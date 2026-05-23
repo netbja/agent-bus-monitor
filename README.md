@@ -80,6 +80,8 @@ agentbus status claude1 working plan 10 shipped   # trailing words are kept whol
 agentbus notify "soak 24h started"
 agentbus cmd claude2 "check status"
 agentbus listen "status:*"
+agentbus report claude1 "bug corrigé"             # curated report → hermes relays to Signal
+agentbus report claude1 --auto "soak 24h done"    # auto = Stop-hook safety net
 busmon                                            # live dashboard
 ```
 
@@ -117,6 +119,7 @@ status traffic doesn't, until agents become long-running.
 | `status:{agent}`     | `state\|message` or `state`     | AGENTS + ACTIVITY    |
 | `hermes:notify`      | free text                       | ACTIVITY             |
 | `hermes:cmd:{agent}` | command text                    | ACTIVITY             |
+| `hermes:report:{agent}` | `note\|msg` or `auto\|msg`   | ACTIVITY (read by hermes) |
 
 Subscribed via `PSUBSCRIBE status:* hermes:*`. States: `working`, `idle`,
 `blocked`, `done`. All conventions live in `bus/bus.go` — the single source of

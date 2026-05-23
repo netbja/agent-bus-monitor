@@ -33,8 +33,10 @@ Streams) or changing the wire format is meant to be a one-file change. **Put pro
 `bus/bus.go`, not in the binaries.**
 
 The two binaries (each a single `main.go`):
-- **`agentbus`** — fire-and-forget CLI: `status`/`cmd`/`notify`/`listen`. Parses args manually
-  (no flag library beyond the `--host` shim); trailing words are joined into one message.
+- **`agentbus`** — fire-and-forget CLI: `status`/`cmd`/`notify`/`listen`/`report`. Parses args
+  manually (no flag library beyond the `--host` shim); trailing words are joined into one message.
+  `report <agent> [--auto] <msg>` publishes on `hermes:report:{agent}` (`kind|message`, kind
+  `note`/`auto`), sanitized + truncated in `bus.go`; consumed by hermes_laptop, not the other agents.
 - **`busmon`** — `tview`/`tcell` TUI. `PSUBSCRIBE status:* hermes:*` runs in a goroutine that
   pushes UI updates via `app.QueueUpdateDraw`; the `agents` map is mutex-guarded; a 1s ticker
   re-renders so chips age into `idle`/`offline` even with no new traffic.

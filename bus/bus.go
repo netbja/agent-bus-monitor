@@ -8,11 +8,20 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/redis/go-redis/v9"
 )
 
 const NotifyChannel = "hermes:notify"
+
+// Report kinds carried in the hermes:report:{agent} payload (kind|message).
+const (
+	ReportNote = "note" // intentional, agent-authored report → relayed verbatim
+	ReportAuto = "auto" // Stop-hook safety-net summary → LLM-gated (phase 2)
+)
+
+const maxReportLen = 120
 
 var ValidAgents = map[string]bool{
 	"claude1": true, "claude2": true, "hermes_laptop": true, "hermes_vdr": true,
@@ -63,9 +72,10 @@ func Connect(host string) (*redis.Client, error) {
 
 func StatusChannel(agent string) string { return "status:" + agent }
 func CmdChannel(agent string) string    { return "hermes:cmd:" + agent }
+func ReportChannel(agent string) string { return "hermes:report:" + agent }
 
 // Parse turns a (channel, payload) pair into its logical fields. kind is one of
-// "status", "notify", "cmd", or "?" for anything outside the convention.
+// "status", "notify", "cmd", "report", or "?" for anything outside the convention.
 func Parse(channel, data string) (agent, kind, state, message string) {
 	switch {
 	case strings.HasPrefix(channel, "status:"):
@@ -79,6 +89,13 @@ func Parse(channel, data string) (agent, kind, state, message string) {
 		return "hermes", "notify", "", data
 	case strings.HasPrefix(channel, "hermes:cmd:"):
 		return strings.TrimPrefix(channel, "hermes:cmd:"), "cmd", "", data
+	case strings.HasPrefix(channel, "hermes:report:"):
+		parts := strings.SplitN(data, "|", 2)
+		state = parts[0]
+		if len(parts) > 1 {
+			message = parts[1]
+		}
+		return strings.TrimPrefix(channel, "hermes:report:"), "report", state, message
 	}
 	return "?", "?", "", data
 }
@@ -89,6 +106,33 @@ func Status(ctx context.Context, r *redis.Client, agent, state, message string) 
 		payload = state + "|" + message
 	}
 	return r.Publish(ctx, StatusChannel(agent), payload).Err()
+}
+
+// SanitizeReportMessage strips control characters — the line-based `agentbus
+// listen` consumer breaks on embedded newlines — collapses runs of whitespace,
+// and truncates to maxReportLen runes so a report stays one bounded line.
+func SanitizeReportMessage(s string) string {
+	mapped := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+	out := strings.Join(strings.Fields(mapped), " ")
+	if r := []rune(out); len(r) > maxReportLen {
+		out = strings.TrimSpace(string(r[:maxReportLen])) + "…"
+	}
+	return out
+}
+
+func reportPayload(kind, message string) string {
+	return kind + "|" + SanitizeReportMessage(message)
+}
+
+// Report publishes an agent's report on hermes:report:{agent}. kind is
+// ReportNote (intentional) or ReportAuto (Stop-hook safety net).
+func Report(ctx context.Context, r *redis.Client, agent, kind, message string) error {
+	return r.Publish(ctx, ReportChannel(agent), reportPayload(kind, message)).Err()
 }
 
 func Cmd(ctx context.Context, r *redis.Client, from, target, command string) error {

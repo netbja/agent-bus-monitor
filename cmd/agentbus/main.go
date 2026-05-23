@@ -5,6 +5,7 @@
 //   agentbus cmd <target> <command...>
 //   agentbus notify <message...>
 //   agentbus listen <channel_pattern>
+//   agentbus report <agent> [--auto] <message...>
 //   agentbus --host <host> <command> ...
 //
 // Unlike agent_bus.py, trailing words are joined, so unquoted multi-word
@@ -37,7 +38,7 @@ func main() {
 		}
 	}
 	if len(args) < 1 {
-		die("usage: agentbus <status|cmd|notify|listen> ...  [--host <host>]")
+		die("usage: agentbus <status|cmd|notify|listen|report> ...  [--host <host>]")
 	}
 
 	client, err := bus.Connect(host)
@@ -83,6 +84,27 @@ func main() {
 			die("usage: agentbus notify <message>")
 		}
 		if err := bus.Notify(ctx, client, strings.Join(args[1:], " ")); err != nil {
+			die(err.Error())
+		}
+
+	case "report":
+		if len(args) < 3 {
+			die("usage: agentbus report <agent> [--auto] <message>")
+		}
+		agent := args[1]
+		if !bus.ValidAgents[agent] {
+			die(fmt.Sprintf("invalid agent %q", agent))
+		}
+		rest := args[2:]
+		kind := bus.ReportNote
+		if rest[0] == "--auto" {
+			kind = bus.ReportAuto
+			rest = rest[1:]
+		}
+		if len(rest) == 0 {
+			die("usage: agentbus report <agent> [--auto] <message>")
+		}
+		if err := bus.Report(ctx, client, agent, kind, strings.Join(rest, " ")); err != nil {
 			die(err.Error())
 		}
 
