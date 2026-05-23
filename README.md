@@ -136,10 +136,9 @@ Resolved by both `agentbus` and `busmon` in the same order as the old
 
 ## Watching a remote bus over SSH
 
-The bus listens on the host's `localhost:6380` but should not be exposed raw over
-the network — the Redis password travels in plaintext. To watch a bus on another
-box (e.g. hermes on the VDR), forward its port through SSH and point a tool at the
-local end of the tunnel:
+The broker is bound to loopback (`127.0.0.1:6380`) and must stay that way — the Redis password
+travels in plaintext, so the bus is never exposed raw over the network. To watch a bus on another
+box, forward its port through SSH and point a tool at the local end of the tunnel:
 
 ```bash
 ssh -NL 6381:localhost:6380 user@192.168.1.5 &   # tunnel VDR bus -> local :6381
@@ -148,6 +147,10 @@ REDIS_PORT=6381 ./busmon                          # watch it
 # one shot, with automatic tunnel teardown:
 ./remote-bus.sh user@192.168.1.5
 ```
+
+> The deployed laptop⇄VDR setup runs this **in reverse**: the VDR opens the tunnel *into* the
+> laptop's bus (`ssh -L 6380:localhost:6380 …`) rather than the laptop reaching out. See
+> **Deployment topology** above.
 
 ## Tuning
 
