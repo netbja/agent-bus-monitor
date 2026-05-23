@@ -18,6 +18,36 @@ any other project.
 `agentbus` is a drop-in replacement for the former `agent_bus.py`: same channels,
 same `state|message` payload, same connection conventions.
 
+## Deployment topology (current: laptop ⇄ VDR)
+
+The bus is consumed by a concrete two-host setup. This is how the pieces wire up
+today — and, importantly, where they *don't* connect.
+
+- **Broker** runs on the **laptop** (`docker compose up`, redis:8-alpine on `:6380`).
+- The **VDR** (`bot@vdr`) reaches it through an SSH tunnel it opens *to* the laptop:
+  `ssh -L 6380:localhost:6380 sysnet@sysnet-laptop.local -N`. So `agentbus --host 127.0.0.1`
+  on the VDR publishes onto the laptop's bus.
+- Two Claude Code sessions run on the laptop under **herdr** in `~/Projects/adv-trading-ai`
+  (agents `claude1`, `claude2`); a **hermes agent** runs on the VDR.
+
+**Inbound to the laptop Claudes — `bus_watch.sh` (the canonical bridge).**
+`adv-trading-ai/tools/bus_watch.sh <agent> [heartbeat_secs]` is a one-shot watcher armed as a
+Claude Code background task: it blocks on `hermes:cmd:<agent>` and `hermes:notify`, prints the
+first match (or `__HEARTBEAT__` on timeout) and exits — and that exit re-invokes the Claude
+session that armed it. Each session re-arms after every fire. `busmon` runs alongside as the
+human dashboard.
+
+> An earlier prototype, `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes via
+> `herdr pane send-text/send-keys` with hard-coded pane IDs. It was dropped in favour of
+> `bus_watch.sh`, which needs no pane map and rides Claude Code's background-task model directly.
+
+**Separate notification path — NOT the bus.** The `Stop` hook in
+`adv-trading-ai/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
+the VDR's hermes **gateway** at `http://<vdr>:8644/webhooks/claude-notify`. That route is
+`Deliver: signal`: it pings a human over Signal when a Claude task stops. The gateway never
+touches Redis, so this path is **independent of the agent bus** — webhook traffic does not appear
+on `hermes:*`, and the bus carries nothing back to Signal.
+
 ## Run the broker
 
 ```bash
@@ -29,6 +59,11 @@ Password defaults to `AgentBus2025!`; override via `REDIS_PASSWORD` (see
 `.env.example` → copy to `.env`). Redis is used purely for pub/sub — there are no
 application keys — so the volume and AOF only matter if stateful features are
 added later (e.g. a move to Redis Streams).
+
+> ⚠️ The compose file maps `6380:6379`, which binds **all interfaces** (`0.0.0.0:6380` — confirm
+> with `ss -tlnp`). The "localhost-only" intent below is *not* enforced: on a shared LAN the bus
+> is reachable with the default password in plaintext. Bind it to loopback —
+> `127.0.0.1:6380:6379` in `docker-compose.yml` — and let the SSH tunnel be the only remote path.
 
 ## Build the tools
 
