@@ -1,6 +1,9 @@
 package bus
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestReportChannel(t *testing.T) {
 	if got := ReportChannel("claude1"); got != "hermes:report:claude1" {
@@ -27,5 +30,27 @@ func TestParseReport(t *testing.T) {
 					c.agent, c.kind, c.state, c.message)
 			}
 		})
+	}
+}
+
+func TestSanitizeReportMessage(t *testing.T) {
+	if got := SanitizeReportMessage("line1\nline2\r\tend"); got != "line1 line2 end" {
+		t.Fatalf("control chars: got %q, want %q", got, "line1 line2 end")
+	}
+	if got := SanitizeReportMessage("  spaced   out  "); got != "spaced out" {
+		t.Fatalf("whitespace: got %q, want %q", got, "spaced out")
+	}
+	got := SanitizeReportMessage(strings.Repeat("x", 200))
+	r := []rune(got)
+	if len(r) != maxReportLen+1 || r[len(r)-1] != '…' {
+		t.Fatalf("truncation: got %d runes (last %q), want %d + …", len(r), string(r[len(r)-1]), maxReportLen)
+	}
+}
+
+func TestReportPayloadRoundTrip(t *testing.T) {
+	agent, kind, state, message := Parse(ReportChannel("claude1"), reportPayload(ReportNote, "bug\nX|fixed"))
+	if agent != "claude1" || kind != "report" || state != "note" || message != "bug X|fixed" {
+		t.Fatalf("round-trip = (%q,%q,%q,%q), want (claude1,report,note,bug X|fixed)",
+			agent, kind, state, message)
 	}
 }
