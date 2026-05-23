@@ -1,9 +1,10 @@
 // busmon — live TUI dashboard for the Agent Bus (Redis pub/sub).
 //
 // Subscribes to status:* and hermes:* and renders three panes:
-//   AGENTS   per-agent last state + idle/offline derived from time since last status
-//   ACTIVITY scrolling feed of status changes, notifications, and commands
-//   INPUT    type a message + Enter to publish to hermes:notify; Esc or Ctrl-C quits
+//
+//	AGENTS   per-agent last state + idle/offline derived from time since last status
+//	ACTIVITY scrolling feed of status changes, notifications, and commands
+//	INPUT    type a message + Enter to publish to hermes:notify; Esc or Ctrl-C quits
 //
 // Connection conventions match agent_bus.py (see package bus): REDIS_URL, or
 // REDIS_HOST/PORT/PASSWORD; --host overrides REDIS_HOST.
@@ -151,6 +152,8 @@ func main() {
 				line = tag("gray", ts) + " " + tag("aqua", "[notify]") + " " + tview.Escape(message)
 			case "cmd":
 				line = tag("gray", ts) + " " + tag("fuchsia", "[cmd->"+agent+"]") + " " + tview.Escape(message)
+			case "report":
+				line = tag("gray", ts) + " " + tag("teal", "[report:"+state+"->"+agent+"]") + " " + tview.Escape(message)
 			default:
 				line = tag("gray", ts) + " " + tview.Escape(message)
 			}
