@@ -1,0 +1,25 @@
+name: agent-bus
+
+services:
+  redis:
+    image: redis:8-alpine
+    container_name: agent-bus-redis
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:-AgentBus2025!}
+      - --appendonly
+      - "yes"
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-AgentBus2025!}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:

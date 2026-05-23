@@ -1,14 +1,12 @@
-// Bus Monitor — live TUI dashboard for the Agent Bus (Redis pub/sub).
+// busmon — live TUI dashboard for the Agent Bus (Redis pub/sub).
 //
 // Subscribes to status:* and hermes:* and renders three panes:
 //   AGENTS   per-agent last state + idle/offline derived from time since last status
 //   ACTIVITY scrolling feed of status changes, notifications, and commands
 //   INPUT    type a message + Enter to publish to hermes:notify; Esc or Ctrl-C quits
 //
-// Connection conventions match agent_bus.py:
-//   REDIS_URL                                  (takes precedence when set)
-//   REDIS_HOST / REDIS_PORT / REDIS_PASSWORD   (defaults localhost:6380 / AgentBus2025!)
-//   --host                                     overrides REDIS_HOST
+// Connection conventions match agent_bus.py (see package bus): REDIS_URL, or
+// REDIS_HOST/PORT/PASSWORD; --host overrides REDIS_HOST.
 package main
 
 import (
@@ -22,8 +20,9 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/redis/go-redis/v9"
 	"github.com/rivo/tview"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 const (
@@ -35,52 +34,6 @@ type agentState struct {
 	state    string
 	message  string
 	lastSeen time.Time
-}
-
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}
-
-type silentLogger struct{}
-
-func (silentLogger) Printf(context.Context, string, ...interface{}) {}
-
-func newClient(host string) (*redis.Client, error) {
-	if url := os.Getenv("REDIS_URL"); url != "" {
-		opt, err := redis.ParseURL(url)
-		if err != nil {
-			return nil, err
-		}
-		return redis.NewClient(opt), nil
-	}
-	if host == "" {
-		host = envOr("REDIS_HOST", "localhost")
-	}
-	return redis.NewClient(&redis.Options{
-		Addr:     host + ":" + envOr("REDIS_PORT", "6380"),
-		Password: envOr("REDIS_PASSWORD", "AgentBus2025!"),
-	}), nil
-}
-
-func parse(channel, data string) (agent, kind, state, message string) {
-	switch {
-	case strings.HasPrefix(channel, "status:"):
-		agent = strings.TrimPrefix(channel, "status:")
-		parts := strings.SplitN(data, "|", 2)
-		state = parts[0]
-		if len(parts) > 1 {
-			message = parts[1]
-		}
-		return agent, "status", state, message
-	case channel == "hermes:notify":
-		return "hermes", "notify", "", data
-	case strings.HasPrefix(channel, "hermes:cmd:"):
-		return strings.TrimPrefix(channel, "hermes:cmd:"), "cmd", "", data
-	}
-	return "?", "?", "", data
 }
 
 func stateColor(state string) string {
@@ -132,18 +85,13 @@ func renderAgents(view *tview.TextView, agents map[string]*agentState, mu *sync.
 func main() {
 	host := flag.String("host", "", "Redis host (overrides REDIS_HOST)")
 	flag.Parse()
-	redis.SetLogger(silentLogger{})
 
-	client, err := newClient(*host)
+	client, err := bus.Connect(*host)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	ctx := context.Background()
-	if err := client.Ping(ctx).Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: Redis connection failed: %v\n", err)
 		os.Exit(1)
 	}
+	ctx := context.Background()
 
 	app := tview.NewApplication()
 
@@ -164,7 +112,7 @@ func main() {
 		switch key {
 		case tcell.KeyEnter:
 			if text := strings.TrimSpace(input.GetText()); text != "" {
-				client.Publish(ctx, "hermes:notify", text)
+				bus.Notify(ctx, client, text)
 			}
 			input.SetText("")
 		case tcell.KeyEscape:
@@ -187,7 +135,7 @@ func main() {
 	pubsub := client.PSubscribe(ctx, "status:*", "hermes:*")
 	go func() {
 		for msg := range pubsub.Channel() {
-			agent, kind, state, message := parse(msg.Channel, msg.Payload)
+			agent, kind, state, message := bus.Parse(msg.Channel, msg.Payload)
 			ts := time.Now().Format("15:04:05")
 			var line string
 			switch kind {
