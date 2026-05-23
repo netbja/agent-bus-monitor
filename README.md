@@ -60,10 +60,10 @@ Password defaults to `AgentBus2025!`; override via `REDIS_PASSWORD` (see
 application keys — so the volume and AOF only matter if stateful features are
 added later (e.g. a move to Redis Streams).
 
-> ⚠️ The compose file maps `6380:6379`, which binds **all interfaces** (`0.0.0.0:6380` — confirm
-> with `ss -tlnp`). The "localhost-only" intent below is *not* enforced: on a shared LAN the bus
-> is reachable with the default password in plaintext. Bind it to loopback —
-> `127.0.0.1:6380:6379` in `docker-compose.yml` — and let the SSH tunnel be the only remote path.
+> The broker is bound to **loopback only** (`127.0.0.1:6380:6379` in `docker-compose.yml`), so it
+> is not reachable from the LAN — the SSH tunnel below is the only remote path. This matters
+> because the Redis password travels in plaintext. (It previously mapped `6380:6379`, i.e. bound
+> `0.0.0.0`; verify the active bind with `ss -tlnp | grep 6380`.)
 
 ## Build the tools
 

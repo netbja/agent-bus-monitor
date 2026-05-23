@@ -64,9 +64,9 @@ It never touches Redis — see README "Deployment topology".
   A non-empty `--host` overrides `REDIS_HOST` only. Note the **non-standard port 6380** (compose
   maps host `6380` → container `6379`). `agentbus` cmd-sender identity defaults to `hermes_vdr`,
   overridable via `AGENT_BUS_AGENT`.
-- **`docker-compose.yml` binds `6380` on all interfaces** (`0.0.0.0`), contradicting the
-  "localhost-only" intent; the bus is LAN-reachable with the default password. The fix is
-  `127.0.0.1:6380:6379` (not yet applied).
+- **`docker-compose.yml` binds `6380` to loopback** (`127.0.0.1:6380:6379`) so the bus is not
+  LAN-reachable (the password travels in plaintext); the SSH tunnel is the only remote path. Don't
+  revert to a bare `6380:6379` (= `0.0.0.0`) without a reason.
 - **Liveness is passive** — there is no heartbeat channel. busmon derives `idle`/`offline` purely
   from the timestamp of each agent's last `status:` message (`idleAfter` 2m, `staleAfter` 10m,
   constants atop `cmd/busmon/main.go`). Agents are one-shot CLI calls, so each status publish *is*

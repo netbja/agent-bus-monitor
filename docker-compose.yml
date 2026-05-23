@@ -11,7 +11,9 @@ services:
       - --appendonly
       - "yes"
     ports:
-      - "6380:6379"
+      # loopback-only: the Redis password travels in plaintext, so the bus must
+      # not be LAN-reachable. Remote access goes through an SSH tunnel (see README).
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis-data:/data
     restart: unless-stopped
