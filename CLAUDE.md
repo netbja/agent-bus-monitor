@@ -39,7 +39,12 @@ The two binaries (each a single `main.go`):
   `note`/`auto`), sanitized + truncated in `bus.go`; consumed by hermes_laptop, not the other agents.
 - **`busmon`** — `tview`/`tcell` TUI. `PSUBSCRIBE status:* hermes:*` runs in a goroutine that
   pushes UI updates via `app.QueueUpdateDraw`; the `agents` map is mutex-guarded; a 1s ticker
-  re-renders so chips age into `idle`/`offline` even with no new traffic.
+  re-renders so chips age into `idle`/`offline` even with no new traffic. The `agents` map is
+  populated from **both** `status:` (authoritative state) and `report:` (liveness only — a
+  report-only agent shows state `active`). The ACTIVITY feed live-tails via tview's `trackEnd`
+  (set once at start, **not** per message, so scrolling up sticks); `Tab` focuses it to scroll,
+  and `activityTitle` recomputes the `[live]`/`[↑ pause · N]` indicator from `GetWrappedLineCount`/
+  `GetScrollOffset`/`GetInnerRect`. Mouse wheel works (`EnableMouse(true)`).
 
 ### How the bus is actually consumed (lives outside this repo)
 
@@ -69,7 +74,7 @@ It never touches Redis — see README "Deployment topology".
 - **`docker-compose.yml` binds `6380` to loopback** (`127.0.0.1:6380:6379`) so the bus is not
   LAN-reachable (the password travels in plaintext); the SSH tunnel is the only remote path. Don't
   revert to a bare `6380:6379` (= `0.0.0.0`) without a reason.
-- **Liveness is passive** — there is no heartbeat channel. busmon derives `idle`/`offline` purely
-  from the timestamp of each agent's last `status:` message (`idleAfter` 2m, `staleAfter` 10m,
-  constants atop `cmd/busmon/main.go`). Agents are one-shot CLI calls, so each status publish *is*
-  the heartbeat; don't add a heartbeat unless agents become long-running daemons.
+- **Liveness is passive** — there is no heartbeat channel. busmon derives `idle`/`offline` from
+  the timestamp of each agent's last `status:` *or* `report:` message (`idleAfter` 2m, `staleAfter`
+  10m, constants atop `cmd/busmon/main.go`). Agents are one-shot CLI calls, so each status/report
+  publish *is* the heartbeat; don't add a heartbeat unless agents become long-running daemons.
