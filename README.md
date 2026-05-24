@@ -89,28 +89,34 @@ busmon                                            # live dashboard
 
 ```
 ┌─ AGENTS ───────────────────────────────────────────────────────────────────┐
-│ claude1: working (plan 10)   claude2: idle 3m   hermes_vdr: offline          │
-├─ ACTIVITY ───────────────────────────────────────────────────────────────────┤
+│ claude1: working (plan 10)   claude2: active (soak bug fixed)   hermes_vdr: offline │
+├─ ACTIVITY  [live] ────────────────────────────────────────────────────────────┤
 │ 23:15:12 [claude1] working | plan 10 shipped                                 │
 │ 23:16:02 [notify] Soak 24h started                                           │
+│ 23:16:40 [report:note->claude2] soak bug fixed                               │
 ├─ INPUT ──────────────────────────────────────────────────────────────────────┤
 │ > _                                                                          │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **AGENTS** — one chip per agent, driven only by `status:{agent}` messages.
-  Color reflects the published state. Past `idleAfter` it shows `idle Nm`; past
-  `staleAfter`, `offline`.
-- **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands.
+- **AGENTS** — one chip per agent. `status:{agent}` sets the state (color-coded);
+  a `report:{agent}` also counts as liveness, showing the agent as `active` with
+  its last report if it never published a status. Past `idleAfter` it shows
+  `idle Nm`; past `staleAfter`, `offline`.
+- **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
+  and reports. It live-tails by default; **Tab** moves focus here to scroll back
+  (arrows/PgUp/PgDn/mouse wheel; `g`/`G` for top/bottom). The title shows `[live]`
+  or `[↑ pause · N plus bas]` while you browse history; **Tab** or **Esc** returns
+  to the input and resumes the tail.
 - **INPUT** — type a message, Enter publishes to `hermes:notify`; Esc/Ctrl-C quits.
 
 ### Liveness model (why no dedicated heartbeat)
 
 Agents are one-shot CLI invocations, not daemons — nothing is alive between
 invocations to emit a periodic heartbeat. Liveness is derived **passively** from
-the timestamp of each agent's last `status:` message: every status publish *is*
-the heartbeat. A dedicated heartbeat channel would buy nothing the existing
-status traffic doesn't, until agents become long-running.
+the timestamp of each agent's last `status:` *or* `report:` message: every such
+publish *is* the heartbeat. A dedicated heartbeat channel would buy nothing the
+existing traffic doesn't, until agents become long-running.
 
 ## Bus conventions
 
@@ -119,7 +125,7 @@ status traffic doesn't, until agents become long-running.
 | `status:{agent}`     | `state\|message` or `state`     | AGENTS + ACTIVITY    |
 | `hermes:notify`      | free text                       | ACTIVITY             |
 | `hermes:cmd:{agent}` | command text                    | ACTIVITY             |
-| `hermes:report:{agent}` | `note\|msg` or `auto\|msg`   | ACTIVITY (read by hermes) |
+| `hermes:report:{agent}` | `note\|msg` or `auto\|msg`   | AGENTS + ACTIVITY (also read by hermes) |
 
 Subscribed via `PSUBSCRIBE status:* hermes:*`. States: `working`, `idle`,
 `blocked`, `done`. All conventions live in `bus/bus.go` — the single source of
