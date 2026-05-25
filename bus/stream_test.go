@@ -167,6 +167,33 @@ func TestPilotLease(t *testing.T) {
 	}
 }
 
+func TestChallengeGate(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	defer b.r.Del(ctx, GateKey(b.Project(), "dev"))
+
+	if m, err := b.OpenChallenges(ctx, "dev"); err != nil || len(m) != 0 {
+		t.Fatalf("OpenChallenges before = (%v, %v), want (empty, nil)", m, err)
+	}
+	if err := b.OpenChallenge(ctx, "dev", "C1", "review|justify X"); err != nil {
+		t.Fatalf("OpenChallenge: %v", err)
+	}
+	m, err := b.OpenChallenges(ctx, "dev")
+	if err != nil || len(m) != 1 || m["C1"] != "review|justify X" {
+		t.Fatalf("OpenChallenges after open = (%v, %v), want {C1: review|justify X}", m, err)
+	}
+	if err := b.ResolveChallenge(ctx, "dev", "C1"); err != nil {
+		t.Fatalf("ResolveChallenge: %v", err)
+	}
+	if m, err := b.OpenChallenges(ctx, "dev"); err != nil || len(m) != 0 {
+		t.Fatalf("OpenChallenges after resolve = (%v, %v), want (empty, nil)", m, err)
+	}
+
+	if err := b.OpenChallenge(ctx, "dev", "", "no ref"); err == nil {
+		t.Fatal("OpenChallenge accepted an empty ref, want error")
+	}
+}
+
 func TestWatchCmdDelivers(t *testing.T) {
 	b := dialTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

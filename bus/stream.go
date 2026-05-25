@@ -275,6 +275,28 @@ func (b *Bus) PilotDriver(ctx context.Context) (string, error) {
 	return v, err
 }
 
+// OpenChallenge records an unresolved 4-eyes challenge gating agent: a hash
+// field ref → meta ("<challenger>|<summary>"). The agent must not proceed while
+// any challenge is open. There is deliberately no TTL — a safety gate is closed
+// only by an explicit verdict (ResolveChallenge), never by silent expiry.
+func (b *Bus) OpenChallenge(ctx context.Context, agent, ref, meta string) error {
+	if ref == "" {
+		return fmt.Errorf("challenge ref required")
+	}
+	return b.r.HSet(ctx, GateKey(b.project, agent), ref, meta).Err()
+}
+
+// ResolveChallenge closes the challenge identified by ref (the verdict step).
+func (b *Bus) ResolveChallenge(ctx context.Context, agent, ref string) error {
+	return b.r.HDel(ctx, GateKey(b.project, agent), ref).Err()
+}
+
+// OpenChallenges returns ref→meta for every unresolved challenge gating agent.
+// A non-empty result means the agent is gated.
+func (b *Bus) OpenChallenges(ctx context.Context, agent string) (map[string]string, error) {
+	return b.r.HGetAll(ctx, GateKey(b.project, agent)).Result()
+}
+
 // idList returns the per-key cursor IDs in the same order as keys (XREAD wants
 // all keys followed by all IDs).
 func idList(keys []string, ids map[string]string) []string {
