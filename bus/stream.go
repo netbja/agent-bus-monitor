@@ -6,8 +6,12 @@
 package bus
 
 import (
+	"context"
+	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/redis/go-redis/v9"
 )
 
 const streamMaxLen = 1000
@@ -78,4 +82,74 @@ func splitStreamKey(key string) (project, kind string) {
 		return key[:i], key[i+1:]
 	}
 	return "", key
+}
+
+// Bus is a project-scoped handle over the Streams transport. Construct it with
+// Open; every operation is namespaced to the project.
+type Bus struct {
+	r       *redis.Client
+	project string
+}
+
+// Open binds a client to a project. The project is required and must be a valid
+// slug — there is no global default namespace (that was the old collision bug).
+func Open(r *redis.Client, project string) (*Bus, error) {
+	if !ValidName(project) {
+		return nil, fmt.Errorf("invalid project %q (want %s)", project, nameRE)
+	}
+	return &Bus{r: r, project: project}, nil
+}
+
+// Project returns the project this Bus is bound to.
+func (b *Bus) Project() string { return b.project }
+
+// add XADDs to {project}:{kind} with an approximate length cap so no stream
+// grows unbounded, and returns the new entry ID.
+func (b *Bus) add(ctx context.Context, kind string, values map[string]interface{}) (string, error) {
+	return b.r.XAdd(ctx, &redis.XAddArgs{
+		Stream: StreamKey(b.project, kind),
+		MaxLen: streamMaxLen,
+		Approx: true,
+		Values: values,
+	}).Result()
+}
+
+func (b *Bus) Status(ctx context.Context, agent, state, message string) (string, error) {
+	if !ValidName(agent) {
+		return "", fmt.Errorf("invalid agent %q", agent)
+	}
+	if !ValidStates[state] {
+		return "", fmt.Errorf("invalid state %q (working|idle|blocked|done)", state)
+	}
+	return b.add(ctx, "status", map[string]interface{}{
+		"agent": agent, "state": state, "message": message,
+	})
+}
+
+func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, error) {
+	if !ValidName(agent) {
+		return "", fmt.Errorf("invalid agent %q", agent)
+	}
+	return b.add(ctx, "report", map[string]interface{}{
+		"agent": agent, "kind": kind, "message": SanitizeReportMessage(message),
+	})
+}
+
+func (b *Bus) Notify(ctx context.Context, from, message string) (string, error) {
+	return b.add(ctx, "notify", map[string]interface{}{"from": from, "message": message})
+}
+
+// Cmd appends an addressed entry to the shared {project}:cmd stream. typ is one
+// of CmdDirective/CmdChallenge/CmdReply/CmdVerdict; ref correlates a challenge
+// with its replies and verdict (empty for fire-and-forget directives).
+func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (string, error) {
+	if !ValidName(target) {
+		return "", fmt.Errorf("invalid target %q", target)
+	}
+	if !validCmdTypes[typ] {
+		return "", fmt.Errorf("invalid cmd type %q", typ)
+	}
+	return b.add(ctx, "cmd", map[string]interface{}{
+		"from": from, "target": target, "type": typ, "ref": ref, "command": command,
+	})
 }

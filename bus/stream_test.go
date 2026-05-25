@@ -1,6 +1,11 @@
 package bus
 
-import "testing"
+import (
+	"context"
+	"strconv"
+	"testing"
+	"time"
+)
 
 func TestStreamKeyNaming(t *testing.T) {
 	if got := StreamKey("busmon", "status"); got != "busmon:status" {
@@ -55,5 +60,51 @@ func TestParseEntry(t *testing.T) {
 				t.Fatalf("ParseEntry = %+v, want %+v", got, c.want)
 			}
 		})
+	}
+}
+
+// dialTest connects to the dev broker and returns a Bus on a unique throwaway
+// project; it skips the test if Redis is down. All four streams + the pilot key
+// are deleted on cleanup (gate keys are per-agent — tests clean their own).
+func dialTest(t *testing.T) *Bus {
+	t.Helper()
+	r, err := Connect("")
+	if err != nil {
+		t.Skipf("Redis unavailable (run docker compose up -d): %v", err)
+	}
+	project := "t" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	b, err := Open(r, project)
+	if err != nil {
+		t.Fatalf("Open(%q): %v", project, err)
+	}
+	t.Cleanup(func() {
+		ctx := context.Background()
+		r.Del(ctx, StreamKey(project, "status"), StreamKey(project, "report"),
+			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project))
+		r.Close()
+	})
+	return b
+}
+
+func TestOpenRejectsBadProject(t *testing.T) {
+	if _, err := Open(nil, "Bad:Project"); err == nil {
+		t.Fatal("Open accepted an invalid project, want error")
+	}
+}
+
+func TestPublishValidation(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "dev", "flying", "x"); err == nil {
+		t.Error("Status accepted invalid state, want error")
+	}
+	if _, err := b.Status(ctx, "Bad Agent", "working", "x"); err == nil {
+		t.Error("Status accepted invalid agent, want error")
+	}
+	if _, err := b.Cmd(ctx, "hermes", "dev", "shout", "", "x"); err == nil {
+		t.Error("Cmd accepted invalid type, want error")
+	}
+	if _, err := b.Status(ctx, "dev", "working", "ok"); err != nil {
+		t.Errorf("valid Status failed: %v", err)
 	}
 }
