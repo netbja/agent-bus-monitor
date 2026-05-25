@@ -5,18 +5,19 @@
 // AGENT_BUS_AGENT (default "hermes"). Trailing words are joined into one message.
 //
 // Usage:
-//   agentbus --project P status    <agent> <working|idle|blocked|done> [msg...]
-//   agentbus --project P report    <agent> [--auto] <msg...>
-//   agentbus --project P notify    <msg...>
-//   agentbus --project P cmd       <target> <command...>
-//   agentbus --project P challenge <target> [--ref R] <msg...>   # opens a 4-eyes gate
-//   agentbus --project P reply     --ref R <target> <msg...>
-//   agentbus --project P verdict   --ref R <target> <approve|reject> [msg...]  # resolves the gate
-//   agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
-//   agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
-//   agentbus --project P watch     <agent>      # one-shot: prints first addressed cmd, or __HEARTBEAT__
-//   agentbus --project P listen    [status report notify cmd]    # debug tail
-//   agentbus --host <host> ...
+//
+//	agentbus --project P status    <agent> <working|idle|blocked|done> [msg...]
+//	agentbus --project P report    <agent> [--auto] <msg...>
+//	agentbus --project P notify    <msg...>
+//	agentbus --project P cmd       <target> <command...>
+//	agentbus --project P challenge <target> [--ref R] <msg...>   # opens a 4-eyes gate
+//	agentbus --project P reply     --ref R <target> <msg...>
+//	agentbus --project P verdict   --ref R <target> <approve|reject> [msg...]  # resolves the gate
+//	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
+//	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
+//	agentbus --project P watch     <agent>      # one-shot: prints first addressed cmd, or __HEARTBEAT__
+//	agentbus --project P listen    [status report notify cmd]    # debug tail
+//	agentbus --host <host> ...
 package main
 
 import (
@@ -34,6 +35,9 @@ const (
 	pilotTTL  = 90 * time.Second  // default pilot lease TTL (override --ttl)
 	heartbeat = 240 * time.Second // watch prints __HEARTBEAT__ and exits after this idle window
 )
+
+// listenKinds bounds the stream kinds the debug `listen` tail accepts.
+var listenKinds = map[string]bool{"status": true, "report": true, "notify": true, "cmd": true}
 
 func die(msg string) {
 	fmt.Fprintln(os.Stderr, "error: "+msg)
@@ -121,10 +125,13 @@ func main() {
 			ref = genRef()
 		}
 		target, msg := rest[0], strings.Join(rest[1:], " ")
-		if _, err := b.Cmd(ctx, self, target, bus.CmdChallenge, ref, msg); err != nil {
+		// Open the gate first — it's the authoritative blocking record. If the
+		// cmd publish then fails, the target stays correctly gated rather than
+		// seeing a phantom challenge event with no matching gate.
+		if err := b.OpenChallenge(ctx, target, ref, self+"|"+msg); err != nil {
 			die(err.Error())
 		}
-		if err := b.OpenChallenge(ctx, target, ref, self+"|"+msg); err != nil {
+		if _, err := b.Cmd(ctx, self, target, bus.CmdChallenge, ref, msg); err != nil {
 			die(err.Error())
 		}
 		fmt.Printf("challenge %s opened on %s\n", ref, target)
@@ -160,10 +167,10 @@ func main() {
 		}
 
 	case "pilot":
+		rest, ttlStr := extractFlag(rest, "--ttl")
 		if len(rest) < 1 {
 			die("usage: pilot <claim|renew|release|status> [--ttl 90s]")
 		}
-		rest, ttlStr := extractFlag(rest, "--ttl")
 		ttl := pilotTTL
 		if ttlStr != "" {
 			if d, perr := time.ParseDuration(ttlStr); perr == nil {
@@ -245,7 +252,14 @@ func main() {
 		if len(kinds) == 0 {
 			kinds = []string{"status", "report", "notify", "cmd"}
 		}
+		for _, k := range kinds {
+			if !listenKinds[k] {
+				die(fmt.Sprintf("listen: unknown kind %q (want status|report|notify|cmd)", k))
+			}
+		}
 		fmt.Fprintf(os.Stderr, "Tailing %v on project %q (Ctrl+C to stop)...\n", kinds, project)
+		// "$" = live only. Tail warns "$" can miss entries across multiple
+		// streams in the first poll gap; acceptable for a debug listener.
 		err := b.Tail(ctx, "$", kinds, func(e bus.Event) {
 			who := e.Agent
 			if who == "" {
