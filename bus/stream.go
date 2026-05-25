@@ -172,6 +172,9 @@ func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (
 // tails: with several streams, "$" can miss entries that arrive between the
 // per-poll re-evaluation of "$" on each stream.
 func (b *Bus) Tail(ctx context.Context, lastID string, kinds []string, fn func(Event)) error {
+	if len(kinds) == 0 {
+		return fmt.Errorf("tail: no stream kinds given")
+	}
 	keys := make([]string, len(kinds))
 	ids := make(map[string]string, len(kinds))
 	for i, k := range kinds {
