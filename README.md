@@ -1,22 +1,19 @@
 # agent-bus
 
-Self-contained multi-agent coordination bus over Redis pub/sub, plus the Go
-tooling around it. Agents (claude1, claude2, hermes_laptop, hermes_vdr) publish
-status, commands, and notifications on a shared Redis instance; a TUI visualises
-the traffic live. Broker, client, and monitor all live here — nothing depends on
-any other project.
+Self-contained multi-agent coordination bus over **Redis Streams**, plus the Go
+tooling around it. Agents publish status, commands, and notifications on a shared
+Redis instance under a required project namespace; a TUI visualises the traffic
+live. Broker, client, and monitor all live here — nothing depends on any other
+project.
 
 ## Components
 
-| Piece      | What it is                                                  |
-|------------|-------------------------------------------------------------|
-| broker     | `redis:8-alpine` on `localhost:6380` (`docker-compose.yml`) |
-| `bus/`     | Go package: connection, channels, parsing, publish API      |
-| `agentbus` | CLI client — publish status/cmd/notify, listen (`cmd/agentbus`) |
-| `busmon`   | TUI dashboard: AGENTS / ACTIVITY / INPUT (`cmd/busmon`)      |
-
-`agentbus` is a drop-in replacement for the former `agent_bus.py`: same channels,
-same `state|message` payload, same connection conventions.
+| Piece      | What it is                                                                  |
+|------------|-----------------------------------------------------------------------------|
+| broker     | `redis:8-alpine` on `localhost:6380` (`docker-compose.yml`)                |
+| `bus/`     | Go package: connection, Streams API (`Bus` handle), publish helpers         |
+| `agentbus` | CLI client — status/report/notify/cmd/watch/listen (`cmd/agentbus`)         |
+| `busmon`   | TUI dashboard: AGENTS / ACTIVITY / INPUT (`cmd/busmon`)                     |
 
 ## Deployment topology (current: laptop ⇄ VDR)
 
@@ -31,11 +28,11 @@ today — and, importantly, where they *don't* connect.
   (agents `claude1`, `claude2`); a **hermes agent** runs on the VDR.
 
 **Inbound to the laptop Claudes — `bus_watch.sh` (the canonical bridge).**
-`adv-trading-ai/tools/bus_watch.sh <agent> [heartbeat_secs]` is a one-shot watcher armed as a
-Claude Code background task: it blocks on `hermes:cmd:<agent>` and `hermes:notify`, prints the
-first match (or `__HEARTBEAT__` on timeout) and exits — and that exit re-invokes the Claude
-session that armed it. Each session re-arms after every fire. `busmon` runs alongside as the
-human dashboard.
+`adv-trading-ai/tools/bus_watch.sh <agent>` is a one-shot watcher armed as a Claude Code
+background task. It calls `agentbus watch <agent>`, which blocks on the project's `:cmd` stream
+via XREADGROUP and prints the first addressed entry (or `__HEARTBEAT__` after a 240s idle window)
+then exits — and that exit re-invokes the Claude session that armed it. Each session re-arms after
+every fire. `busmon` runs alongside as the human dashboard.
 
 > An earlier prototype, `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes via
 > `herdr pane send-text/send-keys` with hard-coded pane IDs. It was dropped in favour of
@@ -56,9 +53,8 @@ docker compose ps
 ```
 
 Password defaults to `AgentBus2025!`; override via `REDIS_PASSWORD` (see
-`.env.example` → copy to `.env`). Redis is used purely for pub/sub — there are no
-application keys — so the volume and AOF only matter if stateful features are
-added later (e.g. a move to Redis Streams).
+`.env.example` → copy to `.env`). Redis Streams entries are capped at ~1000 per
+stream (XADD MAXLEN ~); the pilot lease and challenge gates use ordinary keys/hashes.
 
 > The broker is bound to **loopback only** (`127.0.0.1:6380:6379` in `docker-compose.yml`), so it
 > is not reachable from the LAN — the SSH tunnel below is the only remote path. This matters
@@ -75,14 +71,23 @@ go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus
 
 ## Use it
 
+`AGENT_BUS_PROJECT` (or `--project <p>`) is required for all commands.
+
 ```bash
-agentbus status claude1 working plan 10 shipped   # trailing words are kept whole
+# Set project once in the shell (or pass --project on each call):
+export AGENT_BUS_PROJECT=myproject
+
+agentbus status claude1 working "plan 10 shipped"  # trailing words are joined
 agentbus notify "soak 24h started"
-agentbus cmd claude2 "check status"
-agentbus listen "status:*"
-agentbus report claude1 "bug corrigé"             # curated report → hermes relays to Signal
-agentbus report claude1 --auto "soak 24h done"    # auto = Stop-hook safety net
-busmon                                            # live dashboard
+agentbus cmd claude2 "check status"                # sends a directive to claude2
+agentbus report claude1 "bug corrigé"              # curated report (note kind)
+agentbus report claude1 --auto "soak 24h done"     # auto = Stop-hook safety net
+agentbus watch claude1                             # one-shot: waits for next cmd, or __HEARTBEAT__
+agentbus listen                                    # debug tail (all four streams)
+agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
+agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
+
+busmon -project myproject                          # live dashboard
 ```
 
 ## busmon panes
@@ -99,38 +104,41 @@ busmon                                            # live dashboard
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **AGENTS** — one chip per agent. `status:{agent}` sets the state (color-coded);
-  a `report:{agent}` also counts as liveness, showing the agent as `active` with
-  its last report if it never published a status. Past `idleAfter` it shows
-  `idle Nm`; past `staleAfter`, `offline`.
+- **AGENTS** — one chip per agent. `{p}:status` entries set the state (color-coded);
+  a `{p}:report` entry also counts as liveness, showing the agent as `active` with
+  its last report if it never published a status. A lock badge (`🔒N`) shows open
+  4-eyes challenges. The pilot indicator (`[autonome]`/`[piloté par X]`) shows the
+  current lease holder. Past `idleAfter` it shows `idle Nm`; past `staleAfter`, `offline`.
 - **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
   and reports. It live-tails by default; **Tab** moves focus here to scroll back
   (arrows/PgUp/PgDn/mouse wheel; `g`/`G` for top/bottom). The title shows `[live]`
   or `[↑ pause · N plus bas]` while you browse history; **Tab** or **Esc** returns
   to the input and resumes the tail.
-- **INPUT** — type a message, Enter publishes to `hermes:notify`; Esc/Ctrl-C quits.
+- **INPUT** — type a message, Enter publishes on `{p}:notify`; Esc/Ctrl-C quits.
 
 ### Liveness model (why no dedicated heartbeat)
 
 Agents are one-shot CLI invocations, not daemons — nothing is alive between
 invocations to emit a periodic heartbeat. Liveness is derived **passively** from
-the timestamp of each agent's last `status:` *or* `report:` message: every such
-publish *is* the heartbeat. A dedicated heartbeat channel would buy nothing the
-existing traffic doesn't, until agents become long-running.
+the Redis stream-entry timestamp of each agent's last `status` or `report` entry:
+every such publish *is* the heartbeat. A dedicated heartbeat stream would buy nothing
+the existing traffic doesn't, until agents become long-running.
 
 ## Bus conventions
 
-| Channel              | Payload                         | Pane it feeds        |
-|----------------------|---------------------------------|----------------------|
-| `status:{agent}`     | `state\|message` or `state`     | AGENTS + ACTIVITY    |
-| `hermes:notify`      | free text                       | ACTIVITY             |
-| `hermes:cmd:{agent}` | command text                    | ACTIVITY             |
-| `hermes:report:{agent}` | `note\|msg` or `auto\|msg`   | AGENTS + ACTIVITY (also read by hermes) |
+Stream keys are `{project}:{kind}`. Project and agent names must match `^[a-z][a-z0-9_-]{0,31}$`
+(validated by `bus.ValidName`).
 
-Subscribed via `PSUBSCRIBE status:* hermes:*`. States: `working`, `idle`,
-`blocked`, `done`. All conventions live in `bus/bus.go` — the single source of
-truth shared by both binaries, which is also what makes a future transport swap
-(pub/sub → Redis Streams) a one-file change.
+| Stream              | Key fields                                       | Pane it feeds                   |
+|---------------------|--------------------------------------------------|---------------------------------|
+| `{p}:status`        | `agent state message`                            | AGENTS + ACTIVITY               |
+| `{p}:report`        | `agent kind(note\|auto) message`                 | AGENTS + ACTIVITY + hermes      |
+| `{p}:notify`        | `from message`                                   | ACTIVITY                        |
+| `{p}:cmd`           | `from target type ref command`                   | ACTIVITY + agents               |
+
+Additional keys: `{p}:pilot` (string, pilot lease), `{p}:gate:{agent}` (hash, 4-eyes challenges).
+States: `working`, `idle`, `blocked`, `done`. All transport conventions live in `bus/stream.go`;
+transport-neutral primitives (`Connect`, `ValidStates`, `SanitizeReportMessage`) are in `bus/bus.go`.
 
 ## Connection
 
