@@ -247,6 +247,28 @@ func (b *Bus) WatchCmd(ctx context.Context, agent, consumer string, fn func(Even
 	}
 }
 
+// Pilot sets (or renews — they are the same SET) the project's pilot lease to
+// driver with a TTL. Hermes calls this on an interval while it has budget;
+// stopping = letting workers fall back to autonomous mode.
+func (b *Bus) Pilot(ctx context.Context, driver string, ttl time.Duration) error {
+	return b.r.Set(ctx, PilotKey(b.project), driver, ttl).Err()
+}
+
+// ReleasePilot drops the lease immediately (explicit hand-off to autonomous).
+func (b *Bus) ReleasePilot(ctx context.Context) error {
+	return b.r.Del(ctx, PilotKey(b.project)).Err()
+}
+
+// PilotDriver returns the current driver, or "" if no lease is held — "" means
+// autonomous mode (Hermes is out of budget or down).
+func (b *Bus) PilotDriver(ctx context.Context) (string, error) {
+	v, err := b.r.Get(ctx, PilotKey(b.project)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", nil
+	}
+	return v, err
+}
+
 // idList returns the per-key cursor IDs in the same order as keys (XREAD wants
 // all keys followed by all IDs).
 func idList(keys []string, ids map[string]string) []string {

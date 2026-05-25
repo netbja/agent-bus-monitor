@@ -140,6 +140,30 @@ func TestTailRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPilotLease(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+
+	if d, err := b.PilotDriver(ctx); err != nil || d != "" {
+		t.Fatalf("PilotDriver before claim = (%q, %v), want (\"\", nil)", d, err)
+	}
+	if err := b.Pilot(ctx, "hermes", 90*time.Second); err != nil {
+		t.Fatalf("Pilot: %v", err)
+	}
+	if d, err := b.PilotDriver(ctx); err != nil || d != "hermes" {
+		t.Fatalf("PilotDriver after claim = (%q, %v), want (\"hermes\", nil)", d, err)
+	}
+	if ttl := b.r.TTL(ctx, PilotKey(b.Project())).Val(); ttl <= 0 {
+		t.Fatalf("pilot key TTL = %v, want > 0 (lease must expire)", ttl)
+	}
+	if err := b.ReleasePilot(ctx); err != nil {
+		t.Fatalf("ReleasePilot: %v", err)
+	}
+	if d, err := b.PilotDriver(ctx); err != nil || d != "" {
+		t.Fatalf("PilotDriver after release = (%q, %v), want (\"\", nil)", d, err)
+	}
+}
+
 func TestWatchCmdDelivers(t *testing.T) {
 	b := dialTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
