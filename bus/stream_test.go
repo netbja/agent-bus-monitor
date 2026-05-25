@@ -110,3 +110,32 @@ func TestPublishValidation(t *testing.T) {
 		t.Errorf("valid Status failed: %v", err)
 	}
 }
+
+func TestTailRoundTrip(t *testing.T) {
+	b := dialTest(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if _, err := b.Status(ctx, "dev", "working", "hello"); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	got := make(chan Event, 1)
+	go func() {
+		_ = b.Tail(ctx, "0", []string{"status"}, func(e Event) {
+			select {
+			case got <- e:
+			default:
+			}
+		})
+	}()
+
+	select {
+	case e := <-got:
+		if e.Kind != "status" || e.Agent != "dev" || e.State != "working" || e.Message != "hello" {
+			t.Fatalf("Tail event = %+v, want status/dev/working/hello", e)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Tail produced no event within 3s")
+	}
+}

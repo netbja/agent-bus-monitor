@@ -7,9 +7,11 @@ package bus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -158,4 +160,63 @@ func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (
 	return b.add(ctx, "cmd", map[string]interface{}{
 		"from": from, "target": target, "type": typ, "ref": ref, "command": command,
 	})
+}
+
+// Tail blocks reading the given stream kinds from lastID onward (use "$" for
+// only-new, "0" to replay history), invoking fn per event until ctx is
+// cancelled. It is read-only: a plain XREAD never touches consumer-group
+// cursors, so observers (busmon) don't compete with agents reading cmd via
+// WatchCmd.
+func (b *Bus) Tail(ctx context.Context, lastID string, kinds []string, fn func(Event)) error {
+	keys := make([]string, len(kinds))
+	ids := make(map[string]string, len(kinds))
+	for i, k := range kinds {
+		keys[i] = StreamKey(b.project, k)
+		ids[keys[i]] = lastID
+	}
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		res, err := b.r.XRead(ctx, &redis.XReadArgs{
+			Streams: append(append([]string{}, keys...), idList(keys, ids)...),
+			Block:   time.Second,
+		}).Result()
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				continue // block timeout, no new entries
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return err
+		}
+		for _, s := range res {
+			for _, m := range s.Messages {
+				ids[s.Stream] = m.ID
+				fn(ParseEntry(s.Stream, m.ID, toStringMap(m.Values)))
+			}
+		}
+	}
+}
+
+// idList returns the per-key cursor IDs in the same order as keys (XREAD wants
+// all keys followed by all IDs).
+func idList(keys []string, ids map[string]string) []string {
+	out := make([]string, len(keys))
+	for i, k := range keys {
+		out[i] = ids[k]
+	}
+	return out
+}
+
+// toStringMap narrows redis stream field values (interface{}) to strings.
+func toStringMap(v map[string]interface{}) map[string]string {
+	out := make(map[string]string, len(v))
+	for k, val := range v {
+		if s, ok := val.(string); ok {
+			out[k] = s
+		}
+	}
+	return out
 }
