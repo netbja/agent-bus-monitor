@@ -170,27 +170,45 @@ func TestPilotLease(t *testing.T) {
 func TestChallengeGate(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	defer b.r.Del(ctx, GateKey(b.Project(), "dev"))
+	t.Cleanup(func() { b.r.Del(ctx, GateKey(b.Project(), "dev")) })
 
 	if m, err := b.OpenChallenges(ctx, "dev"); err != nil || len(m) != 0 {
 		t.Fatalf("OpenChallenges before = (%v, %v), want (empty, nil)", m, err)
 	}
+	// Two concurrent challenges — a hash gate must accumulate them, not overwrite.
 	if err := b.OpenChallenge(ctx, "dev", "C1", "review|justify X"); err != nil {
-		t.Fatalf("OpenChallenge: %v", err)
+		t.Fatalf("OpenChallenge C1: %v", err)
+	}
+	if err := b.OpenChallenge(ctx, "dev", "C2", "hermes|recheck Y"); err != nil {
+		t.Fatalf("OpenChallenge C2: %v", err)
 	}
 	m, err := b.OpenChallenges(ctx, "dev")
-	if err != nil || len(m) != 1 || m["C1"] != "review|justify X" {
-		t.Fatalf("OpenChallenges after open = (%v, %v), want {C1: review|justify X}", m, err)
+	if err != nil || len(m) != 2 || m["C1"] != "review|justify X" || m["C2"] != "hermes|recheck Y" {
+		t.Fatalf("OpenChallenges after 2 opens = (%v, %v), want {C1,C2}", m, err)
 	}
+	// Resolving C1 leaves C2 gating the agent.
 	if err := b.ResolveChallenge(ctx, "dev", "C1"); err != nil {
-		t.Fatalf("ResolveChallenge: %v", err)
+		t.Fatalf("ResolveChallenge C1: %v", err)
+	}
+	if m, err := b.OpenChallenges(ctx, "dev"); err != nil || len(m) != 1 || m["C2"] != "hermes|recheck Y" {
+		t.Fatalf("OpenChallenges after resolving C1 = (%v, %v), want {C2}", m, err)
+	}
+	if err := b.ResolveChallenge(ctx, "dev", "C2"); err != nil {
+		t.Fatalf("ResolveChallenge C2: %v", err)
 	}
 	if m, err := b.OpenChallenges(ctx, "dev"); err != nil || len(m) != 0 {
 		t.Fatalf("OpenChallenges after resolve = (%v, %v), want (empty, nil)", m, err)
 	}
 
+	// A verdict for a ref that isn't open must fail loudly, not no-op.
+	if err := b.ResolveChallenge(ctx, "dev", "C1"); err == nil {
+		t.Error("ResolveChallenge of an unknown ref succeeded, want error")
+	}
 	if err := b.OpenChallenge(ctx, "dev", "", "no ref"); err == nil {
-		t.Fatal("OpenChallenge accepted an empty ref, want error")
+		t.Error("OpenChallenge accepted an empty ref, want error")
+	}
+	if err := b.OpenChallenge(ctx, "dev", "C9", ""); err == nil {
+		t.Error("OpenChallenge accepted an empty meta, want error")
 	}
 }
 

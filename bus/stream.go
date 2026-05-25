@@ -278,21 +278,37 @@ func (b *Bus) PilotDriver(ctx context.Context) (string, error) {
 // OpenChallenge records an unresolved 4-eyes challenge gating agent: a hash
 // field ref → meta ("<challenger>|<summary>"). The agent must not proceed while
 // any challenge is open. There is deliberately no TTL — a safety gate is closed
-// only by an explicit verdict (ResolveChallenge), never by silent expiry.
+// only by an explicit verdict (ResolveChallenge), never by silent expiry. Both
+// ref and meta are required: ref keys the challenge, meta is its audit trail.
+// agent is not re-validated here (the key is derived, not broadcast); the caller
+// — typically the cmd-stream handler — is expected to have validated it upstream.
 func (b *Bus) OpenChallenge(ctx context.Context, agent, ref, meta string) error {
 	if ref == "" {
 		return fmt.Errorf("challenge ref required")
 	}
+	if meta == "" {
+		return fmt.Errorf("challenge meta required (audit trail)")
+	}
 	return b.r.HSet(ctx, GateKey(b.project, agent), ref, meta).Err()
 }
 
-// ResolveChallenge closes the challenge identified by ref (the verdict step).
+// ResolveChallenge closes the challenge identified by ref (the verdict step). It
+// errors if no such challenge is open, so a verdict carrying a stale or mistyped
+// ref fails loudly instead of silently "resolving" a gate that was never set.
 func (b *Bus) ResolveChallenge(ctx context.Context, agent, ref string) error {
-	return b.r.HDel(ctx, GateKey(b.project, agent), ref).Err()
+	n, err := b.r.HDel(ctx, GateKey(b.project, agent), ref).Result()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("no open challenge %q for agent %q", ref, agent)
+	}
+	return nil
 }
 
 // OpenChallenges returns ref→meta for every unresolved challenge gating agent.
-// A non-empty result means the agent is gated.
+// A non-empty result means the agent is gated. An ungated agent yields an empty
+// (non-nil) map, not an error.
 func (b *Bus) OpenChallenges(ctx context.Context, agent string) (map[string]string, error) {
 	return b.r.HGetAll(ctx, GateKey(b.project, agent)).Result()
 }
