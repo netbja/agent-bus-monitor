@@ -29,3 +29,31 @@ func TestValidName(t *testing.T) {
 		}
 	}
 }
+
+func TestParseEntry(t *testing.T) {
+	cases := []struct {
+		name, stream string
+		fields       map[string]string
+		want         Event
+	}{
+		{"status", "busmon:status",
+			map[string]string{"agent": "dev", "state": "working", "message": "hi"},
+			Event{ID: "1-0", Project: "busmon", Kind: "status", Agent: "dev", State: "working", Message: "hi"}},
+		{"report", "busmon:report",
+			map[string]string{"agent": "dev", "kind": "note", "message": "bug fixed"},
+			Event{ID: "1-0", Project: "busmon", Kind: "report", Agent: "dev", RKind: "note", Message: "bug fixed"}},
+		{"notify", "trading:notify",
+			map[string]string{"from": "hermes", "message": "soak running"},
+			Event{ID: "1-0", Project: "trading", Kind: "notify", From: "hermes", Message: "soak running"}},
+		{"cmd", "busmon:cmd",
+			map[string]string{"from": "review", "target": "dev", "type": "challenge", "ref": "C1", "command": "justify X"},
+			Event{ID: "1-0", Project: "busmon", Kind: "cmd", From: "review", Target: "dev", Type: "challenge", Ref: "C1", Message: "justify X"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ParseEntry(c.stream, "1-0", c.fields); got != c.want {
+				t.Fatalf("ParseEntry = %+v, want %+v", got, c.want)
+			}
+		})
+	}
+}
