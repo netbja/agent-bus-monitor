@@ -249,12 +249,18 @@ func (b *Bus) WatchCmd(ctx context.Context, agent, consumer string, fn func(Even
 
 // Pilot sets (or renews — they are the same SET) the project's pilot lease to
 // driver with a TTL. Hermes calls this on an interval while it has budget;
-// stopping = letting workers fall back to autonomous mode.
+// stopping = letting workers fall back to autonomous mode. driver must be
+// non-empty: "" is PilotDriver's "no lease / autonomous" sentinel, so an empty
+// driver would be an unreadable lease.
 func (b *Bus) Pilot(ctx context.Context, driver string, ttl time.Duration) error {
+	if driver == "" {
+		return fmt.Errorf("pilot driver must not be empty")
+	}
 	return b.r.Set(ctx, PilotKey(b.project), driver, ttl).Err()
 }
 
 // ReleasePilot drops the lease immediately (explicit hand-off to autonomous).
+// Safe to call when no lease is held — DEL of a missing key is a no-op.
 func (b *Bus) ReleasePilot(ctx context.Context) error {
 	return b.r.Del(ctx, PilotKey(b.project)).Err()
 }

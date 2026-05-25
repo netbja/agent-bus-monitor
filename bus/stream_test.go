@@ -162,6 +162,9 @@ func TestPilotLease(t *testing.T) {
 	if d, err := b.PilotDriver(ctx); err != nil || d != "" {
 		t.Fatalf("PilotDriver after release = (%q, %v), want (\"\", nil)", d, err)
 	}
+	if err := b.Pilot(ctx, "", 90*time.Second); err == nil {
+		t.Error("Pilot accepted an empty driver, want error (collides with autonomous sentinel)")
+	}
 }
 
 func TestWatchCmdDelivers(t *testing.T) {
