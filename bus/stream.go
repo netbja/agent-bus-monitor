@@ -162,11 +162,15 @@ func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (
 	})
 }
 
-// Tail blocks reading the given stream kinds from lastID onward (use "$" for
-// only-new, "0" to replay history), invoking fn per event until ctx is
-// cancelled. It is read-only: a plain XREAD never touches consumer-group
-// cursors, so observers (busmon) don't compete with agents reading cmd via
-// WatchCmd.
+// Tail blocks reading the given stream kinds from lastID onward (use "0" to
+// replay history), invoking fn per event until ctx is cancelled. It is
+// read-only: a plain XREAD never touches consumer-group cursors, so observers
+// (busmon) don't compete with agents reading cmd via WatchCmd.
+//
+// fn is called synchronously on Tail's goroutine — it must not block (queue the
+// work and return). Pass "0" or an explicit ID rather than "$" for multi-kind
+// tails: with several streams, "$" can miss entries that arrive between the
+// per-poll re-evaluation of "$" on each stream.
 func (b *Bus) Tail(ctx context.Context, lastID string, kinds []string, fn func(Event)) error {
 	keys := make([]string, len(kinds))
 	ids := make(map[string]string, len(kinds))
