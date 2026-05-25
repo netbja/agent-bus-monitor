@@ -200,6 +200,53 @@ func (b *Bus) Tail(ctx context.Context, lastID string, kinds []string, fn func(E
 	}
 }
 
+// WatchCmd consumes the project's shared cmd stream via a per-agent consumer
+// group (group name = agent), giving at-least-once delivery across one-shot
+// restarts (the cursor lives server-side). fn is called only for entries whose
+// target == agent; every read entry is XACKed — including ones for other agents
+// — so the pending-entries list stays clean. WatchCmd returns nil when fn
+// returns true (handled; used by the one-shot `agentbus watch`) or the context
+// error when cancelled.
+func (b *Bus) WatchCmd(ctx context.Context, agent, consumer string, fn func(Event) bool) error {
+	if !ValidName(agent) {
+		return fmt.Errorf("invalid agent %q", agent)
+	}
+	stream := StreamKey(b.project, "cmd")
+	// MKSTREAM creates the stream if absent; an existing group yields BUSYGROUP,
+	// which we ignore so the group keeps its current cursor.
+	if err := b.r.XGroupCreateMkStream(ctx, stream, agent, "$").Err(); err != nil &&
+		!strings.Contains(err.Error(), "BUSYGROUP") {
+		return err
+	}
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		res, err := b.r.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group: agent, Consumer: consumer,
+			Streams: []string{stream, ">"},
+			Block:   time.Second, Count: 16,
+		}).Result()
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				continue
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return err
+		}
+		for _, s := range res {
+			for _, m := range s.Messages {
+				b.r.XAck(ctx, stream, agent, m.ID) // best-effort; clears the PEL
+				if e := ParseEntry(stream, m.ID, toStringMap(m.Values)); e.Target == agent && fn(e) {
+					return nil
+				}
+			}
+		}
+	}
+}
+
 // idList returns the per-key cursor IDs in the same order as keys (XREAD wants
 // all keys followed by all IDs).
 func idList(keys []string, ids map[string]string) []string {

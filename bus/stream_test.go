@@ -139,3 +139,39 @@ func TestTailRoundTrip(t *testing.T) {
 		t.Fatal("Tail produced no event within 3s")
 	}
 }
+
+func TestWatchCmdDelivers(t *testing.T) {
+	b := dialTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream := StreamKey(b.Project(), "cmd")
+	// Pre-create dev's group at "0" so the test deterministically replays the
+	// entries published next (WatchCmd's own MKSTREAM at "$" is then a no-op).
+	if err := b.r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
+		t.Fatalf("XGroupCreate: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "hermes", "other", CmdDirective, "", "not for dev"); err != nil {
+		t.Fatalf("Cmd other: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "review", "dev", CmdChallenge, "C1", "justify X"); err != nil {
+		t.Fatalf("Cmd dev: %v", err)
+	}
+
+	got := make(chan Event, 1)
+	go func() {
+		_ = b.WatchCmd(ctx, "dev", "test-consumer", func(e Event) bool {
+			got <- e
+			return true // one-shot: stop on first entry addressed to dev
+		})
+	}()
+
+	select {
+	case e := <-got:
+		if e.Target != "dev" || e.Type != CmdChallenge || e.Ref != "C1" || e.Message != "justify X" {
+			t.Fatalf("WatchCmd delivered %+v, want the dev/challenge/C1 entry", e)
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("WatchCmd delivered nothing for dev within 4s")
+	}
+}
