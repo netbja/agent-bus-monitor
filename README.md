@@ -87,7 +87,7 @@ agentbus listen                                    # debug tail (all four stream
 agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
 
-busmon -project myproject                          # live dashboard
+busmon --project myproject                         # live dashboard
 ```
 
 ## busmon panes

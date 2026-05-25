@@ -10,8 +10,8 @@ export AGENT_BUS_PROJECT=trading   # REQUIRED — your project namespace (no def
 export AGENT_BUS_AGENT=dev         # your role (lowercase ^[a-z][a-z0-9_-]{0,31}$); hermes = orchestrator
 ```
 
-`agentbus` and `busmon` both refuse to start without a project. `--project P` / `-project P`
-override the env var; `--host`/`REDIS_*` resolve the broker (default `localhost:6380`).
+`agentbus` and `busmon` both refuse to start without a project. `--project P`
+overrides the env var; `--host`/`REDIS_*` resolve the broker (default `localhost:6380`).
 
 ## Publishing (what you should emit)
 
@@ -76,6 +76,6 @@ is the thin wrapper that calls it.
 
 ## Watching everything
 
-`busmon -project <p>` — TUI: AGENTS (presence + pilot mode header + 🔒 gate badges), ACTIVITY
+`busmon --project <p>` — TUI: AGENTS (presence + pilot mode header + 🔒 gate badges), ACTIVITY
 (status/report/notify/cmd, backfilled from history), INPUT (Enter → `notify`).
 Debug from the CLI: `agentbus listen [status report notify cmd]`.
