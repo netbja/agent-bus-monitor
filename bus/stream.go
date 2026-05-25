@@ -114,6 +114,7 @@ func (b *Bus) add(ctx context.Context, kind string, values map[string]interface{
 	}).Result()
 }
 
+// Status publishes an agent's state to the {project}:status stream.
 func (b *Bus) Status(ctx context.Context, agent, state, message string) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
@@ -126,6 +127,9 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string) (string,
 	})
 }
 
+// Report publishes a curated report to the {project}:report stream. kind is
+// intentionally not allowlisted here — it is free text (note/auto today) owned
+// by the report protocol, mirroring the legacy Report in bus.go.
 func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
@@ -135,6 +139,8 @@ func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, 
 	})
 }
 
+// Notify broadcasts a message on the {project}:notify stream. from is advisory
+// (the announcing identity); it is not validated.
 func (b *Bus) Notify(ctx context.Context, from, message string) (string, error) {
 	return b.add(ctx, "notify", map[string]interface{}{"from": from, "message": message})
 }

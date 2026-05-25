@@ -87,6 +87,8 @@ func dialTest(t *testing.T) *Bus {
 }
 
 func TestOpenRejectsBadProject(t *testing.T) {
+	// nil client is intentional: Open validates the project before it ever
+	// touches the client, so a bad project must error without dialing Redis.
 	if _, err := Open(nil, "Bad:Project"); err == nil {
 		t.Fatal("Open accepted an invalid project, want error")
 	}
