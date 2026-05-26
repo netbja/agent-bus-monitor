@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestExtractFlag(t *testing.T) {
 	rest, v := extractFlag([]string{"a", "--ref", "C1", "b"}, "--ref")
@@ -32,5 +35,23 @@ func TestExtractBool(t *testing.T) {
 func TestGenRefUnique(t *testing.T) {
 	if a, b := genRef(), genRef(); a == b || a == "" {
 		t.Fatalf("genRef not unique/non-empty: %q %q", a, b)
+	}
+}
+
+func TestParseIdle(t *testing.T) {
+	def := 240 * time.Second
+	if got := parseIdle("", def); got != def {
+		t.Fatalf("empty = %v, want default %v", got, def)
+	}
+	if got := parseIdle("3600", def); got != 3600*time.Second {
+		t.Fatalf("\"3600\" = %v, want 3600s", got)
+	}
+	// non-positive and non-numeric fall back to the default, never zero/negative
+	// (a zero idle window would make the watcher exit immediately, busy-looping).
+	if got := parseIdle("0", def); got != def {
+		t.Fatalf("\"0\" = %v, want default", got)
+	}
+	if got := parseIdle("nope", def); got != def {
+		t.Fatalf("\"nope\" = %v, want default", got)
 	}
 }

@@ -30,3 +30,14 @@ func extractBool(args []string, name string) ([]string, bool) {
 
 // genRef returns a short, sortable, unique challenge id.
 func genRef() string { return strconv.FormatInt(time.Now().UnixNano(), 36) }
+
+// parseIdle interprets subscribe/watch's optional "[idle_seconds]" positional:
+// whole seconds the watcher blocks before emitting a heartbeat and exiting so it
+// can be re-armed. Empty, non-numeric, or non-positive falls back to def — a
+// zero/negative window would make the watcher exit instantly and busy-loop.
+func parseIdle(arg string, def time.Duration) time.Duration {
+	if n, err := strconv.Atoi(arg); err == nil && n > 0 {
+		return time.Duration(n) * time.Second
+	}
+	return def
+}

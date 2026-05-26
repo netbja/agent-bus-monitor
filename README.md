@@ -12,7 +12,7 @@ project.
 |------------|-----------------------------------------------------------------------------|
 | broker     | `redis:8-alpine` on `localhost:6380` (`docker-compose.yml`)                |
 | `bus/`     | Go package: connection, Streams API (`Bus` handle), publish helpers         |
-| `agentbus` | CLI client — status/report/notify/cmd/watch/listen (`cmd/agentbus`)         |
+| `agentbus` | CLI client — status/report/notify/cmd/subscribe/listen (`cmd/agentbus`)     |
 | `busmon`   | TUI dashboard: AGENTS / ACTIVITY / INPUT (`cmd/busmon`)                     |
 
 ## Deployment topology (current: laptop ⇄ VDR)
@@ -27,16 +27,19 @@ today — and, importantly, where they *don't* connect.
 - Two Claude Code sessions run on the laptop under **herdr** in `~/Projects/adv-trading-ai`
   (agents `claude1`, `claude2`); a **hermes agent** runs on the VDR.
 
-**Inbound to the laptop Claudes — `bus_watch.sh` (the canonical bridge).**
-`adv-trading-ai/tools/bus_watch.sh <agent>` is a one-shot watcher armed as a Claude Code
-background task. It calls `agentbus watch <agent>`, which blocks on the project's `:cmd` stream
-via XREADGROUP and prints the first addressed entry (or `__HEARTBEAT__` after a 240s idle window)
-then exits — and that exit re-invokes the Claude session that armed it. Each session re-arms after
-every fire. `busmon` runs alongside as the human dashboard.
+**Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
+A session arms `agentbus subscribe <agent> [idle_secs]` as a Claude Code background task. It blocks
+on the project's `:cmd` stream via XREADGROUP, prints the first addressed entry (or `__HEARTBEAT__`
+after the idle window, default 240s) then exits — and that exit re-invokes the Claude session that
+armed it. Each session re-arms after every fire. The whole loop lives in the `agentbus` binary, so
+there is **no wrapper script and no watcher daemon** in the agent path. `busmon` runs alongside as
+the human dashboard.
 
-> An earlier prototype, `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes via
-> `herdr pane send-text/send-keys` with hard-coded pane IDs. It was dropped in favour of
-> `bus_watch.sh`, which needs no pane map and rides Claude Code's background-task model directly.
+> This supersedes `adv-trading-ai/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
+> and the persistent `~/.hermes/scripts/bus_watch_hdl.sh` logger loop. An even earlier prototype,
+> `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes with hard-coded pane IDs. Don't
+> reintroduce a wrapper, a pane relay, or a `Restart=always` watcher daemon — a restart loop never
+> wakes a terminal Claude session, which defeats the wake-on-exit model.
 
 **Separate notification path — NOT the bus.** The `Stop` hook in
 `adv-trading-ai/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
@@ -82,7 +85,8 @@ agentbus notify "soak 24h started"
 agentbus cmd claude2 "check status"                # sends a directive to claude2
 agentbus report claude1 "bug corrigé"              # curated report (note kind)
 agentbus report claude1 --auto "soak 24h done"     # auto = Stop-hook safety net
-agentbus watch claude1                             # one-shot: waits for next cmd, or __HEARTBEAT__
+agentbus subscribe claude1                         # block for next cmd then exit (re-arm to stay subscribed)
+agentbus subscribe claude1 3600                    # same, with a 1h idle window before __HEARTBEAT__
 agentbus listen                                    # debug tail (all four streams)
 agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
