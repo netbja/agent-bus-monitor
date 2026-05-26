@@ -39,7 +39,7 @@ This is a TTL lease, not a message:
   ```bash
   agentbus pilot status          # "piloted by hermes"  OR  "autonomous"
   ```
-  - **piloted** → wait for a directive (don't act on your own); `agentbus watch <self>` blocks for it.
+  - **piloted** → wait for a directive (don't act on your own); `agentbus subscribe <self>` blocks for it.
   - **autonomous** → proceed on your own plan; just keep emitting `status`/`report`.
 
 The lease expiring (Hermes silent / out of budget / crashed) ⇒ autonomous, automatically.
@@ -68,11 +68,12 @@ agentbus gate <self>            # lists open challenges; exit code ≠ 0 means y
 
 ## Inbound (being driven / challenged)
 
-`agentbus watch <agent>` is the one-shot inbound watcher: it blocks on `{project}:cmd` for an entry
-addressed to `<agent>` (server-side consumer-group cursor = no missed commands across restarts),
-prints `[type from->target ref=R] message` and exits — or prints `__HEARTBEAT__` after ~240s idle.
-Arm it as a Claude background task and re-arm after each fire. In `adv-trading-ai`, `tools/bus_watch.sh`
-is the thin wrapper that calls it.
+`agentbus subscribe <agent> [idle_secs]` is the inbound subscriber: it blocks on `{project}:cmd` for an
+entry addressed to `<agent>` (server-side consumer-group cursor = no missed commands across restarts),
+prints `[type from->target ref=R] message` and exits — or prints `__HEARTBEAT__` after the idle window
+(optional positional arg, default ~240s). Arm it as a Claude background task: its **exit** is what wakes
+your session, so re-arm after each fire. The loop is self-contained in the binary — no wrapper script
+and no daemon. (`watch` is a kept-for-compat alias.)
 
 ## Watching everything
 
