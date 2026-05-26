@@ -15,7 +15,8 @@
 //	agentbus --project P verdict   --ref R <target> <approve|reject> [msg...]  # resolves the gate
 //	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
-//	agentbus --project P watch     <agent>      # one-shot: prints first addressed cmd, or __HEARTBEAT__
+//	agentbus --project P subscribe <agent> [idle_secs]  # block for next addressed cmd, print it, exit; re-arm to stay subscribed
+//	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
 //	agentbus --host <host> ...
 package main
@@ -62,7 +63,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -219,16 +220,26 @@ func main() {
 		}
 		os.Exit(1) // gated → non-zero so a script/agent can block on it
 
-	case "watch":
+	case "subscribe", "watch":
+		// One subscription tick: block on the agent's :cmd consumer group until
+		// the next addressed cmd, print it, and EXIT — that exit is what lets a
+		// Claude Code background task complete and re-invoke the agent's session.
+		// "Staying subscribed" = the agent re-arming after each fire, not a loop
+		// here (a long-lived loop would never wake a terminal session). On idle,
+		// print __HEARTBEAT__ and exit so the agent re-arms / detects liveness.
 		if len(rest) < 1 {
-			die("usage: watch <agent>")
+			die("usage: subscribe <agent> [idle_seconds]")
 		}
 		agent := rest[0]
+		idle := heartbeat
+		if len(rest) > 1 {
+			idle = parseIdle(rest[1], heartbeat)
+		}
 		consumer, _ := os.Hostname()
 		if consumer == "" {
 			consumer = self
 		}
-		wctx, cancel := context.WithTimeout(ctx, heartbeat)
+		wctx, cancel := context.WithTimeout(ctx, idle)
 		defer cancel()
 		werr := b.WatchCmd(wctx, agent, consumer, func(e bus.Event) bool {
 			ref := ""
@@ -242,7 +253,7 @@ func main() {
 			return // delivered one cmd
 		}
 		if errors.Is(werr, context.DeadlineExceeded) {
-			fmt.Println("__HEARTBEAT__") // idle window elapsed; re-arm the watcher
+			fmt.Println("__HEARTBEAT__") // idle window elapsed; re-arm the subscriber
 			return
 		}
 		die(werr.Error())

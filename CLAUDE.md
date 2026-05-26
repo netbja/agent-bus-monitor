@@ -58,10 +58,14 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (each a single `main.go`)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`notify`/`cmd`/`challenge`/`reply`/
-  `verdict`/`pilot`/`gate`/`watch`/`listen`. Parses args manually; trailing words are joined.
-  `watch <agent>` is a one-shot XREADGROUP loop (consumer group = agent name) that prints the first
-  addressed cmd entry then exits, or prints `__HEARTBEAT__` after a 240s idle window. `listen`
-  tails all four streams via `Bus.Tail` for debugging.
+  `verdict`/`pilot`/`gate`/`subscribe`/`watch`/`listen`. Parses args manually; trailing words are
+  joined. `subscribe <agent> [idle_secs]` is a one-shot XREADGROUP loop (consumer group = agent
+  name) that prints the first addressed cmd entry then **exits** — that exit is the wake signal for
+  a Claude Code background task — or prints `__HEARTBEAT__` after the idle window (optional positional
+  `idle_secs`, default 240s) and exits so the agent re-arms. "Staying subscribed" is the agent
+  re-arming after each fire, **not** a long-lived loop (which would never wake a terminal session).
+  `watch` is the legacy alias of `subscribe` (same handler). `listen` tails all four streams via
+  `Bus.Tail` for debugging.
 - **`busmon`** — `tview`/`tcell` TUI. `Bus.Tail` with lastID `"0"` (backfills history, then live)
   runs in a goroutine pushing UI updates via `app.QueueUpdateDraw`; the `agents` map is
   mutex-guarded; a 1s ticker polls `Bus.PilotDriver` + per-agent `Bus.OpenChallenges` and re-renders
@@ -74,15 +78,18 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
 ### How the bus is actually consumed (lives outside this repo)
 
-The canonical inbound bridge to a Claude Code session is **`bus_watch.sh`**, in the *separate*
-`adv-trading-ai` repo (`tools/bus_watch.sh`), not here. It should call `agentbus watch <agent>`
-(which handles XREADGROUP cursor management and the heartbeat timeout internally) rather than
-reimplementing the Streams read loop itself. The script is a thin wrapper: it blocks on the
-`agentbus watch` exit and re-invokes the Claude session that armed it.
+A Claude Code session subscribes by arming **`agentbus subscribe <agent> [idle_secs]`** as a
+background task: it blocks on the project's `:cmd` stream, prints the first addressed entry, and
+exits — and that exit re-invokes the session that armed it, which then re-arms. The whole loop is
+self-contained in the `agentbus` binary (this repo); there is **no external wrapper script** and
+**no daemon** in the agent path. The old `adv-trading-ai/tools/bus_watch.sh` (and the persistent
+`~/.hermes/scripts/bus_watch_hdl.sh` logger loop) are **superseded** — agents call `agentbus
+subscribe` directly. Don't reintroduce a wrapper script or a `Restart=always` watcher daemon: a
+restart loop just re-runs the watcher and never wakes a terminal Claude session, which defeats the
+wake-on-exit model.
 
-A prior in-repo prototype, `cmd/busbridge` (relay to herdr panes via `herdr pane send-text/send-keys`),
-was **removed** in favour of `bus_watch.sh`. Don't reintroduce a pane-relay daemon without
-checking `bus_watch.sh` first.
+A still-earlier in-repo prototype, `cmd/busbridge` (relay to herdr panes via `herdr pane
+send-text/send-keys`), was also **removed**. Don't reintroduce a pane-relay daemon either.
 
 There is also a parallel notification path that is **not** on this bus: an `adv-trading-ai` `Stop`
 hook POSTs (via `hermes-notify`) to a hermes gateway on the VDR (`:8644`) that delivers to Signal.
