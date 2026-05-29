@@ -1,82 +1,181 @@
-# Agent Bus — guide for Claude & Hermes agents
+# Agent Bus — Quick-Use Card for Agents
 
-How to talk on the Streams bus. One transport (Redis Streams), one rule:
-every channel is `{project}:{kind}`.
+You are an agent (Claude Code, Codex, hermes, …) talking to other agents over a
+shared **Redis Streams** bus. One CLI: **`agentbus`**. This card is the full
+syntax — copy a line, change the words, run it. **Don't guess the flags; they
+are listed verbatim below.**
 
-## Setup (every agent)
+---
 
-```bash
-export AGENT_BUS_PROJECT=trading   # REQUIRED — your project namespace (no default)
-export AGENT_BUS_AGENT=dev         # your role (lowercase ^[a-z][a-z0-9_-]{0,31}$); hermes = orchestrator
-```
+## 0. Read this first — the 4 traps that make commands fail
 
-`agentbus` and `busmon` both refuse to start without a project. `--project P`
-overrides the env var; `--host`/`REDIS_*` resolve the broker (default `localhost:6380`).
+These are the only reasons a well-formed-looking command gets rejected. Check
+them before retrying anything.
 
-## Publishing (what you should emit)
+1. **Project is mandatory.** Every call needs `--project <p>` (or `export
+   AGENT_BUS_PROJECT=<p>`). No default. Missing it → `error: project required`.
+2. **Flags use a DOUBLE dash and a SPACE — never `=`, never a single dash.**
+   - ✅ `agentbus --project trading ...`   ✅ `--ref abc123`   ✅ `--auto`   ✅ `--ttl 90s`
+   - ❌ `-project trading` (single dash — silently ignored → "project required")
+   - ❌ `--ref=abc123` (the `=` form is NOT parsed → "usage" error)
+   - (Exception: the `busmon` TUI uses Go flags and tolerates `-project` *or*
+     `--project`. `agentbus` does **not** — always use `--project`.)
+3. **Positional order is fixed.** `<agent>` and `<state>`/`<target>` come in the
+   exact order shown. Trailing words are joined into the message, so the message
+   always goes **last** and needs no quotes (quotes are fine too).
+4. **`<agent>`/`<project>` names must match `^[a-z][a-z0-9_-]{0,31}$`** —
+   lowercase, start with a **letter**, then letters/digits/`_`/`-`, ≤32 chars.
+   - ✅ `claude1`  ✅ `claude_1`  ✅ `dev`  ✅ `hermes`  ✅ `c`
+   - ❌ `Claude1` (uppercase)  ❌ `1claude` (leading digit)  ❌ `_claude` (leading `_`)  ❌ `claude.1` (dot)
 
-```bash
-agentbus status <agent> <working|idle|blocked|done> [msg]   # your state — this IS your heartbeat
-agentbus report <agent> [--auto] <msg>                      # curated report (note, or --auto safety-net)
-agentbus notify <msg>                                       # project-wide announcement
-```
+State values are a closed set: **`working` · `idle` · `blocked` · `done`**.
 
-Agents are one-shot CLI calls, so every `status`/`report` publish doubles as liveness — busmon
-ages you to `idle` (2m) / `offline` (10m) from your last entry.
+---
 
-## Who's driving: piloted vs autonomous
-
-**Hermes pilots the workers while it has budget; when budget runs out, workers are autonomous.**
-This is a TTL lease, not a message:
-
-- **Hermes**, on an interval *while it has budget*:
-  ```bash
-  agentbus pilot claim           # = renew; SET {project}:pilot=hermes EX 90s (default; --ttl to change)
-  ```
-  Out of budget? **Just stop calling it.** No "I'm done" message. (Or `agentbus pilot release` to hand off now.)
-
-- **Workers**, at each wake-up, check the mode:
-  ```bash
-  agentbus pilot status          # "piloted by hermes"  OR  "autonomous"
-  ```
-  - **piloted** → wait for a directive (don't act on your own); `agentbus subscribe <self>` blocks for it.
-  - **autonomous** → proceed on your own plan; just keep emitting `status`/`report`.
-
-The lease expiring (Hermes silent / out of budget / crashed) ⇒ autonomous, automatically.
-
-## Directing & challenging other agents (`{project}:cmd`)
-
-Any agent can address any agent. `cmd.type` ∈ `directive | challenge | reply | verdict`.
+## 1. 30-second setup
 
 ```bash
-agentbus cmd <target> <command>                       # directive (Hermes piloting) — gated by pilot mode
-agentbus challenge <target> [--ref R] <why>           # 4-eyes: opens a gate on <target> (prints the ref)
-agentbus reply --ref R <target> <answer>              # respond to a challenge
-agentbus verdict --ref R <target> <approve|reject>    # closes the gate
+export AGENT_BUS_PROJECT=trading   # REQUIRED namespace (every stream is {project}:{kind})
+export AGENT_BUS_AGENT=claude1     # who YOU are (used as `from` and pilot identity); default "hermes"
 ```
 
-### Strict 4-eyes gate
+With those exported you can drop `--project` from every command below. The
+broker defaults to `localhost:6380` (override with `--host` or `REDIS_*`).
 
-A `challenge` **blocks** the challenged agent until a `verdict`, in **both** piloted and autonomous mode
-(it's a safety barrier independent of who's driving). Before you mark work `done` / proceed, check:
+Sanity check it works:
 
 ```bash
-agentbus gate <self>            # lists open challenges; exit code ≠ 0 means you are GATED — do not proceed
+agentbus notify "claude1 online"   # should return silently with exit 0
 ```
 
-`verdict` fails loudly if the ref isn't open (catches a stale/typo verdict).
+---
 
-## Inbound (being driven / challenged)
+## 2. Cheat sheet — every command, copy-paste ready
 
-`agentbus subscribe <agent> [idle_secs]` is the inbound subscriber: it blocks on `{project}:cmd` for an
-entry addressed to `<agent>` (server-side consumer-group cursor = no missed commands across restarts),
-prints `[type from->target ref=R] message` and exits — or prints `__HEARTBEAT__` after the idle window
-(optional positional arg, default ~240s). Arm it as a Claude background task: its **exit** is what wakes
-your session, so re-arm after each fire. The loop is self-contained in the binary — no wrapper script
-and no daemon. (`watch` is a kept-for-compat alias.)
+Assumes `AGENT_BUS_PROJECT` is exported. If not, add `--project <p>` after `agentbus`.
 
-## Watching everything
+```bash
+# ── PUBLISH YOUR OWN STATE (this IS your heartbeat — emit often) ──────────────
+agentbus status <agent> <working|idle|blocked|done> [message...]
+agentbus status claude1 working plan 10 shipped         # message = trailing words, no quotes needed
+agentbus status claude1 done
 
-`busmon --project <p>` — TUI: AGENTS (presence + pilot mode header + 🔒 gate badges), ACTIVITY
-(status/report/notify/cmd, backfilled from history), INPUT (Enter → `notify`).
-Debug from the CLI: `agentbus listen [status report notify cmd]`.
+# ── REPORT (curated human-facing note) ───────────────────────────────────────
+agentbus report <agent> [--auto] <message...>
+agentbus report claude1 bug in order router fixed
+agentbus report claude1 --auto soak 24h done            # --auto = Stop-hook safety-net report
+
+# ── NOTIFY (project-wide announcement, from = AGENT_BUS_AGENT) ────────────────
+agentbus notify <message...>
+agentbus notify soak test started
+
+# ── DIRECT ANOTHER AGENT (directive on {project}:cmd) ─────────────────────────
+agentbus cmd <target> <command...>
+agentbus cmd claude2 run the integration suite
+
+# ── 4-EYES CHALLENGE GATE (blocks <target> until a verdict) ───────────────────
+agentbus challenge <target> [--ref R] <why...>          # prints: "challenge <ref> opened on <target>"
+agentbus challenge claude2 confirm you backed up the DB # auto-generates a ref, PRINTS it — capture it
+agentbus reply   --ref <R> <target> <answer...>         # answer a challenge you received
+agentbus verdict --ref <R> <target> <approve|reject> [message...]   # resolver closes the gate
+agentbus verdict --ref k3f9q claude2 approve looks good
+
+# ── AM I BLOCKED? (check before you proceed / mark done) ──────────────────────
+agentbus gate <agent>                                   # lists open challenges; EXIT CODE != 0 means GATED
+agentbus gate claude1 && echo "clear to proceed"
+
+# ── PILOT LEASE (who is driving: hermes vs autonomous) ────────────────────────
+agentbus pilot <claim|renew|release|status> [--ttl 90s]
+agentbus pilot status                                   # prints "piloted by hermes" OR "autonomous"
+agentbus pilot claim --ttl 120s                         # hermes only: take/renew the lease
+agentbus pilot release                                  # hand off to autonomous now
+
+# ── INBOUND: wait for a command addressed to you ─────────────────────────────
+agentbus subscribe <agent> [idle_secs]                  # blocks for ONE cmd, prints it, EXITS; default idle 240s
+agentbus subscribe claude1                              # arm as a background task; its exit wakes your session
+agentbus subscribe claude1 3600                         # 1h idle window before it prints __HEARTBEAT__ and exits
+agentbus watch claude1                                  # legacy alias of subscribe
+
+# ── DEBUG: tail streams to your terminal ─────────────────────────────────────
+agentbus listen [status report notify cmd]              # default: all four
+agentbus listen cmd report
+
+# ── HUMAN DASHBOARD (separate binary) ─────────────────────────────────────────
+busmon --project trading                                # or -project; busmon tolerates both
+```
+
+---
+
+## 3. How the loop actually works (the part agents get wrong)
+
+### Your status/report IS your heartbeat
+Agents are **one-shot CLI calls**, not daemons. There is no separate heartbeat.
+busmon ages you to **idle** after 2 min and **offline** after 10 min from your
+last `status`/`report` entry. So emit `status` whenever your state changes and a
+`report` at milestones — that's what keeps you "alive" on the dashboard.
+
+### Piloted vs autonomous — check before acting
+```bash
+agentbus pilot status
+```
+- **`piloted by hermes`** → wait for a directive; don't act on your own. Arm
+  `agentbus subscribe <self>` to receive it.
+- **`autonomous`** → proceed on your own plan; just keep emitting `status`/`report`.
+
+hermes holds the lease (`pilot claim`, default 90s TTL) only while it has budget.
+When the lease expires (hermes silent / out of budget / crashed) the mode flips
+to autonomous automatically — there is no "I'm done" message.
+
+### `subscribe` is wake-on-exit, not a long loop
+`agentbus subscribe <self>` **blocks until one command addressed to you arrives,
+prints it, and exits.** That exit is the wake signal — arm it as a Claude Code
+background task; when it fires, your session re-invokes and you re-arm. After the
+idle window (default 240s, or `[idle_secs]`) it prints `__HEARTBEAT__` and exits
+so you can re-arm. **Do not** wrap it in a `while` loop or a daemon — a long-lived
+loop never wakes a terminal session, which defeats the model. The whole loop
+lives in the binary; there is no wrapper script and no watcher daemon.
+
+### The 4-eyes gate blocks regardless of pilot mode
+A `challenge` opens a gate on the target that **blocks it until a `verdict`**, in
+both piloted and autonomous mode (it's a safety barrier, independent of who's
+driving). The typical flow across three agents:
+
+```bash
+# reviewer opens the gate (capture the printed ref!)
+agentbus challenge claude2 confirm prod migration is reversible
+#   → challenge k3f9q opened on claude2
+
+# claude2 sees it gating itself and answers
+agentbus gate claude2                       # exit != 0, lists: k3f9q  reviewer|confirm prod migration...
+agentbus reply --ref k3f9q claude2 rollback script tested, snapshot taken
+
+# a SECOND reviewer (4 eyes) resolves it
+agentbus verdict --ref k3f9q claude2 approve verified
+```
+`verdict` fails loudly if the ref isn't open (catches a stale/typo ref).
+
+---
+
+## 4. busmon (the human TUI)
+
+`busmon --project <p>` shows three panes:
+
+- **AGENTS** — presence chips (color by state), pilot-mode header
+  (`piloté par hermes` / `autonome`), and a 🔒 badge when an agent is gated.
+- **ACTIVITY** — live feed of status/report/notify/cmd (history backfilled on start).
+  - `Tab` focuses the feed; `↑`/`↓` or `j`/`k` select a line, `g`/`Home` jumps to
+    the oldest, `G`/`End` to the newest.
+  - `y` or `Enter` copies the selected line to the **clipboard** (OSC52 — works
+    even over an SSH tunnel). `Esc` clears the selection and returns to live tail.
+  - Mouse wheel scrolls; the title shows `[live]` or a pause indicator.
+- **INPUT** — type a message, `Enter` publishes it on `{project}:notify`.
+  `Esc`/`Ctrl-C` (or `q` while the feed is focused) quits.
+
+---
+
+## 5. One-line mental model
+
+> Every stream is `{project}:{kind}`. You publish your `status`/`report`, you
+> read commands with `subscribe`, you gate risky actions with
+> `challenge`/`verdict`, and a human watches it all in `busmon`. Flags are
+> `--double-dash value`. That's the whole bus.
