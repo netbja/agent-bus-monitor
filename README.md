@@ -76,6 +76,9 @@ go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus
 
 `AGENT_BUS_PROJECT` (or `--project <p>`) is required for all commands.
 
+> **Agents:** a copy-paste command reference (with the flag/positional traps that
+> cause retries) lives in [`docs/AGENT-BUS-GUIDE.md`](docs/AGENT-BUS-GUIDE.md).
+
 ```bash
 # Set project once in the shell (or pass --project on each call):
 export AGENT_BUS_PROJECT=myproject
@@ -114,11 +117,16 @@ busmon --project myproject                         # live dashboard
   4-eyes challenges. The pilot indicator (`[autonome]`/`[piloté par X]`) shows the
   current lease holder. Past `idleAfter` it shows `idle Nm`; past `staleAfter`, `offline`.
 - **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
-  and reports. It live-tails by default; **Tab** moves focus here to scroll back
-  (arrows/PgUp/PgDn/mouse wheel; `g`/`G` for top/bottom). The title shows `[live]`
-  or `[↑ pause · N plus bas]` while you browse history; **Tab** or **Esc** returns
-  to the input and resumes the tail.
+  and reports. It live-tails by default; **Tab** moves focus here. While focused,
+  **↑↓** / **j k** select a line (highlighted), **g**/**Home** jumps to the oldest
+  and **G**/**End** to the newest, and **y** or **Enter** copies the selected line
+  to the clipboard (OSC52, so it works over the SSH tunnel). Mouse wheel / PgUp/PgDn
+  still scroll. The title shows `[live]`, the browse indicator `[↑ pause · N plus bas]`,
+  or the selection position. **Esc** clears the selection and returns to the input,
+  resuming the tail.
 - **INPUT** — type a message, Enter publishes on `{p}:notify`; Esc/Ctrl-C quits.
+  The field inherits the terminal's own fg/bg colors (no forced white-on-blue), so
+  it stays legible in any theme.
 
 ### Liveness model (why no dedicated heartbeat)
 
