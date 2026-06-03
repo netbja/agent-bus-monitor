@@ -442,11 +442,13 @@ func main() {
 		})
 	}()
 
-	// Poll pilot mode + per-agent gate counts off the UI thread; re-render so
-	// chips age into idle/offline even with no new traffic.
+	// Poll pilot mode + per-agent gate counts + armed leases + cmd backlog off
+	// the UI thread; re-render so chips age and badges update with no new traffic.
 	go func() {
 		for range time.Tick(time.Second) {
 			driver, _ := b.PilotDriver(ctx)
+			armed, _ := b.ArmedAgents(ctx)
+			lag, _ := b.CmdLag(ctx)
 			mu.Lock()
 			names := make([]string, 0, len(agents))
 			for n := range agents {
@@ -461,8 +463,19 @@ func main() {
 			}
 			mu.Lock()
 			pilot = driver
-			for n, c := range gates {
-				if a := agents[n]; a != nil {
+			// Surface agents known only via a live armed lease (subscribed but no
+			// status published yet). Armed keys are TTL'd, so this never leaks a
+			// ghost. Lag-only groups are NOT synthesized — consumer groups persist
+			// after an agent is gone, so a stale group must not conjure a chip.
+			for n := range armed {
+				if agents[n] == nil {
+					agents[n] = &agentState{state: "active", lastSeen: time.Now()}
+				}
+			}
+			for n, a := range agents {
+				_, a.armed = armed[n]
+				a.lag = lag[n]
+				if c, ok := gates[n]; ok {
 					a.gated = c
 				}
 			}
