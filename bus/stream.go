@@ -41,6 +41,7 @@ func ValidName(s string) bool { return nameRE.MatchString(s) }
 func StreamKey(project, kind string) string { return project + ":" + kind }
 func PilotKey(project string) string        { return project + ":pilot" }
 func GateKey(project, agent string) string  { return project + ":gate:" + agent }
+func ArmedKey(project, agent string) string { return project + ":armed:" + agent }
 
 // Event is a parsed stream entry. Which fields are populated depends on Kind.
 type Event struct {
@@ -280,6 +281,76 @@ func (b *Bus) PilotDriver(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	return v, err
+}
+
+// Arm records a subscribe presence lease for agent: a TTL'd key
+// {project}:armed:{agent} whose value is the listening consumer/host. The TTL
+// is the subscriber's idle window, so the lease self-expires if the subscriber
+// crashes — busmon's "listening" badge clears with no cleanup logic. This is
+// observability only; callers must not gate command delivery on it.
+func (b *Bus) Arm(ctx context.Context, agent, consumer string, ttl time.Duration) error {
+	if !ValidName(agent) {
+		return fmt.Errorf("invalid agent %q", agent)
+	}
+	return b.r.Set(ctx, ArmedKey(b.project, agent), consumer, ttl).Err()
+}
+
+// Disarm clears agent's presence lease (called when subscribe exits). Safe to
+// call when no lease is held — DEL of a missing key is a no-op.
+func (b *Bus) Disarm(ctx context.Context, agent string) error {
+	if !ValidName(agent) {
+		return fmt.Errorf("invalid agent %q", agent)
+	}
+	return b.r.Del(ctx, ArmedKey(b.project, agent)).Err()
+}
+
+// ArmedAgents returns agent→consumer for every agent with a live presence
+// lease. Used by busmon to render the listening badge. Keys that expire between
+// the SCAN and the GET are skipped.
+func (b *Bus) ArmedAgents(ctx context.Context) (map[string]string, error) {
+	out := make(map[string]string)
+	prefix := b.project + ":armed:"
+	var cursor uint64
+	for {
+		keys, next, err := b.r.Scan(ctx, cursor, prefix+"*", 100).Result()
+		if err != nil {
+			return out, err
+		}
+		for _, k := range keys {
+			v, err := b.r.Get(ctx, k).Result()
+			if err != nil {
+				continue // expired between SCAN and GET
+			}
+			out[strings.TrimPrefix(k, prefix)] = v
+		}
+		if next == 0 {
+			return out, nil
+		}
+		cursor = next
+	}
+}
+
+// CmdLag returns, per consumer group on the project's cmd stream, how many
+// entries the group has not yet read (XINFO GROUPS "lag"). Group name == agent
+// name (see WatchCmd), so the result is agent→backlog. A non-zero backlog for an
+// agent with no live armed lease is busmon's "stopped listening" signal. The
+// stream not existing yet is not an error — it just means no backlog. Redis may
+// report a lag of -1 when it cannot be determined (e.g. after the stream is
+// trimmed at its MAXLEN cap); CmdLag passes that through unchanged, and busmon
+// only renders the badge when lag > 0, so -1 is harmlessly ignored.
+func (b *Bus) CmdLag(ctx context.Context) (map[string]int64, error) {
+	groups, err := b.r.XInfoGroups(ctx, StreamKey(b.project, "cmd")).Result()
+	out := make(map[string]int64, len(groups))
+	if err != nil {
+		if strings.Contains(err.Error(), "no such key") {
+			return out, nil // stream not created yet → no groups, no lag
+		}
+		return out, err
+	}
+	for _, g := range groups {
+		out[g.Name] = g.Lag
+	}
+	return out, nil
 }
 
 // OpenChallenge records an unresolved 4-eyes challenge gating agent: a hash

@@ -91,9 +91,10 @@ agentbus pilot claim --ttl 120s                         # hermes only: take/rene
 agentbus pilot release                                  # hand off to autonomous now
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
-agentbus subscribe <agent> [idle_secs]                  # blocks for ONE cmd, prints it, EXITS; default idle 240s
+agentbus subscribe <agent> [idle_secs]                  # blocks for ONE cmd, prints it + a rearm sentinel, EXITS; default idle 240s
 agentbus subscribe claude1                              # arm as a background task; its exit wakes your session
-agentbus subscribe claude1 3600                         # 1h idle window before it prints __HEARTBEAT__ and exits
+agentbus subscribe claude1 3600                         # 1h idle window before it heartbeats and exits
+agentbus subscribe --loop hermes                        # HEADLESS callers only (hermes/shell): consume continuously, never exit
 agentbus watch claude1                                  # legacy alias of subscribe
 
 # ── DEBUG: tail streams to your terminal ─────────────────────────────────────
@@ -128,12 +129,26 @@ to autonomous automatically — there is no "I'm done" message.
 
 ### `subscribe` is wake-on-exit, not a long loop
 `agentbus subscribe <self>` **blocks until one command addressed to you arrives,
-prints it, and exits.** That exit is the wake signal — arm it as a Claude Code
-background task; when it fires, your session re-invokes and you re-arm. After the
-idle window (default 240s, or `[idle_secs]`) it prints `__HEARTBEAT__` and exits
-so you can re-arm. **Do not** wrap it in a `while` loop or a daemon — a long-lived
-loop never wakes a terminal session, which defeats the model. The whole loop
-lives in the binary; there is no wrapper script and no watcher daemon.
+prints it, then prints a final machine line and exits.** Arm it as a Claude Code
+background task; its exit wakes your session, and you re-arm. After the idle
+window (default 240s, or `[idle_secs]`) it heartbeats and exits so you can re-arm.
+
+The last line is always a structured sentinel — **re-arm iff it says `rearm=1`**:
+
+| You see                                         | Meaning            | Exit code | Re-arm? |
+|-------------------------------------------------|--------------------|-----------|---------|
+| `__AGENTBUS__ event=cmd rearm=1 ref=… from=…`   | a command arrived  | 0         | yes     |
+| `__AGENTBUS__ event=heartbeat rearm=1`          | idle window passed | 64        | yes     |
+| `__AGENTBUS__ event=error rearm=1 msg=…`        | transient glitch   | 75        | yes     |
+| `__AGENTBUS__ event=fatal rearm=0 msg=…`        | misconfigured      | 1         | **no**  |
+
+**While armed and waiting you are `idle`, never `blocked`** — `blocked` is
+reserved for an open 4-eyes gate. busmon shows a `👂` badge next to armed agents,
+so a human can see you're listening. **Do not** wrap `subscribe` in a `while`
+loop or a daemon — a long-lived loop never wakes a terminal session. (The one
+exception is `--loop`, for **headless** consumers like hermes or a shell logger
+that are not trying to wake a session.) The whole loop lives in the binary;
+there is no wrapper script and no watcher daemon.
 
 ### The 4-eyes gate blocks regardless of pilot mode
 A `challenge` opens a gate on the target that **blocks it until a `verdict`**, in

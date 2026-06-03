@@ -41,7 +41,9 @@ type agentState struct {
 	state    string
 	message  string
 	lastSeen time.Time
-	gated    int // open 4-eyes challenges; >0 shows a lock badge
+	gated    int   // open 4-eyes challenges; >0 shows a lock badge
+	armed    bool  // a live subscribe lease exists → 👂 listening badge
+	lag      int64 // unconsumed {p}:cmd entries for this agent → ⌛ backlog badge
 }
 
 func stateColor(state string) string {
@@ -122,6 +124,38 @@ func entryTime(id string) time.Time {
 	return time.Now()
 }
 
+// agentLabel renders one agent's AGENTS-pane chip: the aged state, then badges
+// for listening (👂), command backlog (⌛N — orange when nobody is listening),
+// and open 4-eyes challenges (🔒N).
+func agentLabel(n string, a *agentState, now time.Time) string {
+	var label string
+	switch age := now.Sub(a.lastSeen); {
+	case age > staleAfter:
+		label = tag("gray", n+": offline")
+	case age > idleAfter:
+		label = tag("yellow", fmt.Sprintf("%s: idle %dm", n, int(age.Minutes())))
+	default:
+		label = tag(stateColor(a.state), n+": "+a.state)
+		if a.message != "" {
+			label += " " + tview.Escape("("+clip(a.message, 48)+")")
+		}
+	}
+	if a.armed {
+		label += " [green]👂[-]"
+	}
+	if a.lag > 0 {
+		color := "yellow" // listening but behind — transient
+		if !a.armed {
+			color = "orange" // backlog with no listener — the "stopped re-arming" tell
+		}
+		label += fmt.Sprintf(" [%s]⌛%d[-]", color, a.lag)
+	}
+	if a.gated > 0 {
+		label += fmt.Sprintf(" [red]🔒%d[-]", a.gated)
+	}
+	return label
+}
+
 func renderAgents(view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -134,23 +168,7 @@ func renderAgents(view *tview.TextView, agents map[string]*agentState, mu *sync.
 	now := time.Now()
 	parts := make([]string, 0, len(names))
 	for _, n := range names {
-		a := agents[n]
-		var label string
-		switch age := now.Sub(a.lastSeen); {
-		case age > staleAfter:
-			label = tag("gray", n+": offline")
-		case age > idleAfter:
-			label = tag("yellow", fmt.Sprintf("%s: idle %dm", n, int(age.Minutes())))
-		default:
-			label = tag(stateColor(a.state), n+": "+a.state)
-			if a.message != "" {
-				label += " " + tview.Escape("("+clip(a.message, 48)+")")
-			}
-		}
-		if a.gated > 0 {
-			label += fmt.Sprintf(" [red]🔒%d[-]", a.gated)
-		}
-		parts = append(parts, label)
+		parts = append(parts, agentLabel(n, agents[n], now))
 	}
 	view.SetText(strings.Join(parts, "   "))
 }
@@ -424,11 +442,13 @@ func main() {
 		})
 	}()
 
-	// Poll pilot mode + per-agent gate counts off the UI thread; re-render so
-	// chips age into idle/offline even with no new traffic.
+	// Poll pilot mode + per-agent gate counts + armed leases + cmd backlog off
+	// the UI thread; re-render so chips age and badges update with no new traffic.
 	go func() {
 		for range time.Tick(time.Second) {
 			driver, _ := b.PilotDriver(ctx)
+			armed, _ := b.ArmedAgents(ctx)
+			lag, _ := b.CmdLag(ctx)
 			mu.Lock()
 			names := make([]string, 0, len(agents))
 			for n := range agents {
@@ -443,8 +463,19 @@ func main() {
 			}
 			mu.Lock()
 			pilot = driver
-			for n, c := range gates {
-				if a := agents[n]; a != nil {
+			// Surface agents known only via a live armed lease (subscribed but no
+			// status published yet). Armed keys are TTL'd, so this never leaks a
+			// ghost. Lag-only groups are NOT synthesized — consumer groups persist
+			// after an agent is gone, so a stale group must not conjure a chip.
+			for n := range armed {
+				if agents[n] == nil {
+					agents[n] = &agentState{state: "active", lastSeen: time.Now()}
+				}
+			}
+			for n, a := range agents {
+				_, a.armed = armed[n]
+				a.lag = lag[n]
+				if c, ok := gates[n]; ok {
 					a.gated = c
 				}
 			}

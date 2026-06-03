@@ -113,9 +113,12 @@ busmon --project myproject                         # live dashboard
 
 - **AGENTS** — one chip per agent. `{p}:status` entries set the state (color-coded);
   a `{p}:report` entry also counts as liveness, showing the agent as `active` with
-  its last report if it never published a status. A lock badge (`🔒N`) shows open
-  4-eyes challenges. The pilot indicator (`[autonome]`/`[piloté par X]`) shows the
-  current lease holder. Past `idleAfter` it shows `idle Nm`; past `staleAfter`, `offline`.
+  its last report if it never published a status. Badges: `👂` = the agent is armed
+  and listening on `{p}:cmd` (a live `subscribe` lease); `⌛N` = N commands are queued
+  for it unread (orange when no one is listening — the "stopped re-arming" tell);
+  `🔒N` = open 4-eyes challenges. The pilot indicator (`[autonome]`/`[piloté par X]`)
+  shows the current lease holder. Past `idleAfter` it shows `idle Nm`; past
+  `staleAfter`, `offline`.
 - **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
   and reports. It live-tails by default; **Tab** moves focus here. While focused,
   **↑↓** / **j k** select a line (highlighted), **g**/**Home** jumps to the oldest
@@ -148,7 +151,8 @@ Stream keys are `{project}:{kind}`. Project and agent names must match `^[a-z][a
 | `{p}:notify`        | `from message`                                   | ACTIVITY                        |
 | `{p}:cmd`           | `from target type ref command`                   | ACTIVITY + agents               |
 
-Additional keys: `{p}:pilot` (string, pilot lease), `{p}:gate:{agent}` (hash, 4-eyes challenges).
+Additional keys: `{p}:pilot` (string, pilot lease), `{p}:gate:{agent}` (hash, 4-eyes challenges),
+`{p}:armed:{agent}` (string with TTL, the subscribe presence lease behind the `👂` badge).
 States: `working`, `idle`, `blocked`, `done`. All transport conventions live in `bus/stream.go`;
 transport-neutral primitives (`Connect`, `ValidStates`, `SanitizeReportMessage`) are in `bus/bus.go`.
 
