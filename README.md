@@ -20,12 +20,12 @@ project.
 The bus is consumed by a concrete two-host setup. This is how the pieces wire up
 today — and, importantly, where they *don't* connect.
 
-- **Broker** runs on the **laptop** (`docker compose up`, redis:8-alpine on `:6380`).
-- The **VDR** (`bot@vdr`) reaches it through an SSH tunnel it opens *to* the laptop:
-  `ssh -L 6380:localhost:6380 sysnet@sysnet-laptop.local -N`. So `agentbus --host 127.0.0.1`
-  on the VDR publishes onto the laptop's bus.
+- **Broker** runs on the **laptop/desktop** (`docker compose up`, redis:8-alpine on `:6380`).
+- The **remotebox** (`user@remotebox`) reaches it through an SSH tunnel it opens *to* the laptop/desktop:
+  `ssh -L 6380:localhost:6380 user@laptop.local -N`. So `agentbus --host 127.0.0.1`
+  on the remote box publishes onto the laptop's bus.
 - Two Claude Code sessions run on the laptop under **herdr** in `~/Projects/adv-trading-ai`
-  (agents `claude1`, `claude2`); a **hermes agent** runs on the VDR.
+  (agents `claude1`, `claude2`); a **hermes agent** runs on the remote box.
 
 **Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
 A session arms `agentbus subscribe <agent> [idle_secs]` as a Claude Code background task. It blocks
@@ -42,8 +42,8 @@ the human dashboard.
 > wakes a terminal Claude session, which defeats the wake-on-exit model.
 
 **Separate notification path — NOT the bus.** The `Stop` hook in
-`adv-trading-ai/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
-the VDR's hermes **gateway** at `http://<vdr>:8644/webhooks/claude-notify`. That route is
+`myproject/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
+the remote box's hermes **gateway** at `http://<remote>:8644/webhooks/claude-notify`. That route is
 `Deliver: signal`: it pings a human over Signal when a Claude task stops. The gateway never
 touches Redis, so this path is **independent of the agent bus** — webhook traffic does not appear
 on `hermes:*`, and the bus carries nothing back to Signal.
@@ -101,7 +101,7 @@ busmon --project myproject                         # live dashboard
 
 ```
 ┌─ AGENTS ───────────────────────────────────────────────────────────────────┐
-│ claude1: working (plan 10)   claude2: active (soak bug fixed)   hermes_vdr: offline │
+│ claude1: working (plan 10)   claude2: active (soak bug fixed)   hermes: offline │
 ├─ ACTIVITY  [live] ────────────────────────────────────────────────────────────┤
 │ 23:15:12 [claude1] working | plan 10 shipped                                 │
 │ 23:16:02 [notify] Soak 24h started                                           │
