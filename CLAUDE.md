@@ -66,7 +66,13 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   re-arming after each fire, **not** a long-lived loop (which would never wake a terminal session).
   `watch` is the legacy alias of `subscribe` (same handler). `listen` tails all four streams via
   `Bus.Tail` for debugging.
-- **`busmon`** — `tview`/`tcell` TUI. `Bus.Tail` with lastID `"0"` (backfills history, then live)
+- **`busmon`** — `tview`/`tcell` TUI. On launch it backfills only the **last `--limit` ACTIVITY
+  lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all history) via `Bus.Recent`,
+  then live-tails from the per-stream cursors `Recent` returns through `Bus.TailFrom` (no replay, no
+  `"$"` gap). `--limit 0` falls back to the original `Bus.Tail(ctx, "0", …)` full-history replay.
+  `--reset` purges the four streams first (`Bus.Purge` = `XTRIM MAXLEN 0`, gated by a `[y/N]`
+  confirmation or `--reset --yes`). The shared event renderer is the `handle` closure (used for both
+  the backfill and the live tail). All of this
   runs in a goroutine pushing UI updates via `app.QueueUpdateDraw`; the `agents` map is
   mutex-guarded; a 1s ticker polls `Bus.PilotDriver` + per-agent `Bus.OpenChallenges` and re-renders
   so chips age into `idle`/`offline` even with no new stream traffic. The `agents` map is populated
@@ -121,4 +127,10 @@ It never touches Redis — see README "Deployment topology".
   competes with `agentbus watch` for cmd entries. `Bus.WatchCmd` uses XREADGROUP with the group
   name set to the agent name, giving at-least-once delivery across one-shot restarts.
 - **Stream length is capped** at ~1000 entries per stream (XADD MAXLEN ~ in `stream.go`). Older
-  entries are trimmed automatically; the busmon backfill on startup replays whatever remains.
+  entries are trimmed automatically; the busmon backfill on startup replays only the last `--limit`
+  of whatever remains (default 25; `--limit 0` for all).
+- **`busmon --reset` is `XTRIM`, not `DEL`.** `Bus.Purge` trims each stream to `MAXLEN 0`, so the
+  visible history is wiped but consumer groups (cmd at-least-once cursors) and the
+  `armed`/`pilot`/`gate` keys **survive** — don't switch it to `DEL`, which would reset cmd delivery
+  state. The confirmation reads stdin **before** the TUI starts; a piped/non-TTY stdin counts as
+  "no", so `--reset` never purges unattended without `--yes`.

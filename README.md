@@ -94,8 +94,18 @@ agentbus listen                                    # debug tail (all four stream
 agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
 
-busmon --project myproject                         # live dashboard
+busmon --project myproject                         # live dashboard (last 25 lines, then live)
+busmon --project myproject --limit 100             # backfill the last 100 lines on launch
+busmon --project myproject --limit 0               # replay all retained history (pre-limit behavior)
+busmon --project myproject --reset                 # purge the project's streams first (asks to confirm)
+busmon --project myproject --reset --yes           # purge without the confirmation prompt
 ```
+
+On launch, busmon backfills only the **last `--limit` ACTIVITY lines** (default `25`, merged across
+all four streams) before live-tailing — set a persistent default with `AGENT_BUS_BUSMON_LIMIT`, or
+`--limit 0` to replay everything. `--reset` clears the project's history (`XTRIM` of the four
+streams — it keeps consumer groups and the armed/pilot/gate leases, so cmd delivery is unaffected)
+after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
 
 ## busmon panes
 

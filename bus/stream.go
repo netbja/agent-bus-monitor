@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -176,11 +178,34 @@ func (b *Bus) Tail(ctx context.Context, lastID string, kinds []string, fn func(E
 	if len(kinds) == 0 {
 		return fmt.Errorf("tail: no stream kinds given")
 	}
+	start := make(map[string]string, len(kinds))
+	for _, k := range kinds {
+		start[StreamKey(b.project, k)] = lastID
+	}
+	return b.TailFrom(ctx, start, kinds, fn)
+}
+
+// TailFrom is Tail with a per-stream start cursor: start maps a full stream key
+// ({project}:{kind}) to the ID to read after. A kind whose key is absent (or
+// maps to "") defaults to "0" — replays nothing for an empty stream now, yet
+// catches every future entry, which avoids the "$" gap (entries arriving between
+// a backfill and the live subscribe). busmon pairs this with Recent: backfill
+// the last N merged entries, then live-tail from the cursors Recent returned so
+// nothing is replayed and nothing is missed. The fn-must-not-block contract is
+// the same as Tail.
+func (b *Bus) TailFrom(ctx context.Context, start map[string]string, kinds []string, fn func(Event)) error {
+	if len(kinds) == 0 {
+		return fmt.Errorf("tail: no stream kinds given")
+	}
 	keys := make([]string, len(kinds))
 	ids := make(map[string]string, len(kinds))
 	for i, k := range kinds {
 		keys[i] = StreamKey(b.project, k)
-		ids[keys[i]] = lastID
+		if id := start[keys[i]]; id != "" {
+			ids[keys[i]] = id
+		} else {
+			ids[keys[i]] = "0"
+		}
 	}
 	for {
 		if ctx.Err() != nil {
@@ -206,6 +231,76 @@ func (b *Bus) Tail(ctx context.Context, lastID string, kinds []string, fn func(E
 			}
 		}
 	}
+}
+
+// Recent returns the last n entries merged across the given stream kinds, in
+// chronological order (oldest→newest, ready to render top→bottom), plus a cursor
+// map {streamKey: newest ID} for every non-empty stream. The cursors are meant
+// to seed TailFrom so the live tail resumes exactly after the backfill with no
+// replay; empty streams are intentionally absent (TailFrom defaults them to
+// "0"). Entries are read with XREVRANGE COUNT n per stream — read-only, no
+// consumer-group cursors touched, like Tail.
+func (b *Bus) Recent(ctx context.Context, kinds []string, n int) ([]Event, map[string]string, error) {
+	cursors := make(map[string]string, len(kinds))
+	var all []Event
+	for _, k := range kinds {
+		key := StreamKey(b.project, k)
+		msgs, err := b.r.XRevRangeN(ctx, key, "+", "-", int64(n)).Result()
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(msgs) > 0 {
+			cursors[key] = msgs[0].ID // XREVRANGE is newest-first, so [0] is this stream's latest
+		}
+		for _, m := range msgs {
+			all = append(all, ParseEntry(key, m.ID, toStringMap(m.Values)))
+		}
+	}
+	sort.Slice(all, func(i, j int) bool { return idLess(all[i].ID, all[j].ID) })
+	if len(all) > n {
+		all = all[len(all)-n:] // keep the n most recent across all streams
+	}
+	return all, cursors, nil
+}
+
+// Purge clears the given stream kinds with XTRIM MAXLEN 0 and returns the total
+// number of entries removed. XTRIM keeps the streams' consumer groups (so cmd
+// at-least-once delivery is unaffected) and never touches the project's
+// armed/pilot/gate keys — it only drops the visible history. Trimming a
+// nonexistent stream removes nothing and is not an error.
+func (b *Bus) Purge(ctx context.Context, kinds []string) (int64, error) {
+	var total int64
+	for _, k := range kinds {
+		removed, err := b.r.XTrimMaxLen(ctx, StreamKey(b.project, k), 0).Result()
+		if err != nil {
+			return total, err
+		}
+		total += removed
+	}
+	return total, nil
+}
+
+// idLess orders two Redis stream IDs ("<ms>-<seq>") numerically. A string
+// compare is wrong: "10-0" sorts before "9-0" lexicographically.
+func idLess(a, b string) bool {
+	ams, aseq := splitID(a)
+	bms, bseq := splitID(b)
+	if ams != bms {
+		return ams < bms
+	}
+	return aseq < bseq
+}
+
+// splitID parses a stream ID into its millisecond and sequence components;
+// unparseable parts become 0.
+func splitID(id string) (ms, seq int64) {
+	s := id
+	if i := strings.IndexByte(id, '-'); i >= 0 {
+		s = id[:i]
+		seq, _ = strconv.ParseInt(id[i+1:], 10, 64)
+	}
+	ms, _ = strconv.ParseInt(s, 10, 64)
+	return ms, seq
 }
 
 // WatchCmd consumes the project's shared cmd stream via a per-agent consumer
