@@ -17,6 +17,9 @@ func TestStreamKeyNaming(t *testing.T) {
 	if got := GateKey("busmon", "dev"); got != "busmon:gate:dev" {
 		t.Fatalf("GateKey = %q, want busmon:gate:dev", got)
 	}
+	if got := ArmedKey("busmon", "dev"); got != "busmon:armed:dev" {
+		t.Fatalf("ArmedKey = %q, want busmon:armed:dev", got)
+	}
 }
 
 func TestValidName(t *testing.T) {
@@ -209,6 +212,38 @@ func TestChallengeGate(t *testing.T) {
 	}
 	if err := b.OpenChallenge(ctx, "dev", "C9", ""); err == nil {
 		t.Error("OpenChallenge accepted an empty meta, want error")
+	}
+}
+
+func TestArmedLease(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, ArmedKey(b.Project(), "dev")) })
+
+	if got := ArmedKey("busmon", "dev"); got != "busmon:armed:dev" {
+		t.Fatalf("ArmedKey = %q, want busmon:armed:dev", got)
+	}
+	if m, err := b.ArmedAgents(ctx); err != nil || len(m) != 0 {
+		t.Fatalf("ArmedAgents before arm = (%v, %v), want (empty, nil)", m, err)
+	}
+	if err := b.Arm(ctx, "dev", "host-1", 30*time.Second); err != nil {
+		t.Fatalf("Arm: %v", err)
+	}
+	m, err := b.ArmedAgents(ctx)
+	if err != nil || len(m) != 1 || m["dev"] != "host-1" {
+		t.Fatalf("ArmedAgents after arm = (%v, %v), want {dev:host-1}", m, err)
+	}
+	if ttl := b.r.TTL(ctx, ArmedKey(b.Project(), "dev")).Val(); ttl <= 0 {
+		t.Fatalf("armed key TTL = %v, want > 0 (lease must self-expire)", ttl)
+	}
+	if err := b.Disarm(ctx, "dev"); err != nil {
+		t.Fatalf("Disarm: %v", err)
+	}
+	if m, err := b.ArmedAgents(ctx); err != nil || len(m) != 0 {
+		t.Fatalf("ArmedAgents after disarm = (%v, %v), want (empty, nil)", m, err)
+	}
+	if err := b.Arm(ctx, "Bad Agent", "host-1", 30*time.Second); err == nil {
+		t.Error("Arm accepted an invalid agent, want error")
 	}
 }
 
