@@ -15,7 +15,7 @@ project.
 | `agentbus` | CLI client — status/report/notify/cmd/subscribe/listen (`cmd/agentbus`)     |
 | `busmon`   | TUI dashboard: AGENTS / ACTIVITY / INPUT (`cmd/busmon`)                     |
 
-## Deployment topology (current: laptop ⇄ VDR)
+## Deployment topology (current: machine ⇄ remote machine)
 
 The bus is consumed by a concrete two-host setup. This is how the pieces wire up
 today — and, importantly, where they *don't* connect.
