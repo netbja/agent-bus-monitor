@@ -82,7 +82,7 @@ A Claude Code session subscribes by arming **`agentbus subscribe <agent> [idle_s
 background task: it blocks on the project's `:cmd` stream, prints the first addressed entry, and
 exits — and that exit re-invokes the session that armed it, which then re-arms. The whole loop is
 self-contained in the `agentbus` binary (this repo); there is **no external wrapper script** and
-**no daemon** in the agent path. The old `adv-trading-ai/tools/bus_watch.sh` (and the persistent
+**no daemon** in the agent path. The old `myprojecttools/bus_watch.sh` (and the persistent
 `~/.hermes/scripts/bus_watch_hdl.sh` logger loop) are **superseded** — agents call `agentbus
 subscribe` directly. Don't reintroduce a wrapper script or a `Restart=always` watcher daemon: a
 restart loop just re-runs the watcher and never wakes a terminal Claude session, which defeats the
