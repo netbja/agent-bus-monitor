@@ -24,7 +24,7 @@ today — and, importantly, where they *don't* connect.
 - The **remotebox** (`user@remotebox`) reaches it through an SSH tunnel it opens *to* the laptop/desktop:
   `ssh -L 6380:localhost:6380 user@laptop.local -N`. So `agentbus --host 127.0.0.1`
   on the remote box publishes onto the laptop's bus.
-- Two Claude Code sessions run on the laptop under **herdr** in `~/Projects/adv-trading-ai`
+- Two Claude Code sessions run on the laptop under **herdr** in `~/myproject`
   (agents `claude1`, `claude2`); a **hermes agent** runs on the remote box.
 
 **Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
@@ -35,7 +35,7 @@ armed it. Each session re-arms after every fire. The whole loop lives in the `ag
 there is **no wrapper script and no watcher daemon** in the agent path. `busmon` runs alongside as
 the human dashboard.
 
-> This supersedes `adv-trading-ai/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
+> This supersedes `myproject/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
 > and the persistent `~/.hermes/scripts/bus_watch_hdl.sh` logger loop. An even earlier prototype,
 > `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes with hard-coded pane IDs. Don't
 > reintroduce a wrapper, a pane relay, or a `Restart=always` watcher daemon — a restart loop never
