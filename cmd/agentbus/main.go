@@ -23,7 +23,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -221,14 +220,15 @@ func main() {
 		os.Exit(1) // gated → non-zero so a script/agent can block on it
 
 	case "subscribe", "watch":
-		// One subscription tick: block on the agent's :cmd consumer group until
-		// the next addressed cmd, print it, and EXIT — that exit is what lets a
-		// Claude Code background task complete and re-invoke the agent's session.
-		// "Staying subscribed" = the agent re-arming after each fire, not a loop
-		// here (a long-lived loop would never wake a terminal session). On idle,
-		// print __HEARTBEAT__ and exit so the agent re-arms / detects liveness.
+		// One subscription tick (or a headless --loop). The wake-on-exit model
+		// for terminal sessions: block on the agent's :cmd group, print the next
+		// addressed entry plus a __AGENTBUS__ rearm sentinel, and EXIT — that exit
+		// re-invokes the session, which re-arms iff the sentinel says rearm=1.
+		// --loop is for headless consumers (hermes/shell) only — never a terminal
+		// wake path, since a long-lived loop can't wake a session.
+		rest, loop := extractBool(rest, "--loop")
 		if len(rest) < 1 {
-			die("usage: subscribe <agent> [idle_seconds]")
+			die("usage: subscribe [--loop] <agent> [idle_seconds]")
 		}
 		agent := rest[0]
 		idle := heartbeat
@@ -239,24 +239,7 @@ func main() {
 		if consumer == "" {
 			consumer = self
 		}
-		wctx, cancel := context.WithTimeout(ctx, idle)
-		defer cancel()
-		werr := b.WatchCmd(wctx, agent, consumer, func(e bus.Event) bool {
-			ref := ""
-			if e.Ref != "" {
-				ref = " ref=" + e.Ref
-			}
-			fmt.Printf("[%s %s->%s%s] %s\n", e.Type, e.From, e.Target, ref, e.Message)
-			return true
-		})
-		if werr == nil {
-			return // delivered one cmd
-		}
-		if errors.Is(werr, context.DeadlineExceeded) {
-			fmt.Println("__HEARTBEAT__") // idle window elapsed; re-arm the subscriber
-			return
-		}
-		die(werr.Error())
+		os.Exit(runSubscribe(ctx, b, agent, consumer, idle, loop, os.Stdout))
 
 	case "listen":
 		kinds := rest
