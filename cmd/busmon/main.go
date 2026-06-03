@@ -14,9 +14,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -29,6 +31,39 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
+
+// streamKinds are the four streams busmon tails into the ACTIVITY feed and that
+// --reset purges.
+var streamKinds = []string{"status", "report", "notify", "cmd"}
+
+// resolveLimit picks the ACTIVITY backfill size: an explicit --limit wins, else
+// AGENT_BUS_BUSMON_LIMIT, else 25. A non-numeric env value falls through to 25.
+// The result is the number of most-recent merged lines to replay on launch;
+// 0 (or negative) means "replay all retained history" (the pre-limit behavior).
+func resolveLimit(flagSet bool, flagVal int, env string) int {
+	if flagSet {
+		return flagVal
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(env)); env != "" && err == nil {
+		return n
+	}
+	return 25
+}
+
+// confirmReset asks for interactive confirmation before --reset purges the
+// project's streams. It accepts y/yes/oui (case-insensitive); anything else —
+// including EOF from a piped or non-TTY stdin — declines, so a purge is never
+// triggered by an unattended pipe.
+func confirmReset(project string, in io.Reader) bool {
+	fmt.Printf("Purger l'historique des 4 streams du projet '%s' (status/report/notify/cmd) ? [y/N] ", project)
+	line, _ := bufio.NewReader(in).ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes", "oui":
+		return true
+	default:
+		return false
+	}
+}
 
 const (
 	idleAfter  = 2 * time.Minute
@@ -176,7 +211,18 @@ func renderAgents(view *tview.TextView, agents map[string]*agentState, mu *sync.
 func main() {
 	host := flag.String("host", "", "Redis host (overrides REDIS_HOST)")
 	projectFlag := flag.String("project", "", "project namespace (or AGENT_BUS_PROJECT)")
+	limitFlag := flag.Int("limit", 25, "ACTIVITY backfill: replay the last N lines on launch (0 = all history; or AGENT_BUS_BUSMON_LIMIT)")
+	resetFlag := flag.Bool("reset", false, "purge the project's streams before launching (asks to confirm)")
+	yesFlag := flag.Bool("yes", false, "skip the --reset confirmation prompt")
 	flag.Parse()
+
+	limitSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "limit" {
+			limitSet = true
+		}
+	})
+	limit := resolveLimit(limitSet, *limitFlag, os.Getenv("AGENT_BUS_BUSMON_LIMIT"))
 
 	project := *projectFlag
 	if project == "" {
@@ -202,6 +248,22 @@ func main() {
 		os.Exit(1)
 	}
 	ctx := context.Background()
+
+	// --reset purges the project's streams before the TUI starts (terminal still
+	// in normal mode for the confirmation prompt). XTRIM clears history but keeps
+	// consumer groups + armed/pilot/gate leases.
+	if *resetFlag {
+		if !*yesFlag && !confirmReset(project, os.Stdin) {
+			fmt.Println("Annulé.")
+			os.Exit(0)
+		}
+		removed, err := b.Purge(ctx, streamKinds)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: purge failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Purgé: %d entrées effacées.\n", removed)
+	}
 
 	app := tview.NewApplication()
 
@@ -376,70 +438,99 @@ func main() {
 		return false
 	})
 
-	// Tail the project's streams: "0" backfills retained history, then live.
-	go func() {
-		_ = b.Tail(ctx, "0", []string{"status", "report", "notify", "cmd"}, func(e bus.Event) {
-			ts := entryTime(e.ID).Format("15:04:05")
-			var line, plain string // line = colored display; plain = tag-free, for the clipboard
-			switch e.Kind {
-			case "status":
-				mu.Lock()
-				a := agents[e.Agent]
-				if a == nil {
-					a = &agentState{}
-					agents[e.Agent] = a
-				}
-				a.state, a.message, a.lastSeen = e.State, e.Message, entryTime(e.ID)
-				mu.Unlock()
-				line = tag("gray", ts) + " " + tag(stateColor(e.State), "["+e.Agent+"]") + " " + tview.Escape(e.State)
-				plain = ts + " [" + e.Agent + "] " + e.State
-				if e.Message != "" {
-					line += " | " + tview.Escape(e.Message)
-					plain += " | " + e.Message
-				}
-			case "notify":
-				line = tag("gray", ts) + " " + tag("aqua", "[notify]") + " " + tview.Escape(e.Message)
-				plain = ts + " [notify] " + e.Message
-			case "cmd":
-				label := "[" + e.Type + " " + e.From + "->" + e.Target
-				if e.Ref != "" {
-					label += " " + e.Ref
-				}
-				label += "]"
-				line = tag("gray", ts) + " " + tag("fuchsia", label) + " " + tview.Escape(e.Message)
-				plain = ts + " " + label + " " + e.Message
-			case "report":
-				mu.Lock()
-				a := agents[e.Agent]
-				if a == nil {
-					a = &agentState{state: "active"}
-					agents[e.Agent] = a
-				}
-				a.lastSeen = entryTime(e.ID)
-				if e.Message != "" {
-					a.message = e.Message
-				}
-				mu.Unlock()
-				line = tag("gray", ts) + " " + tag("teal", "[report:"+e.RKind+"->"+e.Agent+"]") + " " + tview.Escape(e.Message)
-				plain = ts + " [report:" + e.RKind + "->" + e.Agent + "] " + e.Message
-			default:
-				line = tag("gray", ts) + " " + tview.Escape(e.Message)
-				plain = ts + " " + e.Message
+	// handle renders one stream event into the ACTIVITY feed and updates the
+	// agents map. It runs on the tail goroutine; the feed mutation is deferred to
+	// the tview loop via QueueUpdateDraw. Shared by the startup backfill and the
+	// live tail.
+	handle := func(e bus.Event) {
+		ts := entryTime(e.ID).Format("15:04:05")
+		var line, plain string // line = colored display; plain = tag-free, for the clipboard
+		switch e.Kind {
+		case "status":
+			mu.Lock()
+			a := agents[e.Agent]
+			if a == nil {
+				a = &agentState{}
+				agents[e.Agent] = a
 			}
-			app.QueueUpdateDraw(func() {
-				seq++
-				id := strconv.Itoa(seq)
-				feed = append(feed, feedLine{id: id, text: plain})
-				if len(feed) > feedCap {
-					feed = feed[len(feed)-feedCap:]
-				}
-				// Wrap the line in a region so it can be selected/highlighted;
-				// tview.Escape above already neutralised any ["..."] in messages.
-				fmt.Fprintf(activityView, "[\"%s\"]%s[\"\"]\n", id, line)
-				refreshTitle()
-				renderAgents(agentsView, agents, &mu, &pilot)
-			})
+			a.state, a.message, a.lastSeen = e.State, e.Message, entryTime(e.ID)
+			mu.Unlock()
+			line = tag("gray", ts) + " " + tag(stateColor(e.State), "["+e.Agent+"]") + " " + tview.Escape(e.State)
+			plain = ts + " [" + e.Agent + "] " + e.State
+			if e.Message != "" {
+				line += " | " + tview.Escape(e.Message)
+				plain += " | " + e.Message
+			}
+		case "notify":
+			line = tag("gray", ts) + " " + tag("aqua", "[notify]") + " " + tview.Escape(e.Message)
+			plain = ts + " [notify] " + e.Message
+		case "cmd":
+			label := "[" + e.Type + " " + e.From + "->" + e.Target
+			if e.Ref != "" {
+				label += " " + e.Ref
+			}
+			label += "]"
+			line = tag("gray", ts) + " " + tag("fuchsia", label) + " " + tview.Escape(e.Message)
+			plain = ts + " " + label + " " + e.Message
+		case "report":
+			mu.Lock()
+			a := agents[e.Agent]
+			if a == nil {
+				a = &agentState{state: "active"}
+				agents[e.Agent] = a
+			}
+			a.lastSeen = entryTime(e.ID)
+			if e.Message != "" {
+				a.message = e.Message
+			}
+			mu.Unlock()
+			line = tag("gray", ts) + " " + tag("teal", "[report:"+e.RKind+"->"+e.Agent+"]") + " " + tview.Escape(e.Message)
+			plain = ts + " [report:" + e.RKind + "->" + e.Agent + "] " + e.Message
+		default:
+			line = tag("gray", ts) + " " + tview.Escape(e.Message)
+			plain = ts + " " + e.Message
+		}
+		app.QueueUpdateDraw(func() {
+			seq++
+			id := strconv.Itoa(seq)
+			feed = append(feed, feedLine{id: id, text: plain})
+			if len(feed) > feedCap {
+				feed = feed[len(feed)-feedCap:]
+			}
+			// Wrap the line in a region so it can be selected/highlighted;
+			// tview.Escape above already neutralised any ["..."] in messages.
+			fmt.Fprintf(activityView, "[\"%s\"]%s[\"\"]\n", id, line)
+			refreshTitle()
+			renderAgents(agentsView, agents, &mu, &pilot)
 		})
+	}
+
+	// Backfill, then live-tail. With a limit, fetch the last N merged entries up
+	// front (fatal on error, while the terminal is still ours) and resume the
+	// live tail from the per-stream cursors Recent returns — no replay, no "$"
+	// gap. Rendering runs in the goroutine so it drains through QueueUpdateDraw
+	// concurrently with app.Run(); a large backfill must not block on the queue
+	// before the loop starts. limit <= 0 keeps the original behavior: replay all
+	// retained history.
+	var backfill []bus.Event
+	var cursors map[string]string
+	if limit > 0 {
+		var err error
+		backfill, cursors, err = b.Recent(ctx, streamKinds, limit)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: backfill failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	go func() {
+		for _, e := range backfill {
+			handle(e)
+		}
+		if limit > 0 {
+			_ = b.TailFrom(ctx, cursors, streamKinds, handle)
+		} else {
+			_ = b.Tail(ctx, "0", streamKinds, handle)
+		}
 	}()
 
 	// Poll pilot mode + per-agent gate counts + armed leases + cmd backlog off
