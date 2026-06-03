@@ -330,6 +330,29 @@ func (b *Bus) ArmedAgents(ctx context.Context) (map[string]string, error) {
 	}
 }
 
+// CmdLag returns, per consumer group on the project's cmd stream, how many
+// entries the group has not yet read (XINFO GROUPS "lag"). Group name == agent
+// name (see WatchCmd), so the result is agent→backlog. A non-zero backlog for an
+// agent with no live armed lease is busmon's "stopped listening" signal. The
+// stream not existing yet is not an error — it just means no backlog. Redis may
+// report a lag of -1 when it cannot be determined (e.g. after the stream is
+// trimmed at its MAXLEN cap); CmdLag passes that through unchanged, and busmon
+// only renders the badge when lag > 0, so -1 is harmlessly ignored.
+func (b *Bus) CmdLag(ctx context.Context) (map[string]int64, error) {
+	groups, err := b.r.XInfoGroups(ctx, StreamKey(b.project, "cmd")).Result()
+	out := make(map[string]int64, len(groups))
+	if err != nil {
+		if strings.Contains(err.Error(), "no such key") {
+			return out, nil // stream not created yet → no groups, no lag
+		}
+		return out, err
+	}
+	for _, g := range groups {
+		out[g.Name] = g.Lag
+	}
+	return out, nil
+}
+
 // OpenChallenge records an unresolved 4-eyes challenge gating agent: a hash
 // field ref → meta ("<challenger>|<summary>"). The agent must not proceed while
 // any challenge is open. There is deliberately no TTL — a safety gate is closed

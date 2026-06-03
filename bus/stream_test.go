@@ -247,6 +247,32 @@ func TestArmedLease(t *testing.T) {
 	}
 }
 
+func TestCmdLag(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	stream := StreamKey(b.Project(), "cmd")
+
+	// No cmd stream yet → no groups → empty lag, no error.
+	if m, err := b.CmdLag(ctx); err != nil || len(m) != 0 {
+		t.Fatalf("CmdLag before any group = (%v, %v), want (empty, nil)", m, err)
+	}
+
+	// dev's group reads from the start ("0"), so published-but-unread entries
+	// register as lag.
+	if err := b.r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
+		t.Fatalf("XGroupCreate: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "do "+strconv.Itoa(i)); err != nil {
+			t.Fatalf("Cmd: %v", err)
+		}
+	}
+	m, err := b.CmdLag(ctx)
+	if err != nil || m["dev"] != 3 {
+		t.Fatalf("CmdLag after 3 unread = (%v, %v), want dev:3", m, err)
+	}
+}
+
 func TestWatchCmdDelivers(t *testing.T) {
 	b := dialTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
