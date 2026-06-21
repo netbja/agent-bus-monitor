@@ -39,14 +39,14 @@ func clip(s string, n int) string {
 
 func activityTitle(total, topRow, height int) string {
 	if below := total - topRow - height; below > 0 {
-		return fmt.Sprintf(" ACTIVITY  [yellow][↑ pause · %d plus bas — Fin/G pour le direct][-] ", below)
+		return fmt.Sprintf(" ACTIVITY  [yellow][↑ pause · %d below — End/G for live][-] ", below)
 	}
 	return " ACTIVITY  [green][live][-] "
 }
 
 // selectionTitle is the ACTIVITY header shown while a feed line is selected.
 func selectionTitle(pos, total int) string {
-	return fmt.Sprintf(" ACTIVITY  [aqua][● sélection %d/%d — ↑↓/jk déplacer · y/⏎ copier · Échap direct][-] ", pos, total)
+	return fmt.Sprintf(" ACTIVITY  [aqua][● selection %d/%d — ↑↓/jk move · y/⏎ copy · Esc live][-] ", pos, total)
 }
 
 // feedLine pairs a TextView region id with the plain (tag-free) text of one
@@ -70,7 +70,7 @@ func selPos(feed []feedLine, id string) int {
 // from the pilot-lease driver (master == whoever holds the lease; empty = none).
 func statusBar(project, driver string) string {
 	if driver == "" {
-		return fmt.Sprintf(" [white]%s[-]  ·  [yellow]autonome (pas de master)[-]", tview.Escape(project))
+		return fmt.Sprintf(" [white]%s[-]  ·  [yellow]autonomous (no master)[-]", tview.Escape(project))
 	}
 	return fmt.Sprintf(" [white]%s[-]  ·  [green]⬢ MASTER %s[-]", tview.Escape(project), tview.Escape(driver))
 }

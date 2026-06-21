@@ -19,7 +19,7 @@ func TestActivityTitleLive(t *testing.T) {
 func TestActivityTitlePaused(t *testing.T) {
 	// Scrolled up: total - top - height = lines hidden below the viewport.
 	got := activityTitle(100, 30, 20) // 100-30-20 = 50 below
-	want := " ACTIVITY  [yellow][↑ pause · 50 plus bas — Fin/G pour le direct][-] "
+	want := " ACTIVITY  [yellow][↑ pause · 50 below — End/G for live][-] "
 	if got != want {
 		t.Errorf("activityTitle(100,30,20) = %q, want %q", got, want)
 	}
