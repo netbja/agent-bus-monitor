@@ -15,8 +15,8 @@ func TestStatusBar(t *testing.T) {
 		t.Fatalf("statusBar = %q, want the project name", master)
 	}
 	auto := statusBar("trading", "")
-	if !strings.Contains(auto, "autonome") || strings.Contains(auto, "MASTER") {
-		t.Fatalf("statusBar(\"\") = %q, want 'autonome' and no MASTER", auto)
+	if !strings.Contains(auto, "autonomous") || strings.Contains(auto, "MASTER") {
+		t.Fatalf("statusBar(\"\") = %q, want 'autonomous' and no MASTER", auto)
 	}
 }
 
@@ -54,7 +54,7 @@ func TestSelectionTitle(t *testing.T) {
 	if !strings.Contains(got, "3/42") {
 		t.Errorf("selectionTitle(3,42) = %q, want it to show 3/42", got)
 	}
-	if !strings.Contains(got, "copier") {
+	if !strings.Contains(got, "copy") {
 		t.Errorf("selectionTitle = %q, want it to mention the copy key", got)
 	}
 }

@@ -3,7 +3,7 @@
 // Tails one project's streams ({project}:status|report|notify|cmd) and renders:
 //
 //	STATUS   project name + pilot-lease driver as "⬢ MASTER <driver>",
-//	         or "autonome (pas de master)" when no lease is held.
+//	         or "autonomous (no master)" when no lease is held.
 //	AGENTS   per-agent presence (state from status:, liveness also from report:),
 //	         chips wrap to fit terminal width; the master's chip shows a ⬢ marker.
 //	         A lock badge appears when an agent is gated by open 4-eyes challenges.
@@ -53,14 +53,14 @@ func resolveLimit(flagSet bool, flagVal int, env string) int {
 }
 
 // confirmReset asks for interactive confirmation before --reset purges the
-// project's streams. It accepts y/yes/oui (case-insensitive); anything else —
+// project's streams. It accepts y/yes (case-insensitive); anything else —
 // including EOF from a piped or non-TTY stdin — declines, so a purge is never
 // triggered by an unattended pipe.
 func confirmReset(project string, in io.Reader) bool {
-	fmt.Printf("Purger l'historique des 4 streams du projet '%s' (status/report/notify/cmd) ? [y/N] ", project)
+	fmt.Printf("Purge the 4 stream histories for project '%s' (status/report/notify/cmd)? [y/N] ", project)
 	line, _ := bufio.NewReader(in).ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes", "oui":
+	case "y", "yes":
 		return true
 	default:
 		return false
@@ -163,7 +163,7 @@ func main() {
 	// consumer groups + armed/pilot/gate leases.
 	if *resetFlag {
 		if !*yesFlag && !confirmReset(project, os.Stdin) {
-			fmt.Println("Annulé.")
+			fmt.Println("Cancelled.")
 			os.Exit(0)
 		}
 		removed, err := b.Purge(ctx, streamKinds)
@@ -171,7 +171,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: purge failed: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Purgé: %d entrées effacées.\n", removed)
+		fmt.Printf("Purged: %d entries removed.\n", removed)
 	}
 
 	app := tview.NewApplication()
