@@ -110,8 +110,9 @@ after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
 ## busmon panes
 
 ```
+  trading  ·  ⬢ MASTER hermes
 ┌─ AGENTS ───────────────────────────────────────────────────────────────────┐
-│ claude1: working (plan 10)   claude2: active (soak bug fixed)   hermes: offline │
+│ ⬢ hermes: working (plan 10)   claude1: active (soak bug fixed)   claude2: offline │
 ├─ ACTIVITY  [live] ────────────────────────────────────────────────────────────┤
 │ 23:15:12 [claude1] working | plan 10 shipped                                 │
 │ 23:16:02 [notify] Soak 24h started                                           │
@@ -121,13 +122,15 @@ after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
+- **STATUS** — top bar showing the project name and the pilot-lease driver as
+  `⬢ MASTER <driver>`, or `autonome (pas de master)` when no lease is held.
 - **AGENTS** — one chip per agent. `{p}:status` entries set the state (color-coded);
   a `{p}:report` entry also counts as liveness, showing the agent as `active` with
   its last report if it never published a status. Badges: `👂` = the agent is armed
   and listening on `{p}:cmd` (a live `subscribe` lease); `⌛N` = N commands are queued
   for it unread (orange when no one is listening — the "stopped re-arming" tell);
-  `🔒N` = open 4-eyes challenges. The pilot indicator (`[autonome]`/`[piloté par X]`)
-  shows the current lease holder. Past `idleAfter` it shows `idle Nm`; past
+  `🔒N` = open 4-eyes challenges. Chips wrap across rows to fit the terminal width;
+  the master's chip carries a `⬢` marker. Past `idleAfter` it shows `idle Nm`; past
   `staleAfter`, `offline`.
 - **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
   and reports. It live-tails by default; **Tab** moves focus here. While focused,

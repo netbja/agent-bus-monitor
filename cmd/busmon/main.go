@@ -2,9 +2,11 @@
 //
 // Tails one project's streams ({project}:status|report|notify|cmd) and renders:
 //
+//	STATUS   project name + pilot-lease driver as "⬢ MASTER <driver>",
+//	         or "autonome (pas de master)" when no lease is held.
 //	AGENTS   per-agent presence (state from status:, liveness also from report:),
-//	         the pilot mode (piloted/autonomous), and a lock badge when an agent
-//	         is gated by open 4-eyes challenges.
+//	         chips wrap to fit terminal width; the master's chip shows a ⬢ marker.
+//	         A lock badge appears when an agent is gated by open 4-eyes challenges.
 //	ACTIVITY scrolling feed of status/report/notify/cmd events. Tab focuses it;
 //	         ↑↓/j/k select a line, y/Enter copies it to the clipboard (OSC52, so
 //	         it works over SSH), Esc returns to the live tail.
