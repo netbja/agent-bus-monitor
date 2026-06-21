@@ -83,7 +83,8 @@ func dialTest(t *testing.T) *Bus {
 	t.Cleanup(func() {
 		ctx := context.Background()
 		r.Del(ctx, StreamKey(project, "status"), StreamKey(project, "report"),
-			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project))
+			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project),
+			AgentsKey(project))
 		r.Close()
 	})
 	return b
@@ -270,6 +271,25 @@ func TestCmdLag(t *testing.T) {
 	m, err := b.CmdLag(ctx)
 	if err != nil || m["dev"] != 3 {
 		t.Fatalf("CmdLag after 3 unread = (%v, %v), want dev:3", m, err)
+	}
+}
+
+func TestAgentsSnapshot(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "dev", "working", "plan 10"); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	m, err := b.Agents(ctx)
+	if err != nil {
+		t.Fatalf("Agents: %v", err)
+	}
+	s, ok := m["dev"]
+	if !ok {
+		t.Fatalf("Agents missing dev: %+v", m)
+	}
+	if s.State != "working" || s.Message != "plan 10" || s.TS == 0 {
+		t.Fatalf("snapshot = %+v, want state=working message=plan 10 ts>0", s)
 	}
 }
 
