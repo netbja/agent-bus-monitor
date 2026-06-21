@@ -69,7 +69,8 @@ const (
 	idleAfter  = 2 * time.Minute
 	staleAfter = 10 * time.Minute
 
-	feedCap = 500 // ACTIVITY lines retained for display + selection
+	feedCap      = 500 // ACTIVITY lines retained for display + selection
+	maxAgentRows = 4   // AGENTS content rows before the "+N" overflow marker
 )
 
 type agentState struct {
@@ -82,21 +83,27 @@ type agentState struct {
 }
 
 
-func renderAgents(view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
+func renderAgents(layout *tview.Flex, view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
 	mu.Lock()
 	defer mu.Unlock()
-	// pilot is retained for the master-chip marker (added in the AGENTS render change).
 	names := make([]string, 0, len(agents))
 	for n := range agents {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	now := time.Now()
-	parts := make([]string, 0, len(names))
-	for _, n := range names {
-		parts = append(parts, agentLabel(n, agents[n], now))
+	_, _, w, _ := view.GetInnerRect()
+	if w < 1 {
+		w = 80 // before the first layout pass; corrected on the next render
 	}
-	view.SetText(strings.Join(parts, "   "))
+	chips := make([]chip, 0, len(names))
+	for _, n := range names {
+		lbl := agentLabel(n, agents[n], now, n == *pilot)
+		chips = append(chips, chip{lbl, tview.TaggedStringWidth(lbl)})
+	}
+	rows, used := packChips(chips, w, maxAgentRows)
+	view.SetText(strings.Join(rows, "\n"))
+	layout.ResizeItem(view, used+2, 0) // +2 borders; grow to fit, capped by maxAgentRows
 }
 
 // renderStatus updates the top status bar with the project and current master
@@ -169,7 +176,7 @@ func main() {
 
 	statusView := tview.NewTextView().SetDynamicColors(true)
 
-	agentsView := tview.NewTextView().SetDynamicColors(true)
+	agentsView := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	agentsView.SetBorder(true).SetTitle(" AGENTS ")
 
 	activityView := tview.NewTextView()
@@ -404,7 +411,7 @@ func main() {
 			// tview.Escape above already neutralised any ["..."] in messages.
 			fmt.Fprintf(activityView, "[\"%s\"]%s[\"\"]\n", id, line)
 			refreshTitle()
-			renderAgents(agentsView, agents, &mu, &pilot)
+			renderAgents(layout, agentsView, agents, &mu, &pilot)
 			renderStatus(statusView, project, &mu, &pilot)
 		})
 	}
@@ -476,7 +483,7 @@ func main() {
 			}
 			mu.Unlock()
 			app.QueueUpdateDraw(func() {
-				renderAgents(agentsView, agents, &mu, &pilot)
+				renderAgents(layout, agentsView, agents, &mu, &pilot)
 				renderStatus(statusView, project, &mu, &pilot)
 				refreshTitle()
 			})

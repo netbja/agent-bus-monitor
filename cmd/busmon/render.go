@@ -88,10 +88,62 @@ func entryTime(id string) time.Time {
 	return time.Now()
 }
 
+// chip is one agent's AGENTS-pane label plus its visible width (color tags
+// excluded), so packChips can fit chips to the pane width without counting tags.
+type chip struct {
+	text string
+	w    int
+}
+
+const chipSep = "  " // two spaces between chips on a row
+
+// packChips greedily packs chips into rows no wider than width, keeping each chip
+// intact. At most maxRows rows; if chips remain after maxRows, the last row gets a
+// "[gray]+N[-]" marker counting the unplaced chips. Returns the rendered rows and
+// their count (always >= 1). width<1 and maxRows<1 are clamped to 1.
+func packChips(chips []chip, width, maxRows int) ([]string, int) {
+	if width < 1 {
+		width = 1
+	}
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	if len(chips) == 0 {
+		return []string{""}, 1
+	}
+	var rows []string
+	i := 0
+	for i < len(chips) && len(rows) < maxRows {
+		var cur strings.Builder
+		curW := 0
+		for i < len(chips) {
+			c := chips[i]
+			sep := 0
+			if curW > 0 {
+				sep = len(chipSep)
+			}
+			if curW > 0 && curW+sep+c.w > width {
+				break // chip won't fit on this row
+			}
+			if curW > 0 {
+				cur.WriteString(chipSep)
+			}
+			cur.WriteString(c.text)
+			curW += sep + c.w
+			i++
+		}
+		rows = append(rows, cur.String())
+	}
+	if i < len(chips) {
+		rows[len(rows)-1] += fmt.Sprintf("%s[gray]+%d[-]", chipSep, len(chips)-i)
+	}
+	return rows, len(rows)
+}
+
 // agentLabel renders one agent's AGENTS-pane chip: the aged state, then badges
 // for listening (👂), command backlog (⌛N — orange when nobody is listening),
-// and open 4-eyes challenges (🔒N).
-func agentLabel(n string, a *agentState, now time.Time) string {
+// and open 4-eyes challenges (🔒N). When master is true, prepends a ⬢ marker.
+func agentLabel(n string, a *agentState, now time.Time, master bool) string {
 	var label string
 	switch age := now.Sub(a.lastSeen); {
 	case age > staleAfter:
@@ -116,6 +168,9 @@ func agentLabel(n string, a *agentState, now time.Time) string {
 	}
 	if a.gated > 0 {
 		label += fmt.Sprintf(" [red]🔒%d[-]", a.gated)
+	}
+	if master {
+		label = "[fuchsia]⬢[-] " + label
 	}
 	return label
 }
