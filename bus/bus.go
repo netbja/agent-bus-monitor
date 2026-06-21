@@ -8,6 +8,7 @@ package bus
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -20,7 +21,19 @@ const (
 	ReportAuto = "auto" // Stop-hook safety-net summary → LLM-gated (phase 2)
 )
 
-const maxReportLen = 120
+const defaultReportMax = 500
+
+// reportMaxLen resolves the report rune cap: AGENT_BUS_REPORT_MAX if it parses
+// to a positive int, else defaultReportMax (500). Read per call so it stays
+// settable from tests and per-process env.
+func reportMaxLen() int {
+	if v := os.Getenv("AGENT_BUS_REPORT_MAX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultReportMax
+}
 
 var ValidStates = map[string]bool{
 	"working": true, "idle": true, "blocked": true, "done": true,
@@ -67,7 +80,7 @@ func Connect(host string) (*redis.Client, error) {
 
 // SanitizeReportMessage strips control characters — the line-based `agentbus
 // listen` consumer breaks on embedded newlines — collapses runs of whitespace,
-// and truncates to maxReportLen runes so a report stays one bounded line.
+// and truncates to the resolved cap so a report stays one bounded line.
 func SanitizeReportMessage(s string) string {
 	mapped := strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -76,8 +89,8 @@ func SanitizeReportMessage(s string) string {
 		return r
 	}, s)
 	out := strings.Join(strings.Fields(mapped), " ")
-	if r := []rune(out); len(r) > maxReportLen {
-		out = strings.TrimSpace(string(r[:maxReportLen])) + "…"
+	if max := reportMaxLen(); len([]rune(out)) > max {
+		out = strings.TrimSpace(string([]rune(out)[:max])) + "…"
 	}
 	return out
 }

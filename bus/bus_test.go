@@ -12,9 +12,17 @@ func TestSanitizeReportMessage(t *testing.T) {
 	if got := SanitizeReportMessage("  spaced   out  "); got != "spaced out" {
 		t.Fatalf("whitespace: got %q, want %q", got, "spaced out")
 	}
-	got := SanitizeReportMessage(strings.Repeat("x", 200))
-	r := []rune(got)
-	if len(r) != maxReportLen+1 || r[len(r)-1] != '…' {
-		t.Fatalf("truncation: got %d runes (last %q), want %d + …", len(r), string(r[len(r)-1]), maxReportLen)
+	// default cap is 500 runes, then an ellipsis
+	got := SanitizeReportMessage(strings.Repeat("x", 600))
+	if r := []rune(got); len(r) != 501 || r[len(r)-1] != '…' {
+		t.Fatalf("default truncation: got %d runes (last %q), want 501 + …", len(r), string(r[len(r)-1]))
+	}
+}
+
+func TestReportMaxLenEnv(t *testing.T) {
+	t.Setenv("AGENT_BUS_REPORT_MAX", "10")
+	got := SanitizeReportMessage(strings.Repeat("y", 50))
+	if r := []rune(got); len(r) != 11 || r[len(r)-1] != '…' {
+		t.Fatalf("env cap: got %d runes, want 11 + …", len(r))
 	}
 }

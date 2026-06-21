@@ -83,7 +83,8 @@ func dialTest(t *testing.T) *Bus {
 	t.Cleanup(func() {
 		ctx := context.Background()
 		r.Del(ctx, StreamKey(project, "status"), StreamKey(project, "report"),
-			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project))
+			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project),
+			AgentsKey(project))
 		r.Close()
 	})
 	return b
@@ -273,6 +274,25 @@ func TestCmdLag(t *testing.T) {
 	}
 }
 
+func TestAgentsSnapshot(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "dev", "working", "plan 10"); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	m, err := b.Agents(ctx)
+	if err != nil {
+		t.Fatalf("Agents: %v", err)
+	}
+	s, ok := m["dev"]
+	if !ok {
+		t.Fatalf("Agents missing dev: %+v", m)
+	}
+	if s.State != "working" || s.Message != "plan 10" || s.TS == 0 {
+		t.Fatalf("snapshot = %+v, want state=working message=plan 10 ts>0", s)
+	}
+}
+
 func TestWatchCmdDelivers(t *testing.T) {
 	b := dialTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -293,7 +313,7 @@ func TestWatchCmdDelivers(t *testing.T) {
 
 	got := make(chan Event, 1)
 	go func() {
-		_ = b.WatchCmd(ctx, "dev", "test-consumer", func(e Event) bool {
+		_ = b.WatchCmd(ctx, "dev", "test-consumer", "", func(e Event) bool {
 			got <- e
 			return true // one-shot: stop on first entry addressed to dev
 		})
@@ -306,5 +326,33 @@ func TestWatchCmdDelivers(t *testing.T) {
 		}
 	case <-time.After(4 * time.Second):
 		t.Fatal("WatchCmd delivered nothing for dev within 4s")
+	}
+}
+
+func TestWatchCmdFloorSkipsBacklog(t *testing.T) {
+	b := dialTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	stream := StreamKey(b.Project(), "cmd")
+	if err := b.r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
+		t.Fatalf("XGroupCreate: %v", err)
+	}
+	oldID, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "OLD")
+	if err != nil {
+		t.Fatalf("Cmd OLD: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "NEW"); err != nil {
+		t.Fatalf("Cmd NEW: %v", err)
+	}
+	var got Event
+	werr := b.WatchCmd(ctx, "dev", "test-consumer", oldID, func(e Event) bool {
+		got = e
+		return true
+	})
+	if werr != nil {
+		t.Fatalf("WatchCmd: %v", werr)
+	}
+	if got.Message != "NEW" {
+		t.Fatalf("delivered %q, want NEW (OLD must be skipped by floor)", got.Message)
 	}
 }

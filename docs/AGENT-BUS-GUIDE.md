@@ -7,6 +7,26 @@ are listed verbatim below.**
 
 ---
 
+## Drop this into your project's CLAUDE.md
+
+`CLAUDE.md` is the one file every subagent reads. Paste this block into the
+consuming project's `CLAUDE.md` (fill the two names) so subagents inherit bus
+access without re-asking:
+
+```markdown
+## Agent Bus (coordination over Redis Streams)
+- CLI: `agentbus` (from github.com/netbja/agent-bus-monitor; `go install ./...`).
+- Identity / namespace (export once):
+  `export AGENT_BUS_PROJECT=<project>` and `export AGENT_BUS_AGENT=<your-agent>`.
+- Receive directives — arm as a background task; its exit wakes you, then re-arm:
+  `agentbus subscribe "$AGENT_BUS_AGENT" --since "$LAST_CURSOR"`  # one JSON line/fire; persist its `id`
+- Publish your state (this IS your heartbeat):
+  `agentbus status "$AGENT_BUS_AGENT" working "<msg>"`
+- Peers' current state: `agentbus agents`. Full reference: docs/AGENT-BUS-GUIDE.md.
+```
+
+---
+
 ## 0. Read this first — the 4 traps that make commands fail
 
 These are the only reasons a well-formed-looking command gets rejected. Check
@@ -90,9 +110,14 @@ agentbus pilot status                                   # prints "piloted by her
 agentbus pilot claim --ttl 120s                         # hermes only: take/renew the lease
 agentbus pilot release                                  # hand off to autonomous now
 
+# ── PEERS: current state of every agent (one line each) ───────────────────────
+agentbus agents                                         # name · state · (message) · age; marks idle/offline
+agentbus agents --json                                  # raw map for scripts
+
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
-agentbus subscribe <agent> [idle_secs]                  # blocks for ONE cmd, prints it + a rearm sentinel, EXITS; default idle 240s
-agentbus subscribe claude1                              # arm as a background task; its exit wakes your session
+agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s
+agentbus subscribe claude1                              # no --since = skip backlog, start at "now"; arm as a background task
+agentbus subscribe --since 1782053749061-3 claude1      # resume after a persisted cursor (the `id` from the last fire)
 agentbus subscribe claude1 3600                         # 1h idle window before it heartbeats and exits
 agentbus subscribe --loop hermes                        # HEADLESS callers only (hermes/shell): consume continuously, never exit
 agentbus watch claude1                                  # legacy alias of subscribe
@@ -129,26 +154,31 @@ to autonomous automatically — there is no "I'm done" message.
 
 ### `subscribe` is wake-on-exit, not a long loop
 `agentbus subscribe <self>` **blocks until one command addressed to you arrives,
-prints it, then prints a final machine line and exits.** Arm it as a Claude Code
-background task; its exit wakes your session, and you re-arm. After the idle
-window (default 240s, or `[idle_secs]`) it heartbeats and exits so you can re-arm.
+emits ONE JSON object, then exits.** Arm it as a Claude Code background task; its
+exit wakes your session, and you re-arm. After the idle window (default 240s, or
+`[idle_secs]`) it emits a heartbeat object and exits so you can re-arm.
 
-The last line is always a structured sentinel — **re-arm iff it says `rearm=1`**:
+Each fire is exactly one JSON line — parse it once. **Re-arm iff `rearm` is `true`:**
 
-| You see                                         | Meaning            | Exit code | Re-arm? |
-|-------------------------------------------------|--------------------|-----------|---------|
-| `__AGENTBUS__ event=cmd rearm=1 ref=… from=…`   | a command arrived  | 0         | yes     |
-| `__AGENTBUS__ event=heartbeat rearm=1`          | idle window passed | 64        | yes     |
-| `__AGENTBUS__ event=error rearm=1 msg=…`        | transient glitch   | 75        | yes     |
-| `__AGENTBUS__ event=fatal rearm=0 msg=…`        | misconfigured      | 1         | **no**  |
+| You see                                                              | Meaning            | Exit | Re-arm? |
+|----------------------------------------------------------------------|--------------------|------|---------|
+| `{"event":"cmd","rearm":true,"id":"…","type":"…","from":"…","target":"…","ref":"…","body":"…"}` | a command arrived  | 0    | yes     |
+| `{"event":"heartbeat","rearm":true}`                                 | idle window passed | 64   | yes     |
+| `{"event":"error","rearm":true,"msg":"…"}`                           | transient glitch   | 75   | yes     |
+| `{"event":"fatal","rearm":false,"msg":"…"}`                          | misconfigured      | 1    | **no**  |
+
+**Persist the `id`** from each `cmd` fire and pass it back as `--since <id>` next
+time you arm — that is your cursor. With no `--since`, subscribe starts at the
+broker's "now" and never replays archived backlog, so a fresh session is never
+flooded by stale commands. Pass `--since 0` only if you deliberately want full
+at-least-once replay.
 
 **While armed and waiting you are `idle`, never `blocked`** — `blocked` is
-reserved for an open 4-eyes gate. busmon shows a `👂` badge next to armed agents,
-so a human can see you're listening. **Do not** wrap `subscribe` in a `while`
-loop or a daemon — a long-lived loop never wakes a terminal session. (The one
-exception is `--loop`, for **headless** consumers like hermes or a shell logger
-that are not trying to wake a session.) The whole loop lives in the binary;
-there is no wrapper script and no watcher daemon.
+reserved for an open 4-eyes gate. busmon shows a `👂` badge next to armed agents.
+**Do not** wrap `subscribe` in a `while` loop or a daemon — a long-lived loop
+never wakes a terminal session. (The one exception is `--loop`, for **headless**
+consumers like hermes; it emits one `cmd` object per entry, with no `rearm`.) The
+whole loop lives in the binary; there is no wrapper script and no watcher daemon.
 
 ### The 4-eyes gate blocks regardless of pilot mode
 A `challenge` opens a gate on the target that **blocks it until a `verdict`**, in

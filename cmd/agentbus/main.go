@@ -15,7 +15,8 @@
 //	agentbus --project P verdict   --ref R <target> <approve|reject> [msg...]  # resolves the gate
 //	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
-//	agentbus --project P subscribe <agent> [idle_secs]  # block for next addressed cmd, print it, exit; re-arm to stay subscribed
+//	agentbus --project P agents    [--json]      # current state of all agents (one line each)
+//	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
 //	agentbus --host <host> ...
@@ -23,6 +24,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -33,7 +35,7 @@ import (
 
 const (
 	pilotTTL  = 90 * time.Second  // default pilot lease TTL (override --ttl)
-	heartbeat = 240 * time.Second // watch prints __HEARTBEAT__ and exits after this idle window
+	heartbeat = 240 * time.Second // subscribe emits a heartbeat JSON object (rearm:true) and exits after this idle window
 )
 
 // listenKinds bounds the stream kinds the debug `listen` tail accepts.
@@ -62,7 +64,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|agents|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -219,27 +221,49 @@ func main() {
 		}
 		os.Exit(1) // gated → non-zero so a script/agent can block on it
 
+	case "agents":
+		_, asJSON := extractBool(rest, "--json")
+		m, err := b.Agents(ctx)
+		if err != nil {
+			die(err.Error())
+		}
+		if asJSON {
+			out, _ := json.MarshalIndent(m, "", "  ")
+			fmt.Println(string(out))
+			return
+		}
+		fmt.Print(agentsTable(m, time.Now()))
+
 	case "subscribe", "watch":
-		// One subscription tick (or a headless --loop). The wake-on-exit model
-		// for terminal sessions: block on the agent's :cmd group, print the next
-		// addressed entry plus a __AGENTBUS__ rearm sentinel, and EXIT — that exit
-		// re-invokes the session, which re-arms iff the sentinel says rearm=1.
-		// --loop is for headless consumers (hermes/shell) only — never a terminal
-		// wake path, since a long-lived loop can't wake a session.
+		// One subscription tick (or a headless --loop). Emits one JSON subEvent
+		// per fire: the cmd payload + cursor (id) + rearm flag. --since <cursor>
+		// sets the floor; omitted = skip backlog (start at the server's "now").
 		rest, loop := extractBool(rest, "--loop")
+		rest, since := extractFlag(rest, "--since")
 		if len(rest) < 1 {
-			die("usage: subscribe [--loop] <agent> [idle_seconds]")
+			die("usage: subscribe [--loop] [--since <cursor>] <agent> [idle_seconds]")
 		}
 		agent := rest[0]
 		idle := heartbeat
 		if len(rest) > 1 {
 			idle = parseIdle(rest[1], heartbeat)
 		}
+		floor := since
+		switch {
+		case floor == "":
+			f, ferr := b.ServerFloor(ctx)
+			if ferr != nil {
+				die("could not resolve server-time floor: " + ferr.Error())
+			}
+			floor = f
+		case floor != "0" && !strings.Contains(floor, "-"):
+			floor += "-0" // accept a bare <ms> cursor
+		}
 		consumer, _ := os.Hostname()
 		if consumer == "" {
 			consumer = self
 		}
-		os.Exit(runSubscribe(ctx, b, agent, consumer, idle, loop, os.Stdout))
+		os.Exit(runSubscribe(ctx, b, agent, consumer, idle, floor, loop, os.Stdout))
 
 	case "listen":
 		kinds := rest

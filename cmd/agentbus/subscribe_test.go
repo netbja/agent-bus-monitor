@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,43 +15,15 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-func TestRearmSentinel(t *testing.T) {
-	cases := []struct {
-		name           string
-		outcome        watchOutcome
-		ref, from, msg string
-		wantLine       string
-		wantCode       int
-	}{
-		{"cmd", outcomeCmd, "C1", "hermes", "", "__AGENTBUS__ event=cmd rearm=1 ref=C1 from=hermes", 0},
-		{"heartbeat", outcomeHeartbeat, "", "", "", "__AGENTBUS__ event=heartbeat rearm=1", 64},
-		{"transient", outcomeTransient, "", "", "broker down", "__AGENTBUS__ event=error rearm=1 msg=broker down", 75},
-		{"fatal", outcomeFatal, "", "", "invalid agent", "__AGENTBUS__ event=fatal rearm=0 msg=invalid agent", 1},
+// lastEvent parses the final non-empty JSON line emitted by runSubscribe.
+func lastEvent(t *testing.T, out string) subEvent {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	var ev subEvent
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &ev); err != nil {
+		t.Fatalf("output last line not JSON: %q (%v)", out, err)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			line, code := rearmSentinel(c.outcome, c.ref, c.from, c.msg)
-			if line != c.wantLine {
-				t.Errorf("line = %q, want %q", line, c.wantLine)
-			}
-			if code != c.wantCode {
-				t.Errorf("code = %d, want %d", code, c.wantCode)
-			}
-		})
-	}
-}
-
-func TestPrintCmd(t *testing.T) {
-	var buf bytes.Buffer
-	printCmd(&buf, bus.Event{Type: "directive", From: "hermes", Target: "dev", Message: "run it"})
-	if got := buf.String(); got != "[directive hermes->dev] run it\n" {
-		t.Fatalf("printCmd = %q", got)
-	}
-	buf.Reset()
-	printCmd(&buf, bus.Event{Type: "challenge", From: "review", Target: "dev", Ref: "C1", Message: "justify"})
-	if got := buf.String(); got != "[challenge review->dev ref=C1] justify\n" {
-		t.Fatalf("printCmd with ref = %q", got)
-	}
+	return ev
 }
 
 // syncBuf is a goroutine-safe io.Writer so the --loop test can read what the
@@ -96,12 +69,13 @@ func dialMain(t *testing.T) (*bus.Bus, *redis.Client) {
 func TestRunSubscribeFatalOnBadAgent(t *testing.T) {
 	var buf bytes.Buffer
 	// b is nil on purpose: ValidName rejects the agent before any Redis call.
-	code := runSubscribe(context.Background(), nil, "Bad Agent", "host-1", time.Second, false, &buf)
+	code := runSubscribe(context.Background(), nil, "Bad Agent", "host-1", time.Second, "0", false, &buf)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (fatal)", code)
 	}
-	if !strings.Contains(buf.String(), "__AGENTBUS__ event=fatal rearm=0") {
-		t.Errorf("missing fatal sentinel: %q", buf.String())
+	ev := lastEvent(t, buf.String())
+	if ev.Event != "fatal" || ev.Rearm == nil || *ev.Rearm {
+		t.Errorf("event = %+v, want event=fatal rearm=false", ev)
 	}
 }
 
@@ -110,7 +84,7 @@ func TestRunSubscribeDelivers(t *testing.T) {
 	ctx := context.Background()
 	stream := bus.StreamKey(b.Project(), "cmd")
 	// Pre-create dev's group at "0" so the already-published entry is delivered
-	// deterministically (no race with WatchCmd's own MKSTREAM at "$").
+	// deterministically; floor "0" disables the skip-backlog filter.
 	if err := r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
 		t.Fatalf("XGroupCreate: %v", err)
 	}
@@ -119,34 +93,58 @@ func TestRunSubscribeDelivers(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	code := runSubscribe(ctx, b, "dev", "host-1", 4*time.Second, false, &buf)
+	code := runSubscribe(ctx, b, "dev", "host-1", 4*time.Second, "0", false, &buf)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (delivered)", code)
 	}
-	out := buf.String()
-	if !strings.Contains(out, "[challenge review->dev ref=C1] justify X") {
-		t.Errorf("output missing cmd line: %q", out)
+	ev := lastEvent(t, buf.String())
+	if ev.Event != "cmd" || ev.Rearm == nil || !*ev.Rearm {
+		t.Fatalf("event = %+v, want cmd rearm=true", ev)
 	}
-	if !strings.Contains(out, "__AGENTBUS__ event=cmd rearm=1 ref=C1 from=review") {
-		t.Errorf("output missing cmd sentinel: %q", out)
+	if ev.From != "review" || ev.Target != "dev" || ev.Type != "challenge" || ev.Ref != "C1" || ev.Body != "justify X" {
+		t.Errorf("payload = %+v, want review/dev/challenge/C1/justify X", ev)
+	}
+	if ev.ID == "" {
+		t.Error("cmd event missing id (cursor)")
+	}
+}
+
+func TestRunSubscribeFloorSkipsBacklog(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	stream := bus.StreamKey(b.Project(), "cmd")
+	if err := r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
+		t.Fatalf("XGroupCreate: %v", err)
+	}
+	oldID, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", "OLD")
+	if err != nil {
+		t.Fatalf("Cmd OLD: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", "NEW"); err != nil {
+		t.Fatalf("Cmd NEW: %v", err)
+	}
+	var buf bytes.Buffer
+	code := runSubscribe(ctx, b, "dev", "host-1", 4*time.Second, oldID, false, &buf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	ev := lastEvent(t, buf.String())
+	if ev.Body != "NEW" {
+		t.Fatalf("delivered body=%q, want NEW (OLD skipped by floor)", ev.Body)
 	}
 }
 
 func TestRunSubscribeHeartbeat(t *testing.T) {
 	b, _ := dialMain(t)
 	var buf bytes.Buffer
-	// No cmd published: WatchCmd creates the group at "$", blocks, the 1s idle
-	// window elapses → heartbeat.
-	code := runSubscribe(context.Background(), b, "dev", "host-1", 1*time.Second, false, &buf)
+	// No cmd published: WatchCmd blocks, the 1s idle window elapses → heartbeat.
+	code := runSubscribe(context.Background(), b, "dev", "host-1", 1*time.Second, "0", false, &buf)
 	if code != 64 {
 		t.Fatalf("exit code = %d, want 64 (heartbeat)", code)
 	}
-	out := buf.String()
-	if !strings.Contains(out, "__HEARTBEAT__") {
-		t.Errorf("missing deprecated __HEARTBEAT__: %q", out)
-	}
-	if !strings.Contains(out, "__AGENTBUS__ event=heartbeat rearm=1") {
-		t.Errorf("missing heartbeat sentinel: %q", out)
+	ev := lastEvent(t, buf.String())
+	if ev.Event != "heartbeat" || ev.Rearm == nil || !*ev.Rearm {
+		t.Errorf("event = %+v, want heartbeat rearm=true", ev)
 	}
 }
 
@@ -165,7 +163,7 @@ func TestRunSubscribeLoopDeliversMany(t *testing.T) {
 
 	buf := &syncBuf{}
 	done := make(chan int, 1)
-	go func() { done <- runSubscribe(ctx, b, "dev", "host-1", 2*time.Second, true, buf) }()
+	go func() { done <- runSubscribe(ctx, b, "dev", "host-1", 2*time.Second, "0", true, buf) }()
 
 	deadline := time.After(5 * time.Second)
 	for !(strings.Contains(buf.String(), "do 0") && strings.Contains(buf.String(), "do 1")) {

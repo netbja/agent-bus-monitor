@@ -58,14 +58,16 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (each a single `main.go`)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`notify`/`cmd`/`challenge`/`reply`/
-  `verdict`/`pilot`/`gate`/`subscribe`/`watch`/`listen`. Parses args manually; trailing words are
-  joined. `subscribe <agent> [idle_secs]` is a one-shot XREADGROUP loop (consumer group = agent
-  name) that prints the first addressed cmd entry then **exits** — that exit is the wake signal for
-  a Claude Code background task — or prints `__HEARTBEAT__` after the idle window (optional positional
-  `idle_secs`, default 240s) and exits so the agent re-arms. "Staying subscribed" is the agent
-  re-arming after each fire, **not** a long-lived loop (which would never wake a terminal session).
-  `watch` is the legacy alias of `subscribe` (same handler). `listen` tails all four streams via
-  `Bus.Tail` for debugging.
+  `verdict`/`pilot`/`gate`/`agents`/`subscribe`/`watch`/`listen`. Parses args manually; trailing
+  words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot XREADGROUP
+  loop (consumer group = agent name) that emits **one JSON object** then **exits** — a `cmd` object
+  (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle window (positional
+  `idle_secs`, default 240s). Caller persists the `id` field and passes it back as `--since <id>` on
+  re-arm; omitting `--since` starts at "now" (no backlog replay); `--since 0` = full at-least-once
+  replay. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after each fire, **not** a
+  long-lived loop (which would never wake a terminal session). `agents [--json]` lists every peer's
+  current state. `watch` is the legacy alias of `subscribe` (same handler). `listen` tails all four
+  streams via `Bus.Tail` for debugging.
 - **`busmon`** — `tview`/`tcell` TUI. On launch it backfills only the **last `--limit` ACTIVITY
   lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all history) via `Bus.Recent`,
   then live-tails from the per-stream cursors `Recent` returns through `Bus.TailFrom` (no replay, no
