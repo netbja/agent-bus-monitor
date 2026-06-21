@@ -2,9 +2,11 @@
 //
 // Tails one project's streams ({project}:status|report|notify|cmd) and renders:
 //
+//	STATUS   project name + pilot-lease driver as "⬢ MASTER <driver>",
+//	         or "autonome (pas de master)" when no lease is held.
 //	AGENTS   per-agent presence (state from status:, liveness also from report:),
-//	         the pilot mode (piloted/autonomous), and a lock badge when an agent
-//	         is gated by open 4-eyes challenges.
+//	         chips wrap to fit terminal width; the master's chip shows a ⬢ marker.
+//	         A lock badge appears when an agent is gated by open 4-eyes challenges.
 //	ACTIVITY scrolling feed of status/report/notify/cmd events. Tab focuses it;
 //	         ↑↓/j/k select a line, y/Enter copies it to the clipboard (OSC52, so
 //	         it works over SSH), Esc returns to the live tail.
@@ -69,7 +71,8 @@ const (
 	idleAfter  = 2 * time.Minute
 	staleAfter = 10 * time.Minute
 
-	feedCap = 500 // ACTIVITY lines retained for display + selection
+	feedCap      = 500 // ACTIVITY lines retained for display + selection
+	maxAgentRows = 4   // AGENTS content rows before the "+N" overflow marker
 )
 
 type agentState struct {
@@ -81,131 +84,37 @@ type agentState struct {
 	lag      int64 // unconsumed {p}:cmd entries for this agent → ⌛ backlog badge
 }
 
-func stateColor(state string) string {
-	switch state {
-	case "working":
-		return "green"
-	case "idle":
-		return "yellow"
-	case "blocked":
-		return "red"
-	case "done":
-		return "blue"
-	case "active": // report-only presence (no status: yet)
-		return "teal"
-	}
-	return "white"
-}
 
-func tag(color, text string) string {
-	return fmt.Sprintf("[%s]%s[-]", color, tview.Escape(text))
-}
-
-func clip(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return strings.TrimSpace(string(r[:n])) + "…"
-}
-
-func activityTitle(total, topRow, height int) string {
-	if below := total - topRow - height; below > 0 {
-		return fmt.Sprintf(" ACTIVITY  [yellow][↑ pause · %d plus bas — Fin/G pour le direct][-] ", below)
-	}
-	return " ACTIVITY  [green][live][-] "
-}
-
-// selectionTitle is the ACTIVITY header shown while a feed line is selected.
-func selectionTitle(pos, total int) string {
-	return fmt.Sprintf(" ACTIVITY  [aqua][● sélection %d/%d — ↑↓/jk déplacer · y/⏎ copier · Échap direct][-] ", pos, total)
-}
-
-// feedLine pairs a TextView region id with the plain (tag-free) text of one
-// ACTIVITY entry, so a selected line can be copied verbatim to the clipboard.
-type feedLine struct {
-	id   string
-	text string
-}
-
-// selPos returns the index of id in feed, or -1 if it has scrolled out.
-func selPos(feed []feedLine, id string) int {
-	for i := range feed {
-		if feed[i].id == id {
-			return i
-		}
-	}
-	return -1
-}
-
-// pilotLabel renders the AGENTS-pane pilot indicator from the lease driver.
-func pilotLabel(driver string) string {
-	if driver == "" {
-		return "[yellow][autonome][-]"
-	}
-	return "[green][piloté par " + tview.Escape(driver) + "][-]"
-}
-
-// entryTime parses a Redis stream ID ("<ms>-<seq>") to wall-clock time so a
-// backfilled entry ages correctly instead of looking freshly seen.
-func entryTime(id string) time.Time {
-	ms := id
-	if i := strings.IndexByte(id, '-'); i >= 0 {
-		ms = id[:i]
-	}
-	if n, err := strconv.ParseInt(ms, 10, 64); err == nil {
-		return time.UnixMilli(n)
-	}
-	return time.Now()
-}
-
-// agentLabel renders one agent's AGENTS-pane chip: the aged state, then badges
-// for listening (👂), command backlog (⌛N — orange when nobody is listening),
-// and open 4-eyes challenges (🔒N).
-func agentLabel(n string, a *agentState, now time.Time) string {
-	var label string
-	switch age := now.Sub(a.lastSeen); {
-	case age > staleAfter:
-		label = tag("gray", n+": offline")
-	case age > idleAfter:
-		label = tag("yellow", fmt.Sprintf("%s: idle %dm", n, int(age.Minutes())))
-	default:
-		label = tag(stateColor(a.state), n+": "+a.state)
-		if a.message != "" {
-			label += " " + tview.Escape("("+clip(a.message, 48)+")")
-		}
-	}
-	if a.armed {
-		label += " [green]👂[-]"
-	}
-	if a.lag > 0 {
-		color := "yellow" // listening but behind — transient
-		if !a.armed {
-			color = "orange" // backlog with no listener — the "stopped re-arming" tell
-		}
-		label += fmt.Sprintf(" [%s]⌛%d[-]", color, a.lag)
-	}
-	if a.gated > 0 {
-		label += fmt.Sprintf(" [red]🔒%d[-]", a.gated)
-	}
-	return label
-}
-
-func renderAgents(view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
+func renderAgents(layout *tview.Flex, view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
 	mu.Lock()
 	defer mu.Unlock()
-	view.SetTitle(" AGENTS  " + pilotLabel(*pilot) + " ")
 	names := make([]string, 0, len(agents))
 	for n := range agents {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	now := time.Now()
-	parts := make([]string, 0, len(names))
-	for _, n := range names {
-		parts = append(parts, agentLabel(n, agents[n], now))
+	_, _, w, _ := view.GetInnerRect()
+	if w < 1 {
+		w = 80 // before the first layout pass; corrected on the next render
 	}
-	view.SetText(strings.Join(parts, "   "))
+	chips := make([]chip, 0, len(names))
+	for _, n := range names {
+		lbl := agentLabel(n, agents[n], now, n == *pilot)
+		chips = append(chips, chip{lbl, tview.TaggedStringWidth(lbl)})
+	}
+	rows, used := packChips(chips, w, maxAgentRows)
+	view.SetText(strings.Join(rows, "\n"))
+	layout.ResizeItem(view, used+2, 0) // +2 borders; grow to fit, capped by maxAgentRows
+}
+
+// renderStatus updates the top status bar with the project and current master
+// (the pilot-lease driver). Mutex-guarded read of the shared pilot string.
+func renderStatus(view *tview.TextView, project string, mu *sync.Mutex, pilot *string) {
+	mu.Lock()
+	driver := *pilot
+	mu.Unlock()
+	view.SetText(statusBar(project, driver))
 }
 
 func main() {
@@ -267,7 +176,9 @@ func main() {
 
 	app := tview.NewApplication()
 
-	agentsView := tview.NewTextView().SetDynamicColors(true)
+	statusView := tview.NewTextView().SetDynamicColors(true)
+
+	agentsView := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	agentsView.SetBorder(true).SetTitle(" AGENTS ")
 
 	activityView := tview.NewTextView()
@@ -354,6 +265,7 @@ func main() {
 	})
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(statusView, 1, 0, false).
 		AddItem(agentsView, 3, 0, false).
 		AddItem(activityView, 0, 1, false).
 		AddItem(input, 3, 0, true)
@@ -501,7 +413,8 @@ func main() {
 			// tview.Escape above already neutralised any ["..."] in messages.
 			fmt.Fprintf(activityView, "[\"%s\"]%s[\"\"]\n", id, line)
 			refreshTitle()
-			renderAgents(agentsView, agents, &mu, &pilot)
+			renderAgents(layout, agentsView, agents, &mu, &pilot)
+			renderStatus(statusView, project, &mu, &pilot)
 		})
 	}
 
@@ -572,7 +485,8 @@ func main() {
 			}
 			mu.Unlock()
 			app.QueueUpdateDraw(func() {
-				renderAgents(agentsView, agents, &mu, &pilot)
+				renderAgents(layout, agentsView, agents, &mu, &pilot)
+				renderStatus(statusView, project, &mu, &pilot)
 				refreshTitle()
 			})
 		}
