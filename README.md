@@ -29,9 +29,9 @@ today — and, importantly, where they *don't* connect.
 
 **Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
 A session arms `agentbus subscribe <agent> [idle_secs]` as a Claude Code background task. It blocks
-on the project's `:cmd` stream via XREADGROUP, prints the first addressed entry (or `__HEARTBEAT__`
-after the idle window, default 240s) then exits — and that exit re-invokes the Claude session that
-armed it. Each session re-arms after every fire. The whole loop lives in the `agentbus` binary, so
+on the project's `:cmd` stream via XREADGROUP, emits one JSON object per fire (a `cmd` object, or a
+`heartbeat` object after the idle window, default 240s) then exits — and that exit re-invokes the
+Claude session that armed it. Each session re-arms after every fire. The whole loop lives in the `agentbus` binary, so
 there is **no wrapper script and no watcher daemon** in the agent path. `busmon` runs alongside as
 the human dashboard.
 
@@ -89,7 +89,7 @@ agentbus cmd claude2 "check status"                # sends a directive to claude
 agentbus report claude1 "bug corrigé"              # curated report (note kind)
 agentbus report claude1 --auto "soak 24h done"     # auto = Stop-hook safety net
 agentbus subscribe claude1                         # block for next cmd then exit (re-arm to stay subscribed)
-agentbus subscribe claude1 3600                    # same, with a 1h idle window before __HEARTBEAT__
+agentbus subscribe claude1 3600                    # same, with a 1h idle window before the heartbeat object
 agentbus listen                                    # debug tail (all four streams)
 agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated

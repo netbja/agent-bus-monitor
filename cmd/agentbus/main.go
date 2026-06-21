@@ -35,7 +35,7 @@ import (
 
 const (
 	pilotTTL  = 90 * time.Second  // default pilot lease TTL (override --ttl)
-	heartbeat = 240 * time.Second // watch prints __HEARTBEAT__ and exits after this idle window
+	heartbeat = 240 * time.Second // subscribe emits a heartbeat JSON object (rearm:true) and exits after this idle window
 )
 
 // listenKinds bounds the stream kinds the debug `listen` tail accepts.
