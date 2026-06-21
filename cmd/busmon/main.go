@@ -85,7 +85,7 @@ type agentState struct {
 func renderAgents(view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
 	mu.Lock()
 	defer mu.Unlock()
-	view.SetTitle(" AGENTS  " + pilotLabel(*pilot) + " ")
+	// pilot is retained for the master-chip marker (added in the AGENTS render change).
 	names := make([]string, 0, len(agents))
 	for n := range agents {
 		names = append(names, n)
@@ -97,6 +97,15 @@ func renderAgents(view *tview.TextView, agents map[string]*agentState, mu *sync.
 		parts = append(parts, agentLabel(n, agents[n], now))
 	}
 	view.SetText(strings.Join(parts, "   "))
+}
+
+// renderStatus updates the top status bar with the project and current master
+// (the pilot-lease driver). Mutex-guarded read of the shared pilot string.
+func renderStatus(view *tview.TextView, project string, mu *sync.Mutex, pilot *string) {
+	mu.Lock()
+	driver := *pilot
+	mu.Unlock()
+	view.SetText(statusBar(project, driver))
 }
 
 func main() {
@@ -157,6 +166,8 @@ func main() {
 	}
 
 	app := tview.NewApplication()
+
+	statusView := tview.NewTextView().SetDynamicColors(true)
 
 	agentsView := tview.NewTextView().SetDynamicColors(true)
 	agentsView.SetBorder(true).SetTitle(" AGENTS ")
@@ -245,6 +256,7 @@ func main() {
 	})
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(statusView, 1, 0, false).
 		AddItem(agentsView, 3, 0, false).
 		AddItem(activityView, 0, 1, false).
 		AddItem(input, 3, 0, true)
@@ -393,6 +405,7 @@ func main() {
 			fmt.Fprintf(activityView, "[\"%s\"]%s[\"\"]\n", id, line)
 			refreshTitle()
 			renderAgents(agentsView, agents, &mu, &pilot)
+			renderStatus(statusView, project, &mu, &pilot)
 		})
 	}
 
@@ -464,6 +477,7 @@ func main() {
 			mu.Unlock()
 			app.QueueUpdateDraw(func() {
 				renderAgents(agentsView, agents, &mu, &pilot)
+				renderStatus(statusView, project, &mu, &pilot)
 				refreshTitle()
 			})
 		}

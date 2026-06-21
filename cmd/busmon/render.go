@@ -66,12 +66,13 @@ func selPos(feed []feedLine, id string) int {
 	return -1
 }
 
-// pilotLabel renders the AGENTS-pane pilot indicator from the lease driver.
-func pilotLabel(driver string) string {
+// statusBar renders the top bar: the project, then the master indicator derived
+// from the pilot-lease driver (master == whoever holds the lease; empty = none).
+func statusBar(project, driver string) string {
 	if driver == "" {
-		return "[yellow][autonome][-]"
+		return fmt.Sprintf(" [white]%s[-]  ·  [yellow]autonome (pas de master)[-]", tview.Escape(project))
 	}
-	return "[green][piloté par " + tview.Escape(driver) + "][-]"
+	return fmt.Sprintf(" [white]%s[-]  ·  [green]⬢ MASTER %s[-]", tview.Escape(project), tview.Escape(driver))
 }
 
 // entryTime parses a Redis stream ID ("<ms>-<seq>") to wall-clock time so a

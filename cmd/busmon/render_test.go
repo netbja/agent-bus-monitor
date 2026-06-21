@@ -6,12 +6,17 @@ import (
 	"time"
 )
 
-func TestPilotLabel(t *testing.T) {
-	if got := pilotLabel(""); !strings.Contains(got, "autonome") {
-		t.Fatalf("pilotLabel(\"\") = %q, want it to mention autonome", got)
+func TestStatusBar(t *testing.T) {
+	master := statusBar("trading", "hermes")
+	if !strings.Contains(master, "⬢ MASTER hermes") {
+		t.Fatalf("statusBar(driver) = %q, want '⬢ MASTER hermes'", master)
 	}
-	if got := pilotLabel("hermes"); !strings.Contains(got, "piloté par hermes") {
-		t.Fatalf("pilotLabel(hermes) = %q, want it to mention 'piloté par hermes'", got)
+	if !strings.Contains(master, "trading") {
+		t.Fatalf("statusBar = %q, want the project name", master)
+	}
+	auto := statusBar("trading", "")
+	if !strings.Contains(auto, "autonome") || strings.Contains(auto, "MASTER") {
+		t.Fatalf("statusBar(\"\") = %q, want 'autonome' and no MASTER", auto)
 	}
 }
 
