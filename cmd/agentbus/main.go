@@ -15,6 +15,7 @@
 //	agentbus --project P verdict   --ref R <target> <approve|reject> [msg...]  # resolves the gate
 //	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
+//	agentbus --project P agents    [--json]      # current state of all agents (one line each)
 //	agentbus --project P subscribe <agent> [idle_secs]  # block for next addressed cmd, print it, exit; re-arm to stay subscribed
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
@@ -23,6 +24,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -62,7 +64,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|agents|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -218,6 +220,19 @@ func main() {
 			fmt.Printf("%s\t%s\n", ref, meta)
 		}
 		os.Exit(1) // gated → non-zero so a script/agent can block on it
+
+	case "agents":
+		_, asJSON := extractBool(rest, "--json")
+		m, err := b.Agents(ctx)
+		if err != nil {
+			die(err.Error())
+		}
+		if asJSON {
+			out, _ := json.MarshalIndent(m, "", "  ")
+			fmt.Println(string(out))
+			return
+		}
+		fmt.Print(agentsTable(m, time.Now()))
 
 	case "subscribe", "watch":
 		// One subscription tick (or a headless --loop). The wake-on-exit model
