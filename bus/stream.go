@@ -329,18 +329,26 @@ func splitID(id string) (ms, seq int64) {
 // WatchCmd consumes the project's shared cmd stream via a per-agent consumer
 // group (group name = agent), giving at-least-once delivery across one-shot
 // restarts (the cursor lives server-side). fn is called only for entries whose
-// target == agent; every read entry is XACKed — including ones for other agents
-// — so the pending-entries list stays clean. WatchCmd returns nil when fn
-// returns true (handled; used by the one-shot `agentbus watch`) or the context
-// error when cancelled.
-func (b *Bus) WatchCmd(ctx context.Context, agent, consumer string, fn func(Event) bool) error {
+// target == agent AND whose ID is strictly newer than floor (pre-floor entries
+// are ACKed but not delivered, so the PEL stays clean). An empty or "0" floor
+// means "no floor" — every entry passes. WatchCmd returns nil when fn returns
+// true (handled; used by the one-shot `agentbus watch`) or the context error
+// when cancelled.
+func (b *Bus) WatchCmd(ctx context.Context, agent, consumer, floor string, fn func(Event) bool) error {
 	if !ValidName(agent) {
 		return fmt.Errorf("invalid agent %q", agent)
 	}
 	stream := StreamKey(b.project, "cmd")
-	// MKSTREAM creates the stream if absent; an existing group yields BUSYGROUP,
-	// which we ignore so the group keeps its current cursor.
-	if err := b.r.XGroupCreateMkStream(ctx, stream, agent, "$").Err(); err != nil &&
+	// A fresh group is created at the floor (so a persisted cursor catches every
+	// entry after it); an empty floor keeps today's "$" = from-now. An existing
+	// group yields BUSYGROUP and keeps its server-side cursor unchanged.
+	createAt := "$"
+	if floor == "0" {
+		createAt = "0"
+	} else if floor != "" {
+		createAt = floor
+	}
+	if err := b.r.XGroupCreateMkStream(ctx, stream, agent, createAt).Err(); err != nil &&
 		!strings.Contains(err.Error(), "BUSYGROUP") {
 		return err
 	}
@@ -364,13 +372,35 @@ func (b *Bus) WatchCmd(ctx context.Context, agent, consumer string, fn func(Even
 		}
 		for _, s := range res {
 			for _, m := range s.Messages {
-				b.r.XAck(ctx, stream, agent, m.ID) // best-effort; clears the PEL
-				if e := ParseEntry(stream, m.ID, toStringMap(m.Values)); e.Target == agent && fn(e) {
+				b.r.XAck(ctx, stream, agent, m.ID) // ACK every read entry, even skipped ones
+				e := ParseEntry(stream, m.ID, toStringMap(m.Values))
+				if e.Target == agent && aboveFloor(floor, e.ID) && fn(e) {
 					return nil
 				}
 			}
 		}
 	}
+}
+
+// aboveFloor reports whether id is strictly newer than floor. An empty or "0"
+// floor is "no floor" — every entry passes. floor must be a full stream id
+// ("<ms>-<seq>") or "" / "0"; the CLI normalizes a bare "<ms>" before calling.
+func aboveFloor(floor, id string) bool {
+	if floor == "" || floor == "0" {
+		return true
+	}
+	return idLess(floor, id)
+}
+
+// ServerFloor returns the Redis server's current time as a stream-id floor
+// "<ms>-0". A subscriber with no explicit --since starts here, so it sees only
+// commands published from now on and never replays archived backlog.
+func (b *Bus) ServerFloor(ctx context.Context) (string, error) {
+	t, err := b.r.Time(ctx).Result()
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt(t.UnixMilli(), 10) + "-0", nil
 }
 
 // Pilot sets (or renews — they are the same SET) the project's pilot lease to

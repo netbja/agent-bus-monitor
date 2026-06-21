@@ -313,7 +313,7 @@ func TestWatchCmdDelivers(t *testing.T) {
 
 	got := make(chan Event, 1)
 	go func() {
-		_ = b.WatchCmd(ctx, "dev", "test-consumer", func(e Event) bool {
+		_ = b.WatchCmd(ctx, "dev", "test-consumer", "", func(e Event) bool {
 			got <- e
 			return true // one-shot: stop on first entry addressed to dev
 		})
@@ -326,5 +326,33 @@ func TestWatchCmdDelivers(t *testing.T) {
 		}
 	case <-time.After(4 * time.Second):
 		t.Fatal("WatchCmd delivered nothing for dev within 4s")
+	}
+}
+
+func TestWatchCmdFloorSkipsBacklog(t *testing.T) {
+	b := dialTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	stream := StreamKey(b.Project(), "cmd")
+	if err := b.r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
+		t.Fatalf("XGroupCreate: %v", err)
+	}
+	oldID, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "OLD")
+	if err != nil {
+		t.Fatalf("Cmd OLD: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "NEW"); err != nil {
+		t.Fatalf("Cmd NEW: %v", err)
+	}
+	var got Event
+	werr := b.WatchCmd(ctx, "dev", "test-consumer", oldID, func(e Event) bool {
+		got = e
+		return true
+	})
+	if werr != nil {
+		t.Fatalf("WatchCmd: %v", werr)
+	}
+	if got.Message != "NEW" {
+		t.Fatalf("delivered %q, want NEW (OLD must be skipped by floor)", got.Message)
 	}
 }

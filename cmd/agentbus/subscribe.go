@@ -84,7 +84,7 @@ func runSubscribe(ctx context.Context, b *bus.Bus, agent, consumer string, idle 
 				}
 			}
 		}()
-		err := b.WatchCmd(ctx, agent, consumer, func(e bus.Event) bool {
+		err := b.WatchCmd(ctx, agent, consumer, "", func(e bus.Event) bool {
 			printCmd(out, e)
 			return false // never "done" → consume continuously
 		})
@@ -99,7 +99,7 @@ func runSubscribe(ctx context.Context, b *bus.Bus, agent, consumer string, idle 
 	var last bus.Event
 	wctx, cancel := context.WithTimeout(ctx, idle)
 	defer cancel()
-	werr := b.WatchCmd(wctx, agent, consumer, func(e bus.Event) bool {
+	werr := b.WatchCmd(wctx, agent, consumer, "", func(e bus.Event) bool {
 		last = e
 		printCmd(out, e)
 		return true // one-shot: stop on the first addressed entry
