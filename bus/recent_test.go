@@ -35,7 +35,7 @@ func seedSpaced(t *testing.T, b *Bus, entries [][2]string) {
 		var err error
 		switch e[0] {
 		case "status":
-			_, err = b.Status(ctx, "dev", "working", e[1])
+			_, err = b.Status(ctx, "dev", "working", e[1], "")
 		case "report":
 			_, err = b.Report(ctx, "dev", "note", e[1])
 		case "notify":
@@ -108,7 +108,7 @@ func TestTailFromDoesNotReplay(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if _, err := b.Status(ctx, "dev", "working", "old"); err != nil {
+	if _, err := b.Status(ctx, "dev", "working", "old", ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	_, cursors, err := b.Recent(ctx, []string{"status"}, 25)
@@ -127,7 +127,7 @@ func TestTailFromDoesNotReplay(t *testing.T) {
 	}()
 	// Give the tail a moment to block, then publish a fresh entry.
 	time.Sleep(100 * time.Millisecond)
-	if _, err := b.Status(ctx, "dev", "idle", "new"); err != nil {
+	if _, err := b.Status(ctx, "dev", "idle", "new", ""); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 

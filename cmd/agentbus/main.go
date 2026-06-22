@@ -85,7 +85,10 @@ func main() {
 		if len(rest) < 2 {
 			die("usage: status <agent> <state> [message]")
 		}
-		if _, err := b.Status(ctx, rest[0], rest[1], strings.Join(rest[2:], " ")); err != nil {
+		// HERDR_PANE_ID (set inside a herdr pane) registers the agent's pane in
+		// the {project}:agents hash; empty outside herdr.
+		pane := os.Getenv("HERDR_PANE_ID")
+		if _, err := b.Status(ctx, rest[0], rest[1], strings.Join(rest[2:], " "), pane); err != nil {
 			die(err.Error())
 		}
 
