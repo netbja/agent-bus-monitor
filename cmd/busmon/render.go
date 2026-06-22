@@ -169,6 +169,9 @@ func agentLabel(n string, a *agentState, now time.Time, master bool) string {
 	if a.gated > 0 {
 		label += fmt.Sprintf(" [red]🔒%d[-]", a.gated)
 	}
+	if a.pane != "" {
+		label += " [blue]⧉[-]"
+	}
 	if master {
 		label = "[fuchsia]⬢[-] " + label
 	}

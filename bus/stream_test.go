@@ -101,16 +101,16 @@ func TestOpenRejectsBadProject(t *testing.T) {
 func TestPublishValidation(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	if _, err := b.Status(ctx, "dev", "flying", "x"); err == nil {
+	if _, err := b.Status(ctx, "dev", "flying", "x", ""); err == nil {
 		t.Error("Status accepted invalid state, want error")
 	}
-	if _, err := b.Status(ctx, "Bad Agent", "working", "x"); err == nil {
+	if _, err := b.Status(ctx, "Bad Agent", "working", "x", ""); err == nil {
 		t.Error("Status accepted invalid agent, want error")
 	}
 	if _, err := b.Cmd(ctx, "hermes", "dev", "shout", "", "x"); err == nil {
 		t.Error("Cmd accepted invalid type, want error")
 	}
-	if _, err := b.Status(ctx, "dev", "working", "ok"); err != nil {
+	if _, err := b.Status(ctx, "dev", "working", "ok", ""); err != nil {
 		t.Errorf("valid Status failed: %v", err)
 	}
 }
@@ -120,7 +120,7 @@ func TestTailRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if _, err := b.Status(ctx, "dev", "working", "hello"); err != nil {
+	if _, err := b.Status(ctx, "dev", "working", "hello", ""); err != nil {
 		t.Fatalf("Status: %v", err)
 	}
 
@@ -277,8 +277,11 @@ func TestCmdLag(t *testing.T) {
 func TestAgentsSnapshot(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	if _, err := b.Status(ctx, "dev", "working", "plan 10"); err != nil {
+	if _, err := b.Status(ctx, "dev", "working", "plan 10", "w1:p1"); err != nil {
 		t.Fatalf("Status: %v", err)
+	}
+	if _, err := b.Status(ctx, "ana", "idle", "", ""); err != nil {
+		t.Fatalf("Status ana: %v", err)
 	}
 	m, err := b.Agents(ctx)
 	if err != nil {
@@ -288,8 +291,11 @@ func TestAgentsSnapshot(t *testing.T) {
 	if !ok {
 		t.Fatalf("Agents missing dev: %+v", m)
 	}
-	if s.State != "working" || s.Message != "plan 10" || s.TS == 0 {
-		t.Fatalf("snapshot = %+v, want state=working message=plan 10 ts>0", s)
+	if s.State != "working" || s.Message != "plan 10" || s.TS == 0 || s.Pane != "w1:p1" {
+		t.Fatalf("snapshot = %+v, want working/plan 10/ts>0/pane w1:p1", s)
+	}
+	if m["ana"].Pane != "" {
+		t.Fatalf("ana pane = %q, want empty (no HERDR_PANE_ID)", m["ana"].Pane)
 	}
 }
 

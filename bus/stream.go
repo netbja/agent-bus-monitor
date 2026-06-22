@@ -55,6 +55,7 @@ type AgentSnapshot struct {
 	State   string `json:"state"`
 	Message string `json:"message,omitempty"`
 	TS      int64  `json:"ts"` // ms since epoch, from the status entry's stream id
+	Pane    string `json:"pane,omitempty"` // HERDR_PANE_ID when the agent runs inside herdr
 }
 
 // Event is a parsed stream entry. Which fields are populated depends on Kind.
@@ -131,8 +132,10 @@ func (b *Bus) add(ctx context.Context, kind string, values map[string]interface{
 	}).Result()
 }
 
-// Status publishes an agent's state to the {project}:status stream.
-func (b *Bus) Status(ctx context.Context, agent, state, message string) (string, error) {
+// Status publishes an agent's state to the {project}:status stream. pane is the
+// agent's HERDR_PANE_ID (empty outside herdr); it is stored in the {project}:agents
+// snapshot only, never in the status stream.
+func (b *Bus) Status(ctx context.Context, agent, state, message, pane string) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
 	}
@@ -149,7 +152,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string) (string,
 	// The stream is the source of truth; a failed HSET only means a briefly
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
-	if snap, merr := json.Marshal(AgentSnapshot{State: state, Message: message, TS: ms}); merr == nil {
+	if snap, merr := json.Marshal(AgentSnapshot{State: state, Message: message, TS: ms, Pane: pane}); merr == nil {
 		_ = b.r.HSet(ctx, AgentsKey(b.project), agent, snap).Err()
 	}
 	return id, nil

@@ -50,7 +50,11 @@ func agentsTable(m map[string]bus.AgentSnapshot, now time.Time) string {
 		if s.Message != "" {
 			msg = "  (" + s.Message + ")"
 		}
-		fmt.Fprintf(&sb, "%-12s %-8s %-9s%s%s\n", n, s.State, humanAge(age), marker, msg)
+		pane := ""
+		if s.Pane != "" {
+			pane = "  ⧉" + s.Pane
+		}
+		fmt.Fprintf(&sb, "%-12s %-8s %-9s%s%s%s\n", n, s.State, humanAge(age), marker, pane, msg)
 	}
 	return sb.String()
 }

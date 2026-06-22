@@ -123,13 +123,13 @@ after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
 ```
 
 - **STATUS** — top bar showing the project name and the pilot-lease driver as
-  `⬢ MASTER <driver>`, or `autonome (pas de master)` when no lease is held.
+  `⬢ MASTER <driver>`, or `autonomous (no master)` when no lease is held.
 - **AGENTS** — one chip per agent. `{p}:status` entries set the state (color-coded);
   a `{p}:report` entry also counts as liveness, showing the agent as `active` with
   its last report if it never published a status. Badges: `👂` = the agent is armed
   and listening on `{p}:cmd` (a live `subscribe` lease); `⌛N` = N commands are queued
   for it unread (orange when no one is listening — the "stopped re-arming" tell);
-  `🔒N` = open 4-eyes challenges. Chips wrap across rows to fit the terminal width;
+  `🔒N` = open 4-eyes challenges; `⧉` = the agent is attached to a herdr pane (its `HERDR_PANE_ID`). Chips wrap across rows to fit the terminal width;
   the master's chip carries a `⬢` marker. Past `idleAfter` it shows `idle Nm`; past
   `staleAfter`, `offline`.
 - **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
@@ -137,7 +137,7 @@ after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
   **↑↓** / **j k** select a line (highlighted), **g**/**Home** jumps to the oldest
   and **G**/**End** to the newest, and **y** or **Enter** copies the selected line
   to the clipboard (OSC52, so it works over the SSH tunnel). Mouse wheel / PgUp/PgDn
-  still scroll. The title shows `[live]`, the browse indicator `[↑ pause · N plus bas]`,
+  still scroll. The title shows `[live]`, the browse indicator `[↑ pause · N below]`,
   or the selection position. **Esc** clears the selection and returns to the input,
   resuming the tail.
 - **INPUT** — type a message, Enter publishes on `{p}:notify`; Esc/Ctrl-C quits.

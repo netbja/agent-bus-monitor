@@ -91,6 +91,14 @@ func TestAgentLabel(t *testing.T) {
 	if got := agentLabel("dev", gated, now, false); !strings.Contains(got, "🔒1") {
 		t.Fatalf("gated agent label = %q, want a 🔒1 badge", got)
 	}
+
+	attached := &agentState{state: "working", lastSeen: now, pane: "w1:p1"}
+	if got := agentLabel("dev", attached, now, false); !strings.Contains(got, "⧉") {
+		t.Fatalf("herdr-attached agent label = %q, want a ⧉ badge", got)
+	}
+	if strings.Contains(agentLabel("dev", base, now, false), "⧉") {
+		t.Fatal("agent with no pane should not show the ⧉ badge")
+	}
 }
 
 func TestAgentLabelMaster(t *testing.T) {

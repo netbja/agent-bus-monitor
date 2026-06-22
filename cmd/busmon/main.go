@@ -79,9 +79,10 @@ type agentState struct {
 	state    string
 	message  string
 	lastSeen time.Time
-	gated    int   // open 4-eyes challenges; >0 shows a lock badge
-	armed    bool  // a live subscribe lease exists → 👂 listening badge
-	lag      int64 // unconsumed {p}:cmd entries for this agent → ⌛ backlog badge
+	gated    int    // open 4-eyes challenges; >0 shows a lock badge
+	armed    bool   // a live subscribe lease exists → 👂 listening badge
+	lag      int64  // unconsumed {p}:cmd entries for this agent → ⌛ backlog badge
+	pane     string // HERDR_PANE_ID from the agents hash → ⧉ herdr-attached badge
 }
 
 
@@ -453,6 +454,7 @@ func main() {
 			driver, _ := b.PilotDriver(ctx)
 			armed, _ := b.ArmedAgents(ctx)
 			lag, _ := b.CmdLag(ctx)
+			snaps, _ := b.Agents(ctx)
 			mu.Lock()
 			names := make([]string, 0, len(agents))
 			for n := range agents {
@@ -479,6 +481,7 @@ func main() {
 			for n, a := range agents {
 				_, a.armed = armed[n]
 				a.lag = lag[n]
+				a.pane = snaps[n].Pane
 				if c, ok := gates[n]; ok {
 					a.gated = c
 				}
