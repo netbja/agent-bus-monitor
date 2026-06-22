@@ -11,7 +11,7 @@ import (
 func TestAgentsTable(t *testing.T) {
 	now := time.UnixMilli(1_700_000_000_000)
 	m := map[string]bus.AgentSnapshot{
-		"claude1": {State: "working", Message: "plan 10", TS: now.Add(-12 * time.Second).UnixMilli()},
+		"claude1": {State: "working", Message: "plan 10", TS: now.Add(-12 * time.Second).UnixMilli(), Pane: "w1:p1"},
 		"hermes":  {State: "done", TS: now.Add(-11 * time.Minute).UnixMilli()},
 	}
 	out := agentsTable(m, now)
@@ -26,6 +26,9 @@ func TestAgentsTable(t *testing.T) {
 	}
 	if strings.Index(out, "claude1") > strings.Index(out, "hermes") {
 		t.Fatalf("rows not sorted by name: %q", out)
+	}
+	if !strings.Contains(out, "⧉w1:p1") {
+		t.Fatalf("claude1 pane badge missing: %q", out)
 	}
 }
 
