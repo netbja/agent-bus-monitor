@@ -143,6 +143,19 @@ func packChips(chips []chip, width, maxRows int) ([]string, int) {
 	return rows, len(rows)
 }
 
+// usageBadge joins the non-empty of session/reset with "·" for a compact chip
+// badge: "99%·36m", "99%", "36m", or "" when both are empty.
+func usageBadge(snap bus.UsageSnapshot) string {
+	parts := make([]string, 0, 2)
+	if snap.Session != "" {
+		parts = append(parts, snap.Session)
+	}
+	if snap.Reset != "" {
+		parts = append(parts, snap.Reset)
+	}
+	return strings.Join(parts, "·")
+}
+
 // parseDirected splits an "@<agent> <body>" line. directed is true only when the
 // line starts with '@', the agent token is a valid name, and a non-empty body
 // follows. Otherwise it returns ("", text, false) so the caller broadcasts the
@@ -213,6 +226,9 @@ func agentLabel(n string, a *agentState, now time.Time, master bool) string {
 	}
 	if a.pane != "" {
 		label += " [blue]⧉[-]"
+	}
+	if a.usage != "" {
+		label += " [gray][" + a.usage + "][-]"
 	}
 	if master {
 		label = "[fuchsia]⬢[-] " + label

@@ -83,6 +83,7 @@ type agentState struct {
 	armed    bool   // a live subscribe lease exists → 👂 listening badge
 	lag      int64  // unconsumed {p}:cmd entries for this agent → ⌛ backlog badge
 	pane     string // HERDR_PANE_ID from the agents hash → ⧉ herdr-attached badge
+	usage    string // compact session·reset from the usage hash → [..] badge
 }
 
 
@@ -469,6 +470,7 @@ func main() {
 			armed, _ := b.ArmedAgents(ctx)
 			lag, _ := b.CmdLag(ctx)
 			snaps, _ := b.Agents(ctx)
+			usageSnaps, _ := b.Usage(ctx)
 			mu.Lock()
 			names := make([]string, 0, len(agents))
 			for n := range agents {
@@ -496,6 +498,7 @@ func main() {
 				_, a.armed = armed[n]
 				a.lag = lag[n]
 				a.pane = snaps[n].Pane
+				a.usage = usageBadge(usageSnaps[n])
 				if c, ok := gates[n]; ok {
 					a.gated = c
 				}
