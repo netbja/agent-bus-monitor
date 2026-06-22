@@ -114,6 +114,8 @@ agentbus pilot release                                  # hand off to autonomous
 agentbus agents                                         # name · state · (message) · age; marks idle/offline; shows ⧉<pane> if attached to a herdr pane
 agentbus agents --json                                  # raw map for scripts
 agentbus pane <agent>                                   # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
+agentbus usage <agent> '<json>'                         # write the agent's budget snapshot (status-line tee)
+agentbus usage                                          # print everyone's budget; --json for raw
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
 agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s
@@ -130,6 +132,26 @@ agentbus listen cmd report
 # ── HUMAN DASHBOARD (separate binary) ─────────────────────────────────────────
 busmon --project trading                                # or -project; busmon tolerates both
 ```
+
+---
+
+### Status-line usage tee
+
+Your status line already computes the budget numbers — tee them to the bus (structured, never
+scraped). Paste this into your `statusLine` script after you've computed the values; it throttles
+(so frequent refreshes don't hammer Redis) and swallows errors (so it never breaks the line):
+
+```bash
+ts=/tmp/abus-usage-$AGENT_BUS_AGENT
+if [ -z "$(find "$ts" -newermt '-20 seconds' 2>/dev/null)" ]; then
+  agentbus usage "$AGENT_BUS_AGENT" \
+    "{\"model\":\"$MODEL\",\"ctx\":\"$CTX\",\"weekly\":\"$WEEKLY\",\"session\":\"$SESSION\",\"reset\":\"$RESET\"}" \
+    >/dev/null 2>&1 || true
+  touch "$ts"
+fi
+```
+
+Requires `AGENT_BUS_PROJECT` / `AGENT_BUS_AGENT` in the status-line script's env.
 
 ---
 
