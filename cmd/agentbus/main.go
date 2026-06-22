@@ -16,6 +16,7 @@
 //	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
 //	agentbus --project P agents    [--json]      # current state of all agents (one line each)
+//	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 //	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
@@ -64,7 +65,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|agents|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|agents|pane|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -236,6 +237,20 @@ func main() {
 			return
 		}
 		fmt.Print(agentsTable(m, time.Now()))
+
+	case "pane":
+		if len(rest) < 1 {
+			die("usage: pane <agent>")
+		}
+		m, err := b.Agents(ctx)
+		if err != nil {
+			die(err.Error())
+		}
+		p, ok := agentPane(m, rest[0])
+		if !ok {
+			die(fmt.Sprintf("no herdr pane registered for %q", rest[0]))
+		}
+		fmt.Println(p)
 
 	case "subscribe", "watch":
 		// One subscription tick (or a headless --loop). Emits one JSON subEvent

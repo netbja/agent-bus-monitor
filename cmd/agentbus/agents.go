@@ -26,6 +26,16 @@ func humanAge(d time.Duration) string {
 	}
 }
 
+// agentPane returns the agent's registered herdr pane and whether the agent is
+// known with a non-empty pane.
+func agentPane(m map[string]bus.AgentSnapshot, agent string) (string, bool) {
+	s, ok := m[agent]
+	if !ok || s.Pane == "" {
+		return "", false
+	}
+	return s.Pane, true
+}
+
 // agentsTable renders the current state of every agent, one aged line each,
 // sorted by name. Entries older than agentIdleAfter/agentStaleAfter are marked
 // idle/offline (never deleted — age is the staleness signal).

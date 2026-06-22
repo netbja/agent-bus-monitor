@@ -32,6 +32,22 @@ func TestAgentsTable(t *testing.T) {
 	}
 }
 
+func TestAgentPane(t *testing.T) {
+	m := map[string]bus.AgentSnapshot{
+		"claude1": {State: "working", Pane: "w1:p1"},
+		"claude2": {State: "idle"}, // no pane
+	}
+	if p, ok := agentPane(m, "claude1"); !ok || p != "w1:p1" {
+		t.Fatalf("agentPane(claude1) = (%q,%v), want (w1:p1,true)", p, ok)
+	}
+	if _, ok := agentPane(m, "claude2"); ok {
+		t.Fatal("agentPane(claude2) should be false (no pane)")
+	}
+	if _, ok := agentPane(m, "ghost"); ok {
+		t.Fatal("agentPane(ghost) should be false (unknown)")
+	}
+}
+
 func TestHumanAge(t *testing.T) {
 	cases := []struct {
 		d    time.Duration
