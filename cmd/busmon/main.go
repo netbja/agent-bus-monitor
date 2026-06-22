@@ -253,13 +253,27 @@ func main() {
 			return
 		}
 		screen.SetClipboard([]byte(feed[i].text)) // OSC52 — reaches the local clipboard even over SSH
-		input.SetTitle(" INPUT  [green][✓ copié][-] ")
+		input.SetTitle(" INPUT  [green][✓ copied][-] ")
 	}
+
+	input.SetAutocompleteFunc(func(currentText string) []string {
+		mu.Lock()
+		names := make([]string, 0, len(agents))
+		for n := range agents {
+			names = append(names, n)
+		}
+		mu.Unlock()
+		return agentCompletions(currentText, names)
+	})
 
 	input.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			if text := strings.TrimSpace(input.GetText()); text != "" {
-				b.Notify(ctx, self, text)
+				if tgt, body, directed := parseDirected(text); directed {
+					b.Cmd(ctx, self, tgt, bus.CmdDirective, "", body)
+				} else {
+					b.Notify(ctx, self, text)
+				}
 			}
 			input.SetText("")
 		}
