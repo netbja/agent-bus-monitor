@@ -140,7 +140,8 @@ after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
   still scroll. The title shows `[live]`, the browse indicator `[↑ pause · N below]`,
   or the selection position. **Esc** clears the selection and returns to the input,
   resuming the tail.
-- **INPUT** — type a message, Enter publishes on `{p}:notify`; Esc/Ctrl-C quits.
+- **INPUT** — type a message, Enter publishes on `{p}:notify`; an `@<agent> <text>` line sends a
+  directed cmd to that agent (type `@` for autocomplete). Esc/Ctrl-C quits.
   The field inherits the terminal's own fg/bg colors (no forced white-on-blue), so
   it stays legible in any theme.
 
@@ -151,6 +152,15 @@ invocations to emit a periodic heartbeat. Liveness is derived **passively** from
 the Redis stream-entry timestamp of each agent's last `status` or `report` entry:
 every such publish *is* the heartbeat. A dedicated heartbeat stream would buy nothing
 the existing traffic doesn't, until agents become long-running.
+
+## Master skill
+
+`skills/agent-bus-master/SKILL.md` is a Claude Code skill the **master** (the pilot-lease driver,
+running inside herdr) uses to drive peer agents' panes: **resync** (inject text into an agent's
+herdr pane) and **unblock** (detect a herdr-`blocked` agent, alert a human one-way via Signal + the
+bus, then inject the human's answer — typed in busmon as `@<agent> <answer>` or via
+`agentbus cmd`). Install/symlink it where the master's Claude Code loads skills. The bridge is
+`agentbus pane <agent>` (the agent's `HERDR_PANE_ID`, from `agentbus status`).
 
 ## Bus conventions
 
