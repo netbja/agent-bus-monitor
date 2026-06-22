@@ -17,6 +17,7 @@
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
 //	agentbus --project P agents    [--json]      # current state of all agents (one line each)
 //	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
+//	agentbus --project P usage     [<agent> <json>]   # write a budget snapshot, or print all (status-line tee)
 //	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
@@ -65,7 +66,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|agents|pane|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -251,6 +252,33 @@ func main() {
 			die(fmt.Sprintf("no herdr pane registered for %q", rest[0]))
 		}
 		fmt.Println(p)
+
+	case "usage":
+		rest, asJSON := extractBool(rest, "--json")
+		if len(rest) == 0 {
+			m, err := b.Usage(ctx)
+			if err != nil {
+				die(err.Error())
+			}
+			if asJSON {
+				out, _ := json.MarshalIndent(m, "", "  ")
+				fmt.Println(string(out))
+				return
+			}
+			fmt.Print(usageTable(m, time.Now()))
+			return
+		}
+		if len(rest) < 2 {
+			die("usage: usage <agent> <json>   (or no args to read everyone's budget)")
+		}
+		var snap bus.UsageSnapshot
+		if err := json.Unmarshal([]byte(strings.Join(rest[1:], " ")), &snap); err != nil {
+			die("bad usage JSON: " + err.Error())
+		}
+		snap.TS = time.Now().UnixMilli()
+		if err := b.SetUsage(ctx, rest[0], snap); err != nil {
+			die(err.Error())
+		}
 
 	case "subscribe", "watch":
 		// One subscription tick (or a headless --loop). Emits one JSON subEvent
