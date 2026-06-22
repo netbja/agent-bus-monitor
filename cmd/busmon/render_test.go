@@ -112,6 +112,35 @@ func TestAgentLabelMaster(t *testing.T) {
 	}
 }
 
+func TestParseDirected(t *testing.T) {
+	if tgt, body, ok := parseDirected("@claude1 do the thing"); !ok || tgt != "claude1" || body != "do the thing" {
+		t.Fatalf("parseDirected directed = (%q,%q,%v), want claude1/do the thing/true", tgt, body, ok)
+	}
+	if _, body, ok := parseDirected("hello world"); ok || body != "hello world" {
+		t.Fatalf("parseDirected plain = (_,%q,%v), want (hello world,false)", body, ok)
+	}
+	if _, _, ok := parseDirected("@claude1"); ok {
+		t.Fatal("parseDirected with no body should not be directed")
+	}
+	if _, _, ok := parseDirected("@Bad foo"); ok {
+		t.Fatal("parseDirected with an invalid agent name should fall back (not directed)")
+	}
+}
+
+func TestAgentCompletions(t *testing.T) {
+	names := []string{"claude2", "claude1", "hermes"}
+	got := agentCompletions("@cl", names)
+	if len(got) != 2 || got[0] != "@claude1 " || got[1] != "@claude2 " {
+		t.Fatalf("agentCompletions(@cl) = %v, want [@claude1 , @claude2 ]", got)
+	}
+	if agentCompletions("@claude1 do", names) != nil {
+		t.Fatal("no completions once the body has started (space present)")
+	}
+	if agentCompletions("hello", names) != nil {
+		t.Fatal("no completions when not @-prefixed")
+	}
+}
+
 func TestPackChips(t *testing.T) {
 	// (a) all chips fit on one row
 	rows, used := packChips([]chip{{"a", 1}, {"b", 1}, {"c", 1}}, 100, 4)

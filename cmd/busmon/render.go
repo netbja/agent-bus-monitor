@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rivo/tview"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 func stateColor(state string) string {
@@ -138,6 +141,45 @@ func packChips(chips []chip, width, maxRows int) ([]string, int) {
 		rows[len(rows)-1] += fmt.Sprintf("%s[gray]+%d[-]", chipSep, len(chips)-i)
 	}
 	return rows, len(rows)
+}
+
+// parseDirected splits an "@<agent> <body>" line. directed is true only when the
+// line starts with '@', the agent token is a valid name, and a non-empty body
+// follows. Otherwise it returns ("", text, false) so the caller broadcasts the
+// whole line to notify.
+func parseDirected(text string) (target, body string, directed bool) {
+	if !strings.HasPrefix(text, "@") {
+		return "", text, false
+	}
+	rest := text[1:]
+	sp := strings.IndexByte(rest, ' ')
+	if sp < 0 {
+		return "", text, false // "@agent" with no body
+	}
+	agent := rest[:sp]
+	body = strings.TrimSpace(rest[sp+1:])
+	if !bus.ValidName(agent) || body == "" {
+		return "", text, false
+	}
+	return agent, body, true
+}
+
+// agentCompletions returns "@<name> " entries for the @-prefixed first token of
+// currentText (no space yet) whose name matches the partial, sorted. Returns nil
+// once a space (the body) has started, or when currentText is not @-prefixed.
+func agentCompletions(currentText string, names []string) []string {
+	if !strings.HasPrefix(currentText, "@") || strings.ContainsRune(currentText, ' ') {
+		return nil
+	}
+	prefix := currentText[1:]
+	var out []string
+	for _, n := range names {
+		if strings.HasPrefix(n, prefix) {
+			out = append(out, "@"+n+" ")
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // agentLabel renders one agent's AGENTS-pane chip: the aged state, then badges

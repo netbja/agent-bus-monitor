@@ -113,6 +113,7 @@ agentbus pilot release                                  # hand off to autonomous
 # ── PEERS: current state of every agent (one line each) ───────────────────────
 agentbus agents                                         # name · state · (message) · age; marks idle/offline; shows ⧉<pane> if attached to a herdr pane
 agentbus agents --json                                  # raw map for scripts
+agentbus pane <agent>                                   # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
 agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s
@@ -216,7 +217,8 @@ agentbus verdict --ref k3f9q claude2 approve verified
   - `y` or `Enter` copies the selected line to the **clipboard** (OSC52 — works
     even over an SSH tunnel). `Esc` clears the selection and returns to live tail.
   - Mouse wheel scrolls; the title shows `[live]` or a pause indicator.
-- **INPUT** — type a message, `Enter` publishes it on `{project}:notify`.
+- **INPUT** — type a message, `Enter` publishes it on `{project}:notify`; type `@` for agent
+  autocomplete and an `@<agent> <text>` line sends a **directed cmd** to that agent.
   `Esc`/`Ctrl-C` (or `q` while the feed is focused) quits.
 
 ---
