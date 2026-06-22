@@ -58,6 +58,22 @@ type AgentSnapshot struct {
 	Pane    string `json:"pane,omitempty"` // HERDR_PANE_ID when the agent runs inside herdr
 }
 
+// UsageKey is the per-project hash of latest agent usage snapshots ({agent} →
+// JSON UsageSnapshot), written by `agentbus usage` (the status-line tee) and read
+// by busmon / the master. Separate from AgentsKey: a different writer and cadence.
+func UsageKey(project string) string { return project + ":usage" }
+
+// UsageSnapshot is an agent's latest budget readout — the display strings its
+// status line already computed (not parsed numbers).
+type UsageSnapshot struct {
+	Model   string `json:"model,omitempty"`
+	Ctx     string `json:"ctx,omitempty"`
+	Weekly  string `json:"weekly,omitempty"`
+	Session string `json:"session,omitempty"`
+	Reset   string `json:"reset,omitempty"`
+	TS      int64  `json:"ts"`
+}
+
 // Event is a parsed stream entry. Which fields are populated depends on Kind.
 type Event struct {
 	ID      string // redis stream entry id
@@ -553,6 +569,34 @@ func (b *Bus) Agents(ctx context.Context) (map[string]AgentSnapshot, error) {
 	out := make(map[string]AgentSnapshot, len(raw))
 	for agent, v := range raw {
 		var s AgentSnapshot
+		if json.Unmarshal([]byte(v), &s) == nil {
+			out[agent] = s
+		}
+	}
+	return out, nil
+}
+
+// SetUsage overwrites an agent's usage snapshot in the {project}:usage hash.
+func (b *Bus) SetUsage(ctx context.Context, agent string, snap UsageSnapshot) error {
+	if !ValidName(agent) {
+		return fmt.Errorf("invalid agent %q", agent)
+	}
+	v, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	return b.r.HSet(ctx, UsageKey(b.project), agent, v).Err()
+}
+
+// Usage returns agent → latest usage snapshot. Unparseable fields are skipped.
+func (b *Bus) Usage(ctx context.Context) (map[string]UsageSnapshot, error) {
+	raw, err := b.r.HGetAll(ctx, UsageKey(b.project)).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]UsageSnapshot, len(raw))
+	for agent, v := range raw {
+		var s UsageSnapshot
 		if json.Unmarshal([]byte(v), &s) == nil {
 			out[agent] = s
 		}

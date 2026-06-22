@@ -84,7 +84,7 @@ func dialTest(t *testing.T) *Bus {
 		ctx := context.Background()
 		r.Del(ctx, StreamKey(project, "status"), StreamKey(project, "report"),
 			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project),
-			AgentsKey(project))
+			AgentsKey(project), UsageKey(project))
 		r.Close()
 	})
 	return b
@@ -360,5 +360,28 @@ func TestWatchCmdFloorSkipsBacklog(t *testing.T) {
 	}
 	if got.Message != "NEW" {
 		t.Fatalf("delivered %q, want NEW (OLD must be skipped by floor)", got.Message)
+	}
+}
+
+func TestUsageRoundTrip(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	snap := UsageSnapshot{Model: "Opus 4.8", Ctx: "194.5k", Weekly: "41.0%", Session: "99.0%", Reset: "36m", TS: 1700000000000}
+	if err := b.SetUsage(ctx, "dev", snap); err != nil {
+		t.Fatalf("SetUsage: %v", err)
+	}
+	m, err := b.Usage(ctx)
+	if err != nil {
+		t.Fatalf("Usage: %v", err)
+	}
+	got, ok := m["dev"]
+	if !ok {
+		t.Fatalf("Usage missing dev: %+v", m)
+	}
+	if got != snap {
+		t.Fatalf("snapshot = %+v, want %+v", got, snap)
+	}
+	if err := b.SetUsage(ctx, "Bad Agent", snap); err == nil {
+		t.Error("SetUsage accepted an invalid agent, want error")
 	}
 }

@@ -52,3 +52,14 @@ herdr pane send-keys "$pane" Enter
 A cmd to a currently-blocked agent also lands in that agent's `subscribe` consumer group, so on its
 next re-arm it could re-receive the answer as a directive — mitigated by the agent persisting its
 `--since` cursor (see the bus guide). Don't re-inject an answer you've already delivered.
+
+## Broadcast team budget
+Give the team a regular budget readout. Each agent's status-line script tees its usage to the bus
+(see `docs/AGENT-BUS-GUIDE.md` → "Status-line usage tee"); read it and post a one-line summary:
+```bash
+agentbus usage                                  # the team budget table (or --json)
+agentbus notify "budget — claude1 99%/36m · claude2 41%/2h"   # periodic one-line summary
+```
+Distribution is **notify + pull**: the summary lands on `{project}:notify` (visible in busmon and to
+the human), and agents read `agentbus usage` themselves on demand. Never push budget via `cmd` to
+each agent — that wakes every agent's `subscribe`.

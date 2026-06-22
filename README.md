@@ -86,13 +86,14 @@ export AGENT_BUS_PROJECT=myproject
 agentbus status claude1 working "plan 10 shipped"  # trailing words are joined
 agentbus notify "soak 24h started"
 agentbus cmd claude2 "check status"                # sends a directive to claude2
-agentbus report claude1 "bug corrigé"              # curated report (note kind)
+agentbus report claude1 "bug fixed"                # curated report (note kind)
 agentbus report claude1 --auto "soak 24h done"     # auto = Stop-hook safety net
 agentbus subscribe claude1                         # block for next cmd then exit (re-arm to stay subscribed)
 agentbus subscribe claude1 3600                    # same, with a 1h idle window before the heartbeat object
 agentbus listen                                    # debug tail (all four streams)
 agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
+agentbus usage                                     # print every agent's budget; usage <a> '<json>' writes one
 
 busmon --project myproject                         # live dashboard (last 25 lines, then live)
 busmon --project myproject --limit 100             # backfill the last 100 lines on launch
@@ -129,7 +130,8 @@ after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
   its last report if it never published a status. Badges: `👂` = the agent is armed
   and listening on `{p}:cmd` (a live `subscribe` lease); `⌛N` = N commands are queued
   for it unread (orange when no one is listening — the "stopped re-arming" tell);
-  `🔒N` = open 4-eyes challenges; `⧉` = the agent is attached to a herdr pane (its `HERDR_PANE_ID`). Chips wrap across rows to fit the terminal width;
+  `🔒N` = open 4-eyes challenges; `⧉` = the agent is attached to a herdr pane (its `HERDR_PANE_ID`);
+  `[session·reset]` = the agent's latest budget readout (from `{p}:usage`). Chips wrap across rows to fit the terminal width;
   the master's chip carries a `⬢` marker. Past `idleAfter` it shows `idle Nm`; past
   `staleAfter`, `offline`.
 - **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,

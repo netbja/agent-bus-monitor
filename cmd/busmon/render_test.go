@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 func TestStatusBar(t *testing.T) {
@@ -138,6 +140,33 @@ func TestAgentCompletions(t *testing.T) {
 	}
 	if agentCompletions("hello", names) != nil {
 		t.Fatal("no completions when not @-prefixed")
+	}
+}
+
+func TestUsageBadge(t *testing.T) {
+	if got := usageBadge(bus.UsageSnapshot{Session: "99%", Reset: "36m"}); got != "99%·36m" {
+		t.Fatalf("both = %q, want 99%%·36m", got)
+	}
+	if got := usageBadge(bus.UsageSnapshot{Session: "99%"}); got != "99%" {
+		t.Fatalf("session only = %q, want 99%%", got)
+	}
+	if got := usageBadge(bus.UsageSnapshot{Reset: "36m"}); got != "36m" {
+		t.Fatalf("reset only = %q, want 36m", got)
+	}
+	if got := usageBadge(bus.UsageSnapshot{Model: "Opus"}); got != "" {
+		t.Fatalf("neither = %q, want empty", got)
+	}
+}
+
+func TestAgentLabelUsage(t *testing.T) {
+	now := time.Now()
+	withUsage := &agentState{state: "working", lastSeen: now, usage: "99%·36m"}
+	if got := agentLabel("dev", withUsage, now, false); !strings.Contains(got, "99%·36m") {
+		t.Fatalf("agentLabel with usage = %q, want the usage badge", got)
+	}
+	noUsage := &agentState{state: "working", lastSeen: now}
+	if strings.Contains(agentLabel("dev", noUsage, now, false), "[gray][") {
+		t.Fatal("no usage badge when usage is empty")
 	}
 }
 
