@@ -111,7 +111,7 @@ agentbus pilot claim --ttl 120s                         # hermes only: take/rene
 agentbus pilot release                                  # hand off to autonomous now
 
 # ── PEERS: current state of every agent (one line each) ───────────────────────
-agentbus agents                                         # name · state · (message) · age; marks idle/offline
+agentbus agents                                         # name · state · (message) · age; marks idle/offline; shows ⧉<pane> if attached to a herdr pane
 agentbus agents --json                                  # raw map for scripts
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
@@ -205,8 +205,11 @@ agentbus verdict --ref k3f9q claude2 approve verified
 
 `busmon --project <p>` shows three panes:
 
-- **AGENTS** — presence chips (color by state), pilot-mode header
-  (`piloté par hermes` / `autonome`), and a 🔒 badge when an agent is gated.
+- **AGENTS** — presence chips (color by state). Badges: `👂` = armed and listening;
+  `⌛N` = N commands queued unread; `🔒N` = open 4-eyes challenges; `⬢` = this agent
+  holds the pilot lease (master); `⧉` = attached to a herdr pane (`HERDR_PANE_ID`).
+  The pilot/master indicator is in the **top status bar** (`⬢ MASTER <driver>` /
+  `autonomous (no master)`), not in the AGENTS pane title.
 - **ACTIVITY** — live feed of status/report/notify/cmd (history backfilled on start).
   - `Tab` focuses the feed; `↑`/`↓` or `j`/`k` select a line, `g`/`Home` jumps to
     the oldest, `G`/`End` to the newest.
