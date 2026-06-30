@@ -9,7 +9,8 @@
 //	agentbus --project P status    <agent> <working|idle|blocked|done> [msg...]
 //	agentbus --project P report    <agent> [--auto] <msg...>
 //	agentbus --project P notify    <msg...>
-//	agentbus --project P cmd       <target> <command...>
+//	agentbus --project P cmd       [--ref T] <target> <command...>   # prints the entry id (= thread root)
+//	agentbus --project P thread    <thread-id>   # show the :cmd thread (entries where ref or id == thread-id), chronological
 //	agentbus --project P challenge <target> [--ref R] <msg...>   # opens a 4-eyes gate
 //	agentbus --project P reply     --ref R <target> <msg...>
 //	agentbus --project P verdict   (--pr N | --subject S) [--ref R] <author> <approve|reject> [msg...]  # records to the ledger; resolves a matching gate as a bonus
@@ -67,7 +68,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|verdicts|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|notify|cmd|thread|challenge|reply|verdict|verdicts|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -117,12 +118,25 @@ func main() {
 		}
 
 	case "cmd":
+		rest, ref := extractFlag(rest, "--ref")
 		if len(rest) < 2 {
-			die("usage: cmd <target> <command>")
+			die("usage: cmd [--ref T] <target> <command>")
 		}
-		if _, err := b.Cmd(ctx, self, rest[0], bus.CmdDirective, "", strings.Join(rest[1:], " ")); err != nil {
+		id, err := b.Cmd(ctx, self, rest[0], bus.CmdDirective, ref, strings.Join(rest[1:], " "))
+		if err != nil {
 			die(err.Error())
 		}
+		fmt.Println(id) // entry id = this thread's root, capturable for replies
+
+	case "thread":
+		if len(rest) < 1 {
+			die("usage: thread <thread-id>")
+		}
+		evs, err := b.Thread(ctx, rest[0])
+		if err != nil {
+			die(err.Error())
+		}
+		fmt.Print(threadReport(rest[0], evs, time.Now()))
 
 	case "challenge":
 		rest, ref := extractFlag(rest, "--ref")
