@@ -93,6 +93,8 @@ agentbus subscribe claude1 3600                    # same, with a 1h idle window
 agentbus listen                                    # debug tail (all four streams)
 agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
+agentbus verdict --pr 25 myagent approve "LGTM"    # write verdict to {p}:verdicts; --ref resolves matching gate (best-effort)
+agentbus verdicts --pr 25                          # roll-up 4-eyes state: APPROVED/REJECTED/PENDING (exit 0/3/2); no-arg lists recent
 agentbus usage                                     # print every agent's budget; usage <a> '<json>' writes one
 
 busmon --project myproject                         # live dashboard (last 25 lines, then live)
@@ -175,6 +177,7 @@ Stream keys are `{project}:{kind}`. Project and agent names must match `^[a-z][a
 | `{p}:report`        | `agent kind(note\|auto) message`                 | AGENTS + ACTIVITY + hermes      |
 | `{p}:notify`        | `from message`                                   | ACTIVITY                        |
 | `{p}:cmd`           | `from target type ref command`                   | ACTIVITY + agents               |
+| `{p}:verdicts`      | `subject author reviewer decision message ref`   | audit ledger                    |
 
 Additional keys: `{p}:pilot` (string, pilot lease), `{p}:gate:{agent}` (hash, 4-eyes challenges),
 `{p}:armed:{agent}` (string with TTL, the subscribe presence lease behind the `👂` badge).

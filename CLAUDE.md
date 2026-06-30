@@ -48,7 +48,9 @@ kinds per project:
 | `{p}:cmd`           | `from target type ref command`                  | busmon ACTIVITY + agents |
 
 Additional keys: `{p}:pilot` (Redis string, pilot lease → driver name + TTL), `{p}:gate:{agent}`
-(Redis hash, ref→meta; 4-eyes challenges gate the named agent).
+(Redis hash, ref→meta; 4-eyes challenges gate the named agent), `{p}:verdicts` (Redis stream,
+append-only 4-eyes ledger; one entry per verdict — subject/author/reviewer/decision/message/ref —
+capped at `verdictMaxLen()` = 10000, override `AGENT_BUS_VERDICT_MAX`).
 
 ### Replacing the `ValidAgents` allowlist
 
@@ -58,16 +60,21 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (each a single `main.go`)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`notify`/`cmd`/`challenge`/`reply`/
-  `verdict`/`pilot`/`gate`/`agents`/`subscribe`/`watch`/`listen`. Parses args manually; trailing
-  words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot XREADGROUP
-  loop (consumer group = agent name) that emits **one JSON object** then **exits** — a `cmd` object
-  (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle window (positional
-  `idle_secs`, default 240s). Caller persists the `id` field and passes it back as `--since <id>` on
-  re-arm; omitting `--since` starts at "now" (no backlog replay); `--since 0` = full at-least-once
-  replay. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after each fire, **not** a
-  long-lived loop (which would never wake a terminal session). `agents [--json]` lists every peer's
-  current state. `watch` is the legacy alias of `subscribe` (same handler). `listen` tails all four
-  streams via `Bus.Tail` for debugging.
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`subscribe`/`watch`/`listen`. Parses args manually;
+  trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
+  XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
+  `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
+  window (positional `idle_secs`, default 240s). Caller persists the `id` field and passes it back
+  as `--since <id>` on re-arm; omitting `--since` starts at "now" (no backlog replay); `--since 0`
+  = full at-least-once replay. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
+  each fire, **not** a long-lived loop (which would never wake a terminal session). `agents [--json]`
+  lists every peer's current state. `watch` is the legacy alias of `subscribe` (same handler).
+  `listen` tails all four streams via `Bus.Tail` for debugging. `verdict` is subject-first
+  (`--pr N`/`--subject S`), always appends to the `{p}:verdicts` ledger, publishes a live
+  `CmdVerdict`, and resolves a matching `--ref` gate only as a best-effort bonus (it no longer
+  errors when no challenge is open). `verdicts [--pr N|--subject S]` prints the roll-up 4-eyes
+  state (`APPROVED`/`REJECTED`/`PENDING`) with exit codes 0/3/2; no-arg lists recent verdicts
+  across all subjects.
 - **`busmon`** — `tview`/`tcell` TUI. On launch it backfills only the **last `--limit` ACTIVITY
   lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all history) via `Bus.Recent`,
   then live-tails from the per-stream cursors `Recent` returns through `Bus.TailFrom` (no replay, no
@@ -136,3 +143,8 @@ It never touches Redis — see README "Deployment topology".
   `armed`/`pilot`/`gate` keys **survive** — don't switch it to `DEL`, which would reset cmd delivery
   state. The confirmation reads stdin **before** the TUI starts; a piped/non-TTY stdin counts as
   "no", so `--reset` never purges unattended without `--yes`.
+- **The verdict ledger is the audit source of truth, the gate is just a lock.** `verdict` writes
+  `{p}:verdicts` unconditionally (self-approvals included — the roll-up ignores them, but the record
+  stays). The roll-up rule: APPROVED iff the latest independent approve (reviewer ≠ author) is newer
+  than any reject. Don't gate "was this approved?" on the `{p}:gate:{agent}` hash — that only holds
+  *open* challenges; query `agentbus verdicts` instead.
