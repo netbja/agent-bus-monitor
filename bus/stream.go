@@ -250,7 +250,7 @@ func (b *Bus) AppendVerdict(ctx context.Context, v Verdict) (string, error) {
 		Approx: true,
 		Values: map[string]interface{}{
 			"subject": v.Subject, "author": v.Author, "reviewer": v.Reviewer,
-			"decision": v.Decision, "message": v.Message, "ref": v.Ref,
+			"decision": v.Decision, "message": SanitizeReportMessage(v.Message), "ref": v.Ref,
 		},
 	}).Result()
 }

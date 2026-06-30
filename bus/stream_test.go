@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -420,6 +421,48 @@ func TestVerdictLedger(t *testing.T) {
 	only, err := b.Verdicts(ctx, "pr:8")
 	if err != nil || len(only) != 1 || only[0].Decision != "reject" {
 		t.Fatalf("Verdicts(pr:8) = %+v (%v), want 1 reject", only, err)
+	}
+}
+
+func TestVerdictMessageSanitize(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	// Message with embedded newline, tab, and multi-space — must be sanitized.
+	raw := "line1\nline2\t\tx   y"
+	if _, err := b.AppendVerdict(ctx, Verdict{
+		Subject: "pr:99", Author: "claude1", Reviewer: "claude2",
+		Decision: "approve", Message: raw,
+	}); err != nil {
+		t.Fatalf("AppendVerdict: %v", err)
+	}
+	vs, err := b.Verdicts(ctx, "pr:99")
+	if err != nil || len(vs) != 1 {
+		t.Fatalf("Verdicts: %d entries (%v), want 1", len(vs), err)
+	}
+	stored := vs[0].Message
+	if strings.Contains(stored, "\n") {
+		t.Errorf("stored message contains newline: %q", stored)
+	}
+	if strings.Contains(stored, "\t") {
+		t.Errorf("stored message contains tab: %q", stored)
+	}
+	// Verify whitespace-collapsed: "x   y" → "x y".
+	if strings.Contains(stored, "  ") {
+		t.Errorf("stored message has multi-space run: %q", stored)
+	}
+	// LGTM passes through unchanged (pre-existing assertion style).
+	if _, err := b.AppendVerdict(ctx, Verdict{
+		Subject: "pr:99", Author: "claude1", Reviewer: "claude3",
+		Decision: "approve", Message: "LGTM",
+	}); err != nil {
+		t.Fatalf("AppendVerdict LGTM: %v", err)
+	}
+	vs2, err := b.Verdicts(ctx, "pr:99")
+	if err != nil || len(vs2) != 2 {
+		t.Fatalf("Verdicts after second: %d entries (%v)", len(vs2), err)
+	}
+	if vs2[1].Message != "LGTM" {
+		t.Errorf("LGTM altered by sanitize: got %q", vs2[1].Message)
 	}
 }
 

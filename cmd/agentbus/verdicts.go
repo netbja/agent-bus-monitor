@@ -129,8 +129,12 @@ func verdictsOverview(vs []bus.Verdict, now time.Time) string {
 	}
 	var sb strings.Builder
 	for _, v := range vs {
-		fmt.Fprintf(&sb, "%-9s %-12s %-7s %-12s  %q\n",
-			humanAge(now.Sub(time.UnixMilli(v.TS))), v.Subject, v.Decision, v.Reviewer, v.Message)
+		fmt.Fprintf(&sb, "%-9s %-12s %-7s %-12s",
+			humanAge(now.Sub(time.UnixMilli(v.TS))), v.Subject, v.Decision, v.Reviewer)
+		if v.Message != "" {
+			fmt.Fprintf(&sb, "  %q", v.Message)
+		}
+		sb.WriteByte('\n')
 	}
 	return sb.String()
 }

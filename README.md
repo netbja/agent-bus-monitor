@@ -93,7 +93,7 @@ agentbus subscribe claude1 3600                    # same, with a 1h idle window
 agentbus listen                                    # debug tail (all four streams)
 agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
-agentbus verdict --pr 25 myagent approve "LGTM"    # write verdict to {p}:verdicts; --ref resolves matching gate
+agentbus verdict --pr 25 myagent approve "LGTM"    # write verdict to {p}:verdicts; --ref resolves matching gate (best-effort)
 agentbus verdicts --pr 25                          # roll-up 4-eyes state: APPROVED/REJECTED/PENDING (exit 0/3/2); no-arg lists recent
 agentbus usage                                     # print every agent's budget; usage <a> '<json>' writes one
 

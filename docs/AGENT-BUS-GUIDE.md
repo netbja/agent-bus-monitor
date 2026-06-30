@@ -97,8 +97,9 @@ agentbus cmd claude2 run the integration suite
 agentbus challenge <target> [--ref R] <why...>          # prints: "challenge <ref> opened on <target>"
 agentbus challenge claude2 confirm you backed up the DB # auto-generates a ref, PRINTS it — capture it
 agentbus reply   --ref <R> <target> <answer...>         # answer a challenge you received
-agentbus verdict --ref <R> <target> <approve|reject> [message...]   # resolver closes the gate
-agentbus verdict --ref k3f9q claude2 approve looks good
+agentbus verdict (--pr N | --subject S) [--ref R] <target> <approve|reject> [msg...]   # records to {p}:verdicts; --ref resolves the gate (best-effort)
+agentbus verdict --pr 25 --ref k3f9q claude2 approve looks good
+agentbus verdicts --pr 25                                          # roll-up 4-eyes state: APPROVED/REJECTED/PENDING (exit 0/3/2)
 
 # ── AM I BLOCKED? (check before you proceed / mark done) ──────────────────────
 agentbus gate <agent>                                   # lists open challenges; EXIT CODE != 0 means GATED
@@ -218,9 +219,9 @@ agentbus gate claude2                       # exit != 0, lists: k3f9q  reviewer|
 agentbus reply --ref k3f9q claude2 rollback script tested, snapshot taken
 
 # a SECOND reviewer (4 eyes) resolves it
-agentbus verdict --ref k3f9q claude2 approve verified
+agentbus verdict --pr 25 --ref k3f9q claude2 approve verified
 ```
-`verdict` fails loudly if the ref isn't open (catches a stale/typo ref).
+`verdict` records to the `{p}:verdicts` ledger unconditionally; if `--ref` names no open gate it prints a `notice:` to stderr and still succeeds (best-effort resolution — no longer fatal). Query state with `agentbus verdicts --pr 25`.
 
 ---
 
