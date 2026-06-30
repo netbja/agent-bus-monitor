@@ -279,6 +279,44 @@ func (b *Bus) Verdicts(ctx context.Context, subject string) ([]Verdict, error) {
 	return out, nil
 }
 
+// Thread returns every {project}:cmd entry belonging to thread threadID,
+// oldest→newest (XRANGE is ascending). An entry belongs iff its ref == threadID,
+// or its id == threadID (the root), or threadID is a bare <ms> (all digits) and
+// the entry's id has the prefix threadID+"-". Scan-and-filter over the capped cmd
+// stream, like Verdicts; reads with XRANGE only, so no consumer-group cursors are
+// touched. An unknown thread yields an empty (non-nil) slice, not an error.
+func (b *Bus) Thread(ctx context.Context, threadID string) ([]Event, error) {
+	key := StreamKey(b.project, "cmd")
+	msgs, err := b.r.XRange(ctx, key, "-", "+").Result()
+	if err != nil {
+		return nil, err
+	}
+	bareMS := isAllDigits(threadID)
+	out := make([]Event, 0, len(msgs))
+	for _, m := range msgs {
+		e := ParseEntry(key, m.ID, toStringMap(m.Values))
+		if e.Ref == threadID || e.ID == threadID || (bareMS && strings.HasPrefix(e.ID, threadID+"-")) {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
+// isAllDigits reports whether s is non-empty and only ASCII digits (a bare <ms>
+// stream-id prefix). Used by Thread to accept a millisecond cursor without its
+// "-<seq>" suffix, mirroring subscribe --since.
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // Tail blocks reading the given stream kinds from lastID onward (use "0" to
 // replay history), invoking fn per event until ctx is cancelled. It is
 // read-only: a plain XREAD never touches consumer-group cursors, so observers
