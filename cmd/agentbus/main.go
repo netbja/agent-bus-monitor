@@ -12,7 +12,8 @@
 //	agentbus --project P cmd       <target> <command...>
 //	agentbus --project P challenge <target> [--ref R] <msg...>   # opens a 4-eyes gate
 //	agentbus --project P reply     --ref R <target> <msg...>
-//	agentbus --project P verdict   --ref R <target> <approve|reject> [msg...]  # resolves the gate
+//	agentbus --project P verdict   (--pr N | --subject S) [--ref R] <author> <approve|reject> [msg...]  # records to the ledger; resolves a matching gate as a bonus
+//	agentbus --project P verdicts  [--pr N | --subject S]   # roll-up 4-eyes state of a subject (exit 0=approved/2=pending/3=rejected), or recent across all
 //	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
 //	agentbus --project P agents    [--json]      # current state of all agents (one line each)
@@ -66,7 +67,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|notify|cmd|challenge|reply|verdict|verdicts|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -154,24 +155,68 @@ func main() {
 
 	case "verdict":
 		rest, ref := extractFlag(rest, "--ref")
-		if ref == "" || len(rest) < 2 {
-			die("usage: verdict --ref R <target> <approve|reject> [message]")
+		rest, pr := extractFlag(rest, "--pr")
+		rest, subjectFlag := extractFlag(rest, "--subject")
+		subject, serr := resolveSubject(pr, subjectFlag)
+		if serr != nil {
+			die(serr.Error())
 		}
-		target, decision := rest[0], rest[1]
+		if len(rest) < 2 {
+			die("usage: verdict (--pr N | --subject S) [--ref R] <author> <approve|reject> [message]")
+		}
+		author, decision := rest[0], rest[1]
 		if decision != "approve" && decision != "reject" {
 			die("verdict decision must be approve or reject")
 		}
-		msg := decision
-		if len(rest) > 2 {
-			msg += ": " + strings.Join(rest[2:], " ")
-		}
-		// Resolve first: a verdict for a ref that isn't open must fail loudly.
-		if err := b.ResolveChallenge(ctx, target, ref); err != nil {
+		rationale := strings.Join(rest[2:], " ")
+		// 1. Durable ledger entry — always, including self-approvals (the
+		//    independence rule is enforced at read time, not here).
+		if _, err := b.AppendVerdict(ctx, bus.Verdict{
+			Subject: subject, Author: author, Reviewer: self,
+			Decision: decision, Message: rationale, Ref: ref,
+		}); err != nil {
 			die(err.Error())
 		}
-		if _, err := b.Cmd(ctx, self, target, bus.CmdVerdict, ref, msg); err != nil {
+		// 2. Live notification on :cmd so busmon and the author see it (as before).
+		cmdMsg := decision
+		if rationale != "" {
+			cmdMsg += ": " + rationale
+		}
+		if _, err := b.Cmd(ctx, self, author, bus.CmdVerdict, ref, cmdMsg); err != nil {
 			die(err.Error())
 		}
+		// 3. Bonus gate resolution: best-effort, only when --ref names an open
+		//    challenge. A missing/stale ref is a notice, not a fatal error — that
+		//    is what lets a cmd-requested review (no challenge) still be recorded.
+		if ref != "" {
+			if err := b.ResolveChallenge(ctx, author, ref); err != nil {
+				fmt.Fprintln(os.Stderr, "notice: "+err.Error())
+			}
+		}
+		fmt.Printf("verdict recorded: %s %s on %s\n", decision, subject, author)
+
+	case "verdicts":
+		rest, pr := extractFlag(rest, "--pr")
+		rest, subjectFlag := extractFlag(rest, "--subject")
+		if strings.TrimSpace(pr) == "" && strings.TrimSpace(subjectFlag) == "" {
+			vs, err := b.Verdicts(ctx, "") // overview: all subjects
+			if err != nil {
+				die(err.Error())
+			}
+			fmt.Print(verdictsOverview(vs, time.Now()))
+			return
+		}
+		subject, serr := resolveSubject(pr, subjectFlag)
+		if serr != nil {
+			die(serr.Error())
+		}
+		vs, err := b.Verdicts(ctx, subject)
+		if err != nil {
+			die(err.Error())
+		}
+		out, code := verdictsReport(subject, vs, time.Now())
+		fmt.Print(out)
+		os.Exit(code)
 
 	case "pilot":
 		rest, ttlStr := extractFlag(rest, "--ttl")
