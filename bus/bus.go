@@ -35,6 +35,21 @@ func reportMaxLen() int {
 	return defaultReportMax
 }
 
+const defaultVerdictMax = 10000
+
+// verdictMaxLen resolves the verdict-ledger cap: AGENT_BUS_VERDICT_MAX if it
+// parses to a positive int, else defaultVerdictMax (10000). The ledger is the
+// money-path audit trail, so it is capped far higher than the 1000-entry
+// activity streams — low volume, but we keep ~all of it.
+func verdictMaxLen() int {
+	if v := os.Getenv("AGENT_BUS_VERDICT_MAX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultVerdictMax
+}
+
 var ValidStates = map[string]bool{
 	"working": true, "idle": true, "blocked": true, "done": true,
 }

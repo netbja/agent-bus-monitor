@@ -50,12 +50,32 @@ func ArmedKey(project, agent string) string { return project + ":armed:" + agent
 // AgentSnapshot), written by Status and read by `agentbus agents`.
 func AgentsKey(project string) string { return project + ":agents" }
 
+// VerdictsKey is the per-project append-only ledger of 4-eyes verdicts
+// ({project}:verdicts). Unlike the activity streams it is capped at
+// verdictMaxLen() (default 10000) because it is the money-path audit trail.
+func VerdictsKey(project string) string { return project + ":verdicts" }
+
 // AgentSnapshot is the cached current state of one agent.
 type AgentSnapshot struct {
 	State   string `json:"state"`
 	Message string `json:"message,omitempty"`
 	TS      int64  `json:"ts"` // ms since epoch, from the status entry's stream id
 	Pane    string `json:"pane,omitempty"` // HERDR_PANE_ID when the agent runs inside herdr
+}
+
+// Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
+// target (e.g. "pr:25"); Author is the agent under review and Reviewer the agent
+// issuing the verdict. Ref optionally links to a challenge thread. TS is the ms
+// timestamp derived from the stream id.
+type Verdict struct {
+	ID       string `json:"id"`
+	Subject  string `json:"subject"`
+	Author   string `json:"author"`
+	Reviewer string `json:"reviewer"`
+	Decision string `json:"decision"` // approve | reject
+	Message  string `json:"message,omitempty"`
+	Ref      string `json:"ref,omitempty"`
+	TS       int64  `json:"ts"`
 }
 
 // UsageKey is the per-project hash of latest agent usage snapshots ({agent} →
@@ -205,6 +225,58 @@ func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (
 	return b.add(ctx, "cmd", map[string]interface{}{
 		"from": from, "target": target, "type": typ, "ref": ref, "command": command,
 	})
+}
+
+// AppendVerdict records one verdict in the {project}:verdicts ledger and returns
+// the new entry id. It writes unconditionally — including self-approvals
+// (reviewer == author) — so the audit trail is complete; the independence rule
+// is enforced only at read time by the roll-up. The cap is verdictMaxLen().
+func (b *Bus) AppendVerdict(ctx context.Context, v Verdict) (string, error) {
+	if !ValidName(v.Author) {
+		return "", fmt.Errorf("invalid author %q", v.Author)
+	}
+	if !ValidName(v.Reviewer) {
+		return "", fmt.Errorf("invalid reviewer %q", v.Reviewer)
+	}
+	if v.Subject == "" {
+		return "", fmt.Errorf("verdict subject required")
+	}
+	if v.Decision != "approve" && v.Decision != "reject" {
+		return "", fmt.Errorf("verdict decision must be approve or reject")
+	}
+	return b.r.XAdd(ctx, &redis.XAddArgs{
+		Stream: VerdictsKey(b.project),
+		MaxLen: int64(verdictMaxLen()),
+		Approx: true,
+		Values: map[string]interface{}{
+			"subject": v.Subject, "author": v.Author, "reviewer": v.Reviewer,
+			"decision": v.Decision, "message": v.Message, "ref": v.Ref,
+		},
+	}).Result()
+}
+
+// Verdicts returns ledger entries oldest→newest (XRANGE is ascending, which the
+// CLI roll-up relies on). If subject != "", only entries for that subject are
+// returned; subject == "" returns the whole ledger.
+func (b *Bus) Verdicts(ctx context.Context, subject string) ([]Verdict, error) {
+	msgs, err := b.r.XRange(ctx, VerdictsKey(b.project), "-", "+").Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Verdict, 0, len(msgs))
+	for _, m := range msgs {
+		f := toStringMap(m.Values)
+		if subject != "" && f["subject"] != subject {
+			continue
+		}
+		ms, _ := splitID(m.ID)
+		out = append(out, Verdict{
+			ID: m.ID, Subject: f["subject"], Author: f["author"],
+			Reviewer: f["reviewer"], Decision: f["decision"],
+			Message: f["message"], Ref: f["ref"], TS: ms,
+		})
+	}
+	return out, nil
 }
 
 // Tail blocks reading the given stream kinds from lastID onward (use "0" to

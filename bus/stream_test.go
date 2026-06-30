@@ -84,7 +84,7 @@ func dialTest(t *testing.T) *Bus {
 		ctx := context.Background()
 		r.Del(ctx, StreamKey(project, "status"), StreamKey(project, "report"),
 			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project),
-			AgentsKey(project), UsageKey(project))
+			AgentsKey(project), UsageKey(project), VerdictsKey(project))
 		r.Close()
 	})
 	return b
@@ -383,5 +383,57 @@ func TestUsageRoundTrip(t *testing.T) {
 	}
 	if err := b.SetUsage(ctx, "Bad Agent", snap); err == nil {
 		t.Error("SetUsage accepted an invalid agent, want error")
+	}
+}
+
+func TestVerdictsKeyNaming(t *testing.T) {
+	if got := VerdictsKey("busmon"); got != "busmon:verdicts" {
+		t.Fatalf("VerdictsKey = %q, want busmon:verdicts", got)
+	}
+}
+
+func TestVerdictLedger(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.AppendVerdict(ctx, Verdict{
+		Subject: "pr:7", Author: "claude1", Reviewer: "claude2",
+		Decision: "approve", Message: "LGTM", Ref: "r1",
+	}); err != nil {
+		t.Fatalf("AppendVerdict approve: %v", err)
+	}
+	if _, err := b.AppendVerdict(ctx, Verdict{
+		Subject: "pr:8", Author: "claude1", Reviewer: "claude3", Decision: "reject",
+	}); err != nil {
+		t.Fatalf("AppendVerdict reject: %v", err)
+	}
+	all, err := b.Verdicts(ctx, "")
+	if err != nil || len(all) != 2 {
+		t.Fatalf("Verdicts(all) = %d entries (%v), want 2", len(all), err)
+	}
+	if all[0].Subject != "pr:7" || all[0].Reviewer != "claude2" ||
+		all[0].Decision != "approve" || all[0].Message != "LGTM" || all[0].Ref != "r1" {
+		t.Fatalf("first verdict fields wrong: %+v", all[0])
+	}
+	if all[0].TS == 0 {
+		t.Fatalf("verdict TS not derived from id: %+v", all[0])
+	}
+	only, err := b.Verdicts(ctx, "pr:8")
+	if err != nil || len(only) != 1 || only[0].Decision != "reject" {
+		t.Fatalf("Verdicts(pr:8) = %+v (%v), want 1 reject", only, err)
+	}
+}
+
+func TestAppendVerdictValidation(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	bad := []Verdict{
+		{Subject: "pr:1", Author: "Bad Author", Reviewer: "claude2", Decision: "approve"},
+		{Subject: "pr:1", Author: "claude1", Reviewer: "claude2", Decision: "maybe"},
+		{Subject: "", Author: "claude1", Reviewer: "claude2", Decision: "approve"},
+	}
+	for i, v := range bad {
+		if _, err := b.AppendVerdict(ctx, v); err == nil {
+			t.Errorf("case %d: AppendVerdict accepted invalid %+v, want error", i, v)
+		}
 	}
 }
