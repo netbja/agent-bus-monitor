@@ -92,6 +92,9 @@ agentbus notify soak test started
 # ── DIRECT ANOTHER AGENT (directive on {project}:cmd) ─────────────────────────
 agentbus cmd <target> <command...>
 agentbus cmd claude2 run the integration suite
+ID=$(agentbus cmd claude2 run the integration suite)   # prints the entry id = thread root
+agentbus reply --ref "$ID" hermes on it                # thread a reply onto that directive
+agentbus thread "$ID"                                  # see the whole chain (directive → reply → verdict)
 
 # ── 4-EYES CHALLENGE GATE (blocks <target> until a verdict) ───────────────────
 agentbus challenge <target> [--ref R] <why...>          # prints: "challenge <ref> opened on <target>"
