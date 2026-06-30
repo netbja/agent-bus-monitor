@@ -480,3 +480,78 @@ func TestAppendVerdictValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestThread(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	root, err := b.Cmd(ctx, "hermes", "claude2", CmdDirective, "", "review the migration")
+	if err != nil {
+		t.Fatalf("Cmd directive: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "claude2", "hermes", CmdReply, root, "on it"); err != nil {
+		t.Fatalf("Cmd reply: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "unrelated"); err != nil {
+		t.Fatalf("Cmd unrelated: %v", err)
+	}
+	evs, err := b.Thread(ctx, root)
+	if err != nil {
+		t.Fatalf("Thread: %v", err)
+	}
+	if len(evs) != 2 {
+		t.Fatalf("Thread(%q) = %d entries, want 2 (directive+reply)", root, len(evs))
+	}
+	if evs[0].ID != root || evs[0].Type != CmdDirective || evs[0].Message != "review the migration" {
+		t.Fatalf("entry 0 not the root directive: %+v", evs[0])
+	}
+	if evs[1].Type != CmdReply || evs[1].Ref != root || evs[1].Message != "on it" {
+		t.Fatalf("entry 1 not the reply: %+v", evs[1])
+	}
+}
+
+func TestThreadChallengeRef(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	const C = "c1abc"
+	if _, err := b.Cmd(ctx, "rev", "claude2", CmdChallenge, C, "justify X"); err != nil {
+		t.Fatalf("challenge: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "claude2", "rev", CmdReply, C, "because Y"); err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "rev2", "claude2", CmdVerdict, C, "approve"); err != nil {
+		t.Fatalf("verdict: %v", err)
+	}
+	evs, err := b.Thread(ctx, C)
+	if err != nil || len(evs) != 3 {
+		t.Fatalf("Thread(%q) = %d (%v), want 3 (challenge+reply+verdict)", C, len(evs), err)
+	}
+}
+
+func TestThreadBareMS(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	root, err := b.Cmd(ctx, "hermes", "claude2", CmdDirective, "", "x")
+	if err != nil {
+		t.Fatalf("Cmd: %v", err)
+	}
+	ms := root
+	if i := strings.IndexByte(root, '-'); i >= 0 {
+		ms = root[:i]
+	}
+	evs, err := b.Thread(ctx, ms) // bare <ms>, no -seq
+	if err != nil || len(evs) != 1 || evs[0].ID != root {
+		t.Fatalf("Thread(bare ms %q) = %+v (%v), want the root entry", ms, evs, err)
+	}
+}
+
+func TestThreadUnknown(t *testing.T) {
+	b := dialTest(t)
+	evs, err := b.Thread(context.Background(), "nope-0")
+	if err != nil {
+		t.Fatalf("Thread(unknown) error: %v", err)
+	}
+	if len(evs) != 0 {
+		t.Fatalf("Thread(unknown) = %d entries, want 0", len(evs))
+	}
+}

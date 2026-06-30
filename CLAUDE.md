@@ -59,7 +59,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
 ### The two binaries (each a single `main.go`)
 
-- **`agentbus`** — fire-and-forget CLI: `status`/`report`/`notify`/`cmd`/`challenge`/`reply`/
+- **`agentbus`** — fire-and-forget CLI: `status`/`report`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
   `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`subscribe`/`watch`/`listen`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
@@ -74,7 +74,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `CmdVerdict`, and resolves a matching `--ref` gate only as a best-effort bonus (it no longer
   errors when no challenge is open). `verdicts [--pr N|--subject S]` prints the roll-up 4-eyes
   state (`APPROVED`/`REJECTED`/`PENDING`) with exit codes 0/3/2; no-arg lists recent verdicts
-  across all subjects.
+  across all subjects. `cmd [--ref T] <target> <command>` now prints its entry id (the thread
+  root) and accepts `--ref` to continue an existing thread; `thread <T>` reads the `:cmd` stream
+  and prints every entry whose `ref` or `id` equals `T`, chronologically — the thread-id of any
+  message is its `ref` if set, else its own id, so a directive id and a challenge ref both work.
+  Live read of `:cmd` (recent ~1000); the verdict ledger remains the durable audit.
 - **`busmon`** — `tview`/`tcell` TUI. On launch it backfills only the **last `--limit` ACTIVITY
   lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all history) via `Bus.Recent`,
   then live-tails from the per-stream cursors `Recent` returns through `Bus.TailFrom` (no replay, no
