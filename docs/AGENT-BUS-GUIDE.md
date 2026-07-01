@@ -134,6 +134,7 @@ agentbus watch claude1                                  # legacy alias of subscr
 # ── DEBUG: tail streams to your terminal ─────────────────────────────────────
 agentbus listen [status report notify cmd]              # default: all four
 agentbus listen cmd report
+agentbus version                                       # print the bus protocol version (v1)
 
 # ── HUMAN DASHBOARD (separate binary) ─────────────────────────────────────────
 busmon --project trading                                # or -project; busmon tolerates both
