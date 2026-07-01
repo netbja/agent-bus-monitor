@@ -21,6 +21,13 @@ const (
 	ReportAuto = "auto" // Stop-hook safety-net summary → LLM-gated (phase 2)
 )
 
+// ProtocolVersion is the bus wire-protocol version stamped on every subscribe
+// JSON event (subEvent "v"). It labels the current subscribe contract as v1.
+// Bump it ONLY on a breaking change to that contract — a field removed, renamed,
+// or repurposed, or a change in an existing field's semantics. Additive fields
+// within a version are non-breaking and must not bump it.
+const ProtocolVersion = 1
+
 const defaultReportMax = 500
 
 // reportMaxLen resolves the report rune cap: AGENT_BUS_REPORT_MAX if it parses

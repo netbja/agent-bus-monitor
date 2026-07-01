@@ -148,6 +148,34 @@ func TestRunSubscribeHeartbeat(t *testing.T) {
 	}
 }
 
+func TestEmitStampsProtocolVersion(t *testing.T) {
+	var buf bytes.Buffer
+	emit(&buf, subEvent{Event: "cmd"}) // V intentionally left 0 — emit must stamp it
+	var got subEvent
+	if err := json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &got); err != nil {
+		t.Fatalf("emit output not JSON: %q (%v)", buf.String(), err)
+	}
+	if got.V != bus.ProtocolVersion {
+		t.Fatalf("emit did not stamp v: got %d, want %d", got.V, bus.ProtocolVersion)
+	}
+}
+
+func TestEmittedVariantsCarryVersion(t *testing.T) {
+	// Every subEvent variant goes through emit, so each must carry "v":1.
+	for _, ev := range []subEvent{
+		{Event: "cmd"},
+		{Event: "heartbeat", Rearm: boolPtr(true)},
+		{Event: "error", Rearm: boolPtr(true), Msg: "boom"},
+		{Event: "fatal", Rearm: boolPtr(false), Msg: "invalid agent"},
+	} {
+		var buf bytes.Buffer
+		emit(&buf, ev)
+		if !strings.Contains(buf.String(), `"v":1`) {
+			t.Fatalf("%s event missing v:1: %q", ev.Event, buf.String())
+		}
+	}
+}
+
 func TestRunSubscribeLoopDeliversMany(t *testing.T) {
 	b, r := dialMain(t)
 	ctx, cancel := context.WithCancel(context.Background())
