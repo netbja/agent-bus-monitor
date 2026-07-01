@@ -12,6 +12,16 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
+// reportMarker returns a compact " (+N)" breadcrumb (N = full rune length) when a
+// report retained a full text, so the operator knows `agentbus reports <id>` shows
+// more; empty when there is nothing extra.
+func reportMarker(full string) string {
+	if full == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (+%d)", len([]rune(full)))
+}
+
 func stateColor(state string) string {
 	switch state {
 	case "working":

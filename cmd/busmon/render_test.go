@@ -170,6 +170,15 @@ func TestAgentLabelUsage(t *testing.T) {
 	}
 }
 
+func TestReportMarker(t *testing.T) {
+	if got := reportMarker(""); got != "" {
+		t.Fatalf("empty full → no marker, got %q", got)
+	}
+	if got := reportMarker("the\nfull\ntext"); got != " (+13)" { // 13 runes
+		t.Fatalf("marker = %q, want ' (+13)'", got)
+	}
+}
+
 func TestPackChips(t *testing.T) {
 	// (a) all chips fit on one row
 	rows, used := packChips([]chip{{"a", 1}, {"b", 1}, {"c", 1}}, 100, 4)
