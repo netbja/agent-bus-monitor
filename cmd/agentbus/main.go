@@ -8,6 +8,7 @@
 //
 //	agentbus --project P status    <agent> <working|idle|blocked|done> [msg...]
 //	agentbus --project P report    <agent> [--auto] <msg...>
+//	agentbus --project P reports   [<id>]         # list recent reports; <id> prints one report's full retained text
 //	agentbus --project P notify    <msg...>
 //	agentbus --project P cmd       [--ref T] <target> <command...>   # prints the entry id (= thread root)
 //	agentbus --project P thread    <thread-id>   # show the :cmd thread (entries where ref or id == thread-id), chronological
@@ -75,7 +76,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -115,6 +116,27 @@ func main() {
 		if _, err := b.Report(ctx, rest[0], kind, strings.Join(rest[1:], " ")); err != nil {
 			die(err.Error())
 		}
+
+	case "reports":
+		rest, asJSON := extractBool(rest, "--json")
+		if len(rest) >= 1 { // detail: one report's full text by id
+			e, err := b.ReportByID(ctx, rest[0])
+			if err != nil {
+				die(err.Error())
+			}
+			fmt.Println(reportDetail(e))
+			return
+		}
+		evs, err := b.Reports(ctx, 25)
+		if err != nil {
+			die(err.Error())
+		}
+		if asJSON {
+			out, _ := json.MarshalIndent(evs, "", "  ")
+			fmt.Println(string(out))
+			return
+		}
+		fmt.Print(reportsTable(evs))
 
 	case "notify":
 		if len(rest) < 1 {
