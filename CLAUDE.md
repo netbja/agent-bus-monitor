@@ -60,7 +60,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (each a single `main.go`)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`subscribe`/`watch`/`listen`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
@@ -152,3 +152,11 @@ It never touches Redis — see README "Deployment topology".
   stays). The roll-up rule: APPROVED iff the latest independent approve (reviewer ≠ author) is newer
   than any reject. Don't gate "was this approved?" on the `{p}:gate:{agent}` hash — that only holds
   *open* challenges; query `agentbus verdicts` instead.
+- **The `subscribe` JSON output is versioned; nothing else is.** Every `subscribe` event carries
+  `"v"` (= `bus.ProtocolVersion`, currently 1). The rule: within a `v`, changes are **additive only**
+  and consumers **must ignore unknown fields**; **bump `v` only on a breaking change** to the
+  subscribe contract (a field removed/renamed/repurposed or a semantics change). A consumer that
+  sees a higher `v` than it knows should **fail loud**, not best-effort — that is what turns a format
+  cutover (the old sentinel→JSON break) into an explicit signal. `agentbus version` prints the
+  constant. Stream entries and `agents`/`usage`/`verdicts` output are **not** versioned (they are
+  additive-by-key via `ParseEntry`/`json.Unmarshal`).

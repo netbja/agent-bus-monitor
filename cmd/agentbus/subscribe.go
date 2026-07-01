@@ -16,6 +16,7 @@ import (
 // to re-arm (rearm). rearm is a *bool so fatal's rearm:false survives omitempty
 // while --loop entries omit the field entirely.
 type subEvent struct {
+	V      int    `json:"v"`
 	Event  string `json:"event"`
 	Rearm  *bool  `json:"rearm,omitempty"`
 	ID     string `json:"id,omitempty"`
@@ -38,8 +39,10 @@ func cmdEvent(e bus.Event, rearm *bool) subEvent {
 	}
 }
 
-// emit writes one subEvent as a single JSON line.
+// emit writes one subEvent as a single JSON line, stamping the protocol version
+// so every variant (cmd/heartbeat/error/fatal) carries "v".
 func emit(out io.Writer, ev subEvent) {
+	ev.V = bus.ProtocolVersion
 	b, _ := json.Marshal(ev)
 	fmt.Fprintln(out, string(b))
 }

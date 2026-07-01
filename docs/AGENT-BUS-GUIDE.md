@@ -122,6 +122,7 @@ agentbus agents --json                                  # raw map for scripts
 agentbus pane <agent>                                   # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 agentbus usage <agent> '<json>'                         # write the agent's budget snapshot (status-line tee)
 agentbus usage                                          # print everyone's budget; --json for raw
+agentbus version                                        # print the bus protocol version (v1) — no project/broker needed
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
 agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s

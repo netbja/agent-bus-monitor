@@ -23,6 +23,7 @@
 //	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
+//	agentbus version               # print the bus protocol version (no project/broker needed)
 //	agentbus --host <host> ...
 package main
 
@@ -64,11 +65,17 @@ func main() {
 	if project == "" {
 		project = os.Getenv("AGENT_BUS_PROJECT")
 	}
+	// version reads a compile-time constant — no project, no broker. Handle it
+	// before the project check and before bus.Connect.
+	if len(args) >= 1 && args[0] == "version" {
+		fmt.Printf("agentbus protocol v%d\n", bus.ProtocolVersion)
+		return
+	}
 	if project == "" {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|notify|cmd|thread|challenge|reply|verdict|verdicts|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")

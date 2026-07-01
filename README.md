@@ -97,6 +97,7 @@ agentbus gate claude2                              # list open 4-eyes challenges
 agentbus verdict --pr 25 myagent approve "LGTM"    # write verdict to {p}:verdicts; --ref resolves matching gate (best-effort)
 agentbus verdicts --pr 25                          # roll-up 4-eyes state: APPROVED/REJECTED/PENDING (exit 0/3/2); no-arg lists recent
 agentbus usage                                     # print every agent's budget; usage <a> '<json>' writes one
+agentbus version                                   # print the bus protocol version (no project/broker needed)
 
 busmon --project myproject                         # live dashboard (last 25 lines, then live)
 busmon --project myproject --limit 100             # backfill the last 100 lines on launch
@@ -104,6 +105,11 @@ busmon --project myproject --limit 0               # replay all retained history
 busmon --project myproject --reset                 # purge the project's streams first (asks to confirm)
 busmon --project myproject --reset --yes           # purge without the confirmation prompt
 ```
+
+The `subscribe` output carries `"v"` (= `bus.ProtocolVersion`, currently 1). Changes within a
+version are additive only (consumers must ignore unknown fields); `v` bumps only on a breaking subscribe-contract change (a field
+removed/renamed/repurposed or a semantics change). A consumer that sees an unknown higher `v` should
+fail loud, not best-effort. Stream entries and `agents`/`usage`/`verdicts` output are not versioned.
 
 On launch, busmon backfills only the **last `--limit` ACTIVITY lines** (default `25`, merged across
 all four streams) before live-tailing — set a persistent default with `AGENT_BUS_BUSMON_LIMIT`, or
