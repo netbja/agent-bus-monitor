@@ -421,6 +421,37 @@ func (b *Bus) Recent(ctx context.Context, kinds []string, n int) ([]Event, map[s
 	return all, cursors, nil
 }
 
+// Reports returns the n most recent {project}:report entries in chronological
+// order (oldest→newest), each with Full populated when the report retained a full
+// text. Read-only (XREVRANGE then reversed) — no consumer-group cursors touched,
+// like Recent/Verdicts.
+func (b *Bus) Reports(ctx context.Context, n int) ([]Event, error) {
+	key := StreamKey(b.project, "report")
+	msgs, err := b.r.XRevRangeN(ctx, key, "+", "-", int64(n)).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Event, 0, len(msgs))
+	for i := len(msgs) - 1; i >= 0; i-- { // XREVRANGE is newest-first; yield oldest→newest
+		out = append(out, ParseEntry(key, msgs[i].ID, toStringMap(msgs[i].Values)))
+	}
+	return out, nil
+}
+
+// ReportByID returns the single {project}:report entry with the given id, or an
+// error if no such entry exists.
+func (b *Bus) ReportByID(ctx context.Context, id string) (Event, error) {
+	key := StreamKey(b.project, "report")
+	msgs, err := b.r.XRange(ctx, key, id, id).Result()
+	if err != nil {
+		return Event{}, err
+	}
+	if len(msgs) == 0 {
+		return Event{}, fmt.Errorf("no report %q", id)
+	}
+	return ParseEntry(key, msgs[0].ID, toStringMap(msgs[0].Values)), nil
+}
+
 // Purge clears the given stream kinds with XTRIM MAXLEN 0 and returns the total
 // number of entries removed. XTRIM keeps the streams' consumer groups (so cmd
 // at-least-once delivery is unaffected) and never touches the project's
