@@ -107,7 +107,7 @@ busmon --project myproject --reset --yes           # purge without the confirmat
 ```
 
 The `subscribe` output carries `"v"` (= `bus.ProtocolVersion`, currently 1). Changes within a
-version are additive only; `v` bumps only on a breaking subscribe-contract change (a field
+version are additive only (consumers must ignore unknown fields); `v` bumps only on a breaking subscribe-contract change (a field
 removed/renamed/repurposed or a semantics change). A consumer that sees an unknown higher `v` should
 fail loud, not best-effort. Stream entries and `agents`/`usage`/`verdicts` output are not versioned.
 

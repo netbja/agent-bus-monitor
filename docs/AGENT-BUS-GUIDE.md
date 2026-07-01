@@ -122,6 +122,7 @@ agentbus agents --json                                  # raw map for scripts
 agentbus pane <agent>                                   # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 agentbus usage <agent> '<json>'                         # write the agent's budget snapshot (status-line tee)
 agentbus usage                                          # print everyone's budget; --json for raw
+agentbus version                                        # print the bus protocol version (v1) — no project/broker needed
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
 agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s
@@ -134,7 +135,6 @@ agentbus watch claude1                                  # legacy alias of subscr
 # ── DEBUG: tail streams to your terminal ─────────────────────────────────────
 agentbus listen [status report notify cmd]              # default: all four
 agentbus listen cmd report
-agentbus version                                       # print the bus protocol version (v1)
 
 # ── HUMAN DASHBOARD (separate binary) ─────────────────────────────────────────
 busmon --project trading                                # or -project; busmon tolerates both
