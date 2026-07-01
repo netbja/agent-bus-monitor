@@ -84,6 +84,9 @@ agentbus status claude1 done
 agentbus report <agent> [--auto] <message...>
 agentbus report claude1 bug in order router fixed
 agentbus report claude1 --auto soak 24h done            # --auto = Stop-hook safety-net report
+agentbus reports                                        # list recent reports; (+N) = full text retained
+agentbus reports --json                                 # same list, machine-readable JSON
+agentbus reports <id>                                   # print that report's full text (multi-line, untruncated)
 
 # ── NOTIFY (project-wide announcement, from = AGENT_BUS_AGENT) ────────────────
 agentbus notify <message...>

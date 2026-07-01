@@ -43,7 +43,7 @@ kinds per project:
 | Stream key          | Fields written                                  | Consumed by              |
 |---------------------|-------------------------------------------------|--------------------------|
 | `{p}:status`        | `agent state message`                           | busmon AGENTS+ACTIVITY   |
-| `{p}:report`        | `agent kind message` (kind: note/auto)          | busmon ACTIVITY + hermes |
+| `{p}:report`        | `agent kind message` (kind: note/auto); optional `full` (retained only when it differs from the ≤500 preview) | busmon ACTIVITY + hermes |
 | `{p}:notify`        | `from message`                                  | busmon ACTIVITY          |
 | `{p}:cmd`           | `from target type ref command`                  | busmon ACTIVITY + agents |
 
@@ -59,7 +59,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
 ### The two binaries (each a single `main.go`)
 
-- **`agentbus`** — fire-and-forget CLI: `status`/`report`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
+- **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
   `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
@@ -69,7 +69,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   = full at-least-once replay. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
   each fire, **not** a long-lived loop (which would never wake a terminal session). `agents [--json]`
   lists every peer's current state. `watch` is the legacy alias of `subscribe` (same handler).
-  `listen` tails all four streams via `Bus.Tail` for debugging. `verdict` is subject-first
+  `listen` tails all four streams via `Bus.Tail` for debugging. `report` now retains the full
+  text (newlines/tabs kept, ≤8000, `AGENT_BUS_REPORT_FULL_MAX`) in a `full` field **only when it
+  differs from the one-line ≤500 preview**; `reports [--json]` lists recent reports (marking those
+  with more via ` (+N)`) and `reports <id>` prints one report's full retained text.
+  `listen`/busmon still render the preview. `verdict` is subject-first
   (`--pr N`/`--subject S`), always appends to the `{p}:verdicts` ledger, publishes a live
   `CmdVerdict`, and resolves a matching `--ref` gate only as a best-effort bonus (it no longer
   errors when no challenge is open). `verdicts [--pr N|--subject S]` prints the roll-up 4-eyes
@@ -160,3 +164,9 @@ It never touches Redis — see README "Deployment topology".
   cutover (the old sentinel→JSON break) into an explicit signal. `agentbus version` prints the
   constant. Stream entries and `agents`/`usage`/`verdicts` output are **not** versioned (they are
   additive-by-key via `ParseEntry`/`json.Unmarshal`).
+- **`report` keeps a bounded preview AND the full text.** The write path stores `message` (the
+  ≤500 one-line `SanitizeReportMessage` preview, for `listen`/busmon) and — only when it carries
+  more — a `full` field (`SanitizeReportFull`: newlines/tabs kept, ≤8000). Don't raise the preview
+  cap to "see more" — that floods the flat viewers; use `agentbus reports <id>` (or the busmon
+  ` (+N)` marker) instead. The `full` field lives in the entry and is trimmed with the ~1000-cap
+  report stream — `report` is an activity channel, not the durable audit (that's the verdict ledger).
