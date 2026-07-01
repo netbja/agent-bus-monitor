@@ -107,6 +107,7 @@ type Event struct {
 	Type    string // cmd: directive|challenge|reply|verdict
 	Ref     string // cmd: correlation id
 	Message string // status/report/notify text, or the cmd command
+	Full    string // report: full retained text (empty unless it differs from the preview)
 }
 
 // ParseEntry turns a raw stream entry into an Event. The kind is derived from
@@ -119,7 +120,7 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	case "status":
 		e.Agent, e.State, e.Message = fields["agent"], fields["state"], fields["message"]
 	case "report":
-		e.Agent, e.RKind, e.Message = fields["agent"], fields["kind"], fields["message"]
+		e.Agent, e.RKind, e.Message, e.Full = fields["agent"], fields["kind"], fields["message"], fields["full"]
 	case "notify":
 		e.From, e.Message = fields["from"], fields["message"]
 	case "cmd":
@@ -194,16 +195,21 @@ func (b *Bus) Status(ctx context.Context, agent, state, message, pane string) (s
 	return id, nil
 }
 
-// Report publishes a curated report to the {project}:report stream. kind is
-// intentionally not allowlisted here — it is free text (note/auto today) owned
-// by the report protocol, mirroring the legacy Report in bus.go.
+// Report publishes a curated report to the {project}:report stream. The one-line
+// preview (SanitizeReportMessage, ≤500) is what listen/busmon render; the full
+// text (SanitizeReportFull, keeps newlines, ≤8000) is retained in a `full` field
+// only when it carries more than the preview, so `agentbus reports <id>` can
+// restore fidelity without flooding the flat viewers.
 func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
 	}
-	return b.add(ctx, "report", map[string]interface{}{
-		"agent": agent, "kind": kind, "message": SanitizeReportMessage(message),
-	})
+	preview := SanitizeReportMessage(message)
+	values := map[string]interface{}{"agent": agent, "kind": kind, "message": preview}
+	if full := SanitizeReportFull(message); full != preview {
+		values["full"] = full
+	}
+	return b.add(ctx, "report", values)
 }
 
 // Notify broadcasts a message on the {project}:notify stream. from is advisory

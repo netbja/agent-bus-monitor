@@ -116,3 +116,39 @@ func SanitizeReportMessage(s string) string {
 	}
 	return out
 }
+
+const defaultReportFullMax = 8000
+
+// reportFullMax resolves the retained-full-text cap: AGENT_BUS_REPORT_FULL_MAX if
+// it parses to a positive int, else defaultReportFullMax (8000). Read per call,
+// mirroring reportMaxLen.
+func reportFullMax() int {
+	if v := os.Getenv("AGENT_BUS_REPORT_FULL_MAX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultReportFullMax
+}
+
+// SanitizeReportFull is the fidelity-preserving companion to
+// SanitizeReportMessage: it keeps newlines and tabs (multi-line structure
+// survives) but maps every other control rune to a space (safe to print), does
+// NOT collapse internal whitespace, and truncates to reportFullMax() runes with a
+// trailing … . Stored in the report entry's `full` field, read by
+// `agentbus reports <id>`.
+func SanitizeReportFull(s string) string {
+	mapped := strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+	if max := reportFullMax(); len([]rune(mapped)) > max {
+		mapped = strings.TrimSpace(string([]rune(mapped)[:max])) + "…"
+	}
+	return mapped
+}
