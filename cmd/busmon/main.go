@@ -412,8 +412,9 @@ func main() {
 				a.message = e.Message
 			}
 			mu.Unlock()
-			line = tag("gray", ts) + " " + tag("teal", "[report:"+e.RKind+"->"+e.Agent+"]") + " " + tview.Escape(e.Message)
-			plain = ts + " [report:" + e.RKind + "->" + e.Agent + "] " + e.Message
+			marker := reportMarker(e.Full)
+			line = tag("gray", ts) + " " + tag("teal", "[report:"+e.RKind+"->"+e.Agent+"]") + " " + tview.Escape(e.Message) + marker
+			plain = ts + " [report:" + e.RKind + "->" + e.Agent + "] " + e.Message + marker
 		default:
 			line = tag("gray", ts) + " " + tview.Escape(e.Message)
 			plain = ts + " " + e.Message

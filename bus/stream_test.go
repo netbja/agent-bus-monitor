@@ -555,3 +555,78 @@ func TestThreadUnknown(t *testing.T) {
 		t.Fatalf("Thread(unknown) = %d entries, want 0", len(evs))
 	}
 }
+
+func TestReportsAndReportByID(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Report(ctx, "claude2", ReportNote, "first"); err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	multiID, err := b.Report(ctx, "claude3", ReportNote, "big\nreport\nbody")
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	// Reports: recent, chronological, Full populated for the multiline one
+	evs, err := b.Reports(ctx, 10)
+	if err != nil || len(evs) != 2 {
+		t.Fatalf("Reports = %d entries (%v), want 2", len(evs), err)
+	}
+	if evs[0].Agent != "claude2" || evs[1].Agent != "claude3" {
+		t.Fatalf("Reports not chronological: %+v", evs)
+	}
+	if evs[1].Full == "" {
+		t.Fatalf("multiline report should carry Full: %+v", evs[1])
+	}
+	// ReportByID: fetch the one entry; unknown id errors
+	got, err := b.ReportByID(ctx, multiID)
+	if err != nil || got.Agent != "claude3" || !strings.Contains(got.Full, "\n") {
+		t.Fatalf("ReportByID(%q) = %+v (%v)", multiID, got, err)
+	}
+	if _, err := b.ReportByID(ctx, "1-0"); err == nil {
+		t.Fatal("ReportByID(unknown) should error")
+	}
+}
+
+func TestReportStoresFullWhenDiffers(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	// short single-line report → preview == full → no full field stored
+	if _, err := b.Report(ctx, "claude2", ReportNote, "all good"); err != nil {
+		t.Fatalf("Report short: %v", err)
+	}
+	// multi-line report → preview flattens, full preserved → full field stored
+	if _, err := b.Report(ctx, "claude3", ReportNote, "line1\nline2\n\nmore"); err != nil {
+		t.Fatalf("Report multiline: %v", err)
+	}
+	evs, _, err := b.Recent(ctx, []string{"report"}, 10)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	var short, multi Event
+	for _, e := range evs {
+		switch e.Agent {
+		case "claude2":
+			short = e
+		case "claude3":
+			multi = e
+		}
+	}
+	// Guard against a silent false-pass: a missed lookup would leave these
+	// zero-value, and a zero Event has Full=="" which passes the assertion below
+	// without ever checking the real entry.
+	if short.Agent == "" {
+		t.Fatal("claude2 report entry not found in Recent window")
+	}
+	if multi.Agent == "" {
+		t.Fatal("claude3 report entry not found in Recent window")
+	}
+	if short.Full != "" {
+		t.Fatalf("short report should carry no full text, got %q", short.Full)
+	}
+	if multi.Full == "" || !strings.Contains(multi.Full, "\n") {
+		t.Fatalf("multiline report should retain full text with newlines, got %q", multi.Full)
+	}
+	if strings.Contains(multi.Message, "\n") {
+		t.Fatalf("preview should be one line, got %q", multi.Message)
+	}
+}

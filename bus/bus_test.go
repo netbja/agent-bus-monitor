@@ -26,3 +26,20 @@ func TestReportMaxLenEnv(t *testing.T) {
 		t.Fatalf("env cap: got %d runes, want 11 + …", len(r))
 	}
 }
+
+func TestSanitizeReportFull(t *testing.T) {
+	// keeps newlines and tabs, maps other control chars to space, no collapse
+	got := SanitizeReportFull("a\nb\tc\x00d   e")
+	if got != "a\nb\tc d   e" {
+		t.Fatalf("SanitizeReportFull = %q, want %q", got, "a\nb\tc d   e")
+	}
+	// short input under the cap is returned unchanged (no truncation, no collapse)
+	if got := SanitizeReportFull("short  text"); got != "short  text" {
+		t.Fatalf("no-truncation path = %q, want %q", got, "short  text")
+	}
+	// truncates at the cap with an ellipsis
+	t.Setenv("AGENT_BUS_REPORT_FULL_MAX", "5")
+	if got := SanitizeReportFull("abcdefghij"); got != "abcde…" {
+		t.Fatalf("truncated = %q, want %q", got, "abcde…")
+	}
+}

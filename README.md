@@ -89,6 +89,9 @@ agentbus cmd [--ref T] claude2 run the suite       # directive; prints the entry
 agentbus thread 1782588072942-0                    # show the :cmd thread (ref or id == arg), chronological
 agentbus report claude1 "bug fixed"                # curated report (note kind)
 agentbus report claude1 --auto "soak 24h done"     # auto = Stop-hook safety net
+agentbus reports                                   # list recent reports ((+N) = full text retained)
+agentbus reports --json                            # same list, machine-readable JSON
+agentbus reports <id>                              # print one report's full retained text
 agentbus subscribe claude1                         # block for next cmd then exit (re-arm to stay subscribed)
 agentbus subscribe claude1 3600                    # same, with a 1h idle window before the heartbeat object
 agentbus listen                                    # debug tail (all four streams)
@@ -181,7 +184,7 @@ Stream keys are `{project}:{kind}`. Project and agent names must match `^[a-z][a
 | Stream              | Key fields                                       | Pane it feeds                   |
 |---------------------|--------------------------------------------------|---------------------------------|
 | `{p}:status`        | `agent state message`                            | AGENTS + ACTIVITY               |
-| `{p}:report`        | `agent kind(note\|auto) message`                 | AGENTS + ACTIVITY + hermes      |
+| `{p}:report`        | `agent kind(note\|auto) message`; optional `full` (kept only when it differs from the ≤500 preview) | AGENTS + ACTIVITY + hermes      |
 | `{p}:notify`        | `from message`                                   | ACTIVITY                        |
 | `{p}:cmd`           | `from target type ref command`                   | ACTIVITY + agents               |
 | `{p}:verdicts`      | `subject author reviewer decision message ref`   | audit ledger                    |

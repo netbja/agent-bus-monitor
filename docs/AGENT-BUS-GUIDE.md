@@ -84,6 +84,9 @@ agentbus status claude1 done
 agentbus report <agent> [--auto] <message...>
 agentbus report claude1 bug in order router fixed
 agentbus report claude1 --auto soak 24h done            # --auto = Stop-hook safety-net report
+agentbus reports                                        # list recent reports; (+N) = full text retained
+agentbus reports --json                                 # same list, machine-readable JSON
+agentbus reports <id>                                   # print that report's full text (multi-line, untruncated)
 
 # ── NOTIFY (project-wide announcement, from = AGENT_BUS_AGENT) ────────────────
 agentbus notify <message...>
@@ -192,10 +195,14 @@ Each fire is exactly one JSON line — parse it once. **Re-arm iff `rearm` is `t
 
 | You see                                                              | Meaning            | Exit | Re-arm? |
 |----------------------------------------------------------------------|--------------------|------|---------|
-| `{"event":"cmd","rearm":true,"id":"…","type":"…","from":"…","target":"…","ref":"…","body":"…"}` | a command arrived  | 0    | yes     |
-| `{"event":"heartbeat","rearm":true}`                                 | idle window passed | 64   | yes     |
-| `{"event":"error","rearm":true,"msg":"…"}`                           | transient glitch   | 75   | yes     |
-| `{"event":"fatal","rearm":false,"msg":"…"}`                          | misconfigured      | 1    | **no**  |
+| `{"v":1,"event":"cmd","rearm":true,"id":"…","type":"…","from":"…","target":"…","ref":"…","body":"…"}` | a command arrived  | 0    | yes     |
+| `{"v":1,"event":"heartbeat","rearm":true}`                           | idle window passed | 64   | yes     |
+| `{"v":1,"event":"error","rearm":true,"msg":"…"}`                     | transient glitch   | 75   | yes     |
+| `{"v":1,"event":"fatal","rearm":false,"msg":"…"}`                    | misconfigured      | 1    | **no**  |
+
+Every fire leads with `"v":1` — the bus protocol version (`agentbus version`). Parse
+by key and **ignore fields you don't recognize**; a higher `"v"` than you know means
+the format changed — stop and re-check rather than mis-parsing.
 
 **Persist the `id`** from each `cmd` fire and pass it back as `--since <id>` next
 time you arm — that is your cursor. With no `--since`, subscribe starts at the
