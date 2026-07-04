@@ -75,14 +75,18 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    of truth if the plan changes.
 2. **One task in flight at a time.** Don't dispatch N+1 until N clears BOTH: worker reports done,
    AND the reviewer reports approve. An unreviewed "done" isn't done.
-3. **`agentbus reports <id>` for the full text** — the notify/status tail view truncates long
-   reports.
-4. **Route review over `cmd`, not the formal `challenge`/`verdict` gate** — reserve that mechanism
+3. **`agentbus reports --json` entries carry the full text in `.Full`** — no separate lookup needed,
+   the plain-text tail view is the one that truncates.
+4. **If you poll `agentbus reports --json` yourself (e.g. from a background watcher), track the last
+   seen `.ID`, not the array length** — the endpoint is a capped/rolling recent-reports window, so
+   the count plateaus once you're past the cap and a length-diff check silently stops firing even
+   though new reports keep arriving.
+5. **Route review over `cmd`, not the formal `challenge`/`verdict` gate** — reserve that mechanism
    for an actual blocking risk (money-path, prod migration), not routine per-task review; plain
    cmd→report round-trips are cheaper and sufficient.
-5. **Independently verify what you can** (`git log`, `gh run list`, a real command) rather than
+6. **Independently verify what you can** (`git log`, `gh run list`, a real command) rather than
    trusting self-reports alone — cheap, and catches a report that's technically true but incomplete.
-6. **Plan-level sign-off before declaring the whole thing done** — one final review against the
+7. **Plan-level sign-off before declaring the whole thing done** — one final review against the
    plan's Definition of Done, not just the last task's diff. Per-task review doesn't prove the
    pieces integrate.
 
