@@ -1,6 +1,6 @@
 ---
 name: agent-bus-master
-description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to coordinate peer agents over the Agent Bus: resync an agent by injecting text into its herdr pane, and unblock an agent stuck on an on-screen question (detect it, alert a human, then inject the human's answer). Use when you hold the pilot lease and need to drive other agents' panes."
+description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to coordinate peer agents over the Agent Bus: resync an agent by injecting text into its herdr pane, unblock an agent stuck on an on-screen question, and dispatch a multi-task implementation plan across an implementer + reviewer pair. Use when you hold the pilot lease and need to drive other agents' panes, or when you're running a task-by-task plan through the bus."
 ---
 
 # Agent Bus — Master Skill
@@ -63,3 +63,38 @@ agentbus notify "budget — claude1 99%/36m · claude2 41%/2h"   # periodic one-
 Distribution is **notify + pull**: the summary lands on `{project}:notify` (visible in busmon and to
 the human), and agents read `agentbus usage` themselves on demand. Never push budget via `cmd` to
 each agent — that wakes every agent's `subscribe`.
+
+## Pipeline dispatch — task-by-task with review gate
+
+Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a reviewer (e.g.
+`claude-4eyes`):
+
+1. **Point at the plan, don't paste it** — if peers share your repo/cwd, `agentbus cmd claude-worker
+   "Start Task N of <plan-file-path>. TDD, one task, report + hold when green."` beats pasting the
+   task's full text; peers already have the file, pasting wastes tokens and drifts from the source
+   of truth if the plan changes.
+2. **One task in flight at a time.** Don't dispatch N+1 until N clears BOTH: worker reports done,
+   AND the reviewer reports approve. An unreviewed "done" isn't done.
+3. **`agentbus reports <id>` for the full text** — the notify/status tail view truncates long
+   reports.
+4. **Route review over `cmd`, not the formal `challenge`/`verdict` gate** — reserve that mechanism
+   for an actual blocking risk (money-path, prod migration), not routine per-task review; plain
+   cmd→report round-trips are cheaper and sufficient.
+5. **Independently verify what you can** (`git log`, `gh run list`, a real command) rather than
+   trusting self-reports alone — cheap, and catches a report that's technically true but incomplete.
+6. **Plan-level sign-off before declaring the whole thing done** — one final review against the
+   plan's Definition of Done, not just the last task's diff. Per-task review doesn't prove the
+   pieces integrate.
+
+## Gotchas
+
+- **Shared session budget**: the whole team often draws one account's session pool. Near the limit,
+  broadcast a hold — finish the in-flight task, get it reviewed and committed, then idle — don't
+  dispatch anything new until the reset. Resume normally once it drops back down.
+- **Not every peer stays subscribe-armed** — an agent may be deliberately unsubscribed to cut cost
+  (expensive model, long idle stretches). `agentbus cmd` alone won't wake it. Check `agentbus agents`
+  staleness; if it's stale by design, reach it via Resync (pane injection) instead — and keep the
+  injection terse, unsubscribed doesn't exempt it from a shared session budget either.
+- **Context-window creep**: watch each pane's status-line `Ctx:` figure alongside session%. Near a
+  high-context threshold, have the agent write a hand-off (current step, what's committed, what's
+  pending) BEFORE you `/clear` its pane — never clear first and sort it out after.
