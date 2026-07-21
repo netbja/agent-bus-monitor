@@ -8,18 +8,23 @@ B="$REPO/scripts/bootstrap"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 stub="$tmp/bin"
 
+# The trigger prepends $HOME/.local/bin to PATH (cron's minimal env), so a real agentbus
+# installed on this machine would shadow a plain PATH-stub. Point HOME at a temp dir and stub
+# inside its .local/bin so the stub wins regardless of what's really installed.
+home="$tmp/home"; localbin="$home/.local/bin"; mkdir -p "$localbin"
+
 # (a) dry-run prints pane + message when the sentinel is up.
-make_stub "$stub" agentbus 0 "w3:p2"        # `agentbus pane sentinel` -> w3:p2
-out="$(PATH="$stub:$PATH" AGENT_BUS_PROJECT=demo HERDR_SESSION=s DAILY_REVIEW_DRYRUN=1 "$T")"
+make_stub "$localbin" agentbus 0 "w3:p2"    # `agentbus pane sentinel` -> w3:p2
+out="$(HOME="$home" AGENT_BUS_PROJECT=demo HERDR_SESSION=s DAILY_REVIEW_DRYRUN=1 "$T")"
 assert_contains "$out" "pane=w3:p2"                 "trigger resolved pane"
 assert_contains "$out" "agent-bus-sentinel skill"   "trigger message references the skill"
 
 # (b) sentinel down -> skip, exit 0, do not call herdr.
-make_stub "$stub" agentbus 1                # pane lookup fails
-make_stub "$stub" herdr 0
+make_stub "$localbin" agentbus 1            # pane lookup fails
+make_stub "$localbin" herdr 0
 assert_exit 0 "skips cleanly when sentinel down" -- \
-  bash -c "PATH='$stub:$PATH' AGENT_BUS_PROJECT=demo HERDR_SESSION=s '$T'"
-if [[ ! -f "$stub/herdr.calls" ]]; then _ok "herdr never called when sentinel down"; else _bad "herdr called despite no pane"; fi
+  bash -c "HOME='$home' AGENT_BUS_PROJECT=demo HERDR_SESSION=s '$T'"
+if [[ ! -f "$localbin/herdr.calls" ]]; then _ok "herdr never called when sentinel down"; else _bad "herdr called despite no pane"; fi
 
 # (c) crontab install is idempotent.
 make_stub "$stub" docker 0

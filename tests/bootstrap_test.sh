@@ -20,18 +20,28 @@ run() { PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$proj" "$B" "$@"; }
 # invalid name rejected
 assert_exit 1 "rejects invalid project name" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new 1bad"
 
-# new writes a valid template
-run new demo >/dev/null
+# new writes a valid template; an explicit project path -> working_dir
+projdir="$(mkdir -p "$tmp/proj" && cd "$tmp/proj" && pwd)"
+run new demo "$projdir" >/dev/null
 tpl="$proj/demo.toml"
 assert_exit 0 "template is valid TOML" -- python3 -c "import tomllib;tomllib.load(open('$tpl','rb'))"
 body="$(cat "$tpl")"
 assert_contains "$body" 'name = "demo"'                          "template name"
+assert_contains "$body" "working_dir = \"$projdir\""             "working_dir = the given project path"
 assert_contains "$body" "agent-launch master demo"              "master tab"
 assert_contains "$body" "agent-launch sentinel demo"            "sentinel tab"
 assert_contains "$body" "busmon --project demo"                 "busmon tab"
 # boot roles present, architect (pop) absent
 assert_contains "$body" "agent-launch foureyes demo"           "foureyes tab"
 if [[ "$body" != *"agent-launch architect demo"* ]]; then _ok "architect not booted"; else _bad "architect leaked into template"; fi
+
+# no path -> working_dir defaults to $PWD
+projdir2="$(mkdir -p "$tmp/proj2" && cd "$tmp/proj2" && pwd)"
+( cd "$projdir2" && PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$proj" "$B" new demo2 >/dev/null )
+assert_contains "$(cat "$proj/demo2.toml")" "working_dir = \"$projdir2\"" 'working_dir defaults to $PWD'
+
+# a non-directory path is rejected
+assert_exit 1 "rejects a non-directory path" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demo3 /no/such/dir"
 
 # auto verb -> recall when template exists (no crash, broker still ensured)
 assert_exit 0 "auto recalls existing project" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' demo"
