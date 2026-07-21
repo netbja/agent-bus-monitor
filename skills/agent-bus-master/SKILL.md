@@ -23,6 +23,19 @@ agentbus pane claude1           # just the pane id; non-zero exit if none
 herdr pane ids are NOT durable. Before acting, confirm the stored id is still live with
 `herdr pane list`; if it's gone, re-resolve by matching the agent/cwd in that output.
 
+## Spawn a peer
+The team's boot roles (coder, foureyes, sentinel) come up with the workspace. When you need a
+role that isn't up — design work, or surge capacity — **pop** it. Popping runs the *exact* boot
+recipe (`agent-launch`), so a popped agent is identical to a booted one:
+```bash
+agent-spawn architect "$AGENT_BUS_PROJECT"   # design work -> architect (Fable, Opus on fallback)
+agent-spawn coder "$AGENT_BUS_PROJECT"       # surge -> a second implementer
+```
+`agent-spawn <role> <project>` opens a new herdr tab running `agent-launch <role> <project>`;
+it requires `HERDR_ENV=1` (you're inside herdr) and a role defined in `roles.toml`. The new
+agent arms its own `subscribe` and publishes `status`, so it shows up in busmon and in
+`agentbus agents` within a few seconds — dispatch to it once it reports `online`.
+
 ## Resync — inject text into an agent's pane
 ```bash
 pane=$(agentbus pane claude1) || { echo "claude1 has no registered pane"; exit 1; }
