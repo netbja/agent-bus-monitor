@@ -14,10 +14,13 @@ source "$SCRIPT_DIR/lib/roles.sh"
 die()  { echo "bootstrap: $*" >&2; exit 1; }
 warn() { echo "bootstrap: $*" >&2; }
 
-verb=""; project=""; project_dir=""; do_index=0; do_cron=0; assume_yes=0
+verb=""; project=""; project_dir=""; session_flag=""; do_index=0; do_cron=0; assume_yes=0
+want_session=0
 for a in "$@"; do
+  if [[ "$want_session" == 1 ]]; then session_flag="$a"; want_session=0; continue; fi
   case "$a" in
     new|recall) verb="$a" ;;
+    --session)  want_session=1 ;;
     --index)    do_index=1 ;;
     --cron)     do_cron=1 ;;
     --yes|-y)   assume_yes=1 ;;
@@ -27,7 +30,8 @@ for a in "$@"; do
                 else die "unexpected arg: $a"; fi ;;
   esac
 done
-[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [<path>] [--index] [--cron] [--yes]"
+[[ "$want_session" == 0 ]] || die "--session needs a value"
+[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [<path>] [--session <name>] [--index] [--cron] [--yes]"
 [[ "$project" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid project name: $project"
 
 # The team's working directory: where every agent's cwd lands, and where --index builds the
@@ -36,6 +40,11 @@ done
 project_dir="${project_dir:-$PWD}"
 [[ -d "$project_dir" ]] || die "project path is not a directory: $project_dir"
 PROJECT_DIR="$(cd "$project_dir" && pwd)"
+
+# The herdr session the project opens in (herdr registers plugins PER SESSION). --session wins,
+# else the session bootstrap runs inside ($HERDR_SESSION), else the project name (the convention).
+SESSION="${session_flag:-${HERDR_SESSION:-$project}}"
+HERDR_PLUS_PATH="${HERDR_PLUS_PATH:-$HOME/Tools/herdr-plugins/herdr-plus}"
 
 projects_dir() {
   if [[ -n "${HERDR_PLUS_PROJECTS_DIR:-}" ]]; then echo "$HERDR_PLUS_PROJECTS_DIR"; return; fi
@@ -109,6 +118,21 @@ install_cron() {
   echo "cron: installed daily-review for $project (07:00 daily)"
 }
 
+# Register herdr-plus in the target session so the Projects picker works there — herdr registers
+# plugins per session, so a fresh project session starts without it. Best-effort: skip cleanly if
+# herdr or the plugin checkout is missing. Works whether the session is running (registers live) or
+# not (seeds its registry for the next `herdr --session <name>`).
+link_plugin() {
+  command -v herdr >/dev/null 2>&1 || { warn "herdr not on PATH; skipping herdr-plus link"; return 0; }
+  [[ -d "$HERDR_PLUS_PATH" ]] || { warn "herdr-plus not at $HERDR_PLUS_PATH; skipping link (set HERDR_PLUS_PATH)"; return 0; }
+  if HERDR_SESSION="$SESSION" herdr plugin link "$HERDR_PLUS_PATH" >/dev/null 2>&1; then
+    echo "herdr-plus: linked into session '$SESSION' (open the Projects picker there)"
+  else
+    # herdr only registers into a RUNNING session server; if '$SESSION' isn't up this is expected.
+    warn "herdr-plus not linked into '$SESSION' — is that session running? Start it ('herdr --session $SESSION') then re-run bootstrap from inside it."
+  fi
+}
+
 case "$verb" in
   new)
     ensure_broker
@@ -121,6 +145,7 @@ case "$verb" in
     echo "recall: broker up; open '$project' via the herdr-plus picker (fresh sessions)"
     ;;
 esac
+link_plugin
 [[ "$do_index" == "1" ]] && index_preflight
 [[ "$do_cron"  == "1" ]] && install_cron
 echo "bootstrap: $verb $project done"
