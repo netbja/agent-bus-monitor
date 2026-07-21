@@ -68,8 +68,19 @@ write_template() {
   echo "wrote $template"
 }
 
-# Filled in Task 7.
-index_preflight() { warn "--index not yet implemented"; }
+index_preflight() {
+  if command -v rtk >/dev/null 2>&1; then echo "rtk: $(command -v rtk)"; else warn "rtk not on PATH (token proxy inactive; non-fatal)"; fi
+  if [[ -d "$REPO/.codegraph" ]]; then
+    echo "codegraph: index already present (.codegraph/)"
+  elif command -v codegraph >/dev/null 2>&1; then
+    if ( cd "$REPO" && codegraph init ); then echo "codegraph: initialized"; else warn "codegraph init failed (non-fatal; agents fall back to grep/Read)"; fi
+  else
+    warn "codegraph not on PATH (skipping index; non-fatal)"
+  fi
+  # Signal the sentinel to warm the code-index (MCP, agent-side) once on its next boot.
+  mkdir -p "$REPO/.agent-bus" && : > "$REPO/.agent-bus/index-requested"
+  echo "index: requested (sentinel runs index_repository on boot)"
+}
 # Filled in Task 8.
 install_cron()    { warn "--cron not yet implemented"; }
 
