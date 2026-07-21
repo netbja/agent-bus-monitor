@@ -1,3 +1,6 @@
 /busmon
 /agentbus
 .env
+
+# local bootstrap markers
+.agent-bus/

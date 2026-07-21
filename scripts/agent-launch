@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# The shared leaf: resolve <role> from roles.toml and BECOME that agent (exec claude).
+# Used by herdr-plus template tabs (boot) AND by agent-spawn (pop) — one recipe, not two.
+# Usage: agent-launch <role> <project>
+#   AGENT_LAUNCH_DRYRUN=1  -> print the resolved command instead of exec (test seam).
+#   ROLES_DIR              -> override the prompt dir (default <repo>/roles).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=scripts/lib/roles.sh
+source "$SCRIPT_DIR/lib/roles.sh"
+
+die() { echo "agent-launch: $*" >&2; exit 1; }
+
+role="${1:?usage: agent-launch <role> <project>}"
+project="${2:?usage: agent-launch <role> <project>}"
+
+valid='^[a-z][a-z0-9_-]{0,31}$'
+[[ "$role"    =~ $valid ]] || die "invalid role name: $role"
+[[ "$project" =~ $valid ]] || die "invalid project name: $project"
+role_exists "$role" || die "unknown role: $role (not in $ROLES_TOML)"
+
+model="$(role_field "$role" model)"
+fallback="$(role_field "$role" fallback)"
+permission="$(role_field "$role" permission)"
+[[ -n "$model" ]]      || die "role $role has no model"
+[[ -n "$permission" ]] || die "role $role has no permission"
+
+prompt_file="${ROLES_DIR:-$REPO/roles}/$role.md"
+[[ -f "$prompt_file" ]] || die "missing role prompt file: $prompt_file"
+
+export AGENT_BUS_PROJECT="$project"
+export AGENT_BUS_AGENT="$role"
+
+# --permission-mode takes the roles.toml value verbatim (acceptEdits | bypassPermissions).
+cmd=(claude --model "$model")
+if [[ -n "$fallback" ]]; then cmd+=(--fallback-model "$fallback"); fi
+cmd+=(--permission-mode "$permission" --name "$project:$role")
+
+if [[ "${AGENT_LAUNCH_DRYRUN:-0}" == "1" ]]; then
+  # Stable, readable line. The prompt is shown as --append-system-prompt-file <path>;
+  # the real exec below inlines the file via --append-system-prompt "$(cat ...)".
+  printf '%s --append-system-prompt-file %s\n' "${cmd[*]}" "$prompt_file"
+  exit 0
+fi
+
+exec "${cmd[@]}" --append-system-prompt "$(cat "$prompt_file")"

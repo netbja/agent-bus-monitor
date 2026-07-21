@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Provision (do NOT launch) a project's Agent Bus team. Opening the workspace is the human's
+# job via the herdr-plus fuzzy picker; this only writes the template + prepares the broker.
+# Usage:
+#   bootstrap [new|recall] <project> [--index] [--cron] [--yes]
+#   bootstrap <project> ...           # no verb -> auto: recall if the template exists, else new
+# Env seam: HERDR_PLUS_PROJECTS_DIR (default resolved from herdr).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/lib/roles.sh"
+
+die()  { echo "bootstrap: $*" >&2; exit 1; }
+warn() { echo "bootstrap: $*" >&2; }
+
+verb=""; project=""; do_index=0; do_cron=0; assume_yes=0
+for a in "$@"; do
+  case "$a" in
+    new|recall) verb="$a" ;;
+    --index)    do_index=1 ;;
+    --cron)     do_cron=1 ;;
+    --yes|-y)   assume_yes=1 ;;
+    -*)         die "unknown flag: $a" ;;
+    *)          if [[ -z "$project" ]]; then project="$a"; else die "unexpected arg: $a"; fi ;;
+  esac
+done
+[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [--index] [--cron] [--yes]"
+[[ "$project" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid project name: $project"
+
+projects_dir() {
+  if [[ -n "${HERDR_PLUS_PROJECTS_DIR:-}" ]]; then echo "$HERDR_PLUS_PROJECTS_DIR"; return; fi
+  local base
+  if base="$(herdr plugin config-dir cloudmanic.herdr-plus 2>/dev/null)" && [[ -n "$base" ]]; then
+    echo "$base/projects"
+  else
+    echo "${XDG_CONFIG_HOME:-$HOME/.config}/herdr-plus/projects"
+  fi
+}
+PROJECTS_DIR="$(projects_dir)"
+template="$PROJECTS_DIR/$project.toml"
+
+if [[ -z "$verb" ]]; then
+  if [[ -f "$template" ]]; then verb="recall"; else verb="new"; fi
+fi
+
+ensure_broker() {
+  ( cd "$REPO" && docker compose up -d ) || die "failed to start the broker (docker compose up -d)"
+}
+
+write_template() {
+  mkdir -p "$PROJECTS_DIR"
+  {
+    echo "name = \"$project\""
+    echo "description = \"Agent Bus team for $project\""
+    echo "working_dir = \"$REPO\""
+    echo
+    while IFS= read -r role; do
+      echo "[[tabs]]"
+      echo "name = \"$role\""
+      echo "command = \"$SCRIPT_DIR/agent-launch $role $project\""
+      echo
+    done < <(roles_by_tier boot)
+    echo "[[tabs]]"
+    echo "name = \"busmon\""
+    echo "command = \"$REPO/busmon --project $project\""
+  } > "$template"
+  echo "wrote $template"
+}
+
+index_preflight() {
+  if command -v rtk >/dev/null 2>&1; then echo "rtk: $(command -v rtk)"; else warn "rtk not on PATH (token proxy inactive; non-fatal)"; fi
+  if [[ -d "$REPO/.codegraph" ]]; then
+    echo "codegraph: index already present (.codegraph/)"
+  elif command -v codegraph >/dev/null 2>&1; then
+    if ( cd "$REPO" && codegraph init ); then echo "codegraph: initialized"; else warn "codegraph init failed (non-fatal; agents fall back to grep/Read)"; fi
+  else
+    warn "codegraph not on PATH (skipping index; non-fatal)"
+  fi
+  # Signal the sentinel to warm the code-index (MCP, agent-side) once on its next boot.
+  mkdir -p "$REPO/.agent-bus" && : > "$REPO/.agent-bus/index-requested"
+  echo "index: requested (sentinel runs index_repository on boot)"
+}
+install_cron() {
+  local session="${HERDR_SESSION:-default}"
+  local tag="# agent-bus daily-review: $project"
+  local line="0 7 * * * AGENT_BUS_PROJECT=$project HERDR_SESSION=$session $SCRIPT_DIR/daily-review-trigger.sh >/dev/null 2>&1"
+  local current; current="$(crontab -l 2>/dev/null || true)"
+  # -x: whole-line match, so project "demo" is not seen as "installed" merely because
+  # "# agent-bus daily-review: demo2" already exists (substring collision).
+  if grep -qxF "$tag" <<<"$current"; then
+    echo "cron: already installed for $project"
+    return
+  fi
+  printf '%s\n%s\n%s\n' "$current" "$tag" "$line" | grep -v '^[[:space:]]*$' | crontab -
+  echo "cron: installed daily-review for $project (07:00 daily)"
+}
+
+case "$verb" in
+  new)
+    ensure_broker
+    "$SCRIPT_DIR/link-role-skills.sh"
+    write_template
+    ;;
+  recall)
+    ensure_broker
+    [[ -f "$template" ]] || warn "no template at $template (run 'bootstrap new $project')"
+    echo "recall: broker up; open '$project' via the herdr-plus picker (fresh sessions)"
+    ;;
+esac
+[[ "$do_index" == "1" ]] && index_preflight
+[[ "$do_cron"  == "1" ]] && install_cron
+echo "bootstrap: $verb $project done"

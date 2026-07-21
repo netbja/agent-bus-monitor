@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# The master's "pop": open a new herdr tab that runs agent-launch <role> <project>.
+# Requires HERDR_ENV=1 (you must be inside herdr to drive it) — same precondition as the
+# agent-bus-master skill. Reuses the exact boot recipe (agent-launch), so pop == boot.
+# Usage: agent-spawn <role> <project>
+#   AGENT_SPAWN_DRYRUN=1 -> print the herdr command instead of running it (test seam).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/lib/roles.sh"
+
+die() { echo "agent-spawn: $*" >&2; exit 1; }
+
+role="${1:?usage: agent-spawn <role> <project>}"
+project="${2:?usage: agent-spawn <role> <project>}"
+
+[[ "${HERDR_ENV:-}" == "1" ]] || die "not inside herdr (HERDR_ENV != 1); open via the herdr-plus picker instead"
+role_exists "$role" || die "unknown role: $role"
+
+# `herdr agent start <label> --cwd <path> -- <argv...>` opens a new terminal (its own tab)
+# in the current workspace, running the argv. The label doubles as the herdr agent name.
+herdr_cmd=(herdr agent start "$project:$role" --cwd "$REPO"
+           -- bash "$SCRIPT_DIR/agent-launch" "$role" "$project")
+
+if [[ "${AGENT_SPAWN_DRYRUN:-0}" == "1" ]]; then
+  printf '%s\n' "${herdr_cmd[*]}"
+  exit 0
+fi
+
+exec "${herdr_cmd[@]}"
