@@ -191,10 +191,13 @@ there is the simplest fix.
 ### Start a new project
 
 ```bash
-scripts/bootstrap new myproject     # provision only: broker up + skills linked + herdr-plus template written
+scripts/bootstrap new myproject /path/to/your/project   # provision only; the team works in that dir (default: $PWD)
 ```
 
-`bootstrap` **launches nothing** — it provisions. Then, inside herdr, open the **Projects** picker
+`bootstrap` **launches nothing** — it provisions. That 2nd argument is where the team works —
+every agent's cwd, and where `--index` builds the index; omit it to use `$PWD`. It is **not** the
+tooling repo (broker, `agent-launch`, and `busmon` stay here). Then, inside herdr, open the
+**Projects** picker
 (herdr-plus's `Projects` action — bind a key to `cloudmanic.herdr-plus.projects`, or use herdr's
 plugin-action menu), highlight `myproject`, and press **Enter**. herdr-plus opens the workspace with
 one tab per boot role — `master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab. Each tab

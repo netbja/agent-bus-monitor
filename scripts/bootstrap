@@ -14,7 +14,7 @@ source "$SCRIPT_DIR/lib/roles.sh"
 die()  { echo "bootstrap: $*" >&2; exit 1; }
 warn() { echo "bootstrap: $*" >&2; }
 
-verb=""; project=""; do_index=0; do_cron=0; assume_yes=0
+verb=""; project=""; project_dir=""; do_index=0; do_cron=0; assume_yes=0
 for a in "$@"; do
   case "$a" in
     new|recall) verb="$a" ;;
@@ -22,11 +22,20 @@ for a in "$@"; do
     --cron)     do_cron=1 ;;
     --yes|-y)   assume_yes=1 ;;
     -*)         die "unknown flag: $a" ;;
-    *)          if [[ -z "$project" ]]; then project="$a"; else die "unexpected arg: $a"; fi ;;
+    *)          if [[ -z "$project" ]]; then project="$a";
+                elif [[ -z "$project_dir" ]]; then project_dir="$a";
+                else die "unexpected arg: $a"; fi ;;
   esac
 done
-[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [--index] [--cron] [--yes]"
+[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [<path>] [--index] [--cron] [--yes]"
 [[ "$project" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid project name: $project"
+
+# The team's working directory: where every agent's cwd lands, and where --index builds the
+# index + drops the sentinel marker. Defaults to $PWD (run bootstrap from your project), or pass
+# it as the 2nd positional. NOT the tooling repo — that stays $REPO (broker, agent-launch, busmon).
+project_dir="${project_dir:-$PWD}"
+[[ -d "$project_dir" ]] || die "project path is not a directory: $project_dir"
+PROJECT_DIR="$(cd "$project_dir" && pwd)"
 
 projects_dir() {
   if [[ -n "${HERDR_PLUS_PROJECTS_DIR:-}" ]]; then echo "$HERDR_PLUS_PROJECTS_DIR"; return; fi
@@ -53,7 +62,7 @@ write_template() {
   {
     echo "name = \"$project\""
     echo "description = \"Agent Bus team for $project\""
-    echo "working_dir = \"$REPO\""
+    echo "working_dir = \"$PROJECT_DIR\""
     echo
     while IFS= read -r role; do
       echo "[[tabs]]"
@@ -70,15 +79,19 @@ write_template() {
 
 index_preflight() {
   if command -v rtk >/dev/null 2>&1; then echo "rtk: $(command -v rtk)"; else warn "rtk not on PATH (token proxy inactive; non-fatal)"; fi
-  if [[ -d "$REPO/.codegraph" ]]; then
+  if [[ -d "$PROJECT_DIR/.codegraph" ]]; then
     echo "codegraph: index already present (.codegraph/)"
   elif command -v codegraph >/dev/null 2>&1; then
-    if ( cd "$REPO" && codegraph init ); then echo "codegraph: initialized"; else warn "codegraph init failed (non-fatal; agents fall back to grep/Read)"; fi
+    if ( cd "$PROJECT_DIR" && codegraph init ); then echo "codegraph: initialized"; else warn "codegraph init failed (non-fatal; agents fall back to grep/Read)"; fi
   else
     warn "codegraph not on PATH (skipping index; non-fatal)"
   fi
-  # Signal the sentinel to warm the code-index (MCP, agent-side) once on its next boot.
-  mkdir -p "$REPO/.agent-bus" && : > "$REPO/.agent-bus/index-requested"
+  # Signal the sentinel (whose cwd is the project) to warm the code-index on its next boot.
+  mkdir -p "$PROJECT_DIR/.agent-bus" && : > "$PROJECT_DIR/.agent-bus/index-requested"
+  # keep the marker out of the project's git status
+  if [[ -f "$PROJECT_DIR/.gitignore" ]] && ! grep -qxF '.agent-bus/' "$PROJECT_DIR/.gitignore"; then
+    printf '\n# agent-bus local markers\n.agent-bus/\n' >> "$PROJECT_DIR/.gitignore"
+  fi
   echo "index: requested (sentinel runs index_repository on boot)"
 }
 install_cron() {
