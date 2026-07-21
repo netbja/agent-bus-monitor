@@ -81,8 +81,20 @@ index_preflight() {
   mkdir -p "$REPO/.agent-bus" && : > "$REPO/.agent-bus/index-requested"
   echo "index: requested (sentinel runs index_repository on boot)"
 }
-# Filled in Task 8.
-install_cron()    { warn "--cron not yet implemented"; }
+install_cron() {
+  local session="${HERDR_SESSION:-default}"
+  local tag="# agent-bus daily-review: $project"
+  local line="0 7 * * * AGENT_BUS_PROJECT=$project HERDR_SESSION=$session $SCRIPT_DIR/daily-review-trigger.sh >/dev/null 2>&1"
+  local current; current="$(crontab -l 2>/dev/null || true)"
+  # -x: whole-line match, so project "demo" is not seen as "installed" merely because
+  # "# agent-bus daily-review: demo2" already exists (substring collision).
+  if grep -qxF "$tag" <<<"$current"; then
+    echo "cron: already installed for $project"
+    return
+  fi
+  printf '%s\n%s\n%s\n' "$current" "$tag" "$line" | grep -v '^[[:space:]]*$' | crontab -
+  echo "cron: installed daily-review for $project (07:00 daily)"
+}
 
 case "$verb" in
   new)
