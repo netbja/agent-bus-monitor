@@ -3,7 +3,7 @@
 **Date:** 2026-07-16
 **Status:** Approved (brainstorming), pending implementation plan
 **Scope:** Brique 1 of a larger vision — the provisioning + spawn layer (S1+S2+S3),
-plus a Haiku **steward** (daily project review + master-context nudge), cron-woken, and an
+plus a Haiku **sentinel** (daily project review + master-context nudge), cron-woken, and an
 opt-in **index preflight** (codegraph / code-index) so agents boot with warm tooling.
 S4 (conversational recall) and S5 (deeper knowledge tooling) are separate specs.
 
@@ -18,7 +18,7 @@ with the right model and the right skills, from one keypress.
 
 ## Goals
 
-- **One keypress from zero to a working team**: master + coder + 4-eyes + steward + busmon
+- **One keypress from zero to a working team**: master + coder + 4-eyes + sentinel + busmon
   come up at boot, each armed on the bus with its role model and skills.
 - **The master can pop extras on demand** (architect, a second coder, a test-runner)
   using the *same* spawn recipe as the boot path — one mechanism, not two.
@@ -26,7 +26,7 @@ with the right model and the right skills, from one keypress.
   Matt Pocock engineering collection at `~/Tools/herdr-plugins/skills/`) plus the bus
   peer/master skills.
 - **Per-role model tiering** with graceful fallback (`Fable si dispo`).
-- **A Haiku steward keeps the team healthy**: a cheap always-on agent that, woken by a
+- **A Haiku sentinel keeps the team healthy**: a cheap always-on agent that, woken by a
   machine cron (survives reboots), writes a daily project review and *nudges* the master
   to reset its own context (hand-off → `/clear`) when it saturates — it never clears the
   master itself.
@@ -45,7 +45,7 @@ with the right model and the right skills, from one keypress.
   vault as shared memory, and ADR management via codebase-memory.
 - **herdr-reviewr** integration (when added, set `auto_open = false` to avoid racing
   the herdr-plus worktree layouts).
-- **No polling daemon for the steward**: it stays a one-shot wake-on-exit agent driven by
+- **No polling daemon for the sentinel**: it stays a one-shot wake-on-exit agent driven by
   the machine cron (and ad-hoc `cmd`s), not a `Restart=always` watcher — consistent with
   the rest of the bus (see CLAUDE.md "Things that bite").
 
@@ -54,20 +54,20 @@ with the right model and the right skills, from one keypress.
 | Decision | Choice | Rationale |
 |---|---|---|
 | Team startup model | **Hybride**: core at boot + master pops extras | Matches the "master pops agents" vision while keeping a reliable static core. |
-| Core (boot) team | master + coder + 4-eyes + steward + busmon | coder↔4-eyes is the permanent TDD+review pipeline; steward is the cheap Haiku caretaker; architecture is bursty. |
+| Core (boot) team | master + coder + 4-eyes + sentinel + busmon | coder↔4-eyes is the permanent TDD+review pipeline; sentinel is the cheap Haiku caretaker; architecture is bursty. |
 | Popped on demand | architect (+ test-runner, coder#2, docs) | Design work is intermittent; surge capacity is on demand. |
 | herdr-plus role | **In scope** as the declarative front door | Composes with `agent-launch` (template tabs call it); no redundant spawn path. |
 | Spawn mechanism | one leaf `agent-launch`, shared by template tabs and the master's `agent-spawn` | Single source of truth for how an agent starts. |
 | Architect model | `claude-fable-5`, fallback `claude-opus-4-8` | Fable si dispo, sinon Opus (not Sonnet). |
-| Executing agents' permissions | `bypassPermissions` (coder/architect/4eyes); master `acceptEdits` | Unattended agents need Bash without stalls; oversight via busmon + bus 4-eyes gate. |
+| Executing agents' permissions | `bypassPermissions` (coder/architect/foureyes); master `acceptEdits` | Unattended agents need Bash without stalls; oversight via busmon + bus 4-eyes gate. |
 | Code home | this repo (`scripts/`, `roles/`, `roles.toml`, extend the master skill) | It is the bus tooling; not bus protocol, so not in `bus/`. |
 | Session naming | `claude --name <project>:<role>` | Mirrors the bus namespace; makes `/resume` show *who is who* across projects → human recall path in brique 1. |
-| Steward role | `steward` — `claude-haiku-4-5`, boot tier, persistent | Cheap always-on caretaker; always present so the daily cron can reach it and it can check master's health. |
-| Steward wake model | machine cron → `agentbus pane steward` → pane poke | Cron survives reboots (unlike a session task); the bus pane-bridge resolves the pane live (no hard-coded `w8:p1`). |
-| Master reset | **notify-only** — steward `cmd`s master to hand-off + `/clear`; master self-executes | Respects hand-off-before-clear; a subordinate never drives the pilot's pane. |
-| Context signal | reuse `agentbus usage` (the status-line tee) | No new heartbeat/telemetry; the steward reads master's Ctx/session% on its cron wake. |
+| Sentinel role | `sentinel` — `claude-haiku-4-5`, boot tier, persistent | Cheap always-on caretaker; always present so the daily cron can reach it and it can check master's health. |
+| Sentinel wake model | machine cron → `agentbus pane sentinel` → pane poke | Cron survives reboots (unlike a session task); the bus pane-bridge resolves the pane live (no hard-coded `w8:p1`). |
+| Master reset | **notify-only** — sentinel `cmd`s master to hand-off + `/clear`; master self-executes | Respects hand-off-before-clear; a subordinate never drives the pilot's pane. |
+| Context signal | reuse `agentbus usage` (the status-line tee) | No new heartbeat/telemetry; the sentinel reads master's Ctx/session% on its cron wake. |
 | Tooling delivery | inherit global MCP servers + `rtk` hook; don't re-install per project | codegraph/codebase-memory tools + the rtk command-rewrite hook already reach every launched `claude`; only the *index* is per-project. |
-| Index preflight | opt-in `bootstrap --index`: `codegraph init` (CLI) + steward runs `index_repository` | Warm tools on first query, not a cold build mid-task; best-effort / non-fatal, so a project that doesn't want it just skips the flag. |
+| Index preflight | opt-in `bootstrap --index`: `codegraph init` (CLI) + sentinel runs `index_repository` | Warm tools on first query, not a cold build mid-task; best-effort / non-fatal, so a project that doesn't want it just skips the flag. |
 
 ## Architecture
 
@@ -77,8 +77,8 @@ with the right model and the right skills, from one keypress.
      │  - valide ValidName                        ▼
      │  - broker up (docker compose up -d)   [[tabs]] master  command="agent-launch master  <proj>"
      │  - link-role-skills.sh                [[tabs]] coder   command="agent-launch coder   <proj>"
-     │  - écrit projects/<proj>.toml         [[tabs]] 4eyes   command="agent-launch 4eyes   <proj>"
-     │  - (opt-in) install crontab           [[tabs]] steward command="agent-launch steward <proj>"
+     │  - écrit projects/<proj>.toml         [[tabs]] foureyes   command="agent-launch foureyes   <proj>"
+     │  - (opt-in) install crontab           [[tabs]] sentinel command="agent-launch sentinel <proj>"
      │  - (opt-in --index) codegraph init    [[tabs]] busmon  command="busmon --project <proj>"
      ▼
   ~/.config/herdr/.../projects/<proj>.toml                    │
@@ -88,14 +88,14 @@ with the right model and the right skills, from one keypress.
                               │  résout roles.toml → {model, fallback, perm, skills}
                               │  export AGENT_BUS_PROJECT / AGENT_BUS_AGENT
                               │  exec claude --model M --fallback-model F <perm> \
-                              │       --append-system-prompt-file roles/<role>.md --name <proj>:<role>
+                              │       --append-system-prompt "$(cat roles/<role>.md)" --name <proj>:<role>
                               │  (l'agent au boot: /skills ; agentbus subscribe ; status)
                               └─────────────────────────────────────────────────┘
                                              ▲
                                              │ herdr CLI: nouvel onglet → agent-launch
               master (Sonnet 5) ── "pop architect" ──► agent-spawn architect <proj>
 
-  machine crontab ─ daily ─► daily-review-trigger.sh ─► pane=$(agentbus pane steward)
+  machine crontab ─ daily ─► daily-review-trigger.sh ─► pane=$(agentbus pane sentinel)
      (survit au reboot)                                 herdr pane send-text <pane>
                                                         "[cron] revue du jour + checke Ctx master → nudge si haut"
 ```
@@ -105,10 +105,10 @@ opens** (picker / worktree layout); the **master pops** via `agent-spawn` (raw h
 This sidesteps the "to drive herdr you must be inside herdr" bootstrap problem — the human
 already lives in herdr, so opening goes through the herdr-plus picker, not our scripts.
 
-The **steward** is a boot agent like any other (its tab runs `agent-launch steward`), but its
+The **sentinel** is a boot agent like any other (its tab runs `agent-launch sentinel`), but its
 work is driven from *outside* the session by a **machine crontab** entry (installed opt-in by
 `bootstrap`) — the same wake-on-exit trick the sibling project uses for its daily journal, with
-the pane resolved live via `agentbus pane steward` instead of a hard-coded id.
+the pane resolved live via `agentbus pane sentinel` instead of a hard-coded id.
 
 ## Components
 
@@ -129,7 +129,7 @@ permission = "bypassPermissions"
 tier = "boot"
 skills = ["agent-bus", "tdd", "implement"]
 
-[roles.4eyes]
+[roles.foureyes]
 model = "claude-opus-4-8"
 permission = "bypassPermissions"
 tier = "boot"
@@ -142,11 +142,11 @@ permission = "bypassPermissions"
 tier = "pop"
 skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
 
-[roles.steward]
+[roles.sentinel]
 model = "claude-haiku-4-5"
 permission = "bypassPermissions"   # writes/commits the daily journal → needs Bash without stalls
 tier = "boot"
-skills = ["agent-bus", "agent-bus-steward"]
+skills = ["agent-bus", "agent-bus-sentinel"]
 ```
 
 `busmon` is not a role (it is the TUI, launched directly as a tab command).
@@ -157,15 +157,15 @@ Runs *inside* the pane and **becomes** the agent.
 1. Resolve `<role>` from `roles.toml`; fail loudly on unknown role.
 2. `export AGENT_BUS_PROJECT=<project>` and `AGENT_BUS_AGENT=<role>`.
 3. Build the `claude` invocation: `--model`, `--fallback-model` (if set), the permission
-   flag (`--permission-mode acceptEdits` or `--dangerously-skip-permissions`),
-   `--append-system-prompt-file roles/<role>.md`, `--name <project>:<role>`.
+   flag (`--permission-mode acceptEdits` or `--permission-mode bypassPermissions`),
+   `--append-system-prompt "$(cat roles/<role>.md)"`, `--name <project>:<role>`.
 4. `exec claude …` (replaces the shell so the pane *is* the agent).
 5. **Dry-run mode** (`AGENT_LAUNCH_DRYRUN=1`) prints the resolved command instead of
    exec — the testability seam.
 
 **Session naming (`--name <project>:<role>`)**: the display name shown in the prompt box
 and in `claude --resume`. Format mirrors the bus namespace (`{project}:{kind}`), so
-`myproj:coder` / `myproj:4eyes` read the same as the streams. It disambiguates same-role
+`myproj:coder` / `myproj:foureyes` read the same as the streams. It disambiguates same-role
 sessions across projects in the global resume list, and gives brique 1 a **human recall
 path**: after a reboot, `claude --resume` lists agents by name and the human picks the
 right one — even with a shared cwd. Scripted role→session-id recall stays in S4; this only
@@ -192,30 +192,30 @@ implementation time.
   exists, else `new`.
 - **`--index` (opt-in)**: preflight the knowledge tooling — `which rtk` (sanity), then
   `codegraph init` if `.codegraph/` is absent (CLI, best-effort, **non-fatal**). code-index has
-  no shell entrypoint, so its *build* is delegated to the steward at boot (see its playbook);
+  no shell entrypoint, so its *build* is delegated to the sentinel at boot (see its playbook);
   `bootstrap` just records that the project wants indexing. `--cron` (opt-in) installs the
   daily-review crontab line (below).
 
 ### `scripts/link-role-skills.sh` — skill delivery
 Idempotent. Symlinks *only the skills referenced in `roles.toml`* into `~/.claude/skills/`
 from two sources: this repo's own `skills/` (the bus skills — `agent-bus`, `agent-bus-master`,
-`agent-bus-steward`) and the Matt Pocock collection at
+`agent-bus-sentinel`) and the Matt Pocock collection at
 `~/Tools/herdr-plugins/skills/skills/<bucket>/<skill>`. Each role's skills then resolve via
 `/skill-name`. Two runs leave the same state.
 
-### `scripts/daily-review-trigger.sh` — the steward's cron poke
+### `scripts/daily-review-trigger.sh` — the sentinel's cron poke
 Adapted from the sibling project's `daily_journal_trigger.sh`. Runs under the **machine
 crontab** (not a Claude session task → survives reboots) with a minimal env, so it exports
 what it needs (`PATH`, `HERDR_SESSION`, `AGENT_BUS_PROJECT`, the Redis connection env). It:
 
-1. Resolves the steward's pane **live**: `pane=$(agentbus pane steward)` (our bus pane-bridge —
-   no hard-coded `w8:p1`; skips with a clear message + exit 0 if the steward isn't up).
-2. `herdr pane send-text "$pane" "$MSG"` + `send-keys Enter`, where `$MSG` tells the steward:
+1. Resolves the sentinel's pane **live**: `pane=$(agentbus pane sentinel)` (our bus pane-bridge —
+   no hard-coded `w8:p1`; skips with a clear message + exit 0 if the sentinel isn't up).
+2. `herdr pane send-text "$pane" "$MSG"` + `send-keys Enter`, where `$MSG` tells the sentinel:
    write today's review, read `agentbus usage`, and if master's Ctx/session% is high, `cmd`
    master to hand-off + `/clear`.
 3. **Dry-run** (`DAILY_REVIEW_DRYRUN=1`) prints the resolved pane + message instead of sending.
 
-### `skills/agent-bus-steward/SKILL.md` — the steward's playbook
+### `skills/agent-bus-sentinel/SKILL.md` — the sentinel's playbook
 Three procedures for a cheap Haiku caretaker:
 
 - **Daily review**: read STATUS / journal / `git log` / `MEMORY.md`, post a one-line `agentbus
@@ -223,7 +223,7 @@ Three procedures for a cheap Haiku caretaker:
   entry (no push) — mirroring the sibling's journal ritual.
 - **Master-context nudge**: read `agentbus usage`; if master's Ctx/session% crosses the
   threshold, `agentbus cmd master "Ctx NN% — write a hand-off then /clear"`. **Notify-only** —
-  the steward never injects into master's pane; master owns its own reset (its existing
+  the sentinel never injects into master's pane; master owns its own reset (its existing
   "context-window creep" gotcha handles the hand-off-before-clear).
 - **Index warm-up (only if `--index` was requested)**: on first boot, if code-index isn't
   indexed yet, call `index_repository` once — an MCP tool, so an *agent* (not a shell script)
@@ -246,15 +246,15 @@ architect; surge → coder#2 / test-runner), and that popping reuses the exact b
    (+ opt-in `.codegraph/` build + daily cron).
 2. Human: herdr-plus picker → Enter `myproj` → 5 tabs open.
 3. Each core tab runs `agent-launch <role> myproj` → `claude` boots → agent invokes its
-   skills, arms `agentbus subscribe`, publishes status. busmon shows master/coder/4eyes/steward.
-   (If `--index`, the steward runs `index_repository` once on this first boot.)
+   skills, arms `agentbus subscribe`, publishes status. busmon shows master/coder/foureyes/sentinel.
+   (If `--index`, the sentinel runs `index_repository` once on this first boot.)
 4. Master (Sonnet 5) needs design: `agent-spawn architect myproj` → new tab →
    `agent-launch architect myproj` → architect (Fable, or Opus on fallback) joins the bus.
 5. Master dispatches the pipeline (existing skill): point at plan, one task in flight,
-   coder implements + reports, 4eyes reviews + reports, master gates.
-6. Daily, the machine cron pokes the steward's pane → steward writes the review (report +
+   coder implements + reports, foureyes reviews + reports, master gates.
+6. Daily, the machine cron pokes the sentinel's pane → sentinel writes the review (report +
    journal commit) and reads `agentbus usage`; if master is context-heavy it `cmd`s master to
-   hand-off + `/clear`. Steward then re-arms `agentbus subscribe` and idles until the next poke.
+   hand-off + `/clear`. Sentinel then re-arms `agentbus subscribe` and idles until the next poke.
 
 ## Error handling & edges
 
@@ -268,16 +268,16 @@ architect; surge → coder#2 / test-runner), and that popping reuses the exact b
 - **Unknown role** → `agent-launch` / `agent-spawn` fail loudly (mirrors `ValidName`).
 - **Shared-cwd `--continue` collision** → not exposed in brique 1 (fresh sessions);
   documented as the motivation for S4 (worktree-per-agent).
-- **Steward down when cron fires** → `agentbus pane steward` returns non-zero; the trigger
-  logs "steward not up, skipping" and exits 0 (no daily review that day, no crash).
+- **Sentinel down when cron fires** → `agentbus pane sentinel` returns non-zero; the trigger
+  logs "sentinel not up, skipping" and exits 0 (no daily review that day, no crash).
 - **Cron minimal env** → the trigger exports `PATH`/`HERDR_SESSION`/`AGENT_BUS_PROJECT` + Redis
   env explicitly (cron starts with almost none); a missing var fails loud in dry-run first.
 - **Master saturated / unresponsive to the nudge** → the nudge is a `cmd` (wakes master's
   subscribe); if master doesn't act, the human sees the same `cmd` in busmon and can step in.
-  The steward never force-clears, so a missed nudge is a no-op, never lost work.
+  The sentinel never force-clears, so a missed nudge is a no-op, never lost work.
 - **Index build fails / tool missing** → `bootstrap --index` is best-effort and **non-fatal**:
   `codegraph` absent or `codegraph init` failing prints a warning and continues; the team still
-  boots (agents fall back to grep/Read). Same for the steward's `index_repository` — logged, not
+  boots (agents fall back to grep/Read). Same for the sentinel's `index_repository` — logged, not
   fatal.
 - **`--index` not passed** → no `.codegraph/` build, no `index_repository`; agents cold-build on
   first use (or never, if unused). The flag is the only switch; nothing is implicit.
@@ -290,10 +290,10 @@ architect; surge → coder#2 / test-runner), and that popping reuses the exact b
   skill exists under the collection.
 - **`link-role-skills.sh`**: idempotent (run twice → identical state, valid symlinks).
 - **Generated template**: valid TOML with the expected core tabs.
-- **Documented manual e2e**: picker → 5 tabs → busmon shows coder/4eyes/master/steward armed →
+- **Documented manual e2e**: picker → 5 tabs → busmon shows coder/foureyes/master/sentinel armed →
   master `agent-spawn architect` → architect appears (Fable, or Opus on fallback).
 - **`daily-review-trigger.sh` dry-run** (`DAILY_REVIEW_DRYRUN=1`): asserts the resolved pane +
-  message; a stubbed `agentbus pane steward` non-zero exit → the "skipping" path (exit 0).
+  message; a stubbed `agentbus pane sentinel` non-zero exit → the "skipping" path (exit 0).
 - **Crontab install idempotency**: `bootstrap … --cron` twice → exactly one line.
 - **`--index` preflight**: with `codegraph` stubbed, `bootstrap --index` runs `codegraph init`
   only when `.codegraph/` is absent and stays non-fatal when the stub exits non-zero (asserts
@@ -308,9 +308,9 @@ scripts/bootstrap                  (+ opt-in --cron crontab install, --index pre
 scripts/link-role-skills.sh
 scripts/daily-review-trigger.sh    (machine-cron poke, adapted from the sibling)
 roles.toml
-roles/{master,coder,4eyes,architect,steward}.md
+roles/{master,coder,foureyes,architect,sentinel}.md
 skills/agent-bus-master/SKILL.md   (+ "Spawn a peer" section)
-skills/agent-bus-steward/SKILL.md  (daily review + master-context nudge + index warm-up)
+skills/agent-bus-sentinel/SKILL.md  (daily review + master-context nudge + index warm-up)
 tests (dry-run assertions + TOML validity + link idempotency + crontab idempotency)
 ```
 
