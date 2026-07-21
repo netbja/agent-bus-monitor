@@ -28,6 +28,8 @@ if [[ ! -f "$localbin/herdr.calls" ]]; then _ok "herdr never called when sentine
 
 # (c) crontab install is idempotent.
 make_stub "$stub" docker 0
+make_stub "$stub" herdr 0            # bootstrap's link_plugin calls `herdr plugin link` — stub it out
+export HERDR_PLUS_PATH="$tmp/hplus"; mkdir -p "$HERDR_PLUS_PATH"
 cronfile="$tmp/cron.txt"; : > "$cronfile"
 cat > "$stub/crontab" <<EOF
 #!/usr/bin/env bash

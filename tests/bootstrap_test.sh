@@ -7,6 +7,15 @@ B="$REPO/scripts/bootstrap"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 stub="$tmp/bin"
 make_stub "$stub" docker 0            # docker compose up -d -> ok
+# herdr stub: capture link_plugin's `plugin link` call + the HERDR_SESSION it targets, so the real
+# herdr is never touched. (make_stub logs only args, not env, so we hand-roll this one.)
+cat > "$stub/herdr" <<HSTUB
+#!/usr/bin/env bash
+echo "HERDR_SESSION=\${HERDR_SESSION:-} \$*" >> "$stub/herdr.calls"
+exit 0
+HSTUB
+chmod +x "$stub/herdr"
+export HERDR_PLUS_PATH="$tmp/hplus"; mkdir -p "$HERDR_PLUS_PATH"   # fake checkout so link_plugin's -d guard passes
 # link-role-skills.sh is called by `new`; point its dest at a temp dir + fake sources.
 export SKILLS_DEST="$tmp/skills" POCOCK_SKILLS_ROOT="$tmp/pocock" REPO_SKILLS="$tmp/reposkills"
 for s in tdd implement code-review diagnosing-bugs codebase-design domain-modeling to-spec wayfinder to-tickets; do
@@ -42,6 +51,16 @@ assert_contains "$(cat "$proj/demo2.toml")" "working_dir = \"$projdir2\"" 'worki
 
 # a non-directory path is rejected
 assert_exit 1 "rejects a non-directory path" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demo3 /no/such/dir"
+
+# brique 1.2: --session <name> -> herdr-plus linked into that session (herdr registers plugins per-session)
+: > "$stub/herdr.calls"
+run new demos "$projdir" --session mysess >/dev/null
+assert_contains "$(cat "$stub/herdr.calls")" "HERDR_SESSION=mysess plugin link $HERDR_PLUS_PATH" "herdr-plus linked into --session"
+
+# no --session and not inside a herdr session -> link target defaults to the project name
+: > "$stub/herdr.calls"
+env -u HERDR_SESSION PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$proj" "$B" new demosess "$projdir" >/dev/null
+assert_contains "$(cat "$stub/herdr.calls")" "HERDR_SESSION=demosess plugin link" "link session defaults to the project name"
 
 # auto verb -> recall when template exists (no crash, broker still ensured)
 assert_exit 0 "auto recalls existing project" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' demo"

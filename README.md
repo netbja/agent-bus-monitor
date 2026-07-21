@@ -180,28 +180,41 @@ demand — both go through one shared launch recipe. It's shell tooling *around*
 go build -o busmon ./cmd/busmon              # the busmon tab runs $REPO/busmon
 go install ./...                             # put agentbus + busmon on your PATH (the agents call them)
 scripts/link-role-skills.sh                  # symlink each role's skills into ~/.claude/skills
-herdr plugin install cloudmanic/herdr-plus   # the Projects picker  (dev: herdr plugin link ~/path/to/herdr-plus)
 ```
 
-Also needs the Matt Pocock skills present locally (the role skills resolve from
+Keep the **herdr-plus** checkout at `~/Tools/herdr-plugins/herdr-plus` (or set `HERDR_PLUS_PATH`) —
+`bootstrap` links it into each project's herdr session for you (herdr registers plugins **per
+session**). Also needs the Matt Pocock skills present locally (the role skills resolve from
 `~/Tools/herdr-plugins/skills/skills/engineering/`). If you use `--cron`, make sure `agentbus` is
 reachable on the cron job's `PATH` — the trigger prepends `~/.local/bin`, so building the binaries
 there is the simplest fix.
 
 ### Start a new project
 
+herdr registers plugins **per session**, and you give each project its own herdr session — so the
+Projects picker only exists in a session once herdr-plus is linked there. `bootstrap` does that link
+for you, but herdr only accepts it into a **running** session, so create the session first and
+provision from inside it:
+
 ```bash
-scripts/bootstrap new myproject /path/to/your/project   # provision only; the team works in that dir (default: $PWD)
+# 1. create + attach the project's herdr session (must be running for the link to take):
+herdr --session myproject
+
+# 2. from inside it, provision — links herdr-plus into this session AND writes the template:
+/path/to/agent-bus-monitor/scripts/bootstrap new myproject /path/to/your/project
+
+# 3. open the Projects picker and pick myproject:
+herdr plugin action invoke cloudmanic.herdr-plus.projects
 ```
 
-`bootstrap` **launches nothing** — it provisions. That 2nd argument is where the team works —
-every agent's cwd, and where `--index` builds the index; omit it to use `$PWD`. It is **not** the
-tooling repo (broker, `agent-launch`, and `busmon` stay here). Then, inside herdr, open the
-**Projects** picker
-(herdr-plus's `Projects` action — bind a key to `cloudmanic.herdr-plus.projects`, or use herdr's
-plugin-action menu), highlight `myproject`, and press **Enter**. herdr-plus opens the workspace with
-one tab per boot role — `master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab. Each tab
-boots its Claude agent, which arms itself on the bus (`agentbus subscribe`) and appears in busmon.
+`bootstrap` **launches nothing** — it provisions (broker up, skills linked, **herdr-plus linked into
+the session**, template written). The `new` line's 2nd argument is where the team works — every
+agent's cwd, and where `--index` builds the index; omit it to use `$PWD`. It is **not** the tooling
+repo (broker, `agent-launch`, `busmon` stay here). The linked session is `$HERDR_SESSION` (so
+running from inside it just works), else the project name — pass `--session <name>` if your herdr
+session is named differently. Picking `myproject` opens the workspace: one tab per boot role —
+`master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab. Each tab boots its Claude agent,
+which arms on the bus (`agentbus subscribe`) and appears in busmon.
 
 From there you drive the team as a human:
 - **Watch** everything in the `busmon` tab (AGENTS + ACTIVITY).
