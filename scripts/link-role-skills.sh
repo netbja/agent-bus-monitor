@@ -43,7 +43,11 @@ for skill in ${wanted[@]+"${wanted[@]}"}; do
     die "skill not found in repo or Pocock collection: $skill"
   fi
   target="$DEST/$skill"
-  if [[ -e "$target" && ! -L "$target" ]]; then rm -rf "$target"; fi
+  # Never destroy something we didn't create: a real (non-symlink) dir/file here is the
+  # user's — refuse and let them move it aside, rather than silently rm -rf under $HOME.
+  if [[ -e "$target" && ! -L "$target" ]]; then
+    die "refusing to overwrite non-symlink $target (move it aside, then re-run)"
+  fi
   ln -sfn "$src" "$target"
   echo "linked $skill -> $src"
 done
