@@ -167,6 +167,49 @@ the Redis stream-entry timestamp of each agent's last `status` or `report` entry
 every such publish *is* the heartbeat. A dedicated heartbeat stream would buy nothing
 the existing traffic doesn't, until agents become long-running.
 
+## Bootstrap a team
+
+`scripts/bootstrap` brings a whole team up from one keypress, and the master can **pop** extras on
+demand — both go through one shared launch recipe. This is shell tooling *around* the bus
+(`scripts/`, `roles/`, `roles.toml`), not part of the bus protocol.
+
+```bash
+scripts/bootstrap new myproject           # provision: broker up + link skills + write the herdr-plus template
+scripts/bootstrap new myproject --index   # + warm the codegraph / code-index for this repo (best-effort, non-fatal)
+scripts/bootstrap new myproject --cron    # + install the daily sentinel review (machine crontab)
+scripts/bootstrap myproject               # no verb -> recall an existing project (else new)
+```
+
+`bootstrap` only **provisions** — it launches nothing. You open the workspace through the
+**herdr-plus** fuzzy picker (each template tab runs `agent-launch <role> myproject`); the agents
+then arm themselves on the bus and show up in busmon.
+
+**Roles** live in `roles.toml` (hand-editable — adding one needs no code change):
+
+| Role       | Model                                | Perms             | Tier | Job                                             |
+|------------|--------------------------------------|-------------------|------|-------------------------------------------------|
+| `master`   | `claude-sonnet-5`                    | acceptEdits       | boot | pilot: coordinates the team, gates each task    |
+| `coder`    | `claude-opus-4-8`                    | bypassPermissions | boot | implementer (TDD)                               |
+| `foureyes` | `claude-opus-4-8`                    | bypassPermissions | boot | independent 4-eyes reviewer                     |
+| `sentinel` | `claude-haiku-4-5`                   | bypassPermissions | boot | daily review + notify-only master-context nudge |
+| `architect`| `claude-fable-5` → `claude-opus-4-8` | bypassPermissions | pop  | design / specs, popped on demand                |
+
+- **`scripts/agent-launch <role> <project>`** — the shared leaf: resolves the role from `roles.toml`
+  and `exec`s `claude` with the right model, permission mode, skills, and session name
+  (`<project>:<role>`, so `claude --resume` shows who is who). Used by *both* the boot tabs and the pop.
+- **`scripts/agent-spawn <role> <project>`** — the master's pop: opens a new herdr tab running
+  `agent-launch` (pop == boot). Requires `HERDR_ENV=1`; also documented in the master skill's
+  "Spawn a peer" section.
+- **`scripts/link-role-skills.sh`** — symlinks each role's skills into `~/.claude/skills` from this
+  repo (`agent-bus*`) and the Matt Pocock collection (refuses to overwrite a non-symlink target).
+- **`scripts/daily-review-trigger.sh`** — the `--cron` job pokes the sentinel's pane (resolved live
+  via `agentbus pane sentinel`) once a day to write a project review; the sentinel also nudges the
+  master to reset its context when it saturates — **notify-only**, it never clears the master's pane.
+
+Design/rationale live in `docs/superpowers/specs/2026-07-16-master-bootstrap-design.md`. Tests are a
+dependency-free bash suite: `bash tests/run.sh`. Prereqs: the herdr-plus plugin
+(`herdr plugin install cloudmanic/herdr-plus`) and the Matt Pocock skills present locally.
+
 ## Master skill
 
 `skills/agent-bus-master/SKILL.md` is a Claude Code skill the **master** (the pilot-lease driver,
