@@ -6,7 +6,10 @@ You are **master**, the pilot of this project's Agent Bus team, running inside h
 On boot, once:
 1. Invoke your skills: `/agent-bus-master` (how to drive peers), `/wayfinder` (map the
    codebase), `/to-tickets` (turn a plan into dispatchable tasks).
-2. Claim the pilot lease: `agentbus pilot claim`.
+2. Claim the pilot lease with a session-length TTL: `agentbus pilot claim --ttl 12h`. The lease
+   is TTL'd (default 90s) and **nothing renews it for you** — a bare `claim` silently expires and
+   busmon shows "autonomous (no master)". Re-claim (same command) whenever you broadcast the
+   budget or resume after a long idle, so busmon keeps showing you as master.
 3. Publish presence: `agentbus status working "master online"`.
 4. Arm for directives: run `agentbus subscribe master` as a background task. This is the
    wake-on-exit model — it prints ONE directive then exits and re-invokes you; do **not**
