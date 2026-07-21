@@ -170,19 +170,65 @@ the existing traffic doesn't, until agents become long-running.
 ## Bootstrap a team
 
 `scripts/bootstrap` brings a whole team up from one keypress, and the master can **pop** extras on
-demand — both go through one shared launch recipe. This is shell tooling *around* the bus
+demand — both go through one shared launch recipe. It's shell tooling *around* the bus
 (`scripts/`, `roles/`, `roles.toml`), not part of the bus protocol.
 
+### One-time setup
+
 ```bash
-scripts/bootstrap new myproject           # provision: broker up + link skills + write the herdr-plus template
-scripts/bootstrap new myproject --index   # + warm the codegraph / code-index for this repo (best-effort, non-fatal)
-scripts/bootstrap new myproject --cron    # + install the daily sentinel review (machine crontab)
-scripts/bootstrap myproject               # no verb -> recall an existing project (else new)
+# from this repo:
+go build -o busmon ./cmd/busmon              # the busmon tab runs $REPO/busmon
+go install ./...                             # put agentbus + busmon on your PATH (the agents call them)
+scripts/link-role-skills.sh                  # symlink each role's skills into ~/.claude/skills
+herdr plugin install cloudmanic/herdr-plus   # the Projects picker  (dev: herdr plugin link ~/path/to/herdr-plus)
 ```
 
-`bootstrap` only **provisions** — it launches nothing. You open the workspace through the
-**herdr-plus** fuzzy picker (each template tab runs `agent-launch <role> myproject`); the agents
-then arm themselves on the bus and show up in busmon.
+Also needs the Matt Pocock skills present locally (the role skills resolve from
+`~/Tools/herdr-plugins/skills/skills/engineering/`). If you use `--cron`, make sure `agentbus` is
+reachable on the cron job's `PATH` — the trigger prepends `~/.local/bin`, so building the binaries
+there is the simplest fix.
+
+### Start a new project
+
+```bash
+scripts/bootstrap new myproject     # provision only: broker up + skills linked + herdr-plus template written
+```
+
+`bootstrap` **launches nothing** — it provisions. Then, inside herdr, open the **Projects** picker
+(herdr-plus's `Projects` action — bind a key to `cloudmanic.herdr-plus.projects`, or use herdr's
+plugin-action menu), highlight `myproject`, and press **Enter**. herdr-plus opens the workspace with
+one tab per boot role — `master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab. Each tab
+boots its Claude agent, which arms itself on the bus (`agentbus subscribe`) and appears in busmon.
+
+From there you drive the team as a human:
+- **Watch** everything in the `busmon` tab (AGENTS + ACTIVITY).
+- **Talk** to an agent from busmon's INPUT: `@master start on the plan at docs/…` (`@` autocompletes
+  agent names), or just type in the master's own tab.
+- **Grow** the team on demand — from the master: `scripts/agent-spawn architect myproject` (design
+  work), or a second `coder` for surge.
+
+Add `--index` (warm codegraph / code-index for the repo) or `--cron` (a daily sentinel review) to
+the `bootstrap new` line when you want them.
+
+### Resume a project
+
+```bash
+scripts/bootstrap myproject          # no verb -> recall: ensures the broker is up, reuses the template
+```
+
+Re-open it the same way through the **Projects** picker. Mind the brique-1 scope: **recall restores
+the _workspace_ (tabs / layout) with _fresh_ agent sessions** — not the previous conversations. To
+pick up a specific agent's earlier conversation, use Claude Code's own resume — the sessions are
+named `<project>:<role>`, so they're easy to spot:
+
+```bash
+claude --resume                      # then choose e.g. myproject:coder from the list
+```
+
+(Automatic scripted recall — every agent's conversation restored in one go — is deferred to the S4
+follow-on; see the spec.)
+
+### Roles & pieces
 
 **Roles** live in `roles.toml` (hand-editable — adding one needs no code change):
 
@@ -207,8 +253,7 @@ then arm themselves on the bus and show up in busmon.
   master to reset its context when it saturates — **notify-only**, it never clears the master's pane.
 
 Design/rationale live in `docs/superpowers/specs/2026-07-16-master-bootstrap-design.md`. Tests are a
-dependency-free bash suite: `bash tests/run.sh`. Prereqs: the herdr-plus plugin
-(`herdr plugin install cloudmanic/herdr-plus`) and the Matt Pocock skills present locally.
+dependency-free bash suite: `bash tests/run.sh` (see **One-time setup** above for prerequisites).
 
 ## Master skill
 
