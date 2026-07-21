@@ -18,14 +18,20 @@ project="${2:?usage: agent-spawn <role> <project>}"
 [[ "${HERDR_ENV:-}" == "1" ]] || die "not inside herdr (HERDR_ENV != 1); open via the herdr-plus picker instead"
 role_exists "$role" || die "unknown role: $role"
 
-# `herdr agent start <label> --cwd <path> -- <argv...>` opens a new terminal (its own tab)
-# in the current workspace, running the argv. The label doubles as the herdr agent name.
-herdr_cmd=(herdr agent start "$project:$role" --cwd "$REPO"
-           -- bash "$SCRIPT_DIR/agent-launch" "$role" "$project")
+# The command that turns a pane into the agent (exec so the pane *becomes* it, like the boot tabs).
+launch="exec $SCRIPT_DIR/agent-launch $role $project"
 
 if [[ "${AGENT_SPAWN_DRYRUN:-0}" == "1" ]]; then
-  printf '%s\n' "${herdr_cmd[*]}"
+  # `herdr agent start` (the old recipe) split the current pane; a popped agent should get its
+  # own TAB like the boot agents. So: create a tab, then run the launch leaf in its root pane.
+  printf 'herdr tab create --label %s --cwd %s --no-focus\n' "$role" "$REPO"
+  printf 'herdr pane run <new-tab-root-pane> %s\n' "$launch"
   exit 0
 fi
 
-exec "${herdr_cmd[@]}"
+# Open a NEW TAB in the current workspace (not a split), grab its root pane, run the leaf there.
+tab_json="$(herdr tab create --label "$role" --cwd "$REPO" --no-focus)"
+pane="$(printf '%s' "$tab_json" | python3 -c 'import sys, json; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])')"
+[[ -n "$pane" ]] || die "could not resolve the new tab's pane id from herdr: $tab_json"
+herdr pane run "$pane" "$launch"
+echo "agent-spawn: $role launched in a new tab (pane $pane)"

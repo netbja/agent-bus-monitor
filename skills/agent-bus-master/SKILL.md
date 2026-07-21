@@ -11,8 +11,10 @@ agents' herdr panes over the Agent Bus.
 ## Check first
 - `HERDR_ENV=1` — you must be inside a herdr pane (you control panes via the `herdr` CLI). If unset, stop.
 - `AGENT_BUS_PROJECT` and `AGENT_BUS_AGENT` exported (see `docs/AGENT-BUS-GUIDE.md`).
-- You hold the lease: `agentbus pilot status` prints `piloted by <you>`. If not, claim it
-  (`agentbus pilot claim`) or stop — only the master drives panes.
+- You hold the lease: `agentbus pilot status` prints `piloted by <you>`. If not, claim it with a
+  session-length TTL (`agentbus pilot claim --ttl 12h`) or stop — only the master drives panes.
+  The lease is TTL'd (default 90s) and **nothing renews it automatically**: a bare `claim` expires
+  in 90s and busmon flips to "autonomous (no master)". Re-claim it when you broadcast the budget.
 
 ## Agent → pane bridge
 Each peer registers its pane (`HERDR_PANE_ID`) via its `agentbus status` heartbeat:
@@ -71,6 +73,7 @@ Give the team a regular budget readout. Each agent's status-line script tees its
 (see `docs/AGENT-BUS-GUIDE.md` → "Status-line usage tee"); read it and post a one-line summary:
 ```bash
 agentbus usage                                  # the team budget table (or --json)
+agentbus pilot claim --ttl 12h                  # renew your TTL'd lease while you're here (keeps busmon showing you as master)
 agentbus notify "budget — claude1 99%/36m · claude2 41%/2h"   # periodic one-line summary
 ```
 Distribution is **notify + pull**: the summary lands on `{project}:notify` (visible in busmon and to
