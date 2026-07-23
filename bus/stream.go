@@ -59,8 +59,19 @@ func VerdictsKey(project string) string { return project + ":verdicts" }
 type AgentSnapshot struct {
 	State   string `json:"state"`
 	Message string `json:"message,omitempty"`
-	TS      int64  `json:"ts"` // ms since epoch, from the status entry's stream id
-	Pane    string `json:"pane,omitempty"` // HERDR_PANE_ID when the agent runs inside herdr
+	TS      int64  `json:"ts"`                // ms since epoch, from the status entry's stream id
+	Pane    string `json:"pane,omitempty"`    // HERDR_PANE_ID when the agent runs inside herdr
+	Session string `json:"session,omitempty"` // CLAUDE_CODE_SESSION_ID: locates the agent's transcript
+}
+
+// AgentIdent is the ambient identity an agent's own process already knows about
+// itself. The CLI reads it from the environment on every status publish — the
+// agent never types it, so it cannot drift or be forgotten. Grouped in a struct
+// (rather than more positional params) because this list grows: each new field
+// is one more thing a reader can learn about an agent for free.
+type AgentIdent struct {
+	Pane    string // HERDR_PANE_ID
+	Session string // CLAUDE_CODE_SESSION_ID
 }
 
 // Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
@@ -83,15 +94,44 @@ type Verdict struct {
 // by busmon / the master. Separate from AgentsKey: a different writer and cadence.
 func UsageKey(project string) string { return project + ":usage" }
 
-// UsageSnapshot is an agent's latest budget readout — the display strings its
-// status line already computed (not parsed numbers).
+// UsageSnapshot is one agent's latest readout: what IT is doing (model, context
+// fill). Account-wide numbers do NOT belong here — see BudgetSnapshot. Weekly /
+// Session / Reset are retained for the old status-line tee, which wrote the
+// account's numbers into every agent's row; new writers leave them empty.
 type UsageSnapshot struct {
-	Model   string `json:"model,omitempty"`
-	Ctx     string `json:"ctx,omitempty"`
-	Weekly  string `json:"weekly,omitempty"`
-	Session string `json:"session,omitempty"`
-	Reset   string `json:"reset,omitempty"`
-	TS      int64  `json:"ts"`
+	Model    string `json:"model,omitempty"`
+	Ctx      string `json:"ctx,omitempty"`
+	Provider string `json:"provider,omitempty"` // anthropic | openai | moonshot | …
+	Source   string `json:"source,omitempty"`   // transcript | statusline
+	Weekly   string `json:"weekly,omitempty"`   // deprecated: account-scope, use Budgets
+	Session  string `json:"session,omitempty"`  // deprecated: account-scope, use Budgets
+	Reset    string `json:"reset,omitempty"`    // deprecated: account-scope, use Budgets
+	TS       int64  `json:"ts"`
+}
+
+// BudgetKey is the per-project hash of provider budget snapshots ({provider} →
+// JSON BudgetSnapshot).
+//
+// Scope is the ACCOUNT, not the agent: a session/weekly window belongs to the
+// subscription every agent draws on, so five agents on one account share one
+// number. Writing it per-agent (as the old status-line tee did) stored five
+// copies of the same figure and made a stale copy look like a per-agent fact.
+// One writer publishes one row per provider; UsageKey stays per-agent.
+func BudgetKey(project string) string { return project + ":budget" }
+
+// BudgetSnapshot is one provider's account-level budget window. Percentages are
+// "how much of the window is consumed" (0-100); resets are RFC3339. Extra
+// carries provider-specific gauges (e.g. per-model weekly splits) so a new
+// provider needs no schema change.
+type BudgetSnapshot struct {
+	Provider     string             `json:"provider"`
+	SessionPct   float64            `json:"session_pct,omitempty"`
+	SessionReset string             `json:"session_reset,omitempty"`
+	WeeklyPct    float64            `json:"weekly_pct,omitempty"`
+	WeeklyReset  string             `json:"weekly_reset,omitempty"`
+	Extra        map[string]float64 `json:"extra,omitempty"`
+	Source       string             `json:"source,omitempty"` // where the reader got it
+	TS           int64              `json:"ts"`
 }
 
 // Event is a parsed stream entry. Which fields are populated depends on Kind.
@@ -172,7 +212,7 @@ func (b *Bus) add(ctx context.Context, kind string, values map[string]interface{
 // Status publishes an agent's state to the {project}:status stream. pane is the
 // agent's HERDR_PANE_ID (empty outside herdr); it is stored in the {project}:agents
 // snapshot only, never in the status stream.
-func (b *Bus) Status(ctx context.Context, agent, state, message, pane string) (string, error) {
+func (b *Bus) Status(ctx context.Context, agent, state, message string, who AgentIdent) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
 	}
@@ -189,7 +229,8 @@ func (b *Bus) Status(ctx context.Context, agent, state, message, pane string) (s
 	// The stream is the source of truth; a failed HSET only means a briefly
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
-	if snap, merr := json.Marshal(AgentSnapshot{State: state, Message: message, TS: ms, Pane: pane}); merr == nil {
+	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session}
+	if snap, merr := json.Marshal(snapshot); merr == nil {
 		_ = b.r.HSet(ctx, AgentsKey(b.project), agent, snap).Err()
 	}
 	return id, nil
@@ -746,6 +787,35 @@ func (b *Bus) Usage(ctx context.Context) (map[string]UsageSnapshot, error) {
 		var s UsageSnapshot
 		if json.Unmarshal([]byte(v), &s) == nil {
 			out[agent] = s
+		}
+	}
+	return out, nil
+}
+
+// SetBudget overwrites a provider's account budget in the {project}:budget hash.
+func (b *Bus) SetBudget(ctx context.Context, provider string, snap BudgetSnapshot) error {
+	if !ValidName(provider) {
+		return fmt.Errorf("invalid provider %q", provider)
+	}
+	snap.Provider = provider
+	v, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	return b.r.HSet(ctx, BudgetKey(b.project), provider, v).Err()
+}
+
+// Budgets returns provider → latest account budget. Unparseable fields are skipped.
+func (b *Bus) Budgets(ctx context.Context) (map[string]BudgetSnapshot, error) {
+	raw, err := b.r.HGetAll(ctx, BudgetKey(b.project)).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]BudgetSnapshot, len(raw))
+	for provider, v := range raw {
+		var s BudgetSnapshot
+		if json.Unmarshal([]byte(v), &s) == nil {
+			out[provider] = s
 		}
 	}
 	return out, nil

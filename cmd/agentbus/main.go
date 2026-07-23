@@ -23,6 +23,9 @@
 //	agentbus --project P usage     [<agent> <json>]   # write a budget snapshot, or print all (status-line tee)
 //	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
+//	agentbus --project P budget    [--json]     # account budget window, one row per provider
+//	agentbus --project P budget    <provider> <json>             # publish a provider's window
+//	agentbus --project P refresh   [--quiet]    # read local sources -> publish budget + per-agent usage
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
 //	agentbus version               # print the bus protocol version (no project/broker needed)
 //	agentbus --host <host> ...
@@ -37,6 +40,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/usage"
 )
 
 const (
@@ -97,10 +101,16 @@ func main() {
 		if len(rest) < 2 {
 			die("usage: status <agent> <state> [message]")
 		}
-		// HERDR_PANE_ID (set inside a herdr pane) registers the agent's pane in
-		// the {project}:agents hash; empty outside herdr.
-		pane := os.Getenv("HERDR_PANE_ID")
-		if _, err := b.Status(ctx, rest[0], rest[1], strings.Join(rest[2:], " "), pane); err != nil {
+		// Ambient identity, read from the environment rather than asked of the
+		// agent: HERDR_PANE_ID (empty outside herdr) locates its pane, and
+		// CLAUDE_CODE_SESSION_ID (empty for a non-Claude-Code peer) locates its
+		// transcript, which is what `agentbus refresh` reads usage from. The
+		// agent never types either, so neither can drift or be forgotten.
+		who := bus.AgentIdent{
+			Pane:    os.Getenv("HERDR_PANE_ID"),
+			Session: os.Getenv("CLAUDE_CODE_SESSION_ID"),
+		}
+		if _, err := b.Status(ctx, rest[0], rest[1], strings.Join(rest[2:], " "), who); err != nil {
 			die(err.Error())
 		}
 
@@ -366,6 +376,70 @@ func main() {
 		snap.TS = time.Now().UnixMilli()
 		if err := b.SetUsage(ctx, rest[0], snap); err != nil {
 			die(err.Error())
+		}
+
+	case "budget":
+		rest, asJSON := extractBool(rest, "--json")
+		if len(rest) == 0 {
+			m, err := b.Budgets(ctx)
+			if err != nil {
+				die(err.Error())
+			}
+			if asJSON {
+				out, _ := json.MarshalIndent(m, "", "  ")
+				fmt.Println(string(out))
+				return
+			}
+			fmt.Print(budgetTable(m, time.Now()))
+			return
+		}
+		if len(rest) < 2 {
+			die("usage: budget <provider> <json>   (or no args to read every provider's window)")
+		}
+		var snap bus.BudgetSnapshot
+		if err := json.Unmarshal([]byte(strings.Join(rest[1:], " ")), &snap); err != nil {
+			die("bad budget JSON: " + err.Error())
+		}
+		snap.TS = time.Now().UnixMilli()
+		if err := b.SetBudget(ctx, rest[0], snap); err != nil {
+			die(err.Error())
+		}
+
+	case "refresh":
+		// Read the local artefacts and publish both halves: the ACCOUNT budget
+		// (one row per provider) and each AGENT's model + context fill (from its
+		// own transcript). Nothing here asks an agent to cooperate.
+		//
+		// Never fails on a missing source — this runs from the sentinel's cron
+		// wake, where a hard exit means the whole caretaker pass is lost.
+		_, quiet := extractBool(rest, "--quiet")
+		notes := []string{}
+
+		budgets, bnotes := collectBudgets(usage.CCStatuslinePath())
+		notes = append(notes, bnotes...)
+		for provider, snap := range budgets {
+			if err := b.SetBudget(ctx, provider, snap); err != nil {
+				notes = append(notes, fmt.Sprintf("publishing %s budget: %v", provider, err))
+			}
+		}
+
+		agents, err := b.Agents(ctx)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("reading agents: %v", err))
+		}
+		snaps, unotes := collectAgentUsage(agents, usage.ProjectsRoot())
+		notes = append(notes, unotes...)
+		for agent, snap := range snaps {
+			if err := b.SetUsage(ctx, agent, snap); err != nil {
+				notes = append(notes, fmt.Sprintf("publishing %s usage: %v", agent, err))
+			}
+		}
+
+		if !quiet {
+			fmt.Printf("refresh: %d provider budget(s), %d agent snapshot(s)\n", len(budgets), len(snaps))
+			for _, n := range notes {
+				fmt.Fprintln(os.Stderr, "refresh: "+n)
+			}
 		}
 
 	case "subscribe", "watch":
