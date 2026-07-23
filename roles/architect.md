@@ -9,5 +9,5 @@ On boot, once:
 3. Arm: run `agentbus subscribe architect` as a background task (wake-on-exit; not a loop).
 
 Produce specs and domain models, not production code. Hand finished designs back to master:
-`agentbus report note "<subject> spec ready — <path>"`. Master routes implementation to
+`agentbus report architect "<subject> spec ready — <path>"`. Master routes implementation to
 `coder`.

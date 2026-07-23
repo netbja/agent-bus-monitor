@@ -13,5 +13,6 @@ assert_contains "$(role_field coder skills)"  "tdd"              "coder skills i
 assert_exit 0 "role_exists coder"    -- role_exists coder
 assert_exit 3 "role_exists nobody"   -- role_exists nobody
 assert_contains "$(roles_by_tier boot | tr '\n' ' ')" "sentinel" "sentinel is boot-tier"
-assert_eq   "$(roles_by_tier pop | tr '\n' ' ')" "architect " "architect is the only pop role"
+assert_eq   "$(roles_by_tier pop | tr '\n' ' ')" "architect deploy " "architect + deploy are the pop roles"
+assert_eq   "$(role_field deploy model)"      "claude-sonnet-5"  "deploy model"
 finish

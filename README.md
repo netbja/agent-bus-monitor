@@ -180,14 +180,15 @@ demand — both go through one shared launch recipe. It's shell tooling *around*
 go build -o busmon ./cmd/busmon              # the busmon tab runs $REPO/busmon
 go install ./...                             # put agentbus + busmon on your PATH (the agents call them)
 scripts/link-role-skills.sh                  # symlink each role's skills into ~/.claude/skills
-make -C ~/Tools/herdr-plugins/herdr-plus build   # build the herdr-plus binary once (link registers it, doesn't build)
 ```
 
-Keep the **herdr-plus** checkout at `~/Tools/herdr-plugins/herdr-plus` (or set `HERDR_PLUS_PATH`) and
-**build it once** (above): `herdr plugin link` registers the plugin but does **not** compile it, and
-the Projects picker spawns `bin/herdr-plus` — skip the build and pane-open fails with *"Unable to
-spawn … bin/herdr-plus … does not exist"*. `bootstrap` then links that checkout into each project's
-herdr session for you (herdr registers plugins **per session**). Also needs the Matt Pocock skills present locally (the role skills resolve from
+Keep the **herdr-plus** checkout at `~/Tools/herdr-plugins/herdr-plus` (or set `HERDR_PLUS_PATH`) —
+`bootstrap` handles the rest: it **builds** `bin/herdr-plus` if it's missing, then **links** the
+checkout into the project's herdr session (herdr registers plugins **per session**). The build step
+matters because `herdr plugin link` registers the plugin but does **not** compile it, and every
+entry point spawns `bin/herdr-plus`; without it, opening the Projects picker fails with *"Unable to
+spawn … bin/herdr-plus … does not exist"*. To do it by hand: `make -C
+~/Tools/herdr-plugins/herdr-plus build`. Also needs the Matt Pocock skills present locally (the role skills resolve from
 `~/Tools/herdr-plugins/skills/skills/engineering/`). If you use `--cron`, make sure `agentbus` is
 reachable on the cron job's `PATH` — the trigger prepends `~/.local/bin`, so building the binaries
 there is the simplest fix.
@@ -224,7 +225,8 @@ From there you drive the team as a human:
 - **Talk** to an agent from busmon's INPUT: `@master start on the plan at docs/…` (`@` autocompletes
   agent names), or just type in the master's own tab.
 - **Grow** the team on demand — from the master: `scripts/agent-spawn architect myproject` (design
-  work), or a second `coder` for surge.
+  work), `scripts/agent-spawn deploy myproject` (ship it + watch the target), or a second `coder`
+  for surge.
 
 Add `--index` (warm codegraph / code-index for the repo) or `--cron` (a daily sentinel review) to
 the `bootstrap new` line when you want them.
@@ -258,6 +260,7 @@ follow-on; see the spec.)
 | `foureyes` | `claude-opus-4-8`                    | bypassPermissions | boot | independent 4-eyes reviewer                     |
 | `sentinel` | `claude-haiku-4-5`                   | bypassPermissions | boot | daily review + notify-only master-context nudge |
 | `architect`| `claude-fable-5` → `claude-opus-4-8` | bypassPermissions | pop  | design / specs, popped on demand                |
+| `deploy`   | `claude-sonnet-5`                    | bypassPermissions | pop  | ships the project to its target, then watches it|
 
 - **`scripts/agent-launch <role> <project>`** — the shared leaf: resolves the role from `roles.toml`
   and `exec`s `claude` with the right model, permission mode, skills, and session name

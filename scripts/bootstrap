@@ -118,6 +118,28 @@ install_cron() {
   echo "cron: installed daily-review for $project (07:00 daily)"
 }
 
+# `herdr plugin link` REGISTERS the plugin, it does not COMPILE it — and every entry point spawns
+# ./bin/herdr-plus. Build it here when it's missing, so a fresh machine doesn't discover the gap as
+# "Unable to spawn … bin/herdr-plus … does not exist" at the first pane-open. Prefers the plugin
+# manifest's own [[build]] script, falls back to the Makefile target. Best-effort: a failed build
+# only warns — linking an unbuilt plugin is no worse than not linking it.
+ensure_plugin_built() {
+  if [[ -x "$HERDR_PLUS_PATH/bin/herdr-plus" ]]; then return 0; fi
+  local how=""
+  if   [[ -f "$HERDR_PLUS_PATH/scripts/build.sh" ]]; then how="sh scripts/build.sh"
+  elif [[ -f "$HERDR_PLUS_PATH/Makefile"        ]]; then how="make build"
+  else warn "herdr-plus: no bin/herdr-plus and no build script at $HERDR_PLUS_PATH; the Projects picker will not open"; return 0
+  fi
+  echo "herdr-plus: binary missing — building ($how)"
+  if ! ( cd "$HERDR_PLUS_PATH" && $how ); then
+    warn "herdr-plus build failed ($how); build it by hand before using the Projects picker"
+    return 0
+  fi
+  if [[ -x "$HERDR_PLUS_PATH/bin/herdr-plus" ]]; then echo "herdr-plus: built"
+  else warn "herdr-plus: $how produced no bin/herdr-plus"; fi
+  return 0
+}
+
 # Register herdr-plus in the target session so the Projects picker works there — herdr registers
 # plugins per session, so a fresh project session starts without it. Best-effort: skip cleanly if
 # herdr or the plugin checkout is missing. Works whether the session is running (registers live) or
@@ -125,6 +147,7 @@ install_cron() {
 link_plugin() {
   command -v herdr >/dev/null 2>&1 || { warn "herdr not on PATH; skipping herdr-plus link"; return 0; }
   [[ -d "$HERDR_PLUS_PATH" ]] || { warn "herdr-plus not at $HERDR_PLUS_PATH; skipping link (set HERDR_PLUS_PATH)"; return 0; }
+  ensure_plugin_built
   if HERDR_SESSION="$SESSION" herdr plugin link "$HERDR_PLUS_PATH" >/dev/null 2>&1; then
     echo "herdr-plus: linked into session '$SESSION' (open the Projects picker there)"
   else

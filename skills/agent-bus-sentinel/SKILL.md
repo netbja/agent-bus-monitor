@@ -14,7 +14,7 @@ You start from a blank context; read before you write, assume nothing.
 1. Read, in order: the project's `STATUS`/status file, `docs/PROJECT-JOURNAL.md` (if present —
    for the format and the previous entry, which you must NOT copy), `git log --oneline -25`,
    and `MEMORY.md`.
-2. Post a one-line summary to the bus: `agentbus report note "daily review: <what changed>"`.
+2. Post a one-line summary to the bus: `agentbus report sentinel "daily review: <what changed>"`.
 3. If the project keeps `docs/PROJECT-JOURNAL.md`, append **one** entry at the top (just under
    the header) dated `$(date +%F)`, describing what CHANGED since the last entry (new commits /
    verdicts / deadlines), then commit only that file (`git add docs/PROJECT-JOURNAL.md &&
