@@ -64,4 +64,40 @@ assert_contains "$(cat "$stub/herdr.calls")" "HERDR_SESSION=demosess plugin link
 
 # auto verb -> recall when template exists (no crash, broker still ensured)
 assert_exit 0 "auto recalls existing project" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' demo"
+
+# --- herdr-plus build-if-missing -------------------------------------------------------------
+# `herdr plugin link` registers but does NOT compile; the picker spawns ./bin/herdr-plus. bootstrap
+# builds it when it's absent so the gap isn't discovered at the first pane-open.
+hp="$HERDR_PLUS_PATH"
+touch "$hp/Makefile"
+cat > "$stub/make" <<MSTUB
+#!/usr/bin/env bash
+echo "\$*" >> "$stub/make.calls"
+mkdir -p "$hp/bin" && : > "$hp/bin/herdr-plus" && chmod +x "$hp/bin/herdr-plus"
+MSTUB
+chmod +x "$stub/make"
+
+out="$(run new demobuild "$projdir" 2>&1)"
+assert_contains "$(cat "$stub/make.calls" 2>/dev/null)" "build"  "builds herdr-plus when bin/ is missing"
+assert_contains "$out" "herdr-plus: built"                       "reports the build"
+
+# already built -> no rebuild on the next bootstrap
+: > "$stub/make.calls"
+run new demobuilt "$projdir" >/dev/null 2>&1
+assert_eq "$(cat "$stub/make.calls")" ""                         "skips the build when bin/herdr-plus exists"
+
+# the plugin manifest's own [[build]] script wins over the Makefile
+rm -f "$hp/bin/herdr-plus"
+mkdir -p "$hp/scripts"
+printf 'mkdir -p bin && : > bin/herdr-plus && chmod +x bin/herdr-plus\n' > "$hp/scripts/build.sh"
+: > "$stub/make.calls"
+out="$(run new demoscript "$projdir" 2>&1)"
+assert_contains "$out" "sh scripts/build.sh"                     "prefers the plugin's own build script"
+assert_eq "$(cat "$stub/make.calls")" ""                         "make unused when build.sh exists"
+
+# no build recipe at all -> warn, don't fail the bootstrap
+rm -f "$hp/bin/herdr-plus" "$hp/Makefile" "$hp/scripts/build.sh"
+out="$(run new demonobuild "$projdir" 2>&1)"
+assert_contains "$out" "no bin/herdr-plus and no build script"   "warns when there is nothing to build"
+assert_exit 0 "bootstrap still succeeds without a build recipe" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demonobuild2 '$projdir'"
 finish

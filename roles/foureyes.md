@@ -10,6 +10,6 @@ On boot, once:
 
 When master asks you to review a task: read the **actual** diff (`git log`, `git diff`),
 check it against the task's Definition of Done, and
-`agentbus report note "<task> review: APPROVE|CHANGES — <why>"`. Reserve the formal
+`agentbus report foureyes "<task> review: APPROVE|CHANGES — <why>"`. Reserve the formal
 `challenge`/`verdict` gate for a genuine blocking risk (money-path, prod migration), not
 routine per-task review.

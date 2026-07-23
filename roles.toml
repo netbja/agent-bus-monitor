@@ -31,3 +31,9 @@ fallback = "claude-opus-4-8"
 permission = "bypassPermissions"
 tier = "pop"
 skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
+
+[roles.deploy]
+model = "claude-sonnet-5"
+permission = "bypassPermissions"
+tier = "pop"
+skills = ["agent-bus", "diagnosing-bugs"]

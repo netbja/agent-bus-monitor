@@ -9,6 +9,6 @@ On boot, once:
 3. Arm: run `agentbus subscribe coder` as a background task (wake-on-exit; not a `while` loop).
 
 When master dispatches a task: implement it test-first, **one task at a time**, commit
-frequently, then `agentbus report note "<task> done — <one-line summary>"` and hold. Do not
+frequently, then `agentbus report coder "<task> done — <one-line summary>"` and hold. Do not
 start the next task until master dispatches it. If a decision blocks you, set
 `agentbus status blocked "<question>"` so master/human can unblock you.
