@@ -119,8 +119,13 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   confirmation or `--reset --yes`). The shared event renderer is the `handle` closure (used for both
   the backfill and the live tail). All of this
   runs in a goroutine pushing UI updates via `app.QueueUpdateDraw`; the `agents` map is
-  mutex-guarded; a 1s ticker polls `Bus.PilotDriver` + per-agent `Bus.OpenChallenges` and re-renders
-  so chips age into `idle`/`offline` even with no new stream traffic. The `agents` map is populated
+  mutex-guarded; a 1s ticker polls `Bus.PilotDriver` + `Bus.Usage` + `Bus.Budgets` + per-agent
+  `Bus.OpenChallenges` and re-renders so chips age into `idle`/`offline` even with no new stream
+  traffic. **The two usage scopes render in two different places, deliberately**: the STATUS bar
+  carries the account budget per provider (`anthropic 25%/44%` = session/weekly, green→yellow at
+  75%→red at 90%), while an agent chip's `[..]` badge carries only that agent's own context fill —
+  an account-scope number pinned to one chip would read as that agent's number. `budgetBar` renders
+  nothing when no budget is published, so an unknown budget looks unknown rather than like 0% used. The `agents` map is populated
   from **both** `status` entries (authoritative state) and `report` entries (liveness only — a
   report-only agent shows state `active`). The ACTIVITY feed live-tails via tview's `trackEnd`
   (set once at start, **not** per message, so scrolling up sticks); `Tab` focuses it to scroll,

@@ -2,8 +2,9 @@
 //
 // Tails one project's streams ({project}:status|report|notify|cmd) and renders:
 //
-//	STATUS   project name + pilot-lease driver as "⬢ MASTER <driver>",
-//	         or "autonomous (no master)" when no lease is held.
+//	STATUS   project name + pilot-lease driver as "⬢ MASTER <driver>", or
+//	         "autonomous (no master)" when no lease is held, then the ACCOUNT
+//	         budget per provider ("anthropic 25%/44%" = session/weekly window).
 //	AGENTS   per-agent presence (state from status:, liveness also from report:),
 //	         chips wrap to fit terminal width; the master's chip shows a ⬢ marker.
 //	         A lock badge appears when an agent is gated by open 4-eyes challenges.
@@ -83,9 +84,8 @@ type agentState struct {
 	armed    bool   // a live subscribe lease exists → 👂 listening badge
 	lag      int64  // unconsumed {p}:cmd entries for this agent → ⌛ backlog badge
 	pane     string // HERDR_PANE_ID from the agents hash → ⧉ herdr-attached badge
-	usage    string // compact session·reset from the usage hash → [..] badge
+	usage    string // this agent's own context fill from the usage hash → [..] badge
 }
-
 
 func renderAgents(layout *tview.Flex, view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
 	mu.Lock()
@@ -112,11 +112,12 @@ func renderAgents(layout *tview.Flex, view *tview.TextView, agents map[string]*a
 
 // renderStatus updates the top status bar with the project and current master
 // (the pilot-lease driver). Mutex-guarded read of the shared pilot string.
-func renderStatus(view *tview.TextView, project string, mu *sync.Mutex, pilot *string) {
+func renderStatus(view *tview.TextView, project string, mu *sync.Mutex, pilot *string, budgets *map[string]bus.BudgetSnapshot) {
 	mu.Lock()
 	driver := *pilot
+	b := *budgets
 	mu.Unlock()
-	view.SetText(statusBar(project, driver))
+	view.SetText(statusBar(project, driver, b))
 }
 
 func main() {
@@ -197,6 +198,10 @@ func main() {
 	agents := make(map[string]*agentState)
 	var mu sync.Mutex
 	var pilot string // current pilot lease driver (guarded by mu)
+	// Account budget per provider, refreshed by the 1s ticker (guarded by mu).
+	// Empty until someone runs `agentbus refresh`; the bar then stays blank
+	// rather than implying 0% used.
+	budgets := map[string]bus.BudgetSnapshot{}
 
 	// ACTIVITY line-selection state. Everything here is touched only on the
 	// tview event loop (input handlers + QueueUpdateDraw both run there), so it
@@ -431,7 +436,7 @@ func main() {
 			fmt.Fprintf(activityView, "[\"%s\"]%s[\"\"]\n", id, line)
 			refreshTitle()
 			renderAgents(layout, agentsView, agents, &mu, &pilot)
-			renderStatus(statusView, project, &mu, &pilot)
+			renderStatus(statusView, project, &mu, &pilot, &budgets)
 		})
 	}
 
@@ -472,6 +477,7 @@ func main() {
 			lag, _ := b.CmdLag(ctx)
 			snaps, _ := b.Agents(ctx)
 			usageSnaps, _ := b.Usage(ctx)
+			budgetSnaps, _ := b.Budgets(ctx)
 			mu.Lock()
 			names := make([]string, 0, len(agents))
 			for n := range agents {
@@ -486,6 +492,7 @@ func main() {
 			}
 			mu.Lock()
 			pilot = driver
+			budgets = budgetSnaps
 			// Surface agents known only via a live armed lease (subscribed but no
 			// status published yet). Armed keys are TTL'd, so this never leaks a
 			// ghost. Lag-only groups are NOT synthesized — consumer groups persist
@@ -507,7 +514,7 @@ func main() {
 			mu.Unlock()
 			app.QueueUpdateDraw(func() {
 				renderAgents(layout, agentsView, agents, &mu, &pilot)
-				renderStatus(statusView, project, &mu, &pilot)
+				renderStatus(statusView, project, &mu, &pilot, &budgets)
 				refreshTitle()
 			})
 		}

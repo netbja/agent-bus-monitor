@@ -9,14 +9,14 @@ import (
 )
 
 func TestStatusBar(t *testing.T) {
-	master := statusBar("trading", "hermes")
+	master := statusBar("trading", "hermes", nil)
 	if !strings.Contains(master, "⬢ MASTER hermes") {
 		t.Fatalf("statusBar(driver) = %q, want '⬢ MASTER hermes'", master)
 	}
 	if !strings.Contains(master, "trading") {
 		t.Fatalf("statusBar = %q, want the project name", master)
 	}
-	auto := statusBar("trading", "")
+	auto := statusBar("trading", "", nil)
 	if !strings.Contains(auto, "autonomous") || strings.Contains(auto, "MASTER") {
 		t.Fatalf("statusBar(\"\") = %q, want 'autonomous' and no MASTER", auto)
 	}
@@ -144,6 +144,16 @@ func TestAgentCompletions(t *testing.T) {
 }
 
 func TestUsageBadge(t *testing.T) {
+	// The chip badge is the agent's OWN context fill; account-scope numbers are
+	// identical for every agent and live in the status bar instead.
+	if got := usageBadge(bus.UsageSnapshot{Ctx: "608k ctx", Model: "claude-sonnet-5"}); got != "608k ctx" {
+		t.Fatalf("ctx = %q, want 608k ctx", got)
+	}
+	// Ctx wins over the legacy account-scope strings when both are present.
+	if got := usageBadge(bus.UsageSnapshot{Ctx: "42k ctx", Session: "99%"}); got != "42k ctx" {
+		t.Fatalf("ctx should win = %q, want 42k ctx", got)
+	}
+	// Legacy fallback: a snapshot from the old status-line tee still renders.
 	if got := usageBadge(bus.UsageSnapshot{Session: "99%", Reset: "36m"}); got != "99%·36m" {
 		t.Fatalf("both = %q, want 99%%·36m", got)
 	}
@@ -207,5 +217,52 @@ func TestPackChips(t *testing.T) {
 	_, used = packChips([]chip{tagged, tagged, tagged}, 7, 4) // 1+2+1+2+1 = 7 fits
 	if used != 1 {
 		t.Fatalf("(d) used=%d, want 1 row (packed by visible width)", used)
+	}
+}
+
+func TestBudgetBar(t *testing.T) {
+	// Nothing published -> nothing rendered. An unknown budget must look
+	// unknown, never like 0% used.
+	if got := budgetBar(nil); got != "" {
+		t.Fatalf("empty budgets = %q, want empty", got)
+	}
+	one := budgetBar(map[string]bus.BudgetSnapshot{
+		"anthropic": {SessionPct: 25, WeeklyPct: 44},
+	})
+	if !strings.Contains(one, "anthropic 25%/44%") {
+		t.Fatalf("budgetBar = %q, want 'anthropic 25%%/44%%'", one)
+	}
+	// Sorted, so the bar doesn't reshuffle every tick.
+	two := budgetBar(map[string]bus.BudgetSnapshot{
+		"openai":    {SessionPct: 1, WeeklyPct: 2},
+		"anthropic": {SessionPct: 3, WeeklyPct: 4},
+	})
+	if strings.Index(two, "anthropic") > strings.Index(two, "openai") {
+		t.Fatalf("providers not sorted: %q", two)
+	}
+}
+
+func TestBudgetColorWarnsBeforeTheWall(t *testing.T) {
+	cases := []struct {
+		pct  float64
+		want string
+	}{{0, "green"}, {74, "green"}, {75, "yellow"}, {89, "yellow"}, {90, "red"}, {100, "red"}}
+	for _, c := range cases {
+		if got := budgetColor(c.pct); got != c.want {
+			t.Errorf("budgetColor(%v) = %q, want %q", c.pct, got, c.want)
+		}
+	}
+}
+
+// The status bar carries the account budget; a chip never does.
+func TestStatusBarShowsBudget(t *testing.T) {
+	got := statusBar("trading", "master", map[string]bus.BudgetSnapshot{
+		"anthropic": {SessionPct: 25, WeeklyPct: 44},
+	})
+	if !strings.Contains(got, "anthropic 25%/44%") {
+		t.Fatalf("statusBar = %q, want the account budget", got)
+	}
+	if !strings.Contains(got, "⬢ MASTER master") {
+		t.Fatalf("statusBar = %q, want the master indicator kept", got)
 	}
 }
