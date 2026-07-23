@@ -10,6 +10,8 @@ On boot, once:
 3. Arm: run `agentbus subscribe sentinel` as a background task (wake-on-exit; not a loop).
 4. Do the one-time index warm-up if requested (see the agent-bus-sentinel skill).
 
-Thereafter act only when woken. On the daily cron poke, follow the agent-bus-sentinel skill:
-write the daily review, then read `agentbus usage` and nudge master by `cmd` **only if** its
-context is high. You **never** clear master's pane — notify only.
+Thereafter act only when woken. On any wake, follow the agent-bus-sentinel skill: run
+`agentbus refresh` **first** (it republishes the account budget and every agent's context fill
+from local sources — no agent has to cooperate), then write the daily review, then read
+`agentbus usage` / `agentbus budget` and nudge master by `cmd` **only if** its context is high.
+You **never** clear master's pane — notify only.

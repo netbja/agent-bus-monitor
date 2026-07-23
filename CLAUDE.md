@@ -50,7 +50,35 @@ kinds per project:
 Additional keys: `{p}:pilot` (Redis string, pilot lease → driver name + TTL), `{p}:gate:{agent}`
 (Redis hash, ref→meta; 4-eyes challenges gate the named agent), `{p}:verdicts` (Redis stream,
 append-only 4-eyes ledger; one entry per verdict — subject/author/reviewer/decision/message/ref —
-capped at `verdictMaxLen()` = 10000, override `AGENT_BUS_VERDICT_MAX`).
+capped at `verdictMaxLen()` = 10000, override `AGENT_BUS_VERDICT_MAX`), `{p}:agents` (Redis hash,
+agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:usage` (Redis hash, agent→`UsageSnapshot`;
+**per-agent** model + context fill), `{p}:budget` (Redis hash, provider→`BudgetSnapshot`;
+**account-scope** session/weekly window per provider).
+
+### Budget vs usage: two scopes, two keys, zero cooperation
+
+`agentbus refresh` (run by the sentinel on every wake, from the `usage` package) reads local
+artefacts and publishes both halves. **No agent tees anything** — the old status-line tee is gone;
+it required a hand-written `statusLine` script, and with a third-party status line (ccstatusline)
+it silently never fired.
+
+- **`{p}:budget` is account-scope.** A session/weekly window belongs to the *subscription* every
+  agent draws on, so it is keyed by **provider**, not agent — five agents on one account share one
+  number. Source: `~/.cache/ccstatusline/usage.json` (ccstatusline's cache of Anthropic's OAuth
+  usage endpoint; free to read, costs no tokens). `BudgetSnapshot.Extra` carries provider-specific
+  gauges so a new provider needs no schema change.
+- **`{p}:usage` is per-agent.** Model + context fill, read from that agent's own transcript at
+  `~/.claude/projects/*/{session}.jsonl`. `UsageSnapshot.Weekly`/`Session`/`Reset` are **deprecated**
+  (they held account-scope data); new writers leave them empty.
+- **How the transcript is found:** `agentbus status` captures `CLAUDE_CODE_SESSION_ID` into
+  `AgentSnapshot.Session` from the environment, exactly as it captures `HERDR_PANE_ID` — see
+  `bus.AgentIdent`. The agent never types it, so it cannot drift. A peer with no session id (a
+  non-Claude-Code agent) is skipped with a note, never invented.
+- **Deliberately not reported:** context *percentage* (needs a per-model window table that rots
+  every model release) and cost (needs a price table that rots the same way; on a subscription the
+  figure is fiction). Raw context tokens are what is actually known.
+- `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
+  cron wake where a hard exit loses the whole caretaker pass.
 
 ### Replacing the `ValidAgents` allowlist
 
@@ -60,7 +88,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (each a single `main.go`)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`refresh`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle

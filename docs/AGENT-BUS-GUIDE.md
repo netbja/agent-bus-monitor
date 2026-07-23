@@ -123,8 +123,9 @@ agentbus pilot release                                  # hand off to autonomous
 agentbus agents                                         # name · state · (message) · age; marks idle/offline; shows ⧉<pane> if attached to a herdr pane
 agentbus agents --json                                  # raw map for scripts
 agentbus pane <agent>                                   # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
-agentbus usage <agent> '<json>'                         # write the agent's budget snapshot (status-line tee)
-agentbus usage                                          # print everyone's budget; --json for raw
+agentbus usage                                          # per-agent: model · context fill; --json for raw
+agentbus budget                                         # per-provider ACCOUNT window: session % / weekly % / resets; --json for raw
+agentbus refresh                                        # republish both from local sources (the sentinel runs this); --quiet from cron
 agentbus version                                        # print the bus protocol version (v1) — no project/broker needed
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
@@ -145,23 +146,35 @@ busmon --project trading                                # or -project; busmon to
 
 ---
 
-### Status-line usage tee
+### Budget & usage: nobody tees anything
 
-Your status line already computes the budget numbers — tee them to the bus (structured, never
-scraped). Paste this into your `statusLine` script after you've computed the values; it throttles
-(so frequent refreshes don't hammer Redis) and swallows errors (so it never breaks the line):
+`agentbus refresh` reads the artefacts that already exist on disk and publishes **two** things.
+No agent cooperates, so an agent that never publishes is still measured:
 
-```bash
-ts=/tmp/abus-usage-$AGENT_BUS_AGENT
-if [ -z "$(find "$ts" -newermt '-20 seconds' 2>/dev/null)" ]; then
-  agentbus usage "$AGENT_BUS_AGENT" \
-    "{\"model\":\"$MODEL\",\"ctx\":\"$CTX\",\"weekly\":\"$WEEKLY\",\"session\":\"$SESSION\",\"reset\":\"$RESET\"}" \
-    >/dev/null 2>&1 || true
-  touch "$ts"
-fi
-```
+| Key | Scope | Source | Read with |
+|---|---|---|---|
+| `{p}:budget` | **account**, per provider — session %, weekly %, resets | ccstatusline's cache of Anthropic's OAuth usage endpoint (`~/.cache/ccstatusline/usage.json`) | `agentbus budget` |
+| `{p}:usage`  | **one agent** — model, context fill | that agent's transcript, `~/.claude/projects/*/<session>.jsonl` | `agentbus usage` |
 
-Requires `AGENT_BUS_PROJECT` / `AGENT_BUS_AGENT` in the status-line script's env.
+**Why two keys.** A session/weekly window belongs to the *subscription*, not to an agent: five
+agents on one account share one number. Storing it per-agent (as the old status-line tee did)
+kept five copies of the same figure and let a stale copy read as a per-agent fact.
+
+**How an agent's transcript is found.** `agentbus status` captures `CLAUDE_CODE_SESSION_ID` from
+the environment on every publish — the same way it captures `HERDR_PANE_ID`. The agent never
+types it, so it cannot drift or be forgotten. A peer with no session id (a non-Claude-Code agent)
+is simply skipped with a note.
+
+**Who runs it.** The sentinel, first thing on every wake (`agentbus refresh --quiet` from cron).
+Anyone can run it; it is idempotent and never fails hard on a missing source.
+
+**Non-Claude providers.** `agentbus budget <provider> '<json>'` publishes a window for any other
+provider (`openai`, `moonshot`, …) — the schema is already per-provider, so adding one needs no
+change here.
+
+**What it deliberately does not report.** No context *percentage* (needs a per-model window table
+that rots every release) and no cost (needs a price table that rots the same way, and on a
+subscription a dollar figure is fiction). Raw context tokens are what we actually know.
 
 ---
 

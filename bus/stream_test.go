@@ -85,7 +85,7 @@ func dialTest(t *testing.T) *Bus {
 		ctx := context.Background()
 		r.Del(ctx, StreamKey(project, "status"), StreamKey(project, "report"),
 			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project),
-			AgentsKey(project), UsageKey(project), VerdictsKey(project))
+			AgentsKey(project), UsageKey(project), BudgetKey(project), VerdictsKey(project))
 		r.Close()
 	})
 	return b
@@ -102,16 +102,16 @@ func TestOpenRejectsBadProject(t *testing.T) {
 func TestPublishValidation(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	if _, err := b.Status(ctx, "dev", "flying", "x", ""); err == nil {
+	if _, err := b.Status(ctx, "dev", "flying", "x", AgentIdent{}); err == nil {
 		t.Error("Status accepted invalid state, want error")
 	}
-	if _, err := b.Status(ctx, "Bad Agent", "working", "x", ""); err == nil {
+	if _, err := b.Status(ctx, "Bad Agent", "working", "x", AgentIdent{}); err == nil {
 		t.Error("Status accepted invalid agent, want error")
 	}
 	if _, err := b.Cmd(ctx, "hermes", "dev", "shout", "", "x"); err == nil {
 		t.Error("Cmd accepted invalid type, want error")
 	}
-	if _, err := b.Status(ctx, "dev", "working", "ok", ""); err != nil {
+	if _, err := b.Status(ctx, "dev", "working", "ok", AgentIdent{}); err != nil {
 		t.Errorf("valid Status failed: %v", err)
 	}
 }
@@ -121,7 +121,7 @@ func TestTailRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if _, err := b.Status(ctx, "dev", "working", "hello", ""); err != nil {
+	if _, err := b.Status(ctx, "dev", "working", "hello", AgentIdent{}); err != nil {
 		t.Fatalf("Status: %v", err)
 	}
 
@@ -278,10 +278,10 @@ func TestCmdLag(t *testing.T) {
 func TestAgentsSnapshot(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	if _, err := b.Status(ctx, "dev", "working", "plan 10", "w1:p1"); err != nil {
+	if _, err := b.Status(ctx, "dev", "working", "plan 10", AgentIdent{Pane: "w1:p1"}); err != nil {
 		t.Fatalf("Status: %v", err)
 	}
-	if _, err := b.Status(ctx, "ana", "idle", "", ""); err != nil {
+	if _, err := b.Status(ctx, "ana", "idle", "", AgentIdent{}); err != nil {
 		t.Fatalf("Status ana: %v", err)
 	}
 	m, err := b.Agents(ctx)

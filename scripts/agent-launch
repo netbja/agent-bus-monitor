@@ -33,6 +33,15 @@ prompt_file="${ROLES_DIR:-$REPO/roles}/$role.md"
 export AGENT_BUS_PROJECT="$project"
 export AGENT_BUS_AGENT="$role"
 
+# A stray ANTHROPIC_API_KEY in the environment silently flips Claude Code from the subscription to
+# pay-as-you-go billing — for EVERY agent this launcher starts, with nothing on screen to say so.
+# Drop it. ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN are deliberately left alone: those are the seam
+# for pointing a role at an Anthropic-API-compatible provider. Set AGENT_LAUNCH_KEEP_API_KEY=1 if
+# you really do want a role billed to the API.
+if [[ "${AGENT_LAUNCH_KEEP_API_KEY:-0}" != "1" ]]; then
+  unset ANTHROPIC_API_KEY
+fi
+
 # --permission-mode takes the roles.toml value verbatim (acceptEdits | bypassPermissions).
 cmd=(claude --model "$model")
 if [[ -n "$fallback" ]]; then cmd+=(--fallback-model "$fallback"); fi

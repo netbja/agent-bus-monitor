@@ -69,13 +69,20 @@ next re-arm it could re-receive the answer as a directive — mitigated by the a
 `--since` cursor (see the bus guide). Don't re-inject an answer you've already delivered.
 
 ## Broadcast team budget
-Give the team a regular budget readout. Each agent's status-line script tees its usage to the bus
-(see `docs/AGENT-BUS-GUIDE.md` → "Status-line usage tee"); read it and post a one-line summary:
+Give the team a regular budget readout. Nothing is teed by the agents — the sentinel's
+`agentbus refresh` reads it from local artefacts (see `docs/AGENT-BUS-GUIDE.md` → "Budget &
+usage"). Two scopes, two commands:
 ```bash
-agentbus usage                                  # the team budget table (or --json)
+agentbus budget                                 # ACCOUNT: session/weekly window per provider
+agentbus usage                                  # PER AGENT: model + context fill
+agentbus refresh                                # if the numbers look stale, republish them yourself
 agentbus pilot claim --ttl 12h                  # renew your TTL'd lease while you're here (keeps busmon showing you as master)
-agentbus notify "budget — claude1 99%/36m · claude2 41%/2h"   # periodic one-line summary
+agentbus notify "budget — session 25% (resets 25m) · claude1 141k ctx · claude2 88k ctx"
 ```
+**Read the two apart.** `budget` is the shared subscription window: when *it* is near the limit,
+the whole team must hold, no matter how empty an individual agent's context is. `usage` is
+per-agent context fill: a single agent near its window needs a hand-off and a `/clear`, and that
+says nothing about the others.
 Distribution is **notify + pull**: the summary lands on `{project}:notify` (visible in busmon and to
 the human), and agents read `agentbus usage` themselves on demand. Never push budget via `cmd` to
 each agent — that wakes every agent's `subscribe`.
@@ -115,6 +122,7 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
   (expensive model, long idle stretches). `agentbus cmd` alone won't wake it. Check `agentbus agents`
   staleness; if it's stale by design, reach it via Resync (pane injection) instead — and keep the
   injection terse, unsubscribed doesn't exempt it from a shared session budget either.
-- **Context-window creep**: watch each pane's status-line `Ctx:` figure alongside session%. Near a
-  high-context threshold, have the agent write a hand-off (current step, what's committed, what's
-  pending) BEFORE you `/clear` its pane — never clear first and sort it out after.
+- **Context-window creep**: watch `agentbus usage` (context fill per agent, read from each agent's
+  transcript — it keeps working even for an agent that publishes nothing). Near a high-context
+  threshold, have the agent write a hand-off (current step, what's committed, what's pending)
+  BEFORE you `/clear` its pane — never clear first and sort it out after.
