@@ -79,13 +79,60 @@ func selPos(feed []feedLine, id string) int {
 	return -1
 }
 
-// statusBar renders the top bar: the project, then the master indicator derived
-// from the pilot-lease driver (master == whoever holds the lease; empty = none).
-func statusBar(project, driver string) string {
+// statusBar renders the top bar: the project, the master indicator derived from
+// the pilot-lease driver (master == whoever holds the lease; empty = none), and
+// the ACCOUNT budget per provider.
+//
+// The budget belongs here and not on an agent chip: a session/weekly window is
+// the shared subscription every agent draws on, so pinning it next to one agent
+// would read as that agent's own number.
+func statusBar(project, driver string, budgets map[string]bus.BudgetSnapshot) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, " [white]%s[-]  ·  ", tview.Escape(project))
 	if driver == "" {
-		return fmt.Sprintf(" [white]%s[-]  ·  [yellow]autonomous (no master)[-]", tview.Escape(project))
+		sb.WriteString("[yellow]autonomous (no master)[-]")
+	} else {
+		fmt.Fprintf(&sb, "[green]⬢ MASTER %s[-]", tview.Escape(driver))
 	}
-	return fmt.Sprintf(" [white]%s[-]  ·  [green]⬢ MASTER %s[-]", tview.Escape(project), tview.Escape(driver))
+	if b := budgetBar(budgets); b != "" {
+		sb.WriteString("  ·  " + b)
+	}
+	return sb.String()
+}
+
+// budgetBar renders "anthropic 25%/44%" per provider, coloured by the tighter of
+// the two windows. Empty when nothing has been published — an unknown budget must
+// look unknown, never like 0% used.
+func budgetBar(budgets map[string]bus.BudgetSnapshot) string {
+	names := make([]string, 0, len(budgets))
+	for n := range budgets {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, n := range names {
+		s := budgets[n]
+		worst := s.SessionPct
+		if s.WeeklyPct > worst {
+			worst = s.WeeklyPct
+		}
+		parts = append(parts, fmt.Sprintf("[%s]%s %.0f%%/%.0f%%[-]",
+			budgetColor(worst), tview.Escape(n), s.SessionPct, s.WeeklyPct))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// budgetColor warns before the wall, not at it: past 75% of a window there is
+// time to finish and commit in-flight work; past 90% there is not.
+func budgetColor(pct float64) string {
+	switch {
+	case pct >= 90:
+		return "red"
+	case pct >= 75:
+		return "yellow"
+	default:
+		return "green"
+	}
 }
 
 // entryTime parses a Redis stream ID ("<ms>-<seq>") to wall-clock time so a
@@ -153,9 +200,17 @@ func packChips(chips []chip, width, maxRows int) ([]string, int) {
 	return rows, len(rows)
 }
 
-// usageBadge joins the non-empty of session/reset with "·" for a compact chip
-// badge: "99%·36m", "99%", "36m", or "" when both are empty.
+// usageBadge is the per-agent chip badge: that agent's own context fill, e.g.
+// "608k ctx". Account-scope numbers (session/weekly windows) deliberately do NOT
+// appear here — they are the same for every agent, so a chip is the one place
+// they cannot mean anything; the status bar carries them instead.
+//
+// Falls back to the legacy Session/Reset strings so a snapshot written by the
+// old status-line tee still renders something rather than vanishing.
 func usageBadge(snap bus.UsageSnapshot) string {
+	if snap.Ctx != "" {
+		return snap.Ctx
+	}
 	parts := make([]string, 0, 2)
 	if snap.Session != "" {
 		parts = append(parts, snap.Session)
