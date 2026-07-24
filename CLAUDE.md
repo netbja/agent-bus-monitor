@@ -127,7 +127,10 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `"$"` gap). `--limit 0` falls back to the original `Bus.Tail(ctx, "0", …)` full-history replay.
   `--reset` purges the four streams first (`Bus.Purge` = `XTRIM MAXLEN 0`, gated by a `[y/N]`
   confirmation or `--reset --yes`). `--list` prints the broker's projects (newest activity first)
-  to **stdout** and exits — plain text, no tview tags, since it never enters the TUI. The shared
+  to **stdout** and exits — plain text, no tview tags, since it never enters the TUI.
+  `--delete <p>` retires a project entirely (`bus.DeleteProject` = `DEL` of every `{p}:*` key)
+  behind the same `[y/N]`/`--yes` gate as `--reset`; the prompt states the key count, agent count
+  and last activity, because a slug alone is a poor thing to judge on. The shared
   event renderer is the `handle` closure (used for both
   the backfill and the live tail). All of this
   runs in a goroutine pushing UI updates via `app.QueueUpdateDraw`; the `agents` map is
@@ -199,7 +202,15 @@ It never touches Redis — see README "Deployment topology".
   visible history is wiped but consumer groups (cmd at-least-once cursors) and the
   `armed`/`pilot`/`gate` keys **survive** — don't switch it to `DEL`, which would reset cmd delivery
   state. The confirmation reads stdin **before** the TUI starts; a piped/non-TTY stdin counts as
-  "no", so `--reset` never purges unattended without `--yes`.
+  "no", so `--reset` never purges unattended without `--yes`. **`busmon --delete <p>` is the `DEL`**
+  — the deliberate opposite: it retires the project, so consumer groups, leases and every hash go
+  with it. `--reset` clears a project you are keeping; `--delete` removes one you are not.
+- **`ValidName` in `bus.ProjectKeys` is what stands between `--delete '*'` and an erased broker.**
+  The `SCAN MATCH` glob is built from the caller's string (`project+":*"`), so the name is validated
+  **before** the client is touched — `TestProjectKeysRejectsGlobsBeforeDialing` passes a nil client
+  on purpose, so a guard that ran too late would panic rather than pass. The trailing colon also
+  makes the prefix exact: `demo:*` never reaches `demo-2574:status`, so a delete cannot take a
+  same-prefixed sibling with it. Never build that glob from an unvalidated string.
 - **The verdict ledger is the audit source of truth, the gate is just a lock.** `verdict` writes
   `{p}:verdicts` unconditionally (self-approvals included — the roll-up ignores them, but the record
   stays). The roll-up rule: APPROVED iff the latest independent approve (reviewer ≠ author) is newer

@@ -7,6 +7,7 @@ package bus
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/redis/go-redis/v9"
@@ -111,6 +112,63 @@ func (b *Bus) lastStreamTS(ctx context.Context) (int64, error) {
 		}
 	}
 	return newest, nil
+}
+
+// ProjectInfo returns one project's summary row, for callers that already know
+// the name (e.g. showing what a delete is about to remove).
+func ProjectInfo(ctx context.Context, r *redis.Client, project string) (ProjectSummary, error) {
+	b, err := Open(r, project)
+	if err != nil {
+		return ProjectSummary{}, err
+	}
+	return b.summary(ctx)
+}
+
+// ProjectKeys lists every key belonging to project.
+//
+// The ValidName check is the load-bearing line of this file: the glob below is
+// built from the caller's string, so without it `ProjectKeys(ctx, r, "*")` would
+// match the entire keyspace — and DeleteProject would erase the broker. A valid
+// name cannot contain a glob metacharacter.
+//
+// The trailing colon also makes the prefix exact: "demo:*" does not match
+// "demo-2574:status", so deleting `demo` cannot take a sibling with it.
+func ProjectKeys(ctx context.Context, r *redis.Client, project string) ([]string, error) {
+	if !ValidName(project) {
+		return nil, fmt.Errorf("invalid project %q (want %s)", project, nameRE)
+	}
+	var out []string
+	var cursor uint64
+	for {
+		keys, next, err := r.Scan(ctx, cursor, project+":*", 500).Result()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, keys...)
+		if cursor = next; cursor == 0 {
+			break
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// DeleteProject removes every key a project owns and returns how many were
+// deleted. This is a DEL, not the XTRIM of Bus.Purge: streams go with their
+// consumer groups, and the agents/usage/budget/verdicts hashes, the pilot lease
+// and every gate/armed lease go with them. Nothing about the project survives.
+//
+// Use Bus.Purge to clear a project's visible history while keeping it working;
+// use this to retire the project itself.
+func DeleteProject(ctx context.Context, r *redis.Client, project string) (int64, error) {
+	keys, err := ProjectKeys(ctx, r, project)
+	if err != nil {
+		return 0, err
+	}
+	if len(keys) == 0 {
+		return 0, nil
+	}
+	return r.Del(ctx, keys...).Result()
 }
 
 // scanProjects SCANs the keyspace and returns the distinct project names it can

@@ -108,6 +108,8 @@ busmon --project myproject --limit 100             # backfill the last 100 lines
 busmon --project myproject --limit 0               # replay all retained history (pre-limit behavior)
 busmon --project myproject --reset                 # purge the project's streams first (asks to confirm)
 busmon --project myproject --reset --yes           # purge without the confirmation prompt
+busmon --delete oldproject                         # retire a project: DEL every one of its keys (asks to confirm)
+busmon --delete oldproject --yes                   # ...without the confirmation prompt
 ```
 
 The `subscribe` output carries `"v"` (= `bus.ProtocolVersion`, currently 1). Changes within a
@@ -138,6 +140,22 @@ Newest activity first, so the project you just left is the top row. It prints to
 ever seen — the `{p}:agents` hash is never pruned — so a retired peer still counts; `LAST ACTIVITY`
 is what carries recency. A project purged with `--reset` keeps its date (the hash outlives the
 `XTRIM`); `never` means nothing on it was ever dated.
+
+`busmon --delete <project>` is the other half: it retires a project by `DEL`-ing every `{p}:*` key.
+
+```
+$ busmon --delete demo-2574
+Delete ALL 2 keys for project 'demo-2574' (0 agents, last activity 23d ago)?
+This is a DEL, not --reset: streams, consumer groups, agents/usage/budget/verdicts, pilot and gate leases all go. [y/N] y
+Deleted 2 keys for project 'demo-2574'.
+```
+
+**`--reset` and `--delete` are deliberate opposites.** `--reset` clears the history of a project you
+are keeping — an `XTRIM`, so consumer groups and the armed/pilot/gate leases survive and cmd
+delivery is unaffected. `--delete` removes a project you are not keeping, and takes all of that with
+it. Same `[y/N]` gate and same `--yes` bypass as `--reset`; the prompt states the key count, agent
+count and last activity, because a slug alone is a poor thing to judge on. A project with no keys is
+a no-op success, so a repeated cleanup script does not fail on its second run.
 
 ## busmon panes
 

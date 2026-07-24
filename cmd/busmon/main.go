@@ -68,6 +68,74 @@ func confirmReset(project string, in io.Reader) bool {
 	}
 }
 
+// confirmDelete asks before --delete erases a project. It shows what is about to
+// go — key count, agent count, how recently the project was active — because the
+// slug alone is a poor thing to judge on: "demo-2574" and "demo" look equally
+// disposable until you see one of them was busy a minute ago.
+//
+// Same accept rule as confirmReset: y/yes, and EOF from a pipe declines.
+// The prompt goes to an injectable writer (confirmReset predates this and prints
+// straight to stdout): what it says IS the safety feature here, so it is worth a
+// test.
+func confirmDelete(s bus.ProjectSummary, keys int, now time.Time, out io.Writer, in io.Reader) bool {
+	fmt.Fprintf(out, "Delete ALL %d %s for project '%s' (%d agents, last activity %s)?\n",
+		keys, plural(keys, "key"), s.Project, s.Agents, lastSeen(s.LastTS, now))
+	fmt.Fprint(out, "This is a DEL, not --reset: streams, consumer groups, agents/usage/budget/verdicts, "+
+		"pilot and gate leases all go. [y/N] ")
+	line, _ := bufio.NewReader(in).ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// deleteProject implements `busmon --delete <project>`. A project with no keys is
+// a no-op success: that is the typo signal (you asked to delete 31 keys and were
+// told there are none) without making a repeated cleanup script fail.
+func deleteProject(host, project string, yes bool, in io.Reader, now time.Time) error {
+	client, err := bus.Connect(host)
+	if err != nil {
+		return fmt.Errorf("Redis connection failed: %w", err)
+	}
+	defer client.Close()
+	ctx := context.Background()
+
+	keys, err := bus.ProjectKeys(ctx, client, project)
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		fmt.Fprintf(os.Stderr, "no keys for project '%s' — nothing to delete\n", project)
+		return nil
+	}
+
+	summary, err := bus.ProjectInfo(ctx, client, project)
+	if err != nil {
+		return err
+	}
+	if !yes && !confirmDelete(summary, len(keys), now, os.Stdout, in) {
+		fmt.Println("Cancelled.")
+		return nil
+	}
+
+	n, err := bus.DeleteProject(ctx, client, project)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Deleted %d %s for project '%s'.\n", n, plural(int(n), "key"), project)
+	return nil
+}
+
+// plural is the usual English -s. Only ever fed regular nouns here.
+func plural(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
+}
+
 // listProjects writes the `busmon --list` table to out. A broker with no
 // projects reports on stderr and leaves out untouched, so `busmon --list | wc -l`
 // counts projects and nothing else.
@@ -149,6 +217,7 @@ func main() {
 	resetFlag := flag.Bool("reset", false, "purge the project's streams before launching (asks to confirm)")
 	yesFlag := flag.Bool("yes", false, "skip the --reset confirmation prompt")
 	listFlag := flag.Bool("list", false, "list the projects on this bus and exit")
+	deleteFlag := flag.String("delete", "", "delete every key of a project (DEL, not --reset's XTRIM) and exit")
 	flag.Parse()
 
 	limitSet := false
@@ -164,6 +233,17 @@ func main() {
 	// resolve. It also wins over --reset: a read-only query never purges.
 	if *listFlag {
 		if err := listProjects(*host, os.Stdout, time.Now()); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// --delete names its own target, so like --list it must not require --project.
+	// It also sits above --reset: purging a project's history on the way to
+	// deleting the project would be work done twice and a confirmation asked twice.
+	if *deleteFlag != "" {
+		if err := deleteProject(*host, *deleteFlag, *yesFlag, os.Stdin, time.Now()); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
