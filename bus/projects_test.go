@@ -152,3 +152,129 @@ func TestProjectsDatesAPurgedProject(t *testing.T) {
 		t.Errorf("Agents = %d after purge, want 1", s.Agents)
 	}
 }
+
+// The glob in ProjectKeys is built from the caller's string, so ValidName is the
+// only thing between `--delete '*'` and an erased broker. A nil client is
+// deliberate: the guard must fire before anything is dialled, so a nil-pointer
+// panic here would itself be the failure.
+func TestProjectKeysRejectsGlobsBeforeDialing(t *testing.T) {
+	for _, bad := range []string{"*", "", "a:b", "de*mo", "demo?", "[a-z]", "Demo", "*:status"} {
+		if keys, err := ProjectKeys(context.Background(), nil, bad); err == nil {
+			t.Errorf("ProjectKeys(%q) = %v, nil; want an error", bad, keys)
+		}
+	}
+	for _, bad := range []string{"*", "", "a:b", "de*mo"} {
+		if n, err := DeleteProject(context.Background(), nil, bad); err == nil || n != 0 {
+			t.Errorf("DeleteProject(%q) = %d, %v; want 0, error", bad, n, err)
+		}
+	}
+}
+
+// "demo:*" must not reach "demo-2574:status" — the trailing colon makes the
+// prefix exact, so deleting a project cannot take a same-prefixed sibling.
+func TestProjectKeysIsAnExactPrefix(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+
+	sibling := b.project + "-sib"
+	if err := b.r.Set(ctx, sibling+":pilot", "master", time.Minute).Err(); err != nil {
+		t.Fatalf("seed sibling: %v", err)
+	}
+	t.Cleanup(func() { b.r.Del(ctx, PilotKey(sibling)) })
+
+	if _, err := b.Status(ctx, "coder", "working", "hi", AgentIdent{}); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	keys, err := ProjectKeys(ctx, b.r, b.project)
+	if err != nil {
+		t.Fatalf("ProjectKeys: %v", err)
+	}
+	if len(keys) == 0 {
+		t.Fatal("ProjectKeys found nothing for a project that just published")
+	}
+	for _, k := range keys {
+		if !strings.HasPrefix(k, b.project+":") {
+			t.Errorf("key %q is not owned by %q", k, b.project)
+		}
+	}
+	if n, _ := b.r.Exists(ctx, PilotKey(sibling)).Result(); n != 1 {
+		t.Error("the sibling project's key vanished")
+	}
+}
+
+func TestDeleteProjectRemovesEverything(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+
+	// a consumer group is the documented difference from Bus.Purge: XTRIM keeps
+	// it, DEL takes it with the stream.
+	if err := b.r.XGroupCreateMkStream(ctx, StreamKey(b.project, "cmd"), "coder", "0").Err(); err != nil {
+		t.Fatalf("XGroupCreateMkStream: %v", err)
+	}
+	if _, err := b.Status(ctx, "coder", "working", "hi", AgentIdent{}); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if _, err := b.Report(ctx, "coder", "note", "hello"); err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	if err := b.Pilot(ctx, "master", time.Minute); err != nil {
+		t.Fatalf("Pilot: %v", err)
+	}
+	if err := b.OpenChallenge(ctx, "coder", "ref1", "meta"); err != nil {
+		t.Fatalf("OpenChallenge: %v", err)
+	}
+	if err := b.Arm(ctx, "coder", "host", time.Minute); err != nil {
+		t.Fatalf("Arm: %v", err)
+	}
+	if err := b.SetUsage(ctx, "coder", UsageSnapshot{Ctx: "1k ctx"}); err != nil {
+		t.Fatalf("SetUsage: %v", err)
+	}
+
+	before, err := ProjectKeys(ctx, b.r, b.project)
+	if err != nil {
+		t.Fatalf("ProjectKeys: %v", err)
+	}
+	if len(before) < 6 {
+		t.Fatalf("expected the full footprint, got %v", before)
+	}
+
+	n, err := DeleteProject(ctx, b.r, b.project)
+	if err != nil {
+		t.Fatalf("DeleteProject: %v", err)
+	}
+	if int(n) != len(before) {
+		t.Errorf("deleted %d keys, want %d (%v)", n, len(before), before)
+	}
+
+	after, err := ProjectKeys(ctx, b.r, b.project)
+	if err != nil {
+		t.Fatalf("ProjectKeys after delete: %v", err)
+	}
+	if len(after) != 0 {
+		t.Errorf("keys survived the delete: %v", after)
+	}
+	if groups, err := b.r.XInfoGroups(ctx, StreamKey(b.project, "cmd")).Result(); err == nil && len(groups) > 0 {
+		t.Errorf("consumer group survived the delete: %v", groups)
+	}
+
+	list, err := Projects(ctx, b.r)
+	if err != nil {
+		t.Fatalf("Projects: %v", err)
+	}
+	for _, p := range list {
+		if p.Project == b.project {
+			t.Error("the deleted project is still discoverable by Projects")
+		}
+	}
+}
+
+// Deleting a project that is not there is a no-op success, so a repeated cleanup
+// script does not fail on its second run.
+func TestDeleteProjectOnAbsentProjectIsANoOp(t *testing.T) {
+	b := dialTest(t)
+	n, err := DeleteProject(context.Background(), b.r, b.project+"-nope")
+	if err != nil || n != 0 {
+		t.Errorf("DeleteProject(absent) = %d, %v; want 0, nil", n, err)
+	}
+}
