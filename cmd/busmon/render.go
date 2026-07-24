@@ -135,6 +135,66 @@ func budgetColor(pct float64) string {
 	}
 }
 
+// projectTable renders `busmon --list`: one row per project on the broker, in
+// the order given (bus.Projects already sorts newest first). Plain text with no
+// tview colour tags — this goes to stdout, not the TUI, where a "[green]" would
+// print literally. Empty input renders "" so the caller can say "nothing here"
+// on stderr and leave stdout clean for `| wc -l`.
+func projectTable(list []bus.ProjectSummary, now time.Time) string {
+	if len(list) == 0 {
+		return ""
+	}
+	nameW, masterW := len("PROJECT"), len("MASTER")
+	for _, p := range list {
+		if len(p.Project) > nameW {
+			nameW = len(p.Project)
+		}
+		if len(p.Master) > masterW {
+			masterW = len(p.Master)
+		}
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%-*s  %6s  %-*s  %s\n",
+		nameW, "PROJECT", "AGENTS", masterW, "MASTER", "LAST ACTIVITY")
+	for _, p := range list {
+		master := p.Master
+		if master == "" {
+			master = "-"
+		}
+		fmt.Fprintf(&sb, "%-*s  %6d  %-*s  %s\n",
+			nameW, p.Project, p.Agents, masterW, master, lastSeen(p.LastTS, now))
+	}
+	return sb.String()
+}
+
+// lastSeen renders a project's last-activity stamp. A project with nothing dated
+// reads "never" rather than a bogus 1970 age.
+func lastSeen(ts int64, now time.Time) string {
+	if ts <= 0 {
+		return "never"
+	}
+	return humanAge(now.Sub(time.UnixMilli(ts))) + " ago"
+}
+
+// humanAge renders a duration as one coarse unit ("45s", "2m", "3h", "6d").
+// Precision past the leading unit is noise: the question a project row answers is
+// "minutes or days ago", not "how many minutes".
+func humanAge(d time.Duration) string {
+	if d < 0 {
+		d = 0 // a stamp from the future (clock skew) is not a negative age
+	}
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
+}
+
 // entryTime parses a Redis stream ID ("<ms>-<seq>") to wall-clock time so a
 // backfilled entry ages correctly instead of looking freshly seen.
 func entryTime(id string) time.Time {

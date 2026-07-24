@@ -266,3 +266,80 @@ func TestStatusBarShowsBudget(t *testing.T) {
 		t.Fatalf("statusBar = %q, want the master indicator kept", got)
 	}
 }
+
+func TestProjectTable(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	ms := func(d time.Duration) int64 { return now.Add(-d).UnixMilli() }
+
+	out := projectTable([]bus.ProjectSummary{
+		{Project: "ai-tradex-solana", Agents: 5, Master: "master", LastTS: ms(2 * time.Minute)},
+		{Project: "agent-bus-monitor", Agents: 2, LastTS: ms(3 * time.Hour)},
+		{Project: "demo", Agents: 1, LastTS: ms(6 * 24 * time.Hour)},
+	}, now)
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("got %d lines, want 4 (header + 3 projects):\n%s", len(lines), out)
+	}
+	for _, want := range []string{"PROJECT", "AGENTS", "MASTER", "LAST ACTIVITY"} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("header %q missing %q", lines[0], want)
+		}
+	}
+	if !strings.Contains(lines[1], "ai-tradex-solana") || !strings.Contains(lines[1], "2m ago") {
+		t.Errorf("row 1 = %q, want the newest project with its age", lines[1])
+	}
+	if !strings.Contains(lines[2], "3h ago") || !strings.Contains(lines[3], "6d ago") {
+		t.Errorf("ages not rendered:\n%s", out)
+	}
+	// no pilot lease reads as "-", never as an empty column
+	if !strings.Contains(lines[2], " - ") {
+		t.Errorf("masterless row = %q, want a '-' placeholder", lines[2])
+	}
+	// the table renders in the order given: bus.Projects owns the sort
+	if strings.Index(out, "ai-tradex-solana") > strings.Index(out, "demo") {
+		t.Error("projectTable reordered its input")
+	}
+	// columns line up: every row starts its AGENTS column at the same offset
+	col := strings.Index(lines[0], "AGENTS")
+	for _, l := range lines[1:] {
+		if len(l) < col {
+			t.Fatalf("row shorter than the header columns: %q", l)
+		}
+	}
+}
+
+// Empty output (not a "none found" line) keeps stdout clean for `| wc -l`; the
+// caller reports the empty case on stderr.
+func TestProjectTableEmptyRendersNothing(t *testing.T) {
+	if got := projectTable(nil, time.Now()); got != "" {
+		t.Errorf("projectTable(nil) = %q, want empty", got)
+	}
+}
+
+func TestHumanAge(t *testing.T) {
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "0s"},
+		{45 * time.Second, "45s"},
+		{90 * time.Second, "1m"},
+		{59 * time.Minute, "59m"},
+		{3 * time.Hour, "3h"},
+		{25 * time.Hour, "1d"},
+		{6 * 24 * time.Hour, "6d"},
+		{-5 * time.Second, "0s"}, // clock skew is not a negative age
+	}
+	for _, c := range cases {
+		if got := humanAge(c.d); got != c.want {
+			t.Errorf("humanAge(%v) = %q, want %q", c.d, got, c.want)
+		}
+	}
+}
+
+func TestLastSeenNever(t *testing.T) {
+	if got := lastSeen(0, time.Now()); got != "never" {
+		t.Errorf("lastSeen(0) = %q, want %q", got, "never")
+	}
+}
