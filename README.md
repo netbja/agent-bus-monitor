@@ -102,6 +102,7 @@ agentbus verdicts --pr 25                          # roll-up 4-eyes state: APPRO
 agentbus usage                                     # print every agent's budget; usage <a> '<json>' writes one
 agentbus version                                   # print the bus protocol version (no project/broker needed)
 
+busmon --list                                      # what projects are on this bus? (no --project needed)
 busmon --project myproject                         # live dashboard (last 25 lines, then live)
 busmon --project myproject --limit 100             # backfill the last 100 lines on launch
 busmon --project myproject --limit 0               # replay all retained history (pre-limit behavior)
@@ -119,6 +120,24 @@ all four streams) before live-tailing — set a persistent default with `AGENT_B
 `--limit 0` to replay everything. `--reset` clears the project's history (`XTRIM` of the four
 streams — it keeps consumer groups and the armed/pilot/gate leases, so cmd delivery is unaffected)
 after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
+
+`busmon --list` is the way back in when you have forgotten a project's name — it is the only busmon
+invocation that does **not** need `--project`, since that is the question it answers:
+
+```
+$ busmon --list
+PROJECT             AGENTS  MASTER  LAST ACTIVITY
+ai-tradex-solana         6  master  2m ago
+agent-bus-monitor        2  -       3h ago
+demo                     0  -       23d ago
+```
+
+Newest activity first, so the project you just left is the top row. It prints to stdout and exits
+(nothing else does — pipe it), reports an empty broker on stderr, and never writes: combined with
+`--reset` the list still wins and nothing is purged. `AGENTS` counts every agent the project has
+ever seen — the `{p}:agents` hash is never pruned — so a retired peer still counts; `LAST ACTIVITY`
+is what carries recency. A project purged with `--reset` keeps its date (the hash outlives the
+`XTRIM`); `never` means nothing on it was ever dated.
 
 ## busmon panes
 

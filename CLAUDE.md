@@ -24,7 +24,8 @@ Both binaries (`busmon`, `agentbus`) are gitignored build artifacts.
 
 ## Architecture
 
-**`bus/bus.go` + `bus/stream.go` together are the single source of truth.** `bus.go` holds
+**`bus/bus.go` + `bus/stream.go` together are the single source of truth**, with `bus/projects.go`
+as a small third file for the one thing that is *not* project-scoped (see below). `bus.go` holds
 transport-neutral primitives (`Connect`, `ValidStates`, `ReportNote`/`ReportAuto`,
 `SanitizeReportMessage`). `stream.go` holds the entire Streams API: the `Bus` handle, stream key
 naming, all publish helpers (`Bus.Status`/`Bus.Report`/`Bus.Notify`/`Bus.Cmd`), `Bus.Tail` for
@@ -33,6 +34,15 @@ read-only observation, `Bus.WatchCmd` for per-agent at-least-once cmd delivery, 
 (`Bus.OpenChallenge`/`Bus.ResolveChallenge`/`Bus.OpenChallenges`). Both binaries call `bus.Connect`
 then `bus.Open` to get a `*Bus`; they contain almost no logic of their own. **Put protocol changes
 in `bus/stream.go` (or `bus/bus.go` for transport-neutral primitives), not in the binaries.**
+
+`bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
+function taking a raw client**, not a `*Bus` method, because it answers the question you have
+*before* you know a project name. `Open` already demands a valid project, so a method there would be
+a circle. It SCANs the keyspace and attributes each key to a project via `projectFromKey`
+(suffix in `projectKinds` **and** `ValidName` on the prefix). That second test is what keeps
+`{p}:gate:{agent}` and `{p}:armed:{agent}` from forging a phantom project — they split to a
+"project" that still holds a colon — so the scanner needs no special case. Foreign keys on a shared
+broker are skipped, never guessed at.
 
 ### Stream layout
 
@@ -116,7 +126,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   then live-tails from the per-stream cursors `Recent` returns through `Bus.TailFrom` (no replay, no
   `"$"` gap). `--limit 0` falls back to the original `Bus.Tail(ctx, "0", …)` full-history replay.
   `--reset` purges the four streams first (`Bus.Purge` = `XTRIM MAXLEN 0`, gated by a `[y/N]`
-  confirmation or `--reset --yes`). The shared event renderer is the `handle` closure (used for both
+  confirmation or `--reset --yes`). `--list` prints the broker's projects (newest activity first)
+  to **stdout** and exits — plain text, no tview tags, since it never enters the TUI. The shared
+  event renderer is the `handle` closure (used for both
   the backfill and the live tail). All of this
   runs in a goroutine pushing UI updates via `app.QueueUpdateDraw`; the `agents` map is
   mutex-guarded; a 1s ticker polls `Bus.PilotDriver` + `Bus.Usage` + `Bus.Budgets` + per-agent
@@ -155,7 +167,11 @@ It never touches Redis — see README "Deployment topology".
 
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
-  pub/sub collision bug.
+  pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer
+  "what do I put in `--project`?" — so its block in `main()` must stay **above** the project-required
+  exit, and above `--reset` (a read-only query never purges). Move it down and it dies on the error
+  it was written to resolve; `TestProjectsFindsALiveProject` will not catch that, only the ordering
+  in `main()` will.
 - **`ValidName` replaced the `ValidAgents` allowlist.** Agent names must match
   `^[a-z][a-z0-9_-]{0,31}$`; `agentbus` rejects anything else. No code change needed to add agents.
 - **`ValidStates`** (`working`, `idle`, `blocked`, `done`) is still a hardcoded map in `bus.go`.

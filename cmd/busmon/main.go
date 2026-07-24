@@ -68,6 +68,28 @@ func confirmReset(project string, in io.Reader) bool {
 	}
 }
 
+// listProjects writes the `busmon --list` table to out. A broker with no
+// projects reports on stderr and leaves out untouched, so `busmon --list | wc -l`
+// counts projects and nothing else.
+func listProjects(host string, out io.Writer, now time.Time) error {
+	client, err := bus.Connect(host)
+	if err != nil {
+		return fmt.Errorf("Redis connection failed: %w", err)
+	}
+	defer client.Close()
+
+	list, err := bus.Projects(context.Background(), client)
+	if err != nil {
+		return err
+	}
+	if len(list) == 0 {
+		fmt.Fprintln(os.Stderr, "no projects on this bus yet")
+		return nil
+	}
+	_, err = io.WriteString(out, projectTable(list, now))
+	return err
+}
+
 const (
 	idleAfter  = 2 * time.Minute
 	staleAfter = 10 * time.Minute
@@ -126,6 +148,7 @@ func main() {
 	limitFlag := flag.Int("limit", 25, "ACTIVITY backfill: replay the last N lines on launch (0 = all history; or AGENT_BUS_BUSMON_LIMIT)")
 	resetFlag := flag.Bool("reset", false, "purge the project's streams before launching (asks to confirm)")
 	yesFlag := flag.Bool("yes", false, "skip the --reset confirmation prompt")
+	listFlag := flag.Bool("list", false, "list the projects on this bus and exit")
 	flag.Parse()
 
 	limitSet := false
@@ -135,6 +158,17 @@ func main() {
 		}
 	})
 	limit := resolveLimit(limitSet, *limitFlag, os.Getenv("AGENT_BUS_BUSMON_LIMIT"))
+
+	// --list answers "which projects are on this bus?", so it MUST run before the
+	// project-required exit below — that error is the very thing it exists to
+	// resolve. It also wins over --reset: a read-only query never purges.
+	if *listFlag {
+		if err := listProjects(*host, os.Stdout, time.Now()); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	project := *projectFlag
 	if project == "" {
