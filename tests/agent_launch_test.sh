@@ -14,7 +14,7 @@ out="$(AGENT_LAUNCH_DRYRUN=1 "$L" coder demo)"
 assert_contains "$out" "--permission-mode bypassPermissions" "coder permission flag"
 
 out="$(AGENT_LAUNCH_DRYRUN=1 "$L" architect demo)"
-assert_contains "$out" "--model claude-fable-5"            "architect model"
+assert_contains "$out" "--model claude-opus-5"             "architect model"
 assert_contains "$out" "--fallback-model claude-opus-4-8"  "architect fallback"
 
 assert_exit 1 "unknown role fails"     -- env AGENT_LAUNCH_DRYRUN=1 "$L" bogus demo
