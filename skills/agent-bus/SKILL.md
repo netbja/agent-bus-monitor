@@ -67,6 +67,63 @@ To review a peer's risky change: `agentbus challenge <target> <why>` opens a gat
 `reply --ref <R>`; a **second, independent** agent resolves it with `verdict … approve|reject`
 (a self-approval never counts). Query the recorded state with `agentbus verdicts`.
 
+## Shared working tree — one checkout, several agents
+The team usually shares ONE physical checkout. Read-only git (`log`, `diff`, `show`,
+`status`) is always safe; anything that moves HEAD or rewrites the tree is a coordination
+act, because the same files are on every peer's screen:
+
+- **Never `git checkout`/`git switch` on your own** — it yanks the tree from under the peer
+  whose branch is currently checked out (typically mid-review). Branch switching is master's
+  call, announced on the bus.
+- **Work on a branch named `<role>/<task-slug>`**, created when master hands you the tree.
+- **Never leave uncommitted changes behind.** Before you hold, hand off, or go idle: commit,
+  or `git stash push -m "<role>: <task>"`. Loose changes ride along on the next checkout and
+  silently land in someone else's review.
+- **Pop only your own stash** (match the `<role>:` tag), and only once your branch is the
+  one checked out. The full dance is: stash → wait for the current branch to merge → your
+  branch checked out → pop.
+- **A tracked file has exactly one writer at a time.** The one-task-in-flight rule is what
+  makes that true — don't edit outside your dispatched task.
+
+## The session budget is shared — check it before you spend
+Every agent on the team draws the same subscription window. Read it before starting a large
+task (broad survey, subagents, long plan):
+```bash
+agentbus budget     # account session/weekly % per provider, with reset times
+```
+- **< 75%** — work normally.
+- **≥ 75%** — economy mode: small steps, no exploratory sweeps, finish what's in flight.
+- **≥ 90%** — hold: commit or stash, report, go idle until the reset.
+The numbers are as fresh as the sentinel's last `agentbus refresh`; if they look stale, say
+so on the bus instead of finding out by hitting the wall mid-task.
+
+## The board — who owns what, check it before you start
+`{project}:board` is the shared ownership registry (task → owner → state → branch). Read it
+before starting anything — a task already owned is off-limits, no matter what a stale
+message told you:
+```bash
+agentbus board                                          # TASK OWNER STATE BRANCH AGE
+agentbus board claim <task> --branch <role>/<task>      # fails if a peer owns it
+agentbus board state <task> review                      # as the task moves
+agentbus board done <task>                              # merged / finished
+agentbus board drop <task>                              # released without doing it
+```
+Claim BEFORE you invest in the work: a failed claim (`owned by <peer> (<state>)`) means
+pick another task or ask master — never duplicate. Keep your own entries honest as the task
+moves; the board is only as good as its last update.
+
+## Pushing a signal nobody asked for — the outbox convention
+`notify` and `report` are fire-and-forget: they show up in busmon but wake NO agent. When
+you discover something the team must act on — a stash that already exists, a subagent that
+died on a provider error, a scope change, a task that's already in review — don't wait to
+be asked:
+1. `agentbus notify "<finding>"` for the record (the human sees it in busmon), and
+2. `agentbus cmd sentinel "relay: <what happened, what you need>"` to wake the caretaker.
+   Sentinel judges: blocking → it forwards to master by `cmd`; informational → it logs a
+   report.
+Sentinel is the cheap relay — relaying is its job. Reserve a direct `cmd master` for when
+YOU are blocked and need a decision, not for FYI traffic.
+
 ## The whole bus in one line
 > Every stream is `{project}:{kind}`. Publish `status`/`report`, receive with `subscribe`
 > (wake-on-exit — re-arm iff `rearm`, persist the `id` cursor), gate the risky with

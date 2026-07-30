@@ -1,6 +1,6 @@
 ---
 name: agent-bus-sentinel
-description: "Run from the SENTINEL agent (the cheap Haiku caretaker) on the Agent Bus. Four one-shot duties, each triggered by an external wake (machine cron or a directed cmd), never a polling loop: refresh the team's budget and per-agent usage from local sources; write the daily project-review entry; nudge the master to reset its own context when it saturates (notify-only — never clear master's pane); and, once at boot if requested, warm the code-index. Use when you are the sentinel and have been woken."
+description: "Run from the SENTINEL agent (the cheap Haiku caretaker) on the Agent Bus. Five one-shot duties, each triggered by an external wake (machine cron or a directed cmd), never a polling loop: refresh the team's budget and per-agent usage from local sources; write the daily project-review entry; nudge the master when its context or the session budget runs hot (notify-only — never clear master's pane); relay urgent peer findings to master; and, once at boot if requested, warm the code-index. Use when you are the sentinel and have been woken."
 ---
 
 # Agent Bus — Sentinel Skill
@@ -44,17 +44,23 @@ You start from a blank context; read before you write, assume nothing.
    git commit -m "docs(journal): entry $(date +%F)"`) — keep the Co-Authored-By trailer, do
    **not** push. If nothing changed, say so in one line.
 
-## Duty 2 — Master-context nudge (cron-woken, notify-only)
+## Duty 2 — Master nudge, context & session budget (cron-woken, notify-only)
 1. Read both halves (Duty 0 has just refreshed them): `agentbus usage` for master's context fill,
    `agentbus budget` for the account's session/weekly windows.
-2. If master's context is high (**≥ 400k ctx** on a 1M-window model, or the account's session
-   window is ≥ 90%; override the token threshold via `AGENT_BUS_CTX_THRESHOLD`), nudge it — do
-   **not** touch its pane:
-   ```bash
-   agentbus cmd master "Ctx <NN>% — write a hand-off (step, committed, in-progress) then /clear"
-   ```
+2. Nudge master when either gauge runs hot — do **not** touch its pane:
+   - **Context** ≥ 400k ctx on a 1M-window model (override via `AGENT_BUS_CTX_THRESHOLD`):
+     ```bash
+     agentbus cmd master "Ctx <NN>% — write a hand-off (step, committed, in-progress) then /clear"
+     ```
+   - **Session budget** ≥ 75% of the account window:
+     ```bash
+     agentbus cmd master "Session <NN>% (resets <HH:MM>) — wrap up: finish in-flight, dispatch nothing new"
+     ```
+     At 75% master still lands the in-flight task; at ≥ 90% it holds everything until the
+     reset. 75% suits a small subscription — raise it only if the account has headroom.
+   A missed nudge is a no-op; you never force-clear, so no work is ever lost.
 3. That's it. Master owns its own reset (its agent-bus-master skill handles hand-off-before-
-   clear). A missed nudge is a no-op; you never force-clear, so no work is ever lost.
+   clear) and its own budget hold.
 
 ## Duty 3 — Index warm-up (once, at boot, only if requested)
 `bootstrap --index` drops a marker so you know indexing is wanted:
@@ -67,6 +73,15 @@ if [[ -f .agent-bus/index-requested && ! -f .agent-bus/index-done ]]; then
 fi
 ```
 Keep it a one-shot. Keeping the index *fresh* over time is a later slice (S5), not your job.
+
+## Duty 4 — Relay (cmd-woken)
+A `cmd` whose body starts with `relay:` is a peer pushing an unrequested finding (the
+outbox convention — see the agent-bus skill). Judge it once:
+- **Blocking or critical** (a peer is stuck, duplicate work spotted, scope change,
+  money-path) → forward it: `agentbus cmd master "relay from <agent>: <finding>"`.
+- **Informational** → `agentbus report sentinel "relay from <agent>: <finding>"` and done.
+Then re-arm and idle, as always. Never relay a relay — a `relay:` from another caretaker
+or one that already names master goes straight to a report.
 
 ## Boundaries
 - **Never** drive another agent's pane (that's the master's job). Your only lever on master is
