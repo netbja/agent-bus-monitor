@@ -28,6 +28,7 @@
 //	agentbus --project P board     [--json]     # shared task board: task → owner/state/branch
 //	agentbus --project P board     claim <task> [--branch b]     # fails if a peer owns it
 //	agentbus --project P board     state <task> <state> | done <task> | drop <task>
+//	agentbus --project P shutdown  [--force]    # broadcast a shutdown directive to every peer; refused while tasks aren't done or peers are busy
 //	agentbus --project P refresh   [--quiet]    # read local sources -> publish budget + per-agent usage
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
 //	agentbus version               # print the bus protocol version (no project/broker needed)
@@ -83,7 +84,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|refresh|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -456,6 +457,43 @@ func main() {
 		default:
 			die("board: want claim|state|done|drop (or no subcommand to list)")
 		}
+
+	case "shutdown":
+		// Global team stop: broadcast a shutdown directive to every known peer.
+		// Refused while work is in flight (non-done board tasks, busy peers)
+		// unless --force. Closing the panes afterwards is master's job (its
+		// skill) — the bus only carries the signal.
+		_, force := extractBool(rest, "--force")
+		board, err := b.Board(ctx)
+		if err != nil {
+			die(err.Error())
+		}
+		agents, err := b.Agents(ctx)
+		if err != nil {
+			die(err.Error())
+		}
+		if !force {
+			blockers := shutdownBlockers(board, agents, self, time.Now())
+			if len(blockers) > 0 {
+				for _, bl := range blockers {
+					fmt.Fprintln(os.Stderr, "shutdown blocked: "+bl)
+				}
+				die(fmt.Sprintf("shutdown refused: %d blocker(s) — finish the work or pass --force", len(blockers)))
+			}
+		}
+		msg := "shutdown: all work complete — set status done, post a final report, and do NOT re-arm subscribe; master closes your pane"
+		n := 0
+		for name := range agents {
+			if name == self {
+				continue // whoever runs this shuts down last, by hand
+			}
+			if _, err := b.Cmd(ctx, self, name, bus.CmdDirective, "", msg); err != nil {
+				fmt.Fprintf(os.Stderr, "shutdown: cmd to %s failed: %v\n", name, err)
+				continue
+			}
+			n++
+		}
+		fmt.Printf("shutdown broadcast to %d agent(s)\n", n)
 
 	case "refresh":
 		// Read the local artefacts and publish both halves: the ACCOUNT budget

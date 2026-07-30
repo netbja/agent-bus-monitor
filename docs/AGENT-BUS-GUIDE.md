@@ -135,6 +135,11 @@ agentbus board state <task> <state>                     # move the task along (r
 agentbus board done <task>                              # merged/finished; a done task can be re-claimed by anyone
 agentbus board drop <task>                              # release the task without doing it
 
+# ── SHUTDOWN: stop the whole team when the work is done (saves idle burn) ─────
+agentbus shutdown                                       # broadcast "shutdown" to every peer; REFUSED while a board task isn't done or a peer is busy
+agentbus shutdown --force                               # override the guard (you know better)
+# peers then report, set done, and stop re-arming subscribe; master closes the panes (see the master skill)
+
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
 agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s
 agentbus subscribe claude1                              # no --since = skip backlog, start at "now"; arm as a background task
