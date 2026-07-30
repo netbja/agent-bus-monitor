@@ -124,6 +124,14 @@ be asked:
 Sentinel is the cheap relay — relaying is its job. Reserve a direct `cmd master` for when
 YOU are blocked and need a decision, not for FYI traffic.
 
+## A `shutdown` directive means the team is done
+When master broadcasts `shutdown`, the work is over and idling would just burn
+the shared budget on heartbeat wakes. Set `agentbus status done`, post a final
+`agentbus report` if you have unreported work, and do **not** re-arm
+`subscribe` — an idle session with no armed subscribe costs nothing. Master
+closes your pane. If you genuinely still have work, answer on the thread
+instead of going silent.
+
 ## The whole bus in one line
 > Every stream is `{project}:{kind}`. Publish `status`/`report`, receive with `subscribe`
 > (wake-on-exit — re-arm iff `rearm`, persist the `id` cursor), gate the risky with
