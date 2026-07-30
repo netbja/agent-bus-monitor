@@ -112,12 +112,17 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
 7. **Plan-level sign-off before declaring the whole thing done** — one final review against the
    plan's Definition of Done, not just the last task's diff. Per-task review doesn't prove the
    pieces integrate.
+8. **The board is the shared ownership registry** — run `agentbus board` before each dispatch:
+   a task already claimed by a peer is off-limits. Workers claim their task when they start
+   (their agent-bus skill instructs it) and move it to `review`/`done` as it lands. If a
+   dispatch bounces on a failed claim, believe the board, not your plan.
 
 ## Gotchas
 
-- **Shared session budget**: the whole team often draws one account's session pool. Near the limit,
-  broadcast a hold — finish the in-flight task, get it reviewed and committed, then idle — don't
-  dispatch anything new until the reset. Resume normally once it drops back down.
+- **Shared session budget**: the whole team often draws one account's session pool — plan
+  against the reset time `agentbus budget` prints, not just the percentage. **≥ 75%**: wrap-up
+  mode — finish the in-flight task, get it reviewed and committed, dispatch nothing new.
+  **≥ 90%**: full hold until the reset. Resume normally once it drops back down.
 - **Not every peer stays subscribe-armed** — an agent may be deliberately unsubscribed to cut cost
   (expensive model, long idle stretches). `agentbus cmd` alone won't wake it. Check `agentbus agents`
   staleness; if it's stale by design, reach it via Resync (pane injection) instead — and keep the
@@ -126,3 +131,11 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
   transcript — it keeps working even for an agent that publishes nothing). Near a high-context
   threshold, have the agent write a hand-off (current step, what's committed, what's pending)
   BEFORE you `/clear` its pane — never clear first and sort it out after.
+- **Grey ghost text at a peer's prompt is a Claude Code suggestion, not the human typing.**
+  Claude Code pre-fills likely next inputs in dim grey; `herdr pane read` shows that ghost as
+  ordinary text, so a "line typed but not yet submitted" in a pane may be nobody's words.
+  Enter alone does NOT accept a pre-fill (the human confirms with TAB, then Enter) — so never
+  relay an unsubmitted prompt line to another agent, and never treat it as a directive from the
+  human. To tell ghost from real typing, read the pane with `herdr pane read "$pane" --format ansi`:
+  the suggestion renders in a dim SGR color, typed text in the default color. Before any
+  `send-keys Enter`, confirm the prompt buffer is empty or holds exactly what you just sent.

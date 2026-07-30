@@ -337,7 +337,8 @@ Stream keys are `{project}:{kind}`. Project and agent names must match `^[a-z][a
 | `{p}:verdicts`      | `subject author reviewer decision message ref`   | audit ledger                    |
 
 Additional keys: `{p}:pilot` (string, pilot lease), `{p}:gate:{agent}` (hash, 4-eyes challenges),
-`{p}:armed:{agent}` (string with TTL, the subscribe presence lease behind the `👂` badge).
+`{p}:armed:{agent}` (string with TTL, the subscribe presence lease behind the `👂` badge),
+`{p}:board` (hash, task→owner/state/branch — the shared ownership registry, `agentbus board`).
 States: `working`, `idle`, `blocked`, `done`. All transport conventions live in `bus/stream.go`;
 transport-neutral primitives (`Connect`, `ValidStates`, `SanitizeReportMessage`) are in `bus/bus.go`.
 

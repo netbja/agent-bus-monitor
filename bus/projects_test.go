@@ -21,6 +21,7 @@ func TestProjectFromKey(t *testing.T) {
 		{"dev:budget", "dev"},
 		{"dev:verdicts", "dev"},
 		{"dev:pilot", "dev"},
+		{"dev:board", "dev"},
 		{"ai-tradex-solana:status", "ai-tradex-solana"},
 
 		// two-colon keys: the "project" keeps a colon, so ValidName rejects them

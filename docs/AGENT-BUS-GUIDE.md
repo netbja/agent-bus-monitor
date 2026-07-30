@@ -128,6 +128,13 @@ agentbus budget                                         # per-provider ACCOUNT w
 agentbus refresh                                        # republish both from local sources (the sentinel runs this); --quiet from cron
 agentbus version                                        # print the bus protocol version (v1) — no project/broker needed
 
+# ── BOARD: shared task ownership — check it BEFORE starting any task ──────────
+agentbus board                                          # TASK OWNER STATE BRANCH AGE (newest first); --json for raw
+agentbus board claim <task> [--branch <b>]              # take ownership (state=working); FAILS if a peer owns it — that refusal is the point
+agentbus board state <task> <state>                     # move the task along (review, blocked, …)
+agentbus board done <task>                              # merged/finished; a done task can be re-claimed by anyone
+agentbus board drop <task>                              # release the task without doing it
+
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
 agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s
 agentbus subscribe claude1                              # no --since = skip backlog, start at "now"; arm as a background task
