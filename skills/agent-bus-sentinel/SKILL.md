@@ -58,6 +58,12 @@ You start from a blank context; read before you write, assume nothing.
      ```
      At 75% master still lands the in-flight task; at ≥ 90% it holds everything until the
      reset. 75% suits a small subscription — raise it only if the account has headroom.
+   - **All quiet** — `agentbus board` non-empty and all `done`, and no peer
+     `working`/`blocked`: the team may be idling for nothing:
+     ```bash
+     agentbus cmd master "All quiet (board all-done, nobody working) — consider agentbus shutdown"
+     ```
+     An EMPTY board means the team may not have started yet — never nudge then.
    A missed nudge is a no-op; you never force-clear, so no work is ever lost.
 3. That's it. Master owns its own reset (its agent-bus-master skill handles hand-off-before-
    clear) and its own budget hold.

@@ -117,6 +117,22 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    (their agent-bus skill instructs it) and move it to `review`/`done` as it lands. If a
    dispatch bounces on a failed claim, believe the board, not your plan.
 
+## Shutdown — stop the team when the work is done
+Idle agents are not free: every armed `subscribe` wakes its session on each
+heartbeat window. When the plan is done (final sign-off passed, board all
+`done`), bring the team down instead of leaving it in standby:
+1. `agentbus shutdown` — refused while a board task isn't done or a peer is
+   still working/blocked (a stale >10min heartbeat doesn't block: dead, not
+   busy). `--force` overrides when you know better. Sentinel may nudge you
+   toward this when it sees all-quiet.
+2. Each peer receives a `shutdown` directive: it reports, sets `done`, and
+   stops re-arming. Give them a minute to land their final status.
+3. Close the peer tabs: `herdr tab list`, then `herdr tab close <id>` for each
+   agent tab (busmon can stay for the human). Release the pilot lease:
+   `agentbus pilot release`.
+4. Tell the human the team is down. Your own pane goes last — leave it to the
+   human, or close it once everything else is gone.
+
 ## Gotchas
 
 - **Shared session budget**: the whole team often draws one account's session pool — plan
