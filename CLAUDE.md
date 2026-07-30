@@ -24,8 +24,9 @@ Both binaries (`busmon`, `agentbus`) are gitignored build artifacts.
 
 ## Architecture
 
-**`bus/bus.go` + `bus/stream.go` together are the single source of truth**, with `bus/projects.go`
-as a small third file for the one thing that is *not* project-scoped (see below). `bus.go` holds
+**`bus/bus.go` + `bus/stream.go` together are the single source of truth**, with two small
+satellite files: `bus/projects.go` for the one thing that is *not* project-scoped (see below), and
+`bus/board.go` for the shared task-ownership board (`{p}:board`, a hash — not a stream). `bus.go` holds
 transport-neutral primitives (`Connect`, `ValidStates`, `ReportNote`/`ReportAuto`,
 `SanitizeReportMessage`). `stream.go` holds the entire Streams API: the `Bus` handle, stream key
 naming, all publish helpers (`Bus.Status`/`Bus.Report`/`Bus.Notify`/`Bus.Cmd`), `Bus.Tail` for
@@ -33,7 +34,8 @@ read-only observation, `Bus.WatchCmd` for per-agent at-least-once cmd delivery, 
 (`Bus.Pilot`/`Bus.ReleasePilot`/`Bus.PilotDriver`), and the 4-eyes challenge gate
 (`Bus.OpenChallenge`/`Bus.ResolveChallenge`/`Bus.OpenChallenges`). Both binaries call `bus.Connect`
 then `bus.Open` to get a `*Bus`; they contain almost no logic of their own. **Put protocol changes
-in `bus/stream.go` (or `bus/bus.go` for transport-neutral primitives), not in the binaries.**
+in `bus/stream.go` (or `bus/bus.go` for transport-neutral primitives, `bus/board.go` for the
+board), not in the binaries.**
 
 `bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
 function taking a raw client**, not a `*Bus` method, because it answers the question you have
@@ -63,7 +65,8 @@ append-only 4-eyes ledger; one entry per verdict — subject/author/reviewer/dec
 capped at `verdictMaxLen()` = 10000, override `AGENT_BUS_VERDICT_MAX`), `{p}:agents` (Redis hash,
 agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:usage` (Redis hash, agent→`UsageSnapshot`;
 **per-agent** model + context fill), `{p}:budget` (Redis hash, provider→`BudgetSnapshot`;
-**account-scope** session/weekly window per provider).
+**account-scope** session/weekly window per provider), `{p}:board` (Redis hash, task→`BoardEntry`;
+the shared ownership registry — owner + state + branch, claimed via `agentbus board claim`).
 
 ### Budget vs usage: two scopes, two keys, zero cooperation
 
@@ -98,7 +101,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (each a single `main.go`)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`refresh`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`refresh`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle

@@ -25,6 +25,9 @@
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P budget    [--json]     # account budget window, one row per provider
 //	agentbus --project P budget    <provider> <json>             # publish a provider's window
+//	agentbus --project P board     [--json]     # shared task board: task → owner/state/branch
+//	agentbus --project P board     claim <task> [--branch b]     # fails if a peer owns it
+//	agentbus --project P board     state <task> <state> | done <task> | drop <task>
 //	agentbus --project P refresh   [--quiet]    # read local sources -> publish budget + per-agent usage
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
 //	agentbus version               # print the bus protocol version (no project/broker needed)
@@ -80,7 +83,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|refresh|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -403,6 +406,55 @@ func main() {
 		snap.TS = time.Now().UnixMilli()
 		if err := b.SetBudget(ctx, rest[0], snap); err != nil {
 			die(err.Error())
+		}
+
+	case "board":
+		rest, asJSON := extractBool(rest, "--json")
+		rest, branch := extractFlag(rest, "--branch")
+		if len(rest) == 0 { // list the whole board
+			m, err := b.Board(ctx)
+			if err != nil {
+				die(err.Error())
+			}
+			if asJSON {
+				out, _ := json.MarshalIndent(m, "", "  ")
+				fmt.Println(string(out))
+				return
+			}
+			fmt.Print(boardTable(m, time.Now()))
+			return
+		}
+		switch rest[0] {
+		case "claim":
+			if len(rest) < 2 {
+				die("usage: board claim <task> [--branch b]")
+			}
+			if err := b.BoardClaim(ctx, rest[1], self, branch); err != nil {
+				die(err.Error())
+			}
+		case "state":
+			if len(rest) < 3 {
+				die("usage: board state <task> <state>")
+			}
+			if err := b.BoardState(ctx, rest[1], rest[2]); err != nil {
+				die(err.Error())
+			}
+		case "done":
+			if len(rest) < 2 {
+				die("usage: board done <task>")
+			}
+			if err := b.BoardState(ctx, rest[1], "done"); err != nil {
+				die(err.Error())
+			}
+		case "drop":
+			if len(rest) < 2 {
+				die("usage: board drop <task>")
+			}
+			if err := b.BoardDrop(ctx, rest[1]); err != nil {
+				die(err.Error())
+			}
+		default:
+			die("board: want claim|state|done|drop (or no subcommand to list)")
 		}
 
 	case "refresh":

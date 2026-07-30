@@ -22,6 +22,7 @@ import (
 var projectKinds = map[string]bool{
 	"status": true, "report": true, "notify": true, "cmd": true,
 	"agents": true, "usage": true, "budget": true, "verdicts": true, "pilot": true,
+	"board": true,
 }
 
 // activityKinds are the streams whose newest entry dates a project.

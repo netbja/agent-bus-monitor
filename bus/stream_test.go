@@ -85,7 +85,8 @@ func dialTest(t *testing.T) *Bus {
 		ctx := context.Background()
 		r.Del(ctx, StreamKey(project, "status"), StreamKey(project, "report"),
 			StreamKey(project, "notify"), StreamKey(project, "cmd"), PilotKey(project),
-			AgentsKey(project), UsageKey(project), BudgetKey(project), VerdictsKey(project))
+			AgentsKey(project), UsageKey(project), BudgetKey(project), VerdictsKey(project),
+			BoardKey(project))
 		r.Close()
 	})
 	return b
