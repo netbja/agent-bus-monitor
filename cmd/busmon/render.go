@@ -26,7 +26,7 @@ func stateColor(state string) string {
 	switch state {
 	case "working":
 		return "green"
-	case "idle":
+	case "idle", "review":
 		return "yellow"
 	case "blocked":
 		return "red"
@@ -193,6 +193,80 @@ func humanAge(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
+}
+
+// pad right-pads s with spaces to n runes (no-op when already wider).
+func pad(s string, n int) string {
+	if w := len([]rune(s)); w < n {
+		return s + strings.Repeat(" ", n-w)
+	}
+	return s
+}
+
+// boardPanel renders the BOARD pane: one line per task — task, owner, colored
+// state, branch, age — newest activity first (the same order as
+// `agentbus board`, so TUI and CLI tell the same story). Fields are clipped to
+// the pane width; color tags never count toward it.
+func boardPanel(m map[string]bus.BoardEntry, now time.Time, width int) string {
+	if len(m) == 0 || width < 1 {
+		return ""
+	}
+	tasks := make([]string, 0, len(m))
+	ownerW := 0
+	for t, e := range m {
+		tasks = append(tasks, t)
+		if w := len([]rune(e.Owner)); w > ownerW {
+			ownerW = w
+		}
+	}
+	sort.Slice(tasks, func(i, j int) bool {
+		if m[tasks[i]].Updated != m[tasks[j]].Updated {
+			return m[tasks[i]].Updated > m[tasks[j]].Updated
+		}
+		return tasks[i] < tasks[j]
+	})
+	if ownerW > 12 {
+		ownerW = 12
+	}
+	// columns: task owner state branch age — state is padded inside its color
+	// tag so the branch column lines up; task/branch split what is left once
+	// owner, state, age (≤4: "45s"…"999d") and the 4 separators are paid for.
+	// clip() adds its "…" on top of the runes it keeps, so each of the three
+	// clippable columns can overshoot its budget by one — reserve 3 for that.
+	const stateW = 8
+	avail := width - ownerW - stateW - 4 - 4 - 3
+	if avail < 2 {
+		avail = 2
+	}
+	taskW := avail / 2
+	branchW := avail - taskW
+	var sb strings.Builder
+	for _, t := range tasks {
+		e := m[t]
+		state := tag(stateColor(e.State), pad(e.State, stateW))
+		fmt.Fprintf(&sb, "%s %s %s %s %s\n",
+			pad(clip(t, taskW), taskW),
+			pad(clip(e.Owner, ownerW), ownerW),
+			state,
+			tview.Escape(clip(e.Branch, branchW)),
+			humanAge(now.Sub(time.Unix(e.Updated, 0))))
+	}
+	return sb.String()
+}
+
+// boardTitle carries the all-done signal: when every task is done the pane
+// says so in green — the visual cue that an `agentbus shutdown` is pertinent.
+func boardTitle(m map[string]bus.BoardEntry) string {
+	done := 0
+	for _, e := range m {
+		if e.State == "done" {
+			done++
+		}
+	}
+	if len(m) > 0 && done == len(m) {
+		return " BOARD  [green][✓ all done][-] "
+	}
+	return fmt.Sprintf(" BOARD  [gray][%d/%d done][-] ", done, len(m))
 }
 
 // entryTime parses a Redis stream ID ("<ms>-<seq>") to wall-clock time so a
