@@ -12,6 +12,16 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
+// daySeparator renders the day-boundary marker inserted into the ACTIVITY
+// feed when an event falls on a different day than the one before it. The
+// feed shows times only, so without this marker a multi-day history reads as
+// one shuffled morning. Returns the colored display line and the tag-free
+// text (for the clipboard), like handle's line/plain pair.
+func daySeparator(t time.Time) (line, plain string) {
+	d := t.Format("Mon 2006-01-02")
+	return tag("gray", "── "+d+" ──"), "── " + d + " ──"
+}
+
 // reportMarker returns a compact " (+N)" breadcrumb (N = full rune length) when a
 // report retained a full text, so the operator knows `agentbus reports <id>` shows
 // more; empty when there is nothing extra.

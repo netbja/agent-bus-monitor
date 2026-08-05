@@ -11,7 +11,9 @@
 //	BOARD    the shared task board ({project}:board): task → owner/state/branch/age,
 //	         refreshed by the same 1s ticker; the title turns "✓ all done" green
 //	         when every task is done. Hidden while the board is empty.
-//	ACTIVITY scrolling feed of status/report/notify/cmd events. Tab focuses it;
+//	ACTIVITY scrolling feed of status/report/notify/cmd events, with a dim
+//	         "── Mon 2006-01-02 ──" separator at each day boundary (lines
+//	         show times only). Tab focuses it;
 //	         ↑↓/j/k select a line, y/Enter copies it to the clipboard (OSC52, so
 //	         it works over SSH), Esc returns to the live tail.
 //	INPUT    type a message + Enter to publish on {project}:notify; Esc/Ctrl-C quits.
@@ -354,6 +356,7 @@ func main() {
 	var seq int             // monotonic region id source (ids are never reused)
 	selID := ""             // selected region id; "" = live tail (no selection)
 	var screen tcell.Screen // captured each draw, for clipboard (OSC52) writes
+	lastDay := ""           // day of the last feed entry; a change inserts a day separator
 
 	refreshTitle := func() {
 		if pos := selPos(feed, selID); selID != "" && pos >= 0 {
@@ -524,7 +527,8 @@ func main() {
 	// the tview loop via QueueUpdateDraw. Shared by the startup backfill and the
 	// live tail.
 	handle := func(e bus.Event) {
-		ts := entryTime(e.ID).Format("15:04:05")
+		et := entryTime(e.ID)
+		ts := et.Format("15:04:05")
 		var line, plain string // line = colored display; plain = tag-free, for the clipboard
 		switch e.Kind {
 		case "status":
@@ -573,6 +577,18 @@ func main() {
 			plain = ts + " " + e.Message
 		}
 		app.QueueUpdateDraw(func() {
+			// A day boundary inserts a dim separator before the event, so a
+			// multi-day feed stays readable even though lines show times only.
+			// Backfill and the live tail share this path, and lastDay starts
+			// empty, so the very first line of a launch is always anchored.
+			if day := et.Format("2006-01-02"); day != lastDay {
+				lastDay = day
+				seq++
+				sepID := strconv.Itoa(seq)
+				sepLine, sepPlain := daySeparator(et)
+				feed = append(feed, feedLine{id: sepID, text: sepPlain})
+				fmt.Fprintf(activityView, "[\"%s\"]%s[\"\"]\n", sepID, sepLine)
+			}
 			seq++
 			id := strconv.Itoa(seq)
 			feed = append(feed, feedLine{id: id, text: plain})
