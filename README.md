@@ -161,9 +161,10 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
 
 ```
   trading  ·  ⬢ MASTER hermes
-┌─ AGENTS ───────────────────────────────────────────────────────────────────┐
-│ ⬢ hermes: working (plan 10)   claude1: active (soak bug fixed)   claude2: offline │
-├─ ACTIVITY  [live] ────────────────────────────────────────────────────────────┤
+┌─ AGENTS ───────────────────────────────┬─ BOARD  [1/2 done] ──────────────────┐
+│ ⬢ hermes: working (plan 10)   claude1: │ task-21  coder     working coder/t… │
+│ active (soak bug fixed)   claude2: off │ task-20  foureyes  done    foureye… │
+├─ ACTIVITY  [live] ─────────────────────┴──────────────────────────────────────┤
 │ 23:15:12 [claude1] working | plan 10 shipped                                 │
 │ 23:16:02 [notify] Soak 24h started                                           │
 │ 23:16:40 [report:note->claude2] soak bug fixed                               │
@@ -183,6 +184,12 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
   `[session·reset]` = the agent's latest budget readout (from `{p}:usage`). Chips wrap across rows to fit the terminal width;
   the master's chip carries a `⬢` marker. Past `idleAfter` it shows `idle Nm`; past
   `staleAfter`, `offline`.
+- **BOARD** — the shared task board (`{p}:board`), one line per task:
+  `task owner state branch age`, state color-coded, newest activity first (the
+  same order as `agentbus board`). Refreshed by the same 1s ticker as the rest.
+  The title counts `N/M done` and turns green `✓ all done` when every task is
+  done — the visual cue that an `agentbus shutdown` is pertinent. The pane is
+  hidden while the board is empty, leaving the full row width to AGENTS.
 - **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
   and reports. It live-tails by default; **Tab** moves focus here. While focused,
   **↑↓** / **j k** select a line (highlighted), **g**/**Home** jumps to the oldest

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rivo/tview"
+
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -28,6 +30,68 @@ func TestEntryTime(t *testing.T) {
 	}
 	if entryTime("bogus").IsZero() {
 		t.Fatal("entryTime(bogus) returned zero time, want a fallback")
+	}
+}
+
+func TestBoardPanel(t *testing.T) {
+	now := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	m := map[string]bus.BoardEntry{
+		"task-20": {Owner: "foureyes", State: "review", Branch: "foureyes/task-20", Updated: now.Add(-2 * time.Hour).Unix()},
+		"task-21": {Owner: "coder", State: "working", Branch: "coder/task-21", Updated: now.Add(-5 * time.Minute).Unix()},
+	}
+	out := boardPanel(m, now, 80)
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2:\n%s", len(lines), out)
+	}
+	// newest activity first, like `agentbus board`
+	if !strings.Contains(lines[0], "task-21") || !strings.Contains(lines[1], "task-20") {
+		t.Fatalf("not sorted newest first:\n%s", out)
+	}
+	for _, want := range []string{"task-20", "foureyes", "review", "foureyes/task-20", "2h"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("row %q missing %q", lines[1], want)
+		}
+	}
+	// state is color-coded
+	if !strings.Contains(lines[0], "[green]") || !strings.Contains(lines[1], "[yellow]") {
+		t.Errorf("states not color-coded:\n%s", out)
+	}
+}
+
+func TestBoardPanelEmpty(t *testing.T) {
+	if got := boardPanel(nil, time.Now(), 80); got != "" {
+		t.Errorf("boardPanel(nil) = %q, want empty", got)
+	}
+}
+
+func TestBoardPanelClipsToWidth(t *testing.T) {
+	now := time.Now()
+	m := map[string]bus.BoardEntry{
+		"a-very-long-task-slug-indeed": {Owner: "averylongowner", State: "working", Branch: "owner/a-very-long-branch-name", Updated: now.Unix()},
+	}
+	out := boardPanel(m, now, 40)
+	line := strings.TrimRight(out, "\n")
+	if w := tview.TaggedStringWidth(line); w > 40 {
+		t.Errorf("line width %d over the pane width: %q", w, line)
+	}
+}
+
+func TestBoardTitle(t *testing.T) {
+	// The all-done signal is the shutdown cue: it must stand out.
+	all := boardTitle(map[string]bus.BoardEntry{
+		"task-1": {State: "done"},
+		"task-2": {State: "done"},
+	})
+	if !strings.Contains(all, "all done") || !strings.Contains(all, "[green]") {
+		t.Errorf("all-done title = %q, want a green 'all done'", all)
+	}
+	part := boardTitle(map[string]bus.BoardEntry{
+		"task-1": {State: "done"},
+		"task-2": {State: "working"},
+	})
+	if !strings.Contains(part, "1/2 done") || strings.Contains(part, "all done") {
+		t.Errorf("partial title = %q, want '1/2 done'", part)
 	}
 }
 

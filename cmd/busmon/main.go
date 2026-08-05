@@ -8,6 +8,9 @@
 //	AGENTS   per-agent presence (state from status:, liveness also from report:),
 //	         chips wrap to fit terminal width; the master's chip shows a ⬢ marker.
 //	         A lock badge appears when an agent is gated by open 4-eyes challenges.
+//	BOARD    the shared task board ({project}:board): task → owner/state/branch/age,
+//	         refreshed by the same 1s ticker; the title turns "✓ all done" green
+//	         when every task is done. Hidden while the board is empty.
 //	ACTIVITY scrolling feed of status/report/notify/cmd events. Tab focuses it;
 //	         ↑↓/j/k select a line, y/Enter copies it to the clipboard (OSC52, so
 //	         it works over SSH), Esc returns to the live tail.
@@ -177,7 +180,7 @@ type agentState struct {
 	usage    string // this agent's own context fill from the usage hash → [..] badge
 }
 
-func renderAgents(layout *tview.Flex, view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
+func renderAgents(layout *tview.Flex, row *tview.Flex, view *tview.TextView, agents map[string]*agentState, mu *sync.Mutex, pilot *string) {
 	mu.Lock()
 	defer mu.Unlock()
 	names := make([]string, 0, len(agents))
@@ -197,7 +200,27 @@ func renderAgents(layout *tview.Flex, view *tview.TextView, agents map[string]*a
 	}
 	rows, used := packChips(chips, w, maxAgentRows)
 	view.SetText(strings.Join(rows, "\n"))
-	layout.ResizeItem(view, used+2, 0) // +2 borders; grow to fit, capped by maxAgentRows
+	layout.ResizeItem(row, used+2, 0) // +2 borders; grow to fit, capped by maxAgentRows
+}
+
+// renderBoard updates the BOARD pane from the mu-guarded snapshot the 1s
+// ticker refreshes. An empty board hides the pane entirely (ResizeItem 0,0)
+// so AGENTS keeps the full row width.
+func renderBoard(row *tview.Flex, view *tview.TextView, mu *sync.Mutex, board *map[string]bus.BoardEntry) {
+	mu.Lock()
+	m := *board
+	mu.Unlock()
+	if len(m) == 0 {
+		row.ResizeItem(view, 0, 0)
+		return
+	}
+	row.ResizeItem(view, 0, 1)
+	_, _, w, _ := view.GetInnerRect()
+	if w < 1 {
+		w = 40 // before the first layout pass; corrected on the next render
+	}
+	view.SetText(boardPanel(m, time.Now(), w))
+	view.SetTitle(boardTitle(m))
 }
 
 // renderStatus updates the top status bar with the project and current master
@@ -298,6 +321,9 @@ func main() {
 	agentsView := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	agentsView.SetBorder(true).SetTitle(" AGENTS ")
 
+	boardView := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	boardView.SetBorder(true).SetTitle(" BOARD ")
+
 	activityView := tview.NewTextView()
 	activityView.SetDynamicColors(true).SetRegions(true).SetMaxLines(feedCap).SetScrollable(true)
 	activityView.SetBorder(true).SetTitle(activityTitle(0, 0, 0))
@@ -316,6 +342,10 @@ func main() {
 	// Empty until someone runs `agentbus refresh`; the bar then stays blank
 	// rather than implying 0% used.
 	budgets := map[string]bus.BudgetSnapshot{}
+	// Shared task board ({project}:board), refreshed by the same ticker
+	// (guarded by mu). Empty until the first tick; the BOARD pane stays
+	// hidden while there is nothing to show.
+	board := map[string]bus.BoardEntry{}
 
 	// ACTIVITY line-selection state. Everything here is touched only on the
 	// tview event loop (input handlers + QueueUpdateDraw both run there), so it
@@ -399,9 +429,13 @@ func main() {
 		}
 	})
 
+	agentsRow := tview.NewFlex().
+		AddItem(agentsView, 0, 1, false).
+		AddItem(boardView, 0, 0, false) // hidden until the board has a task
+
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(statusView, 1, 0, false).
-		AddItem(agentsView, 3, 0, false).
+		AddItem(agentsRow, 3, 0, false).
 		AddItem(activityView, 0, 1, false).
 		AddItem(input, 3, 0, true)
 
@@ -549,7 +583,7 @@ func main() {
 			// tview.Escape above already neutralised any ["..."] in messages.
 			fmt.Fprintf(activityView, "[\"%s\"]%s[\"\"]\n", id, line)
 			refreshTitle()
-			renderAgents(layout, agentsView, agents, &mu, &pilot)
+			renderAgents(layout, agentsRow, agentsView, agents, &mu, &pilot)
 			renderStatus(statusView, project, &mu, &pilot, &budgets)
 		})
 	}
@@ -582,8 +616,9 @@ func main() {
 		}
 	}()
 
-	// Poll pilot mode + per-agent gate counts + armed leases + cmd backlog off
-	// the UI thread; re-render so chips age and badges update with no new traffic.
+	// Poll pilot mode + per-agent gate counts + armed leases + cmd backlog +
+	// the shared task board off the UI thread; re-render so chips age and
+	// badges update with no new traffic.
 	go func() {
 		for range time.Tick(time.Second) {
 			driver, _ := b.PilotDriver(ctx)
@@ -592,6 +627,7 @@ func main() {
 			snaps, _ := b.Agents(ctx)
 			usageSnaps, _ := b.Usage(ctx)
 			budgetSnaps, _ := b.Budgets(ctx)
+			boardSnap, _ := b.Board(ctx)
 			mu.Lock()
 			names := make([]string, 0, len(agents))
 			for n := range agents {
@@ -607,6 +643,7 @@ func main() {
 			mu.Lock()
 			pilot = driver
 			budgets = budgetSnaps
+			board = boardSnap
 			// Surface agents known only via a live armed lease (subscribed but no
 			// status published yet). Armed keys are TTL'd, so this never leaks a
 			// ghost. Lag-only groups are NOT synthesized — consumer groups persist
@@ -627,7 +664,8 @@ func main() {
 			}
 			mu.Unlock()
 			app.QueueUpdateDraw(func() {
-				renderAgents(layout, agentsView, agents, &mu, &pilot)
+				renderAgents(layout, agentsRow, agentsView, agents, &mu, &pilot)
+				renderBoard(agentsRow, boardView, &mu, &board)
 				renderStatus(statusView, project, &mu, &pilot, &budgets)
 				refreshTitle()
 			})
