@@ -95,6 +95,19 @@ func TestBoardTitle(t *testing.T) {
 	}
 }
 
+func TestDaySeparator(t *testing.T) {
+	line, plain := daySeparator(time.Date(2026, 8, 4, 23, 59, 59, 0, time.UTC))
+	if !strings.Contains(line, "2026-08-04") || !strings.Contains(line, "Tue") {
+		t.Fatalf("line = %q, want the date and weekday", line)
+	}
+	if !strings.Contains(line, "[gray]") {
+		t.Fatalf("line = %q, want it dimmed", line)
+	}
+	if strings.Contains(plain, "[gray]") || !strings.Contains(plain, "2026-08-04") {
+		t.Fatalf("plain = %q, want the date without color tags", plain)
+	}
+}
+
 func TestSelPos(t *testing.T) {
 	feed := []feedLine{{id: "1"}, {id: "2"}, {id: "3"}}
 	for _, tc := range []struct {

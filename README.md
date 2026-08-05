@@ -191,7 +191,9 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
   done — the visual cue that an `agentbus shutdown` is pertinent. The pane is
   hidden while the board is empty, leaving the full row width to AGENTS.
 - **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
-  and reports. It live-tails by default; **Tab** moves focus here. While focused,
+  and reports. Lines carry times only, so a dim `── Mon 2026-08-04 ──` separator
+  is inserted at each day boundary (and above the very first line) to keep a
+  multi-day history readable. It live-tails by default; **Tab** moves focus here. While focused,
   **↑↓** / **j k** select a line (highlighted), **g**/**Home** jumps to the oldest
   and **G**/**End** to the newest, and **y** or **Enter** copies the selected line
   to the clipboard (OSC52, so it works over the SSH tunnel). Mouse wheel / PgUp/PgDn
