@@ -55,12 +55,20 @@ State values are a closed set: **`working` · `idle` · `blocked` · `done`**.
 ## 1. 30-second setup
 
 ```bash
-export AGENT_BUS_PROJECT=trading   # REQUIRED namespace (every stream is {project}:{kind})
+export AGENT_BUS_PROJECT=<project> # REQUIRED namespace (every stream is {project}:{kind})
 export AGENT_BUS_AGENT=claude1     # who YOU are (used as `from` and pilot identity); default "hermes"
 ```
 
 With those exported you can drop `--project` from every command below. The
 broker defaults to `localhost:6380` (override with `--host` or `REDIS_*`).
+
+> **Substitute your real project name — never paste the placeholder as-is.** A
+> wrong-but-valid namespace does not error: the stream is created on first write,
+> your messages land where nobody listens, and every command still exits 0.
+> Observed in the wild: two agents reviewing the same PRs sat in two namespaces
+> for 10 days, one side publishing "ready for review", the other replying
+> elsewhere. Run `agentbus agents` and confirm you can see your peers before you
+> trust the bus.
 
 Sanity check it works:
 
