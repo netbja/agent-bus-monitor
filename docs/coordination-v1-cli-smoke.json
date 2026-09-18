@@ -1,0 +1,13 @@
+{
+  "project": "smoke-bc391ec36714",
+  "request_id": "1789706672981-0",
+  "response_id": "1789706672995-0",
+  "subscribe_protocol": 1,
+  "body_runes": 3600,
+  "delivery_before_accept": "output_written",
+  "state_before_accept": "requested",
+  "final_state": "done",
+  "report_exact": true,
+  "verdict_exact": true,
+  "broker": "isolated Redis 8.6.3 unix socket"
+}

@@ -1,5 +1,9 @@
 # Coordination v1 validation and review
 
+Final outcome: transport 1b5326b and Claude busmon 5c10cb7 validated together
+without merging; 225 Go cases/subtests passed, zero skipped, race checks and
+12 shell tests passed. Independent review: coordination-v1-codex-review.md.
+
 Worktree: `/tmp/agent-bus-monitor-coordination`, branch
 `codex/coordination-v1`, base `1e5f789`. This record accompanies the contract;
 all changes are unmerged and undeployed. Todo_Kimi.txt and the initial working
@@ -171,3 +175,15 @@ A socket timeout at the subscribe idle deadline is normalized to the context
 expiry, preserving heartbeat/64 instead of creating an error/rearm loop.
 After correction, bus+CLI tests pass, including the 100ms proxy test, ordinary
 heartbeat, contention heartbeat, interruption and cross-process restart tests.
+
+
+## Final combined validation
+
+The final independent review is in coordination-v1-codex-review.md. Claude's
+last typed integration commit is 5c10cb7. Transport 1b5326b and all five Claude
+commits after 1e5f789 were combined only through an ephemeral Go overlay.
+Build/vet/tests/race passed independently; JSON logs show 186 cases/subtests on
+the transport tree and 225 on the combined tree, zero skipped/failed. The shell
+demo tests pass 12/12 with stubbed Docker. CLI smoke evidence is committed in
+coordination-v1-cli-smoke.json. Remaining limits and rollback are documented;
+there is no outstanding blocking review finding, automatic merge or deployment.
