@@ -21,8 +21,8 @@ func TestAgentsTable(t *testing.T) {
 	if !strings.Contains(out, "12s ago") {
 		t.Fatalf("claude1 age wrong: %q", out)
 	}
-	if !strings.Contains(out, "offline") {
-		t.Fatalf("hermes (11m) should be offline: %q", out)
+	if !strings.Contains(out, "bus activity stale") {
+		t.Fatalf("hermes (11m) should show stale bus activity: %q", out)
 	}
 	if strings.Index(out, "claude1") > strings.Index(out, "hermes") {
 		t.Fatalf("rows not sorted by name: %q", out)

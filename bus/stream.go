@@ -79,14 +79,16 @@ type AgentIdent struct {
 // issuing the verdict. Ref optionally links to a challenge thread. TS is the ms
 // timestamp derived from the stream id.
 type Verdict struct {
-	ID       string `json:"id"`
-	Subject  string `json:"subject"`
-	Author   string `json:"author"`
-	Reviewer string `json:"reviewer"`
-	Decision string `json:"decision"` // approve | reject
-	Message  string `json:"message,omitempty"`
-	Ref      string `json:"ref,omitempty"`
-	TS       int64  `json:"ts"`
+	ID           string `json:"id"`
+	Subject      string `json:"subject"`
+	Author       string `json:"author"`
+	Reviewer     string `json:"reviewer"`
+	Decision     string `json:"decision"` // approve | reject
+	Message      string `json:"message,omitempty"`
+	Full         string `json:"full,omitempty"`
+	TextComplete string `json:"text_complete,omitempty"`
+	Ref          string `json:"ref,omitempty"`
+	TS           int64  `json:"ts"`
 }
 
 // UsageKey is the per-project hash of latest agent usage snapshots ({agent} →
@@ -136,18 +138,24 @@ type BudgetSnapshot struct {
 
 // Event is a parsed stream entry. Which fields are populated depends on Kind.
 type Event struct {
-	ID      string // redis stream entry id
-	Project string
-	Kind    string // status | report | notify | cmd
-	Agent   string // status/report: the author
-	From    string // notify/cmd: the sender
-	Target  string // cmd: the addressed agent
-	State   string // status: working|idle|blocked|done
-	RKind   string // report: note|auto
-	Type    string // cmd: directive|challenge|reply|verdict
-	Ref     string // cmd: correlation id
-	Message string // status/report/notify text, or the cmd command
-	Full    string // report: full retained text (empty unless it differs from the preview)
+	ID           string // redis stream entry id
+	Project      string
+	Kind         string // status | report | notify | cmd
+	Agent        string // status/report: the author
+	From         string // notify/cmd: the sender
+	Target       string // cmd: the addressed agent
+	State        string // status: working|idle|blocked|done
+	RKind        string // report: note|auto
+	Type         string // cmd: directive|challenge|reply|verdict
+	Ref          string // cmd: correlation id
+	Message      string // status/report/notify text, or the cmd command
+	TextComplete string // yes, no, or empty (legacy unknown)
+	Task         string // optional tracked board task
+	ExpiresAt    int64  // optional command deadline, Unix ms
+	Delivery     string // transport disposition, never acceptance
+	Recovered    bool   // possible duplicate from pending recovery
+	Attempt      int64  // Redis delivery attempt count
+	Full         string // report: full retained text (empty unless it differs from the preview)
 }
 
 // ParseEntry turns a raw stream entry into an Event. The kind is derived from
@@ -155,7 +163,8 @@ type Event struct {
 // the Streams analog of the legacy Parse in bus.go.
 func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	project, kind := splitStreamKey(streamKey)
-	e := Event{ID: id, Project: project, Kind: kind}
+	e := Event{ID: id, Project: project, Kind: kind, TextComplete: fields["text_complete"], Task: fields["task"]}
+	e.ExpiresAt, _ = strconv.ParseInt(fields["expires_at"], 10, 64)
 	switch kind {
 	case "status":
 		e.Agent, e.State, e.Message = fields["agent"], fields["state"], fields["message"]
@@ -240,15 +249,19 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 // preview (SanitizeReportMessage, ≤500) is what listen/busmon render; the full
 // text (SanitizeReportFull, keeps newlines, ≤8000) is retained in a `full` field
 // only when it carries more than the preview, so `agentbus reports <id>` can
-// restore fidelity without flooding the flat viewers.
+// restore fidelity without flooding the flat viewers. Oversize/invalid UTF-8
+// is rejected before publishing; new retained text is exact, not sanitized.
 func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
 	}
+	if err := ValidateText(message, reportFullMax()); err != nil {
+		return "", err
+	}
 	preview := SanitizeReportMessage(message)
-	values := map[string]interface{}{"agent": agent, "kind": kind, "message": preview}
-	if full := SanitizeReportFull(message); full != preview {
-		values["full"] = full
+	values := map[string]interface{}{"agent": agent, "kind": kind, "message": preview, "text_complete": "yes"}
+	if message != preview {
+		values["full"] = message
 	}
 	return b.add(ctx, "report", values)
 }
@@ -263,6 +276,9 @@ func (b *Bus) Notify(ctx context.Context, from, message string) (string, error) 
 // of CmdDirective/CmdChallenge/CmdReply/CmdVerdict; ref correlates a challenge
 // with its replies and verdict (empty for fire-and-forget directives).
 func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (string, error) {
+	if err := ValidateText(command, CmdMaxRunes); err != nil {
+		return "", err
+	}
 	if !ValidName(target) {
 		return "", fmt.Errorf("invalid target %q", target)
 	}
@@ -270,7 +286,7 @@ func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (
 		return "", fmt.Errorf("invalid cmd type %q", typ)
 	}
 	return b.add(ctx, "cmd", map[string]interface{}{
-		"from": from, "target": target, "type": typ, "ref": ref, "command": command,
+		"from": from, "target": target, "type": typ, "ref": ref, "command": command, "text_complete": "yes",
 	})
 }
 
@@ -291,6 +307,9 @@ func (b *Bus) AppendVerdict(ctx context.Context, v Verdict) (string, error) {
 	if v.Decision != "approve" && v.Decision != "reject" {
 		return "", fmt.Errorf("verdict decision must be approve or reject")
 	}
+	if err := ValidateText(v.Message, reportFullMax()); err != nil {
+		return "", err
+	}
 	return b.r.XAdd(ctx, &redis.XAddArgs{
 		Stream: VerdictsKey(b.project),
 		MaxLen: int64(verdictMaxLen()),
@@ -298,6 +317,7 @@ func (b *Bus) AppendVerdict(ctx context.Context, v Verdict) (string, error) {
 		Values: map[string]interface{}{
 			"subject": v.Subject, "author": v.Author, "reviewer": v.Reviewer,
 			"decision": v.Decision, "message": SanitizeReportMessage(v.Message), "ref": v.Ref,
+			"full": v.Message, "text_complete": "yes",
 		},
 	}).Result()
 }
@@ -320,7 +340,7 @@ func (b *Bus) Verdicts(ctx context.Context, subject string) ([]Verdict, error) {
 		out = append(out, Verdict{
 			ID: m.ID, Subject: f["subject"], Author: f["author"],
 			Reviewer: f["reviewer"], Decision: f["decision"],
-			Message: f["message"], Ref: f["ref"], TS: ms,
+			Message: f["message"], Full: f["full"], TextComplete: f["text_complete"], Ref: f["ref"], TS: ms,
 		})
 	}
 	return out, nil
@@ -533,60 +553,21 @@ func splitID(id string) (ms, seq int64) {
 	return ms, seq
 }
 
-// WatchCmd consumes the project's shared cmd stream via a per-agent consumer
-// group (group name = agent), giving at-least-once delivery across one-shot
-// restarts (the cursor lives server-side). fn is called only for entries whose
-// target == agent AND whose ID is strictly newer than floor (pre-floor entries
-// are ACKed but not delivered, so the PEL stays clean). An empty or "0" floor
-// means "no floor" — every entry passes. WatchCmd returns nil when fn returns
-// true (handled; used by the one-shot `agentbus watch`) or the context error
-// when cancelled.
+// WatchCmd is the compatibility adapter. Callback completion is a technical
+// delivery boundary only. Use WatchCmdDelivery to propagate output failures.
 func (b *Bus) WatchCmd(ctx context.Context, agent, consumer, floor string, fn func(Event) bool) error {
-	if !ValidName(agent) {
-		return fmt.Errorf("invalid agent %q", agent)
-	}
-	stream := StreamKey(b.project, "cmd")
-	// A fresh group is created at the floor (so a persisted cursor catches every
-	// entry after it); an empty floor keeps today's "$" = from-now. An existing
-	// group yields BUSYGROUP and keeps its server-side cursor unchanged.
-	createAt := "$"
-	if floor == "0" {
-		createAt = "0"
-	} else if floor != "" {
-		createAt = floor
-	}
-	if err := b.r.XGroupCreateMkStream(ctx, stream, agent, createAt).Err(); err != nil &&
-		!strings.Contains(err.Error(), "BUSYGROUP") {
+	var unavailable error
+	err := b.WatchCmdDelivery(ctx, agent, consumer, floor, func(e Event) (bool, error) {
+		if e.Delivery == "missing" || e.Delivery == "expired" {
+			unavailable = fmt.Errorf("command %s %s: no actionable payload", e.ID, e.Delivery)
+			return true, nil
+		}
+		return fn(e), nil
+	})
+	if err != nil {
 		return err
 	}
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		res, err := b.r.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group: agent, Consumer: consumer,
-			Streams: []string{stream, ">"},
-			Block:   time.Second, Count: 16,
-		}).Result()
-		if err != nil {
-			if errors.Is(err, redis.Nil) {
-				continue
-			}
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return err
-		}
-		for _, s := range res {
-			for _, m := range s.Messages {
-				b.r.XAck(ctx, stream, agent, m.ID) // ACK every read entry, even skipped ones
-				e := ParseEntry(stream, m.ID, toStringMap(m.Values))
-				if e.Target == agent && aboveFloor(floor, e.ID) && fn(e) {
-					return nil
-				}
-			}
-		}
-	}
+	return unavailable
 }
 
 // aboveFloor reports whether id is strictly newer than floor. An empty or "0"
@@ -638,11 +619,12 @@ func (b *Bus) PilotDriver(ctx context.Context) (string, error) {
 	return v, err
 }
 
-// Arm records a subscribe presence lease for agent: a TTL'd key
+// Arm records a legacy subscribe presence lease for agent: a TTL'd key
 // {project}:armed:{agent} whose value is the listening consumer/host. The TTL
 // is the subscriber's idle window, so the lease self-expires if the subscriber
 // crashes — busmon's "listening" badge clears with no cleanup logic. This is
-// observability only; callers must not gate command delivery on it.
+// observability only; callers must not gate command delivery on it. Upgraded
+// subscribers instead own ReceiverKey; ArmedAgents observes both generations.
 func (b *Bus) Arm(ctx context.Context, agent, consumer string, ttl time.Duration) error {
 	if !ValidName(agent) {
 		return fmt.Errorf("invalid agent %q", agent)
@@ -660,39 +642,46 @@ func (b *Bus) Disarm(ctx context.Context, agent string) error {
 }
 
 // ArmedAgents returns agent→consumer for every agent with a live presence
-// lease. Used by busmon to render the listening badge. Keys that expire between
+// lease, including upgraded receiver leases. Used by busmon to render the listening badge. Keys that expire between
 // the SCAN and the GET are skipped.
 func (b *Bus) ArmedAgents(ctx context.Context) (map[string]string, error) {
 	out := make(map[string]string)
-	prefix := b.project + ":armed:"
-	var cursor uint64
-	for {
-		keys, next, err := b.r.Scan(ctx, cursor, prefix+"*", 100).Result()
-		if err != nil {
-			return out, err
-		}
-		for _, k := range keys {
-			v, err := b.r.Get(ctx, k).Result()
+	for _, kind := range []string{"armed", "receiver"} {
+		prefix := b.project + ":" + kind + ":"
+		var cursor uint64
+		for {
+			keys, next, err := b.r.Scan(ctx, cursor, prefix+"*", 100).Result()
 			if err != nil {
-				continue // expired between SCAN and GET
+				return out, err
 			}
-			out[strings.TrimPrefix(k, prefix)] = v
+			for _, k := range keys {
+				v, err := b.r.Get(ctx, k).Result()
+				if errors.Is(err, redis.Nil) {
+					continue
+				}
+				if err != nil {
+					return out, err
+				}
+				if kind == "receiver" {
+					if i := strings.LastIndexByte(v, ':'); i >= 0 {
+						v = v[:i]
+					}
+				}
+				out[strings.TrimPrefix(k, prefix)] = v
+			}
+			if next == 0 {
+				break
+			}
+			cursor = next
 		}
-		if next == 0 {
-			return out, nil
-		}
-		cursor = next
 	}
+	return out, nil
 }
 
-// CmdLag returns, per consumer group on the project's cmd stream, how many
-// entries the group has not yet read (XINFO GROUPS "lag"). Group name == agent
-// name (see WatchCmd), so the result is agent→backlog. A non-zero backlog for an
-// agent with no live armed lease is busmon's "stopped listening" signal. The
-// stream not existing yet is not an error — it just means no backlog. Redis may
-// report a lag of -1 when it cannot be determined (e.g. after the stream is
-// trimmed at its MAXLEN cap); CmdLag passes that through unchanged, and busmon
-// only renders the badge when lag > 0, so -1 is harmlessly ignored.
+// CmdLag returns XINFO GROUPS lag: unread entries in the ENTIRE shared cmd
+// stream, including other targets, excluding pending entries. It is not a count
+// of addressed requests, accepted work, or unfinished actions. -1 means unknown.
+// A missing stream returns an empty map.
 func (b *Bus) CmdLag(ctx context.Context) (map[string]int64, error) {
 	groups, err := b.r.XInfoGroups(ctx, StreamKey(b.project, "cmd")).Result()
 	out := make(map[string]int64, len(groups))

@@ -16,10 +16,10 @@ import (
 func threadReport(threadID string, evs []bus.Event, now time.Time) string {
 	var sb strings.Builder
 	if len(evs) == 0 {
-		fmt.Fprintf(&sb, "thread %s  (no entries)\n", threadID)
+		fmt.Fprintf(&sb, "thread %s  (no entries) [unknown or removed by retention]\n", threadID)
 		return sb.String()
 	}
-	fmt.Fprintf(&sb, "thread %s  (%d entries)\n", threadID, len(evs))
+	fmt.Fprintf(&sb, "thread %s  (%d entries) [retained window only, ~1000 cmd entries]\n", threadID, len(evs))
 	for _, e := range evs {
 		fmt.Fprintf(&sb, "  %-9s %-9s %s→%s",
 			humanAge(now.Sub(time.UnixMilli(idMS(e.ID)))), e.Type, e.From, e.Target)

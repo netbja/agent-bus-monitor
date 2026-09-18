@@ -93,8 +93,8 @@ func verdictsReport(subject string, vs []bus.Verdict, now time.Time) (string, in
 	for i := range vs {
 		v := vs[i]
 		fmt.Fprintf(&sb, "  %-9s %-7s %-12s", humanAge(now.Sub(time.UnixMilli(v.TS))), v.Decision, v.Reviewer)
-		if v.Message != "" {
-			fmt.Fprintf(&sb, "  %q", v.Message)
+		if v.Message != "" || v.Full != "" || v.TextComplete != "yes" {
+			fmt.Fprintf(&sb, "  %q", verdictText(v))
 		}
 		if v.Ref != "" {
 			fmt.Fprintf(&sb, "  ref=%s", v.Ref)
@@ -131,10 +131,24 @@ func verdictsOverview(vs []bus.Verdict, now time.Time) string {
 	for _, v := range vs {
 		fmt.Fprintf(&sb, "%-9s %-12s %-7s %-12s",
 			humanAge(now.Sub(time.UnixMilli(v.TS))), v.Subject, v.Decision, v.Reviewer)
-		if v.Message != "" {
-			fmt.Fprintf(&sb, "  %q", v.Message)
+		if v.Message != "" || v.Full != "" || v.TextComplete != "yes" {
+			fmt.Fprintf(&sb, "  %q", verdictText(v))
 		}
 		sb.WriteByte('\n')
 	}
 	return sb.String()
+}
+
+func verdictText(v bus.Verdict) string {
+	body := v.Message
+	if v.Full != "" {
+		body = v.Full
+	}
+	if v.TextComplete == "" {
+		return "[completeness unknown: legacy entry] " + body
+	}
+	if v.TextComplete == "no" {
+		return "[truncated at publication] " + body
+	}
+	return body
 }

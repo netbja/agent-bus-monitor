@@ -7,10 +7,12 @@ package bus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -65,6 +67,10 @@ type silentLogger struct{}
 
 func (silentLogger) Printf(context.Context, string, ...interface{}) {}
 
+// The go-redis logger is global. Set it before any client goroutine exists;
+// changing it on every Connect races with previously opened client pools.
+func init() { redis.SetLogger(silentLogger{}) }
+
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -77,7 +83,6 @@ func envOr(key, def string) string {
 // AgentBus2025!). A non-empty host overrides REDIS_HOST. It pings before
 // returning so callers fail fast instead of inside the first command.
 func Connect(host string) (*redis.Client, error) {
-	redis.SetLogger(silentLogger{})
 	var client *redis.Client
 	if url := os.Getenv("REDIS_URL"); url != "" {
 		opt, err := redis.ParseURL(url)
@@ -151,4 +156,32 @@ func SanitizeReportFull(s string) string {
 		mapped = strings.TrimSpace(string([]rune(mapped)[:max])) + "…"
 	}
 	return mapped
+}
+
+// MessageLimits describes this writer's limits; stream caps are approximate,
+// not a time-based durability promise. The board has no automatic retention.
+type MessageLimits struct {
+	StreamEntries  int    `json:"stream_entries_approx"`
+	VerdictEntries int    `json:"verdict_entries_approx"`
+	PreviewRunes   int    `json:"preview_runes"`
+	FullRunes      int    `json:"full_runes"`
+	CmdRunes       int    `json:"cmd_runes"`
+	BoardRetention string `json:"board_retention"`
+}
+
+const CmdMaxRunes = 65536
+
+func Limits() MessageLimits {
+	return MessageLimits{streamMaxLen, verdictMaxLen(), reportMaxLen(), reportFullMax(), CmdMaxRunes, "until explicit board drop or project deletion"}
+}
+
+// ValidateText rejects before publishing; no accepted full body is clipped.
+func ValidateText(s string, max int) error {
+	if !utf8.ValidString(s) {
+		return fmt.Errorf("message is not valid UTF-8")
+	}
+	if n := utf8.RuneCountInString(s); n > max {
+		return fmt.Errorf("message has %d runes; limit is %d (not published)", n, max)
+	}
+	return nil
 }
