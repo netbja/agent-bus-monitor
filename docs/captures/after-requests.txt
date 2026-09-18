@@ -1,26 +1,26 @@
  demo  ·  ⬢ MASTER hermes  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
 ┌───────────────────────── AGENTS ─────────────────────────┐┌──────────────────── BOARD  [1/5 done] ───────────────────┐
-│archite╔══════════════════════════ REQUESTS · 5 waiting  [↑↓/jk scroll · Esc back] ══════════════════════════╗… 4m    │
-│coder: ║── tracked requests (3 waiting of 4) ──                                                              ║1m      │
+│archite╔══════════════════════════ REQUESTS · 5 waiting  [↑↓/jk scroll · Esc back] ══════════════════════════╗… 3m    │
+│coder: ║── tracked requests (3 waiting of 4) ──                                                              ║0m      │
 │foureye║task-22 → coder blocked  asked 3h ago                                                                ║        │
 │⬢ herme║   blocked by coder: clé API absente sur le VDR                                                      ║        │
 │sentine║   no deadline set · written to subscriber output (not proof it was read) · availability unknown     ║… 3h    │
-└───────║task-20 → foureyes requested  asked 43m ago                                                          ║────────┘
+└───────║task-20 → foureyes requested  asked 42m ago                                                          ║────────┘
 ┌───────║   not accepted yet — foureyes has not taken it                                                      ║────────┐
-│── Fri ║   deadline in 16m · written to subscriber output (not proof it was read) · availability unknown     ║        │
-│02:48:1║task-21 → coder accepted  asked 2h ago                                                               ║        │
-│02:50:1║   accepted 21m ago by coder — no response recorded yet                                              ║        │
-│03:00:1║   no deadline set · queued — no subscriber output recorded · availability unknown                   ║        │
-│03:06:1║task-19 → architect done  asked 5h ago                                                               ║ sans ch│
-│03:07:1║   answered 3h ago (1789682294000-0)                                                                 ║        │
-│03:09:1║   no deadline set · written to subscriber output (not proof it was read) · availability unknown     ║        │
-│03:12:1║                                                                                                     ║        │
-│03:13:1║── cmd threads with no answer in the retained history (2) ──                                         ║        │
-│03:14:1║   untracked: the protocol records no acceptance for these, and an answer                            ║        │
-│03:17:3║   that has been trimmed from the stream looks the same as one that never came.                      ║        │
-│03:17:4║directive hermes → foureyes  asked 12m ago · thread 1789693634000-0                                  ║        │
+│── Fri ║   deadline in 17m · written to subscriber output (not proof it was read) · availability unknown     ║        │
+│03:00:1║task-21 → coder accepted  asked 2h ago                                                               ║        │
+│03:02:1║   accepted 20m ago by coder — no response recorded yet                                              ║        │
+│03:12:1║   no deadline set · queued — no subscriber output recorded · availability unknown                   ║        │
+│03:18:1║task-19 → architect done  asked 5h ago                                                               ║ sans ch│
+│03:19:1║   answered 3h ago (1789683017000-0)                                                                 ║        │
+│03:21:1║   no deadline set · written to subscriber output (not proof it was read) · availability unknown     ║        │
+│03:24:1║                                                                                                     ║        │
+│03:25:1║── cmd threads with no answer in the retained history (2) ──                                         ║        │
+│03:26:1║   untracked: the protocol records no acceptance for these, and an answer                            ║        │
+│03:29:3║   that has been trimmed from the stream looks the same as one that never came.                      ║        │
+│03:29:5║directive hermes → foureyes  asked 11m ago · thread 1789694357000-0                                  ║        │
 │       ║   relis la tranche busmon quand elle est stable                                                     ║        │
-│       ║challenge foureyes → coder  asked 5m ago · thread pr-42                                              ║        │
+│       ║challenge foureyes → coder  asked 4m ago · thread pr-42                                              ║        │
 │       ║   explique pourquoi le parser ignore le champ full                                                  ║        │
 │       ║                                                                                                     ║        │
 │       ║                                                                                                     ║        │

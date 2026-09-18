@@ -177,6 +177,7 @@ const (
 	feedCap      = 500 // ACTIVITY lines retained for display + selection
 	maxAgentRows = 5   // AGENTS content rows before the "+N" overflow marker
 
+	pollBudget     = 3 * time.Second // deadline for ALL of one tick's reads
 	tailRetry      = 2 * time.Second // pause before resuming the feed after a broker error
 	requestPoll    = 5               // ticks between follow-up view refreshes
 	openThreadScan = 200             // cmd entries scanned for unanswered exchanges
@@ -959,14 +960,40 @@ func main() {
 			// PilotDriver is the canary for the monitor's own link: a plain GET,
 			// run every tick, whose failure means busmon is blind — not that the
 			// agents have gone quiet.
-			driver, perr := b.PilotDriver(ctx)
+			//
+			// It gets its own short deadline. Left to the client's dial timeout
+			// and retries, a stopped broker takes ~25s to surface as an error,
+			// and the bar cheerfully reports "bus ok" throughout — the precise
+			// lie this indicator exists to prevent. A GET that has not answered
+			// in healthCanary seconds is not a healthy link, tunnel or not.
+			// The whole tick shares one deadline. Bounding only the canary is
+			// not enough: every later call would still sit on its own dial
+			// timeout, so the redraw carrying the bad news arrives half a
+			// minute after the news itself.
+			pollCtx, cancelPoll := context.WithTimeout(ctx, pollBudget)
+			driver, perr := b.PilotDriver(pollCtx)
 			setHealth(perr)
-			armed, _ := b.ArmedAgents(ctx)
-			lag, _ := b.CmdLag(ctx)
-			snaps, _ := b.Agents(ctx)
-			usageSnaps, _ := b.Usage(ctx)
-			budgetSnaps, _ := b.Budgets(ctx)
-			boardSnap, _ := b.Board(ctx)
+			if perr != nil {
+				// The link is down. Draw that immediately and keep every
+				// previous snapshot: the remaining reads would each sit on
+				// their own timeout, and their empty results would blank the
+				// budget and the board — which reads as "nothing published"
+				// rather than "nobody could ask". A stale number under a red
+				// link is honest; a blank one is not.
+				cancelPoll()
+				app.QueueUpdateDraw(func() {
+					renderAgents(layout, agentsRow, agentsView, st)
+					renderStatus(statusView, project, st)
+					refreshTitle()
+				})
+				continue
+			}
+			armed, armedErr := b.ArmedAgents(pollCtx)
+			lag, lagErr := b.CmdLag(pollCtx)
+			snaps, snapsErr := b.Agents(pollCtx)
+			usageSnaps, usageErr := b.Usage(pollCtx)
+			budgetSnaps, budgetErr := b.Budgets(pollCtx)
+			boardSnap, boardErr := b.Board(pollCtx)
 
 			// The follow-up view costs a hash read plus a slice of the cmd
 			// stream, and it changes at human speed, so it refreshes every few
@@ -977,10 +1004,10 @@ func main() {
 			var threads []openThread
 			var haveThreads bool
 			if tick%requestPoll == 1 {
-				if raw, err := client.HGetAll(ctx, bus.BoardKey(project)).Result(); err == nil {
+				if raw, err := client.HGetAll(pollCtx, bus.BoardKey(project)).Result(); err == nil {
 					reqs, haveReqs = boardRequests(raw), true
 				}
-				if cmds, _, err := b.Recent(ctx, []string{"cmd"}, openThreadScan); err == nil {
+				if cmds, _, err := b.Recent(pollCtx, []string{"cmd"}, openThreadScan); err == nil {
 					st.mu.Lock()
 					known := st.requests
 					st.mu.Unlock()
@@ -999,15 +1026,21 @@ func main() {
 			st.mu.Unlock()
 			gates := make(map[string]int, len(names))
 			for _, n := range names {
-				if m, err := b.OpenChallenges(ctx, n); err == nil {
+				if m, err := b.OpenChallenges(pollCtx, n); err == nil {
 					gates[n] = len(m)
 				}
 			}
 
 			st.mu.Lock()
 			st.pilot = driver
-			st.budgets = budgetSnaps
-			st.board = boardSnap
+			// Each snapshot survives its own failed read, for the same reason:
+			// an unanswered question must not be rendered as an answer.
+			if budgetErr == nil {
+				st.budgets = budgetSnaps
+			}
+			if boardErr == nil {
+				st.board = boardSnap
+			}
 			if haveReqs {
 				st.requests = reqs
 			}
@@ -1018,7 +1051,7 @@ func main() {
 			// that has ever published a status, so discovery no longer depends
 			// on whether that status happened to fall inside the --limit window
 			// of the ACTIVITY backfill.
-			for n, s := range snaps {
+			for n, s := range agentsOrNil(snaps, snapsErr) {
 				a := st.agents[n]
 				if a == nil {
 					a = &agentState{}
@@ -1043,15 +1076,25 @@ func main() {
 				}
 			}
 			for n, a := range st.agents {
-				_, a.armed = armed[n]
-				a.lag = lag[n]
-				a.pane = snaps[n].Pane
-				a.usage = usageBadge(usageSnaps[n])
+				if armedErr == nil {
+					_, a.armed = armed[n]
+				}
+				if lagErr == nil {
+					a.lag = lag[n]
+				}
+				if snapsErr == nil {
+					a.pane = snaps[n].Pane
+				}
+				if usageErr == nil {
+					a.usage = usageBadge(usageSnaps[n])
+				}
 				if c, ok := gates[n]; ok {
 					a.gated = c
 				}
 			}
 			st.mu.Unlock()
+
+			cancelPoll()
 
 			app.QueueUpdateDraw(func() {
 				renderAgents(layout, agentsRow, agentsView, st)

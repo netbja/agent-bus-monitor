@@ -2,9 +2,12 @@
 # busmon-demo — an isolated bus with reproducible demo data, for renders and
 # manual inspection.
 #
-# It never touches the real broker: it runs its own redis container on port
-# 6390 (the project's broker is 6380) under the container name below, and every
-# key it writes belongs to the throwaway project "demo".
+# It never touches the real broker, and it never touches a container it did not
+# create: it runs its own redis on port 6390 (the project's broker is 6380) in a
+# container labelled busmon-demo=1, and every key it writes belongs to the
+# throwaway project "demo". A container of the same name without that label is
+# somebody else's, and this script refuses it rather than reusing it — the seed
+# wipes state, and wiping state you do not own is how a demo eats a real bus.
 #
 #   scripts/busmon-demo.sh up                 start the container and seed it
 #   scripts/busmon-demo.sh run [args…]        run ./busmon against the demo bus
@@ -18,6 +21,7 @@
 set -euo pipefail
 
 NAME=agent-bus-demo
+LABEL=busmon-demo
 PORT=6390
 PASS=AgentBus2025!
 PROJECT=demo
@@ -27,12 +31,38 @@ r() { docker exec -i "$NAME" redis-cli -a "$PASS" --no-auth-warning "$@" >/dev/n
 
 now_ms() { echo $(($(date +%s) * 1000)); }
 
+exists() { docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; }
+
+# owned is the whole safety story: only a container this script created carries
+# the label, and only a labelled container is ever started, seeded or removed.
+owned() {
+  [[ "$(docker inspect -f "{{index .Config.Labels \"$LABEL\"}}" "$NAME" 2>/dev/null)" == "1" ]]
+}
+
+require_owned() {
+  if ! owned; then
+    echo "refusing: a container named '$NAME' exists but carries no $LABEL=1 label," >&2
+    echo "so this script did not create it. It will not be started, seeded or removed." >&2
+    echo "Rename or remove it yourself if the name is genuinely free." >&2
+    exit 1
+  fi
+}
+
+# wipe_namespace clears ONLY {project}:* inside our own container. Deliberately
+# not FLUSHALL: a wipe that is not scoped to the namespace it owns is one typo
+# away from erasing a real bus.
+wipe_namespace() {
+  docker exec -i "$NAME" sh -c \
+    "redis-cli -a '$PASS' --no-auth-warning --scan --pattern '$PROJECT:*' | xargs -r redis-cli -a '$PASS' --no-auth-warning DEL" >/dev/null
+}
+
 up() {
-  if ! docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; then
-    docker run -d --name "$NAME" -p "127.0.0.1:$PORT:6379" redis:8-alpine \
-      redis-server --requirepass "$PASS" >/dev/null
-  else
+  if exists; then
+    require_owned
     docker start "$NAME" >/dev/null
+  else
+    docker run -d --name "$NAME" --label "$LABEL=1" -p "127.0.0.1:$PORT:6379" redis:8-alpine \
+      redis-server --requirepass "$PASS" >/dev/null
   fi
   for _ in $(seq 30); do
     docker exec -i "$NAME" redis-cli -a "$PASS" --no-auth-warning ping 2>/dev/null | grep -q PONG && break
@@ -44,10 +74,11 @@ up() {
 }
 
 seed() {
+  require_owned
   local now min
   now=$(now_ms)
   min=60000
-  r FLUSHALL
+  wipe_namespace
 
   # ---- status: coder declared working 18 minutes ago and has said nothing since
   r XADD "$PROJECT:status" $((now - 18 * min))-0 agent coder state working message "refactoring the stream parser"
@@ -111,6 +142,8 @@ détails:
   r HSET "$PROJECT:gate:coder" "pr-42" "foureyes|explique le champ full"
 }
 
+# REDIS_URL wins over REDIS_HOST/PORT in bus.Connect, so leaving it set would
+# quietly point a "demo" run at whatever bus it names — including the real one.
 env_for_demo() {
   export REDIS_HOST=127.0.0.1 REDIS_PORT=$PORT REDIS_PASSWORD=$PASS
   unset REDIS_URL || true
@@ -130,7 +163,7 @@ capture() {
   local cols=${COLS:-120} rows=${ROWS:-34}
   mkdir -p "$(dirname "$out")"
   tmux new-session -d -s "$session" -x "$cols" -y "$rows" \
-    "REDIS_HOST=127.0.0.1 REDIS_PORT=$PORT REDIS_PASSWORD='$PASS' '$bin' --project $PROJECT --limit 25"
+    "REDIS_URL= REDIS_HOST=127.0.0.1 REDIS_PORT=$PORT REDIS_PASSWORD='$PASS' '$bin' --project $PROJECT --limit 25"
   sleep 2.5
   for key in "${@:3}"; do tmux send-keys -t "$session" "$key"; sleep 0.6; done
   tmux capture-pane -p -t "$session" >"$out"
@@ -139,7 +172,12 @@ capture() {
 }
 
 down() {
-  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  if ! exists; then
+    echo "no '$NAME' container — nothing to remove"
+    return
+  fi
+  require_owned
+  docker rm -f "$NAME" >/dev/null
   echo "demo bus removed"
 }
 

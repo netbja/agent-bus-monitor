@@ -570,3 +570,12 @@ func agentLabel(n string, a *agentState, now time.Time, master bool) string {
 	}
 	return label
 }
+
+// agentsOrNil drops a snapshot that came from a failed read, so a broker that
+// could not answer never looks like a broker that answered "nobody".
+func agentsOrNil(snaps map[string]bus.AgentSnapshot, err error) map[string]bus.AgentSnapshot {
+	if err != nil {
+		return nil
+	}
+	return snaps
+}
