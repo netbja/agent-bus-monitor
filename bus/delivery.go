@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -100,6 +101,15 @@ func (b *Bus) WatchCmdDelivery(ctx context.Context, agent, consumer, floor strin
 		case e := <-renewal:
 			return e
 		default:
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			// Socket deadlines may fire just before the context timer publishes Err.
+			// Preserve the one-shot idle outcome instead of returning an error wake.
+			var timeout net.Error
+			if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) && errors.As(err, &timeout) && timeout.Timeout() {
+				return context.DeadlineExceeded
+			}
 			return err
 		}
 	}

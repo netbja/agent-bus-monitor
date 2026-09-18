@@ -89,14 +89,16 @@ func Connect(host string) (*redis.Client, error) {
 		if err != nil {
 			return nil, err
 		}
+		opt.ContextTimeoutEnabled = true
 		client = redis.NewClient(opt)
 	} else {
 		if host == "" {
 			host = envOr("REDIS_HOST", "localhost")
 		}
 		client = redis.NewClient(&redis.Options{
-			Addr:     host + ":" + envOr("REDIS_PORT", "6380"),
-			Password: envOr("REDIS_PASSWORD", "AgentBus2025!"),
+			ContextTimeoutEnabled: true,
+			Addr:                  host + ":" + envOr("REDIS_PORT", "6380"),
+			Password:              envOr("REDIS_PASSWORD", "AgentBus2025!"),
 		})
 	}
 	if err := client.Ping(context.Background()).Err(); err != nil {

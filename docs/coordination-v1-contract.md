@@ -193,3 +193,8 @@ acceptance already do. Mixed old/new subscribers still cannot coordinate their
 consumer-group reads; a same-agent cutover is required, but old Arm/Disarm can
 no longer overwrite the upgraded receiver fence. Old busmon may miss new leases
 until its bus package is upgraded; no fake presence or heartbeat is published.
+
+Connect enables go-redis ContextTimeoutEnabled for both URL and host settings.
+An isolated TCP proxy reproduced a 100ms deadline taking 3.001s on an already
+established, blackholed connection. Honoring caller I/O deadlines prevents this
+from defeating subscribe/poll timeouts. This changes no wire fields or keys.

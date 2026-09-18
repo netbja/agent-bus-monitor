@@ -158,3 +158,16 @@ tracked/untracked counts). Two additional findings were sent for correction:
 - monitor health update was delayed by later failing poll reads; refresh failure
   immediately and preserve snapshots on unavailable/partial polls.
 API typed integration and final review still pending at this checkpoint.
+
+### Established-connection timeout regression
+
+Independent review of the polling deadline found go-redis defaults to ignoring
+context deadlines for I/O on established connections. A local TCP proxy forwarding
+ONLY the isolated Redis socket reproduced a 100ms deadline returning after
+3.001420035s when replies were blackholed after Connect's successful ping.
+`TestConnectHonorsDeadlineOnEstablishedConnection` failed before the fix.
+Connect now enables ContextTimeoutEnabled in both URL/host configuration paths.
+A socket timeout at the subscribe idle deadline is normalized to the context
+expiry, preserving heartbeat/64 instead of creating an error/rearm loop.
+After correction, bus+CLI tests pass, including the 100ms proxy test, ordinary
+heartbeat, contention heartbeat, interruption and cross-process restart tests.
