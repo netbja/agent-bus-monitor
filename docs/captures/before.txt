@@ -1,0 +1,34 @@
+ demo  ·  ⬢ MASTER hermes  ·  anthropic 25%/44%
+┌───────────────────────── AGENTS ─────────────────────────┐┌──────────────────── BOARD  [1/5 done] ───────────────────┐
+│coder: offline 👂 🔒1 ⧉ [120k ctx]  foureyes: idle 6m 👂 ⧉││task-23         sentinel  working  sentinel/task-2… 3m    │
+│⬢ hermes: working (driving the slice) ⧉ [84k ctx]         ││task-21         coder     accepted coder/task-21 20m      │
+│sentinel: blocked (no API key for the nightly refresh)    ││task-20         foureyes  requested  42m                  │
+└──────────────────────────────────────────────────────────┘└──────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────── ACTIVITY   ─────────────────────────────────────────────────────┐
+│── Fri 2026-09-18 ──                                                                                                  │
+│02:48:14 [directive hermes->coder] rebase sur main et relance la suite                                                │
+│02:50:14 [reply coder->hermes 1789692494000-0] fait, suite verte                                                      │
+│03:00:14 [coder] working | refactoring the stream parser                                                              │
+│03:06:14 [report:note->coder] résumé du refactor: 3 étapes, 2 faites — le parser accepte désormais les entrées sans ch│
+│03:07:14 [directive hermes->foureyes] relis la tranche busmon quand elle est stable                                   │
+│03:09:14 [foureyes] idle | waiting for a diff to review                                                               │
+│03:12:14 [report:note->foureyes] relecture du diff: deux remarques, rien de bloquant                                  │
+│03:13:14 [notify] slice 1 gelée pour revue — ne pas merger                                                            │
+│03:14:14 [challenge foureyes->coder pr-42] explique pourquoi le parser ignore le champ full                           │
+│03:17:34 [hermes] working | driving the slice                                                                         │
+│03:17:49 [sentinel] blocked | no API key for the nightly refresh                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+╔════════════════════════════════════════════════════════ INPUT ═══════════════════════════════════════════════════════╗
+║>                                                                                                                     ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝

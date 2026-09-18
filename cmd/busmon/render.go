@@ -108,6 +108,32 @@ func selPos(feed []feedLine, id string) int {
 	return -1
 }
 
+// moveSelection steps the selection through the lines currently on screen and
+// returns the newly selected id. It walks the VISIBLE slice, so ↑↓ never stop
+// on a line the filter is hiding, and it clamps at both ends rather than
+// wrapping — wrapping from the newest line to the oldest, in a feed that grows
+// while you read it, loses your place.
+//
+// An empty view, or a selection that has scrolled out of the retained window,
+// lands on the newest visible line.
+func moveSelection(visible []feedLine, cur string, delta int) string {
+	if len(visible) == 0 {
+		return ""
+	}
+	i := selPos(visible, cur)
+	if cur == "" || i < 0 {
+		return visible[len(visible)-1].id
+	}
+	i += delta
+	if i < 0 {
+		i = 0
+	}
+	if i >= len(visible) {
+		i = len(visible) - 1
+	}
+	return visible[i].id
+}
+
 // health is what the monitor knows about its OWN link to the broker. It is
 // deliberately separate from anything an agent publishes: "busmon cannot reach
 // Redis" and "this agent has gone quiet" look identical on screen otherwise,
@@ -485,7 +511,7 @@ func freshness(last, now time.Time, message string) string {
 		return " " + tag("yellow", "· no update "+humanAge(age))
 	}
 	if message != "" {
-		return " " + tview.Escape("("+clip(message, 48)+")")
+		return " " + tview.Escape("("+clip(message, 32)+")")
 	}
 	return ""
 }

@@ -3,20 +3,27 @@
 // Tails one project's streams ({project}:status|report|notify|cmd) and renders:
 //
 //	STATUS   project name + pilot-lease driver as "⬢ MASTER <driver>", or
-//	         "autonomous (no master)" when no lease is held, then the ACCOUNT
-//	         budget per provider ("anthropic 25%/44%" = session/weekly window).
-//	AGENTS   per-agent presence (state from status:, liveness also from report:),
-//	         chips wrap to fit terminal width; the master's chip shows a ⬢ marker.
-//	         A lock badge appears when an agent is gated by open 4-eyes challenges.
+//	         "autonomous (no master)" when no lease is held; what is waiting on
+//	         someone; the ACCOUNT budget per provider ("anthropic 25%/44%" =
+//	         session/weekly window); and the MONITOR's own link to the broker.
+//	AGENTS   one chip per agent, keeping three facts apart: the state the agent
+//	         DECLARED (never overwritten by silence), how old that declaration
+//	         is ("· no update 18m"), and whether a subscriber is armed (👂).
+//	         Chips wrap to fit; the master's shows a ⬢ marker, and badges carry
+//	         cmd backlog (⌛), open 4-eyes challenges (🔒), pane (⧉), context.
 //	BOARD    the shared task board ({project}:board): task → owner/state/branch/age,
 //	         refreshed by the same 1s ticker; the title turns "✓ all done" green
 //	         when every task is done. Hidden while the board is empty.
 //	ACTIVITY scrolling feed of status/report/notify/cmd events, with a dim
 //	         "── Mon 2006-01-02 ──" separator at each day boundary (lines
-//	         show times only). Tab focuses it;
-//	         ↑↓/j/k select a line, y/Enter copies it to the clipboard (OSC52, so
-//	         it works over SSH), Esc returns to the live tail.
+//	         show times only). Tab focuses it; ↑↓/j/k select a line, Enter opens
+//	         it in full, y copies it (OSC52, so it works over SSH), / filters by
+//	         @agent, thread or words, Esc walks back out to the live tail.
 //	INPUT    type a message + Enter to publish on {project}:notify; Esc/Ctrl-C quits.
+//
+// Three overlays sit over that layout, one keypress away so the panes can stay
+// compact: the selected message in full with its thread (Enter), what is
+// waiting on someone (r / F2), and the legend for every badge (? / F1).
 //
 // Project is required: -project or AGENT_BUS_PROJECT. -host overrides REDIS_HOST.
 package main
@@ -168,7 +175,7 @@ const (
 	staleAfter = 10 * time.Minute
 
 	feedCap      = 500 // ACTIVITY lines retained for display + selection
-	maxAgentRows = 4   // AGENTS content rows before the "+N" overflow marker
+	maxAgentRows = 5   // AGENTS content rows before the "+N" overflow marker
 
 	tailRetry      = 2 * time.Second // pause before resuming the feed after a broker error
 	requestPoll    = 5               // ticks between follow-up view refreshes
@@ -510,23 +517,9 @@ func main() {
 		}
 	}
 	moveSelect := func(delta int) {
-		v := visible()
-		if len(v) == 0 {
-			return
+		if id := moveSelection(visible(), selID, delta); id != "" {
+			selectLine(id)
 		}
-		i := selPos(v, selID)
-		if selID == "" || i < 0 {
-			enterSelect()
-			return
-		}
-		i += delta
-		if i < 0 {
-			i = 0
-		}
-		if i >= len(v) {
-			i = len(v) - 1
-		}
-		selectLine(v[i].id)
 	}
 	exitSelect := func() {
 		selID = ""

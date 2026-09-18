@@ -1,0 +1,34 @@
+ demo  ·  ⬢ MASTER hermes  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
+┌───────────────────────── AGENTS ─────────────────────────┐┌──────────────────── BOARD  [1/5 done] ───────────────────┐
+│archite╔═════════ MESSAGE · report · note  [↑↓/jk scroll · y copy text · Y copy thread · Esc back] ══════════╗… 4m    │
+│coder: ║kind    report · note                                                                                ║1m      │
+│foureye║from    coder                                                                                        ║        │
+│⬢ herme║to      (broadcast — every reader of this project)                                                   ║        │
+│sentine║when    2026-09-18 03:06:14  (13m ago)                                                               ║… 3h    │
+└───────║id      1789693574000-0                                                                              ║────────┘
+┌───────║thread  — (this stream carries no thread id)                                                         ║────────┐
+│── Fri ║text    retained text, 404 chars                                                                     ║        │
+│02:48:1║        completeness not marked on this entry — published before the marker existed                  ║        │
+│02:50:1║                                                                                                     ║        │
+│03:00:1║résumé du refactor:                                                                                  ║        │
+│03:06:1║                                                                                                     ║ sans ch│
+│03:07:1║  1. relire le contrat Coordination v1 ✅                                                            ║        │
+│03:09:1║  2. écrire les tests de rendu ✅                                                                    ║        │
+│03:12:1║  3. brancher la vue de suivi sur le board — en cours                                                ║        │
+│03:13:1║                                                                                                     ║        │
+│03:14:1║détails:                                                                                             ║        │
+│03:17:3║  - les entrées anciennes n'ont pas de marqueur text_complete, donc la                               ║        │
+│03:17:4║    complétude est inconnue et l'écran doit le dire                                                  ║        │
+│       ║  - 日本語の行も通る                                                                                 ║        │
+│       ║  - la ligne suivante est délibérément très longue pour vérifier le retour à la ligne dans un        ║        │
+│       ║terminal étroit                                                                                      ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+└───────╚═════════════════════════════════════════════════════════════════════════════════════════════════════╝────────┘
+┌───────────────────────────────────── INPUT  [Tab feed · F1 legend · F2 requests] ────────────────────────────────────┐
+│>                                                                                                                     │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
