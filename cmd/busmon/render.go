@@ -72,11 +72,30 @@ func selectionTitle(pos, total int) string {
 	return fmt.Sprintf(" ACTIVITY  [aqua][● selection %d/%d — ↑↓/jk move · y/⏎ copy · Esc live][-] ", pos, total)
 }
 
-// feedLine pairs a TextView region id with the plain (tag-free) text of one
-// ACTIVITY entry, so a selected line can be copied verbatim to the clipboard.
+// modal centres an overlay over the main layout. The sizes are proportional,
+// never fixed: at 40 columns the overlay still leaves a frame of context around
+// it instead of demanding a width the terminal does not have.
+func modal(p tview.Primitive) tview.Primitive {
+	return tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(p, 0, 12, true).
+			AddItem(nil, 0, 1, false), 0, 12, true).
+		AddItem(nil, 0, 1, false)
+}
+
+// feedLine is one ACTIVITY entry: its TextView region id, the coloured line and
+// the plain (tag-free) one for the clipboard, and the event itself. Keeping the
+// event — rather than only the string that was printed — is what lets a
+// selected line be opened in full, filtered on, or traced to its thread.
+// A day separator has a zero Event (Kind ""), which is how it is told apart.
 type feedLine struct {
 	id   string
-	text string
+	line string // colour-tagged, as written to the view
+	text string // tag-free, for the clipboard
+	ev   bus.Event
+	at   time.Time
 }
 
 // selPos returns the index of id in feed, or -1 if it has scrolled out.
@@ -89,24 +108,69 @@ func selPos(feed []feedLine, id string) int {
 	return -1
 }
 
+// health is what the monitor knows about its OWN link to the broker. It is
+// deliberately separate from anything an agent publishes: "busmon cannot reach
+// Redis" and "this agent has gone quiet" look identical on screen otherwise,
+// and they call for opposite reactions.
+type health struct {
+	ok    bool
+	since time.Time // when the current condition started
+	err   string    // last connection error, when not ok
+}
+
+// healthIndicator renders the monitor's own connection, always present so its
+// absence is never mistaken for silence on the bus.
+func healthIndicator(h health, now time.Time) string {
+	if h.ok {
+		return "[green]⇄ bus ok[-]"
+	}
+	age := ""
+	if !h.since.IsZero() {
+		age = " " + humanAge(now.Sub(h.since))
+	}
+	reason := ""
+	if h.err != "" {
+		reason = " (" + clip(h.err, 40) + ")"
+	}
+	return tag("red", "⇄ monitor cannot reach the bus"+age+reason)
+}
+
+// statusData is everything the top bar reports. Grouped in a struct because the
+// bar answers several unrelated questions at once — who drives, what is
+// waiting, what the account has left, and whether the monitor itself is
+// connected — and each one arrives from a different place.
+type statusData struct {
+	project string
+	driver  string
+	budgets map[string]bus.BudgetSnapshot
+	waiting string // "3 waiting · oldest 42m", empty when nothing waits
+	health  health
+	now     time.Time
+}
+
 // statusBar renders the top bar: the project, the master indicator derived from
-// the pilot-lease driver (master == whoever holds the lease; empty = none), and
-// the ACCOUNT budget per provider.
+// the pilot-lease driver (master == whoever holds the lease; empty = none),
+// what is waiting on someone, the ACCOUNT budget per provider, and the
+// monitor's own link to the broker.
 //
 // The budget belongs here and not on an agent chip: a session/weekly window is
 // the shared subscription every agent draws on, so pinning it next to one agent
 // would read as that agent's own number.
-func statusBar(project, driver string, budgets map[string]bus.BudgetSnapshot) string {
+func statusBar(s statusData) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, " [white]%s[-]  ·  ", tview.Escape(project))
-	if driver == "" {
+	fmt.Fprintf(&sb, " [white]%s[-]  ·  ", tview.Escape(s.project))
+	if s.driver == "" {
 		sb.WriteString("[yellow]autonomous (no master)[-]")
 	} else {
-		fmt.Fprintf(&sb, "[green]⬢ MASTER %s[-]", tview.Escape(driver))
+		fmt.Fprintf(&sb, "[green]⬢ MASTER %s[-]", tview.Escape(s.driver))
 	}
-	if b := budgetBar(budgets); b != "" {
+	if s.waiting != "" {
+		sb.WriteString("  ·  " + s.waiting)
+	}
+	if b := budgetBar(s.budgets); b != "" {
 		sb.WriteString("  ·  " + b)
 	}
+	sb.WriteString("  ·  " + healthIndicator(s.health, s.now))
 	return sb.String()
 }
 
@@ -404,21 +468,57 @@ func agentCompletions(currentText string, names []string) []string {
 	return out
 }
 
-// agentLabel renders one agent's AGENTS-pane chip: the aged state, then badges
-// for listening (👂), command backlog (⌛N — orange when nobody is listening),
-// and open 4-eyes challenges (🔒N). When master is true, prepends a ⬢ marker.
+// freshness reports how old the agent's own last word is — never what it means.
+// The bus has no heartbeat, so silence is silence: it may be a busy agent, a
+// closed pane or a dead host, and busmon is not entitled to choose between
+// them. Under idleAfter the age is uninteresting and the last message takes the
+// space instead; past it, the age replaces the message because "when did we
+// last hear anything" is then the only question worth the width.
+func freshness(last, now time.Time, message string) string {
+	if last.IsZero() {
+		return " " + tag("gray", "· no update seen")
+	}
+	switch age := now.Sub(last); {
+	case age > staleAfter:
+		return " " + tag("orange", "· no update "+humanAge(age))
+	case age > idleAfter:
+		return " " + tag("yellow", "· no update "+humanAge(age))
+	}
+	if message != "" {
+		return " " + tview.Escape("("+clip(message, 48)+")")
+	}
+	return ""
+}
+
+// agentLabel renders one agent's AGENTS-pane chip. It keeps three facts apart
+// that the old chip merged into one word:
+//
+//   - the state the agent DECLARED (coloured, always shown, never overwritten —
+//     an agent that said "working" and then went quiet is still shown as
+//     working, because that is the last thing it actually said);
+//   - how old that declaration is ("· no update 18m" — a fact, unlike the
+//     "offline" this replaces, which was a guess dressed as an observation);
+//   - whether a subscriber is armed for it (👂), which is a lease, not a state.
+//
+// Then the badges: command backlog (⌛N — orange when nobody is listening), open
+// 4-eyes challenges (🔒N), herdr pane (⧉), own context fill ([..]). When master
+// is true, prepends a ⬢ marker.
 func agentLabel(n string, a *agentState, now time.Time, master bool) string {
 	var label string
-	switch age := now.Sub(a.lastSeen); {
-	case age > staleAfter:
-		label = tag("gray", n+": offline")
-	case age > idleAfter:
-		label = tag("yellow", fmt.Sprintf("%s: idle %dm", n, int(age.Minutes())))
-	default:
-		label = tag(stateColor(a.state), n+": "+a.state)
-		if a.message != "" {
-			label += " " + tview.Escape("("+clip(a.message, 48)+")")
+	if a.state == "" {
+		// Seen on the bus (a report, or an armed lease) but it has never said
+		// what it is doing. That is not a state, and inventing one here is how
+		// presence gets mistaken for progress.
+		label = tag("gray", n+": no state declared")
+		if !a.lastSeen.IsZero() {
+			label += " " + tag("gray", "· last seen "+humanAge(now.Sub(a.lastSeen))+" ago")
 		}
+	} else {
+		// The age is the age of the DECLARATION, not of the agent's last sign of
+		// life: a report proves the process is alive, not that "working" is still
+		// true. Reading the fresher stamp here would quietly re-validate a stale
+		// claim, which is the conflation this chip exists to undo.
+		label = tag(stateColor(a.state), n+": "+a.state) + freshness(a.stateAt, now, a.message)
 	}
 	if a.armed {
 		label += " [green]👂[-]"
