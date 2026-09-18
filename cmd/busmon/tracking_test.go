@@ -8,33 +8,42 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// The exact shape the Coordination v1 publisher writes into {p}:board. If this
-// stops parsing, the follow-up view has silently gone blind.
-const requestedJSON = `{"owner":"foureyes","state":"requested","updated":1758142000,` +
-	`"request":{"id":"1758141663000-0","thread":"1758141663000-0","from":"hermes",` +
-	`"target":"foureyes","created_at":1758141663000,"expires_at":0,"delivery":"queued"}}`
+// The entry a Coordination v1 publisher records for a fresh request. If this
+// mapping stops holding, the follow-up view has silently gone blind.
+func requestedEntry() bus.BoardEntry {
+	return bus.BoardEntry{
+		Owner: "foureyes", State: "requested", Updated: 1758142000,
+		Request: &bus.RequestInfo{
+			ID: "1758141663000-0", Thread: "1758141663000-0",
+			From: "hermes", Target: "foureyes",
+			CreatedAt: 1758141663000, ExpiresAt: 0,
+			Delivery: "queued", Availability: "retained",
+		},
+	}
+}
 
-func TestBoardRequestsParsesTheContractShape(t *testing.T) {
-	got := boardRequests(map[string]string{"task-20": requestedJSON})
+func TestBoardRequestsMapsEveryContractField(t *testing.T) {
+	got := boardRequests(map[string]bus.BoardEntry{"task-20": requestedEntry()})
 	if len(got) != 1 {
-		t.Fatalf("parsed %d requests, want 1", len(got))
+		t.Fatalf("read %d requests, want 1", len(got))
 	}
 	r := got[0]
 	if !r.Tracked {
-		t.Error("an entry carrying a request object must read as tracked")
+		t.Error("an entry carrying a request must read as tracked")
 	}
-	for name, check := range map[string]bool{
-		"task":     r.Task == "task-20",
-		"target":   r.Target == "foureyes",
-		"from":     r.From == "hermes",
-		"state":    r.State == "requested",
-		"thread":   r.Thread == "1758141663000-0",
-		"id":       r.ID == "1758141663000-0",
-		"delivery": r.Delivery == "queued",
-		"created":  r.Created.Equal(time.UnixMilli(1758141663000)),
+	for name, ok := range map[string]bool{
+		"task":         r.Task == "task-20",
+		"target":       r.Target == "foureyes",
+		"from":         r.From == "hermes",
+		"state":        r.State == "requested",
+		"thread":       r.Thread == "1758141663000-0",
+		"id":           r.ID == "1758141663000-0",
+		"delivery":     r.Delivery == "queued",
+		"availability": r.Availability == "retained",
+		"created":      r.Created.Equal(time.UnixMilli(1758141663000)),
 	} {
-		if !check {
-			t.Errorf("field %s did not survive the parse: %+v", name, r)
+		if !ok {
+			t.Errorf("field %s did not survive the mapping: %+v", name, r)
 		}
 	}
 	// expires_at 0 means "no deadline", not "1970".
@@ -43,43 +52,23 @@ func TestBoardRequestsParsesTheContractShape(t *testing.T) {
 	}
 }
 
-// An ordinary board task carries no request object. It records no acceptance
-// and no response, so it must never be counted or listed as a pending request —
-// the BOARD pane is where ownership bookkeeping belongs.
-func TestPlainBoardTasksAreNeverCountedAsRequests(t *testing.T) {
+// Availability is derived by the typed reader at read time. busmon must render
+// what it says and, when it says nothing, admit the gap rather than assume.
+func TestAvailabilityIsRenderedFromTheTypedReader(t *testing.T) {
 	now := time.Now()
-	plain := `{"owner":"coder","state":"working","branch":"coder/task-21","updated":1758142000}`
-	got := boardRequests(map[string]string{"task-21": plain})
-	if len(got) != 1 || got[0].Tracked {
-		t.Fatalf("a plain board task must read as untracked: %+v", got)
+	e := requestedEntry()
+	e.Request.Availability = "missing"
+	block := requestBlock(boardRequests(map[string]bus.BoardEntry{"task-20": e})[0], now)
+	if !strings.Contains(block, "cause unknown") {
+		t.Errorf("a missing body must name no cause:\n%s", block)
 	}
-	if panel := requestsPanel(got, nil, now, 80); strings.Contains(panel, "task-21") {
-		t.Errorf("an untracked board task must not be listed as a request:\n%s", panel)
+	if strings.Contains(block, "trimmed") || strings.Contains(block, "aged out") {
+		t.Errorf("a missing body must not be blamed on trimming:\n%s", block)
 	}
-	if line := waitingLine(got, nil, now); line != "" {
-		t.Errorf("an untracked board task must not count as waiting, got %q", line)
-	}
-}
-
-// A tracked request publishes a directive into the cmd stream. Without
-// de-duplication it would surface twice — once as a request, once as an
-// unanswered thread — and be counted as two things waiting.
-func TestOpenThreadsSkipWhatATrackedRequestAlreadyCovers(t *testing.T) {
-	reqs := boardRequests(map[string]string{"task-20": requestedJSON})
-	cmds := []bus.Event{
-		{ID: "1758141663000-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "foureyes", Message: "review it"},
-		{ID: "1758141999000-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder", Message: "something untracked"},
-	}
-	got := openThreads(cmds, reqs)
-	if len(got) != 1 || got[0].ID != "1758141999000-0" {
-		t.Fatalf("a tracked request's own cmd must not reappear as an open thread: %+v", got)
-	}
-}
-
-func TestBoardRequestsSkipsCorruptEntries(t *testing.T) {
-	got := boardRequests(map[string]string{"bad": "{not json", "task-20": requestedJSON})
-	if len(got) != 1 || got[0].Task != "task-20" {
-		t.Errorf("a corrupt board value must be skipped, not guessed at: %+v", got)
+	e.Request.Availability = ""
+	block = requestBlock(boardRequests(map[string]bus.BoardEntry{"task-20": e})[0], now)
+	if !strings.Contains(block, "availability unknown") {
+		t.Errorf("an underived availability must read as unknown:\n%s", block)
 	}
 }
 
@@ -156,11 +145,11 @@ func TestNextActionStatesRecordedFactsOnly(t *testing.T) {
 // operator has to act in.
 func TestRequestsSortByWhatNeedsAttention(t *testing.T) {
 	now := time.Now()
-	raw := map[string]string{
-		"a-done":      `{"owner":"x","state":"done","updated":1}`,
-		"b-accepted":  `{"owner":"x","state":"accepted","updated":2}`,
-		"c-requested": `{"owner":"x","state":"requested","updated":3}`,
-		"d-blocked":   `{"owner":"x","state":"blocked","updated":4}`,
+	raw := map[string]bus.BoardEntry{
+		"a-done":      {Owner: "x", State: "done", Updated: 1},
+		"b-accepted":  {Owner: "x", State: "accepted", Updated: 2},
+		"c-requested": {Owner: "x", State: "requested", Updated: 3},
+		"d-blocked":   {Owner: "x", State: "blocked", Updated: 4},
 	}
 	got := boardRequests(raw)
 	var order []string
@@ -209,7 +198,7 @@ func TestOpenThreadsExcludeAnsweredExchanges(t *testing.T) {
 
 func TestRequestsPanelSeparatesTrackedFromUntracked(t *testing.T) {
 	now := time.Now()
-	reqs := boardRequests(map[string]string{"task-20": requestedJSON})
+	reqs := boardRequests(map[string]bus.BoardEntry{"task-20": requestedEntry()})
 	threads := openThreads([]bus.Event{
 		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder", Message: "look at the flake"},
 	}, reqs)

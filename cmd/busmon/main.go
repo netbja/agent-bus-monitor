@@ -970,6 +970,14 @@ func main() {
 			// not enough: every later call would still sit on its own dial
 			// timeout, so the redraw carrying the bad news arrives half a
 			// minute after the news itself.
+			//
+			// The deadline is only worth this much because bus.Connect sets
+			// ContextTimeoutEnabled on the client. Left at go-redis's default
+			// it governs dialing and waiting for a free connection but not I/O
+			// on one already open, so a black-holed link — packets dropped, the
+			// socket still up — would sail past it and the bar would keep
+			// saying "bus ok". If that option ever goes away, so does this
+			// guarantee.
 			pollCtx, cancelPoll := context.WithTimeout(ctx, pollBudget)
 			driver, perr := b.PilotDriver(pollCtx)
 			setHealth(perr)
@@ -1003,10 +1011,14 @@ func main() {
 			var haveReqs bool
 			var threads []openThread
 			var haveThreads bool
+			// The board is already in hand, and the typed reader derived
+			// Availability with it, so the requests view costs nothing extra.
+			// Only the cmd-stream scan behind the untracked-threads list is
+			// throttled: that one is an XREVRANGE over hundreds of entries.
+			if boardErr == nil {
+				reqs, haveReqs = boardRequests(boardSnap), true
+			}
 			if tick%requestPoll == 1 {
-				if raw, err := client.HGetAll(pollCtx, bus.BoardKey(project)).Result(); err == nil {
-					reqs, haveReqs = boardRequests(raw), true
-				}
 				if cmds, _, err := b.Recent(pollCtx, []string{"cmd"}, openThreadScan); err == nil {
 					st.mu.Lock()
 					known := st.requests

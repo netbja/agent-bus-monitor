@@ -2,27 +2,27 @@
 ┌───────────────────────── AGENTS ─────────────────────────┐┌──────────────────── BOARD  [1/5 done] ───────────────────┐
 │archite╔═════════ MESSAGE · report · note  [↑↓/jk scroll · y copy text · Y copy thread · Esc back] ══════════╗… 3m    │
 │coder: ║kind    report · note                                                                                ║0m      │
-│foureye║from    coder                                                                                        ║        │
+│foureye║from    sentinel                                                                                     ║        │
 │⬢ herme║to      (broadcast — every reader of this project)                                                   ║        │
-│sentine║when    2026-09-18 03:18:17  (12m ago)                                                               ║… 3h    │
-└───────║id      1789694297000-0                                                                              ║────────┘
+│sentine║when    2026-09-18 04:10:59  (3m ago)                                                                ║… 3h    │
+└───────║id      1789697459000-0                                                                              ║────────┘
 ┌───────║thread  — (this stream carries no thread id)                                                         ║────────┐
-│── Fri ║text    retained text, 404 chars                                                                     ║        │
-│03:00:1║        completeness not marked on this entry — published before the marker existed                  ║        │
-│03:02:1║                                                                                                     ║        │
-│03:12:1║résumé du refactor:                                                                                  ║        │
-│03:18:1║                                                                                                     ║ sans ch│
-│03:19:1║  1. relire le contrat Coordination v1 ✅                                                            ║        │
-│03:21:1║  2. écrire les tests de rendu ✅                                                                    ║        │
-│03:24:1║  3. brancher la vue de suivi sur le board — en cours                                                ║        │
-│03:25:1║                                                                                                     ║        │
-│03:26:1║détails:                                                                                             ║        │
-│03:29:3║  - les entrées anciennes n'ont pas de marqueur text_complete, donc la                               ║        │
-│03:29:5║    complétude est inconnue et l'écran doit le dire                                                  ║        │
-│       ║  - 日本語の行も通る                                                                                 ║        │
-│       ║  - la ligne suivante est délibérément très longue pour vérifier le retour à la ligne dans un        ║        │
-│       ║terminal étroit                                                                                      ║        │
-│       ║                                                                                                     ║        │
+│── Fri ║text    complete — full text retained (256 chars)                                                    ║        │
+│01:13:5║                                                                                                     ║        │
+│02:13:5║revue quotidienne                                                                                    ║        │
+│03:31:5║                                                                                                     ║        │
+│03:43:5║budget: 25% de la fenêtre de session, 44% de la semaine                                              ║        │
+│03:45:5║tâches: aucune bloquée depuis hier                                                                   ║        │
+│03:55:5║remarque: cette entrée porte le marqueur text_complete, donc son texte peut                          ║        │
+│04:01:5║être annoncé comme complet — contrairement aux entrées plus anciennes.                               ║ sans ch│
+│04:02:5║                                                                                                     ║        │
+│04:04:5║                                                                                                     ║        │
+│04:07:5║                                                                                                     ║        │
+│04:08:5║                                                                                                     ║        │
+│04:09:5║                                                                                                     ║        │
+│04:10:5║                                                                                                     ║        │
+│04:13:1║                                                                                                     ║        │
+│04:13:3║                                                                                                     ║        │
 │       ║                                                                                                     ║        │
 │       ║                                                                                                     ║        │
 │       ║                                                                                                     ║        │

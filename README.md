@@ -198,9 +198,13 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
     but never a status reads `no state declared`.
   - **the subscription** — `👂`, a live `subscribe` lease. A lease, not a state.
 
-  Then the badges: `⌛N` = N cmd entries unread by its consumer group (orange when
-  nobody is listening — the "stopped re-arming" tell); `🔒N` = open 4-eyes
-  challenges; `⧉` = attached to a herdr pane; `[120k ctx]` = that agent's own
+  Then the badges: `⌛N` = N entries this agent's consumer group has not read —
+  the cmd stream is **shared**, so that counts entries addressed to anyone and is
+  not a queue of work for this agent, and entries read but unacknowledged are not
+  counted at all (orange when no lease is live: a question worth asking, not a
+  diagnosis); `🔒N` = open 4-eyes challenges; `⧉` = the agent published a herdr
+  pane id with its last status — declared, not verified, since the pane may be
+  long closed; `[120k ctx]` = that agent's own
   context fill (from `{p}:usage`); `⬢` = holds the pilot lease. Chips wrap to fit
   the terminal width, and `+N` means that many did not fit. The roster comes from
   the `{p}:agents` hash, so an agent that last spoke before the `--limit` backfill
@@ -243,10 +247,10 @@ It also states **how much of the text is really there**, which the feed cannot:
 | line | meaning |
 |---|---|
 | `complete — this is the whole message as published` | the entry carries `text_complete: yes` |
-| `truncated at publish — the rest was never stored` | `text_complete: no`; re-reading will not bring it back, the author has to resend |
+| `truncated at publish — the rest was never stored` | `text_complete: no` — the entry is *marked* as cut; re-reading will not bring it back, the author has to resend |
 | `one-line preview, no further text retained` | no `full` field was stored |
 | `completeness not marked on this entry` | published before the marker existed, so completeness is **unknown** |
-| `not retained — this id reads back empty (cause unknown)` | the entry is gone; an empty read cannot tell trimming from deletion |
+| `not retained — this id reads back empty (cause unknown)` | an empty read cannot tell a trimmed entry from a deleted one, or from an id that never existed |
 
 A trailing `…` is deliberately **not** read as proof of truncation: the sanitiser
 writes one when it cuts, but so do authors.
@@ -257,7 +261,8 @@ each with its target, age, what would move it, and the evidence: the deadline
 **only when `expires_at` is set**, and the delivery disposition in words.
 `output_written` renders as *written to subscriber output (not proof it was read)* —
 never as received or accepted; `queued` means no output was **recorded**, not that
-none was ever written; a `missing` body never implies the work is done. Cmd threads
+none was ever written; a body that reads back empty is reported as *not retained,
+cause unknown* and never implies the work is done. Cmd threads
 with no answer in the retained history are listed separately and labelled as
 carrying no acceptance signal at all, because the protocol records none for them.
 

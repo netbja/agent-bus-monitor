@@ -66,13 +66,13 @@ func missingFidelity() fidelity {
 	return fidelity{Label: "not retained — this id reads back empty (cause unknown)", Tone: "red"}
 }
 
-// eventFidelity classifies one feed event.
-//
-// bus.Event does not carry the Coordination v1 text_complete marker in this
-// tree yet (it is Codex's side of the contract), so every entry reads as
-// unmarked — which is precisely what an unmarked entry means. When the field
-// lands this passes e.TextComplete instead of "".
-func eventFidelity(e bus.Event) fidelity { return classify(e.Kind, e.Message, e.Full, "") }
+// eventFidelity classifies one feed event against the Coordination v1
+// completeness marker: "yes" complete, "no" truncated at publish, and empty for
+// every entry published before the marker existed — which classify reports as
+// unverified rather than guessing from the text.
+func eventFidelity(e bus.Event) fidelity {
+	return classify(e.Kind, e.Message, e.Full, e.TextComplete)
+}
 
 // messageBody is the most complete text busmon holds for an entry: the retained
 // full text when there is one, else the stored preview. Newlines are kept — the

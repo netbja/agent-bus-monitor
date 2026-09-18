@@ -111,12 +111,35 @@ détails:
   - la ligne suivante est délibérément très longue pour vérifier le retour à la ligne dans un terminal étroit"
   r XADD "$PROJECT:report" $((now - 6 * min))-0 agent foureyes kind note \
     message "relecture du diff: deux remarques, rien de bloquant"
+  # A Coordination v1 writer marks completeness. Seeded alongside the unmarked
+  # ones above so the demo shows both readings side by side: this entry can be
+  # promised whole, the older ones cannot.
+  r XADD "$PROJECT:report" $((now - 3 * min))-0 agent sentinel kind note text_complete yes \
+    message "revue quotidienne: budget 25%/44%, aucune tâche bloquée depuis hier" \
+    full "revue quotidienne
+
+budget: 25% de la fenêtre de session, 44% de la semaine
+tâches: aucune bloquée depuis hier
+remarque: cette entrée porte le marqueur text_complete, donc son texte peut
+être annoncé comme complet — contrairement aux entrées plus anciennes."
 
   # ---- notify
   r XADD "$PROJECT:notify" $((now - 5 * min))-0 from hermes message "slice 1 gelée pour revue — ne pas merger"
 
-  # ---- cmd: one answered exchange, one directive still unanswered, and a
-  # challenge threaded on a subject ref rather than a stream id.
+  # ---- cmd, in id order (XADD only accepts increasing ids).
+  #
+  # The three newest tracked requests point at REAL entries here, exactly as
+  # bus.Request does when it publishes the directive and records its id. That
+  # matters for the demo: Board() derives availability by reading the body back,
+  # so a request whose id names nothing would render as "not retained".
+  # task-19 is the deliberate exception — five hours old, its body no longer in
+  # the stream, which is what an aged-out request actually looks like.
+  r XADD "$PROJECT:cmd" $((now - 180 * min))-0 from hermes target coder type directive ref "" \
+    command "instrumente le chemin de reprise du sentinel" task task-22 expires_at 0 text_complete yes
+  r XADD "$PROJECT:cmd" $((now - 120 * min))-0 from hermes target coder type directive ref "" \
+    command "ajoute les compteurs de remise au board" task task-21 expires_at 0 text_complete yes
+  r XADD "$PROJECT:cmd" $((now - 42 * min))-0 from hermes target foureyes type directive ref "" \
+    command "relis la tranche coordination avant gel" task task-20 expires_at $((now + 18 * min)) text_complete yes
   r XADD "$PROJECT:cmd" $((now - 30 * min))-0 from hermes target coder type directive ref "" command "rebase sur main et relance la suite"
   r XADD "$PROJECT:cmd" $((now - 28 * min))-0 from coder target hermes type reply ref $((now - 30 * min))-0 command "fait, suite verte"
   r XADD "$PROJECT:cmd" $((now - 11 * min))-0 from hermes target foureyes type directive ref "" command "relis la tranche busmon quand elle est stable"

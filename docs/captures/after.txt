@@ -8,20 +8,20 @@
 └──────────────────────────────────────────────────────────┘└──────────────────────────────────────────────────────────┘
 ┌───────────────────────────────────────────────────── ACTIVITY   ─────────────────────────────────────────────────────┐
 │── Fri 2026-09-18 ──                                                                                                  │
-│03:00:17 [directive hermes->coder] rebase sur main et relance la suite                                                │
-│03:02:17 [reply coder->hermes 1789693217000-0] fait, suite verte                                                      │
-│03:12:17 [coder] working | refactoring the stream parser                                                              │
-│03:18:17 [report:note->coder] résumé du refactor: 3 étapes, 2 faites — le parser accepte désormais les entrées sans ch│
-│03:19:17 [directive hermes->foureyes] relis la tranche busmon quand elle est stable                                   │
-│03:21:17 [foureyes] idle | waiting for a diff to review                                                               │
-│03:24:17 [report:note->foureyes] relecture du diff: deux remarques, rien de bloquant                                  │
-│03:25:17 [notify] slice 1 gelée pour revue — ne pas merger                                                            │
-│03:26:17 [challenge foureyes->coder pr-42] explique pourquoi le parser ignore le champ full                           │
-│03:29:37 [hermes] working | driving the slice                                                                         │
-│03:29:52 [sentinel] blocked | no API key for the nightly refresh                                                      │
-│                                                                                                                      │
-│                                                                                                                      │
-│                                                                                                                      │
+│01:13:03 [directive hermes->coder] instrumente le chemin de reprise du sentinel                                       │
+│02:13:03 [directive hermes->coder] ajoute les compteurs de remise au board                                            │
+│03:31:03 [directive hermes->foureyes] relis la tranche coordination avant gel                                         │
+│03:43:03 [directive hermes->coder] rebase sur main et relance la suite                                                │
+│03:45:03 [reply coder->hermes 1789695783000-0] fait, suite verte                                                      │
+│03:55:03 [coder] working | refactoring the stream parser                                                              │
+│04:01:03 [report:note->coder] résumé du refactor: 3 étapes, 2 faites — le parser accepte désormais les entrées sans ch│
+│04:02:03 [directive hermes->foureyes] relis la tranche busmon quand elle est stable                                   │
+│04:04:03 [foureyes] idle | waiting for a diff to review                                                               │
+│04:07:03 [report:note->foureyes] relecture du diff: deux remarques, rien de bloquant                                  │
+│04:08:03 [notify] slice 1 gelée pour revue — ne pas merger                                                            │
+│04:09:03 [challenge foureyes->coder pr-42] explique pourquoi le parser ignore le champ full                           │
+│04:12:23 [hermes] working | driving the slice                                                                         │
+│04:12:38 [sentinel] blocked | no API key for the nightly refresh                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

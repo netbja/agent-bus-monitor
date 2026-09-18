@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -46,32 +45,6 @@ type request struct {
 	ResponseID        string
 }
 
-// boardEntryJSON is the wire shape of one {p}:board hash value. Unknown keys are
-// ignored, so an entry written by an older agent still parses.
-type boardEntryJSON struct {
-	Owner   string `json:"owner"`
-	State   string `json:"state"`
-	Branch  string `json:"branch"`
-	Updated int64  `json:"updated"` // seconds
-	Request *struct {
-		ID                string `json:"id"`
-		Thread            string `json:"thread"`
-		From              string `json:"from"`
-		Target            string `json:"target"`
-		CreatedAt         int64  `json:"created_at"` // ms
-		ExpiresAt         int64  `json:"expires_at"`
-		Delivery          string `json:"delivery"`
-		OutputWrittenAt   int64  `json:"output_written_at"`
-		Attempts          int64  `json:"attempts"`
-		DuplicatePossible bool   `json:"duplicate_possible"`
-		AcceptedAt        int64  `json:"accepted_at"`
-		ResponseID        string `json:"response_id"`
-		RespondedAt       int64  `json:"responded_at"`
-		BlockedReason     string `json:"blocked_reason"`
-		Availability      string `json:"availability"`
-	} `json:"request"`
-}
-
 // msTime converts a Unix-millisecond stamp, keeping 0 as the zero time so
 // "absent" never renders as 1970.
 func msTime(ms int64) time.Time {
@@ -81,21 +54,17 @@ func msTime(ms int64) time.Time {
 	return time.UnixMilli(ms)
 }
 
-// boardRequests turns the raw board hash into view models. A corrupt value is
-// skipped rather than guessed at, like bus.Board does.
-func boardRequests(raw map[string]string) []request {
-	out := make([]request, 0, len(raw))
-	for task, v := range raw {
-		var e boardEntryJSON
-		if json.Unmarshal([]byte(v), &e) != nil {
-			continue
-		}
+// boardRequests turns the board into view models. It reads bus.BoardEntry
+// directly: the typed reader also derives Availability, which the raw hash
+// cannot carry because it is computed at read time and never persisted.
+func boardRequests(m map[string]bus.BoardEntry) []request {
+	out := make([]request, 0, len(m))
+	for task, e := range m {
 		r := request{
 			Task: task, Owner: e.Owner, Branch: e.Branch, State: e.State,
 			Updated: time.Unix(e.Updated, 0),
 		}
-		if e.Request != nil {
-			q := e.Request
+		if q := e.Request; q != nil {
 			r.Tracked = true
 			r.ID, r.Thread, r.From, r.Target = q.ID, q.Thread, q.From, q.Target
 			r.Created, r.Expires = msTime(q.CreatedAt), msTime(q.ExpiresAt)
@@ -222,10 +191,11 @@ func deadlineWords(r request, now time.Time) (text, tone string) {
 // requestBlock renders one request as two lines: who owes what, then the
 // evidence. Blocks rather than a table because the follow-up view has to stay
 // readable in a narrow pane, where columns would collapse into noise.
-func requestBlock(r request, now time.Time, width int) string {
-	if width < 20 {
-		width = 20
-	}
+// The two prose lines are NOT clipped to the pane width: the REQUESTS overlay
+// wraps, and clipping them cost exactly the wrong words — the caveat sits at the
+// end of the longest sentence, so "reads back empty, cause unknown" truncated to
+// "reads back empty,…" turned a careful statement into a bare claim.
+func requestBlock(r request, now time.Time) string {
 	var sb strings.Builder
 	head := fmt.Sprintf("%s %s %s %s",
 		tag("white", clip(r.Task, 24)),
@@ -239,7 +209,7 @@ func requestBlock(r request, now time.Time, width int) string {
 	fmt.Fprintf(&sb, "%s  %s\n", head, tag("gray", age))
 
 	next, tone := nextAction(r, now)
-	fmt.Fprintf(&sb, "   %s\n", tag(tone, clip(next, width-4)))
+	fmt.Fprintf(&sb, "   %s\n", tag(tone, next))
 
 	facts := []string{}
 	if d, _ := deadlineWords(r, now); d != "" {
@@ -255,7 +225,7 @@ func requestBlock(r request, now time.Time, width int) string {
 	if av := availabilityWords(r.Availability); av != "" {
 		facts = append(facts, av)
 	}
-	fmt.Fprintf(&sb, "   %s\n", tag("gray", clip(strings.Join(facts, " · "), width-4)))
+	fmt.Fprintf(&sb, "   %s\n", tag("gray", strings.Join(facts, " · ")))
 	return sb.String()
 }
 
@@ -267,7 +237,11 @@ func availabilityWords(a string) string {
 	case "retained":
 		return "body still on the bus"
 	case "missing":
-		return "body no longer on the bus (this never means done)"
+		// Read-time derivation: the cmd entry holding the body came back empty.
+		// That is the observation; trimming, deletion and an id that never
+		// existed are indistinguishable from here, and none of them says the
+		// work was or was not done.
+		return "body not retained — reads back empty, cause unknown (never means done)"
 	case "expired":
 		return "body expired"
 	case "":
@@ -385,7 +359,7 @@ func requestsPanel(reqs []request, threads []openThread, now time.Time, width in
 			"   an ordinary cmd directive is not one and cannot record acceptance.") + "\n")
 	}
 	for _, r := range tracked {
-		sb.WriteString(requestBlock(r, now, width))
+		sb.WriteString(requestBlock(r, now))
 	}
 	sb.WriteString("\n" + tag("gray", fmt.Sprintf("── cmd threads with no answer in the retained history (%d) ──", len(threads))) + "\n")
 	sb.WriteString(tag("gray", "   untracked: the protocol records no acceptance for these, and an answer\n"+
