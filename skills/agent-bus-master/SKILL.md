@@ -1,6 +1,6 @@
 ---
 name: agent-bus-master
-description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to coordinate peer agents over the Agent Bus: resync an agent by injecting text into its herdr pane, unblock an agent stuck on an on-screen question, and dispatch a multi-task implementation plan across an implementer + reviewer pair. Use when you hold the pilot lease and need to drive other agents' panes, or when you're running a task-by-task plan through the bus."
+description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to coordinate peer agents over the Agent Bus: resync an agent by injecting text into its herdr pane, unblock an agent stuck on an on-screen question, dispatch a multi-task implementation plan across an implementer + reviewer pair, and send tracked requests whose acceptance and completion are recorded rather than inferred. Use when you hold the pilot lease and need to drive other agents' panes, or when you're running a task-by-task plan through the bus."
 ---
 
 # Agent Bus — Master Skill
@@ -30,7 +30,7 @@ The team's boot roles (coder, foureyes, sentinel) come up with the workspace. Wh
 role that isn't up — design work, or surge capacity — **pop** it. Popping runs the *exact* boot
 recipe (`agent-launch`), so a popped agent is identical to a booted one:
 ```bash
-agent-spawn architect "$AGENT_BUS_PROJECT"   # design work -> architect (Fable, Opus on fallback)
+agent-spawn architect "$AGENT_BUS_PROJECT"   # design work -> architect (model per roles.toml)
 agent-spawn coder "$AGENT_BUS_PROJECT"       # surge -> a second implementer
 ```
 `agent-spawn <role> <project>` opens a new herdr tab running `agent-launch <role> <project>`;
@@ -86,6 +86,32 @@ says nothing about the others.
 Distribution is **notify + pull**: the summary lands on `{project}:notify` (visible in busmon and to
 the human), and agents read `agentbus usage` themselves on demand. Never push budget via `cmd` to
 each agent — that wakes every agent's `subscribe`.
+
+## Dispatching work you intend to follow up — `request`, not `cmd`
+
+`agentbus cmd` is fire-and-forget: once sent, nothing records whether the peer took it, and
+chasing it means reading the feed and guessing. A **tracked request** records the answer:
+
+```bash
+agentbus request send <task> <target> [--ref T] [--ttl 5m] <body>
+agentbus request                       # EVERY tracked request, done ones included (--json)
+```
+
+- The `<task>` slug **is** the board key, so the request creates the board entry in state
+  `requested`. Reusing a slug is refused and hands you the existing request id: a retry
+  inspects the work that exists, it does not create a second copy of it.
+- `--ttl` is a deadline on acting, and it is **optional**. Without it there is no deadline —
+  which busmon states plainly. Don't set one you don't mean: once it passes, a peer that had
+  not yet accepted can no longer take the work and has to come back to you. A peer that had
+  already accepted can still resume after a block.
+- Use plain `cmd` for what it is good at: a nudge, an answer, an FYI, anything you will not
+  follow up.
+
+**Never infer that a request was taken.** A peer's `report`, its `status`, a reply on the
+thread, even bytes delivered to its subscriber — none of those is an acceptance. Only
+`request accept` is, and only `request done` completes. So when you want to know where a
+task stands, read `agentbus request` (or busmon's REQUESTS view) instead of interpreting
+silence — and read it as "no acceptance recorded", never as "the agent is ignoring you". That is the entire point of the mechanism: it replaces your inference with a record.
 
 ## Pipeline dispatch — task-by-task with review gate
 

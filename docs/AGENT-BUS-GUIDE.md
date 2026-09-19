@@ -142,6 +142,31 @@ agentbus board claim <task> [--branch <b>]              # take ownership (state=
 agentbus board state <task> <state>                     # move the task along (review, blocked, …)
 agentbus board done <task>                              # merged/finished; a done task can be re-claimed by anyone
 agentbus board drop <task>                              # release the task without doing it
+# claim/state/done apply to UNTRACKED tasks only: on a tracked request they are refused
+# ("tracked request: use request accept/block/done or explicit board drop"). drop is allowed.
+
+# ── TRACKED REQUESTS: a directive whose acceptance and answer are RECORDED ────
+# The <task> slug is the board key: `request send` creates the board entry in state
+# "requested". Everything below is recorded on the board; nothing is ever inferred.
+agentbus request send <task> <target> [--ref T] [--ttl 5m] <body>   # publish + record; prints the cmd id
+agentbus request accept <task>                          # TARGET ONLY, before starting. The only thing that means "taken"
+agentbus request block  <task> <reason>                 # TARGET ONLY; reason is required, it is what the human reads
+agentbus request done   <task> <reply>                  # TARGET ONLY; requires a prior accept; publishes the reply on the thread
+agentbus request                                        # EVERY tracked request, done ones included; --json for every field
+# Reusing a <task> slug is REFUSED and returns the existing request id — a retry inspects, it never duplicates.
+# `block` does NOT require a prior accept: a target can refuse work it never took.
+# After a `block`, the request must be accepted again before it can be completed.
+# A repeated `done` returns the FIRST response id and does not replace the text you sent before.
+# --ttl is optional: without it there is NO deadline. The deadline gates the FIRST acceptance only:
+#   never-accepted + expired      -> accept refused ("request expired; cannot accept")
+#   never-accepted + body trimmed -> accept refused ("request body missing; cannot accept")
+#   already-accepted              -> accept and done both still work, deadline or not
+# A reply on the thread, a report, a status, or bytes delivered to a subscriber are NONE of them an acceptance.
+# `board claim` / `board state` on a tracked task are REFUSED — the broker answers
+#   "tracked request: use request accept/block/done or explicit board drop".
+# `board drop` DOES work and is the sharp edge: it deletes the board entry, request metadata
+#   included, WITHOUT cancelling the command already published or any work in flight. You lose
+#   the tracking, not the action.
 
 # ── SHUTDOWN: stop the whole team when the work is done (saves idle burn) ─────
 agentbus shutdown                                       # broadcast "shutdown" to every peer; REFUSED while a board task isn't done or a peer is busy
@@ -150,11 +175,16 @@ agentbus shutdown --force                               # override the guard (yo
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
 agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s
-agentbus subscribe claude1                              # no --since = skip backlog, start at "now"; arm as a background task
+agentbus subscribe claude1                              # no --since = start at "now" — see the warning below; arm as a background task
 agentbus subscribe --since 1782053749061-3 claude1      # resume after a persisted cursor (the `id` from the last fire)
 agentbus subscribe claude1 3600                         # 1h idle window before it heartbeats and exits
 agentbus subscribe --loop hermes                        # HEADLESS callers only (hermes/shell): consume continuously, never exit
 agentbus watch claude1                                  # legacy alias of subscribe
+# WARNING — --since is a floor, and a floor DISCARDS. It filters pending entries too: anything
+# older than the cursor is ACKNOWLEDGED WITHOUT BEING DELIVERED to you. So arming with no
+# --since does not "skip the backlog for now", it consumes it unseen. Persist the `id` of the
+# last event you handled and pass it back every time. Moving a cursor forward never means the
+# work was accepted — only `request accept` does.
 
 # ── DEBUG: tail streams to your terminal ─────────────────────────────────────
 agentbus listen [status report notify cmd]              # default: all four
@@ -228,23 +258,66 @@ Each fire is exactly one JSON line — parse it once. **Re-arm iff `rearm` is `t
 
 | You see                                                              | Meaning            | Exit | Re-arm? |
 |----------------------------------------------------------------------|--------------------|------|---------|
-| `{"v":1,"event":"cmd","rearm":true,"id":"…","type":"…","from":"…","target":"…","ref":"…","body":"…"}` | a command arrived  | 0    | yes     |
+| `{"v":1,"event":"cmd","rearm":true,"id":"…","type":"…","from":"…","target":"…","ref":"…","body":"…"}` | a command arrived  | 0 **or 75** | yes |
+| …plus `"delivery"`, `"attempt"`, `"duplicate_possible"`, `"text_complete"` | transport + text facts, present on **any** cmd | — | — |
+| …plus `"task"` | the ONLY field that marks a tracked request (`expires_at` is omitted when zero, so its absence proves nothing) | — | — |
 | `{"v":1,"event":"heartbeat","rearm":true}`                           | idle window passed | 64   | yes     |
-| `{"v":1,"event":"error","rearm":true,"msg":"…"}`                     | transient glitch   | 75   | yes     |
+| `{"v":1,"event":"error","rearm":true,"msg":"…"}`                     | glitch, **or** an entry with no executable payload (missing / expired body). The missing/expired form carries the entry `id` and no body you may act on — **do not execute its text**; a plain glitch may carry no id at all | 75 | yes |
 | `{"v":1,"event":"fatal","rearm":false,"msg":"…"}`                    | misconfigured      | 1    | **no**  |
+
+**A `cmd` event can still exit 75.** The JSON is written before the entry is acknowledged,
+so a failed ACK after a complete write exits 75 with the object already on your stdout.
+Treat what you read, not the exit code, as the work; the non-zero status means the delivery
+may be repeated.
+
+The added fields are additive within `v:1`, and each says less than it looks like:
+
+- **`delivery`** is the transport disposition *at the moment of emission* — for an ordinary
+  delivery that is `uncertain`. The values `queued` and `output_written` are **board**
+  observations, read with `agentbus request`; they do not appear on stdout. `queued` means no
+  delivery attempt was *recorded*, not that none happened. None of them is ever a receipt or
+  an acceptance.
+- **`attempt`** counts delivery attempts, never executions. **`duplicate_possible:true`**
+  means this same entry may have reached you before — deduplicate on project + message `id`.
+  An **absent** flag guarantees nothing: a producer that retried on its own can still have
+  created a second entry. When the event carries `task`, check `agentbus request` before
+  redoing the work; for an ordinary cmd there is no board record to consult.
+- **`task`** is the only field that attaches an entry to a tracked request.
+- **`expires_at`** is omitted when zero, so an absent field means no deadline was expressed.
+- **`text_complete`** is `yes` (whole), `no` (cut at publish), or **absent** — and absent
+  means *unknown*, not complete.
 
 Every fire leads with `"v":1` — the bus protocol version (`agentbus version`). Parse
 by key and **ignore fields you don't recognize**; a higher `"v"` than you know means
 the format changed — stop and re-check rather than mis-parsing.
 
 **Persist the `id`** from each `cmd` fire and pass it back as `--since <id>` next
-time you arm — that is your cursor. With no `--since`, subscribe starts at the
-broker's "now" and never replays archived backlog, so a fresh session is never
-flooded by stale commands. Pass `--since 0` only if you deliberately want full
-at-least-once replay.
+time you arm — that is your cursor.
 
-**While armed and waiting you are `idle`, never `blocked`** — `blocked` is
-reserved for an open 4-eyes gate. busmon shows a `👂` badge next to armed agents.
+**A floor discards; it does not postpone.** With no `--since`, subscribe starts at the
+broker's "now", and every entry addressed to you **at or below** that id — including entries
+recovered from the pending list — is **acknowledged without being delivered**. It is gone
+from your group, not waiting for later. So "no `--since`" is not "skip the backlog for now",
+it is "consume the backlog unseen".
+
+- Keep your cursor when a fire carries no id (`heartbeat`, `error`): re-arm with the same
+  `--since` you had, or you move your floor forward for nothing.
+- `--since 0` lifts the floor for what is still deliverable. On an **existing** group it does
+  **not** resurrect entries already acknowledged — those are gone whatever you pass; on a
+  **new** group it starts from the retained history.
+- Persisting the cursor is what stops you eating your own backlog. It is not a promise that
+  nothing is lost: the stream is capped, so a body can age out of it, and an entry is
+  acknowledged before you act on it, so a crash can lose the execution. What survives both is
+  the **board record** — there is no garbage collection, so a tracked request stays on the
+  board even when its body no longer reads back.
+
+Moving a cursor forward is a transport decision and **never means the work was accepted**.
+Only `request accept` records that.
+
+**While armed and waiting you are `idle`, never `blocked`** — the agent *status*
+`blocked` is reserved for an open 4-eyes gate. A tracked request's `blocked` **state** is a
+different thing entirely: it is you telling the board, with a reason, that this one task
+cannot move. You can be `blocked` on a request while your own status is `working`. busmon shows a `👂` badge next to armed agents.
 **Do not** wrap `subscribe` in a `while` loop or a daemon — a long-lived loop
 never wakes a terminal session. (The one exception is `--loop`, for **headless**
 consumers like hermes; it emits one `cmd` object per entry, with no `rearm`.) The

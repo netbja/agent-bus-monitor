@@ -1,6 +1,6 @@
 ---
 name: agent-bus
-description: Use when you are a peer agent coordinating with other agents over the Agent Bus (Redis Streams via the `agentbus` CLI) — to publish your state/heartbeat, receive directives by arming `subscribe`, report progress, check whether you're piloted or autonomous, or gate a risky action with the 4-eyes challenge/verdict flow. For the master/pilot role (driving other agents' panes), use agent-bus-master instead.
+description: Use when you are a peer agent coordinating with other agents over the Agent Bus (Redis Streams via the `agentbus` CLI) — to publish your state/heartbeat, receive directives by arming `subscribe`, accept/block/complete a tracked request addressed to you, report progress, check whether you're piloted or autonomous, or gate a risky action with the 4-eyes challenge/verdict flow. For the master/pilot role (driving other agents' panes), use agent-bus-master instead.
 ---
 
 # Agent Bus — Peer Agent
@@ -55,8 +55,9 @@ agentbus pilot status     # "piloted by hermes"  OR  "autonomous"
 Agents are one-shot CLI calls, not daemons — there is no separate heartbeat. Emit
 `agentbus status <self> <working|idle|blocked|done> <msg>` when your state changes, and
 `agentbus report <self> <msg>` at milestones (its full text is retained — `reports <id>`
-reads it). busmon ages you to idle/offline from your last entry. While armed and waiting
-you are **`idle`, never `blocked`**.
+reads it). busmon shows the state you DECLARED plus how old that declaration is ("no update 18m") —
+it never relabels your silence, so a stale `working` stays on screen as your own claim
+until you correct it. While armed and waiting you are **`idle`, never `blocked`**.
 
 ## Gating risky actions (the 4-eyes money-path)
 `blocked` is reserved for an **open 4-eyes gate**. Before proceeding or marking done:
@@ -112,6 +113,82 @@ Claim BEFORE you invest in the work: a failed claim (`owned by <peer> (<state>)`
 pick another task or ask master — never duplicate. Keep your own entries honest as the task
 moves; the board is only as good as its last update.
 
+These verbs are for **untracked** tasks. On a task that carries a tracked request, `claim`,
+`state` and `done` are all refused (`tracked request: use request accept/block/done or
+explicit board drop`) — see the next section. `drop` is the exception: it is allowed, and it
+deletes the tracking without cancelling anything.
+
+## Tracked requests — the only thing that records that you took the work
+
+A `cmd` directive is fire-and-forget: nothing anywhere remembers whether you took it. A
+**tracked request** is a directive recorded on the board, and it carries three facts a
+`cmd` cannot: whether you accepted it, whether you are blocked on it, and what you answered.
+
+**Nothing infers your acceptance.** Not the delivery, not your `status`, not a reply you
+wrote on the thread. If you never run `accept`, nothing records that you took it and the human watching busmon
+reads "no acceptance recorded" — which says nothing about you either way, and is exactly
+why you should record it. The verbs, in no fixed order beyond the rules below:
+
+```bash
+agentbus request accept <task>              # BEFORE you start working. Not optional.
+agentbus request block  <task> <reason>     # when you cannot proceed — say why, in words
+agentbus request accept <task>              # to resume after a block
+agentbus request done   <task> <reply>      # when finished — the reply is your answer
+agentbus request                            # EVERY tracked request, done ones included
+```
+
+- Only the **target** agent can accept, block or complete its own request.
+- `block` does not require a prior `accept` — you may refuse work you never took, with a
+  reason. After a block, `accept` again before you can complete it.
+- `done` requires a prior `accept`. A reply on the thread completes nothing, and a second
+  `done` returns the first response id without replacing what you already answered.
+- A deadline gates the **first** acceptance only: a request you never accepted cannot be
+  accepted once `expires_at` has passed (nor if its body has been trimmed) — say so on the
+  bus rather than starting work that is already out of time. Work you had already accepted
+  can still be resumed and completed afterwards, deadline or not.
+- **`board claim` / `board state` on a tracked task are refused** — the broker tells you to
+  use the request verbs. `board drop` is not refused, and it is the sharp edge: it deletes
+  the board entry and its request metadata **without cancelling the command already sent or
+  the work in flight**. Dropping loses the tracking, not the action.
+
+A request's `blocked` state is not your agent `status`: the first says this one task cannot
+move and why, the second is reserved for an open 4-eyes gate. You can be blocked on a
+request while you are `working` on something else.
+
+## What the subscribe JSON now tells you about a request
+
+Where relevant, a `cmd` event carries `task`, `expires_at`, `delivery`, `duplicate_possible`
+and `attempt`. The protocol version stays `1` — these are additive, so **ignore fields you
+don't recognise** and never treat a missing one as false.
+
+- **`delivery`** describes the transport, never you. On stdout an ordinary delivery reads
+  `uncertain`; `queued` and `output_written` are board observations you read with
+  `agentbus request`, and `queued` means no attempt was *recorded*, not that none happened.
+- **`duplicate_possible: true`** means this exact entry may have reached you before —
+  deduplicate on project + message `id`. An absent flag guarantees nothing, since a producer
+  may have retried on its own. When the event carries `task`, check `agentbus request`
+  before redoing the work.
+- **`expires_at`** is omitted when it is zero, so an absent field means no deadline was
+  expressed. Never invent one.
+
+## Persist your cursor — a floor is not a filter, it discards
+
+Pending entries are recovered before new ones, and **recovery respects your `--since`
+floor**: an entry older than the floor is acknowledged *without being delivered to you*. So
+arming with no `--since` (which means "start at now") silently drops everything addressed
+to you at or below that id, i.e. everything that arrived while you were not armed.
+
+Persist the `id` of the last event you handled and pass it back as `--since <id>` on every
+re-arm — and keep the same cursor when a fire carries no id (a `heartbeat` or an `error`),
+or you move your floor forward for nothing.
+
+That is what stops you eating your own backlog. It is **not** a promise that nothing is
+lost: the stream is capped, so a body can age out of it, and an entry is acknowledged before
+you act on it, so a crash can lose the execution. The **board record survives both** — there
+is no garbage collection, so a tracked request stays visible even once its body no longer
+reads back. `--since 0` lifts the floor for what is still deliverable; it does not resurrect
+what your group already acknowledged.
+
 ## Pushing a signal nobody asked for — the outbox convention
 `notify` and `report` are fire-and-forget: they show up in busmon but wake NO agent. When
 you discover something the team must act on — a stash that already exists, a subagent that
@@ -134,5 +211,6 @@ instead of going silent.
 
 ## The whole bus in one line
 > Every stream is `{project}:{kind}`. Publish `status`/`report`, receive with `subscribe`
-> (wake-on-exit — re-arm iff `rearm`, persist the `id` cursor), gate the risky with
-> `challenge`/`verdict`, and read exact flags & JSON from `docs/AGENT-BUS-GUIDE.md`.
+> (wake-on-exit — re-arm iff `rearm`, persist the `id` cursor or you discard your backlog),
+> `accept` a tracked request before you start and `done` it with your answer, gate the risky
+> with `challenge`/`verdict`, and read exact flags & JSON from `docs/AGENT-BUS-GUIDE.md`.

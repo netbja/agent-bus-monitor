@@ -201,7 +201,7 @@ func TestScreenRequestsOverlayShowsEachRequestHonestly(t *testing.T) {
 	screen := draw(t, modal(pane), 110, 30)
 
 	for _, want := range []string{"task-20", "task-21", "task-22", "deadline in 18m",
-		"not accepted yet", "waiting on an API key", "no deadline set"} {
+		"no acceptance recorded", "waiting on an API key", "no deadline set"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("requests overlay missing %q:\n%s", want, screen)
 		}

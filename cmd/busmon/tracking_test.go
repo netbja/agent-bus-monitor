@@ -123,7 +123,7 @@ func TestNextActionStatesRecordedFactsOnly(t *testing.T) {
 		r    request
 		want string
 	}{
-		{"requested", request{State: "requested", Target: "foureyes"}, "not accepted yet"},
+		{"requested", request{State: "requested", Target: "foureyes"}, "no acceptance recorded"},
 		{"accepted", request{State: "accepted", Target: "coder", Accepted: now.Add(-8 * time.Minute)}, "accepted 8m ago"},
 		{"blocked", request{State: "blocked", Target: "coder", BlockedReason: "waiting on an API key"}, "waiting on an API key"},
 		{"done", request{State: "done", Responded: now.Add(-time.Hour), ResponseID: "9-0"}, "answered 1h ago"},
@@ -141,7 +141,7 @@ func TestNextActionStatesRecordedFactsOnly(t *testing.T) {
 	}
 }
 
-// Blocked work first, then what nobody has taken, oldest first — the order the
+// Blocked work first, then what has no acceptance recorded, oldest first — the order the
 // operator has to act in.
 func TestRequestsSortByWhatNeedsAttention(t *testing.T) {
 	now := time.Now()
@@ -206,7 +206,7 @@ func TestRequestsPanelSeparatesTrackedFromUntracked(t *testing.T) {
 	for _, want := range []string{
 		"tracked requests",
 		"task-20",
-		"not accepted yet",
+		"no acceptance recorded",
 		"no answer in the retained history",
 		"records no acceptance",
 		"look at the flake",

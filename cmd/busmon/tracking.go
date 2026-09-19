@@ -98,7 +98,7 @@ func trackedOnly(reqs []request) []request {
 }
 
 // requestRank orders the follow-up view by what needs attention: blocked (an
-// agent has said it cannot proceed), then requested (nobody has taken it),
+// agent has said it cannot proceed), then requested (no acceptance recorded),
 // then accepted (someone is on it), then done.
 func requestRank(r request) int {
 	switch r.State {
@@ -129,11 +129,10 @@ func deliveryWords(d string) string {
 	switch d {
 	case "queued":
 		// Deliberately about the record, not the world: a writer that crashed
-		// after emitting but before recording leaves a request queued, so
-		// "nothing was written" would be a stronger claim than the data
-		// supports. Acceptance is a separate axis — a request can be accepted
-		// and still read queued here.
-		return "queued — no subscriber output recorded"
+		// before recording leaves a request queued, so "nothing was attempted"
+		// would be a stronger claim than the data supports. Acceptance is a
+		// separate axis — a request can be accepted and still read queued here.
+		return "queued — no delivery attempt recorded"
 	case "output_written":
 		return "written to subscriber output (not proof it was read)"
 	case "uncertain":
@@ -153,7 +152,7 @@ func deliveryWords(d string) string {
 func nextAction(r request, now time.Time) (text, tone string) {
 	switch r.State {
 	case "requested":
-		return fmt.Sprintf("not accepted yet — %s has not taken it", r.Target), "yellow"
+		return fmt.Sprintf("no acceptance recorded from %s", r.Target), "yellow"
 	case "blocked":
 		reason := r.BlockedReason
 		if reason == "" {
