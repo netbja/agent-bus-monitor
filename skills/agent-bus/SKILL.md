@@ -226,15 +226,22 @@ Then publish your last state (`agentbus status <self> idle "<what you finished>"
 do not arm again. An unarmed session costs nothing.
 
 **You do not decide to come back — master does.** A `cmd` addressed to an unarmed agent is
-not lost: it stays in the shared stream. But whether it ever reaches you is decided by your
-group's **server-side cursor**, and that cursor only moves FORWARD. `--since` filters what
-you are handed; it cannot walk the cursor back. So:
+not lost: it stays in the shared stream. Whether it reaches you depends on what happened to
+it in **your group**, and the three cases are not the same:
 
-- Your group's floor is set **when the group is created** — choose it then, deliberately.
-- Once the cursor has passed an entry, no re-arm recovers it. Only an operator can rewind a
-  group, and that is a decision about the whole project, not a thing you do to catch up.
-- What you can always do is read it out of band: `agentbus thread`, `agentbus reports`,
-  busmon. Then ask master to re-send what still matters.
+- **Never delivered** (above your group's `last-delivered-id`) — still deliverable. Whether
+  you are handed it depends on the floor you arm with: at or below the floor it is
+  acknowledged unseen, above it, delivered.
+- **Pending** (delivered to your group but never acknowledged) — **still recoverable**, even
+  though it sits *below* `last-delivered-id`. Pending entries are recovered before new ones,
+  subject to the same floor, as long as the body is still retained.
+- **Already acknowledged, or skipped when your group was created** — out of reach. Lowering
+  `--since` does not bring these back: it filters what you are handed, it does not rewind
+  `last-delivered-id`. Only an operator rewinding the group changes that.
+
+So the floor you choose decides what you see, and the one that creates your group decides
+what you will never see. What is genuinely out of reach can still be read out of band —
+`agentbus thread`, `agentbus reports`, busmon — and master can re-send what matters.
 
 One live project has 210 such commands sitting unread today.
 

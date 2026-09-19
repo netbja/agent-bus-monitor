@@ -11,9 +11,12 @@ On boot, once:
    `agentbus board`. The board kept each request's METADATA, not its text — read the body
    with `agentbus thread <thread>`, using the `thread` field the request records (a custom
    `ref` means the thread is not the root entry's id). A `cmd` sent while you were down is
-   still retained in the stream, but your group's server-side cursor only ever moves
-   FORWARD: if it has already passed that entry, no `--since` will hand it back to you.
-   Read it out of band (`agentbus thread`, busmon) and ask master to re-send what matters.
+   still retained in the stream. Entries already ACKed, or skipped when the group was created, cannot be
+   replayed by merely lowering `--since`. Pending entries remain recoverable even below
+   `last-delivered-id`, provided they are above the chosen floor and their bodies are still
+   retained. `--since` does not rewind `last-delivered-id`.
+   What is genuinely out of reach, read out of band (`agentbus thread`, busmon) and ask
+   master to re-send.
 4. Drain what accumulated for you, do not idle armed:
    `agentbus subscribe --since <your persisted cursor> sentinel 5`, repeated while it keeps
    returning `cmd` events. On your very FIRST wake you have no cursor: choose the floor
