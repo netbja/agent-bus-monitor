@@ -94,7 +94,7 @@ chasing it means reading the feed and guessing. A **tracked request** records th
 
 ```bash
 agentbus request send <task> <target> [--ref T] [--ttl 5m] <body>
-agentbus request                       # everything outstanding (--json for machines)
+agentbus request                       # EVERY tracked request, done ones included (--json)
 ```
 
 - The `<task>` slug **is** the board key, so the request creates the board entry in state
@@ -111,7 +111,7 @@ agentbus request                       # everything outstanding (--json for mach
 thread, even bytes delivered to its subscriber — none of those is an acceptance. Only
 `request accept` is, and only `request done` completes. So when you want to know where a
 task stands, read `agentbus request` (or busmon's REQUESTS view) instead of interpreting
-silence. That is the entire point of the mechanism: it replaces your inference with a record.
+silence — and read it as "no acceptance recorded", never as "the agent is ignoring you". That is the entire point of the mechanism: it replaces your inference with a record.
 
 ## Pipeline dispatch — task-by-task with review gate
 

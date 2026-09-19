@@ -71,6 +71,8 @@ func helpText() string {
 		"  written to subscriber output",
 		"                 the bytes reached a subscriber's output. It is NOT proof",
 		"                 the agent read them, and never an acceptance.",
+		"  queued         no delivery attempt is recorded — which is not proof that",
+		"                 none happened, only that none was written down.",
 		"  no deadline set",
 		"                 the request carries no expiry. busmon never invents one.",
 		"  body not retained",

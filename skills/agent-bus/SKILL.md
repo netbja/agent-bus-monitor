@@ -120,24 +120,33 @@ A `cmd` directive is fire-and-forget: nothing anywhere remembers whether you too
 `cmd` cannot: whether you accepted it, whether you are blocked on it, and what you answered.
 
 **Nothing infers your acceptance.** Not the delivery, not your `status`, not a reply you
-wrote on the thread. If you never run `accept`, the request stays `requested` forever and
-the human watching busmon sees a task nobody has taken. Run these, in this order:
+wrote on the thread. If you never run `accept`, nothing records that you took it and the human watching busmon
+reads "no acceptance recorded" — which says nothing about you either way, and is exactly
+why you should record it. The verbs, in no fixed order beyond the rules below:
 
 ```bash
 agentbus request accept <task>              # BEFORE you start working. Not optional.
 agentbus request block  <task> <reason>     # when you cannot proceed — say why, in words
 agentbus request accept <task>              # to resume after a block
 agentbus request done   <task> <reply>      # when finished — the reply is your answer
-agentbus request                            # what is outstanding (--json for machines)
+agentbus request                            # EVERY tracked request, done ones included
 ```
 
 - Only the **target** agent can accept, block or complete its own request.
-- `done` requires a prior `accept`, and a blocked request must be accepted again before it
-  can be completed. A generic reply on the thread completes nothing.
-- A deadline blocks the **first** acceptance only: a request you never accepted cannot be
-  accepted once `expires_at` has passed — say so on the bus rather than starting work that
-  is already out of time. Work you had already accepted can still be resumed after a block,
-  deadline or not.
+- `block` does not require a prior `accept` — you may refuse work you never took, with a
+  reason. After a block, `accept` again before you can complete it.
+- `done` requires a prior `accept`. A reply on the thread completes nothing, and a second
+  `done` returns the first response id without replacing what you already answered.
+- A deadline gates the **first** acceptance only: a request you never accepted cannot be
+  accepted once `expires_at` has passed (nor if its body has been trimmed) — say so on the
+  bus rather than starting work that is already out of time. Work you had already accepted
+  can still be resumed and completed afterwards, deadline or not.
+- **Do not touch a tracked task with `board claim` / `board state`.** Those move the entry
+  behind the request's back. The request verbs are its only controls.
+
+A request's `blocked` state is not your agent `status`: the first says this one task cannot
+move and why, the second is reserved for an open 4-eyes gate. You can be blocked on a
+request while you are `working` on something else.
 
 ## What the subscribe JSON now tells you about a request
 
@@ -145,12 +154,13 @@ Where relevant, a `cmd` event carries `task`, `expires_at`, `delivery`, `duplica
 and `attempt`. The protocol version stays `1` — these are additive, so **ignore fields you
 don't recognise** and never treat a missing one as false.
 
-- **`delivery`** describes the transport, never you. `output_written` means the bytes
-  reached a subscriber's output — not that anything was read, and never that anything was
-  accepted. `queued` means no output was recorded, which is not proof none was written.
-- **`duplicate_possible: true`** means this exact request may have been delivered to you
-  before. The `id` is the same request, not a second one: check `agentbus request` for the
-  task's current state before doing the work twice.
+- **`delivery`** describes the transport, never you. On stdout an ordinary delivery reads
+  `uncertain`; `queued` and `output_written` are board observations you read with
+  `agentbus request`, and `queued` means no attempt was *recorded*, not that none happened.
+- **`duplicate_possible: true`** means this exact entry may have reached you before —
+  deduplicate on project + message `id`. An absent flag guarantees nothing, since a producer
+  may have retried on its own. When the event carries `task`, check `agentbus request`
+  before redoing the work.
 - **`expires_at: 0`** means no deadline. Never invent one.
 
 ## Persist your cursor — a floor is not a filter, it discards
@@ -158,11 +168,16 @@ don't recognise** and never treat a missing one as false.
 Pending entries are recovered before new ones, and **recovery respects your `--since`
 floor**: an entry older than the floor is acknowledged *without being delivered to you*. So
 arming with no `--since` (which means "start at now") silently drops everything addressed
-to you while you were not armed.
+to you at or below that id, i.e. everything that arrived while you were not armed.
 
 Persist the `id` of the last event you handled and pass it back as `--since <id>` on every
-re-arm. That is the whole difference between a subscriber that misses nothing and one that
-quietly eats its own backlog.
+re-arm — and keep the same cursor when a fire carries no id (a `heartbeat` or an `error`),
+or you move your floor forward for nothing.
+
+That is what stops you eating your own backlog. It is **not** a promise that nothing is
+lost: the stream is capped, and an entry is acknowledged before you act on it, so retention
+and a crash can still take work off the board. `--since 0` lifts the floor for what is still
+deliverable; it does not resurrect what your group already acknowledged.
 
 ## Pushing a signal nobody asked for — the outbox convention
 `notify` and `report` are fire-and-forget: they show up in busmon but wake NO agent. When
