@@ -26,10 +26,18 @@ func TestReportsTable(t *testing.T) {
 }
 
 func TestReportDetail(t *testing.T) {
-	if got := reportDetail(bus.Event{Message: "preview…", Full: "the\nfull\ntext"}); got != "the\nfull\ntext" {
+	if got := reportDetail(bus.Event{TextComplete: "yes", Message: "preview…", Full: "the\nfull\ntext"}); got != "the\nfull\ntext" {
 		t.Fatalf("detail should return Full: %q", got)
 	}
-	if got := reportDetail(bus.Event{Message: "just a preview"}); got != "just a preview" {
+	if got := reportDetail(bus.Event{TextComplete: "yes", Message: "just a preview"}); got != "just a preview" {
 		t.Fatalf("detail should fall back to Message: %q", got)
+	}
+}
+
+func TestReportDetailCompleteness(t *testing.T) {
+	for _, tc := range []struct{ state, want string }{{"", "completeness unknown"}, {"no", "truncated at publication"}} {
+		if got := reportDetail(bus.Event{Message: "text", TextComplete: tc.state}); !strings.Contains(got, tc.want) {
+			t.Fatalf("%q lacks %s", got, tc.want)
+		}
 	}
 }

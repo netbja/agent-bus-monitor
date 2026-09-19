@@ -17,6 +17,11 @@ func reportsTable(evs []bus.Event) string {
 		if e.Full != "" {
 			fmt.Fprintf(&sb, "  (+%d)", len([]rune(e.Full)))
 		}
+		if e.TextComplete == "" {
+			sb.WriteString("  [completeness unknown]")
+		} else if e.TextComplete == "no" {
+			sb.WriteString("  [truncated at publication]")
+		}
 		sb.WriteByte('\n')
 	}
 	return sb.String()
@@ -25,8 +30,15 @@ func reportsTable(evs []bus.Event) string {
 // reportDetail returns the full retained text of a report (Full when present, else
 // the preview Message) — the payload of `agentbus reports <id>`.
 func reportDetail(e bus.Event) string {
+	body := e.Message
 	if e.Full != "" {
-		return e.Full
+		body = e.Full
 	}
-	return e.Message
+	if e.TextComplete == "" {
+		return "[completeness unknown: legacy entry]\n" + body
+	}
+	if e.TextComplete == "no" {
+		return "[truncated at publication]\n" + body
+	}
+	return body
 }

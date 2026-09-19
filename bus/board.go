@@ -24,10 +24,11 @@ func BoardKey(project string) string { return project + ":board" }
 // list, only "done" is special (a done task can be re-claimed by anyone).
 // Updated is unix seconds.
 type BoardEntry struct {
-	Owner   string `json:"owner"`
-	State   string `json:"state"`
-	Branch  string `json:"branch,omitempty"`
-	Updated int64  `json:"updated"`
+	Owner   string       `json:"owner"`
+	State   string       `json:"state"`
+	Branch  string       `json:"branch,omitempty"`
+	Updated int64        `json:"updated"`
+	Request *RequestInfo `json:"request,omitempty"`
 }
 
 // Board returns task → entry for the whole board. Unparseable fields are
@@ -44,6 +45,9 @@ func (b *Bus) Board(ctx context.Context) (map[string]BoardEntry, error) {
 			out[task] = e
 		}
 	}
+	if err := b.requestAvailability(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -59,17 +63,7 @@ func (b *Bus) BoardClaim(ctx context.Context, task, owner, branch string) error 
 	if !ValidName(owner) {
 		return fmt.Errorf("invalid owner %q", owner)
 	}
-	key := BoardKey(b.project)
-	cur, err := b.boardEntry(ctx, key, task)
-	if err != nil {
-		return err
-	}
-	if cur != nil && cur.State != "done" && cur.Owner != owner {
-		return fmt.Errorf("board: %s owned by %s (%s)", task, cur.Owner, cur.State)
-	}
-	return b.boardSet(ctx, key, task, BoardEntry{
-		Owner: owner, State: "working", Branch: branch, Updated: time.Now().Unix(),
-	})
+	return boardMutation.Run(ctx, b.r, []string{BoardKey(b.project)}, "claim", task, owner, branch, time.Now().Unix()).Err()
 }
 
 // BoardState updates the state (and timestamp) of an existing entry, keeping
@@ -83,17 +77,7 @@ func (b *Bus) BoardState(ctx context.Context, task, state string) error {
 	if !ValidName(state) {
 		return fmt.Errorf("invalid board state %q (a word like working|review|done|blocked)", state)
 	}
-	key := BoardKey(b.project)
-	cur, err := b.boardEntry(ctx, key, task)
-	if err != nil {
-		return err
-	}
-	if cur == nil {
-		return fmt.Errorf("board: no task %q (claim it first)", task)
-	}
-	cur.State = state
-	cur.Updated = time.Now().Unix()
-	return b.boardSet(ctx, key, task, *cur)
+	return boardMutation.Run(ctx, b.r, []string{BoardKey(b.project)}, "state", task, state, "", time.Now().Unix()).Err()
 }
 
 // BoardDrop removes task from the board. Dropping an unknown task is a no-op
@@ -130,3 +114,22 @@ func (b *Bus) boardSet(ctx context.Context, key, task string, e BoardEntry) erro
 	}
 	return b.r.HSet(ctx, key, task, v).Err()
 }
+
+// The whole read/check/write runs atomically and preserves unknown JSON fields.
+var boardMutation = redis.NewScript(`
+local raw = redis.call('HGET', KEYS[1], ARGV[2])
+local e = nil
+if raw then e = cjson.decode(raw) end
+if e and e.request then return redis.error_reply('tracked request: use request accept/block/done or explicit board drop') end
+if ARGV[1] == 'claim' then
+ if e and e.state ~= 'done' and e.owner ~= ARGV[3] then
+  return redis.error_reply('board: '..ARGV[2]..' owned by '..e.owner..' ('..e.state..')')
+ end
+ e = e or {}
+ e.owner = ARGV[3]; e.state = 'working'; e.branch = ARGV[4]
+else
+ if not e then return redis.error_reply('board: no task '..ARGV[2]..' (claim it first)') end
+ e.state = ARGV[3]
+end
+e.updated = tonumber(ARGV[5])
+return redis.call('HSET', KEYS[1], ARGV[2], cjson.encode(e))`)

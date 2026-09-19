@@ -160,30 +160,55 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
 ## busmon panes
 
 ```
-  trading  ·  ⬢ MASTER hermes
-┌─ AGENTS ───────────────────────────────┬─ BOARD  [1/2 done] ──────────────────┐
-│ ⬢ hermes: working (plan 10)   claude1: │ task-21  coder     working coder/t… │
-│ active (soak bug fixed)   claude2: off │ task-20  foureyes  done    foureye… │
-├─ ACTIVITY  [live] ─────────────────────┴──────────────────────────────────────┤
-│ 23:15:12 [claude1] working | plan 10 shipped                                 │
-│ 23:16:02 [notify] Soak 24h started                                           │
-│ 23:16:40 [report:note->claude2] soak bug fixed                               │
-├─ INPUT ──────────────────────────────────────────────────────────────────────┤
-│ > _                                                                          │
-└──────────────────────────────────────────────────────────────────────────────┘
+ demo  ·  ⬢ MASTER hermes  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
+┌─ AGENTS ─────────────────────────────────┬─ BOARD  [1/5 done] ─────────────────┐
+│ architect: done · no update 5h           │ task-23  sentinel  working  4m      │
+│ coder: working · no update 18m 👂 🔒1 ⧉  │ task-21  coder     accepted 21m     │
+│ foureyes: idle · no update 10m 👂 ⧉      │ task-20  foureyes  requested 43m    │
+│ ⬢ hermes: working (driving the slice) ⧉  │ task-22  coder     blocked  1h      │
+├─ ACTIVITY  [live] ───────────────────────┴─────────────────────────────────────┤
+│ ── Fri 2026-09-18 ──                                                           │
+│ 03:00:14 [coder] working | refactoring the stream parser                       │
+│ 03:06:14 [report:note->coder] résumé du refactor: 3 étapes, 2 faites… (+404)    │
+│ 03:14:14 [challenge foureyes->coder pr-42] explique pourquoi le parser ignore…  │
+├─ INPUT  [Tab feed · F1 legend · F2 requests] ──────────────────────────────────┤
+│ > _                                                                            │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **STATUS** — top bar showing the project name and the pilot-lease driver as
-  `⬢ MASTER <driver>`, or `autonomous (no master)` when no lease is held.
-- **AGENTS** — one chip per agent. `{p}:status` entries set the state (color-coded);
-  a `{p}:report` entry also counts as liveness, showing the agent as `active` with
-  its last report if it never published a status. Badges: `👂` = the agent is armed
-  and listening on `{p}:cmd` (a live `subscribe` lease); `⌛N` = N commands are queued
-  for it unread (orange when no one is listening — the "stopped re-arming" tell);
-  `🔒N` = open 4-eyes challenges; `⧉` = the agent is attached to a herdr pane (its `HERDR_PANE_ID`);
-  `[session·reset]` = the agent's latest budget readout (from `{p}:usage`). Chips wrap across rows to fit the terminal width;
-  the master's chip carries a `⬢` marker. Past `idleAfter` it shows `idle Nm`; past
-  `staleAfter`, `offline`.
+- **STATUS** — top bar: the project name, the pilot-lease driver as
+  `⬢ MASTER <driver>` (or `autonomous (no master)` when no lease is held), what is
+  waiting on someone (`5 requests waiting · oldest 3h`), the account budget per
+  provider, and `⇄ bus ok` — the **monitor's own** link to Redis. That last one is
+  separate on purpose: a broker busmon cannot reach looks exactly like a team that
+  has gone quiet, and the two call for opposite reactions. When it breaks it reads
+  `⇄ monitor cannot reach the bus 12s (dial tcp …)` and the feed retries from its
+  own cursors rather than dying silently.
+- **AGENTS** — one chip per agent, keeping three facts apart that are easy to
+  confuse:
+  - **the state the agent declared** — `coder: working` — colour-coded, and never
+    overwritten by silence. An agent that said `working` three hours ago and has
+    said nothing since still reads `working`: that is the last thing it actually
+    told you.
+  - **how old that declaration is** — `· no update 18m`. Nothing is shown while
+    the agent spoke within `idleAfter`. This replaces the old `offline` label,
+    which turned silence into a claim about the agent; the bus has no heartbeat,
+    so silence is silence. A `{p}:report` proves the process is alive but does
+    **not** refresh the declared state, and an agent that has published a report
+    but never a status reads `no state declared`.
+  - **the subscription** — `👂`, a live `subscribe` lease. A lease, not a state.
+
+  Then the badges: `⌛N` = N entries this agent's consumer group has not read —
+  the cmd stream is **shared**, so that counts entries addressed to anyone and is
+  not a queue of work for this agent, and entries read but unacknowledged are not
+  counted at all (orange when no lease is live: a question worth asking, not a
+  diagnosis); `🔒N` = open 4-eyes challenges; `⧉` = the agent published a herdr
+  pane id with its last status — declared, not verified, since the pane may be
+  long closed; `[120k ctx]` = that agent's own
+  context fill (from `{p}:usage`); `⬢` = holds the pilot lease. Chips wrap to fit
+  the terminal width, and `+N` means that many did not fit. The roster comes from
+  the `{p}:agents` hash, so an agent that last spoke before the `--limit` backfill
+  window still gets a chip. Press `?` for all of this on screen.
 - **BOARD** — the shared task board (`{p}:board`), one line per task:
   `task owner state branch age`, state color-coded, newest activity first (the
   same order as `agentbus board`). Refreshed by the same 1s ticker as the rest.
@@ -195,15 +220,53 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
   is inserted at each day boundary (and above the very first line) to keep a
   multi-day history readable. It live-tails by default; **Tab** moves focus here. While focused,
   **↑↓** / **j k** select a line (highlighted), **g**/**Home** jumps to the oldest
-  and **G**/**End** to the newest, and **y** or **Enter** copies the selected line
-  to the clipboard (OSC52, so it works over the SSH tunnel). Mouse wheel / PgUp/PgDn
-  still scroll. The title shows `[live]`, the browse indicator `[↑ pause · N below]`,
-  or the selection position. **Esc** clears the selection and returns to the input,
-  resuming the tail.
+  and **G**/**End** to the newest, **Enter** opens the selected message in full,
+  and **y** copies the line to the clipboard (OSC52, so it works over the SSH
+  tunnel). **/** filters the feed; mouse wheel / PgUp/PgDn still scroll. The title
+  shows `[live]`, the browse indicator `[↑ pause · N below]`, the active filter, or
+  the selection position. **Esc** walks back out one step at a time — selection,
+  then filter, then focus — so nothing is lost by accident.
 - **INPUT** — type a message, Enter publishes on `{p}:notify`; an `@<agent> <text>` line sends a
   directed cmd to that agent (type `@` for autocomplete). Esc/Ctrl-C quits.
   The field inherits the terminal's own fg/bg colors (no forced white-on-blue), so
   it stays legible in any theme.
+
+### Overlays: summary on screen, detail on demand
+
+Three views sit over the layout, one keypress away, so the panes stay compact.
+
+**Enter — the message in full.** The feed shows one clipped line; this shows the
+whole entry: author, addressee, absolute date and age, entry id, thread, and the
+body with its newlines intact. `y` copies the text exactly as published, `Y` the
+whole thread. For a `cmd` it also lists the thread transcript — the directive, its
+replies and its verdict, in order — so an exchange interrupted halfway can be read
+back without hopping between terminals.
+
+It also states **how much of the text is really there**, which the feed cannot:
+
+| line | meaning |
+|---|---|
+| `complete — this is the whole message as published` | the entry carries `text_complete: yes` |
+| `truncated at publish — the rest was never stored` | `text_complete: no` — the entry is *marked* as cut; re-reading will not bring it back, the author has to resend |
+| `one-line preview, no further text retained` | no `full` field was stored |
+| `completeness not marked on this entry` | published before the marker existed, so completeness is **unknown** |
+| `not retained — this id reads back empty (cause unknown)` | an empty read cannot tell a trimmed entry from a deleted one, or from an id that never existed |
+
+A trailing `…` is deliberately **not** read as proof of truncation: the sanitiser
+writes one when it cuts, but so do authors.
+
+**r / F2 — what is waiting on someone.** Tracked requests from the board, ordered
+by what needs attention (blocked, then unclaimed, then in progress, then done),
+each with its target, age, what would move it, and the evidence: the deadline
+**only when `expires_at` is set**, and the delivery disposition in words.
+`output_written` renders as *written to subscriber output (not proof it was read)* —
+never as received or accepted; `queued` means no output was **recorded**, not that
+none was ever written; a body that reads back empty is reported as *not retained,
+cause unknown* and never implies the work is done. Cmd threads
+with no answer in the retained history are listed separately and labelled as
+carrying no acceptance signal at all, because the protocol records none for them.
+
+**? / F1 — the legend.** Every badge, colour and counter, in words.
 
 ### Liveness model (why no dedicated heartbeat)
 
@@ -212,6 +275,31 @@ invocations to emit a periodic heartbeat. Liveness is derived **passively** from
 the Redis stream-entry timestamp of each agent's last `status` or `report` entry:
 every such publish *is* the heartbeat. A dedicated heartbeat stream would buy nothing
 the existing traffic doesn't, until agents become long-running.
+
+What busmon will **not** do with that signal is guess. Silence is reported as
+silence (`no update 18m`), never as `offline`; a report moves liveness but not the
+declared state; an armed lease is shown as a lease; and no agent's presence is ever
+used to infer that its task has progressed. Task state comes from the board, and
+acceptance only from an explicit request transition.
+
+### Reproducing the screens
+
+`scripts/busmon-demo.sh` builds an isolated bus for demos and renders — its own
+Redis container on port 6390, its own throwaway `demo` project, never the real
+broker on 6380:
+
+```bash
+scripts/busmon-demo.sh up                          # start + seed the demo bus
+scripts/busmon-demo.sh run                         # busmon against it
+scripts/busmon-demo.sh capture out.txt ./busmon F2 # one screen, via tmux, to a file
+scripts/busmon-demo.sh down                        # remove the container
+```
+
+The seeded data is deliberately awkward — an agent that declared `working` and went
+quiet, an agent known only to the agents hash, a long multi-line Unicode report, a
+pre-retention report, an answered thread, an unanswered directive, and a tracked
+request in each state. `docs/captures/` holds the before/after renders produced this
+way.
 
 ## Bootstrap a team
 

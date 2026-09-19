@@ -52,9 +52,9 @@ func agentsTable(m map[string]bus.AgentSnapshot, now time.Time) string {
 		marker := ""
 		switch {
 		case age > agentStaleAfter:
-			marker = "  · offline"
+			marker = "  · bus activity stale"
 		case age > agentIdleAfter:
-			marker = "  · idle"
+			marker = "  · bus activity quiet"
 		}
 		msg := ""
 		if s.Message != "" {

@@ -1,0 +1,32 @@
+{
+  "cmd1": {
+    "exit": 0,
+    "stdout": "1789678071319-0\n",
+    "stderr": ""
+  },
+  "cmd2": {
+    "exit": 0,
+    "stdout": "1789678071336-0\n",
+    "stderr": ""
+  },
+  "subscribe1": {
+    "exit": 0,
+    "stdout": "{\"v\":1,\"event\":\"cmd\",\"rearm\":true,\"id\":\"1789678071319-0\",\"type\":\"directive\",\"from\":\"reviewer\",\"target\":\"dev\",\"body\":\"first\"}\n",
+    "stderr": ""
+  },
+  "subscribe2": {
+    "exit": 64,
+    "stdout": "{\"v\":1,\"event\":\"heartbeat\",\"rearm\":true}\n",
+    "stderr": ""
+  },
+  "verdict_publish": {
+    "exit": 0,
+    "stdout": "verdict recorded: approve isolated-audit on author\n",
+    "stderr": ""
+  },
+  "verdict_read": {
+    "exit": 0,
+    "stdout": "isolated-audit: APPROVED ✓ (reviewer, 0s ago)\n  0s ago    approve reviewer      \"é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂 é漢🙂…\"\n",
+    "stderr": ""
+  }
+}

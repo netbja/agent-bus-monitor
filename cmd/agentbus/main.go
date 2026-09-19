@@ -31,6 +31,9 @@
 //	agentbus --project P shutdown  [--force]    # broadcast a shutdown directive to every peer; refused while tasks aren't done or peers are busy
 //	agentbus --project P refresh   [--quiet]    # read local sources -> publish budget + per-agent usage
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
+//	agentbus --project P request [--json] | send <task> <target> [--ref T] [--ttl 5m] <body>
+//	agentbus --project P request accept <task> | block <task> <reason> | done <task> <reply>
+//	agentbus limits                # writer size/retention limits, no broker needed
 //	agentbus version               # print the bus protocol version (no project/broker needed)
 //	agentbus --host <host> ...
 package main
@@ -76,6 +79,11 @@ func main() {
 	}
 	// version reads a compile-time constant — no project, no broker. Handle it
 	// before the project check and before bus.Connect.
+	if len(args) >= 1 && args[0] == "limits" {
+		out, _ := json.MarshalIndent(bus.Limits(), "", "  ")
+		fmt.Println(string(out))
+		return
+	}
 	if len(args) >= 1 && args[0] == "version" {
 		fmt.Printf("agentbus protocol v%d\n", bus.ProtocolVersion)
 		return
@@ -84,7 +92,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|limits|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -101,6 +109,10 @@ func main() {
 	cmd, rest := args[0], args[1:]
 
 	switch cmd {
+	case "request":
+		if err := runRequest(ctx, b, self, rest, os.Stdout); err != nil {
+			die(err.Error())
+		}
 	case "status":
 		if len(rest) < 2 {
 			die("usage: status <agent> <state> [message]")
@@ -137,6 +149,11 @@ func main() {
 			e, err := b.ReportByID(ctx, rest[0])
 			if err != nil {
 				die(err.Error())
+			}
+			if asJSON {
+				out, _ := json.MarshalIndent(e, "", "  ")
+				fmt.Println(string(out))
+				return
 			}
 			fmt.Println(reportDetail(e))
 			return
@@ -190,6 +207,9 @@ func main() {
 			ref = genRef()
 		}
 		target, msg := rest[0], strings.Join(rest[1:], " ")
+		if err := bus.ValidateText(msg, bus.CmdMaxRunes); err != nil {
+			die(err.Error())
+		}
 		// Open the gate first — it's the authoritative blocking record. If the
 		// cmd publish then fails, the target stays correctly gated rather than
 		// seeing a phantom challenge event with no matching gate.
@@ -226,6 +246,13 @@ func main() {
 			die("verdict decision must be approve or reject")
 		}
 		rationale := strings.Join(rest[2:], " ")
+		cmdMsg := decision
+		if rationale != "" {
+			cmdMsg += ": " + rationale
+		}
+		if err := bus.ValidateText(cmdMsg, bus.CmdMaxRunes); err != nil {
+			die(err.Error())
+		}
 		// 1. Durable ledger entry — always, including self-approvals (the
 		//    independence rule is enforced at read time, not here).
 		if _, err := b.AppendVerdict(ctx, bus.Verdict{
@@ -235,10 +262,6 @@ func main() {
 			die(err.Error())
 		}
 		// 2. Live notification on :cmd so busmon and the author see it (as before).
-		cmdMsg := decision
-		if rationale != "" {
-			cmdMsg += ": " + rationale
-		}
 		if _, err := b.Cmd(ctx, self, author, bus.CmdVerdict, ref, cmdMsg); err != nil {
 			die(err.Error())
 		}
@@ -253,6 +276,25 @@ func main() {
 		fmt.Printf("verdict recorded: %s %s on %s\n", decision, subject, author)
 
 	case "verdicts":
+		rest, asJSON := extractBool(rest, "--json")
+		if asJSON {
+			rest, pr := extractFlag(rest, "--pr")
+			_, subject := extractFlag(rest, "--subject")
+			if pr != "" || subject != "" {
+				var err error
+				subject, err = resolveSubject(pr, subject)
+				if err != nil {
+					die(err.Error())
+				}
+			}
+			vs, err := b.Verdicts(ctx, subject)
+			if err != nil {
+				die(err.Error())
+			}
+			out, _ := json.MarshalIndent(vs, "", "  ")
+			fmt.Println(string(out))
+			return
+		}
 		rest, pr := extractFlag(rest, "--pr")
 		rest, subjectFlag := extractFlag(rest, "--subject")
 		if strings.TrimSpace(pr) == "" && strings.TrimSpace(subjectFlag) == "" {

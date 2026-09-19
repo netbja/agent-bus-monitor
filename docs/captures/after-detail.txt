@@ -1,0 +1,34 @@
+ demo  ·  ⬢ MASTER hermes  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
+┌───────────────────────── AGENTS ─────────────────────────┐┌──────────────────── BOARD  [1/5 done] ───────────────────┐
+│archite╔═════════ MESSAGE · report · note  [↑↓/jk scroll · y copy text · Y copy thread · Esc back] ══════════╗… 3m    │
+│coder: ║kind    report · note                                                                                ║0m      │
+│foureye║from    sentinel                                                                                     ║        │
+│⬢ herme║to      (broadcast — every reader of this project)                                                   ║        │
+│sentine║when    2026-09-18 04:10:59  (3m ago)                                                                ║… 3h    │
+└───────║id      1789697459000-0                                                                              ║────────┘
+┌───────║thread  — (this stream carries no thread id)                                                         ║────────┐
+│── Fri ║text    complete — full text retained (256 chars)                                                    ║        │
+│01:13:5║                                                                                                     ║        │
+│02:13:5║revue quotidienne                                                                                    ║        │
+│03:31:5║                                                                                                     ║        │
+│03:43:5║budget: 25% de la fenêtre de session, 44% de la semaine                                              ║        │
+│03:45:5║tâches: aucune bloquée depuis hier                                                                   ║        │
+│03:55:5║remarque: cette entrée porte le marqueur text_complete, donc son texte peut                          ║        │
+│04:01:5║être annoncé comme complet — contrairement aux entrées plus anciennes.                               ║ sans ch│
+│04:02:5║                                                                                                     ║        │
+│04:04:5║                                                                                                     ║        │
+│04:07:5║                                                                                                     ║        │
+│04:08:5║                                                                                                     ║        │
+│04:09:5║                                                                                                     ║        │
+│04:10:5║                                                                                                     ║        │
+│04:13:1║                                                                                                     ║        │
+│04:13:3║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+│       ║                                                                                                     ║        │
+└───────╚═════════════════════════════════════════════════════════════════════════════════════════════════════╝────────┘
+┌───────────────────────────────────── INPUT  [Tab feed · F1 legend · F2 requests] ────────────────────────────────────┐
+│>                                                                                                                     │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

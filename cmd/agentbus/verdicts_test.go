@@ -76,7 +76,7 @@ func TestVerdictsOverview(t *testing.T) {
 	now := time.UnixMilli(1_700_000_000_000)
 	ts := func(secAgo int) int64 { return now.Add(-time.Duration(secAgo) * time.Second).UnixMilli() }
 	vs := []bus.Verdict{
-		{Subject: "pr:10", Reviewer: "claude2", Author: "claude1", Decision: "approve", Message: "looks good", TS: ts(120)},
+		{Subject: "pr:10", Reviewer: "claude2", Author: "claude1", Decision: "approve", Message: "looks good", TextComplete: "yes", TS: ts(120)},
 		{Subject: "pr:11", Reviewer: "claude3", Author: "claude1", Decision: "reject", TS: ts(60)},
 	}
 	out := verdictsOverview(vs, now)
