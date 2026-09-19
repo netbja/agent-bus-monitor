@@ -1,6 +1,6 @@
 ---
 name: agent-bus-master
-description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to coordinate peer agents over the Agent Bus: resync an agent by injecting text into its herdr pane, unblock an agent stuck on an on-screen question, dispatch a multi-task implementation plan across an implementer + reviewer pair, and send tracked requests whose acceptance and completion are recorded rather than inferred. Use when you hold the pilot lease and need to drive other agents' panes, or when you're running a task-by-task plan through the bus."
+description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to coordinate peer agents over the Agent Bus: wake an idle-disconnected peer through its herdr pane (the bus cannot reach one that is not armed), resync an agent by injecting text into its herdr pane, unblock an agent stuck on an on-screen question, dispatch a multi-task implementation plan across an implementer + reviewer pair, and send tracked requests whose acceptance and completion are recorded rather than inferred. Use when you hold the pilot lease and need to drive other agents' panes, or when you're running a task-by-task plan through the bus."
 ---
 
 # Agent Bus — Master Skill
@@ -86,6 +86,63 @@ says nothing about the others.
 Distribution is **notify + pull**: the summary lands on `{project}:notify` (visible in busmon and to
 the human), and agents read `agentbus usage` themselves on demand. Never push budget via `cmd` to
 each agent — that wakes every agent's `subscribe`.
+
+## Peers disconnect when idle — bringing one back is YOUR job
+
+A peer that has finished its work stops re-arming and goes silent on purpose: an armed
+`subscribe` wakes its session every idle window, and idling armed is the most expensive way
+to do nothing. So assume peers are **not listening** unless you have just woken them.
+
+This changes how you dispatch:
+
+- **A `cmd` to an unarmed peer is retained, but nothing will hand it over.** It stays in the
+  shared stream; what fails is delivery. On an existing group a default re-arm filters and
+  acknowledges everything at or below "now", unseen; on a group that does not exist yet those
+  entries are skipped instead. Either way the peer never sees it unless you or it choose a
+  floor on purpose. One live project has 210 such commands unread right now — among them two
+  merge authorisations whose branches are still unmerged. Unread is not proof they went
+  unexecuted; it does mean nobody can say they were seen.
+- **Assign with `request send`.** A tracked request is recorded on the **board**, which is
+  read on demand. It survives the peer's absence with no listener, and the peer picks it up
+  at boot by reading `agentbus request` — no session had to idle for that to work.
+- **Then wake the peer through its pane**, not the bus — in two separate steps, because the
+  first one cannot be automated away.
+
+  **Step 1, resolve and look.** `agentbus pane coder` returns what coder registered on its
+  last status: a **snapshot**, and herdr ids are recycled. herdr can tell you the pane is live
+  and which client and cwd it runs — it does **not** know bus agent names, so no command can
+  prove the pane is still coder's. You confirm that by reading it:
+  ```bash
+  pane=$(agentbus pane coder) || { echo "coder has no registered pane"; exit 1; }
+  herdr pane list                                    # is that id still live? same cwd?
+  herdr pane read "$pane" --source recent --lines 20 # and is this actually coder?
+  ```
+
+  **Step 2, only once you are satisfied, inject.** Name the project and the exact task — the
+  peer may serve several, and it wakes with no idea why:
+  ```bash
+  herdr pane send-text "$pane" "$AGENT_BUS_PROJECT / task-42 assigned: run agentbus request, then arm."
+  herdr pane send-keys "$pane" Enter
+  ```
+
+  Never chain the two: injecting after a bare existence check is how you type a directive into
+  whatever process inherited that id. If the pane is gone the peer is not asleep, it is gone —
+  pop the role again (`agent-spawn <role> "$AGENT_BUS_PROJECT"`); it boots, reads the board,
+  and finds its work.
+
+**You are the exception: you stay armed.** You are how peers come back, and where the human
+and the sentinel reach the team — a budget or context nudge sent to an unarmed master is
+retained but never delivered, so it simply does not happen. Hold the lease and keep listening,
+even when the team is quiet.
+
+Being armed is not being alive: your pane can die with the lease still held and the subscribe
+gone. The human's recovery path does not go through the bus — they reach your pane directly in
+herdr, or pop a fresh master. When the work is genuinely over, end the team deliberately with
+`agentbus shutdown` rather than letting it decay into an unreachable silence.
+
+Wake a peer because there is work for it, not to check on it. Its silence is not a fault to
+correct — it is the behaviour you asked for, and `agentbus request` already tells you what it
+owes you.
 
 ## Dispatching work you intend to follow up — `request`, not `cmd`
 

@@ -40,7 +40,9 @@ never wakes a terminal session.
   directive/challenge/reply/verdict) are **different fields** — don't collapse them. Every
   line also leads with `"v"` (protocol version); ignore fields you don't recognize. The
   exact table is GUIDE §3.
-- **Re-arm iff `rearm` is `true`.** A `fatal` event is `rearm:false` → stop, you're misconfigured.
+- **Re-arm iff `rearm` is `true`** *and you still have work in flight*. A `fatal` event is
+  `rearm:false` → stop, you're misconfigured. When your work is done, stop re-arming on
+  purpose — see "Disconnect when you have nothing left to do".
 - **Persist the `id`** and pass it back as `--since <id>` on the next arm — that's your
   cursor (at-least-once; no replay of what you already handled). No `--since` = start at "now".
 
@@ -176,7 +178,8 @@ don't recognise** and never treat a missing one as false.
 Pending entries are recovered before new ones, and **recovery respects your `--since`
 floor**: an entry older than the floor is acknowledged *without being delivered to you*. So
 arming with no `--since` (which means "start at now") silently drops everything addressed
-to you at or below that id, i.e. everything that arrived while you were not armed.
+to you at or below that id, i.e. everything that arrived while you were not armed — and on a
+group that already exists, the server cursor has moved past them for good.
 
 Persist the `id` of the last event you handled and pass it back as `--since <id>` on every
 re-arm — and keep the same cursor when a fire carries no id (a `heartbeat` or an `error`),
@@ -201,6 +204,55 @@ be asked:
 Sentinel is the cheap relay — relaying is its job. Reserve a direct `cmd master` for when
 YOU are blocked and need a decision, not for FYI traffic.
 
+## Disconnect when you have nothing left to do
+
+An armed `subscribe` is not free. Every idle window it exits and **wakes your session**,
+which spends tokens whether or not anything arrived. Idling armed "just in case" is the most
+expensive way to do nothing. So when your work is finished: stop, and do **not** re-arm.
+
+Re-arm while work is in flight — you are mid-task, you expect an answer, a review is coming
+back. That is what the wake-on-exit loop is for. It is the *idle* waiting that must end.
+
+Before you stop, leave nothing **silently** unfinished. You may leave work behind — you may
+not leave it unexplained:
+
+- your finished work is reported (`agentbus report <self> …`);
+- every board task you own is `done`, or its state says where it really stands;
+- no tracked request addressed to you is still `requested` — accept it and do it, or
+  `agentbus request block <task> <reason>`. A blocked request is a perfectly good reason to
+  leave: the record carries the reason, so master can act on it without you.
+
+Then publish your last state (`agentbus status <self> idle "<what you finished>"`) and simply
+do not arm again. An unarmed session costs nothing.
+
+**You do not decide to come back — master does.** A `cmd` addressed to an unarmed agent is
+not lost: it stays in the shared stream. Whether it reaches you depends on what happened to
+it in **your group**, and the three cases are not the same:
+
+- **Never delivered** (above your group's `last-delivered-id`) — still deliverable. Whether
+  you are handed it depends on the floor you arm with: at or below the floor it is
+  acknowledged unseen, above it, delivered.
+- **Pending** (delivered to your group but never acknowledged) — **still recoverable**, even
+  though it sits *below* `last-delivered-id`. Pending entries are recovered before new ones,
+  subject to the same floor, as long as the body is still retained.
+- **Already acknowledged, or skipped when your group was created** — out of reach. Lowering
+  `--since` does not bring these back: it filters what you are handed, it does not rewind
+  `last-delivered-id`. Only an operator rewinding the group changes that.
+
+So the floor you choose decides what you see, and the one that creates your group decides
+what you will never see. What is genuinely out of reach can still be read out of band —
+`agentbus thread`, `agentbus reports`, busmon — and master can re-send what matters.
+
+One live project has 210 such commands sitting unread today.
+
+Master wakes you by injecting into your herdr pane. When you wake, start at your boot
+sequence: read `agentbus request` and `agentbus board` **first** — that is where work
+assigned during your absence is recorded. The board holds the request's **metadata**, not its
+text: read the body with `agentbus thread <thread>`, using the `thread` field the request
+records — with a custom `ref` that is not the root entry's id — and check that the body is
+still available and the deadline not passed **before** your first `accept`. Then arm, if
+there is anything to wait for.
+
 ## A `shutdown` directive means the team is done
 When master broadcasts `shutdown`, the work is over and idling would just burn
 the shared budget on heartbeat wakes. Set `agentbus status done`, post a final
@@ -211,6 +263,7 @@ instead of going silent.
 
 ## The whole bus in one line
 > Every stream is `{project}:{kind}`. Publish `status`/`report`, receive with `subscribe`
-> (wake-on-exit — re-arm iff `rearm`, persist the `id` cursor or you discard your backlog),
+> (wake-on-exit — re-arm while work is in flight, persist the `id` cursor or you discard your
+> backlog, and stop arming once you are done: master wakes you through your pane, not the bus),
 > `accept` a tracked request before you start and `done` it with your answer, gate the risky
 > with `challenge`/`verdict`, and read exact flags & JSON from `docs/AGENT-BUS-GUIDE.md`.
