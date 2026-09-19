@@ -105,19 +105,30 @@ This changes how you dispatch:
 - **Assign with `request send`.** A tracked request is recorded on the **board**, which is
   read on demand. It survives the peer's absence with no listener, and the peer picks it up
   at boot by reading `agentbus request` — no session had to idle for that to work.
-- **Then wake the peer through its pane**, not the bus. `agentbus pane` returns what the peer
-  registered on its last status — a **snapshot**, and herdr ids are recycled, so confirm the
-  pane is still that agent before you type into it:
+- **Then wake the peer through its pane**, not the bus — in two separate steps, because the
+  first one cannot be automated away.
+
+  **Step 1, resolve and look.** `agentbus pane coder` returns what coder registered on its
+  last status: a **snapshot**, and herdr ids are recycled. herdr can tell you the pane is live
+  and which client and cwd it runs — it does **not** know bus agent names, so no command can
+  prove the pane is still coder's. You confirm that by reading it:
   ```bash
   pane=$(agentbus pane coder) || { echo "coder has no registered pane"; exit 1; }
-  herdr pane list | grep -q "$pane" || { echo "stale pane id for coder"; exit 1; }
-  # and check the row is still coder's (agent + cwd) before injecting
+  herdr pane list                                    # is that id still live? same cwd?
+  herdr pane read "$pane" --source recent --lines 20 # and is this actually coder?
+  ```
+
+  **Step 2, only once you are satisfied, inject.** Name the project and the exact task — the
+  peer may serve several, and it wakes with no idea why:
+  ```bash
   herdr pane send-text "$pane" "$AGENT_BUS_PROJECT / task-42 assigned: run agentbus request, then arm."
   herdr pane send-keys "$pane" Enter
   ```
-  Name the project and the exact task in the message — the peer may serve several, and it
-  wakes with no idea why. If the pane is gone the peer is not asleep, it is gone: pop the role
-  again (`agent-spawn <role> "$AGENT_BUS_PROJECT"`); it boots, reads the board, finds its work.
+
+  Never chain the two: injecting after a bare existence check is how you type a directive into
+  whatever process inherited that id. If the pane is gone the peer is not asleep, it is gone —
+  pop the role again (`agent-spawn <role> "$AGENT_BUS_PROJECT"`); it boots, reads the board,
+  and finds its work.
 
 **You are the exception: you stay armed.** You are how peers come back, and where the human
 and the sentinel reach the team — a budget or context nudge sent to an unarmed master is

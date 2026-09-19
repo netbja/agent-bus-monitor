@@ -178,9 +178,8 @@ don't recognise** and never treat a missing one as false.
 Pending entries are recovered before new ones, and **recovery respects your `--since`
 floor**: an entry older than the floor is acknowledged *without being delivered to you*. So
 arming with no `--since` (which means "start at now") silently drops everything addressed
-to you at or below that id, i.e. everything that arrived while you were not armed. (On a
-group that does not exist yet, those entries are skipped rather than acknowledged — still
-undelivered, but still in the stream for a floor you set on purpose.)
+to you at or below that id, i.e. everything that arrived while you were not armed — and on a
+group that already exists, the server cursor has moved past them for good.
 
 Persist the `id` of the last event you handled and pass it back as `--since <id>` on every
 re-arm — and keep the same cursor when a fire carries no id (a `heartbeat` or an `error`),
@@ -227,17 +226,25 @@ Then publish your last state (`agentbus status <self> idle "<what you finished>"
 do not arm again. An unarmed session costs nothing.
 
 **You do not decide to come back — master does.** A `cmd` addressed to an unarmed agent is
-not lost: it stays in the shared stream. But nothing delivers it to you afterwards by
-default — on an existing group, re-arming at "now" filters and acknowledges everything at or
-below the floor, unseen. Recovering it takes your persisted cursor, or a floor you choose
-deliberately. One live project has 210 such commands sitting unread today.
+not lost: it stays in the shared stream. But whether it ever reaches you is decided by your
+group's **server-side cursor**, and that cursor only moves FORWARD. `--since` filters what
+you are handed; it cannot walk the cursor back. So:
+
+- Your group's floor is set **when the group is created** — choose it then, deliberately.
+- Once the cursor has passed an entry, no re-arm recovers it. Only an operator can rewind a
+  group, and that is a decision about the whole project, not a thing you do to catch up.
+- What you can always do is read it out of band: `agentbus thread`, `agentbus reports`,
+  busmon. Then ask master to re-send what still matters.
+
+One live project has 210 such commands sitting unread today.
 
 Master wakes you by injecting into your herdr pane. When you wake, start at your boot
 sequence: read `agentbus request` and `agentbus board` **first** — that is where work
 assigned during your absence is recorded. The board holds the request's **metadata**, not its
-text: take the thread id and read the body with `agentbus thread <id>`, and check that the
-body is still available and the deadline not passed **before** your first `accept`. Then arm
-— if there is anything to wait for.
+text: read the body with `agentbus thread <thread>`, using the `thread` field the request
+records — with a custom `ref` that is not the root entry's id — and check that the body is
+still available and the deadline not passed **before** your first `accept`. Then arm, if
+there is anything to wait for.
 
 ## A `shutdown` directive means the team is done
 When master broadcasts `shutdown`, the work is over and idling would just burn

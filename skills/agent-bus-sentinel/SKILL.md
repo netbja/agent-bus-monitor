@@ -38,8 +38,13 @@ its text; an `error` with no id is a transport failure, stop and let the next wa
 
 **Persist the cursor between wakes** (the `id` of the last event you handled). Without it you
 restart at "now" and everything addressed to you below that floor is acknowledged unseen.
-On your very first wake there is no cursor to restore: choose the floor deliberately and say
-which you chose — do not let "now" happen to you by default.
+
+On your very first wake there is no cursor to restore, and that moment is the only one that
+counts: **the floor you pass creates your consumer group at that position.** Afterwards the
+group's server-side cursor only moves forward — a later `--since` filters what you are handed
+but never walks it back. So choose that first floor deliberately, say which you chose, and do
+not let "now" happen to you by default. Getting it wrong is not something you can fix later
+by re-arming; it takes an operator rewinding the group.
 
 ## Duty 0 — Refresh the budget (every wake, first)
 

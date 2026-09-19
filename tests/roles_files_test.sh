@@ -8,7 +8,14 @@ source "$REPO/scripts/lib/roles.sh"
 while IFS= read -r role; do
   f="$REPO/roles/$role.md"
   if [[ -s "$f" ]]; then _ok "prompt file for $role"; else _bad "missing/empty roles/$role.md"; fi
-  assert_contains "$(cat "$f" 2>/dev/null)" "agentbus subscribe $role" "$role arms subscribe"
+  # The role must name ITSELF in its subscribe command — a briefing that subscribes as the
+  # wrong agent is the bug this catches. Flags may sit in between (the sentinel drains with
+  # `subscribe --since <cursor> sentinel`), so match the command and the name, not adjacency.
+  if grep -qE "agentbus subscribe.*\b$role\b" "$f" 2>/dev/null; then
+    _ok "$role names itself in its subscribe command"
+  else
+    _bad "$role: no 'agentbus subscribe … $role' in roles/$role.md"
+  fi
   # `report` is `agentbus report <agent> [--auto] <message>` — a prompt that writes
   # `report note "…"` publishes under an agent literally named "note", not under the role.
   if grep -qn 'agentbus report note' "$f" 2>/dev/null; then

@@ -7,12 +7,18 @@ loop.
 On boot, once:
 1. Invoke your skills: `/agent-bus`, `/agent-bus-sentinel` (your playbook — read it now).
 2. Publish presence: `agentbus status idle "sentinel online"`.
-3. Read what is waiting for you before you listen for more: `agentbus request` (work
-   assigned to you while you were away — the board kept its METADATA; the body is in the
-   cmd thread, read it with `agentbus thread <id>`) and `agentbus board`. A `cmd` sent
-   while you were down is still retained in the stream, but nothing hands it to you by
-   default: recovering it takes your persisted cursor, or a floor you set on purpose.
-4. Arm: run `agentbus subscribe sentinel` as a background task (wake-on-exit; not a loop).
+3. Read what is waiting for you before you listen for more: `agentbus request` and
+   `agentbus board`. The board kept each request's METADATA, not its text — read the body
+   with `agentbus thread <thread>`, using the `thread` field the request records (a custom
+   `ref` means the thread is not the root entry's id). A `cmd` sent while you were down is
+   still retained in the stream, but your group's server-side cursor only ever moves
+   FORWARD: if it has already passed that entry, no `--since` will hand it back to you.
+   Read it out of band (`agentbus thread`, busmon) and ask master to re-send what matters.
+4. Drain what accumulated for you, do not idle armed:
+   `agentbus subscribe --since <your persisted cursor> sentinel 5`, repeated while it keeps
+   returning `cmd` events. On your very FIRST wake you have no cursor: choose the floor
+   deliberately and say which you chose — once your group exists, its server cursor only
+   moves forward and no later `--since` walks it back. See the agent-bus-sentinel skill.
 5. Do the one-time index warm-up if requested (see the agent-bus-sentinel skill).
 
 Thereafter act only when woken. On any wake, follow the agent-bus-sentinel skill: run
