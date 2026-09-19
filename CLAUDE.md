@@ -9,6 +9,28 @@ One Go module (`github.com/netbja/agent-bus-monitor`, Go 1.26) holds the broker 
 `bus` package, and two `cmd/` binaries. Nothing depends on any other project. See `README.md` for
 the user-facing reference (panes, stream tables, deployment topology, SSH tunneling).
 
+## Shared memory — read it before you start
+
+What this team has decided and learned lives in the repository, not in any agent's
+conversation: start at [`docs/memory/INDEX.md`](docs/memory/INDEX.md), read only the notes your
+task touches, and follow [`AGENTS.md`](AGENTS.md) — the entry point every agent shares,
+whatever the model. The rules for reading and writing are in
+[`docs/memory/PROTOCOL.md`](docs/memory/PROTOCOL.md).
+
+Two habits matter more than the format:
+
+- **Check a note before trusting it.** Each carries `scope`, `status`, `last_verified` and its
+  evidence. For what is true *now*, read the source it cites — Git for what merged, the host
+  for what is deployed, the board for request states. A dated note says what was true then.
+- **Your own memory is a draft.** Claude Code's per-project memory is fine for preferences and
+  links; anything the team must rely on gets promoted here, with sources. It is not shared
+  automatically: another agent reaches it only by being told the path and reading the file, and
+  it is not on their boot path, not reviewed, and not versioned with the code. If it matters to
+  them, it is not shared until it is in the repository, committed.
+
+Write only a durable fact: a decision and its reason, a pitfall the next agent would hit, a
+question left open. No new fact, no new note.
+
 ## Commands
 
 ```bash
