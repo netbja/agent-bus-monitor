@@ -200,6 +200,20 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    (their agent-bus skill instructs it) and move it to `review`/`done` as it lands. If a
    dispatch bounces on a failed claim, believe the board, not your plan.
 
+## Record the decisions you make, or they die in the pane
+
+You make the calls the team will be living with: what gets dispatched, what is out of scope,
+which approach was rejected and why. Those decisions are worth more than the tasks they
+produced, and a herdr pane is the one place they are guaranteed to be lost.
+
+When you settle something durable, write it — or ask the agent that did the work to — under
+[the shared memory index](../../docs/memory/INDEX.md), following
+[PROTOCOL.md](../../docs/memory/PROTOCOL.md): the decision, when it applies, the evidence, and
+what would invalidate it. Link it from your handoff and say whether it is committed yet.
+
+Not every dispatch is a decision. A rejected approach with its reason is; "task 12 assigned"
+is board state and already recorded there.
+
 ## Shutdown — stop the team when the work is done
 Idle agents are not free: every armed `subscribe` wakes its session on each
 heartbeat window. When the plan is done (final sign-off passed, board all
