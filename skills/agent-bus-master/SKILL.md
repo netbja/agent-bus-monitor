@@ -101,8 +101,9 @@ agentbus request                       # everything outstanding (--json for mach
   `requested`. Reusing a slug is refused and hands you the existing request id: a retry
   inspects the work that exists, it does not create a second copy of it.
 - `--ttl` is a deadline on acting, and it is **optional**. Without it there is no deadline —
-  which busmon states plainly. Don't set one you don't mean: a request past its deadline
-  can no longer be accepted, and the peer has to come back to you.
+  which busmon states plainly. Don't set one you don't mean: once it passes, a peer that had
+  not yet accepted can no longer take the work and has to come back to you. A peer that had
+  already accepted can still resume after a block.
 - Use plain `cmd` for what it is good at: a nudge, an answer, an FYI, anything you will not
   follow up.
 

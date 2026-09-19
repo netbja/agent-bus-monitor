@@ -134,8 +134,10 @@ agentbus request                            # what is outstanding (--json for ma
 - Only the **target** agent can accept, block or complete its own request.
 - `done` requires a prior `accept`, and a blocked request must be accepted again before it
   can be completed. A generic reply on the thread completes nothing.
-- A request past its deadline **cannot be accepted** — say so on the bus rather than
-  starting work that is already out of time.
+- A deadline blocks the **first** acceptance only: a request you never accepted cannot be
+  accepted once `expires_at` has passed — say so on the bus rather than starting work that
+  is already out of time. Work you had already accepted can still be resumed after a block,
+  deadline or not.
 
 ## What the subscribe JSON now tells you about a request
 

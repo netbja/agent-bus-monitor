@@ -152,7 +152,9 @@ agentbus request block  <task> <reason>                 # TARGET ONLY; reason is
 agentbus request done   <task> <reply>                  # TARGET ONLY; requires a prior accept; publishes the reply on the thread
 agentbus request                                        # what is outstanding; --json for every field
 # Reusing a <task> slug is REFUSED and returns the existing request id — a retry inspects, it never duplicates.
-# --ttl is optional: without it there is NO deadline. A request past its deadline can no longer be accepted.
+# --ttl is optional: without it there is NO deadline. The deadline blocks the FIRST acceptance only:
+#   never-accepted + expired  -> accept is refused ("request expired; cannot accept")
+#   already-accepted          -> accept still works, so a blocked task can be resumed past its deadline
 # After a `block`, the request must be accepted again before it can be completed.
 # A reply on the thread, a report, a status, or bytes delivered to a subscriber are NONE of them an acceptance.
 
@@ -247,7 +249,8 @@ Each fire is exactly one JSON line — parse it once. **Re-arm iff `rearm` is `t
 | You see                                                              | Meaning            | Exit | Re-arm? |
 |----------------------------------------------------------------------|--------------------|------|---------|
 | `{"v":1,"event":"cmd","rearm":true,"id":"…","type":"…","from":"…","target":"…","ref":"…","body":"…"}` | a command arrived  | 0    | yes     |
-| …plus, when the entry carries them: `"task"`, `"expires_at"`, `"delivery"`, `"duplicate_possible"`, `"attempt"`, `"text_complete"` | it belongs to a tracked request | 0 | yes |
+| …plus `"delivery"`, `"attempt"`, `"duplicate_possible"`, `"text_complete"` | transport + text facts, on **any** cmd | 0 | yes |
+| …plus `"task"` and `"expires_at"` | THIS is what marks a tracked request | 0 | yes |
 | `{"v":1,"event":"heartbeat","rearm":true}`                           | idle window passed | 64   | yes     |
 | `{"v":1,"event":"error","rearm":true,"msg":"…"}`                     | transient glitch   | 75   | yes     |
 | `{"v":1,"event":"fatal","rearm":false,"msg":"…"}`                    | misconfigured      | 1    | **no**  |
