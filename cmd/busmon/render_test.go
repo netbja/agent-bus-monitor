@@ -11,14 +11,14 @@ import (
 )
 
 func TestStatusBar(t *testing.T) {
-	master := statusBar("trading", "hermes", nil)
+	master := statusBar(statusData{project: "trading", driver: "hermes"})
 	if !strings.Contains(master, "⬢ MASTER hermes") {
 		t.Fatalf("statusBar(driver) = %q, want '⬢ MASTER hermes'", master)
 	}
 	if !strings.Contains(master, "trading") {
 		t.Fatalf("statusBar = %q, want the project name", master)
 	}
-	auto := statusBar("trading", "", nil)
+	auto := statusBar(statusData{project: "trading"})
 	if !strings.Contains(auto, "autonomous") || strings.Contains(auto, "MASTER") {
 		t.Fatalf("statusBar(\"\") = %q, want 'autonomous' and no MASTER", auto)
 	}
@@ -333,8 +333,9 @@ func TestBudgetColorWarnsBeforeTheWall(t *testing.T) {
 
 // The status bar carries the account budget; a chip never does.
 func TestStatusBarShowsBudget(t *testing.T) {
-	got := statusBar("trading", "master", map[string]bus.BudgetSnapshot{
-		"anthropic": {SessionPct: 25, WeeklyPct: 44},
+	got := statusBar(statusData{
+		project: "trading", driver: "master",
+		budgets: map[string]bus.BudgetSnapshot{"anthropic": {SessionPct: 25, WeeklyPct: 44}},
 	})
 	if !strings.Contains(got, "anthropic 25%/44%") {
 		t.Fatalf("statusBar = %q, want the account budget", got)
