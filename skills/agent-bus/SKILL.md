@@ -1,6 +1,6 @@
 ---
 name: agent-bus
-description: Use when you are a peer agent coordinating with other agents over the Agent Bus (Redis Streams via the `agentbus` CLI) — to publish your state/heartbeat, receive directives by arming `subscribe`, report progress, check whether you're piloted or autonomous, or gate a risky action with the 4-eyes challenge/verdict flow. For the master/pilot role (driving other agents' panes), use agent-bus-master instead.
+description: Use when you are a peer agent coordinating with other agents over the Agent Bus (Redis Streams via the `agentbus` CLI) — to publish your state/heartbeat, receive directives by arming `subscribe`, accept/block/complete a tracked request addressed to you, report progress, check whether you're piloted or autonomous, or gate a risky action with the 4-eyes challenge/verdict flow. For the master/pilot role (driving other agents' panes), use agent-bus-master instead.
 ---
 
 # Agent Bus — Peer Agent
@@ -55,8 +55,9 @@ agentbus pilot status     # "piloted by hermes"  OR  "autonomous"
 Agents are one-shot CLI calls, not daemons — there is no separate heartbeat. Emit
 `agentbus status <self> <working|idle|blocked|done> <msg>` when your state changes, and
 `agentbus report <self> <msg>` at milestones (its full text is retained — `reports <id>`
-reads it). busmon ages you to idle/offline from your last entry. While armed and waiting
-you are **`idle`, never `blocked`**.
+reads it). busmon shows the state you DECLARED plus how old that declaration is ("no update 18m") —
+it never relabels your silence, so a stale `working` stays on screen as your own claim
+until you correct it. While armed and waiting you are **`idle`, never `blocked`**.
 
 ## Gating risky actions (the 4-eyes money-path)
 `blocked` is reserved for an **open 4-eyes gate**. Before proceeding or marking done:
@@ -112,6 +113,55 @@ Claim BEFORE you invest in the work: a failed claim (`owned by <peer> (<state>)`
 pick another task or ask master — never duplicate. Keep your own entries honest as the task
 moves; the board is only as good as its last update.
 
+## Tracked requests — the only thing that records that you took the work
+
+A `cmd` directive is fire-and-forget: nothing anywhere remembers whether you took it. A
+**tracked request** is a directive recorded on the board, and it carries three facts a
+`cmd` cannot: whether you accepted it, whether you are blocked on it, and what you answered.
+
+**Nothing infers your acceptance.** Not the delivery, not your `status`, not a reply you
+wrote on the thread. If you never run `accept`, the request stays `requested` forever and
+the human watching busmon sees a task nobody has taken. Run these, in this order:
+
+```bash
+agentbus request accept <task>              # BEFORE you start working. Not optional.
+agentbus request block  <task> <reason>     # when you cannot proceed — say why, in words
+agentbus request accept <task>              # to resume after a block
+agentbus request done   <task> <reply>      # when finished — the reply is your answer
+agentbus request                            # what is outstanding (--json for machines)
+```
+
+- Only the **target** agent can accept, block or complete its own request.
+- `done` requires a prior `accept`, and a blocked request must be accepted again before it
+  can be completed. A generic reply on the thread completes nothing.
+- A request past its deadline **cannot be accepted** — say so on the bus rather than
+  starting work that is already out of time.
+
+## What the subscribe JSON now tells you about a request
+
+Where relevant, a `cmd` event carries `task`, `expires_at`, `delivery`, `duplicate_possible`
+and `attempt`. The protocol version stays `1` — these are additive, so **ignore fields you
+don't recognise** and never treat a missing one as false.
+
+- **`delivery`** describes the transport, never you. `output_written` means the bytes
+  reached a subscriber's output — not that anything was read, and never that anything was
+  accepted. `queued` means no output was recorded, which is not proof none was written.
+- **`duplicate_possible: true`** means this exact request may have been delivered to you
+  before. The `id` is the same request, not a second one: check `agentbus request` for the
+  task's current state before doing the work twice.
+- **`expires_at: 0`** means no deadline. Never invent one.
+
+## Persist your cursor — a floor is not a filter, it discards
+
+Pending entries are recovered before new ones, and **recovery respects your `--since`
+floor**: an entry older than the floor is acknowledged *without being delivered to you*. So
+arming with no `--since` (which means "start at now") silently drops everything addressed
+to you while you were not armed.
+
+Persist the `id` of the last event you handled and pass it back as `--since <id>` on every
+re-arm. That is the whole difference between a subscriber that misses nothing and one that
+quietly eats its own backlog.
+
 ## Pushing a signal nobody asked for — the outbox convention
 `notify` and `report` are fire-and-forget: they show up in busmon but wake NO agent. When
 you discover something the team must act on — a stash that already exists, a subagent that
@@ -134,5 +184,6 @@ instead of going silent.
 
 ## The whole bus in one line
 > Every stream is `{project}:{kind}`. Publish `status`/`report`, receive with `subscribe`
-> (wake-on-exit — re-arm iff `rearm`, persist the `id` cursor), gate the risky with
-> `challenge`/`verdict`, and read exact flags & JSON from `docs/AGENT-BUS-GUIDE.md`.
+> (wake-on-exit — re-arm iff `rearm`, persist the `id` cursor or you discard your backlog),
+> `accept` a tracked request before you start and `done` it with your answer, gate the risky
+> with `challenge`/`verdict`, and read exact flags & JSON from `docs/AGENT-BUS-GUIDE.md`.
