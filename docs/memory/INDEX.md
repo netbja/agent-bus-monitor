@@ -20,6 +20,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 - [Inspect pending AND unread addressed commands before choosing a cursor](lessons/2026-09-19-pel-is-not-backlog.md)
 - [Delivery, acceptance and completion are separate facts](lessons/2026-09-19-delivery-is-not-acceptance.md)
 - [Installed binaries and test endpoints require explicit verification](lessons/2026-09-19-runtime-and-test-endpoints.md)
+- [A worktree in /tmp holds work that nothing else holds](lessons/2026-09-19-worktrees-in-tmp.md)
 
 ## Open questions and historical checkpoints
 
