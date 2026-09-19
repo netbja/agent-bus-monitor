@@ -113,6 +113,11 @@ Claim BEFORE you invest in the work: a failed claim (`owned by <peer> (<state>)`
 pick another task or ask master — never duplicate. Keep your own entries honest as the task
 moves; the board is only as good as its last update.
 
+These verbs are for **untracked** tasks. On a task that carries a tracked request, `claim`,
+`state` and `done` are all refused (`tracked request: use request accept/block/done or
+explicit board drop`) — see the next section. `drop` is the exception: it is allowed, and it
+deletes the tracking without cancelling anything.
+
 ## Tracked requests — the only thing that records that you took the work
 
 A `cmd` directive is fire-and-forget: nothing anywhere remembers whether you took it. A
@@ -141,8 +146,10 @@ agentbus request                            # EVERY tracked request, done ones i
   accepted once `expires_at` has passed (nor if its body has been trimmed) — say so on the
   bus rather than starting work that is already out of time. Work you had already accepted
   can still be resumed and completed afterwards, deadline or not.
-- **Do not touch a tracked task with `board claim` / `board state`.** Those move the entry
-  behind the request's back. The request verbs are its only controls.
+- **`board claim` / `board state` on a tracked task are refused** — the broker tells you to
+  use the request verbs. `board drop` is not refused, and it is the sharp edge: it deletes
+  the board entry and its request metadata **without cancelling the command already sent or
+  the work in flight**. Dropping loses the tracking, not the action.
 
 A request's `blocked` state is not your agent `status`: the first says this one task cannot
 move and why, the second is reserved for an open 4-eyes gate. You can be blocked on a
@@ -161,7 +168,8 @@ don't recognise** and never treat a missing one as false.
   deduplicate on project + message `id`. An absent flag guarantees nothing, since a producer
   may have retried on its own. When the event carries `task`, check `agentbus request`
   before redoing the work.
-- **`expires_at: 0`** means no deadline. Never invent one.
+- **`expires_at`** is omitted when it is zero, so an absent field means no deadline was
+  expressed. Never invent one.
 
 ## Persist your cursor — a floor is not a filter, it discards
 
@@ -175,9 +183,11 @@ re-arm — and keep the same cursor when a fire carries no id (a `heartbeat` or 
 or you move your floor forward for nothing.
 
 That is what stops you eating your own backlog. It is **not** a promise that nothing is
-lost: the stream is capped, and an entry is acknowledged before you act on it, so retention
-and a crash can still take work off the board. `--since 0` lifts the floor for what is still
-deliverable; it does not resurrect what your group already acknowledged.
+lost: the stream is capped, so a body can age out of it, and an entry is acknowledged before
+you act on it, so a crash can lose the execution. The **board record survives both** — there
+is no garbage collection, so a tracked request stays visible even once its body no longer
+reads back. `--since 0` lifts the floor for what is still deliverable; it does not resurrect
+what your group already acknowledged.
 
 ## Pushing a signal nobody asked for — the outbox convention
 `notify` and `report` are fire-and-forget: they show up in busmon but wake NO agent. When

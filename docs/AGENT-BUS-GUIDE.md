@@ -142,6 +142,8 @@ agentbus board claim <task> [--branch <b>]              # take ownership (state=
 agentbus board state <task> <state>                     # move the task along (review, blocked, …)
 agentbus board done <task>                              # merged/finished; a done task can be re-claimed by anyone
 agentbus board drop <task>                              # release the task without doing it
+# claim/state/done apply to UNTRACKED tasks only: on a tracked request they are refused
+# ("tracked request: use request accept/block/done or explicit board drop"). drop is allowed.
 
 # ── TRACKED REQUESTS: a directive whose acceptance and answer are RECORDED ────
 # The <task> slug is the board key: `request send` creates the board entry in state
@@ -160,8 +162,11 @@ agentbus request                                        # EVERY tracked request,
 #   never-accepted + body trimmed -> accept refused ("request body missing; cannot accept")
 #   already-accepted              -> accept and done both still work, deadline or not
 # A reply on the thread, a report, a status, or bytes delivered to a subscriber are NONE of them an acceptance.
-# The board verbs are NOT for these: `board claim` / `board state` on a tracked task would move
-# it behind the request's back. Use the request verbs; read it with `agentbus request`.
+# `board claim` / `board state` on a tracked task are REFUSED — the broker answers
+#   "tracked request: use request accept/block/done or explicit board drop".
+# `board drop` DOES work and is the sharp edge: it deletes the board entry, request metadata
+#   included, WITHOUT cancelling the command already published or any work in flight. You lose
+#   the tracking, not the action.
 
 # ── SHUTDOWN: stop the whole team when the work is done (saves idle burn) ─────
 agentbus shutdown                                       # broadcast "shutdown" to every peer; REFUSED while a board task isn't done or a peer is busy
@@ -257,7 +262,7 @@ Each fire is exactly one JSON line — parse it once. **Re-arm iff `rearm` is `t
 | …plus `"delivery"`, `"attempt"`, `"duplicate_possible"`, `"text_complete"` | transport + text facts, present on **any** cmd | — | — |
 | …plus `"task"` | the ONLY field that marks a tracked request (`expires_at` is omitted when zero, so its absence proves nothing) | — | — |
 | `{"v":1,"event":"heartbeat","rearm":true}`                           | idle window passed | 64   | yes     |
-| `{"v":1,"event":"error","rearm":true,"msg":"…"}`                     | glitch, **or** an entry with no executable payload (missing / expired body) — it carries an id and no body you may act on: **do not execute its text** | 75 | yes |
+| `{"v":1,"event":"error","rearm":true,"msg":"…"}`                     | glitch, **or** an entry with no executable payload (missing / expired body). The missing/expired form carries the entry `id` and no body you may act on — **do not execute its text**; a plain glitch may carry no id at all | 75 | yes |
 | `{"v":1,"event":"fatal","rearm":false,"msg":"…"}`                    | misconfigured      | 1    | **no**  |
 
 **A `cmd` event can still exit 75.** The JSON is written before the entry is acknowledged,
@@ -301,8 +306,10 @@ it is "consume the backlog unseen".
   **not** resurrect entries already acknowledged — those are gone whatever you pass; on a
   **new** group it starts from the retained history.
 - Persisting the cursor is what stops you eating your own backlog. It is not a promise that
-  nothing is lost — the stream is capped, and an entry is acknowledged before you act on it,
-  so retention and a crash can still take work off the board.
+  nothing is lost: the stream is capped, so a body can age out of it, and an entry is
+  acknowledged before you act on it, so a crash can lose the execution. What survives both is
+  the **board record** — there is no garbage collection, so a tracked request stays on the
+  board even when its body no longer reads back.
 
 Moving a cursor forward is a transport decision and **never means the work was accepted**.
 Only `request accept` records that.
