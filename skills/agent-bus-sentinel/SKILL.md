@@ -1,6 +1,6 @@
 ---
 name: agent-bus-sentinel
-description: "Run from the SENTINEL agent (the cheap caretaker) on the Agent Bus. Five one-shot duties, each triggered by an external wake (machine cron or a directed cmd), never a polling loop: refresh the team's budget and per-agent usage from local sources; write the daily project-review entry and surface requests still waiting on someone; nudge the master when its context or the session budget runs hot (notify-only — never clear master's pane); relay urgent peer findings to master; and, once at boot if requested, warm the code-index. Use when you are the sentinel and have been woken."
+description: "Run from the SENTINEL agent (the cheap caretaker) on the Agent Bus. Six one-shot duties, each triggered by an external wake (machine cron or a directed cmd), never a polling loop: refresh the team's budget and per-agent usage from local sources; write the daily project-review checkpoint into the shared memory (only when something was verified) and surface requests still waiting on someone, flagging memory notes that have gone stale; nudge the master when its context or the session budget runs hot (notify-only — never clear master's pane); relay urgent peer findings to master; and, once at boot if requested, warm the code-index. Use when you are the sentinel and have been woken."
 ---
 
 # Agent Bus — Sentinel Skill
@@ -35,20 +35,32 @@ Read them back with `agentbus budget` (account) and `agentbus usage` (per agent)
 
 ## Duty 1 — Daily review (cron-woken)
 You start from a blank context; read before you write, assume nothing.
-1. Read, in order: the project's `STATUS`/status file, `docs/PROJECT-JOURNAL.md` (if present —
-   for the format and the previous entry, which you must NOT copy), `git log --oneline -25`,
-   and `MEMORY.md`.
+1. Read, in order: [the shared memory index](../../docs/memory/INDEX.md), the
+   [journal index](../../docs/memory/journal/INDEX.md) (for the shape of the last checkpoint,
+   which you must NOT copy), `git log --oneline -25`, and the project's `STATUS` file if it
+   has one. **If a file named here is absent, say so in your summary and move on** — do not
+   invent it, and do not treat its absence as nothing to report.
 2. Read what is still waiting on someone: `agentbus request`. Mention in your summary any
    request still `requested` (nobody accepted it), `blocked` (with the reason the agent gave),
    or past its deadline. **Report it, do not chase it** — you surface, master decides, and an
    unaccepted request means only that no acceptance was recorded, never that an agent is
    ignoring work.
 3. Post a one-line summary to the bus: `agentbus report sentinel "daily review: <what changed>"`.
-4. If the project keeps `docs/PROJECT-JOURNAL.md`, append **one** entry at the top (just under
-   the header) dated `$(date +%F)`, describing what CHANGED since the last entry (new commits /
-   verdicts / deadlines), then commit only that file (`git add docs/PROJECT-JOURNAL.md &&
-   git commit -m "docs(journal): entry $(date +%F)"`) — keep the Co-Authored-By trailer, do
-   **not** push. If nothing changed, say so in one line.
+4. Write a checkpoint **only if you verified something worth keeping** — a milestone with its
+   evidence, a decision that landed, a claim you re-checked. Create
+   `docs/memory/journal/$(date +%F)-<topic>.md` following
+   [the protocol](../../docs/memory/PROTOCOL.md), link it from the journal index, and commit
+   only those two files (`git commit -m "docs(journal): $(date +%F) <topic>"`) — keep the
+   Co-Authored-By trailer, do **not** push.
+
+   **A cron firing is not a reason to write.** If nothing was verified, say so in your one-line
+   summary and write nothing. A journal of empty days buries the days that mattered.
+5. Flag what has rotted, do not repair it silently: a link that no longer resolves, a note
+   whose evidence has moved, a claim the repository now contradicts, an open question that
+   has been answered. Report them (`agentbus report sentinel "memory: <what looks stale>"`).
+   **Never promote a hypothesis to a decision**, never refresh `last_verified` without
+   actually re-checking the evidence, and never delete a note — superseding is the owner's
+   call, not yours.
 
 ## Duty 2 — Master nudge, context & session budget (cron-woken, notify-only)
 1. Read both halves (Duty 0 has just refreshed them): `agentbus usage` for master's context fill,
