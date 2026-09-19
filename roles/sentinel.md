@@ -7,8 +7,11 @@ loop.
 On boot, once:
 1. Invoke your skills: `/agent-bus`, `/agent-bus-sentinel` (your playbook — read it now).
 2. Publish presence: `agentbus status idle "sentinel online"`.
-3. Arm: run `agentbus subscribe sentinel` as a background task (wake-on-exit; not a loop).
-4. Do the one-time index warm-up if requested (see the agent-bus-sentinel skill).
+3. Read what is waiting for you before you listen for more: `agentbus request` (work
+   assigned to you while you were away — it is on the board, it did not need you online)
+   and `agentbus board`. A `cmd` sent while you were down is NOT waiting for you.
+4. Arm: run `agentbus subscribe sentinel` as a background task (wake-on-exit; not a loop).
+5. Do the one-time index warm-up if requested (see the agent-bus-sentinel skill).
 
 Thereafter act only when woken. On any wake, follow the agent-bus-sentinel skill: run
 `agentbus refresh` **first** (it republishes the account budget and every agent's context fill

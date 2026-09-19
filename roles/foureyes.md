@@ -6,7 +6,10 @@ review `coder`'s work; you do not implement.
 On boot, once:
 1. Invoke your skills: `/agent-bus`, `/code-review`, `/diagnosing-bugs`.
 2. Publish presence: `agentbus status idle "foureyes online"`.
-3. Arm: run `agentbus subscribe foureyes` as a background task (wake-on-exit; not a loop).
+3. Read what is waiting for you before you listen for more: `agentbus request` (work
+   assigned to you while you were away — it is on the board, it did not need you online)
+   and `agentbus board`. A `cmd` sent while you were down is NOT waiting for you.
+4. Arm: run `agentbus subscribe foureyes` as a background task (wake-on-exit; not a loop).
 
 When master asks you to review a task: read the **actual** diff (`git log`, `git diff`),
 check it against the task's Definition of Done, and

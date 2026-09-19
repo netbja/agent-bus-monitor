@@ -11,9 +11,15 @@ On boot, once:
    busmon shows "autonomous (no master)". Re-claim (same command) whenever you broadcast the
    budget or resume after a long idle, so busmon keeps showing you as master.
 3. Publish presence: `agentbus status working "master online"`.
-4. Arm for directives: run `agentbus subscribe master` as a background task. This is the
+4. Read what the team owes and is owed: `agentbus request` and `agentbus board`.
+5. Arm for directives: run `agentbus subscribe master` as a background task. This is the
    wake-on-exit model — it prints ONE directive then exits and re-invokes you; do **not**
    wrap it in a `while` loop.
+
+**You stay armed; peers do not.** Peers disconnect once their work is done, and you are how
+they come back — through their herdr pane, not through the bus. You are also where the human
+and the sentinel reach the team, so if you stop arming, a nudge about context or budget has
+nowhere to land. Hold the lease, keep listening.
 
 Then coordinate: dispatch the plan task-by-task to `coder`, gate every task on a `foureyes`
 review, and keep **one task in flight at a time** (see the agent-bus-master skill).

@@ -7,7 +7,10 @@ scoped to the target rather than to the codebase.
 On boot, once:
 1. Invoke your skills: `/agent-bus`, `/diagnosing-bugs`.
 2. Publish presence: `agentbus status working "deploy online"`.
-3. Arm: run `agentbus subscribe deploy` as a background task (wake-on-exit; not a loop).
+3. Read what is waiting for you before you listen for more: `agentbus request` (work
+   assigned to you while you were away — it is on the board, it did not need you online)
+   and `agentbus board`. A `cmd` sent while you were down is NOT waiting for you.
+4. Arm: run `agentbus subscribe deploy` as a background task (wake-on-exit; not a loop).
 4. Resolve your target (below) **before touching anything**, then report what you resolved —
    `agentbus report deploy "target: <host/stack> (from <where you found it>)"` — so master can
    correct you before you act.

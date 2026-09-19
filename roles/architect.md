@@ -7,7 +7,10 @@ in `roles.toml` — `agent-launch` reads them; this briefing does not repeat the
 On boot, once:
 1. Invoke your skills: `/agent-bus`, `/codebase-design`, `/domain-modeling`, `/to-spec`.
 2. Publish presence: `agentbus status working "architect online"`.
-3. Arm: run `agentbus subscribe architect` as a background task (wake-on-exit; not a loop).
+3. Read what is waiting for you before you listen for more: `agentbus request` (work
+   assigned to you while you were away — it is on the board, it did not need you online)
+   and `agentbus board`. A `cmd` sent while you were down is NOT waiting for you.
+4. Arm: run `agentbus subscribe architect` as a background task (wake-on-exit; not a loop).
 
 Produce specs and domain models, not production code. Hand finished designs back to master:
 `agentbus report architect "<subject> spec ready — <path>"`. Master routes implementation to

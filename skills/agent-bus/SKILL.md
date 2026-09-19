@@ -40,7 +40,9 @@ never wakes a terminal session.
   directive/challenge/reply/verdict) are **different fields** — don't collapse them. Every
   line also leads with `"v"` (protocol version); ignore fields you don't recognize. The
   exact table is GUIDE §3.
-- **Re-arm iff `rearm` is `true`.** A `fatal` event is `rearm:false` → stop, you're misconfigured.
+- **Re-arm iff `rearm` is `true`** *and you still have work in flight*. A `fatal` event is
+  `rearm:false` → stop, you're misconfigured. When your work is done, stop re-arming on
+  purpose — see "Disconnect when you have nothing left to do".
 - **Persist the `id`** and pass it back as `--since <id>` on the next arm — that's your
   cursor (at-least-once; no replay of what you already handled). No `--since` = start at "now".
 
@@ -201,6 +203,33 @@ be asked:
 Sentinel is the cheap relay — relaying is its job. Reserve a direct `cmd master` for when
 YOU are blocked and need a decision, not for FYI traffic.
 
+## Disconnect when you have nothing left to do
+
+An armed `subscribe` is not free. Every idle window it exits and **wakes your session**,
+which spends tokens whether or not anything arrived. Idling armed "just in case" is the most
+expensive way to do nothing. So when your work is finished: stop, and do **not** re-arm.
+
+Re-arm while work is in flight — you are mid-task, you expect an answer, a review is coming
+back. That is what the wake-on-exit loop is for. It is the *idle* waiting that must end.
+
+Before you stop, leave nothing in limbo:
+
+- your finished work is reported (`agentbus report <self> …`);
+- you own no board task that is not `done`;
+- no tracked request addressed to you is still `requested` — accept it and do it, or
+  `agentbus request block <task> <reason>` so the record says why you left it there.
+
+Then publish your last state (`agentbus status <self> idle "<what you finished>"`) and simply
+do not arm again. An unarmed session costs nothing.
+
+**You do not decide to come back — master does.** And master cannot reach you over the bus
+once you are gone: a `cmd` addressed to an unarmed agent is appended to the shared stream and
+sits there unread. That is not a theory — it is how one live project accumulated 210 unread
+commands, two of which were merge authorisations nobody ever executed. Master wakes you by
+injecting into your herdr pane. When you wake, start at your boot sequence: read
+`agentbus request` and `agentbus board` **first** — that is where work assigned during your
+absence actually is — then arm.
+
 ## A `shutdown` directive means the team is done
 When master broadcasts `shutdown`, the work is over and idling would just burn
 the shared budget on heartbeat wakes. Set `agentbus status done`, post a final
@@ -211,6 +240,7 @@ instead of going silent.
 
 ## The whole bus in one line
 > Every stream is `{project}:{kind}`. Publish `status`/`report`, receive with `subscribe`
-> (wake-on-exit — re-arm iff `rearm`, persist the `id` cursor or you discard your backlog),
+> (wake-on-exit — re-arm while work is in flight, persist the `id` cursor or you discard your
+> backlog, and stop arming once you are done: master wakes you through your pane, not the bus),
 > `accept` a tracked request before you start and `done` it with your answer, gate the risky
 > with `challenge`/`verdict`, and read exact flags & JSON from `docs/AGENT-BUS-GUIDE.md`.
