@@ -23,9 +23,10 @@ Two habits matter more than the format:
   evidence. For what is true *now*, read the source it cites — Git for what merged, the host
   for what is deployed, the board for request states. A dated note says what was true then.
 - **Your own memory is a draft.** Claude Code's per-project memory is fine for preferences and
-  links; anything the team must rely on gets promoted here, with sources. Codex, Kimi and Grok
-  cannot read your private memory — if it matters to them, it is not shared until it is in the
-  repository, committed.
+  links; anything the team must rely on gets promoted here, with sources. It is not shared
+  automatically: another agent reaches it only by being told the path and reading the file, and
+  it is not on their boot path, not reviewed, and not versioned with the code. If it matters to
+  them, it is not shared until it is in the repository, committed.
 
 Write only a durable fact: a decision and its reason, a pitfall the next agent would hit, a
 question left open. No new fact, no new note.

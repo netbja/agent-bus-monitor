@@ -202,7 +202,8 @@ context recovery, and when your task changes — then only the notes that task t
   deployed, the board for request states).
 - **Write only a durable fact**: a decision and why, a pitfall that will bite the next agent,
   a question left open. One subject per note, with evidence that can be re-checked — a commit,
-  a PR, a test. No new fact means no new note; a test run or a heartbeat is not a fact.
+  a PR, a test at a pinned revision. No new fact means no new note: a routine run that
+  confirmed what everyone expected is evidence you can cite, not a reason to write one.
 - **Your private memory is a draft.** Anything the team must rely on gets promoted to the
   repository with its sources. A note nobody else can read is not shared memory, and neither
   is one still sitting uncommitted in your worktree — say so when you hand off.
