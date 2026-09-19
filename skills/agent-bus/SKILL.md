@@ -178,7 +178,9 @@ don't recognise** and never treat a missing one as false.
 Pending entries are recovered before new ones, and **recovery respects your `--since`
 floor**: an entry older than the floor is acknowledged *without being delivered to you*. So
 arming with no `--since` (which means "start at now") silently drops everything addressed
-to you at or below that id, i.e. everything that arrived while you were not armed.
+to you at or below that id, i.e. everything that arrived while you were not armed. (On a
+group that does not exist yet, those entries are skipped rather than acknowledged — still
+undelivered, but still in the stream for a floor you set on purpose.)
 
 Persist the `id` of the last event you handled and pass it back as `--since <id>` on every
 re-arm — and keep the same cursor when a fire carries no id (a `heartbeat` or an `error`),
@@ -212,23 +214,30 @@ expensive way to do nothing. So when your work is finished: stop, and do **not**
 Re-arm while work is in flight — you are mid-task, you expect an answer, a review is coming
 back. That is what the wake-on-exit loop is for. It is the *idle* waiting that must end.
 
-Before you stop, leave nothing in limbo:
+Before you stop, leave nothing **silently** unfinished. You may leave work behind — you may
+not leave it unexplained:
 
 - your finished work is reported (`agentbus report <self> …`);
-- you own no board task that is not `done`;
+- every board task you own is `done`, or its state says where it really stands;
 - no tracked request addressed to you is still `requested` — accept it and do it, or
-  `agentbus request block <task> <reason>` so the record says why you left it there.
+  `agentbus request block <task> <reason>`. A blocked request is a perfectly good reason to
+  leave: the record carries the reason, so master can act on it without you.
 
 Then publish your last state (`agentbus status <self> idle "<what you finished>"`) and simply
 do not arm again. An unarmed session costs nothing.
 
-**You do not decide to come back — master does.** And master cannot reach you over the bus
-once you are gone: a `cmd` addressed to an unarmed agent is appended to the shared stream and
-sits there unread. That is not a theory — it is how one live project accumulated 210 unread
-commands, two of which were merge authorisations nobody ever executed. Master wakes you by
-injecting into your herdr pane. When you wake, start at your boot sequence: read
-`agentbus request` and `agentbus board` **first** — that is where work assigned during your
-absence actually is — then arm.
+**You do not decide to come back — master does.** A `cmd` addressed to an unarmed agent is
+not lost: it stays in the shared stream. But nothing delivers it to you afterwards by
+default — on an existing group, re-arming at "now" filters and acknowledges everything at or
+below the floor, unseen. Recovering it takes your persisted cursor, or a floor you choose
+deliberately. One live project has 210 such commands sitting unread today.
+
+Master wakes you by injecting into your herdr pane. When you wake, start at your boot
+sequence: read `agentbus request` and `agentbus board` **first** — that is where work
+assigned during your absence is recorded. The board holds the request's **metadata**, not its
+text: take the thread id and read the body with `agentbus thread <id>`, and check that the
+body is still available and the deadline not passed **before** your first `accept`. Then arm
+— if there is anything to wait for.
 
 ## A `shutdown` directive means the team is done
 When master broadcasts `shutdown`, the work is over and idling would just burn

@@ -22,14 +22,24 @@ At each wake, after your duties, drain what accumulated for you instead:
 agentbus subscribe --since <your persisted cursor> sentinel 5
 ```
 
-Re-arm it only as long as it keeps returning `cmd` events — each one is a `relay:` a peer
-pushed while you were away. The moment it returns a `heartbeat`, you are caught up: record
-the cursor and stop. Nothing is waiting, and an unarmed session costs nothing.
+Re-arm it only as long as it keeps returning `cmd` events. Each is something addressed to
+you — usually a `relay:`, but a `request`, a `shutdown`, a `reply` or a `verdict` reach you
+the same way, so read `type` and the body instead of assuming.
+
+**A `heartbeat` does not mean the queue is empty.** It means no cmd was delivered *in that
+window* — the window can be spent waiting for the receiver lease, or skipping entries
+addressed to other agents. So treat it as "nothing came to me just now", record your cursor,
+and stop; the next cron wake resumes from the same cursor and picks up whatever is there.
+
+Handle the other outcomes rather than looping on them: an `error` carrying an id is a
+missing or expired entry with **no body you may act on** — note it and move on, never execute
+its text; an `error` with no id is a transport failure, stop and let the next wake retry; a
+`fatal` means you are misconfigured, stop and say so.
 
 **Persist the cursor between wakes** (the `id` of the last event you handled). Without it you
-restart at "now" and every relay a peer sent while you were down is acknowledged unseen —
-that is how a live project buried 210 commands, two of them merge authorisations nobody
-executed.
+restart at "now" and everything addressed to you below that floor is acknowledged unseen.
+On your very first wake there is no cursor to restore: choose the floor deliberately and say
+which you chose — do not let "now" happen to you by default.
 
 ## Duty 0 — Refresh the budget (every wake, first)
 
@@ -120,5 +130,9 @@ master goes straight to a report.
 ## Boundaries
 - **Never** drive another agent's pane (that's the master's job). Your only lever on master is
   a `cmd` it reads on its own subscribe wake.
-- **Never** become a daemon, and never idle armed. Each wake ends when the drain returns a
-  heartbeat: record your cursor and stop until cron or a directed `cmd` wakes you again.
+- **Never** become a daemon, and never idle armed. Each wake ends when the drain stops
+  returning cmds: record your cursor and stop.
+- **Check that your cron wake actually exists** (it is opt-in). Once you are unarmed, a
+  directed `cmd` can no longer wake you — nothing can, except cron or a human. A sentinel with
+  no cron and no subscribe is not a caretaker, it is a stopped process: say so on the bus
+  before you go.

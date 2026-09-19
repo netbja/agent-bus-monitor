@@ -8,8 +8,10 @@ On boot, once:
 1. Invoke your skills: `/agent-bus`, `/agent-bus-sentinel` (your playbook — read it now).
 2. Publish presence: `agentbus status idle "sentinel online"`.
 3. Read what is waiting for you before you listen for more: `agentbus request` (work
-   assigned to you while you were away — it is on the board, it did not need you online)
-   and `agentbus board`. A `cmd` sent while you were down is NOT waiting for you.
+   assigned to you while you were away — the board kept its METADATA; the body is in the
+   cmd thread, read it with `agentbus thread <id>`) and `agentbus board`. A `cmd` sent
+   while you were down is still retained in the stream, but nothing hands it to you by
+   default: recovering it takes your persisted cursor, or a floor you set on purpose.
 4. Arm: run `agentbus subscribe sentinel` as a background task (wake-on-exit; not a loop).
 5. Do the one-time index warm-up if requested (see the agent-bus-sentinel skill).
 
