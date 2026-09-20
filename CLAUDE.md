@@ -39,10 +39,16 @@ go build -o busmon  ./cmd/busmon      # build the TUI dashboard
 go build -o agentbus ./cmd/agentbus   # build the CLI client
 go install ./...                      # install both to $GOBIN
 go build ./... && go vet ./...        # compile + vet everything
-go test ./... -count=1                # run all tests (bus + agentbus + busmon)
+go test ./... -count=1                # unit tests; Redis integration cases skip without explicit opt-in
+AGENTBUS_TEST_REDIS_URL=unix:///tmp/agentbus-test/redis.sock go test ./... -count=1 # isolated Redis only
 ```
 
 Both binaries (`busmon`, `agentbus`) are gitignored build artifacts.
+
+Tests must never use the production broker. `AGENTBUS_TEST_REDIS_URL` must point
+to an independently started, isolated disposable Redis instance; ambient
+`REDIS_URL` does not authorize test connections. An unavailable explicitly
+configured test broker fails the suite. See [Redis test setup](docs/testing-redis.md).
 
 ## Architecture
 
