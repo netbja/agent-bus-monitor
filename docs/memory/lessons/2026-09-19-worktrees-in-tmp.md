@@ -34,8 +34,9 @@ files, into a dated directory under `$HOME`.
 
 **Evidence.** The rescue of both packages is recorded in
 [the v0.6.0 release notes](../../releases/v0.6.0.md), which name
-`~/agent-bus-rescue/` as the preserved location of the test guard that did not
-make the release. The shared-memory package survived and merged as PR #39; had
+`~/agent-bus-rescue/` as the preserved location of the test guard that missed
+that release. That guard was recovered from the rescue copy and shipped in
+[v0.6.1](../../releases/v0.6.1.md) — the rescue is what made it recoverable. The shared-memory package survived and merged as PR #39; had
 `/tmp` been cleaned that morning, a day of two agents' work would have gone with
 it, review included.
 
