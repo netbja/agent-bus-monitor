@@ -54,5 +54,6 @@ processes; an ambient `REDIS_URL` cannot opt tests in. See the
 and full isolated integration validation was completed on 2026-09-20 against a
 fresh disposable Redis 8.6.3 container: with the endpoint configured, the only
 remaining skip is the intentional guard probe, and an explicitly configured but
-unreachable endpoint fails rather than skipping. This records local work on a
-branch, not a claim that main or the published release contains the guard.
+unreachable endpoint fails rather than skipping. Merged as PR #42 and released
+in [v0.6.1](../../releases/v0.6.1.md); before that tag, a `go test` run on a host
+with the broker up did reach it.

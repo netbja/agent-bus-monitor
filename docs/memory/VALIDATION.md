@@ -32,8 +32,9 @@ The separate boot commits were published by Claude; they must not be merged
 alone with missing memory targets. The v0.6.0 release notes are preparation, not
 a created GitHub release or an authorization to merge pending branches.
 
-The separate Redis-test opt-in guard remains outside this slice, uncommitted
-and awaiting full isolated validation. No live-bus groups, cursors or pending
+The separate Redis-test opt-in guard was outside this slice when it was written.
+It has since been validated on an isolated Redis 8 and released in
+[v0.6.1](../releases/v0.6.1.md) (PR #42). No live-bus groups, cursors or pending
 entries were changed. Existing Todo_Kimi.txt and historical brain notes were
 not modified.
 
