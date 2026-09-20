@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/testredis"
 )
 
 func TestStreamKeyNaming(t *testing.T) {
@@ -67,14 +69,15 @@ func TestParseEntry(t *testing.T) {
 	}
 }
 
-// dialTest connects to the dev broker and returns a Bus on a unique throwaway
-// project; it skips the test if Redis is down. All four streams + the pilot key
-// are deleted on cleanup (gate keys are per-agent — tests clean their own).
+// dialTest requires an explicitly configured isolated broker and returns a Bus
+// on a unique throwaway project. An unavailable configured broker fails the test.
+// Gate keys are per-agent — tests clean their own.
 func dialTest(t *testing.T) *Bus {
 	t.Helper()
+	testredis.Configure(t)
 	r, err := Connect("")
 	if err != nil {
-		t.Skipf("Redis unavailable (run docker compose up -d): %v", err)
+		t.Fatalf("explicit test Redis unavailable: %v", err)
 	}
 	project := "t" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	b, err := Open(r, project)

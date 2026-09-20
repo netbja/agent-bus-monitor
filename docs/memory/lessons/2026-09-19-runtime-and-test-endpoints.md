@@ -5,7 +5,7 @@ scope: transferable
 kind: lesson
 status: active
 created: 2026-09-19
-last_verified: 2026-09-19
+last_verified: 2026-09-20
 author: codex
 confidence: verified
 ---
@@ -43,3 +43,16 @@ AGENTBUS_TEST_REDIS_URL, but must not be assumed installed or merged. Check curr
 source before choosing the test command. vcs.modified=true prevents certifying a
 clean source build solely from its revision field. Do not store credentials or
 raw production exports in memory notes.
+
+## Guard follow-up (2026-09-20)
+
+The restored guard now lives in the persistent worktree
+`.worktrees/test-isolation`, branch `fix/test-redis-opt-in`. It requires
+`AGENTBUS_TEST_REDIS_URL` before test connections, including subscriber child
+processes; an ambient `REDIS_URL` cannot opt tests in. See the
+[setup and validation record](../../testing-redis.md). Unit/guard checks pass,
+and full isolated integration validation was completed on 2026-09-20 against a
+fresh disposable Redis 8.6.3 container: with the endpoint configured, the only
+remaining skip is the intentional guard probe, and an explicitly configured but
+unreachable endpoint fails rather than skipping. This records local work on a
+branch, not a claim that main or the published release contains the guard.

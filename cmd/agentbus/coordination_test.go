@@ -14,6 +14,8 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/netbja/agent-bus-monitor/internal/testredis"
 )
 
 type failedWriter struct{ short bool }
@@ -140,6 +142,7 @@ func TestCoordinationSubscriberHelper(t *testing.T) {
 	if os.Getenv("AGENTBUS_TEST_SUBSCRIBER") != "1" {
 		return
 	}
+	testredis.Configure(t)
 	client, err := bus.Connect("")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
