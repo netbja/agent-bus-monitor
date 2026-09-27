@@ -51,3 +51,10 @@ par le modèle reste une déclaration de configuration, pas une découverte dist
 Les métriques demeurent fondées sur les sources Claude et les snapshots conservés
 restent historiques. Le guide décrit ces limites et les références officielles.
 Cette note ne donne aucune permission de déployer ou de changer un bus actif.
+
+## Release preparation
+
+L'utilisateur a autorisé push, PR, merge et nouvelle release le 2026-09-27.
+Les [notes v0.7.0](../../releases/v0.7.0.md) décrivent le périmètre livré et la
+validation sur Redis 8.6.3 jetable, avec `go test -race -count=1 ./...`.
+La publication effective doit être vérifiée sur GitHub ; cette note ne l'anticipe pas.
