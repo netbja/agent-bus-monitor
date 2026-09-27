@@ -13,7 +13,7 @@ done
 # agent-bus-sentinel does not exist in the repo yet (created in Task 9); fake it so the
 # resolver's repo-first branch has something to find.
 mkdir -p "$tmp/reposkills/agent-bus-sentinel"; echo "# sentinel" > "$tmp/reposkills/agent-bus-sentinel/SKILL.md"
-for s in agent-bus agent-bus-master; do
+for s in agent-bus agent-bus-master agent-bus-security; do
   mkdir -p "$tmp/reposkills/$s"; echo "# $s" > "$tmp/reposkills/$s/SKILL.md"
 done
 

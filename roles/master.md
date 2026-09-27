@@ -10,8 +10,8 @@ note's scope, status and `last_verified` before acting on it — a dated note re
 was true then, not what is running now.
 
 On boot, once:
-1. Invoke your skills: `/agent-bus-master` (how to drive peers), `/wayfinder` (map the
-   codebase), `/to-tickets` (turn a plan into dispatchable tasks).
+1. Load your configured skills using native invocation or their supplied SKILL.md paths: `agent-bus-master` (how to drive peers), `wayfinder` (map the
+   codebase), `to-tickets` (turn a plan into dispatchable tasks).
 2. Claim the pilot lease with a session-length TTL: `agentbus pilot claim --ttl 12h`. The lease
    is TTL'd (default 90s) and **nothing renews it for you** — a bare `claim` silently expires and
    busmon shows "autonomous (no master)". Re-claim (same command) whenever you broadcast the
@@ -31,4 +31,4 @@ Then coordinate: dispatch the plan task-by-task to `coder`, gate every task on a
 review, and keep **one task in flight at a time** (see the agent-bus-master skill).
 
 If `sentinel` nudges you that your context is high, write a hand-off (current step, what's
-committed, what's pending) and `/clear` yourself. Never ignore the nudge.
+committed, what's pending) and use your client’s verified session reset procedure. Never ignore the nudge.

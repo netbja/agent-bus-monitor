@@ -37,3 +37,9 @@ model = "claude-sonnet-5"
 permission = "bypassPermissions"
 tier = "pop"
 skills = ["agent-bus", "diagnosing-bugs"]
+
+[roles.security]
+model = "claude-opus-4-8"
+permission = "manual"
+tier = "pop"
+skills = ["agent-bus", "agent-bus-security"]

@@ -1,5 +1,21 @@
 # agent-bus
 
+## New in v0.7.0
+
+Choose **Claude Code, Codex or Kimi CLI per role**, with a project-wide default or
+mixed teams. Profiles select the client, provider and model; **effort stays at the
+client/provider default unless the user explicitly overrides it**. Existing Claude
+manifests remain compatible, and additional clients can use a local adapter.
+
+The new on-demand **security** role reviews repository vulnerabilities and proposes
+corrections. It complements foureyes' functional review without applying patches
+or adding an automatic merge gate.
+
+See the [configuration guide](docs/AGENT-PROFILES.md),
+[mixed-team example](examples/roles.mixed.toml) and [release notes](docs/releases/v0.7.0.md).
+Local launch tests use simulated clients; authenticated sessions remain to be checked
+on your accounts. Usage collectors still cover Claude sources only.
+
 Self-contained multi-agent coordination bus over **Redis Streams**, plus the Go
 tooling around it. Agents publish status, commands, and notifications on a shared
 Redis instance under a required project namespace; a TUI visualises the traffic
@@ -313,7 +329,7 @@ demand — both go through one shared launch recipe. It's shell tooling *around*
 # from this repo:
 go build -o busmon ./cmd/busmon              # the busmon tab runs $REPO/busmon
 go install ./...                             # put agentbus + busmon on your PATH (the agents call them)
-scripts/link-role-skills.sh                  # symlink each role's skills into ~/.claude/skills
+scripts/link-role-skills.sh                  # install skills for the selected clients
 ```
 
 Keep the **herdr-plus** checkout at `~/Tools/herdr-plugins/herdr-plus` (or set `HERDR_PLUS_PATH`) —
@@ -351,8 +367,8 @@ agent's cwd, and where `--index` builds the index; omit it to use `$PWD`. It is 
 repo (broker, `agent-launch`, `busmon` stay here). The linked session is `$HERDR_SESSION` (so
 running from inside it just works), else the project name — pass `--session <name>` if your herdr
 session is named differently. Picking `myproject` opens the workspace: one tab per boot role —
-`master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab. Each tab boots its Claude agent,
-which arms on the bus (`agentbus subscribe`) and appears in busmon.
+`master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab. Each tab launches its configured client and role. Agents publish presence on the bus
+and recover tracked work; background wake support depends on the client.
 
 From there you drive the team as a human:
 - **Watch** everything in the `busmon` tab (AGENTS + ACTIVITY).
@@ -373,8 +389,8 @@ scripts/bootstrap myproject          # no verb -> recall: ensures the broker is 
 
 Re-open it the same way through the **Projects** picker. Mind the brique-1 scope: **recall restores
 the _workspace_ (tabs / layout) with _fresh_ agent sessions** — not the previous conversations. To
-pick up a specific agent's earlier conversation, use Claude Code's own resume — the sessions are
-named `<project>:<role>`, so they're easy to spot:
+pick up an earlier conversation, use that client’s native resume mechanism. For
+Claude Code, sessions are named `<project>:<role>`:
 
 ```bash
 claude --resume                      # then choose e.g. myproject:coder from the list
@@ -387,37 +403,43 @@ follow-on; see the spec.)
 
 **Roles** live in `roles.toml` (hand-editable — adding one needs no code change):
 
-| Role       | Model                                | Perms             | Tier | Job                                             |
-|------------|--------------------------------------|-------------------|------|-------------------------------------------------|
-| `master`   | `claude-sonnet-5`                    | acceptEdits       | boot | pilot: coordinates the team, gates each task    |
-| `coder`    | `claude-opus-4-8`                    | bypassPermissions | boot | implementer (TDD)                               |
-| `foureyes` | `claude-opus-4-8`                    | bypassPermissions | boot | independent 4-eyes reviewer                     |
-| `sentinel` | `claude-haiku-4-5`                   | bypassPermissions | boot | daily review + notify-only master-context nudge |
-| `architect`| `claude-fable-5` → `claude-opus-4-8` | bypassPermissions | pop  | design / specs, popped on demand                |
-| `deploy`   | `claude-sonnet-5`                    | bypassPermissions | pop  | ships the project to its target, then watches it|
+| Role | Tier | Job |
+| --- | --- | --- |
+| `master` | boot | coordinates the team and reviews task completion |
+| `coder` | boot | implements changes and tests |
+| `foureyes` | boot | reviews correctness, regressions and maintainability |
+| `sentinel` | boot | daily review and context/budget notifications |
+| `architect` | pop | design and specifications |
+| `deploy` | pop | deployment and target monitoring |
+| `security` | pop | repository security review and proposed corrections |
 
-- **`scripts/agent-launch <role> <project>`** — the shared leaf: resolves the role from `roles.toml`
-  and `exec`s `claude` with the right model, permission mode, skills, and session name
-  (`<project>:<role>`, so `claude --resume` shows who is who). Used by *both* the boot tabs and the pop.
+Execution settings live in the manifest, not in these role descriptions. For schema
+v2, `defaults.profile` selects the common profile and `roles.<role>.profile` overrides
+it. See [agent profiles](docs/AGENT-PROFILES.md) for native permissions, optional effort,
+provider configuration and extension adapters.
+
+- **`scripts/agent-launch <role> <project>`** — resolves the selected profile and starts
+  its client with the role instructions and skills. Both boot tabs and pop use it.
 - **`scripts/agent-spawn <role> <project>`** — the master's pop: opens a new herdr tab running
   `agent-launch` (pop == boot). Requires `HERDR_ENV=1`; also documented in the master skill's
   "Spawn a peer" section.
-- **`scripts/link-role-skills.sh`** — symlinks each role's skills into `~/.claude/skills` from this
-  repo (`agent-bus*`) and the Matt Pocock collection (refuses to overwrite a non-symlink target).
+- **`scripts/link-role-skills.sh`** — symlinks skills into `~/.claude/skills` for Claude or
+  `~/.agents/skills` for Codex/Kimi, from this repo and the Matt Pocock collection.
+  All sources and collisions are checked before writing; real user files are preserved.
 - **`scripts/daily-review-trigger.sh`** — the `--cron` job pokes the sentinel's pane (resolved live
   via `agentbus pane sentinel`) once a day to write a project review; the sentinel also nudges the
   master to reset its context when it saturates — **notify-only**, it never clears the master's pane.
 
 Design/rationale live in `docs/superpowers/specs/2026-07-16-master-bootstrap-design.md`. Tests are a
-dependency-free bash suite: `bash tests/run.sh` (see **One-time setup** above for prerequisites).
+dependency-free bash/Python suite: `bash tests/run.sh` (see **One-time setup** above for prerequisites).
 
 ## Master skill
 
-`skills/agent-bus-master/SKILL.md` is a Claude Code skill the **master** (the pilot-lease driver,
+`skills/agent-bus-master/SKILL.md` is the coordination skill the **master** (the pilot-lease driver,
 running inside herdr) uses to drive peer agents' panes: **resync** (inject text into an agent's
 herdr pane) and **unblock** (detect a herdr-`blocked` agent, alert a human one-way via Signal + the
 bus, then inject the human's answer — typed in busmon as `@<agent> <answer>` or via
-`agentbus cmd`). Install/symlink it where the master's Claude Code loads skills. The bridge is
+`agentbus cmd`). Install/symlink it where the master's client loads skills, or read its source directly. The bridge is
 `agentbus pane <agent>` (the agent's `HERDR_PANE_ID`, from `agentbus status`).
 
 ## Bus conventions
