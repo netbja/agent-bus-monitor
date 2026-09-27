@@ -68,21 +68,22 @@ ensure_broker() {
 
 write_template() {
   mkdir -p "$PROJECTS_DIR"
-  {
-    echo "name = \"$project\""
-    echo "description = \"Agent Bus team for $project\""
-    echo "working_dir = \"$PROJECT_DIR\""
-    echo
-    while IFS= read -r role; do
-      echo "[[tabs]]"
-      echo "name = \"$role\""
-      echo "command = \"$SCRIPT_DIR/agent-launch $role $project\""
-      echo
-    done < <(roles_by_tier boot)
-    echo "[[tabs]]"
-    echo "name = \"busmon\""
-    echo "command = \"$REPO/busmon --project $project\""
-  } > "$template"
+  python3 - "$ROLES_TOML" "$project" "$PROJECT_DIR" "$SCRIPT_DIR" "$REPO" > "$template" <<'PYT'
+import json, shlex, sys, tomllib
+manifest, project, cwd, scripts, repo = sys.argv[1:]
+with open(manifest, "rb") as f:
+    roles = tomllib.load(f)["roles"]
+print("name = " + json.dumps(project, ensure_ascii=False))
+print("description = " + json.dumps("Agent Bus team for " + project, ensure_ascii=False))
+print("working_dir = " + json.dumps(cwd, ensure_ascii=False))
+for role, info in roles.items():
+    if info.get("tier") != "boot":
+        continue
+    command = shlex.join(["env", "ROLES_TOML=" + manifest, scripts + "/agent-launch", role, project])
+    print("\n[[tabs]]\nname = " + json.dumps(role, ensure_ascii=False) + "\ncommand = " + json.dumps(command, ensure_ascii=False))
+command = shlex.join([repo + "/busmon", "--project", project])
+print('\n[[tabs]]\nname = "busmon"\ncommand = ' + json.dumps(command, ensure_ascii=False))
+PYT
   echo "wrote $template"
 }
 
@@ -155,6 +156,8 @@ link_plugin() {
     warn "herdr-plus not linked into '$SESSION' — is that session running? Start it ('herdr --session $SESSION') then re-run bootstrap from inside it."
   fi
 }
+
+roles_validate || die "invalid role manifest"
 
 case "$verb" in
   new)

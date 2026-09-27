@@ -1,0 +1,59 @@
+# Copy to your project, set model IDs/aliases available on YOUR accounts, then:
+# ROLES_TOML=/absolute/path/roles.toml AGENT_LAUNCH_DRYRUN=1 agent-launch coder demo
+# No reasoning override: keep the client/provider default for every role.
+schema_version = 2
+
+[defaults]
+profile = "claude"
+
+[profiles.claude]
+client = "claude-code"
+provider = "anthropic"
+model = "sonnet"
+[profiles.claude.options]
+permission = "acceptEdits"
+
+[profiles.review]
+client = "codex"
+provider = "openai"
+model = "your-codex-model"
+[profiles.review.options]
+sandbox = "read-only"
+approval = "on-request"
+
+[profiles.kimi]
+client = "kimi-cli"
+# Informational here: the native Kimi model alias selects its configured provider.
+provider = "moonshot"
+model = "your-kimi-model-alias"
+
+[roles.master]
+tier = "boot"
+skills = ["agent-bus-master", "wayfinder", "to-tickets"]
+
+[roles.coder]
+tier = "boot"
+skills = ["agent-bus", "tdd", "implement"]
+
+[roles.foureyes]
+profile = "review"
+tier = "boot"
+skills = ["agent-bus", "code-review", "diagnosing-bugs"]
+
+[roles.sentinel]
+profile = "kimi"
+tier = "boot"
+skills = ["agent-bus", "agent-bus-sentinel"]
+
+[roles.architect]
+tier = "pop"
+skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
+
+[roles.deploy]
+tier = "pop"
+skills = ["agent-bus", "diagnosing-bugs"]
+
+[roles.security]
+profile = "review"
+tier = "pop"
+skills = ["agent-bus", "agent-bus-security"]

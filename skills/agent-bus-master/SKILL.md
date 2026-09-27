@@ -8,6 +8,19 @@ description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to
 You are the **master** (you hold the pilot lease), running inside herdr. This skill drives peer
 agents' herdr panes over the Agent Bus.
 
+## Client portability
+
+Roles are independent of clients/providers. Use the configured launch profile via
+`agent-spawn`; do not choose a model inside this skill. Skill invocation, background
+wake support and session reset commands differ between clients. References to `/clear`
+below describe Claude Code: for another client, use its verified native reset procedure
+after the same hand-off, and never inject an unsupported slash command into its pane.
+Read required skills directly when native invocation is unavailable.
+For a repository security review, dispatch the `security` role on demand. It reports
+security evidence and proposed corrections; foureyes retains functional review. Reuse
+existing tracked findings for the same root cause. Security is advisory, without a new
+automatic merge gate.
+
 ## Check first
 - `HERDR_ENV=1` — you must be inside a herdr pane (you control panes via the `herdr` CLI). If unset, stop.
 - `AGENT_BUS_PROJECT` and `AGENT_BUS_AGENT` exported (see `docs/AGENT-BUS-GUIDE.md`).
@@ -80,7 +93,7 @@ agentbus pilot claim --ttl 12h                  # renew your TTL'd lease while y
 agentbus notify "budget — session 25% (resets 25m) · claude1 141k ctx · claude2 88k ctx"
 ```
 **Read the two apart.** `budget` is the shared subscription window: when *it* is near the limit,
-the whole team must hold, no matter how empty an individual agent's context is. `usage` is
+the agents using that provider must hold, no matter how empty an individual agent's context is. `usage` is
 per-agent context fill: a single agent near its window needs a hand-off and a `/clear`, and that
 says nothing about the others.
 Distribution is **notify + pull**: the summary lands on `{project}:notify` (visible in busmon and to

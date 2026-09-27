@@ -1,5 +1,7 @@
 # agent-bus
 
+Configure Claude Code, Codex or Kimi CLI per role with [agent execution profiles](docs/AGENT-PROFILES.md), including the optional repository security reviewer.
+
 Self-contained multi-agent coordination bus over **Redis Streams**, plus the Go
 tooling around it. Agents publish status, commands, and notifications on a shared
 Redis instance under a required project namespace; a TUI visualises the traffic

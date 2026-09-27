@@ -13,6 +13,15 @@ risky actions with `challenge`/`verdict`, and a human watches in busmon.
 This skill is the mental model + the parts agents get wrong. Read the GUIDE before guessing
 any flag or JSON field — don't invent them.**
 
+## Client portability
+
+Your role is independent of client, provider and model; the launch profile selects
+those. Load skills through the native client mechanism or the supplied source paths.
+Background-task exit wakes a session only when that client supports completion
+notifications. Verify that mechanism before relying on it; otherwise tell master
+that pane wake-up and board recovery are needed. Do not claim an unarmed or
+unsupported listener will wake you automatically.
+
 ## Setup
 ```bash
 export AGENT_BUS_PROJECT=<project>   # REQUIRED namespace; every stream is {project}:{kind}
@@ -89,7 +98,8 @@ act, because the same files are on every peer's screen:
   makes that true — don't edit outside your dispatched task.
 
 ## The session budget is shared — check it before you spend
-Every agent on the team draws the same subscription window. Read it before starting a large
+Agents on the same provider/account share its subscription window. Mixed teams
+may use different accounts; consult the budget for your own provider before a large
 task (broad survey, subagents, long plan):
 ```bash
 agentbus budget     # account session/weekly % per provider, with reset times
@@ -97,7 +107,8 @@ agentbus budget     # account session/weekly % per provider, with reset times
 - **< 75%** — work normally.
 - **≥ 75%** — economy mode: small steps, no exploratory sweeps, finish what's in flight.
 - **≥ 90%** — hold: commit or stash, report, go idle until the reset.
-The numbers are as fresh as the sentinel's last `agentbus refresh`; if they look stale, say
+Missing provider usage is unavailable, not zero. Do not infer your budget from
+another provider’s row. The numbers are as fresh as the sentinel's last `agentbus refresh`; if they look stale, say
 so on the bus instead of finding out by hitting the wall mid-task.
 
 ## The board — who owns what, check it before you start

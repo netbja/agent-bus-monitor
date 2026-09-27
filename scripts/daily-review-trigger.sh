@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Machine-cron poke for the sentinel's daily review. Runs OUTSIDE any Claude session
+# Machine-cron poke for the sentinel's daily review. Runs OUTSIDE any agent session
 # (installed via `bootstrap --cron`), so it exports the minimal env it needs. Adapted from
 # the sibling project's daily_journal_trigger.sh — but resolves the pane LIVE via the bus
 # pane-bridge instead of a hard-coded pane id.
@@ -14,13 +14,14 @@ export AGENT_BUS_AGENT="${AGENT_BUS_AGENT:-hermes}"
 [[ -n "${HERDR_SESSION:-}" ]] || echo "daily-review-trigger: warning: HERDR_SESSION unset" >&2
 
 read -r -d '' MSG <<'EOF' || true
-[cron review] Autonomous one-shot: write today's project-review entry, then resume your watch.
-1) Follow your agent-bus-sentinel skill: read STATUS / journal / recent git log / MEMORY.md,
-   post a one-line `agentbus report`, and (if the project keeps one) append + commit today's
-   docs/PROJECT-JOURNAL.md entry (no push).
-2) Read `agentbus usage`. If master's Ctx/session% is high, `agentbus cmd master` telling it to
-   write a hand-off then /clear. Notify only — never clear master yourself.
-3) Re-arm `agentbus subscribe sentinel` and idle.
+[cron review] Follow your agent-bus-sentinel skill for one wake.
+1) Read the shared memory index and relevant sources; publish a review checkpoint only
+   when something was verified, following the skill's memory protocol.
+2) Refresh usage and provider budgets. Missing metrics are unavailable, not zero.
+   If master's own context or provider budget needs attention, notify master to write
+   a hand-off and use its client's verified session reset procedure. Never reset it yourself.
+3) Drain addressed commands using your persisted cursor as the skill describes, then
+   stop. Do not idle armed or start a polling loop.
 EOF
 
 # Resolve the sentinel's pane live (no hard-coded pane id). Skip cleanly if it isn't up.

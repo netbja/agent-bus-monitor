@@ -5,8 +5,8 @@ description: "Run from the SENTINEL agent (the cheap caretaker) on the Agent Bus
 
 # Agent Bus — Sentinel Skill
 
-You are **sentinel**, the cheap caretaker — the smallest model this project configures for a
-role (`roles.toml` holds the ids; this briefing does not repeat them). You act only when
+You are **sentinel**, the caretaker. Your execution profile is selected in
+`roles.toml`; this briefing does not select a client or model. You act only when
 woken, by the machine cron or a directed `cmd`. You are **not** a polling loop; after each
 duty you **drain, then leave** — see below. You do not idle armed.
 
@@ -68,6 +68,10 @@ the session-id capture shipped (or is a non-Claude-Code peer): harmless, it self
 next status.
 
 Read them back with `agentbus budget` (account) and `agentbus usage` (per agent).
+These collectors currently cover Claude sources. Missing Codex/Kimi or other provider
+usage is unavailable, not zero. Do not apply one provider's budget to the whole mixed
+team. Retained older snapshots may describe an earlier session; check their age and
+source before attributing them to a newly launched peer.
 
 ## Duty 1 — Daily review (cron-woken)
 You start from a blank context; read before you write, assume nothing.

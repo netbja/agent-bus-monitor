@@ -13,6 +13,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 
 ## Decisions
 
+- [Provider-neutral roles and security review](decisions/2026-09-27-provider-neutral-security.md)
 - [Markdown reference, Obsidian view, Redis operational state](decisions/2026-09-19-shared-memory.md)
 
 ## Lessons

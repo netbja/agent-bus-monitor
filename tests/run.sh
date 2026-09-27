@@ -7,4 +7,5 @@ for t in "$DIR"/*_test.sh; do
   echo "### $(basename "$t")"
   bash "$t" || rc=1
 done
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$DIR" -p 'test_role_config.py' || rc=1
 exit "$rc"
