@@ -211,6 +211,13 @@ type agentState struct {
 	stale    int             // addressed entries older than the dispatch horizon → old:N
 	gap      bool            // entries may have been trimmed unread → ✂?
 	wake     *bus.WakeRecord // the dispatcher's wake record, nil when none
+
+	pid         int       // AgentSnapshot.PID (0 = not recorded)
+	pidStart    uint64    // AgentSnapshot.PIDStart
+	queueKnown  bool      // an Obligation read has succeeded at least once
+	queueFailed bool      // the latest attempted Obligation read failed (or the broker is down)
+	queueAt     time.Time // time of the last successful Obligation read
+	ctxRaw      string    // UsageSnapshot.Ctx exactly as read
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.
@@ -997,6 +1004,11 @@ func main() {
 				// rather than "nobody could ask". A stale number under a red
 				// link is honest; a blank one is not.
 				cancelPoll()
+				st.mu.Lock()
+				for _, a := range st.agents {
+					a.queueFailed = true
+				}
+				st.mu.Unlock()
 				app.QueueUpdateDraw(func() {
 					renderAgents(layout, agentsRow, agentsView, st)
 					renderStatus(statusView, project, st)
@@ -1135,9 +1147,11 @@ func main() {
 				}
 				if snapsErr == nil {
 					a.pane = snaps[n].Pane
+					a.pid, a.pidStart = snaps[n].PID, snaps[n].PIDStart
 				}
 				if usageErr == nil {
 					a.usage = usageBadge(usageSnaps[n])
+					a.ctxRaw = usageSnaps[n].Ctx
 				}
 				if c, ok := gates[n]; ok {
 					a.gated = c
@@ -1146,6 +1160,9 @@ func main() {
 				if wi, ok := wakes[n]; ok {
 					if wi.obOK {
 						a.waiting, a.stale, a.gap = wi.ob.Size(), wi.ob.Stale, wi.ob.GapPossible
+						a.queueKnown, a.queueFailed, a.queueAt = true, false, time.Now()
+					} else {
+						a.queueFailed = true
 					}
 					if wi.recOK {
 						a.wake = nil
