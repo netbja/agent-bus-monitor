@@ -323,7 +323,7 @@ Logs: one JSON line per decision on stderr (`agent`, `action`, `rule`, `high_id`
 |---|---|---|---|---|---|
 | herdr detects client | yes (`claude`) | yes (`codex`) | yes (`kimi`) | yes (`grok`) | yes (`agy`) |
 | `agent prompt` submits | yes (dedicated pane, Task 7) | yes | yes (but returned `agent_prompt_stalled`) | yes | yes |
-| herdr `working` during a turn | yes (`idle→working→done`) | not probed | **no** — reported `idle`, then `done`, while spinner ran | yes (`idle→working→done`) | yes (`idle→working→idle`) |
+| herdr `working` during a turn | yes (`idle→working→done`) | yes (`idle→working→done`; controller probe 2026-10-10 15:12, `working` for 13 s during a `sleep 8` turn) | **no** — reported `idle`, then `done`, while spinner ran | yes (`idle→working→done`) | yes (`idle→working→idle`) |
 | herdr `blocked` on approval | yes, on an `AskUserQuestion` menu (permission prompt not reproducible: the session runs in bypass-permissions mode) | — | yes | — (ran without approval) | yes |
 | Empty-input signature | `❯` + NBSP directly under a `─` rule, optionally a **dim** (`ESC[2m`) placeholder or prompt suggestion; the glyph turns grey during a turn | `› ` + **dim** (`ESC[2m`) placeholder | `│ >` + spaces | `│ ❯` + spaces | `>` alone between two `─` rules |
 | Non-empty input visible | yes (not dim) | yes, after render delay | yes | yes | yes |
