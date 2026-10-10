@@ -1,5 +1,21 @@
 # agent-bus
 
+## New in v0.8.0 — event-driven dispatch
+
+An idle agent can now stay **disconnected at zero token cost** and still be reached:
+`agentbus dispatch` (one per project, a tab in the bootstrap template) watches the cmd stream
+and, when work waits for an agent that is not armed, types one fixed wake line into its herdr
+pane — never the message itself. The woken agent runs `agentbus subscribe --drain <self>`,
+handles what it finds and goes idle again; a `request done` or `request block` wakes the
+requester the same way. No LLM takes part in ordinary routing, and while a dispatcher runs the
+master may sleep too. Without a dispatcher, behaviour is v0.7's.
+
+It only types into a pane that is idle, not busy, with an empty input line, **not focused**, and
+running the process the agent registered (pid + start time); everything else is deferred and,
+past 10 minutes, escalated to `master`. See the [release notes](docs/releases/v0.8.0.md) and the
+[design spec](docs/superpowers/specs/2026-10-10-event-driven-dispatch-design.md). Live acceptance
+on real client panes is still pending.
+
 ## New in v0.7.0
 
 Choose **Claude Code, Codex or Kimi CLI per role**, with a project-wide default or
@@ -30,6 +46,7 @@ project.
 | `bus/`     | Go package: connection, Streams API (`Bus` handle), publish helpers         |
 | `agentbus` | CLI client — status/report/notify/cmd/subscribe/listen (`cmd/agentbus`)     |
 | `busmon`   | TUI dashboard: AGENTS / ACTIVITY / INPUT (`cmd/busmon`)                     |
+| `dispatch/`| Wake dispatcher behind `agentbus dispatch`: wakes unarmed agents via herdr  |
 
 ## Deployment topology (current: machine ⇄ remote machine)
 
@@ -54,8 +71,11 @@ the human dashboard.
 > This supersedes `myproject/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
 > and the persistent `~/.hermes/scripts/bus_watch_hdl.sh` logger loop. An even earlier prototype,
 > `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes with hard-coded pane IDs. Don't
-> reintroduce a wrapper, a pane relay, or a `Restart=always` watcher daemon — a restart loop never
-> wakes a terminal Claude session, which defeats the wake-on-exit model.
+> reintroduce a wrapper script — a restart loop never wakes a terminal session. v0.8 revised the
+> pane-relay part on purpose ([decision](docs/memory/decisions/2026-10-10-event-driven-dispatch.md)):
+> **the only automated process that types into panes is `agentbus dispatch`, and it types a wake
+> line, never a message; master's manual pane injection remains the fallback while no dispatcher
+> runs.** Pane ids are self-registered and pid-verified, not hard-coded.
 
 **Separate notification path — NOT the bus.** The `Stop` hook in
 `myproject/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
@@ -110,6 +130,10 @@ agentbus reports --json                            # same list, machine-readable
 agentbus reports <id>                              # print one report's full retained text
 agentbus subscribe claude1                         # block for next cmd then exit (re-arm to stay subscribed)
 agentbus subscribe claude1 3600                    # same, with a 1h idle window before the heartbeat object
+agentbus subscribe --drain claude1                 # woken by a dispatcher line? drain first: JSONL per waiting entry, exit 0/64 empty/75 error
+agentbus cmd --no-wake claude2 for later           # wake=no: delivered at its next drain/subscribe, never wakes it
+agentbus dispatch                                  # wake dispatcher (foreground; one per project; JSON log on stderr)
+agentbus dispatch --status                         # "dispatch up" (exit 0) or "dispatch down" (exit 1)
 agentbus listen                                    # debug tail (all four streams)
 agentbus pilot claim --ttl 120s                    # claim pilot lease (self = AGENT_BUS_AGENT)
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
@@ -132,6 +156,12 @@ The `subscribe` output carries `"v"` (= `bus.ProtocolVersion`, currently 1). Cha
 version are additive only (consumers must ignore unknown fields); `v` bumps only on a breaking subscribe-contract change (a field
 removed/renamed/repurposed or a semantics change). A consumer that sees an unknown higher `v` should
 fail loud, not best-effort. Stream entries and `agents`/`usage`/`verdicts` output are not versioned.
+`subscribe --drain` events reuse the same object (one per line, no `rearm`) and may add `stale`
+(entry older than the 24h horizon) and `age_s`; never act on a stale entry without confirmation
+from its sender or master. A woken agent must drain rather than run a plain `subscribe`, which
+floors at "now" and acknowledges the waiting entries unseen. The cmd `type` field can also be
+`escalation` (from the dispatcher to `--escalate-to`, default `master`) or `blocked` (from
+`request block`, to the requester, once per new reason).
 
 On launch, busmon backfills only the **last `--limit` ACTIVITY lines** (default `25`, merged across
 all four streams) before live-tailing — set a persistent default with `AGENT_BUS_BUSMON_LIMIT`, or
@@ -199,7 +229,8 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
   separate on purpose: a broker busmon cannot reach looks exactly like a team that
   has gone quiet, and the two call for opposite reactions. When it breaks it reads
   `⇄ monitor cannot reach the bus 12s (dial tcp …)` and the feed retries from its
-  own cursors rather than dying silently.
+  own cursors rather than dying silently. `dispatch ●` / `dispatch ○` says whether a wake
+  dispatcher holds the project's lease.
 - **AGENTS** — one chip per agent, keeping three facts apart that are easy to
   confuse:
   - **the state the agent declared** — `coder: working` — colour-coded, and never
@@ -221,7 +252,11 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
   diagnosis); `🔒N` = open 4-eyes challenges; `⧉` = the agent published a herdr
   pane id with its last status — declared, not verified, since the pane may be
   long closed; `[120k ctx]` = that agent's own
-  context fill (from `{p}:usage`); `⬢` = holds the pilot lease. Chips wrap to fit
+  context fill (from `{p}:usage`); `⬢` = holds the pilot lease. Dispatcher badges:
+  `✉N` = N wake-relevant messages waiting with no wake under way, `⏰` = a wake in
+  flight or deferred, `⚠` = escalated, `old:N` = addressed entries past the 24h horizon
+  (they wake no one), `✂?` = entries may have been trimmed before this agent's group
+  read them. Chips wrap to fit
   the terminal width, and `+N` means that many did not fit. The roster comes from
   the `{p}:agents` hash, so an agent that last spoke before the `--limit` backfill
   window still gets a chip. Press `?` for all of this on screen.
@@ -328,6 +363,7 @@ demand — both go through one shared launch recipe. It's shell tooling *around*
 ```bash
 # from this repo:
 go build -o busmon ./cmd/busmon              # the busmon tab runs $REPO/busmon
+go build -o agentbus ./cmd/agentbus          # the dispatch tab runs $REPO/agentbus
 go install ./...                             # put agentbus + busmon on your PATH (the agents call them)
 scripts/link-role-skills.sh                  # install skills for the selected clients
 ```
@@ -367,8 +403,12 @@ agent's cwd, and where `--index` builds the index; omit it to use `$PWD`. It is 
 repo (broker, `agent-launch`, `busmon` stay here). The linked session is `$HERDR_SESSION` (so
 running from inside it just works), else the project name — pass `--session <name>` if your herdr
 session is named differently. Picking `myproject` opens the workspace: one tab per boot role —
-`master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab. Each tab launches its configured client and role. Agents publish presence on the bus
-and recover tracked work; background wake support depends on the client.
+`master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab and a `dispatch` tab running
+`agentbus --project myproject dispatch` (omit it with `bootstrap new … --no-dispatch`). Each tab
+launches its configured client and role. Agents publish presence on the bus and recover tracked
+work; with the dispatch tab up, an idle unarmed agent is woken through its pane when work lands
+for it, whatever its client's background-task support (only clients with a probed screen
+signature are prompted).
 
 From there you drive the team as a human:
 - **Watch** everything in the `busmon` tab (AGENTS + ACTIVITY).
@@ -440,7 +480,9 @@ running inside herdr) uses to drive peer agents' panes: **resync** (inject text 
 herdr pane) and **unblock** (detect a herdr-`blocked` agent, alert a human one-way via Signal + the
 bus, then inject the human's answer — typed in busmon as `@<agent> <answer>` or via
 `agentbus cmd`). Install/symlink it where the master's client loads skills, or read its source directly. The bridge is
-`agentbus pane <agent>` (the agent's `HERDR_PANE_ID`, from `agentbus status`).
+`agentbus pane <agent>` (the agent's `HERDR_PANE_ID`, from `agentbus status`). It also says when the
+master may sleep: only while `agentbus dispatch --status` reports up; otherwise it stays armed and
+wakes peers by hand, as in v0.7.
 
 ## Bus conventions
 
@@ -452,12 +494,14 @@ Stream keys are `{project}:{kind}`. Project and agent names must match `^[a-z][a
 | `{p}:status`        | `agent state message`                            | AGENTS + ACTIVITY               |
 | `{p}:report`        | `agent kind(note\|auto) message`; optional `full` (kept only when it differs from the ≤500 preview) | AGENTS + ACTIVITY + hermes      |
 | `{p}:notify`        | `from message`                                   | ACTIVITY                        |
-| `{p}:cmd`           | `from target type ref command`                   | ACTIVITY + agents               |
+| `{p}:cmd`           | `from target type ref command`; optional `wake=no` | ACTIVITY + agents + dispatch  |
 | `{p}:verdicts`      | `subject author reviewer decision message ref`   | audit ledger                    |
 
 Additional keys: `{p}:pilot` (string, pilot lease), `{p}:gate:{agent}` (hash, 4-eyes challenges),
 `{p}:armed:{agent}` (string with TTL, the subscribe presence lease behind the `👂` badge),
-`{p}:board` (hash, task→owner/state/branch — the shared ownership registry, `agentbus board`).
+`{p}:board` (hash, task→owner/state/branch — the shared ownership registry, `agentbus board`),
+`{p}:dispatch` (string with TTL, the dispatcher lease behind `dispatch ●`), `{p}:wake:{agent}`
+(hash, the dispatcher's wake record for one agent: state, last wake time, tries, escalation).
 States: `working`, `idle`, `blocked`, `done`. All transport conventions live in `bus/stream.go`;
 transport-neutral primitives (`Connect`, `ValidStates`, `SanitizeReportMessage`) are in `bus/bus.go`.
 

@@ -20,7 +20,10 @@ those. Load skills through the native client mechanism or the supplied source pa
 Background-task exit wakes a session only when that client supports completion
 notifications. Verify that mechanism before relying on it; otherwise tell master
 that pane wake-up and board recovery are needed. Do not claim an unarmed or
-unsupported listener will wake you automatically.
+unsupported listener will wake you automatically. The one exception is a running
+dispatcher (`agentbus dispatch --status` prints `dispatch up`): it types a wake line into
+your pane when work lands for you, without relying on background-task support — see
+"Woken by the dispatcher".
 
 ## Setup
 ```bash
@@ -46,7 +49,8 @@ never wakes a terminal session.
 - **Parse the JSON by its documented fields, not guessed ones.** The discriminator is
   **`event`** (`cmd` / `heartbeat` / `error` / `fatal`) — plus `rearm`, `id`, and, for a
   `cmd`, `type`/`from`/`ref`/`body`. `event` (delivery kind) and `type` (the cmd's kind:
-  directive/challenge/reply/verdict) are **different fields** — don't collapse them. Every
+  directive/challenge/reply/verdict/escalation/blocked) are **different fields** — don't
+  collapse them. Every
   line also leads with `"v"` (protocol version); ignore fields you don't recognize. The
   exact table is GUIDE §3.
 - **Re-arm iff `rearm` is `true`** *and you still have work in flight*. A `fatal` event is
@@ -54,6 +58,45 @@ never wakes a terminal session.
   purpose — see "Disconnect when you have nothing left to do".
 - **Persist the `id`** and pass it back as `--since <id>` on the next arm — that's your
   cursor (at-least-once; no replay of what you already handled). No `--since` = start at "now".
+
+## Woken by the dispatcher — drain first, never a plain `subscribe`
+When `agentbus dispatch` runs for the project (`agentbus dispatch --status` → `dispatch up`,
+busmon `dispatch ●`), it watches the cmd stream and, when an entry is addressed to you while
+you are **not armed** and your pane is idle, types one fixed line into your pane:
+
+```
+[agentbus#<nonce>] <project>: <n> message(s) waiting for <you>. Run: agentbus --project <project> subscribe --drain <you>
+```
+
+The line carries no message content — only the command to run. It only reaches an agent
+the dispatcher can identify: your last `agentbus status`, run from inside your herdr pane,
+records the pane and your client's process (pid + start time). An agent without that record —
+or restarted since — is never typed into; it is escalated to master instead. On a line that
+starts with `[agentbus#`:
+
+1. **Run `agentbus --project <p> subscribe --drain <self>` first.** It prints one JSON
+   object per waiting entry (your pending entries, then the unread ones), acknowledges each
+   only after printing it, and exits: 0 if it printed something, 64 if nothing was waiting.
+   **Never answer a wake line with a plain `subscribe`**: with no `--since` it floors at
+   "now" and acknowledges every older entry **unseen** — exactly the ones you were woken for.
+2. **Never act on an entry with `"stale":true`** (older than the 24h horizon; `age_s` gives
+   its age in seconds) without confirmation from its sender or master — report it instead
+   (`agentbus report <self> "stale entry <id> from <from>: …"`). It is delivered so nothing is
+   discarded unseen, not because it is still wanted.
+3. Handle the rest as usual (tracked request → `request accept` first, then the work).
+4. When nothing is left: `agentbus status <self> idle "<what you finished>"` and stop. Do not
+   arm `subscribe`.
+
+While `dispatch up`, **do not re-arm `subscribe` just to wait for an answer** — a reply, a
+`blocked` notice on a request you sent, or a new directive wakes you the same way. Arming
+remains valid when you want an answer inside the current turn; the dispatcher leaves an
+armed agent alone. A drain that finds you armed elsewhere reports an `error` event (your
+receiver is busy) and exits 75 without consuming anything. With `dispatch down`, nothing
+types into your pane automatically: the rules below (re-arm while work is in flight, master
+wakes you) apply unchanged.
+
+To send a cmd that must reach a peer without waking it — it waits for the peer's next drain
+or subscribe — use `agentbus cmd --no-wake <target> <command>`.
 
 ## Before you act — are you piloted or autonomous?
 ```bash
@@ -244,6 +287,8 @@ expensive way to do nothing. So when your work is finished: stop, and do **not**
 
 Re-arm while work is in flight — you are mid-task, you expect an answer, a review is coming
 back. That is what the wake-on-exit loop is for. It is the *idle* waiting that must end.
+While a dispatcher runs (`dispatch up`), waiting for an answer is idle waiting too: stop, and
+the reply wakes you through your pane.
 
 Before you stop, leave nothing **silently** unfinished. You may leave work behind — you may
 not leave it unexplained:
@@ -257,8 +302,8 @@ not leave it unexplained:
 Then publish your last state (`agentbus status <self> idle "<what you finished>"`) and simply
 do not arm again. An unarmed session costs nothing.
 
-**You do not decide to come back — master does.** A `cmd` addressed to an unarmed agent is
-not lost: it stays in the shared stream. Whether it reaches you depends on what happened to
+**You do not decide to come back — the dispatcher, or master, does.** A `cmd` addressed to an
+unarmed agent is not lost: it stays in the shared stream. Whether it reaches you depends on what happened to
 it in **your group**, and the three cases are not the same:
 
 - **Never delivered** (above your group's `last-delivered-id`) — still deliverable. Whether
@@ -277,7 +322,8 @@ what you will never see. What is genuinely out of reach can still be read out of
 
 One live project has 210 such commands sitting unread today.
 
-Master wakes you by injecting into your herdr pane. When you wake, start at your boot
+With a dispatcher running, you are woken by its wake line: drain first (above). Without
+one, master wakes you by injecting into your herdr pane. Either way, then follow your boot
 sequence: read `agentbus request` and `agentbus board` **first** — that is where work
 assigned during your absence is recorded. The board holds the request's **metadata**, not its
 text: read the body with `agentbus thread <thread>`, using the `thread` field the request
@@ -296,6 +342,8 @@ instead of going silent.
 ## The whole bus in one line
 > Every stream is `{project}:{kind}`. Publish `status`/`report`, receive with `subscribe`
 > (wake-on-exit — re-arm while work is in flight, persist the `id` cursor or you discard your
-> backlog, and stop arming once you are done: master wakes you through your pane, not the bus),
+> backlog, and stop arming once you are done: the dispatcher — or master without one — wakes
+> you through your pane; on a `[agentbus#` line run `subscribe --drain <self>` first, never a
+> plain `subscribe`, and never act on a `stale` entry unconfirmed),
 > `accept` a tracked request before you start and `done` it with your answer, gate the risky
 > with `challenge`/`verdict`, and read exact flags & JSON from `docs/AGENT-BUS-GUIDE.md`.

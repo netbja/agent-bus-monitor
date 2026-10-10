@@ -43,6 +43,16 @@ assert_contains "$body" "busmon --project demo"                 "busmon tab"
 # boot roles present, architect (pop) absent
 assert_contains "$body" "agent-launch foureyes demo"           "foureyes tab"
 if [[ "$body" != *"agent-launch architect demo"* ]]; then _ok "architect not booted"; else _bad "architect leaked into template"; fi
+# v0.8: a dispatch tab runs the wake dispatcher, built like the busmon tab (repo binary)
+assert_contains "$body" 'name = "dispatch"'                      "dispatch tab"
+assert_contains "$body" "$REPO/agentbus --project demo dispatch" "dispatch tab runs agentbus dispatch"
+
+# --no-dispatch omits the dispatch tab (busmon stays)
+run new demonod "$projdir" --no-dispatch >/dev/null
+body_nod="$(cat "$proj/demonod.toml")"
+assert_exit 0 "--no-dispatch template is valid TOML" -- python3 -c "import tomllib;tomllib.load(open('$proj/demonod.toml','rb'))"
+if [[ "$body_nod" != *'name = "dispatch"'* && "$body_nod" != *"--project demonod dispatch"* ]]; then _ok "--no-dispatch omits the dispatch tab"; else _bad "--no-dispatch still wrote a dispatch tab"; fi
+assert_contains "$body_nod" "busmon --project demonod"          "--no-dispatch keeps the busmon tab"
 
 # no path -> working_dir defaults to $PWD
 projdir2="$(mkdir -p "$tmp/proj2" && cd "$tmp/proj2" && pwd)"
