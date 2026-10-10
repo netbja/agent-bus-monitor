@@ -170,7 +170,7 @@ const (TierTooSmall Tier = iota; TierNarrow; TierMedium; TierWide)
 type PanelID int
 const (PanelAgents PanelID = iota; PanelActivity; PanelBoard; PanelRequests)
 type Rect struct{ X, Y, W, H int }
-type Counts struct{ Agents, Board int }
+type Counts struct{ Agents, Board int; Composing bool } // Composing: narrow shows the input row only while composing
 type Layout struct {
 	Tier                      Tier
 	Header                    Rect // 1 or 2 rows
@@ -185,7 +185,7 @@ func computeLayout(w, h int, c Counts, active PanelID) Layout // active = tab sh
 ```
 
 - [ ] **Step 1:** Failing tests `TestComputeLayoutTiers` (table over the spec §8.1 sizes, expected
-  tier: 160×45 wide, 120×40 wide, 120×12 narrow, 119×40 medium, 119×12 narrow, 160×13 medium,
+  tier: 160×45 wide, 120×40 wide, 120×12 narrow, 119×40 medium, 119×12 narrow, 160×13 narrow,
   100×30 medium, 80×24 medium, 80×11 narrow, 79×24 narrow, 64×22 narrow, 40×12 narrow, 30×6 narrow,
   30×5/1×40/10×40 too small) and `TestComputeLayoutInvariants` (every non-zero rect inside w×h,
   pairwise disjoint, Agents data rows ≥ 3 when Agents shown and `c.Agents ≥ 3`, active view ≥ 1 data
