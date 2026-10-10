@@ -377,6 +377,14 @@ func requestsPanel(reqs []request, threads []openThread, now time.Time, width in
 // someone and how long the oldest has waited. Empty when nothing waits, so the
 // bar stays quiet when there is nothing to chase.
 func waitingLine(reqs []request, threads []openThread, now time.Time) string {
+	if s := waitingText(reqs, threads, now); s != "" {
+		return tag("yellow", s)
+	}
+	return ""
+}
+
+// waitingText is waitingLine without colour, for the v0.9 header.
+func waitingText(reqs []request, threads []openThread, now time.Time) string {
 	waiting, oldest := 0, time.Duration(0)
 	consider := func(t time.Time) {
 		if t.IsZero() {
@@ -408,7 +416,7 @@ func waitingLine(reqs []request, threads []openThread, now time.Time) string {
 	if waiting == 1 {
 		word = "request"
 	}
-	return tag("yellow", fmt.Sprintf("%d %s waiting · oldest %s", waiting, word, humanAge(oldest)))
+	return fmt.Sprintf("%d %s waiting · oldest %s", waiting, word, humanAge(oldest))
 }
 
 // requestsTitle names the overlay and its keys, like the message detail.
