@@ -170,7 +170,6 @@ func listProjects(host string, out io.Writer, now time.Time) error {
 }
 
 const (
-	idleAfter  = 2 * time.Minute
 	staleAfter = 10 * time.Minute
 
 	feedCap = 500 // ACTIVITY lines retained for display + selection

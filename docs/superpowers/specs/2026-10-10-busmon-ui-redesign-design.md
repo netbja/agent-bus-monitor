@@ -1,7 +1,8 @@
 # busmon v0.9.0 — UI redesign (btop-style, responsive)
 
-- **Status:** rev 2 — brainstorm sections 1–4 approved by the user 2026-10-10; Codex counter-audit
-  C1–C22 (`.superpowers/brainstorm/codex-spec-review.md`) integrated.
+- **Status:** rev 3 — brainstorm sections 1–4 approved by the user 2026-10-10; Codex counter-audit
+  C1–C22 (`.superpowers/brainstorm/codex-spec-review.md`) integrated; rev 3 records what
+  implementation settled (§12).
 - **Base:** `main` @ 0baba13 (v0.8.0)
 - **Inputs:** user brainstorm; Codex UI audit (`.superpowers/brainstorm/codex-busmon-ui.md`);
   browser mockups (`.superpowers/brainstorm/2815610-1791649884/content/`).
@@ -487,3 +488,19 @@ never overwritten by silence; no "offline"/"dead"/"active" inferred from silence
 v0.9.0: `docs/releases/v0.9.0.md` (with the live-check captures), README busmon section (tiers,
 keys, `--theme`, ambiguous-width note), CLAUDE.md busmon paragraph updated (keys, focus, files,
 badges → words). Wherever ACP/CLI drivers were announced for v0.9, they move to v0.10.
+
+## 12. Settled during implementation (rev 3)
+
+- §5.1: the literal scan allows the UI glyph set anywhere, not ASCII only — the hazard is a glyph
+  outside the set (width 2 or emoji-capable), and every glyph in the set is width 1.
+- §3.6: a message detail starts with one attribution line (`from → to  date (age)`) above the body,
+  so the author stays visible at 40×8; the technical block follows the body as specified.
+- §3.6: in the narrow tier an overlay takes the full width **below the header**, so bus health and
+  dispatch stay visible while a detail is open.
+- §3.3.1: until the operator moves in Agents, the selection follows the top (most urgent) row.
+- §3.4: an evicted selected event moves the selection to the event now at its former position
+  (the list's departed-key rule), not to the oldest retained one.
+- §3.2: the header's waiting text is today's `waitingText` (count and age of the oldest).
+- §7: tview initialises the screen it is given exactly once; the colour depth is read from that
+  screen (a throwaway screen to probe colours broke the real terminal). tview delivers keys to the
+  root primitive, so the main page and the modal layer relay them to the focused child.

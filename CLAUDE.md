@@ -99,7 +99,7 @@ kinds per project:
 
 | Stream key          | Fields written                                  | Consumed by              |
 |---------------------|-------------------------------------------------|--------------------------|
-| `{p}:status`        | `agent state message`                           | busmon AGENTS+ACTIVITY   |
+| `{p}:status`        | `agent state message`                           | busmon Agents+Activity   |
 | `{p}:report`        | `agent kind message` (kind: note/auto); optional `full` (retained only when it differs from the ≤500 preview) | busmon ACTIVITY + hermes |
 | `{p}:notify`        | `from message`                                  | busmon ACTIVITY          |
 | `{p}:cmd`           | `from target type ref command`; optional `wake=no` (delivered, never wakes) | busmon ACTIVITY + agents + dispatch |
@@ -113,7 +113,7 @@ agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:usage` (Redis hash, a
 **account-scope** session/weekly window per provider), `{p}:board` (Redis hash, task→`BoardEntry`;
 the shared ownership registry — owner + state + branch, claimed via `agentbus board claim`),
 `{p}:dispatch` (Redis string, the dispatcher lease → token, `PX 15000` renewed every 5s; its
-presence is what `agentbus dispatch --status` and busmon's `dispatch ●/○` report; in
+presence is what `agentbus dispatch --status` and busmon's `dispatch up/down` report; in
 `projectKinds`), `{p}:wake:{agent}` (Redis hash, the dispatcher's per-agent wake record — state,
 `at` from Redis `TIME`, tries, pid, escalated, gap flag; two colons, so it cannot forge a project).
 `AgentSnapshot` also carries `pid`/`pid_start`/`terminal`, recorded by `agentbus status` inside
@@ -187,35 +187,41 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   second dispatcher for the same project exits 0; one whose lease lapsed re-acquires while the
   project still has keys, and exits 0 once it is deleted); `dispatch --status` prints `dispatch up`
   (exit 0) or `dispatch down` (exit 1).
-- **`busmon`** — `tview`/`tcell` TUI. On launch it backfills only the **last `--limit` ACTIVITY
-  lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all history) via `Bus.Recent`,
-  then live-tails from the per-stream cursors `Recent` returns through `Bus.TailFrom` (no replay, no
-  `"$"` gap). `--limit 0` falls back to the original `Bus.Tail(ctx, "0", …)` full-history replay.
-  `--reset` purges the four streams first (`Bus.Purge` = `XTRIM MAXLEN 0`, gated by a `[y/N]`
-  confirmation or `--reset --yes`). `--list` prints the broker's projects (newest activity first)
-  to **stdout** and exits — plain text, no tview tags, since it never enters the TUI.
-  `--delete <p>` retires a project entirely (`bus.DeleteProject` = `DEL` of every `{p}:*` key)
-  behind the same `[y/N]`/`--yes` gate as `--reset`; the prompt states the key count, agent count
-  and last activity, because a slug alone is a poor thing to judge on. The shared
-  event renderer is the `handle` closure (used for both
-  the backfill and the live tail). All of this
-  runs in a goroutine pushing UI updates via `app.QueueUpdateDraw`; the `agents` map is
-  mutex-guarded; a 1s ticker polls `Bus.PilotDriver` + `Bus.Usage` + `Bus.Budgets` + per-agent
-  `Bus.OpenChallenges` and re-renders so chips age into `idle`/`offline` even with no new stream
-  traffic. Every 5th tick (`wakePoll`, 5 s; the last values stay in between) it reads `Bus.DispatchAlive` (STATUS bar `dispatch ●`/`dispatch ○`) and,
-  per agent, `Bus.Obligation` + `Bus.Wake` for the chip badges `✉N` (messages waiting), `⏰` (wake
-  in flight or deferred), `⚠` (escalated), `old:N` (entries past the horizon) and `✂?` (entries
-  may have been trimmed before the agent's group read them). **The two usage scopes render in two
-  different places, deliberately**: the STATUS bar
-  carries the account budget per provider (`anthropic 25%/44%` = session/weekly, green→yellow at
-  75%→red at 90%), while an agent chip's `[..]` badge carries only that agent's own context fill —
-  an account-scope number pinned to one chip would read as that agent's number. `budgetBar` renders
-  nothing when no budget is published, so an unknown budget looks unknown rather than like 0% used. The `agents` map is populated
-  from **both** `status` entries (authoritative state) and `report` entries (liveness only — a
-  report-only agent shows state `active`). The ACTIVITY feed live-tails via tview's `trackEnd`
-  (set once at start, **not** per message, so scrolling up sticks); `Tab` focuses it to scroll,
-  and `activityTitle` recomputes the `[live]`/`[↑ pause · N]` indicator from `GetWrappedLineCount`/
-  `GetScrollOffset`/`GetInnerRect`. Mouse wheel works (`EnableMouse(true)`).
+- **`busmon`** — `tview`/`tcell` TUI, btop-style since v0.9 (spec
+  `docs/superpowers/specs/2026-10-10-busmon-ui-redesign-design.md`). On launch it backfills only
+  the **last `--limit` Activity lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all
+  history) via `Bus.Recent`, then live-tails from the per-stream cursors `Recent` returns through
+  `Bus.TailFrom` (no replay, no `"$"` gap); `--limit 0` falls back to `Bus.Tail(ctx, "0", …)`.
+  `--reset` purges the four streams first (`Bus.Purge` = `XTRIM MAXLEN 0`, behind a `[y/N]`
+  confirmation or `--reset --yes`). `--list` prints the broker's projects to **stdout** and exits
+  (plain text, never the TUI). `--delete <p>` retires a project (`bus.DeleteProject` = `DEL` of every
+  `{p}:*` key) behind the same gate; the prompt states key count, agent count and last activity.
+  `--theme auto|dark|light` (or `AGENT_BUS_BUSMON_THEME`).
+
+  Files: `theme.go` (colour roles, palettes dark/light/16/none, the closed single-cell glyph set —
+  the only place colours and glyphs are named), `cells.go` (preview/detail sanitising, grapheme
+  width, `Fit`/`FitLine`, `DrawLine`, `DrawFrame` with the scrollbar), `layout.go`
+  (`computeLayout`: pure geometry, three tiers wide ≥120 / medium 80–119 / narrow), `listview.go`
+  (the one selectable scrolling list: Agents, Activity, Board and Requests are all instances;
+  selection and wheel anchor follow keys, tail mode for Activity), `agents.go` (attention sort,
+  flags, ctx-token parser), `activity.go` (event → row, pause cursor), `board.go`, `header.go`,
+  `detail.go` + `detail_agent.go` (overlays), `keys.go` (one key table per mode drives the handler,
+  the footer and the help), `poll.go` (`pollOnce` behind the `busReader` interface: the 1 s tick and
+  its read inventory), `ui.go` (stable primitives, `screenView`, the modal layer), `main.go` (flags,
+  CLI paths, tail and poll goroutines).
+
+  **Rules that keep it straight:** every primitive is created once; `screenView.Draw` recomputes the
+  layout and refills rows from the `shared` model but never changes focus and never does I/O —
+  a size change runs `relayout` via `go app.QueueUpdateDraw` (calling `SetFocus` from a draw would
+  deadlock tview). tview delivers keys to the **root**, so `screenView`/`modalView` relay them to
+  the focused child. Rows are `Line` values (role-tagged segments), measured in cells; only overlay
+  bodies use colour tags, through `tag()`/`tg()`, which resolve to theme roles. No literal outside
+  the glyph set (`TestNoStrayNonASCIILiterals`); `TestAlignmentSuite` draws every size × palette ×
+  hostile fixture and checks every frame's corners and borders. The tick reads every second
+  (pilot, armed, lag, agents, usage, budgets, board, challenges) and every 5th tick the dispatcher
+  facts (`DispatchAlive`, `Obligation`, `Wake`); a failed read keeps the last value (queue shows
+  `N?`). The usage scopes stay apart: account budget (used %) in the header, an agent's own context
+  (raw tokens) in its row. The declared state is never overwritten by silence or by a report.
 
 ### How the bus is actually consumed (lives outside this repo)
 
@@ -266,9 +272,9 @@ It never touches Redis — see README "Deployment topology".
 - **`docker-compose.yml` binds `6380` to loopback** (`127.0.0.1:6380:6379`) so the bus is not
   LAN-reachable (the password travels in plaintext); the SSH tunnel is the only remote path. Don't
   revert to a bare `6380:6379` (= `0.0.0.0`) without a reason.
-- **Liveness is passive** — there is no heartbeat stream. busmon derives `idle`/`offline` from
-  the stream-entry timestamp of each agent's last `status` or `report` entry (`idleAfter` 2m,
-  `staleAfter` 10m, constants atop `cmd/busmon/main.go`). Agents are one-shot CLI calls, so each
+- **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
+  last declared status as a freshness bar (empty after `staleAfter` 10m, atop
+  `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each
   status/report publish *is* the heartbeat; don't add a heartbeat unless agents become long-running
   daemons.
 - **`Bus.Tail` uses XREAD (no consumer group)** — it never touches group cursors, so busmon never
