@@ -54,9 +54,18 @@ func ProcStart(pid int) (uint64, error) {
 	return f.start, nil
 }
 
-// AncestorAmong walks the ppid chain from self (self included) and returns the
-// first process found among candidates.
+// AncestorAmong returns the OUTERMOST candidate on self's ancestor chain,
+// self excluded. The pane's foreground set can include short-lived tool
+// shells (or this very process) below the agent; the long-lived agent is the
+// one furthest up, so the walk keeps the last match on its way to init.
 func AncestorAmong(candidates []int, self int) (int, bool) {
+	return ancestorAmong(candidates, self, func(pid int) (int, error) {
+		f, err := readStat(pid)
+		return f.ppid, err
+	})
+}
+
+func ancestorAmong(candidates []int, self int, ppidOf func(int) (int, error)) (int, bool) {
 	if len(candidates) == 0 {
 		return 0, false
 	}
@@ -64,18 +73,16 @@ func AncestorAmong(candidates []int, self int) (int, bool) {
 	for _, c := range candidates {
 		want[c] = true
 	}
-	for pid, hops := self, 0; pid > 0 && hops < 256; hops++ {
+	found, ok := 0, false
+	pid, err := ppidOf(self)
+	for hops := 0; err == nil && pid > 0 && hops < 256; hops++ {
 		if want[pid] {
-			return pid, true
+			found, ok = pid, true
 		}
 		if pid == 1 {
 			break
 		}
-		f, err := readStat(pid)
-		if err != nil {
-			break
-		}
-		pid = f.ppid
+		pid, err = ppidOf(pid)
 	}
-	return 0, false
+	return found, ok
 }

@@ -177,17 +177,29 @@ func TestInspectReady(t *testing.T) {
 	}
 }
 
+// Two reads that are each Ready but differ must not be Ready: the settle
+// comparison is the only thing that can say no. The identical-screens control
+// proves it.
 func TestInspectUnsettledNotReady(t *testing.T) {
-	h, _ := fakeHerdr(t, map[string]string{
-		"agent-get.json":    "herdr/agent-get-kimi.json",
-		"process-info.json": "herdr/process-info-kimi.json",
-		"screen1.txt":       "screens/kimi-empty.txt",
-		"screen2.txt":       "screens/kimi-typed.txt",
-		"screen.txt":        "screens/kimi-empty.txt",
-	})
-	in := h.Inspect(context.Background(), "w4:p1")
-	if in.Err != nil || in.Ready {
-		t.Fatalf("two different reads gave Ready=%v err=%v", in.Ready, in.Err)
+	for _, s := range []string{"kimi-empty", "old-prompt"} {
+		if ready, _ := Signatures["kimi"].match(readFixture(t, "screens/"+s+".txt")); !ready {
+			t.Fatalf("precondition: %s is not Ready on its own", s)
+		}
+	}
+	inspect := func(second string) Inspection {
+		h, _ := fakeHerdr(t, map[string]string{
+			"agent-get.json":    "herdr/agent-get-kimi.json",
+			"process-info.json": "herdr/process-info-kimi.json",
+			"screen1.txt":       "screens/kimi-empty.txt",
+			"screen2.txt":       "screens/" + second + ".txt",
+		})
+		return h.Inspect(context.Background(), "w4:p1")
+	}
+	if in := inspect("kimi-empty"); in.Err != nil || !in.Ready {
+		t.Fatalf("identical settled reads: Ready=%v err=%v; want Ready", in.Ready, in.Err)
+	}
+	if in := inspect("old-prompt"); in.Err != nil || in.Ready {
+		t.Fatalf("two different Ready reads gave Ready=%v err=%v", in.Ready, in.Err)
 	}
 }
 

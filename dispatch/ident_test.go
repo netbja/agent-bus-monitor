@@ -17,6 +17,37 @@ func TestAncestorAmongFindsParent(t *testing.T) {
 	if _, ok := AncestorAmong(nil, os.Getpid()); ok {
 		t.Fatal("AncestorAmong found an ancestor among no candidates")
 	}
+	// Self is never its own ancestor: {self, parent} -> parent.
+	got, ok = AncestorAmong([]int{os.Getpid(), parent}, os.Getpid())
+	if !ok || got != parent {
+		t.Fatalf("AncestorAmong({self, parent}) = %d, %v; want parent %d", got, ok, parent)
+	}
+	if _, ok := AncestorAmong([]int{os.Getpid()}, os.Getpid()); ok {
+		t.Fatal("AncestorAmong counted self as an ancestor")
+	}
+}
+
+// The agent is the outermost foreground ancestor, not a tool shell under it.
+// Chain: 50 (agentbus) -> 40 (tool shell) -> 30 (agent) -> 20 (pane shell) -> 1.
+func TestAncestorAmongPrefersOutermost(t *testing.T) {
+	ppid := map[int]int{50: 40, 40: 30, 30: 20, 20: 1}
+	lookup := func(pid int) (int, error) {
+		p, ok := ppid[pid]
+		if !ok {
+			return 0, os.ErrNotExist
+		}
+		return p, nil
+	}
+	got, ok := ancestorAmong([]int{50, 40, 30}, 50, lookup)
+	if !ok || got != 30 {
+		t.Fatalf("ancestorAmong = %d, %v; want outermost 30", got, ok)
+	}
+	if got, ok := ancestorAmong([]int{40}, 50, lookup); !ok || got != 40 {
+		t.Fatalf("single candidate: %d, %v; want 40", got, ok)
+	}
+	if _, ok := ancestorAmong([]int{99}, 50, lookup); ok {
+		t.Fatal("found a non-ancestor")
+	}
 }
 
 func TestProcStartStable(t *testing.T) {
