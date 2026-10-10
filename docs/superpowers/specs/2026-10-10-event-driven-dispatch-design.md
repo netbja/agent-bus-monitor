@@ -264,7 +264,9 @@ STATUS bar: `dispatch ●` / `dispatch ○`. Agent chip: `✉N` waiting obligati
 | Failure | Behaviour |
 |---|---|
 | Dispatcher crash / restart | Recompute from Redis; wake reservations and escalation clocks survive (C8) |
-| Old dispatcher after lease loss | Cannot reserve (§3.3 step 1); ≤1 in-flight prompt (R-B4) |
+| Old dispatcher after lease loss | Cannot reserve (§3.3 step 1); ≤1 in-flight prompt (R-B4). `dispatch.Run` returns `ErrLeaseLost` |
+| Lease lapsed while the project lives on (suspend, broker restart) | `agentbus dispatch` sees `ErrLeaseLost`, checks `Bus.HasKeysBesidesDispatch` (`ProjectKeys` minus `{p}:dispatch`): keys remain → logs, backs off 1 s doubling to 30 s and runs `dispatch.Run` again, which re-acquires; errors while re-acquiring (broker still down) are retried, never fatal. If another dispatcher took the lease meanwhile → `ErrAlreadyRunning`, exit 0 |
+| Project deleted while a dispatcher runs | Same `ErrLeaseLost`; no key besides the lease → exit 0 without re-acquiring, so no key is recreated |
 | Two dispatchers | Lease; loser exits |
 | Burst of N entries | One wake per agent per window (R-2) |
 | Lease lapses with obligation pending | Next tick handles it (C4) |

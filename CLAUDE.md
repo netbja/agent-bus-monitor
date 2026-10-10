@@ -183,7 +183,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   receiver lease is held). It is what a woken agent runs. `cmd --no-wake` writes `wake=no`
   (`Bus.CmdNoWake`; `shutdown` uses it). `dispatch [--horizon 24h] [--escalate-after 10m]
   [--escalate-to master]` runs `dispatch.Run` in the foreground (JSON decision log on stderr; a
-  second dispatcher for the same project exits 0); `dispatch --status` prints `dispatch up`
+  second dispatcher for the same project exits 0; one whose lease lapsed re-acquires while the
+  project still has keys, and exits 0 once it is deleted); `dispatch --status` prints `dispatch up`
   (exit 0) or `dispatch down` (exit 1).
 - **`busmon`** — `tview`/`tcell` TUI. On launch it backfills only the **last `--limit` ACTIVITY
   lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all history) via `Bus.Recent`,

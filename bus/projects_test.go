@@ -279,3 +279,26 @@ func TestDeleteProjectOnAbsentProjectIsANoOp(t *testing.T) {
 		t.Errorf("DeleteProject(absent) = %d, %v; want 0, nil", n, err)
 	}
 }
+
+// HasKeysBesidesDispatch answers "is this project still alive?" for a
+// dispatcher that lost its lease: only the lease key itself does not count.
+func TestHasKeysBesidesDispatch(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = DeleteProject(context.Background(), b.r, b.project) })
+	if ok, err := b.HasKeysBesidesDispatch(ctx); err != nil || ok {
+		t.Fatalf("empty project = %v %v, want false nil", ok, err)
+	}
+	if ok, _ := b.AcquireDispatch(ctx, "tok", 15*time.Second); !ok {
+		t.Fatal("AcquireDispatch failed")
+	}
+	if ok, err := b.HasKeysBesidesDispatch(ctx); err != nil || ok {
+		t.Fatalf("lease only = %v %v, want false nil", ok, err)
+	}
+	if _, err := b.Notify(ctx, "me", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := b.HasKeysBesidesDispatch(ctx); err != nil || !ok {
+		t.Fatalf("lease + notify = %v %v, want true nil", ok, err)
+	}
+}
