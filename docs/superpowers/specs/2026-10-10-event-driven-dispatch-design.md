@@ -197,10 +197,11 @@ agent without a group (`XGROUP CREATE … MKSTREAM`, ignore `BUSYGROUP`, idempot
 Commands sent shortly before an agent registers are therefore captured; a failed
 creation in `status` is retried by the dispatcher (R-B2).
 
-Consequence for the existing contract: a plain `subscribe` (no `--since`) on a
-group that already exists delivers its unread entries — that was already the
-behaviour on an existing group; what changes is that the group now usually exists
-before the first `subscribe`. Documented in the GUIDE.
+The existing contract is unchanged: a plain `subscribe` (no `--since`) still
+floors at the server's "now" (`ServerFloor`) and **acknowledges older entries
+unseen** (`cmd/agentbus/main.go`, `subscribe` case). That is exactly why a woken
+agent must use `--drain` (no floor), and why the `agent-bus` skill says: on a wake
+line, drain first, never a plain `subscribe`. Documented in the GUIDE.
 
 ### 5.2 Snapshot gains process identity
 `agentbus status`, when `HERDR_ENV=1`, resolves `herdr pane process-info --pane
@@ -302,16 +303,18 @@ Logs: one JSON line per decision on stderr (`agent`, `action`, `rule`, `high_id`
 
 ## 10. Runtime probes (2026-10-10, herdr session `busmon`)
 
-| Probe | Claude 2.1.296 | Codex 0.162.1 | Kimi 2.1.1 | Grok |
-|---|---|---|---|---|
-| herdr detects client | yes (`claude`) | yes (`codex`) | yes (`kimi`) | yes (`grok`) |
-| `agent prompt` submits | not probed (own pane) | yes | yes (but returned `agent_prompt_stalled`) | yes |
-| herdr `working` during a turn | yes (observed on own pane) | not probed | **no** — reported `idle`, then `done`, while spinner ran | yes (`idle→working→done`) |
-| herdr `blocked` on approval | — | — | yes | — (ran without approval) |
-| Empty-input signature | to capture | `› ` + **dim** (`ESC[2m`) placeholder | `│ >` + spaces | `│ ❯` + spaces |
-| Non-empty input visible | to capture | yes, after render delay | yes | yes |
-| Modal hazard | — | transcript-scroll mode: footer `enter/esc latest`, Enter does not submit | approval panel (→ blocked) | — |
-| Clear input | — | `ctrl+u` | `ctrl+u` | `ctrl+u` |
+| Probe | Claude 2.1.296 | Codex 0.162.1 | Kimi 2.1.1 | Grok | agy (Antigravity) |
+|---|---|---|---|---|---|
+| herdr detects client | yes (`claude`) | yes (`codex`) | yes (`kimi`) | yes (`grok`) | yes (`agy`) |
+| `agent prompt` submits | not probed (own pane) | yes | yes (but returned `agent_prompt_stalled`) | yes | yes |
+| herdr `working` during a turn | yes (observed on own pane) | not probed | **no** — reported `idle`, then `done`, while spinner ran | yes (`idle→working→done`) | yes (`idle→working→idle`) |
+| herdr `blocked` on approval | — | — | yes | — (ran without approval) | yes |
+| Empty-input signature | to capture | `› ` + **dim** (`ESC[2m`) placeholder | `│ >` + spaces | `│ ❯` + spaces | `>` alone between two `─` rules |
+| Non-empty input visible | to capture | yes, after render delay | yes | yes | yes |
+| Modal hazard | — | transcript-scroll mode: footer `enter/esc latest`, Enter does not submit | approval panel (→ blocked) | — | approval menu has a `> 1. Yes…` line (→ blocked); `esc to dismiss` banner |
+| Clear input | — | `ctrl+u` | `ctrl+u` | `ctrl+u` | `ctrl+u` |
+
+Gemini CLI is no longer used here; Antigravity (`agy`) replaces it.
 
 Pane ids were not reused within the session (`w1:p2` then `w1:p3`); `terminal_id`
 is unique per pane. §5.2 makes identity independent of both.
@@ -355,7 +358,7 @@ injection remains the fallback while no dispatcher runs.*
 
 ## 12. Out of scope (v0.9+)
 
-An ACP runtime (Gemini/Kimi/OpenCode ship ACP servers; Claude/Codex via
+An ACP runtime (Kimi/OpenCode ship ACP servers; Claude/Codex via
 adapters). Whether it would own headless sessions or attach to existing ones is
 an open architecture choice, not something ACP imposes (R-9, C18). Also: `codex
 queue`; task-level retry/backoff and DLQ; per-task token metrics; structured memory
