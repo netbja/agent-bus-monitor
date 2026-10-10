@@ -118,7 +118,10 @@ and three per backlog before escalating.
 
 - **While `dispatch up`:** `request send` (or `cmd`) is enough — the dispatcher wakes the
   target, and the reply, a `blocked` notice or an escalation wakes **you** the same way. You
-  **may** stop arming and sleep. Check `dispatch --status` before you do, every time.
+  **may** stop arming and sleep — **only if your pane is not the one the human works in**.
+  The dispatcher never types into a focused pane, so if the human is (or may be) focused on
+  your pane, stay armed while you await replies, blocked notices and escalations. Check
+  `dispatch --status` before you sleep, every time.
 - **While `dispatch down`:** the v0.7 rules below stand unchanged — you stay armed and you
   wake peers through their panes yourself.
 - **Manual pane wake is the sanctioned fallback**, not a breach of the "only the dispatcher
@@ -192,7 +195,8 @@ up`.** Without a dispatcher you are how peers come back, and where the human and
 reach the team — a budget or context nudge sent to an unarmed master is retained but never
 delivered, so it simply does not happen. Hold the lease and keep listening, even when the team
 is quiet. With a dispatcher up, those nudges wake you through your pane like any peer, so you
-may sleep; if the dispatcher goes down while you sleep, the sentinel's cron check notifies the
+may sleep — unless the human is (or may be) focused on your pane: a focused pane is never typed
+into, so then you stay armed while anything is awaited; if the dispatcher goes down while you sleep, the sentinel's cron check notifies the
 human, and the v0.7 rule applies again from your next wake.
 
 Being armed is not being alive: your pane can die with the lease still held and the subscribe

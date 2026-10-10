@@ -283,7 +283,7 @@ Logs: one JSON line per decision on stderr (`agent`, `action`, `rule`, `high_id`
 | Skill | Change |
 |---|---|
 | `agent-bus` | Do not re-arm to *wait for an answer* when `dispatch ●`; the dispatcher wakes you when the reply lands. On a wake line: `subscribe --drain`, handle, `status idle`, stop. Never act on a `stale` entry without confirmation. Armed `subscribe` remains valid. |
-| `agent-bus-master` | **Conditional**: while `dispatch ●`, master may sleep — replies, blocked requests and escalations wake it. While `dispatch ○`, the v0.7 rule stands unchanged: master stays armed and wakes peers manually (R-3). Manual pane injection by master is the sanctioned fallback, not a violation of §11. |
+| `agent-bus-master` | **Conditional**: while `dispatch ●`, master may sleep — replies, blocked requests and escalations wake it — **only if its pane is not the one the human works in**: the dispatcher never types into a focused pane (§3.2), so while the human is (or may be) focused on master's pane, master stays armed while it awaits replies or escalations. While `dispatch ○`, the v0.7 rule stands unchanged: master stays armed and wakes peers manually (R-3). Manual pane injection by master is the sanctioned fallback, not a violation of §11. |
 | `agent-bus-sentinel` | On each external (cron) wake: check `{p}:dispatch`; if absent, `notify` the human. The sentinel is woken by machine cron, not by the dispatcher, so it can detect the dispatcher's death (R-3). |
 | `scripts/bootstrap` | Opens a `dispatch` pane running `agentbus --project <p> dispatch`; opt-out flag. No systemd. |
 | `CLAUDE.md` | Replace the two "don't reintroduce a pane-relay / watcher daemon" lines with the §11 rule. |
