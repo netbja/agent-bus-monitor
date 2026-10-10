@@ -198,13 +198,17 @@ const (
 type agentState struct {
 	state    string
 	message  string
-	stateAt  time.Time // when the state above was declared
-	lastSeen time.Time // last activity of any kind on the bus
-	gated    int       // open 4-eyes challenges; >0 shows a lock badge
-	armed    bool      // a live subscribe lease exists → 👂 listening badge
-	lag      int64     // unconsumed {p}:cmd entries for this agent → ⌛ backlog badge
-	pane     string    // HERDR_PANE_ID from the agents hash → ⧉ herdr-attached badge
-	usage    string    // this agent's own context fill from the usage hash → [..] badge
+	stateAt  time.Time       // when the state above was declared
+	lastSeen time.Time       // last activity of any kind on the bus
+	gated    int             // open 4-eyes challenges; >0 shows a lock badge
+	armed    bool            // a live subscribe lease exists → 👂 listening badge
+	lag      int64           // unconsumed {p}:cmd entries for this agent → ⌛ backlog badge
+	pane     string          // HERDR_PANE_ID from the agents hash → ⧉ herdr-attached badge
+	usage    string          // this agent's own context fill from the usage hash → [..] badge
+	waiting  int64           // wake-relevant messages (pending + unread) → ✉N when nothing wakes it
+	stale    int             // addressed entries older than the dispatch horizon → ⌛N
+	gap      bool            // entries may have been trimmed unread → ✂?
+	wake     *bus.WakeRecord // the dispatcher's wake record, nil when none
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.
@@ -216,6 +220,7 @@ type shared struct {
 	agents   map[string]*agentState
 	pilot    string                        // pilot-lease driver, "" = autonomous
 	budgets  map[string]bus.BudgetSnapshot // account scope, per provider
+	dispatch string                        // "", "up" or "down"
 	board    map[string]bus.BoardEntry
 	requests []request    // tracked requests read from the board
 	threads  []openThread // cmd exchanges with no answer in retained history
@@ -271,12 +276,13 @@ func renderStatus(view *tview.TextView, project string, st *shared) {
 	now := time.Now()
 	st.mu.Lock()
 	d := statusData{
-		project: project,
-		driver:  st.pilot,
-		budgets: st.budgets,
-		waiting: waitingLine(st.requests, st.threads, now),
-		health:  st.health,
-		now:     now,
+		project:  project,
+		driver:   st.pilot,
+		budgets:  st.budgets,
+		dispatch: st.dispatch,
+		waiting:  waitingLine(st.requests, st.threads, now),
+		health:   st.health,
+		now:      now,
 	}
 	st.mu.Unlock()
 	view.SetText(statusBar(d))
@@ -1036,6 +1042,25 @@ func main() {
 				names = append(names, n)
 			}
 			st.mu.Unlock()
+			type wakeInfo struct {
+				ob     bus.Obligation
+				obOK   bool
+				rec    bus.WakeRecord
+				hasRec bool
+				recOK  bool
+			}
+			wakes := make(map[string]wakeInfo, len(names))
+			dispAlive, dispErr := b.DispatchAlive(pollCtx)
+			for _, n := range names {
+				var wi wakeInfo
+				if ob, err := b.Obligation(pollCtx, n, bus.DefaultHorizon); err == nil {
+					wi.ob, wi.obOK = ob, true
+				}
+				if rec, ok, err := b.Wake(pollCtx, n); err == nil {
+					wi.rec, wi.hasRec, wi.recOK = rec, ok, true
+				}
+				wakes[n] = wi
+			}
 			gates := make(map[string]int, len(names))
 			for _, n := range names {
 				if m, err := b.OpenChallenges(pollCtx, n); err == nil {
@@ -1045,6 +1070,12 @@ func main() {
 
 			st.mu.Lock()
 			st.pilot = driver
+			if dispErr == nil {
+				st.dispatch = "down"
+				if dispAlive {
+					st.dispatch = "up"
+				}
+			}
 			// Each snapshot survives its own failed read, for the same reason:
 			// an unanswered question must not be rendered as an answer.
 			if budgetErr == nil {
@@ -1102,6 +1133,19 @@ func main() {
 				}
 				if c, ok := gates[n]; ok {
 					a.gated = c
+				}
+				// Errors keep the last value, as for budgets.
+				if wi, ok := wakes[n]; ok {
+					if wi.obOK {
+						a.waiting, a.stale, a.gap = wi.ob.Size(), wi.ob.Stale, wi.ob.GapPossible
+					}
+					if wi.recOK {
+						a.wake = nil
+						if wi.hasRec {
+							rec := wi.rec
+							a.wake = &rec
+						}
+					}
 				}
 			}
 			st.mu.Unlock()

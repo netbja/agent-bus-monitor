@@ -421,3 +421,65 @@ func TestLastSeenNever(t *testing.T) {
 		t.Errorf("lastSeen(0) = %q, want %q", got, "never")
 	}
 }
+
+func TestStatusBarDispatch(t *testing.T) {
+	up := statusBar(statusData{project: "p", dispatch: "up"})
+	if !strings.Contains(up, "dispatch ●") {
+		t.Fatalf("up = %q, want 'dispatch ●'", up)
+	}
+	down := statusBar(statusData{project: "p", dispatch: "down"})
+	if !strings.Contains(down, "dispatch ○") {
+		t.Fatalf("down = %q, want 'dispatch ○'", down)
+	}
+	none := statusBar(statusData{project: "p"})
+	if strings.Contains(none, "dispatch") {
+		t.Fatalf("unknown = %q, want no dispatch indicator", none)
+	}
+}
+
+func TestAgentLabelWakeBadges(t *testing.T) {
+	now := time.Now()
+	mk := func(mod func(a *agentState)) string {
+		a := &agentState{state: "idle", stateAt: now, lastSeen: now}
+		mod(a)
+		return agentLabel("coder", a, now, false)
+	}
+	for _, b := range []string{"✉", "⏰", "⚠", "✂?"} {
+		if got := mk(func(*agentState) {}); strings.Contains(got, b) {
+			t.Fatalf("zero state shows %q: %q", b, got)
+		}
+	}
+	if got := mk(func(a *agentState) { a.waiting = 3 }); !strings.Contains(got, "✉3") {
+		t.Fatalf("waiting, no wake record: %q", got)
+	}
+	if got := mk(func(a *agentState) { a.waiting = 3; a.wake = &bus.WakeRecord{State: "clear"} }); !strings.Contains(got, "✉3") {
+		t.Fatalf("waiting, clear record: %q", got)
+	}
+	if got := mk(func(a *agentState) { a.waiting = 3; a.wake = &bus.WakeRecord{State: "prompted"} }); strings.Contains(got, "✉") || !strings.Contains(got, "⏰") {
+		t.Fatalf("waiting, prompted: %q", got)
+	}
+	if got := mk(func(a *agentState) { a.wake = &bus.WakeRecord{State: "clear"} }); strings.Contains(got, "✉") || strings.Contains(got, "⏰") {
+		t.Fatalf("clear alone: %q", got)
+	}
+	if got := mk(func(a *agentState) { a.waiting = 0 }); strings.Contains(got, "✉") {
+		t.Fatalf("nothing waiting: %q", got)
+	}
+	for _, s := range []string{"deferred", "prompting", "prompted", "unobserved"} {
+		if got := mk(func(a *agentState) { a.wake = &bus.WakeRecord{State: s} }); !strings.Contains(got, "⏰") {
+			t.Fatalf("%s: %q", s, got)
+		}
+	}
+	got := mk(func(a *agentState) { a.wake = &bus.WakeRecord{State: "prompted", Escalated: "true"} })
+	if !strings.Contains(got, "⚠") || !strings.Contains(got, "⏰") {
+		t.Fatalf("escalated: %q", got)
+	}
+	if got := mk(func(a *agentState) { a.wake = &bus.WakeRecord{State: "clear", Escalated: "pending"} }); !strings.Contains(got, "⚠") {
+		t.Fatalf("pending escalation: %q", got)
+	}
+	if got := mk(func(a *agentState) { a.stale = 2 }); !strings.Contains(got, "⌛2") {
+		t.Fatalf("stale: %q", got)
+	}
+	if got := mk(func(a *agentState) { a.gap = true }); !strings.Contains(got, "✂?") {
+		t.Fatalf("gap: %q", got)
+	}
+}
