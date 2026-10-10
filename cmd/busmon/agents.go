@@ -206,7 +206,7 @@ func agentColsFor(tier Tier) agentCols {
 	case TierMedium:
 		return agentCols{glyph: 2, name: 10, state: 9, updated: 5, queue: 4, flags: 12}
 	}
-	return agentCols{glyph: 2, name: 10, state: 9, updated: 5, queue: 4, flags: 10}
+	return agentCols{glyph: 2, name: 10, state: 9, updated: 5, queue: 4} // narrow: the flag joins the message
 }
 
 // cell fits a multi-segment value to a column of n cells with one trailing space.
@@ -257,7 +257,11 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 		}
 		flags = append(flags, Seg{Text: f.Word, Role: f.Role})
 	}
-	l = append(l, cell(flags, c.flags)...)
+	if c.flags > 0 {
+		l = append(l, cell(flags, c.flags)...)
+	} else if len(flags) > 0 {
+		l = append(l, append(flags, Seg{Text: " "})...)
+	}
 	l = append(l, Seg{Text: Preview(a.message), Role: RoleText})
 	return FitLine(l, width)
 }

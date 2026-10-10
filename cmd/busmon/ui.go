@@ -726,7 +726,11 @@ func (u *ui) tabsLine(tabs []PanelID, active PanelID, x, y int) Line {
 	var l Line
 	pos := x
 	for i, p := range tabs {
-		label := fmt.Sprintf(" %d %s ", i+1, panelNames[p])
+		name := panelNames[p]
+		if len(tabs) == 4 && p == PanelRequests {
+			name = "Req" // narrow: four tabs must fit 30 columns
+		}
+		label := fmt.Sprintf(" %d %s ", i+1, name)
 		role := RoleMuted
 		if p == active {
 			role = RoleAccent

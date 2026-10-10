@@ -187,6 +187,10 @@ func TestAgentRowWidth(t *testing.T) {
 			t.Errorf("wide row keeps %q", bad)
 		}
 	}
+	nar := agentRow("grok", hostileAgent(now), false, TierNarrow, 40, now).text()
+	if !strings.Contains(nar, "gate 1 日") {
+		t.Errorf("narrow row must fold the flag into the message: %q", nar)
+	}
 	med := agentRow("grok", hostileAgent(now), false, TierMedium, 100, now).text()
 	if strings.Contains(med, "608k") || strings.Contains(med, GlyphBarFull) || !strings.Contains(med, "gate 1") || strings.Contains(med, "deferred") {
 		t.Errorf("medium row must drop bar and ctx and keep one flag: %q", med)
