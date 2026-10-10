@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -151,7 +152,8 @@ func TestPurgeClearsStreamsKeepsGroups(t *testing.T) {
 	// A consumer group on the cmd stream must survive the purge (XTRIM keeps
 	// groups; cmd at-least-once delivery is unaffected).
 	cmdKey := StreamKey(b.project, "cmd")
-	if err := b.r.XGroupCreateMkStream(ctx, cmdKey, "dev", "$").Err(); err != nil {
+	// Status already created the "dev" group at the horizon floor; tolerate that.
+	if err := b.r.XGroupCreateMkStream(ctx, cmdKey, "dev", "$").Err(); err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		t.Fatalf("create group: %v", err)
 	}
 
