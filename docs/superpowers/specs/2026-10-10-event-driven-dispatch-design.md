@@ -1,7 +1,7 @@
 # Event-Driven Dispatch (v0.8) — Design Spec
 
 - **Date**: 2026-10-10
-- **Status**: Revision 2 — Codex spec review integrated, runtime probes run
+- **Status**: Revision 3 — Codex spec and plan reviews integrated, runtime probes run
 - **Base**: `origin/main` @ 6848194 (v0.7.0 — provider-neutral role profiles)
 - **Scope**: a deterministic `agentbus dispatch` process that wakes disconnected
   agents through herdr when Redis holds work for them; `subscribe --drain`;
@@ -51,7 +51,7 @@ peer X ──cmd/request──▶ {p}:cmd ──XREAD BLOCK (signal only)──�
   A armed (receiver lease present)?  → nothing to do; subscribe owns it
   else identity(A) = pane pid/start-time match → runtime.Inspect(pane)
      ready (idle|done, not busy by client signature, input empty, prompt line
-            visible, pane NOT focused) → reserve wake → runtime.Prompt → confirm echo
+            visible, pane NOT focused) → reserve wake → runtime.Prompt → observe nonce
      anything else → defer (tick revisits); escalate when the obligation is older than T
 A woken → `agentbus subscribe --drain A` → handles → request accept/done
 done → reply targeted at requester → same path wakes the requester (completion bridge)
@@ -67,8 +67,9 @@ deferred agents. A restart recomputes everything (C4, C8, C9).
 
 For agent A with group A on `{p}:cmd`:
 
-- **PEL**: `XPENDING` count of group A > 0 (a pending non-addressed entry is
-  acknowledged by the drain without output, as `WatchCmdDelivery` already does).
+- **PEL**: pending entries of group A, filtered like unread entries (addressed to
+  A, not `wake=no`, not stale). A pending entry whose body was trimmed is
+  wake-relevant (the drain must report it as `missing`) unless its id is stale.
 - **Unread**: `XRANGE (last-delivered-id +` filtered to `target == A`, bounded by
   the stream cap.
 - **No group**: entries in the retained stream addressed to A also count. The
@@ -109,9 +110,11 @@ attached is not a typing risk; whether `herdr status client` exposes attachment
 reliably is verified during implementation — until then focused means defer (the
 focused agent then reaches the human through escalation at T).
 
-**Progress** = group A's `last-delivered-id` advanced, or the PEL shrank, since the
-wake record was written. Progress or an identity change (new pid) resets `tries`
-and `escalated`.
+**Progress** = group A's `last-delivered-id` advanced, or its pending count
+**decreased**, since the last reservation (a growing PEL is not progress).
+Progress, or an identity change (pid or pid start time differs from the wake
+record), resets `tries` and `escalated` — a new stall can be escalated again.
+A `defer` keeps `at`, `tries`, the progress marks and `escalated` unchanged.
 
 **Escalation clock**: the age of the oldest obligation entry, read from its stream
 id. It is durable by construction — a dispatcher restart does not reset it (R-2).
@@ -119,20 +122,27 @@ T defaults to 10 min (`--escalate-after`).
 
 ### 3.3 Wake procedure (bounded duplicates)
 
+0. **Re-check** — immediately before reserving, re-run `Inspect` (focus and
+   readiness can change between the first inspection and the prompt).
 1. **Reserve** — Lua CAS on `{p}:wake:A`, fenced by the dispatcher lease and
    requiring lease PTTL > 5 s: write `{state: prompting, at, pid, tries+1,
    high_id}` only if rule 5 still allows it. A crash after this point and before
    the prompt costs one retry window, never a burst.
-2. **Prompt** — `herdr agent prompt <pane> <wake text>` with a 3 s timeout.
-3. **Confirm** — `herdr pane wait-output --match "[agentbus]"` (5 s). Herdr's own
-   `agent_prompt_stalled` is not used as the signal (it fired for Kimi on a
-   successful submission). Record `state: prompted` or `state: unconfirmed`.
+2. **Prompt** — `GET {p}:dispatch` == token, then `herdr agent prompt <pane>
+   <wake text>` with a 3 s timeout.
+3. **Observe** — `herdr pane wait-output --match "[agentbus#<nonce>]"` (5 s), where
+   `<nonce>` is 6 random hex chars new to this prompt, so an old screen cannot
+   match. This observes that the line reached the screen; it is **not** proof the
+   agent submitted or took the work (the drain/progress is). Herdr's
+   `agent_prompt_stalled` is not used (it fired for Kimi on a successful
+   submission). Record `state: prompted` or `state: unobserved`.
 
 Bound (R-B4): at most **one prompt per agent per 60 s window** and **3 per
-obligation** before escalation, including across dispatcher crashes and an old
-dispatcher whose lease expired (it re-checks the lease in step 1 and cannot pass
-step 1 without it; a prompt already past step 1 is the single in-flight case,
-bounded by the 3 s herdr timeout < 5 s minimum PTTL). An extra wake is not free:
+obligation** before escalation, across dispatcher crashes. An old dispatcher
+whose lease expired cannot reserve. **Residual, accepted:** a dispatcher process
+suspended for longer than the 5 s minimum PTTL *between* the token check of step 2
+and the herdr call can still emit one extra prompt; nothing in Redis can fence an
+external side effect against an arbitrary pause. An extra wake is not free:
 it costs one short turn (an empty drain). It never lands in an active turn,
 because readiness excludes busy agents.
 
@@ -140,7 +150,7 @@ The prompt carries **no message body** — peer content is never typed into a
 terminal:
 
 ```
-[agentbus] <project>: <n> message(s) waiting for <agent>. Run: agentbus --project <project> subscribe --drain <agent>
+[agentbus#<nonce>] <project>: <n> message(s) waiting for <agent>. Run: agentbus --project <project> subscribe --drain <agent>
 ```
 
 ### 3.4 Escalation
@@ -148,7 +158,10 @@ terminal:
 An `escalation` cmd targeted at the **escalation recipient** — `--escalate-to`,
 default the role name `master` — not the current pilot-lease holder, which expires
 while master sleeps (R-5). Body: agent, reason, obligation size, oldest id. Plus a
-`notify` for the human. It wakes master through the same path. If the stuck agent
+`notify` for the human. It wakes master through the same path. Order: write
+`escalated: pending` (fenced) → XADD escalation + notify (fenced Lua, so a deleted
+project is never recreated) → `escalated: true`. A crash in between resends on
+restart: at-least-once, a duplicate only after a crash. If the stuck agent
 **is** the recipient: `notify` only (no recursion), `⚠` in busmon. One escalation
 per obligation (recorded in the wake hash).
 
@@ -168,8 +181,8 @@ per obligation (recorded in the wake hash).
       Gone      bool
   }
   type Runtime interface {
-      Inspect(ctx context.Context, pane string) (Inspection, error)
-      Prompt(ctx context.Context, pane, text string) (confirmed bool, err error)
+      Inspect(ctx context.Context, pane string) Inspection // errors in Inspection.Err
+      Prompt(ctx context.Context, pane, text, nonce string) (observed bool, err error)
   }
   ```
   The wake prompt *is* the signal; delivery stays in Redis. An ACP runtime (v0.9)
@@ -230,8 +243,8 @@ true by construction (it calls herdr's local socket).
 - `{p}:dispatch` — lease (`SET NX PX 15000`, token-fenced renew every 5 s /
   release). One dispatcher per project; a second exits 0 with a message. Liveness
   signal for busmon/sentinel/master. Added to `projectKinds`.
-- `{p}:wake:{agent}` — hash `{state, at, tries, high_id, pid, escalated,
-  progress_mark}`. Two colons → cannot forge a project.
+- `{p}:wake:{agent}` — hash `{state, at, tries, high_id, pid, pid_start, escalated,
+  last_delivered, pending_total, gap_notified, reason}`. Two colons → cannot forge a project.
 
 ### 5.5 `subscribe --drain <agent>`
 `WatchCmdDelivery` semantics (lease, PEL first, ACK after output), **no floor, no
@@ -241,8 +254,8 @@ none. The one-shot `subscribe` contract is unchanged.
 
 ### 5.6 busmon
 STATUS bar: `dispatch ●` / `dispatch ○`. Agent chip: `✉N` waiting obligation,
-`⏰` deferred wake, `⚠` escalated, `⌛N` stale entries, `✂N` entries trimmed before
-the group read them.
+`⏰` deferred wake, `⚠` escalated, `⌛N` stale entries, `✂?` possible gap
+(entries may have been trimmed before the group read them).
 
 ## 6. Error handling
 
@@ -254,7 +267,7 @@ the group read them.
 | Burst of N entries | One wake per agent per window (R-2) |
 | Lease lapses with obligation pending | Next tick handles it (C4) |
 | PEL entry whose body was trimmed | Drain emits `missing` |
-| Entry trimmed before the group read it | Unrecoverable for that agent; dispatcher counts it when group `last-delivered-id` < stream first id and its lag > 0, busmon `✂N`, `notify` once (R-1) |
+| Entry trimmed before the group read it | Unrecoverable for that agent and not countable exactly. Gap *possible* when group `last-delivered-id` < first retained id and the stream has entries added since; busmon `✂?`, one `notify` (flag persisted in the wake record) (R-1) |
 | Redis or herdr error | JSON log line (correlation id = cmd entry id), capped backoff to 30 s; never exits on a transient error |
 | herdr socket absent | Every agent deferred → escalation path; dispatch keeps running |
 | Escalation recipient is the stuck agent | `notify` only, `⚠` |
@@ -371,9 +384,9 @@ and skill self-improvement (Brigade P2).
 | R-B1 human typing race (C12) | Pane must be unfocused (keyboard goes to the focused pane) + settled empty ready signature; residual: focus switch inside the inspect→prompt gap (<100 ms) |
 | R-B2 no group / late group (C11, C8) | Ungrouped addressed entries count; group created at horizon floor by status and dispatcher (§3.1, §5.1) |
 | R-B3 stale vs drain (C14) | Stale delivered flagged, never acted on without confirmation; never acked unseen (§3.1) |
-| R-B4 old dispatcher / duplicate bound (C6, C7) | Fenced reservation before prompt, PTTL margin, one per window, 3 per obligation (§3.3) |
+| R-B4 old dispatcher / duplicate bound (C6, C7) | Re-check, fenced reservation, token check before prompt, one per window, 3 per obligation; residual under process suspension stated (§3.3) |
 | R-B5 identity (C10) | pid + start time, ancestor-verified (§5.2) |
-| R-1 trimmed before read | Stated as a limit, counted and surfaced (§2, §6) |
+| R-1 trimmed before read | Stated as a limit; surfaced as a *possible* gap, not a count (§2, §6) |
 | R-2 burst / clock | Window per agent regardless of ids; clock from oldest entry id (§3.2) |
 | R-3 master sleep vs compat; sentinel | Conditional on `dispatch ●`; sentinel cron check (§7) |
 | R-4 expired is availability, not state | §2 corrected |
