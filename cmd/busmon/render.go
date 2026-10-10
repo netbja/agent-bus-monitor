@@ -92,6 +92,8 @@ func modal(p tview.Primitive) tview.Primitive {
 // A day separator has a zero Event (Kind ""), which is how it is told apart.
 type feedLine struct {
 	id   string
+	seq  int    // monotonic arrival number (separators included)
+	sep  bool   // a day separator, not an event
 	line string // colour-tagged, as written to the view
 	text string // tag-free, for the clipboard
 	ev   bus.Event
