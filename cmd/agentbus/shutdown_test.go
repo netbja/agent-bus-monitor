@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -61,4 +64,45 @@ func TestShutdownBlockers(t *testing.T) {
 			t.Fatalf("stale peer should not block: %v", got)
 		}
 	})
+}
+
+func TestShutdownUsesNoWake(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	defer r.Del(ctx, bus.StreamKey(b.Project(), "cmd"))
+	agents := map[string]bus.AgentSnapshot{"dev": {}, "master": {}}
+	if n := broadcastShutdown(ctx, b, "master", agents, "bye", io.Discard); n != 1 {
+		t.Fatalf("n = %d, want 1", n)
+	}
+	msgs, err := r.XRange(ctx, bus.StreamKey(b.Project(), "cmd"), "-", "+").Result()
+	if err != nil || len(msgs) != 1 {
+		t.Fatalf("entries: %v %v", msgs, err)
+	}
+	if msgs[0].Values["wake"] != "no" || msgs[0].Values["target"] != "dev" {
+		t.Fatalf("shutdown entry = %v", msgs[0].Values)
+	}
+}
+
+func TestCmdNoWakeFlag(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	defer r.Del(ctx, bus.StreamKey(b.Project(), "cmd"))
+	var out bytes.Buffer
+	if err := runCmd(ctx, b, "me", []string{"--no-wake", "dev", "hi"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	id := strings.TrimSpace(out.String())
+	msgs, _ := r.XRange(ctx, bus.StreamKey(b.Project(), "cmd"), id, id).Result()
+	if len(msgs) != 1 || msgs[0].Values["wake"] != "no" || msgs[0].Values["command"] != "hi" {
+		t.Fatalf("entry = %v", msgs)
+	}
+	out.Reset()
+	if err := runCmd(ctx, b, "me", []string{"dev", "plain"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	id = strings.TrimSpace(out.String())
+	msgs, _ = r.XRange(ctx, bus.StreamKey(b.Project(), "cmd"), id, id).Result()
+	if _, ok := msgs[0].Values["wake"]; ok {
+		t.Fatal("plain cmd wrote wake")
+	}
 }

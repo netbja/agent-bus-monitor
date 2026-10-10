@@ -27,10 +27,14 @@ const (
 	CmdChallenge = "challenge" // from a peer; opens a 4-eyes gate on the target
 	CmdReply     = "reply"     // response to a challenge, correlated by ref
 	CmdVerdict   = "verdict"   // closes a challenge, correlated by ref
+
+	CmdEscalation = "escalation" // dispatcher: an addressed message went unread too long
+	CmdBlocked    = "blocked"    // dispatcher: a wake could not be delivered
 )
 
 var validCmdTypes = map[string]bool{
 	CmdDirective: true, CmdChallenge: true, CmdReply: true, CmdVerdict: true,
+	CmdEscalation: true, CmdBlocked: true,
 }
 
 // nameRE bounds project slugs and agent names: lowercase, starts with a letter,
@@ -156,6 +160,9 @@ type Event struct {
 	Recovered    bool   // possible duplicate from pending recovery
 	Attempt      int64  // Redis delivery attempt count
 	Full         string // report: full retained text (empty unless it differs from the preview)
+	NoWake       bool   // cmd: field wake=no — delivered, but never worth waking the target
+	Stale        bool   // set by drain only: entry older than the horizon
+	AgeS         int64  // set by drain only: entry age in seconds
 }
 
 // ParseEntry turns a raw stream entry into an Event. The kind is derived from
@@ -165,6 +172,7 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	project, kind := splitStreamKey(streamKey)
 	e := Event{ID: id, Project: project, Kind: kind, TextComplete: fields["text_complete"], Task: fields["task"]}
 	e.ExpiresAt, _ = strconv.ParseInt(fields["expires_at"], 10, 64)
+	e.NoWake = fields["wake"] == "no"
 	switch kind {
 	case "status":
 		e.Agent, e.State, e.Message = fields["agent"], fields["state"], fields["message"]
@@ -276,6 +284,16 @@ func (b *Bus) Notify(ctx context.Context, from, message string) (string, error) 
 // of CmdDirective/CmdChallenge/CmdReply/CmdVerdict; ref correlates a challenge
 // with its replies and verdict (empty for fire-and-forget directives).
 func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (string, error) {
+	return b.cmd(ctx, from, target, typ, ref, command, nil)
+}
+
+// CmdNoWake is Cmd plus the field wake=no: the entry is delivered normally but
+// a dispatcher never wakes the target for it.
+func (b *Bus) CmdNoWake(ctx context.Context, from, target, typ, ref, command string) (string, error) {
+	return b.cmd(ctx, from, target, typ, ref, command, map[string]interface{}{"wake": "no"})
+}
+
+func (b *Bus) cmd(ctx context.Context, from, target, typ, ref, command string, extra map[string]interface{}) (string, error) {
 	if err := ValidateText(command, CmdMaxRunes); err != nil {
 		return "", err
 	}
@@ -285,9 +303,13 @@ func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (
 	if !validCmdTypes[typ] {
 		return "", fmt.Errorf("invalid cmd type %q", typ)
 	}
-	return b.add(ctx, "cmd", map[string]interface{}{
+	values := map[string]interface{}{
 		"from": from, "target": target, "type": typ, "ref": ref, "command": command, "text_complete": "yes",
-	})
+	}
+	for k, v := range extra {
+		values[k] = v
+	}
+	return b.add(ctx, "cmd", values)
 }
 
 // AppendVerdict records one verdict in the {project}:verdicts ledger and returns

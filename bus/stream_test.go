@@ -634,3 +634,57 @@ func TestReportStoresFullWhenDiffers(t *testing.T) {
 		t.Fatalf("preview should be one line, got %q", multi.Message)
 	}
 }
+
+func TestParseEntryReadsWakeNo(t *testing.T) {
+	e := ParseEntry("p:cmd", "1-0", map[string]string{"from": "a", "target": "b", "type": "directive", "command": "x", "wake": "no"})
+	if !e.NoWake {
+		t.Fatal("wake=no not parsed")
+	}
+	e = ParseEntry("p:cmd", "1-0", map[string]string{"from": "a", "target": "b", "type": "directive", "command": "x"})
+	if e.NoWake {
+		t.Fatal("NoWake set without field")
+	}
+	e = ParseEntry("p:cmd", "1-0", map[string]string{"wake": "yes"})
+	if e.NoWake {
+		t.Fatal("only wake=no sets NoWake")
+	}
+}
+
+func TestCmdNoWakeWritesField(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	id, err := b.CmdNoWake(ctx, "me", "dev", CmdDirective, "r1", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), id, id).Result()
+	if err != nil || len(msgs) != 1 {
+		t.Fatalf("xrange: %v %v", msgs, err)
+	}
+	want := map[string]string{"from": "me", "target": "dev", "type": CmdDirective, "ref": "r1", "command": "hello", "text_complete": "yes", "wake": "no"}
+	for k, v := range want {
+		if got, _ := msgs[0].Values[k].(string); got != v {
+			t.Fatalf("field %s = %q, want %q", k, got, v)
+		}
+	}
+	if _, err := b.CmdNoWake(ctx, "me", "Bad Name", CmdDirective, "", "x"); err == nil {
+		t.Fatal("CmdNoWake skipped target validation")
+	}
+	id2, _ := b.Cmd(ctx, "me", "dev", CmdDirective, "", "plain")
+	m2, _ := b.r.XRange(ctx, StreamKey(b.project, "cmd"), id2, id2).Result()
+	if _, ok := m2[0].Values["wake"]; ok {
+		t.Fatal("Cmd must not write wake")
+	}
+}
+
+func TestCmdAcceptsEscalationAndBlockedTypes(t *testing.T) {
+	b := dialTest(t)
+	for _, typ := range []string{CmdEscalation, CmdBlocked} {
+		if _, err := b.Cmd(context.Background(), "me", "master", typ, "", "x"); err != nil {
+			t.Fatalf("%s rejected: %v", typ, err)
+		}
+	}
+	if CmdEscalation != "escalation" || CmdBlocked != "blocked" {
+		t.Fatal("wrong constant values")
+	}
+}

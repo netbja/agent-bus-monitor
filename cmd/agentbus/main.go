@@ -178,15 +178,9 @@ func main() {
 		}
 
 	case "cmd":
-		rest, ref := extractFlag(rest, "--ref")
-		if len(rest) < 2 {
-			die("usage: cmd [--ref T] <target> <command>")
-		}
-		id, err := b.Cmd(ctx, self, rest[0], bus.CmdDirective, ref, strings.Join(rest[1:], " "))
-		if err != nil {
+		if err := runCmd(ctx, b, self, rest, os.Stdout); err != nil {
 			die(err.Error())
 		}
-		fmt.Println(id) // entry id = this thread's root, capturable for replies
 
 	case "thread":
 		if len(rest) < 1 {
@@ -524,17 +518,7 @@ func main() {
 			}
 		}
 		msg := "shutdown: all work complete — set status done, post a final report, and do NOT re-arm subscribe; master closes your pane"
-		n := 0
-		for name := range agents {
-			if name == self {
-				continue // whoever runs this shuts down last, by hand
-			}
-			if _, err := b.Cmd(ctx, self, name, bus.CmdDirective, "", msg); err != nil {
-				fmt.Fprintf(os.Stderr, "shutdown: cmd to %s failed: %v\n", name, err)
-				continue
-			}
-			n++
-		}
+		n := broadcastShutdown(ctx, b, self, agents, msg, os.Stderr)
 		fmt.Printf("shutdown broadcast to %d agent(s)\n", n)
 
 	case "refresh":
