@@ -1,6 +1,6 @@
 ---
 name: agent-bus-sentinel
-description: "Run from the SENTINEL agent (the cheap caretaker) on the Agent Bus. Six one-shot duties, each triggered by an external wake (machine cron or a directed cmd), never a polling loop: refresh the team's budget and per-agent usage from local sources; write the daily project-review checkpoint into the shared memory (only when something was verified) and surface requests still waiting on someone, flagging memory notes that have gone stale; nudge the master when its context or the session budget runs hot (notify-only — never clear master's pane); relay urgent peer findings to master; and, once at boot if requested, warm the code-index. Use when you are the sentinel and have been woken."
+description: "Run from the SENTINEL agent (the cheap caretaker) on the Agent Bus. Six one-shot duties, each triggered by an external wake (machine cron or a directed cmd), never a polling loop: refresh the team's budget and per-agent usage from local sources and check that the wake dispatcher is up; write the daily project-review checkpoint into the shared memory (only when something was verified) and surface requests still waiting on someone, flagging memory notes that have gone stale; nudge the master when its context or the session budget runs hot (notify-only — never clear master's pane); relay urgent peer findings to master; and, once at boot if requested, warm the code-index. Use when you are the sentinel and have been woken."
 ---
 
 # Agent Bus — Sentinel Skill
@@ -12,8 +12,8 @@ duty you **drain, then leave** — see below. You do not idle armed.
 
 ## Drain, do not idle (you are the exception, and it is not a licence to stay)
 
-Peers disconnect when their work is done and master wakes them through their pane. You are
-woken by **cron**, so you never needed to stay armed to be reachable — and staying armed is
+Peers disconnect when their work is done and the dispatcher (or, without one, master) wakes
+them through their pane. You are woken by **cron**, so you never needed to stay armed to be reachable — and staying armed is
 the expensive part: an armed `subscribe` wakes your session every idle window for nothing.
 
 At each wake, after your duties, drain what accumulated for you instead:
@@ -36,6 +36,12 @@ missing or expired entry with **no body you may act on** — note it and move on
 its text; an `error` with no id is a transport failure, stop and let the next wake retry; a
 `fatal` means you are misconfigured, stop and say so.
 
+**If you were woken by a dispatcher wake line** (a line starting with `[agentbus#`), drain
+with `agentbus --project <p> subscribe --drain sentinel` instead — never a plain `subscribe`,
+which floors at "now" and acknowledges the waiting entries unseen — and never act on an entry
+flagged `"stale":true` without confirmation from its sender or master. Your cursor-based drain
+above stays the rule for cron wakes.
+
 **Persist the cursor between wakes** (the `id` of the last event you handled). Without it you
 restart at "now" and everything addressed to you below that floor is acknowledged unseen.
 
@@ -46,7 +52,7 @@ different case — they stay recoverable below `last-delivered-id`, above your f
 their bodies are retained. Either way `--since` filters what you are handed; it never
 rewinds `last-delivered-id`. Choose that first floor deliberately and say which you chose.
 
-## Duty 0 — Refresh the budget (every wake, first)
+## Duty 0 — Refresh the budget, check the dispatcher (every wake, first)
 
 ```bash
 agentbus refresh          # --quiet from cron
@@ -68,6 +74,24 @@ the session-id capture shipped (or is a non-Claude-Code peer): harmless, it self
 next status.
 
 Read them back with `agentbus budget` (account) and `agentbus usage` (per agent).
+
+Then, still on every cron wake, check the wake dispatcher — you are the one participant it
+does not wake, so you are the one that can notice it is gone:
+
+```bash
+agentbus dispatch --status   # "dispatch up" (exit 0) or "dispatch down" (exit 1)
+```
+
+On `dispatch down`, tell the human — it means peers and master are no longer woken when work
+lands for them, and master falls back to staying armed:
+
+```bash
+agentbus notify "dispatch down for $AGENT_BUS_PROJECT — unarmed agents are not woken; restart the dispatch tab (agentbus --project $AGENT_BUS_PROJECT dispatch)"
+```
+
+Exit 1 with an `error:` line instead of `dispatch down` is a broker problem, not a verdict on
+the dispatcher: report what it printed. Never start a dispatcher yourself; it belongs in its
+own pane, opened by the human (the bootstrap template's `dispatch` tab).
 These collectors currently cover Claude sources. Missing Codex/Kimi or other provider
 usage is unavailable, not zero. Do not apply one provider's budget to the whole mixed
 team. Retained older snapshots may describe an earlier session; check their age and
@@ -149,11 +173,13 @@ armed. Never relay a relay — a `relay:` from another caretaker or one that alr
 master goes straight to a report.
 
 ## Boundaries
-- **Never** drive another agent's pane (that's the master's job). Your only lever on master is
-  a `cmd` it reads on its own subscribe wake.
+- **Never** drive another agent's pane (that's the master's job, or the dispatcher's). Your only
+  lever on master is a `cmd` — it reads it on its own subscribe wake, or the dispatcher wakes it
+  for it.
 - **Never** become a daemon, and never idle armed. Each wake ends when the drain stops
   returning cmds: record your cursor and stop.
 - **Check that your cron wake actually exists** (it is opt-in). Once you are unarmed, a
-  directed `cmd` can no longer wake you — nothing can, except cron or a human. A sentinel with
+  directed `cmd` can no longer wake you unless a dispatcher runs (`dispatch up`) — and the
+  dispatcher's own failure is what your cron wake exists to catch. A sentinel with
   no cron and no subscribe is not a caretaker, it is a stopped process: say so on the bus
   before you go.

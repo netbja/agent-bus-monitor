@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A self-contained multi-agent coordination bus over **Redis Streams**, plus the Go tooling around it.
 One Go module (`github.com/netbja/agent-bus-monitor`, Go 1.26) holds the broker config, the shared
-`bus` package, and two `cmd/` binaries. Nothing depends on any other project. See `README.md` for
-the user-facing reference (panes, stream tables, deployment topology, SSH tunneling).
+`bus` package, the `dispatch` package (the wake dispatcher), and two `cmd/` binaries. Nothing
+depends on any other project. See `README.md` for the user-facing reference (panes, stream
+tables, deployment topology, SSH tunneling).
 
 ## Shared memory — read it before you start
 
@@ -65,6 +66,22 @@ then `bus.Open` to get a `*Bus`; they contain almost no logic of their own. **Pu
 in `bus/stream.go` (or `bus/bus.go` for transport-neutral primitives, `bus/board.go` for the
 board), not in the binaries.**
 
+Two more `bus` files carry v0.8's dispatcher primitives: `bus/obligation.go` (`EnsureGroup`,
+which creates an agent's cmd group at the horizon floor `now − DefaultHorizon` (24h) — called by
+`Bus.Status` — plus `Obligation`, `Armed`, `GroupNames`, `CmdTargets`) and `bus/dispatchkeys.go`
+(the `{p}:dispatch` lease — `AcquireDispatch`/`RenewDispatch`/`ReleaseDispatch`/`DispatchAlive` —
+and the fenced writes `ReserveWake`/`PutWake`/`DeleteWake`/`FencedCmd`/`FencedNotify`/
+`FencedEnsureGroup`). `bus/delivery.go` holds `WatchCmdDelivery` and `DrainCmd`.
+
+**`dispatch/`** is the reconciliation loop behind `agentbus dispatch`, built on exported `bus` API
+only: `Decide` (`decide.go`, a pure function of obligation, armed, snapshot, inspection and wake
+record → none/prompt/defer/escalate), the `Runtime` interface and its only implementation `Herdr`
+(`herdr.go`, the one file that shells out to herdr; per-client ready/busy signatures — a client
+without one is never prompted), process identity (`ident.go`: `AncestorAmong`, `ProcStart`), and
+`Run` (`loop.go`). It holds no durable local state: every decision is recomputed from Redis plus
+herdr, so a restart loses nothing. Spec:
+`docs/superpowers/specs/2026-10-10-event-driven-dispatch-design.md`.
+
 `bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
 function taking a raw client**, not a `*Bus` method, because it answers the question you have
 *before* you know a project name. `Open` already demands a valid project, so a method there would be
@@ -85,7 +102,7 @@ kinds per project:
 | `{p}:status`        | `agent state message`                           | busmon AGENTS+ACTIVITY   |
 | `{p}:report`        | `agent kind message` (kind: note/auto); optional `full` (retained only when it differs from the ≤500 preview) | busmon ACTIVITY + hermes |
 | `{p}:notify`        | `from message`                                  | busmon ACTIVITY          |
-| `{p}:cmd`           | `from target type ref command`                  | busmon ACTIVITY + agents |
+| `{p}:cmd`           | `from target type ref command`; optional `wake=no` (delivered, never wakes) | busmon ACTIVITY + agents + dispatch |
 
 Additional keys: `{p}:pilot` (Redis string, pilot lease → driver name + TTL), `{p}:gate:{agent}`
 (Redis hash, ref→meta; 4-eyes challenges gate the named agent), `{p}:verdicts` (Redis stream,
@@ -94,7 +111,15 @@ capped at `verdictMaxLen()` = 10000, override `AGENT_BUS_VERDICT_MAX`), `{p}:age
 agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:usage` (Redis hash, agent→`UsageSnapshot`;
 **per-agent** model + context fill), `{p}:budget` (Redis hash, provider→`BudgetSnapshot`;
 **account-scope** session/weekly window per provider), `{p}:board` (Redis hash, task→`BoardEntry`;
-the shared ownership registry — owner + state + branch, claimed via `agentbus board claim`).
+the shared ownership registry — owner + state + branch, claimed via `agentbus board claim`),
+`{p}:dispatch` (Redis string, the dispatcher lease → token, `PX 15000` renewed every 5s; its
+presence is what `agentbus dispatch --status` and busmon's `dispatch ●/○` report; in
+`projectKinds`), `{p}:wake:{agent}` (Redis hash, the dispatcher's per-agent wake record — state,
+`at` from Redis `TIME`, tries, pid, escalated, gap flag; two colons, so it cannot forge a project).
+`AgentSnapshot` also carries `pid`/`pid_start`/`terminal`, recorded by `agentbus status` inside
+herdr — the identity the dispatcher checks before typing into a pane. cmd `type` gains
+`escalation` (dispatcher → `--escalate-to`, default `master`) and `blocked` (written by `request
+block` to the requester, only on a transition or a new reason).
 
 ### Budget vs usage: two scopes, two keys, zero cooperation
 
@@ -126,16 +151,17 @@ it silently never fired.
 The old hardcoded `ValidAgents` map is gone. Agent and project names are validated by `ValidName`,
 a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
-### The two binaries (each a single `main.go`)
+### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
   window (positional `idle_secs`, default 240s). Caller persists the `id` field and passes it back
   as `--since <id>` on re-arm; omitting `--since` starts at "now" (no backlog replay); `--since 0`
-  = full at-least-once replay. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
+  = at-least-once replay of whatever the group still holds — once `status` has created the group
+  at the horizon floor (v0.8, `EnsureGroup`), entries older than that floor are never replayed. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
   each fire, **not** a long-lived loop (which would never wake a terminal session). `agents [--json]`
   lists every peer's current state. `watch` is the legacy alias of `subscribe` (same handler).
   `listen` tails all four streams via `Bus.Tail` for debugging. `report` now retains the full
@@ -152,6 +178,15 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   and prints every entry whose `ref` or `id` equals `T`, chronologically — the thread-id of any
   message is its `ref` if set, else its own id, so a directive id and a challenge ref both work.
   Live read of `:cmd` (recent ~1000); the verdict ledger remains the durable audit.
+  `subscribe --drain <agent>` (`Bus.DrainCmd`) empties the agent's queue — PEL first, then unread,
+  **no floor**, ACK after output — as JSONL (one `"v":1` object per entry, with `age_s` on every
+  entry and `stale` only for entries older than the 24h horizon) and exits 0 (output), 64 (empty) or 75 (error, e.g. the
+  receiver lease is held). It is what a woken agent runs. `cmd --no-wake` writes `wake=no`
+  (`Bus.CmdNoWake`; `shutdown` uses it). `dispatch [--horizon 24h] [--escalate-after 10m]
+  [--escalate-to master]` runs `dispatch.Run` in the foreground (JSON decision log on stderr; a
+  second dispatcher for the same project exits 0; one whose lease lapsed re-acquires while the
+  project still has keys, and exits 0 once it is deleted); `dispatch --status` prints `dispatch up`
+  (exit 0) or `dispatch down` (exit 1).
 - **`busmon`** — `tview`/`tcell` TUI. On launch it backfills only the **last `--limit` ACTIVITY
   lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all history) via `Bus.Recent`,
   then live-tails from the per-stream cursors `Recent` returns through `Bus.TailFrom` (no replay, no
@@ -167,7 +202,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   runs in a goroutine pushing UI updates via `app.QueueUpdateDraw`; the `agents` map is
   mutex-guarded; a 1s ticker polls `Bus.PilotDriver` + `Bus.Usage` + `Bus.Budgets` + per-agent
   `Bus.OpenChallenges` and re-renders so chips age into `idle`/`offline` even with no new stream
-  traffic. **The two usage scopes render in two different places, deliberately**: the STATUS bar
+  traffic. Every 5th tick (`wakePoll`, 5 s; the last values stay in between) it reads `Bus.DispatchAlive` (STATUS bar `dispatch ●`/`dispatch ○`) and,
+  per agent, `Bus.Obligation` + `Bus.Wake` for the chip badges `✉N` (messages waiting), `⏰` (wake
+  in flight or deferred), `⚠` (escalated), `old:N` (entries past the horizon) and `✂?` (entries
+  may have been trimmed before the agent's group read them). **The two usage scopes render in two
+  different places, deliberately**: the STATUS bar
   carries the account budget per provider (`anthropic 25%/44%` = session/weekly, green→yellow at
   75%→red at 90%), while an agent chip's `[..]` badge carries only that agent's own context fill —
   an account-scope number pinned to one chip would read as that agent's number. `budgetBar` renders
@@ -184,14 +223,23 @@ A Claude Code session subscribes by arming **`agentbus subscribe <agent> [idle_s
 background task: it blocks on the project's `:cmd` stream, prints the first addressed entry, and
 exits — and that exit re-invokes the session that armed it, which then re-arms. The whole loop is
 self-contained in the `agentbus` binary (this repo); there is **no external wrapper script** and
-**no daemon** in the agent path. The old `myprojecttools/bus_watch.sh` (and the persistent
+**no daemon** in the subscribe path (the one process that runs alongside is `agentbus
+dispatch`, which only types a wake line — see the dispatcher paragraph below). The old `myprojecttools/bus_watch.sh` (and the persistent
 `~/.hermes/scripts/bus_watch_hdl.sh` logger loop) are **superseded** — agents call `agentbus
-subscribe` directly. Don't reintroduce a wrapper script or a `Restart=always` watcher daemon: a
-restart loop just re-runs the watcher and never wakes a terminal Claude session, which defeats the
-wake-on-exit model.
+subscribe` directly. Don't reintroduce a wrapper script: a restart loop just re-runs the watcher
+and never wakes a terminal session.
 
 A still-earlier in-repo prototype, `cmd/busbridge` (relay to herdr panes via `herdr pane
-send-text/send-keys`), was also **removed**. Don't reintroduce a pane-relay daemon either.
+send-text/send-keys`, with hard-coded pane ids), was also **removed**. v0.8 revised that decision
+on purpose (spec §11, `docs/memory/decisions/2026-10-10-event-driven-dispatch.md`): **the only
+automated process that types into panes is `agentbus dispatch`, and it types a wake line, never a
+message; master's manual pane injection remains the fallback while no dispatcher runs.** The wake
+line is fixed — `[agentbus#<nonce>] <project>: <n> message(s) waiting for <agent>. Run: agentbus
+--project <project> subscribe --drain <agent>` — and the agent then drains through Redis. The
+dispatcher touches only unarmed agents with a real obligation, in a pane that is ready, unfocused
+and pid-verified. Don't add a second pane writer, and don't make the dispatcher type message
+content. It runs as a herdr pane (the bootstrap template's `dispatch` tab, `--no-dispatch` to omit
+it), not under systemd.
 
 There is also a parallel notification path that is **not** on this bus: an `adv-trading-ai` `Stop`
 hook POSTs (via `hermes-notify`) to a hermes gateway on the VDR (`:8644`) that delivers to Signal.
@@ -247,6 +295,16 @@ It never touches Redis — see README "Deployment topology".
   stays). The roll-up rule: APPROVED iff the latest independent approve (reviewer ≠ author) is newer
   than any reject. Don't gate "was this approved?" on the `{p}:gate:{agent}` hash — that only holds
   *open* challenges; query `agentbus verdicts` instead.
+- **A plain `subscribe` acknowledges older entries unseen; `--drain` does not.** With no
+  `--since`, `subscribe` floors at the server's "now", so everything that waited for an unarmed
+  agent is ACKed without output. That is why a woken agent must run `subscribe --drain` — keep the
+  wake text and the skills pointing there, never at a plain `subscribe`.
+- **Every dispatcher write is fenced.** Wake records, escalation/notify XADDs, deletes and group
+  creation go through Lua that first checks `GET {p}:dispatch == token`, so a dispatcher that lost
+  its lease — or whose project was deleted — writes nothing and recreates no key. Persisted times
+  come from Redis (`TIME`, stream ids), never the dispatcher's clock. Don't add an unfenced
+  dispatcher write. Accepted residual: `busmon --delete` (SCAN then DEL) can race one fenced write
+  into an orphan key.
 - **The `subscribe` JSON output is versioned; nothing else is.** Every `subscribe` event carries
   `"v"` (= `bus.ProtocolVersion`, currently 1). The rule: within a `v`, changes are **additive only**
   and consumers **must ignore unknown fields**; **bump `v` only on a breaking change** to the

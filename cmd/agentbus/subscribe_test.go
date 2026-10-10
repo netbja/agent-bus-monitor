@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -214,5 +215,143 @@ func TestRunSubscribeLoopDeliversMany(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("loop did not return after ctx cancel")
+	}
+}
+
+func TestSubscribeDrainJSONLAndExitCodes(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(context.Background(), bus.ReceiverKey(b.Project(), "dev")) })
+
+	var empty bytes.Buffer
+	if code := runDrain(ctx, b, "dev", "host-1", &empty); code != 64 {
+		t.Fatalf("empty drain exit = %d, want 64", code)
+	}
+	if empty.Len() != 0 {
+		t.Fatalf("empty drain wrote %q, want nothing", empty.String())
+	}
+
+	for _, msg := range []string{"one", "two"} {
+		if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var buf bytes.Buffer
+	if code := runDrain(ctx, b, "dev", "host-1", &buf); code != 0 {
+		t.Fatalf("drain exit = %d, want 0 (output %q)", code, buf.String())
+	}
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("drain wrote %d lines, want 2: %q", len(lines), buf.String())
+	}
+	for i, line := range lines {
+		if !strings.Contains(line, `"v":1`) {
+			t.Fatalf("line %d missing v:1: %q", i, line)
+		}
+		if strings.Contains(line, `"rearm"`) {
+			t.Fatalf("drain line %d carries rearm: %q", i, line)
+		}
+		var ev subEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("line %d not JSON: %q", i, line)
+		}
+		if ev.Event != "cmd" || ev.Body != []string{"one", "two"}[i] || ev.ID == "" {
+			t.Fatalf("line %d = %+v, want cmd %q", i, ev, []string{"one", "two"}[i])
+		}
+	}
+	var again bytes.Buffer
+	if code := runDrain(ctx, b, "dev", "host-1", &again); code != 64 || again.Len() != 0 {
+		t.Fatalf("second drain exit=%d out=%q, want 64 and nothing (queue emptied)", code, again.String())
+	}
+}
+
+func TestSubscribeDrainStaleFields(t *testing.T) {
+	ev := cmdEvent(bus.Event{ID: "1-0", Stale: true, AgeS: 90000}, nil)
+	var buf bytes.Buffer
+	if err := emit(&buf, ev); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `"stale":true`) || !strings.Contains(buf.String(), `"age_s":90000`) {
+		t.Fatalf("stale fields not emitted: %q", buf.String())
+	}
+	buf.Reset()
+	_ = emit(&buf, cmdEvent(bus.Event{ID: "1-0"}, boolPtr(true)))
+	if strings.Contains(buf.String(), "stale") || strings.Contains(buf.String(), "age_s") {
+		t.Fatalf("one-shot event grew drain fields: %q", buf.String())
+	}
+}
+
+func TestSubscribeDrainRejectsIncompatibleFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"--drain", "--since", "0", "dev"},
+		{"--drain", "--loop", "dev"},
+		{"--drain", "dev", "30"},
+		{"--since", "123-0", "--drain", "dev"},
+	} {
+		if _, err := parseSubscribeArgs(args); !errors.Is(err, errDrainUsage) {
+			t.Errorf("parseSubscribeArgs(%q) err = %v, want errDrainUsage", args, err)
+		}
+	}
+	a, err := parseSubscribeArgs([]string{"--drain", "dev"})
+	if err != nil || !a.drain || a.agent != "dev" {
+		t.Fatalf("parseSubscribeArgs(--drain dev) = %+v, %v", a, err)
+	}
+	a, err = parseSubscribeArgs([]string{"--loop", "--since", "5", "dev", "30"})
+	if err != nil || a.drain || !a.loop || a.since != "5" || a.agent != "dev" || a.idle != "30" {
+		t.Fatalf("plain subscribe args = %+v, %v", a, err)
+	}
+	if _, err := parseSubscribeArgs(nil); err == nil || errors.Is(err, errDrainUsage) {
+		t.Fatalf("missing agent err = %v, want a plain usage error", err)
+	}
+}
+
+// leaseStealer writes successfully, then deletes the receiver lease so the
+// following ACK is fenced off: output is complete, ACK fails.
+type leaseStealer struct {
+	r     *redis.Client
+	key   string
+	lines int
+	buf   bytes.Buffer
+}
+
+func (w *leaseStealer) Write(p []byte) (int, error) {
+	w.lines++
+	n, err := w.buf.Write(p)
+	w.r.Del(context.Background(), w.key)
+	return n, err
+}
+
+func TestSubscribeDrainOutputThenAckFailureExit75(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	for _, msg := range []string{"one", "two"} {
+		if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := &leaseStealer{r: r, key: bus.ReceiverKey(b.Project(), "dev")}
+	if code := runDrain(ctx, b, "dev", "host-1", w); code != 75 {
+		t.Fatalf("exit = %d, want 75 (ACK failed after output)", code)
+	}
+	if w.lines != 1 || strings.Count(w.buf.String(), "\n") != 1 || !strings.Contains(w.buf.String(), `"body":"one"`) {
+		t.Fatalf("output = %q (%d writes), want exactly the first cmd line", w.buf.String(), w.lines)
+	}
+	p, err := r.XPending(ctx, bus.StreamKey(b.Project(), "cmd"), "dev").Result()
+	if err != nil || p.Count != 1 {
+		t.Fatalf("pending = %+v err=%v, want the un-ACKed entry left pending", p, err)
+	}
+}
+
+func TestSubscribeDrainReceiverBusyExit75(t *testing.T) {
+	// The bus test covers the bounded wait; here the CLI mapping:
+	// ErrReceiverBusy → one error line without rearm, zero cmd lines, exit 75.
+	var buf bytes.Buffer
+	code := drainExit(&buf, 0, bus.ErrReceiverBusy)
+	if code != 75 {
+		t.Fatalf("exit = %d, want 75", code)
+	}
+	ev := lastEvent(t, buf.String())
+	if ev.Event != "error" || ev.Rearm != nil || ev.Msg == "" || strings.Count(buf.String(), "\n") != 1 {
+		t.Fatalf("busy output = %q, want one error event without rearm", buf.String())
 	}
 }

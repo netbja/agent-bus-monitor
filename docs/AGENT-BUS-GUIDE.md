@@ -20,6 +20,9 @@ access without re-asking:
   `export AGENT_BUS_PROJECT=<project>` and `export AGENT_BUS_AGENT=<your-agent>`.
 - Receive directives — arm as a background task; its exit wakes you, then re-arm:
   `agentbus subscribe "$AGENT_BUS_AGENT" --since "$LAST_CURSOR"`  # one JSON line/fire; persist its `id`
+- Woken by a line starting `[agentbus#` (the dispatcher): run
+  `agentbus --project "$AGENT_BUS_PROJECT" subscribe --drain "$AGENT_BUS_AGENT"` FIRST — never a plain `subscribe`, which acks
+  the waiting entries unseen. Never act on an entry with `"stale":true` without confirmation.
 - Publish your state (this IS your heartbeat):
   `agentbus status "$AGENT_BUS_AGENT" working "<msg>"`
 - Peers' current state: `agentbus agents`. Full reference: docs/AGENT-BUS-GUIDE.md.
@@ -108,6 +111,7 @@ ID=$(agentbus cmd claude2 run the integration suite)   # capture the printed id 
 agentbus reply --ref "$ID" hermes on it                # thread a reply onto that directive
 agentbus thread "$ID"                                  # see the whole chain (directive → reply → verdict)
 # a full <ms>-<seq> id is an exact match; a bare <ms> is best-effort. Flag tokens (--ref) in cmd text are reserved.
+agentbus cmd --no-wake claude2 read this when you are next up   # wake=no: delivered at its next drain/subscribe, never wakes it
 
 # ── 4-EYES CHALLENGE GATE (blocks <target> until a verdict) ───────────────────
 agentbus challenge <target> [--ref R] <why...>          # prints: "challenge <ref> opened on <target>"
@@ -172,6 +176,13 @@ agentbus request                                        # EVERY tracked request,
 agentbus shutdown                                       # broadcast "shutdown" to every peer; REFUSED while a board task isn't done or a peer is busy
 agentbus shutdown --force                               # override the guard (you know better)
 # peers then report, set done, and stop re-arming subscribe; master closes the panes (see the master skill)
+# shutdown entries carry wake=no (the dispatcher never wakes a peer to tell it to stop) and
+# expires_at = send time + 10m: a later session drains a stale one as an `expired` error
+
+# ── WAKE DISPATCHER: wakes UNARMED agents through herdr when a cmd waits ──────
+agentbus dispatch                                       # foreground, one per project (a 2nd exits 0); JSON decision log on stderr
+agentbus dispatch --escalate-after 10m --escalate-to master --horizon 24h   # the defaults, spelled out
+agentbus dispatch --status                              # "dispatch up" (exit 0) | "dispatch down" (exit 1)
 
 # ── INBOUND: wait for a command addressed to you ─────────────────────────────
 agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd, emits ONE JSON object, EXITS; default idle 240s
@@ -180,6 +191,7 @@ agentbus subscribe --since 1782053749061-3 claude1      # resume after a persist
 agentbus subscribe claude1 3600                         # 1h idle window before it heartbeats and exits
 agentbus subscribe --loop hermes                        # HEADLESS callers only (hermes/shell): consume continuously, never exit
 agentbus watch claude1                                  # legacy alias of subscribe
+agentbus --project <p> subscribe --drain claude1        # WOKEN? run this first: JSONL, one object per waiting entry, then exit (0 / 64 empty / 75 error)
 # WARNING — --since is a floor, and a floor DISCARDS. It filters pending entries too: anything
 # older than the cursor is ACKNOWLEDGED WITHOUT BEING DELIVERED to you. So arming with no
 # --since does not "skip the backlog for now", it consumes it unseen. Persist the `id` of the
@@ -321,7 +333,68 @@ cannot move. You can be `blocked` on a request while your own status is `working
 **Do not** wrap `subscribe` in a `while` loop or a daemon — a long-lived loop
 never wakes a terminal session. (The one exception is `--loop`, for **headless**
 consumers like hermes; it emits one `cmd` object per entry, with no `rearm`.) The
-whole loop lives in the binary; there is no wrapper script and no watcher daemon.
+whole loop lives in the binary; there is no wrapper script and no watcher daemon. The one
+automated process that types into panes is the dispatcher (next section), and it types a
+wake line, never a message.
+
+### Woken by the dispatcher — `subscribe --drain`
+`agentbus dispatch` (one per project, usually the bootstrap template's `dispatch` tab) watches
+`{project}:cmd`. When an entry is addressed to an agent that is **not armed**, it checks the
+agent's herdr pane — idle, not busy by its client's signature, empty input line visible, not
+focused, and running the process the agent registered with its last `agentbus status` (pid +
+start time, recorded only when `status` runs inside herdr) — and types one fixed line:
+
+```
+[agentbus#3fa9c1] trading: 2 message(s) waiting for claude1. Run: agentbus --project trading subscribe --drain claude1
+```
+
+No message content is ever typed. At most one wake per agent per 60s, three per backlog;
+after that, or when the pane stays not-ready longer than `--escalate-after` (default 10m; an
+agent in herdr state `working` gets 4× that), the dispatcher sends an `escalation` cmd to
+`--escalate-to` (default `master`) and a `notify`. Entries older than `--horizon` (24h) never
+wake anyone on their own. An agent registered from an older binary or outside herdr (no pid
+in its snapshot) is never prompted. Only `{project}:cmd` wakes; `report` and `notify` never do.
+
+**On a wake line, run `agentbus --project <p> subscribe --drain <self>` first — never a plain
+`subscribe`.** A plain `subscribe` floors at "now" and acknowledges every older entry unseen,
+which is exactly the backlog you were woken for. `--drain` has no floor and takes no
+`--since`: it reads your pending entries, then the unread ones, prints **one JSON object per
+entry** (the same `cmd` object as above, without `rearm`), acknowledges each after printing it,
+and exits as soon as both are empty:
+
+| Exit | Meaning |
+|------|---------|
+| 0    | at least one entry printed |
+| 64   | nothing was waiting |
+| 75   | error — an `{"v":1,"event":"error","msg":"…"}` line (e.g. your receiver lease is held by an armed `subscribe`; nothing was consumed), or a failure after output |
+
+A drained entry carries more fields (additive, `v` stays 1):
+
+- **`age_s`** — set on every drained entry: its age in seconds (Redis time).
+- **`"stale":true`** — only when the entry is older than the 24h horizon. It is delivered so
+  nothing is acknowledged unseen, not because it is still wanted: **never act on a stale entry
+  without confirmation from its sender or master** — report it instead.
+- **An entry whose id predates your current session's start** (the id's leading number is its
+  Unix-ms send time) is not new work either: it was left for a previous session. Same
+  treatment as stale — never act on it without confirmation from its sender or master. A
+  `shutdown` carries `expires_at` (10 minutes after it was sent), so a late one already drains
+  as an `expired` error.
+- A missing/expired body comes out as an `error` event carrying the `id`, exactly as in
+  `subscribe`: no payload you may act on.
+
+The cmd `type` can now also be:
+
+- **`escalation`** — from `dispatch`, to the escalation recipient: `<agent>: <reason>; <n>
+  waiting, oldest <id>`. Someone could not be woken; the recipient decides (wake the pane by
+  hand, re-pop the role).
+- **`blocked`** — written by `request block <task> <reason>` to the **requester**, on the
+  request's thread, with `task` set and the reason as the body; sent only when the request
+  enters `blocked` or the reason changes, never on an identical repeat.
+
+While `dispatch --status` reports up, **don't re-arm `subscribe` only to wait for an answer**:
+the reply (or a `blocked` notice) wakes you the same way. Arming stays valid — the dispatcher
+never touches an armed agent. While it reports down, nothing types into your pane automatically
+and the rules above are unchanged.
 
 ### The 4-eyes gate blocks regardless of pilot mode
 A `challenge` opens a gate on the target that **blocks it until a `verdict`**, in
@@ -351,8 +424,13 @@ agentbus verdict --pr 25 --ref k3f9q claude2 approve verified
 - **AGENTS** — presence chips (color by state). Badges: `👂` = armed and listening;
   `⌛N` = N commands queued unread; `🔒N` = open 4-eyes challenges; `⬢` = this agent
   holds the pilot lease (master); `⧉` = attached to a herdr pane (`HERDR_PANE_ID`).
+  Dispatcher badges: `✉N` = N wake-relevant messages waiting with no wake under way;
+  `⏰` = a wake in flight or deferred; `⚠` = escalated; `old:N` = N addressed entries past the
+  24h horizon (they wake no one); `✂?` = entries may have been trimmed from the stream before
+  this agent's group read them.
   The pilot/master indicator is in the **top status bar** (`⬢ MASTER <driver>` /
-  `autonomous (no master)`), not in the AGENTS pane title.
+  `autonomous (no master)`), not in the AGENTS pane title. The status bar also shows
+  `dispatch ●` (a dispatcher holds the project's lease) or `dispatch ○` (none).
 - **ACTIVITY** — live feed of status/report/notify/cmd (history backfilled on start).
   - `Tab` focuses the feed; `↑`/`↓` or `j`/`k` select a line, `g`/`Home` jumps to
     the oldest, `G`/`End` to the newest.
@@ -368,6 +446,7 @@ agentbus verdict --pr 25 --ref k3f9q claude2 approve verified
 ## 5. One-line mental model
 
 > Every stream is `{project}:{kind}`. You publish your `status`/`report`, you
-> read commands with `subscribe`, you gate risky actions with
+> read commands with `subscribe` (or `subscribe --drain` when the dispatcher wakes
+> you), you gate risky actions with
 > `challenge`/`verdict`, and a human watches it all in `busmon`. Flags are
 > `--double-dash value`. That's the whole bus.

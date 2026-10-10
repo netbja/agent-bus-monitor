@@ -86,3 +86,24 @@ func TestStatusRegistersSessionID(t *testing.T) {
 		t.Errorf("Pane = %q, want w1:p1", got)
 	}
 }
+
+// Process identity rides the same ambient struct: the dispatcher prompts only
+// when the snapshot's pid and start time match the pane's foreground process.
+func TestStatusCopiesIdentity(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+
+	who := AgentIdent{Pane: "w1:p1", PID: 4242, PIDStart: 987654321, Terminal: "term-7"}
+	if _, err := b.Status(ctx, "dev", "idle", "x", who); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	agents, err := b.Agents(ctx)
+	if err != nil {
+		t.Fatalf("Agents: %v", err)
+	}
+	got := agents["dev"]
+	if got.PID != 4242 || got.PIDStart != 987654321 || got.Terminal != "term-7" {
+		t.Errorf("snapshot identity = pid %d start %d terminal %q, want 4242 987654321 term-7",
+			got.PID, got.PIDStart, got.Terminal)
+	}
+}

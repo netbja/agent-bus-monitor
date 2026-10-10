@@ -1,6 +1,6 @@
 ---
 name: agent-bus-master
-description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to coordinate peer agents over the Agent Bus: wake an idle-disconnected peer through its herdr pane (the bus cannot reach one that is not armed), resync an agent by injecting text into its herdr pane, unblock an agent stuck on an on-screen question, dispatch a multi-task implementation plan across an implementer + reviewer pair, and send tracked requests whose acceptance and completion are recorded rather than inferred. Use when you hold the pilot lease and need to drive other agents' panes, or when you're running a task-by-task plan through the bus."
+description: "Run from the MASTER agent (the pilot-lease driver) inside herdr to coordinate peer agents over the Agent Bus: know when `agentbus dispatch` wakes idle peers for you and when you must wake one through its herdr pane yourself (the bus alone cannot reach a peer that is not armed), handle the dispatcher's `escalation` and `blocked` notices, resync an agent by injecting text into its herdr pane, unblock an agent stuck on an on-screen question, dispatch a multi-task implementation plan across an implementer + reviewer pair, and send tracked requests whose acceptance and completion are recorded rather than inferred. Use when you hold the pilot lease and need to drive other agents' panes, or when you're running a task-by-task plan through the bus."
 ---
 
 # Agent Bus — Master Skill
@@ -100,7 +100,54 @@ Distribution is **notify + pull**: the summary lands on `{project}:notify` (visi
 the human), and agents read `agentbus usage` themselves on demand. Never push budget via `cmd` to
 each agent — that wakes every agent's `subscribe`.
 
-## Peers disconnect when idle — bringing one back is YOUR job
+## Is a dispatcher running? — check before you rely on a wake
+
+```bash
+agentbus dispatch --status     # "dispatch up" (exit 0) or "dispatch down" (exit 1); busmon: dispatch ●/○
+```
+
+`agentbus dispatch` (the bootstrap template's `dispatch` tab) is a deterministic process — no
+LLM — that wakes **unarmed** agents when a `cmd` addressed to them is waiting. It types one
+fixed wake line into the agent's pane, never the message itself:
+`[agentbus#<nonce>] <project>: <n> message(s) waiting for <agent>. Run: agentbus --project <project> subscribe --drain <agent>`.
+It types only into a pane that is idle, not busy by its client's signature, with an empty,
+visible input line, **not focused** in herdr, and whose foreground process matches the pid
+and start time the agent registered with its last `agentbus status`. Anything else is
+deferred, and escalated to you if it stays stuck (below). At most one wake per agent per 60s
+and three per backlog before escalating.
+
+- **While `dispatch up`:** `request send` (or `cmd`) is enough — the dispatcher wakes the
+  target, and the reply, a `blocked` notice or an escalation wakes **you** the same way. You
+  **may** stop arming and sleep — **only if your pane is not the one the human works in**.
+  The dispatcher never types into a focused pane, so if the human is (or may be) focused on
+  your pane, stay armed while you await replies, blocked notices and escalations. Check
+  `dispatch --status` before you sleep, every time.
+- **While `dispatch down`:** the v0.7 rules below stand unchanged — you stay armed and you
+  wake peers through their panes yourself.
+- **Manual pane wake is the sanctioned fallback**, not a breach of the "only the dispatcher
+  types into panes" rule: use it while no dispatcher runs, or for a peer the dispatcher
+  escalated to you.
+- To send without waking anyone, `agentbus cmd --no-wake <target> <command>`: delivered at
+  the target's next drain or subscribe. `agentbus shutdown` is already `wake=no`, and expires 10 minutes after it is sent.
+
+### The two notices the dispatcher era adds
+
+Both arrive as `cmd` events addressed to you; their `type` field tells them apart:
+
+- **`escalation`** (`from: dispatch`) — a peer has had work waiting longer than the
+  escalation delay (default 10m, `--escalate-after`; a peer reporting `working` is given 4×
+  that) without being woken, or three wakes made no progress. Its `body`:
+  `<agent>: <reason>; <n> waiting, oldest <id>`. A matching `notify` lands in busmon and the
+  chip shows `⚠`. Typical reasons: the pane is focused (the human is there), the agent has no
+  verified identity (registered from an older binary, outside herdr, or restarted since its
+  last `status`), the pane is gone, or its client is not supported. Look at the pane (Step 1
+  below) and wake it by hand, or re-pop the role. One escalation per backlog; progress resets
+  it. If **you** are the stuck agent, there is no cmd — only the `notify` and `⚠`.
+- **`blocked`** (`from:` the peer) — the peer ran `request block <task> <reason>` on a request
+  you sent; in the JSON event `body` is the reason, `ref` the thread, `task` the request. Decide: answer on
+  the thread, re-scope, or reassign. It is sent once per new reason, not on every repeat.
+
+## Peers disconnect when idle — bringing one back is YOUR job (when no dispatcher runs)
 
 A peer that has finished its work stops re-arming and goes silent on purpose: an armed
 `subscribe` wakes its session every idle window, and idling armed is the most expensive way
@@ -143,10 +190,14 @@ This changes how you dispatch:
   pop the role again (`agent-spawn <role> "$AGENT_BUS_PROJECT"`); it boots, reads the board,
   and finds its work.
 
-**You are the exception: you stay armed.** You are how peers come back, and where the human
-and the sentinel reach the team — a budget or context nudge sent to an unarmed master is
-retained but never delivered, so it simply does not happen. Hold the lease and keep listening,
-even when the team is quiet.
+**You are the exception: you stay armed — unless `agentbus dispatch --status` reports `dispatch
+up`.** Without a dispatcher you are how peers come back, and where the human and the sentinel
+reach the team — a budget or context nudge sent to an unarmed master is retained but never
+delivered, so it simply does not happen. Hold the lease and keep listening, even when the team
+is quiet. With a dispatcher up, those nudges wake you through your pane like any peer, so you
+may sleep — unless the human is (or may be) focused on your pane: a focused pane is never typed
+into, so then you stay armed while anything is awaited; if the dispatcher goes down while you sleep, the sentinel's cron check notifies the
+human, and the v0.7 rule applies again from your next wake.
 
 Being armed is not being alive: your pane can die with the lease still held and the subscribe
 gone. The human's recovery path does not go through the bus — they reach your pane directly in
@@ -238,7 +289,9 @@ heartbeat window. When the plan is done (final sign-off passed, board all
 2. Each peer receives a `shutdown` directive: it reports, sets `done`, and
    stops re-arming. Give them a minute to land their final status.
 3. Close the peer tabs: `herdr tab list`, then `herdr tab close <id>` for each
-   agent tab (busmon can stay for the human). Release the pilot lease:
+   agent tab (busmon can stay for the human; close the `dispatch` tab too unless the project
+   stays live — with the panes gone, any later cmd would only end in an escalation). Release
+   the pilot lease:
    `agentbus pilot release`.
 4. Tell the human the team is down. Your own pane goes last — leave it to the
    human, or close it once everything else is gone.
@@ -250,9 +303,10 @@ heartbeat window. When the plan is done (final sign-off passed, board all
   mode — finish the in-flight task, get it reviewed and committed, dispatch nothing new.
   **≥ 90%**: full hold until the reset. Resume normally once it drops back down.
 - **Not every peer stays subscribe-armed** — an agent may be deliberately unsubscribed to cut cost
-  (expensive model, long idle stretches). `agentbus cmd` alone won't wake it. Check `agentbus agents`
-  staleness; if it's stale by design, reach it via Resync (pane injection) instead — and keep the
-  injection terse, unsubscribed doesn't exempt it from a shared session budget either.
+  (expensive model, long idle stretches). With `dispatch down`, `agentbus cmd` alone won't wake it:
+  check `agentbus agents` staleness; if it's stale by design, reach it via Resync (pane injection)
+  instead — and keep the injection terse, unsubscribed doesn't exempt it from a shared session
+  budget either. With `dispatch up`, the cmd wakes it, unless escalated.
 - **Context-window creep**: watch `agentbus usage` (context fill per agent, read from each agent's
   transcript — it keeps working even for an agent that publishes nothing). Near a high-context
   threshold, have the agent write a hand-off (current step, what's committed, what's pending)

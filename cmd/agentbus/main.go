@@ -10,7 +10,7 @@
 //	agentbus --project P report    <agent> [--auto] <msg...>
 //	agentbus --project P reports   [<id>]         # list recent reports; <id> prints one report's full retained text
 //	agentbus --project P notify    <msg...>
-//	agentbus --project P cmd       [--ref T] <target> <command...>   # prints the entry id (= thread root)
+//	agentbus --project P cmd       [--ref T] [--no-wake] <target> <command...>   # prints the entry id (= thread root); --no-wake: never wakes the target
 //	agentbus --project P thread    <thread-id>   # show the :cmd thread (entries where ref or id == thread-id), chronological
 //	agentbus --project P challenge <target> [--ref R] <msg...>   # opens a 4-eyes gate
 //	agentbus --project P reply     --ref R <target> <msg...>
@@ -22,15 +22,18 @@
 //	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 //	agentbus --project P usage     [<agent> <json>]   # write a budget snapshot, or print all (status-line tee)
 //	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
+//	agentbus --project P subscribe --drain <agent>  # JSONL, one line per waiting entry (PEL then unread); exit 0 output, 64 empty, 75 error
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P budget    [--json]     # account budget window, one row per provider
 //	agentbus --project P budget    <provider> <json>             # publish a provider's window
 //	agentbus --project P board     [--json]     # shared task board: task → owner/state/branch
 //	agentbus --project P board     claim <task> [--branch b]     # fails if a peer owns it
 //	agentbus --project P board     state <task> <state> | done <task> | drop <task>
-//	agentbus --project P shutdown  [--force]    # broadcast a shutdown directive to every peer; refused while tasks aren't done or peers are busy
+//	agentbus --project P shutdown  [--force]    # broadcast a shutdown directive (wake=no, expires in 10m) to every peer; refused while tasks aren't done or peers are busy
 //	agentbus --project P refresh   [--quiet]    # read local sources -> publish budget + per-agent usage
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
+//	agentbus --project P dispatch  [--horizon 24h] [--escalate-after 10m] [--escalate-to master]  # wake unarmed agents through herdr (JSON log on stderr)
+//	agentbus --project P dispatch  --status     # print "dispatch up" (exit 0) or "dispatch down" (exit 1)
 //	agentbus --project P request [--json] | send <task> <target> [--ref T] [--ttl 5m] <body>
 //	agentbus --project P request accept <task> | block <task> <reason> | done <task> <reply>
 //	agentbus limits                # writer size/retention limits, no broker needed
@@ -41,12 +44,16 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
 
@@ -92,7 +99,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|limits|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|dispatch|limits|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -109,6 +116,12 @@ func main() {
 	cmd, rest := args[0], args[1:]
 
 	switch cmd {
+	case "dispatch":
+		sctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		code := runDispatch(sctx, b, rest, dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}, os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+
 	case "request":
 		if err := runRequest(ctx, b, self, rest, os.Stdout); err != nil {
 			die(err.Error())
@@ -122,10 +135,7 @@ func main() {
 		// CLAUDE_CODE_SESSION_ID (empty for a non-Claude-Code peer) locates its
 		// transcript, which is what `agentbus refresh` reads usage from. The
 		// agent never types either, so neither can drift or be forgotten.
-		who := bus.AgentIdent{
-			Pane:    os.Getenv("HERDR_PANE_ID"),
-			Session: os.Getenv("CLAUDE_CODE_SESSION_ID"),
-		}
+		who := statusIdent(ctx)
 		if _, err := b.Status(ctx, rest[0], rest[1], strings.Join(rest[2:], " "), who); err != nil {
 			die(err.Error())
 		}
@@ -178,15 +188,9 @@ func main() {
 		}
 
 	case "cmd":
-		rest, ref := extractFlag(rest, "--ref")
-		if len(rest) < 2 {
-			die("usage: cmd [--ref T] <target> <command>")
-		}
-		id, err := b.Cmd(ctx, self, rest[0], bus.CmdDirective, ref, strings.Join(rest[1:], " "))
-		if err != nil {
+		if err := runCmd(ctx, b, self, rest, os.Stdout); err != nil {
 			die(err.Error())
 		}
-		fmt.Println(id) // entry id = this thread's root, capturable for replies
 
 	case "thread":
 		if len(rest) < 1 {
@@ -524,17 +528,7 @@ func main() {
 			}
 		}
 		msg := "shutdown: all work complete — set status done, post a final report, and do NOT re-arm subscribe; master closes your pane"
-		n := 0
-		for name := range agents {
-			if name == self {
-				continue // whoever runs this shuts down last, by hand
-			}
-			if _, err := b.Cmd(ctx, self, name, bus.CmdDirective, "", msg); err != nil {
-				fmt.Fprintf(os.Stderr, "shutdown: cmd to %s failed: %v\n", name, err)
-				continue
-			}
-			n++
-		}
+		n := broadcastShutdown(ctx, b, self, agents, msg, os.Stderr)
 		fmt.Printf("shutdown broadcast to %d agent(s)\n", n)
 
 	case "refresh":
@@ -578,15 +572,27 @@ func main() {
 		// One subscription tick (or a headless --loop). Emits one JSON subEvent
 		// per fire: the cmd payload + cursor (id) + rearm flag. --since <cursor>
 		// sets the floor; omitted = skip backlog (start at the server's "now").
-		rest, loop := extractBool(rest, "--loop")
-		rest, since := extractFlag(rest, "--since")
-		if len(rest) < 1 {
-			die("usage: subscribe [--loop] [--since <cursor>] <agent> [idle_seconds]")
+		// --drain empties the queue (PEL, then unread; no floor) and exits.
+		sa, perr := parseSubscribeArgs(rest)
+		if errors.Is(perr, errDrainUsage) {
+			fmt.Fprintln(os.Stderr, "error: "+perr.Error())
+			fmt.Fprintln(os.Stderr, subscribeUsage)
+			os.Exit(2)
 		}
-		agent := rest[0]
+		if perr != nil {
+			die(perr.Error())
+		}
+		agent, loop, since := sa.agent, sa.loop, sa.since
+		consumer, _ := os.Hostname()
+		if consumer == "" {
+			consumer = self
+		}
+		if sa.drain {
+			os.Exit(runDrain(ctx, b, agent, consumer, os.Stdout))
+		}
 		idle := heartbeat
-		if len(rest) > 1 {
-			idle = parseIdle(rest[1], heartbeat)
+		if sa.idle != "" {
+			idle = parseIdle(sa.idle, heartbeat)
 		}
 		floor := since
 		switch {
@@ -598,10 +604,6 @@ func main() {
 			floor = f
 		case floor != "0" && !strings.Contains(floor, "-"):
 			floor += "-0" // accept a bare <ms> cursor
-		}
-		consumer, _ := os.Hostname()
-		if consumer == "" {
-			consumer = self
 		}
 		os.Exit(runSubscribe(ctx, b, agent, consumer, idle, floor, loop, os.Stdout))
 
@@ -632,4 +634,37 @@ func main() {
 	default:
 		die(fmt.Sprintf("unknown command %q", cmd))
 	}
+}
+
+// statusIdent is the identity `status` publishes, all of it ambient. Inside
+// herdr (HERDR_ENV=1 and HERDR_PANE_ID set) it also records the agent's
+// process: the pane's foreground pid that is an ancestor of this process, its
+// /proc start time, and the herdr terminal id — what the dispatcher checks
+// before typing into the pane. Any failure leaves those empty (the agent is
+// then unverified and never prompted); status itself still succeeds.
+// HERDR_BIN overrides the herdr binary.
+func statusIdent(ctx context.Context) bus.AgentIdent {
+	who := bus.AgentIdent{
+		Pane:    os.Getenv("HERDR_PANE_ID"),
+		Session: os.Getenv("CLAUDE_CODE_SESSION_ID"),
+	}
+	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
+		return who
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	pids, terminal, err := dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}.ForegroundPIDs(ctx, who.Pane)
+	if err != nil {
+		return who
+	}
+	pid, ok := dispatch.AncestorAmong(pids, os.Getpid())
+	if !ok {
+		return who
+	}
+	start, err := dispatch.ProcStart(pid)
+	if err != nil {
+		return who
+	}
+	who.PID, who.PIDStart, who.Terminal = pid, start, terminal
+	return who
 }

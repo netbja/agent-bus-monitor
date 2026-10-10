@@ -26,3 +26,18 @@ func TestResolveLimit(t *testing.T) {
 		})
 	}
 }
+
+// Obligation/Wake/DispatchAlive cost a few reads per agent; they are polled
+// every 5 s (the dispatcher's own tick), not every 1 s redraw — first tick
+// included, so the badges appear at startup.
+func TestWakePollEveryFiveTicks(t *testing.T) {
+	var due []int
+	for tick := 1; tick <= 12; tick++ {
+		if wakePollDue(tick) {
+			due = append(due, tick)
+		}
+	}
+	if len(due) != 3 || due[0] != 1 || due[1] != 6 || due[2] != 11 {
+		t.Fatalf("wake poll ticks = %v, want [1 6 11]", due)
+	}
+}

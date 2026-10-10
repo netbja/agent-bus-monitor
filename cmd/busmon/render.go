@@ -166,12 +166,13 @@ func healthIndicator(h health, now time.Time) string {
 // waiting, what the account has left, and whether the monitor itself is
 // connected — and each one arrives from a different place.
 type statusData struct {
-	project string
-	driver  string
-	budgets map[string]bus.BudgetSnapshot
-	waiting string // "3 waiting · oldest 42m", empty when nothing waits
-	health  health
-	now     time.Time
+	project  string
+	driver   string
+	budgets  map[string]bus.BudgetSnapshot
+	dispatch string // "" unknown, "up" or "down": the wake dispatcher's liveness
+	waiting  string // "3 waiting · oldest 42m", empty when nothing waits
+	health   health
+	now      time.Time
 }
 
 // statusBar renders the top bar: the project, the master indicator derived from
@@ -189,6 +190,12 @@ func statusBar(s statusData) string {
 		sb.WriteString("[yellow]autonomous (no master)[-]")
 	} else {
 		fmt.Fprintf(&sb, "[green]⬢ MASTER %s[-]", tview.Escape(s.driver))
+	}
+	switch s.dispatch {
+	case "up":
+		sb.WriteString("  ·  [green]dispatch ●[-]")
+	case "down":
+		sb.WriteString("  ·  [red]dispatch ○[-]")
 	}
 	if s.waiting != "" {
 		sb.WriteString("  ·  " + s.waiting)
@@ -559,6 +566,7 @@ func agentLabel(n string, a *agentState, now time.Time, master bool) string {
 	if a.gated > 0 {
 		label += fmt.Sprintf(" [red]🔒%d[-]", a.gated)
 	}
+	label += wakeBadges(a)
 	if a.pane != "" {
 		label += " [blue]⧉[-]"
 	}
@@ -578,4 +586,34 @@ func agentsOrNil(snaps map[string]bus.AgentSnapshot, err error) map[string]bus.A
 		return nil
 	}
 	return snaps
+}
+
+// wakeBadges renders the dispatcher-facing suffixes of a chip: ✉N mail waiting
+// that nothing is about to wake anyone for (no wake record, or a "clear" one),
+// ⏰ a wake in flight or deferred, ⚠ an escalation, old:N entries past the
+// horizon, ✂? entries that may have been trimmed unread. Zero values render
+// nothing, so an unknown obligation never looks like an empty one.
+func wakeBadges(a *agentState) string {
+	var s string
+	state, esc := "", ""
+	if a.wake != nil {
+		state, esc = a.wake.State, a.wake.Escalated
+	}
+	if a.waiting > 0 && (a.wake == nil || state == "clear") {
+		s += fmt.Sprintf(" [yellow]✉%d[-]", a.waiting)
+	}
+	switch state {
+	case "deferred", "prompting", "prompted", "unobserved":
+		s += " [aqua]⏰[-]"
+	}
+	if esc != "" {
+		s += " [red]⚠[-]"
+	}
+	if a.stale > 0 {
+		s += fmt.Sprintf(" [gray]old:%d[-]", a.stale)
+	}
+	if a.gap {
+		s += " [gray]✂?[-]"
+	}
+	return s
 }

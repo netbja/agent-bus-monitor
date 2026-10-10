@@ -27,10 +27,14 @@ const (
 	CmdChallenge = "challenge" // from a peer; opens a 4-eyes gate on the target
 	CmdReply     = "reply"     // response to a challenge, correlated by ref
 	CmdVerdict   = "verdict"   // closes a challenge, correlated by ref
+
+	CmdEscalation = "escalation" // dispatcher: an addressed message went unread too long
+	CmdBlocked    = "blocked"    // request block: tells the requester its request is blocked
 )
 
 var validCmdTypes = map[string]bool{
 	CmdDirective: true, CmdChallenge: true, CmdReply: true, CmdVerdict: true,
+	CmdEscalation: true, CmdBlocked: true,
 }
 
 // nameRE bounds project slugs and agent names: lowercase, starts with a letter,
@@ -62,6 +66,12 @@ type AgentSnapshot struct {
 	TS      int64  `json:"ts"`                // ms since epoch, from the status entry's stream id
 	Pane    string `json:"pane,omitempty"`    // HERDR_PANE_ID when the agent runs inside herdr
 	Session string `json:"session,omitempty"` // CLAUDE_CODE_SESSION_ID: locates the agent's transcript
+	// Process identity (§5.2): the agent's foreground pid in its pane and that
+	// pid's start time (field 22 of /proc/<pid>/stat), so a recycled pane or a
+	// restarted agent is never mistaken for this one. PID 0 = unverified.
+	PID      int    `json:"pid,omitempty"`
+	PIDStart uint64 `json:"pid_start,omitempty"`
+	Terminal string `json:"terminal,omitempty"` // herdr terminal id, display only
 }
 
 // AgentIdent is the ambient identity an agent's own process already knows about
@@ -70,8 +80,11 @@ type AgentSnapshot struct {
 // (rather than more positional params) because this list grows: each new field
 // is one more thing a reader can learn about an agent for free.
 type AgentIdent struct {
-	Pane    string // HERDR_PANE_ID
-	Session string // CLAUDE_CODE_SESSION_ID
+	Pane     string // HERDR_PANE_ID
+	Session  string // CLAUDE_CODE_SESSION_ID
+	PID      int    // agent's foreground pid in its herdr pane (0 = unknown)
+	PIDStart uint64 // that pid's start time, /proc/<pid>/stat field 22
+	Terminal string // herdr terminal id, display only
 }
 
 // Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
@@ -146,7 +159,7 @@ type Event struct {
 	Target       string // cmd: the addressed agent
 	State        string // status: working|idle|blocked|done
 	RKind        string // report: note|auto
-	Type         string // cmd: directive|challenge|reply|verdict
+	Type         string // cmd: directive|challenge|reply|verdict|escalation|blocked
 	Ref          string // cmd: correlation id
 	Message      string // status/report/notify text, or the cmd command
 	TextComplete string // yes, no, or empty (legacy unknown)
@@ -156,6 +169,9 @@ type Event struct {
 	Recovered    bool   // possible duplicate from pending recovery
 	Attempt      int64  // Redis delivery attempt count
 	Full         string // report: full retained text (empty unless it differs from the preview)
+	NoWake       bool   // cmd: field wake=no — delivered, but never worth waking the target
+	Stale        bool   // set by drain only: entry older than the horizon
+	AgeS         int64  // set by drain only: entry age in seconds
 }
 
 // ParseEntry turns a raw stream entry into an Event. The kind is derived from
@@ -165,6 +181,7 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	project, kind := splitStreamKey(streamKey)
 	e := Event{ID: id, Project: project, Kind: kind, TextComplete: fields["text_complete"], Task: fields["task"]}
 	e.ExpiresAt, _ = strconv.ParseInt(fields["expires_at"], 10, 64)
+	e.NoWake = fields["wake"] == "no"
 	switch kind {
 	case "status":
 		e.Agent, e.State, e.Message = fields["agent"], fields["state"], fields["message"]
@@ -238,10 +255,15 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// The stream is the source of truth; a failed HSET only means a briefly
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
-	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session}
+	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
+		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal}
 	if snap, merr := json.Marshal(snapshot); merr == nil {
 		_ = b.r.HSet(ctx, AgentsKey(b.project), agent, snap).Err()
 	}
+	// Best-effort too: give the agent a consumer group at the 24h horizon floor
+	// so commands sent before its first subscribe are not lost to a "$" start.
+	// A failure only delays group creation to the first subscribe.
+	_ = b.EnsureGroup(ctx, agent, DefaultHorizon)
 	return id, nil
 }
 
@@ -276,6 +298,33 @@ func (b *Bus) Notify(ctx context.Context, from, message string) (string, error) 
 // of CmdDirective/CmdChallenge/CmdReply/CmdVerdict; ref correlates a challenge
 // with its replies and verdict (empty for fire-and-forget directives).
 func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (string, error) {
+	return b.cmd(ctx, from, target, typ, ref, command, nil)
+}
+
+// CmdNoWake is Cmd plus the field wake=no: the entry is delivered normally but
+// a dispatcher never wakes the target for it.
+func (b *Bus) CmdNoWake(ctx context.Context, from, target, typ, ref, command string) (string, error) {
+	return b.cmd(ctx, from, target, typ, ref, command, map[string]interface{}{"wake": "no"})
+}
+
+// CmdNoWakeTTL is CmdNoWake plus expires_at = Redis TIME + ttl (Unix ms): once
+// past it, delivery turns the entry into a payload-less "expired" event. It is
+// for signals that are only meaningful to the session they were sent to —
+// shutdown — so a later session draining the queue is never stopped by them.
+func (b *Bus) CmdNoWakeTTL(ctx context.Context, from, target, typ, ref, command string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		return "", fmt.Errorf("invalid ttl %v", ttl)
+	}
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		return "", err
+	}
+	return b.cmd(ctx, from, target, typ, ref, command, map[string]interface{}{
+		"wake": "no", "expires_at": strconv.FormatInt(now.Add(ttl).UnixMilli(), 10),
+	})
+}
+
+func (b *Bus) cmd(ctx context.Context, from, target, typ, ref, command string, extra map[string]interface{}) (string, error) {
 	if err := ValidateText(command, CmdMaxRunes); err != nil {
 		return "", err
 	}
@@ -285,9 +334,13 @@ func (b *Bus) Cmd(ctx context.Context, from, target, typ, ref, command string) (
 	if !validCmdTypes[typ] {
 		return "", fmt.Errorf("invalid cmd type %q", typ)
 	}
-	return b.add(ctx, "cmd", map[string]interface{}{
+	values := map[string]interface{}{
 		"from": from, "target": target, "type": typ, "ref": ref, "command": command, "text_complete": "yes",
-	})
+	}
+	for k, v := range extra {
+		values[k] = v
+	}
+	return b.add(ctx, "cmd", values)
 }
 
 // AppendVerdict records one verdict in the {project}:verdicts ledger and returns
