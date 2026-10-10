@@ -102,8 +102,11 @@ action ∈ {`none`, `prompt`, `defer`, `escalate`}. Evaluated top to bottom:
 
 **Ready** = all of: herdr state `idle` or `done`; the client's **busy signature**
 does not match (herdr's state is not trusted alone — Kimi 2.1 reports `idle`/`done`
-while its spinner runs, §10); the client's **ready signature** matches (empty input
-line visible, no modal footer — e.g. Codex transcript-scroll mode where Enter does
+while its spinner runs, §10); the client's **ready signature** matches **on the
+current input box only** — the region from the last line matching the client's
+input-line marker (`Prompt`; for claude and agy from the `─` rule above it) to the
+end of the screen, so an old box in scrollback never counts; no marker → not ready
+— (empty input line visible, no modal footer — e.g. Codex transcript-scroll mode where Enter does
 not submit); the screen is **settled** (two reads 200 ms apart identical); and the
 pane is **not focused** in herdr (R-B1). A focused pane with no herdr client
 attached is not a typing risk; whether `herdr status client` exposes attachment
@@ -189,7 +192,8 @@ per obligation (recorded in the wake hash).
   would implement the same two methods.
 
 - **`dispatch/herdr.go`** — the only `Runtime` in v0.8. Per-client **signature
-  table** (ready + busy regexes, matched on `herdr pane read --source recent` with
+  table** (input-line marker + ready + busy + modal regexes; ready is matched only
+  on the last input box, busy and modal on the whole screen; matched on `herdr pane read --source recent` with
   ANSI where needed). Entries ship only for clients that passed §10; any other
   client is unsupported → never prompted.
 

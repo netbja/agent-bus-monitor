@@ -23,6 +23,8 @@ Spec §10 records what each state means.
 | `agy-empty.txt` | REAL — w5:p1, idle, unfocused |
 | `agy-typed.txt` | REAL — w5:p1 with `zz-probe` typed, then cleared |
 | `agy-approval.txt` | SYNTHETIC — top of `agy-empty.txt`, input box replaced by an approval menu with a `> 1. Yes` line and an `esc to dismiss` banner (spec §10 "Modal hazard"); reproducing it needs a prompt to the peer |
+| `<client>-old-empty-typed.txt` (claude, codex, kimi, grok, agy) | DERIVED — last 12 lines of `<client>-empty.txt` (an OLD empty input box in scrollback) above the last 28 lines of `<client>-typed.txt` (the CURRENT box with `zz-probe` typed); must read not ready. Escapes and `\r` kept as in the sources |
+| `<client>-old-typed-empty.txt` (same clients) | DERIVED — last 12 lines of `<client>-typed.txt` above the last 28 lines of `<client>-empty.txt`; must read ready (only the current box counts) |
 | `old-prompt.txt` | DERIVED — `kimi-empty.txt` plus an earlier `[agentbus#abc123]` wake line in the transcript, for the nonce test |
 
 `../herdr/*.json` are real replies (`agent get`, `pane get`, `pane process-info`,

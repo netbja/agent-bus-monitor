@@ -41,6 +41,19 @@ func TestSignatures(t *testing.T) {
 		{"agy", "agy-empty", true, false},
 		{"agy", "agy-typed", false, false},
 		{"agy", "agy-approval", false, false},
+		// Only the CURRENT (last) input box counts: an old empty box higher in
+		// scrollback must not make a typed current box look ready, and an old
+		// typed box must not veto an empty current one. DERIVED fixtures.
+		{"claude", "claude-old-empty-typed", false, false},
+		{"claude", "claude-old-typed-empty", true, false},
+		{"codex", "codex-old-empty-typed", false, false},
+		{"codex", "codex-old-typed-empty", true, false},
+		{"kimi", "kimi-old-empty-typed", false, false},
+		{"kimi", "kimi-old-typed-empty", true, false},
+		{"grok", "grok-old-empty-typed", false, false},
+		{"grok", "grok-old-typed-empty", true, false},
+		{"agy", "agy-old-empty-typed", false, false},
+		{"agy", "agy-old-typed-empty", true, false},
 	}
 	for _, c := range cases {
 		t.Run(c.screen, func(t *testing.T) {
@@ -54,7 +67,14 @@ func TestSignatures(t *testing.T) {
 			}
 		})
 	}
-	for name := range Signatures {
+	for name, sig := range Signatures {
+		if sig.Prompt == nil {
+			t.Errorf("%s: no Prompt marker; its readiness could match an old input box", name)
+		}
+		// No input line on screen at all: never ready.
+		if ready, _ := sig.match("some output\nmore output\n"); ready {
+			t.Errorf("%s: ready without any input line", name)
+		}
 		if !Supported()[name] {
 			t.Errorf("Supported() misses %s", name)
 		}

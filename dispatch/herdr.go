@@ -33,10 +33,20 @@ const (
 // matched on the ANSI read when ANSI is set (some empty inputs differ from
 // typed ones only by their dim placeholder); Busy and Modal always match the
 // screen with escapes stripped.
+//
+// Prompt is the client's input-line marker, matched per line on stripped text.
+// Ready is evaluated only on the CURRENT input box: the region from the last
+// line matching Prompt to the end of the screen — from the nearest `─` rule
+// above it when RuleAbove is set (claude, agy: the box starts with a rule). An
+// older box higher in scrollback can therefore neither make a typed current
+// box look ready nor veto an empty one. No Prompt line on screen → not ready.
+// Busy and Modal still look at the whole screen (the safe direction).
 type Signature struct {
 	Ready, Busy []*regexp.Regexp
 	Modal       []*regexp.Regexp
 	ANSI        bool
+	Prompt      *regexp.Regexp
+	RuleAbove   bool
 }
 
 var res = regexp.MustCompile
@@ -50,30 +60,37 @@ var Signatures = map[string]Signature{
 	// input box empty, so the spinner line (`✶ Kneading… (2s · ↓ 91 tokens)`)
 	// is the busy signature.
 	"claude": {
-		Ready: []*regexp.Regexp{res(`(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?$`)},
-		Busy:  []*regexp.Regexp{res(`(?m)^[ \t]*[·✢✳✶✻✽*][ \t]+\S+…`)},
-		ANSI:  true,
+		Ready:     []*regexp.Regexp{res(`(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?$`)},
+		Busy:      []*regexp.Regexp{res(`(?m)^[ \t]*[·✢✳✶✻✽*][ \t]+\S+…`)},
+		ANSI:      true,
+		Prompt:    res(`^❯`),
+		RuleAbove: true,
 	},
 	// `›` followed only by styling and spaces, then the dim placeholder.
 	// Transcript-scroll mode (footer `enter/esc latest`) does not submit on Enter.
 	"codex": {
-		Ready: []*regexp.Regexp{res(`(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m`)},
-		Modal: []*regexp.Regexp{res(`enter/esc latest`)},
-		ANSI:  true,
+		Ready:  []*regexp.Regexp{res(`(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m`)},
+		Modal:  []*regexp.Regexp{res(`enter/esc latest`)},
+		ANSI:   true,
+		Prompt: res(`^›`),
 	},
 	// The input box has a right border on screen: `│ >   …   │`.
 	// Kimi 2.1 reports idle/done while its moon spinner runs (`🌑 · Tip: …`).
 	"kimi": {
-		Ready: []*regexp.Regexp{res(`(?m)^[ \t]*│ >[ \t]*(?:│[ \t]*)?$`)},
-		Busy:  []*regexp.Regexp{res(`(?m)^[ \t]*(?:🌑|🌒|🌓|🌔|🌕|🌖|🌗|🌘)(?:[ \t]|·|$)`)},
+		Ready:  []*regexp.Regexp{res(`(?m)^[ \t]*│ >[ \t]*(?:│[ \t]*)?$`)},
+		Busy:   []*regexp.Regexp{res(`(?m)^[ \t]*(?:🌑|🌒|🌓|🌔|🌕|🌖|🌗|🌘)(?:[ \t]|·|$)`)},
+		Prompt: res(`^[ \t]*│ >`),
 	},
 	"grok": {
-		Ready: []*regexp.Regexp{res(`(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?$`)},
+		Ready:  []*regexp.Regexp{res(`(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?$`)},
+		Prompt: res(`^[ \t]*│ ❯`),
 	},
 	// `>` alone between two `─` rules; the approval menu shows `> 1. Yes…`.
 	"agy": {
-		Ready: []*regexp.Regexp{res(`(?m)^─{3,}[ \t]*\n>[ \t]*\n─{3,}`)},
-		Modal: []*regexp.Regexp{res(`(?m)^[ \t]*>[ \t]*1\.[ \t]`)},
+		Ready:     []*regexp.Regexp{res(`(?m)^─{3,}[ \t]*\n>[ \t]*\n─{3,}`)},
+		Modal:     []*regexp.Regexp{res(`(?m)^[ \t]*>[ \t]*1\.[ \t]`)},
+		Prompt:    res(`^>(?:[ \t]|$)`),
+		RuleAbove: true,
 	},
 }
 
@@ -97,16 +114,48 @@ func anyMatch(rs []*regexp.Regexp, s string) bool {
 	return false
 }
 
+var ruleLine = regexp.MustCompile(`^[ \t]*─{3,}`)
+
+// inputRegion is the part of screen (raw, escapes kept) that holds the current
+// input box: from the last line whose stripped text matches Prompt — or the
+// nearest rule above it, with RuleAbove — to the end. ok=false: no input line.
+func (s Signature) inputRegion(screen string) (string, bool) {
+	if s.Prompt == nil {
+		return "", false
+	}
+	lines := strings.Split(screen, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if !s.Prompt.MatchString(ansiEscape.ReplaceAllString(lines[i], "")) {
+			continue
+		}
+		start := i
+		if s.RuleAbove {
+			for j := i - 1; j >= 0; j-- {
+				if ruleLine.MatchString(ansiEscape.ReplaceAllString(lines[j], "")) {
+					start = j
+					break
+				}
+			}
+		}
+		return strings.Join(lines[start:], "\n"), true
+	}
+	return "", false
+}
+
 // match judges one screen read.
 func (s Signature) match(screen string) (ready, busy bool) {
 	screen = strings.ReplaceAll(screen, "\r", "")
 	plain := ansiEscape.ReplaceAllString(screen, "")
-	on := plain
-	if s.ANSI {
-		on = screen
+	busy = anyMatch(s.Busy, plain)
+	region, ok := s.inputRegion(screen)
+	if !ok {
+		return false, busy
 	}
-	ready = anyMatch(s.Ready, on) && !anyMatch(s.Modal, plain)
-	return ready, anyMatch(s.Busy, plain)
+	if !s.ANSI {
+		region = ansiEscape.ReplaceAllString(region, "")
+	}
+	ready = anyMatch(s.Ready, region) && !anyMatch(s.Modal, plain)
+	return ready, busy
 }
 
 // Herdr drives panes through the herdr CLI. Bin "" means "herdr" on PATH.
