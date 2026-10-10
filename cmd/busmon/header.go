@@ -77,7 +77,7 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	sort.Strings(names)
 	for i, n := range names {
-		add(budgetSeg(n, d.budgets[n], tier), 6+i*0, second).prio = 6 + i // rightmost provider = lowest priority
+		add(budgetSeg(n, d.budgets[n], tier), 6+i, second) // the rightmost provider has the lowest priority
 	}
 	clock := add(Line{{Text: d.now.Format("15:04:05"), Role: RoleMuted}}, 100, 0)
 	clock.right = true
