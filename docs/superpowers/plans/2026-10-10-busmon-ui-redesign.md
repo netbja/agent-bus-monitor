@@ -216,6 +216,8 @@ func (l *ListView) Live() bool
 func (l *ListView) SetOnChange(func(key string, live bool))   // selection or live changed
 func (l *ListView) SetOnOpen(func(key string))                // Enter/v or click on the selected row
 func (l *ListView) Scroll() ScrollState
+func (l *ListView) Move(delta int); First(); Last(); Open(); Resume(); ClearSelection(); ScrollBy(delta int) // the key table (Task 10) calls these
+const listGutter = 2 // every row reserves 2 cells for the selection marker: row builders get width = panel W − 4
 // Draw, InputHandler (↑↓ j k PgUp PgDn Home g End G Enter v), MouseHandler (click, wheel, track click), PasteHandler (ignore)
 ```
 
