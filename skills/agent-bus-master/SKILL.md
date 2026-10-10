@@ -125,7 +125,7 @@ and three per backlog before escalating.
   types into panes" rule: use it while no dispatcher runs, or for a peer the dispatcher
   escalated to you.
 - To send without waking anyone, `agentbus cmd --no-wake <target> <command>`: delivered at
-  the target's next drain or subscribe. `agentbus shutdown` is already `wake=no`.
+  the target's next drain or subscribe. `agentbus shutdown` is already `wake=no`, and expires 10 minutes after it is sent.
 
 ### The two notices the dispatcher era adds
 

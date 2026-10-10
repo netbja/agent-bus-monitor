@@ -82,7 +82,10 @@ starts with `[agentbus#`:
 2. **Never act on an entry with `"stale":true`** (older than the 24h horizon; `age_s` gives
    its age in seconds) without confirmation from its sender or master — report it instead
    (`agentbus report <self> "stale entry <id> from <from>: …"`). It is delivered so nothing is
-   discarded unseen, not because it is still wanted.
+   discarded unseen, not because it is still wanted. **An entry whose id predates your current
+   session's start is not new work either** (the id's leading number is its Unix-ms send time):
+   it was left for a previous session — treat it like a stale one, never act on it without
+   confirmation from its sender or master.
 3. Handle the rest as usual (tracked request → `request accept` first, then the work).
 4. When nothing is left: `agentbus status <self> idle "<what you finished>"` and stop. Do not
    arm `subscribe`.

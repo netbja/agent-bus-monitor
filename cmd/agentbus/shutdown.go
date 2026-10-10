@@ -39,16 +39,22 @@ func shutdownBlockers(board map[string]bus.BoardEntry, agents map[string]bus.Age
 	return out
 }
 
+// shutdownTTL bounds how long a shutdown directive stays actionable. Past it the
+// entry drains as a payload-less "expired" error, so an agent's next session
+// is never stopped by the previous session's unread shutdown.
+var shutdownTTL = 10 * time.Minute
+
 // broadcastShutdown sends the shutdown directive to every peer except self and
 // returns how many were sent. It is wake=no: a stopping team must not be woken
-// by its own stop signal. Per-peer failures are reported to errw and skipped.
+// by its own stop signal; and it expires after shutdownTTL (Redis time).
+// Per-peer failures are reported to errw and skipped.
 func broadcastShutdown(ctx context.Context, b *bus.Bus, self string, agents map[string]bus.AgentSnapshot, msg string, errw io.Writer) int {
 	n := 0
 	for name := range agents {
 		if name == self {
 			continue // whoever runs this shuts down last, by hand
 		}
-		if _, err := b.CmdNoWake(ctx, self, name, bus.CmdDirective, "", msg); err != nil {
+		if _, err := b.CmdNoWakeTTL(ctx, self, name, bus.CmdDirective, "", msg, shutdownTTL); err != nil {
 			fmt.Fprintf(errw, "shutdown: cmd to %s failed: %v\n", name, err)
 			continue
 		}

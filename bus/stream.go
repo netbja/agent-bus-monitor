@@ -307,6 +307,23 @@ func (b *Bus) CmdNoWake(ctx context.Context, from, target, typ, ref, command str
 	return b.cmd(ctx, from, target, typ, ref, command, map[string]interface{}{"wake": "no"})
 }
 
+// CmdNoWakeTTL is CmdNoWake plus expires_at = Redis TIME + ttl (Unix ms): once
+// past it, delivery turns the entry into a payload-less "expired" event. It is
+// for signals that are only meaningful to the session they were sent to —
+// shutdown — so a later session draining the queue is never stopped by them.
+func (b *Bus) CmdNoWakeTTL(ctx context.Context, from, target, typ, ref, command string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		return "", fmt.Errorf("invalid ttl %v", ttl)
+	}
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		return "", err
+	}
+	return b.cmd(ctx, from, target, typ, ref, command, map[string]interface{}{
+		"wake": "no", "expires_at": strconv.FormatInt(now.Add(ttl).UnixMilli(), 10),
+	})
+}
+
 func (b *Bus) cmd(ctx context.Context, from, target, typ, ref, command string, extra map[string]interface{}) (string, error) {
 	if err := ValidateText(command, CmdMaxRunes); err != nil {
 		return "", err

@@ -230,7 +230,9 @@ true by construction (it calls herdr's local socket).
 
 ### 5.3 Stream fields and types
 - `wake=no` on cmd entries suppresses dispatcher wakes; `agentbus cmd --no-wake`.
-  `shutdown` uses it: a disconnected peer is already stopped.
+  `shutdown` uses it: a disconnected peer is already stopped. `shutdown` entries
+  also carry `expires_at` = Redis TIME + 10m (`Bus.CmdNoWakeTTL`), so a drain by a
+  later session yields a payload-less `expired` error, never a live stop order.
 - `escalation` cmd type (§3.4).
 - `request block` XADDs a `type=blocked` entry targeted at the requester inside
   the existing Lua transition, **only when the state changes into `blocked` or the

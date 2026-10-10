@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -80,6 +83,43 @@ func TestShutdownUsesNoWake(t *testing.T) {
 	}
 	if msgs[0].Values["wake"] != "no" || msgs[0].Values["target"] != "dev" {
 		t.Fatalf("shutdown entry = %v", msgs[0].Values)
+	}
+	// A shutdown left unread must not stop the agent's next session: it
+	// expires 10 minutes after it was sent, measured on Redis time.
+	now, err := r.Time(ctx).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp, _ := strconv.ParseInt(fmt.Sprint(msgs[0].Values["expires_at"]), 10, 64)
+	if d := exp - now.Add(10*time.Minute).UnixMilli(); d < -2000 || d > 2000 {
+		t.Fatalf("expires_at = %d, want ≈ server time + 10m", exp)
+	}
+}
+
+func TestExpiredShutdownDrainsAsPayloadlessError(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	defer bus.DeleteProject(ctx, r, b.Project())
+	old := shutdownTTL
+	shutdownTTL = time.Millisecond
+	defer func() { shutdownTTL = old }()
+	if n := broadcastShutdown(ctx, b, "master", map[string]bus.AgentSnapshot{"dev": {}}, "shutdown", io.Discard); n != 1 {
+		t.Fatalf("n = %d, want 1", n)
+	}
+	time.Sleep(5 * time.Millisecond)
+	var out bytes.Buffer
+	if code := runDrain(ctx, b, "dev", "host-1", &out); code != 0 {
+		t.Fatalf("drain exit = %d, out=%s", code, out.String())
+	}
+	var ev map[string]any
+	if err := json.Unmarshal(out.Bytes(), &ev); err != nil {
+		t.Fatalf("drain output %q: %v", out.String(), err)
+	}
+	if ev["event"] != "error" || ev["delivery"] != "expired" {
+		t.Fatalf("event = %v, want error/expired", ev)
+	}
+	if _, ok := ev["body"]; ok {
+		t.Fatalf("expired shutdown carried a body: %v", ev)
 	}
 }
 

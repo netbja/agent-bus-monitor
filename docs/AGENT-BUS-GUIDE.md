@@ -21,7 +21,7 @@ access without re-asking:
 - Receive directives — arm as a background task; its exit wakes you, then re-arm:
   `agentbus subscribe "$AGENT_BUS_AGENT" --since "$LAST_CURSOR"`  # one JSON line/fire; persist its `id`
 - Woken by a line starting `[agentbus#` (the dispatcher): run
-  `agentbus subscribe --drain "$AGENT_BUS_AGENT"` FIRST — never a plain `subscribe`, which acks
+  `agentbus --project "$AGENT_BUS_PROJECT" subscribe --drain "$AGENT_BUS_AGENT"` FIRST — never a plain `subscribe`, which acks
   the waiting entries unseen. Never act on an entry with `"stale":true` without confirmation.
 - Publish your state (this IS your heartbeat):
   `agentbus status "$AGENT_BUS_AGENT" working "<msg>"`
@@ -176,7 +176,8 @@ agentbus request                                        # EVERY tracked request,
 agentbus shutdown                                       # broadcast "shutdown" to every peer; REFUSED while a board task isn't done or a peer is busy
 agentbus shutdown --force                               # override the guard (you know better)
 # peers then report, set done, and stop re-arming subscribe; master closes the panes (see the master skill)
-# shutdown entries carry wake=no: the dispatcher never wakes a peer to tell it to stop
+# shutdown entries carry wake=no (the dispatcher never wakes a peer to tell it to stop) and
+# expires_at = send time + 10m: a later session drains a stale one as an `expired` error
 
 # ── WAKE DISPATCHER: wakes UNARMED agents through herdr when a cmd waits ──────
 agentbus dispatch                                       # foreground, one per project (a 2nd exits 0); JSON decision log on stderr
@@ -190,7 +191,7 @@ agentbus subscribe --since 1782053749061-3 claude1      # resume after a persist
 agentbus subscribe claude1 3600                         # 1h idle window before it heartbeats and exits
 agentbus subscribe --loop hermes                        # HEADLESS callers only (hermes/shell): consume continuously, never exit
 agentbus watch claude1                                  # legacy alias of subscribe
-agentbus subscribe --drain claude1                      # WOKEN? run this first: JSONL, one object per waiting entry, then exit (0 / 64 empty / 75 error)
+agentbus --project <p> subscribe --drain claude1        # WOKEN? run this first: JSONL, one object per waiting entry, then exit (0 / 64 empty / 75 error)
 # WARNING — --since is a floor, and a floor DISCARDS. It filters pending entries too: anything
 # older than the cursor is ACKNOWLEDGED WITHOUT BEING DELIVERED to you. So arming with no
 # --since does not "skip the backlog for now", it consumes it unseen. Persist the `id` of the
@@ -367,12 +368,17 @@ and exits as soon as both are empty:
 | 64   | nothing was waiting |
 | 75   | error — an `{"v":1,"event":"error","msg":"…"}` line (e.g. your receiver lease is held by an armed `subscribe`; nothing was consumed), or a failure after output |
 
-A drained entry may carry two more fields (additive, `v` stays 1):
+A drained entry carries more fields (additive, `v` stays 1):
 
-- **`"stale":true`** — the entry is older than the 24h horizon; **`age_s`** is its age in
-  seconds (Redis time). It is delivered so nothing is acknowledged unseen, not because it is
-  still wanted: **never act on a stale entry without confirmation from its sender or master**
-  — report it instead.
+- **`age_s`** — set on every drained entry: its age in seconds (Redis time).
+- **`"stale":true`** — only when the entry is older than the 24h horizon. It is delivered so
+  nothing is acknowledged unseen, not because it is still wanted: **never act on a stale entry
+  without confirmation from its sender or master** — report it instead.
+- **An entry whose id predates your current session's start** (the id's leading number is its
+  Unix-ms send time) is not new work either: it was left for a previous session. Same
+  treatment as stale — never act on it without confirmation from its sender or master. A
+  `shutdown` carries `expires_at` (10 minutes after it was sent), so a late one already drains
+  as an `expired` error.
 - A missing/expired body comes out as an `error` event carrying the `id`, exactly as in
   `subscribe`: no payload you may act on.
 

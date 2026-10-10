@@ -211,3 +211,50 @@ func TestDrainReceiverBusy(t *testing.T) {
 		t.Fatalf("lease = %q, drain must not touch a lease it never held", v)
 	}
 }
+
+// A no-wake entry with a TTL carries expires_at = Redis TIME + ttl, and once
+// past it a drain yields an expired, payload-less event — the shutdown path:
+// a stop signal left unread must not stop the agent's next session.
+func TestCmdNoWakeTTLExpiresBeforeDrain(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	stream := StreamKey(b.project, "cmd")
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := b.CmdNoWakeTTL(ctx, "master", "dev", CmdDirective, "", "shutdown", 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := b.r.XRange(ctx, stream, id, id).Result()
+	if err != nil || len(msgs) != 1 {
+		t.Fatalf("entry: %v %v", msgs, err)
+	}
+	if msgs[0].Values["wake"] != "no" {
+		t.Fatalf("wake = %v, want no", msgs[0].Values["wake"])
+	}
+	exp, _ := strconv.ParseInt(msgs[0].Values["expires_at"].(string), 10, 64)
+	want := now.Add(10 * time.Minute).UnixMilli()
+	if d := exp - want; d < -2000 || d > 2000 {
+		t.Fatalf("expires_at = %d, want ≈ %d (server time + 10m)", exp, want)
+	}
+
+	if _, err := b.CmdNoWakeTTL(ctx, "master", "dev", CmdDirective, "", "stop now", time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	var got []Event
+	if _, err := b.DrainCmd(ctx, "dev", "host-1", DefaultHorizon, collect(&got)); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("drained %d entries, want 2", len(got))
+	}
+	if got[0].Delivery == "expired" || got[0].Message != "shutdown" {
+		t.Fatalf("live entry = %+v", got[0])
+	}
+	if got[1].Delivery != "expired" || got[1].Message != "" {
+		t.Fatalf("expired entry = %+v, want delivery=expired and no body", got[1])
+	}
+}
