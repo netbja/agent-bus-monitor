@@ -1,116 +1,101 @@
 package main
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
-// helpText is the legend: every badge, colour and counter on the screen, in
-// words. The panes stay compact precisely because this exists — a chip can
-// afford to be a symbol when one keypress spells it out.
-//
-// Kept as one string (not generated from the renderers) so it reads as prose
-// to a human; helpCoversEveryBadge in the tests is what keeps it honest.
+// helpText is the legend (F1): KEYS generated from the key tables, then every
+// state, flag, type and counter on the screen, in words. The panels stay
+// compact precisely because this exists.
 func helpText() string {
-	return strings.Join([]string{
-		tag("white", "KEYS"),
-		"  Tab            move between the message feed and the input line",
-		"  ↑ ↓ / j k      select a line in the feed (the feed stops following)",
-		"  Enter          open the selected message: full text, who, when, thread",
-		"  y              copy the selected line (OSC52 — works over SSH)",
-		"  / then text    filter the feed: @agent, a thread id, or any words",
-		"  Esc            leave the selection or the filter, and follow live again",
-		"  r   F2         requests: what is waiting on someone",
-		"  ?   F1         this legend",
-		"  q   Ctrl-C     quit",
-		"",
-		tag("white", "IN AN OPEN MESSAGE"),
-		"  y              copy the message text exactly as it was published",
-		"  Y              copy the whole thread as plain text",
-		"  ↑ ↓ / j k      scroll     Esc   back to the feed",
-		"",
-		tag("white", "AGENT CHIPS"),
-		"  name: working  the state the agent DECLARED the last time it spoke.",
-		"                 It is never overwritten by silence: an agent that said",
-		"                 working and then went quiet still reads working.",
-		"  · no update 18m",
-		"                 how long ago that declaration was published. The bus has",
-		"                 no heartbeat, so this is silence — not death, not idleness.",
-		"                 Nothing is shown while the agent spoke within 2 minutes.",
-		"  no state declared",
-		"                 seen on the bus (a report, or an armed subscriber) but it",
-		"                 has never published what it is doing.",
-		"  [green]👂[-]             a subscriber lease is live for this agent. Its absence",
-		"                 means no lease — not that the agent is dead, and not that",
-		"                 anything was read.",
-		"  [yellow]⌛N[-]            N entries the agent's consumer group has not read yet.",
-		"                 The cmd stream is SHARED, so this counts entries addressed",
-		"                 to anyone: a large number is not a queue of work for this",
-		"                 agent. Entries already read but not acknowledged are not",
-		"                 counted. Orange when no lease is live — a question worth",
-		"                 asking, not a diagnosis.",
-		"  [red]🔒N[-]            N open 4-eyes challenges gate this agent; it must not",
-		"                 proceed until a verdict closes them.",
-		"  [blue]⧉[-]              the agent published a herdr pane id with its last status.",
-		"                 Declared, not verified: the pane may be long closed.",
-		"  [gray][120k ctx][-]      that agent's OWN context fill. Account-wide budget is in",
-		"                 the status bar instead — it is the same number for everyone.",
-		"  [fuchsia]⬢[-]              holds the pilot lease (the master).",
-		"  [yellow]✉N[-]             N messages wait for this agent (pending + unread, the",
-		"                 ones a dispatcher would wake it for) and no wake is under",
-		"                 way. Not proof the agent is stuck — it may be armed.",
-		"  [aqua]⏰[-]             the dispatcher has a wake in flight or deferred for it.",
-		"  [red]⚠[-]              the dispatcher escalated: it could not wake this agent.",
-		"  [gray]old:N[-]          N addressed entries older than the 24h horizon. They",
-		"                 never wake anyone on their own; a drain delivers them flagged.",
-		"  [gray]✂?[-]             entries MAY have been trimmed from the capped cmd stream",
-		"                 before this agent's group read them. Possible, not proven.",
-		"",
-		tag("white", "STATUS BAR"),
-		"  ⬢ MASTER x     x holds the pilot lease. `autonomous` means nobody does.",
-		"  N waiting      tracked requests plus unanswered cmd threads; see r.",
-		"  anthropic 25%/44%",
-		"                 ACCOUNT budget: session window / weekly window, shared by",
-		"                 every agent on that provider. Blank when nothing published it.",
-		"  [green]dispatch ●[-]     a dispatcher holds this project's lease: unarmed agents",
-		"                 are woken through their herdr panes. [red]dispatch ○[-]: none runs —",
-		"                 nothing wakes an unarmed agent. Absent while unknown.",
-		"  ⇄ bus ok       the MONITOR's own link to Redis. When it turns red, busmon",
-		"                 is blind — the agents may be perfectly fine.",
-		"",
-		tag("white", "REQUESTS"),
-		"  requested      published and recorded; nobody has accepted it.",
-		"  accepted       the target agent explicitly accepted it.",
-		"  blocked        the target agent explicitly reported it cannot proceed.",
-		"  done           the target agent published a completion reply.",
-		"  written to subscriber output",
-		"                 the bytes reached a subscriber's output. It is NOT proof",
-		"                 the agent read them, and never an acceptance.",
-		"  queued         no delivery attempt is recorded — which is not proof that",
-		"                 none happened, only that none was written down.",
-		"  no deadline set",
-		"                 the request carries no expiry. busmon never invents one.",
-		"  body not retained",
-		"                 the request text reads back empty. An empty read cannot",
-		"                 tell trimming from deletion from an id that never",
-		"                 existed, and says nothing about whether the work was",
-		"                 done.",
-		"",
-		tag("white", "MESSAGE TEXT"),
-		"  full text retained",
-		"                 the whole text is stored and shown.",
-		"  truncated at publish",
-		"                 the entry is MARKED as cut when it was published; the rest",
-		"                 was never stored — ask the author to resend. A trailing …",
-		"                 is not that mark and proves nothing.",
-		"  one-line preview, no further text retained",
-		"                 nothing beyond the preview is stored for this entry.",
-		"  completeness not marked",
-		"                 published before the completeness marker existed, so",
-		"                 busmon cannot promise the text is whole.",
-		"  not retained   the entry reads back empty. The cause is unknown: a",
-		"                 trimmed entry, a deleted one and an id that never",
-		"                 existed are indistinguishable from here.",
-	}, "\n")
+	var sb strings.Builder
+	head := func(s string) { sb.WriteString(tg(RoleAccent, s) + "\n") }
+	row := func(k, v string) { fmt.Fprintf(&sb, "  %s %s\n", tg(RoleText, Fit(k, 20)), v) }
+	more := func(v string) { fmt.Fprintf(&sb, "  %s %s\n", Fit("", 20), v) }
+	blank := func() { sb.WriteString("\n") }
+
+	head("KEYS")
+	for _, sec := range []struct {
+		name string
+		m    Mode
+	}{{"panels", ModePanel}, {"writing a message", ModeInput}, {"editing the filter", ModeFilter}, {"an open detail", ModeOverlay}} {
+		sb.WriteString("  " + tg(RoleMuted, sec.name) + "\n")
+		for _, b := range bindings(sec.m) {
+			if b.Hint != "" {
+				row(b.Keys, b.Hint)
+			}
+		}
+	}
+	row("1 2 3 (4)", "medium and narrow screens: switch the visible panel")
+	row("click / wheel", "click selects, click on the selected row opens it; the wheel scrolls")
+	row("i : @", "write a message; @agent text sends a directive, plain text a notify")
+	blank()
+
+	head("STATES")
+	row(GlyphWorking+" working", "the state the agent DECLARED the last time it published a status.")
+	row(GlyphIdle+" idle", "Silence never changes it: an agent that said working and went quiet")
+	row(GlyphBlocked+" blocked", "still reads working. Any other recorded value is shown as written.")
+	row(GlyphDone+" done", "")
+	row(GlyphNone+" no state declared", "seen on the bus (a report, a lease) but it never published a state.")
+	row("updated", "bar and age of that declaration: the bar empties over 10 minutes.")
+	more("It measures freshness, not liveness - the bus has no heartbeat.")
+	row("ctx", "the agent's own context, in raw tokens. Never a percentage.")
+	row("sort", "attention first: escalated, gated or blocked; then queued or being woken;")
+	more("then working, idle, other states, done, no state declared. Names inside each.")
+	blank()
+	sb.WriteString("  " + tg(RoleMuted, "flags") + "\n")
+	row("escalated", "the dispatcher could not wake this agent and told the escalation target.")
+	row("escalating", "that escalation is being published.")
+	row("gate N", "N open 4-eyes challenges gate this agent: it must wait for a verdict.")
+	row("deferred", "a wake is due but the pane was not ready (busy, focused, typed input).")
+	row("unobserved", "a wake line was typed but its nonce was never seen on screen.")
+	row("waking", "the dispatcher reserved a wake and is typing the line.")
+	row("woken", "the nonce was echoed on the agent's screen - not proof it read or accepted anything.")
+	row("pilot", "holds the pilot lease (the master).")
+	row("armed", "a receiver lease is live: something subscribes for this agent. A lease, not a state.")
+	row("stale N", "N addressed entries older than the 24h horizon; they wake no one.")
+	row("wake:<value>", "a wake state this busmon does not know, shown as stored.")
+	blank()
+	sb.WriteString("  " + tg(RoleMuted, "activity types") + "\n")
+	row("status", "a state declaration (state - message).")
+	row("report  auto", "an agent's report; auto = written by a hook. (+N): more text retained.")
+	row("notify", "a broadcast note.")
+	row("request", "a directive carrying a tracked request (agentbus request send).")
+	row("directive  reply", "a cmd to an agent, and its answer.")
+	row("challenge  verdict", "4-eyes: a review request and its decision.")
+	row("escalation", "the dispatcher could not wake an agent.")
+	row("blocked", "a request target reports it cannot proceed.")
+	row("board", "task, owner, state and age; working, requested, accepted, blocked, done.")
+	blank()
+
+	head("DELIVERY")
+	row(GlyphWorking+" bus ok", "busmon's OWN link to Redis. "+GlyphBlocked+" bus down Ns: busmon is blind,")
+	more("the agents may be fine; values on screen are the last ones read.")
+	row(GlyphWorking+" dispatch up", "a dispatcher holds the lease: unarmed agents are woken in their panes.")
+	row(GlyphIdle+" dispatch down", "none runs: nothing wakes an unarmed agent. ? dispatch: not measured yet.")
+	row("used", "account windows consumed per provider (session / week), shared by every agent.")
+	row("queue", "messages that would wake this agent: addressed, not wake=no, within the horizon.")
+	more(GlyphNone + " = measured zero, " + GlyphDash + " = not measured yet, N? = last read failed.")
+	row("lag (detail)", "entries in the SHARED cmd stream this agent's group has not read: not a work queue.")
+	row("gap (detail)", "entries may have been trimmed before this agent read them - possible, not proven.")
+	blank()
+	sb.WriteString("  " + tg(RoleMuted, "requests") + "\n")
+	row("requested", "published and recorded; nobody has accepted it.")
+	row("accepted", "the target explicitly accepted it.")
+	row("written to output", "the bytes reached a subscriber's output - not proof the agent read them.")
+	row("queued", "no delivery attempt is recorded - not proof none happened.")
+	row("no deadline set", "the request carries no expiry; busmon never invents one.")
+	row("body not retained", "the request text reads back empty; trimmed, deleted and never-existed look alike.")
+	row("untracked threads", "cmd threads with no answer in the retained history; never shown as accepted.")
+	blank()
+	sb.WriteString("  " + tg(RoleMuted, "message text") + "\n")
+	row("full text retained", "the whole text is stored and shown.")
+	row("truncated at publish", "MARKED as cut when published; the rest was never stored. A trailing "+GlyphEllipsis+" proves nothing.")
+	row("one-line preview", "nothing beyond the preview is stored for this entry.")
+	row("completeness not marked", "published before the marker existed; busmon cannot promise it is whole.")
+	row("not retained", "the entry reads back empty; the cause is unknown.")
+	return sb.String()
 }
 
-func helpTitle() string {
-	return " LEGEND  [gray][↑↓/jk scroll · Esc back][-] "
-}
+func helpTitle() string { return "Help" }

@@ -28,7 +28,7 @@ func TestGlyphsAreSingleCell(t *testing.T) {
 
 func TestNoStrayNonASCIILiterals(t *testing.T) {
 	// Explicit temporary exemptions, emptied by Task 10.
-	legacyFiles := map[string]bool{"main.go": true, "render.go": true, "help.go": true, "detail.go": true, "tracking.go": true, "filter.go": true}
+	legacyFiles := map[string]bool{"main.go": true, "render.go": true, "detail.go": true, "tracking.go": true, "filter.go": true}
 	paths, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)

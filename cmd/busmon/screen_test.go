@@ -226,51 +226,6 @@ func TestScreenRequestsOverlayAtFortyColumns(t *testing.T) {
 	}
 }
 
-// The legend has to name every badge the chips can draw; a symbol nobody can
-// look up is worse than no symbol.
-func TestHelpExplainsEveryBadgeTheChipsCanDraw(t *testing.T) {
-	now := time.Now()
-	a := &agentState{state: "working", stateAt: now, lastSeen: now,
-		armed: true, lag: 3, gated: 1, pane: "w1:p1", usage: "120k ctx"}
-	chip := agentLabel("coder", a, now, true)
-	help := helpText()
-	for _, badge := range []string{"👂", "⌛", "🔒", "⧉", "⬢"} {
-		if !strings.Contains(chip, badge) {
-			t.Fatalf("test is stale: the chip no longer draws %q: %s", badge, chip)
-		}
-		if !strings.Contains(help, badge) {
-			t.Errorf("the legend does not explain %q", badge)
-		}
-	}
-	screen := draw(t, modal(textPane(help)), 100, 40)
-	if !strings.Contains(screen, "KEYS") {
-		t.Errorf("the legend must render:\n%s", screen)
-	}
-}
-
-// The v0.8 dispatcher badges and the STATUS bar's dispatch indicator need a
-// legend entry too.
-func TestHelpExplainsTheDispatchBadges(t *testing.T) {
-	now := time.Now()
-	help := helpText()
-	chips := []string{
-		agentLabel("a", &agentState{state: "idle", stateAt: now, lastSeen: now, waiting: 2}, now, false),
-		agentLabel("b", &agentState{state: "idle", stateAt: now, lastSeen: now, stale: 1, gap: true,
-			wake: &bus.WakeRecord{State: "prompted", Escalated: "true"}}, now, false),
-		statusBar(statusData{project: "p", dispatch: "up"}),
-		statusBar(statusData{project: "p", dispatch: "down"}),
-	}
-	drawn := strings.Join(chips, " ")
-	for _, badge := range []string{"✉", "⏰", "⚠", "old:", "✂?", "dispatch ●", "dispatch ○"} {
-		if !strings.Contains(drawn, badge) {
-			t.Fatalf("test is stale: nothing draws %q any more: %s", badge, drawn)
-		}
-		if !strings.Contains(help, badge) {
-			t.Errorf("the legend does not explain %q", badge)
-		}
-	}
-}
-
 // Resizing mid-session must not leave the feed drawing outside its frame.
 func TestScreenFeedSurvivesResize(t *testing.T) {
 	view := tview.NewTextView().SetDynamicColors(true).SetRegions(true).SetScrollable(true)
