@@ -18,7 +18,7 @@ var layoutSizes = []struct {
 
 func TestComputeLayoutTiers(t *testing.T) {
 	for _, s := range layoutSizes {
-		got := computeLayout(s.w, s.h, Counts{Agents: 14, Board: 4}, PanelActivity)
+		got := computeLayout(s.w, s.h, Counts{Agents: 14, Board: 4}, PanelActivity, PanelActivity)
 		if got.Tier != s.tier {
 			t.Errorf("%dx%d: tier %v, want %v", s.w, s.h, got.Tier, s.tier)
 		}
@@ -45,7 +45,7 @@ func TestComputeLayoutInvariants(t *testing.T) {
 			for _, c := range counts {
 				for _, act := range actives {
 					name := fmt.Sprintf("%dx%d %+v active=%d", w, h, c, act)
-					l := computeLayout(w, h, c, act)
+					l := computeLayout(w, h, c, act, act)
 					if l.Tier == TierTooSmall {
 						if len(l.Visible) != 0 {
 							t.Errorf("%s: too small but panels visible", name)
@@ -125,27 +125,27 @@ func checkAgentRows(t *testing.T, name string, l Layout, c Counts, borders, avai
 }
 
 func TestComputeLayoutVisibleOrder(t *testing.T) {
-	wide := computeLayout(160, 45, Counts{Agents: 4}, PanelBoard)
+	wide := computeLayout(160, 45, Counts{Agents: 4}, PanelBoard, PanelBoard)
 	if fmt.Sprint(wide.Visible) != fmt.Sprint([]PanelID{PanelAgents, PanelActivity, PanelBoard, PanelRequests}) {
 		t.Errorf("wide visible %v", wide.Visible)
 	}
-	med := computeLayout(100, 30, Counts{Agents: 4}, PanelBoard)
+	med := computeLayout(100, 30, Counts{Agents: 4}, PanelBoard, PanelBoard)
 	if fmt.Sprint(med.Visible) != fmt.Sprint([]PanelID{PanelAgents, PanelBoard}) || med.Board != med.Lower || med.Activity != (Rect{}) {
 		t.Errorf("medium visible %v board %+v lower %+v", med.Visible, med.Board, med.Lower)
 	}
 	// In medium the lower tab can never be Agents: asking for it keeps Activity there.
-	med2 := computeLayout(100, 30, Counts{Agents: 4}, PanelAgents)
+	med2 := computeLayout(100, 30, Counts{Agents: 4}, PanelAgents, PanelAgents)
 	if fmt.Sprint(med2.Visible) != fmt.Sprint([]PanelID{PanelAgents, PanelActivity}) {
 		t.Errorf("medium with agents active: %v", med2.Visible)
 	}
-	nar := computeLayout(64, 22, Counts{Agents: 14}, PanelAgents)
+	nar := computeLayout(64, 22, Counts{Agents: 14}, PanelAgents, PanelAgents)
 	if fmt.Sprint(nar.Visible) != fmt.Sprint([]PanelID{PanelAgents}) || nar.Tabs.H != 1 || nar.AgentRows != nar.Agents.H-2 {
 		t.Errorf("narrow %+v", nar)
 	}
 	if nar.Input.H != 0 {
 		t.Errorf("narrow input shown while not composing: %+v", nar.Input)
 	}
-	if c := computeLayout(64, 22, Counts{Agents: 14, Composing: true}, PanelAgents); c.Input.H != 1 {
+	if c := computeLayout(64, 22, Counts{Agents: 14, Composing: true}, PanelAgents, PanelAgents); c.Input.H != 1 {
 		t.Errorf("narrow composing input %+v", c.Input)
 	}
 }

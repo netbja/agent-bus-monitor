@@ -117,22 +117,23 @@ func TestDaySeparatorRow(t *testing.T) {
 
 func TestPauseCursor(t *testing.T) {
 	var p pauseCursor
-	p.Arrive(5, true)
+	p.Recount([]int{5})
 	if p.Paused() || p.New() != 0 {
 		t.Fatal("live cursor counted")
 	}
 	p.Pause(10)
-	p.Arrive(11, true)
-	p.Arrive(12, false)
-	p.Arrive(13, true) // a re-delivery of an older seq never counts twice
-	p.Arrive(9, true)
+	p.Recount([]int{5, 9, 11, 13})
 	if p.New() != 2 {
 		t.Fatalf("New %d, want 2", p.New())
 	}
 	p.Pause(20) // pausing again while paused keeps the cursor
-	p.Arrive(14, true)
+	p.Recount([]int{11, 13, 14})
 	if p.New() != 3 {
 		t.Fatalf("New %d after re-pause, want 3", p.New())
+	}
+	p.Recount([]int{14}) // a narrower filter shrinks the count
+	if p.New() != 1 {
+		t.Fatalf("New %d after filter change, want 1", p.New())
 	}
 	p.Resume()
 	if p.Paused() || p.New() != 0 {
@@ -147,7 +148,7 @@ func TestActivityFrameKeepsFilter(t *testing.T) {
 		t.Fatalf("live frame %q / %q", title.text(), label.text())
 	}
 	p.Pause(3)
-	p.Arrive(4, true)
+	p.Recount([]int{4})
 	title, label = activityFrame(&p, 4, 10, parseFilter("@kimi"))
 	if title.text() != "Activity  paused · 1 new" || label.text() != "4 of 10 events · filter: @kimi" {
 		t.Fatalf("paused frame %q / %q", title.text(), label.text())

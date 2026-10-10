@@ -17,7 +17,7 @@ func TestParseCtx(t *testing.T) {
 			t.Errorf("parseCtx(%q) = %d,%v want %d", in, got, good, want)
 		}
 	}
-	for _, in := range []string{"25%", "", "5h12m", "k", "-3k", "1.2.3k", "ctx"} {
+	for _, in := range []string{"25%", "", "5h12m", "k", "-3k", "1.2.3k", "ctx", "inf", "Infinity", "NaN", "infk", "1e9"} {
 		if _, good := parseCtx(in); good {
 			t.Errorf("parseCtx(%q) accepted", in)
 		}

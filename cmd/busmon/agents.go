@@ -24,7 +24,7 @@ func parseCtx(raw string) (tokens int64, ok bool) {
 	case 'M':
 		mult, s = 1e6, s[:len(s)-1]
 	}
-	if s == "" || strings.ContainsAny(s, "+-eE") {
+	if s == "" || strings.Trim(s, "0123456789.") != "" { // no sign, exponent, inf or nan
 		return 0, false
 	}
 	v, err := strconv.ParseFloat(s, 64)

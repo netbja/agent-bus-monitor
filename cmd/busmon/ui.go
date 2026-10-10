@@ -62,6 +62,7 @@ type ui struct {
 	ovPlain       string
 	ovThreadPlain string
 	flash         string
+	flashErr      bool // the flash reports a failure (RoleError)
 	agentsTouched bool // the operator moved in Agents: stop following the top row
 
 	feed         []feedLine
@@ -160,14 +161,6 @@ func (u *ui) mode() Mode {
 
 func (u *ui) tier() Tier { return u.layout.Tier }
 
-// active is the panel the layout shows in medium's lower frame / narrow's view.
-func (u *ui) active() PanelID {
-	if u.focus == PanelAgents && u.layout.Tier == TierMedium {
-		return u.lowerTab
-	}
-	return u.focus
-}
-
 func (u *ui) counts() Counts {
 	u.st.mu.Lock()
 	defer u.st.mu.Unlock()
@@ -175,11 +168,7 @@ func (u *ui) counts() Counts {
 }
 
 func (u *ui) computeLayout(w, h int) Layout {
-	active := u.focus
-	if active == PanelAgents && w >= mediumMinWidth && w < wideMinWidth {
-		active = u.lowerTab
-	}
-	return computeLayout(w, h, u.counts(), active)
+	return computeLayout(w, h, u.counts(), u.focus, u.lowerTab)
 }
 
 // relayout runs on the UI goroutine after a size change: it recomputes the
@@ -229,7 +218,7 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	if act != ActNone {
-		u.flash = ""
+		u.flash, u.flashErr = "", false
 	}
 	switch m {
 	case ModeOverlay:
@@ -382,12 +371,21 @@ func (u *ui) inputDone(key tcell.Key) {
 			return
 		}
 		if text != "" {
+			ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
+			var err error
 			if tgt, body, directed := parseDirected(text); directed {
-				_, _ = u.w.Cmd(u.ctx, u.self, tgt, bus.CmdDirective, "", body)
+				_, err = u.w.Cmd(ctx, u.self, tgt, bus.CmdDirective, "", body)
 				u.flash = "directive sent to " + tgt
 			} else {
-				_, _ = u.w.Notify(u.ctx, u.self, text)
+				_, err = u.w.Notify(ctx, u.self, text)
 				u.flash = "notify sent"
+			}
+			cancel()
+			u.flashErr = err != nil
+			if err != nil {
+				// keep the draft: the operator retries once the bus is back
+				u.flash = "send failed: " + Preview(err.Error())
+				return
 			}
 		}
 		u.input.SetText("")
@@ -403,7 +401,7 @@ func (u *ui) copyText(s, what string) {
 		return
 	}
 	u.scr.SetClipboard([]byte(s)) // OSC52: reaches the local clipboard even over SSH
-	u.flash = GlyphDone + " " + what + " copied"
+	u.flash, u.flashErr = GlyphDone+" "+what+" copied", false
 }
 
 func (u *ui) feedIndex(id string) int {
@@ -538,7 +536,7 @@ func (u *ui) openRequestItem(key string) {
 
 func (u *ui) openRequestsOverlay() {
 	u.st.mu.Lock()
-	body := requestsPanel(u.st.requests, u.st.threads, time.Now(), max(40, u.width-8))
+	body := requestsPanel(u.st.requests, u.st.threads, time.Now(), max(20, overlayInnerWidth(u.width)))
 	n := waitingCount(u.st.requests, u.st.threads)
 	u.st.mu.Unlock()
 	u.showOverlay(ovRequests, fmt.Sprintf("Requests %s %d waiting", GlyphNone, n), body, "", "")
@@ -611,7 +609,6 @@ func (u *ui) appendEvent(e bus.Event) {
 	u.seq++
 	fl := feedLine{id: strconv.Itoa(u.seq), seq: u.seq, text: plainLine(e, et), ev: e, at: et}
 	u.feed = append(u.feed, fl)
-	u.pause.Arrive(fl.seq, u.filter.match(fl))
 	if len(u.feed) > feedCap {
 		u.feed = u.feed[len(u.feed)-feedCap:]
 	}
@@ -730,7 +727,11 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	}
 	var footer Line
 	if u.flash != "" {
-		footer = FitLine(Line{{Text: " " + u.flash, Role: RoleOK}}, w)
+		role := RoleOK
+		if u.flashErr {
+			role = RoleError
+		}
+		footer = FitLine(Line{{Text: " " + u.flash, Role: role}}, w)
 	} else {
 		footer = footerHints(u.mode(), u.focus, l.Tier, w)
 	}
@@ -754,7 +755,7 @@ func (u *ui) tabsLine(tabs []PanelID, active PanelID, x, y int) Line {
 		if p == active {
 			role = RoleAccent
 		}
-		l = append(l, Seg{Text: label, Role: role, Bold: p == active})
+		l = append(l, Seg{Text: label, Role: role, Bold: p == active, Reverse: p == active && th.Palette() == PaletteNone})
 		u.tabSpans = append(u.tabSpans, tabSpan{x0: pos, x1: pos + Width(label), y: y, panel: p})
 		pos += Width(label)
 	}
@@ -798,6 +799,7 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 	act := u.lists[PanelActivity]
 	var feedItems []ListItem
 	events, shown := 0, 0
+	var admitted []int
 	for _, fl := range u.feed {
 		if !fl.sep {
 			events++
@@ -807,11 +809,13 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 		}
 		if !fl.sep {
 			shown++
+			admitted = append(admitted, fl.seq)
 		}
 		feedItems = append(feedItems, ListItem{Key: fl.id, Line: activityRow(fl, l.Tier, rowW(PanelActivity)), Selectable: !fl.sep})
 	}
 	act.SetHeader(activityHeader(l.Tier, rowW(PanelActivity)))
 	act.SetItems(feedItems)
+	u.pause.Recount(admitted)
 	at, al := activityFrame(&u.pause, shown, events, u.filter)
 	act.SetFrame(at, al)
 
@@ -847,7 +851,9 @@ func (s *screenView) MouseHandler() func(action tview.MouseAction, event *tcell.
 		}
 		for _, p := range u.layout.Visible {
 			if l := u.lists[p]; l.InRect(mx, my) {
-				if p == PanelAgents && action == tview.MouseLeftClick {
+				if p == PanelAgents && action != tview.MouseMove {
+					// a click or the wheel: the operator has taken over the
+					// selection, so stop pinning it to the top row
 					u.agentsTouched = true
 				}
 				return l.MouseHandler()(action, event, setFocus)
@@ -858,6 +864,15 @@ func (s *screenView) MouseHandler() func(action tview.MouseAction, event *tcell.
 		}
 		return false, nil
 	})
+}
+
+// overlayInnerWidth is the text width inside the overlay frame that
+// modalView.Draw places on a screen w cells wide (frame plus one-cell padding).
+func overlayInnerWidth(w int) int {
+	if w < mediumMinWidth {
+		return w - 4
+	}
+	return min(100, w-4) - 4
 }
 
 // modalView is the overlay layer: it covers the whole screen and consumes
@@ -883,7 +898,7 @@ func (m *modalView) Draw(screen tcell.Screen) {
 		return // the main page already says "too small"
 	}
 	if w < mediumMinWidth {
-		// Narrow: the whole width, below the header, so bus health and the
+		// Narrow (keep overlayInnerWidth in step): the whole width, below the header, so bus health and the
 		// dispatcher stay visible while a detail is open.
 		top := min(m.u.layout.Header.H, h-minHeight+1)
 		m.u.overlay.SetRect(x, y+top, w, h-top)

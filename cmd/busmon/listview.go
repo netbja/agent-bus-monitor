@@ -249,11 +249,18 @@ func (l *ListView) nearestSelectable(i int) int {
 
 func (l *ListView) lastSelectable() int { return l.nearestSelectable(len(l.items) - 1) }
 
+// showHeader: the column header gives way when the frame has room for only
+// one inner row, so a tiny view still shows a data row (spec §8.1).
+func (l *ListView) showHeader() bool {
+	_, _, _, h := l.GetRect()
+	return l.header != nil && h >= 4
+}
+
 // inner is the content rectangle: inside the frame, below the header row.
 func (l *ListView) inner() (x, y, w, h int) {
 	x, y, w, h = l.GetRect()
 	x, y, w, h = x+1, y+1, w-2, h-2
-	if l.header != nil {
+	if l.showHeader() {
 		y, h = y+1, h-1
 	}
 	return x, y, max(w, 0), max(h, 0)
@@ -298,7 +305,7 @@ func (l *ListView) Draw(screen tcell.Screen) {
 		return
 	}
 	gutter := min(listGutter, iw)
-	if l.header != nil && h > 2 {
+	if l.showHeader() {
 		DrawLine(screen, ix, iy-1, gutter, nil, false)
 		DrawLine(screen, ix+gutter, iy-1, iw-gutter, l.header, false)
 	}

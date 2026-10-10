@@ -165,10 +165,10 @@ func detailThread(e bus.Event, th threadState) string {
 	case looksLikeStreamID(id):
 		pos = "reply in thread"
 	}
-	out := id + "  " + tag("gray", "("+pos+")")
+	out := tview.Escape(Preview(id)) + "  " + tag("gray", "("+pos+")")
 	switch {
 	case th.Err != nil:
-		out += "  " + tag("red", "[thread unreadable: "+th.Err.Error()+"]")
+		out += "  " + tag("red", "[thread unreadable: "+Preview(th.Err.Error())+"]")
 	case !th.Loaded:
 		out += "  " + tag("gray", "[reading…]")
 	default:
@@ -208,15 +208,15 @@ func detailText(e bus.Event, at, now time.Time, th threadState) string {
 		row("", tag("gray", f.Caveat))
 	}
 	if e.Kind == "status" && e.State != "" {
-		row("state", tag(stateColor(e.State), e.State)+"  "+tag("gray", "(as declared by the agent)"))
+		row("state", tag(stateColor(e.State), Preview(e.State))+"  "+tag("gray", "(as declared by the agent)"))
 	}
 	sb.WriteString("\n")
-	row("kind", tview.Escape(detailKind(e)))
-	row("from", tview.Escape(detailFrom(e)))
-	row("to", tview.Escape(detailTo(e)))
+	row("kind", tview.Escape(Preview(detailKind(e))))
+	row("from", tview.Escape(Preview(detailFrom(e))))
+	row("to", tview.Escape(Preview(detailTo(e))))
 	row("when", fmt.Sprintf("%s  %s", at.Format("2006-01-02 15:04:05"),
 		tag("gray", "("+humanAge(now.Sub(at))+" ago)")))
-	row("id", tview.Escape(e.ID))
+	row("id", tview.Escape(Preview(e.ID)))
 	row("thread", detailThread(e, th))
 
 	if threadID(e) != "" {
@@ -235,7 +235,7 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 	sb.WriteString(tag("gray", "── thread ──") + "\n")
 	switch {
 	case th.Err != nil:
-		sb.WriteString(tag("red", "thread could not be read: "+th.Err.Error()) + "\n")
+		sb.WriteString(tag("red", "thread could not be read: "+Preview(th.Err.Error())) + "\n")
 		return sb.String()
 	case !th.Loaded:
 		sb.WriteString(tag("gray", "reading the thread…") + "\n")
@@ -256,7 +256,7 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 	// ref ("pr-42") has no root entry to lose, and reporting one as absent
 	// would invent a gap in an exchange that is whole.
 	if !rootHere && looksLikeStreamID(id) {
-		sb.WriteString(tag("yellow", "the thread root "+id+" is "+missingFidelity().Label) + "\n")
+		sb.WriteString(tag("yellow", "the thread root "+Preview(id)+" is "+missingFidelity().Label) + "\n")
 	}
 	return sb.String()
 }
@@ -269,7 +269,7 @@ func threadLine(e bus.Event, now time.Time, self bool) string {
 		marker = tag("aqua", GlyphSelect+" ")
 	}
 	at := entryTime(e.ID)
-	typ := e.Type
+	typ := Preview(e.Type)
 	if typ == "" {
 		typ = "cmd"
 	}
@@ -277,8 +277,8 @@ func threadLine(e bus.Event, now time.Time, self bool) string {
 		marker,
 		tag("gray", at.Format("15:04:05")),
 		tag("fuchsia", pad(typ, 9)),
-		tag("gray", pad(e.From+"→"+e.Target, 16)),
-		tview.Escape(clip(oneLine(e.Message), 60)))
+		tag("gray", pad(Preview(e.From)+"→"+Preview(e.Target), 16)),
+		tview.Escape(clip(oneLine(Preview(e.Message)), 60)))
 }
 
 // oneLine flattens a body for a transcript row; the full text stays one Enter

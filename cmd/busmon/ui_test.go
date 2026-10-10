@@ -21,20 +21,21 @@ type fakeWriter struct {
 	sent    []string
 	threads int
 	release chan struct{}
+	fail    error // returned by Cmd and Notify when set
 }
 
 func (f *fakeWriter) Cmd(_ context.Context, from, target, typ, ref, command string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "cmd "+target+" "+command)
-	return "1-0", nil
+	return "1-0", f.fail
 }
 
 func (f *fakeWriter) Notify(_ context.Context, from, message string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "notify "+message)
-	return "1-0", nil
+	return "1-0", f.fail
 }
 
 func (f *fakeWriter) Thread(_ context.Context, id string) ([]bus.Event, error) {
@@ -524,5 +525,66 @@ func TestResizeDuringDetailLoadNoDeadlock(t *testing.T) {
 	onUI(func() { tier = u.layout.Tier })
 	if tier != TierMedium {
 		t.Fatalf("after resize tier %v", tier)
+	}
+}
+
+// The wheel over Agents must stick: before the fix, the next draw pinned the
+// selection back to the top row (final review #1).
+func TestAgentsWheelSticks(t *testing.T) {
+	h := newHarness(t, hostileShared(time.Now(), false))
+	h.draw(160, 40)
+	r := h.u.layout.Agents
+	ev := tcell.NewEventMouse(r.X+5, r.Y+3, tcell.WheelDown, 0)
+	for i := 0; i < 3; i++ {
+		h.u.pages.MouseHandler()(tview.MouseScrollDown, ev, func(p tview.Primitive) { h.app.SetFocus(p) })
+	}
+	h.draw(160, 40)
+	if top := h.u.lists[PanelAgents].Scroll().Top; top == 0 {
+		t.Fatal("wheel over Agents snapped back to the top row")
+	}
+	h.u.st.mu.Lock()
+	h.u.st.agents["a00"].state = "done" // a reorder on the next tick
+	h.u.st.mu.Unlock()
+	h.draw(160, 40)
+	if top := h.u.lists[PanelAgents].Scroll().Top; top == 0 {
+		t.Fatal("a tick after the wheel snapped back to the top row")
+	}
+}
+
+// A failed send says so and keeps the draft (final review #2).
+func TestSendFailureKeepsDraft(t *testing.T) {
+	h := newHarness(t, hostileShared(time.Now(), true))
+	h.w.fail = errors.New("connection refused")
+	h.draw(160, 40)
+	h.key(runeKey('i'))
+	h.typeText("@a01 rebase now")
+	h.key(key(tcell.KeyEnter))
+	screen := h.draw(160, 40)
+	if got := h.u.input.GetText(); got != "@a01 rebase now" {
+		t.Fatalf("draft lost: %q", got)
+	}
+	if !strings.Contains(screen, "send failed: connection refused") || strings.Contains(screen, "directive sent") {
+		t.Fatalf("footer does not report the failure:\n%s", screen)
+	}
+	h.w.fail = nil
+	h.key(key(tcell.KeyEnter))
+	if screen = h.draw(160, 40); !strings.Contains(screen, "directive sent to a01") || h.u.input.GetText() != "" {
+		t.Fatalf("retry after recovery:\n%s", screen)
+	}
+}
+
+// A free-text ref can neither inject tview tags nor add rows (final review #3).
+func TestDetailRefIsSanitised(t *testing.T) {
+	now := time.Now()
+	base := bus.Event{ID: "1791649884000-0", Kind: "cmd", From: "a", Target: "b", Type: "directive", Message: "m", Ref: "pr-42"}
+	hostile := base
+	hostile.Ref = "[red]pr-42\ntext  complete"
+	clean := detailText(base, now, now, threadState{Loaded: true})
+	got := detailText(hostile, now, now, threadState{Loaded: true})
+	if strings.Count(got, "\n") != strings.Count(clean, "\n") {
+		t.Fatalf("a ref newline added rows:\n%s", got)
+	}
+	if !strings.Contains(got, "[red[]pr-42") {
+		t.Fatalf("ref tag not escaped:\n%s", got)
 	}
 }

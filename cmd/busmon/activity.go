@@ -118,12 +118,12 @@ func activityRow(fl feedLine, tier Tier, width int) Line {
 }
 
 // pauseCursor counts what arrived while Activity was paused: events admitted
-// by the current filter with a sequence number past the pause point. Day
-// separators are never passed to Arrive.
+// by the current filter with a sequence number past the pause point. The count
+// is recomputed from the feed on every fill (Recount), so a filter change
+// while paused is reflected at once (spec §3.4).
 type pauseCursor struct {
 	paused bool
 	at     int // last sequence number visible when the pause started
-	seen   int // highest sequence counted so far
 	n      int
 }
 
@@ -132,16 +132,21 @@ func (p *pauseCursor) Pause(lastSeq int) {
 	if p.paused {
 		return
 	}
-	p.paused, p.at, p.seen, p.n = true, lastSeq, lastSeq, 0
+	p.paused, p.at, p.n = true, lastSeq, 0
 }
 
-// Arrive counts one admitted event that arrived while paused, once per seq.
-func (p *pauseCursor) Arrive(seq int, admitted bool) {
-	if !p.paused || !admitted || seq <= p.seen {
+// Recount sets the count from the sequence numbers of the events the current
+// filter admits (day separators excluded).
+func (p *pauseCursor) Recount(admitted []int) {
+	p.n = 0
+	if !p.paused {
 		return
 	}
-	p.seen = seq
-	p.n++
+	for _, seq := range admitted {
+		if seq > p.at {
+			p.n++
+		}
+	}
 }
 
 func (p *pauseCursor) Resume()      { *p = pauseCursor{} }

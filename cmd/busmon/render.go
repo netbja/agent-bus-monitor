@@ -40,8 +40,6 @@ func stateColor(state string) string {
 		return "red"
 	case "done":
 		return "blue"
-	case "active": // report-only presence (no status: yet)
-		return "teal"
 	}
 	return "white"
 }
@@ -184,8 +182,6 @@ func entryTime(id string) time.Time {
 	}
 	return time.Now()
 }
-
-const chipSep = "  " // two spaces between chips on a row
 
 // parseDirected splits an "@<agent> <body>" line. directed is true only when the
 // line starts with '@', the agent token is a valid name, and a non-empty body

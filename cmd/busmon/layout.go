@@ -71,10 +71,12 @@ func agentRowsFor(agents, avail, borders int) int {
 	return min(max(agents, 1), max(minAgentRows, avail/3-borders))
 }
 
-// computeLayout is the only place that decides geometry. active is the panel
-// shown in medium's lower frame (Agents is never there: it falls back to
-// Activity) and in narrow's single view.
-func computeLayout(w, h int, c Counts, active PanelID) Layout {
+// computeLayout is the only place that decides geometry. focus is the focused
+// panel: narrow's single view, and medium's lower frame unless it is Agents —
+// then lower (the last lower tab) fills that frame. Agents is never in the
+// lower frame: it falls back to Activity.
+func computeLayout(w, h int, c Counts, focus, lower PanelID) Layout {
+	active := focus
 	if w < minWidth || h < minHeight {
 		return Layout{Tier: TierTooSmall}
 	}
@@ -84,11 +86,14 @@ func computeLayout(w, h int, c Counts, active PanelID) Layout {
 		}
 	}
 	if w >= mediumMinWidth {
+		if focus == PanelAgents {
+			active = lower
+		}
 		if l, ok := mediumLayout(w, h, c, active); ok {
 			return l
 		}
 	}
-	return narrowLayout(w, h, c, active)
+	return narrowLayout(w, h, c, focus)
 }
 
 func wideLayout(w, h int, c Counts) (Layout, bool) {

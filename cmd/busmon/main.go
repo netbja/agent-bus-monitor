@@ -1,29 +1,26 @@
 // busmon — live TUI dashboard for the Agent Bus over Redis Streams.
 //
-// Tails one project's streams ({project}:status|report|notify|cmd) and renders:
+// Tails one project's streams ({project}:status|report|notify|cmd) and renders
+// a btop-style screen of framed panels (spec:
+// docs/superpowers/specs/2026-10-10-busmon-ui-redesign-design.md):
 //
-//	STATUS   project name + pilot-lease driver as "⬢ MASTER <driver>", or
-//	         "autonomous (no master)" when no lease is held; what is waiting on
-//	         someone; the ACCOUNT budget per provider ("anthropic 25%/44%" =
-//	         session/weekly window); and the MONITOR's own link to the broker.
-//	AGENTS   one chip per agent, keeping three facts apart: the state the agent
-//	         DECLARED (never overwritten by silence), how old that declaration
-//	         is ("· no update 18m"), and whether a subscriber is armed (👂).
-//	         Chips wrap to fit; the master's shows a ⬢ marker, and badges carry
-//	         cmd backlog (⌛), open 4-eyes challenges (🔒), pane (⧉), context.
-//	BOARD    the shared task board ({project}:board): task → owner/state/branch/age,
-//	         refreshed by the same 1s ticker; the title turns "✓ all done" green
-//	         when every task is done. Hidden while the board is empty.
-//	ACTIVITY scrolling feed of status/report/notify/cmd events, with a dim
-//	         "── Mon 2006-01-02 ──" separator at each day boundary (lines
-//	         show times only). Tab focuses it; ↑↓/j/k select a line, Enter opens
-//	         it in full, y copies it (OSC52, so it works over SSH), / filters by
-//	         @agent, thread or words, Esc walks back out to the live tail.
-//	INPUT    type a message + Enter to publish on {project}:notify; Esc/Ctrl-C quits.
+//	HEADER   project, pilot driver, account budget per provider, dispatcher
+//	         (disp up/down) and the monitor's own link to the broker (bus).
+//	AGENTS   a table sorted by urgency (blocked, waiting mail, working, idle…),
+//	         one row per agent: declared state, age of that declaration, mail
+//	         waiting, wake state, context as raw tokens (never a percentage).
+//	         A scrollbar appears when the agents outgrow the frame.
+//	ACTIVITY the feed of status/report/notify/cmd events in columns, with a day
+//	         separator; live until the operator scrolls (then "paused · N new").
+//	BOARD    the shared task board ({project}:board).
+//	REQUESTS what is waiting on someone (tracked requests, unanswered threads).
 //
-// Three overlays sit over that layout, one keypress away so the panes can stay
-// compact: the selected message in full with its thread (Enter), what is
-// waiting on someone (r / F2), and the legend for every badge (? / F1).
+// The layout is responsive: wide (≥120 columns) shows all four panels, medium
+// (80–119) keeps Agents and puts the others behind tabs 1–3, narrow (<80)
+// shows one view at a time (tabs 1–4). Tab / 1–4 move between panels, Enter
+// opens the selected agent or message in an overlay, y copies (OSC52), /
+// filters, i or @ writes on the bus, r/F2 lists requests, ?/F1 shows every key,
+// q quits. Themes: inherited dark (default), light, and NO_COLOR.
 //
 // Project is required: -project or AGENT_BUS_PROJECT. -host overrides REDIS_HOST.
 package main
@@ -237,6 +234,12 @@ func main() {
 	deleteFlag := flag.String("delete", "", "delete every key of a project (DEL, not --reset's XTRIM) and exit")
 	themeFlag := flag.String("theme", "", "colour theme: auto, dark or light (or AGENT_BUS_BUSMON_THEME; default auto)")
 	flag.Parse()
+	// A typo in the cosmetic --theme must fail before anything destructive
+	// (--reset, --delete) runs; the colour depth is resolved later.
+	if _, err := ResolveTheme(*themeFlag, os.Getenv("AGENT_BUS_BUSMON_THEME"), "", false, 1<<24); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
 
 	limitSet := false
 	flag.Visit(func(f *flag.Flag) {

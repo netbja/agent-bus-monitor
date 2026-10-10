@@ -8,9 +8,10 @@ import (
 )
 
 type Seg struct {
-	Text string
-	Role Role
-	Bold bool
+	Text    string
+	Role    Role
+	Bold    bool
+	Reverse bool // the NO_COLOR stand-in for a highlight (active tab)
 }
 
 type Line []Seg
@@ -134,11 +135,11 @@ func appendSegment(l Line, text string, style Seg) Line {
 	if text == "" {
 		return l
 	}
-	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold {
+	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold && l[n-1].Reverse == style.Reverse {
 		l[n-1].Text += text
 		return l
 	}
-	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold})
+	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold, Reverse: style.Reverse})
 }
 
 // FitLine pads AFTER the ellipsis, consistently with Fit. It never mutates l.
@@ -186,6 +187,9 @@ func DrawLine(s tcell.Screen, x, y, w int, l Line, selected bool) {
 		}
 		if seg.Bold {
 			style = style.Bold(true)
+		}
+		if seg.Reverse {
+			style = style.Reverse(true)
 		}
 		// Match tview's continuation-cell write order.
 		if width > 0 {
@@ -258,7 +262,7 @@ func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
 	labelW := min(label.Width(), labelRoom)
 	if f.Focused && th.Palette() == PaletteNone {
 		for i := range title {
-			title[i].Bold = true
+			title[i].Bold = title[i].Role != RoleMuted // inactive tabs stay plain
 		}
 	}
 	DrawLine(s, x+2, y, titleW, title, false)

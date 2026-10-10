@@ -316,3 +316,26 @@ func TestDrawRowsAndGutter(t *testing.T) {
 		t.Fatalf("right border %q", str)
 	}
 }
+
+func TestHeaderYieldsInTinyFrame(t *testing.T) {
+	its := []ListItem{{Key: "a", Line: Line{{Text: "row-a"}}, Selectable: true}}
+	for _, h := range []int{3, 4} {
+		l := newList(20, h, its)
+		l.SetHeader(Line{{Text: "HEAD"}})
+		s := newRecScreen(t, 20, h, Rect{0, 0, 20, h})
+		l.Draw(s)
+		s.Show()
+		cells, _, _ := s.GetContents()
+		var sb strings.Builder
+		for _, c := range cells {
+			sb.WriteString(string(c.Runes))
+		}
+		got := sb.String()
+		if !strings.Contains(got, "row-a") {
+			t.Errorf("h=%d: no data row drawn: %q", h, got)
+		}
+		if wantHead := h >= 4; strings.Contains(got, "HEAD") != wantHead {
+			t.Errorf("h=%d: header shown=%v, want %v", h, !wantHead, wantHead)
+		}
+	}
+}

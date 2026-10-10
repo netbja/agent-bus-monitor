@@ -65,7 +65,7 @@ func alignCases() []alignCase {
 		for i := 0; i < 40; i++ {
 			h.feed(bus.Event{ID: fmt.Sprintf("17916494%05d-0", i), Kind: []string{"status", "report", "notify", "cmd"}[i%4],
 				Agent: "a00", From: "a01" + strings.Repeat("y", 30), Target: "a02", Type: "directive", State: "working",
-				Message: hostileText, Full: hostileText + hostileText})
+				Message: hostileText, Full: hostileText + hostileText, Ref: []string{"", hostileText}[i%2]})
 		}
 	}
 	return []alignCase{
@@ -84,6 +84,9 @@ func alignCases() []alignCase {
 			h.u.detailThread = threadState{Loaded: true}
 			h.key(key(tcell.KeyEnter))
 		}},
+		{"tab 2", func(h *harness) { feed(h); h.key(runeKey('2')) }},
+		{"tab 3", func(h *harness) { feed(h); h.key(runeKey('3')) }},
+		{"tab 4", func(h *harness) { feed(h); h.key(runeKey('4')) }},
 		{"help", func(h *harness) { h.key(key(tcell.KeyF1)) }},
 		{"requests overlay", func(h *harness) { h.key(key(tcell.KeyF2)) }},
 		{"composing", func(h *harness) { feed(h); h.key(runeKey('i')); h.typeText(hostileText[:12]) }},
@@ -127,9 +130,16 @@ func checkFrame(t *testing.T, sim tcell.SimulationScreen, name string, r Rect, s
 func TestAlignmentSuite(t *testing.T) {
 	saved := th
 	defer func() { th = saved }()
-	for _, palette := range []string{"dark", "none"} {
+	for _, palette := range []string{"dark", "light", "16", "none"} {
 		var err error
-		th, err = ResolveTheme("dark", "", "", palette == "none", 1<<24)
+		name, colors := palette, 1<<24
+		switch palette {
+		case "16":
+			name, colors = "dark", 16
+		case "none":
+			name = "dark"
+		}
+		th, err = ResolveTheme(name, "", "", palette == "none", colors)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -157,6 +167,15 @@ func TestAlignmentSuite(t *testing.T) {
 					first := strings.SplitN(screen, "\n", 2)[0]
 					if !strings.Contains(first, " bus") || !strings.Contains(first, " disp") {
 						t.Errorf("%s: header lacks health or dispatch: %q", name, first)
+					}
+					// No primitive writes outside the screen (a plain
+					// SimulationScreen drops such writes silently).
+					rec := newRecScreen(t, sz[0], sz[1], Rect{0, 0, sz[0], sz[1]})
+					h.u.scr = rec
+					h.u.pages.Draw(rec)
+					h.u.scr = h.sim
+					for _, b := range rec.bad {
+						t.Errorf("%s: write off screen %s", name, b)
 					}
 					if strings.ContainsAny(screen, "\x1b\t\u202e") {
 						t.Errorf("%s: control characters reached the screen", name)
