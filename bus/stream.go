@@ -29,7 +29,7 @@ const (
 	CmdVerdict   = "verdict"   // closes a challenge, correlated by ref
 
 	CmdEscalation = "escalation" // dispatcher: an addressed message went unread too long
-	CmdBlocked    = "blocked"    // dispatcher: a wake could not be delivered
+	CmdBlocked    = "blocked"    // request block: tells the requester its request is blocked
 )
 
 var validCmdTypes = map[string]bool{
@@ -159,7 +159,7 @@ type Event struct {
 	Target       string // cmd: the addressed agent
 	State        string // status: working|idle|blocked|done
 	RKind        string // report: note|auto
-	Type         string // cmd: directive|challenge|reply|verdict
+	Type         string // cmd: directive|challenge|reply|verdict|escalation|blocked
 	Ref          string // cmd: correlation id
 	Message      string // status/report/notify text, or the cmd command
 	TextComplete string // yes, no, or empty (legacy unknown)

@@ -10,7 +10,7 @@
 //	agentbus --project P report    <agent> [--auto] <msg...>
 //	agentbus --project P reports   [<id>]         # list recent reports; <id> prints one report's full retained text
 //	agentbus --project P notify    <msg...>
-//	agentbus --project P cmd       [--ref T] <target> <command...>   # prints the entry id (= thread root)
+//	agentbus --project P cmd       [--ref T] [--no-wake] <target> <command...>   # prints the entry id (= thread root); --no-wake: never wakes the target
 //	agentbus --project P thread    <thread-id>   # show the :cmd thread (entries where ref or id == thread-id), chronological
 //	agentbus --project P challenge <target> [--ref R] <msg...>   # opens a 4-eyes gate
 //	agentbus --project P reply     --ref R <target> <msg...>
@@ -29,7 +29,7 @@
 //	agentbus --project P board     [--json]     # shared task board: task → owner/state/branch
 //	agentbus --project P board     claim <task> [--branch b]     # fails if a peer owns it
 //	agentbus --project P board     state <task> <state> | done <task> | drop <task>
-//	agentbus --project P shutdown  [--force]    # broadcast a shutdown directive to every peer; refused while tasks aren't done or peers are busy
+//	agentbus --project P shutdown  [--force]    # broadcast a shutdown directive (wake=no, expires in 10m) to every peer; refused while tasks aren't done or peers are busy
 //	agentbus --project P refresh   [--quiet]    # read local sources -> publish budget + per-agent usage
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
 //	agentbus --project P dispatch  [--horizon 24h] [--escalate-after 10m] [--escalate-to master]  # wake unarmed agents through herdr (JSON log on stderr)

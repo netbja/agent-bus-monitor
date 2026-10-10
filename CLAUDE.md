@@ -151,7 +151,7 @@ it silently never fired.
 The old hardcoded `ValidAgents` map is gone. Agent and project names are validated by `ValidName`,
 a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
-### The two binaries (each a single `main.go`)
+### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
   `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
@@ -160,7 +160,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
   window (positional `idle_secs`, default 240s). Caller persists the `id` field and passes it back
   as `--since <id>` on re-arm; omitting `--since` starts at "now" (no backlog replay); `--since 0`
-  = full at-least-once replay. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
+  = at-least-once replay of whatever the group still holds — once `status` has created the group
+  at the horizon floor (v0.8, `EnsureGroup`), entries older than that floor are never replayed. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
   each fire, **not** a long-lived loop (which would never wake a terminal session). `agents [--json]`
   lists every peer's current state. `watch` is the legacy alias of `subscribe` (same handler).
   `listen` tails all four streams via `Bus.Tail` for debugging. `report` now retains the full
@@ -178,8 +179,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   message is its `ref` if set, else its own id, so a directive id and a challenge ref both work.
   Live read of `:cmd` (recent ~1000); the verdict ledger remains the durable audit.
   `subscribe --drain <agent>` (`Bus.DrainCmd`) empties the agent's queue — PEL first, then unread,
-  **no floor**, ACK after output — as JSONL (one `"v":1` object per entry, with `stale`/`age_s`
-  for entries older than the 24h horizon) and exits 0 (output), 64 (empty) or 75 (error, e.g. the
+  **no floor**, ACK after output — as JSONL (one `"v":1` object per entry, with `age_s` on every
+  entry and `stale` only for entries older than the 24h horizon) and exits 0 (output), 64 (empty) or 75 (error, e.g. the
   receiver lease is held). It is what a woken agent runs. `cmd --no-wake` writes `wake=no`
   (`Bus.CmdNoWake`; `shutdown` uses it). `dispatch [--horizon 24h] [--escalate-after 10m]
   [--escalate-to master]` runs `dispatch.Run` in the foreground (JSON decision log on stderr; a
@@ -201,7 +202,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   runs in a goroutine pushing UI updates via `app.QueueUpdateDraw`; the `agents` map is
   mutex-guarded; a 1s ticker polls `Bus.PilotDriver` + `Bus.Usage` + `Bus.Budgets` + per-agent
   `Bus.OpenChallenges` and re-renders so chips age into `idle`/`offline` even with no new stream
-  traffic. The same ticker reads `Bus.DispatchAlive` (STATUS bar `dispatch ●`/`dispatch ○`) and,
+  traffic. Every 5th tick (`wakePoll`, 5 s; the last values stay in between) it reads `Bus.DispatchAlive` (STATUS bar `dispatch ●`/`dispatch ○`) and,
   per agent, `Bus.Obligation` + `Bus.Wake` for the chip badges `✉N` (messages waiting), `⏰` (wake
   in flight or deferred), `⚠` (escalated), `old:N` (entries past the horizon) and `✂?` (entries
   may have been trimmed before the agent's group read them). **The two usage scopes render in two
@@ -222,7 +223,8 @@ A Claude Code session subscribes by arming **`agentbus subscribe <agent> [idle_s
 background task: it blocks on the project's `:cmd` stream, prints the first addressed entry, and
 exits — and that exit re-invokes the session that armed it, which then re-arms. The whole loop is
 self-contained in the `agentbus` binary (this repo); there is **no external wrapper script** and
-**no daemon** in the agent path. The old `myprojecttools/bus_watch.sh` (and the persistent
+**no daemon** in the subscribe path (the one process that runs alongside is `agentbus
+dispatch`, which only types a wake line — see the dispatcher paragraph below). The old `myprojecttools/bus_watch.sh` (and the persistent
 `~/.hermes/scripts/bus_watch_hdl.sh` logger loop) are **superseded** — agents call `agentbus
 subscribe` directly. Don't reintroduce a wrapper script: a restart loop just re-runs the watcher
 and never wakes a terminal session.

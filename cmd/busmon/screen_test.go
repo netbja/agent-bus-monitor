@@ -248,6 +248,29 @@ func TestHelpExplainsEveryBadgeTheChipsCanDraw(t *testing.T) {
 	}
 }
 
+// The v0.8 dispatcher badges and the STATUS bar's dispatch indicator need a
+// legend entry too.
+func TestHelpExplainsTheDispatchBadges(t *testing.T) {
+	now := time.Now()
+	help := helpText()
+	chips := []string{
+		agentLabel("a", &agentState{state: "idle", stateAt: now, lastSeen: now, waiting: 2}, now, false),
+		agentLabel("b", &agentState{state: "idle", stateAt: now, lastSeen: now, stale: 1, gap: true,
+			wake: &bus.WakeRecord{State: "prompted", Escalated: "true"}}, now, false),
+		statusBar(statusData{project: "p", dispatch: "up"}),
+		statusBar(statusData{project: "p", dispatch: "down"}),
+	}
+	drawn := strings.Join(chips, " ")
+	for _, badge := range []string{"✉", "⏰", "⚠", "old:", "✂?", "dispatch ●", "dispatch ○"} {
+		if !strings.Contains(drawn, badge) {
+			t.Fatalf("test is stale: nothing draws %q any more: %s", badge, drawn)
+		}
+		if !strings.Contains(help, badge) {
+			t.Errorf("the legend does not explain %q", badge)
+		}
+	}
+}
+
 // Resizing mid-session must not leave the feed drawing outside its frame.
 func TestScreenFeedSurvivesResize(t *testing.T) {
 	view := tview.NewTextView().SetDynamicColors(true).SetRegions(true).SetScrollable(true)

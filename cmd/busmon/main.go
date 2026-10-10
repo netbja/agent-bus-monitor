@@ -31,6 +31,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -180,6 +181,7 @@ const (
 	pollBudget     = 3 * time.Second // deadline for ALL of one tick's reads
 	tailRetry      = 2 * time.Second // pause before resuming the feed after a broker error
 	requestPoll    = 5               // ticks between follow-up view refreshes
+	wakePoll       = 5               // ticks between dispatcher-badge reads (Obligation/Wake/DispatchAlive)
 	openThreadScan = 200             // cmd entries scanned for unanswered exchanges
 
 	// The input line advertises the two keys that are otherwise invisible from
@@ -206,7 +208,7 @@ type agentState struct {
 	pane     string          // HERDR_PANE_ID from the agents hash → ⧉ herdr-attached badge
 	usage    string          // this agent's own context fill from the usage hash → [..] badge
 	waiting  int64           // wake-relevant messages (pending + unread) → ✉N when nothing wakes it
-	stale    int             // addressed entries older than the dispatch horizon → ⌛N
+	stale    int             // addressed entries older than the dispatch horizon → old:N
 	gap      bool            // entries may have been trimmed unread → ✂?
 	wake     *bus.WakeRecord // the dispatcher's wake record, nil when none
 }
@@ -1049,17 +1051,23 @@ func main() {
 				hasRec bool
 				recOK  bool
 			}
+			// The dispatcher badges cost a few reads per agent and change at the
+			// dispatcher's own 5 s tick, so they are read every wakePoll ticks.
+			// Between reads (and after a failed one) the last values stay.
 			wakes := make(map[string]wakeInfo, len(names))
-			dispAlive, dispErr := b.DispatchAlive(pollCtx)
-			for _, n := range names {
-				var wi wakeInfo
-				if ob, err := b.Obligation(pollCtx, n, bus.DefaultHorizon); err == nil {
-					wi.ob, wi.obOK = ob, true
+			dispAlive, dispErr := false, errNotPolled
+			if wakePollDue(tick) {
+				dispAlive, dispErr = b.DispatchAlive(pollCtx)
+				for _, n := range names {
+					var wi wakeInfo
+					if ob, err := b.Obligation(pollCtx, n, bus.DefaultHorizon); err == nil {
+						wi.ob, wi.obOK = ob, true
+					}
+					if rec, ok, err := b.Wake(pollCtx, n); err == nil {
+						wi.rec, wi.hasRec, wi.recOK = rec, ok, true
+					}
+					wakes[n] = wi
 				}
-				if rec, ok, err := b.Wake(pollCtx, n); err == nil {
-					wi.rec, wi.hasRec, wi.recOK = rec, ok, true
-				}
-				wakes[n] = wi
 			}
 			gates := make(map[string]int, len(names))
 			for _, n := range names {
@@ -1174,3 +1182,11 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+// errNotPolled marks a dispatcher read skipped on this tick: like a failed
+// read, it leaves the last value on screen.
+var errNotPolled = errors.New("not polled this tick")
+
+// wakePollDue reports whether tick (1-based) reads the dispatcher badges:
+// the first tick, then every wakePoll ticks.
+func wakePollDue(tick int) bool { return tick%wakePoll == 1 }
