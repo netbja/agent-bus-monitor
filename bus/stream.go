@@ -66,6 +66,12 @@ type AgentSnapshot struct {
 	TS      int64  `json:"ts"`                // ms since epoch, from the status entry's stream id
 	Pane    string `json:"pane,omitempty"`    // HERDR_PANE_ID when the agent runs inside herdr
 	Session string `json:"session,omitempty"` // CLAUDE_CODE_SESSION_ID: locates the agent's transcript
+	// Process identity (§5.2): the agent's foreground pid in its pane and that
+	// pid's start time (field 22 of /proc/<pid>/stat), so a recycled pane or a
+	// restarted agent is never mistaken for this one. PID 0 = unverified.
+	PID      int    `json:"pid,omitempty"`
+	PIDStart uint64 `json:"pid_start,omitempty"`
+	Terminal string `json:"terminal,omitempty"` // herdr terminal id, display only
 }
 
 // AgentIdent is the ambient identity an agent's own process already knows about
@@ -74,8 +80,11 @@ type AgentSnapshot struct {
 // (rather than more positional params) because this list grows: each new field
 // is one more thing a reader can learn about an agent for free.
 type AgentIdent struct {
-	Pane    string // HERDR_PANE_ID
-	Session string // CLAUDE_CODE_SESSION_ID
+	Pane     string // HERDR_PANE_ID
+	Session  string // CLAUDE_CODE_SESSION_ID
+	PID      int    // agent's foreground pid in its herdr pane (0 = unknown)
+	PIDStart uint64 // that pid's start time, /proc/<pid>/stat field 22
+	Terminal string // herdr terminal id, display only
 }
 
 // Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
@@ -246,7 +255,8 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// The stream is the source of truth; a failed HSET only means a briefly
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
-	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session}
+	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
+		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal}
 	if snap, merr := json.Marshal(snapshot); merr == nil {
 		_ = b.r.HSet(ctx, AgentsKey(b.project), agent, snap).Err()
 	}
