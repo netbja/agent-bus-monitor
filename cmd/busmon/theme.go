@@ -118,7 +118,7 @@ func (t *Theme) Border(focused bool) tcell.Style {
 
 func (t *Theme) Tag(r Role, s string) string {
 	s = tview.Escape(s)
-	if t.palette == PaletteNone {
+	if t.palette == PaletteNone || t.tags[themeRole(r)] == "-" {
 		return s
 	}
 	return "[" + t.tags[themeRole(r)] + "]" + s + "[-]"

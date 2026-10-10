@@ -117,6 +117,15 @@ func TestStyleRoles(t *testing.T) {
 	if got := none.Tag(RoleOK, "[x]"); got != "[x[]" {
 		t.Fatal(got)
 	}
+	for thm, want := range map[*Theme]string{dark: "#22324A", light: "#DDF4FF"} {
+		if _, bg, _ := thm.Selected(RoleText).Decompose(); bg != tcell.GetColor(want) {
+			t.Fatal("selection background", bg, want)
+		}
+	}
+	c16, _ := ResolveTheme("dark", "", "", false, 16)
+	if got := c16.Tag(RoleText, "x"); got != "x" {
+		t.Fatal(got)
+	}
 	for _, colors := range []int{16, 1 << 24} {
 		for _, n := range []bool{false, true} {
 			thm, _ := ResolveTheme("dark", "", "", n, colors)
