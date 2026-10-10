@@ -1,0 +1,42 @@
+
+ 🌒 · Tip: press ctrl+o to expand tool output
+
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │                                                                                                                                                                │
+ │  ▐█▛█▛█▌  Welcome to Kimi Code!                                                                                                                                │
+ │  ▐█████▌  Send /help for help information.                                                                                                                     │
+ │                                                                                                                                                                │
+ │  Directory: /data/projects/agent-bus-monitor                                                                                                                   │
+ │  Session:   session_1eaee55a-6361-4b7c-9b80-4ec2311132c0                                                                                                       │
+ │  Model:     K3                                                                                                                                                 │
+ │  Version:   2.1.1                                                                                                                                              │
+ │                                                                                                                                                                │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+ ✦ Kimi Code Desktop is here — Everything you love about Kimi Code, now on desktop
+   Run /desktop or visit https://www.kimi.com/code to install
+
+   No session yet — one will be created on your first message.
+
+ ✨ Test de réveil herdr: réponds uniquement OK, sans rien faire d'autre.
+
+ ● User asked: reply only OK.
+
+ ● OK
+
+ ✨ Exécute la commande shell: sleep 8 ; puis réponds FINI.
+
+ ● Run sleep 8 then answer FINI.
+
+ ● Ran a command · $ sleep 8
+   Command executed successfully.
+
+   Approved: Running: sleep 8
+
+ ● FINI
+
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ >                                                                                                                                                              │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ K3 thinking: high  /data/projects/agent-bus-monitor  main [± ↓3]
+                                                                                                                                           context: 9% (20.6k/256k)

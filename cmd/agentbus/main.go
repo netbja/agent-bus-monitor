@@ -49,6 +49,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
 
@@ -124,10 +125,7 @@ func main() {
 		// CLAUDE_CODE_SESSION_ID (empty for a non-Claude-Code peer) locates its
 		// transcript, which is what `agentbus refresh` reads usage from. The
 		// agent never types either, so neither can drift or be forgotten.
-		who := bus.AgentIdent{
-			Pane:    os.Getenv("HERDR_PANE_ID"),
-			Session: os.Getenv("CLAUDE_CODE_SESSION_ID"),
-		}
+		who := statusIdent(ctx)
 		if _, err := b.Status(ctx, rest[0], rest[1], strings.Join(rest[2:], " "), who); err != nil {
 			die(err.Error())
 		}
@@ -626,4 +624,37 @@ func main() {
 	default:
 		die(fmt.Sprintf("unknown command %q", cmd))
 	}
+}
+
+// statusIdent is the identity `status` publishes, all of it ambient. Inside
+// herdr (HERDR_ENV=1 and HERDR_PANE_ID set) it also records the agent's
+// process: the pane's foreground pid that is an ancestor of this process, its
+// /proc start time, and the herdr terminal id — what the dispatcher checks
+// before typing into the pane. Any failure leaves those empty (the agent is
+// then unverified and never prompted); status itself still succeeds.
+// HERDR_BIN overrides the herdr binary.
+func statusIdent(ctx context.Context) bus.AgentIdent {
+	who := bus.AgentIdent{
+		Pane:    os.Getenv("HERDR_PANE_ID"),
+		Session: os.Getenv("CLAUDE_CODE_SESSION_ID"),
+	}
+	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
+		return who
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	pids, terminal, err := dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}.ForegroundPIDs(ctx, who.Pane)
+	if err != nil {
+		return who
+	}
+	pid, ok := dispatch.AncestorAmong(pids, os.Getpid())
+	if !ok {
+		return who
+	}
+	start, err := dispatch.ProcStart(pid)
+	if err != nil {
+		return who
+	}
+	who.PID, who.PIDStart, who.Terminal = pid, start, terminal
+	return who
 }

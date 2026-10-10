@@ -1,0 +1,3 @@
+# Screens and herdr replies are byte-exact captures (ANSI, CR); never normalise them.
+* -text
+fake-herdr text eol=lf

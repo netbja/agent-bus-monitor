@@ -1,0 +1,64 @@
+#!/bin/sh
+# fake-herdr answers the herdr subcommands dispatch uses from files in
+# $FAKE_HERDR_DIR. Like herdr, a JSON error is printed on stderr with exit 1.
+#   agent get           -> agent-get.json
+#   pane get            -> pane-get.json
+#   pane process-info   -> process-info.json
+#   pane read           -> screen<N>.txt for the Nth read, else screen.txt, else read.json
+#   agent prompt        -> prompt.json; appends the text to ./prompted (and to
+#                          screen.txt when ./echo exists, as if it reached the screen)
+#   pane wait-output    -> literal --match against screen.txt, else a timeout error
+d=${FAKE_HERDR_DIR:?FAKE_HERDR_DIR unset}
+
+serve() {
+	f="$d/$1"
+	if [ ! -f "$f" ]; then
+		echo "{\"error\":{\"code\":\"fake_missing\",\"message\":\"$1\"}}" >&2
+		exit 1
+	fi
+	if grep -q '^{"error"' "$f"; then
+		cat "$f" >&2
+		exit 1
+	fi
+	cat "$f"
+}
+
+case "$1 $2" in
+"agent get") serve agent-get.json ;;
+"pane get") serve pane-get.json ;;
+"pane process-info") serve process-info.json ;;
+"pane read")
+	n=$(cat "$d/.reads" 2>/dev/null || echo 0)
+	n=$((n + 1))
+	echo "$n" >"$d/.reads"
+	if [ -f "$d/screen$n.txt" ]; then
+		cat "$d/screen$n.txt"
+	elif [ -f "$d/screen.txt" ]; then
+		cat "$d/screen.txt"
+	else
+		serve read.json
+	fi
+	;;
+"agent prompt")
+	printf '%s\n' "$4" >>"$d/prompted"
+	[ -f "$d/echo" ] && printf '%s\n' "$4" >>"$d/screen.txt"
+	serve prompt.json
+	;;
+"pane wait-output")
+	m=
+	while [ $# -gt 0 ]; do
+		[ "$1" = "--match" ] && m=$2
+		shift
+	done
+	if [ -n "$m" ] && grep -F -q -- "$m" "$d/screen.txt" 2>/dev/null; then
+		echo '{"id":"cli:pane:wait-output","result":{"matched_line":"fake"},"type":"output_matched"}'
+	else
+		echo '{"error":{"code":"timeout","message":"timed out waiting for output match"},"id":"cli:pane:wait-output"}' >&2
+		exit 1
+	fi
+	;;
+*)
+	echo "{\"error\":{\"code\":\"fake_unknown\",\"message\":\"$1 $2\"}}" >&2
+	exit 1
+	;;
+esac

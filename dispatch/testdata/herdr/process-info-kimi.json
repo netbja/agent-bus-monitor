@@ -1,0 +1,1 @@
+{"id":"cli:pane:process_info","result":{"process_info":{"foreground_process_group_id":1983859,"foreground_processes":[{"argv":["kimi"],"cmdline":"kimi","cwd":"/data/projects/agent-bus-monitor","name":"kimi","pid":1983859}],"pane_id":"w4:p1","shell_pid":1983166},"type":"pane_process_info"}}

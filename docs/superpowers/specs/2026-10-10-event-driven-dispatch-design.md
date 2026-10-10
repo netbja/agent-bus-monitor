@@ -319,15 +319,26 @@ Logs: one JSON line per decision on stderr (`agent`, `action`, `rule`, `high_id`
 | Probe | Claude 2.1.296 | Codex 0.162.1 | Kimi 2.1.1 | Grok | agy (Antigravity) |
 |---|---|---|---|---|---|
 | herdr detects client | yes (`claude`) | yes (`codex`) | yes (`kimi`) | yes (`grok`) | yes (`agy`) |
-| `agent prompt` submits | not probed (own pane) | yes | yes (but returned `agent_prompt_stalled`) | yes | yes |
-| herdr `working` during a turn | yes (observed on own pane) | not probed | **no** — reported `idle`, then `done`, while spinner ran | yes (`idle→working→done`) | yes (`idle→working→idle`) |
-| herdr `blocked` on approval | — | — | yes | — (ran without approval) | yes |
-| Empty-input signature | to capture | `› ` + **dim** (`ESC[2m`) placeholder | `│ >` + spaces | `│ ❯` + spaces | `>` alone between two `─` rules |
-| Non-empty input visible | to capture | yes, after render delay | yes | yes | yes |
-| Modal hazard | — | transcript-scroll mode: footer `enter/esc latest`, Enter does not submit | approval panel (→ blocked) | — | approval menu has a `> 1. Yes…` line (→ blocked); `esc to dismiss` banner |
-| Clear input | — | `ctrl+u` | `ctrl+u` | `ctrl+u` | `ctrl+u` |
+| `agent prompt` submits | yes (dedicated pane, Task 7) | yes | yes (but returned `agent_prompt_stalled`) | yes | yes |
+| herdr `working` during a turn | yes (`idle→working→done`) | not probed | **no** — reported `idle`, then `done`, while spinner ran | yes (`idle→working→done`) | yes (`idle→working→idle`) |
+| herdr `blocked` on approval | yes, on an `AskUserQuestion` menu (permission prompt not reproducible: the session runs in bypass-permissions mode) | — | yes | — (ran without approval) | yes |
+| Empty-input signature | `❯` + NBSP directly under a `─` rule, optionally a **dim** (`ESC[2m`) placeholder or prompt suggestion; the glyph turns grey during a turn | `› ` + **dim** (`ESC[2m`) placeholder | `│ >` + spaces | `│ ❯` + spaces | `>` alone between two `─` rules |
+| Non-empty input visible | yes (not dim) | yes, after render delay | yes | yes | yes |
+| Modal hazard | question menu `❯ 1. …` / `Esc to cancel` replaces the input (→ blocked) | transcript-scroll mode: footer `enter/esc latest`, Enter does not submit | approval panel (→ blocked) | — | approval menu has a `> 1. Yes…` line (→ blocked); `esc to dismiss` banner |
+| Clear input | `ctrl+u` | `ctrl+u` | `ctrl+u` | `ctrl+u` | `ctrl+u` |
+| Busy signature (beyond herdr state) | spinner line `✶ Kneading… (2s · ↓ 91 tokens)` (glyph `·✢✳✶✻✽`, verb + `…`); the input box stays empty during a turn | — | moon glyph `🌑…🌘` + space/`·` | — | — |
 
 Gemini CLI is no longer used here; Antigravity (`agy`) replaces it.
+
+Task 7 additions (2026-10-10): Claude was probed on a dedicated pane (Claude Code
+2.1.296); its signature ships. Kimi's and Grok's input boxes carry a right border
+on screen (`│ >   …   │`, `│ ❯   …   │`), so their ready signatures allow it.
+`herdr pane wait-output --match` is a literal substring search that includes
+output already on screen, and it matched the wake line while it was still in the
+input box — observation is "reached the screen", as §3.3 says. Errors from the
+herdr CLI are JSON objects on **stderr** with exit 1 (`agent_not_found`,
+`pane_not_found`, `timeout`); a pane running no detected agent also answers
+`agent_not_found`. Fixtures and their provenance: `dispatch/testdata/screens/README.md`.
 
 Pane ids were not reused within the session (`w1:p2` then `w1:p3`); `terminal_id`
 is unique per pane. §5.2 makes identity independent of both.
