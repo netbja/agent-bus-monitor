@@ -10,18 +10,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const testHorizon = 24 * time.Hour
-
 func TestEnsureGroupCapturesEarlierCommand(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
 	if _, err := b.Cmd(ctx, "me", "dev", CmdDirective, "", "early"); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.EnsureGroup(ctx, "dev", testHorizon); err != nil {
+	if err := b.EnsureGroup(ctx, "dev", DefaultHorizon); err != nil {
 		t.Fatal(err)
 	}
-	o, err := b.Obligation(ctx, "dev", testHorizon)
+	o, err := b.Obligation(ctx, "dev", DefaultHorizon)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,13 +31,13 @@ func TestEnsureGroupCapturesEarlierCommand(t *testing.T) {
 func TestEnsureGroupIdempotent(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	if err := b.EnsureGroup(ctx, "dev", testHorizon); err != nil {
+	if err := b.EnsureGroup(ctx, "dev", DefaultHorizon); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.EnsureGroup(ctx, "dev", testHorizon); err != nil {
+	if err := b.EnsureGroup(ctx, "dev", DefaultHorizon); err != nil {
 		t.Fatalf("second EnsureGroup: %v", err)
 	}
-	if err := b.EnsureGroup(ctx, "Bad Name", testHorizon); err == nil {
+	if err := b.EnsureGroup(ctx, "Bad Name", DefaultHorizon); err == nil {
 		t.Fatal("accepted invalid agent")
 	}
 }
@@ -47,11 +45,11 @@ func TestEnsureGroupIdempotent(t *testing.T) {
 func TestObligationIgnoresOtherTargetsAndNoWake(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	_ = b.EnsureGroup(ctx, "dev", testHorizon)
+	_ = b.EnsureGroup(ctx, "dev", DefaultHorizon)
 	b.Cmd(ctx, "me", "other", CmdDirective, "", "x")
 	b.CmdNoWake(ctx, "me", "dev", CmdDirective, "", "quiet")
 	id, _ := b.Cmd(ctx, "me", "dev", CmdDirective, "", "real")
-	o, err := b.Obligation(ctx, "dev", testHorizon)
+	o, err := b.Obligation(ctx, "dev", DefaultHorizon)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +89,7 @@ func TestObligationPendingFiltered(t *testing.T) {
 			}
 			add(b)
 			deliverOne(t, b, "dev")
-			o, err := b.Obligation(ctx, "dev", testHorizon)
+			o, err := b.Obligation(ctx, "dev", DefaultHorizon)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -105,11 +103,11 @@ func TestObligationPendingFiltered(t *testing.T) {
 func TestObligationPendingMissingBodyCounts(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	_ = b.EnsureGroup(ctx, "dev", testHorizon)
+	_ = b.EnsureGroup(ctx, "dev", DefaultHorizon)
 	b.Cmd(ctx, "me", "dev", CmdDirective, "", "x")
 	deliverOne(t, b, "dev")
 	b.r.XTrimMaxLen(ctx, StreamKey(b.project, "cmd"), 0)
-	o, err := b.Obligation(ctx, "dev", testHorizon)
+	o, err := b.Obligation(ctx, "dev", DefaultHorizon)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +122,7 @@ func TestObligationNoGroupScansStream(t *testing.T) {
 	b.Cmd(ctx, "me", "other", CmdDirective, "", "x")
 	b.CmdNoWake(ctx, "me", "dev", CmdDirective, "", "q")
 	b.Cmd(ctx, "me", "dev", CmdDirective, "", "real")
-	o, err := b.Obligation(ctx, "dev", testHorizon)
+	o, err := b.Obligation(ctx, "dev", DefaultHorizon)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +131,7 @@ func TestObligationNoGroupScansStream(t *testing.T) {
 	}
 	// No stream at all.
 	b2 := dialTest(t)
-	o2, err := b2.Obligation(ctx, "dev", testHorizon)
+	o2, err := b2.Obligation(ctx, "dev", DefaultHorizon)
 	if err != nil || o2.Wakes() || o2.GroupExists {
 		t.Fatalf("empty: %+v %v", o2, err)
 	}
@@ -147,7 +145,7 @@ func TestObligationStaleNotWaking(t *testing.T) {
 		Values: map[string]interface{}{"from": "me", "target": "dev", "type": "directive", "command": "x"}}).Err(); err != nil {
 		t.Fatal(err)
 	}
-	o, err := b.Obligation(ctx, "dev", testHorizon)
+	o, err := b.Obligation(ctx, "dev", DefaultHorizon)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,14 +164,14 @@ func TestGapPossible(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		b.Cmd(ctx, "me", "dev", CmdDirective, "", "x")
 	}
-	o, _ := b.Obligation(ctx, "dev", testHorizon)
+	o, _ := b.Obligation(ctx, "dev", DefaultHorizon)
 	if o.GapPossible || o.Unread != 5 {
 		t.Fatalf("untrimmed: %+v", o)
 	}
 	if err := b.r.XTrimMaxLen(ctx, stream, 2).Err(); err != nil {
 		t.Fatal(err)
 	}
-	o, _ = b.Obligation(ctx, "dev", testHorizon)
+	o, _ = b.Obligation(ctx, "dev", DefaultHorizon)
 	if !o.GapPossible || o.Unread != 2 {
 		t.Fatalf("trimmed: %+v", o)
 	}
@@ -213,7 +211,7 @@ func TestArmedAndGroupNamesAndTargets(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, []string{"alpha", "dev"}) {
 		t.Fatalf("targets = %v, %v", got, err)
 	}
-	b.EnsureGroup(ctx, "dev", testHorizon)
+	b.EnsureGroup(ctx, "dev", DefaultHorizon)
 	if names, _ := b.GroupNames(ctx); !reflect.DeepEqual(names, []string{"dev"}) {
 		t.Fatalf("groups = %v", names)
 	}

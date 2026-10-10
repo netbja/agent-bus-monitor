@@ -115,7 +115,7 @@ func runSubscribe(ctx context.Context, b *bus.Bus, agent, consumer string, idle 
 
 // drainHorizon is the pinned obligation horizon: a missing group is created at
 // now-24h, and entries older than it are delivered flagged stale.
-const drainHorizon = 24 * time.Hour
+const drainHorizon = bus.DefaultHorizon
 
 const subscribeUsage = "usage: subscribe [--loop] [--since <cursor>] <agent> [idle_seconds] | subscribe --drain <agent>"
 

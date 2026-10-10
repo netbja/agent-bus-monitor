@@ -11,6 +11,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// DefaultHorizon is the age beyond which a cmd entry never triggers a wake on
+// its own (spec section 3.1).
+const DefaultHorizon = 24 * time.Hour
+
 // ServerTime is Redis TIME. Anything compared across restarts uses it, never
 // the local clock.
 func (b *Bus) ServerTime(ctx context.Context) (time.Time, error) {

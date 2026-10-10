@@ -10,8 +10,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const drainHorizon = 24 * time.Hour
-
 func collect(evs *[]Event) func(Event) error {
 	return func(e Event) error { *evs = append(*evs, e); return nil }
 }
@@ -42,7 +40,7 @@ func TestDrainDeliversPendingThenUnreadInOrder(t *testing.T) {
 	ids = append(ids, id)
 
 	var got []Event
-	n, err := b.DrainCmd(ctx, "dev", "host-1", drainHorizon, collect(&got))
+	n, err := b.DrainCmd(ctx, "dev", "host-1", DefaultHorizon, collect(&got))
 	if err != nil || n != 3 {
 		t.Fatalf("DrainCmd n=%d err=%v, want 3 nil", n, err)
 	}
@@ -69,7 +67,7 @@ func TestDrainDeliversPendingThenUnreadInOrder(t *testing.T) {
 func TestDrainEmptyReturnsFast(t *testing.T) {
 	b := dialTest(t)
 	start := time.Now()
-	n, err := b.DrainCmd(context.Background(), "dev", "host-1", drainHorizon, func(Event) error {
+	n, err := b.DrainCmd(context.Background(), "dev", "host-1", DefaultHorizon, func(Event) error {
 		t.Fatal("deliver called on an empty queue")
 		return nil
 	})
@@ -90,7 +88,7 @@ func TestDrainCreatesMissingGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got []Event
-	n, err := b.DrainCmd(ctx, "dev", "host-1", drainHorizon, collect(&got))
+	n, err := b.DrainCmd(ctx, "dev", "host-1", DefaultHorizon, collect(&got))
 	if err != nil || n != 1 || got[0].ID != id {
 		t.Fatalf("DrainCmd n=%d err=%v got=%v, want the early entry", n, err, got)
 	}
@@ -115,7 +113,7 @@ func TestDrainAcksNonAddressedSilently(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got []Event
-	n, err := b.DrainCmd(ctx, "dev", "host-1", drainHorizon, collect(&got))
+	n, err := b.DrainCmd(ctx, "dev", "host-1", DefaultHorizon, collect(&got))
 	if err != nil || n != 1 || len(got) != 1 || got[0].ID != mine {
 		t.Fatalf("DrainCmd n=%d err=%v got=%v, want only %s", n, err, got, mine)
 	}
@@ -169,7 +167,7 @@ func TestDrainCallbackErrorLeavesPending(t *testing.T) {
 		}
 	}
 	boom := errors.New("stdout closed")
-	n, err := b.DrainCmd(ctx, "dev", "host-1", drainHorizon, func(Event) error { return boom })
+	n, err := b.DrainCmd(ctx, "dev", "host-1", DefaultHorizon, func(Event) error { return boom })
 	if !errors.Is(err, boom) || n != 0 {
 		t.Fatalf("DrainCmd n=%d err=%v, want 0 and the callback error", n, err)
 	}
@@ -179,7 +177,7 @@ func TestDrainCallbackErrorLeavesPending(t *testing.T) {
 	}
 	// The next drain recovers it before reading the rest.
 	var got []Event
-	n, err = b.DrainCmd(ctx, "dev", "host-1", drainHorizon, collect(&got))
+	n, err = b.DrainCmd(ctx, "dev", "host-1", DefaultHorizon, collect(&got))
 	if err != nil || n != 2 || !got[0].Recovered || got[0].Attempt != 2 {
 		t.Fatalf("redrain n=%d err=%v got=%+v, want 2 with the first recovered (attempt 2)", n, err, got)
 	}
@@ -199,7 +197,7 @@ func TestDrainReceiverBusy(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	n, err := b.DrainCmd(ctx, "dev", "host-1", drainHorizon, func(Event) error {
+	n, err := b.DrainCmd(ctx, "dev", "host-1", DefaultHorizon, func(Event) error {
 		t.Fatal("delivered without the receiver lease")
 		return nil
 	})

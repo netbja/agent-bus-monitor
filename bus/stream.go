@@ -253,7 +253,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.
 	// A failure only delays group creation to the first subscribe.
-	_ = b.EnsureGroup(ctx, agent, 24*time.Hour)
+	_ = b.EnsureGroup(ctx, agent, DefaultHorizon)
 	return id, nil
 }
 

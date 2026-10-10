@@ -75,7 +75,7 @@ func TestRequestLifecycle(t *testing.T) {
 		t.Fatalf("lifecycle %+v %+v", e, r)
 	}
 	thread, err := b.Thread(ctx, id)
-	if err != nil || len(thread) != 2 || thread[1].Ref != id || thread[1].Message != "finished\npreuves ✓" || thread[1].Target != "sender" {
+	if err != nil || len(thread) != 4 || thread[1].Type != CmdBlocked || thread[2].Type != CmdBlocked || thread[3].Ref != id || thread[3].Message != "finished\npreuves ✓" || thread[3].Target != "sender" {
 		t.Fatalf("thread %+v %v", thread, err)
 	}
 }
@@ -192,5 +192,103 @@ func TestTextFidelityAndLimits(t *testing.T) {
 	legacy := ParseEntry(StreamKey(b.project, "report"), "1-0", map[string]string{"message": "legacy…"})
 	if legacy.TextComplete != "" {
 		t.Fatal("invented completeness")
+	}
+}
+
+// blockedEntries returns the "blocked" cmd entries on the project's stream.
+func blockedEntries(t *testing.T, b *Bus) []map[string]interface{} {
+	t.Helper()
+	msgs, err := b.r.XRange(context.Background(), StreamKey(b.project, "cmd"), "-", "+").Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []map[string]interface{}
+	for _, m := range msgs {
+		if m.Values["type"] == "blocked" {
+			out = append(out, m.Values)
+		}
+	}
+	return out
+}
+
+func TestBlockNotifiesRequesterOnce(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	id, err := b.Request(ctx, "task", "boss", "dev", "", "do it", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := b.BlockRequest(ctx, "task", "dev", "need spec"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := blockedEntries(t, b)
+	if len(got) != 1 {
+		t.Fatalf("want exactly 1 blocked entry, got %d", len(got))
+	}
+	e := got[0]
+	if e["from"] != "dev" || e["target"] != "boss" || e["ref"] != id || e["command"] != "need spec" || e["task"] != "task" || e["text_complete"] != "yes" {
+		t.Fatalf("bad blocked entry %v", e)
+	}
+}
+
+func TestBlockNewReasonNotifiesAgain(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Request(ctx, "task", "boss", "dev", "", "do it", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	for _, reason := range []string{"one", "one", "two"} {
+		if err := b.BlockRequest(ctx, "task", "dev", reason); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := blockedEntries(t, b); len(got) != 2 || got[1]["command"] != "two" {
+		t.Fatalf("want 2 entries ending in reason two, got %v", got)
+	}
+}
+
+func TestBlockAfterAcceptNotifies(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Request(ctx, "task", "boss", "dev", "", "do it", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.AcceptRequest(ctx, "task", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BlockRequest(ctx, "task", "dev", "stuck"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.AcceptRequest(ctx, "task", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BlockRequest(ctx, "task", "dev", "stuck"); err != nil {
+		t.Fatal(err)
+	}
+	if got := blockedEntries(t, b); len(got) != 2 {
+		t.Fatalf("block after accept must notify each time, got %d", len(got))
+	}
+}
+
+func TestBlockedEntryWakesRequester(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if err := b.EnsureGroup(ctx, "boss", DefaultHorizon); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Request(ctx, "task", "boss", "dev", "", "do it", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BlockRequest(ctx, "task", "dev", "need spec"); err != nil {
+		t.Fatal(err)
+	}
+	o, err := b.Obligation(ctx, "boss", DefaultHorizon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Unread != 1 {
+		t.Fatalf("requester Unread=%d, want 1", o.Unread)
 	}
 }

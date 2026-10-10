@@ -108,6 +108,9 @@ if ARGV[3]=='accept' then
  end
  e.state='accepted';r.blocked_reason=nil
 elseif ARGV[3]=='block' then
+ if e.state~='blocked' or r.blocked_reason~=ARGV[4] then
+  redis.call('XADD',KEYS[2],'MAXLEN','~',ARGV[5],'*','from',ARGV[2],'target',r.from,'type','blocked','ref',r.thread,'command',ARGV[4],'task',ARGV[1],'text_complete','yes')
+ end
  e.state='blocked';r.blocked_reason=ARGV[4]
 else
  if not r.accepted_at then return redis.error_reply('request must be explicitly accepted before completion') end
