@@ -127,6 +127,7 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 
 	u.overlay = tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
 	u.overlay.SetScrollable(true).SetBorder(true)
+	u.overlay.SetBorderPadding(0, 0, 1, 1)
 	th.StyleTextView(u.overlay)
 
 	u.screen = &screenView{Box: tview.NewBox(), u: u}
@@ -662,6 +663,23 @@ func (s *screenView) HasFocus() bool {
 	return false
 }
 
+// InputHandler forwards a key the capture let through to the focused child:
+// tview delivers keys to the root, not to the focused widget.
+func (s *screenView) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+	return s.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+		if s.u.input.HasFocus() {
+			s.u.input.InputHandler()(event, setFocus)
+			return
+		}
+		for _, l := range s.u.lists {
+			if l.HasFocus() {
+				l.InputHandler()(event, setFocus)
+				return
+			}
+		}
+	})
+}
+
 func (s *screenView) Draw(screen tcell.Screen) {
 	u := s.u
 	x0, y0, w, h := s.GetRect()
@@ -851,6 +869,12 @@ type modalView struct {
 
 func (m *modalView) Focus(delegate func(p tview.Primitive)) { delegate(m.u.overlay) }
 func (m *modalView) HasFocus() bool                         { return m.u.overlay.HasFocus() }
+
+func (m *modalView) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+	return m.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+		m.u.overlay.InputHandler()(event, setFocus)
+	})
+}
 
 func (m *modalView) Draw(screen tcell.Screen) {
 	x, y, w, h := m.GetRect()

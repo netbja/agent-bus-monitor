@@ -305,9 +305,6 @@ func threadPlain(e bus.Event, th threadState) string {
 	return sb.String()
 }
 
-// detailTitle names the overlay after what is open, with the keys that work in
-// it — the overlay is modal, so its own keys have to be visible from inside.
-func detailTitle(e bus.Event) string {
-	return fmt.Sprintf(" MESSAGE · %s  [gray][↑↓/jk scroll · y copy text · Y copy thread · Esc back][-] ",
-		detailKind(e))
-}
+// detailTitle names the overlay after what is open; the overlay frame adds
+// the keys that work in it.
+func detailTitle(e bus.Event) string { return "Message " + GlyphNone + " " + detailKind(e) }

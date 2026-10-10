@@ -119,11 +119,11 @@ func screenText(sim tcell.SimulationScreen) string {
 	return sb.String()
 }
 
+// key takes tview's own path: the capture, then the ROOT's input handler
+// (tview never hands a key to the focused widget directly).
 func (h *harness) key(ev *tcell.EventKey) {
-	if out := h.u.handleKey(ev); out != nil {
-		if p := h.app.GetFocus(); p != nil {
-			p.InputHandler()(out, func(p tview.Primitive) { h.app.SetFocus(p) })
-		}
+	if out := h.u.handleKey(ev); out != nil && h.u.pages.HasFocus() {
+		h.u.pages.InputHandler()(out, func(p tview.Primitive) { h.app.SetFocus(p) })
 	}
 }
 
@@ -317,6 +317,11 @@ func TestModalBlocksOutsideClick(t *testing.T) {
 	consumed, _ := h.u.pages.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(1, 5, tcell.ButtonPrimary, 0), func(p tview.Primitive) { h.app.SetFocus(p) })
 	if !consumed || h.u.ov != ovHelp || h.u.lists[PanelAgents].Selected() != sel {
 		t.Fatalf("outside click leaked: consumed %v ov %v sel %q", consumed, h.u.ov, h.u.lists[PanelAgents].Selected())
+	}
+	h.key(key(tcell.KeyDown))
+	h.key(key(tcell.KeyDown))
+	if row, _ := h.u.overlay.GetScrollOffset(); row != 2 {
+		t.Fatalf("Down did not scroll the overlay: offset %d", row)
 	}
 	h.key(runeKey('1'))
 	h.key(key(tcell.KeyTab))
