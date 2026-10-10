@@ -188,14 +188,20 @@ func detailText(e bus.Event, at, now time.Time, th threadState) string {
 	var sb strings.Builder
 	row := func(k, v string) { fmt.Fprintf(&sb, "%s  %s\n", tag("gray", pad(k, 6)), v) }
 
-	row("kind", tview.Escape(detailKind(e)))
-	row("from", tview.Escape(detailFrom(e)))
-	row("to", tview.Escape(detailTo(e)))
-	row("when", fmt.Sprintf("%s  %s", at.Format("2006-01-02 15:04:05"),
-		tag("gray", "("+humanAge(now.Sub(at))+" ago)")))
-	row("id", tview.Escape(e.ID))
-	row("thread", detailThread(e, th))
-
+	// One attribution line, then the body with what can honestly be said about
+	// its completeness right under it; the technical block follows.
+	who := detailFrom(e)
+	if e.Target != "" {
+		who += " → " + e.Target
+	}
+	fmt.Fprintf(&sb, "%s  %s\n\n", tview.Escape(Preview(who)),
+		tag("gray", at.Format("2006-01-02 15:04:05")+" ("+humanAge(now.Sub(at))+" ago)"))
+	if body := messageBody(e); body != "" {
+		sb.WriteString(tview.Escape(DetailText(body)))
+	} else {
+		sb.WriteString(tag("gray", "(no text)"))
+	}
+	sb.WriteString("\n\n")
 	f := eventFidelity(e)
 	row("text", tag(f.Tone, f.Label))
 	if f.Caveat != "" {
@@ -204,14 +210,14 @@ func detailText(e bus.Event, at, now time.Time, th threadState) string {
 	if e.Kind == "status" && e.State != "" {
 		row("state", tag(stateColor(e.State), e.State)+"  "+tag("gray", "(as declared by the agent)"))
 	}
-
 	sb.WriteString("\n")
-	if body := messageBody(e); body != "" {
-		sb.WriteString(tview.Escape(body))
-	} else {
-		sb.WriteString(tag("gray", "(no text)"))
-	}
-	sb.WriteString("\n")
+	row("kind", tview.Escape(detailKind(e)))
+	row("from", tview.Escape(detailFrom(e)))
+	row("to", tview.Escape(detailTo(e)))
+	row("when", fmt.Sprintf("%s  %s", at.Format("2006-01-02 15:04:05"),
+		tag("gray", "("+humanAge(now.Sub(at))+" ago)")))
+	row("id", tview.Escape(e.ID))
+	row("thread", detailThread(e, th))
 
 	if threadID(e) != "" {
 		sb.WriteString("\n" + threadSection(e, th, now))
