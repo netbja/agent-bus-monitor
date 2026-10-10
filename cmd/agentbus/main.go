@@ -22,6 +22,7 @@
 //	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 //	agentbus --project P usage     [<agent> <json>]   # write a budget snapshot, or print all (status-line tee)
 //	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
+//	agentbus --project P subscribe --drain <agent>  # JSONL, one line per waiting entry (PEL then unread); exit 0 output, 64 empty, 75 error
 //	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
 //	agentbus --project P budget    [--json]     # account budget window, one row per provider
 //	agentbus --project P budget    <provider> <json>             # publish a provider's window
@@ -41,6 +42,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -562,15 +564,27 @@ func main() {
 		// One subscription tick (or a headless --loop). Emits one JSON subEvent
 		// per fire: the cmd payload + cursor (id) + rearm flag. --since <cursor>
 		// sets the floor; omitted = skip backlog (start at the server's "now").
-		rest, loop := extractBool(rest, "--loop")
-		rest, since := extractFlag(rest, "--since")
-		if len(rest) < 1 {
-			die("usage: subscribe [--loop] [--since <cursor>] <agent> [idle_seconds]")
+		// --drain empties the queue (PEL, then unread; no floor) and exits.
+		sa, perr := parseSubscribeArgs(rest)
+		if errors.Is(perr, errDrainUsage) {
+			fmt.Fprintln(os.Stderr, "error: "+perr.Error())
+			fmt.Fprintln(os.Stderr, subscribeUsage)
+			os.Exit(2)
 		}
-		agent := rest[0]
+		if perr != nil {
+			die(perr.Error())
+		}
+		agent, loop, since := sa.agent, sa.loop, sa.since
+		consumer, _ := os.Hostname()
+		if consumer == "" {
+			consumer = self
+		}
+		if sa.drain {
+			os.Exit(runDrain(ctx, b, agent, consumer, os.Stdout))
+		}
 		idle := heartbeat
-		if len(rest) > 1 {
-			idle = parseIdle(rest[1], heartbeat)
+		if sa.idle != "" {
+			idle = parseIdle(sa.idle, heartbeat)
 		}
 		floor := since
 		switch {
@@ -582,10 +596,6 @@ func main() {
 			floor = f
 		case floor != "0" && !strings.Contains(floor, "-"):
 			floor += "-0" // accept a bare <ms> cursor
-		}
-		consumer, _ := os.Hostname()
-		if consumer == "" {
-			consumer = self
 		}
 		os.Exit(runSubscribe(ctx, b, agent, consumer, idle, floor, loop, os.Stdout))
 

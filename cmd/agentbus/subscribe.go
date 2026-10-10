@@ -32,6 +32,8 @@ type subEvent struct {
 	DuplicatePossible bool   `json:"duplicate_possible,omitempty"`
 	Attempt           int64  `json:"attempt,omitempty"`
 	TextComplete      string `json:"text_complete,omitempty"`
+	Stale             bool   `json:"stale,omitempty"`
+	AgeS              int64  `json:"age_s,omitempty"`
 }
 
 func boolPtr(b bool) *bool { return &b }
@@ -42,6 +44,7 @@ func cmdEvent(e bus.Event, rearm *bool) subEvent {
 	ev := subEvent{
 		Event: "cmd", Rearm: rearm, ID: e.ID, Type: e.Type, From: e.From, Target: e.Target, Ref: e.Ref, Body: e.Message,
 		Task: e.Task, ExpiresAt: e.ExpiresAt, Delivery: e.Delivery, DuplicatePossible: e.Recovered, Attempt: e.Attempt, TextComplete: e.TextComplete,
+		Stale: e.Stale, AgeS: e.AgeS,
 	}
 	if e.Delivery == "missing" || e.Delivery == "expired" {
 		ev.Event = "error"
@@ -107,5 +110,71 @@ func runSubscribe(ctx context.Context, b *bus.Bus, agent, consumer string, idle 
 	default:
 		emit(out, subEvent{Event: "error", Rearm: boolPtr(true), Msg: werr.Error()})
 		return 75
+	}
+}
+
+// drainHorizon is the pinned obligation horizon: a missing group is created at
+// now-24h, and entries older than it are delivered flagged stale.
+const drainHorizon = 24 * time.Hour
+
+const subscribeUsage = "usage: subscribe [--loop] [--since <cursor>] <agent> [idle_seconds] | subscribe --drain <agent>"
+
+// errDrainUsage: --drain takes no cursor, no loop and no idle window (exit 2).
+var errDrainUsage = errors.New("--drain cannot be combined with --since, --loop or idle_seconds")
+
+type subscribeArgs struct {
+	agent, idle, since string
+	loop, drain        bool
+}
+
+// parseSubscribeArgs splits the subscribe/watch flags. A missing agent is a
+// plain usage error; --drain with an incompatible flag is errDrainUsage.
+func parseSubscribeArgs(rest []string) (subscribeArgs, error) {
+	var a subscribeArgs
+	rest, a.drain = extractBool(rest, "--drain")
+	rest, a.loop = extractBool(rest, "--loop")
+	rest, a.since = extractFlag(rest, "--since")
+	if a.drain && (a.loop || a.since != "" || len(rest) > 1) {
+		return a, errDrainUsage
+	}
+	if len(rest) < 1 {
+		return a, errors.New(subscribeUsage)
+	}
+	a.agent = rest[0]
+	if len(rest) > 1 {
+		a.idle = rest[1]
+	}
+	return a, nil
+}
+
+// runDrain empties the agent's queue: one JSON line per entry (no rearm field),
+// then exits — 0 if anything was output, 64 if the queue was empty, 75 on any
+// error. An error after output (e.g. a failed ACK) is reported through the exit
+// code only; the emitted lines already say delivery is uncertain.
+func runDrain(ctx context.Context, b *bus.Bus, agent, consumer string, out io.Writer) int {
+	if !bus.ValidName(agent) {
+		emit(out, subEvent{Event: "fatal", Rearm: boolPtr(false), Msg: "invalid agent " + agent})
+		return 1
+	}
+	emitted := 0
+	_, err := b.DrainCmd(ctx, agent, consumer, drainHorizon, func(e bus.Event) error {
+		emitted++ // even a partial write counts: never follow it with an error line
+		return emit(out, cmdEvent(e, nil))
+	})
+	return drainExit(out, emitted, err)
+}
+
+func drainExit(out io.Writer, emitted int, err error) int {
+	switch {
+	case err != nil && emitted > 0:
+		return 75
+	case err != nil:
+		// Includes bus.ErrReceiverBusy: nothing was read, output or acknowledged.
+		emit(out, subEvent{Event: "error", Msg: err.Error()})
+		return 75
+	case emitted > 0:
+		return 0
+	default:
+		return 64
 	}
 }
