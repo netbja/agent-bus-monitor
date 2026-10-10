@@ -327,7 +327,6 @@ func main() {
 		os.Exit(2)
 	}
 	th = t
-	setRoundedBorders()
 
 	// Everything the background goroutines publish to the UI. Empty until the
 	// first tick: an unknown budget stays blank rather than implying 0% used.

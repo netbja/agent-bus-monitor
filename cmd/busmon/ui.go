@@ -81,6 +81,7 @@ type tabSpan struct {
 }
 
 func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter, project, self string) *ui {
+	setRoundedBorders()
 	u := &ui{app: app, st: st, ctx: ctx, w: w, project: project, self: self,
 		focus: PanelAgents, lowerTab: PanelActivity, composing: ModePanel}
 	for _, p := range panelOrder {
@@ -881,11 +882,15 @@ func (m *modalView) Draw(screen tcell.Screen) {
 	if w < minWidth || h < minHeight {
 		return // the main page already says "too small"
 	}
-	bw, bh := min(100, w-4), h-4
 	if w < mediumMinWidth {
-		bw, bh = w, h
+		// Narrow: the whole width, below the header, so bus health and the
+		// dispatcher stay visible while a detail is open.
+		top := min(m.u.layout.Header.H, h-minHeight+1)
+		m.u.overlay.SetRect(x, y+top, w, h-top)
+	} else {
+		bw, bh := min(100, w-4), h-4
+		m.u.overlay.SetRect(x+(w-bw)/2, y+(h-bh)/2, bw, bh)
 	}
-	m.u.overlay.SetRect(x+(w-bw)/2, y+(h-bh)/2, bw, bh)
 	m.u.overlay.Draw(screen)
 }
 
