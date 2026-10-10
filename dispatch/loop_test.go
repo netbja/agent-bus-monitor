@@ -409,11 +409,13 @@ func TestRunRuntimeErrorDefersAndEscalatesOnce(t *testing.T) {
 	send(t, b, "coder", "build it")
 	rt := newFakeRT(errIn)
 	cfg := fastConfig()
-	cfg.EscalateAfter = 1500 * time.Millisecond // room for a slow first pass under -race
+	cfg.EscalateAfter = 400 * time.Millisecond
 	start(t, b, rt, cfg)
+	// Escalated == "" tells the pre-escalation defer apart from the record
+	// after escalation (State stays deferred, reason "…, escalating").
 	waitFor(t, 2*time.Second, "deferred on inspection error", func() bool {
 		w, ok := wakeOf(t, b, "coder")
-		return ok && w.State == "deferred" && strings.Contains(w.Reason, "inspection error")
+		return ok && w.State == "deferred" && w.Escalated == "" && strings.Contains(w.Reason, "inspection error")
 	})
 	if n := len(escalations(t, r, b, "coder")); n != 0 {
 		t.Fatalf("escalated before T: %d", n)
@@ -517,10 +519,14 @@ func TestRunProjectDeletedStops(t *testing.T) {
 	send(t, b, "ghost", "hello?")
 	rt := newFakeRT(errIn)
 	run := start(t, b, rt, fastConfig())
-	waitFor(t, 3*time.Second, "a wake record", func() bool {
-		_, ok := wakeOf(t, b, "coder")
-		return ok
+	// Both agents' first writes must have landed: DeleteProject is SCAN then
+	// DEL, so a write in that gap would survive the delete.
+	waitFor(t, 3*time.Second, "both wake records", func() bool {
+		_, okc := wakeOf(t, b, "coder")
+		_, okg := wakeOf(t, b, "ghost")
+		return okc && okg
 	})
+	time.Sleep(100 * time.Millisecond) // steady: defers no longer rewrite
 	if _, err := bus.DeleteProject(ctx, r, b.Project()); err != nil {
 		t.Fatal(err)
 	}

@@ -271,6 +271,7 @@ STATUS bar: `dispatch ●` / `dispatch ○`. Agent chip: `✉N` waiting obligati
 | Redis or herdr error | JSON log line (correlation id = cmd entry id), capped backoff to 30 s; never exits on a transient error |
 | herdr socket absent | Every agent deferred → escalation path; dispatch keeps running |
 | Escalation recipient is the stuck agent | `notify` only, `⚠` |
+| `busmon --delete` while a dispatcher runs | Accepted residual: `DeleteProject` is SCAN then DEL, so a fenced write landing in that gap (a `{p}:wake:*` key, or a `notify` stream) can be orphaned. It cannot forge a project, and the dispatcher stops on its next lease check (`ErrLeaseLost`) |
 
 Logs: one JSON line per decision on stderr (`agent`, `action`, `rule`, `high_id`,
 `latency_ms` from oldest obligation entry to prompt).
