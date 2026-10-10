@@ -3,7 +3,7 @@ id: 2026-10-10-event-driven-dispatch
 project: agent-bus-monitor
 scope: project
 kind: decision
-status: proposed
+status: active
 created: 2026-10-10
 last_verified: 2026-10-10
 author: claude
