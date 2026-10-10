@@ -590,7 +590,7 @@ func agentsOrNil(snaps map[string]bus.AgentSnapshot, err error) map[string]bus.A
 
 // wakeBadges renders the dispatcher-facing suffixes of a chip: ✉N mail waiting
 // that nothing is about to wake anyone for (no wake record, or a "clear" one),
-// ⏰ a wake in flight or deferred, ⚠ an escalation, ⌛N entries past the
+// ⏰ a wake in flight or deferred, ⚠ an escalation, old:N entries past the
 // horizon, ✂? entries that may have been trimmed unread. Zero values render
 // nothing, so an unknown obligation never looks like an empty one.
 func wakeBadges(a *agentState) string {
@@ -610,7 +610,7 @@ func wakeBadges(a *agentState) string {
 		s += " [red]⚠[-]"
 	}
 	if a.stale > 0 {
-		s += fmt.Sprintf(" [gray]⌛%d[-]", a.stale)
+		s += fmt.Sprintf(" [gray]old:%d[-]", a.stale)
 	}
 	if a.gap {
 		s += " [gray]✂?[-]"

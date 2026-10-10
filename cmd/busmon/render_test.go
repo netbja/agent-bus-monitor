@@ -476,7 +476,7 @@ func TestAgentLabelWakeBadges(t *testing.T) {
 	if got := mk(func(a *agentState) { a.wake = &bus.WakeRecord{State: "clear", Escalated: "pending"} }); !strings.Contains(got, "⚠") {
 		t.Fatalf("pending escalation: %q", got)
 	}
-	if got := mk(func(a *agentState) { a.stale = 2 }); !strings.Contains(got, "⌛2") {
+	if got := mk(func(a *agentState) { a.stale = 2 }); !strings.Contains(got, "old:2") || strings.Contains(got, "⌛") {
 		t.Fatalf("stale: %q", got)
 	}
 	if got := mk(func(a *agentState) { a.gap = true }); !strings.Contains(got, "✂?") {

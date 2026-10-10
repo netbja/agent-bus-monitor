@@ -254,7 +254,7 @@ none. The one-shot `subscribe` contract is unchanged.
 
 ### 5.6 busmon
 STATUS bar: `dispatch ●` / `dispatch ○`. Agent chip: `✉N` waiting obligation,
-`⏰` deferred wake, `⚠` escalated, `⌛N` stale entries, `✂?` possible gap
+`⏰` deferred wake, `⚠` escalated, `old:N` stale entries, `✂?` possible gap
 (entries may have been trimmed before the group read them).
 
 ## 6. Error handling
