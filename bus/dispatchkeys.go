@@ -270,3 +270,35 @@ func (b *Bus) FencedNotify(ctx context.Context, token, from, message string) (st
 	}
 	return b.fencedAdd(ctx, token, "notify", "from", from, "message", message)
 }
+
+// fencedGroup: -1 not holder; 0 group already there; 1 created at the floor
+// (server TIME minus ARGV[3] ms, never below 0), MKSTREAM.
+var fencedGroup = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
+local t = redis.call('TIME')
+local floor = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000) - tonumber(ARGV[3])
+if floor < 0 then floor = 0 end
+local r = redis.pcall('XGROUP', 'CREATE', KEYS[2], ARGV[2], string.format('%d', floor) .. '-0', 'MKSTREAM')
+if type(r) == 'table' and r.err then
+  if string.find(r.err, 'BUSYGROUP') then return 0 end
+  return redis.error_reply(r.err)
+end
+return 1`)
+
+// FencedEnsureGroup is EnsureGroup written only while token holds the dispatch
+// lease: XGROUP CREATE … MKSTREAM would otherwise recreate the cmd stream of a
+// project deleted under a running dispatcher. An existing group is untouched.
+func (b *Bus) FencedEnsureGroup(ctx context.Context, token, agent string, horizon time.Duration) error {
+	if !ValidName(agent) {
+		return fmt.Errorf("invalid agent %q", agent)
+	}
+	n, err := fencedGroup.Run(ctx, b.r, []string{DispatchKey(b.project), StreamKey(b.project, "cmd")},
+		token, agent, horizon.Milliseconds()).Int()
+	if err != nil {
+		return err
+	}
+	if n < 0 {
+		return ErrNotHolder
+	}
+	return nil
+}

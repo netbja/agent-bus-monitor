@@ -370,3 +370,42 @@ func TestWakeKeyDoesNotForgeProject(t *testing.T) {
 		}
 	}
 }
+
+func TestFencedEnsureGroupHolderCreatesAtFloor(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	early, err := b.Cmd(ctx, "me", "dev", CmdDirective, "", "early")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := b.AcquireDispatch(ctx, "tok", 15*time.Second); !ok {
+		t.Fatal("AcquireDispatch failed")
+	}
+	if err := b.FencedEnsureGroup(ctx, "tok", "dev", DefaultHorizon); err != nil {
+		t.Fatalf("FencedEnsureGroup: %v", err)
+	}
+	o, err := b.Obligation(ctx, "dev", DefaultHorizon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.GroupExists || o.OldestID != early {
+		t.Fatalf("obligation = %+v, want group capturing %s", o, early)
+	}
+	if err := b.FencedEnsureGroup(ctx, "tok", "dev", DefaultHorizon); err != nil {
+		t.Fatalf("second FencedEnsureGroup: %v", err)
+	}
+	if err := b.FencedEnsureGroup(ctx, "tok", "Bad Name", DefaultHorizon); err == nil {
+		t.Fatal("accepted invalid agent")
+	}
+}
+
+func TestFencedEnsureGroupRefusedWithoutLease(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if err := b.FencedEnsureGroup(ctx, "tok", "dev", DefaultHorizon); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("err = %v, want ErrNotHolder", err)
+	}
+	if n, _ := b.r.Exists(ctx, StreamKey(b.project, "cmd")).Result(); n != 0 {
+		t.Fatal("refused FencedEnsureGroup created the cmd stream")
+	}
+}

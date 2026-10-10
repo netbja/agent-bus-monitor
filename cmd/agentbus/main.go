@@ -32,6 +32,8 @@
 //	agentbus --project P shutdown  [--force]    # broadcast a shutdown directive to every peer; refused while tasks aren't done or peers are busy
 //	agentbus --project P refresh   [--quiet]    # read local sources -> publish budget + per-agent usage
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
+//	agentbus --project P dispatch  [--horizon 24h] [--escalate-after 10m] [--escalate-to master]  # wake unarmed agents through herdr (JSON log on stderr)
+//	agentbus --project P dispatch  --status     # print "dispatch up" (exit 0) or "dispatch down" (exit 1)
 //	agentbus --project P request [--json] | send <task> <target> [--ref T] [--ttl 5m] <body>
 //	agentbus --project P request accept <task> | block <task> <reason> | done <task> <reply>
 //	agentbus limits                # writer size/retention limits, no broker needed
@@ -45,7 +47,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -95,7 +99,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|limits|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|dispatch|limits|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -112,6 +116,12 @@ func main() {
 	cmd, rest := args[0], args[1:]
 
 	switch cmd {
+	case "dispatch":
+		sctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		code := runDispatch(sctx, b, rest, dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}, os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+
 	case "request":
 		if err := runRequest(ctx, b, self, rest, os.Stdout); err != nil {
 			die(err.Error())
