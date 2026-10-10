@@ -246,19 +246,23 @@ func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
 		title = append(title, f.Title...)
 		title = append(title, Seg{Text: " ", Role: RoleText})
 	}
+	var label Line
+	if f.Label.Width() > 0 {
+		label = append(append(Line{{Text: " ", Role: RoleText}}, f.Label...), Seg{Text: " ", Role: RoleText})
+	}
 	titleW := min(title.Width(), available)
 	labelRoom := available - titleW
 	if titleW > 0 && labelRoom > 0 {
 		labelRoom--
 	}
-	labelW := min(f.Label.Width(), labelRoom)
+	labelW := min(label.Width(), labelRoom)
 	if f.Focused && th.Palette() == PaletteNone {
 		for i := range title {
 			title[i].Bold = true
 		}
 	}
 	DrawLine(s, x+2, y, titleW, title, false)
-	DrawLine(s, x+w-2-labelW, y, labelW, f.Label, false)
+	DrawLine(s, x+w-2-labelW, y, labelW, label, false)
 	if f.Scroll.Total <= f.Scroll.Visible || f.Scroll.Total <= 0 {
 		return
 	}

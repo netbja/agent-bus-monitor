@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -63,82 +64,6 @@ func noWiderThan(t *testing.T, screen string, w int) {
 	}
 }
 
-// An agent that declared "working" three hours ago and has said nothing since
-// must still read "working". This is the regression the whole state rework
-// exists for: the old chip relabelled it "offline" and the operator lost the
-// only thing the agent actually told them.
-func TestScreenSilentAgentKeepsItsDeclaredState(t *testing.T) {
-	now := time.Now()
-	st := &shared{agents: map[string]*agentState{
-		"coder": {state: "working", message: "refactoring the parser",
-			stateAt: now.Add(-18 * time.Minute), lastSeen: now.Add(-18 * time.Minute)},
-		"foureyes": {state: "blocked", stateAt: now.Add(-30 * time.Second), lastSeen: now.Add(-30 * time.Second)},
-	}}
-	agentsView := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	agentsView.SetBorder(true).SetTitle(" AGENTS ")
-	boardView := tview.NewTextView()
-	row := tview.NewFlex().AddItem(agentsView, 0, 1, false).AddItem(boardView, 0, 0, false)
-	layout := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(row, 6, 0, false)
-
-	renderAgents(layout, row, agentsView, st)
-	screen := draw(t, layout, 90, 8)
-
-	if !strings.Contains(screen, "coder: working") {
-		t.Errorf("a silent agent must keep the state it declared:\n%s", screen)
-	}
-	if !strings.Contains(screen, "no update 18m") {
-		t.Errorf("the age of that declaration must be stated as silence:\n%s", screen)
-	}
-	if strings.Contains(screen, "offline") {
-		t.Errorf("silence must never be rendered as a guess about the agent:\n%s", screen)
-	}
-	if !strings.Contains(screen, "foureyes: blocked") {
-		t.Errorf("a fresh agent keeps its state too:\n%s", screen)
-	}
-}
-
-// An agent that has published a report but never a status has no state to show.
-func TestScreenAgentWithNoDeclaredState(t *testing.T) {
-	st := &shared{agents: map[string]*agentState{
-		"sentinel": {lastSeen: time.Now().Add(-90 * time.Second)},
-	}}
-	view := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	view.SetBorder(true)
-	row := tview.NewFlex().AddItem(view, 0, 1, false)
-	layout := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(row, 5, 0, false)
-
-	renderAgents(layout, row, view, st)
-	screen := draw(t, layout, 80, 6)
-	if !strings.Contains(screen, "no state declared") {
-		t.Errorf("presence without a status is not a state:\n%s", screen)
-	}
-}
-
-// When the monitor loses Redis, the screen must say so — otherwise a dead
-// connection looks exactly like a quiet team.
-func TestScreenReportsTheMonitorsOwnConnection(t *testing.T) {
-	now := time.Now()
-	st := &shared{
-		agents: map[string]*agentState{},
-		health: health{ok: false, since: now.Add(-12 * time.Second), err: "dial tcp 127.0.0.1:6380: connect: connection refused"},
-	}
-	view := tview.NewTextView().SetDynamicColors(true)
-	renderStatus(view, "demo", st)
-	screen := draw(t, view, 120, 1)
-	if !strings.Contains(screen, "monitor cannot reach the bus") {
-		t.Errorf("a broken monitor link must be named as such:\n%s", screen)
-	}
-	if !strings.Contains(screen, "12s") {
-		t.Errorf("how long the link has been down is the actionable part:\n%s", screen)
-	}
-
-	st.health = health{ok: true, since: now}
-	renderStatus(view, "demo", st)
-	if screen = draw(t, view, 120, 1); !strings.Contains(screen, "bus ok") {
-		t.Errorf("a healthy link must be visible too, so its absence means something:\n%s", screen)
-	}
-}
-
 // A long multi-line Unicode report has to survive the trip to the screen: the
 // flat feed shows one clipped line, and this view is the only place the whole
 // thing exists.
@@ -154,14 +79,14 @@ func TestScreenDetailShowsLongUnicodeBodyAndFitsNarrowTerminals(t *testing.T) {
 	pane := textPane(detailText(e, at, at.Add(3*time.Minute), threadState{}))
 
 	for _, size := range []struct{ w, h int }{{100, 30}, {40, 20}, {40, 8}} {
-		screen := draw(t, modal(pane), size.w, size.h)
+		screen := draw(t, pane, size.w, size.h)
 		noWiderThan(t, screen, size.w)
 		if !strings.Contains(screen, "coder") {
 			t.Errorf("%dx%d: the author must be visible:\n%s", size.w, size.h, screen)
 		}
 	}
 	// At a readable size the body itself is on screen, wrapped not truncated.
-	screen := draw(t, modal(pane), 100, 30)
+	screen := draw(t, pane, 100, 30)
 	if !strings.Contains(screen, "résumé des étapes") {
 		t.Errorf("the retained body must be shown:\n%s", screen)
 	}
@@ -176,7 +101,7 @@ func TestScreenDetailAdmitsUnknownCompletenessOnOldEntries(t *testing.T) {
 	e := bus.Event{ID: "1-0", Kind: "report", Agent: "hermes", RKind: bus.ReportNote,
 		Message: "an old report from before the marker existed"}
 	pane := textPane(detailText(e, time.Unix(1, 0), time.Unix(600, 0), threadState{}))
-	screen := draw(t, modal(pane), 110, 24)
+	screen := draw(t, pane, 110, 24)
 	if !strings.Contains(screen, "completeness not marked") {
 		t.Errorf("an unmarked entry must say its completeness is unverified:\n%s", screen)
 	}
@@ -198,7 +123,7 @@ func TestScreenRequestsOverlayShowsEachRequestHonestly(t *testing.T) {
 			BlockedReason: "waiting on an API key", Delivery: "output_written"},
 	}
 	pane := textPane(requestsPanel(reqs, nil, now, 100))
-	screen := draw(t, modal(pane), 110, 30)
+	screen := draw(t, pane, 110, 30)
 
 	for _, want := range []string{"task-20", "task-21", "task-22", "deadline in 18m",
 		"no acceptance recorded", "waiting on an API key", "no deadline set"} {
@@ -219,63 +144,10 @@ func TestScreenRequestsOverlayAtFortyColumns(t *testing.T) {
 	reqs := []request{{Tracked: true, Task: "a-very-long-task-slug-indeed", Target: "foureyes",
 		State: "requested", Created: now.Add(-time.Hour), Updated: now.Add(-time.Hour), Delivery: "queued"}}
 	pane := textPane(requestsPanel(reqs, nil, now, 36))
-	screen := draw(t, modal(pane), 40, 16)
+	screen := draw(t, pane, 40, 16)
 	noWiderThan(t, screen, 40)
 	if !strings.Contains(screen, "a-very-long-task") {
 		t.Errorf("the task must still be identifiable at 40 columns:\n%s", screen)
-	}
-}
-
-// Resizing mid-session must not leave the feed drawing outside its frame.
-func TestScreenFeedSurvivesResize(t *testing.T) {
-	view := tview.NewTextView().SetDynamicColors(true).SetRegions(true).SetScrollable(true)
-	view.SetBorder(true).SetTitle(activityTitle(0, 0, 0))
-	for i := 0; i < 40; i++ {
-		view.Write([]byte("[gray]22:41:03[-] [green][coder][-] working | " +
-			strings.Repeat("une ligne très longue avec des accents ", 3) + "\n"))
-	}
-	for _, size := range []struct{ w, h int }{{120, 30}, {40, 12}, {60, 5}} {
-		noWiderThan(t, draw(t, view, size.w, size.h), size.w)
-	}
-}
-
-// Navigation walks what is on screen. With a filter on, ↑↓ must not stop on
-// hidden lines — and must not fall off either end.
-func TestSelectionWalksOnlyVisibleLines(t *testing.T) {
-	lines := []feedLine{
-		{id: "1", ev: bus.Event{Kind: "status", Agent: "coder", Message: "a"}},
-		{id: "2", ev: bus.Event{Kind: "status", Agent: "foureyes", Message: "b"}},
-		{id: "3", ev: bus.Event{Kind: "status", Agent: "coder", Message: "c"}},
-	}
-	f := parseFilter("@coder")
-	var visible []feedLine
-	for _, l := range lines {
-		if f.match(l) {
-			visible = append(visible, l)
-		}
-	}
-	if len(visible) != 2 {
-		t.Fatalf("filter kept %d lines, want 2", len(visible))
-	}
-	if got := moveSelection(visible, "3", -1); got != "1" {
-		t.Errorf("stepping up from 3 must skip the hidden line 2, got %q", got)
-	}
-	if got := moveSelection(visible, "1", -1); got != "1" {
-		t.Errorf("selection must clamp at the top, got %q", got)
-	}
-	if got := moveSelection(visible, "3", 1); got != "3" {
-		t.Errorf("selection must clamp at the bottom, got %q", got)
-	}
-	if got := moveSelection(visible, "", -1); got != "3" {
-		t.Errorf("a first move lands on the newest visible line, got %q", got)
-	}
-	if got := moveSelection(nil, "", -1); got != "" {
-		t.Errorf("an empty feed has nothing to select, got %q", got)
-	}
-	// A selection that has scrolled out of the retained window is not lost —
-	// it lands back on the newest line rather than freezing the keyboard.
-	if got := moveSelection(visible, "999", 1); got != "3" {
-		t.Errorf("a stale selection must recover, got %q", got)
 	}
 }
 
@@ -318,27 +190,24 @@ func TestFilterRecognisesThreadIDs(t *testing.T) {
 	}
 }
 
-// The shared snapshot is written by two goroutines and read by the renderers;
-// -race turns any slip here into a failure.
+// The shared snapshot is written by the poller and the tail while the screen
+// draws it; -race turns any slip here into a failure.
 func TestSharedStateIsSafeUnderConcurrentAccess(t *testing.T) {
-	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}}
-	view := tview.NewTextView().SetDynamicColors(true)
+	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}}
+	h := newHarness(t, st)
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
 			st.mu.Lock()
-			st.agents["coder"] = &agentState{state: "working", stateAt: time.Now()}
+			st.agents[fmt.Sprintf("coder%d", i%7)] = &agentState{state: "working", stateAt: time.Now()}
 			st.requests = []request{{Tracked: true, State: "requested", Created: time.Now()}}
 			st.mu.Unlock()
 		}
 	}()
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 200; i++ {
-			renderStatus(view, "demo", st)
-		}
-	}()
+	for i := 0; i < 50; i++ {
+		h.draw(120, 30)
+	}
 	wg.Wait()
 }

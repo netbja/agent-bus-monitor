@@ -266,7 +266,7 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 func threadLine(e bus.Event, now time.Time, self bool) string {
 	marker := "  "
 	if self {
-		marker = tag("aqua", "▸ ")
+		marker = tag("aqua", GlyphSelect+" ")
 	}
 	at := entryTime(e.ID)
 	typ := e.Type

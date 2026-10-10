@@ -26,15 +26,22 @@ func TestGlyphsAreSingleCell(t *testing.T) {
 	}
 }
 
+// Every literal busmon draws may hold ASCII and the closed UI glyph set only
+// (spec §5.1): a glyph outside it could be two cells wide, or turn into an
+// emoji, and push a frame's right border out of its column.
 func TestNoStrayNonASCIILiterals(t *testing.T) {
-	// Explicit temporary exemptions, emptied by Task 10.
-	legacyFiles := map[string]bool{"main.go": true, "render.go": true, "detail.go": true, "tracking.go": true, "filter.go": true}
+	allowed := map[rune]bool{}
+	for _, g := range UIGlyphs {
+		for _, r := range g {
+			allowed[r] = true
+		}
+	}
 	paths, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range paths {
-		if p == "theme.go" || strings.HasSuffix(p, "_test.go") || legacyFiles[p] {
+		if p == "theme.go" || strings.HasSuffix(p, "_test.go") {
 			continue
 		}
 		fs := token.NewFileSet()
@@ -53,8 +60,8 @@ func TestNoStrayNonASCIILiterals(t *testing.T) {
 				return true
 			}
 			for _, r := range s {
-				if r > 127 {
-					t.Errorf("%s: non-ASCII literal outside theme.go", fs.Position(lit.Pos()))
+				if r > 127 && !allowed[r] {
+					t.Errorf("%s: %q is outside the UI glyph set", fs.Position(lit.Pos()), r)
 					break
 				}
 			}
