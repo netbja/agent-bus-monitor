@@ -133,7 +133,7 @@ Both arrive as `cmd` events addressed to you; their `type` field tells them apar
 
 - **`escalation`** (`from: dispatch`) — a peer has had work waiting longer than the
   escalation delay (default 10m, `--escalate-after`; a peer reporting `working` is given 4×
-  that) without being woken, or three wakes made no progress. Body:
+  that) without being woken, or three wakes made no progress. Its `body`:
   `<agent>: <reason>; <n> waiting, oldest <id>`. A matching `notify` lands in busmon and the
   chip shows `⚠`. Typical reasons: the pane is focused (the human is there), the agent has no
   verified identity (registered from an older binary, outside herdr, or restarted since its
@@ -141,7 +141,7 @@ Both arrive as `cmd` events addressed to you; their `type` field tells them apar
   below) and wake it by hand, or re-pop the role. One escalation per backlog; progress resets
   it. If **you** are the stuck agent, there is no cmd — only the `notify` and `⚠`.
 - **`blocked`** (`from:` the peer) — the peer ran `request block <task> <reason>` on a request
-  you sent; `command` is the reason, `ref` the thread, `task` the request. Decide: answer on
+  you sent; in the JSON event `body` is the reason, `ref` the thread, `task` the request. Decide: answer on
   the thread, re-scope, or reassign. It is sent once per new reason, not on every repeat.
 
 ## Peers disconnect when idle — bringing one back is YOUR job (when no dispatcher runs)
