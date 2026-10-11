@@ -84,6 +84,19 @@ func TestFencedRequestMatchesRequest(t *testing.T) {
 		p.Request.Target != f.Request.Target || f.Request.Delivery != p.Request.Delivery || f.Request.ExpiresAt != 0 {
 		t.Fatalf("shape differs:\nplain  %+v %+v\nfenced %+v %+v", p, p.Request, f, f.Request)
 	}
+	entries := b.r.XRange(ctx, StreamKey(b.project, "cmd"), "-", "+").Val()
+	if len(entries) != 2 {
+		t.Fatalf("%d cmd entries", len(entries))
+	}
+	pv, fv := entries[0].Values, entries[1].Values
+	for k := range pv {
+		if k != "task" && pv[k] != fv[k] {
+			t.Errorf("cmd field %s: plain %v, fenced %v", k, pv[k], fv[k])
+		}
+	}
+	if len(pv) != len(fv) {
+		t.Errorf("cmd fields differ: %v vs %v", pv, fv)
+	}
 	if _, err := b.FencedRequest(ctx, "tok", "fenced", "conductor", "kimi", "", "again"); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("duplicate: %v", err)
 	}
@@ -167,7 +180,7 @@ func TestMissionOpsRoundTrip(t *testing.T) {
 	if err := b.MissionOpResult(ctx, "tok", id, true, "retried"); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.AckMissionOp(ctx, "conductor", id); err != nil {
+	if err := b.AckMissionOp(ctx, "tok", "conductor", id); err != nil {
 		t.Fatal(err)
 	}
 	ok, msg, found, err := b.WaitMissionOpResult(ctx, id, time.Second)
@@ -200,5 +213,37 @@ func TestFencedHashSetRefusesForeignKey(t *testing.T) {
 	}
 	if ms, err := b.ServerNowMS(ctx); err != nil || ms < time.Now().Add(-time.Hour).UnixMilli() {
 		t.Fatalf("ServerNowMS = %d %v", ms, err)
+	}
+}
+
+func TestAckMissionOpIsFenced(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	b.AcquireConductor(ctx, "tok", 15*time.Second)
+	id, _ := b.SubmitMissionOp(ctx, "master", "retry", []string{"chg/t1"})
+	b.ReadMissionOps(ctx, "conductor", "c1", 0)
+	if err := b.AckMissionOp(ctx, "stale", "conductor", id); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("stale ack: %v", err)
+	}
+	if p := b.r.XPending(ctx, MissionOpsKey(b.project), "conductor").Val(); p.Count != 1 {
+		t.Fatalf("a stale token acknowledged the op: %+v", p)
+	}
+	if err := b.AckMissionOp(ctx, "tok", "conductor", id); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An op read by a conductor that crashed before acknowledging it is handed to
+// the next reader, whatever its consumer name.
+func TestReadMissionOpsRecoversPending(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	id, _ := b.SubmitMissionOp(ctx, "master", "retry", []string{"chg/t1"})
+	if ops, _ := b.ReadMissionOps(ctx, "conductor", "crashed", 0); len(ops) != 1 {
+		t.Fatal("first read")
+	}
+	ops, err := b.ReadMissionOps(ctx, "conductor", "restarted", 0)
+	if err != nil || len(ops) != 1 || ops[0].ID != id || ops[0].Op != "retry" {
+		t.Fatalf("pending op not recovered: %+v %v", ops, err)
 	}
 }

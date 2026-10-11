@@ -276,6 +276,10 @@ func TestRequestDoneFlags(t *testing.T) {
 		{"done", "task", "--commit", "abc1234", "--branch", "bad branch", "reply"},
 		{"done", "task", "--commit", "abc1234", "--branch", "-x", "reply"},
 		{"done", "task", "--commit", "abc1234", "--branch", "a..b", "reply"},
+		{"done", "task", "--commit", "abc1234", "--branch", "feature//x", "reply"},
+		{"done", "task", "--commit", "abc1234", "--branch", "feature/.hidden", "reply"},
+		{"done", "task", "--commit", "abc1234", "--branch", "feature/end.", "reply"},
+		{"done", "task", "--commit", "abc1234", "--branch", "x.lock/y", "reply"},
 	} {
 		if err := runRequest(context.Background(), nil, "kimi", args, io.Discard); err == nil || !strings.Contains(err.Error(), "--") {
 			t.Errorf("%q: err = %v, want a flag error", args, err)

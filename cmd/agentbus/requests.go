@@ -88,13 +88,19 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 
 var commitRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 
-// validBranch applies the git check-ref-format rules a mission branch can break
-// by accident: no whitespace or control characters, no "..", no leading "-",
-// no "@{", no trailing "/" or ".lock", none of ~^:?*[\.
+// validBranch applies git check-ref-format --branch: no whitespace or control
+// characters, none of ~^:?*[\, no "..", no "@{", no leading "-", no trailing
+// ".", and no empty component, component starting with "." or ending in
+// ".lock" (which also rules out "//" and a trailing "/").
 func validBranch(s string) bool {
-	if s == "" || strings.HasPrefix(s, "-") || strings.HasSuffix(s, "/") || strings.HasSuffix(s, ".lock") ||
+	if s == "" || s == "@" || strings.HasPrefix(s, "-") || strings.HasSuffix(s, ".") ||
 		strings.Contains(s, "..") || strings.Contains(s, "@{") || strings.ContainsAny(s, "~^:?*[\\ \t") {
 		return false
+	}
+	for _, part := range strings.Split(s, "/") {
+		if part == "" || strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
+			return false
+		}
 	}
 	for _, r := range s {
 		if r < 0x20 || r == 0x7f {

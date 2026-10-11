@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 )
 
 // File is a change's missions.json (§3.1).
@@ -44,6 +45,9 @@ func Parse(data []byte) (File, error) {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
 		return File{}, fmt.Errorf("missions.json: %w", err)
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return File{}, fmt.Errorf("missions.json: data after the top-level object")
 	}
 	if f.Base == "" {
 		f.Base = "main"

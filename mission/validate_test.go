@@ -101,3 +101,14 @@ func TestHashes(t *testing.T) {
 		t.Fatal("FileHash")
 	}
 }
+
+func TestParseRefusesTrailingData(t *testing.T) {
+	for _, tail := range []string{`{"change": "other"}`, "garbage", "]"} {
+		if _, err := Parse([]byte(validJSON + "\n" + tail)); err == nil {
+			t.Errorf("trailing %q accepted", tail)
+		}
+	}
+	if _, err := Parse([]byte(validJSON + "\n\n")); err != nil {
+		t.Errorf("trailing whitespace refused: %v", err)
+	}
+}

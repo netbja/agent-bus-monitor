@@ -193,6 +193,13 @@ func (b *Bus) ReadMissionOps(ctx context.Context, group, consumer string, block 
 	if err := b.r.XGroupCreateMkStream(ctx, key, group, "0").Err(); err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return nil, err
 	}
+	// Ops a crashed reader took but never acknowledged come first: only one
+	// conductor runs per project, so whatever is pending is ours to redo.
+	if msgs, _, err := b.r.XAutoClaim(ctx, &redis.XAutoClaimArgs{Stream: key, Group: group, Consumer: consumer, MinIdle: 0, Start: "0-0", Count: 32}).Result(); err != nil {
+		return nil, err
+	} else if len(msgs) > 0 {
+		return missionOps(msgs), nil
+	}
 	if block <= 0 {
 		block = -1 // go-redis omits BLOCK for a negative duration
 	}
@@ -205,18 +212,27 @@ func (b *Bus) ReadMissionOps(ctx context.Context, group, consumer string, block 
 	}
 	var out []MissionOp
 	for _, s := range res {
-		for _, m := range s.Messages {
-			op := MissionOp{ID: m.ID, From: fmt.Sprint(m.Values["from"]), Op: fmt.Sprint(m.Values["op"])}
-			_ = json.Unmarshal([]byte(fmt.Sprint(m.Values["args"])), &op.Args)
-			out = append(out, op)
-		}
+		out = append(out, missionOps(s.Messages)...)
 	}
 	return out, nil
 }
 
-// AckMissionOp acknowledges an applied operation.
-func (b *Bus) AckMissionOp(ctx context.Context, group, id string) error {
-	return b.r.XAck(ctx, MissionOpsKey(b.project), group, id).Err()
+func missionOps(msgs []redis.XMessage) []MissionOp {
+	out := make([]MissionOp, 0, len(msgs))
+	for _, m := range msgs {
+		op := MissionOp{ID: m.ID, From: fmt.Sprint(m.Values["from"]), Op: fmt.Sprint(m.Values["op"])}
+		_ = json.Unmarshal([]byte(fmt.Sprint(m.Values["args"])), &op.Args)
+		out = append(out, op)
+	}
+	return out
+}
+
+var fencedXAck = redis.NewScript(fenceCheck + `return redis.call('XACK', KEYS[2], ARGV[2], ARGV[3])`)
+
+// AckMissionOp acknowledges an applied operation, only while token holds the
+// conductor lease: a conductor that lost it must leave the op to its successor.
+func (b *Bus) AckMissionOp(ctx context.Context, token, group, id string) error {
+	return notHolder(fencedXAck.Run(ctx, b.r, []string{ConductorKey(b.project), MissionOpsKey(b.project)}, token, group, id).Err())
 }
 
 // MissionOpResult records the conductor's answer to operation reqID.
