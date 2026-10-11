@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/logo.png" alt="agent-bus: AI agents riding one Redis bus, passing messages along a shared stream" width="900"></p>
+<p align="center"><img src="docs/assets/agent-bus-monitor-logo.png" alt="agent-bus: AI agents riding one Redis bus, passing messages along a shared stream" width="900"></p>
 
 # agent-bus
 
