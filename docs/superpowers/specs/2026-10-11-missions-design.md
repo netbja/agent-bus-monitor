@@ -1,6 +1,6 @@
 # Missions: a deterministic conductor for large changes (v0.10)
 
-- **Status:** rev 2 (Codex spec review folded in: request names, gate closing, conductor primitives, Git locking, integration resume, superseded attempts, recovery by hash). Rev 1: Approach A was chosen by the user on 2026-10-11 ("ok pour A"), and design
+- **Status:** rev 3 (Codex re-check: operator commands go through the conductor, no forced reload over an approval or a merge in progress, an exact supersession protocol). Rev 2 (Codex spec review folded in: request names, gate closing, conductor primitives, Git locking, integration resume, superseded attempts, recovery by hash). Rev 1: Approach A was chosen by the user on 2026-10-11 ("ok pour A"), and design
   sections 1 to 4 were approved one by one.
 - **Base:** `main` @ d0edbff (v0.9.0). It ships with v0.10, alongside the memory tooling (PR #47).
   The CLI/ACP drivers move to v0.11.
@@ -202,10 +202,26 @@ the challenge ref, is `<change>-<id>-<attempt>`, for example `busmon-state-t3-2`
 - The conductor never parses the name: the mission record stores it.
 
 **Attempts are closed explicitly.** A new attempt (after a rejection, `retry`, `reassign` or a
-reload) marks the previous one `superseded` in the mission record, and the conductor replies on
-the old request's thread: "superseded by `<new task>`, stop". Any later `accept` or `done` on a
-superseded task is ignored for the mission. The agent gets that same reply again. Nothing from a
-superseded attempt is ever checked or integrated.
+reload) closes the previous one. The protocol is precise:
+
+1. The mission record marks the old task `superseded`. The record's `current_task` is the
+   only task whose `accept` or `done` the conductor acts on.
+2. The board entry of the old task is set to state `superseded` through a fenced write. The
+   request metadata is left as it was. busmon's waiting count only counts `requested` and
+   `accepted`, so a superseded request stops being shown as waiting.
+3. The conductor sends one `FencedCmd` to the old agent:
+   - type `reply`;
+   - `ref` set to the old request's thread (`RequestInfo.Thread`);
+   - text: `superseded by <new task>: stop, do not deliver`;
+   - `wake=no`.
+
+   The agent is not woken for it. If it is working, the reply reaches it at its next drain, and
+   if the request is still queued, the agent sees both entries in the same drain. The
+   dispatcher's behaviour is unchanged: it wakes on unread entries, not on board states.
+4. A later `accept` or `done` on the superseded task moves no mission state. The conductor sends
+   the same reply once more, at most once per such transition.
+
+Nothing from a superseded attempt is ever checked or integrated.
 
 **What the request body carries.** It holds references only:
 
@@ -325,6 +341,24 @@ mission abort <change> --reason <text>
 
 `retry` and `reassign` always open a new attempt and supersede the current one (§4).
 
+**Who writes: the conductor, always.** Only the lease holder may change a change or a
+mission, so the CLI never writes mission state itself.
+
+- **Reads.** `status` and `show` read Redis directly.
+- **Operator commands.** `load`, `retry`, `reassign`, `skip` and `abort` are sent to the
+  conductor as entries in a dedicated stream, `{p}:missionops`, which joins `projectKinds`. Each
+  entry holds `op`, its arguments, `from` (`AGENT_BUS_AGENT`) and a request id. The cmd stream
+  is not used, so the dispatcher never treats an operation as an agent's obligation.
+- **How the conductor handles them.** It reads the stream through its own consumer group and
+  applies the operations one at a time, between reconciliation passes, with its fenced writes.
+  For `load`, it reads `git show` itself. It then appends a `result` entry (`ok`, or the error)
+  that carries the request id.
+- **What the CLI does.** It waits for that result (30 s, `--wait` to change it), prints it and
+  exits 0 or 1. With no live conductor (`ConductorAlive` false), it refuses at once:
+  `missions down: start agentbus missions`. With a timeout, it says the operation is queued and
+  not yet applied. It never claims success it did not see.
+- **Audit.** The operations stream is also the audit trail of every operator action.
+
 `skip` integrates nothing: it marks the mission `integrated` without a commit, so dependents
 unlock. It records a self-verdict with the reason, so the act is in the ledger. `abort` stops
 the conductor's work on the change and leaves the branch and the worktrees in place.
@@ -406,9 +440,13 @@ The delivered commit is the idempotence key.
   reload fail, unless `--force <reason>` is given. With it, the attempt is superseded (§4): any
   later accept or done on it is ignored, and its agent is told to stop. The mission then goes
   back to `pending`. A queued request can still be read, but it can no longer produce anything.
-- A mission that is changed or removed after approval or integration makes the reload fail,
-  unless `--force <reason>` is given. The reason is recorded. Integrated work is never rewritten
-  silently.
+- A changed or removed mission in `approved` or `integrating` makes the reload fail, **even with
+  `--force`**. An approval or a merge in progress is never cancelled by a reload: wait until the
+  mission is `integrated` or `blocked`, or `abort` the change.
+- A changed or removed mission that is `integrated` makes the reload fail, unless
+  `--force <reason>` is given. Its merge is history: it stays `integrated`. The record keeps
+  `integrated_under` (the revision and hash it was merged with) and the reason. New work needs a
+  new mission. Integrated work is never rewritten or re-run silently.
 - A new mission starts as `pending`.
 
 ### 6.5 Losing Redis
@@ -467,6 +505,9 @@ outside the repository. The oldest logs are pruned past 200 MiB per change.
   - a start with a merge in progress, and one with unknown files, in the integration worktree;
   - a crash after the merge but before the change suite, which must rerun the suite;
   - a mission id or change name too long for a request name, refused at load.
+  - an operator command with no conductor running (refused), one that times out (reported as
+    queued), and a reload refused over `approved`/`integrating` even with `--force`;
+  - a superseded request no longer counted as waiting, and its agent not woken by the reply.
 - **Live acceptance:** port the launcher (`scripts/lib/role_config.py`) to Go as a real
   change. Kimi and Codex run it as missions, master only arbitrates, and the result is
   recorded in the release notes.
