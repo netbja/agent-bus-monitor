@@ -30,7 +30,7 @@ func helpText() string {
 	row("1 2 3 (4)", "medium and narrow screens: switch the visible panel")
 	row("click / wheel", "click selects, click on the selected row opens it; the wheel scrolls")
 	more("a click outside an open detail closes it, like esc")
-	row("i : @", "write a message; @agent text sends a directive, plain text a notify")
+	row("i : @", "write: @agent text wakes that agent, @all text every agent; plain text is a broadcast nobody reads (Enter twice)")
 	blank()
 
 	head("STATES")
@@ -61,7 +61,7 @@ func helpText() string {
 	sb.WriteString("  " + tg(RoleMuted, "activity types") + "\n")
 	row("status", "a state declaration (state - message).")
 	row("report  auto", "an agent's report; auto = written by a hook. (+N): more text retained.")
-	row("notify", "a broadcast note.")
+	row("notify", "a broadcast note; nobody reads it and nothing wakes for it.")
 	row("request", "a directive carrying a tracked request (agentbus request send).")
 	row("directive  reply", "a cmd to an agent, and its answer.")
 	row("challenge  verdict", "4-eyes: a review request and its decision.")

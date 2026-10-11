@@ -15,8 +15,8 @@ import (
 
 // busWriter is what the UI sends and reads on demand. *bus.Bus satisfies it.
 type busWriter interface {
-	Cmd(ctx context.Context, from, target, typ, ref, command string) (string, error)
-	Notify(ctx context.Context, from, message string) (string, error)
+	HumanCmd(ctx context.Context, from, target, command string) (string, error)
+	HumanNotify(ctx context.Context, from, message string) (string, error)
 	Thread(ctx context.Context, threadID string) ([]bus.Event, error)
 }
 
@@ -38,11 +38,12 @@ var panelOrder = []PanelID{PanelAgents, PanelActivity, PanelBoard, PanelRequests
 // UI state. All fields are touched only on the tview event loop: handlers,
 // QueueUpdateDraw callbacks and Draw.
 type ui struct {
-	app           *tview.Application
-	st            *shared
-	ctx           context.Context
-	w             busWriter
-	project, self string
+	app            *tview.Application
+	st             *shared
+	ctx            context.Context
+	w              busWriter
+	project, self  string
+	broadcastDraft string // a draft with no @ already warned about: the next Enter sends it
 
 	pages   *tview.Pages
 	screen  *screenView
@@ -371,14 +372,36 @@ func (u *ui) inputDone(key tcell.Key) {
 			return
 		}
 		if text != "" {
+			tgt, body, directed := parseDirected(text)
+			if !directed && u.broadcastDraft != text {
+				// Nobody reads a notify and nothing wakes for it: say so once.
+				u.broadcastDraft = text
+				u.flash, u.flashErr = "nobody reads a broadcast: start with @agent or @all; Enter again to broadcast", true
+				return
+			}
+			u.broadcastDraft = ""
 			ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
 			var err error
-			if tgt, body, directed := parseDirected(text); directed {
-				_, err = u.w.Cmd(ctx, u.self, tgt, bus.CmdDirective, "", body)
+			switch {
+			case directed && tgt == "all":
+				targets := u.agentNames()
+				for _, a := range targets {
+					if _, err = u.w.HumanCmd(ctx, u.self, a, body); err != nil {
+						break
+					}
+				}
+				u.flash = fmt.Sprintf("directive sent to %d agents", len(targets))
+				if len(targets) == 0 {
+					cancel()
+					u.flash, u.flashErr = "no agent to send to", true
+					return
+				}
+			case directed:
+				_, err = u.w.HumanCmd(ctx, u.self, tgt, body)
 				u.flash = "directive sent to " + tgt
-			} else {
-				_, err = u.w.Notify(ctx, u.self, text)
-				u.flash = "notify sent"
+			default:
+				_, err = u.w.HumanNotify(ctx, u.self, text)
+				u.flash = "broadcast sent"
 			}
 			cancel()
 			u.flashErr = err != nil
@@ -693,7 +716,7 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	}
 	now := time.Now()
 	u.st.mu.Lock()
-	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot,
+	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self,
 		waiting: waitingText(u.st.requests, u.st.threads, now), budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()

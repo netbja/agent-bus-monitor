@@ -20,6 +20,14 @@ type eventLook struct {
 // from a directive that carries request metadata (Task); the wire type stays
 // directive. An unknown cmd type or kind shows its raw name, muted.
 func lookEvent(e bus.Event) eventLook {
+	l := lookEvent1(e)
+	if e.Human && l.From != "" { // a person wrote it (busmon): their glyph and name
+		l.From = GlyphHuman + " " + displayName(l.From)
+	}
+	return l
+}
+
+func lookEvent1(e bus.Event) eventLook {
 	switch e.Kind {
 	case "status":
 		text := e.State

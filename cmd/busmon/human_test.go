@@ -48,7 +48,7 @@ func TestLookEventShowsHumans(t *testing.T) {
 func TestHeaderShowsTheHuman(t *testing.T) {
 	now := time.Now()
 	for _, c := range []struct{ pilot, want string }{{"bernard", "[human · pilot]"}, {"", "Bernard [human]"}} {
-		lines := headerLines(headerData{project: "demo", self: "bernard", pilot: c.pilot, now: now, health: health{ok: true, at: now}}, 160, TierWide)
+		lines := headerLines(headerData{project: "demo", self: "bernard", pilot: c.pilot, now: now, health: health{ok: true, since: now}}, 160, TierWide)
 		text := ""
 		for _, l := range lines {
 			for _, s := range l {

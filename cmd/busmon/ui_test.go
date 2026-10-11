@@ -298,6 +298,7 @@ func TestDraftsSeparate(t *testing.T) {
 	if h.u.input.GetText() != "hello q1" {
 		t.Fatalf("message draft lost: %q", h.u.input.GetText())
 	}
+	h.key(key(tcell.KeyEnter)) // a broadcast: the first Enter only warns
 	h.key(key(tcell.KeyEnter))
 	if fmt.Sprint(h.w.sent) != "[notify hello q1]" {
 		t.Fatalf("sent %v", h.w.sent)

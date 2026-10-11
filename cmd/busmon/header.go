@@ -16,6 +16,7 @@ type headerData struct {
 	dispatch string // "", "up", "down"
 	missions string // "", "up", "down": shown only when not ""
 	pilot    string // pilot-lease driver, "" = autonomous
+	self     string // the person busmon writes as (humanLabel); "" = not shown
 	waiting  string // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
 	budgets  map[string]bus.BudgetSnapshot
 	now      time.Time
@@ -67,9 +68,12 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	if !d.health.ok && d.health.err != "" {
 		add(Line{{Text: "(" + Preview(d.health.err) + ")", Role: RoleMuted}}, 9, second)
 	}
-	if d.pilot != "" {
+	if d.self != "" {
+		add(Line{{Text: Preview(humanLabel(d.self, d.pilot)), Role: RoleText}}, 4, second)
+	}
+	if d.pilot != "" && d.pilot != d.self {
 		add(Line{{Text: "pilot ", Role: RoleMuted}, {Text: Preview(d.pilot), Role: RoleText}}, 4, second)
-	} else {
+	} else if d.pilot == "" {
 		add(Line{{Text: "autonomous", Role: RoleMuted}}, 4, second)
 	}
 	if d.waiting != "" {
