@@ -91,12 +91,18 @@ func NewNote(o NewOptions) (string, error) {
 	stem := date + "-" + o.Slug
 	rel := k.dir + "/" + stem + ".md"
 	notePath := filepath.Join(memDir, k.dir, stem+".md")
-	if _, err := os.Stat(notePath); err == nil {
+	if _, err := os.Lstat(notePath); err == nil {
 		return "", errors.New("docs/memory/" + rel + " already exists")
+	}
+	if !within(resolve(notePath), resolve(o.Root)) {
+		return "", errors.New("docs/memory/" + rel + " resolves outside the repository")
 	}
 	nextIndex, err := appendToSection(string(index), k.heading, "- ["+strings.TrimSpace(o.Title)+"]("+rel+")")
 	if err != nil {
 		return "", err
+	}
+	if n, b := indexSize([]byte(nextIndex)); n > indexMaxLines || b > indexMaxBytes {
+		return "", fmt.Errorf("docs/memory/INDEX.md would reach %d lines, %d bytes; the index must stay within %d lines and %d bytes: trim it first", n, b, indexMaxLines, indexMaxBytes)
 	}
 	if agents, err := os.ReadFile(filepath.Join(o.Root, "AGENTS.md")); err != nil {
 		return "", err
@@ -113,11 +119,21 @@ func NewNote(o NewOptions) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(notePath), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(notePath, []byte(front+fmt.Sprintf(noteBody, strings.TrimSpace(o.Title))), 0o644); err != nil {
+	// O_EXCL claims the name atomically and never follows a link planted there.
+	f, err := os.OpenFile(notePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(indexPath, []byte(nextIndex), 0o644); err != nil {
-		return "", err
+	_, werr := f.WriteString(front + fmt.Sprintf(noteBody, strings.TrimSpace(o.Title)))
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.WriteFile(indexPath, []byte(nextIndex), 0o644)
+	}
+	if werr != nil {
+		os.Remove(notePath) // no orphan note without its index line
+		return "", werr
 	}
 	if _, err := Sync(o.Root); err != nil {
 		return "", err

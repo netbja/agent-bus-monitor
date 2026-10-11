@@ -141,3 +141,14 @@ func TestFindRootInWorktree(t *testing.T) {
 		t.Fatalf("FindRoot = %q, %v; want %q", got, err, root)
 	}
 }
+
+// Codex review: a link through a symlinked directory to a missing file
+// outside the repository escapes it, as pathlib's non-strict resolve says.
+func TestSymlinkedMissingTargetEscapes(t *testing.T) {
+	root := memtest.WriteTree(t)
+	if err := os.Symlink(t.TempDir(), filepath.Join(root, "docs/memory/out")); err != nil {
+		t.Fatal(err)
+	}
+	memtest.Append(t, root, "docs/memory/INDEX.md", "[x](out/missing.md)\n")
+	hasErr(t, check(root), "docs/memory/INDEX.md: local link escapes repository: out/missing.md")
+}

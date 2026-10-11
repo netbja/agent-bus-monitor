@@ -297,16 +297,40 @@ func join(dir, p string) string {
 	return filepath.Join(dir, p)
 }
 
-// resolve is pathlib's non-strict resolve: absolute, cleaned, symlinks
-// followed where the path exists.
+// resolve is pathlib's non-strict resolve: absolute and cleaned, every
+// existing symlink followed — parents of a missing file and a dangling link
+// included — the missing remainder appended as is.
 func resolve(p string) string {
 	if a, err := filepath.Abs(p); err == nil {
 		p = a
 	}
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
+	return resolveDepth(filepath.Clean(p), 0)
+}
+
+func resolveDepth(p string, depth int) string {
+	vol := filepath.VolumeName(p)
+	parts := strings.Split(strings.TrimPrefix(p[len(vol):], string(filepath.Separator)), string(filepath.Separator))
+	cur := vol + string(filepath.Separator)
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		next := filepath.Join(cur, part)
+		fi, err := os.Lstat(next)
+		if err != nil {
+			return filepath.Join(append([]string{cur}, parts[i:]...)...)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 && depth < 40 {
+			if target, err := os.Readlink(next); err == nil {
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(cur, target)
+				}
+				next = resolveDepth(filepath.Clean(target), depth+1)
+			}
+		}
+		cur = next
 	}
-	return filepath.Clean(p)
+	return cur
 }
 
 func within(p, dir string) bool {

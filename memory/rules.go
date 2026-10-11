@@ -70,10 +70,7 @@ func (c *checker) labelRule(index string) {
 
 // budgetRule: the index is loaded at every boot, so it stays small.
 func (c *checker) budgetRule(index []byte) {
-	lines := strings.Count(string(index), "\n")
-	if len(index) > 0 && index[len(index)-1] != '\n' {
-		lines++
-	}
+	lines, _ := indexSize(index)
 	if lines > indexMaxLines || len(index) > indexMaxBytes {
 		c.fail(fmt.Sprintf("docs/memory/INDEX.md: %d lines, %d bytes; the index is loaded at every boot and must stay within %d lines and %d bytes",
 			lines, len(index), indexMaxLines, indexMaxBytes))
@@ -99,3 +96,13 @@ func (c *checker) staleRule(p, text string) {
 }
 
 func (c *checker) warn(s string) { c.res.Warnings = append(c.res.Warnings, s) }
+
+// indexSize is the index's line count (a last line without a newline counts)
+// and byte size.
+func indexSize(index []byte) (lines, bytes int) {
+	lines = strings.Count(string(index), "\n")
+	if len(index) > 0 && index[len(index)-1] != '\n' {
+		lines++
+	}
+	return lines, len(index)
+}

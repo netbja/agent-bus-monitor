@@ -165,3 +165,37 @@ func TestFreshStubFailsCheck(t *testing.T) {
 		}
 	}
 }
+
+// Codex review: a dangling symlink at the note's path must not be followed.
+func TestNewNoteRefusesDanglingSymlink(t *testing.T) {
+	root := noteTree(t)
+	outside := filepath.Join(t.TempDir(), "created-outside.md")
+	if err := os.Symlink(outside, filepath.Join(root, "docs/memory/lessons/2026-10-11-pel-floor.md")); err != nil {
+		t.Fatal(err)
+	}
+	before := treeHash(t, root)
+	if _, err := memory.NewNote(newOpts(root)); err == nil {
+		t.Fatal("accepted")
+	}
+	if _, err := os.Lstat(outside); err == nil {
+		t.Fatal("wrote through the symlink, outside the repository")
+	}
+	if treeHash(t, root) != before {
+		t.Fatal("tree changed")
+	}
+}
+
+// Codex review: a note whose index line would break the budget is refused
+// before anything is written.
+func TestNewNoteRefusesIndexOverBudget(t *testing.T) {
+	root := noteTree(t)
+	memtest.Write(t, root, "docs/memory/INDEX.md", "[Protocol](PROTOCOL.md)\n[Journal](journal/INDEX.md)\n\n## Lessons\n\n- [Seed](lessons/2026-10-01-seed.md)\n"+strings.Repeat("x\n", 54))
+	sync(t, root)
+	before := treeHash(t, root)
+	if _, err := memory.NewNote(newOpts(root)); err == nil || !strings.Contains(err.Error(), "60 lines") {
+		t.Fatalf("err = %v", err)
+	}
+	if treeHash(t, root) != before {
+		t.Fatal("tree changed")
+	}
+}
