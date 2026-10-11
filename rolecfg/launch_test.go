@@ -2,6 +2,9 @@ package rolecfg
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,11 +79,11 @@ func (f *launchFixture) config(client, extra, roles, options string) *Manifest {
 func (f *launchFixture) launch(m *Manifest, role string, extraEnv ...string) (string, string, error) {
 	var out, errw bytes.Buffer
 	f.execed, f.execEnv = nil, nil
-	err := Launch(m, role, "demo", LaunchConfig{Env: append(append([]string{}, f.env...), extraEnv...), Stdout: &out, Stderr: &errw,
-		Exec: func(argv0 string, argv, env []string) error {
+	err := Launch(m, role, "demo", append(append([]string{}, f.env...), extraEnv...), &out, &errw,
+		func(argv0 string, argv, env []string) error {
 			f.execed, f.execEnv = append([]string{argv0}, argv...), env
 			return nil
-		}})
+		})
 	return out.String(), errw.String(), err
 }
 
@@ -184,7 +187,7 @@ func TestLaunchAdapterSpec(t *testing.T) {
 	}
 	spec, err := os.ReadFile(f.execed[3])
 	must(t, err)
-	for _, want := range []string{`"project":"demo"`, `"role":"coder"`, `"prompt":"Role source:`, `"prompt_path":`, `"client":"extra"`} {
+	for _, want := range []string{`"project": "demo"`, `"role": "coder"`, `"prompt": "Role source:`, `"prompt_path": `, `"client": "extra"`} {
 		if !strings.Contains(string(spec), want) {
 			t.Fatalf("spec lacks %s: %s", want, spec)
 		}
@@ -328,5 +331,75 @@ func TestCacheFileIsStable(t *testing.T) {
 	must(t, err)
 	if st.Mode().Perm() != 0o700 {
 		t.Fatalf("cache dir mode %v", st.Mode().Perm())
+	}
+}
+
+// TestAdapterSpecMatchesPython: the spec file an adapter reads is byte for
+// byte what Python's json.dumps wrote (key order, ", "/": " separators,
+// ASCII escapes), so its cache name is the same sha256 too. The golden was
+// produced by role_config.py from the same fixture, with its root as @ROOT@.
+func TestAdapterSpecMatchesPython(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "root dir")
+	must(t, os.MkdirAll(filepath.Join(root, "skills", "test-skill"), 0o755))
+	must(t, os.MkdirAll(filepath.Join(root, "bin"), 0o755))
+	must(t, os.WriteFile(filepath.Join(root, "skills", "test-skill", "SKILL.md"), []byte("# s\n"), 0o644))
+	must(t, os.WriteFile(filepath.Join(root, "bin", "extra"), []byte("#!/bin/sh\n"), 0o755))
+	for src, dst := range map[string]string{"adapter.toml": "roles.toml", "coder.md": "coder.md"} {
+		b, err := os.ReadFile(filepath.Join("testdata", "launch", src))
+		must(t, err)
+		must(t, os.WriteFile(filepath.Join(root, dst), b, 0o644))
+	}
+	golden, err := os.ReadFile(filepath.Join("testdata", "launch", "adapter-spec.golden"))
+	must(t, err)
+	resolved, err := filepath.EvalSymlinks(root)
+	must(t, err)
+	want := strings.ReplaceAll(string(golden), "@ROOT@", resolved)
+	m, err := Load(filepath.Join(root, "roles.toml"))
+	must(t, err)
+	var argv []string
+	env := []string{"PATH=/usr/bin:/bin", "HOME=" + root, "ROLES_DIR=" + root, "REPO_SKILLS=" + filepath.Join(root, "skills"),
+		"POCOCK_SKILLS_ROOT=" + filepath.Join(root, "p"), "AGENT_LAUNCH_CACHE=" + filepath.Join(root, "cache"), "SRC_A=a", "SRC_B=b"}
+	err = Launch(m, "coder", "demo", env, io.Discard, io.Discard, func(argv0 string, a, _ []string) error { argv = a; return nil })
+	must(t, err)
+	got, err := os.ReadFile(argv[2])
+	must(t, err)
+	if string(got) != want {
+		t.Fatalf("spec differs from Python:\n got %s\nwant %s", got, want)
+	}
+	sum := sha256.Sum256([]byte(want))
+	if filepath.Base(argv[2]) != hex.EncodeToString(sum[:])+".json" {
+		t.Fatalf("cache name %s", argv[2])
+	}
+}
+
+func TestPyJSONEscapes(t *testing.T) {
+	for v, want := range map[interface{}]string{
+		"é😀\"\\/\n\t\x7f\x01": `"\u00e9\ud83d\ude00\"\\/\n\t\u007f\u0001"`,
+		int64(3):              "3", true: "true", 0.5: "0.5", 1234567.0: "1234567.0", 1e16: "1e+16", 1e-5: "1e-05", 100.0: "100.0",
+	} {
+		if got, err := pyJSON(v); err != nil || got != want {
+			t.Errorf("pyJSON(%#v) = %s, %v; want %s", v, got, err, want)
+		}
+	}
+}
+
+func TestRepoFromEnv(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("codex", "", "", "")
+	repo := filepath.Join(f.root, "repo")
+	must(t, os.MkdirAll(filepath.Join(repo, "skills", "test-skill"), 0o755))
+	must(t, os.WriteFile(filepath.Join(repo, "skills", "test-skill", "SKILL.md"), []byte("x"), 0o644))
+	var env []string
+	for _, kv := range f.env {
+		if !strings.HasPrefix(kv, "REPO_SKILLS=") {
+			env = append(env, kv)
+		}
+	}
+	f.env = append(env, "AGENTBUS_REPO="+repo)
+	if _, e, err := f.launch(m, "coder"); err != nil {
+		t.Fatal(err, e)
+	}
+	if !strings.Contains(strings.Join(f.execed, " "), filepath.Join(repo, "skills", "test-skill", "SKILL.md")) {
+		t.Fatalf("skills not taken from AGENTBUS_REPO: %q", f.execed)
 	}
 }

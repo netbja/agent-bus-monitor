@@ -9,26 +9,31 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 // builtinBinary is the executable each builtin client runs.
 var builtinBinary = map[string]string{"claude-code": "claude", "codex": "codex", "kimi-cli": "kimi"}
 
-// LaunchConfig is what Launch reads from its surroundings, injected for tests.
-// Repo is the agent-bus-monitor checkout (default skills and role prompts);
-// Env is the launcher's environment (os.Environ() in production); Exec
-// replaces the process (syscall.Exec in production, which keeps the pid).
-type LaunchConfig struct {
-	Repo           string
-	Env            []string
-	Stdout, Stderr io.Writer
-	Exec           func(argv0 string, argv, env []string) error
+// repoRoot is the agent-bus-monitor checkout that holds the default skills
+// and role prompts (Python's REPO): AGENTBUS_REPO, set by the scripts, else
+// the directory of this binary (the scripts run <repo>/agentbus).
+func repoRoot(e *envMap) string {
+	if r, ok := e.get("AGENTBUS_REPO"); ok && r != "" {
+		return r
+	}
+	if exe, err := os.Executable(); err == nil {
+		return filepath.Dir(absResolved(exe))
+	}
+	return "."
 }
 
 // envMap is an ordered environment: lookups, edits, and back to KEY=VALUE.
@@ -291,22 +296,15 @@ func build(p Profile, project, prompt, promptPath string, dry bool, env []string
 	}
 	file := "<resolved launch.json>"
 	if !dry {
-		spec := map[string]interface{}{}
-		raw, err := json.Marshal(p)
+		spec, err := adapterSpec(p, project, prompt, promptPath)
 		if err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal(raw, &spec); err != nil {
+		text, err := pyJSON(spec)
+		if err != nil {
 			return nil, err
 		}
-		spec["project"], spec["prompt"], spec["prompt_path"] = project, prompt, promptPath
-		var b bytes.Buffer
-		enc := json.NewEncoder(&b)
-		enc.SetEscapeHTML(false)
-		if err := enc.Encode(spec); err != nil {
-			return nil, err
-		}
-		if file, err = cacheFile(env, strings.TrimSuffix(b.String(), "\n"), ".json"); err != nil {
+		if file, err = cacheFile(env, text, ".json"); err != nil {
 			return nil, err
 		}
 	}
@@ -381,7 +379,14 @@ func lookPath(name, pathEnv string) (string, error) {
 // Launch is Python's launch(): resolve the role, check the client, build the
 // command, bind the pane inside herdr, set the environment and exec the
 // client (or print the plan when AGENT_LAUNCH_DRYRUN=1).
-func Launch(m *Manifest, role, project string, cfg LaunchConfig) error {
+// env is the launcher's environment (os.Environ() in production); execFn
+// replaces the process (syscall.Exec in production, which keeps the pid).
+func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.Writer, execFn func(argv0 string, argv, env []string) error) error {
+	cfg := struct {
+		Env            []string
+		Stdout, Stderr io.Writer
+		Exec           func(argv0 string, argv, env []string) error
+	}{env, stdout, stderr, execFn}
 	if !namePattern.MatchString(role) || !namePattern.MatchString(project) {
 		return errors.New("invalid role or project name")
 	}
@@ -390,7 +395,7 @@ func Launch(m *Manifest, role, project string, cfg LaunchConfig) error {
 		return err
 	}
 	e := newEnv(cfg.Env)
-	promptPath, prompt, err := promptFor(p, cfg.Repo, e)
+	promptPath, prompt, err := promptFor(p, repoRoot(e), e)
 	if err != nil {
 		return err
 	}
@@ -480,4 +485,222 @@ func sortedKeys(m map[string]string) []string {
 		}
 	}
 	return keys
+}
+
+// ordered is a JSON object that keeps its keys in insertion order, as a
+// Python dict does.
+type ordered struct {
+	keys []string
+	vals map[string]interface{}
+}
+
+func newOrdered() *ordered { return &ordered{vals: map[string]interface{}{}} }
+
+func (o *ordered) set(k string, v interface{}) {
+	if _, ok := o.vals[k]; !ok {
+		o.keys = append(o.keys, k)
+	}
+	o.vals[k] = v
+}
+
+// adapterSpec rebuilds Python's spec dict in its key order: the profile's own
+// TOML fields as written, then profile, role, legacy, skills and manifest,
+// options (in place if the profile has it), adapter, then project, prompt and
+// prompt_path. The profile is re-read from the manifest: decoding into maps
+// loses TOML order.
+func adapterSpec(p Profile, project, prompt, promptPath string) (*ordered, error) {
+	var raw map[string]interface{}
+	meta, err := toml.DecodeFile(p.Manifest, &raw)
+	if err != nil {
+		return nil, err
+	}
+	profiles, _ := raw["profiles"].(map[string]interface{})
+	table, _ := profiles[p.Profile].(map[string]interface{})
+	prefix := []string{"profiles", p.Profile}
+	spec, err := orderedTable(table, meta.Keys(), prefix)
+	if err != nil {
+		return nil, err
+	}
+	skills := make([]interface{}, len(p.Skills))
+	for i, s := range p.Skills {
+		skills[i] = s
+	}
+	spec.set("profile", p.Profile)
+	spec.set("role", p.Role)
+	spec.set("legacy", p.Legacy)
+	spec.set("skills", skills)
+	spec.set("manifest", p.Manifest)
+	if _, ok := spec.vals["options"]; !ok {
+		spec.set("options", newOrdered())
+	}
+	spec.set("adapter", p.Adapter)
+	spec.set("project", project)
+	spec.set("prompt", prompt)
+	spec.set("prompt_path", promptPath)
+	return spec, nil
+}
+
+// orderedTable converts a decoded TOML table to ordered objects, nested
+// tables included, using the key order the decoder saw.
+func orderedTable(table map[string]interface{}, keys []toml.Key, prefix []string) (*ordered, error) {
+	o := newOrdered()
+	for _, k := range keys {
+		if len(k) != len(prefix)+1 || !hasPrefix(k, prefix) {
+			continue
+		}
+		name := k[len(prefix)]
+		v, ok := table[name]
+		if !ok {
+			continue
+		}
+		if sub, isTable := v.(map[string]interface{}); isTable {
+			nested, err := orderedTable(sub, keys, append(append([]string{}, prefix...), name))
+			if err != nil {
+				return nil, err
+			}
+			o.set(name, nested)
+			continue
+		}
+		o.set(name, v)
+	}
+	if len(o.keys) != len(table) {
+		return nil, fmt.Errorf("profile %s: cannot recover the key order of %s", strings.Join(prefix, "."), strings.Join(prefix, "."))
+	}
+	return o, nil
+}
+
+func hasPrefix(k toml.Key, prefix []string) bool {
+	for i, p := range prefix {
+		if k[i] != p {
+			return false
+		}
+	}
+	return true
+}
+
+// pyJSON is Python's json.dumps with its defaults: ", " and ": " separators,
+// ensure_ascii (\uXXXX, surrogate pairs above the BMP), float repr.
+func pyJSON(v interface{}) (string, error) {
+	var b strings.Builder
+	if err := writePyJSON(&b, v); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+func writePyJSON(b *strings.Builder, v interface{}) error {
+	switch x := v.(type) {
+	case nil:
+		b.WriteString("null")
+	case bool:
+		if x {
+			b.WriteString("true")
+		} else {
+			b.WriteString("false")
+		}
+	case string:
+		writePyString(b, x)
+	case int64:
+		b.WriteString(strconv.FormatInt(x, 10))
+	case int:
+		b.WriteString(strconv.Itoa(x))
+	case float64:
+		b.WriteString(pyFloat(x))
+	case []interface{}:
+		b.WriteByte('[')
+		for i, item := range x {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			if err := writePyJSON(b, item); err != nil {
+				return err
+			}
+		}
+		b.WriteByte(']')
+	case []string:
+		items := make([]interface{}, len(x))
+		for i, s := range x {
+			items[i] = s
+		}
+		return writePyJSON(b, items)
+	case *ordered:
+		b.WriteByte('{')
+		for i, k := range x.keys {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			writePyString(b, k)
+			b.WriteString(": ")
+			if err := writePyJSON(b, x.vals[k]); err != nil {
+				return err
+			}
+		}
+		b.WriteByte('}')
+	case []map[string]interface{}:
+		return fmt.Errorf("arrays of tables are not supported in a profile")
+	default:
+		return fmt.Errorf("Object of type %T is not JSON serializable", v)
+	}
+	return nil
+}
+
+func writePyString(b *strings.Builder, s string) {
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		default:
+			switch {
+			case r >= 0x20 && r < 0x7f:
+				b.WriteRune(r)
+			case r > 0xffff:
+				r -= 0x10000
+				fmt.Fprintf(b, `\u%04x\u%04x`, 0xd800+(r>>10), 0xdc00+(r&0x3ff))
+			default:
+				fmt.Fprintf(b, `\u%04x`, r)
+			}
+		}
+	}
+	b.WriteByte('"')
+}
+
+// pyFloat is Python's float repr: fixed notation for exponents in [-4, 16),
+// always with a fractional part, else 1e+16 style.
+func pyFloat(f float64) string {
+	switch {
+	case math.IsInf(f, 1):
+		return "Infinity"
+	case math.IsInf(f, -1):
+		return "-Infinity"
+	case math.IsNaN(f):
+		return "NaN"
+	}
+	e := strconv.FormatFloat(f, 'e', -1, 64)
+	mant, expStr, _ := strings.Cut(e, "e")
+	exp, _ := strconv.Atoi(expStr)
+	if exp >= -4 && exp < 16 {
+		s := strconv.FormatFloat(f, 'f', -1, 64)
+		if !strings.Contains(s, ".") {
+			s += ".0"
+		}
+		return s
+	}
+	sign := "+"
+	if exp < 0 {
+		sign, exp = "-", -exp
+	}
+	return fmt.Sprintf("%se%s%02d", mant, sign, exp)
 }
