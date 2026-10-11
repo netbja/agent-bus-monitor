@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -101,11 +100,4 @@ func (f feedFilter) describe() string {
 		parts = append(parts, "\""+f.text+"\"")
 	}
 	return strings.Join(parts, " + ")
-}
-
-// filterTitle replaces the live/pause indicator while a filter is on, and says
-// how many of the retained lines are hidden and how to get them back.
-func filterTitle(f feedFilter, shown, total int) string {
-	return fmt.Sprintf(" ACTIVITY  [aqua][filter %s · %d of %d lines · Esc clears][-] ",
-		f.describe(), shown, total)
 }

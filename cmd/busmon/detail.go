@@ -165,10 +165,10 @@ func detailThread(e bus.Event, th threadState) string {
 	case looksLikeStreamID(id):
 		pos = "reply in thread"
 	}
-	out := id + "  " + tag("gray", "("+pos+")")
+	out := tview.Escape(Preview(id)) + "  " + tag("gray", "("+pos+")")
 	switch {
 	case th.Err != nil:
-		out += "  " + tag("red", "[thread unreadable: "+th.Err.Error()+"]")
+		out += "  " + tag("red", "[thread unreadable: "+Preview(th.Err.Error())+"]")
 	case !th.Loaded:
 		out += "  " + tag("gray", "[reading…]")
 	default:
@@ -188,30 +188,36 @@ func detailText(e bus.Event, at, now time.Time, th threadState) string {
 	var sb strings.Builder
 	row := func(k, v string) { fmt.Fprintf(&sb, "%s  %s\n", tag("gray", pad(k, 6)), v) }
 
-	row("kind", tview.Escape(detailKind(e)))
-	row("from", tview.Escape(detailFrom(e)))
-	row("to", tview.Escape(detailTo(e)))
-	row("when", fmt.Sprintf("%s  %s", at.Format("2006-01-02 15:04:05"),
-		tag("gray", "("+humanAge(now.Sub(at))+" ago)")))
-	row("id", tview.Escape(e.ID))
-	row("thread", detailThread(e, th))
-
+	// One attribution line, then the body with what can honestly be said about
+	// its completeness right under it; the technical block follows.
+	who := detailFrom(e)
+	if e.Target != "" {
+		who += " → " + e.Target
+	}
+	fmt.Fprintf(&sb, "%s  %s\n\n", tview.Escape(Preview(who)),
+		tag("gray", at.Format("2006-01-02 15:04:05")+" ("+humanAge(now.Sub(at))+" ago)"))
+	if body := messageBody(e); body != "" {
+		sb.WriteString(tview.Escape(DetailText(body)))
+	} else {
+		sb.WriteString(tag("gray", "(no text)"))
+	}
+	sb.WriteString("\n\n")
 	f := eventFidelity(e)
 	row("text", tag(f.Tone, f.Label))
 	if f.Caveat != "" {
 		row("", tag("gray", f.Caveat))
 	}
 	if e.Kind == "status" && e.State != "" {
-		row("state", tag(stateColor(e.State), e.State)+"  "+tag("gray", "(as declared by the agent)"))
-	}
-
-	sb.WriteString("\n")
-	if body := messageBody(e); body != "" {
-		sb.WriteString(tview.Escape(body))
-	} else {
-		sb.WriteString(tag("gray", "(no text)"))
+		row("state", tag(stateColor(e.State), Preview(e.State))+"  "+tag("gray", "(as declared by the agent)"))
 	}
 	sb.WriteString("\n")
+	row("kind", tview.Escape(Preview(detailKind(e))))
+	row("from", tview.Escape(Preview(detailFrom(e))))
+	row("to", tview.Escape(Preview(detailTo(e))))
+	row("when", fmt.Sprintf("%s  %s", at.Format("2006-01-02 15:04:05"),
+		tag("gray", "("+humanAge(now.Sub(at))+" ago)")))
+	row("id", tview.Escape(Preview(e.ID)))
+	row("thread", detailThread(e, th))
 
 	if threadID(e) != "" {
 		sb.WriteString("\n" + threadSection(e, th, now))
@@ -229,7 +235,7 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 	sb.WriteString(tag("gray", "── thread ──") + "\n")
 	switch {
 	case th.Err != nil:
-		sb.WriteString(tag("red", "thread could not be read: "+th.Err.Error()) + "\n")
+		sb.WriteString(tag("red", "thread could not be read: "+Preview(th.Err.Error())) + "\n")
 		return sb.String()
 	case !th.Loaded:
 		sb.WriteString(tag("gray", "reading the thread…") + "\n")
@@ -250,7 +256,7 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 	// ref ("pr-42") has no root entry to lose, and reporting one as absent
 	// would invent a gap in an exchange that is whole.
 	if !rootHere && looksLikeStreamID(id) {
-		sb.WriteString(tag("yellow", "the thread root "+id+" is "+missingFidelity().Label) + "\n")
+		sb.WriteString(tag("yellow", "the thread root "+Preview(id)+" is "+missingFidelity().Label) + "\n")
 	}
 	return sb.String()
 }
@@ -260,10 +266,10 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 func threadLine(e bus.Event, now time.Time, self bool) string {
 	marker := "  "
 	if self {
-		marker = tag("aqua", "▸ ")
+		marker = tag("aqua", GlyphSelect+" ")
 	}
 	at := entryTime(e.ID)
-	typ := e.Type
+	typ := Preview(e.Type)
 	if typ == "" {
 		typ = "cmd"
 	}
@@ -271,8 +277,8 @@ func threadLine(e bus.Event, now time.Time, self bool) string {
 		marker,
 		tag("gray", at.Format("15:04:05")),
 		tag("fuchsia", pad(typ, 9)),
-		tag("gray", pad(e.From+"→"+e.Target, 16)),
-		tview.Escape(clip(oneLine(e.Message), 60)))
+		tag("gray", pad(Preview(e.From)+"→"+Preview(e.Target), 16)),
+		tview.Escape(clip(oneLine(Preview(e.Message)), 60)))
 }
 
 // oneLine flattens a body for a transcript row; the full text stays one Enter
@@ -299,9 +305,6 @@ func threadPlain(e bus.Event, th threadState) string {
 	return sb.String()
 }
 
-// detailTitle names the overlay after what is open, with the keys that work in
-// it — the overlay is modal, so its own keys have to be visible from inside.
-func detailTitle(e bus.Event) string {
-	return fmt.Sprintf(" MESSAGE · %s  [gray][↑↓/jk scroll · y copy text · Y copy thread · Esc back][-] ",
-		detailKind(e))
-}
+// detailTitle names the overlay after what is open; the overlay frame adds
+// the keys that work in it.
+func detailTitle(e bus.Event) string { return "Message " + GlyphNone + " " + detailKind(e) }

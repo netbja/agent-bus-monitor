@@ -1,4 +1,17 @@
+<p align="center"><img src="docs/assets/logo.png" alt="agent-bus: AI agents riding one Redis bus, passing messages along a shared stream" width="900"></p>
+
 # agent-bus
+
+## New in v0.9.0 — busmon redesign
+
+busmon is now a **btop-style dashboard**: an attention-first table of agents with freshness
+bars, queue, context tokens and flags in words; Activity in columns; Board and Requests beside
+it; details on Enter or click. It adapts to the terminal width (three tiers), keeps every frame
+straight, follows the terminal's background with a light theme available (`--theme light`), and
+honours `NO_COLOR`. Nothing changes on the bus. See [busmon panes](#busmon-panes) and the
+[release notes](docs/releases/v0.9.0.md).
+
+![busmon v0.9: header, Agents table sorted by attention, Activity, Board and Requests](docs/assets/busmon.png)
 
 ## New in v0.8.0 — event-driven dispatch
 
@@ -45,7 +58,7 @@ project.
 | broker     | `redis:8-alpine` on `localhost:6380` (`docker-compose.yml`)                |
 | `bus/`     | Go package: connection, Streams API (`Bus` handle), publish helpers         |
 | `agentbus` | CLI client — status/report/notify/cmd/subscribe/listen (`cmd/agentbus`)     |
-| `busmon`   | TUI dashboard: AGENTS / ACTIVITY / INPUT (`cmd/busmon`)                     |
+| `busmon`   | TUI dashboard: Agents / Activity / Board / Requests (`cmd/busmon`)          |
 | `dispatch/`| Wake dispatcher behind `agentbus dispatch`: wakes unarmed agents via herdr  |
 
 ## Deployment topology (current: machine ⇄ remote machine)
@@ -205,86 +218,81 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
 
 ## busmon panes
 
+A btop-style dashboard (v0.9); the [screenshot at the top](#new-in-v090--busmon-redesign) shows it at
+160 columns on a demo project.
+
+<details><summary>The same layout as text, 120 columns</summary>
+
 ```
- demo  ·  ⬢ MASTER hermes  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
-┌─ AGENTS ─────────────────────────────────┬─ BOARD  [1/5 done] ─────────────────┐
-│ architect: done · no update 5h           │ task-23  sentinel  working  4m      │
-│ coder: working · no update 18m 👂 🔒1 ⧉  │ task-21  coder     accepted 21m     │
-│ foureyes: idle · no update 10m 👂 ⧉      │ task-20  foureyes  requested 43m    │
-│ ⬢ hermes: working (driving the slice) ⧉  │ task-22  coder     blocked  1h      │
-├─ ACTIVITY  [live] ───────────────────────┴─────────────────────────────────────┤
-│ ── Fri 2026-09-18 ──                                                           │
-│ 03:00:14 [coder] working | refactoring the stream parser                       │
-│ 03:06:14 [report:note->coder] résumé du refactor: 3 étapes, 2 faites… (+404)    │
-│ 03:14:14 [challenge foureyes->coder pr-42] explique pourquoi le parser ignore…  │
-├─ INPUT  [Tab feed · F1 legend · F2 requests] ──────────────────────────────────┤
-│ > _                                                                            │
-└────────────────────────────────────────────────────────────────────────────────┘
+ uidemo   ● bus ok   ○ dispatch down   autonomous   1 request waiting · oldest 1h                       19:30:14
+╭─ Agents ──────────────────────────────────────────────────────────── 4 agents · 2 working · 1 blocked ─╮
+│    agent     state     updated             queue    ctx     flags               message                │
+│▶ ▲ grok      blocked   ████░░░░░░ 6m       ·        —       gate 1              needs review of PR #46 │
+│  ○ codex     idle      ███████░░░ 3m       1 msg    64k     deferred            waiting                │
+│  ● kimi      working   █████████░ 40s      ·        —       armed               running tests          │
+│  ● master    working   ██████████ 12s      ·        182k    pilot · armed       coordinating v0.9      │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Activity  live ──────────────────────── 8 events · filter: none ─╮╭─ Board ─────────────── 0/1 done ─╮
+│  time   from      to         type       message                   ││  task      owner     state    age │
+│  ── Sat 2026-10-10 ───────────────────────────────────────────────││  ui-theme  codex     working  1h  │
+│  18:23  master    → codex    directive  review render.go          │╰──────────────────────────────────╯
+│  18:23  kimi                 report     go test ./... passed      │╭─ Requests ─────────── 1 waiting ─╮
+╰───────────────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
+› i or : to write · @agent text sends a directive · plain text notifies
+ tab focus   ↑↓ j k select   enter detail   y copy   / filter   i write   esc back   F2 requests   F1 help   q quit
 ```
 
-- **STATUS** — top bar: the project name, the pilot-lease driver as
-  `⬢ MASTER <driver>` (or `autonomous (no master)` when no lease is held), what is
-  waiting on someone (`5 requests waiting · oldest 3h`), the account budget per
-  provider, and `⇄ bus ok` — the **monitor's own** link to Redis. That last one is
-  separate on purpose: a broker busmon cannot reach looks exactly like a team that
-  has gone quiet, and the two call for opposite reactions. When it breaks it reads
-  `⇄ monitor cannot reach the bus 12s (dial tcp …)` and the feed retries from its
-  own cursors rather than dying silently. `dispatch ●` / `dispatch ○` says whether a wake
-  dispatcher holds the project's lease.
-- **AGENTS** — one chip per agent, keeping three facts apart that are easy to
-  confuse:
-  - **the state the agent declared** — `coder: working` — colour-coded, and never
-    overwritten by silence. An agent that said `working` three hours ago and has
-    said nothing since still reads `working`: that is the last thing it actually
-    told you.
-  - **how old that declaration is** — `· no update 18m`. Nothing is shown while
-    the agent spoke within `idleAfter`. This replaces the old `offline` label,
-    which turned silence into a claim about the agent; the bus has no heartbeat,
-    so silence is silence. A `{p}:report` proves the process is alive but does
-    **not** refresh the declared state, and an agent that has published a report
-    but never a status reads `no state declared`.
-  - **the subscription** — `👂`, a live `subscribe` lease. A lease, not a state.
+</details>
 
-  Then the badges: `⌛N` = N entries this agent's consumer group has not read —
-  the cmd stream is **shared**, so that counts entries addressed to anyone and is
-  not a queue of work for this agent, and entries read but unacknowledged are not
-  counted at all (orange when no lease is live: a question worth asking, not a
-  diagnosis); `🔒N` = open 4-eyes challenges; `⧉` = the agent published a herdr
-  pane id with its last status — declared, not verified, since the pane may be
-  long closed; `[120k ctx]` = that agent's own
-  context fill (from `{p}:usage`); `⬢` = holds the pilot lease. Dispatcher badges:
-  `✉N` = N wake-relevant messages waiting with no wake under way, `⏰` = a wake in
-  flight or deferred, `⚠` = escalated, `old:N` = addressed entries past the 24h horizon
-  (they wake no one), `✂?` = entries may have been trimmed before this agent's group
-  read them. Chips wrap to fit
-  the terminal width, and `+N` means that many did not fit. The roster comes from
-  the `{p}:agents` hash, so an agent that last spoke before the `--limit` backfill
-  window still gets a chip. Press `?` for all of this on screen.
-- **BOARD** — the shared task board (`{p}:board`), one line per task:
-  `task owner state branch age`, state color-coded, newest activity first (the
-  same order as `agentbus board`). Refreshed by the same 1s ticker as the rest.
-  The title counts `N/M done` and turns green `✓ all done` when every task is
-  done — the visual cue that an `agentbus shutdown` is pertinent. The pane is
-  hidden while the board is empty, leaving the full row width to AGENTS.
-- **ACTIVITY** — scrolling, color-coded feed of status, notifications, commands,
-  and reports. Lines carry times only, so a dim `── Mon 2026-08-04 ──` separator
-  is inserted at each day boundary (and above the very first line) to keep a
-  multi-day history readable. It live-tails by default; **Tab** moves focus here. While focused,
-  **↑↓** / **j k** select a line (highlighted), **g**/**Home** jumps to the oldest
-  and **G**/**End** to the newest, **Enter** opens the selected message in full,
-  and **y** copies the line to the clipboard (OSC52, so it works over the SSH
-  tunnel). **/** filters the feed; mouse wheel / PgUp/PgDn still scroll. The title
-  shows `[live]`, the browse indicator `[↑ pause · N below]`, the active filter, or
-  the selection position. **Esc** walks back out one step at a time — selection,
-  then filter, then focus — so nothing is lost by accident.
-- **INPUT** — type a message, Enter publishes on `{p}:notify`; an `@<agent> <text>` line sends a
-  directed cmd to that agent (type `@` for autocomplete). Esc/Ctrl-C quits.
-  The field inherits the terminal's own fg/bg colors (no forced white-on-blue), so
-  it stays legible in any theme.
+- **Header** — the project, then the **monitor's own** link to Redis (`● bus ok`, or
+  `▲ bus down 42s` — a broker busmon cannot reach looks exactly like a quiet team, and the
+  two call for opposite reactions), the dispatcher (`● dispatch up` / `○ dispatch down`),
+  the pilot (`pilot <name>` or `autonomous`), what is waiting on someone, the account budget
+  **used** per provider (session and week gauges) and the clock. Health and dispatch are never
+  truncated; the rest gives way from the right on a narrow terminal.
+- **Agents** — one row per agent, **attention first**: escalated, gated or blocked; then
+  queued or being woken; then working, idle, done, and agents that never declared a state.
+  Columns: the **declared** state (never overwritten by silence — an agent that said
+  `working` three hours ago still reads `working`), how old that declaration is (the bar
+  empties over 10 minutes: freshness, not liveness — the bus has no heartbeat), the
+  wake-eligible **queue** (`·` measured zero, `—` not measured yet, `2?` last read failed),
+  its own context in raw **tokens** (never a percentage), and up to two flags in words:
+  `escalated`, `gate N`, `deferred`, `unobserved`, `waking`, `woken` (the dispatcher saw its
+  nonce echoed — not proof anything was read), `pilot`, `armed` (a lease, not a state),
+  `stale N`. The panel holds about a third of the screen and scrolls (scrollbar on its right
+  border); **Enter** or a click opens the agent's detail: full status message, pane and pid,
+  lease, queue with the shared-stream lag and its caveat, wake record, possible gap ("possible,
+  not proven"), gates, context, board tasks and its last activity lines.
+- **Activity** — one line per event in columns `time · from · to · type · message`, a day
+  separator at each date change. It follows the feed live; moving up (or the wheel) pauses it
+  and the title counts `paused · N new`; **End**/**G** or **Esc** returns to live. **/** filters
+  (`@agent`, a thread id, words); the filter stays shown in the title. **Enter** opens the
+  message, **y** copies the line (OSC52, works over SSH).
+- **Board** — the shared task board: `task · owner · state · age`, newest first; Enter opens
+  the task (with its branch).
+- **Requests** — tracked requests still waiting, then cmd threads with no answer in the
+  retained history (never shown as accepted); the header counts both.
+- **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` sends a
+  directed cmd (Tab completes the name), plain text a notify. Esc leaves it and keeps the draft.
+
+**Responsive.** At 120 columns and more, the layout above. From 80 to 119, the header takes
+two lines and the lower area becomes tabs (`1 Activity · 2 Board · 3 Requests`). Under 80,
+one view at a time (`1 Agents · 2 Activity · 3 Board · 4 Req`), with health and dispatch
+still in the header; under 30×6, busmon only says the terminal is too small. It runs the same
+inside herdr or in any terminal.
+
+**Theme.** busmon draws on the terminal's own background. `--theme auto|dark|light` (or
+`AGENT_BUS_BUSMON_THEME`; `auto` reads `COLORFGBG`, else dark) picks the accent palette; a
+16-colour terminal gets a 16-colour palette, and `NO_COLOR` turns colour off entirely (bold
+and reverse only). Every state is also a glyph and a word, so colour is never the only signal.
+Frames are drawn with single-cell glyphs only and every width is measured in cells; the
+box-drawing characters assume the terminal renders East-Asian "ambiguous" width as narrow
+(the default in Western locales).
 
 ### Overlays: summary on screen, detail on demand
 
-Three views sit over the layout, one keypress away, so the panes stay compact.
+Details sit over the layout, one keypress away, so the panes stay compact. A detail is modal:
+keys and clicks outside it go nowhere; Esc or `q` closes it and puts focus back where it was.
 
 **Enter — the message in full.** The feed shows one clipped line; this shows the
 whole entry: author, addressee, absolute date and age, entry id, thread, and the
@@ -317,7 +325,8 @@ cause unknown* and never implies the work is done. Cmd threads
 with no answer in the retained history are listed separately and labelled as
 carrying no acceptance signal at all, because the protocol records none for them.
 
-**? / F1 — the legend.** Every badge, colour and counter, in words.
+**? / F1 — the legend.** Keys (generated from the same table that drives the footer),
+states, flags, activity types and the delivery vocabulary, in words.
 
 ### Liveness model (why no dedicated heartbeat)
 
@@ -328,7 +337,7 @@ every such publish *is* the heartbeat. A dedicated heartbeat stream would buy no
 the existing traffic doesn't, until agents become long-running.
 
 What busmon will **not** do with that signal is guess. Silence is reported as
-silence (`no update 18m`), never as `offline`; a report moves liveness but not the
+silence (the age of the declaration), never as `offline`; a report moves liveness but not the
 declared state; an armed lease is shown as a lease; and no agent's presence is ever
 used to infer that its task has progressed. Task state comes from the board, and
 acceptance only from an explicit request transition.
@@ -351,6 +360,16 @@ quiet, an agent known only to the agents hash, a long multi-line Unicode report,
 pre-retention report, an answered thread, an unanswered directive, and a tracked
 request in each state. `docs/captures/` holds the before/after renders produced this
 way.
+
+The README image comes from `TestCaptureScreen`, which renders one screen of a project on the
+**test** broker to HTML; a headless browser turns it into the PNG:
+
+```bash
+AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 BUSMON_CAPTURE=$PWD/busmon.html \
+  go test ./cmd/busmon -run TestCaptureScreen -count=1      # BUSMON_CAPTURE_PROJECT, _THEME=light
+google-chrome --headless --hide-scrollbars --force-device-scale-factor=2 \
+  --window-size=1460,880 --screenshot=busmon.png busmon.html
+```
 
 ## Bootstrap a team
 
@@ -411,8 +430,8 @@ for it, whatever its client's background-task support (only clients with a probe
 signature are prompted).
 
 From there you drive the team as a human:
-- **Watch** everything in the `busmon` tab (AGENTS + ACTIVITY).
-- **Talk** to an agent from busmon's INPUT: `@master start on the plan at docs/…` (`@` autocompletes
+- **Watch** everything in the `busmon` tab (Agents, Activity, Board, Requests).
+- **Talk** to an agent from busmon (press `@`): `@master start on the plan at docs/…` (`@` autocompletes
   agent names), or just type in the master's own tab.
 - **Grow** the team on demand — from the master: `scripts/agent-spawn architect myproject` (design
   work), `scripts/agent-spawn deploy myproject` (ship it + watch the target), or a second `coder`
@@ -536,5 +555,5 @@ REDIS_PORT=6381 ./busmon                          # watch it
 
 ## Tuning
 
-Idle/offline thresholds are the `idleAfter` (2m) and `staleAfter` (10m) constants
-at the top of `cmd/busmon/main.go`.
+The freshness bar of the Agents table empties over `staleAfter` (10m), a constant at the top
+of `cmd/busmon/main.go`.

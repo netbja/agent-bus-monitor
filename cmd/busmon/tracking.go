@@ -195,6 +195,9 @@ func deadlineWords(r request, now time.Time) (text, tone string) {
 // end of the longest sentence, so "reads back empty, cause unknown" truncated to
 // "reads back empty,…" turned a careful statement into a bare claim.
 func requestBlock(r request, now time.Time) string {
+	// Every field below is free text from the bus: one line, no controls.
+	r.Task, r.Target, r.Owner, r.State = Preview(r.Task), Preview(r.Target), Preview(r.Owner), Preview(r.State)
+	r.BlockedReason = Preview(r.BlockedReason)
 	var sb strings.Builder
 	head := fmt.Sprintf("%s %s %s %s",
 		tag("white", clip(r.Task, 24)),
@@ -364,6 +367,7 @@ func requestsPanel(reqs []request, threads []openThread, now time.Time, width in
 	sb.WriteString(tag("gray", "   untracked: the protocol records no acceptance for these, and an answer\n"+
 		"   that has been trimmed from the stream looks the same as one that never came.") + "\n")
 	for _, t := range threads {
+		t.Type, t.From, t.Target, t.ID, t.Message = Preview(t.Type), Preview(t.From), Preview(t.Target), Preview(t.ID), Preview(t.Message)
 		fmt.Fprintf(&sb, "%s %s %s %s  %s\n   %s\n",
 			tag("fuchsia", pad(t.Type, 9)),
 			tview.Escape(t.From), tag("gray", "→"), tag("aqua", t.Target),
@@ -377,6 +381,14 @@ func requestsPanel(reqs []request, threads []openThread, now time.Time, width in
 // someone and how long the oldest has waited. Empty when nothing waits, so the
 // bar stays quiet when there is nothing to chase.
 func waitingLine(reqs []request, threads []openThread, now time.Time) string {
+	if s := waitingText(reqs, threads, now); s != "" {
+		return tag("yellow", s)
+	}
+	return ""
+}
+
+// waitingText is waitingLine without colour, for the v0.9 header.
+func waitingText(reqs []request, threads []openThread, now time.Time) string {
 	waiting, oldest := 0, time.Duration(0)
 	consider := func(t time.Time) {
 		if t.IsZero() {
@@ -408,7 +420,7 @@ func waitingLine(reqs []request, threads []openThread, now time.Time) string {
 	if waiting == 1 {
 		word = "request"
 	}
-	return tag("yellow", fmt.Sprintf("%d %s waiting · oldest %s", waiting, word, humanAge(oldest)))
+	return fmt.Sprintf("%d %s waiting · oldest %s", waiting, word, humanAge(oldest))
 }
 
 // requestsTitle names the overlay and its keys, like the message detail.
