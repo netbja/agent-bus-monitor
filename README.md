@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.png" alt="agent-bus: AI agents riding one Redis bus, passing messages along a shared stream" width="900"></p>
+
 # agent-bus
 
 ## New in v0.9.0 — busmon redesign
@@ -8,6 +10,8 @@ it; details on Enter or click. It adapts to the terminal width (three tiers), ke
 straight, follows the terminal's background with a light theme available (`--theme light`), and
 honours `NO_COLOR`. Nothing changes on the bus. See [busmon panes](#busmon-panes) and the
 [release notes](docs/releases/v0.9.0.md).
+
+![busmon v0.9: header, Agents table sorted by attention, Activity, Board and Requests](docs/assets/busmon.png)
 
 ## New in v0.8.0 — event-driven dispatch
 
@@ -214,7 +218,10 @@ a no-op success, so a repeated cleanup script does not fail on its second run.
 
 ## busmon panes
 
-A btop-style dashboard (v0.9). Captured on a demo project, 120 columns:
+A btop-style dashboard (v0.9); the [screenshot at the top](#new-in-v090--busmon-redesign) shows it at
+160 columns on a demo project.
+
+<details><summary>The same layout as text, 120 columns</summary>
 
 ```
  uidemo   ● bus ok   ○ dispatch down   autonomous   1 request waiting · oldest 1h                       19:30:14
@@ -234,6 +241,8 @@ A btop-style dashboard (v0.9). Captured on a demo project, 120 columns:
 › i or : to write · @agent text sends a directive · plain text notifies
  tab focus   ↑↓ j k select   enter detail   y copy   / filter   i write   esc back   F2 requests   F1 help   q quit
 ```
+
+</details>
 
 - **Header** — the project, then the **monitor's own** link to Redis (`● bus ok`, or
   `▲ bus down 42s` — a broker busmon cannot reach looks exactly like a quiet team, and the
@@ -351,6 +360,16 @@ quiet, an agent known only to the agents hash, a long multi-line Unicode report,
 pre-retention report, an answered thread, an unanswered directive, and a tracked
 request in each state. `docs/captures/` holds the before/after renders produced this
 way.
+
+The README image comes from `TestCaptureScreen`, which renders one screen of a project on the
+**test** broker to HTML; a headless browser turns it into the PNG:
+
+```bash
+AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 BUSMON_CAPTURE=$PWD/busmon.html \
+  go test ./cmd/busmon -run TestCaptureScreen -count=1      # BUSMON_CAPTURE_PROJECT, _THEME=light
+google-chrome --headless --hide-scrollbars --force-device-scale-factor=2 \
+  --window-size=1460,880 --screenshot=busmon.png busmon.html
+```
 
 ## Bootstrap a team
 
