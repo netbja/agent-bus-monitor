@@ -17,7 +17,7 @@ const validJSON = `{
 
 var tree = []string{"cmd/busmon/main.go", "cmd/busmon/ui_test.go", "README.md"}
 
-func allBriefs(string) bool { return true }
+func allBriefs(p string) (string, bool) { return p, true }
 
 func TestParseDefaults(t *testing.T) {
 	f, err := Parse([]byte(validJSON))
@@ -73,7 +73,7 @@ func TestValidateRefusals(t *testing.T) {
 		})
 	}
 	f, _ := Parse([]byte(validJSON))
-	if err := Validate(f, tree, func(p string) bool { return p != "plan.md" }); err == nil || !strings.Contains(err.Error(), "plan.md") {
+	if err := Validate(f, tree, func(p string) (string, bool) { return p, p != "plan.md" }); err == nil || !strings.Contains(err.Error(), "plan.md") {
 		t.Fatalf("missing brief: %v", err)
 	}
 }

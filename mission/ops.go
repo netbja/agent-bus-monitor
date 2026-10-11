@@ -98,9 +98,10 @@ func (c *Conductor) readMissions(ctx context.Context, ref string) (p, commit str
 		return "", "", nil, File{}, err
 	}
 	dir := path.Dir(p)
-	if err := Validate(f, tree, func(b string) bool {
-		_, err := c.Git.Show(ctx, commit, path.Join(dir, b))
-		return err == nil
+	if err := Validate(f, tree, func(b string) (string, bool) {
+		p := path.Join(dir, b)
+		_, err := c.Git.Show(ctx, commit, p)
+		return p, err == nil
 	}); err != nil {
 		return "", "", nil, File{}, err
 	}

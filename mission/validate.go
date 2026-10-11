@@ -16,10 +16,10 @@ var missionIDRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,7}$`)
 const maxChangeLen = 16
 
 // Validate applies every §3.2 rule and reports all the problems at once.
-// tree is the repository's file list at the loaded commit; briefExists says
-// whether a brief path (relative to the change folder, anchor removed) exists
-// at that commit. Validate itself does no I/O.
-func Validate(f File, tree []string, briefExists func(path string) bool) error {
+// tree is the repository's file list at the loaded commit; brief resolves a
+// brief path (relative to the change folder, anchor removed) and says whether
+// it exists at that commit. Validate itself does no I/O.
+func Validate(f File, tree []string, brief func(path string) (resolved string, ok bool)) error {
 	var probs []string
 	bad := func(format string, a ...any) { probs = append(probs, fmt.Sprintf(format, a...)) }
 
@@ -78,9 +78,11 @@ func Validate(f File, tree []string, briefExists func(path string) bool) error {
 				bad("mission %q: timeout %q is not a duration", m.ID, m.Timeout)
 			}
 		}
-		brief, _, _ := strings.Cut(m.Brief, "#")
-		if brief == "" || !briefExists(brief) {
-			bad("mission %q: brief %q not found at the loaded commit", m.ID, brief)
+		name, _, _ := strings.Cut(m.Brief, "#")
+		if name == "" {
+			bad("mission %q: brief required", m.ID)
+		} else if resolved, ok := brief(name); !ok {
+			bad("mission %q: brief %q (resolved: %s) not found at the loaded commit", m.ID, name, resolved)
 		}
 	}
 	for _, m := range f.Missions {
