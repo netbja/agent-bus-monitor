@@ -245,7 +245,14 @@ func parseAgentGet(b []byte) (agentInfo, error) {
 	return *v.Result.Agent, nil
 }
 
-func parseProcessInfo(b []byte) ([]int, error) {
+// Proc is one foreground process of a pane, as herdr reports it. PPID is read
+// from /proc (0 if the process is gone), for `agentbus bind` to show.
+type Proc struct {
+	PID, PPID     int
+	Name, Cmdline string
+}
+
+func parseProcessInfoProcs(b []byte) ([]Proc, error) {
 	if he := asHerdrError(b); he != nil {
 		return nil, he
 	}
@@ -253,7 +260,9 @@ func parseProcessInfo(b []byte) ([]int, error) {
 		Result struct {
 			ProcessInfo *struct {
 				Foreground []struct {
-					PID int `json:"pid"`
+					PID     int    `json:"pid"`
+					Name    string `json:"name"`
+					Cmdline string `json:"cmdline"`
 				} `json:"foreground_processes"`
 			} `json:"process_info"`
 		} `json:"result"`
@@ -264,11 +273,23 @@ func parseProcessInfo(b []byte) ([]int, error) {
 	if v.Result.ProcessInfo == nil {
 		return nil, fmt.Errorf("herdr process-info: no process_info in reply")
 	}
-	var pids []int
+	var procs []Proc
 	for _, p := range v.Result.ProcessInfo.Foreground {
 		if p.PID > 0 {
-			pids = append(pids, p.PID)
+			procs = append(procs, Proc{PID: p.PID, Name: p.Name, Cmdline: p.Cmdline})
 		}
+	}
+	return procs, nil
+}
+
+func parseProcessInfo(b []byte) ([]int, error) {
+	procs, err := parseProcessInfoProcs(b)
+	if err != nil {
+		return nil, err
+	}
+	var pids []int
+	for _, p := range procs {
+		pids = append(pids, p.PID)
 	}
 	return pids, nil
 }
@@ -288,20 +309,44 @@ func (h Herdr) ForegroundPIDs(ctx context.Context, pane string) ([]int, string, 
 	if err != nil {
 		return nil, "", err
 	}
-	terminal := ""
-	if out, err := h.run(ctx, herdrCallTimeout, "pane", "get", pane); err == nil {
-		var v struct {
-			Result struct {
-				Pane struct {
-					Terminal string `json:"terminal_id"`
-				} `json:"pane"`
-			} `json:"result"`
-		}
-		if json.Unmarshal(out, &v) == nil {
-			terminal = v.Result.Pane.Terminal
+	return pids, h.terminal(ctx, pane), nil
+}
+
+// ForegroundProcs is ForegroundPIDs with each process's name, command line and
+// parent pid: what `agentbus bind` lists for an operator to choose from.
+func (h Herdr) ForegroundProcs(ctx context.Context, pane string) ([]Proc, string, error) {
+	out, err := h.run(ctx, herdrCallTimeout, "pane", "process-info", "--pane", pane)
+	if err != nil {
+		return nil, "", err
+	}
+	procs, err := parseProcessInfoProcs(out)
+	if err != nil {
+		return nil, "", err
+	}
+	for i := range procs {
+		if f, err := readStat(procs[i].PID); err == nil {
+			procs[i].PPID = f.ppid
 		}
 	}
-	return pids, terminal, nil
+	return procs, h.terminal(ctx, pane), nil
+}
+
+func (h Herdr) terminal(ctx context.Context, pane string) string {
+	out, err := h.run(ctx, herdrCallTimeout, "pane", "get", pane)
+	if err != nil {
+		return ""
+	}
+	var v struct {
+		Result struct {
+			Pane struct {
+				Terminal string `json:"terminal_id"`
+			} `json:"pane"`
+		} `json:"result"`
+	}
+	if json.Unmarshal(out, &v) != nil {
+		return ""
+	}
+	return v.Result.Pane.Terminal
 }
 
 func (h Herdr) read(ctx context.Context, pane string, ansi bool) (string, error) {
