@@ -177,9 +177,9 @@ func (m *Manifest) Resolve(role string) (Profile, error) {
 		profile["provider"] = "anthropic"
 		profile["model"] = info["model"]
 		options := map[string]interface{}{}
-		if v, ok := info["permission"]; ok {
-			options["permission"] = v
-		}
+		// The legacy Python resolver always includes this key, even when the
+		// manifest omits it; the built-in Claude option validation rejects nil.
+		options["permission"] = info["permission"]
 		if v, ok := info["fallback"]; ok && truthy(v) {
 			options["fallback"] = v
 		}
@@ -350,11 +350,15 @@ func (m *Manifest) Resolve(role string) (Profile, error) {
 		if !ok {
 			return Profile{}, fmt.Errorf("executable must be a non-empty string without control characters")
 		}
-		if filepath.IsAbs(executable) {
-			resolved.Adapter = filepath.Clean(executable)
-		} else {
-			resolved.Adapter = filepath.Clean(filepath.Join(filepath.Dir(m.manifestPath), executable))
+		adapterPath := executable
+		if !filepath.IsAbs(adapterPath) {
+			adapterPath = filepath.Join(filepath.Dir(m.manifestPath), adapterPath)
 		}
+		adapterPath = filepath.Clean(adapterPath)
+		if canonical, err := filepath.EvalSymlinks(adapterPath); err == nil {
+			adapterPath = canonical
+		}
+		resolved.Adapter = adapterPath
 	}
 	return resolved, nil
 }

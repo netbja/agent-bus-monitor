@@ -162,6 +162,48 @@ executable = %q
 	}
 }
 
+func TestResolveAdapterPathResolvesSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.Mkdir(binDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(binDir, "real-agent")
+	if err := os.WriteFile(target, []byte("agent"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(binDir, "agent")
+	if err := os.Symlink("real-agent", link); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "roles.toml")
+	contents := `schema_version = 2
+[profiles.p]
+client = "local-client"
+provider = "local"
+model = "agent"
+[roles.coder]
+profile = "p"
+tier = "boot"
+[adapters.local-client]
+executable = "bin/agent"
+`
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := m.Resolve("coder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Adapter != target {
+		t.Fatalf("adapter = %q, want resolved symlink target %q", p.Adapter, target)
+	}
+}
+
 func TestResolveLegacyProfile(t *testing.T) {
 	path := writeConfig(t, `[roles.coder]
 model = "opus"
@@ -183,6 +225,21 @@ skills = ["agent-bus"]
 	}
 	if p.Options["permission"] != "manual" || p.Options["fallback"] != "sonnet" {
 		t.Fatalf("legacy options = %#v", p.Options)
+	}
+}
+
+func TestResolveLegacyRoleRequiresPermission(t *testing.T) {
+	path := writeConfig(t, `[roles.x]
+model = "opus"
+tier = "boot"
+`)
+	m, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.Resolve("x")
+	if err == nil || err.Error() != "claude-code option permission must be a non-empty string without control characters" {
+		t.Fatalf("Resolve legacy role without permission error = %v", err)
 	}
 }
 
