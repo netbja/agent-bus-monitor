@@ -25,6 +25,9 @@ type Git struct{ Repo string }
 // ErrConflict: a merge stopped on conflicts and is left in progress.
 var ErrConflict = errors.New("merge conflict")
 
+// ErrUnknownCommit: the repository answered, and the commit is not in it.
+var ErrUnknownCommit = errors.New("unknown commit")
+
 // group makes cmd a process-group leader whose whole group dies on cancel.
 func group(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -70,8 +73,13 @@ func (g Git) Tree(ctx context.Context, commit string) ([]string, error) {
 // ResolveCommit returns the full sha of rev, or an error if it names no commit.
 func (g Git) ResolveCommit(ctx context.Context, rev string) (string, error) {
 	out, err := g.run(ctx, "", "rev-parse", "--verify", "--quiet", rev+"^{commit}")
-	if err != nil {
-		return "", fmt.Errorf("commit %s not found in %s", rev, g.Repo)
+	var ee *exec.ExitError
+	switch {
+	case err == nil:
+	case errors.As(err, &ee) && ee.ExitCode() == 1: // git answered: no such commit
+		return "", fmt.Errorf("commit %s not found in %s: %w", rev, g.Repo, ErrUnknownCommit)
+	default: // git itself failed (repository missing, lock, …)
+		return "", err
 	}
 	return strings.TrimSpace(out), nil
 }

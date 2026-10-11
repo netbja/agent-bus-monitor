@@ -89,8 +89,22 @@ func (c *Conductor) loadChange(ctx context.Context, name string) (*change, error
 
 func (c *Conductor) passChange(ctx context.Context, name string) error {
 	ch, err := c.loadChange(ctx, name)
-	if err != nil || ch == nil || ch.rec.State != "active" {
+	if err != nil || ch == nil {
 		return err
+	}
+	if ch.rec.State != "active" {
+		// An aborted change is never advanced, but what it still owes is
+		// replayed and late replies on its attempts are still answered.
+		var errs []error
+		for id, r := range ch.missions {
+			if err := c.effects(ctx, ch, Mission{ID: id}, &r); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", id, err))
+			}
+			if err := c.notifyLateSuperseded(ctx, ch, &r); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		return errors.Join(errs...)
 	}
 	ids := make([]string, 0, len(ch.missions))
 	for id := range ch.missions {
@@ -259,7 +273,7 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 			r.History = append(r.History, Attempt{N: prev.N, Task: prev.Task, Agent: prev.Agent, Base: prev.Base,
 				Commit: prev.Commit, Branch: prev.Branch, Outcome: outcome, Reason: reason, By: by})
 		case ActOpenReview:
-			r.Subject = "mission:" + ch.rec.Change + "/" + m.ID + "@" + short(r.Current.Commit)
+			r.Subject = "mission:" + ch.rec.Change + "/" + m.ID + "@" + r.Current.Commit // the full sha: a prefix could name two commits
 			r.ReviewRef, r.ReviewOpen = r.Current.Task, false
 		case ActEscalate:
 			r.Escalated = false
@@ -281,8 +295,10 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 	return c.effects(ctx, ch, m, r)
 }
 
-// effects performs, idempotently, every effect the record still owes, and
-// records each one as done right after it succeeds.
+// effects performs every effect the record still owes and records each one
+// as done right after it succeeds. Effects that write to a stream (supersede
+// replies, escalations) are at least once: a crash between the XADD and the
+// flag write repeats that one effect on the next pass.
 func (c *Conductor) effects(ctx context.Context, ch *change, m Mission, r *MissionRecord) error {
 	for i := range r.History {
 		h := &r.History[i]
@@ -481,8 +497,11 @@ func (c *Conductor) runChecks(ctx context.Context, ch *change, m Mission, r *Mis
 		return "no commit delivered (use agentbus request done <task> --commit <sha>)", nil
 	}
 	commit, err := c.Git.ResolveCommit(ctx, r.Current.Commit)
-	if err != nil {
+	if errors.Is(err, ErrUnknownCommit) {
 		return fmt.Sprintf("commit %s not found in %s", r.Current.Commit, c.Git.Repo), nil
+	}
+	if err != nil {
+		return "", err // ours, not the delivery's: retried, no attempt spent
 	}
 	r.Current.Commit = commit
 	if ok, err := c.Git.IsAncestor(ctx, r.Current.Base, commit); err != nil {

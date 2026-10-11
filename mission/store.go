@@ -11,15 +11,16 @@ import (
 // ChangeRecord is a loaded change: which file at which commit, and its state
 // (active or aborted). The plan itself stays in Git; only its hash is kept.
 type ChangeRecord struct {
-	Change   string `json:"change"`
-	Path     string `json:"path"`
-	Commit   string `json:"commit"`
-	FileHash string `json:"file_hash"`
-	Base     string `json:"base"`
-	Branch   string `json:"branch"`
-	Rev      int    `json:"rev"`
-	State    string `json:"state"`
-	LoadedAt int64  `json:"loaded_at"`
+	Change         string `json:"change"`
+	Path           string `json:"path"`
+	Commit         string `json:"commit"`
+	FileHash       string `json:"file_hash"`
+	Base           string `json:"base"`
+	Branch         string `json:"branch"`
+	Rev            int    `json:"rev"`
+	State          string `json:"state"`
+	LoadedAt       int64  `json:"loaded_at"`
+	DirtyEscalated bool   `json:"dirty_escalated,omitempty"` // a dirty integration worktree was reported
 }
 
 // Attempt is one request for a mission. Outcome is empty while it runs, then

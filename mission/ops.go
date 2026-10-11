@@ -156,10 +156,8 @@ func (c *Conductor) abort(ctx context.Context, name, reason string) error {
 	if ch == nil {
 		return fmt.Errorf("unknown change %s", name)
 	}
-	ch.rec.State = "aborted"
-	if err := c.Store.PutChange(ctx, ch.rec); err != nil {
-		return err
-	}
+	// Missions first, the change last: if anything fails part-way the change
+	// stays active, and `mission abort` can simply be run again.
 	var errs []error
 	for _, r := range ch.missions {
 		if r.State == Integrated || r.State == Aborted {
@@ -170,7 +168,11 @@ func (c *Conductor) abort(ctx context.Context, name, reason string) error {
 			errs = append(errs, fmt.Errorf("%s: %w", r.ID, err))
 		}
 	}
-	return errors.Join(errs...)
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	ch.rec.State = "aborted"
+	return c.Store.PutChange(ctx, ch.rec)
 }
 
 // reload builds revision n+1 of a known change (spec §6.4) and writes it in
