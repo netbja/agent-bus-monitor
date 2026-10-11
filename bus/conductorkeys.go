@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -261,4 +262,28 @@ func (b *Bus) WaitMissionOpResult(ctx context.Context, reqID string, timeout tim
 			}
 		}
 	}
+}
+
+// ReadMissionHash reads a change or missions hash of this project (any other
+// key is refused). Reads need no lease: busmon and the CLI use them too.
+func (b *Bus) ReadMissionHash(ctx context.Context, key string) (map[string]string, error) {
+	if !strings.HasPrefix(key, b.project+":change:") && !strings.HasPrefix(key, b.project+":missions:") {
+		return nil, fmt.Errorf("ReadMissionHash: %q is not a change or missions key of %s", key, b.project)
+	}
+	return b.r.HGetAll(ctx, key).Result()
+}
+
+// ChangeNames lists the project's loaded changes, sorted. A key whose suffix
+// is not a valid name is someone else's and is skipped.
+func (b *Bus) ChangeNames(ctx context.Context) ([]string, error) {
+	prefix := b.project + ":change:"
+	var out []string
+	iter := b.r.Scan(ctx, 0, prefix+"*", 200).Iterator()
+	for iter.Next(ctx) {
+		if name := strings.TrimPrefix(iter.Val(), prefix); ValidName(name) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out, iter.Err()
 }
