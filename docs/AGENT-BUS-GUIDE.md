@@ -125,7 +125,7 @@ agentbus verdicts --pr 25                                          # roll-up 4-e
 agentbus gate <agent>                                   # lists open challenges; EXIT CODE != 0 means GATED
 agentbus gate claude1 && echo "clear to proceed"
 
-# ── PILOT LEASE (who is driving: hermes vs autonomous) ────────────────────────
+# ── PILOT LEASE (who is driving: the pilot vs autonomous) ────────────────────────
 agentbus pilot <claim|renew|release|status> [--ttl 90s]
 agentbus pilot status                                   # prints "piloted by hermes" OR "autonomous"
 agentbus pilot claim --ttl 120s                         # hermes only: take/renew the lease

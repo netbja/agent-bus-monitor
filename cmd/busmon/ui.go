@@ -107,7 +107,7 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 
 	u.input = tview.NewInputField().SetLabel(GlyphPrompt + " ")
 	th.StyleInput(u.input)
-	u.input.SetPlaceholder("i or : to write " + GlyphNone + " @agent text sends a directive " + GlyphNone + " plain text notifies")
+	u.input.SetPlaceholder("i or : to write " + GlyphNone + " @agent or @all text wakes them " + GlyphNone + " plain text: a broadcast nobody reads")
 	u.input.SetFocusFunc(func() {
 		if u.composing == ModePanel { // reached by a click
 			u.composing = ModeInput
