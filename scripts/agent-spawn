@@ -33,7 +33,7 @@ fi
 
 # Open a NEW TAB in the current workspace (not a split), grab its root pane, run the leaf there.
 tab_json="$(herdr tab create --label "$role" --cwd "$PWD" --no-focus)"
-pane="$(printf '%s' "$tab_json" | python3 -c 'import sys, json; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])')"
+pane="$(printf '%s' "$tab_json" | tr -d '\n' | sed -n 's/.*"root_pane":[[:space:]]*{[^}]*"pane_id":[[:space:]]*"\([^"]*\)".*/\1/p')"
 [[ -n "$pane" ]] || die "could not resolve the new tab's pane id from herdr: $tab_json"
 herdr pane run "$pane" "$launch"
 echo "agent-spawn: $role launched in a new tab (pane $pane)"

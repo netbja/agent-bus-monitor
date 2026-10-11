@@ -14,17 +14,17 @@ func Template(m *Manifest, manifestPath, project, cwd, scriptsDir, repo string, 
 	fmt.Fprintf(&b, "name = %s\ndescription = %s\nworking_dir = %s\n",
 		templateJSONString(project), templateJSONString("Agent Bus team for "+project), templateJSONString(cwd))
 	for _, role := range m.RolesByTier("boot") {
-		command := templateShellJoin([]string{"env", "ROLES_TOML=" + manifestPath, scriptsDir + "/agent-launch", role, project})
+		command := ShellJoin([]string{"env", "ROLES_TOML=" + manifestPath, scriptsDir + "/agent-launch", role, project})
 		fmt.Fprintf(&b, "\n[[tabs]]\nname = %s\ncommand = %s\n", templateJSONString(role), templateJSONString(command))
 	}
-	command := templateShellJoin([]string{repo + "/busmon", "--project", project})
+	command := ShellJoin([]string{repo + "/busmon", "--project", project})
 	fmt.Fprintf(&b, "\n[[tabs]]\nname = \"busmon\"\ncommand = %s\n", templateJSONString(command))
 	if dispatch {
-		command = templateShellJoin([]string{repo + "/agentbus", "--project", project, "dispatch"})
+		command = ShellJoin([]string{repo + "/agentbus", "--project", project, "dispatch"})
 		fmt.Fprintf(&b, "\n[[tabs]]\nname = \"dispatch\"\ncommand = %s\n", templateJSONString(command))
 	}
 	if missions {
-		command = templateShellJoin([]string{repo + "/agentbus", "--project", project, "missions", "--repo", cwd})
+		command = ShellJoin([]string{repo + "/agentbus", "--project", project, "missions", "--repo", cwd})
 		fmt.Fprintf(&b, "\n[[tabs]]\nname = \"missions\"\ncommand = %s\n", templateJSONString(command))
 	}
 	return b.String()
@@ -59,30 +59,4 @@ func templateJSONString(value string) string {
 	}
 	b.WriteByte('"')
 	return b.String()
-}
-
-func templateShellJoin(args []string) string {
-	quoted := make([]string, len(args))
-	for i, arg := range args {
-		quoted[i] = templateShellQuote(arg)
-	}
-	return strings.Join(quoted, " ")
-}
-
-func templateShellQuote(value string) string {
-	if value != "" {
-		safe := true
-		for i := 0; i < len(value); i++ {
-			c := value[i]
-			if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || strings.ContainsRune("@%+=:,./_-", rune(c)) {
-				continue
-			}
-			safe = false
-			break
-		}
-		if safe {
-			return value
-		}
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }

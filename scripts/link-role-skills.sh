@@ -3,4 +3,6 @@
 # Overrides: ROLES_TOML, SKILLS_DEST, REPO_SKILLS, POCOCK_SKILLS_ROOT.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python3 "$SCRIPT_DIR/lib/role_config.py" install
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/lib/roles.sh"
+exec "$AGENTBUS_BIN" roles install

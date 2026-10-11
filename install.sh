@@ -3,7 +3,7 @@
 # Agent Bus Monitor — Automated Idempotent Installer
 #
 # Installs and validates the Agent Bus environment from a clone of this repository:
-# - System preflight: OS/Arch, git, Python (>= 3.11), Go (the version go.mod requires), Docker
+# - System preflight: OS/Arch, git, Go (the version go.mod requires), Docker
 # - herdr terminal manager & herdr-plus workspace plugin (downloaded only with --install-herdr)
 # - Agent Bus binaries: agentbus & busmon, rebuilt on every run
 # - Role skills for supported AI clients
@@ -192,24 +192,6 @@ if [ "$INSTALL_HERDR" = "1" ]; then
   else
     require_failed "curl is required by --install-herdr but not installed."
   fi
-fi
-
-# Python 3.11+ check (role skills and the bootstrap template generator use tomllib)
-PYTHON_BIN=""
-for py in python3 python; do
-  if command -v "$py" >/dev/null 2>&1; then
-    if "$py" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
-      PYTHON_BIN="$py"
-      break
-    fi
-  fi
-done
-
-if [ -n "$PYTHON_BIN" ]; then
-  PY_VER="$("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")')"
-  log_ok "python3 (>= 3.11): $PY_VER ($PYTHON_BIN)"
-else
-  require_failed "Python 3.11 or newer is required (role skills and bootstrap use tomllib)."
 fi
 
 # Go compiler check, against the version go.mod requires

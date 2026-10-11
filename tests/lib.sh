@@ -5,6 +5,12 @@ set -uo pipefail
 # Hermetic: a test run from inside a herdr pane must not reach the live herdr or broker
 # (agent-launch binds through agentbus when HERDR_ENV=1).
 unset HERDR_ENV HERDR_PANE_ID REDIS_URL
+# The scripts resolve roles through `agentbus roles`: build it once if run.sh did not.
+if [[ -z "${AGENTBUS_BIN:-}" ]]; then
+  _ab_build="$(mktemp -d)"
+  ( cd "$(dirname "${BASH_SOURCE[0]}")/.." && go build -o "$_ab_build/agentbus" ./cmd/agentbus ) || { echo "lib.sh: cannot build agentbus" >&2; exit 1; }
+  export AGENTBUS_BIN="$_ab_build/agentbus"
+fi
 
 _pass=0; _fail=0
 _ok()  { _pass=$((_pass+1)); echo "  ok: $1"; }

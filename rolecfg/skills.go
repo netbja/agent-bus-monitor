@@ -106,57 +106,8 @@ func skillDestination(client string, env []string) (string, error) {
 }
 
 func linkSkillSources(names, env []string) ([]string, error) {
-	repoSkills, ok := skillEnvLookup(env, "REPO_SKILLS")
-	if !ok {
-		repoSkills = filepath.Join(skillRepoRoot(env), "skills")
-	}
-	pocockRoot, ok := skillEnvLookup(env, "POCOCK_SKILLS_ROOT")
-	if !ok {
-		home, found := skillEnvLookup(env, "HOME")
-		if !found || home == "" {
-			home, _ = os.UserHomeDir()
-		}
-		pocockRoot = filepath.Join(home, "Tools", "herdr-plugins", "skills", "skills")
-	}
-	roots := []string{repoSkills, filepath.Join(pocockRoot, "engineering")}
-	sources := make([]string, 0, len(names))
-	for _, name := range names {
-		var found string
-		for _, root := range roots {
-			candidate := filepath.Join(root, name)
-			info, err := os.Stat(filepath.Join(candidate, "SKILL.md"))
-			if err == nil && info.Mode().IsRegular() {
-				found, err = filepath.Abs(candidate)
-				if err == nil {
-					if resolved, resolveErr := filepath.EvalSymlinks(found); resolveErr == nil {
-						found = resolved
-					}
-				}
-				break
-			}
-		}
-		if found == "" {
-			return nil, fmt.Errorf("skill not found in repo or Pocock collection: %s", name)
-		}
-		sources = append(sources, found)
-	}
-	return sources, nil
-}
-
-func skillRepoRoot(env []string) string {
-	if repo, ok := skillEnvLookup(env, "AGENTBUS_REPO"); ok && repo != "" {
-		return repo
-	}
-	if executable, err := os.Executable(); err == nil {
-		if absolute, err := filepath.Abs(executable); err == nil {
-			executable = absolute
-		}
-		if resolved, err := filepath.EvalSymlinks(executable); err == nil {
-			executable = resolved
-		}
-		return filepath.Dir(executable)
-	}
-	return "."
+	e := newEnv(env)
+	return skillSources(names, repoRoot(e), e)
 }
 
 func skillEnvLookup(env []string, name string) (string, bool) {
