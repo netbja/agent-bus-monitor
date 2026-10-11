@@ -257,9 +257,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
 		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal}
-	if snap, merr := json.Marshal(snapshot); merr == nil {
-		_ = b.r.HSet(ctx, AgentsKey(b.project), agent, snap).Err()
-	}
+	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.
 	// A failure only delays group creation to the first subscribe.
