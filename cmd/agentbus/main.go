@@ -20,6 +20,7 @@
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
 //	agentbus --project P agents    [--json]      # current state of all agents (one line each)
 //	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
+//	agentbus --project P bind      <agent> [--pane P] [--pid N]   # bind a verified pane identity (lists candidates without --pid, exit 2)
 //	agentbus --project P usage     [<agent> <json>]   # write a budget snapshot, or print all (status-line tee)
 //	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
 //	agentbus --project P subscribe --drain <agent>  # JSONL, one line per waiting entry (PEL then unread); exit 0 output, 64 empty, 75 error
@@ -105,7 +106,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|limits|mem|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|limits|mem|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -128,6 +129,9 @@ func main() {
 		code := runMissions(sctx, b, rest, wd, os.Stdout, os.Stderr)
 		stop()
 		os.Exit(code)
+	case "bind":
+		h := dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}
+		os.Exit(runBind(ctx, bindDeps{Bind: b.Bind, Procs: h.ForegroundProcs, Start: dispatch.ProcStart, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
 	case "mission":
 		os.Exit(runMission(ctx, b, self, rest, os.Stdout, os.Stderr))
 	case "dispatch":
