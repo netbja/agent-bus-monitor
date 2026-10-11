@@ -24,7 +24,8 @@ type Conductor struct {
 	EscalateTo  string // default "master"
 	Self        string // the conductor's bus identity, "conductor"
 	TestLimit   time.Duration
-	Log         func(format string, args ...any) // optional
+	Now         func(ctx context.Context) (int64, error) // Unix ms; nil = Redis TIME
+	Log         func(format string, args ...any)         // optional
 }
 
 func (c *Conductor) logf(format string, args ...any) {
@@ -156,6 +157,16 @@ func (c *Conductor) advance(ctx context.Context, ch *change, m Mission, r *Missi
 			return err
 		}
 		e := ch.board[r.Current.Task]
+		if late, err := c.pastDeadline(ctx, m, e); err != nil {
+			return err
+		} else if late && (e.State == "accepted" || e.State == "done") {
+			if r.State == Requested {
+				if err := c.transition(ctx, ch, m, r, EvAccepted, ""); err != nil {
+					return err
+				}
+			}
+			return c.transition(ctx, ch, m, r, EvTimedOut, fmt.Sprintf("no delivery within %v of acceptance", missionTimeout(m)))
+		}
 		switch e.State {
 		case "accepted":
 			if r.State == Requested {
@@ -576,4 +587,40 @@ func (c *Conductor) retry(ctx context.Context, changeName, id string) error {
 	}
 	r.Rejections = 0
 	return c.transition(ctx, ch, m, &r, EvRetry, "retried by the operator")
+}
+
+const defaultMissionTimeout = 4 * time.Hour
+
+// missionTimeout is the mission's delivery timeout (validated at load).
+func missionTimeout(m Mission) time.Duration {
+	if d, err := time.ParseDuration(m.Timeout); err == nil && d > 0 {
+		return d
+	}
+	return defaultMissionTimeout
+}
+
+func (c *Conductor) now(ctx context.Context) (int64, error) {
+	if c.Now != nil {
+		return c.Now(ctx)
+	}
+	return c.Bus.ServerNowMS(ctx)
+}
+
+// pastDeadline reports whether the attempt on this board entry missed its
+// delivery deadline: still accepted after it, or delivered after it (a late
+// delivery is never checked). Each attempt is its own task, so the deadline
+// runs from its own acceptance.
+func (c *Conductor) pastDeadline(ctx context.Context, m Mission, e bus.BoardEntry) (bool, error) {
+	if e.Request == nil || e.Request.AcceptedAt == 0 {
+		return false, nil
+	}
+	deadline := e.Request.AcceptedAt + missionTimeout(m).Milliseconds()
+	switch e.State {
+	case "done":
+		return e.Request.RespondedAt > deadline, nil
+	case "accepted":
+		now, err := c.now(ctx)
+		return err == nil && now > deadline, err
+	}
+	return false, nil
 }
