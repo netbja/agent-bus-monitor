@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/logo.png" alt="agent-bus: AI agents riding one Redis bus, passing messages along a shared stream" width="900"></p>
+<p align="center"><img src="docs/assets/agent-bus-monitor-logo.png" alt="agent-bus: AI agents riding one Redis bus, passing messages along a shared stream" width="900"></p>
 
 # agent-bus
 
@@ -113,7 +113,19 @@ stream (XADD MAXLEN ~); the pilot lease and challenge gates use ordinary keys/ha
 > because the Redis password travels in plaintext. (It previously mapped `6380:6379`, i.e. bound
 > `0.0.0.0`; verify the active bind with `ss -tlnp | grep 6380`.)
 
-## Build the tools
+## Install the tools
+
+### Automated install (recommended)
+
+An idempotent installer checks the toolchain (including the Go version `go.mod` requires), rebuilds `agentbus` and `busmon` on every run (into the repository, where bootstrap's tabs run them, and into `--bin-dir`, default `~/.local/bin`), links the role skills and starts the Redis broker. Run it from a clone; re-run it after every `git pull`:
+
+```bash
+./install.sh                # run automated setup
+./install.sh --dry-run      # list what is missing and what would change; changes nothing
+./install.sh --install-herdr  # also download herdr and clone herdr-plus (pinned tag) if missing
+```
+
+### Manual build
 
 ```bash
 go build -o busmon ./cmd/busmon
