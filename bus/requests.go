@@ -25,6 +25,8 @@ type RequestInfo struct {
 	ResponseID        string `json:"response_id,omitempty"`
 	RespondedAt       int64  `json:"responded_at,omitempty"`
 	BlockedReason     string `json:"blocked_reason,omitempty"`
+	Commit            string `json:"commit,omitempty"`       // request done --commit (missions)
+	Branch            string `json:"branch,omitempty"`       // request done --branch
 	Availability      string `json:"availability,omitempty"` // derived, never persisted
 }
 
@@ -74,19 +76,29 @@ func (b *Bus) BlockRequest(ctx context.Context, task, agent, reason string) erro
 // CompleteRequest publishes a response into the existing thread and marks done
 // atomically. Acceptance is required; a generic reply alone never marks done.
 func (b *Bus) CompleteRequest(ctx context.Context, task, agent, body string) (string, error) {
+	return b.CompleteRequestAt(ctx, task, agent, body, "", "")
+}
+
+// CompleteRequestAt is CompleteRequest that also records the delivered commit
+// and branch (missions). A repeated done keeps the first commit and branch.
+func (b *Bus) CompleteRequestAt(ctx context.Context, task, agent, body, commit, branch string) (string, error) {
 	if body == "" {
 		return "", fmt.Errorf("completion response required")
 	}
-	return b.transitionRequest(ctx, task, agent, "done", body)
+	return b.transitionRequest(ctx, task, agent, "done", body, commit, branch)
 }
-func (b *Bus) transitionRequest(ctx context.Context, task, agent, op, body string) (string, error) {
+func (b *Bus) transitionRequest(ctx context.Context, task, agent, op, body string, extra ...string) (string, error) {
+	commit, branch := "", ""
+	if len(extra) == 2 {
+		commit, branch = extra[0], extra[1]
+	}
 	if !ValidName(task) || !ValidName(agent) {
 		return "", fmt.Errorf("invalid task or agent")
 	}
 	if err := ValidateText(body, CmdMaxRunes); err != nil {
 		return "", err
 	}
-	return requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, op, body, streamMaxLen).Text()
+	return requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, op, body, streamMaxLen, commit, branch).Text()
 }
 
 var requestTransition = redis.NewScript(`
@@ -117,6 +129,8 @@ else
  if e.state=='blocked' then return redis.error_reply('blocked request: accept to resume before completion') end
  result=redis.call('XADD',KEYS[2],'MAXLEN','~',ARGV[5],'*','from',ARGV[2],'target',r.from,'type','reply','ref',r.thread,'command',ARGV[4],'text_complete','yes')
  r.response_id=result;r.responded_at=now;e.state='done'
+ if ARGV[6]~='' then r.commit=ARGV[6] end
+ if ARGV[7]~='' then r.branch=ARGV[7] end
 end
 e.updated=math.floor(now/1000)
 redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(e))

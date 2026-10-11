@@ -269,3 +269,34 @@ func TestSubscribeTakesOverWhenLeaseExpires(t *testing.T) {
 		t.Fatalf("takeover failed: %d %s", code, out.String())
 	}
 }
+
+func TestRequestDoneFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"done", "task", "--commit", "xyz", "reply"},
+		{"done", "task", "--commit", "abc1234", "--branch", "bad branch", "reply"},
+		{"done", "task", "--commit", "abc1234", "--branch", "-x", "reply"},
+		{"done", "task", "--commit", "abc1234", "--branch", "a..b", "reply"},
+	} {
+		if err := runRequest(context.Background(), nil, "kimi", args, io.Discard); err == nil || !strings.Contains(err.Error(), "--") {
+			t.Errorf("%q: err = %v, want a flag error", args, err)
+		}
+	}
+}
+
+func TestRequestDoneRecordsCommit(t *testing.T) {
+	b := dialDispatchMain(t)
+	ctx := context.Background()
+	if err := runRequest(ctx, b, "conductor", []string{"send", "chg-t1-1", "kimi", "go"}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if err := runRequest(ctx, b, "kimi", []string{"accept", "chg-t1-1"}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if err := runRequest(ctx, b, "kimi", []string{"done", "chg-t1-1", "--commit", "abc1234", "--branch", "mission/t1", "all", "good"}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	board, _ := b.Board(ctx)
+	if r := board["chg-t1-1"].Request; r.Commit != "abc1234" || r.Branch != "mission/t1" {
+		t.Fatalf("commit/branch = %q/%q", r.Commit, r.Branch)
+	}
+}

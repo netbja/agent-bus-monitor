@@ -292,3 +292,27 @@ func TestBlockedEntryWakesRequester(t *testing.T) {
 		t.Fatalf("requester Unread=%d, want 1", o.Unread)
 	}
 }
+
+func TestCompleteRequestRecordsCommit(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Request(ctx, "chg-t1-1", "conductor", "kimi", "", "do it", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.AcceptRequest(ctx, "chg-t1-1", "kimi"); err != nil {
+		t.Fatal(err)
+	}
+	id, err := b.CompleteRequestAt(ctx, "chg-t1-1", "kimi", "done", "abc1234", "mission/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := b.CompleteRequestAt(ctx, "chg-t1-1", "kimi", "done", "fff9999", "other")
+	if err != nil || again != id {
+		t.Fatalf("repeat done: %q %v, want %q", again, err, id)
+	}
+	board, _ := b.Board(ctx)
+	r := board["chg-t1-1"].Request
+	if r.Commit != "abc1234" || r.Branch != "mission/x" {
+		t.Fatalf("commit/branch = %q/%q", r.Commit, r.Branch)
+	}
+}
