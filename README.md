@@ -123,7 +123,8 @@ go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus
 
 ## Use it
 
-`AGENT_BUS_PROJECT` (or `--project <p>`) is required for all commands.
+`AGENT_BUS_PROJECT` (or `--project <p>`) is required for all commands except `agentbus mem`
+([shared memory](#shared-memory-agentbus-mem), which works on files only).
 
 > **Agents:** a copy-paste command reference (with the flag/positional traps that
 > cause retries) lives in [`docs/AGENT-BUS-GUIDE.md`](docs/AGENT-BUS-GUIDE.md).
@@ -215,6 +216,24 @@ delivery is unaffected. `--delete` removes a project you are not keeping, and ta
 it. Same `[y/N]` gate and same `--yes` bypass as `--reset`; the prompt states the key count, agent
 count and last activity, because a slug alone is a poor thing to judge on. A project with no keys is
 a no-op success, so a repeated cleanup script does not fail on its second run.
+
+### Shared memory: agentbus mem
+
+What the team decided and learned lives in [`docs/memory/`](docs/memory/INDEX.md), reviewed
+through Git like the code. `agentbus mem` keeps it usable — it reads and writes files in the
+working tree only (no project, no broker, never commits):
+
+```bash
+agentbus mem check                     # structure, links, metadata, index copy; WARN on stale notes
+agentbus mem check --strict            # stale notes fail too (--stale-after 60d by default)
+AGENT_BUS_AGENT=coder agentbus mem new lesson pel-floor --title "PEL floor"   # dated note + index line
+agentbus mem sync                      # refresh the index copy in AGENTS.md after editing INDEX.md
+```
+
+A new note is a stub: `mem check` fails until its `<!-- mem:fill -->` sections are written and
+it links a piece of evidence. AGENTS.md carries a generated copy of the index so that clients
+which load only AGENTS.md see it at boot; Claude Code imports the real file from CLAUDE.md. See
+[the memory protocol](docs/memory/PROTOCOL.md).
 
 ## busmon panes
 

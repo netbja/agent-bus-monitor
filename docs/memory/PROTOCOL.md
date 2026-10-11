@@ -76,9 +76,23 @@ for this first slice.
 Run from the repository root before sharing a memory change:
 
 ```sh
-python3 scripts/check-memory.py
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_memory_check.py'
+agentbus mem check            # or: go run ./cmd/agentbus mem check
+go test ./memory/ -count=1    # the checker's own regressions
 ```
+
+`agentbus mem new <lesson|decision|question> <slug> --title "…"` starts a note: it
+writes the frontmatter from facts (status proposed, nothing verified, author from
+`AGENT_BUS_AGENT`), the four sections marked `<!-- mem:fill -->`, and the index line.
+The check fails until every marker is gone and a piece of evidence is linked. The
+template above remains valid for a note written by hand.
+
+AGENTS.md carries a generated copy of INDEX.md between `<!-- memory-index:begin -->`
+and `<!-- memory-index:end -->`, so clients that load only AGENTS.md see the index
+at boot. After editing INDEX.md, run `agentbus mem sync`; the check fails on any
+drift. It also fails when an index label such as `(proposed)` disagrees with the
+note's status, or when INDEX.md outgrows 60 lines or 4096 bytes, and it warns
+(never fails, unless `--strict`) when an active verified note was not re-checked
+for 60 days (`--stale-after`) or a proposal stayed undecided that long.
 
 The checker requires the memory entry points and boot references, follows local
 Markdown links, checks concrete backticked .md references in skills, validates

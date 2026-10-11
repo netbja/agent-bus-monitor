@@ -84,6 +84,12 @@ func main() {
 	if project == "" {
 		project = os.Getenv("AGENT_BUS_PROJECT")
 	}
+	// mem works on files in the working tree — no project, no broker — so it
+	// runs before the project check, like limits and version.
+	if len(args) >= 1 && args[0] == "mem" {
+		wd, _ := os.Getwd()
+		os.Exit(runMem(args[1:], os.Getenv, wd, time.Now(), os.Stdout, os.Stderr))
+	}
 	// version reads a compile-time constant — no project, no broker. Handle it
 	// before the project check and before bus.Connect.
 	if len(args) >= 1 && args[0] == "limits" {
@@ -99,7 +105,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|dispatch|limits|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|dispatch|limits|mem|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")

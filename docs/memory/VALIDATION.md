@@ -49,3 +49,8 @@ internal-link suppression, skill-to-memory suppression, invisible fallback,
 visible fallback with OPTIONAL reporting, future dates and inverted dates. He
 reports all expected outcomes, 13 passing tests, zero live-vault exceptions, and
 restoration of his temporary probes. No objection remains on structure/checker.
+
+## Since v0.10
+
+The checker is now `agentbus mem check` (Go, package `memory/`); `scripts/check-memory.py`
+and its unittest suite were removed. The Python commands above are a dated record.
