@@ -1,0 +1,28 @@
+---
+id: 2026-10-11-pel-floor
+project: test
+scope: project
+kind: lesson
+status: proposed
+created: 2026-10-11
+last_verified: unknown
+author: codex
+confidence: unknown
+---
+# PEL floor
+
+## Finding/decision
+
+<!-- mem:fill --> What was found or decided, in two or three sentences.
+
+## When it applies
+
+<!-- mem:fill --> The situation in which the next agent needs this.
+
+## Evidence
+
+<!-- mem:fill --> Link at least one committed file, PR or test as a Markdown link.
+
+## Limits / what would invalidate it
+
+<!-- mem:fill --> What this does not prove, and what would make it false.
