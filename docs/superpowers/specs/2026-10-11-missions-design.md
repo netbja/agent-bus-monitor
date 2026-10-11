@@ -1,6 +1,6 @@
 # Missions: a deterministic conductor for large changes (v0.10)
 
-- **Status:** rev 1. Approach A was chosen by the user on 2026-10-11 ("ok pour A"), and design
+- **Status:** rev 2 (Codex spec review folded in: request names, gate closing, conductor primitives, Git locking, integration resume, superseded attempts, recovery by hash). Rev 1: Approach A was chosen by the user on 2026-10-11 ("ok pour A"), and design
   sections 1 to 4 were approved one by one.
 - **Base:** `main` @ d0edbff (v0.9.0). It ships with v0.10, alongside the memory tooling (PR #47).
   The CLI/ACP drivers move to v0.11.
@@ -87,20 +87,20 @@ holds three files:
 
 ```json
 {
-  "change": "refactor-busmon-state",
+  "change": "busmon-state",
   "base": "main",
-  "branch": "change/refactor-busmon-state",
+  "branch": "change/busmon-state",
   "reviewer": "codex",
   "test": "go test ./... -count=1",
   "max_attempts": 3,
   "missions": [
-    { "id": "T1", "title": "Characterisation tests for the feed",
+    { "id": "t1", "title": "Characterisation tests for the feed",
       "agent": "kimi",
       "allowed_paths": ["cmd/busmon/*_test.go"],
       "test": "go test ./cmd/busmon/ -count=1",
       "brief": "plan.md#task-1" },
-    { "id": "T3", "title": "Extract the state model out of rendering",
-      "agent": "coder", "reviewer": "kimi", "depends_on": ["T1"],
+    { "id": "t3", "title": "Extract the state model out of rendering",
+      "agent": "coder", "reviewer": "kimi", "depends_on": ["t1"],
       "allowed_paths": ["cmd/busmon/state*.go", "cmd/busmon/*_test.go"],
       "test": "go test ./cmd/busmon/ -count=1", "timeout": "4h",
       "brief": "plan.md#task-3" }
@@ -112,7 +112,7 @@ holds three files:
 
 | Field | Required | Default |
 |---|---|---|
-| `change` | yes | — |
+| `change` | yes | — (`ValidName`, at most 16 characters: it prefixes request names, §4) |
 | `base` | no | `main` |
 | `branch` | no | `change/<change>` |
 | `reviewer` | yes | — (default reviewer for every mission) |
@@ -123,7 +123,7 @@ holds three files:
 
 | Field | Required | Default / meaning |
 |---|---|---|
-| `id` | yes | `^[A-Za-z0-9][A-Za-z0-9_-]{0,15}$` |
+| `id` | yes | `^[a-z0-9][a-z0-9-]{0,7}$` (lowercase: it is part of a request name, §4) |
 | `title` | yes | — |
 | `agent` | yes | — |
 | `reviewer` | no | the change's reviewer |
@@ -190,9 +190,22 @@ current revision.
 spirit of `dispatch.Decide`. Every transition goes through it, and it has a full
 state × event test table.
 
-**One attempt, one request.** Each attempt is one bus request named
-`<change>/<mission>.<attempt>`, for example `refactor-busmon-state/T3.2`. This is needed
-because the existing request protocol refuses to reuse a task name.
+**One attempt, one request.** Each attempt is one bus request. This is needed because the
+existing request protocol refuses to reuse a task name. The request's task name, which is also
+the challenge ref, is `<change>-<id>-<attempt>`, for example `busmon-state-t3-2`.
+
+- It must pass `bus.ValidName` (`^[a-z][a-z0-9_-]{0,31}$`), which `Bus.Request` and every
+  transition enforce.
+- So §3.1 bounds `change` to 16 characters, `id` to `^[a-z0-9][a-z0-9-]{0,7}$`, and attempts
+  to 99.
+- `mission load` checks that the longest possible name fits.
+- The conductor never parses the name: the mission record stores it.
+
+**Attempts are closed explicitly.** A new attempt (after a rejection, `retry`, `reassign` or a
+reload) marks the previous one `superseded` in the mission record, and the conductor replies on
+the old request's thread: "superseded by `<new task>`, stop". Any later `accept` or `done` on a
+superseded task is ignored for the mission. The agent gets that same reply again. Nothing from a
+superseded attempt is ever checked or integrated.
 
 **What the request body carries.** It holds references only:
 
@@ -219,7 +232,15 @@ The agent reads the brief at that commit. Nothing from the plan is copied into R
     - `{p}:conductor`: the conductor lease.
   - **Project scanning.** The first two keys have two colons, so they cannot forge a project,
     as with `{p}:wake:{agent}`. `conductor` joins `projectKinds`.
-  - **Writes** are Lua scripts that check the lease, as the dispatcher's fenced writes do.
+  - **New `bus` primitives, in `bus/conductorkeys.go`.** The dispatcher's are bound to
+    `DispatchKey`, and `OpenChallenge` is a plain `HSET`, so the conductor needs its own:
+    - `AcquireConductor`, `RenewConductor`, `ReleaseConductor` and `ConductorAlive`;
+    - `FencedMissionPut` (a mission record), `FencedChangePut`, `FencedRequest` (the
+      request's `XADD` plus its board entry), `FencedChallenge` (the gate `HSET` plus its
+      `cmd`), `FencedResolveChallenge` and `FencedCmd` (replies and escalations).
+
+    Each one is a Lua script that first checks `GET {p}:conductor == token`. No conductor write
+    goes around them.
 - `RequestInfo` gains two optional fields, `commit` and `branch`, filled by `request done
   --commit <sha> [--branch <b>]`. Both are additive. A done without `--commit` on a mission
   task is rejected by the conductor (§6.2).
@@ -233,6 +254,12 @@ The agent reads the brief at that commit. Nothing from the plan is copied into R
 - **It reconciles; it does not remember.** Every 2 s, and on any new `{p}:cmd` entry, it
   recomputes from Redis and Git what each mission needs. It holds no durable local state, so a
   restart loses nothing (§6.3).
+- **The Redis lease does not stop Git, so a local lock does.** For its whole life, the
+  conductor holds an exclusive `flock` on `~/.local/state/agentbus/<p>/<c>/conductor.lock`.
+  Two conductors on one machine can therefore never run `git` or tests on the same change, even
+  in the window where a lease has lapsed. Every `git` and test command runs in its own process
+  group, under a context cancelled when a renewal fails. Losing the lease kills the commands in
+  flight, and the conductor exits: it does not try to finish an integration it no longer owns.
 - **It never runs an LLM, and never pushes or touches `main`.** The dispatcher keeps its rule
   that it never runs code. The conductor is the one process that runs `git` and the test
   commands, and it is a separate process on purpose.
@@ -248,34 +275,55 @@ The agent reads the brief at that commit. Nothing from the plan is copied into R
   The worktree is removed afterwards. The test command always comes from `missions.json` at the
   loaded commit, never from the agent.
 - **Review** (`checking` → `in_review`). The conductor opens a challenge on the reviewer with
-  the existing `OpenChallenge`. Its body is the mission reference, the commit and the log path.
-  The reviewer answers with:
+  `FencedChallenge`. Its ref is the attempt's task name. Its body holds the mission reference,
+  the commit, the log path and the exact command to answer:
 
   ```
-  agentbus verdict --subject mission:<c>/<id>@<sha12> <agent> <approve|reject> <message>
+  agentbus verdict --subject mission:<c>/<id>@<sha12> --ref <c>-<id>-<attempt> <agent> <approve|reject> <message>
   ```
 
-  The mission moves on only on the roll-up of **that subject**. The existing rule applies:
-  APPROVED when the latest independent approve is newer than any reject. A verdict on another
-  commit counts for nothing, so a review of a stale revision cannot validate a new one.
+  `--ref` closes the reviewer's gate, the existing behaviour of `verdict`. The mission moves on
+  only on the roll-up of **that subject**. The existing rule applies: APPROVED when the latest
+  independent approve is newer than any reject. A verdict on another commit counts for nothing,
+  so a review of a stale revision cannot validate a new one. Whenever a mission leaves
+  `in_review` for any reason, the conductor also calls `FencedResolveChallenge` on that ref, so
+  a forgotten `--ref` never leaves the reviewer gated.
 - **Integration** (`approved` → `integrated`). Integrations are serialised, one worktree of the
   change branch under `~/.local/state/agentbus/<p>/<c>/integration/`. The conductor runs:
 
   ```
   git merge --no-ff <commit> -m "mission <c>/<id> (rev <n>): <title>" \
-    --trailer "Mission: <c>/<id>" --trailer "Mission-Commit: <sha>"
+    --trailer "Mission: <c>/<id>" --trailer "Mission-Commit: <sha>" \
+    --trailer "Mission-Rev: <n>" --trailer "Mission-Hash: <mission hash>"
   ```
 
-  Then it runs the change's `test`, if one is set. On a conflict or a red suite, it aborts the
-  merge or resets to the previous head, puts the mission in `blocked`, and escalates.
+  Before merging, it records `pre_head` (the branch head) in the mission record. Then it runs
+  the change's `test`, if one is set, and records `tested_head` (the merge commit) and the
+  result. Only a green result, recorded for the current branch head, makes the mission
+  `integrated`.
+
+  On a conflict or a red suite, it does three things:
+  - it runs `git merge --abort`, or `git reset --hard <pre_head>`, in its own integration
+    worktree;
+  - it puts the mission in `blocked`;
+  - it escalates.
 - **Escalation** uses the dispatcher's channel: a `cmd` of type `escalation` to `master` (or to
   `--escalate-to`). The text names the mission, the reason and the next command to run.
 
 ### 5.3 `agentbus mission …` (master or the user)
 
-`load <path>@<commit> [--force <reason>]`, `status [<change>]`, `show <change>/<id>` (prints the
-mission, its brief reference and its history), `retry <change>/<id>`, `skip <change>/<id>
---reason <text>`, `reassign <change>/<id> <agent>`, `abort <change> --reason <text>`.
+```
+mission load <path>@<commit> [--force <reason>]   # first load, or reload as revision n+1 (§6.4)
+mission load --recover <path>@<commit>            # rebuild after losing Redis (§6.5); no --force
+mission status [<change>]
+mission show <change>/<id>                         # the mission, its brief reference, its attempts
+mission retry <change>/<id>                        # blocked → a new attempt
+mission reassign <change>/<id> <agent>             # blocked or accepted → a new attempt for <agent>
+mission skip <change>/<id> --reason <text>
+mission abort <change> --reason <text>
+```
+
+`retry` and `reassign` always open a new attempt and supersede the current one (§4).
 
 `skip` integrates nothing: it marks the mission `integrated` without a commit, so dependents
 unlock. It records a self-verdict with the reason, so the act is in the ledger. `abort` stops
@@ -312,7 +360,7 @@ Missions already show in Board and Requests, because they are requests. The head
 | Situation | Behaviour |
 |---|---|
 | A request is not accepted | the v0.8 dispatcher wakes the agent and escalates after 10 minutes (unchanged) |
-| A mission is accepted but not delivered within `timeout` | escalate to master; no automatic reassignment |
+| A mission is accepted but not delivered within `timeout` | it becomes `blocked` (reason `timeout`) and is escalated; master runs `retry` or `reassign`, which supersede the attempt (§4); no automatic reassignment |
 | `request block` | the mission becomes `blocked`, and master gets the reason |
 | The reviewer is silent | the open challenge is an obligation: the dispatcher wakes the reviewer and escalates |
 
@@ -324,7 +372,8 @@ The conductor rejects a delivery when:
 - the commit is unknown, or does not descend from `base`;
 - the diff touches files outside the allowed paths (they are listed);
 - the tests are red (the log tail is attached);
-- it was delivered against an older revision whose mission definition has changed since.
+- it comes from a superseded attempt (§4): ignored rather than rejected, so it costs no
+  attempt.
 
 Each rejection is one attempt. After `max_attempts`, the mission is `blocked` and escalated.
 
@@ -332,11 +381,19 @@ Each rejection is one attempt. After `max_attempts`, the mission is `blocked` an
 
 The delivered commit is the idempotence key.
 
-- A mission found in `checking` is checked again from scratch.
-- A mission found in `integrating` is first tested with `git merge-base --is-ancestor`: if the
-  commit is already in the branch, the mission becomes `integrated`; otherwise the merge is
-  redone.
-- A conductor that lost its lease writes nothing.
+- **At startup, the conductor cleans its integration worktree.**
+  - If a merge is in progress (`MERGE_HEAD` exists), it runs `git merge --abort`.
+  - If the worktree holds changes it did not record, or untracked files, it does not delete
+    them: it blocks the change and escalates.
+- **A mission found in `checking`** is checked again from scratch, in a new disposable
+  worktree.
+- **A mission found in `integrating`** is resumed from the record. Being an ancestor of the
+  branch is not enough:
+  - if the commit is not in the branch, the merge is redone from `pre_head`;
+  - if it is in the branch, the change's `test` must be green and recorded for the current head
+    (`tested_head`), otherwise the suite is run again;
+  - only then does the mission become `integrated`. A red suite blocks it.
+- A conductor that lost its lease writes nothing, and its commands were killed (§5.2).
 - A second conductor for the same project exits 0, as a second dispatcher does.
 
 ### 6.4 Reloading the plan
@@ -344,8 +401,11 @@ The delivered commit is the idempotence key.
 `mission load` at a new commit creates revision n + 1.
 
 - A mission whose hash did not change keeps its state.
-- A changed mission that is not yet approved goes back to `pending`, and its open request is
-  answered with a cancellation note.
+- A changed mission that has not started (`pending`, `ready`) is simply replaced.
+- A changed mission whose attempt is in flight (`requested` through `in_review`) makes the
+  reload fail, unless `--force <reason>` is given. With it, the attempt is superseded (§4): any
+  later accept or done on it is ignored, and its agent is told to stop. The mission then goes
+  back to `pending`. A queued request can still be read, but it can no longer produce anything.
 - A mission that is changed or removed after approval or integration makes the reload fail,
   unless `--force <reason>` is given. The reason is recorded. Integrated work is never rewritten
   silently.
@@ -353,10 +413,11 @@ The delivered commit is the idempotence key.
 
 ### 6.5 Losing Redis
 
-`mission load --recover <path>@<commit>` reads the `Mission:` trailers of the change branch's
-merge commits:
+`mission load --recover <path>@<commit>` reads the trailers of the change branch's merge commits:
 
-- missions found there become `integrated`;
+- a mission whose `Mission-Hash` equals its current definition's hash becomes `integrated`;
+- a mission merged under a different hash (its definition changed since) becomes `blocked`,
+  waiting for master: an old merge never validates a new definition;
 - every other mission becomes `pending`.
 
 Git is the durable proof, and Redis the working state.
@@ -370,8 +431,14 @@ outside the repository. The oldest logs are pruned past 200 MiB per change.
 
 - **Same machine.** The conductor and the agents share one local repository: a commit must be
   in it. Remote agents (VDR) are out of scope.
-- **Trust.** Running the tests runs the agent's code, as any CI or a local `go test` does. It
-  runs as the user, with no sandbox.
+- **Trust.** Running a mission's tests means executing, as the conductor's user, whatever code
+  the agent committed: `sh -c` in a worktree of that commit. This is arbitrary code execution on
+  the host, bounded only by what that user can do. The rules that follow from it:
+  - only load a `missions.json` from a commit you have reviewed;
+  - run the conductor as an ordinary user, with no secrets in its environment beyond what the
+    tests need (no deploy keys, no production Redis URL);
+  - agents and the conductor already share one machine and one account, so this adds no new
+    privilege, but it does not sandbox anything either.
 - **Who reviews.** The reviewer is a role, not a guarantee: the 4-eyes rule ensures another
   agent approved, not that it read well.
 
@@ -391,8 +458,15 @@ outside the repository. The oldest logs are pruned past 200 MiB per change.
   - an integration conflict, which escalates;
   - a restart during checking, and another during integration;
   - a reload with a changed mission;
-  - `--recover` after the Redis keys are deleted;
-  - a verdict on the wrong commit being ignored.
+  - `--recover` after the Redis keys are deleted, including a mission merged under an older
+    hash, which must come back `blocked`;
+  - a verdict on the wrong commit being ignored, and the reviewer's gate closed after every
+    exit from `in_review`;
+  - an `accept` and a `done` on a superseded attempt being ignored;
+  - a lost lease killing a running test, and two conductors on one machine (the `flock`);
+  - a start with a merge in progress, and one with unknown files, in the integration worktree;
+  - a crash after the merge but before the change suite, which must rerun the suite;
+  - a mission id or change name too long for a request name, refused at load.
 - **Live acceptance:** port the launcher (`scripts/lib/role_config.py`) to Go as a real
   change. Kimi and Codex run it as missions, master only arbitrates, and the result is
   recorded in the release notes.
