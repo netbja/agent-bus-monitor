@@ -113,7 +113,18 @@ stream (XADD MAXLEN ~); the pilot lease and challenge gates use ordinary keys/ha
 > because the Redis password travels in plaintext. (It previously mapped `6380:6379`, i.e. bound
 > `0.0.0.0`; verify the active bind with `ss -tlnp | grep 6380`.)
 
-## Build the tools
+## Install the tools
+
+### Automated install (recommended)
+
+An idempotent cross-platform installer automates toolchain preflight, herdr & herdr-plus setup, agentbus & busmon compilation, skill linking, and Redis broker startup:
+
+```bash
+./install.sh                # run automated setup
+./install.sh --dry-run      # inspect environment without modifying anything
+```
+
+### Manual build
 
 ```bash
 go build -o busmon ./cmd/busmon

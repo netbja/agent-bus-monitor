@@ -72,7 +72,7 @@ Ce guide pratique est conçu en complément du `README.md`. Il fournit une march
 
 ## 3. Installation Pas à Pas depuis le Terminal
 
-### Étape 1 : Prérequis Système
+> **Installation Automatisée Rapide** : Vous pouvez exécuter `./install.sh` (ou `./install.sh --dry-run`) directement depuis la racine du dépôt pour réaliser automatiquement les vérifications, l'installation de herdr & herdr-plus, la compilation des binaires et le lancement de Redis de façon idempotente.
 
 Vérifiez la présence des outils suivants :
 - **Go** (version 1.22 ou supérieure)

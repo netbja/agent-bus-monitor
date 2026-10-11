@@ -72,7 +72,7 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 ## 3. Step-by-Step Terminal Installation
 
-### Step 1: System Prerequisites
+> **Quick Automated Setup**: You can run `./install.sh` (or `./install.sh --dry-run`) directly from the repository root to perform preflight checks, herdr & herdr-plus setup, binary builds, and Redis container launch in one idempotent run.
 
 Ensure you have the following installed:
 - **Go** (version 1.22 or newer)
