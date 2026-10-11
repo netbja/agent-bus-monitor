@@ -105,7 +105,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|dispatch|limits|mem|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|limits|mem|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -122,6 +122,14 @@ func main() {
 	cmd, rest := args[0], args[1:]
 
 	switch cmd {
+	case "missions":
+		sctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		wd, _ := os.Getwd()
+		code := runMissions(sctx, b, rest, wd, os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+	case "mission":
+		os.Exit(runMission(ctx, b, self, rest, os.Stdout, os.Stderr))
 	case "dispatch":
 		sctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		code := runDispatch(sctx, b, rest, dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}, os.Stdout, os.Stderr)
