@@ -2,6 +2,23 @@
 
 # agent-bus
 
+## New in v0.10.0 — missions
+
+A large change can now run across several agents and several days. Its tasks are **missions** in
+`docs/changes/<change>/missions.json`, versioned in Git. A deterministic **conductor**
+(`agentbus missions`, a bootstrap tab) runs them:
+- it requests each mission when its dependencies are integrated;
+- it rejects a delivery outside the allowed paths or with failing tests;
+- it opens the 4-eyes review;
+- it merges approved work into `change/<change>`, never `main`.
+
+Master only arbitrates what is blocked. Also new:
+- `agentbus mem` keeps the shared memory in `docs/memory/` checkable;
+- `./install.sh` sets up or updates a machine in one run.
+
+See [Missions](#missions-agentbus-missions-v010), [Install the tools](#install-the-tools) and
+the [release notes](docs/releases/v0.10.0.md). Live acceptance on a real change is still pending.
+
 ## New in v0.9.0 — busmon redesign
 
 busmon is now a **btop-style dashboard**: an attention-first table of agents with freshness
