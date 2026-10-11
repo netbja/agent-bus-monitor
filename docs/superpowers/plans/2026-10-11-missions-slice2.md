@@ -195,7 +195,7 @@ A test can shorten the timeout through `missions.json` (`"timeout": "1s"`).
 - [ ] **Step 1:** Write the failing tests.
   - `TestTimeoutBlocksAndEscalates`: with timeout `1s`, accept, wait 1.2 s, then pass. The mission is `blocked`, with one escalation.
   - `TestTimeoutMeasuredPerAttempt` (Review Focus 5): with a 1 s timeout, accept attempt 1, block it, `retry`, then accept attempt 2 about 0.8 s later. A pass 0.5 s after that second acceptance must not time out, and a pass 1.2 s after it must. A blocked agent cannot re-accept the same task back into flight: the mission is `blocked` until `retry` or `reassign` opens a new task, so no bus change is needed.
-- [ ] **Step 2:** Run `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ -run Timeout -count=1`|Reaccept' -count=1`. Expected: FAIL.
+- [ ] **Step 2:** Run `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ -run Timeout -count=1`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the same. Expected: PASS.
 - [ ] **Step 5:** Commit `feat(mission): per-mission delivery timeouts`.
