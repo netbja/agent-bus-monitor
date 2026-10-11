@@ -339,17 +339,23 @@ func TestCacheFileIsStable(t *testing.T) {
 // ASCII escapes), so its cache name is the same sha256 too. The golden was
 // produced by role_config.py from the same fixture, with its root as @ROOT@.
 func TestAdapterSpecMatchesPython(t *testing.T) {
+	for manifest, golden := range map[string]string{"adapter.toml": "adapter-spec.golden", "adapter-arrays.toml": "adapter-arrays-spec.golden"} {
+		t.Run(manifest, func(t *testing.T) { adapterSpecCase(t, manifest, golden) })
+	}
+}
+
+func adapterSpecCase(t *testing.T, manifest, goldenFile string) {
 	root := filepath.Join(t.TempDir(), "root dir")
 	must(t, os.MkdirAll(filepath.Join(root, "skills", "test-skill"), 0o755))
 	must(t, os.MkdirAll(filepath.Join(root, "bin"), 0o755))
 	must(t, os.WriteFile(filepath.Join(root, "skills", "test-skill", "SKILL.md"), []byte("# s\n"), 0o644))
 	must(t, os.WriteFile(filepath.Join(root, "bin", "extra"), []byte("#!/bin/sh\n"), 0o755))
-	for src, dst := range map[string]string{"adapter.toml": "roles.toml", "coder.md": "coder.md"} {
+	for src, dst := range map[string]string{manifest: "roles.toml", "coder.md": "coder.md"} {
 		b, err := os.ReadFile(filepath.Join("testdata", "launch", src))
 		must(t, err)
 		must(t, os.WriteFile(filepath.Join(root, dst), b, 0o644))
 	}
-	golden, err := os.ReadFile(filepath.Join("testdata", "launch", "adapter-spec.golden"))
+	golden, err := os.ReadFile(filepath.Join("testdata", "launch", goldenFile))
 	must(t, err)
 	resolved, err := filepath.EvalSymlinks(root)
 	must(t, err)

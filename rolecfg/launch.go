@@ -543,32 +543,97 @@ func adapterSpec(p Profile, project, prompt, promptPath string) (*ordered, error
 // orderedTable converts a decoded TOML table to ordered objects, nested
 // tables included, using the key order the decoder saw.
 func orderedTable(table map[string]interface{}, keys []toml.Key, prefix []string) (*ordered, error) {
-	o := newOrdered()
+	// keys is the decoder's full key list; keep the descendants of prefix.
+	var under []toml.Key
 	for _, k := range keys {
-		if len(k) != len(prefix)+1 || !hasPrefix(k, prefix) {
+		if len(k) > len(prefix) && hasPrefix(k, prefix) {
+			under = append(under, k)
+		}
+	}
+	return orderTable(table, under, len(prefix))
+}
+
+// orderTable orders one table from the keys under it, in the decoder's order
+// (depth is the table's own path length). Each child gets the keys beneath
+// it, so nested tables and arrays of tables keep their order too.
+func orderTable(table map[string]interface{}, under []toml.Key, depth int) (*ordered, error) {
+	o := newOrdered()
+	for _, k := range under {
+		if len(k) != depth+1 {
 			continue
 		}
-		name := k[len(prefix)]
+		name := k[depth]
+		if _, seen := o.vals[name]; seen {
+			continue // an array of tables names its key once per element
+		}
 		v, ok := table[name]
 		if !ok {
 			continue
 		}
-		if sub, isTable := v.(map[string]interface{}); isTable {
-			nested, err := orderedTable(sub, keys, append(append([]string{}, prefix...), name))
-			if err != nil {
-				return nil, err
+		var child []toml.Key
+		for _, c := range under {
+			if len(c) > depth+1 && c[depth] == name {
+				child = append(child, c)
 			}
-			o.set(name, nested)
-			continue
 		}
-		o.set(name, v)
+		ov, err := orderValue(v, child, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		o.set(name, ov)
 	}
 	if len(o.keys) != len(table) {
-		return nil, fmt.Errorf("profile %s: cannot recover the key order of %s", strings.Join(prefix, "."), strings.Join(prefix, "."))
+		return nil, fmt.Errorf("cannot recover the key order of a profile table")
 	}
 	return o, nil
 }
 
+// orderValue orders a value from the keys strictly beneath it. The decoder
+// lists the keys of an array's tables one element after another, so element
+// i takes the next keys until it has as many direct keys as it has fields.
+func orderValue(v interface{}, under []toml.Key, depth int) (interface{}, error) {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		return orderTable(x, under, depth)
+	case []map[string]interface{}:
+		items := make([]interface{}, len(x))
+		for i, m := range x {
+			items[i] = m
+		}
+		return orderArray(items, under, depth)
+	case []interface{}:
+		return orderArray(x, under, depth)
+	}
+	return v, nil
+}
+
+func orderArray(items []interface{}, under []toml.Key, depth int) (interface{}, error) {
+	out := make([]interface{}, len(items))
+	pos := 0
+	for i, item := range items {
+		m, isTable := item.(map[string]interface{})
+		if !isTable {
+			out[i] = item
+			continue
+		}
+		start, direct := pos, 0
+		for pos < len(under) {
+			if len(under[pos]) == depth+1 {
+				if direct == len(m) {
+					break // the next element's first key
+				}
+				direct++
+			}
+			pos++
+		}
+		ov, err := orderTable(m, under[start:pos], depth)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = ov
+	}
+	return out, nil
+}
 func hasPrefix(k toml.Key, prefix []string) bool {
 	for i, p := range prefix {
 		if k[i] != p {
@@ -636,8 +701,6 @@ func writePyJSON(b *strings.Builder, v interface{}) error {
 			}
 		}
 		b.WriteByte('}')
-	case []map[string]interface{}:
-		return fmt.Errorf("arrays of tables are not supported in a profile")
 	default:
 		return fmt.Errorf("Object of type %T is not JSON serializable", v)
 	}

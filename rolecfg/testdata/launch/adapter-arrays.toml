@@ -1,0 +1,23 @@
+schema_version = 2
+[defaults]
+profile = "main"
+[adapters.extra]
+executable = "bin/extra"
+[profiles.main]
+client = "extra"
+provider = "prov"
+model = "m"
+[profiles.main.options]
+inl = [{ z = 1, a = 2 }, { b = 3, z = 4 }]
+mixed = [1, "two"]
+[[profiles.main.options.arr]]
+q = 1
+nest = { y = "deep", x = [1, 2] }
+b = 2
+[[profiles.main.options.arr]]
+c = 3
+[profiles.main.options.after]
+k = "v"
+[roles.coder]
+tier = "boot"
+skills = ["test-skill"]
