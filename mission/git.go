@@ -86,7 +86,7 @@ func (g Git) IsAncestor(ctx context.Context, a, b string) (bool, error) {
 }
 
 func (g Git) DiffNames(ctx context.Context, base, commit string) ([]string, error) {
-	out, err := g.run(ctx, "", "diff", "--name-only", base, commit)
+	out, err := g.run(ctx, "", "diff", "--no-renames", "--name-only", base, commit) // a rename lists both sides
 	return lines(out), err
 }
 

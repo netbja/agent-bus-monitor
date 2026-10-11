@@ -33,6 +33,8 @@ type Attempt struct {
 	Branch  string `json:"branch,omitempty"`
 	Outcome string `json:"outcome,omitempty"`
 	Reason  string `json:"reason,omitempty"`
+	By      string `json:"by,omitempty"`     // the task that replaced it
+	Closed  bool   `json:"closed,omitempty"` // board entry superseded and agent told
 }
 
 // MissionRecord is everything the conductor knows about one mission.
@@ -47,6 +49,8 @@ type MissionRecord struct {
 	Reviewer   string    `json:"reviewer,omitempty"`
 	Subject    string    `json:"subject,omitempty"`
 	ReviewRef  string    `json:"review_ref,omitempty"`
+	ReviewOpen bool      `json:"review_open,omitempty"` // the reviewer's gate is open for ReviewRef
+	Escalated  bool      `json:"escalated,omitempty"`   // the blocked state was escalated
 	LogPath    string    `json:"log_path,omitempty"`
 	CheckTail  string    `json:"check_tail,omitempty"`
 	PreHead    string    `json:"pre_head,omitempty"`

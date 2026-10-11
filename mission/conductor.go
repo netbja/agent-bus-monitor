@@ -116,6 +116,9 @@ func (c *Conductor) passChange(ctx context.Context, name string) error {
 
 // advance moves one mission as far as the facts allow in this pass.
 func (c *Conductor) advance(ctx context.Context, ch *change, m Mission, r *MissionRecord) error {
+	if err := c.effects(ctx, ch, m, r); err != nil { // replay what a failure or a crash left owed
+		return err
+	}
 	if r.State == Pending && c.depsIntegrated(ch, m) {
 		if err := c.transition(ctx, ch, m, r, EvDepsIntegrated, ""); err != nil {
 			return err
@@ -194,7 +197,10 @@ func (c *Conductor) put(ctx context.Context, ch *change, r *MissionRecord) error
 	return c.Store.PutMission(ctx, ch.rec.Change, *r)
 }
 
-// transition applies Next, persists, then performs the actions in order.
+// transition applies Next and persists the new state together with the
+// effects it owes (a review to open or close, an escalation, attempts to
+// close), then performs them through effects. An effect that fails is not
+// lost: the flags stay set and every pass replays what is still owed.
 func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *MissionRecord, ev Event, reason string) error {
 	if ev == EvCheckFailed || ev == EvReviewRejected {
 		r.Rejections++
@@ -208,19 +214,8 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 	if reason != "" {
 		r.Reason = reason
 	}
-	sends := false
+	sends := hasAction(acts, ActSendRequest)
 	for _, a := range acts {
-		if a == ActSendRequest {
-			sends = true
-		}
-	}
-	if !sends { // newAttempt persists for the transitions that send a request
-		if err := c.put(ctx, ch, r); err != nil {
-			return err
-		}
-	}
-	for _, a := range acts {
-		var err error
 		switch a {
 		case ActSupersede:
 			outcome := "superseded"
@@ -230,37 +225,79 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 			case EvReviewRejected:
 				outcome = "rejected"
 			}
+			by := ""
+			if sends {
+				by = TaskName(ch.rec.Change, m.ID, r.Attempt+1)
+			}
 			r.History = append(r.History, Attempt{N: prev.N, Task: prev.Task, Agent: prev.Agent, Base: prev.Base,
-				Commit: prev.Commit, Branch: prev.Branch, Outcome: outcome, Reason: reason})
-			if !sends && prev.Task != "" { // abort: nothing replaces it
-				err = c.closeAttempt(ctx, prev, "", reason)
-			}
-		case ActSendRequest:
-			agent := m.Agent
-			if prev.Agent != "" {
-				agent = prev.Agent
-			}
-			err = c.newAttempt(ctx, ch, m, r, agent, reason)
-			if err == nil && prev.Task != "" {
-				err = c.closeAttempt(ctx, prev, r.Current.Task, reason)
-			}
+				Commit: prev.Commit, Branch: prev.Branch, Outcome: outcome, Reason: reason, By: by})
 		case ActOpenReview:
-			err = c.openReview(ctx, ch, m, r)
-		case ActResolveReview:
-			if r.ReviewRef != "" {
-				err = c.Bus.FencedResolveChallenge(ctx, c.Store.Token, r.Reviewer, r.ReviewRef)
-			}
+			r.Subject = "mission:" + ch.rec.Change + "/" + m.ID + "@" + short(r.Current.Commit)
+			r.ReviewRef, r.ReviewOpen = r.Current.Task, false
 		case ActEscalate:
-			_, err = c.Bus.FencedCmdRef(ctx, c.Store.Token, c.Self, c.EscalateTo, bus.CmdEscalation, "",
-				fmt.Sprintf("%s/%s blocked: %s. Next: agentbus mission retry %s/%s | agentbus mission abort %s",
-					ch.rec.Change, m.ID, r.Reason, ch.rec.Change, m.ID, ch.rec.Change), false)
+			r.Escalated = false
 		}
-		if err != nil {
-			return fmt.Errorf("%s: %w", a, err)
+		// ActResolveReview needs nothing here: leaving in_review with
+		// ReviewOpen set is what effects closes.
+	}
+	if sends {
+		agent := m.Agent
+		if prev.Agent != "" {
+			agent = prev.Agent
+		}
+		if err := c.newAttempt(ctx, ch, m, r, agent, reason); err != nil { // persists, publishes
+			return err
+		}
+	} else if err := c.put(ctx, ch, r); err != nil {
+		return err
+	}
+	return c.effects(ctx, ch, m, r)
+}
+
+// effects performs, idempotently, every effect the record still owes, and
+// records each one as done right after it succeeds.
+func (c *Conductor) effects(ctx context.Context, ch *change, m Mission, r *MissionRecord) error {
+	for i := range r.History {
+		h := &r.History[i]
+		if h.Closed || h.Task == "" {
+			continue
+		}
+		if err := c.closeAttempt(ctx, ch, *h, h.By, h.Reason); err != nil {
+			return fmt.Errorf("close %s: %w", h.Task, err)
+		}
+		h.Closed = true
+		if err := c.put(ctx, ch, r); err != nil {
+			return err
 		}
 	}
-	if !sends && len(r.History) > 0 && hasAction(acts, ActSupersede) {
-		return c.put(ctx, ch, r) // the history entry added after the first put
+	if r.ReviewOpen && (r.State != InReview || r.ReviewRef != r.Current.Task) {
+		if err := c.Bus.FencedResolveChallenge(ctx, c.Store.Token, r.Reviewer, r.ReviewRef); err != nil {
+			return fmt.Errorf("close review: %w", err)
+		}
+		r.ReviewOpen = false
+		if err := c.put(ctx, ch, r); err != nil {
+			return err
+		}
+	}
+	if r.State == InReview && !r.ReviewOpen && r.ReviewRef != "" {
+		if err := c.openReview(ctx, ch, m, r); err != nil {
+			return fmt.Errorf("open review: %w", err)
+		}
+		r.ReviewOpen = true
+		if err := c.put(ctx, ch, r); err != nil {
+			return err
+		}
+	}
+	if r.State == Blocked && !r.Escalated {
+		if _, err := c.Bus.FencedCmdRef(ctx, c.Store.Token, c.Self, c.EscalateTo, bus.CmdEscalation, "",
+			fmt.Sprintf("%s/%s blocked: %s. Next: agentbus mission retry %s/%s | agentbus mission abort %s",
+				ch.rec.Change, m.ID, r.Reason, ch.rec.Change, m.ID, ch.rec.Change), false); err != nil {
+			return fmt.Errorf("escalate: %w", err)
+		}
+		r.Escalated = true
+		if err := c.put(ctx, ch, r); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -284,7 +321,7 @@ func (c *Conductor) newAttempt(ctx context.Context, ch *change, m Mission, r *Mi
 	}
 	r.Attempt++
 	r.Current = Attempt{N: r.Attempt, Task: TaskName(ch.rec.Change, m.ID, r.Attempt), Agent: agent, Base: base}
-	r.Subject, r.ReviewRef, r.LogPath, r.CheckTail = "", "", "", ""
+	r.Subject, r.LogPath, r.CheckTail = "", "", "" // ReviewRef stays until its gate is closed
 	r.State = Requested
 	if previous != "" {
 		r.Reason = previous
@@ -320,12 +357,16 @@ func (c *Conductor) ensurePublished(ctx context.Context, ch *change, m Mission, 
 
 // closeAttempt supersedes an old attempt: its board entry stops counting as
 // waiting, and its agent is told on the old thread, without being woken.
-func (c *Conductor) closeAttempt(ctx context.Context, old Attempt, newTask, reason string) error {
+func (c *Conductor) closeAttempt(ctx context.Context, ch *change, old Attempt, newTask, reason string) error {
 	if err := c.Bus.FencedBoardState(ctx, c.Store.Token, old.Task, "superseded"); err != nil {
 		if strings.Contains(err.Error(), "unknown board task") {
 			return nil // never published
 		}
 		return err
+	}
+	if e, ok := ch.board[old.Task]; ok { // this pass must not read the old state
+		e.State = "superseded"
+		ch.board[old.Task] = e
 	}
 	return c.replySuperseded(ctx, old, newTask, reason)
 }
@@ -384,6 +425,12 @@ func (c *Conductor) check(ctx context.Context, ch *change, m Mission, r *Mission
 	}
 	reason, err := c.runChecks(ctx, ch, m, r)
 	if err != nil {
+		// The conductor's own failure, not the delivery's: back to delivered so
+		// the next pass checks again; no rejection is counted.
+		r.State = Delivered
+		if perr := c.put(ctx, ch, r); perr != nil {
+			return errors.Join(err, perr)
+		}
 		return err
 	}
 	if reason != "" {
@@ -446,13 +493,9 @@ func short(sha string) string {
 	return sha
 }
 
-// openReview opens the 4-eyes challenge on the assigned reviewer, once.
+// openReview opens the 4-eyes challenge on the assigned reviewer unless its
+// gate already holds ReviewRef (a crash between the two steps).
 func (c *Conductor) openReview(ctx context.Context, ch *change, m Mission, r *MissionRecord) error {
-	r.Subject = "mission:" + ch.rec.Change + "/" + m.ID + "@" + short(r.Current.Commit)
-	r.ReviewRef = r.Current.Task
-	if err := c.put(ctx, ch, r); err != nil { // persist first (crash safety)
-		return err
-	}
 	open, err := c.Bus.OpenChallenges(ctx, r.Reviewer)
 	if err != nil {
 		return err

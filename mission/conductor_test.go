@@ -2,6 +2,7 @@ package mission
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -348,5 +349,92 @@ func TestPassSupersededLateDone(t *testing.T) {
 	}
 	if replies() != 2 {
 		t.Fatalf("%d replies, want exactly one more", replies())
+	}
+}
+
+// Codex CP2: a rename from a forbidden path into an allowed one must be seen
+// as touching both paths.
+func TestPassRejectsRenameIntoAllowedPath(t *testing.T) {
+	h := newHarness(t, "true")
+	h.pass()
+	m := h.mission("t1")
+	h.b.AcceptRequest(h.ctx, m.Current.Task, "kimi")
+	wt := filepath.Join(t.TempDir(), "agent")
+	run(t, h.repo, "git", "worktree", "add", "-q", "-b", "mission/rename", wt, m.Current.Base)
+	os.MkdirAll(filepath.Join(wt, "src/t1"), 0o755)
+	run(t, wt, "git", "mv", "README.md", "src/t1/moved.md")
+	run(t, wt, "git", "commit", "-q", "-m", "rename")
+	sha := run(t, wt, "git", "rev-parse", "HEAD")
+	h.b.CompleteRequestAt(h.ctx, m.Current.Task, "kimi", "done", sha, "mission/rename")
+	h.pass()
+	if m := h.mission("t1"); m.Attempt != 2 || !strings.Contains(m.History[0].Reason, "README.md") {
+		t.Fatalf("rename slipped through: %+v", m)
+	}
+}
+
+// Codex CP2: effects lost after the state was persisted are replayed by the
+// next pass, exactly once.
+func TestPassReplaysLostEffects(t *testing.T) {
+	h := newHarness(t, "true")
+	h.toReview(map[string]string{"src/t1/a.go": "x"})
+	// lost challenge: in_review, but no gate and not marked open
+	h.b.FencedResolveChallenge(h.ctx, "tok", "codex", "chg-t1-1")
+	h.setState("t1", InReview, func(m *MissionRecord) { m.ReviewOpen = false })
+	h.pass()
+	if open, _ := h.b.OpenChallenges(h.ctx, "codex"); open["chg-t1-1"] == "" {
+		t.Fatal("lost challenge not reopened")
+	}
+	h.pass()
+	if n := countCmds(h.cmds(), func(e bus.Event) bool { return e.Type == bus.CmdChallenge }); n != 2 {
+		t.Fatalf("%d challenge cmds, want the original plus one replay", n)
+	}
+	// lost escalation: blocked, not escalated yet
+	h.setState("t1", Blocked, func(m *MissionRecord) { m.Escalated, m.Reason = false, "stuck" })
+	h.pass()
+	h.pass()
+	if n := countCmds(h.cmds(), func(e bus.Event) bool { return e.Type == bus.CmdEscalation }); n != 1 {
+		t.Fatalf("%d escalations, want exactly one", n)
+	}
+	// the gate of a mission that left review is closed
+	if open, _ := h.b.OpenChallenges(h.ctx, "codex"); len(open) != 0 {
+		t.Fatalf("gate still open after leaving review: %v", open)
+	}
+	// lost close of a superseded attempt
+	h.setState("t1", Requested, func(m *MissionRecord) {
+		m.History = append(m.History, Attempt{N: 1, Task: "chg-t1-1", Agent: "kimi", Outcome: "superseded", By: "chg-t1-2"})
+		m.Current = Attempt{N: 2, Task: "chg-t1-2", Agent: "kimi", Base: m.Current.Base}
+		m.Attempt = 2
+	})
+	h.pass()
+	h.pass()
+	board, _ := h.b.Board(h.ctx)
+	if board["chg-t1-1"].State != "superseded" {
+		t.Fatalf("lost close not replayed: %q", board["chg-t1-1"].State)
+	}
+	thread := board["chg-t1-1"].Request.Thread
+	if n := countCmds(h.cmds(), func(e bus.Event) bool { return e.Ref == thread && e.Type == bus.CmdReply && e.From == "conductor" }); n != 1 {
+		t.Fatalf("%d close replies, want 1", n)
+	}
+}
+
+// Codex CP2: an infrastructure error during a check leaves the mission
+// retryable by the live conductor, not stuck in checking.
+func TestPassCheckInfraErrorIsRetried(t *testing.T) {
+	h := newHarness(t, "true")
+	h.pass()
+	h.deliver("t1", map[string]string{"src/t1/a.go": "x"})
+	blocker := filepath.Join(h.c.ProjectRoot, "chg", "check-chg-t1-1")
+	os.MkdirAll(blocker, 0o755)
+	os.WriteFile(filepath.Join(blocker, "squatter"), []byte("x"), 0o644)
+	if err := h.c.Pass(h.ctx); err == nil {
+		t.Fatal("the infrastructure error was swallowed")
+	}
+	if m := h.mission("t1"); m.State != Delivered || m.Rejections != 0 {
+		t.Fatalf("after an infra error: %+v", m)
+	}
+	os.RemoveAll(blocker)
+	h.pass()
+	if m := h.mission("t1"); m.State != InReview {
+		t.Fatalf("not retried: %s", m.State)
 	}
 }
