@@ -41,4 +41,23 @@ assert_contains "$out" "TOKEN=tok"                 "ANTHROPIC_AUTH_TOKEN preserv
 # explicit opt-in keeps the key
 out="$(PATH="$tmp:$PATH" AGENT_LAUNCH_KEEP_API_KEY=1 ANTHROPIC_API_KEY=sk-keep "$L" master demo)"
 assert_contains "$out" "KEY=sk-keep"          "AGENT_LAUNCH_KEEP_API_KEY=1 keeps the key"
+
+# --- bind before exec (v0.10.1): inside herdr the launcher binds its own pid, which exec hands to the client
+out="$(HERDR_ENV=1 HERDR_PANE_ID=w9:p9 AGENT_LAUNCH_DRYRUN=1 "$L" master demo)"
+assert_contains "$out" "agentbus --project demo bind master --pid" "dry-run shows the bind"
+out="$(AGENT_LAUNCH_DRYRUN=1 "$L" master demo)"
+assert_eq "$([[ "$out" == *" bind "* ]] && echo bind || echo none)" "none" "no bind outside herdr"
+
+cat > "$tmp/agentbus" <<'ASTUB'
+#!/usr/bin/env bash
+echo "$*" > "$BIND_LOG"
+exit "${BIND_RC:-0}"
+ASTUB
+chmod +x "$tmp/agentbus"
+out="$(PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" HERDR_ENV=1 HERDR_PANE_ID=w9:p9 "$L" master demo 2>&1)"
+assert_contains "$(cat "$tmp/bind.log")" "--project demo bind master --pid " "launcher binds itself"
+assert_contains "$out" "KEY=" "client starts after the bind"
+out="$(PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" BIND_RC=1 HERDR_ENV=1 HERDR_PANE_ID=w9:p9 "$L" master demo 2>&1)"
+assert_contains "$out" "warning: agentbus bind failed" "a failed bind is reported"
+assert_contains "$out" "KEY=" "and the client still starts"
 finish
