@@ -72,10 +72,12 @@ Ce guide pratique est conçu en complément du `README.md`. Il fournit une march
 
 ## 3. Installation Pas à Pas depuis le Terminal
 
-> **Installation Automatisée Rapide** : Vous pouvez exécuter `./install.sh` (ou `./install.sh --dry-run`) directement depuis la racine du dépôt pour réaliser automatiquement les vérifications, l'installation de herdr & herdr-plus, la compilation des binaires et le lancement de Redis de façon idempotente.
+> **Installation Automatisée Rapide** : depuis la racine du dépôt, lancez `./install.sh --dry-run` pour voir ce qui manque, puis `./install.sh` pour recompiler et installer `agentbus` et `busmon`, lier les skills de rôle et démarrer Redis. Relancez-le après chaque `git pull`. Ajoutez `--install-herdr` pour télécharger aussi herdr et cloner herdr-plus (tag épinglé) s'ils manquent.
+
+### Étape 1 : Prérequis Système
 
 Vérifiez la présence des outils suivants :
-- **Go** (version 1.22 ou supérieure)
+- **Go** (la version exigée par `go.mod`, actuellement 1.26.3)
 - **Docker** et **Docker Compose**
 - **Python** (version 3.11 ou supérieure)
 - **Git**, **curl**, **make**

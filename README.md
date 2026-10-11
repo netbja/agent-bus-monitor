@@ -117,11 +117,12 @@ stream (XADD MAXLEN ~); the pilot lease and challenge gates use ordinary keys/ha
 
 ### Automated install (recommended)
 
-An idempotent cross-platform installer automates toolchain preflight, herdr & herdr-plus setup, agentbus & busmon compilation, skill linking, and Redis broker startup:
+An idempotent installer checks the toolchain (including the Go version `go.mod` requires), rebuilds `agentbus` and `busmon` on every run (into the repository, where bootstrap's tabs run them, and into `--bin-dir`, default `~/.local/bin`), links the role skills and starts the Redis broker. Run it from a clone; re-run it after every `git pull`:
 
 ```bash
 ./install.sh                # run automated setup
-./install.sh --dry-run      # inspect environment without modifying anything
+./install.sh --dry-run      # list what is missing and what would change; changes nothing
+./install.sh --install-herdr  # also download herdr and clone herdr-plus (pinned tag) if missing
 ```
 
 ### Manual build
