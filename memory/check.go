@@ -36,13 +36,19 @@ func Check(o Options) Result {
 		o.Today = time.Now()
 	}
 	root := resolve(o.Root)
-	c := &checker{root: root, memory: filepath.Join(root, "docs", "memory"), today: o.Today.Format("2006-01-02"), edges: map[string][]string{}}
+	if o.StaleAfter <= 0 {
+		o.StaleAfter = defaultStaleAge
+	}
+	c := &checker{root: root, memory: filepath.Join(root, "docs", "memory"), today: o.Today.Format("2006-01-02"),
+		now: o.Today, staleAfter: o.StaleAfter, edges: map[string][]string{}}
 	c.run()
 	return c.res
 }
 
 type checker struct {
 	root, memory, today string
+	now                 time.Time
+	staleAfter          time.Duration
 	edges               map[string][]string
 	res                 Result
 }
@@ -102,6 +108,7 @@ func (c *checker) run() {
 	}
 	c.reachability()
 	c.blockRule()
+	c.newRules()
 }
 
 // memoryNotes lists every .md under docs/memory (Python's rglob).
