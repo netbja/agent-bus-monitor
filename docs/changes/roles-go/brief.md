@@ -12,6 +12,7 @@ Rules for every mission:
 - No Python, ever. Messages in English. Errors read `agent roles: <message>` when printed by the CLI.
 - Work in your own git worktree from the base given in the directive. Commit only inside
   `allowed_paths`. Deliver with `agentbus request done <task> --commit <sha> --branch <b> "<summary>"`.
+- Test fixtures go under `rolecfg/testdata/<config|launch|template>/` (one folder per mission).
 - Tests never touch the live broker or herdr. The suite unsets `HERDR_ENV`, `HERDR_PANE_ID` and
   `REDIS_URL`; keep it that way.
 
