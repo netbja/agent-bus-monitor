@@ -19,7 +19,7 @@ import (
 
 const (
 	missionsUsage = "usage: missions [--repo DIR] [--escalate-to AGENT] | missions --status"
-	missionUsage  = "usage: mission load <path>@<commit> [--force <reason>] [--wait 30s] | mission retry <change>/<id> | mission reassign <change>/<id> <agent> | mission skip <change>/<id> --reason <text> | mission abort <change> --reason <text> | mission status [<change>] | mission show <change>/<id>"
+	missionUsage  = "usage: mission load <path>@<commit> [--force <reason> | --recover] [--wait 30s] | mission retry <change>/<id> | mission reassign <change>/<id> <agent> | mission skip <change>/<id> --reason <text> | mission abort <change> --reason <text> | mission status [<change>] | mission show <change>/<id>"
 )
 
 // runMissions is `agentbus missions`: the conductor process, in the
@@ -104,13 +104,18 @@ func runMission(ctx context.Context, b *bus.Bus, self string, args []string, std
 	case "load":
 		hasForce := slices.Contains(rest, "--force")
 		var force string
+		var recover bool
 		rest, force = extractFlag(rest, "--force")
-		if len(rest) != 1 || !strings.Contains(rest[0], "@") || (hasForce && strings.TrimSpace(force) == "") {
+		rest, recover = extractBool(rest, "--recover")
+		if len(rest) != 1 || !strings.Contains(rest[0], "@") || (hasForce && strings.TrimSpace(force) == "") || (recover && hasForce) {
 			return usage()
 		}
 		opArgs = rest
-		if hasForce {
+		switch {
+		case hasForce:
 			opArgs = append(opArgs, "force", force)
+		case recover:
+			opArgs = append(opArgs, "recover")
 		}
 	case "retry":
 		if len(rest) != 1 || !strings.Contains(rest[0], "/") {

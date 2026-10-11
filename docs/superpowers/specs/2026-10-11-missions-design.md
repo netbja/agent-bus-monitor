@@ -1,6 +1,6 @@
 # Missions: a deterministic conductor for large changes (v0.10)
 
-- **Status:** rev 3 (Codex re-check: operator commands go through the conductor, no forced reload over an approval or a merge in progress, an exact supersession protocol). Rev 2 (Codex spec review folded in: request names, gate closing, conductor primitives, Git locking, integration resume, superseded attempts, recovery by hash). Rev 1: Approach A was chosen by the user on 2026-10-11 ("ok pour A"), and design
+- **Status:** rev 3, slice 2 implemented (§11 records what it settled). Rev 3 (Codex re-check: operator commands go through the conductor, no forced reload over an approval or a merge in progress, an exact supersession protocol). Rev 2 (Codex spec review folded in: request names, gate closing, conductor primitives, Git locking, integration resume, superseded attempts, recovery by hash). Rev 1: Approach A was chosen by the user on 2026-10-11 ("ok pour A"), and design
   sections 1 to 4 were approved one by one.
 - **Base:** `main` @ d0edbff (v0.9.0). It ships with v0.10, alongside the memory tooling (PR #47).
   The CLI/ACP drivers move to v0.11.
@@ -437,7 +437,8 @@ The delivered commit is the idempotence key.
 
 - A mission whose hash did not change keeps its state.
 - A changed mission that has not started (`pending`, `ready`) is simply replaced.
-- A changed mission whose attempt is in flight (`requested` through `in_review`) makes the
+- A changed mission whose attempt is in flight (`requested` through `in_review`, and `blocked`,
+  which still holds an attempt) makes the
   reload fail, unless `--force <reason>` is given. With it, the attempt is superseded (§4): any
   later accept or done on it is ignored, and its agent is told to stop. The mission then goes
   back to `pending`. A queued request can still be read, but it can no longer produce anything.
@@ -561,3 +562,28 @@ findings are fixed. Six minor findings remain open:
   document this, or make the write and the marker one Lua script.
 - **Dirty worktree at startup.** A dirty integration worktree with no mission integrating is not
   blocked at startup. It is caught, and now repaired live, when the next integration fails.
+
+## 11. Settled in slice 2
+
+- **Removed missions.** A mission removed from the file becomes a tombstone (`aborted`, "removed in
+  rev n") rather than being deleted, so its owed effects still replay. A removed mission brought
+  back by a later revision is `pending` again, and keeps its history and attempt count.
+- **Atomic writes.** A reload and a recover are written in one fenced batch
+  (`FencedMissionBatch`). The network effects they owe (closing an attempt, closing a gate) are
+  replayed by the next pass.
+- **Recover.** The most recent conductor merge of a mission decides its state. A merge counts only
+  with `Mission`, a 40-hex `Mission-Commit`, a 64-hex `Mission-Hash` and a positive
+  `Mission-Rev`. A fresh attempt never reuses a request name already on the board.
+- **Timeouts.** They run from the attempt's own `accepted_at`. A delivery whose `responded_at` is
+  past the deadline is a timeout, and is never checked.
+- **Verdict subject.** It carries the full commit sha.
+- **`skip` and `reassign`.**
+  - `skip`'s ledger entry is an owed effect (`SkipBy`), replayed after a crash.
+  - `reassign` sets `AssignedAgent`, which every later attempt follows.
+- **The §10 minors.** All six are done:
+  - abort transitions its missions first and writes the change last;
+  - an unknown commit is told apart from a git failure;
+  - late replies are still answered on aborted changes;
+  - effects are documented as at least once;
+  - an integration never runs in a dirty worktree;
+  - a dirty worktree is reported once at startup.

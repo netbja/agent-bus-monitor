@@ -264,6 +264,33 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    (their agent-bus skill instructs it) and move it to `review`/`done` as it lands. If a
    dispatch bounces on a failed claim, believe the board, not your plan.
 
+## Missions — running a large change through the conductor
+
+For a multi-agent, multi-day change, write its plan as missions (`docs/changes/<change>/missions.json`:
+agent, reviewer, dependencies, allowed paths, test, brief) and let the conductor drive it. You only
+arbitrate. For a short, Claude-only change, agent teams are lighter.
+
+- Start it once per project in its tab: `agentbus missions` (`agentbus missions --status`).
+- Load the change at a reviewed commit: `agentbus mission load docs/changes/<c>/missions.json@<commit>`.
+- Watch: `agentbus mission status [<c>]`, `agentbus mission show <c>/<id>`; busmon shows
+  `missions up/down`.
+- On an **escalation** (blocked mission), choose:
+  - `agentbus mission retry <c>/<id>` — a new attempt, same agent, fresh round of attempts;
+  - `agentbus mission reassign <c>/<id> <agent>` — a new attempt for another agent (not its reviewer);
+  - `agentbus mission skip <c>/<id> --reason "<why>"` — mark it done without a commit (recorded in the
+    verdict ledger) so its dependents proceed;
+  - `agentbus mission abort <c> --reason "<why>"` — stop the whole change.
+- **Revised plan**: commit the new `missions.json`, then `mission load …@<new commit>` (revision n+1).
+  Unchanged missions keep their state. A mission already in flight changes only with
+  `--force "<why>"` (its attempt is superseded); an approved or integrating one never does; an
+  integrated one stays integrated.
+- **Lost Redis**: `agentbus mission load --recover docs/changes/<c>/missions.json@<commit>` rebuilds
+  the change from its merge trailers on `change/<c>` (integrated missions come back integrated;
+  one merged under an older definition comes back blocked for you to decide).
+
+The conductor merges only into `change/<c>`, never `main`, never pushes. Merging `change/<c>` to
+`main` is a normal PR, yours to open.
+
 ## Record the decisions you make, or they die in the pane
 
 You make the calls the team will be living with: what gets dispatched, what is out of scope,

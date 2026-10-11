@@ -133,3 +133,15 @@ func TestMissionCLISkipReassignQueue(t *testing.T) {
 		t.Fatalf("reassign: exit %d %q", code, errOut)
 	}
 }
+
+func TestMissionCLIRecover(t *testing.T) {
+	b := dialDispatchMain(t)
+	var out, errb bytes.Buffer
+	if code := runMission(context.Background(), b, "master", []string{"load", "--recover", "a@b", "--force", "x"}, &out, &errb); code != 2 {
+		t.Fatalf("--recover with --force: exit %d", code)
+	}
+	code, _, errOut := mission1(t, "load", "--recover", "docs/changes/chg/missions.json@HEAD")
+	if code != 1 || !strings.Contains(errOut, "missions down") {
+		t.Fatalf("--recover reached usage instead of the queue: exit %d %q", code, errOut)
+	}
+}

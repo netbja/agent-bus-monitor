@@ -239,7 +239,7 @@ it links a piece of evidence. AGENTS.md carries a generated copy of the index so
 which load only AGENTS.md see it at boot; Claude Code imports the real file from CLAUDE.md. See
 [the memory protocol](docs/memory/PROTOCOL.md).
 
-### Missions: agentbus missions (v0.10, slice 1)
+### Missions: agentbus missions (v0.10)
 
 For a large change worked on by several agents over several days, the plan stays in Git and the bus
 runs it. A change's tasks become **missions** in `docs/changes/<change>/missions.json` (agent,
@@ -254,6 +254,10 @@ agentbus missions                                   # the conductor (one per pro
 agentbus mission load docs/changes/chg/missions.json@HEAD
 agentbus mission status [chg]                       # where each mission stands
 agentbus mission retry chg/t3                       # a blocked mission gets a new attempt
+agentbus mission reassign chg/t3 codex              # …or goes to another agent
+agentbus mission skip chg/t3 --reason "done by hand" # …or is marked done so its dependents proceed
+agentbus mission load docs/changes/chg/missions.json@HEAD --force "reworded t3"  # a revised plan (rev n+1)
+agentbus mission load --recover docs/changes/chg/missions.json@HEAD           # rebuild after losing Redis
 agentbus mission abort chg --reason "wrong plan"
 # agents deliver with:
 agentbus request done <task> --commit <sha> --branch <b> "<summary>"
@@ -263,8 +267,9 @@ For a short, Claude-only change, Claude Code's agent teams are lighter; missions
 teams (Codex, Kimi, Grok, agy…) and work that must survive restarts. Limits (spec §6.7): the
 conductor and the agents share one machine and repository, and running a mission's tests runs the
 agent's committed code as your user — load only plans you have reviewed, and keep secrets out of
-the conductor's environment. Slice 2 adds reloads, `--recover`, `skip`/`reassign`, timeouts and the
-busmon indicator. Spec: [`docs/superpowers/specs/2026-10-11-missions-design.md`](docs/superpowers/specs/2026-10-11-missions-design.md).
+the conductor's environment. A mission accepted but not delivered within its `timeout` (4h by
+default) is blocked and escalated. busmon shows `missions up/down`; the bootstrap template opens a
+`missions` tab (`--no-missions` to omit it). Spec: [`docs/superpowers/specs/2026-10-11-missions-design.md`](docs/superpowers/specs/2026-10-11-missions-design.md).
 
 ## busmon panes
 
