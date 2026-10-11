@@ -72,10 +72,12 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 ## 3. Step-by-Step Terminal Installation
 
+> **Quick Automated Setup**: from the repository root, run `./install.sh --dry-run` to see what is missing, then `./install.sh` to rebuild and install `agentbus` and `busmon`, link the role skills and start Redis. Re-run it after every `git pull`. Add `--install-herdr` to also download herdr and clone herdr-plus (pinned tag) when they are missing.
+
 ### Step 1: System Prerequisites
 
 Ensure you have the following installed:
-- **Go** (version 1.22 or newer)
+- **Go** (the version `go.mod` requires, currently 1.26.3)
 - **Docker** and **Docker Compose**
 - **Python** (version 3.11 or newer)
 - **Git**, **curl**, **make**
