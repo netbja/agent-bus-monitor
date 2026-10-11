@@ -355,3 +355,19 @@ func TestSubscribeDrainReceiverBusyExit75(t *testing.T) {
 		t.Fatalf("busy output = %q, want one error event without rearm", buf.String())
 	}
 }
+
+func TestCmdEventCarriesHuman(t *testing.T) {
+	ev := cmdEvent(bus.Event{ID: "1-0", Type: bus.CmdDirective, From: "bernard", Target: "codex", Message: "x", Human: true}, nil)
+	var buf bytes.Buffer
+	if err := emit(&buf, ev); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `"human":true`) {
+		t.Fatalf("subscribe JSON lacks human: %s", buf.String())
+	}
+	buf.Reset()
+	_ = emit(&buf, cmdEvent(bus.Event{ID: "1-0", Type: bus.CmdDirective, From: "codex", Target: "claude", Message: "x"}, nil))
+	if strings.Contains(buf.String(), `"human"`) {
+		t.Fatalf("an agent's cmd carries human: %s", buf.String())
+	}
+}
