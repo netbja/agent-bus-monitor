@@ -40,6 +40,9 @@ const (
 	EvIntegrateFailed  Event = "integrate_failed"
 	EvRetry            Event = "retry"
 	EvAbort            Event = "abort"
+	EvSkip             Event = "skip"
+	EvReassign         Event = "reassign"
+	EvTimedOut         Event = "timed_out"
 )
 
 // Action is a side effect the conductor performs after a transition, in order.
@@ -58,7 +61,7 @@ const (
 var (
 	AllStates = []State{Pending, Ready, Requested, Accepted, Delivered, Checking, InReview, Approved, Integrating, Integrated, Blocked, Aborted}
 	AllEvents = []Event{EvDepsIntegrated, EvRequestSent, EvAccepted, EvAgentBlocked, EvDelivered, EvCheckStarted, EvCheckFailed,
-		EvCheckPassed, EvApproved, EvReviewRejected, EvIntegrateStarted, EvIntegrated, EvIntegrateFailed, EvRetry, EvAbort}
+		EvCheckPassed, EvApproved, EvReviewRejected, EvIntegrateStarted, EvIntegrated, EvIntegrateFailed, EvRetry, EvAbort, EvSkip, EvReassign, EvTimedOut}
 )
 
 // Ctx carries what a transition depends on besides the state. AttemptsLeft is
@@ -115,6 +118,19 @@ func Next(s State, ev Event, c Ctx) (State, []Action, error) {
 		return Blocked, []Action{ActEscalate}, nil
 	case s == Blocked && ev == EvRetry:
 		return Requested, []Action{ActSupersede, ActSendRequest}, nil
+	case ev == EvSkip:
+		switch s {
+		case Pending, Ready:
+			return Integrated, nil, nil
+		case Requested, Accepted, Delivered, Checking, Blocked:
+			return Integrated, []Action{ActSupersede}, nil
+		case InReview:
+			return Integrated, []Action{ActSupersede, ActResolveReview}, nil
+		}
+	case (s == Accepted || s == Blocked) && ev == EvReassign:
+		return Requested, []Action{ActSupersede, ActSendRequest}, nil
+	case s == Accepted && ev == EvTimedOut:
+		return Blocked, []Action{ActEscalate}, nil
 	}
 	return s, nil, fmt.Errorf("mission: event %s not allowed in state %s", ev, s)
 }

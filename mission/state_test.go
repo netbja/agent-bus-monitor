@@ -45,6 +45,15 @@ func expected() []row {
 		}
 	}
 	add(InReview, EvAbort, 1, Aborted, ActSupersede, ActResolveReview)
+	add(Pending, EvSkip, 1, Integrated)
+	add(Ready, EvSkip, 1, Integrated)
+	for _, s := range []State{Requested, Accepted, Delivered, Checking, Blocked} {
+		add(s, EvSkip, 1, Integrated, ActSupersede)
+	}
+	add(InReview, EvSkip, 1, Integrated, ActSupersede, ActResolveReview)
+	add(Accepted, EvReassign, 1, Requested, ActSupersede, ActSendRequest)
+	add(Blocked, EvReassign, 1, Requested, ActSupersede, ActSendRequest)
+	add(Accepted, EvTimedOut, 1, Blocked, ActEscalate)
 	return rs
 }
 
