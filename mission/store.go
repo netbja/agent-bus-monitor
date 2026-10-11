@@ -60,6 +60,8 @@ type MissionRecord struct {
 	Reason          string    `json:"reason,omitempty"`
 	IntegratedUnder string    `json:"integrated_under,omitempty"` // reload --force kept it integrated: "rev <n> <hash>"
 	AssignedAgent   string    `json:"assigned_agent,omitempty"`   // set by reassign: the agent of every later attempt
+	SkipBy          string    `json:"skip_by,omitempty"`          // a skip whose ledger entry is still owed
+	SkipReason      string    `json:"skip_reason,omitempty"`
 	Updated         int64     `json:"updated"`
 }
 

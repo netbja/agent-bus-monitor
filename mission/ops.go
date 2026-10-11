@@ -241,12 +241,10 @@ func (c *Conductor) skip(ctx context.Context, name, id, from, reason string) err
 	if _, _, err := Next(r.State, EvSkip, Ctx{}); err != nil {
 		return fmt.Errorf("%s/%s is %s: it cannot be skipped now", name, id, r.State)
 	}
-	if err := c.transition(ctx, ch, m, &r, EvSkip, "skipped by "+from+": "+reason); err != nil {
-		return err
-	}
-	_, err = c.Bus.AppendVerdict(ctx, bus.Verdict{Subject: "mission:" + name + "/" + id + "@skipped", Author: from, Reviewer: from,
-		Decision: "approve", Message: reason})
-	return err
+	// The ledger entry is an owed effect persisted with the state, so a crash
+	// before it is written is repaired by the next pass (effects).
+	r.SkipBy, r.SkipReason = from, reason
+	return c.transition(ctx, ch, m, &r, EvSkip, "skipped by "+from+": "+reason)
 }
 
 // reassign gives a mission to another agent: a new attempt and a new round

@@ -331,6 +331,16 @@ func (c *Conductor) effects(ctx context.Context, ch *change, m Mission, r *Missi
 			return err
 		}
 	}
+	if r.SkipBy != "" { // the ledger entry of a skip
+		if _, err := c.Bus.AppendVerdict(ctx, bus.Verdict{Subject: "mission:" + ch.rec.Change + "/" + r.ID + "@skipped",
+			Author: r.SkipBy, Reviewer: r.SkipBy, Decision: "approve", Message: r.SkipReason}); err != nil {
+			return fmt.Errorf("skip verdict: %w", err)
+		}
+		r.SkipBy, r.SkipReason = "", ""
+		if err := c.put(ctx, ch, r); err != nil {
+			return err
+		}
+	}
 	if r.State == Blocked && !r.Escalated {
 		if _, err := c.Bus.FencedCmdRef(ctx, c.Store.Token, c.Self, c.EscalateTo, bus.CmdEscalation, "",
 			fmt.Sprintf("%s/%s blocked: %s. Next: agentbus mission retry %s/%s | agentbus mission abort %s",

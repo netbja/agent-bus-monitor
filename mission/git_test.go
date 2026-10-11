@@ -3,6 +3,7 @@ package mission
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -210,22 +211,53 @@ func TestMissionMergesIgnoresForeignMerges(t *testing.T) {
 		return c
 	}
 	c1 := side("m1", "a.txt")
-	g.MergeNoFF(ctx, wt, c1, MergeMessage("chg", "t1", 1, "One", c1, "h1"))
+	g.MergeNoFF(ctx, wt, c1, MergeMessage("chg", "t1", 1, "One", c1, strings.Repeat("1", 64)))
 	h := side("hand", "b.txt")
 	g.MergeNoFF(ctx, wt, h, "a merge by hand")
 	bad := side("bad", "c.txt")
 	g.MergeNoFF(ctx, wt, bad, "incomplete\n\nMission: chg/t9\n")
 	other := side("other", "d.txt")
-	g.MergeNoFF(ctx, wt, other, MergeMessage("otherchg", "t1", 1, "Other", other, "hx"))
+	g.MergeNoFF(ctx, wt, other, MergeMessage("otherchg", "t1", 1, "Other", other, strings.Repeat("9", 64)))
 	commitFile(t, dir, "e.txt", "main moves", "main")
 	g.MergeNoFF(ctx, wt, "main", "merge main into the change")
 	c2 := side("m2", "f.txt")
-	g.MergeNoFF(ctx, wt, c2, MergeMessage("chg", "t2", 2, "Two", c2, "h2"))
+	g.MergeNoFF(ctx, wt, c2, MergeMessage("chg", "t2", 2, "Two", c2, strings.Repeat("2", 64)))
 	got, err := g.MissionMerges(ctx, "change/chg", "chg")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].ID != "t1" || got[0].Commit != c1 || got[0].Hash != "h1" || got[0].Rev != 1 || got[1].ID != "t2" || got[1].Rev != 2 {
+	if len(got) != 2 || got[0].ID != "t1" || got[0].Commit != c1 || got[0].Hash != strings.Repeat("1", 64) || got[0].Rev != 1 || got[1].ID != "t2" || got[1].Rev != 2 {
+		t.Fatalf("MissionMerges = %+v", got)
+	}
+}
+
+// CP1 (Codex): a conductor merge needs a positive Mission-Rev and a sha-256
+// Mission-Hash; anything else is not proof of integration.
+func TestMissionMergesSkipsMalformedTrailers(t *testing.T) {
+	g, dir := newRepo(t)
+	ctx := context.Background()
+	g.EnsureBranch(ctx, "change/chg", "main")
+	wt := filepath.Join(t.TempDir(), "integration")
+	g.AddWorktree(ctx, wt, "change/chg", false)
+	good := strings.Repeat("a", 64)
+	for i, tr := range []string{
+		"Mission-Hash: " + good + "\n",                        // no Mission-Rev
+		"Mission-Hash: " + good + "\nMission-Rev: nonsense\n", // not a number
+		"Mission-Hash: " + good + "\nMission-Rev: 0\n",        // not positive
+		"Mission-Hash: corrupted\nMission-Rev: 1\n",           // not a sha-256
+	} {
+		name := fmt.Sprintf("b%d", i)
+		run(t, dir, "git", "checkout", "-q", "-b", name, "main")
+		c := commitFile(t, dir, name+".txt", name, name)
+		run(t, dir, "git", "checkout", "-q", "main")
+		g.MergeNoFF(ctx, wt, c, "bad\n\nMission: chg/t1\nMission-Commit: "+c+"\n"+tr)
+	}
+	run(t, dir, "git", "checkout", "-q", "-b", "ok", "main")
+	c := commitFile(t, dir, "ok.txt", "ok", "ok")
+	run(t, dir, "git", "checkout", "-q", "main")
+	g.MergeNoFF(ctx, wt, c, MergeMessage("chg", "t2", 1, "Two", c, good))
+	got, _ := g.MissionMerges(ctx, "change/chg", "chg")
+	if len(got) != 1 || got[0].ID != "t2" {
 		t.Fatalf("MissionMerges = %+v", got)
 	}
 }

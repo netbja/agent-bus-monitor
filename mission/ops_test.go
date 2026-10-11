@@ -98,3 +98,19 @@ func TestReassignRefusals(t *testing.T) {
 		t.Fatal("a refused reassign wrote something")
 	}
 }
+
+// CP1 (Codex): the skip's ledger entry is an owed effect — a crash between the
+// state write and the verdict is repaired by the next pass, exactly once.
+func TestSkipVerdictReplayed(t *testing.T) {
+	h := newHarness(t, "true")
+	h.setState("t1", Integrated, func(m *MissionRecord) { m.SkipBy, m.SkipReason = "master", "done by hand" })
+	h.pass()
+	h.pass()
+	vs, _ := h.b.Verdicts(h.ctx, "mission:chg/t1@skipped")
+	if len(vs) != 1 || vs[0].Message != "done by hand" {
+		t.Fatalf("ledger: %+v", vs)
+	}
+	if m := h.mission("t1"); m.SkipBy != "" {
+		t.Fatalf("flag not cleared: %+v", m)
+	}
+}

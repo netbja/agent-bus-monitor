@@ -270,3 +270,22 @@ func TestPlanReloadTable(t *testing.T) {
 		}
 	}
 }
+
+// CP1 (Codex): a mission removed by one revision and brought back by the next
+// is active again, not stuck as a tombstone.
+func TestReloadReintroducesTombstone(t *testing.T) {
+	h := newHarness(t, "true")
+	h.pass()
+	only1 := `{"change": "chg", "reviewer": "codex", "test": "true", "missions": [
+ {"id": "t1", "title": "First", "agent": "kimi", "allowed_paths": ["src/t1/**"], "test": "true", "brief": "plan.md#t1"}]}`
+	if ok, msg := h.reload(only1, ""); !ok {
+		t.Fatalf("remove: %q", msg)
+	}
+	ok, msg := h.reload(missionsFile("true"), "")
+	if !ok || msg != "reloaded chg rev 3: 0 changed, 1 added, 0 removed, 1 unchanged" {
+		t.Fatalf("reintroduce: %v %q", ok, msg)
+	}
+	if t2 := h.mission("t2"); t2.State != Pending {
+		t.Fatalf("t2 still %s", t2.State)
+	}
+}

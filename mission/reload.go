@@ -40,6 +40,14 @@ func planReload(old map[string]MissionRecord, f File, rev int, force bool, reaso
 			out[id] = MissionRecord{ID: id, Hash: m.Hash(), State: Pending, Reviewer: f.ReviewerOf(m)}
 			counts.Added++
 			continue
+		case r.State == Aborted && inFile:
+			// Brought back after a removal: active again. Its attempt count
+			// and history stay, so it never reuses an old request name.
+			r.State, r.Hash, r.Reviewer, r.Rejections = Pending, m.Hash(), f.ReviewerOf(m), 0
+			r.Reason = fmt.Sprintf("reintroduced in rev %d", rev)
+			out[id] = r
+			counts.Added++
+			continue
 		case r.State == Aborted || (inFile && r.Hash == m.Hash()):
 			counts.Unchanged++
 			continue

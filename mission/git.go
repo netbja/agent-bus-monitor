@@ -268,7 +268,10 @@ type MissionMerge struct {
 	Rev              int
 }
 
-var hex40 = regexp.MustCompile(`^[0-9a-f]{40}$`)
+var (
+	hex40 = regexp.MustCompile(`^[0-9a-f]{40}$`) // a commit sha
+	hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`) // a mission hash (sha-256)
+)
 
 // MissionMerges returns the change's conductor merges on branch, oldest first.
 // A merge without the full trailer set, naming another change, or whose
@@ -289,10 +292,10 @@ func (g Git) MissionMerges(ctx context.Context, branch, change string) ([]Missio
 			f[i] = strings.TrimSpace(f[i])
 		}
 		c, id, ok := strings.Cut(f[1], "/")
-		if !ok || c != change || id == "" || !hex40.MatchString(f[2]) || f[3] == "" {
-			continue
+		rev, err := strconv.Atoi(f[4])
+		if !ok || c != change || id == "" || !hex40.MatchString(f[2]) || !hex64.MatchString(f[3]) || err != nil || rev < 1 {
+			continue // not a well-formed conductor merge: never proof of integration
 		}
-		rev, _ := strconv.Atoi(f[4])
 		merges = append(merges, MissionMerge{ID: id, Commit: f[2], Hash: f[3], Rev: rev})
 	}
 	slices.Reverse(merges) // git log is newest first
