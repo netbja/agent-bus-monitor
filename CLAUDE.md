@@ -174,7 +174,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
@@ -280,6 +280,15 @@ It never touches Redis — see README "Deployment topology".
   `{p}:missionops` and waits for the conductor's answer. Never add an unfenced mission write, and
   never let the dispatcher run code. The conductor writes only to `change/<change>` (validated at
   load) and never pushes or touches `main`.
+- **The role scripts run `agentbus roles`, not Python.** `scripts/lib/roles.sh`, `agent-launch`,
+  `link-role-skills.sh` and `bootstrap`'s template call `${AGENTBUS_BIN:-$REPO/agentbus} roles …`
+  (package `rolecfg/`: manifest, launch, skills, template — the port of the removed
+  `role_config.py`; its block in `main()` sits above the project-required exit, like `mem`). The
+  repo binary must be built first (`./install.sh`); `tests/run.sh` and `tests/lib.sh` build one.
+  `agent-launch` `exec`s `agentbus`, which binds and then `syscall.Exec`s the client: the pid
+  never changes, which is what `bind` relies on. Outputs are kept byte-identical to the Python
+  (dry runs, adapter spec JSON via `pyJSON`, template); `tests/roles_scripts_test.sh` covers the
+  scripts end to end.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of

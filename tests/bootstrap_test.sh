@@ -33,7 +33,7 @@ assert_exit 1 "rejects invalid project name" -- bash -c "PATH='$stub:$PATH' HERD
 projdir="$(mkdir -p "$tmp/proj" && cd "$tmp/proj" && pwd)"
 run new demo "$projdir" >/dev/null
 tpl="$proj/demo.toml"
-assert_exit 0 "template is valid TOML" -- python3 -c "import tomllib;tomllib.load(open('$tpl','rb'))"
+assert_exit 0 "template is valid TOML" -- "$AGENTBUS_BIN" roles check-toml "$tpl"
 body="$(cat "$tpl")"
 assert_contains "$body" 'name = "demo"'                          "template name"
 assert_contains "$body" "working_dir = \"$projdir\""             "working_dir = the given project path"
@@ -50,7 +50,7 @@ assert_contains "$body" "$REPO/agentbus --project demo dispatch" "dispatch tab r
 # --no-dispatch omits the dispatch tab (busmon stays)
 run new demonod "$projdir" --no-dispatch >/dev/null
 body_nod="$(cat "$proj/demonod.toml")"
-assert_exit 0 "--no-dispatch template is valid TOML" -- python3 -c "import tomllib;tomllib.load(open('$proj/demonod.toml','rb'))"
+assert_exit 0 "--no-dispatch template is valid TOML" -- "$AGENTBUS_BIN" roles check-toml "$proj/demonod.toml"
 if [[ "$body_nod" != *'name = "dispatch"'* && "$body_nod" != *"--project demonod dispatch"* ]]; then _ok "--no-dispatch omits the dispatch tab"; else _bad "--no-dispatch still wrote a dispatch tab"; fi
 assert_contains "$body_nod" "busmon --project demonod"          "--no-dispatch keeps the busmon tab"
 
@@ -59,7 +59,7 @@ assert_contains "$body" 'name = "missions"'                                     
 assert_contains "$body" "$REPO/agentbus --project demo missions --repo $projdir"  "missions tab runs the conductor on the project dir"
 run new demonom "$projdir" --no-missions >/dev/null
 body_nom="$(cat "$proj/demonom.toml")"
-assert_exit 0 "--no-missions template is valid TOML" -- python3 -c "import tomllib;tomllib.load(open('$proj/demonom.toml','rb'))"
+assert_exit 0 "--no-missions template is valid TOML" -- "$AGENTBUS_BIN" roles check-toml "$proj/demonom.toml"
 if [[ "$body_nom" != *'name = "missions"'* ]]; then _ok "--no-missions omits the missions tab"; else _bad "--no-missions still wrote a missions tab"; fi
 assert_contains "$body_nom" 'name = "dispatch"'                 "--no-missions keeps the dispatch tab"
 

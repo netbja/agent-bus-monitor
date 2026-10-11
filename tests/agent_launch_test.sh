@@ -48,16 +48,18 @@ assert_contains "$out" "agentbus --project demo bind master --pid" "dry-run show
 out="$(AGENT_LAUNCH_DRYRUN=1 "$L" master demo)"
 assert_eq "$([[ "$out" == *" bind "* ]] && echo bind || echo none)" "none" "no bind outside herdr"
 
-cat > "$tmp/agentbus" <<'ASTUB'
+# A wrapper around the real agentbus: it records the bind and passes everything else on.
+REAL_AGENTBUS="$AGENTBUS_BIN"
+cat > "$tmp/agentbus" <<ASTUB
 #!/usr/bin/env bash
-echo "$*" > "$BIND_LOG"
-exit "${BIND_RC:-0}"
+if [[ "\$3" == bind ]]; then echo "\$*" > "\$BIND_LOG"; exit "\${BIND_RC:-0}"; fi
+exec "$REAL_AGENTBUS" "\$@"
 ASTUB
 chmod +x "$tmp/agentbus"
-out="$(PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" HERDR_ENV=1 HERDR_PANE_ID=w9:p9 "$L" master demo 2>&1)"
+out="$(AGENTBUS_BIN="$tmp/agentbus" PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" HERDR_ENV=1 HERDR_PANE_ID=w9:p9 "$L" master demo 2>&1)"
 assert_contains "$(cat "$tmp/bind.log")" "--project demo bind master --pid " "launcher binds itself"
 assert_contains "$out" "KEY=" "client starts after the bind"
-out="$(PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" BIND_RC=1 HERDR_ENV=1 HERDR_PANE_ID=w9:p9 "$L" master demo 2>&1)"
+out="$(AGENTBUS_BIN="$tmp/agentbus" PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" BIND_RC=1 HERDR_ENV=1 HERDR_PANE_ID=w9:p9 "$L" master demo 2>&1)"
 assert_contains "$out" "warning: agentbus bind failed" "a failed bind is reported"
 assert_contains "$out" "KEY=" "and the client still starts"
 finish
