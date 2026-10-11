@@ -166,7 +166,13 @@ func TestRunTestTimeoutKillsGroup(t *testing.T) {
 			t.Fatal(err)
 		}
 		pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-		if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
+		// A killed orphan lingers as a zombie until init reaps it: allow 3 s.
+		for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+			if err = syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+				break
+			}
+		}
+		if !errors.Is(err, syscall.ESRCH) {
 			t.Errorf("%s %d still alive (%v)", f, pid, err)
 		}
 	}
