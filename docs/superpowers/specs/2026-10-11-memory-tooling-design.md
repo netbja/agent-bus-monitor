@@ -181,3 +181,17 @@ and any network or Redis access.
   Python in the repository. Under the same "no Python" rule, porting it to Go belongs to the
   v0.10 drivers spec (it is the per-client launch layer those drivers replace). It is not part of
   this slice.
+
+## 9. Settled during implementation
+
+- §3.1: the template-marker rule applies to notes (decisions, lessons, open questions, journal),
+  so `PROTOCOL.md` may quote the marker.
+- §3.1: stale warnings skip journal checkpoints and `resolved`/`superseded` notes; the verified
+  warning applies to `active` notes.
+- §3.1: dates are `YYYY-MM-DD` only, as the protocol template says (Python's `fromisoformat` also
+  took compact forms such as `20261011`; no note used one).
+- §3.2: `mem new` validates everything before its first write — including the AGENTS.md markers
+  and the INDEX budget after its line — creates the note exclusively (`O_EXCL`, never through a
+  symlink) and removes it if the index write fails.
+- Path resolution follows every existing symlink, as pathlib's non-strict `resolve` does, so a
+  link through a symlinked directory to a missing outside file still "escapes the repository".
