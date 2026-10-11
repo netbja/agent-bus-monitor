@@ -31,7 +31,7 @@ Master only arbitrates what is blocked. Also new:
 - `./install.sh` sets up or updates a machine in one run.
 
 See [Missions](#missions-agentbus-missions-v010), [Install the tools](#install-the-tools) and
-the [release notes](docs/releases/v0.10.0.md). Live acceptance on a real change is still pending.
+the [release notes](docs/releases/v0.10.0.md). Live acceptance passed on a real two-mission change.
 
 ## New in v0.9.0 — busmon redesign
 
@@ -58,7 +58,8 @@ It only types into a pane that is idle, not busy, with an empty input line, **no
 running the process the agent registered (pid + start time); everything else is deferred and,
 past 10 minutes, escalated to `master`. See the [release notes](docs/releases/v0.8.0.md) and the
 [design spec](docs/superpowers/specs/2026-10-10-event-driven-dispatch-design.md). Live acceptance
-on real client panes is still pending.
+(2026-10-11): an agy pane was woken on its own; a Codex pane is not yet, because Codex 0.162 runs
+its commands through a shared `codex app-server` daemon and records no pane identity.
 
 ## New in v0.7.0
 
