@@ -244,7 +244,7 @@ func (c *Conductor) skip(ctx context.Context, name, id, from, reason string) err
 	}
 	// The ledger entry is an owed effect persisted with the state, so a crash
 	// before it is written is repaired by the next pass (effects).
-	r.SkipBy, r.SkipReason = from, reason
+	r.SkipBy, r.SkipReason, r.Skipped = from, reason, true
 	return c.transition(ctx, ch, m, &r, EvSkip, "skipped by "+from+": "+reason)
 }
 

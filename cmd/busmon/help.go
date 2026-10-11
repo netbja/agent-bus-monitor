@@ -67,6 +67,7 @@ func helpText() string {
 	row("challenge  verdict", "4-eyes: a review request and its decision.")
 	row("escalation", "the dispatcher could not wake an agent.")
 	row("blocked", "a request target reports it cannot proceed.")
+	row("complete", "the conductor integrated every mission of a change revision.")
 	row("board", "task, owner, state and age; working, requested, accepted, blocked, done.")
 	blank()
 

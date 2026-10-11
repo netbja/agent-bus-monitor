@@ -21,6 +21,11 @@ type ChangeRecord struct {
 	State          string `json:"state"`
 	LoadedAt       int64  `json:"loaded_at"`
 	DirtyEscalated bool   `json:"dirty_escalated,omitempty"` // a dirty integration worktree was reported
+	// Change complete (v0.10.1): the revision whose completion was signalled and
+	// the head it was tested at; a red final suite is reported once per head.
+	CompletedRev       int    `json:"completed_rev,omitempty"`
+	CompletedHead      string `json:"completed_head,omitempty"`
+	CompleteFailedHead string `json:"complete_failed_head,omitempty"`
 }
 
 // Attempt is one request for a mission. Outcome is empty while it runs, then
@@ -62,6 +67,7 @@ type MissionRecord struct {
 	AssignedAgent   string    `json:"assigned_agent,omitempty"`   // set by reassign: the agent of every later attempt
 	SkipBy          string    `json:"skip_by,omitempty"`          // a skip whose ledger entry is still owed
 	SkipReason      string    `json:"skip_reason,omitempty"`
+	Skipped         bool      `json:"skipped,omitempty"` // integrated by an operator skip, not by a merge
 	Updated         int64     `json:"updated"`
 }
 
@@ -135,4 +141,13 @@ func (s Store) PutBatch(ctx context.Context, records []MissionRecord, ch ChangeR
 	}
 	cb, _ := json.Marshal(ch)
 	return s.B.FencedMissionBatch(ctx, s.Token, ch.Change, ms, string(cb))
+}
+
+// PutChangeWithCmd writes the change record and one cmd entry in one fenced
+// script: the signal and the marker that it was sent exist together or not
+// at all.
+func (s Store) PutChangeWithCmd(ctx context.Context, r ChangeRecord, from, target, typ, command string) error {
+	b, _ := json.Marshal(r)
+	_, err := s.B.FencedCmdWithChange(ctx, s.Token, r.Change, from, target, typ, command, string(b))
+	return err
 }

@@ -270,3 +270,25 @@ func TestFencedMissionBatch(t *testing.T) {
 		t.Fatal("invalid change name accepted")
 	}
 }
+
+func TestFencedCmdWithChangeAtomic(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, ConductorKey(b.project), ChangeKey(b.project, "chg")) })
+	b.AcquireConductor(ctx, "real", 15*time.Second)
+	if _, err := b.FencedCmdWithChange(ctx, "stale", "chg", "conductor", "master", CmdComplete, "done", `{"rev":1}`); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("stale token: %v, want ErrNotHolder", err)
+	}
+	if n, _ := b.r.Exists(ctx, ChangeKey(b.project, "chg")).Result(); n != 0 {
+		t.Fatal("a refused write left the change record")
+	}
+	id, err := b.FencedCmdWithChange(ctx, "real", "chg", "conductor", "master", CmdComplete, "change chg rev 1 complete", `{"rev":1}`)
+	if err != nil || id == "" {
+		t.Fatalf("write: %q %v", id, err)
+	}
+	rec, _ := b.r.HGet(ctx, ChangeKey(b.project, "chg"), ChangeRecordField).Result()
+	evs, _, _ := b.Recent(ctx, []string{"cmd"}, 10)
+	if rec != `{"rev":1}` || len(evs) != 1 || evs[0].Type != CmdComplete || evs[0].Target != "master" {
+		t.Fatalf("record %q, cmds %+v", rec, evs)
+	}
+}

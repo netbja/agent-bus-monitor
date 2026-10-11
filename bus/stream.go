@@ -30,11 +30,12 @@ const (
 
 	CmdEscalation = "escalation" // dispatcher: an addressed message went unread too long
 	CmdBlocked    = "blocked"    // request block: tells the requester its request is blocked
+	CmdComplete   = "complete"   // conductor: every mission of a change revision is integrated (v0.10.1)
 )
 
 var validCmdTypes = map[string]bool{
 	CmdDirective: true, CmdChallenge: true, CmdReply: true, CmdVerdict: true,
-	CmdEscalation: true, CmdBlocked: true,
+	CmdEscalation: true, CmdBlocked: true, CmdComplete: true,
 }
 
 // nameRE bounds project slugs and agent names: lowercase, starts with a letter,

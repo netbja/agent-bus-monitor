@@ -197,7 +197,7 @@ func missionStatus(ctx context.Context, b *bus.Bus, rest []string, stdout, stder
 			fmt.Fprintln(stderr, "error: "+err.Error())
 			return 1
 		}
-		fmt.Fprintf(stdout, "%s rev %d (%s) %s\n", ch.Change, ch.Rev, ch.State, ch.Branch)
+		fmt.Fprintln(stdout, changeHeader(ch))
 		tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "  ID\tSTATE\tATTEMPT\tAGENT\tREVIEWER\tREASON")
 		ids := make([]string, 0, len(ms))
@@ -233,4 +233,18 @@ func missionShow(ctx context.Context, b *bus.Bus, ref string, stdout, stderr io.
 	out, _ := json.MarshalIndent(r, "", "  ")
 	fmt.Fprintln(stdout, string(out))
 	return 0
+}
+
+// changeHeader is a change's line in `mission status`; a revision whose
+// completion was signalled says so, with the head it was tested at.
+func changeHeader(ch mission.ChangeRecord) string {
+	state := ch.State
+	if ch.CompletedRev == ch.Rev && ch.CompletedHead != "" {
+		head := ch.CompletedHead
+		if len(head) > 12 {
+			head = head[:12]
+		}
+		state += ", complete at " + head
+	}
+	return fmt.Sprintf("%s rev %d (%s) %s", ch.Change, ch.Rev, state, ch.Branch)
 }

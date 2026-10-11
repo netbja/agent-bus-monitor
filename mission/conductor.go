@@ -142,6 +142,11 @@ func (c *Conductor) passChange(ctx context.Context, name string) error {
 			errs = append(errs, err)
 		}
 	}
+	if len(errs) == 0 {
+		if err := c.checkComplete(ctx, ch); err != nil {
+			errs = append(errs, fmt.Errorf("complete: %w", err))
+		}
+	}
 	return errors.Join(errs...)
 }
 

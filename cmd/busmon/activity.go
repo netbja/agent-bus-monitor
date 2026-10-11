@@ -49,6 +49,8 @@ func lookEvent(e bus.Event) eventLook {
 			look.Role = RoleAttention
 		case bus.CmdEscalation:
 			look.Role = RoleDispatch
+		case bus.CmdComplete:
+			look.Role = RoleOK
 		case bus.CmdBlocked:
 			look.Role = RoleError
 		}

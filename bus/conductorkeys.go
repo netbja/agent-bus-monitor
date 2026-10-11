@@ -331,3 +331,34 @@ func (b *Bus) FencedMissionBatch(ctx context.Context, token, change string, miss
 	}
 	return notHolder(fencedMissionBatch.Run(ctx, b.r, []string{ConductorKey(b.project), MissionsKey(b.project, change), ChangeKey(b.project, change)}, args...).Err())
 }
+
+// KEYS = lease, cmd stream, change; ARGV = token, maxlen, changeRecord, then
+// the cmd field/value pairs.
+var fencedCmdWithChange = redis.NewScript(fenceCheck + `
+local id = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', unpack(ARGV, 4))
+redis.call('HSET', KEYS[3], '` + ChangeRecordField + `', ARGV[3])
+return id`)
+
+// FencedCmdWithChange appends one cmd entry and writes the change record in
+// one script under the conductor lease: a signal sent exactly once with the
+// marker that says it was sent (v0.10.1, change complete).
+func (b *Bus) FencedCmdWithChange(ctx context.Context, token, change, from, target, typ, command, changeRecord string) (string, error) {
+	switch {
+	case !ValidName(change):
+		return "", fmt.Errorf("invalid change %q", change)
+	case !ValidName(target):
+		return "", fmt.Errorf("invalid target %q", target)
+	case !validCmdTypes[typ]:
+		return "", fmt.Errorf("invalid cmd type %q", typ)
+	}
+	if err := ValidateText(command, CmdMaxRunes); err != nil {
+		return "", err
+	}
+	v, err := fencedCmdWithChange.Run(ctx, b.r, []string{ConductorKey(b.project), StreamKey(b.project, "cmd"), ChangeKey(b.project, change)},
+		token, streamMaxLen, changeRecord, "from", from, "target", target, "type", typ, "ref", "", "command", command, "text_complete", "yes").Result()
+	if err != nil {
+		return "", notHolder(err)
+	}
+	id, _ := v.(string)
+	return id, nil
+}
