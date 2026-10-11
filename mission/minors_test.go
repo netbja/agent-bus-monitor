@@ -28,6 +28,9 @@ func TestAbortCrashLeavesChangeActive(t *testing.T) {
 	if ch, _, _ := h.c.Store.Change(h.ctx, "chg"); ch.State != "active" {
 		t.Fatalf("change is %q after a partial abort", ch.State)
 	}
+	if m := h.mission("t1"); m.State != Aborted { // missions are aborted in id order: t1 went first
+		t.Fatalf("t1 is %s, want aborted before t2 failed", m.State)
+	}
 }
 
 // §10: an unknown commit is the delivery's fault; a broken repository is ours.

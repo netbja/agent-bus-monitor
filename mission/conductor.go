@@ -331,10 +331,23 @@ func (c *Conductor) effects(ctx context.Context, ch *change, m Mission, r *Missi
 			return err
 		}
 	}
-	if r.SkipBy != "" { // the ledger entry of a skip
-		if _, err := c.Bus.AppendVerdict(ctx, bus.Verdict{Subject: "mission:" + ch.rec.Change + "/" + r.ID + "@skipped",
-			Author: r.SkipBy, Reviewer: r.SkipBy, Decision: "approve", Message: r.SkipReason}); err != nil {
+	if r.SkipBy != "" { // the ledger entry of a skip, written once
+		subject := "mission:" + ch.rec.Change + "/" + r.ID + "@skipped"
+		vs, err := c.Bus.Verdicts(ctx, subject)
+		if err != nil {
 			return fmt.Errorf("skip verdict: %w", err)
+		}
+		written := false
+		for _, v := range vs { // a crash after the XADD but before the flag write
+			if v.Author == r.SkipBy && v.Message == r.SkipReason {
+				written = true
+			}
+		}
+		if !written {
+			if _, err := c.Bus.AppendVerdict(ctx, bus.Verdict{Subject: subject, Author: r.SkipBy, Reviewer: r.SkipBy,
+				Decision: "approve", Message: r.SkipReason}); err != nil {
+				return fmt.Errorf("skip verdict: %w", err)
+			}
 		}
 		r.SkipBy, r.SkipReason = "", ""
 		if err := c.put(ctx, ch, r); err != nil {

@@ -114,3 +114,18 @@ func TestSkipVerdictReplayed(t *testing.T) {
 		t.Fatalf("flag not cleared: %+v", m)
 	}
 }
+
+// CP2 (Codex): replaying a skip whose verdict was written just before a crash
+// does not write it twice.
+func TestSkipVerdictNotDuplicated(t *testing.T) {
+	h := newHarness(t, "true")
+	h.b.AppendVerdict(h.ctx, bus.Verdict{Subject: "mission:chg/t1@skipped", Author: "master", Reviewer: "master", Decision: "approve", Message: "done by hand"})
+	h.setState("t1", Integrated, func(m *MissionRecord) { m.SkipBy, m.SkipReason = "master", "done by hand" })
+	h.pass()
+	if vs, _ := h.b.Verdicts(h.ctx, "mission:chg/t1@skipped"); len(vs) != 1 {
+		t.Fatalf("%d ledger entries, want 1", len(vs))
+	}
+	if m := h.mission("t1"); m.SkipBy != "" {
+		t.Fatal("flag not cleared")
+	}
+}
