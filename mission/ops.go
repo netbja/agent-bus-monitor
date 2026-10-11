@@ -32,6 +32,24 @@ func (c *Conductor) HandleOp(ctx context.Context, op bus.MissionOp) (ok bool, ms
 			err = c.retry(ctx, name, id)
 			msg = "retried " + name + "/" + id
 		}
+	case "skip":
+		var name, id string
+		if len(op.Args) != 2 || strings.TrimSpace(op.Args[1]) == "" {
+			return false, "usage: skip <change>/<id> <reason>"
+		}
+		if name, id, err = missionRef(op.Args[:1]); err == nil {
+			err = c.skip(ctx, name, id, op.From, op.Args[1])
+			msg = "skipped " + name + "/" + id
+		}
+	case "reassign":
+		var name, id string
+		if len(op.Args) != 2 {
+			return false, "usage: reassign <change>/<id> <agent>"
+		}
+		if name, id, err = missionRef(op.Args[:1]); err == nil {
+			err = c.reassign(ctx, name, id, op.Args[1])
+			msg = "reassigned " + name + "/" + id + " to " + op.Args[1]
+		}
 	case "abort":
 		if len(op.Args) != 2 || strings.TrimSpace(op.Args[1]) == "" {
 			return false, "usage: abort <change> <reason>"
@@ -185,4 +203,68 @@ func (c *Conductor) reload(ctx context.Context, old ChangeRecord, f File, p, com
 	}
 	return fmt.Sprintf("reloaded %s rev %d: %d changed, %d added, %d removed, %d unchanged",
 		f.Change, rev, counts.Changed, counts.Added, counts.Removed, counts.Unchanged), nil
+}
+
+// operatorMission loads one mission for an operator command.
+func (c *Conductor) operatorMission(ctx context.Context, name, id string) (*change, Mission, MissionRecord, error) {
+	ch, err := c.loadChange(ctx, name)
+	if err != nil {
+		return nil, Mission{}, MissionRecord{}, err
+	}
+	if ch == nil {
+		return nil, Mission{}, MissionRecord{}, fmt.Errorf("unknown change %s", name)
+	}
+	if ch.rec.State != "active" {
+		return nil, Mission{}, MissionRecord{}, fmt.Errorf("change %s is %s", name, ch.rec.State)
+	}
+	m, inFile := ch.file.Mission(id)
+	r, known := ch.missions[id]
+	if !inFile || !known {
+		return nil, Mission{}, MissionRecord{}, fmt.Errorf("unknown mission %s/%s", name, id)
+	}
+	return ch, m, r, nil
+}
+
+// skip marks a mission integrated without a commit so its dependents unlock,
+// and records the act in the verdict ledger as a self-verdict (which never
+// counts as an approval). A merge under way is never skipped.
+func (c *Conductor) skip(ctx context.Context, name, id, from, reason string) error {
+	ch, m, r, err := c.operatorMission(ctx, name, id)
+	if err != nil {
+		return err
+	}
+	if !bus.ValidName(from) {
+		return fmt.Errorf("invalid operator %q", from)
+	}
+	if _, _, err := Next(r.State, EvSkip, Ctx{}); err != nil {
+		return fmt.Errorf("%s/%s is %s: it cannot be skipped now", name, id, r.State)
+	}
+	if err := c.transition(ctx, ch, m, &r, EvSkip, "skipped by "+from+": "+reason); err != nil {
+		return err
+	}
+	_, err = c.Bus.AppendVerdict(ctx, bus.Verdict{Subject: "mission:" + name + "/" + id + "@skipped", Author: from, Reviewer: from,
+		Decision: "approve", Message: reason})
+	return err
+}
+
+// reassign gives a mission to another agent: a new attempt and a new round
+// of max_attempts, and every later attempt goes to that agent.
+func (c *Conductor) reassign(ctx context.Context, name, id, agent string) error {
+	ch, m, r, err := c.operatorMission(ctx, name, id)
+	if err != nil {
+		return err
+	}
+	switch {
+	case !bus.ValidName(agent):
+		return fmt.Errorf("invalid agent %q", agent)
+	case agent == r.Reviewer:
+		return fmt.Errorf("%s reviews %s/%s and cannot also do it", agent, name, id)
+	case agent == r.Current.Agent:
+		return fmt.Errorf("%s/%s is already with %s", name, id, agent)
+	}
+	if _, _, err := Next(r.State, EvReassign, Ctx{}); err != nil {
+		return fmt.Errorf("%s/%s is %s: reassign needs it accepted or blocked", name, id, r.State)
+	}
+	r.Rejections, r.AssignedAgent = 0, agent
+	return c.transition(ctx, ch, m, &r, EvReassign, "reassigned to "+agent)
 }

@@ -122,3 +122,14 @@ func TestMissionCLILoadForceNeedsReason(t *testing.T) {
 		}
 	}
 }
+
+func TestMissionCLISkipReassignQueue(t *testing.T) {
+	code, _, errOut := mission1(t, "skip", "chg/t1", "--reason", "done by hand")
+	if code != 1 || !strings.Contains(errOut, "missions down") {
+		t.Fatalf("skip: exit %d %q", code, errOut)
+	}
+	code, _, errOut = mission1(t, "reassign", "chg/t1", "grok")
+	if code != 1 || !strings.Contains(errOut, "missions down") {
+		t.Fatalf("reassign: exit %d %q", code, errOut)
+	}
+}

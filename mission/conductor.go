@@ -258,8 +258,8 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 	}
 	if sends {
 		agent := m.Agent
-		if prev.Agent != "" {
-			agent = prev.Agent
+		if r.AssignedAgent != "" { // reassigned: every later attempt goes there
+			agent = r.AssignedAgent
 		}
 		if err := c.newAttempt(ctx, ch, m, r, agent, reason); err != nil { // persists, publishes
 			return err
