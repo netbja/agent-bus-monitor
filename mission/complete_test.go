@@ -1,6 +1,8 @@
 package mission
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -101,5 +103,28 @@ func TestCompleteRearmsOnReload(t *testing.T) {
 	cs := h.completes()
 	if len(cs) != 2 || !strings.Contains(cs[1].Message, "rev 2 complete") {
 		t.Fatalf("completes = %+v, want one per revision", cs)
+	}
+}
+
+func TestCompleteWaitsForACleanWorktreeAndSaysWhy(t *testing.T) {
+	h := newHarness(t, "true")
+	h.integrateT1()
+	stray := filepath.Join(h.integrationDir(), "stray.txt")
+	if err := os.WriteFile(stray, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.skipNow("t2")
+	h.pass()
+	h.pass()
+	if n := len(h.completes()); n != 0 {
+		t.Fatalf("%d complete signals on a dirty worktree", n)
+	}
+	if n := h.escalationsAbout("unrecorded changes"); n != 1 {
+		t.Fatalf("%d dirty-worktree escalations, want 1", n)
+	}
+	os.Remove(stray)
+	h.pass()
+	if n := len(h.completes()); n != 1 {
+		t.Fatalf("%d complete signals once clean, want 1", n)
 	}
 }

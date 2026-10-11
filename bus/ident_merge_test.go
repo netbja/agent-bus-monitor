@@ -111,3 +111,39 @@ func mustAgents(t *testing.T, b *Bus) map[string]AgentSnapshot {
 	}
 	return m
 }
+
+func TestMergeOldVerifiedStatusDoesNotUndoBind(t *testing.T) {
+	// A verified status appended at ts 150, delayed, lands after a bind made at
+	// ts 300: the bind is newer and must stay.
+	old := AgentSnapshot{State: "idle", TS: 100, Pane: "w2:p1", PID: 42, PIDStart: 7, IdentTS: 300}
+	got := mergeSnapshot(&old, AgentSnapshot{State: "working", TS: 150, Pane: "w9:p9", PID: 11, PIDStart: 3}, false)
+	if got.PID != 42 || got.Pane != "w2:p1" {
+		t.Fatalf("identity = %+v, want the newer bind", got)
+	}
+	if got.State != "working" || got.TS != 150 {
+		t.Fatalf("state = %+v, want the newer state", got)
+	}
+	newer := mergeSnapshot(&old, AgentSnapshot{State: "idle", TS: 400, Pane: "w9:p9", PID: 11, PIDStart: 3}, false)
+	if newer.PID != 11 || newer.IdentTS != 400 {
+		t.Fatalf("identity = %+v, want the newer verified status", newer)
+	}
+}
+
+func TestDelayedVerifiedStatusAfterBindRedis(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	before, err := b.ServerNowMS(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Bind(ctx, "codex", AgentIdent{Pane: "w2:p1", PID: 42, PIDStart: 7}); err != nil {
+		t.Fatal(err)
+	}
+	// The snapshot write of a status whose stream entry predates the bind.
+	if err := b.putSnapshot(ctx, "codex", AgentSnapshot{State: "idle", TS: before - 1, Pane: "w9:p9", PID: 11, PIDStart: 3}, false); err != nil {
+		t.Fatal(err)
+	}
+	if s := mustAgents(t, b)["codex"]; s.PID != 42 || s.Pane != "w2:p1" {
+		t.Fatalf("snapshot = %+v, want the bind kept", s)
+	}
+}

@@ -73,6 +73,9 @@ type AgentSnapshot struct {
 	PID      int    `json:"pid,omitempty"`
 	PIDStart uint64 `json:"pid_start,omitempty"`
 	Terminal string `json:"terminal,omitempty"` // herdr terminal id, display only
+	// IdentTS (ms, Redis time) is when the identity was last proved: by a
+	// verified status (its stream id) or a bind. Only a newer proof replaces it.
+	IdentTS int64 `json:"ident_ts,omitempty"`
 }
 
 // AgentIdent is the ambient identity an agent's own process already knows about

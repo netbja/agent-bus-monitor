@@ -33,8 +33,17 @@ func (c *Conductor) checkComplete(ctx context.Context, ch *change) error {
 	if err != nil {
 		return err
 	}
-	if dirty, err := c.Git.Dirty(ctx, dir); err != nil || dirty {
-		return err // reported by repairIntegration; complete waits for a clean tree
+	if dirty, err := c.Git.Dirty(ctx, dir); err != nil {
+		return err
+	} else if dirty {
+		// Complete waits for a clean tree; repairIntegration reports it once
+		// (DirtyEscalated) and clears the flag when it is clean again.
+		return c.repairIntegration(ctx, ch)
+	}
+	if ch.rec.DirtyEscalated {
+		if err := c.repairIntegration(ctx, ch); err != nil { // clean again: clear the flag
+			return err
+		}
 	}
 	head, err := c.Git.Head(ctx, dir)
 	if err != nil {

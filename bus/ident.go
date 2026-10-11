@@ -5,26 +5,29 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
 // mergeSnapshot computes the {p}:agents entry a write leaves behind (v0.10.1).
-// A bind (identityOnly) sets only the identity. A status sets state, message
-// and ts unless it is older than the stored entry, and replaces the identity
-// only when it verified one itself: an unverified caller's env pane is not
-// trusted over a pid that was proved (Codex's app-server inherits another
-// session's HERDR_PANE_ID).
+// A bind (identityOnly, next.IdentTS = Redis time) sets only the identity. A
+// status sets state, message and ts unless it is older than the stored entry.
+// It replaces the identity only when it verified one itself and that proof is
+// not older than the stored one (a delayed status must not undo a later bind);
+// an unverified caller's env pane is never trusted over a proved pid (Codex's
+// app-server inherits another session's HERDR_PANE_ID).
 func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) AgentSnapshot {
 	var out AgentSnapshot
 	if old != nil {
 		out = *old
 	}
-	setIdentity := func() {
-		out.Pane, out.PID, out.PIDStart, out.Terminal = next.Pane, next.PID, next.PIDStart, next.Terminal
+	setIdentity := func(at int64) {
+		out.Pane, out.PID, out.PIDStart, out.Terminal, out.IdentTS = next.Pane, next.PID, next.PIDStart, next.Terminal, at
 	}
 	if identityOnly {
-		setIdentity()
+		setIdentity(next.IdentTS)
 		return out
 	}
 	if old == nil || next.TS >= old.TS {
@@ -33,8 +36,11 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 	if next.Session != "" {
 		out.Session = next.Session
 	}
-	if next.PID > 0 || old == nil || old.PID == 0 {
-		setIdentity()
+	switch {
+	case next.PID > 0 && (old == nil || next.TS >= old.IdentTS):
+		setIdentity(next.TS)
+	case next.PID == 0 && (old == nil || old.PID == 0):
+		setIdentity(0) // nothing proved either way: the env pane, as before
 	}
 	return out
 }
@@ -67,10 +73,17 @@ func (b *Bus) putSnapshot(ctx context.Context, agent string, next AgentSnapshot,
 		})
 		return err
 	}
-	for i := 0; i < 10; i++ {
+	// The hash holds every agent, so busy peers make the WATCH fail; back off a
+	// little, with jitter, before trying again.
+	for i := 0; i < 50; i++ {
 		err := b.r.Watch(ctx, txf, key)
 		if !errors.Is(err, redis.TxFailedErr) {
 			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(1+rand.IntN(5)) * time.Millisecond):
 		}
 	}
 	return redis.TxFailedErr
@@ -86,5 +99,9 @@ func (b *Bus) Bind(ctx context.Context, agent string, who AgentIdent) error {
 	if who.PID <= 0 || who.PIDStart == 0 || who.Pane == "" {
 		return fmt.Errorf("bind needs a pane, a pid and its start time")
 	}
-	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal}, true)
+	now, err := b.ServerNowMS(ctx)
+	if err != nil {
+		return err
+	}
+	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, IdentTS: now}, true)
 }
