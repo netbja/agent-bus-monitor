@@ -87,6 +87,17 @@ without one is never prompted), process identity (`ident.go`: `AncestorAmong`, `
 herdr, so a restart loses nothing. Spec:
 `docs/superpowers/specs/2026-10-10-event-driven-dispatch-design.md`.
 
+**`mission/`** (v0.10) runs large changes as **missions**: a versioned `docs/changes/<c>/missions.json`
+read from Git at a commit, a pure state machine (`Next` in `state.go`), validation (`validate.go`,
+`paths.go`), a typed store over fenced writes (`store.go`), `Git` (`git.go`: every git and test
+command in its own process group, killed whole on cancel), and the conductor behind `agentbus
+missions` (`conductor.go` — one reconciliation `Pass`: request, check scope and tests, open and read
+the 4-eyes review; `integrate.go` — merge into `change/<c>`, run the change suite, `Startup` crash
+repair; `ops.go` — operator `load`/`retry`/`abort` queued on `{p}:missionops`; `run.go` — flock,
+lease, inbox, tick). Its Redis primitives are in `bus/conductorkeys.go`: the `{p}:conductor` lease
+(`PX 15000`, renewed every 5s) and fenced writes on `{p}:change:{c}`, `{p}:missions:{c}`, the board,
+gates and cmd. Spec: `docs/superpowers/specs/2026-10-11-missions-design.md`.
+
 `bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
 function taking a raw client**, not a `*Bus` method, because it answers the question you have
 *before* you know a project name. `Open` already demands a valid project, so a method there would be
@@ -159,7 +170,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`mem`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
@@ -258,6 +269,13 @@ It never touches Redis — see README "Deployment topology".
 
 ### Things that bite
 
+- **The conductor is the only process that runs repository code, and the only writer of mission
+  state.** `agentbus missions` runs the missions' test commands (arbitrary code from agents' commits,
+  as any CI does) and every write to `{p}:change:*`/`{p}:missions:*` goes through a fenced script in
+  `bus/conductorkeys.go`; the CLI (`agentbus mission load|retry|abort`) only queues operations on
+  `{p}:missionops` and waits for the conductor's answer. Never add an unfenced mission write, and
+  never let the dispatcher run code. The conductor writes only to `change/<change>` (validated at
+  load) and never pushes or touches `main`.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
