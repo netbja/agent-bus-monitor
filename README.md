@@ -58,8 +58,9 @@ It only types into a pane that is idle, not busy, with an empty input line, **no
 running the process the agent registered (pid + start time); everything else is deferred and,
 past 10 minutes, escalated to `master`. See the [release notes](docs/releases/v0.8.0.md) and the
 [design spec](docs/superpowers/specs/2026-10-10-event-driven-dispatch-design.md). Live acceptance
-(2026-10-11): an agy pane was woken on its own; a Codex pane is not yet, because Codex 0.162 runs
-its commands through a shared `codex app-server` daemon and records no pane identity.
+(2026-10-11): agy and, once bound with `agentbus bind` (v0.10.1), Codex were woken on their own.
+Codex 0.162 runs its commands through a shared `codex app-server`, so it cannot register its pane
+by itself.
 
 ## New in v0.7.0
 
