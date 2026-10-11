@@ -9,6 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -249,4 +252,41 @@ func RunTest(ctx context.Context, dir, command, logPath string, limit time.Durat
 		return false, tb.tail(), runErr
 	}
 	return true, tb.tail(), nil
+}
+
+// MissionMerge is one conductor merge read back from its trailers.
+type MissionMerge struct {
+	ID, Commit, Hash string
+	Rev              int
+}
+
+var hex40 = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// MissionMerges returns the change's conductor merges on branch, oldest first.
+// A merge without the full trailer set, naming another change, or whose
+// Mission-Commit is not a full sha is not a conductor merge and is skipped.
+func (g Git) MissionMerges(ctx context.Context, branch, change string) ([]MissionMerge, error) {
+	format := "--format=%H%x1f%(trailers:key=Mission,valueonly)%x1f%(trailers:key=Mission-Commit,valueonly)%x1f%(trailers:key=Mission-Hash,valueonly)%x1f%(trailers:key=Mission-Rev,valueonly)%x1e"
+	out, err := g.run(ctx, "", "log", "--merges", format, branch)
+	if err != nil {
+		return nil, err
+	}
+	var merges []MissionMerge
+	for _, rec := range strings.Split(out, "\x1e") {
+		f := strings.Split(strings.TrimSpace(rec), "\x1f")
+		if len(f) != 5 {
+			continue
+		}
+		for i := range f {
+			f[i] = strings.TrimSpace(f[i])
+		}
+		c, id, ok := strings.Cut(f[1], "/")
+		if !ok || c != change || id == "" || !hex40.MatchString(f[2]) || f[3] == "" {
+			continue
+		}
+		rev, _ := strconv.Atoi(f[4])
+		merges = append(merges, MissionMerge{ID: id, Commit: f[2], Hash: f[3], Rev: rev})
+	}
+	slices.Reverse(merges) // git log is newest first
+	return merges, nil
 }

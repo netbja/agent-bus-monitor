@@ -196,3 +196,36 @@ func TestResolveCommitUnknown(t *testing.T) {
 		t.Fatal("unknown commit resolved")
 	}
 }
+
+func TestMissionMergesIgnoresForeignMerges(t *testing.T) {
+	g, dir := newRepo(t)
+	ctx := context.Background()
+	g.EnsureBranch(ctx, "change/chg", "main")
+	wt := filepath.Join(t.TempDir(), "integration")
+	g.AddWorktree(ctx, wt, "change/chg", false)
+	side := func(name, file string) string {
+		run(t, dir, "git", "checkout", "-q", "-b", name, "main")
+		c := commitFile(t, dir, file, name, name)
+		run(t, dir, "git", "checkout", "-q", "main")
+		return c
+	}
+	c1 := side("m1", "a.txt")
+	g.MergeNoFF(ctx, wt, c1, MergeMessage("chg", "t1", 1, "One", c1, "h1"))
+	h := side("hand", "b.txt")
+	g.MergeNoFF(ctx, wt, h, "a merge by hand")
+	bad := side("bad", "c.txt")
+	g.MergeNoFF(ctx, wt, bad, "incomplete\n\nMission: chg/t9\n")
+	other := side("other", "d.txt")
+	g.MergeNoFF(ctx, wt, other, MergeMessage("otherchg", "t1", 1, "Other", other, "hx"))
+	commitFile(t, dir, "e.txt", "main moves", "main")
+	g.MergeNoFF(ctx, wt, "main", "merge main into the change")
+	c2 := side("m2", "f.txt")
+	g.MergeNoFF(ctx, wt, c2, MergeMessage("chg", "t2", 2, "Two", c2, "h2"))
+	got, err := g.MissionMerges(ctx, "change/chg", "chg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != "t1" || got[0].Commit != c1 || got[0].Hash != "h1" || got[0].Rev != 1 || got[1].ID != "t2" || got[1].Rev != 2 {
+		t.Fatalf("MissionMerges = %+v", got)
+	}
+}

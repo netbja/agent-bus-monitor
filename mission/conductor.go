@@ -336,6 +336,14 @@ func (c *Conductor) newAttempt(ctx context.Context, ch *change, m Mission, r *Mi
 		return err
 	}
 	r.Attempt++
+	// A name already on the board belongs to an attempt this record no longer
+	// knows (a recover after losing Redis): never reuse it as ours.
+	for _, taken := ch.board[TaskName(ch.rec.Change, m.ID, r.Attempt)]; taken; _, taken = ch.board[TaskName(ch.rec.Change, m.ID, r.Attempt)] {
+		if r.Attempt >= 99 {
+			return fmt.Errorf("%s/%s: no free request name left (99 attempts)", ch.rec.Change, m.ID)
+		}
+		r.Attempt++
+	}
 	r.Current = Attempt{N: r.Attempt, Task: TaskName(ch.rec.Change, m.ID, r.Attempt), Agent: agent, Base: base}
 	r.Subject, r.LogPath, r.CheckTail = "", "", "" // ReviewRef stays until its gate is closed
 	r.State = Requested

@@ -21,6 +21,8 @@ func (c *Conductor) HandleOp(ctx context.Context, op bus.MissionOp) (ok bool, ms
 			msg, err = c.load(ctx, op.Args[0], false, "")
 		case len(op.Args) == 3 && op.Args[1] == "force" && strings.TrimSpace(op.Args[2]) != "":
 			msg, err = c.load(ctx, op.Args[0], true, op.Args[2])
+		case len(op.Args) == 2 && op.Args[1] == "recover":
+			msg, err = c.recover(ctx, op.Args[0])
 		default:
 			return false, "usage: load <path>@<commit> [force <reason>]"
 		}
@@ -56,35 +58,43 @@ func missionRef(args []string) (string, string, error) {
 	return name, id, nil
 }
 
-// load reads missions.json at a commit, validates it, creates the change
-// branch and the records (rev 1, every mission pending).
-func (c *Conductor) load(ctx context.Context, ref string, force bool, reason string) (string, error) {
+// readMissions reads missions.json at <path>@<commit>, parses it and
+// validates it against the tree at that commit.
+func (c *Conductor) readMissions(ctx context.Context, ref string) (p, commit string, data []byte, f File, err error) {
 	i := strings.LastIndex(ref, "@")
 	if i <= 0 || i == len(ref)-1 {
-		return "", fmt.Errorf("%q is not <path>@<commit>", ref)
+		return "", "", nil, File{}, fmt.Errorf("%q is not <path>@<commit>", ref)
 	}
-	p, rev := ref[:i], ref[i+1:]
-	commit, err := c.Git.ResolveCommit(ctx, rev)
-	if err != nil {
-		return "", err
+	p = ref[:i]
+	if commit, err = c.Git.ResolveCommit(ctx, ref[i+1:]); err != nil {
+		return "", "", nil, File{}, err
 	}
-	data, err := c.Git.Show(ctx, commit, p)
-	if err != nil {
-		return "", fmt.Errorf("%s not found at %s", p, short(commit))
+	if data, err = c.Git.Show(ctx, commit, p); err != nil {
+		return "", "", nil, File{}, fmt.Errorf("%s not found at %s", p, short(commit))
 	}
-	f, err := Parse(data)
-	if err != nil {
-		return "", err
+	if f, err = Parse(data); err != nil {
+		return "", "", nil, File{}, err
 	}
 	tree, err := c.Git.Tree(ctx, commit)
 	if err != nil {
-		return "", err
+		return "", "", nil, File{}, err
 	}
 	dir := path.Dir(p)
 	if err := Validate(f, tree, func(b string) bool {
 		_, err := c.Git.Show(ctx, commit, path.Join(dir, b))
 		return err == nil
 	}); err != nil {
+		return "", "", nil, File{}, err
+	}
+	return p, commit, data, f, nil
+}
+
+// load reads missions.json at a commit, validates it, creates the change
+// branch and the records (rev 1, every mission pending), or reloads a known
+// change as its next revision.
+func (c *Conductor) load(ctx context.Context, ref string, force bool, reason string) (string, error) {
+	p, commit, data, f, err := c.readMissions(ctx, ref)
+	if err != nil {
 		return "", err
 	}
 	hash := FileHash(data)
