@@ -143,6 +143,16 @@ Both arrive as `cmd` events addressed to you; their `type` field tells them apar
   last `status`), the pane is gone, or its client is not supported. Look at the pane (Step 1
   below) and wake it by hand, or re-pop the role. One escalation per backlog; progress resets
   it. If **you** are the stuck agent, there is no cmd — only the `notify` and `⚠`.
+  **No verified identity** is permanent for a client whose commands do not run under its pane
+  — Codex runs them through a shared `codex app-server`. A role popped by `agent-launch` binds
+  itself; for one started by hand, bind it once you have confirmed the pane is that agent's:
+  `agentbus bind <agent> --pane <pane>` lists the pane's foreground processes, then
+  `agentbus bind <agent> --pane <pane> --pid <the client's pid>` records it. Rebind after the
+  client restarts.
+- **`complete`** (`from: conductor`) — every mission of a change revision is integrated on
+  `change/<change>` and the change suite passed on its head. The body gives the counts
+  (integrated, skipped) and the base. Review the branch and open the PR to the base: the
+  conductor never does.
 - **`blocked`** (`from:` the peer) — the peer ran `request block <task> <reason>` on a request
   you sent; in the JSON event `body` is the reason, `ref` the thread, `task` the request. Decide: answer on
   the thread, re-scope, or reassign. It is sent once per new reason, not on every repeat.
@@ -181,9 +191,11 @@ This changes how you dispatch:
   **Step 2, only once you are satisfied, inject.** Name the project and the exact task — the
   peer may serve several, and it wakes with no idea why:
   ```bash
-  herdr pane send-text "$pane" "$AGENT_BUS_PROJECT / task-42 assigned: run agentbus request, then arm."
-  herdr pane send-keys "$pane" Enter
+  herdr agent prompt "$pane" "$AGENT_BUS_PROJECT / task-42 assigned: run agentbus request, then arm."
   ```
+  `herdr agent prompt` types and submits, the way the dispatcher does. `send-text` followed by
+  `send-keys "$pane" Enter` leaves the line unsubmitted in Codex (seen in the v0.10
+  acceptance); if that happened, clear the input (`send-keys "$pane" ctrl+u`) before you prompt.
 
   Never chain the two: injecting after a bare existence check is how you type a directive into
   whatever process inherited that id. If the pane is gone the peer is not asleep, it is gone —

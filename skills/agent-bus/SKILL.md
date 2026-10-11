@@ -71,8 +71,12 @@ you are **not armed** and your pane is idle, types one fixed line into your pane
 The line carries no message content — only the command to run. It only reaches an agent
 the dispatcher can identify: your last `agentbus status`, run from inside your herdr pane,
 records the pane and your client's process (pid + start time). An agent without that record —
-or restarted since — is never typed into; it is escalated to master instead. On a line that
-starts with `[agentbus#`:
+or restarted since — is never typed into; it is escalated to master instead. If your commands
+do not run under your pane (Codex runs them through a shared `codex app-server`, whose
+environment may even name another pane), `status` cannot record you: `agent-launch` binds
+you at start, and otherwise master runs `agentbus bind <you> --pane <pane> --pid <pid>`. A
+later `status` keeps that identity. Do not hand-edit `HERDR_*` variables to work around it. On
+a line that starts with `[agentbus#`:
 
 1. **Run `agentbus --project <p> subscribe --drain <self>` first.** It prints one JSON
    object per waiting entry (your pending entries, then the unread ones), acknowledges each

@@ -2,6 +2,20 @@
 
 # agent-bus
 
+## New in v0.10.1 — bound identity, change complete
+
+- **Codex can be woken by the dispatcher.** Codex runs its commands through a shared `codex
+  app-server`, so `agentbus status` cannot prove which pane it lives in. Now `agentbus bind
+  <agent> [--pane P] --pid N` records the client's pid, checked against the pane's foreground
+  processes; without `--pid` it lists them. `agent-launch` binds itself before it starts the
+  client. A later unverified `status` keeps that identity.
+- **Change complete.** When every mission of a change revision is integrated, the conductor
+  reruns the change suite on `change/<change>` and sends master one `complete` cmd: open the PR.
+  `mission status` shows it.
+- A `mission load` error about a missing brief names the path it resolved.
+
+See the [release notes](docs/releases/v0.10.1.md).
+
 ## New in v0.10.0 — missions
 
 A large change can now run across several agents and several days. Its tasks are **missions** in
@@ -105,7 +119,7 @@ the human dashboard.
 > pane-relay part on purpose ([decision](docs/memory/decisions/2026-10-10-event-driven-dispatch.md)):
 > **the only automated process that types into panes is `agentbus dispatch`, and it types a wake
 > line, never a message; master's manual pane injection remains the fallback while no dispatcher
-> runs.** Pane ids are self-registered and pid-verified, not hard-coded.
+> runs.** Pane ids are self-registered (or bound with `agentbus bind`) and pid-verified, not hard-coded.
 
 **Separate notification path — NOT the bus.** The `Stop` hook in
 `myproject/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to

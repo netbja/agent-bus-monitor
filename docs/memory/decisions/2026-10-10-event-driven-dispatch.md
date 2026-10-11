@@ -5,7 +5,7 @@ scope: project
 kind: decision
 status: active
 created: 2026-10-10
-last_verified: 2026-10-10
+last_verified: 2026-10-11
 author: claude
 confidence: inferred
 ---
@@ -33,6 +33,11 @@ Shape of the decision, each part with its reason:
   pane not focused, and the pane's foreground process matching the pid + start time the agent
   registered with `agentbus status`. Anything else defers and escalates after 10 minutes (4× for
   `working`) to the role `master`, plus a `notify`.
+- **Bound identity (v0.10.1).** An agent whose commands do not descend from its pane (Codex runs
+  them through a shared `codex app-server`, whose env even names another session's pane) cannot
+  register itself. `agentbus bind <agent> [--pane P] --pid N` records a pid checked against the
+  pane's foreground set; `agent-launch` binds its own pid just before exec hands it to the client.
+  An unverified `status` keeps a verified identity; a verified one replaces it.
 - **Bounded duplicates, fenced writes.** One prompt per agent per 60 s, three per obligation,
   enforced by a Lua reservation fenced by the `{p}:dispatch` lease token; every dispatcher write
   is fenced so a dispatcher that lost its lease writes nothing.
@@ -69,11 +74,11 @@ pane, or to the `{p}:dispatch` / `{p}:wake:{agent}` keys and the `wake=no` / `es
 
 ## Limits / what would invalidate it
 
-- **Proposed, not active**: it becomes active when the branch is merged; check Git, not this note.
-- Live acceptance on real client panes (latency, zero prompts and zero token growth over 30 min
-  idle, focus and typed-input deferral, the full master → coder → master loop) is **pending**;
-  see the [v0.8.0 release notes](../../releases/v0.8.0.md). Tests use a fake runtime and
-  captured screen fixtures.
+- Active since v0.8.0 (merged); check Git, not this note.
+- Live acceptance, 2026-10-11 ([v0.10.0 release notes](../../releases/v0.10.0.md)): agy was
+  woken on its own twice and escalation fired after 10 minutes; Codex 0.162 could not be
+  verified (the app-server case above, fixed by `bind` in v0.10.1). Still not measured: 30 min
+  idle with zero prompts and zero token growth, focus and typed-input deferral on every client.
 - Accepted residuals (spec §3.3, §6): a dispatcher suspended between its token check and the herdr
   call can emit one extra prompt; `busmon --delete` while a dispatcher runs can orphan one fenced
   write; a focus switch inside the inspect→prompt gap is not caught; entries trimmed before an
