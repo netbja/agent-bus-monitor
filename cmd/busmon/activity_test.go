@@ -110,7 +110,7 @@ func TestNarrowFoldsTarget(t *testing.T) {
 func TestDaySeparatorRow(t *testing.T) {
 	fl := hostileFeed()[0]
 	row := activityRow(fl, TierWide, 40)
-	if !strings.Contains(row.text(), "Sat 2026-10-10") || row[0].Role != RoleDim {
+	if !strings.Contains(row.text(), "Sat 2026-10-10") || row[0].Role != RoleMuted { // spec §3.4: a muted rule; dim never carries information alone
 		t.Fatalf("separator %+v", row)
 	}
 }
@@ -155,5 +155,31 @@ func TestActivityFrameKeepsFilter(t *testing.T) {
 	}
 	if title[len(title)-1].Role != RoleAttention {
 		t.Fatalf("paused indicator role %v", title[len(title)-1].Role)
+	}
+}
+
+// Day separators are not events: they never count in the title nor in "N new",
+// with or without a filter.
+func TestAdmittedEventsSkipsSeparators(t *testing.T) {
+	at := time.Date(2026, 10, 10, 18, 0, 0, 0, time.UTC)
+	feed := []feedLine{
+		{id: "1", seq: 1, sep: true, at: at},
+		{id: "2", seq: 2, at: at, ev: bus.Event{Kind: "notify", From: "master", Message: "deploy"}},
+		{id: "3", seq: 3, sep: true, at: at.Add(24 * time.Hour)},
+		{id: "4", seq: 4, at: at, ev: bus.Event{Kind: "status", Agent: "kimi", State: "idle", Message: "tests"}},
+	}
+	adm, events := admittedEvents(feed, feedFilter{})
+	if events != 2 || len(adm) != 2 || adm[0] != 2 || adm[1] != 4 {
+		t.Fatalf("no filter: admitted %v events %d, want [2 4] 2", adm, events)
+	}
+	adm, events = admittedEvents(feed, parseFilter("@kimi"))
+	if events != 2 || len(adm) != 1 || adm[0] != 4 {
+		t.Fatalf("@kimi: admitted %v events %d, want [4] 2", adm, events)
+	}
+	var p pauseCursor
+	p.Pause(1)
+	p.Recount(adm)
+	if p.New() != 1 {
+		t.Fatalf("N new = %d, want 1 (separator at seq 3 excluded)", p.New())
 	}
 }

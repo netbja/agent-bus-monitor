@@ -798,18 +798,11 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 
 	act := u.lists[PanelActivity]
 	var feedItems []ListItem
-	events, shown := 0, 0
-	var admitted []int
+	admitted, events := admittedEvents(u.feed, u.filter)
+	shown := len(admitted)
 	for _, fl := range u.feed {
-		if !fl.sep {
-			events++
-		}
 		if !u.filter.match(fl) {
 			continue
-		}
-		if !fl.sep {
-			shown++
-			admitted = append(admitted, fl.seq)
 		}
 		feedItems = append(feedItems, ListItem{Key: fl.id, Line: activityRow(fl, l.Tier, rowW(PanelActivity)), Selectable: !fl.sep})
 	}

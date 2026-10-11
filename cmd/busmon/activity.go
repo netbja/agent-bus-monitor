@@ -96,7 +96,7 @@ func activityRow(fl feedLine, tier Tier, width int) Line {
 	if fl.sep {
 		head := strings.Repeat(glyphHorizontal, 2) + " " + fl.at.Format("Mon 2006-01-02") + " "
 		rest := max(0, width-Width(head))
-		return FitLine(Line{{Text: head + strings.Repeat(glyphHorizontal, rest), Role: RoleDim}}, width)
+		return FitLine(Line{{Text: head + strings.Repeat(glyphHorizontal, rest), Role: RoleMuted}}, width)
 	}
 	look := lookEvent(fl.ev)
 	c := colsFor(tier)
@@ -172,4 +172,20 @@ func activityFrame(p *pauseCursor, shown, total int, f feedFilter) (title, label
 	}
 	label = Line{{Text: count + " " + GlyphNone + " filter: " + Preview(filter), Role: RoleMuted}}
 	return title, label
+}
+
+// admittedEvents counts the feed's events (day separators are not events) and
+// lists the sequence numbers of those the filter admits: what "N new" and the
+// title's counts are measured on.
+func admittedEvents(feed []feedLine, f feedFilter) (admitted []int, events int) {
+	for _, fl := range feed {
+		if fl.sep {
+			continue
+		}
+		events++
+		if f.match(fl) {
+			admitted = append(admitted, fl.seq)
+		}
+	}
+	return admitted, events
 }

@@ -501,6 +501,8 @@ badges → words). Wherever ACP/CLI drivers were announced for v0.9, they move t
 - §3.4: an evicted selected event moves the selection to the event now at its former position
   (the list's departed-key rule), not to the oldest retained one.
 - §3.2: the header's waiting text is today's `waitingText` (count and age of the oldest).
+- §3.4: the wide time column is 7 cells (`HH:MM` and its gap), not 9; the two cells go to `from`
+  and `to`. The help (F1) lists every binding, alternates included (`enter v`, `F1 ?`, `F2 r`).
 - §7: tview initialises the screen it is given exactly once; the colour depth is read from that
   screen (a throwaway screen to probe colours broke the real terminal). tview delivers keys to the
   root primitive, so the main page and the modal layer relay them to the focused child.

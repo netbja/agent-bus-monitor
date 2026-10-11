@@ -53,6 +53,8 @@ const (
 type binding struct {
 	Keys   string // as displayed: "↑↓ j k"
 	Hint   string // footer word; "" = not advertised in the footer
+	Help   string // help description when Hint is empty; "" = folded into another row
+	Alt    string // alternate keys shown in the help only: "v" for enter
 	Act    Action
 	Panels []PanelID // nil = every panel
 	Tiers  []Tier    // nil = every tier
@@ -124,13 +126,13 @@ func either(fs ...func(*tcell.EventKey) bool) func(*tcell.EventKey) bool {
 }
 
 var (
-	quitBinding   = binding{Keys: "^C", Act: ActQuit, match: keyIs(tcell.KeyCtrlC)}
+	quitBinding   = binding{Keys: "^C", Help: "quit (everywhere)", Act: ActQuit, match: keyIs(tcell.KeyCtrlC)}
 	notActivity   = []PanelID{PanelAgents, PanelBoard, PanelRequests}
 	activityOnly  = []PanelID{PanelActivity}
 	arrows        = GlyphUp + GlyphDownArrow
 	panelBindings = []binding{
 		{Keys: "tab", Hint: "focus", Act: ActNextPanel, match: keyIs(tcell.KeyTab)},
-		{Keys: "shift-tab", Act: ActPrevPanel, match: keyIs(tcell.KeyBacktab)},
+		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(tcell.KeyBacktab)},
 		{Keys: "1-3", Hint: "view", Act: ActTab1, Tiers: []Tier{TierMedium}, match: runeIs('1')},
 		{Keys: "1-4", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
 		{Keys: "2", Act: ActTab2, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('2')},
@@ -138,19 +140,19 @@ var (
 		{Keys: "4", Act: ActTab4, Tiers: []Tier{TierNarrow}, match: runeIs('4')},
 		{Keys: arrows + " j k", Hint: "select", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},
-		{Keys: "pgup", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
-		{Keys: "pgdn", Act: ActPageDown, match: keyIs(tcell.KeyPgDn)},
-		{Keys: "home g", Act: ActFirst, match: either(keyIs(tcell.KeyHome), runeIs('g'))},
+		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
+		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(tcell.KeyPgDn)},
+		{Keys: "home g", Help: "first row", Act: ActFirst, match: either(keyIs(tcell.KeyHome), runeIs('g'))},
 		{Keys: "end G", Hint: "live", Act: ActLive, Panels: activityOnly, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
-		{Keys: "end G", Act: ActLast, Panels: notActivity, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
-		{Keys: "enter", Hint: "detail", Act: ActOpen, match: either(keyIs(tcell.KeyEnter), runeIs('v'))},
+		{Keys: "end G", Help: "last row", Act: ActLast, Panels: notActivity, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
+		{Keys: "enter", Hint: "detail", Alt: "v", Act: ActOpen, match: either(keyIs(tcell.KeyEnter), runeIs('v'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
-		{Keys: "i", Hint: "write", Act: ActCompose, match: runeIs('i', ':')},
+		{Keys: "i", Hint: "write", Alt: ":", Act: ActCompose, match: runeIs('i', ':')},
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},
 		{Keys: "esc", Hint: "back", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
-		{Keys: "F2", Hint: "requests", Act: ActRequests, match: either(keyIs(tcell.KeyF2), runeIs('r'))},
-		{Keys: "F1", Hint: "help", Act: ActHelp, match: either(keyIs(tcell.KeyF1), runeIs('?'))},
+		{Keys: "F2", Hint: "requests", Alt: "r", Act: ActRequests, match: either(keyIs(tcell.KeyF2), runeIs('r'))},
+		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(tcell.KeyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}
 	inputBindings = []binding{
@@ -165,10 +167,10 @@ var (
 	overlayBindings = []binding{
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},
-		{Keys: "pgup", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
-		{Keys: "pgdn", Act: ActPageDown, match: keyIs(tcell.KeyPgDn)},
-		{Keys: "home g", Act: ActFirst, match: either(keyIs(tcell.KeyHome), runeIs('g'))},
-		{Keys: "end G", Act: ActLast, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
+		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
+		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(tcell.KeyPgDn)},
+		{Keys: "home g", Help: "first row", Act: ActFirst, match: either(keyIs(tcell.KeyHome), runeIs('g'))},
+		{Keys: "end G", Help: "last row", Act: ActLast, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "Y", Hint: "copy thread", Act: ActCopyThread, match: runeIs('Y')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(tcell.KeyEscape), runeIs('q'))},

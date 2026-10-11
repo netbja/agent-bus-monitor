@@ -22,8 +22,8 @@ func helpText() string {
 	}{{"panels", ModePanel}, {"writing a message", ModeInput}, {"editing the filter", ModeFilter}, {"an open detail", ModeOverlay}} {
 		sb.WriteString("  " + tg(RoleMuted, sec.name) + "\n")
 		for _, b := range bindings(sec.m) {
-			if b.Hint != "" {
-				row(b.Keys, b.Hint)
+			if k, d, ok := helpRow(b); ok {
+				row(k, d)
 			}
 		}
 	}
@@ -99,3 +99,21 @@ func helpText() string {
 }
 
 func helpTitle() string { return "Help" }
+
+// helpRow is a binding's KEYS line: its keys with the help-only alternates,
+// and its footer hint or, failing that, its help text. A binding with neither
+// is folded into another row (j under the arrows, 2-4 under "1 2 3 (4)").
+func helpRow(b binding) (keys, desc string, ok bool) {
+	desc = b.Hint
+	if desc == "" {
+		desc = b.Help
+	}
+	if desc == "" {
+		return "", "", false
+	}
+	keys = b.Keys
+	if b.Alt != "" {
+		keys += " " + b.Alt
+	}
+	return keys, desc, true
+}

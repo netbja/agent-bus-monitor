@@ -146,3 +146,29 @@ func TestHelpCoversVocabulary(t *testing.T) {
 		}
 	}
 }
+
+// Every binding reaches the help: its own row (keys + alternates), or a row it
+// is folded into on purpose. A new key without a Hint or Help fails here.
+func TestHelpListsEveryBinding(t *testing.T) {
+	help := helpText()
+	folded := map[string]bool{"j": true, "2": true, "3": true, "4": true, "@": true}
+	for _, m := range []Mode{ModePanel, ModeInput, ModeFilter, ModeOverlay} {
+		for _, b := range bindings(m) {
+			k, d, ok := helpRow(b)
+			if !ok {
+				if !folded[b.Keys] {
+					t.Errorf("mode %v: key %q has neither Hint nor Help", m, b.Keys)
+				}
+				continue
+			}
+			if !strings.Contains(help, Fit(k, 20)+" "+d) && !strings.Contains(help, k) {
+				t.Errorf("help lacks %q", k)
+			}
+		}
+	}
+	for _, alt := range []string{"enter v", "F1 ?", "F2 r", "i :", "shift-tab", "pgup", "pgdn", "home g", "^C"} {
+		if !strings.Contains(help, alt) {
+			t.Errorf("help lacks %q", alt)
+		}
+	}
+}
