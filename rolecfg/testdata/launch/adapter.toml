@@ -1,0 +1,22 @@
+schema_version = 2
+[defaults]
+profile = "main"
+[adapters.extra]
+executable = "bin/extra"
+[profiles.main]
+model = "m-é"
+client = "extra"
+provider = "prov"
+reasoning_levels = ["low", "high"]
+reasoning = "high"
+env_refs = { B_KEY = "SRC_B", A_KEY = "SRC_A" }
+[profiles.main.options]
+zeta = 1
+alpha = true
+ratio = 0.5
+big = 1234567.0
+tags = ["x", "ÿ"]
+label = "quote\" slash/ del\u007f"
+[roles.coder]
+tier = "boot"
+skills = ["test-skill"]
