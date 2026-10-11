@@ -23,17 +23,21 @@ type harness struct {
 	repo string
 }
 
-func missionsFile(t1Test string) string {
-	return `{"change": "chg", "reviewer": "codex", "test": "true", "missions": [
+func missionsFile(t1Test string) string { return missionsFileWith(t1Test, "true") }
+
+func missionsFileWith(t1Test, changeTest string) string {
+	return `{"change": "chg", "reviewer": "codex", "test": "` + changeTest + `", "missions": [
  {"id": "t1", "title": "First", "agent": "kimi", "allowed_paths": ["src/t1/**"], "test": "` + t1Test + `", "brief": "plan.md#t1"},
  {"id": "t2", "title": "Second", "agent": "coder", "depends_on": ["t1"], "allowed_paths": ["src/t2/**"], "test": "true", "brief": "plan.md#t2"}]}`
 }
 
-func newHarness(t *testing.T, t1Test string) *harness {
+func newHarness(t *testing.T, t1Test string) *harness { return newHarnessWith(t, t1Test, "true") }
+
+func newHarnessWith(t *testing.T, t1Test, changeTest string) *harness {
 	t.Helper()
 	g, dir := newRepo(t)
 	commitFile(t, dir, "docs/changes/chg/plan.md", "# plan\n", "plan")
-	data := missionsFile(t1Test)
+	data := missionsFileWith(t1Test, changeTest)
 	commit := commitFile(t, dir, "docs/changes/chg/missions.json", data, "missions")
 	b, r := dialBus(t)
 	ctx := context.Background()
@@ -234,8 +238,8 @@ func TestPassIgnoresWrongSubjectAndSelfApproval(t *testing.T) {
 	}
 	h.verdict(m.Subject, "codex", "approve")
 	h.pass()
-	if h.mission("t1").State != Approved {
-		t.Fatalf("state %s", h.mission("t1").State)
+	if s := h.mission("t1").State; s != Approved && s != Integrated { // integration runs in the approval's pass
+		t.Fatalf("state %s", s)
 	}
 	if open, _ := h.b.OpenChallenges(h.ctx, "codex"); len(open) != 0 {
 		t.Fatalf("gate left open: %v", open)

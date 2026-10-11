@@ -39,6 +39,8 @@ type change struct {
 	file     File
 	missions map[string]MissionRecord
 	board    map[string]bus.BoardEntry
+
+	integrated bool // a pass integrates at most one mission per change
 }
 
 // Pass runs one reconciliation over every active change. An error on one
@@ -168,7 +170,13 @@ func (c *Conductor) advance(ctx context.Context, ch *change, m Mission, r *Missi
 		}
 	}
 	if r.State == InReview {
-		return c.readReview(ctx, ch, m, r)
+		if err := c.readReview(ctx, ch, m, r); err != nil {
+			return err
+		}
+	}
+	if r.State == Approved && !ch.integrated { // one integration per pass
+		ch.integrated = true
+		return c.integrate(ctx, ch, m, r)
 	}
 	return nil
 }
@@ -224,6 +232,9 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 			}
 			r.History = append(r.History, Attempt{N: prev.N, Task: prev.Task, Agent: prev.Agent, Base: prev.Base,
 				Commit: prev.Commit, Branch: prev.Branch, Outcome: outcome, Reason: reason})
+			if !sends && prev.Task != "" { // abort: nothing replaces it
+				err = c.closeAttempt(ctx, prev, "", reason)
+			}
 		case ActSendRequest:
 			agent := m.Agent
 			if prev.Agent != "" {
@@ -329,6 +340,9 @@ func (c *Conductor) replySuperseded(ctx context.Context, old Attempt, newTask, r
 		thread = e.Request.Thread
 	}
 	msg := "superseded by " + newTask + ": stop, do not deliver"
+	if newTask == "" {
+		msg = "cancelled: stop, do not deliver"
+	}
 	if reason != "" {
 		msg = reason + " — " + msg
 	}
