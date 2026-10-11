@@ -18,6 +18,10 @@ task touches, and follow [`AGENTS.md`](AGENTS.md) — the entry point every agen
 whatever the model. The rules for reading and writing are in
 [`docs/memory/PROTOCOL.md`](docs/memory/PROTOCOL.md).
 
+The index, imported so it is in context from the first turn:
+
+@docs/memory/INDEX.md
+
 Two habits matter more than the format:
 
 - **Check a note before trusting it.** Each carries `scope`, `status`, `last_verified` and its
@@ -41,6 +45,7 @@ go build -o agentbus ./cmd/agentbus   # build the CLI client
 go install ./...                      # install both to $GOBIN
 go build ./... && go vet ./...        # compile + vet everything
 go test ./... -count=1                # unit tests; Redis integration cases skip without explicit opt-in
+go run ./cmd/agentbus mem check       # shared-memory structure, links, index copy in AGENTS.md
 AGENTBUS_TEST_REDIS_URL=unix:///tmp/agentbus-test/redis.sock go test ./... -count=1 # isolated Redis only
 ```
 
@@ -154,7 +159,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`mem`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
@@ -253,6 +258,11 @@ It never touches Redis — see README "Deployment topology".
 
 ### Things that bite
 
+- **`agentbus mem` needs no project and no broker.** It works on files under the repository
+  root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
+  project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
+  `docs/memory/INDEX.md` between `<!-- memory-index:begin -->` and `<!-- memory-index:end -->`:
+  edit the index, run `agentbus mem sync`; `TestRepositoryPasses` fails `go test ./...` on drift.
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
   pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer

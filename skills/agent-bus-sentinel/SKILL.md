@@ -119,7 +119,11 @@ You start from a blank context; read before you write, assume nothing.
 
    **A cron firing is not a reason to write.** If nothing was verified, say so in your one-line
    summary and write nothing. A journal of empty days buries the days that mattered.
-5. Flag what has rotted, do not repair it silently: a link that no longer resolves, a note
+5. Run `agentbus mem check` first. If it prints `error: no docs/memory/INDEX.md`, this project
+   has no shared memory: say so in your summary and skip the rest of this step. On any `FAIL:`
+   or `WARN:` line, tell master with
+   `agentbus notify "memory check: <n> FAIL, <m> WARN — run agentbus mem check"`. Then
+   flag what has rotted, do not repair it silently: a link that no longer resolves, a note
    whose evidence has moved, a claim the repository now contradicts, an open question that
    has been answered. Report them (`agentbus report sentinel "memory: <what looks stale>"`).
    **Never promote a hypothesis to a decision**, never refresh `last_verified` without

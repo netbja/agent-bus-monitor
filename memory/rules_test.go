@@ -104,3 +104,12 @@ func TestStaleWarnings(t *testing.T) {
 		t.Fatalf("default threshold: %q", r.Warnings)
 	}
 }
+
+// The marker rule is about notes: the protocol may quote the marker.
+func TestFillMarkerQuotedOutsideNotes(t *testing.T) {
+	root := memtest.WriteTree(t)
+	memtest.Append(t, root, "docs/memory/PROTOCOL.md", "Sections are marked `"+memory.FillMarker+"`.\n")
+	if r := check(root); len(r.Errors) != 0 {
+		t.Fatalf("errors: %q", r.Errors)
+	}
+}

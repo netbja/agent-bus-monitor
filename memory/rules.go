@@ -36,12 +36,13 @@ func (c *checker) newRules() {
 		if err != nil {
 			continue
 		}
+		if !noteDirs[filepath.Base(filepath.Dir(p))] || filepath.Base(p) == "INDEX.md" {
+			continue // the protocol may quote the marker; only notes are checked
+		}
 		if strings.Contains(string(b), FillMarker) {
 			c.fail(c.rel(p) + ": template not filled (" + FillMarker + " remains)")
 		}
-		if noteDirs[filepath.Base(filepath.Dir(p))] && filepath.Base(p) != "INDEX.md" {
-			c.staleRule(p, string(b))
-		}
+		c.staleRule(p, string(b))
 	}
 }
 
