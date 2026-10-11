@@ -247,3 +247,26 @@ func TestReadMissionOpsRecoversPending(t *testing.T) {
 		t.Fatalf("pending op not recovered: %+v %v", ops, err)
 	}
 }
+
+func TestFencedMissionBatch(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	b.AcquireConductor(ctx, "tok", 15*time.Second)
+	if err := b.FencedMissionBatch(ctx, "stale", "chg", map[string]string{"t1": "{}"}, `{"rev":2}`); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("stale: %v", err)
+	}
+	if n := b.r.Exists(ctx, MissionsKey(b.project, "chg"), ChangeKey(b.project, "chg")).Val(); n != 0 {
+		t.Fatal("a stale batch wrote something")
+	}
+	if err := b.FencedMissionBatch(ctx, "tok", "chg", map[string]string{"t1": `{"id":"t1"}`, "t2": `{"id":"t2"}`}, `{"rev":2}`); err != nil {
+		t.Fatal(err)
+	}
+	ms, _ := b.ReadMissionHash(ctx, MissionsKey(b.project, "chg"))
+	ch, _ := b.ReadMissionHash(ctx, ChangeKey(b.project, "chg"))
+	if len(ms) != 2 || ch[ChangeRecordField] != `{"rev":2}` {
+		t.Fatalf("missions %v change %v", ms, ch)
+	}
+	if err := b.FencedMissionBatch(ctx, "tok", "Bad Name", nil, "{}"); err == nil {
+		t.Fatal("invalid change name accepted")
+	}
+}

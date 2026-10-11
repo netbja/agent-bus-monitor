@@ -161,3 +161,21 @@ func TestHeaderHostileProject(t *testing.T) {
 		t.Fatalf("control chars in header: %q", got)
 	}
 }
+
+func TestHeaderMissionsStates(t *testing.T) {
+	for state, want := range map[string]string{"up": GlyphWorking + " missions up", "down": GlyphIdle + " missions down"} {
+		d := fullHeader()
+		d.missions = state
+		if got := headerLines(d, 200, TierWide)[0].text(); !strings.Contains(got, want) {
+			t.Errorf("missions %q: %q lacks %q", state, got, want)
+		}
+		if got := joined(headerLines(d, 60, TierNarrow)); !strings.Contains(got, " miss") {
+			t.Errorf("compact missions %q: %q", state, got)
+		}
+	}
+	d := fullHeader()
+	without := headerLines(d, 200, TierWide)[0].text()
+	if strings.Contains(without, "missions") || strings.Contains(without, "miss") {
+		t.Fatalf("absent missions still drawn: %q", without)
+	}
+}

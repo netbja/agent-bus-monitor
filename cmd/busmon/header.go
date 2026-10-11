@@ -14,6 +14,7 @@ type headerData struct {
 	project  string
 	health   health
 	dispatch string // "", "up", "down"
+	missions string // "", "up", "down": shown only when not ""
 	pilot    string // pilot-lease driver, "" = autonomous
 	waiting  string // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
 	budgets  map[string]bus.BudgetSnapshot
@@ -60,6 +61,9 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	add(Line{{Text: Preview(d.project), Role: RoleText, Bold: true}}, 3, 0).trunc = true
 	add(healthSeg(d.health, d.now, compact), 1, 0)
 	add(dispatchSeg(d.dispatch, compact), 2, 0)
+	if d.missions != "" {
+		add(missionsSeg(d.missions, compact), 2, 0)
+	}
 	if !d.health.ok && d.health.err != "" {
 		add(Line{{Text: "(" + Preview(d.health.err) + ")", Role: RoleMuted}}, 9, second)
 	}
@@ -219,4 +223,22 @@ func budgetSeg(name string, b bus.BudgetSnapshot, tier Tier) Line {
 	l = append(l, Seg{Text: sep})
 	gauge("week", b.WeeklyPct)
 	return l
+}
+
+// missionsSeg is the conductor's state, next to the dispatcher's.
+func missionsSeg(state string, compact bool) Line {
+	word := "missions"
+	if compact {
+		word = "miss"
+	}
+	if state == "up" {
+		if compact {
+			return Line{{Text: GlyphWorking + " " + word, Role: RoleOK}}
+		}
+		return Line{{Text: GlyphWorking + " " + word + " up", Role: RoleOK}}
+	}
+	if compact {
+		return Line{{Text: GlyphIdle + " " + word, Role: RoleMuted}}
+	}
+	return Line{{Text: GlyphIdle + " " + word + " down", Role: RoleMuted}}
 }

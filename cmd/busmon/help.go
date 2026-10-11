@@ -75,6 +75,7 @@ func helpText() string {
 	more("the agents may be fine; values on screen are the last ones read.")
 	row(GlyphWorking+" dispatch up", "a dispatcher holds the lease: unarmed agents are woken in their panes.")
 	row(GlyphIdle+" dispatch down", "none runs: nothing wakes an unarmed agent. ? dispatch: not measured yet.")
+	row(GlyphWorking+" missions up", "a missions conductor runs; down: a change is loaded but no conductor runs (its work is stalled).")
 	row("used", "account windows consumed per provider (session / week), shared by every agent.")
 	row("queue", "messages that would wake this agent: addressed, not wake=no, within the horizon.")
 	more(GlyphNone + " = measured zero, " + GlyphDash + " = not measured yet, N? = last read failed.")

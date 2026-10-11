@@ -9,6 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -21,6 +24,9 @@ type Git struct{ Repo string }
 
 // ErrConflict: a merge stopped on conflicts and is left in progress.
 var ErrConflict = errors.New("merge conflict")
+
+// ErrUnknownCommit: the repository answered, and the commit is not in it.
+var ErrUnknownCommit = errors.New("unknown commit")
 
 // group makes cmd a process-group leader whose whole group dies on cancel.
 func group(cmd *exec.Cmd) {
@@ -67,8 +73,13 @@ func (g Git) Tree(ctx context.Context, commit string) ([]string, error) {
 // ResolveCommit returns the full sha of rev, or an error if it names no commit.
 func (g Git) ResolveCommit(ctx context.Context, rev string) (string, error) {
 	out, err := g.run(ctx, "", "rev-parse", "--verify", "--quiet", rev+"^{commit}")
-	if err != nil {
-		return "", fmt.Errorf("commit %s not found in %s", rev, g.Repo)
+	var ee *exec.ExitError
+	switch {
+	case err == nil:
+	case errors.As(err, &ee) && ee.ExitCode() == 1: // git answered: no such commit
+		return "", fmt.Errorf("commit %s not found in %s: %w", rev, g.Repo, ErrUnknownCommit)
+	default: // git itself failed (repository missing, lock, …)
+		return "", err
 	}
 	return strings.TrimSpace(out), nil
 }
@@ -249,4 +260,44 @@ func RunTest(ctx context.Context, dir, command, logPath string, limit time.Durat
 		return false, tb.tail(), runErr
 	}
 	return true, tb.tail(), nil
+}
+
+// MissionMerge is one conductor merge read back from its trailers.
+type MissionMerge struct {
+	ID, Commit, Hash string
+	Rev              int
+}
+
+var (
+	hex40 = regexp.MustCompile(`^[0-9a-f]{40}$`) // a commit sha
+	hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`) // a mission hash (sha-256)
+)
+
+// MissionMerges returns the change's conductor merges on branch, oldest first.
+// A merge without the full trailer set, naming another change, or whose
+// Mission-Commit is not a full sha is not a conductor merge and is skipped.
+func (g Git) MissionMerges(ctx context.Context, branch, change string) ([]MissionMerge, error) {
+	format := "--format=%H%x1f%(trailers:key=Mission,valueonly)%x1f%(trailers:key=Mission-Commit,valueonly)%x1f%(trailers:key=Mission-Hash,valueonly)%x1f%(trailers:key=Mission-Rev,valueonly)%x1e"
+	out, err := g.run(ctx, "", "log", "--merges", format, branch)
+	if err != nil {
+		return nil, err
+	}
+	var merges []MissionMerge
+	for _, rec := range strings.Split(out, "\x1e") {
+		f := strings.Split(strings.TrimSpace(rec), "\x1f")
+		if len(f) != 5 {
+			continue
+		}
+		for i := range f {
+			f[i] = strings.TrimSpace(f[i])
+		}
+		c, id, ok := strings.Cut(f[1], "/")
+		rev, err := strconv.Atoi(f[4])
+		if !ok || c != change || id == "" || !hex40.MatchString(f[2]) || !hex64.MatchString(f[3]) || err != nil || rev < 1 {
+			continue // not a well-formed conductor merge: never proof of integration
+		}
+		merges = append(merges, MissionMerge{ID: id, Commit: f[2], Hash: f[3], Rev: rev})
+	}
+	slices.Reverse(merges) // git log is newest first
+	return merges, nil
 }

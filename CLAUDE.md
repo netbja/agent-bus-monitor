@@ -93,7 +93,8 @@ read from Git at a commit, a pure state machine (`Next` in `state.go`), validati
 command in its own process group, killed whole on cancel), and the conductor behind `agentbus
 missions` (`conductor.go` — one reconciliation `Pass`: request, check scope and tests, open and read
 the 4-eyes review; `integrate.go` — merge into `change/<c>`, run the change suite, `Startup` crash
-repair; `ops.go` — operator `load`/`retry`/`abort` queued on `{p}:missionops`; `run.go` — flock,
+repair; `ops.go` — operator `load` (`--force`, `--recover`)/`retry`/`reassign`/`skip`/`abort` queued
+on `{p}:missionops`; `reload.go` — revisions; `recover.go` — rebuild from merge trailers; `run.go` — flock,
 lease, inbox, tick). Its Redis primitives are in `bus/conductorkeys.go`: the `{p}:conductor` lease
 (`PX 15000`, renewed every 5s) and fenced writes on `{p}:change:{c}`, `{p}:missions:{c}`, the board,
 gates and cmd. Spec: `docs/superpowers/specs/2026-10-11-missions-design.md`.
@@ -272,7 +273,7 @@ It never touches Redis — see README "Deployment topology".
 - **The conductor is the only process that runs repository code, and the only writer of mission
   state.** `agentbus missions` runs the missions' test commands (arbitrary code from agents' commits,
   as any CI does) and every write to `{p}:change:*`/`{p}:missions:*` goes through a fenced script in
-  `bus/conductorkeys.go`; the CLI (`agentbus mission load|retry|abort`) only queues operations on
+  `bus/conductorkeys.go`; the CLI (`agentbus mission load|retry|reassign|skip|abort`) only queues operations on
   `{p}:missionops` and waits for the conductor's answer. Never add an unfenced mission write, and
   never let the dispatcher run code. The conductor writes only to `change/<change>` (validated at
   load) and never pushes or touches `main`.

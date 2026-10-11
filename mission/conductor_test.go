@@ -145,7 +145,7 @@ func TestPassChecksAndOpensReview(t *testing.T) {
 	sha := h.deliver("t1", map[string]string{"src/t1/a.go": "package t1\n"})
 	h.pass()
 	m := h.mission("t1")
-	if m.State != InReview || m.Subject != "mission:chg/t1@"+sha[:12] || m.ReviewRef != "chg-t1-1" {
+	if m.State != InReview || m.Subject != "mission:chg/t1@"+sha || m.ReviewRef != "chg-t1-1" {
 		t.Fatalf("mission: %+v", m)
 	}
 	open, _ := h.b.OpenChallenges(h.ctx, "codex")
@@ -299,7 +299,7 @@ func TestPassPublishIdempotentAfterCrash(t *testing.T) {
 	sha := h2.deliver("t1", map[string]string{"src/t1/a.go": "x"})
 	h2.b.FencedChallenge(h2.ctx, "tok", "codex", "chg-t1-1", "conductor", "opened before the crash")
 	h2.pass()
-	if got := h2.mission("t1"); got.State != InReview || got.Subject != "mission:chg/t1@"+sha[:12] {
+	if got := h2.mission("t1"); got.State != InReview || got.Subject != "mission:chg/t1@"+sha {
 		t.Fatalf("mission: %+v", got)
 	}
 	if n := countCmds(h2.cmds(), func(e bus.Event) bool { return e.Type == bus.CmdChallenge }); n != 1 {

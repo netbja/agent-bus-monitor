@@ -20,6 +20,8 @@ type busReader interface {
 	Board(ctx context.Context) (map[string]bus.BoardEntry, error)
 	Recent(ctx context.Context, kinds []string, n int) ([]bus.Event, map[string]string, error)
 	DispatchAlive(ctx context.Context) (bool, error)
+	ConductorAlive(ctx context.Context) (bool, error)
+	ChangeNames(ctx context.Context) ([]string, error)
 	Obligation(ctx context.Context, agent string, horizon time.Duration) (bus.Obligation, error)
 	Wake(ctx context.Context, agent string) (bus.WakeRecord, bool, error)
 	OpenChallenges(ctx context.Context, agent string) (map[string]string, error)
@@ -113,8 +115,10 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	// dispatcher's own 5 s tick, so they are read every wakePoll ticks.
 	wakes := make(map[string]wakeInfo, len(names))
 	dispAlive, dispErr := false, errNotPolled
+	missionsState, missionsErr := "", errNotPolled
 	if wakePollDue(tick) {
 		dispAlive, dispErr = b.DispatchAlive(pollCtx)
+		missionsState, missionsErr = missionsFact(pollCtx, b)
 		for _, n := range names {
 			var wi wakeInfo
 			if ob, err := b.Obligation(pollCtx, n, bus.DefaultHorizon); err == nil {
@@ -136,6 +140,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.pilot = driver
+	if missionsErr == nil {
+		st.missions = missionsState
+	}
 	if dispErr == nil {
 		st.dispatch = "down"
 		if dispAlive {
@@ -227,4 +234,25 @@ func agentsOrNil(snaps map[string]bus.AgentSnapshot, err error) map[string]bus.A
 		return nil
 	}
 	return snaps
+}
+
+// missionsFact is the header's missions state: "up" while a conductor holds
+// its lease, "down" when none runs but a change is loaded (work is stalled),
+// "" when the project uses no missions at all (nothing to show).
+func missionsFact(ctx context.Context, b busReader) (string, error) {
+	alive, err := b.ConductorAlive(ctx)
+	if err != nil {
+		return "", err
+	}
+	if alive {
+		return "up", nil
+	}
+	names, err := b.ChangeNames(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(names) > 0 {
+		return "down", nil
+	}
+	return "", nil
 }

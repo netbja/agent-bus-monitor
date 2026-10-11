@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 func (c *Conductor) integrationDir(change string) string {
@@ -37,6 +39,12 @@ func (c *Conductor) integrate(ctx context.Context, ch *change, m Mission, r *Mis
 	r.TestedHead, r.TestedOK = "", false
 	if err := c.transition(ctx, ch, m, r, EvIntegrateStarted, ""); err != nil {
 		return err
+	}
+	// Never merge into, or test, a worktree holding changes nobody recorded.
+	if dirty, err := c.Git.Dirty(ctx, dir); err != nil {
+		return err
+	} else if dirty {
+		return c.transition(ctx, ch, m, r, EvIntegrateFailed, "integration worktree has unrecorded changes ("+dir+"); nothing was deleted")
 	}
 	msg := MergeMessage(ch.rec.Change, m.ID, ch.rec.Rev, m.Title, r.Current.Commit, r.Hash)
 	if err := c.Git.MergeNoFF(ctx, dir, r.Current.Commit, msg); err != nil {
@@ -134,6 +142,7 @@ func (c *Conductor) repairIntegration(ctx context.Context, ch *change) error {
 	if dirty, err := c.Git.Dirty(ctx, dir); err != nil {
 		return err
 	} else if dirty {
+		blocked := false
 		for _, r := range ch.missions {
 			if r.State != Integrating {
 				continue
@@ -143,8 +152,23 @@ func (c *Conductor) repairIntegration(ctx context.Context, ch *change) error {
 				return err
 			}
 			ch.missions[r.ID] = r
+			blocked = true
+		}
+		if !blocked && !ch.rec.DirtyEscalated { // nothing to block: report it once
+			if _, err := c.Bus.FencedCmdRef(ctx, c.Store.Token, c.Self, c.EscalateTo, bus.CmdEscalation, "",
+				fmt.Sprintf("%s: the integration worktree %s has unrecorded changes; nothing was deleted and no mission integrates until it is clean", ch.rec.Change, dir), false); err != nil {
+				return err
+			}
+			ch.rec.DirtyEscalated = true
+			return c.Store.PutChange(ctx, ch.rec)
 		}
 		return nil
+	}
+	if ch.rec.DirtyEscalated { // clean again
+		ch.rec.DirtyEscalated = false
+		if err := c.Store.PutChange(ctx, ch.rec); err != nil {
+			return err
+		}
 	}
 	for _, r := range ch.missions {
 		if r.State != Integrating {

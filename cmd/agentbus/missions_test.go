@@ -112,3 +112,36 @@ func TestMissionCLIRoundTrip(t *testing.T) {
 		t.Fatalf("missions --status: %d %q", code, out.String())
 	}
 }
+
+func TestMissionCLILoadForceNeedsReason(t *testing.T) {
+	b := dialDispatchMain(t)
+	for _, args := range [][]string{{"load", "a@b", "--force"}, {"load", "a@b", "--force", "  "}, {"skip", "c/t1"}, {"reassign", "c/t1"}, {"reassign", "c/t1", "Bad Name"}} {
+		var out, errb bytes.Buffer
+		if code := runMission(context.Background(), b, "master", args, &out, &errb); code != 2 {
+			t.Errorf("%q: exit %d", args, code)
+		}
+	}
+}
+
+func TestMissionCLISkipReassignQueue(t *testing.T) {
+	code, _, errOut := mission1(t, "skip", "chg/t1", "--reason", "done by hand")
+	if code != 1 || !strings.Contains(errOut, "missions down") {
+		t.Fatalf("skip: exit %d %q", code, errOut)
+	}
+	code, _, errOut = mission1(t, "reassign", "chg/t1", "grok")
+	if code != 1 || !strings.Contains(errOut, "missions down") {
+		t.Fatalf("reassign: exit %d %q", code, errOut)
+	}
+}
+
+func TestMissionCLIRecover(t *testing.T) {
+	b := dialDispatchMain(t)
+	var out, errb bytes.Buffer
+	if code := runMission(context.Background(), b, "master", []string{"load", "--recover", "a@b", "--force", "x"}, &out, &errb); code != 2 {
+		t.Fatalf("--recover with --force: exit %d", code)
+	}
+	code, _, errOut := mission1(t, "load", "--recover", "docs/changes/chg/missions.json@HEAD")
+	if code != 1 || !strings.Contains(errOut, "missions down") {
+		t.Fatalf("--recover reached usage instead of the queue: exit %d %q", code, errOut)
+	}
+}

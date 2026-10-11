@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -18,7 +19,7 @@ import (
 
 const (
 	missionsUsage = "usage: missions [--repo DIR] [--escalate-to AGENT] | missions --status"
-	missionUsage  = "usage: mission load <path>@<commit> [--wait 30s] | mission retry <change>/<id> | mission abort <change> --reason <text> | mission status [<change>] | mission show <change>/<id>"
+	missionUsage  = "usage: mission load <path>@<commit> [--force <reason> | --recover] [--wait 30s] | mission retry <change>/<id> | mission reassign <change>/<id> <agent> | mission skip <change>/<id> --reason <text> | mission abort <change> --reason <text> | mission status [<change>] | mission show <change>/<id>"
 )
 
 // runMissions is `agentbus missions`: the conductor process, in the
@@ -101,12 +102,35 @@ func runMission(ctx context.Context, b *bus.Bus, self string, args []string, std
 		}
 		return missionShow(ctx, b, rest[0], stdout, stderr)
 	case "load":
-		if len(rest) != 1 || !strings.Contains(rest[0], "@") {
+		hasForce := slices.Contains(rest, "--force")
+		var force string
+		var recover bool
+		rest, force = extractFlag(rest, "--force")
+		rest, recover = extractBool(rest, "--recover")
+		if len(rest) != 1 || !strings.Contains(rest[0], "@") || (hasForce && strings.TrimSpace(force) == "") || (recover && hasForce) {
 			return usage()
 		}
 		opArgs = rest
+		switch {
+		case hasForce:
+			opArgs = append(opArgs, "force", force)
+		case recover:
+			opArgs = append(opArgs, "recover")
+		}
 	case "retry":
 		if len(rest) != 1 || !strings.Contains(rest[0], "/") {
+			return usage()
+		}
+		opArgs = rest
+	case "skip":
+		var reason string
+		rest, reason = extractFlag(rest, "--reason")
+		if len(rest) != 1 || !strings.Contains(rest[0], "/") || strings.TrimSpace(reason) == "" {
+			return usage()
+		}
+		opArgs = []string{rest[0], reason}
+	case "reassign":
+		if len(rest) != 2 || !strings.Contains(rest[0], "/") || !bus.ValidName(rest[1]) {
 			return usage()
 		}
 		opArgs = rest

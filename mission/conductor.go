@@ -24,7 +24,8 @@ type Conductor struct {
 	EscalateTo  string // default "master"
 	Self        string // the conductor's bus identity, "conductor"
 	TestLimit   time.Duration
-	Log         func(format string, args ...any) // optional
+	Now         func(ctx context.Context) (int64, error) // Unix ms; nil = Redis TIME
+	Log         func(format string, args ...any)         // optional
 }
 
 func (c *Conductor) logf(format string, args ...any) {
@@ -88,8 +89,22 @@ func (c *Conductor) loadChange(ctx context.Context, name string) (*change, error
 
 func (c *Conductor) passChange(ctx context.Context, name string) error {
 	ch, err := c.loadChange(ctx, name)
-	if err != nil || ch == nil || ch.rec.State != "active" {
+	if err != nil || ch == nil {
 		return err
+	}
+	if ch.rec.State != "active" {
+		// An aborted change is never advanced, but what it still owes is
+		// replayed and late replies on its attempts are still answered.
+		var errs []error
+		for id, r := range ch.missions {
+			if err := c.effects(ctx, ch, Mission{ID: id}, &r); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", id, err))
+			}
+			if err := c.notifyLateSuperseded(ctx, ch, &r); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		return errors.Join(errs...)
 	}
 	ids := make([]string, 0, len(ch.missions))
 	for id := range ch.missions {
@@ -108,10 +123,17 @@ func (c *Conductor) passChange(ctx context.Context, name string) error {
 	}
 	for _, id := range ids {
 		m, ok := ch.file.Mission(id)
-		if !ok {
+		r := ch.missions[id]
+		if !ok { // removed from the plan: replay what it still owes, never advance
+			if err := c.effects(ctx, ch, Mission{ID: id}, &r); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", id, err))
+			}
+			if err := c.notifyLateSuperseded(ctx, ch, &r); err != nil {
+				errs = append(errs, err)
+			}
+			ch.missions[id] = r
 			continue
 		}
-		r := ch.missions[id]
 		if err := c.advance(ctx, ch, m, &r); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))
 		}
@@ -149,6 +171,16 @@ func (c *Conductor) advance(ctx context.Context, ch *change, m Mission, r *Missi
 			return err
 		}
 		e := ch.board[r.Current.Task]
+		if late, err := c.pastDeadline(ctx, m, e); err != nil {
+			return err
+		} else if late && (e.State == "accepted" || e.State == "done") {
+			if r.State == Requested {
+				if err := c.transition(ctx, ch, m, r, EvAccepted, ""); err != nil {
+					return err
+				}
+			}
+			return c.transition(ctx, ch, m, r, EvTimedOut, fmt.Sprintf("no delivery within %v of acceptance", missionTimeout(m)))
+		}
 		switch e.State {
 		case "accepted":
 			if r.State == Requested {
@@ -241,7 +273,7 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 			r.History = append(r.History, Attempt{N: prev.N, Task: prev.Task, Agent: prev.Agent, Base: prev.Base,
 				Commit: prev.Commit, Branch: prev.Branch, Outcome: outcome, Reason: reason, By: by})
 		case ActOpenReview:
-			r.Subject = "mission:" + ch.rec.Change + "/" + m.ID + "@" + short(r.Current.Commit)
+			r.Subject = "mission:" + ch.rec.Change + "/" + m.ID + "@" + r.Current.Commit // the full sha: a prefix could name two commits
 			r.ReviewRef, r.ReviewOpen = r.Current.Task, false
 		case ActEscalate:
 			r.Escalated = false
@@ -251,8 +283,8 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 	}
 	if sends {
 		agent := m.Agent
-		if prev.Agent != "" {
-			agent = prev.Agent
+		if r.AssignedAgent != "" { // reassigned: every later attempt goes there
+			agent = r.AssignedAgent
 		}
 		if err := c.newAttempt(ctx, ch, m, r, agent, reason); err != nil { // persists, publishes
 			return err
@@ -263,8 +295,10 @@ func (c *Conductor) transition(ctx context.Context, ch *change, m Mission, r *Mi
 	return c.effects(ctx, ch, m, r)
 }
 
-// effects performs, idempotently, every effect the record still owes, and
-// records each one as done right after it succeeds.
+// effects performs every effect the record still owes and records each one
+// as done right after it succeeds. Effects that write to a stream (supersede
+// replies, escalations) are at least once: a crash between the XADD and the
+// flag write repeats that one effect on the next pass.
 func (c *Conductor) effects(ctx context.Context, ch *change, m Mission, r *MissionRecord) error {
 	for i := range r.History {
 		h := &r.History[i]
@@ -297,10 +331,36 @@ func (c *Conductor) effects(ctx context.Context, ch *change, m Mission, r *Missi
 			return err
 		}
 	}
+	if r.SkipBy != "" { // the ledger entry of a skip, written once
+		subject := "mission:" + ch.rec.Change + "/" + r.ID + "@skipped"
+		vs, err := c.Bus.Verdicts(ctx, subject)
+		if err != nil {
+			return fmt.Errorf("skip verdict: %w", err)
+		}
+		written := false
+		for _, v := range vs { // a crash after the XADD but before the flag write
+			// The ledger keeps a sanitised one-line Message (and the raw text in
+			// Full when they differ): compare in both forms.
+			if v.Author == r.SkipBy && (v.Full == r.SkipReason || v.Message == r.SkipReason ||
+				v.Message == bus.SanitizeReportMessage(r.SkipReason)) {
+				written = true
+			}
+		}
+		if !written {
+			if _, err := c.Bus.AppendVerdict(ctx, bus.Verdict{Subject: subject, Author: r.SkipBy, Reviewer: r.SkipBy,
+				Decision: "approve", Message: r.SkipReason}); err != nil {
+				return fmt.Errorf("skip verdict: %w", err)
+			}
+		}
+		r.SkipBy, r.SkipReason = "", ""
+		if err := c.put(ctx, ch, r); err != nil {
+			return err
+		}
+	}
 	if r.State == Blocked && !r.Escalated {
 		if _, err := c.Bus.FencedCmdRef(ctx, c.Store.Token, c.Self, c.EscalateTo, bus.CmdEscalation, "",
 			fmt.Sprintf("%s/%s blocked: %s. Next: agentbus mission retry %s/%s | agentbus mission abort %s",
-				ch.rec.Change, m.ID, r.Reason, ch.rec.Change, m.ID, ch.rec.Change), false); err != nil {
+				ch.rec.Change, r.ID, r.Reason, ch.rec.Change, r.ID, ch.rec.Change), false); err != nil {
 			return fmt.Errorf("escalate: %w", err)
 		}
 		r.Escalated = true
@@ -329,6 +389,14 @@ func (c *Conductor) newAttempt(ctx context.Context, ch *change, m Mission, r *Mi
 		return err
 	}
 	r.Attempt++
+	// A name already on the board belongs to an attempt this record no longer
+	// knows (a recover after losing Redis): never reuse it as ours.
+	for _, taken := ch.board[TaskName(ch.rec.Change, m.ID, r.Attempt)]; taken; _, taken = ch.board[TaskName(ch.rec.Change, m.ID, r.Attempt)] {
+		if r.Attempt >= 99 {
+			return fmt.Errorf("%s/%s: no free request name left (99 attempts)", ch.rec.Change, m.ID)
+		}
+		r.Attempt++
+	}
 	r.Current = Attempt{N: r.Attempt, Task: TaskName(ch.rec.Change, m.ID, r.Attempt), Agent: agent, Base: base}
 	r.Subject, r.LogPath, r.CheckTail = "", "", "" // ReviewRef stays until its gate is closed
 	r.State = Requested
@@ -455,8 +523,11 @@ func (c *Conductor) runChecks(ctx context.Context, ch *change, m Mission, r *Mis
 		return "no commit delivered (use agentbus request done <task> --commit <sha>)", nil
 	}
 	commit, err := c.Git.ResolveCommit(ctx, r.Current.Commit)
-	if err != nil {
+	if errors.Is(err, ErrUnknownCommit) {
 		return fmt.Sprintf("commit %s not found in %s", r.Current.Commit, c.Git.Repo), nil
+	}
+	if err != nil {
+		return "", err // ours, not the delivery's: retried, no attempt spent
 	}
 	r.Current.Commit = commit
 	if ok, err := c.Git.IsAncestor(ctx, r.Current.Base, commit); err != nil {
@@ -561,4 +632,40 @@ func (c *Conductor) retry(ctx context.Context, changeName, id string) error {
 	}
 	r.Rejections = 0
 	return c.transition(ctx, ch, m, &r, EvRetry, "retried by the operator")
+}
+
+const defaultMissionTimeout = 4 * time.Hour
+
+// missionTimeout is the mission's delivery timeout (validated at load).
+func missionTimeout(m Mission) time.Duration {
+	if d, err := time.ParseDuration(m.Timeout); err == nil && d > 0 {
+		return d
+	}
+	return defaultMissionTimeout
+}
+
+func (c *Conductor) now(ctx context.Context) (int64, error) {
+	if c.Now != nil {
+		return c.Now(ctx)
+	}
+	return c.Bus.ServerNowMS(ctx)
+}
+
+// pastDeadline reports whether the attempt on this board entry missed its
+// delivery deadline: still accepted after it, or delivered after it (a late
+// delivery is never checked). Each attempt is its own task, so the deadline
+// runs from its own acceptance.
+func (c *Conductor) pastDeadline(ctx context.Context, m Mission, e bus.BoardEntry) (bool, error) {
+	if e.Request == nil || e.Request.AcceptedAt == 0 {
+		return false, nil
+	}
+	deadline := e.Request.AcceptedAt + missionTimeout(m).Milliseconds()
+	switch e.State {
+	case "done":
+		return e.Request.RespondedAt > deadline, nil
+	case "accepted":
+		now, err := c.now(ctx)
+		return err == nil && now > deadline, err
+	}
+	return false, nil
 }

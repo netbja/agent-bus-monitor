@@ -54,6 +54,15 @@ assert_exit 0 "--no-dispatch template is valid TOML" -- python3 -c "import tomll
 if [[ "$body_nod" != *'name = "dispatch"'* && "$body_nod" != *"--project demonod dispatch"* ]]; then _ok "--no-dispatch omits the dispatch tab"; else _bad "--no-dispatch still wrote a dispatch tab"; fi
 assert_contains "$body_nod" "busmon --project demonod"          "--no-dispatch keeps the busmon tab"
 
+# v0.10: a missions tab runs the conductor on the project's repository
+assert_contains "$body" 'name = "missions"'                                       "missions tab"
+assert_contains "$body" "$REPO/agentbus --project demo missions --repo $projdir"  "missions tab runs the conductor on the project dir"
+run new demonom "$projdir" --no-missions >/dev/null
+body_nom="$(cat "$proj/demonom.toml")"
+assert_exit 0 "--no-missions template is valid TOML" -- python3 -c "import tomllib;tomllib.load(open('$proj/demonom.toml','rb'))"
+if [[ "$body_nom" != *'name = "missions"'* ]]; then _ok "--no-missions omits the missions tab"; else _bad "--no-missions still wrote a missions tab"; fi
+assert_contains "$body_nom" 'name = "dispatch"'                 "--no-missions keeps the dispatch tab"
+
 # no path -> working_dir defaults to $PWD
 projdir2="$(mkdir -p "$tmp/proj2" && cd "$tmp/proj2" && pwd)"
 ( cd "$projdir2" && PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$proj" "$B" new demo2 >/dev/null )

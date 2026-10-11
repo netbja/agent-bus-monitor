@@ -214,6 +214,32 @@ A request's `blocked` state is not your agent `status`: the first says this one 
 move and why, the second is reserved for an open 4-eyes gate. You can be blocked on a
 request while you are `working` on something else.
 
+## Missions — when a request body starts with `mission <change>/<id>`
+
+A mission is one task of a larger change, run by the conductor (`agentbus missions`). The request
+gives you everything by reference: `base=<sha>`, the brief as `<path>@<commit>#<anchor>`, and the
+exact delivery command.
+
+1. Accept it: `agentbus request accept <task>`.
+2. Read the brief **at that commit**: `git show <commit>:<path>` (not the working copy).
+3. Work in your own worktree, on a branch from the given base:
+   `git worktree add -b mission/<task> <dir> <base>`.
+4. Commit only inside the mission's allowed paths; anything else gets the delivery rejected
+   (renames count on both sides). Run the mission's test command yourself before delivering.
+5. Deliver: `agentbus request done <task> --commit <sha> --branch mission/<task> "<summary>"`.
+   A `done` without `--commit` is rejected.
+
+The conductor checks scope and tests, then a reviewer gives a verdict. A rejection comes back as a
+**new** request (`<change>-<id>-<n+1>`) with the reason; start again from its base. A reply
+**"superseded by …: stop, do not deliver"** (or "cancelled") means exactly that — stop work on the
+old task and deliver nothing for it. A mission you accepted and did not deliver within its timeout
+(4h by default) is blocked and escalated to master.
+
+**As a reviewer**, you receive a challenge with the exact line to answer; use it as given, with the
+full-sha subject and the `--ref`:
+`agentbus verdict --subject mission:<change>/<id>@<sha> --ref <task> <agent> <approve|reject> "<why>"`.
+Only the assigned reviewer's verdict on that exact commit counts.
+
 ## What the subscribe JSON now tells you about a request
 
 Where relevant, a `cmd` event carries `task`, `expires_at`, `delivery`, `duplicate_possible`

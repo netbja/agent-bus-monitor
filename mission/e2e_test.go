@@ -27,6 +27,7 @@ type team struct {
 	mu    sync.Mutex
 	done  map[string]bool // tasks delivered
 	voted map[string]bool // subjects approved
+	idle  map[string]bool // mission ids nobody works on
 }
 
 func (tm *team) round(ctx context.Context) {
@@ -41,7 +42,7 @@ func (tm *team) round(ctx context.Context) {
 	for _, m := range ms {
 		task := m.Current.Task
 		e, ok := board[task]
-		if !ok || tm.done[task] || (e.State != "requested" && e.State != "accepted") {
+		if !ok || tm.done[task] || tm.idle[m.ID] || (e.State != "requested" && e.State != "accepted") {
 			continue
 		}
 		if e.State == "requested" && tm.b.AcceptRequest(ctx, task, m.Current.Agent) != nil {
@@ -168,5 +169,59 @@ func TestEndToEndRestartMidCheck(t *testing.T) {
 	out, _ := gitRun(cfg.Repo, "log", "--merges", "--format=%(trailers:key=Mission,valueonly)", "change/chg")
 	if n := strings.Count(out, "chg/b"); n != 1 {
 		t.Fatalf("b integrated %d times:\n%s", n, out)
+	}
+}
+
+// op queues an operator command on a running conductor and waits for it.
+func runOp(t *testing.T, b *bus.Bus, op string, args ...string) string {
+	t.Helper()
+	id, err := b.SubmitMissionOp(context.Background(), "master", op, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok, msg, found, err := b.WaitMissionOpResult(context.Background(), id, 10*time.Second)
+	if err != nil || !found || !ok {
+		t.Fatalf("%s %v: %v %q %v %v", op, args, ok, msg, found, err)
+	}
+	return msg
+}
+
+// Slice 2 end to end: a and b are integrated while nobody takes c; the plan is
+// revised (c's title), which needs --force since c is in flight; then c is
+// skipped. Everything ends integrated, under rev 2, with two merges.
+func TestEndToEndReloadAndSkip(t *testing.T) {
+	b, cfg, commit, tm := e2eSetup(t, "true")
+	tm.idle = map[string]bool{"c": true}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startRun(t, ctx, b, cfg)
+	defer func() { cancel(); <-done }()
+	loadViaOp(t, b, commit)
+	go tm.play(ctx)
+	waitFor(t, 60*time.Second, "c requested", func() bool {
+		ms, _ := Store{B: b}.Missions(context.Background(), "chg")
+		return ms["a"].State == Integrated && ms["b"].State == Integrated && ms["c"].State == Requested
+	})
+	revised := strings.Replace(strings.Replace(e2eMissions, "BTEST", "true", 1), `"title": "C"`, `"title": "C, revised"`, 1)
+	g := Git{Repo: cfg.Repo}
+	commitFile(t, cfg.Repo, "docs/changes/chg/missions.json", revised, "revise c")
+	head, _ := g.ResolveCommit(context.Background(), "HEAD")
+	if msg := runOp(t, b, "load", "docs/changes/chg/missions.json@"+head, "force", "c reworded"); !strings.HasPrefix(msg, "reloaded chg rev 2: 1 changed") {
+		t.Fatalf("reload: %q", msg)
+	}
+	waitFor(t, 30*time.Second, "c requested again", func() bool {
+		ms, _ := Store{B: b}.Missions(context.Background(), "chg")
+		return ms["c"].State == Requested && ms["c"].Attempt == 2
+	})
+	runOp(t, b, "skip", "chg/c", "folded into b")
+	waitFor(t, 30*time.Second, "all integrated", func() bool { return allIntegrated(b) })
+	if ch, _, _ := (Store{B: b}).Change(context.Background(), "chg"); ch.Rev != 2 {
+		t.Fatalf("rev %d", ch.Rev)
+	}
+	out, _ := gitRun(cfg.Repo, "log", "--merges", "--format=%(trailers:key=Mission,valueonly)", "change/chg")
+	if n := len(lines(out)); n != 2 {
+		t.Fatalf("%d merges, want 2:\n%s", n, out)
+	}
+	if vs, _ := b.Verdicts(context.Background(), "mission:chg/c@skipped"); len(vs) != 1 {
+		t.Fatalf("skip ledger: %+v", vs)
 	}
 }

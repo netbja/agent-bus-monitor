@@ -250,7 +250,7 @@ func TestOpLoadValidates(t *testing.T) {
 		t.Fatalf("second load: %v %q", ok, msg)
 	}
 	other := commitFile(t, c.Git.Repo, "docs/changes/chg/missions.json", strings.Replace(missionsFile("true"), "First", "Changed", 1), "edit")
-	if ok, msg := c.HandleOp(ctx, bus.MissionOp{Op: "load", Args: []string{"docs/changes/chg/missions.json@" + other}}); ok || !strings.Contains(msg, "slice 1") {
+	if ok, msg := c.HandleOp(ctx, bus.MissionOp{Op: "load", Args: []string{"docs/changes/chg/missions.json@" + other}}); !ok || !strings.HasPrefix(msg, "reloaded chg rev 2:") {
 		t.Fatalf("reload: %v %q", ok, msg)
 	}
 	if ok, _ := c.HandleOp(ctx, bus.MissionOp{Op: "load", Args: []string{"no-commit-here"}}); ok {
@@ -310,6 +310,7 @@ func TestOpAbort(t *testing.T) {
 // untracked file in the integration worktree makes git refuse the merge; the
 // live conductor repairs on its next pass: blocked, escalated, file kept.
 func TestLiveConductorRepairsFailedIntegration(t *testing.T) {
+	// A dirty worktree is now refused before any merge: blocked at once.
 	h := newHarness(t, "true")
 	h.toReview(map[string]string{"src/t1/a.go": "mission\n"})
 	h.ensureIntegrationWorktree()
@@ -317,11 +318,7 @@ func TestLiveConductorRepairsFailedIntegration(t *testing.T) {
 	os.MkdirAll(filepath.Dir(squatter), 0o755)
 	os.WriteFile(squatter, []byte("local\n"), 0o644)
 	h.verdict(h.mission("t1").Subject, "codex", "approve")
-	h.c.Pass(h.ctx) // the merge is refused: not a conflict
-	if m := h.mission("t1"); m.State != Integrating {
-		t.Fatalf("setup: t1 is %s", m.State)
-	}
-	h.c.Pass(h.ctx) // no restart: the live pass must repair it
+	h.c.Pass(h.ctx)
 	if m := h.mission("t1"); m.State != Blocked || !strings.Contains(m.Reason, "unrecorded changes") {
 		t.Fatalf("t1 after a live pass: %+v", m)
 	}
@@ -330,5 +327,17 @@ func TestLiveConductorRepairsFailedIntegration(t *testing.T) {
 	}
 	if n := countCmds(h.cmds(), func(e bus.Event) bool { return e.Type == bus.CmdEscalation }); n != 1 {
 		t.Fatalf("%d escalations", n)
+	}
+
+	// A mission left integrating (an interrupted merge) is resumed by a live
+	// pass, without a restart.
+	h2 := newHarness(t, "true")
+	h2.toReview(map[string]string{"src/t1/a.go": "x"})
+	h2.ensureIntegrationWorktree()
+	h2.setState("t1", Integrating, func(m *MissionRecord) { m.PreHead = h2.branchHead() })
+	h2.pass()
+	h2.pass()
+	if m := h2.mission("t1"); m.State != Integrated {
+		t.Fatalf("interrupted integration not resumed live: %+v", m)
 	}
 }

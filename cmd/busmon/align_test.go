@@ -24,7 +24,7 @@ const hostileText = "日本語の説明 👩\u200d💻 e\u0301 ❤\uFE0F\ttab\nn
 func hostileShared(now time.Time, down bool) *shared {
 	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{
 		"anthropic": {SessionPct: 80, WeeklyPct: 95}, "openai": {SessionPct: 10, WeeklyPct: 20}},
-		board: map[string]bus.BoardEntry{}, health: health{ok: true, since: now}, pilot: "a00", dispatch: "up"}
+		board: map[string]bus.BoardEntry{}, health: health{ok: true, since: now}, pilot: "a00", dispatch: "up", missions: "down"}
 	states := []string{"working", "idle", "blocked", "done", "", "review"}
 	for i := 0; i < 20; i++ {
 		name := fmt.Sprintf("a%02d%s", i, strings.Repeat("x", 29))
