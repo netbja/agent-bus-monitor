@@ -97,6 +97,15 @@ func (c *Conductor) passChange(ctx context.Context, name string) error {
 	}
 	sort.Strings(ids)
 	var errs []error
+	for _, r := range ch.missions {
+		if r.State == Integrating { // left by a failed integration: repair now
+			ch.integrated = true
+			if err := c.repairIntegration(ctx, ch); err != nil {
+				errs = append(errs, fmt.Errorf("repair integration: %w", err))
+			}
+			break
+		}
+	}
 	for _, id := range ids {
 		m, ok := ch.file.Mission(id)
 		if !ok {

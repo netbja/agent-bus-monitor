@@ -304,3 +304,31 @@ func TestOpAbort(t *testing.T) {
 		t.Fatal("unknown op accepted")
 	}
 }
+
+// Final review (Kimi minor 1, regraded Important): an integration that fails
+// for another reason than a conflict must not wait for a restart. Here an
+// untracked file in the integration worktree makes git refuse the merge; the
+// live conductor repairs on its next pass: blocked, escalated, file kept.
+func TestLiveConductorRepairsFailedIntegration(t *testing.T) {
+	h := newHarness(t, "true")
+	h.toReview(map[string]string{"src/t1/a.go": "mission\n"})
+	h.ensureIntegrationWorktree()
+	squatter := filepath.Join(h.integrationDir(), "src/t1/a.go")
+	os.MkdirAll(filepath.Dir(squatter), 0o755)
+	os.WriteFile(squatter, []byte("local\n"), 0o644)
+	h.verdict(h.mission("t1").Subject, "codex", "approve")
+	h.c.Pass(h.ctx) // the merge is refused: not a conflict
+	if m := h.mission("t1"); m.State != Integrating {
+		t.Fatalf("setup: t1 is %s", m.State)
+	}
+	h.c.Pass(h.ctx) // no restart: the live pass must repair it
+	if m := h.mission("t1"); m.State != Blocked || !strings.Contains(m.Reason, "unrecorded changes") {
+		t.Fatalf("t1 after a live pass: %+v", m)
+	}
+	if _, err := os.Stat(squatter); err != nil {
+		t.Fatal("the local file was deleted")
+	}
+	if n := countCmds(h.cmds(), func(e bus.Event) bool { return e.Type == bus.CmdEscalation }); n != 1 {
+		t.Fatalf("%d escalations", n)
+	}
+}

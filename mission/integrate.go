@@ -112,7 +112,15 @@ func (c *Conductor) startupChange(ctx context.Context, name string) error {
 			ch.missions[id] = r
 		}
 	}
-	dir := c.integrationDir(name)
+	return c.repairIntegration(ctx, ch)
+}
+
+// repairIntegration brings the integration worktree back to a known state and
+// resumes every mission left integrating: at startup, and on any pass that
+// finds one (an integration that failed for another reason than a conflict
+// must not wait for a restart).
+func (c *Conductor) repairIntegration(ctx context.Context, ch *change) error {
+	dir := c.integrationDir(ch.rec.Change)
 	if _, err := os.Stat(dir); err != nil {
 		return nil // never integrated anything: nothing to repair
 	}
@@ -134,6 +142,7 @@ func (c *Conductor) startupChange(ctx context.Context, name string) error {
 			if err := c.transition(ctx, ch, m, &r, EvIntegrateFailed, "integration worktree has unrecorded changes ("+dir+"); nothing was deleted"); err != nil {
 				return err
 			}
+			ch.missions[r.ID] = r
 		}
 		return nil
 	}
@@ -145,6 +154,7 @@ func (c *Conductor) startupChange(ctx context.Context, name string) error {
 		if err := c.resumeIntegration(ctx, ch, m, &r, dir); err != nil {
 			return err
 		}
+		ch.missions[r.ID] = r
 	}
 	return nil
 }
