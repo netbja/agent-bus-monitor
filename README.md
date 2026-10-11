@@ -128,6 +128,10 @@ go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus
 
 > **Agents:** a copy-paste command reference (with the flag/positional traps that
 > cause retries) lives in [`docs/AGENT-BUS-GUIDE.md`](docs/AGENT-BUS-GUIDE.md).
+>
+> **Operators / Getting Started:** A step-by-step operational guide for setup, herdr,
+> herdr-plus and workflows is available in [English](docs/OPERATIONAL-GUIDE.md) and
+> [French](docs/OPERATIONAL-GUIDE.fr.md).
 
 ```bash
 # Set project once in the shell (or pass --project on each call):
