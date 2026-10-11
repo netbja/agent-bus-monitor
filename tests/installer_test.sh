@@ -48,7 +48,9 @@ assert_eq "$(ls "$T/cfg/herdr" | grep -c '^config.toml.bak.')" "1" "herdr config
 assert_contains "$inst_out" "warning" "warnings are counted in the summary"
 
 cp "$T/cfg/herdr/config.toml" "$T/config.after"
-run_install >/dev/null; rc=$?
+second_out="$(run_install)"; rc=$?
+# This step failed once under load in a change suite, unexplained: keep the evidence next time.
+[[ "$rc" == 0 ]] || { echo "  second install output (rc=$rc):"; printf "%s\n" "$second_out" | tail -30 | sed "s/^/    /"; }
 assert_eq "$rc" "0" "second install exits 0"
 assert_eq "$(cmp -s "$T/config.after" "$T/cfg/herdr/config.toml" && echo same)" "same" "second install leaves herdr config alone"
 

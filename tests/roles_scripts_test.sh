@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# End-to-end checks of the role scripts (agent-launch, agent-spawn, bootstrap,
+# link-role-skills.sh) over `agentbus roles`, with fake clients: never a model, never the bus.
+# Ported from the former tests/test_role_config.py; the unit cases live in rolecfg/.
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$DIR/.." && pwd)"
+source "$DIR/lib.sh"
+
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+root="$T/agent profiles"
+mkdir -p "$root/skills/test-skill" "$root/bin"
+echo '# Test skill' > "$root/skills/test-skill/SKILL.md"
+printf 'ROLE INSTRUCTIONS: review $(touch MUST_NOT_EXIST) `literal`\n' > "$root/coder.md"
+for c in claude codex kimi; do
+  cat > "$root/bin/$c" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == --help ]]; then echo '--model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan'; exit 0; fi
+echo "ARGS $*"
+env | grep -E '^(AGENT_BUS_[A-Z_]+|ROLES_TOML|ANTHROPIC_API_KEY)=' | sort
+exit "${FAKE_EXIT:-0}"
+EOF
+  chmod +x "$root/bin/$c"
+done
+manifest="$root/roles.toml"
+config() { # <client> [extra roles toml]
+  printf 'schema_version = 2\n[defaults]\nprofile = "main"\n[profiles.main]\nclient = "%s"\nprovider = "test-provider"\nmodel = "test-model"\n[roles.coder]\ntier = "boot"\nskills = ["test-skill"]\n%s\n' "$1" "${2:-}" > "$manifest"
+}
+export ROLES_TOML="$manifest" ROLES_DIR="$root" REPO_SKILLS="$root/skills" POCOCK_SKILLS_ROOT="$root/pocock" \
+  AGENT_LAUNCH_CACHE="$root/cache" SKILLS_DEST="$root/installed" PATH="$root/bin:$PATH"
+L="$REPO/scripts/agent-launch"
+
+# Billing guard: ANTHROPIC_API_KEY dropped for claude-code only; the client's exit code propagates (exec)
+for c in codex kimi-cli claude-code; do
+  config "$c"
+  out="$(ANTHROPIC_API_KEY=key "$L" coder demo 2>&1)"
+  if [[ "$c" == claude-code ]]; then
+    assert_eq "$([[ "$out" == *ANTHROPIC_API_KEY=* ]] && echo kept || echo dropped)" "dropped" "$c: API key dropped"
+  else
+    assert_contains "$out" "ANTHROPIC_API_KEY=key" "$c: API key kept"
+  fi
+done
+assert_exit 7 "the client's exit code propagates" -- env FAKE_EXIT=7 "$L" coder demo
+out="$(ANTHROPIC_API_KEY=key AGENT_LAUNCH_KEEP_API_KEY=1 "$L" coder demo 2>&1)"
+assert_contains "$out" "ANTHROPIC_API_KEY=key" "AGENT_LAUNCH_KEEP_API_KEY=1 keeps it"
+assert_contains "$out" "ROLES_TOML=$manifest" "the client gets the resolved manifest"
+assert_eq "$([[ -e "$root/MUST_NOT_EXIST" ]] && echo ran || echo inert)" "inert" "the role prompt is never run by a shell"
+
+# A bad option shape fails cleanly
+config codex '[profiles.main.options]
+sandbox = {}'
+err="$("$L" coder demo 2>&1)"; rc=$?
+assert_eq "$rc" "1" "a table where a string belongs exits 1"
+assert_contains "$err" "agent roles: codex option sandbox must be a non-empty string" "and says why"
+
+# agent-spawn quotes the manifest and refuses an injected project name
+config claude-code
+out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo 2>&1)"; rc=$?
+assert_eq "$rc" "0" "agent-spawn dry run exits 0"
+assert_contains "$out" "$(printf '%q' "ROLES_TOML=$manifest")" "the manifest path is shell-quoted"
+assert_exit 1 "an injected project name is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder 'demo;touch injected'"
+assert_eq "$([[ -e "$root/injected" ]] && echo yes || echo no)" "no" "nothing was injected"
+
+# bootstrap writes a template whose tab command runs the launcher with the selected manifest
+printf '#!/bin/sh\nexit 0\n' > "$root/bin/docker"; printf '#!/bin/sh\nexit 0\n' > "$root/bin/herdr"; chmod +x "$root/bin/docker" "$root/bin/herdr"
+project="$root/project \"quoted\" \$literal 🧪"; mkdir -p "$project"
+out="$(HERDR_PLUS_PROJECTS_DIR="$root/templates" HERDR_PLUS_PATH="$root/absent-plugin" "$REPO/scripts/bootstrap" new demo "$project" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "bootstrap with a hostile project path exits 0"
+tpl="$root/templates/demo.toml"
+assert_exit 0 "the template is valid TOML" -- "$AGENTBUS_BIN" roles check-toml "$tpl"
+cmd="$(sed -n 's/^command = "\(.*agent-launch.*\)"$/\1/p' "$tpl" | head -1 | sed 's/\\"/"/g; s/\\\\/\\/g')"
+assert_contains "$cmd" "$(printf '%s' "ROLES_TOML=$manifest" | sed "s/'/'\"'\"'/g")" "the tab command carries the manifest"
+out="$(cd "$project" && bash -c "$cmd" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "the generated tab command runs"
+assert_contains "$out" "ROLES_TOML=$manifest" "and launches with the selected manifest"
+
+# Skill links: preflight before any write, never over a real directory, idempotent, per client
+export SKILLS_DEST="$root/fresh-dest"; rm -f "$root/skills/test-skill/user-file"
+config claude-code '[roles.reviewer]
+tier = "pop"
+skills = ["missing-skill"]'
+assert_exit 1 "a missing skill stops the install" -- "$REPO/scripts/link-role-skills.sh"
+assert_eq "$([[ -e "$SKILLS_DEST" ]] && echo yes || echo no)" "no" "and nothing was linked"
+config claude-code
+mkdir -p "$SKILLS_DEST/test-skill"; echo preserve > "$SKILLS_DEST/test-skill/user-file"
+assert_exit 1 "a real directory in the way stops the install" -- "$REPO/scripts/link-role-skills.sh"
+assert_eq "$(cat "$SKILLS_DEST/test-skill/user-file")" "preserve" "and it is left alone"
+config claude-code '[profiles.review]
+client = "kimi-cli"
+provider = "moonshot"
+model = "alias"
+[roles.reviewer]
+profile = "review"
+tier = "pop"
+skills = ["test-skill"]'
+home="$root/home"; mkdir -p "$home"
+env -u SKILLS_DEST HOME="$home" "$REPO/scripts/link-role-skills.sh" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "0" "install for two clients exits 0"
+ino() { stat -c %i "$1" 2>/dev/null || stat -f %i "$1"; }
+before="$(ino "$home/.claude/skills/test-skill") $(ino "$home/.agents/skills/test-skill")"
+env -u SKILLS_DEST HOME="$home" "$REPO/scripts/link-role-skills.sh" >/dev/null 2>&1
+after="$(ino "$home/.claude/skills/test-skill") $(ino "$home/.agents/skills/test-skill")"
+assert_eq "$after" "$before" "a second install rewrites nothing"
+for d in .claude/skills .agents/skills; do
+  assert_eq "$(cd "$home/$d/test-skill" && pwd -P)" "$(cd "$root/skills/test-skill" && pwd -P)" "$d/test-skill points at the skill"
+done
+finish

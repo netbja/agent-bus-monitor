@@ -169,7 +169,9 @@ go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus
 ## Use it
 
 `AGENT_BUS_PROJECT` (or `--project <p>`) is required for all commands except `agentbus mem`
-([shared memory](#shared-memory-agentbus-mem), which works on files only).
+([shared memory](#shared-memory-agentbus-mem), which works on files only) and `agentbus roles`
+(the role manifest the scripts use: `validate`, `tier`, `field`, `launch`, `install`, `template`;
+no Python any more).
 
 > **Agents:** a copy-paste command reference (with the flag/positional traps that
 > cause retries) lives in [`docs/AGENT-BUS-GUIDE.md`](docs/AGENT-BUS-GUIDE.md).
@@ -590,7 +592,7 @@ provider configuration and extension adapters.
   master to reset its context when it saturates — **notify-only**, it never clears the master's pane.
 
 Design/rationale live in `docs/superpowers/specs/2026-07-16-master-bootstrap-design.md`. Tests are a
-dependency-free bash/Python suite: `bash tests/run.sh` (see **One-time setup** above for prerequisites).
+bash suite (it builds `agentbus` once): `bash tests/run.sh` (see **One-time setup** above for prerequisites).
 
 ## Master skill
 
