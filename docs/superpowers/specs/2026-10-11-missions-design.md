@@ -207,8 +207,9 @@ reload) closes the previous one. The protocol is precise:
 1. The mission record marks the old task `superseded`. The record's `current_task` is the
    only task whose `accept` or `done` the conductor acts on.
 2. The board entry of the old task is set to state `superseded` through a fenced write. The
-   request metadata is left as it was. busmon's waiting count only counts `requested` and
-   `accepted`, so a superseded request stops being shown as waiting.
+   request metadata is left as it was. busmon counts every tracked request whose state is
+   not `done` as waiting (`request.waiting()` in `cmd/busmon/tracking.go`). Slice 1 therefore
+   also excludes `superseded` there, so a superseded request stops being shown as waiting.
 3. The conductor sends one `FencedCmd` to the old agent:
    - type `reply`;
    - `ref` set to the old request's thread (`RequestInfo.Thread`);
