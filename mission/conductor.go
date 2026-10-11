@@ -339,7 +339,10 @@ func (c *Conductor) effects(ctx context.Context, ch *change, m Mission, r *Missi
 		}
 		written := false
 		for _, v := range vs { // a crash after the XADD but before the flag write
-			if v.Author == r.SkipBy && v.Message == r.SkipReason {
+			// The ledger keeps a sanitised one-line Message (and the raw text in
+			// Full when they differ): compare in both forms.
+			if v.Author == r.SkipBy && (v.Full == r.SkipReason || v.Message == r.SkipReason ||
+				v.Message == bus.SanitizeReportMessage(r.SkipReason)) {
 				written = true
 			}
 		}

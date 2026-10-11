@@ -129,3 +129,16 @@ func TestSkipVerdictNotDuplicated(t *testing.T) {
 		t.Fatal("flag not cleared")
 	}
 }
+
+// Final review (agy): the ledger stores a sanitised one-line message (and the
+// raw text in Full); a multi-line reason must still be recognised as written.
+func TestSkipVerdictNotDuplicatedMultiline(t *testing.T) {
+	h := newHarness(t, "true")
+	reason := "manual workaround:\n- step 1   checked"
+	h.b.AppendVerdict(h.ctx, bus.Verdict{Subject: "mission:chg/t1@skipped", Author: "master", Reviewer: "master", Decision: "approve", Message: reason})
+	h.setState("t1", Integrated, func(m *MissionRecord) { m.SkipBy, m.SkipReason = "master", reason })
+	h.pass()
+	if vs, _ := h.b.Verdicts(h.ctx, "mission:chg/t1@skipped"); len(vs) != 1 {
+		t.Fatalf("%d ledger entries, want 1", len(vs))
+	}
+}

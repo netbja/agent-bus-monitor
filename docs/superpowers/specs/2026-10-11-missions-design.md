@@ -587,3 +587,13 @@ findings are fixed. Six minor findings remain open:
   - effects are documented as at least once;
   - an integration never runs in a dirty worktree;
   - a dirty worktree is reported once at startup.
+
+Minors left after the slice-2 reviews (Codex checkpoints, agy final review):
+
+- `abort` iterates missions in map order. Every mission is still processed, and the change is
+  written only if all succeed, but sorting the ids would make the partial state of a failed abort
+  deterministic.
+- `newAttempt` bounds attempts at 99 only while skipping taken names. Past 99, a request name is
+  still a valid bus name (at most 29 characters), but it no longer matches the documented bound.
+- There is no injected mid-script failure test for `FencedMissionBatch`. The Lua script is atomic
+  by construction, and the lease-refusal case is tested.
