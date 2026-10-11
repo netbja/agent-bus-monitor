@@ -37,6 +37,7 @@
 //	agentbus --project P dispatch  --status     # print "dispatch up" (exit 0) or "dispatch down" (exit 1)
 //	agentbus --project P request [--json] | send <task> <target> [--ref T] [--ttl 5m] <body>
 //	agentbus --project P request accept <task> | block <task> <reason> | done <task> <reply>
+//	agentbus roles  <validate|exists|tier|field|launch|install|template|check-toml> ...  # role manifest (scripts), no project/broker
 //	agentbus limits                # writer size/retention limits, no broker needed
 //	agentbus version               # print the bus protocol version (no project/broker needed)
 //	agentbus --host <host> ...
@@ -91,6 +92,11 @@ func main() {
 		wd, _ := os.Getwd()
 		os.Exit(runMem(args[1:], os.Getenv, wd, time.Now(), os.Stdout, os.Stderr))
 	}
+	// roles reads the role manifest (the scripts' launcher): no project, no
+	// broker. launch replaces this process with the client.
+	if len(args) >= 1 && args[0] == "roles" {
+		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
+	}
 	// version reads a compile-time constant — no project, no broker. Handle it
 	// before the project check and before bus.Connect.
 	if len(args) >= 1 && args[0] == "limits" {
@@ -106,7 +112,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|limits|mem|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|limits|mem|roles|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")

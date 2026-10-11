@@ -1,11 +1,9 @@
 package rolecfg
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -232,12 +230,10 @@ func cacheFile(env []string, text, suffix string) (string, error) {
 	return target, os.Rename(tmp.Name(), target)
 }
 
+// jsonString is Python's json.dumps of one string (codex -c values).
 func jsonString(s string) string {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	_ = enc.Encode(s)
-	return strings.TrimSuffix(b.String(), "\n")
+	q, _ := pyJSON(s) // Python json.dumps: ASCII escapes
+	return q
 }
 
 // build is Python's build(): the client command line. dry replaces the
