@@ -1,0 +1,32 @@
+{
+  "change": "roles-go",
+  "base": "main",
+  "branch": "change/roles-go",
+  "reviewer": "claude",
+  "test": "go build ./... && go vet ./... && go test ./... -count=1 && bash tests/run.sh",
+  "max_attempts": 3,
+  "missions": [
+    { "id": "t1", "title": "rolecfg: load, validate and resolve the role manifest",
+      "agent": "codex", "reviewer": "claude",
+      "allowed_paths": ["rolecfg/config.go", "rolecfg/config_test.go", "rolecfg/testdata/**", "go.mod", "go.sum"],
+      "test": "go vet ./rolecfg/ && go test ./rolecfg/ -count=1", "timeout": "4h",
+      "brief": "brief.md#t1" },
+    { "id": "t2", "title": "rolecfg: prompt, cache, client command and launch",
+      "agent": "claude", "reviewer": "codex", "depends_on": ["t1"],
+      "allowed_paths": ["rolecfg/launch.go", "rolecfg/launch_test.go", "rolecfg/testdata/**"],
+      "test": "go vet ./rolecfg/ && go test ./rolecfg/ -count=1", "timeout": "4h",
+      "brief": "brief.md#t2" },
+    { "id": "t3", "title": "rolecfg: skill links and the herdr-plus template",
+      "agent": "codex", "reviewer": "claude", "depends_on": ["t1"],
+      "allowed_paths": ["rolecfg/skills.go", "rolecfg/skills_test.go", "rolecfg/template.go", "rolecfg/template_test.go", "rolecfg/testdata/**"],
+      "test": "go vet ./rolecfg/ && go test ./rolecfg/ -count=1", "timeout": "4h",
+      "brief": "brief.md#t3" },
+    { "id": "t4", "title": "agentbus roles; scripts switched to Go; Python removed",
+      "agent": "claude", "reviewer": "codex", "depends_on": ["t2", "t3"],
+      "allowed_paths": ["rolecfg/**", "cmd/agentbus/roles.go", "cmd/agentbus/roles_test.go", "cmd/agentbus/main.go",
+        "scripts/**", "tests/**", "install.sh", "README.md", "CLAUDE.md", "AGENTS.md",
+        "docs/memory/decisions/2026-09-27-provider-neutral-security.md", "docs/releases/**"],
+      "test": "go build ./... && go vet ./... && go test ./... -count=1 && bash tests/run.sh", "timeout": "4h",
+      "brief": "brief.md#t4" }
+  ]
+}
