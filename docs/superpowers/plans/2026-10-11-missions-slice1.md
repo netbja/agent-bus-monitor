@@ -28,7 +28,7 @@
   - attempts are 1 to 99.
 - Verdict subject: `mission:<change>/<id>@<sha12>`. The conductor's bus identity: `conductor`. The escalation target defaults to `master`.
 - Lease: `{p}:conductor`, `PX 15000`, renewed every 5 s. Tick: 2 s. Check test limit: 20 min. Log tail on the bus: the last 40 lines, at most 4 KiB.
-- Local state root: `~/.local/state/agentbus/<p>/<c>/` holds `conductor.lock`, `integration/`, `check-<task>/` and `logs/`. `XDG_STATE_HOME` overrides `~/.local/state`.
+- State paths (one convention everywhere): `StateHome` = `$XDG_STATE_HOME/agentbus` (default `~/.local/state/agentbus`); `ProjectRoot` = `StateHome/<p>`, which holds `conductor.lock` (the conductor is per project, so its lock is too; this refines spec §5.2, which placed it per change); `ChangeRoot` = `ProjectRoot/<c>`, which holds `integration/`, `check-<task>/` and `logs/`. `XDG_STATE_HOME` overrides `~/.local/state`.
 - Defaults: `base` `main`, `branch` `change/<change>`, `max_attempts` 3.
 - Tests use only `AGENTBUS_TEST_REDIS_URL` (the isolated broker); Redis cases skip without it. Git tests use `t.TempDir()` repositories.
 - No Python. User-facing text in English. Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
@@ -130,7 +130,7 @@ func DependsTransitively(f File, a, b string) bool
 `Validate` also checks that `TaskName(change, id, 99)` passes `bus.ValidName` for every mission. `tree` is the repository's file list at the loaded commit, passed in so `Validate` stays pure.
 
 - [ ] **Step 1: Failing tests**:
-  - `TestParseDefaults`: `base` becomes `main`, `branch` becomes `change/<c>`, and `max_attempts` becomes 3.
+  - `TestParseDefaults`: `base` becomes `main`, `branch` becomes `change/<c>`, and `max_attempts` becomes 3. `TestValidateBranchConfined`: `branch` other than exactly `change/<change>` (e.g. `main`, `change/other`, `feature/x`) is refused, and so is `base == branch`. **The conductor writes only to `change/<change>`** (Codex C1).
   - `TestValidateRefusals`: a table with one fixture per rule. The rules are: unknown field, duplicate id, unknown dependency, cycle `a→b→a`, a `ValidName` failure on an agent, reviewer == agent, a missing brief, an upper-case id, a 17-character change, overlapping `allowed_paths` without a dependency, and an empty `allowed_paths`. Each asserts that the error names the offending mission.
   - `TestOverlapOrderedIsAllowed`: the same paths with `depends_on` are accepted.
   - `TestMatchPath`, as a table:
@@ -159,7 +159,7 @@ func DependsTransitively(f File, a, b string) bool
 type State string // pending ready requested accepted delivered checking in_review approved integrating integrated rejected blocked aborted
 type Event string // deps_integrated request_sent accepted agent_blocked delivered check_started check_failed check_passed approved review_rejected integrate_started integrated integrate_failed retry abort
 type Action string // send_request supersede_attempt run_check open_review resolve_review integrate escalate
-type Ctx struct{ RejectionsLeft int } // max_attempts − rejections so far in this round
+type Ctx struct{ AttemptsLeft int } // max_attempts − rejections in this round, counted AFTER the current rejection
 func Next(s State, ev Event, c Ctx) (State, []Action, error) // error = event not allowed in s
 ```
 The transition table is exact. Any pair not listed returns an error and leaves the state unchanged.
@@ -173,9 +173,9 @@ The transition table is exact. Any pair not listed returns an error and leaves t
 | accepted | delivered | delivered | — |
 | delivered | check_started | checking | — |
 | checking | check_passed | in_review | open_review |
-| checking | check_failed | requested if RejectionsLeft > 1, else blocked | supersede_attempt + send_request, or escalate |
+| checking | check_failed | requested if AttemptsLeft > 0, else blocked | supersede_attempt + send_request, or escalate |
 | in_review | approved | approved | resolve_review |
-| in_review | review_rejected | requested if RejectionsLeft > 1, else blocked | resolve_review + supersede_attempt + send_request, or resolve_review + escalate |
+| in_review | review_rejected | requested if AttemptsLeft > 0, else blocked | resolve_review + supersede_attempt + send_request, or resolve_review + escalate |
 | approved | integrate_started | integrating | — |
 | integrating | integrated | integrated | — |
 | integrating | integrate_failed | blocked | escalate |
@@ -184,7 +184,7 @@ The transition table is exact. Any pair not listed returns an error and leaves t
 
 `rejected` is a transient label recorded in the attempt history; `Next` never returns it as the mission state.
 
-- [ ] **Step 1: Failing test**: `TestNextTable` iterates over every listed row, asserting state and actions. It also iterates over every (state × event) pair *not* listed and asserts an error with the state unchanged. `TestRejectionsExhausted` uses `RejectionsLeft: 1` on `check_failed`, which gives `blocked` with `escalate`.
+- [ ] **Step 1: Failing test**: `TestNextTable` iterates over every listed row, asserting state and actions. It also iterates over every (state × event) pair *not* listed and asserts an error with the state unchanged. `TestAttemptsExhausted`: `AttemptsLeft: 0` on `check_failed` gives `blocked` with `escalate`, and `AttemptsLeft: 1` gives `requested`.
 - [ ] **Step 2: Run** `go test ./mission/ -run Next -count=1` — Expected: FAIL.
 - [ ] **Step 3: Implement** `Next` as a table.
 - [ ] **Step 4: Run** — Expected: PASS.
@@ -218,7 +218,8 @@ func (b *Bus) FencedCmdRef(ctx, token, from, target, typ, ref, command string, n
 func (b *Bus) ServerNowMS(ctx) (int64, error)                                // Redis TIME in ms
 // Operator queue (written by the CLI, not fenced; read and answered by the conductor):
 func (b *Bus) SubmitMissionOp(ctx, from, op string, args []string) (string, error) // XADD kind=op
-func (b *Bus) MissionOpResult(ctx, token, reqID string, ok bool, msg string) error // fenced XADD kind=result req=<id>
+func MissionResultsKey(p string) string   // p+":missionops:results" (two colons: not a project kind)
+func (b *Bus) MissionOpResult(ctx, token, reqID string, ok bool, msg string) error // fenced XADD to MissionResultsKey: req ok msg
 func (b *Bus) ReadMissionOps(ctx, group, consumer string, block time.Duration) ([]MissionOp, error) // XREADGROUP; creates group at "0" if missing
 func (b *Bus) AckMissionOp(ctx, group, id string) error
 func (b *Bus) WaitMissionOpResult(ctx, reqID string, timeout time.Duration) (ok bool, msg string, found bool, err error) // XREAD after reqID, filters kind=result req=reqID
@@ -231,7 +232,7 @@ type MissionOp struct{ ID, From, Op string; Args []string }
   - `TestFencedRequestMatchesRequest`: the board entry shape equals `Bus.Request`'s for the same input, and a duplicate task is refused.
   - `TestFencedChallengeOpensGateAndCmd`, then `TestFencedResolveChallengeIdempotent`.
   - `TestFencedCmdRefNoWake`: the entry carries `wake=no` and `ref`.
-  - `TestMissionOpsRoundTrip`: submit → read → result → `WaitMissionOpResult` finds it; a timeout returns `found=false`.
+  - `TestMissionOpsRoundTrip`: submit → read → result → `WaitMissionOpResult` finds it; a timeout returns `found=false`. Results live in their own stream (`MissionResultsKey`), so after a result is written a second `ReadMissionOps` returns nothing and the group has no pending entry (Codex I4). `WaitMissionOpResult` reads `MissionResultsKey` from the request id's timestamp.
   - `TestFencedHashSetRefusesForeignKey`: the key `p:agents` is refused.
 - [ ] **Step 2: Run** `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./bus/ -run 'Conductor|Fenced|MissionOps' -count=1` — Expected: FAIL.
 - [ ] **Step 3: Implement**, reusing the dispatcher's Lua patterns. `FencedRequest` is `publishRequest` with a leading `GET` check.
@@ -277,7 +278,7 @@ func (s Store) Changes(ctx) ([]string, error)                   // SCAN p:change
 ```
 
 - [ ] **Step 1: Failing tests** (Redis): `TestStoreRoundTrip` (put then get, field for field); `TestStoreStaleToken` (put with a lost lease gives `ErrNotHolder`); `TestStoreChangesScan` (two changes are listed, and a foreign key `p:change:Bad Name` is skipped).
-- [ ] **Step 2: Run** `go test ./mission/ -run Store -count=1` (with the test broker) — Expected: FAIL.
+- [ ] **Step 2: Run** `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ -run Store -count=1` — Expected: FAIL.
 - [ ] **Step 3: Implement** — JSON values in the hashes.
 - [ ] **Step 4: Run** — Expected: PASS.
 - [ ] **Step 5: Commit** `feat(mission): typed store over fenced writes`.
@@ -321,7 +322,7 @@ Rules:
   - `TestMergeNoFFTrailers`: `git log -1 --format=%(trailers:key=Mission-Hash,valueonly)` returns the hash;
   - `TestMergeConflictLeavesMergeInProgress`, then `MergeAbort` → clean;
   - `TestRunTestPassFail`: `true`/`false`;
-  - `TestRunTestTimeoutKillsGroup`: the command is `sleep 30 & sleep 30` with a 1 s limit, which returns within 7 s. Afterwards `pgrep -f "sleep 30"` finds no survivor started by this test (match on a unique marker in the command);
+  - `TestRunTestTimeoutKillsGroup`: run in a temp dir, the command is `sleep 30 & echo $! > child.pid; echo $$ > parent.pid; sleep 30`, with a 1 s limit. It returns within 7 s, and afterwards both recorded PIDs are gone: `syscall.Kill(pid, 0)` returns `ESRCH`. The test uses no `pgrep` and no shared names (Codex M2);
   - `TestRunTestTailBounded`: the command is `yes | head -c 2000000`, the tail is at most 4096 bytes, and the log file holds the full output;
   - `TestResolveCommitUnknown`: an error for `deadbeef`.
 - [ ] **Step 2: Run** `go test ./mission/ -run 'Diff|Ensure|Merge|RunTest|Resolve' -count=1` — Expected: FAIL.
@@ -341,7 +342,7 @@ type Conductor struct {
     Bus        *bus.Bus
     Store      Store
     Git        Git
-    StateRoot  string    // ~/.local/state/agentbus/<p>
+    ProjectRoot string   // StateHome/<p>; a change's files live in ProjectRoot/<c>
     EscalateTo string    // default "master"
     Self       string    // "conductor"
     TestLimit  time.Duration // 20m
@@ -352,22 +353,22 @@ func (c *Conductor) Pass(ctx context.Context) error // one reconciliation over e
 
 1. **pending → ready** when every dependency is `integrated`. On `ready`, it sends the request:
    - `Attempt++`, `Current = {N, Task: TaskName(..), Agent, Base: Git.ResolveCommit(change.Branch)} (the branch head; the integration worktree may not exist yet)`;
-   - `FencedRequest(task, "conductor", agent, "", body)`. The body is `mission <c>/<id> rev <n>: <title> | base=<sha> | brief=<change dir>/<brief path>@<commit>#<anchor> | deliver: agentbus request done <task> --commit <sha> --branch <b> "<summary>"`, and on a retry it adds `| previous: <reason>`;
+   - **persist first**: `PutMission` with `Current` set and the state still `ready`. Then `FencedRequest(task, "conductor", agent, "", body)`. An error "board task already exists: <task>" for `Current.Task` means a previous pass published it before crashing. That counts as success, which makes publishing idempotent across a crash (Codex I2). A `ready` record found with `Current.Task` set and that task already on the board goes straight to `requested`, without publishing again. The body is `mission <c>/<id> rev <n>: <title> | base=<sha> | brief=<change dir>/<brief path>@<commit>#<anchor> | deliver: agentbus request done <task> --commit <sha> --branch <b> "<summary>"`, and on a retry it adds `| previous: <reason>`;
    - then `Next(ready, request_sent)`.
 2. **requested/accepted:** read `Bus.Board()[Current.Task]`. A board state of `accepted` → `accepted`. `blocked` → `blocked`, with the reason and an escalation. `done` → `delivered`, with `Current.Commit/Branch` taken from `request.commit/branch`.
 3. **delivered → checking → in_review or a new attempt.** The checks run in order:
    - no commit, or `ResolveCommit` fails → `check_failed` with "commit <x> not found in <repo>";
    - `!IsAncestor(base, commit)` → `check_failed` with "does not descend from base";
    - any `DiffNames` path outside `allowed_paths` → `check_failed` listing them;
-   - otherwise, in a worktree `StateRoot/<c>/check-<task>` (detached at the commit), `RunTest`. Red → `check_failed` with the tail; green → `check_passed`. The worktree is always removed afterwards.
+   - otherwise, in a worktree `ProjectRoot/<c>/check-<task>` (detached at the commit), `RunTest`. Red → `check_failed` with the tail; green → `check_passed`. The worktree is always removed afterwards.
 
-   On `check_passed`, it sets `Subject = "mission:<c>/<id>@" + commit[:12]` and `ReviewRef = Current.Task`, then calls `FencedChallenge(reviewer, ReviewRef, "conductor", msg)`. `msg` holds the subject, the log path and the exact `agentbus verdict --subject <Subject> --ref <ReviewRef> <agent> <approve|reject> <message>` line.
-4. **in_review:** `RollUp(Verdicts(Subject))`, keeping only verdicts with `Author == Current.Agent` (the agent). `APPROVED` → `approved` + `FencedResolveChallenge`; `REJECTED` → `review_rejected`; `PENDING` → nothing.
+   On `check_passed`, it sets `Subject = "mission:<c>/<id>@" + commit[:12]` and `ReviewRef = Current.Task`, then calls `PutMission` (persisting first, as above). It then calls `FencedChallenge(reviewer, ReviewRef, "conductor", msg)` only if `OpenChallenges(reviewer)` does not already hold `ReviewRef`, so a crash between the two steps never sends a second challenge (Codex I2). `msg` holds the subject, the log path and the exact `agentbus verdict --subject <Subject> --ref <ReviewRef> <agent> <approve|reject> <message>` line.
+4. **in_review:** `RollUp(Verdicts(Subject))`, keeping only the verdicts with `Author == Current.Agent` **and** `Reviewer == r.Reviewer`, the assigned reviewer (Codex I3). An approve from any other agent, however independent, is ignored and logged. `APPROVED` → `approved` + `FencedResolveChallenge`; `REJECTED` → `review_rejected`; `PENDING` → nothing.
 5. **Applying actions:**
    - `supersede_attempt`: mark the old attempt `superseded` in `History`, set `FencedBoardState(oldTask, "superseded")`, and send `FencedCmdRef(.., oldAgent, "reply", oldThread, "superseded by <new task>: stop, do not deliver", noWake=true)`;
    - `escalate`: `FencedCmdRef(.., EscalateTo, "escalation", "", "<c>/<id> blocked: <reason>. Next: agentbus mission retry <c>/<id> | agentbus mission abort <c>")`.
 
-   Rejections increment `Rejections`. `Ctx.RejectionsLeft = MaxAttempts - Rejections` (counted after the increment).
+   Rejections increment `Rejections`. `Ctx.AttemptsLeft = MaxAttempts - Rejections`, counted after the increment: with `max_attempts` 3, rejections 1 and 2 retry, and the 3rd blocks, so exactly three deliveries are checked.
 6. **A late `accept` or `done` on a superseded task** found on the board moves nothing. The conductor resends the superseded reply once per such transition (remember it in `History[i].Outcome = "superseded_notified_<state>"`).
 
 Integration is Task 8. Here `approved` stays `approved`.
@@ -380,6 +381,8 @@ Integration is Task 8. Here `approved` stays `approved`.
   - `TestPassUnknownCommit`: `--commit deadbeef` gives `check_failed` with "not found" and attempt 2, with no panic.
   - `TestPassAttemptsExhausted`: three red deliveries give `blocked` and one escalation cmd to `master`.
   - `TestPassIgnoresWrongSubjectAndSelfApproval`: a verdict on `@<other sha>` and a self-approve by kimi leave it `in_review`, while codex's approve on the right subject gives `approved` with the gate closed.
+  - `TestPassIgnoresThirdPartyApprove`: an approve on the right subject by `grok`, who is not the assigned reviewer, leaves the mission `in_review`.
+  - `TestPassPublishIdempotentAfterCrash`: write a `ready` record with `Current.Task` set, publish that task with `FencedRequest` by hand (simulating the crash), then `Pass` gives `requested` with exactly one board entry and one cmd entry. Likewise for the challenge: when the gate already holds `ReviewRef`, `Pass` gives `in_review` with no second challenge cmd.
   - `TestPassAgentBlocked`: `BlockRequest` gives `blocked` with the reason, plus an escalation.
   - `TestPassSupersededLateDone`: after a supersede, a `CompleteRequestAt` on the old task changes nothing for the mission, and exactly one more reply is sent.
 - [ ] **Step 2: Run** `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ -run Pass -count=1` — Expected: FAIL.
@@ -399,7 +402,7 @@ func (c *Conductor) Startup(ctx context.Context) error           // per active c
 func (c *Conductor) integrate(ctx context.Context, ch ChangeRecord, f File, m Mission, r *MissionRecord) error
 func (c *Conductor) HandleOp(ctx context.Context, op bus.MissionOp) (ok bool, msg string)
 ```
-**Integration**, one mission per `Pass`, approved missions in id order, in `StateRoot/<c>/integration`. That directory is created with `AddWorktree(dir, branch, detach=false)` when it is missing.
+**Integration**, one mission per `Pass`, approved missions in id order, in `ProjectRoot/<c>/integration`. That directory is created with `AddWorktree(dir, branch, detach=false)` when it is missing.
 1. Record `PreHead = Head(dir)`, then call `Next(approved, integrate_started)` and persist.
 2. `MergeNoFF(commit, message)`. `ErrConflict` → `MergeAbort`, then `integrate_failed`.
 3. If the change has `test`, run `RunTest(dir, test, log, TestLimit)`, then record `TestedHead = Head(dir)` and `TestedOK`. Red → `ResetHard(PreHead)` and `integrate_failed`.
@@ -434,7 +437,7 @@ func (c *Conductor) HandleOp(ctx context.Context, op bus.MissionOp) (ok bool, ms
   - `TestOpLoadValidates`: an invalid file gives an error result and no records; a valid one creates rev 1; loading the same file twice gives an ok "already loaded"; a different file for the same change gives the slice-1 refusal.
   - `TestOpRetryOnlyBlocked`: retry on `in_review` is an error, and on `blocked` it opens a new attempt.
   - `TestOpAbort`: open gates are resolved, attempts superseded and the change `aborted`; `Pass` does nothing more for it.
-- [ ] **Step 2: Run** `go test ./mission/ -run 'Integrate|Startup|Op' -count=1` (with the test broker) — Expected: FAIL.
+- [ ] **Step 2: Run** `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ -run 'Integrate|Startup|Op' -count=1` — Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `go test ./mission/ -count=1` — Expected: PASS.
 - [ ] **Step 5: Commit** `feat(mission): integration, restart cleanup and operator ops`.
@@ -447,16 +450,16 @@ func (c *Conductor) HandleOp(ctx context.Context, op bus.MissionOp) (ok bool, ms
 
 **Interfaces — Produces:**
 ```go
-type RunConfig struct{ Repo, StateRoot, EscalateTo string; Tick, Lease, Renew, TestLimit time.Duration }
-func DefaultRunConfig() RunConfig  // Tick 2s, Lease 15s, Renew 5s, TestLimit 20m, EscalateTo "master", StateRoot from XDG
+type RunConfig struct{ Repo, StateHome, EscalateTo string; Tick, Lease, Renew, TestLimit time.Duration }
+func DefaultRunConfig() RunConfig  // Tick 2s, Lease 15s, Renew 5s, TestLimit 20m, EscalateTo "master", StateHome from XDG
 var ErrAlreadyRunning = errors.New("another conductor holds the lease")
 func Run(ctx context.Context, b *bus.Bus, cfg RunConfig) error
 ```
 `Run` does the following, in order:
-1. take an exclusive non-blocking `flock` on `StateRoot/conductor.lock`. If it is busy, return `ErrAlreadyRunning`;
+1. take an exclusive non-blocking `flock` on `StateHome/<p>/conductor.lock`. If it is busy, return `ErrAlreadyRunning`;
 2. `AcquireConductor`. If that fails, also return `ErrAlreadyRunning`;
 3. start the renewal goroutine. A renewal failure cancels the run context, which kills the commands in flight through `Git`/`RunTest`, and `Run` then returns `bus.ErrNotHolder` wrapped as "lease lost";
-4. start the inbox goroutine, `b.WatchCmdDelivery(ctx, "conductor", consumer, "", deliver)`. It holds the receiver lease, and each entry kicks a pass (a non-blocking send on a channel) and returns `false` so the watch keeps going;
+4. derive `runCtx`, cancelled on lease loss or on return. **Everything below gets `runCtx`**: the inbox watcher, the loop, `Pass`, and every `Git`/`RunTest` call (Codex I5). Start the inbox goroutine, `b.WatchCmdDelivery(runCtx, "conductor", consumer, "", deliver)`. It holds the receiver lease, and each entry kicks a pass (a non-blocking send on a channel) and returns `false` so the watch keeps going;
 5. call `Startup`;
 6. loop: on every `Tick` or kick, read the pending ops (`ReadMissionOps` with group `conductor`, block 0), `HandleOp` each one and ack it, then `Pass`.
 
@@ -475,6 +478,7 @@ CLI (in `cmd/agentbus/missions.go`):
   - `TestRunFlockBlocksEvenWithoutLease`: with the lease key deleted externally but the lock held, a second `Run` still returns `ErrAlreadyRunning`.
   - `TestRunLeaseLostKillsTest`: a change whose mission test is `sleep 60`; delete `{p}:conductor` during the check → `Run` returns within 20 s, and no `sleep 60` with the test's marker survives.
   - `TestRunInboxKeepsConductorArmed`: while `Run` runs, `b.Armed(ctx, "conductor")` is true.
+  - `TestRunLeaseLossReleasesInbox`: after `{p}:conductor` is deleted, `Run` returns, and within 5 s `b.Armed(ctx, "conductor")` is false and no goroutine started by `Run` is left (compare `runtime.NumGoroutine` before and after, allowing for the Redis pool).
   - `TestMissionCLIDown`: with no conductor, `mission retry x/y` exits 1 with `missions down`.
   - `TestMissionCLIRoundTrip`: with `Run` in a goroutine, `mission load` exits 0 and `mission status` lists the missions.
   - `TestMissionCLIUsage`: bad arguments exit 2.
@@ -497,7 +501,7 @@ CLI (in `cmd/agentbus/missions.go`):
   - `main` is untouched;
   - no gate stays open.
 
-  `TestEndToEndRestartMidCheck` kills `Run`'s context during `b`'s check (the test is `sleep 2; true`), restarts it, and asserts that `b` ends `integrated` exactly once.
+  `TestEndToEndRestartMidCheck` kills `Run`'s context during `b`'s check, restarts it, and asserts that `b` ends `integrated` exactly once. `b`'s test is `touch "$MARK"; sleep 2; true`, where `MARK` is a temp path set in the environment. The test waits for that file to exist before cancelling, so the cancel is proven to land mid-check (Codex M3).
 - [ ] **Step 2: Run** `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ -run EndToEnd -count=1 -v` — Expected: FAIL until all the pieces are wired, then PASS (this task only adds the test and the docs; a failure here is a bug in Tasks 1–9 to fix where it lives).
 - [ ] **Step 3: Docs** as listed; `go run ./cmd/agentbus mem check` → PASS.
 - [ ] **Step 4: Run** `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./... -race -count=1` — Expected: every package `ok`.
