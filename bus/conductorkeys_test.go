@@ -292,3 +292,20 @@ func TestFencedCmdWithChangeAtomic(t *testing.T) {
 		t.Fatalf("record %q, cmds %+v", rec, evs)
 	}
 }
+
+func TestResultBlockNeverRoundsToForever(t *testing.T) {
+	// XREAD BLOCK takes milliseconds and BLOCK 0 waits forever: what is left
+	// under a millisecond must end the wait, not become 0.
+	for _, c := range []struct {
+		left time.Duration
+		want time.Duration
+		ok   bool
+	}{
+		{0, 0, false}, {500 * time.Microsecond, 0, false}, {time.Millisecond, time.Millisecond, true},
+		{300 * time.Millisecond, 300 * time.Millisecond, true}, {5 * time.Second, time.Second, true},
+	} {
+		if got, ok := resultBlock(c.left); got != c.want || ok != c.ok {
+			t.Errorf("resultBlock(%v) = %v, %v; want %v, %v", c.left, got, ok, c.want, c.ok)
+		}
+	}
+}

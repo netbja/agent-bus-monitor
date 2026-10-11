@@ -258,11 +258,11 @@ func (b *Bus) WaitMissionOpResult(ctx context.Context, reqID string, timeout tim
 		}
 	}
 	for {
-		left := time.Until(deadline)
-		if left <= 0 {
+		block, ok := resultBlock(time.Until(deadline))
+		if !ok {
 			return false, "", false, nil
 		}
-		res, err := b.r.XRead(ctx, &redis.XReadArgs{Streams: []string{MissionResultsKey(b.project), cursor}, Count: 64, Block: min(left, time.Second)}).Result()
+		res, err := b.r.XRead(ctx, &redis.XReadArgs{Streams: []string{MissionResultsKey(b.project), cursor}, Count: 64, Block: block}).Result()
 		if err == redis.Nil {
 			continue
 		}
@@ -361,4 +361,13 @@ func (b *Bus) FencedCmdWithChange(ctx context.Context, token, change, from, targ
 	}
 	id, _ := v.(string)
 	return id, nil
+}
+
+// resultBlock is the XREAD BLOCK for what is left of a wait. BLOCK is in whole
+// milliseconds and BLOCK 0 waits forever, so under a millisecond the wait ends.
+func resultBlock(left time.Duration) (time.Duration, bool) {
+	if left < time.Millisecond {
+		return 0, false
+	}
+	return min(left, time.Second).Truncate(time.Millisecond), true
 }
