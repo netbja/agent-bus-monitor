@@ -16,10 +16,14 @@ func (c *Conductor) HandleOp(ctx context.Context, op bus.MissionOp) (ok bool, ms
 	var err error
 	switch op.Op {
 	case "load":
-		if len(op.Args) != 1 {
-			return false, "usage: load <path>@<commit>"
+		switch {
+		case len(op.Args) == 1:
+			msg, err = c.load(ctx, op.Args[0], false, "")
+		case len(op.Args) == 3 && op.Args[1] == "force" && strings.TrimSpace(op.Args[2]) != "":
+			msg, err = c.load(ctx, op.Args[0], true, op.Args[2])
+		default:
+			return false, "usage: load <path>@<commit> [force <reason>]"
 		}
-		msg, err = c.load(ctx, op.Args[0])
 	case "retry":
 		var name, id string
 		if name, id, err = missionRef(op.Args); err == nil {
@@ -54,7 +58,7 @@ func missionRef(args []string) (string, string, error) {
 
 // load reads missions.json at a commit, validates it, creates the change
 // branch and the records (rev 1, every mission pending).
-func (c *Conductor) load(ctx context.Context, ref string) (string, error) {
+func (c *Conductor) load(ctx context.Context, ref string, force bool, reason string) (string, error) {
 	i := strings.LastIndex(ref, "@")
 	if i <= 0 || i == len(ref)-1 {
 		return "", fmt.Errorf("%q is not <path>@<commit>", ref)
@@ -90,7 +94,7 @@ func (c *Conductor) load(ctx context.Context, ref string) (string, error) {
 		if old.FileHash == hash {
 			return fmt.Sprintf("already loaded rev %d of %s", old.Rev, f.Change), nil
 		}
-		return "", fmt.Errorf("%s is already loaded with another missions.json: reload is not available in slice 1", f.Change)
+		return c.reload(ctx, old, f, p, commit, hash, force, reason)
 	}
 	if err := c.Git.EnsureBranch(ctx, f.Branch, f.Base); err != nil {
 		return "", err
@@ -139,4 +143,36 @@ func (c *Conductor) abort(ctx context.Context, name, reason string) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// reload builds revision n+1 of a known change (spec §6.4) and writes it in
+// one fenced batch; the effects it owes (closing superseded attempts and
+// review gates) are replayed by the next pass.
+func (c *Conductor) reload(ctx context.Context, old ChangeRecord, f File, p, commit, hash string, force bool, reason string) (string, error) {
+	if old.State != "active" {
+		return "", fmt.Errorf("change %s is %s; load it under a new name", f.Change, old.State)
+	}
+	if f.Branch != old.Branch {
+		return "", fmt.Errorf("the change branch cannot move from %s to %s", old.Branch, f.Branch)
+	}
+	records, err := c.Store.Missions(ctx, f.Change)
+	if err != nil {
+		return "", err
+	}
+	rev := old.Rev + 1
+	updates, counts, err := planReload(records, f, rev, force, reason)
+	if err != nil {
+		return "", err
+	}
+	list := make([]MissionRecord, 0, len(updates))
+	for _, r := range updates {
+		list = append(list, r)
+	}
+	rec := old
+	rec.Rev, rec.Commit, rec.Path, rec.FileHash = rev, commit, p, hash
+	if err := c.Store.PutBatch(ctx, list, rec); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("reloaded %s rev %d: %d changed, %d added, %d removed, %d unchanged",
+		f.Change, rev, counts.Changed, counts.Added, counts.Removed, counts.Unchanged), nil
 }

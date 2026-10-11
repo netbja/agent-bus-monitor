@@ -250,7 +250,7 @@ func TestOpLoadValidates(t *testing.T) {
 		t.Fatalf("second load: %v %q", ok, msg)
 	}
 	other := commitFile(t, c.Git.Repo, "docs/changes/chg/missions.json", strings.Replace(missionsFile("true"), "First", "Changed", 1), "edit")
-	if ok, msg := c.HandleOp(ctx, bus.MissionOp{Op: "load", Args: []string{"docs/changes/chg/missions.json@" + other}}); ok || !strings.Contains(msg, "slice 1") {
+	if ok, msg := c.HandleOp(ctx, bus.MissionOp{Op: "load", Args: []string{"docs/changes/chg/missions.json@" + other}}); !ok || !strings.HasPrefix(msg, "reloaded chg rev 2:") {
 		t.Fatalf("reload: %v %q", ok, msg)
 	}
 	if ok, _ := c.HandleOp(ctx, bus.MissionOp{Op: "load", Args: []string{"no-commit-here"}}); ok {

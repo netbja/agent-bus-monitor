@@ -108,10 +108,17 @@ func (c *Conductor) passChange(ctx context.Context, name string) error {
 	}
 	for _, id := range ids {
 		m, ok := ch.file.Mission(id)
-		if !ok {
+		r := ch.missions[id]
+		if !ok { // removed from the plan: replay what it still owes, never advance
+			if err := c.effects(ctx, ch, Mission{ID: id}, &r); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", id, err))
+			}
+			if err := c.notifyLateSuperseded(ctx, ch, &r); err != nil {
+				errs = append(errs, err)
+			}
+			ch.missions[id] = r
 			continue
 		}
-		r := ch.missions[id]
 		if err := c.advance(ctx, ch, m, &r); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))
 		}
@@ -300,7 +307,7 @@ func (c *Conductor) effects(ctx context.Context, ch *change, m Mission, r *Missi
 	if r.State == Blocked && !r.Escalated {
 		if _, err := c.Bus.FencedCmdRef(ctx, c.Store.Token, c.Self, c.EscalateTo, bus.CmdEscalation, "",
 			fmt.Sprintf("%s/%s blocked: %s. Next: agentbus mission retry %s/%s | agentbus mission abort %s",
-				ch.rec.Change, m.ID, r.Reason, ch.rec.Change, m.ID, ch.rec.Change), false); err != nil {
+				ch.rec.Change, r.ID, r.Reason, ch.rec.Change, r.ID, ch.rec.Change), false); err != nil {
 			return fmt.Errorf("escalate: %w", err)
 		}
 		r.Escalated = true

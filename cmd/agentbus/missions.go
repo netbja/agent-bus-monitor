@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -18,7 +19,7 @@ import (
 
 const (
 	missionsUsage = "usage: missions [--repo DIR] [--escalate-to AGENT] | missions --status"
-	missionUsage  = "usage: mission load <path>@<commit> [--wait 30s] | mission retry <change>/<id> | mission abort <change> --reason <text> | mission status [<change>] | mission show <change>/<id>"
+	missionUsage  = "usage: mission load <path>@<commit> [--force <reason>] [--wait 30s] | mission retry <change>/<id> | mission abort <change> --reason <text> | mission status [<change>] | mission show <change>/<id>"
 )
 
 // runMissions is `agentbus missions`: the conductor process, in the
@@ -101,10 +102,16 @@ func runMission(ctx context.Context, b *bus.Bus, self string, args []string, std
 		}
 		return missionShow(ctx, b, rest[0], stdout, stderr)
 	case "load":
-		if len(rest) != 1 || !strings.Contains(rest[0], "@") {
+		hasForce := slices.Contains(rest, "--force")
+		var force string
+		rest, force = extractFlag(rest, "--force")
+		if len(rest) != 1 || !strings.Contains(rest[0], "@") || (hasForce && strings.TrimSpace(force) == "") {
 			return usage()
 		}
 		opArgs = rest
+		if hasForce {
+			opArgs = append(opArgs, "force", force)
+		}
 	case "retry":
 		if len(rest) != 1 || !strings.Contains(rest[0], "/") {
 			return usage()

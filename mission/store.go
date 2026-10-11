@@ -39,25 +39,26 @@ type Attempt struct {
 
 // MissionRecord is everything the conductor knows about one mission.
 type MissionRecord struct {
-	ID         string    `json:"id"`
-	Hash       string    `json:"hash"`
-	State      State     `json:"state"`
-	Attempt    int       `json:"attempt"`
-	Rejections int       `json:"rejections"`
-	Current    Attempt   `json:"current"`
-	History    []Attempt `json:"history,omitempty"`
-	Reviewer   string    `json:"reviewer,omitempty"`
-	Subject    string    `json:"subject,omitempty"`
-	ReviewRef  string    `json:"review_ref,omitempty"`
-	ReviewOpen bool      `json:"review_open,omitempty"` // the reviewer's gate is open for ReviewRef
-	Escalated  bool      `json:"escalated,omitempty"`   // the blocked state was escalated
-	LogPath    string    `json:"log_path,omitempty"`
-	CheckTail  string    `json:"check_tail,omitempty"`
-	PreHead    string    `json:"pre_head,omitempty"`
-	TestedHead string    `json:"tested_head,omitempty"`
-	TestedOK   bool      `json:"tested_ok,omitempty"`
-	Reason     string    `json:"reason,omitempty"`
-	Updated    int64     `json:"updated"`
+	ID              string    `json:"id"`
+	Hash            string    `json:"hash"`
+	State           State     `json:"state"`
+	Attempt         int       `json:"attempt"`
+	Rejections      int       `json:"rejections"`
+	Current         Attempt   `json:"current"`
+	History         []Attempt `json:"history,omitempty"`
+	Reviewer        string    `json:"reviewer,omitempty"`
+	Subject         string    `json:"subject,omitempty"`
+	ReviewRef       string    `json:"review_ref,omitempty"`
+	ReviewOpen      bool      `json:"review_open,omitempty"` // the reviewer's gate is open for ReviewRef
+	Escalated       bool      `json:"escalated,omitempty"`   // the blocked state was escalated
+	LogPath         string    `json:"log_path,omitempty"`
+	CheckTail       string    `json:"check_tail,omitempty"`
+	PreHead         string    `json:"pre_head,omitempty"`
+	TestedHead      string    `json:"tested_head,omitempty"`
+	TestedOK        bool      `json:"tested_ok,omitempty"`
+	Reason          string    `json:"reason,omitempty"`
+	IntegratedUnder string    `json:"integrated_under,omitempty"` // reload --force kept it integrated: "rev <n> <hash>"
+	Updated         int64     `json:"updated"`
 }
 
 // Store reads and writes change and mission records. Every write goes through
@@ -67,7 +68,7 @@ type Store struct {
 	Token string
 }
 
-const changeField = "record"
+const changeField = bus.ChangeRecordField
 
 func (s Store) Change(ctx context.Context, c string) (ChangeRecord, bool, error) {
 	h, err := s.B.ReadMissionHash(ctx, bus.ChangeKey(s.B.Project(), c))
@@ -114,3 +115,20 @@ func (s Store) PutMission(ctx context.Context, c string, r MissionRecord) error 
 }
 
 func (s Store) Changes(ctx context.Context) ([]string, error) { return s.B.ChangeNames(ctx) }
+
+// PutBatch writes mission records and the change record in one fenced script,
+// each record stamped with Redis TIME.
+func (s Store) PutBatch(ctx context.Context, records []MissionRecord, ch ChangeRecord) error {
+	now, err := s.B.ServerNowMS(ctx)
+	if err != nil {
+		return err
+	}
+	ms := make(map[string]string, len(records))
+	for _, r := range records {
+		r.Updated = now
+		b, _ := json.Marshal(r)
+		ms[r.ID] = string(b)
+	}
+	cb, _ := json.Marshal(ch)
+	return s.B.FencedMissionBatch(ctx, s.Token, ch.Change, ms, string(cb))
+}

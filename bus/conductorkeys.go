@@ -303,3 +303,31 @@ func (b *Bus) ChangeNames(ctx context.Context) ([]string, error) {
 	sort.Strings(out)
 	return out, iter.Err()
 }
+
+// ChangeRecordField is the field of {p}:change:{c} that holds the change record.
+const ChangeRecordField = "record"
+
+// KEYS = lease, missions, change; ARGV = token, changeRecord, then mission
+// field/value pairs.
+var fencedMissionBatch = redis.NewScript(fenceCheck + `
+for i = 3, #ARGV, 2 do redis.call('HSET', KEYS[2], ARGV[i], ARGV[i+1]) end
+redis.call('HSET', KEYS[3], '` + ChangeRecordField + `', ARGV[2])
+return 1`)
+
+// FencedMissionBatch writes several mission records and the change record in
+// one script: a reload or a recover is all or nothing.
+func (b *Bus) FencedMissionBatch(ctx context.Context, token, change string, missions map[string]string, changeRecord string) error {
+	if !ValidName(change) {
+		return fmt.Errorf("invalid change %q", change)
+	}
+	args := []interface{}{token, changeRecord}
+	ids := make([]string, 0, len(missions))
+	for id := range missions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		args = append(args, id, missions[id])
+	}
+	return notHolder(fencedMissionBatch.Run(ctx, b.r, []string{ConductorKey(b.project), MissionsKey(b.project, change), ChangeKey(b.project, change)}, args...).Err())
+}

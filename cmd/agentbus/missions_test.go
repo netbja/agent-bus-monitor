@@ -112,3 +112,13 @@ func TestMissionCLIRoundTrip(t *testing.T) {
 		t.Fatalf("missions --status: %d %q", code, out.String())
 	}
 }
+
+func TestMissionCLILoadForceNeedsReason(t *testing.T) {
+	b := dialDispatchMain(t)
+	for _, args := range [][]string{{"load", "a@b", "--force"}, {"load", "a@b", "--force", "  "}, {"skip", "c/t1"}, {"reassign", "c/t1"}, {"reassign", "c/t1", "Bad Name"}} {
+		var out, errb bytes.Buffer
+		if code := runMission(context.Background(), b, "master", args, &out, &errb); code != 2 {
+			t.Errorf("%q: exit %d", args, code)
+		}
+	}
+}
