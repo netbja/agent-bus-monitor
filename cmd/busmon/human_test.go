@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -101,5 +103,54 @@ func TestBroadcastNeedsASecondEnter(t *testing.T) {
 	h.w.mu.Unlock()
 	if sent != "notify hello team" || !strings.Contains(screen, "broadcast sent") {
 		t.Fatalf("second Enter: sent %q, footer:\n%s", sent, screen)
+	}
+}
+
+func TestBroadcastWarningDoesNotSurviveEsc(t *testing.T) {
+	h := newHarness(t, demoShared(time.Now()))
+	h.draw(160, 40)
+	h.key(runeKey('i'))
+	h.typeText("hello team")
+	h.key(key(tcell.KeyEnter)) // warned
+	h.key(key(tcell.KeyEscape))
+	h.key(runeKey('i')) // the draft comes back
+	h.key(key(tcell.KeyEnter))
+	h.w.mu.Lock()
+	n := len(h.w.sent)
+	h.w.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("a broadcast was sent with one Enter after Esc: %v", h.w.sent)
+	}
+}
+
+// failFor fails HumanCmd for one target only.
+type failFor struct {
+	*fakeWriter
+	target string
+}
+
+func (f failFor) HumanCmd(ctx context.Context, from, target, command string) (string, error) {
+	if target == f.target {
+		return "", errors.New("connection reset")
+	}
+	return f.fakeWriter.HumanCmd(ctx, from, target, command)
+}
+
+func TestAllPartialFailureIsNotRetriedBlindly(t *testing.T) {
+	h := newHarness(t, demoShared(time.Now()))
+	h.u.w = failFor{h.w, "foureyes"}
+	h.draw(160, 40)
+	h.key(runeKey('i'))
+	h.typeText("@all stand-up")
+	h.key(key(tcell.KeyEnter))
+	screen := h.draw(160, 40)
+	h.w.mu.Lock()
+	sent := strings.Join(h.w.sent, "|")
+	h.w.mu.Unlock()
+	if !strings.Contains(sent, "cmd coder stand-up") || !strings.Contains(sent, "cmd sentinel stand-up") {
+		t.Fatalf("the other agents were not served: %s", sent)
+	}
+	if !strings.Contains(screen, "sent to 2 of 3 agents; failed: foureyes") || h.u.input.GetText() != "" {
+		t.Fatalf("partial failure: draft %q, footer:\n%s", h.u.input.GetText(), screen)
 	}
 }

@@ -353,6 +353,7 @@ func (u *ui) startFilter() {
 // leaveInput returns from the input line to the panels; keep saves the
 // message draft (a filter edit is simply dropped).
 func (u *ui) leaveInput(keep bool) {
+	u.broadcastDraft = "" // a warning holds for the next Enter only, never across an Esc
 	if u.composing == ModeInput && keep {
 		u.msgDraft = u.input.GetText()
 	}
@@ -371,6 +372,9 @@ func (u *ui) inputDone(key tcell.Key) {
 			u.setFocusPanel(PanelActivity)
 			return
 		}
+		if text == "" {
+			u.broadcastDraft = ""
+		}
 		if text != "" {
 			tgt, body, directed := parseDirected(text)
 			if !directed && u.broadcastDraft != text {
@@ -385,15 +389,31 @@ func (u *ui) inputDone(key tcell.Key) {
 			switch {
 			case directed && tgt == "all":
 				targets := u.agentNames()
-				for _, a := range targets {
-					if _, err = u.w.HumanCmd(ctx, u.self, a, body); err != nil {
-						break
-					}
-				}
-				u.flash = fmt.Sprintf("directive sent to %d agents", len(targets))
 				if len(targets) == 0 {
 					cancel()
 					u.flash, u.flashErr = "no agent to send to", true
+					return
+				}
+				// Every agent is tried. If some were served, the draft is cleared:
+				// a retry of @all would send them the directive twice.
+				var failed []string
+				var lastErr error
+				for _, a := range targets {
+					if _, e := u.w.HumanCmd(ctx, u.self, a, body); e != nil {
+						failed, lastErr = append(failed, a), e
+					}
+				}
+				u.flash = fmt.Sprintf("directive sent to %d agents", len(targets))
+				switch {
+				case len(failed) == len(targets):
+					err = lastErr // nothing sent: keep the draft, a retry is safe
+				case len(failed) > 0:
+					cancel()
+					u.flash = fmt.Sprintf("sent to %d of %d agents; failed: %s (%s)", len(targets)-len(failed), len(targets),
+						strings.Join(failed, ", "), Preview(lastErr.Error()))
+					u.flashErr = true
+					u.input.SetText("")
+					u.msgDraft = ""
 					return
 				}
 			case directed:
