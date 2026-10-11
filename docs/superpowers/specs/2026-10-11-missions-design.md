@@ -541,3 +541,23 @@ v0.10.0 is tagged after slice 2 and the memory tooling are both merged.
   its own spec.
 - **Open: a bridge to agent teams.** A `TaskCompleted` hook could call `agentbus mission`, so
   that Claude teammates can take part. This is not in v0.10.
+
+## 10. Known minors carried into slice 2 (from the slice-1 reviews)
+
+Codex reviewed two checkpoints and Kimi did the final review. All their critical and important
+findings are fixed. Six minor findings remain open:
+
+- **`abort` ordering.** `abort` marks the change aborted before it transitions its missions. A crash
+  between the two leaves requests waiting until `mission abort` is run again. Fix: transition the
+  missions first, or have startup finish the job.
+- **Transient git errors.** A failed `ResolveCommit` always rejects the delivery. A transient git
+  error should be retried as an infrastructure error, as the checks already are.
+- **Verdict subject length.** The subject uses a 12-hex prefix of the sha, a 48-bit collision space.
+  Consider 16 hex characters or the full sha.
+- **Late replies on an aborted change.** An agent that accepts or delivers an attempt of an
+  aborted change gets no reply, because `Pass` skips aborted changes.
+- **Effects that write to a stream are at-least-once.** This covers the supersede reply and the
+  escalation. A crash between the `XADD` and the flag write repeats the effect once. Either
+  document this, or make the write and the marker one Lua script.
+- **Dirty worktree at startup.** A dirty integration worktree with no mission integrating is not
+  blocked at startup. It is caught, and now repaired live, when the next integration fails.
