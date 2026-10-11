@@ -29,6 +29,7 @@ func helpText() string {
 	}
 	row("1 2 3 (4)", "medium and narrow screens: switch the visible panel")
 	row("click / wheel", "click selects, click on the selected row opens it; the wheel scrolls")
+	more("a click outside an open detail closes it, like esc")
 	row("i : @", "write a message; @agent text sends a directive, plain text a notify")
 	blank()
 

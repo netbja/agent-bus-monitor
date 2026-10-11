@@ -869,8 +869,8 @@ func overlayInnerWidth(w int) int {
 }
 
 // modalView is the overlay layer: it covers the whole screen and consumes
-// every mouse event, so a click outside the detail box never reaches the
-// panels behind it.
+// every mouse event. A click outside the detail box closes it, like Esc, and
+// never reaches the panels behind it.
 type modalView struct {
 	*tview.Box
 	u *ui
@@ -908,6 +908,9 @@ func (m *modalView) MouseHandler() func(action tview.MouseAction, event *tcell.E
 			if consumed, capture := m.u.overlay.MouseHandler()(action, event, setFocus); consumed {
 				return true, capture
 			}
+		}
+		if action == tview.MouseLeftClick {
+			m.u.closeOverlay()
 		}
 		return true, nil // outside the box: swallowed, never passed to the panels
 	})

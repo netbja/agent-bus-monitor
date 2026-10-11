@@ -309,16 +309,34 @@ func TestDraftsSeparate(t *testing.T) {
 	}
 }
 
-func TestModalBlocksOutsideClick(t *testing.T) {
+func TestModalOutsideClickCloses(t *testing.T) {
 	h := newHarness(t, demoShared(time.Now()))
 	h.draw(160, 45)
 	sel := h.u.lists[PanelAgents].Selected()
+	mouse := func(a tview.MouseAction, x, y int, b tcell.ButtonMask) bool {
+		consumed, _ := h.u.pages.MouseHandler()(a, tcell.NewEventMouse(x, y, b, 0), func(p tview.Primitive) { h.app.SetFocus(p) })
+		return consumed
+	}
 	h.key(key(tcell.KeyF1))
 	h.draw(160, 45)
-	consumed, _ := h.u.pages.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(1, 5, tcell.ButtonPrimary, 0), func(p tview.Primitive) { h.app.SetFocus(p) })
-	if !consumed || h.u.ov != ovHelp || h.u.lists[PanelAgents].Selected() != sel {
-		t.Fatalf("outside click leaked: consumed %v ov %v sel %q", consumed, h.u.ov, h.u.lists[PanelAgents].Selected())
+	if !mouse(tview.MouseScrollDown, 1, 5, tcell.WheelDown) || h.u.ov != ovHelp {
+		t.Fatalf("wheel outside: ov %v, want the help still open", h.u.ov)
 	}
+	ox, oy, _, _ := h.u.overlay.GetRect()
+	if !mouse(tview.MouseLeftClick, ox+3, oy+3, tcell.ButtonPrimary) || h.u.ov != ovHelp {
+		t.Fatalf("click inside: ov %v, want the help still open", h.u.ov)
+	}
+	if !mouse(tview.MouseLeftDown, 1, 5, tcell.ButtonPrimary) || !mouse(tview.MouseLeftUp, 1, 5, 0) || h.u.ov != ovHelp {
+		t.Fatalf("press outside closed before the click: ov %v", h.u.ov)
+	}
+	if !mouse(tview.MouseLeftClick, 1, 5, tcell.ButtonPrimary) || h.u.ov != ovNone {
+		t.Fatalf("outside click: ov %v, want closed like Esc", h.u.ov)
+	}
+	if h.u.lists[PanelAgents].Selected() != sel || h.u.focus != PanelAgents {
+		t.Fatalf("outside click leaked to the panels: sel %q focus %v", h.u.lists[PanelAgents].Selected(), h.u.focus)
+	}
+	h.key(key(tcell.KeyF1))
+	h.draw(160, 45)
 	h.key(key(tcell.KeyDown))
 	h.key(key(tcell.KeyDown))
 	if row, _ := h.u.overlay.GetScrollOffset(); row != 2 {

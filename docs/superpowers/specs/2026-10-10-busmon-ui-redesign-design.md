@@ -251,8 +251,8 @@ acceptance), restyled.
 ### 3.6 Detail overlays
 
 Enter or click opens a detail for the focused panel's selection. Each detail is a full-screen
-**modal layer** that consumes every key and mouse event; a click or wheel outside the detail box
-does nothing. Width capped at 100 cells (centred); full screen in the narrow tier. Esc or `q`
+**modal layer** that consumes every key and mouse event; a click outside the detail box
+closes it like Esc and goes no further (it never selects a row behind); the wheel outside does nothing. Width capped at 100 cells (centred); full screen in the narrow tier. Esc or `q`
 closes it and restores the previous **logical** focus (panel id + selected item key), even across a
 tier change; if the item is gone, the panel's nearest item is selected.
 
@@ -368,10 +368,10 @@ overlay (modal) → input / filter (text modes) → panel → global.
 | input | `Enter` | send (directive if `@agent body`, else notify) — unchanged rule; the hint line shows the target before sending |
 | input | `Esc` | back to the previous panel; the **message draft** is kept |
 | filter | text keys | edit the filter; `Enter` applies, `Esc` cancels the edit (the previously applied filter stays). Filter draft and message draft are separate |
-| overlay | `Esc` `q` | close |
+| overlay | `Esc` `q`, click outside the box | close |
 | overlay | `↑ ↓ j k PgUp PgDn g G` | scroll |
 | overlay | `y` / `Y` | copy (§3.6) |
-| overlay | everything else, incl. tab keys and mouse outside the box | ignored |
+| overlay | everything else, incl. tab keys and the wheel outside the box | ignored |
 
 Mouse: wheel scrolls the panel under the pointer (viewport only, §3.3.4) without changing focus or
 opening anything; click focuses that panel and selects the row; click on the selected row opens it;
@@ -501,6 +501,8 @@ badges → words). Wherever ACP/CLI drivers were announced for v0.9, they move t
 - §3.4: an evicted selected event moves the selection to the event now at its former position
   (the list's departed-key rule), not to the oldest retained one.
 - §3.2: the header's waiting text is today's `waitingText` (count and age of the oldest).
+- §3.6 (user request, 2026-10-11): a click outside an open detail closes it, like Esc; the click
+  is consumed, so it never selects or opens a row behind.
 - §3.4: the wide time column is 7 cells (`HH:MM` and its gap), not 9; the two cells go to `from`
   and `to`. The help (F1) lists every binding, alternates included (`enter v`, `F1 ?`, `F2 r`).
 - §7: tview initialises the screen it is given exactly once; the colour depth is read from that
