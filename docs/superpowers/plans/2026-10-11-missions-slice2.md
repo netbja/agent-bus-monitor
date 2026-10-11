@@ -77,42 +77,47 @@ New rows of the transition table (every other pair stays refused):
 ### Task 2: Reload a revised plan (§6.4)
 
 **Files:**
-- Modify `mission/ops.go` (`load`), `mission/store.go` (`MissionRecord.IntegratedUnder string`, `json:"integrated_under,omitempty"`), `bus/conductorkeys.go` (`FencedHashDel`), `cmd/agentbus/missions.go` (`load … --force <reason>`).
+- Modify `mission/ops.go` (`load`), `mission/store.go` (`MissionRecord.IntegratedUnder string`, `json:"integrated_under,omitempty"`), `bus/conductorkeys.go` (`FencedMissionBatch`), `mission/conductor.go` (missions absent from the file still get their effects replayed), `cmd/agentbus/missions.go` (`load … --force <reason>`).
 - Test: `mission/reload_test.go`, `bus/conductorkeys_test.go`, `cmd/agentbus/missions_test.go`.
 
 **Interfaces — Produces:**
-- `func (b *Bus) FencedHashDel(ctx, token, key, field string) error`: the same key restriction as `FencedHashSet`.
+- `func (b *Bus) FencedMissionBatch(ctx, token, change string, missions map[string]string, changeRecord string) error`. It is **one** Lua script that checks the lease, `HSET`s every mission record and then the change record, so a reload is all or nothing (Codex: no hybrid revision after a crash).
 - `load` with a known change and a different file hash builds revision `n+1`:
   1. Read, parse and validate the new file at the new commit, as in a first load.
-  2. Classify every mission id of the old file union the new one. The new definition's hash is compared with `MissionRecord.Hash`.
+  2. Classify, through the pure `planReload(old map[string]MissionRecord, f File, rev int, force bool, reason string) (map[string]MissionRecord, reloadCounts, error)`, every id of the old records union the new file. The new definition's hash is compared with `MissionRecord.Hash`.
 
-     | Old state | Unchanged | Changed or removed |
-     |---|---|---|
-     | any | keep the record; update `Hash` if needed (it is equal) | — |
-     | pending, ready | — | changed: replaced (`pending`, new hash, attempts kept); removed: record deleted |
-     | requested, accepted, delivered, checking, in_review, blocked | — | refused unless `force`; with `force`: `abort`-style supersede of the attempt (resolve review), then as pending/ready |
-     | approved, integrating | — | refused, even with `force`: "wait until integrated or blocked, or abort the change" |
-     | integrated | — | refused unless `force`; with `force` it stays `integrated`, `IntegratedUnder = "rev <n> <hash>"`, the new `Hash`, and `Reason = "reload --force: <reason>"` |
-     | (new id) | — | a `pending` record |
+     | Old state | Unchanged | Changed | Removed from the file |
+     |---|---|---|---|
+     | pending, ready | kept | `pending`, new hash | tombstone |
+     | requested, accepted, delivered, checking, in_review, blocked | kept | refused unless `force`; with `force`: `pending`, new hash, the attempt moved to `History` (outcome `superseded`, `Closed` false), `Escalated` true | refused unless `force`; with `force`: tombstone with the attempt moved to `History` the same way |
+     | approved, integrating | kept | refused, **even with** `force` | refused, even with `force` |
+     | integrated | kept | refused unless `force`; with `force` it stays `integrated`, `IntegratedUnder = "rev <n> <old hash>"`, new hash, `Reason = "reload --force: <reason>"` | the same as changed: it stays `integrated` with `IntegratedUnder` |
+     | aborted (an earlier tombstone) | kept | kept | kept |
+     | (new id) | — | — | a `pending` record |
 
+     A **tombstone** is the record in state `aborted` with `Reason = "removed in rev <n+1>"`. The record is kept rather than deleted, so its effects (closing the attempt, closing the review gate) still replay. `ReviewOpen` stays as it was, so a gate open on a removed or superseded mission is closed by the effects.
   3. Every refusal is decided before any write. The error lists every offending mission with its state.
-  4. Write the mission changes, then `PutChange` with `Rev+1`, the new `Commit`, `Path` and `FileHash`.
-  5. Answer `reloaded <c> rev <n+1>: <k> changed, <a> added, <r> removed`.
-- `blocked` counts as in flight (it holds an attempt). This decision is recorded in the spec's §9 by Task 8.
+  4. One `FencedMissionBatch` writes every record and the change record (`Rev+1`, the new `Commit`, `Path` and `FileHash`). The next pass replays the owed effects: supersede replies, board states, gate closes.
+  5. Answer `reloaded <c> rev <n+1>: <k> changed, <a> added, <r> removed, <u> unchanged`. The counts are disjoint: `changed` is in both files with another hash (forced `integrated` ones included), `added` is new ids, `removed` is new tombstones, and `unchanged` is the rest.
+- `passChange` runs `effects` and `notifyLateSuperseded` for missions absent from the file too (with an empty `Mission`), and never `advance`s them.
+- `blocked` counts as in flight (it holds an attempt). Task 8 writes this into spec §6.4 itself, not only §9.
 - An aborted change refuses `load`: "change aborted; load it under a new name".
 - CLI: `mission load <path>@<commit> [--force <reason>]` sends `[ref, "force", reason]`. `--force` without a reason is a usage error (exit 2).
 
 - [ ] **Step 1:** Write the failing tests, on the harness from `conductor_test.go`, with a second `missions.json` committed and loaded through `HandleOp`:
   - `TestReloadKeepsUnchanged`: t1 in review and unchanged, t2 pending and changed. After the reload, t1 is still `in_review` with the same attempt, t2 is pending with the new hash, the change is rev 2, and the answer counts "1 changed".
-  - `TestReloadRefusesInFlightWithoutForce`: t1 `accepted` and changed. Without `force` the answer is refused, naming t1 and `accepted`, and both the change and the mission records are byte-identical to before. With `force` and a reason, t1 is `pending`, the old task is `superseded`, and one `wake=no` reply goes to its thread.
+  - `TestReloadRefusesInFlightWithoutForce`: t1 `accepted` and changed. Without `force` the answer is refused, naming t1 and `accepted`, and both the change and the mission records are byte-identical to before. With `force` and a reason, t1 is `pending` right after the reload. After one pass, the old task is `superseded` and exactly one `wake=no` reply has gone to its thread.
   - `TestReloadNeverCancelsApproval`: t1 `approved` or `integrating` and changed, even with `force`, gives a refusal and nothing written.
   - `TestReloadForceKeepsIntegrated`: t1 `integrated` and changed. Without `force` it is refused. With `force` it is still `integrated`, `IntegratedUnder` names rev 1, and t2 (which depends on t1) is not reset.
-  - `TestReloadAddsAndRemoves`: a new t3 gives a `pending` record; removing the pending t2 deletes its record.
+  - `TestReloadAddsAndRemoves`: a new t3 gives a `pending` record; removing the pending t2 tombstones it, and the answer is exactly `reloaded chg rev 2: 0 changed, 1 added, 1 removed, 1 unchanged`.
+  - `TestReloadRemovesInFlightWithForce`: t1 `in_review` is removed from the file. Without `force` it is refused. With `force` it becomes a tombstone; after one pass its gate is closed, its old task is `superseded`, and a late `done` on that task gets exactly one more reply.
+  - `TestReloadIsAtomic`: make `FencedMissionBatch` fail by swapping the token just before the call (lease lost). Every record and the change record are byte-identical to before.
+  - `TestPlanReloadTable`: the pure function against every row of the table above, including the counts.
   - `TestReloadSupersededQueuedRequestProducesNothing` (Review Focus 1): t1 `requested`, not accepted, and changed, reloaded with `force`. The agent then accepts and delivers the old task. After two passes, t1's new attempt is the only one checked: the old commit appears in no `Subject`. The agent's drain contains the superseded reply.
   - `TestReloadAbortedChangeRefused`.
-  - `TestFencedHashDel` in bus: a stale token is refused; a foreign key is refused.
+  - `TestFencedMissionBatch` in bus: all fields are written in one call; a stale token is refused and writes nothing.
   - `TestMissionCLILoadForceNeedsReason`: exit 2.
-- [ ] **Step 2:** Run `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ ./bus/ ./cmd/agentbus/ -run 'Reload|HashDel|LoadForce' -count=1`. Expected: FAIL.
+- [ ] **Step 2:** Run `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ ./bus/ ./cmd/agentbus/ -run 'Reload|MissionBatch|LoadForce' -count=1`. Expected: FAIL.
 - [ ] **Step 3:** Implement. The classification is a pure function `planReload(old map[string]MissionRecord, f File, force bool) (reloadPlan, error)`, tested through the table above.
 - [ ] **Step 4:** Run the same. Expected: PASS.
 - [ ] **Step 5:** Commit `feat(mission): reload a revised plan as a new revision`.
@@ -139,11 +144,14 @@ New rows of the transition table (every other pair stays refused):
     | none | `pending` |
 
   - the change record's `Rev` is the highest `Mission-Rev` seen, or 1;
+  - **several merges of one id** (a merge under an old hash, then one under the current hash after a reload): the **most recent** merge on the branch decides. If its hash is current the mission is `integrated`; otherwise it is `blocked`;
+  - `MissionMerges` skips a merge whose trailers are incomplete (no `Mission`, `Mission-Commit` or `Mission-Hash`), or whose `Mission-Commit` is not 40 hex characters;
   - it answers `recovered <c> rev <n>: <i> integrated, <b> blocked, <p> pending`.
 - `newAttempt` (Review Focus 3): while the board already holds `TaskName(c, id, Attempt+1)`, it increments `Attempt`. It gives up past 99 with an error. The crash-safety path (`ready` or `requested` with `Current.Task` already set) is unchanged.
 
 - [ ] **Step 1:** Write the failing tests.
-  - `TestMissionMergesIgnoresForeignMerges` (Review Focus 2): one conductor merge, one hand merge, and one merge of `main` into the branch. Only one `MissionMerge` comes back.
+  - `TestMissionMergesIgnoresForeignMerges` (Review Focus 2): one conductor merge, one hand merge, and one merge of `main` into the branch. Only one `MissionMerge` comes back. A merge with a hand-written incomplete `Mission:` trailer is skipped too, and two conductor merges come back oldest first.
+  - `TestRecoverMostRecentMergeDecides`: t1 merged under hash A, then again under the current hash B, gives `integrated`. In the reverse order, B then A, it gives `blocked`.
   - `TestRecoverRebuilds`: integrate t1 through the normal flow, then delete every `p:change:*` and `p:missions:*` key. `recover` brings back t1 `integrated` and t2 `pending`, and the next pass requests t2.
   - `TestRecoverChangedDefinitionBlocks`: the same, but recovering from a `missions.json` where t1 changed. t1 is `blocked`, and the next pass escalates once.
   - `TestRecoverRefusedWhenKnown`.
@@ -188,13 +196,19 @@ New rows of the transition table (every other pair stays refused):
 
 **Files:** Modify `mission/conductor.go`. Test: `mission/conductor_test.go`.
 
-**Interfaces:** In `advance`, after reading the board for an `accepted` mission, compute the deadline as the board entry's `request.accepted_at` (ms, Redis time; the latest acceptance, since the board overwrites it on re-accept) plus `Timeout` (default `4h`). When `ServerNowMS` is past it, apply `EvTimedOut` with reason `"no delivery within <timeout> of acceptance"`. The resulting `blocked` is escalated through the effects.
-
-A test can shorten the timeout through `missions.json` (`"timeout": "1s"`).
+**Interfaces:**
+- `Conductor.Now func(ctx) (int64, error)` is the clock in Unix ms. It defaults to `Bus.ServerNowMS`; tests replace it, so no test sleeps across a deadline.
+- The deadline is the board entry's `request.accepted_at` plus `Timeout` (default `4h`). Each attempt is its own task, so its own `accepted_at`.
+- In `advance`, for a mission in `requested` or `accepted` whose board entry is `accepted` **or** `done`:
+  - if the board is still `accepted` and `Now` is past the deadline, apply `EvTimedOut`;
+  - if the board is `done` but `request.responded_at` is past the deadline, it is a **late delivery** (Codex): also `EvTimedOut`. The delivery is never checked, and the attempt is superseded by the later `retry` or `reassign`.
+  - The reason is `"no delivery within <timeout> of acceptance"`. The resulting `blocked` is escalated through the effects.
+- For the late-delivery case from `requested`, apply `EvAccepted` first, then `EvTimedOut`, as for a normal done.
 
 - [ ] **Step 1:** Write the failing tests.
-  - `TestTimeoutBlocksAndEscalates`: with timeout `1s`, accept, wait 1.2 s, then pass. The mission is `blocked`, with one escalation.
-  - `TestTimeoutMeasuredPerAttempt` (Review Focus 5): with a 1 s timeout, accept attempt 1, block it, `retry`, then accept attempt 2 about 0.8 s later. A pass 0.5 s after that second acceptance must not time out, and a pass 1.2 s after it must. A blocked agent cannot re-accept the same task back into flight: the mission is `blocked` until `retry` or `reassign` opens a new task, so no bus change is needed.
+  - `TestTimeoutBlocksAndEscalates`: accept, set `Now` to `accepted_at + 4h + 1ms`, then pass. The mission is `blocked`, with one escalation. At `+4h - 1ms` it stays `accepted`.
+  - `TestLateDeliveryTimesOut`: with a `30m` timeout, accept, then `done` with a valid commit, and set `responded_at` past the deadline by rewriting the board entry in the test. After a pass the mission is `blocked`, no check ran (no log file), and there is one escalation.
+  - `TestTimeoutMeasuredPerAttempt` (Review Focus 5): with a `1h` timeout, accept attempt 1, block it, `retry`, then accept attempt 2. With `Now` set to attempt 1's `accepted_at + 1h + 1ms` it does **not** time out, and with attempt 2's `accepted_at + 1h + 1ms` it does. A blocked agent cannot re-accept the same task back into flight: the mission is `blocked` until `retry` or `reassign` opens a new task, so no bus change is needed.
 - [ ] **Step 2:** Run `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ -run Timeout -count=1`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the same. Expected: PASS.
@@ -213,7 +227,7 @@ A test can shorten the timeout through `missions.json` (`"timeout": "1s"`).
 | subject length | full sha in `Subject` | update the slice-1 tests that build subjects |
 | late replies on aborted changes | `passChange` runs `notifyLateSuperseded` for aborted changes too (and nothing else) | `TestAbortedChangeAnswersLateDone` |
 | at-least-once effects | the `effects` comment says "at least once", and one test asserts a duplicate escalation is tolerated (two escalation cmds after a simulated crash, mission still `blocked`, no third) | `TestEffectsAtLeastOnce` |
-| dirty integration worktree | `integrate` checks `Dirty` before merging; dirty gives `integrate_failed` with "integration worktree has unrecorded changes", and nothing is deleted | `TestIntegrateRefusesDirtyWorktree` (an untracked unrelated file must not ride into the merge) |
+| dirty integration worktree | `integrate` checks `Dirty` before merging; dirty gives `integrate_failed` with "integration worktree has unrecorded changes", nothing deleted. **At startup**, a dirty worktree with no mission integrating is escalated once (`ChangeRecord.DirtyEscalated`, cleared when the worktree is clean again), and integrations stay refused until it is clean | `TestIntegrateRefusesDirtyWorktree` (an untracked unrelated file must not ride into the merge) and `TestStartupDirtyWithoutIntegrationEscalatesOnce` (the file is kept; one escalation over two restarts; cleaning the worktree clears the flag) |
 
 - [ ] **Step 1:** Write the six failing tests.
 - [ ] **Step 2:** Run `AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 go test ./mission/ -count=1`. Expected: FAIL on the new tests only.
