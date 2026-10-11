@@ -2,10 +2,11 @@
 # Provision (do NOT launch) a project's Agent Bus team. Opening the workspace is the human's
 # job via the herdr-plus fuzzy picker; this only writes the template + prepares the broker.
 # Usage:
-#   bootstrap [new|recall] <project> [<path>] [--session <name>] [--index] [--cron] [--no-dispatch] [--yes]
+#   bootstrap [new|recall] <project> [<path>] [--session <name>] [--index] [--cron] [--no-dispatch] [--no-missions] [--yes]
 #   bootstrap <project> ...           # no verb -> auto: recall if the template exists, else new
-# The template opens one tab per boot role, a busmon tab and (unless --no-dispatch) a dispatch tab
-# running `agentbus --project <p> dispatch`, which wakes idle unarmed agents when work lands for them.
+# The template opens one tab per boot role, a busmon tab, (unless --no-dispatch) a dispatch tab
+# running `agentbus --project <p> dispatch`, which wakes idle unarmed agents when work lands for
+# them, and (unless --no-missions) a missions tab running the conductor on the project dir.
 # Env seam: HERDR_PLUS_PROJECTS_DIR (default resolved from herdr).
 set -euo pipefail
 
@@ -18,6 +19,7 @@ warn() { echo "bootstrap: $*" >&2; }
 
 verb=""; project=""; project_dir=""; session_flag=""; do_index=0; do_cron=0; assume_yes=0
 do_dispatch=1
+do_missions=1
 want_session=0
 for a in "$@"; do
   if [[ "$want_session" == 1 ]]; then session_flag="$a"; want_session=0; continue; fi
@@ -27,6 +29,7 @@ for a in "$@"; do
     --index)    do_index=1 ;;
     --cron)     do_cron=1 ;;
     --no-dispatch) do_dispatch=0 ;;
+    --no-missions) do_missions=0 ;;
     --yes|-y)   assume_yes=1 ;;
     -*)         die "unknown flag: $a" ;;
     *)          if [[ -z "$project" ]]; then project="$a";
@@ -35,7 +38,7 @@ for a in "$@"; do
   esac
 done
 [[ "$want_session" == 0 ]] || die "--session needs a value"
-[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [<path>] [--session <name>] [--index] [--cron] [--no-dispatch] [--yes]"
+[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [<path>] [--session <name>] [--index] [--cron] [--no-dispatch] [--no-missions] [--yes]"
 [[ "$project" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid project name: $project"
 
 # The team's working directory: where every agent's cwd lands, and where --index builds the
@@ -72,9 +75,9 @@ ensure_broker() {
 
 write_template() {
   mkdir -p "$PROJECTS_DIR"
-  python3 - "$ROLES_TOML" "$project" "$PROJECT_DIR" "$SCRIPT_DIR" "$REPO" "$do_dispatch" > "$template" <<'PYT'
+  python3 - "$ROLES_TOML" "$project" "$PROJECT_DIR" "$SCRIPT_DIR" "$REPO" "$do_dispatch" "$do_missions" > "$template" <<'PYT'
 import json, shlex, sys, tomllib
-manifest, project, cwd, scripts, repo, do_dispatch = sys.argv[1:]
+manifest, project, cwd, scripts, repo, do_dispatch, do_missions = sys.argv[1:]
 with open(manifest, "rb") as f:
     roles = tomllib.load(f)["roles"]
 print("name = " + json.dumps(project, ensure_ascii=False))
@@ -90,6 +93,9 @@ print('\n[[tabs]]\nname = "busmon"\ncommand = ' + json.dumps(command, ensure_asc
 if do_dispatch == "1":
     command = shlex.join([repo + "/agentbus", "--project", project, "dispatch"])
     print('\n[[tabs]]\nname = "dispatch"\ncommand = ' + json.dumps(command, ensure_ascii=False))
+if do_missions == "1":
+    command = shlex.join([repo + "/agentbus", "--project", project, "missions", "--repo", cwd])
+    print('\n[[tabs]]\nname = "missions"\ncommand = ' + json.dumps(command, ensure_ascii=False))
 PYT
   echo "wrote $template"
 }

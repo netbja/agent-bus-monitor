@@ -218,6 +218,7 @@ type shared struct {
 	pilot    string                        // pilot-lease driver, "" = autonomous
 	budgets  map[string]bus.BudgetSnapshot // account scope, per provider
 	dispatch string                        // "", "up" or "down"
+	missions string                        // "" (no conductor, nothing loaded), "up" or "down"
 	board    map[string]bus.BoardEntry
 	requests []request    // tracked requests read from the board
 	threads  []openThread // cmd exchanges with no answer in retained history

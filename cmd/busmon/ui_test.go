@@ -375,6 +375,9 @@ func TestEnterOpensAgentDetailAndCopies(t *testing.T) {
 type fakeReader struct {
 	calls map[string]int
 	fail  bool
+
+	conductor bool     // ConductorAlive
+	changes   []string // ChangeNames
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -437,7 +440,7 @@ func TestNoExtraReadsPerTick(t *testing.T) {
 	f.calls = map[string]int{}
 	pollOnce(context.Background(), f, st, 6) // 6 % 5 == 1: a full tick
 	full := map[string]int{"PilotDriver": 1, "ArmedAgents": 1, "CmdLag": 1, "Agents": 1, "Usage": 1, "Budgets": 1,
-		"Board": 1, "Recent": 1, "DispatchAlive": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2}
+		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2}
 	if fmt.Sprint(f.calls) != fmt.Sprint(full) {
 		t.Fatalf("full tick reads %v\nwant %v", f.calls, full)
 	}
@@ -604,5 +607,29 @@ func TestDetailRefIsSanitised(t *testing.T) {
 	}
 	if !strings.Contains(got, "[red[]pr-42") {
 		t.Fatalf("ref tag not escaped:\n%s", got)
+	}
+}
+
+func (f *fakeReader) ConductorAlive(context.Context) (bool, error) {
+	f.n("ConductorAlive")
+	return f.conductor, nil
+}
+func (f *fakeReader) ChangeNames(context.Context) ([]string, error) {
+	f.n("ChangeNames")
+	return f.changes, nil
+}
+
+func TestPollMissionsState(t *testing.T) {
+	for _, c := range []struct {
+		alive   bool
+		changes []string
+		want    string
+	}{{true, nil, "up"}, {false, []string{"chg"}, "down"}, {false, nil, ""}} {
+		f := &fakeReader{calls: map[string]int{}, conductor: c.alive, changes: c.changes}
+		st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
+		pollOnce(context.Background(), f, st, 1)
+		if st.missions != c.want {
+			t.Errorf("alive=%v changes=%v: missions %q, want %q", c.alive, c.changes, st.missions, c.want)
+		}
 	}
 }

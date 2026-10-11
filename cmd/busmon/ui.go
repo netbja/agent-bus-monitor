@@ -693,7 +693,7 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	}
 	now := time.Now()
 	u.st.mu.Lock()
-	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, pilot: u.st.pilot,
+	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot,
 		waiting: waitingText(u.st.requests, u.st.threads, now), budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()
