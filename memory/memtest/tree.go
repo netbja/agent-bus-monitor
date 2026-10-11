@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/memory"
 )
 
 // WriteTree writes, in a fresh temp dir, the tree the Python checker's tests
@@ -30,6 +32,10 @@ func WriteTree(t testing.TB) string {
 	}
 	for p, body := range files {
 		Write(t, root, p, body)
+	}
+	Append(t, root, "AGENTS.md", "\n"+memory.BeginMarker+"\n"+memory.EndMarker+"\n")
+	if _, err := memory.Sync(root); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatal(err)

@@ -124,6 +124,9 @@ func TestFutureAndInvertedDatesFail(t *testing.T) {
 func TestImageLinkIsNotALink(t *testing.T) {
 	root := memtest.WriteTree(t)
 	memtest.Append(t, root, "docs/memory/INDEX.md", "![diagram](missing.png)\n")
+	if _, err := memory.Sync(root); err != nil {
+		t.Fatal(err)
+	}
 	if r := check(root); len(r.Errors) != 0 {
 		t.Fatalf("errors: %q", r.Errors)
 	}

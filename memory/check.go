@@ -101,6 +101,7 @@ func (c *checker) run() {
 		}
 	}
 	c.reachability()
+	c.blockRule()
 }
 
 // memoryNotes lists every .md under docs/memory (Python's rglob).
