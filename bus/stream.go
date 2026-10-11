@@ -30,11 +30,12 @@ const (
 
 	CmdEscalation = "escalation" // dispatcher: an addressed message went unread too long
 	CmdBlocked    = "blocked"    // request block: tells the requester its request is blocked
+	CmdComplete   = "complete"   // conductor: every mission of a change revision is integrated (v0.10.1)
 )
 
 var validCmdTypes = map[string]bool{
 	CmdDirective: true, CmdChallenge: true, CmdReply: true, CmdVerdict: true,
-	CmdEscalation: true, CmdBlocked: true,
+	CmdEscalation: true, CmdBlocked: true, CmdComplete: true,
 }
 
 // nameRE bounds project slugs and agent names: lowercase, starts with a letter,
@@ -72,6 +73,9 @@ type AgentSnapshot struct {
 	PID      int    `json:"pid,omitempty"`
 	PIDStart uint64 `json:"pid_start,omitempty"`
 	Terminal string `json:"terminal,omitempty"` // herdr terminal id, display only
+	// IdentTS (ms, Redis time) is when the identity was last proved: by a
+	// verified status (its stream id) or a bind. Only a newer proof replaces it.
+	IdentTS int64 `json:"ident_ts,omitempty"`
 }
 
 // AgentIdent is the ambient identity an agent's own process already knows about
@@ -257,9 +261,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
 		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal}
-	if snap, merr := json.Marshal(snapshot); merr == nil {
-		_ = b.r.HSet(ctx, AgentsKey(b.project), agent, snap).Err()
-	}
+	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.
 	// A failure only delays group creation to the first subscribe.

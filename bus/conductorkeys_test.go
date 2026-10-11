@@ -270,3 +270,42 @@ func TestFencedMissionBatch(t *testing.T) {
 		t.Fatal("invalid change name accepted")
 	}
 }
+
+func TestFencedCmdWithChangeAtomic(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, ConductorKey(b.project), ChangeKey(b.project, "chg")) })
+	b.AcquireConductor(ctx, "real", 15*time.Second)
+	if _, err := b.FencedCmdWithChange(ctx, "stale", "chg", "conductor", "master", CmdComplete, "done", `{"rev":1}`); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("stale token: %v, want ErrNotHolder", err)
+	}
+	if n, _ := b.r.Exists(ctx, ChangeKey(b.project, "chg")).Result(); n != 0 {
+		t.Fatal("a refused write left the change record")
+	}
+	id, err := b.FencedCmdWithChange(ctx, "real", "chg", "conductor", "master", CmdComplete, "change chg rev 1 complete", `{"rev":1}`)
+	if err != nil || id == "" {
+		t.Fatalf("write: %q %v", id, err)
+	}
+	rec, _ := b.r.HGet(ctx, ChangeKey(b.project, "chg"), ChangeRecordField).Result()
+	evs, _, _ := b.Recent(ctx, []string{"cmd"}, 10)
+	if rec != `{"rev":1}` || len(evs) != 1 || evs[0].Type != CmdComplete || evs[0].Target != "master" {
+		t.Fatalf("record %q, cmds %+v", rec, evs)
+	}
+}
+
+func TestResultBlockNeverRoundsToForever(t *testing.T) {
+	// XREAD BLOCK takes milliseconds and BLOCK 0 waits forever: what is left
+	// under a millisecond must end the wait, not become 0.
+	for _, c := range []struct {
+		left time.Duration
+		want time.Duration
+		ok   bool
+	}{
+		{0, 0, false}, {500 * time.Microsecond, 0, false}, {time.Millisecond, time.Millisecond, true},
+		{300 * time.Millisecond, 300 * time.Millisecond, true}, {5 * time.Second, time.Second, true},
+	} {
+		if got, ok := resultBlock(c.left); got != c.want || ok != c.ok {
+			t.Errorf("resultBlock(%v) = %v, %v; want %v, %v", c.left, got, ok, c.want, c.ok)
+		}
+	}
+}

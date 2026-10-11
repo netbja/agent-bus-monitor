@@ -40,6 +40,8 @@ func TestLookEventMapping(t *testing.T) {
 			eventLook{From: "dispatch", To: "master", Type: "escalation", Role: RoleDispatch, Text: "stuck"}},
 		{"blocked", bus.Event{Kind: "cmd", Type: "blocked", From: "kimi", Target: "master", Message: "need key"},
 			eventLook{From: "kimi", To: "master", Type: "blocked", Role: RoleError, Text: "need key"}},
+		{"complete", bus.Event{Kind: "cmd", Type: "complete", From: "conductor", Target: "master", Message: "change calc rev 1 complete"},
+			eventLook{From: "conductor", To: "master", Type: "complete", Role: RoleOK, Text: "change calc rev 1 complete"}},
 		{"unknown cmd", bus.Event{Kind: "cmd", Type: "shutdown", From: "master", Target: "kimi", Message: "bye"},
 			eventLook{From: "master", To: "kimi", Type: "shutdown", Role: RoleMuted, Text: "bye"}},
 		{"unknown kind", bus.Event{Kind: "weird", Message: "x"},

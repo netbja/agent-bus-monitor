@@ -222,7 +222,15 @@ def launch(role, project):
             needed.append("--" + p["options"]["permission"])
         require(all(flag in help_result.stdout for flag in needed), f"{binary} lacks required launch flags; inspect its version/help")
     cmd = build(p, project, prompt, prompt_path, dry)
+    # Inside herdr, bind this process's pid before exec hands it (and its start time) to the
+    # client: the dispatcher can then verify the pane even when the client's own commands
+    # do not descend from it (Codex's shared app-server).
+    bind = None
+    if os.environ.get("HERDR_ENV") == "1" and os.environ.get("HERDR_PANE_ID"):
+        bind = [os.environ.get("AGENTBUS_BIN", "agentbus"), "--project", project, "bind", role, "--pid", str(os.getpid())]
     if dry:
+        if bind:
+            print(shlex.join(bind))
         print(shlex.join(cmd))
         if not p["legacy"]:
             print(f"profile={p['profile']} client={p['client']} provider={p['provider']} reasoning={p.get('reasoning', 'client-default')}; skills={','.join(p['skills'])}")
@@ -238,6 +246,14 @@ def launch(role, project):
         env[target] = os.environ[source]
     if p["client"] == "claude-code" and env.get("AGENT_LAUNCH_KEEP_API_KEY") != "1":
         env.pop("ANTHROPIC_API_KEY", None)
+    if bind:
+        try:
+            ok = subprocess.run(bind, env=env, timeout=10).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            ok = False
+        if not ok:  # an agent the dispatcher cannot wake beats no agent
+            print(f"warning: agentbus bind failed; the dispatcher will not wake {role} until it is bound "
+                  f"(agentbus --project {project} bind {role} --pane {os.environ['HERDR_PANE_ID']})", file=sys.stderr)
     os.execvpe(cmd[0], cmd, env)
 
 

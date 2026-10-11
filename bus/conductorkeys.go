@@ -258,11 +258,11 @@ func (b *Bus) WaitMissionOpResult(ctx context.Context, reqID string, timeout tim
 		}
 	}
 	for {
-		left := time.Until(deadline)
-		if left <= 0 {
+		block, ok := resultBlock(time.Until(deadline))
+		if !ok {
 			return false, "", false, nil
 		}
-		res, err := b.r.XRead(ctx, &redis.XReadArgs{Streams: []string{MissionResultsKey(b.project), cursor}, Count: 64, Block: min(left, time.Second)}).Result()
+		res, err := b.r.XRead(ctx, &redis.XReadArgs{Streams: []string{MissionResultsKey(b.project), cursor}, Count: 64, Block: block}).Result()
 		if err == redis.Nil {
 			continue
 		}
@@ -330,4 +330,44 @@ func (b *Bus) FencedMissionBatch(ctx context.Context, token, change string, miss
 		args = append(args, id, missions[id])
 	}
 	return notHolder(fencedMissionBatch.Run(ctx, b.r, []string{ConductorKey(b.project), MissionsKey(b.project, change), ChangeKey(b.project, change)}, args...).Err())
+}
+
+// KEYS = lease, cmd stream, change; ARGV = token, maxlen, changeRecord, then
+// the cmd field/value pairs.
+var fencedCmdWithChange = redis.NewScript(fenceCheck + `
+local id = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', unpack(ARGV, 4))
+redis.call('HSET', KEYS[3], '` + ChangeRecordField + `', ARGV[3])
+return id`)
+
+// FencedCmdWithChange appends one cmd entry and writes the change record in
+// one script under the conductor lease: a signal sent exactly once with the
+// marker that says it was sent (v0.10.1, change complete).
+func (b *Bus) FencedCmdWithChange(ctx context.Context, token, change, from, target, typ, command, changeRecord string) (string, error) {
+	switch {
+	case !ValidName(change):
+		return "", fmt.Errorf("invalid change %q", change)
+	case !ValidName(target):
+		return "", fmt.Errorf("invalid target %q", target)
+	case !validCmdTypes[typ]:
+		return "", fmt.Errorf("invalid cmd type %q", typ)
+	}
+	if err := ValidateText(command, CmdMaxRunes); err != nil {
+		return "", err
+	}
+	v, err := fencedCmdWithChange.Run(ctx, b.r, []string{ConductorKey(b.project), StreamKey(b.project, "cmd"), ChangeKey(b.project, change)},
+		token, streamMaxLen, changeRecord, "from", from, "target", target, "type", typ, "ref", "", "command", command, "text_complete", "yes").Result()
+	if err != nil {
+		return "", notHolder(err)
+	}
+	id, _ := v.(string)
+	return id, nil
+}
+
+// resultBlock is the XREAD BLOCK for what is left of a wait. BLOCK is in whole
+// milliseconds and BLOCK 0 waits forever, so under a millisecond the wait ends.
+func resultBlock(left time.Duration) (time.Duration, bool) {
+	if left < time.Millisecond {
+		return 0, false
+	}
+	return min(left, time.Second).Truncate(time.Millisecond), true
 }

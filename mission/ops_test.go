@@ -142,3 +142,14 @@ func TestSkipVerdictNotDuplicatedMultiline(t *testing.T) {
 		t.Fatalf("%d ledger entries, want 1", len(vs))
 	}
 }
+
+func TestLoadMissingBriefShowsResolvedPath(t *testing.T) {
+	h := newHarness(t, "true")
+	data := `{"change": "other", "reviewer": "codex", "missions": [
+ {"id": "a", "title": "A", "agent": "kimi", "allowed_paths": ["src/**"], "test": "true", "brief": "brief.md#a"}]}`
+	commitFile(t, h.repo, "docs/changes/other/missions.json", data, "other")
+	ok, msg := h.op("load", "docs/changes/other/missions.json@HEAD")
+	if ok || !strings.Contains(msg, `brief "brief.md" (resolved: docs/changes/other/brief.md) not found`) {
+		t.Fatalf("load = %v %q, want the resolved brief path", ok, msg)
+	}
+}

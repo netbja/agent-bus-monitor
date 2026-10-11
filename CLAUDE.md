@@ -134,9 +134,12 @@ presence is what `agentbus dispatch --status` and busmon's `dispatch up/down` re
 `projectKinds`), `{p}:wake:{agent}` (Redis hash, the dispatcher's per-agent wake record — state,
 `at` from Redis `TIME`, tries, pid, escalated, gap flag; two colons, so it cannot forge a project).
 `AgentSnapshot` also carries `pid`/`pid_start`/`terminal`, recorded by `agentbus status` inside
-herdr — the identity the dispatcher checks before typing into a pane. cmd `type` gains
-`escalation` (dispatcher → `--escalate-to`, default `master`) and `blocked` (written by `request
-block` to the requester, only on a transition or a new reason).
+herdr — the identity the dispatcher checks before typing into a pane — or by `agentbus bind`
+(v0.10.1, `Bus.Bind` in `bus/ident.go`) for a client whose commands do not descend from its pane
+(Codex's shared app-server). cmd `type` gains
+`escalation` (dispatcher → `--escalate-to`, default `master`), `blocked` (written by `request
+block` to the requester, only on a transition or a new reason) and `complete` (conductor → the
+escalation target, once per change revision whose missions are all integrated).
 
 ### Budget vs usage: two scopes, two keys, zero cooperation
 
@@ -334,6 +337,13 @@ It never touches Redis — see README "Deployment topology".
   `--since`, `subscribe` floors at the server's "now", so everything that waited for an unarmed
   agent is ACKed without output. That is why a woken agent must run `subscribe --drain` — keep the
   wake text and the skills pointing there, never at a plain `subscribe`.
+- **An unverified `status` never overwrites a verified identity.** Every `{p}:agents` write goes
+  through `putSnapshot` (`bus/ident.go`, one WATCH/MULTI transaction, `mergeSnapshot`): a status
+  with no pid keeps the stored pane/pid/pid_start/terminal, a verified one replaces them, an
+  older entry never regresses state, `bind` changes only the identity, and a verified status
+  replaces the identity only if it is newer than `ident_ts` (the last proof). Don't write the
+  snapshot with a bare HSET — Codex's app-server env carries another session's `HERDR_PANE_ID`,
+  and a blind write would erase the bound pane. One runtime per agent name.
 - **Every dispatcher write is fenced.** Wake records, escalation/notify XADDs, deletes and group
   creation go through Lua that first checks `GET {p}:dispatch == token`, so a dispatcher that lost
   its lease — or whose project was deleted — writes nothing and recreates no key. Persisted times

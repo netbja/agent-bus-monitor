@@ -258,3 +258,25 @@ func TestForegroundPIDs(t *testing.T) {
 		t.Fatalf("ForegroundPIDs = %v %q %v", pids, term, err)
 	}
 }
+
+func TestParseProcessInfoProcs(t *testing.T) {
+	procs, err := parseProcessInfoProcs([]byte(readFixture(t, "herdr/process-info-codex.json")))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var node *Proc
+	for i := range procs {
+		if procs[i].PID == 1930926 {
+			node = &procs[i]
+		}
+	}
+	if node == nil || node.Name != "MainThread" || node.Cmdline != "node /home/sysnet/.nvm/versions/node/v24.10.0/bin/codex" {
+		t.Fatalf("procs = %+v, want the codex node process with its command line", procs)
+	}
+	if len(procs) != 4 {
+		t.Fatalf("got %d procs, want 4", len(procs))
+	}
+	if _, err := parseProcessInfoProcs([]byte(readFixture(t, "herdr/process-info-notfound.json"))); err == nil {
+		t.Fatal("a herdr error must not parse as an empty list")
+	}
+}

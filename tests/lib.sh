@@ -2,6 +2,9 @@
 # Tiny assert helpers + a PATH-stub maker. Sourced by every tests/*_test.sh.
 # Note: intentionally NOT `set -e` — we run all asserts and count failures.
 set -uo pipefail
+# Hermetic: a test run from inside a herdr pane must not reach the live herdr or broker
+# (agent-launch binds through agentbus when HERDR_ENV=1).
+unset HERDR_ENV HERDR_PANE_ID REDIS_URL
 
 _pass=0; _fail=0
 _ok()  { _pass=$((_pass+1)); echo "  ok: $1"; }

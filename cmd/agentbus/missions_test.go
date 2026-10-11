@@ -145,3 +145,18 @@ func TestMissionCLIRecover(t *testing.T) {
 		t.Fatalf("--recover reached usage instead of the queue: exit %d %q", code, errOut)
 	}
 }
+
+func TestChangeHeaderShowsCompletion(t *testing.T) {
+	rec := mission.ChangeRecord{Change: "calc", Rev: 2, State: "active", Branch: "change/calc"}
+	if got := changeHeader(rec); got != "calc rev 2 (active) change/calc" {
+		t.Fatalf("header = %q", got)
+	}
+	rec.CompletedRev, rec.CompletedHead = 2, "410e62a0123456789"
+	if got := changeHeader(rec); got != "calc rev 2 (active, complete at 410e62a01234) change/calc" {
+		t.Fatalf("header = %q", got)
+	}
+	rec.Rev = 3 // reloaded since: rev 3 is not complete
+	if got := changeHeader(rec); got != "calc rev 3 (active) change/calc" {
+		t.Fatalf("header = %q", got)
+	}
+}
