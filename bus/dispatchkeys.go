@@ -234,8 +234,13 @@ func (b *Bus) DeleteWake(ctx context.Context, agent, token string) error {
 }
 
 func (b *Bus) fencedAdd(ctx context.Context, token, kind string, fields ...interface{}) (string, error) {
+	return b.fencedAddKey(ctx, DispatchKey(b.project), StreamKey(b.project, kind), token, fields...)
+}
+
+// fencedAddKey XADDs fields to stream only while token holds leaseKey.
+func (b *Bus) fencedAddKey(ctx context.Context, leaseKey, stream, token string, fields ...interface{}) (string, error) {
 	args := append([]interface{}{token, streamMaxLen}, fields...)
-	v, err := fencedAdd.Run(ctx, b.r, []string{DispatchKey(b.project), StreamKey(b.project, kind)}, args...).Result()
+	v, err := fencedAdd.Run(ctx, b.r, []string{leaseKey, stream}, args...).Result()
 	if err != nil {
 		return "", err
 	}

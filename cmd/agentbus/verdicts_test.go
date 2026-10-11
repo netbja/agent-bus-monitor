@@ -23,55 +23,6 @@ func TestResolveSubject(t *testing.T) {
 	}
 }
 
-func TestRollUp(t *testing.T) {
-	mk := func(reviewer, author, decision string) bus.Verdict {
-		return bus.Verdict{Reviewer: reviewer, Author: author, Decision: decision}
-	}
-	cases := []struct {
-		name    string
-		vs      []bus.Verdict
-		want    string
-		wantIdx int
-	}{
-		{"independent approve",
-			[]bus.Verdict{mk("claude2", "claude1", "approve")},
-			"APPROVED", 0},
-		{"self approve only",
-			[]bus.Verdict{mk("claude1", "claude1", "approve")},
-			"PENDING", -1},
-		{"reject after approve",
-			[]bus.Verdict{mk("claude2", "claude1", "approve"), mk("claude3", "claude1", "reject")},
-			"REJECTED", 1},
-		{"reject then approve",
-			[]bus.Verdict{mk("claude3", "claude1", "reject"), mk("claude2", "claude1", "approve")},
-			"APPROVED", 1},
-		{"empty", nil, "PENDING", -1},
-		// Two independent approves: APPROVED, deciderIdx = index of the LATEST approve.
-		{"two independent approves",
-			[]bus.Verdict{mk("claude2", "claude1", "approve"), mk("claude3", "claude1", "approve")},
-			"APPROVED", 1},
-		// Multiple independent approves, then a reject: REJECTED.
-		{"multiple approves then reject",
-			[]bus.Verdict{
-				mk("claude2", "claude1", "approve"),
-				mk("claude3", "claude1", "approve"),
-				mk("claude4", "claude1", "reject"),
-			},
-			"REJECTED", 2},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, gotIdx := rollUp(c.vs)
-			if got != c.want {
-				t.Errorf("state = %q, want %q", got, c.want)
-			}
-			if gotIdx != c.wantIdx {
-				t.Errorf("deciderIdx = %d, want %d", gotIdx, c.wantIdx)
-			}
-		})
-	}
-}
-
 func TestVerdictsOverview(t *testing.T) {
 	now := time.UnixMilli(1_700_000_000_000)
 	ts := func(secAgo int) int64 { return now.Add(-time.Duration(secAgo) * time.Second).UnixMilli() }

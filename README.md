@@ -239,6 +239,33 @@ it links a piece of evidence. AGENTS.md carries a generated copy of the index so
 which load only AGENTS.md see it at boot; Claude Code imports the real file from CLAUDE.md. See
 [the memory protocol](docs/memory/PROTOCOL.md).
 
+### Missions: agentbus missions (v0.10, slice 1)
+
+For a large change worked on by several agents over several days, the plan stays in Git and the bus
+runs it. A change's tasks become **missions** in `docs/changes/<change>/missions.json` (agent,
+reviewer, dependencies, allowed paths, test command, brief). A deterministic **conductor** — no LLM
+— requests each mission once its dependencies are integrated, rejects a delivery that touches files
+outside its allowed paths or whose tests are red, opens a 4-eyes review on the assigned reviewer,
+and merges approved commits into `change/<change>` (never `main`, never a push). Master only
+arbitrates what is blocked.
+
+```bash
+agentbus missions                                   # the conductor (one per project, a herdr tab)
+agentbus mission load docs/changes/chg/missions.json@HEAD
+agentbus mission status [chg]                       # where each mission stands
+agentbus mission retry chg/t3                       # a blocked mission gets a new attempt
+agentbus mission abort chg --reason "wrong plan"
+# agents deliver with:
+agentbus request done <task> --commit <sha> --branch <b> "<summary>"
+```
+
+For a short, Claude-only change, Claude Code's agent teams are lighter; missions are for mixed
+teams (Codex, Kimi, Grok, agy…) and work that must survive restarts. Limits (spec §6.7): the
+conductor and the agents share one machine and repository, and running a mission's tests runs the
+agent's committed code as your user — load only plans you have reviewed, and keep secrets out of
+the conductor's environment. Slice 2 adds reloads, `--recover`, `skip`/`reassign`, timeouts and the
+busmon indicator. Spec: [`docs/superpowers/specs/2026-10-11-missions-design.md`](docs/superpowers/specs/2026-10-11-missions-design.md).
+
 ## busmon panes
 
 A btop-style dashboard (v0.9); the [screenshot at the top](#new-in-v090--busmon-redesign) shows it at

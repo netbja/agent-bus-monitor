@@ -225,3 +225,13 @@ func TestRequestsPanelExplainsAnEmptyBoard(t *testing.T) {
 		t.Errorf("the empty view should say how a tracked request is created:\n%s", panel)
 	}
 }
+
+func TestSupersededIsNotWaiting(t *testing.T) {
+	r := request{State: "superseded", Tracked: true}
+	if r.waiting() {
+		t.Fatal("a superseded request counts as waiting")
+	}
+	if n := waitingCount([]request{r, {State: "accepted", Tracked: true}}, nil); n != 1 {
+		t.Fatalf("waitingCount = %d, want 1", n)
+	}
+}

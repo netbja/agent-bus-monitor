@@ -82,7 +82,7 @@ func boardRequests(m map[string]bus.BoardEntry) []request {
 // waiting reports whether this request still needs somebody to act. Only the
 // recorded state answers that — never the agent's presence, never a delivery
 // flag, never the age of the entry.
-func (r request) waiting() bool { return r.State != "done" }
+func (r request) waiting() bool { return r.State != "done" && r.State != "superseded" }
 
 // trackedOnly keeps the board entries that actually carry request metadata.
 // Everything downstream counts and renders requests; a plain board task has no
