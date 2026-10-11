@@ -3,6 +3,7 @@ module github.com/netbja/agent-bus-monitor
 go 1.26.3
 
 require (
+	github.com/BurntSushi/toml v1.5.0
 	github.com/gdamore/tcell/v2 v2.13.9
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/rivo/tview v0.42.0
