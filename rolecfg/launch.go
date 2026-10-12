@@ -210,10 +210,21 @@ func cacheFile(env []string, text, suffix string) (string, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return "", err
 	}
+	// The cached file becomes a client's prompt or spec: a directory others can
+	// write to would let them plant one.
+	if st, err := os.Stat(root); err != nil {
+		return "", err
+	} else if st.Mode().Perm()&0o022 != 0 {
+		return "", fmt.Errorf("launch cache %s is writable by others; use a private directory (chmod 700)", root)
+	}
 	sum := sha256.Sum256([]byte(text))
 	target := filepath.Join(root, hex.EncodeToString(sum[:])+suffix)
-	if _, err := os.Lstat(target); err == nil {
-		return target, nil
+	// Reuse an entry only if it is a regular file whose content still matches
+	// its name; a symlink or a tampered file is replaced (rename never follows it).
+	if st, err := os.Lstat(target); err == nil && st.Mode().IsRegular() {
+		if b, err := os.ReadFile(target); err == nil && sha256.Sum256(b) == sum {
+			return target, nil
+		}
 	}
 	tmp, err := os.CreateTemp(root, "tmp")
 	if err != nil {

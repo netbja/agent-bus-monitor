@@ -409,3 +409,42 @@ func TestRepoFromEnv(t *testing.T) {
 		t.Fatalf("skills not taken from AGENTBUS_REPO: %q", f.execed)
 	}
 }
+
+// The cache is trusted only for what it holds: a planted file or symlink with
+// the right name but other content is replaced, never handed to a client.
+func TestCacheFileReplacesTamperedEntries(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "c")
+	env := []string{"AGENT_LAUNCH_CACHE=" + dir}
+	path, err := cacheFile(env, "hello", ".md")
+	must(t, err)
+	must(t, os.WriteFile(path, []byte("INJECTED"), 0o600))
+	again, err := cacheFile(env, "hello", ".md")
+	must(t, err)
+	if b, _ := os.ReadFile(again); string(b) != "hello" {
+		t.Fatalf("tampered cache entry reused: %q", b)
+	}
+	evil := filepath.Join(t.TempDir(), "evil")
+	must(t, os.WriteFile(evil, []byte("INJECTED"), 0o600))
+	must(t, os.Remove(path))
+	must(t, os.Symlink(evil, path))
+	again, err = cacheFile(env, "hello", ".md")
+	must(t, err)
+	if st, _ := os.Lstat(again); st.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("a symlink in the cache was kept")
+	}
+	if b, _ := os.ReadFile(again); string(b) != "hello" {
+		t.Fatalf("symlinked cache entry reused: %q", b)
+	}
+	if b, _ := os.ReadFile(evil); string(b) != "INJECTED" {
+		t.Fatal("the symlink target was written through")
+	}
+}
+
+func TestCacheFileRefusesAWritableSharedDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "shared")
+	must(t, os.MkdirAll(dir, 0o777))
+	must(t, os.Chmod(dir, 0o777))
+	if _, err := cacheFile([]string{"AGENT_LAUNCH_CACHE=" + dir}, "hello", ".md"); err == nil || !strings.Contains(err.Error(), "writable by others") {
+		t.Fatalf("a group/world-writable cache dir was used: %v", err)
+	}
+}
