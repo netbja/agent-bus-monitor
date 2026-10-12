@@ -216,7 +216,12 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   confirmation or `--reset --yes`). `--list` prints the broker's projects to **stdout** and exits
   (plain text, never the TUI). `--delete <p>` retires a project (`bus.DeleteProject` = `DEL` of every
   `{p}:*` key) behind the same gate; the prompt states key count, agent count and last activity.
-  `--theme auto|dark|light` (or `AGENT_BUS_BUSMON_THEME`).
+  `--theme auto|dark|light` (or `AGENT_BUS_BUSMON_THEME`). busmon writes as a **person**, never
+  as an agent: `--as <name>` or `AGENT_BUS_HUMAN`, else `pilot` (`humanIdentity`, `human.go`),
+  through `Bus.HumanCmd`/`HumanNotify`, whose entries carry `human=yes` (`Event.Human`,
+  subscribe's `"human": true`). The header shows `♙ Bernard [human · pilot]`; `@all` fans a
+  directive out to every known agent; a plain-text notify needs a second Enter, because nobody
+  reads one and nothing wakes for it.
 
   Files: `theme.go` (colour roles, palettes dark/light/16/none, the closed single-cell glyph set —
   the only place colours and glyphs are named), `cells.go` (preview/detail sanitising, grapheme

@@ -174,6 +174,7 @@ type Event struct {
 	Attempt      int64  // Redis delivery attempt count
 	Full         string // report: full retained text (empty unless it differs from the preview)
 	NoWake       bool   // cmd: field wake=no — delivered, but never worth waking the target
+	Human        bool   // cmd/notify: field human=yes — written by a person (busmon), not an agent
 	Stale        bool   // set by drain only: entry older than the horizon
 	AgeS         int64  // set by drain only: entry age in seconds
 }
@@ -186,6 +187,7 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	e := Event{ID: id, Project: project, Kind: kind, TextComplete: fields["text_complete"], Task: fields["task"]}
 	e.ExpiresAt, _ = strconv.ParseInt(fields["expires_at"], 10, 64)
 	e.NoWake = fields["wake"] == "no"
+	e.Human = fields["human"] == "yes"
 	switch kind {
 	case "status":
 		e.Agent, e.State, e.Message = fields["agent"], fields["state"], fields["message"]
@@ -884,4 +886,23 @@ func toStringMap(v map[string]interface{}) map[string]string {
 		}
 	}
 	return out
+}
+
+// HumanCmd is a directive written by a person from busmon: the entry carries
+// human=yes, so agents (subscribe's "human") and every busmon tell it apart
+// from an agent's directive. It wakes the target like any addressed entry.
+func (b *Bus) HumanCmd(ctx context.Context, from, target, command string) (string, error) {
+	if !ValidName(from) {
+		return "", fmt.Errorf("invalid sender %q", from)
+	}
+	return b.cmd(ctx, from, target, CmdDirective, "", command, map[string]interface{}{"human": "yes"})
+}
+
+// HumanNotify is a broadcast written by a person: nobody reads it and nothing
+// wakes for it, which busmon says before sending one.
+func (b *Bus) HumanNotify(ctx context.Context, from, message string) (string, error) {
+	if !ValidName(from) {
+		return "", fmt.Errorf("invalid sender %q", from)
+	}
+	return b.add(ctx, "notify", map[string]interface{}{"from": from, "message": message, "human": "yes"})
 }

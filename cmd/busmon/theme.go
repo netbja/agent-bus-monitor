@@ -166,6 +166,7 @@ const (
 	GlyphBarEmpty  = "░"
 	GlyphGauge     = "▇"
 	GlyphPrompt    = "›"
+	GlyphHuman     = "♙" // a person on the bus (busmon), never an agent
 	// Border glyphs are kept here too; Task 10 owns tview.Borders.
 	glyphVertical    = "│"
 	glyphThumb       = "┃"
@@ -180,5 +181,5 @@ var UIGlyphs = []string{
 	GlyphWorking, GlyphIdle, GlyphBlocked, GlyphDown, GlyphDone, GlyphNone,
 	GlyphSelect, GlyphArrowR, GlyphArrowL, GlyphUp, GlyphDownArrow, GlyphEllipsis,
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
-	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt,
+	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
 }

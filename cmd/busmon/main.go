@@ -234,6 +234,7 @@ func main() {
 	listFlag := flag.Bool("list", false, "list the projects on this bus and exit")
 	deleteFlag := flag.String("delete", "", "delete every key of a project (DEL, not --reset's XTRIM) and exit")
 	themeFlag := flag.String("theme", "", "colour theme: auto, dark or light (or AGENT_BUS_BUSMON_THEME; default auto)")
+	asFlag := flag.String("as", "", "your name on the bus, shown as a human (or AGENT_BUS_HUMAN; default \"pilot\")")
 	flag.Parse()
 	// A typo in the cosmetic --theme must fail before anything destructive
 	// (--reset, --delete) runs; the colour depth is resolved later.
@@ -280,9 +281,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error: project required: -project <p> or AGENT_BUS_PROJECT")
 		os.Exit(1)
 	}
-	self := os.Getenv("AGENT_BUS_AGENT")
-	if self == "" {
-		self = "hermes"
+	// busmon writes as a person, never as an agent: --as, AGENT_BUS_HUMAN, else "pilot".
+	self, err := humanIdentity(*asFlag, os.Getenv("AGENT_BUS_HUMAN"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: --as: "+err.Error())
+		os.Exit(1)
 	}
 
 	client, err := bus.Connect(*host)

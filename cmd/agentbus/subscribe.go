@@ -32,6 +32,7 @@ type subEvent struct {
 	DuplicatePossible bool   `json:"duplicate_possible,omitempty"`
 	Attempt           int64  `json:"attempt,omitempty"`
 	TextComplete      string `json:"text_complete,omitempty"`
+	Human             bool   `json:"human,omitempty"` // written by a person (busmon), additive in v1
 	Stale             bool   `json:"stale,omitempty"`
 	AgeS              int64  `json:"age_s,omitempty"`
 }
@@ -44,7 +45,7 @@ func cmdEvent(e bus.Event, rearm *bool) subEvent {
 	ev := subEvent{
 		Event: "cmd", Rearm: rearm, ID: e.ID, Type: e.Type, From: e.From, Target: e.Target, Ref: e.Ref, Body: e.Message,
 		Task: e.Task, ExpiresAt: e.ExpiresAt, Delivery: e.Delivery, DuplicatePossible: e.Recovered, Attempt: e.Attempt, TextComplete: e.TextComplete,
-		Stale: e.Stale, AgeS: e.AgeS,
+		Stale: e.Stale, AgeS: e.AgeS, Human: e.Human,
 	}
 	if e.Delivery == "missing" || e.Delivery == "expired" {
 		ev.Event = "error"

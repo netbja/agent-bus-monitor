@@ -2,6 +2,18 @@
 
 # agent-bus
 
+## New in v0.10.2 — the operator is a person; no more Python
+
+- **busmon shows who you are**: `busmon --as bernard` (or `AGENT_BUS_HUMAN`, else `pilot`)
+  shows **`♙ Bernard [human · pilot]`** in the header and `♙` on your entries. Agents see
+  `"human": true` and act on a human directive first.
+- **`@all <text>`** wakes every agent. Plain text is a broadcast **nobody reads**: busmon says
+  so, and only a second Enter sends it.
+- **The role launcher is Go** (`agentbus roles`, package `rolecfg/`). `role_config.py` is gone,
+  and the scripts, the installer and the tests need no Python.
+
+See the [release notes](docs/releases/v0.10.2.md).
+
 ## New in v0.10.1 — bound identity, change complete
 
 - **Codex can be woken by the dispatcher.** Codex runs its commands through a shared `codex
@@ -340,7 +352,7 @@ A btop-style dashboard (v0.9); the [screenshot at the top](#new-in-v090--busmon-
 │  18:23  master    → codex    directive  review render.go          │╰──────────────────────────────────╯
 │  18:23  kimi                 report     go test ./... passed      │╭─ Requests ─────────── 1 waiting ─╮
 ╰───────────────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
-› i or : to write · @agent text sends a directive · plain text notifies
+› i or : to write · @agent or @all text wakes them · plain text: a broadcast nobody reads
  tab focus   ↑↓ j k select   enter detail   y copy   / filter   i write   esc back   F2 requests   F1 help   q quit
 ```
 
@@ -375,7 +387,12 @@ A btop-style dashboard (v0.9); the [screenshot at the top](#new-in-v090--busmon-
 - **Requests** — tracked requests still waiting, then cmd threads with no answer in the
   retained history (never shown as accepted); the header counts both.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` sends a
-  directed cmd (Tab completes the name), plain text a notify. Esc leaves it and keeps the draft.
+  directed cmd (Tab completes the name) that wakes the agent, `@all <text>` one to every agent.
+  Plain text is a notify that no agent reads and nothing wakes for: the first Enter says so, a
+  second one sends it. Esc leaves it and keeps the draft. You write as a **person**: `busmon
+  --as bernard` (or `AGENT_BUS_HUMAN`) shows "♙ Bernard [human · pilot]" in the header (`pilot`
+  while you hold the lease); with no name it is "♙ Pilot [human]". Your entries carry `human=yes`,
+  and agents see `"human": true`.
 
 **Responsive.** At 120 columns and more, the layout above. From 80 to 119, the header takes
 two lines and the lower area becomes tabs (`1 Activity · 2 Board · 3 Requests`). Under 80,

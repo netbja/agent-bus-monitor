@@ -53,6 +53,10 @@ never wakes a terminal session.
   collapse them. Every
   line also leads with `"v"` (protocol version); ignore fields you don't recognize. The
   exact table is GUIDE §3.
+- **`"human": true` means a person wrote it** (the operator, from busmon; `from` is their
+  name, or `pilot`). A human directive comes first: act on it before your queued agent work,
+  and answer them on the bus (`agentbus cmd --ref <id> <from> "<answer>"`) so busmon shows it.
+  A directive to `@all` reaches every agent; each one answers for itself.
 - **Re-arm iff `rearm` is `true`** *and you still have work in flight*. A `fatal` event is
   `rearm:false` → stop, you're misconfigured. When your work is done, stop re-arming on
   purpose — see "Disconnect when you have nothing left to do".
@@ -107,7 +111,7 @@ or subscribe — use `agentbus cmd --no-wake <target> <command>`.
 
 ## Before you act — are you piloted or autonomous?
 ```bash
-agentbus pilot status     # "piloted by hermes"  OR  "autonomous"
+agentbus pilot status     # "piloted by <driver>"  OR  "autonomous"
 ```
 - **piloted** → wait for a directive (arm `subscribe`); don't act on your own initiative.
 - **autonomous** → proceed on your own plan; just keep emitting `status`/`report`.

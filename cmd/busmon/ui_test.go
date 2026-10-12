@@ -24,14 +24,14 @@ type fakeWriter struct {
 	fail    error // returned by Cmd and Notify when set
 }
 
-func (f *fakeWriter) Cmd(_ context.Context, from, target, typ, ref, command string) (string, error) {
+func (f *fakeWriter) HumanCmd(_ context.Context, from, target, command string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "cmd "+target+" "+command)
 	return "1-0", f.fail
 }
 
-func (f *fakeWriter) Notify(_ context.Context, from, message string) (string, error) {
+func (f *fakeWriter) HumanNotify(_ context.Context, from, message string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "notify "+message)
@@ -83,7 +83,7 @@ func newHarness(t *testing.T, st *shared) *harness {
 	}
 	app := tview.NewApplication().SetScreen(sim)
 	w := &fakeWriter{}
-	u := newUI(app, st, context.Background(), w, "demo", "hermes")
+	u := newUI(app, st, context.Background(), w, "demo", "bernard")
 	app.SetRoot(u.pages, true).SetFocus(u.lists[PanelAgents])
 	h := &harness{t: t, sim: sim, app: app, u: u, w: w}
 	t.Cleanup(sim.Fini)
@@ -298,6 +298,7 @@ func TestDraftsSeparate(t *testing.T) {
 	if h.u.input.GetText() != "hello q1" {
 		t.Fatalf("message draft lost: %q", h.u.input.GetText())
 	}
+	h.key(key(tcell.KeyEnter)) // a broadcast: the first Enter only warns
 	h.key(key(tcell.KeyEnter))
 	if fmt.Sprint(h.w.sent) != "[notify hello q1]" {
 		t.Fatalf("sent %v", h.w.sent)
@@ -495,7 +496,7 @@ func TestResizeDuringDetailLoadNoDeadlock(t *testing.T) {
 	app := tview.NewApplication().SetScreen(sim)
 	w := &fakeWriter{release: make(chan struct{})}
 	st := demoShared(time.Now())
-	u := newUI(app, st, context.Background(), w, "demo", "hermes")
+	u := newUI(app, st, context.Background(), w, "demo", "bernard")
 	app.SetRoot(u.pages, true).SetFocus(u.lists[PanelAgents])
 	done := make(chan error, 1)
 	go func() { done <- app.Run() }()
