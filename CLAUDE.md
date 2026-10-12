@@ -191,7 +191,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `listen`/busmon still render the preview. `verdict` is subject-first
   (`--pr N`/`--subject S`), always appends to the `{p}:verdicts` ledger, publishes a live
   `CmdVerdict`, and resolves a matching `--ref` gate only as a best-effort bonus (it no longer
-  errors when no challenge is open). `verdicts [--pr N|--subject S]` prints the roll-up 4-eyes
+  errors when no challenge is open; a `--ref` open on the *reviewer*, a mission review the conductor
+  closes itself, is left alone and not reported as missing — `verdictGateNotice`). `verdicts [--pr N|--subject S]` prints the roll-up 4-eyes
   state (`APPROVED`/`REJECTED`/`PENDING`) with exit codes 0/3/2; no-arg lists recent verdicts
   across all subjects. `cmd [--ref T] <target> <command>` now prints its entry id (the thread
   root) and accepts `--ref` to continue an existing thread; `thread <T>` reads the `:cmd` stream

@@ -297,8 +297,8 @@ func main() {
 		//    challenge. A missing/stale ref is a notice, not a fatal error — that
 		//    is what lets a cmd-requested review (no challenge) still be recorded.
 		if ref != "" {
-			if err := b.ResolveChallenge(ctx, author, ref); err != nil {
-				fmt.Fprintln(os.Stderr, "notice: "+err.Error())
+			if msg := verdictGateNotice(ctx, b, author, self, ref); msg != "" {
+				fmt.Fprintln(os.Stderr, msg)
 			}
 		}
 		fmt.Printf("verdict recorded: %s %s on %s\n", decision, subject, author)
