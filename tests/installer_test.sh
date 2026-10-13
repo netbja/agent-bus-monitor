@@ -23,7 +23,7 @@ cat > "$T/fakebin/herdr" <<'EOF'
 echo "$*" >> "$HERDR_LOG"
 case "$1 ${2:-}" in
   "plugin list") if [ -f "$HERDR_STATE" ]; then echo "- cloudmanic.herdr-plus (Herdr Plus) enabled [$(cat "$HERDR_STATE")]"; else echo "0 plugins installed"; fi ;;
-  "plugin install") echo "github" > "$HERDR_STATE" ;;
+  "plugin install") [ -n "${HERDR_FAIL_INSTALL:-}" ] && exit 1; echo "github" > "$HERDR_STATE" ;;
   "plugin link") echo "local:$3" > "$HERDR_STATE" ;;
   "plugin uninstall"|"plugin unlink") rm -f "$HERDR_STATE" ;;
   "plugin action") [ -f "$HERDR_STATE" ] && echo '{"result":{"actions":[{"action_id":"projects","command":["x"],"plugin_id":"cloudmanic.herdr-plus"}]}}' ;;
@@ -122,12 +122,17 @@ assert_contains "$(cat "$HERDR_LOG")" "plugin install cloudmanic/herdr-plus --re
 : > "$HERDR_LOG"
 HERDR_PLUS_REF=v0.1.99 run_setup install --no-skills >/dev/null
 assert_eq "$(grep -c 'plugin install' "$HERDR_LOG")" "0" "the same pin is not reinstalled"
+fail_out="$(HERDR_FAIL_INSTALL=1 HERDR_PLUS_REF=v0.2.0 run_setup install --no-skills)"
+assert_contains "$fail_out" "herdr-plus is NOT installed" "a failed reinstall and rollback says the plugin is gone"
+run_setup install --install-herdr --no-skills >/dev/null
 
 # A local herdr-plus checkout is linked, not downloaded
 rm -f "$HERDR_STATE"; : > "$HERDR_LOG"
 mkdir -p "$T/hp/bin" && printf '#!/bin/sh\n' > "$T/hp/bin/herdr-plus" && chmod +x "$T/hp/bin/herdr-plus"
 HERDR_PLUS_PATH="$T/hp" "$SETUP" install --bin-dir "$T/bin" --no-docker --no-skills >/dev/null 2>&1
 assert_contains "$(cat "$HERDR_LOG")" "plugin link $T/hp" "a local checkout is linked into herdr"
+: > "$HERDR_LOG"; HERDR_PLUS_PATH="$T/hp" HERDR_PLUS_REF=v0.3.0 "$SETUP" install --bin-dir "$T/bin" --no-docker --no-skills >/dev/null 2>&1
+assert_eq "$(grep -c "plugin install" "$HERDR_LOG")" "0" "a linked checkout is never reinstalled from GitHub"
 
 # A key already bound to prefix+up is not overridden
 cp "$T/cfg/herdr/config.toml" "$T/config.ours"
@@ -198,12 +203,13 @@ assert_contains "$up_out" "git pull --ff-only failed" "and says why"
 
 # update fast-forwards to a newer release and reinstalls it
 git clone -q --bare "$T/repo" "$T/upstream.git" && git -C "$T/repo" remote add origin "$T/upstream.git" && git -C "$T/repo" fetch -q origin && git -C "$T/repo" branch -q -u origin/$(git -C "$T/repo" rev-parse --abbrev-ref HEAD)
-git clone -q "$T/upstream.git" "$T/dev" && echo more >> "$T/dev/CHANGELOG.md" && git -C "$T/dev" add -A && git -C "$T/dev" -c user.email=t@t -c user.name=t commit -qm next && git -C "$T/dev" tag v9.9.10 && git -C "$T/dev" push -q origin HEAD --tags
+git clone -q "$T/upstream.git" "$T/dev" && echo more >> "$T/dev/CHANGELOG.md" && sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/setup.sh" && grep -q "pulled installer" "$T/dev/setup.sh" && git -C "$T/dev" add -A && git -C "$T/dev" -c user.email=t@t -c user.name=t commit -qm next && git -C "$T/dev" tag v9.9.10 && git -C "$T/dev" push -q origin HEAD --tags
 up_out="$("$SETUP" update --bin-dir "$T/bin" --no-docker --no-skills 2>&1)"; rc=$?
 [[ "$rc" == 0 ]] || printf "%s\n" "$up_out" | tail -15 | sed "s/^/    /"
 assert_eq "$rc" "0" "update exits 0"
 assert_contains "$up_out" "updated v9.9.9 -> v9.9.10" "update reports vA -> vB"
 assert_contains "$("$T/bin/agentbus" version)" "agentbus version v9.9.10" "and installs the new release"
+assert_contains "$up_out" "the pulled installer is the one running" "update runs the installer it pulled, not the one in memory"
 # Go older than go.mod, with no automatic toolchain switch: refused
 mkdir -p "$T/oldgo"
 cat > "$T/oldgo/go" <<'EOF'

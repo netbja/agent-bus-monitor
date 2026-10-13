@@ -227,7 +227,9 @@ redis_state() { # running | stopped | absent
   case "$st" in running) echo running ;; "") echo absent ;; *) echo stopped ;; esac
 }
 
-herdr_plus_pin_changed() { [ -f "$HERDR_PLUS_STATE" ] && [ "$(cat "$HERDR_PLUS_STATE")" != "$HERDR_PLUS_REF" ] && herdr_plus_registered; }
+herdr_plus_linked() { herdr plugin list 2>/dev/null | grep "$HERDR_PLUS_ID" | grep -q "local:"; }
+# True only for a herdr-plus setup installed from GitHub at another ref; a linked checkout is the user's.
+herdr_plus_pin_changed() { [ -f "$HERDR_PLUS_STATE" ] && [ "$(cat "$HERDR_PLUS_STATE")" != "$HERDR_PLUS_REF" ] && herdr_plus_registered && ! herdr_plus_linked; }
 herdr_plus_registered() { command -v herdr >/dev/null 2>&1 && herdr plugin list 2>/dev/null | grep -q "$HERDR_PLUS_ID"; }
 herdr_plus_action_ok()  { command -v herdr >/dev/null 2>&1 && herdr plugin action list 2>/dev/null | tr -d "\n" | grep -q "\"action_id\":\"projects\"[^}]*\"plugin_id\":\"$HERDR_PLUS_ID\""; }
 
@@ -326,15 +328,15 @@ do_uninstall() {
   if herdr_plus_registered; then
     # herdr-plus is useful without agent-bus: kept unless asked.
     if ask "uninstall the herdr-plus plugin too (useful without agent-bus)?" n; then
-      if herdr plugin list 2>/dev/null | grep "$HERDR_PLUS_ID" | grep -q "local:"; then herdr plugin unlink "$HERDR_PLUS_ID" >/dev/null 2>&1 || true
+      if herdr_plus_linked; then herdr plugin unlink "$HERDR_PLUS_ID" >/dev/null 2>&1 || true
       else herdr plugin uninstall "$HERDR_PLUS_ID" --yes >/dev/null 2>&1 || herdr plugin uninstall "$HERDR_PLUS_ID" >/dev/null 2>&1 || true; fi
       rm -f "$HERDR_PLUS_STATE"
       log_ok "herdr-plus: uninstalled"
     fi
   fi
   if [ -f "$SKILLS_MARK" ]; then
-    if [ -n "$(git -C "$SKILLS_HOME" status --porcelain 2>/dev/null)" ]; then
-      log_warn "$SKILLS_HOME has local changes: kept"
+    if ! changes="$(git -C "$SKILLS_HOME" status --porcelain 2>/dev/null)" || [ -n "$changes" ]; then
+      log_warn "$SKILLS_HOME has local changes, or git cannot read it: kept"
     elif ask "remove the external skills folder $SKILLS_HOME?" y; then rm -rf "$SKILLS_HOME"; log_ok "removed $SKILLS_HOME"; fi
   elif [ -e "$SKILLS_HOME" ]; then
     log_info "$SKILLS_HOME was not created by setup: kept"
@@ -377,6 +379,16 @@ do_update() {
       if [ -f "$REPO_DIR/docs/releases/$tag.md" ]; then log_info "$tag: docs/releases/$tag.md"; fi
     done
   fi
+  # The pull may have changed this very script (pins, steps): install with the new one, not with
+  # the copy already in memory.
+  set -- install --bin-dir "$BIN_DIR"
+  [ "$INSTALL_HERDR" = "1" ] && set -- "$@" --install-herdr
+  [ "$FORCE" = "1" ] && set -- "$@" --force
+  [ "$START_DOCKER" = "0" ] && set -- "$@" --no-docker
+  [ "$INSTALL_SKILLS" = "0" ] && set -- "$@" --no-skills
+  [ "$ASSUME_YES" = "1" ] && set -- "$@" --yes
+  rm -rf "$TMP_DIR"
+  exec "$REPO_DIR/setup.sh" "$@"
 }
 
 case "$SUBCOMMAND" in
@@ -512,8 +524,12 @@ elif herdr_plus_pin_changed; then
     log_ok "herdr-plus: $old_ref -> $HERDR_PLUS_REF through herdr"
   else
     show_log "$TMP_DIR/herdr-install-plugin.log"
-    herdr plugin install "$HERDR_PLUS_GITHUB" --ref "$old_ref" --yes >/dev/null 2>&1 || true
-    log_warn "herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF failed; kept $old_ref."
+    if herdr plugin install "$HERDR_PLUS_GITHUB" --ref "$old_ref" --yes >/dev/null 2>&1 && herdr_plus_registered; then
+      log_warn "herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF failed; $old_ref reinstalled."
+    else
+      rm -f "$HERDR_PLUS_STATE"
+      log_warn "herdr-plus is NOT installed: $HERDR_PLUS_REF and the rollback to $old_ref both failed (re-run: herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF)."
+    fi
   fi
 elif herdr_plus_registered && [ "$FORCE" = "0" ]; then
   log_ok "herdr-plus: registered with herdr"
