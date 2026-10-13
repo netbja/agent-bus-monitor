@@ -99,9 +99,11 @@ cd ~/agent-bus-monitor
 - installs **herdr** if it is missing (`--install-herdr`);
 - registers **herdr-plus** with herdr (`herdr plugin install cloudmanic/herdr-plus --ref <tag>`)
   and checks that its Projects action exists;
-- adds the `Ctrl+B` then `↑` binding;
+- adds the `Ctrl+B` then `↑` binding, creating herdr's `config.toml` if herdr has never run, and
+  tells a running herdr to reload it;
 - clones the external role skills (`mattpocock/skills`, pinned) into
-  `~/.local/share/agentbus/skills/mattpocock` and links the role skills;
+  `~/.local/share/agentbus/skills/mattpocock` and links the role skills. If one is still missing,
+  the agent starts without it, with a warning;
 - starts the Redis broker on `127.0.0.1:6380`.
 
 Make sure `~/.local/bin` is on your `PATH`; `install` warns when it is not, or when another copy
@@ -118,10 +120,14 @@ shadows it.
 busmon shows a discreet `↑ vX.Y.Z` in its header when a newer release exists. It checks once a
 day; `AGENT_BUS_NO_UPDATE_CHECK=1` turns the check off.
 
-`uninstall` removes:
+`update` refuses a tree with uncommitted changes, then runs the `setup.sh` it just pulled. A new
+herdr-plus pin reinstalls the herdr-plus that setup installed (a linked checkout is never replaced).
+
+`uninstall` removes only what setup made, and has no `--dry-run` (run it without `--yes` and
+answer each question):
 - our binaries and our skill links (never a real directory);
-- the key binding;
-- the external skills.
+- the key binding, if it is still exactly the block setup wrote; an edited one is kept;
+- the external skills, if setup cloned them and they have no local changes.
 
 It asks about herdr-plus separately, since herdr-plus is useful without agent-bus. For Redis it
 offers: stop it and keep the data (the default), remove it together with its data, or leave it.

@@ -113,18 +113,27 @@ What `install` does:
 - **herdr-plus.** It is registered with herdr's own plugin store:
   `herdr plugin install cloudmanic/herdr-plus --ref <tag>`, or `herdr plugin link` for a local
   checkout set with `HERDR_PLUS_PATH`. `install` then checks that its Projects action exists.
+  A new pin in a later release reinstalls the herdr-plus that setup installed; a linked checkout
+  is never replaced.
+- **The `Ctrl+B` `↑` binding.** It is added to herdr's `config.toml`, which is created if herdr
+  has never run. A running herdr reloads it at once (`herdr server reload-config`).
 - **External role skills** (`mattpocock/skills`, pinned tag): cloned into
   `${XDG_DATA_HOME:-~/.local/share}/agentbus/skills/mattpocock`. A skill that is still missing
-  only warns when an agent starts.
+  only warns, in `agentbus up` and when an agent starts; the agent runs without it. A folder
+  there that setup did not clone is left alone.
 
-`uninstall` asks before each removal:
+`update` refuses a tree with uncommitted changes, fast-forwards it, then runs the `setup.sh` it
+just pulled.
+
+`uninstall` asks before each removal, and removes only what setup made:
 - our binaries and our skill links (never a real directory);
-- the herdr key binding;
-- the external skills;
+- the herdr key binding, if it is still exactly the block setup wrote (an edited one is kept);
+- the external skills, if setup cloned them and they have no local changes;
 - Redis: stop it (keep the data), remove it with its data, or leave it.
 
 herdr-plus is asked separately, because it is useful without agent-bus. The repository itself is
-left in place. `./install.sh` remains an alias of `./setup.sh install`.
+left in place. It has no `--dry-run`: run it without `--yes` and answer each question.
+`./install.sh` remains an alias of `./setup.sh install`.
 
 ### Manual build
 

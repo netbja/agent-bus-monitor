@@ -99,9 +99,11 @@ cd ~/agent-bus-monitor
 - installe **herdr** s'il manque (`--install-herdr`) ;
 - enregistre **herdr-plus** auprès de herdr (`herdr plugin install cloudmanic/herdr-plus --ref <tag>`)
   et vérifie que son action Projects existe ;
-- ajoute le raccourci `Ctrl+B` puis `↑` ;
+- ajoute le raccourci `Ctrl+B` puis `↑`. Il crée le `config.toml` de herdr si herdr n'a jamais
+  tourné, et demande à un herdr déjà ouvert de le relire ;
 - clone les skills externes (`mattpocock/skills`, version épinglée) dans
-  `~/.local/share/agentbus/skills/mattpocock` et lie les skills des rôles ;
+  `~/.local/share/agentbus/skills/mattpocock` et lie les skills des rôles. S'il en manque un,
+  l'agent démarre sans lui, avec un avertissement ;
 - démarre le broker Redis sur `127.0.0.1:6380`.
 
 Vérifiez que `~/.local/bin` est dans votre `PATH` : `install` prévient s'il n'y est pas, ou si une
@@ -119,10 +121,15 @@ Quand une version plus récente existe, busmon l'indique discrètement dans son 
 `↑ vX.Y.Z`. La vérification a lieu une fois par jour ; `AGENT_BUS_NO_UPDATE_CHECK=1` la
 désactive.
 
-`uninstall` retire :
+`update` refuse un dépôt avec des changements non commités, puis lance le `setup.sh` qu'il vient
+de tirer. Une nouvelle version épinglée de herdr-plus réinstalle celui que setup a installé (un
+dossier local lié n'est jamais remplacé).
+
+`uninstall` ne retire que ce que setup a installé. Il n'a pas de `--dry-run` : lancez-le sans
+`--yes` et répondez à chaque question. Il retire :
 - nos binaires et nos liens de skills (jamais un vrai dossier) ;
-- le raccourci ;
-- les skills externes.
+- le raccourci, s'il est encore exactement le bloc écrit par setup ; un bloc modifié est gardé ;
+- les skills externes, si setup les a clonés et qu'ils n'ont pas de changements locaux.
 
 Il pose une question à part pour herdr-plus, qui reste utile sans agent-bus. Pour Redis, il
 propose : l'arrêter en gardant les données (le choix par défaut), le supprimer avec ses données,
