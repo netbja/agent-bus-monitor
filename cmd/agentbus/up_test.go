@@ -13,10 +13,14 @@ import (
 type fakeHerdr struct {
 	calls      []string
 	workspaces string // JSON list of {"label","workspace_id"} entries
+	fail       string // a call prefix that fails
 }
 
 func (f *fakeHerdr) run(args ...string) ([]byte, error) {
 	f.calls = append(f.calls, strings.Join(args, " "))
+	if f.fail != "" && strings.HasPrefix(strings.Join(args, " "), f.fail) {
+		return nil, errors.New("herdr failed")
+	}
 	switch strings.Join(args[:2], " ") {
 	case "workspace list":
 		return []byte(`{"result":{"workspaces":[` + f.workspaces + `]}}`), nil
@@ -120,5 +124,24 @@ func TestUpRefusesBadInput(t *testing.T) {
 	deps.Bootstrap = func([]string) error { return errors.New("broker down") }
 	if code := runUp([]string{"demo"}, deps, &out, &errw); code == 0 || !strings.Contains(errw.String(), "broker down") {
 		t.Fatalf("a bootstrap failure must stop up: %q", errw.String())
+	}
+}
+
+// A layout that fails halfway must not leave a labelled workspace behind: the
+// next "agentbus up" would focus it and report success with no command running.
+func TestUpClosesAWorkspaceItCouldNotFinish(t *testing.T) {
+	for _, fail := range []string{"tab create --workspace w9 --label dispatch", "pane run w9:p1", "tab rename"} {
+		work, _, h, _, deps := upFixture(t)
+		h.fail = fail
+		var out, errw bytes.Buffer
+		if code := runUp([]string{"demo", work}, deps, &out, &errw); code == 0 {
+			t.Fatalf("%s: up succeeded", fail)
+		}
+		if got := strings.Join(h.calls, "\n"); !strings.Contains(got, "workspace close w9") {
+			t.Fatalf("%s: the half-made workspace was not closed:\n%s", fail, got)
+		}
+		if !strings.Contains(errw.String(), "closed") {
+			t.Fatalf("%s: stderr = %q", fail, errw.String())
+		}
 	}
 }

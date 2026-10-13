@@ -130,7 +130,19 @@ func layout(d upDeps, project string, tpl upTemplate) error {
 		return fmt.Errorf("herdr workspace create: unexpected reply %s", strings.TrimSpace(string(out)))
 	}
 	ws, panes := created.Result.Workspace.WorkspaceID, []string{created.Result.RootPane.PaneID}
-	if _, err := d.Herdr("tab", "rename", created.Result.Tab.TabID, tpl.Tabs[0].Name); err != nil {
+	if err := fill(d, ws, created.Result.Tab.TabID, panes, tpl); err != nil {
+		// A half-made workspace would be focused by the next "agentbus up" as if it were open.
+		if _, cerr := d.Herdr("workspace", "close", ws); cerr != nil {
+			return fmt.Errorf("%w (and closing the half-made workspace %s failed: %v; close it by hand)", err, ws, cerr)
+		}
+		return fmt.Errorf("%w (closed the half-made workspace %s; run agentbus up again)", err, ws)
+	}
+	return nil
+}
+
+// fill names the root tab, creates the others and runs each tab's command.
+func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
+	if _, err := d.Herdr("tab", "rename", rootTab, tpl.Tabs[0].Name); err != nil {
 		return fmt.Errorf("herdr tab rename: %w", err)
 	}
 	for _, t := range tpl.Tabs[1:] {
