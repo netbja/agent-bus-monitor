@@ -57,3 +57,7 @@ skills = ["agent-bus", "diagnosing-bugs"]
 profile = "review"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-security"]
+
+[roles.docs]
+tier = "pop"
+skills = ["agent-bus", "agent-bus-docs"]
