@@ -41,6 +41,11 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    - how it was validated (tests, live runs, reviews);
    - known limits;
    - the 🤖 footer the repository uses.
+
+   **No GitHub?** The remote may not be GitHub, there may be no remote, or `gh` may be missing or
+   not logged in. Then push `pr/<c>` if there is a remote, open nothing else, and put the PR body
+   in your report instead (`agentbus report` keeps the full text). The reviewer reads the branch.
+   Never work around it by merging, or by pushing to `<base>`.
 6. **Ask for the 4-eyes review** on the bus:
    `agentbus challenge <reviewer> --ref pr-<c> "review the docs of PR <url>"`.
    Then report: `agentbus report <you> "PR <url> opened for <c>"`.
