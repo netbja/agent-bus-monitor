@@ -11,6 +11,9 @@ import (
 // Version is the release tag (v0.11.0, or v0.11.0-3-gabc123 between tags), or "dev".
 var Version = "dev"
 
+// Repo is the checkout setup.sh built from (agentbus up finds scripts/bootstrap there).
+var Repo = ""
+
 // Newer reports whether tag a is a strictly newer release than b. Both are
 // vMAJOR.MINOR.PATCH, optionally followed by "-…" (git describe); anything
 // else, including "dev", is never newer and never older.
