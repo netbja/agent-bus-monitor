@@ -101,6 +101,7 @@ assert_contains "$inst_out" "Projects picker action available" "the picker actio
 assert_contains "$(cat "$T/cfg/herdr/config.toml")" "cloudmanic.herdr-plus.projects" "herdr keybinding added"
 assert_eq "$(ls "$T/cfg/herdr" | grep -c '^config.toml.bak.')" "1" "herdr config backed up before the edit"
 assert_eq "$(git -C "$T/data/agentbus/skills/mattpocock" describe --tags 2>/dev/null)" "v1.3.1" "external skills cloned at the pinned tag"
+assert_eq "$([[ -f "$T/data/agentbus/skills/mattpocock/.git/agentbus-setup" ]] && echo ours || echo unmarked)" "ours" "the clone is marked as setup's own"
 assert_eq "$(readlink "$HOME/.claude/skills/wayfinder")" "$T/data/agentbus/skills/mattpocock/skills/engineering/wayfinder" "role skills linked to the clone"
 assert_contains "$inst_out" "agentbus up myproject" "next steps point at agentbus up"
 
@@ -113,6 +114,14 @@ assert_eq "$rc" "0" "second install exits 0"
 assert_eq "$(cmp -s "$T/config.after" "$T/cfg/herdr/config.toml" && echo same)" "same" "second install leaves herdr config alone"
 assert_eq "$(grep -c 'plugin install' "$HERDR_LOG")" "0" "a registered herdr-plus is not installed again"
 assert_contains "$second_out" "external skills: v1.3.1" "the skills clone is refreshed in place"
+
+# A new pin reaches a herdr-plus that setup installed (update runs install)
+: > "$HERDR_LOG"
+HERDR_PLUS_REF=v0.1.99 run_setup install --no-skills >/dev/null
+assert_contains "$(cat "$HERDR_LOG")" "plugin install cloudmanic/herdr-plus --ref v0.1.99 --yes" "a changed pin reinstalls the herdr-plus setup installed"
+: > "$HERDR_LOG"
+HERDR_PLUS_REF=v0.1.99 run_setup install --no-skills >/dev/null
+assert_eq "$(grep -c 'plugin install' "$HERDR_LOG")" "0" "the same pin is not reinstalled"
 
 # A local herdr-plus checkout is linked, not downloaded
 rm -f "$HERDR_STATE"; : > "$HERDR_LOG"
@@ -142,11 +151,16 @@ assert_contains "$status_out" "agentbus v9.9.9: $T/bin/agentbus" "status shows t
 assert_contains "$status_out" "external skills: v1.3.1" "status shows the external skills"
 assert_contains "$status_out" "Projects picker available" "status shows herdr-plus"
 
+# uninstall has no dry run: it refuses one rather than remove things while "dry"
+assert_exit 1 "uninstall --dry-run is refused" -- "$SETUP" uninstall --yes --dry-run --bin-dir "$T/bin"
+assert_eq "$([[ -x "$T/bin/agentbus" ]] && echo kept || echo gone)" "kept" "and removes nothing"
+# a SKILLS_DEST with a space is one directory
+mkdir -p "$T/My Skills" && ln -s "$T/repo/skills/agent-bus" "$T/My Skills/agent-bus"
 # uninstall without a terminal and without --yes refuses to guess
 command -v setsid >/dev/null && assert_exit 1 "uninstall with no terminal and no --yes stops" -- setsid bash -c "'$SETUP' uninstall --bin-dir '$T/bin' < /dev/null"
 # uninstall --yes takes the cautious defaults: ours removed, herdr-plus kept
 mkdir -p "$HOME/.claude/skills/real-dir"
-un_out="$($(command -v setsid || true) "$SETUP" uninstall --yes --bin-dir "$T/bin" < /dev/null 2>&1)"; rc=$?
+un_out="$(SKILLS_DEST="$T/My Skills" $(command -v setsid || true) "$SETUP" uninstall --yes --bin-dir "$T/bin" < /dev/null 2>&1)"; rc=$?
 assert_eq "$rc" "0" "uninstall --yes exits 0"
 assert_eq "$([[ -e "$T/bin/agentbus" || -e "$T/bin/busmon" ]] && echo left || echo gone)" "gone" "our binaries removed"
 assert_eq "$([[ -L "$HOME/.claude/skills/wayfinder" ]] && echo left || echo gone)" "gone" "our skill links removed"
@@ -158,6 +172,21 @@ assert_eq "$([[ -d "$T/data/agentbus/skills/mattpocock" ]] && echo left || echo 
 assert_eq "$([[ -x "$T/repo/agentbus" ]] && echo kept || echo lost)" "kept" "the repository's own build is left"
 assert_contains "$(cat "$DOCKER_LOG")" "compose stop" "uninstall --yes stops Redis (through the fake docker)"
 assert_eq "$(grep -c "compose down" "$DOCKER_LOG")" "0" "and never removes its data without --purge"
+assert_eq "$([[ -L "$T/My Skills/agent-bus" ]] && echo left || echo gone)" "gone" "a link in a SKILLS_DEST with a space is removed"
+
+# A binding block the user edited is left as it is, and what follows it is never eaten
+printf '[ui]\ntheme = "dark"\n\n# herdr-plus Projects picker: prefix (ctrl+b) then Up\n[[keys.command]]\nkey = "prefix+up"\ntype = "plugin_action"\ncommand = "cloudmanic.herdr-plus.projects"\n[ui.extra]\nmode = "x"\n' > "$T/cfg/herdr/config.toml"
+ed_out="$($(command -v setsid || true) "$SETUP" uninstall --yes --bin-dir "$T/bin" < /dev/null 2>&1)"
+assert_contains "$(cat "$T/cfg/herdr/config.toml")" "[ui.extra]" "an edited binding block never takes the next section with it"
+assert_contains "$ed_out" "edited" "and the edited block is reported, not removed"
+
+# A skills folder setup did not create is never removed, nor fetched into
+mkdir -p "$T/data/agentbus/skills/mattpocock" && git -C "$T/data/agentbus/skills/mattpocock" init -q && echo mine > "$T/data/agentbus/skills/mattpocock/notes"
+own_out="$(run_setup install --no-docker 2>&1)"
+assert_contains "$own_out" "not created by setup" "a foreign skills folder is reported at install"
+$(command -v setsid || true) "$SETUP" uninstall --yes --bin-dir "$T/bin" < /dev/null >/dev/null 2>&1
+assert_eq "$(cat "$T/data/agentbus/skills/mattpocock/notes" 2>/dev/null)" "mine" "and kept at uninstall"
+rm -rf "$T/data/agentbus/skills/mattpocock"
 
 # update refuses a dirty tree, then fast-forwards and reinstalls
 echo "x" >> "$T/repo/README.md"

@@ -130,6 +130,8 @@ while [ $# -gt 0 ]; do
     *) log_fatal "Unknown flag: $1 (see --help)" ;;
   esac
 done
+[ "$SUBCOMMAND" = "uninstall" ] && [ "$DRY_RUN" = "1" ] &&
+  log_fatal "uninstall has no --dry-run: it asks before every step (run it without --yes to choose)"
 
 [ -f "$REPO_DIR/go.mod" ] && [ -d "$REPO_DIR/cmd/agentbus" ] ||
   log_fatal "setup.sh must run from a clone of agent-bus-monitor (no go.mod next to it in $REPO_DIR)"
@@ -161,6 +163,20 @@ version_ge() {
 # -----------------------------------------------------------------------------
 HERDR_CONFIG="${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
 KEYBIND_MARK="# herdr-plus Projects picker: prefix (ctrl+b) then Up"
+KEYBIND_BLOCK="$(cat <<'EOF'
+
+# herdr-plus Projects picker: prefix (ctrl+b) then Up
+[[keys.command]]
+key = "prefix+up"
+type = "plugin_action"
+command = "cloudmanic.herdr-plus.projects"
+description = "herdr-plus: projects"
+EOF
+)"
+# Only a clone setup made carries this marker; any other folder there is the user's.
+SKILLS_MARK="$SKILLS_HOME/.git/agentbus-setup"
+# The herdr-plus release setup installed through herdr, so a new pin reaches it.
+HERDR_PLUS_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/agentbus/herdr-plus.ref"
 REDIS_CONTAINER="agent-bus-redis"
 
 compose_cmd() {
@@ -192,7 +208,8 @@ is_our_binary() {
 # Role-skill symlinks install made: links pointing into this repository's skills or the
 # external skills folder (or the historical ~/Tools checkout). Never a real directory.
 our_skill_links() {
-  for dir in ${SKILLS_DEST:-} "$HOME/.claude/skills" "$HOME/.agents/skills"; do
+  { [ -n "${SKILLS_DEST:-}" ] && printf '%s\n' "$SKILLS_DEST"; printf '%s\n%s\n' "$HOME/.claude/skills" "$HOME/.agents/skills"; } |
+  while IFS= read -r dir; do
     [ -d "$dir" ] || continue
     for link in "$dir"/*; do
       [ -L "$link" ] || continue
@@ -210,6 +227,7 @@ redis_state() { # running | stopped | absent
   case "$st" in running) echo running ;; "") echo absent ;; *) echo stopped ;; esac
 }
 
+herdr_plus_pin_changed() { [ -f "$HERDR_PLUS_STATE" ] && [ "$(cat "$HERDR_PLUS_STATE")" != "$HERDR_PLUS_REF" ] && herdr_plus_registered; }
 herdr_plus_registered() { command -v herdr >/dev/null 2>&1 && herdr plugin list 2>/dev/null | grep -q "$HERDR_PLUS_ID"; }
 herdr_plus_action_ok()  { command -v herdr >/dev/null 2>&1 && herdr plugin action list 2>/dev/null | tr -d "\n" | grep -q "\"action_id\":\"projects\"[^}]*\"plugin_id\":\"$HERDR_PLUS_ID\""; }
 
@@ -282,13 +300,27 @@ do_uninstall() {
     if ask "remove the herdr key binding (prefix+up -> herdr-plus projects)?" y; then
       backup="$HERDR_CONFIG.bak.$(date +%Y%m%d%H%M%S)"
       cp -p "$HERDR_CONFIG" "$backup"
-      # Drop the block install appended: its blank line, the marker and the 5 lines after it.
-      awk -v mark="$KEYBIND_MARK" '
-        skip > 0 { skip--; next }
-        $0 == mark { if (held) held = 0; skip = 5; next }
-        { if (held) print prev; if ($0 == "") { held = 1; prev = $0; next } held = 0; print }
-        END { if (held) print prev }' "$backup" > "$HERDR_CONFIG"
-      log_ok "removed the key binding (backup: $backup)"
+      # Drop the block install wrote, line for line, and the blank line before it. A block the
+      # user edited is left alone: guessing where it ends could take their next section with it.
+      if printf '%s\n' "$KEYBIND_BLOCK" | awk '
+          NR == FNR { if (FNR > 1) want[++w] = $0; next }
+          { line[++n] = $0 }
+          END {
+            for (i = 1; i <= n; i++) {
+              ok = 1
+              for (k = 1; k <= w; k++) if (line[i + k - 1] != want[k]) { ok = 0; break }
+              if (ok) { for (k = 0; k < w; k++) skip[i + k] = 1; if (i > 1 && line[i - 1] == "") skip[i - 1] = 1; found = 1; i += w - 1 }
+            }
+            for (i = 1; i <= n; i++) if (!skip[i]) print line[i]
+            exit found ? 0 : 3
+          }' - "$backup" > "$TMP_DIR/herdr-config.new"; then
+        cat "$TMP_DIR/herdr-config.new" > "$HERDR_CONFIG"
+        log_ok "removed the key binding (backup: $backup)"
+        command -v herdr >/dev/null 2>&1 && herdr server reload-config >/dev/null 2>&1 || true
+      else
+        rm -f "$backup"
+        log_warn "the key binding block in $HERDR_CONFIG was edited: left as it is (remove it by hand)"
+      fi
     fi
   fi
   if herdr_plus_registered; then
@@ -296,11 +328,16 @@ do_uninstall() {
     if ask "uninstall the herdr-plus plugin too (useful without agent-bus)?" n; then
       if herdr plugin list 2>/dev/null | grep "$HERDR_PLUS_ID" | grep -q "local:"; then herdr plugin unlink "$HERDR_PLUS_ID" >/dev/null 2>&1 || true
       else herdr plugin uninstall "$HERDR_PLUS_ID" --yes >/dev/null 2>&1 || herdr plugin uninstall "$HERDR_PLUS_ID" >/dev/null 2>&1 || true; fi
+      rm -f "$HERDR_PLUS_STATE"
       log_ok "herdr-plus: uninstalled"
     fi
   fi
-  if [ -d "$SKILLS_HOME" ]; then
-    if ask "remove the external skills folder $SKILLS_HOME?" y; then rm -rf "$SKILLS_HOME"; log_ok "removed $SKILLS_HOME"; fi
+  if [ -f "$SKILLS_MARK" ]; then
+    if [ -n "$(git -C "$SKILLS_HOME" status --porcelain 2>/dev/null)" ]; then
+      log_warn "$SKILLS_HOME has local changes: kept"
+    elif ask "remove the external skills folder $SKILLS_HOME?" y; then rm -rf "$SKILLS_HOME"; log_ok "removed $SKILLS_HOME"; fi
+  elif [ -e "$SKILLS_HOME" ]; then
+    log_info "$SKILLS_HOME was not created by setup: kept"
   fi
   state="$(redis_state)"
   cc="$(compose_cmd)"
@@ -465,6 +502,19 @@ fi
 # --install-herdr installs the pinned release through herdr's own plugin store.
 if ! command -v herdr >/dev/null 2>&1; then
   :
+elif herdr_plus_pin_changed && [ "$DRY_RUN" = "1" ]; then
+  log_info "[dry-run] would reinstall herdr-plus $(cat "$HERDR_PLUS_STATE") -> $HERDR_PLUS_REF"
+elif herdr_plus_pin_changed; then
+  old_ref="$(cat "$HERDR_PLUS_STATE")"
+  herdr plugin uninstall "$HERDR_PLUS_ID" --yes >/dev/null 2>&1 || herdr plugin uninstall "$HERDR_PLUS_ID" >/dev/null 2>&1 || true
+  if herdr plugin install "$HERDR_PLUS_GITHUB" --ref "$HERDR_PLUS_REF" --yes >"$TMP_DIR/herdr-install-plugin.log" 2>&1; then
+    printf '%s\n' "$HERDR_PLUS_REF" > "$HERDR_PLUS_STATE"
+    log_ok "herdr-plus: $old_ref -> $HERDR_PLUS_REF through herdr"
+  else
+    show_log "$TMP_DIR/herdr-install-plugin.log"
+    herdr plugin install "$HERDR_PLUS_GITHUB" --ref "$old_ref" --yes >/dev/null 2>&1 || true
+    log_warn "herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF failed; kept $old_ref."
+  fi
 elif herdr_plus_registered && [ "$FORCE" = "0" ]; then
   log_ok "herdr-plus: registered with herdr"
 elif [ -d "$HERDR_PLUS_DIR" ]; then
@@ -497,6 +547,7 @@ elif [ "$INSTALL_HERDR" = "0" ]; then
 elif [ "$DRY_RUN" = "1" ]; then
   log_info "[dry-run] would run: herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF --yes"
 elif herdr plugin install "$HERDR_PLUS_GITHUB" --ref "$HERDR_PLUS_REF" --yes >"$TMP_DIR/herdr-install-plugin.log" 2>&1; then
+  mkdir -p "$(dirname "$HERDR_PLUS_STATE")" && printf '%s\n' "$HERDR_PLUS_REF" > "$HERDR_PLUS_STATE"
   log_ok "herdr-plus: installed $HERDR_PLUS_REF through herdr"
 else
   show_log "$TMP_DIR/herdr-install-plugin.log"
@@ -513,16 +564,6 @@ fi
 
 # Configure herdr-plus keybinding in ~/.config/herdr/config.toml idempotently
 HERDR_CONFIG="${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
-KEYBIND_BLOCK="$(cat <<'EOF'
-
-# herdr-plus Projects picker: prefix (ctrl+b) then Up
-[[keys.command]]
-key = "prefix+up"
-type = "plugin_action"
-command = "cloudmanic.herdr-plus.projects"
-description = "herdr-plus: projects"
-EOF
-)"
 # herdr runs with a partial config.toml, so a machine where it never ran gets one holding the binding.
 if [ ! -f "$HERDR_CONFIG" ] && [ "$DRY_RUN" = "1" ]; then
   log_info "[dry-run] would create $HERDR_CONFIG with the herdr-plus keybinding (prefix+up)"
@@ -624,6 +665,8 @@ esac
 if [ "$INSTALL_SKILLS" = "1" ]; then
   if [ "$DRY_RUN" = "1" ]; then
     log_info "[dry-run] would fetch $SKILLS_REPO $SKILLS_REF into $SKILLS_HOME"
+  elif [ -e "$SKILLS_HOME" ] && [ ! -f "$SKILLS_MARK" ]; then
+    log_warn "$SKILLS_HOME was not created by setup: left as it is (agents use the skills it holds)"
   elif [ -d "$SKILLS_HOME/.git" ]; then
     if git -C "$SKILLS_HOME" fetch --quiet --depth 1 origin "refs/tags/$SKILLS_REF:refs/tags/$SKILLS_REF" >"$TMP_DIR/skills-fetch.log" 2>&1 ||
        git -C "$SKILLS_HOME" fetch --quiet --depth 1 origin "$SKILLS_REF" >>"$TMP_DIR/skills-fetch.log" 2>&1; then
@@ -636,6 +679,7 @@ if [ "$INSTALL_SKILLS" = "1" ]; then
   else
     mkdir -p "$(dirname "$SKILLS_HOME")"
     if git clone --quiet --depth 1 --branch "$SKILLS_REF" "$SKILLS_REPO" "$SKILLS_HOME" >"$TMP_DIR/skills-clone.log" 2>&1; then
+      : > "$SKILLS_MARK"
       log_ok "external skills: cloned $SKILLS_REF into $SKILLS_HOME"
     else
       show_log "$TMP_DIR/skills-clone.log"
