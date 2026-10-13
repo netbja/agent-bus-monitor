@@ -136,24 +136,43 @@ func SkillSources(names []string, repo string, env []string) ([]string, error) {
 	return skillSources(names, repo, newEnv(env))
 }
 
-func skillSources(names []string, repo string, e *envMap) ([]string, error) {
-	roots := []string{
-		e.or("REPO_SKILLS", filepath.Join(repo, "skills")),
-		filepath.Join(e.or("POCOCK_SKILLS_ROOT", filepath.Join(homeDir(e), "Tools/herdr-plugins/skills/skills")), "engineering"),
+// skillRoots is where a skill is looked for, in order: the repository's
+// skills (REPO_SKILLS), then the external collection's engineering folder —
+// POCOCK_SKILLS_ROOT if set, else where setup.sh clones mattpocock/skills
+// (${XDG_DATA_HOME:-~/.local/share}/agentbus/skills/mattpocock), else the
+// historical ~/Tools/herdr-plugins/skills checkout.
+func skillRoots(repo string, e *envMap) []string {
+	roots := []string{e.or("REPO_SKILLS", filepath.Join(repo, "skills"))}
+	if r, ok := e.get("POCOCK_SKILLS_ROOT"); ok {
+		return append(roots, filepath.Join(r, "engineering"))
 	}
+	data := e.or("XDG_DATA_HOME", filepath.Join(homeDir(e), ".local", "share"))
+	return append(roots,
+		filepath.Join(data, "agentbus", "skills", "mattpocock", "skills", "engineering"),
+		filepath.Join(homeDir(e), "Tools", "herdr-plugins", "skills", "skills", "engineering"))
+}
+
+// findSkill returns a skill's resolved directory, or "" when no root has it.
+func findSkill(name string, roots []string) string {
+	for _, root := range roots {
+		if st, err := os.Stat(filepath.Join(root, name, "SKILL.md")); err == nil && st.Mode().IsRegular() {
+			return absResolved(filepath.Join(root, name))
+		}
+	}
+	return ""
+}
+
+// skillSources resolves every skill or fails: InstallSkills never writes a
+// partial set of links.
+func skillSources(names []string, repo string, e *envMap) ([]string, error) {
+	roots := skillRoots(repo, e)
 	sources := make([]string, 0, len(names))
 	for _, name := range names {
-		found := ""
-		for _, root := range roots {
-			if st, err := os.Stat(filepath.Join(root, name, "SKILL.md")); err == nil && st.Mode().IsRegular() {
-				found = filepath.Join(root, name)
-				break
-			}
-		}
+		found := findSkill(name, roots)
 		if found == "" {
 			return nil, fmt.Errorf("skill not found in repo or Pocock collection: %s", name)
 		}
-		sources = append(sources, absResolved(found))
+		sources = append(sources, found)
 	}
 	return sources, nil
 }
@@ -171,22 +190,27 @@ func absResolved(p string) string {
 
 // promptFor returns the role prompt file and the full prompt: the file's text
 // after a header naming it, plus (schema 2) the role's skill paths.
-func promptFor(p Profile, repo string, e *envMap) (string, string, error) {
+func promptFor(p Profile, repo string, e *envMap) (path, prompt string, missing []string, err error) {
 	file := filepath.Join(e.or("ROLES_DIR", filepath.Join(repo, "roles")), p.Role+".md")
 	st, err := os.Stat(file)
 	if err != nil || !st.Mode().IsRegular() {
-		return "", "", fmt.Errorf("missing role prompt file: %s", file)
+		return "", "", nil, fmt.Errorf("missing role prompt file: %s", file)
 	}
 	body, err := os.ReadFile(file)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
-	path := absResolved(file)
-	prompt := fmt.Sprintf("Role source: %s (resolve its relative links from this directory: %s).\n\n", path, filepath.Dir(path)) + string(body)
+	path = absResolved(file)
+	prompt = fmt.Sprintf("Role source: %s (resolve its relative links from this directory: %s).\n\n", path, filepath.Dir(path)) + string(body)
 	if !p.Legacy {
-		sources, err := skillSources(p.Skills, repo, e)
-		if err != nil {
-			return "", "", err
+		roots := skillRoots(repo, e)
+		var sources []string
+		for _, name := range p.Skills {
+			if s := findSkill(name, roots); s != "" {
+				sources = append(sources, s)
+			} else {
+				missing = append(missing, name)
+			}
 		}
 		prompt += "\n\nRead and follow these role skills before work (paths to SKILL.md; resolve their relative links from their own directory):\n"
 		lines := make([]string, len(sources))
@@ -196,7 +220,7 @@ func promptFor(p Profile, repo string, e *envMap) (string, string, error) {
 		prompt += strings.Join(lines, "\n")
 		prompt += "\nUse native skill invocation when available, otherwise read the files directly.\n"
 	}
-	return path, prompt, nil
+	return path, prompt, missing, nil
 }
 
 // cacheFile writes text once under the launch cache (0700), named by its
@@ -402,9 +426,12 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 		return err
 	}
 	e := newEnv(cfg.Env)
-	promptPath, prompt, err := promptFor(p, repoRoot(e), e)
+	promptPath, prompt, missing, err := promptFor(p, repoRoot(e), e)
 	if err != nil {
 		return err
+	}
+	for _, name := range missing { // a team that does not start is worse than an agent short of a skill
+		fmt.Fprintf(cfg.Stderr, "warning: skill %s not found (run ./setup.sh install); %s starts without it\n", name, role)
 	}
 	dry := e.or("AGENT_LAUNCH_DRYRUN", "") == "1"
 	if _, builtin := builtinBinary[p.Client]; !dry && !p.Legacy && builtin {
@@ -415,6 +442,9 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 	cmd, err := build(p, project, prompt, promptPath, dry, cfg.Env)
 	if err != nil {
 		return err
+	}
+	if el := elevated(p); el != "" { // a swapped ROLES_TOML must not start an unsandboxed client silently
+		fmt.Fprintf(cfg.Stderr, "notice: %s runs %s with elevated %s\n", role, p.Client, el)
 	}
 	// Inside herdr, bind this process's pid before exec hands it (and its
 	// start time) to the client: the dispatcher can then verify the pane even
@@ -428,7 +458,8 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 				bin = "agentbus"
 			}
 		}
-		bind = []string{bin, "--project", project, "bind", role, "--pid", strconv.Itoa(os.Getpid())}
+		// The pane is the one this launcher started in, read before env_refs apply.
+		bind = []string{bin, "--project", project, "bind", role, "--pid", strconv.Itoa(os.Getpid()), "--pane", pane}
 	}
 	if dry {
 		if bind != nil {
@@ -452,6 +483,11 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 	}
 	// A child session must never publish the parent Claude session's transcript as its own.
 	e.del("CLAUDE_CODE_SESSION_ID")
+	// The API key reaches no client (it bills pay-as-you-go and a prompt could read it)
+	// unless AGENT_LAUNCH_KEEP_API_KEY=1, or the profile names it in env_refs below.
+	if e.or("AGENT_LAUNCH_KEEP_API_KEY", "") != "1" {
+		e.del("ANTHROPIC_API_KEY")
+	}
 	for _, target := range sortedKeys(p.EnvRefs) {
 		source := p.EnvRefs[target]
 		v, ok := newEnv(cfg.Env).get(source)
@@ -459,9 +495,6 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 			return fmt.Errorf("missing environment source for %s", target)
 		}
 		e.set(target, v)
-	}
-	if p.Client == "claude-code" && e.or("AGENT_LAUNCH_KEEP_API_KEY", "") != "1" {
-		e.del("ANTHROPIC_API_KEY")
 	}
 	if bind != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -773,4 +806,29 @@ func pyFloat(f float64) string {
 		sign, exp = "-", -exp
 	}
 	return fmt.Sprintf("%se%s%02d", mant, sign, exp)
+}
+
+// elevated names the builtin options that take a client out of its safe
+// defaults ("" when none): Claude without permission prompts, Codex with full
+// disk access or no approvals, Kimi in yolo mode.
+func elevated(p Profile) string {
+	var parts []string
+	switch p.Client {
+	case "claude-code":
+		if perm := p.Options["permission"]; perm == "bypassPermissions" || perm == "dontAsk" {
+			parts = append(parts, "permission="+perm)
+		}
+	case "codex":
+		if p.Options["sandbox"] == "danger-full-access" {
+			parts = append(parts, "sandbox=danger-full-access")
+		}
+		if p.Options["approval"] == "never" {
+			parts = append(parts, "approval=never")
+		}
+	case "kimi-cli":
+		if p.Options["permission"] == "yolo" {
+			parts = append(parts, "permission=yolo")
+		}
+	}
+	return strings.Join(parts, " ")
 }

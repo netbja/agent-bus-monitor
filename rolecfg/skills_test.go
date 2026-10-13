@@ -149,3 +149,32 @@ func TestInstallSkillsReplacesWrongSymlink(t *testing.T) {
 		t.Fatalf("replaced link = %q, %v; want %q", got, err, source)
 	}
 }
+
+// bootstrap links with missing skills allowed: the agent starts without them
+// (the launcher warns again), so a failed external-skills download never stops
+// a first run. The plain install stays strict.
+func TestInstallSkillsMissingOKWarnsAndLinksTheRest(t *testing.T) {
+	m := writeSkillsManifest(t,
+		"[profiles.main]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"test\"\n",
+		"[roles.coder]\ntier = \"boot\"\nskills = [\"review\", \"wayfinder\"]\n")
+	root := t.TempDir()
+	source := writeSkill(t, filepath.Join(root, "repo-skills"), "review")
+	dest := filepath.Join(root, "skills")
+	env := []string{"HOME=" + root, "REPO_SKILLS=" + filepath.Join(root, "repo-skills"), "POCOCK_SKILLS_ROOT=" + filepath.Join(root, "none"), "SKILLS_DEST=" + dest}
+	var out, errOut bytes.Buffer
+	if err := InstallSkills(m, env, &out); err == nil {
+		t.Fatal("the strict install accepted a missing skill")
+	}
+	if err := InstallSkillsMissingOK(m, env, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.Readlink(filepath.Join(dest, "review")); err != nil || got != source {
+		t.Fatalf("review link = %q, %v", got, err)
+	}
+	if _, err := os.Lstat(filepath.Join(dest, "wayfinder")); !os.IsNotExist(err) {
+		t.Fatalf("a missing skill got a link: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "warning: skill wayfinder not found (run ./setup.sh install); coder starts without it") {
+		t.Fatalf("stderr = %q", errOut.String())
+	}
+}

@@ -72,81 +72,65 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 ## 3. Step-by-Step Terminal Installation
 
-> **Quick Automated Setup**: from the repository root, run `./install.sh --dry-run` to see what is missing, then `./install.sh` to rebuild and install `agentbus` and `busmon`, link the role skills and start Redis. Re-run it after every `git pull`. Add `--install-herdr` to also download herdr and clone herdr-plus (pinned tag) when they are missing.
+Everything goes through `./setup.sh`, from a clone of the repository. Every step is idempotent,
+so re-running it is safe.
 
 ### Step 1: System Prerequisites
 
-Ensure you have the following installed:
-- **Go** (the version `go.mod` requires, currently 1.26.3)
-- **Docker** and **Docker Compose**
-- **Python** (version 3.11 or newer)
-- **Git**, **curl**, **make**
+- **Go**: the version `go.mod` requires, currently 1.26.3.
+- **Docker** and **Docker Compose**, for the Redis broker.
+- **Git** and **curl**.
 
-### Step 2: Install `herdr`
+Python is no longer needed (since v0.10.2).
 
-`herdr` is the terminal workspace and multiplexing manager tailored for AI coding agents.
+### Step 2: Clone and install
 
-1. Download and install the official binary:
-   ```bash
-   curl -fsSL https://herdr.dev/install.sh | sh
-   ```
-2. Verify `herdr` is in your `PATH`:
-   ```bash
-   herdr --version
-   ```
+```bash
+git clone https://github.com/netbja/agent-bus-monitor ~/agent-bus-monitor
+cd ~/agent-bus-monitor
+./setup.sh install --dry-run          # what is missing, what would change (changes nothing)
+./setup.sh install --install-herdr    # the real install
+```
 
-### Step 3: Install and Build the `herdr-plus` Plugin
+`install`:
+- checks the toolchain;
+- builds `agentbus` and `busmon`, into the repository and into `~/.local/bin`, stamped with
+  their release;
+- installs **herdr** if it is missing (`--install-herdr`);
+- registers **herdr-plus** with herdr (`herdr plugin install cloudmanic/herdr-plus --ref <tag>`)
+  and checks that its Projects action exists;
+- adds the `Ctrl+B` then `↑` binding, creating herdr's `config.toml` if herdr has never run, and
+  tells a running herdr to reload it;
+- clones the external role skills (`mattpocock/skills`, pinned) into
+  `~/.local/share/agentbus/skills/mattpocock` and links the role skills. If one is still missing,
+  the agent starts without it, with a warning;
+- starts the Redis broker on `127.0.0.1:6380`.
 
-`herdr-plus` provides fuzzy project selection and multi-tab workspace orchestration.
+Make sure `~/.local/bin` is on your `PATH`; `install` warns when it is not, or when another copy
+shadows it.
 
-1. Clone `herdr-plus` into your local tools directory:
-   ```bash
-   mkdir -p ~/Tools/herdr-plugins
-   git clone https://github.com/cloudmanic/herdr-plus.git ~/Tools/herdr-plugins/herdr-plus
-   ```
+### Step 3: Check, update, remove
 
-2. Compile the plugin binary:
-   ```bash
-   cd ~/Tools/herdr-plugins/herdr-plus
-   make build
-   ```
-   *Verify that the executable exists at `~/Tools/herdr-plugins/herdr-plus/bin/herdr-plus`.*
+```bash
+./setup.sh status       # versions, PATH shadowing, skills, herdr-plus, key binding, Redis
+./setup.sh update       # git pull --ff-only, then install; prints vA -> vB and the release notes
+./setup.sh uninstall    # asks at every step; --yes = cautious defaults; --purge = Redis data too
+```
 
-3. Configure the shortcut in `~/.config/herdr/config.toml`:
-   ```toml
-   # herdr-plus Projects picker: Prefix (Ctrl+B) then Up Arrow
-   [[keys.command]]
-   key = "prefix+up"
-   type = "plugin_action"
-   command = "cloudmanic.herdr-plus.projects"
-   description = "herdr-plus: projects"
-   ```
+busmon shows a discreet `↑ vX.Y.Z` in its header when a newer release exists. It checks once a
+day; `AGENT_BUS_NO_UPDATE_CHECK=1` turns the check off.
 
-### Step 4: Build and Install `agent-bus-monitor`
+`update` refuses a tree with uncommitted changes, then runs the `setup.sh` it just pulled. A new
+herdr-plus pin reinstalls the herdr-plus that setup installed (a linked checkout is never replaced).
 
-1. Navigate to the `agent-bus-monitor` repository:
-   ```bash
-   cd /data/projects/agent-bus-monitor
-   ```
+`uninstall` removes only what setup made, and has no `--dry-run` (run it without `--yes` and
+answer each question):
+- our binaries and our skill links (never a real directory);
+- the key binding, if it is still exactly the block setup wrote; an edited one is kept;
+- the external skills, if setup cloned them and they have no local changes.
 
-2. Compile and install Go binaries to your `PATH`:
-   ```bash
-   go build -o busmon ./cmd/busmon
-   go build -o agentbus ./cmd/agentbus
-   go install ./...
-   ```
-
-3. Symlink role skills for your AI clients:
-   ```bash
-   scripts/link-role-skills.sh
-   ```
-
-4. Start the local Redis broker:
-   ```bash
-   docker compose up -d
-   docker compose ps
-   # Verify redis:8-alpine is listening on 127.0.0.1:6380
-   ```
+It asks about herdr-plus separately, since herdr-plus is useful without agent-bus. For Redis it
+offers: stop it and keep the data (the default), remove it together with its data, or leave it.
 
 ---
 
@@ -176,63 +160,48 @@ For security, the broker binds strictly to loopback (`127.0.0.1:6380`). Remote a
 
 ### Scenario A: Starting a Team on a NEW Project
 
-Assume your target project is at `/data/projects/myapp`.
+Assume your target project is at `~/code/myapp`.
 
-1. **Create and attach the project's herdr session**:
-   *Note: herdr registers plugins per active session, so start the session first.*
+1. **Start herdr** (a session per project is handy):
    ```bash
    herdr --session myapp
    ```
 
-2. **Provision with `bootstrap`** (from inside the herdr session):
+2. **Provision and open the team in one command** (inside herdr):
    ```bash
-   /data/projects/agent-bus-monitor/scripts/bootstrap new myapp /data/projects/myapp
+   agentbus up myapp ~/code/myapp --as <your-name>
    ```
    This command:
-   - Ensures the Redis broker is running.
-   - Links `herdr-plus` into the active session.
-   - Generates the workspace template at `~/.config/herdr-plus/projects/myapp.toml`.
-   - *(Optional flags: `--index` to build code index, `--cron` for daily sentinel review).*
+   - starts the Redis broker if needed, links the role skills and writes the herdr-plus
+     template (`scripts/bootstrap` underneath; its flags work: `--no-dispatch`, `--no-missions`,
+     `--index`, `--cron`);
+   - opens the workspace directly, with **busmon first and focused**, then:
+     - `master`: team coordinator;
+     - `coder`: implementation agent;
+     - `foureyes`: code review agent;
+     - `sentinel`: health and budget watch;
+     - `dispatch`: wakes idle agents when work lands for them;
+     - `missions`: the conductor for large changes.
+   - Run again, it focuses the open workspace instead of opening a second one.
 
-3. **Open the Team Workspace**:
-   - Press `Ctrl+b` then `Up Arrow` (or run `herdr plugin action invoke cloudmanic.herdr-plus.projects`).
-   - Select `myapp`.
-   - `herdr` automatically spawns all configured tabs:
-     - `master`: Team coordinator
-     - `coder`: Implementation agent
-     - `foureyes`: Code review agent
-     - `sentinel`: Health & budget monitoring
-     - `busmon`: Live TUI monitor
-     - `dispatch`: Automatic wake daemon
+   busmon shows you as `♙ <Name> [human]`, with `· pilot` while you hold the pilot lease. With no
+   `--as`, you are `Pilot [human]`.
 
-4. **Assign the First Task**:
-   - Switch to the `busmon` tab.
-   - In the bottom `INPUT` line, type:
-     ```text
-     @master Initialize the project structure and prepare the roadmap.
-     ```
-   - The master picks up the directive, updates its status, creates tasks on the `:board`, and commands `coder` via `agentbus cmd coder ...`.
+3. **Assign the first task** from busmon's input line (`i`):
+   ```text
+   @master Initialize the project structure and prepare the roadmap.
+   ```
+   `@agent` wakes that agent and `@all` wakes every agent. Plain text is a broadcast nobody
+   reads, so busmon asks for a second Enter before sending it.
 
 ---
 
-### Scenario B: Resuming an EXISTING Project (`recall`)
+### Scenario B: Resuming an EXISTING Project
 
-1. **Open the project's herdr session**:
-   ```bash
-   herdr --session myapp
-   ```
-
-2. **Recall the project**:
-   ```bash
-   /data/projects/agent-bus-monitor/scripts/bootstrap recall myapp
-   # or simply: /data/projects/agent-bus-monitor/scripts/bootstrap myapp
-   ```
-
-3. **Re-open tabs** via the `Projects` picker (`Ctrl+b` then `Up`).
-   > **Note**: Recall restores tabs with fresh agent sessions. To resume an earlier conversation in Claude Code, use native resume:
-   > ```bash
-   > claude --resume  # then pick myapp:master or myapp:coder
-   > ```
+1. Start herdr (`herdr --session myapp`).
+2. Run `agentbus up myapp`, or press `Ctrl+B` then `↑` and pick `myapp`.
+   > Tabs open with fresh agent sessions. To resume an earlier Claude Code conversation, use
+   > `claude --resume` and pick `myapp:master` or `myapp:coder`.
 
 ---
 
@@ -240,7 +209,11 @@ Assume your target project is at `/data/projects/myapp`.
 
 | Action | Command |
 |---|---|
-| Open live dashboard | `busmon --project myapp` |
+| Provision + open a team | `agentbus up myapp ~/code/myapp --as <your-name>` |
+| Update the tools | `./setup.sh update` |
+| What is installed | `./setup.sh status` |
+| Remove the tools | `./setup.sh uninstall` |
+| Open live dashboard | `busmon --project myapp --as <your-name>` |
 | List bus projects | `busmon --list` |
 | View active agents | `agentbus --project myapp agents` |
 | Inspect task board | `agentbus --project myapp board` |

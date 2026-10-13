@@ -10,7 +10,7 @@ live session restart happens automatically.
 
 Copy [the mixed-team example](../examples/roles.mixed.toml), replace its model
 placeholders with IDs/aliases configured on your accounts, and set `ROLES_TOML`
-to its absolute path. The scripts resolve it with `agentbus roles` (build it first: `./install.sh`).
+to its absolute path. The scripts resolve it with `agentbus roles` (build it first: `./setup.sh install`).
 
 ```sh
 ROLES_TOML=/path/to/project/roles.toml AGENT_LAUNCH_DRYRUN=1 scripts/agent-launch coder demo
@@ -81,9 +81,13 @@ Review-only instructions are not an operating-system sandbox: native permissions
 still determine what a client can execute. Configure shell/network permissions
 needed for bus reports independently of permission to modify the audited code.
 
-The Claude adapter preserves the historical billing guard: it removes
-`ANTHROPIC_API_KEY` unless `AGENT_LAUNCH_KEEP_API_KEY=1`. Native base URL/token
-variables remain available. Other clients do not use this guard. Optional profile
+The launcher removes `ANTHROPIC_API_KEY` for every client (it would bill pay-as-you-go,
+and a role prompt could tell the model to read it) unless `AGENT_LAUNCH_KEEP_API_KEY=1`,
+or the profile names it as an `env_refs` target. Native base URL/token variables remain
+available. `env_refs` cannot set the dynamic-linker, shell, interpreter or git hook
+variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG*`, `PYTHON*`, editors and pagers, …)
+nor `HERDR_*`. A profile with elevated options (`bypassPermissions`, `danger-full-access`,
+`approval = "never"`, `yolo`) is announced on stderr before the client starts. Optional profile
 `env_refs` maps target environment variable names to existing source variable names
 without storing their values in the manifest:
 

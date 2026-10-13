@@ -128,3 +128,32 @@ func TestCompleteWaitsForACleanWorktreeAndSaysWhy(t *testing.T) {
 		t.Fatalf("%d complete signals once clean, want 1", n)
 	}
 }
+
+// A plan that names a docs agent hands it the change with complete, in the
+// same fenced write.
+func TestCompleteHandsTheChangeToTheDocsAgent(t *testing.T) {
+	h := newHarness(t, "true")
+	withDocs := strings.Replace(missionsFile("true"), `"reviewer": "codex",`, `"reviewer": "codex", "docs": "docs",`, 1)
+	if ok, msg := h.reload(withDocs, ""); !ok {
+		t.Fatalf("reload with docs: %q", msg)
+	}
+	h.pass()
+	h.skipNow("t1")
+	h.pass()
+	h.skipNow("t2")
+	h.pass()
+	var docs []bus.Event
+	for _, e := range h.cmds() {
+		if e.Target == "docs" {
+			docs = append(docs, e)
+		}
+	}
+	if len(h.completes()) != 1 || len(docs) != 1 || docs[0].Type != bus.CmdDirective ||
+		!strings.Contains(docs[0].Message, "update the docs and open the PR to main") {
+		t.Fatalf("completes %d, docs directives %+v", len(h.completes()), docs)
+	}
+	h.pass()
+	if n := countCmds(h.cmds(), func(e bus.Event) bool { return e.Target == "docs" }); n != 1 {
+		t.Fatalf("%d docs directives after another pass, want 1", n)
+	}
+}

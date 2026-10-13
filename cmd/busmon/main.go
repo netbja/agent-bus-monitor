@@ -40,6 +40,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -216,6 +217,7 @@ type shared struct {
 	mu       sync.Mutex
 	agents   map[string]*agentState
 	pilot    string                        // pilot-lease driver, "" = autonomous
+	update   string                        // a newer release tag found by checkForUpdate, "" = none
 	budgets  map[string]bus.BudgetSnapshot // account scope, per provider
 	dispatch string                        // "", "up" or "down"
 	missions string                        // "" (no conductor, nothing loaded), "up" or "down"
@@ -235,7 +237,12 @@ func main() {
 	deleteFlag := flag.String("delete", "", "delete every key of a project (DEL, not --reset's XTRIM) and exit")
 	themeFlag := flag.String("theme", "", "colour theme: auto, dark or light (or AGENT_BUS_BUSMON_THEME; default auto)")
 	asFlag := flag.String("as", "", "your name on the bus, shown as a human (or AGENT_BUS_HUMAN; default \"pilot\")")
+	versionFlag := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *versionFlag {
+		fmt.Println("busmon version " + buildinfo.Version)
+		return
+	}
 	// A typo in the cosmetic --theme must fail before anything destructive
 	// (--reset, --delete) runs; the colour depth is resolved later.
 	if _, err := ResolveTheme(*themeFlag, os.Getenv("AGENT_BUS_BUSMON_THEME"), "", false, 1<<24); err != nil {
@@ -344,6 +351,7 @@ func main() {
 		health:  health{ok: true, since: time.Now()},
 	}
 	u := newUI(app, st, ctx, b, project, self)
+	go checkForUpdate(ctx, st) // at most once a day; silent offline (AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
 
 	cursors := map[string]string{}
 	handle := func(e bus.Event) {

@@ -151,3 +151,9 @@ func (s Store) PutChangeWithCmd(ctx context.Context, r ChangeRecord, from, targe
 	_, err := s.B.FencedCmdWithChange(ctx, s.Token, r.Change, from, target, typ, command, string(b))
 	return err
 }
+
+// PutChangeWithCmds is PutChangeWithCmd for several cmd entries at once.
+func (s Store) PutChangeWithCmds(ctx context.Context, r ChangeRecord, cmds []bus.CmdSpec) error {
+	b, _ := json.Marshal(r)
+	return s.B.FencedCmdsWithChange(ctx, s.Token, r.Change, cmds, string(b))
+}

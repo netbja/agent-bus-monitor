@@ -2,99 +2,31 @@
 
 # agent-bus
 
-## New in v0.10.2 — the operator is a person; no more Python
+A self-contained multi-agent coordination bus over **Redis Streams**, plus the Go tooling
+around it. Agents publish status, commands and notifications on a shared Redis instance, under
+a required project namespace. `busmon`, a terminal dashboard, shows the traffic live. The
+broker, the client and the monitor all live here; nothing depends on any other project.
 
-- **busmon shows who you are**: `busmon --as bernard` (or `AGENT_BUS_HUMAN`, else `pilot`)
-  shows **`♙ Bernard [human · pilot]`** in the header and `♙` on your entries. Agents see
-  `"human": true` and act on a human directive first.
-- **`@all <text>`** wakes every agent. Plain text is a broadcast **nobody reads**: busmon says
-  so, and only a second Enter sends it.
-- **The role launcher is Go** (`agentbus roles`, package `rolecfg/`). `role_config.py` is gone,
-  and the scripts, the installer and the tests need no Python.
+## Quick start
 
-See the [release notes](docs/releases/v0.10.2.md).
+```bash
+git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor
+./setup.sh install --install-herdr     # toolchain check, binaries, skills, herdr-plus, Redis
+herdr --session myproject              # then, inside herdr:
+agentbus up myproject ~/code/myproject --as <your-name>
+```
 
-## New in v0.10.1 — bound identity, change complete
+`agentbus up` provisions the team and opens its workspace, with busmon first. Later,
+`Ctrl+B` then `↑` reopens any project.
 
-- **Codex can be woken by the dispatcher.** Codex runs its commands through a shared `codex
-  app-server`, so `agentbus status` cannot prove which pane it lives in. Now `agentbus bind
-  <agent> [--pane P] --pid N` records the client's pid, checked against the pane's foreground
-  processes; without `--pid` it lists them. `agent-launch` binds itself before it starts the
-  client. A later unverified `status` keeps that identity.
-- **Change complete.** When every mission of a change revision is integrated, the conductor
-  reruns the change suite on `change/<change>` and sends master one `complete` cmd: open the PR.
-  `mission status` shows it.
-- A `mission load` error about a missing brief names the path it resolved.
+- `./setup.sh update` keeps the machine current; busmon shows `↑ vX.Y.Z` in its header when a
+  newer release exists.
+- `./setup.sh status` shows what is installed.
+- `./setup.sh uninstall` removes it, asking first at each step.
 
-See the [release notes](docs/releases/v0.10.1.md).
-
-## New in v0.10.0 — missions
-
-A large change can now run across several agents and several days. Its tasks are **missions** in
-`docs/changes/<change>/missions.json`, versioned in Git. A deterministic **conductor**
-(`agentbus missions`, a bootstrap tab) runs them:
-- it requests each mission when its dependencies are integrated;
-- it rejects a delivery outside the allowed paths or with failing tests;
-- it opens the 4-eyes review;
-- it merges approved work into `change/<change>`, never `main`.
-
-Master only arbitrates what is blocked. Also new:
-- `agentbus mem` keeps the shared memory in `docs/memory/` checkable;
-- `./install.sh` sets up or updates a machine in one run.
-
-See [Missions](#missions-agentbus-missions-v010), [Install the tools](#install-the-tools) and
-the [release notes](docs/releases/v0.10.0.md). Live acceptance passed on a real two-mission change.
-
-## New in v0.9.0 — busmon redesign
-
-busmon is now a **btop-style dashboard**: an attention-first table of agents with freshness
-bars, queue, context tokens and flags in words; Activity in columns; Board and Requests beside
-it; details on Enter or click. It adapts to the terminal width (three tiers), keeps every frame
-straight, follows the terminal's background with a light theme available (`--theme light`), and
-honours `NO_COLOR`. Nothing changes on the bus. See [busmon panes](#busmon-panes) and the
-[release notes](docs/releases/v0.9.0.md).
-
-![busmon v0.9: header, Agents table sorted by attention, Activity, Board and Requests](docs/assets/busmon.png)
-
-## New in v0.8.0 — event-driven dispatch
-
-An idle agent can now stay **disconnected at zero token cost** and still be reached:
-`agentbus dispatch` (one per project, a tab in the bootstrap template) watches the cmd stream
-and, when work waits for an agent that is not armed, types one fixed wake line into its herdr
-pane — never the message itself. The woken agent runs `agentbus subscribe --drain <self>`,
-handles what it finds and goes idle again; a `request done` or `request block` wakes the
-requester the same way. No LLM takes part in ordinary routing, and while a dispatcher runs the
-master may sleep too. Without a dispatcher, behaviour is v0.7's.
-
-It only types into a pane that is idle, not busy, with an empty input line, **not focused**, and
-running the process the agent registered (pid + start time); everything else is deferred and,
-past 10 minutes, escalated to `master`. See the [release notes](docs/releases/v0.8.0.md) and the
-[design spec](docs/superpowers/specs/2026-10-10-event-driven-dispatch-design.md). Live acceptance
-(2026-10-11): agy and, once bound with `agentbus bind` (v0.10.1), Codex were woken on their own.
-Codex 0.162 runs its commands through a shared `codex app-server`, so it cannot register its pane
-by itself.
-
-## New in v0.7.0
-
-Choose **Claude Code, Codex or Kimi CLI per role**, with a project-wide default or
-mixed teams. Profiles select the client, provider and model; **effort stays at the
-client/provider default unless the user explicitly overrides it**. Existing Claude
-manifests remain compatible, and additional clients can use a local adapter.
-
-The new on-demand **security** role reviews repository vulnerabilities and proposes
-corrections. It complements foureyes' functional review without applying patches
-or adding an automatic merge gate.
-
-See the [configuration guide](docs/AGENT-PROFILES.md),
-[mixed-team example](examples/roles.mixed.toml) and [release notes](docs/releases/v0.7.0.md).
-Local launch tests use simulated clients; authenticated sessions remain to be checked
-on your accounts. Usage collectors still cover Claude sources only.
-
-Self-contained multi-agent coordination bus over **Redis Streams**, plus the Go
-tooling around it. Agents publish status, commands, and notifications on a shared
-Redis instance under a required project namespace; a TUI visualises the traffic
-live. Broker, client, and monitor all live here — nothing depends on any other
-project.
+**What's new:** see the [CHANGELOG](CHANGELOG.md), and [`docs/releases/`](docs/releases/) for
+the full notes of each version. The step-by-step guides are in English and French:
+[Operational guide](docs/OPERATIONAL-GUIDE.md) · [Guide opérationnel](docs/OPERATIONAL-GUIDE.fr.md).
 
 ## Components
 
@@ -160,22 +92,55 @@ stream (XADD MAXLEN ~); the pilot lease and challenge gates use ordinary keys/ha
 
 ## Install the tools
 
-### Automated install (recommended)
+### `setup.sh` (recommended)
 
-An idempotent installer checks the toolchain (including the Go version `go.mod` requires), rebuilds `agentbus` and `busmon` on every run (into the repository, where bootstrap's tabs run them, and into `--bin-dir`, default `~/.local/bin`), links the role skills and starts the Redis broker. Run it from a clone; re-run it after every `git pull`:
+Run it from a clone. It is idempotent, so re-running it is safe:
 
 ```bash
-./install.sh                # run automated setup
-./install.sh --dry-run      # list what is missing and what would change; changes nothing
-./install.sh --install-herdr  # also download herdr and clone herdr-plus (pinned tag) if missing
+./setup.sh install                 # check the toolchain (Go from go.mod), build agentbus + busmon,
+                                   # clone the external skills, link role skills, start Redis
+./setup.sh install --install-herdr # also install herdr (if missing) and the herdr-plus plugin
+./setup.sh install --dry-run       # list what is missing and what would change; changes nothing
+./setup.sh update                  # git pull --ff-only, then install; prints vA -> vB
+./setup.sh status                  # versions, PATH shadowing, skills, herdr-plus, Redis
+./setup.sh uninstall               # asks at every step (--yes: cautious defaults, --purge: Redis data too)
 ```
+
+What `install` does:
+- **Binaries.** Both binaries are rebuilt on every run, into the repository (where the herdr tabs
+  run them) and into `--bin-dir` (default `~/.local/bin`). They carry the release they were built
+  from (`agentbus version`, `busmon --version`).
+- **herdr-plus.** It is registered with herdr's own plugin store:
+  `herdr plugin install cloudmanic/herdr-plus --ref <tag>`, or `herdr plugin link` for a local
+  checkout set with `HERDR_PLUS_PATH`. `install` then checks that its Projects action exists.
+  A new pin in a later release reinstalls the herdr-plus that setup installed; a linked checkout
+  is never replaced.
+- **The `Ctrl+B` `↑` binding.** It is added to herdr's `config.toml`, which is created if herdr
+  has never run. A running herdr reloads it at once (`herdr server reload-config`).
+- **External role skills** (`mattpocock/skills`, pinned tag): cloned into
+  `${XDG_DATA_HOME:-~/.local/share}/agentbus/skills/mattpocock`. A skill that is still missing
+  only warns, in `agentbus up` and when an agent starts; the agent runs without it. A folder
+  there that setup did not clone is left alone.
+
+`update` refuses a tree with uncommitted changes, fast-forwards it, then runs the `setup.sh` it
+just pulled.
+
+`uninstall` asks before each removal, and removes only what setup made:
+- our binaries and our skill links (never a real directory);
+- the herdr key binding, if it is still exactly the block setup wrote (an edited one is kept);
+- the external skills, if setup cloned them and they have no local changes;
+- Redis: stop it (keep the data), remove it with its data, or leave it.
+
+herdr-plus is asked separately, because it is useful without agent-bus. The repository itself is
+left in place. It has no `--dry-run`: run it without `--yes` and answer each question.
+`./install.sh` remains an alias of `./setup.sh install`.
 
 ### Manual build
 
 ```bash
 go build -o busmon ./cmd/busmon
 go build -o agentbus ./cmd/agentbus
-go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus
+go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus (version "dev": no update notice)
 ```
 
 ## Use it
@@ -498,50 +463,43 @@ demand — both go through one shared launch recipe. It's shell tooling *around*
 
 ### One-time setup
 
-```bash
-# from this repo:
-go build -o busmon ./cmd/busmon              # the busmon tab runs $REPO/busmon
-go build -o agentbus ./cmd/agentbus          # the dispatch tab runs $REPO/agentbus
-go install ./...                             # put agentbus + busmon on your PATH (the agents call them)
-scripts/link-role-skills.sh                  # install skills for the selected clients
-```
+`./setup.sh install --install-herdr` (above) does all of it:
+- the binaries;
+- the role skills, including the external collection;
+- herdr-plus, registered with herdr;
+- the `Ctrl+B` `↑` binding for its Projects picker;
+- the broker.
 
-Keep the **herdr-plus** checkout at `~/Tools/herdr-plugins/herdr-plus` (or set `HERDR_PLUS_PATH`) —
-`bootstrap` handles the rest: it **builds** `bin/herdr-plus` if it's missing, then **links** the
-checkout into the project's herdr session (herdr registers plugins **per session**). The build step
-matters because `herdr plugin link` registers the plugin but does **not** compile it, and every
-entry point spawns `bin/herdr-plus`; without it, opening the Projects picker fails with *"Unable to
-spawn … bin/herdr-plus … does not exist"*. To do it by hand: `make -C
-~/Tools/herdr-plugins/herdr-plus build`. Also needs the Matt Pocock skills present locally (the role skills resolve from
-`~/Tools/herdr-plugins/skills/skills/engineering/`). If you use `--cron`, make sure `agentbus` is
-reachable on the cron job's `PATH` — the trigger prepends `~/.local/bin`, so building the binaries
-there is the simplest fix.
+If you use `--cron`, make sure `agentbus` is on the cron job's `PATH`; the trigger prepends
+`~/.local/bin`.
 
-### Start a new project
-
-herdr registers plugins **per session**, and you give each project its own herdr session — so the
-Projects picker only exists in a session once herdr-plus is linked there. `bootstrap` does that link
-for you, but herdr only accepts it into a **running** session, so create the session first and
-provision from inside it:
+### Start a new project — one command
 
 ```bash
-# 1. create + attach the project's herdr session (must be running for the link to take):
-herdr --session myproject
-
-# 2. from inside it, provision — links herdr-plus into this session AND writes the template:
-/path/to/agent-bus-monitor/scripts/bootstrap new myproject /path/to/your/project
-
-# 3. open the Projects picker and pick myproject:
-herdr plugin action invoke cloudmanic.herdr-plus.projects
+herdr --session myproject                                   # start herdr (a session per project is handy)
+agentbus up myproject /path/to/your/project --as <your-name>   # inside it
 ```
 
-`bootstrap` **launches nothing** — it provisions (broker up, skills linked, **herdr-plus linked into
-the session**, template written). The `new` line's 2nd argument is where the team works — every
+`agentbus up`:
+- **Provisions** the project, which is `scripts/bootstrap` underneath: broker up, skills linked,
+  herdr-plus template written. It accepts bootstrap's flags (`--no-dispatch`, `--no-missions`,
+  `--index`, `--cron`, `--session`).
+- **Opens the workspace** directly, with busmon first and focused, then one tab per boot role,
+  then dispatch and missions.
+- **On a re-run**, it focuses the open workspace instead of opening a second one.
+- **Outside herdr**, it only provisions, and tells you how to open the workspace.
+
+The Projects picker (`Ctrl+B` then `↑`) reopens any provisioned project later. The bare
+`scripts/bootstrap new myproject /path` still works, if you prefer to open the workspace from
+the picker.
+
+`bootstrap` alone **launches nothing** — it provisions (broker up, skills linked, **herdr-plus checked in
+herdr**, template written); `agentbus up` does that and then opens the workspace. The 2nd argument is where the team works — every
 agent's cwd, and where `--index` builds the index; omit it to use `$PWD`. It is **not** the tooling
 repo (broker, `agent-launch`, `busmon` stay here). The linked session is `$HERDR_SESSION` (so
 running from inside it just works), else the project name — pass `--session <name>` if your herdr
-session is named differently. Picking `myproject` opens the workspace: one tab per boot role —
-`master`, `coder`, `foureyes`, `sentinel` — plus a `busmon` tab and a `dispatch` tab running
+session is named differently. The workspace opens with a `busmon` tab first, then one tab per boot role —
+`master`, `coder`, `foureyes`, `sentinel` — and a `dispatch` tab running
 `agentbus --project myproject dispatch` (omit it with `bootstrap new … --no-dispatch`). Each tab
 launches its configured client and role. Agents publish presence on the bus and recover tracked
 work; with the dispatch tab up, an idle unarmed agent is woken through its pane when work lands

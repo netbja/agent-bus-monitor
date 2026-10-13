@@ -31,6 +31,7 @@ func helpText() string {
 	row("click / wheel", "click selects, click on the selected row opens it; the wheel scrolls")
 	more("a click outside an open detail closes it, like esc")
 	row("i : @", "write: @agent text wakes that agent, @all text every agent; plain text is a broadcast nobody reads (Enter twice)")
+	row(GlyphUp+" vX.Y.Z", "header: a newer release exists - run ./setup.sh update (checked once a day; AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)")
 	blank()
 
 	head("STATES")

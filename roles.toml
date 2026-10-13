@@ -43,3 +43,9 @@ model = "claude-opus-4-8"
 permission = "manual"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-security"]
+
+[roles.docs]
+model = "claude-sonnet-5"
+permission = "acceptEdits"
+tier = "pop"
+skills = ["agent-bus", "agent-bus-docs"]

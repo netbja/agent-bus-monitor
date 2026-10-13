@@ -21,6 +21,7 @@ type File struct {
 	Reviewer    string    `json:"reviewer"`
 	Test        string    `json:"test"`
 	MaxAttempts int       `json:"max_attempts"`
+	Docs        string    `json:"docs,omitempty"` // agent handed the change on complete (v0.11)
 	Missions    []Mission `json:"missions"`
 }
 

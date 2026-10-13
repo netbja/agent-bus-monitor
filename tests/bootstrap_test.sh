@@ -20,7 +20,7 @@ export HERDR_PLUS_PATH="$tmp/hplus"; mkdir -p "$HERDR_PLUS_PATH"   # fake checko
 export SKILLS_DEST="$tmp/skills" POCOCK_SKILLS_ROOT="$tmp/pocock" REPO_SKILLS="$tmp/reposkills"
 for s in tdd implement code-review diagnosing-bugs codebase-design domain-modeling to-spec wayfinder to-tickets; do
   mkdir -p "$tmp/pocock/engineering/$s"; echo x > "$tmp/pocock/engineering/$s/SKILL.md"; done
-for s in agent-bus agent-bus-master agent-bus-sentinel agent-bus-security; do
+for s in agent-bus agent-bus-master agent-bus-sentinel agent-bus-security agent-bus-docs; do
   mkdir -p "$tmp/reposkills/$s"; echo x > "$tmp/reposkills/$s/SKILL.md"; done
 
 proj="$tmp/projects"
@@ -46,6 +46,14 @@ if [[ "$body" != *"agent-launch architect demo"* ]]; then _ok "architect not boo
 # v0.8: a dispatch tab runs the wake dispatcher, built like the busmon tab (repo binary)
 assert_contains "$body" 'name = "dispatch"'                      "dispatch tab"
 assert_contains "$body" "$REPO/agentbus --project demo dispatch" "dispatch tab runs agentbus dispatch"
+
+# A missing external skill (the download failed) warns; bootstrap still writes the template
+mv "$tmp/pocock/engineering/wayfinder" "$tmp/wayfinder.away"
+miss_out="$(run new demomiss "$projdir" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "a missing skill does not stop bootstrap"
+assert_contains "$miss_out" "warning: skill wayfinder not found" "and it is named"
+assert_eq "$([[ -f "$proj/demomiss.toml" ]] && echo written || echo missing)" "written" "the template is still written"
+mv "$tmp/wayfinder.away" "$tmp/pocock/engineering/wayfinder"
 
 # --no-dispatch omits the dispatch tab (busmon stays)
 run new demonod "$projdir" --no-dispatch >/dev/null
@@ -119,4 +127,10 @@ rm -f "$hp/bin/herdr-plus" "$hp/Makefile" "$hp/scripts/build.sh"
 out="$(run new demonobuild "$projdir" 2>&1)"
 assert_contains "$out" "no bin/herdr-plus and no build script"   "warns when there is nothing to build"
 assert_exit 0 "bootstrap still succeeds without a build recipe" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demonobuild2 '$projdir'"
+# busmon is the first tab (herdr-plus focuses it); --as puts the person's name on it
+first_tab="$(grep -m1 -A1 '^\[\[tabs\]\]' "$tpl" | tail -1)"
+assert_eq "$first_tab" 'name = "busmon"' "busmon is the first tab"
+run new demoas "$projdir" --as bernard >/dev/null
+assert_contains "$(cat "$proj/demoas.toml")" "busmon --project demoas --as bernard" "--as reaches the busmon tab"
+assert_exit 1 "an invalid --as is refused" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demoas2 '$projdir' --as Bernard"
 finish

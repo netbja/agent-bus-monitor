@@ -73,7 +73,14 @@ func (c *Conductor) checkComplete(ctx context.Context, ch *change) error {
 	rec.CompletedRev, rec.CompletedHead, rec.CompleteFailedHead = rec.Rev, head, ""
 	msg := fmt.Sprintf("change %s rev %d complete on %s@%s: %d integrated, %d skipped; open the PR to %s",
 		rec.Change, rec.Rev, rec.Branch, short(head), integrated, skipped, rec.Base)
-	if err := c.Store.PutChangeWithCmd(ctx, rec, c.Self, c.EscalateTo, bus.CmdComplete, msg); err != nil {
+	cmds := []bus.CmdSpec{{From: c.Self, Target: c.EscalateTo, Type: bus.CmdComplete, Command: msg}}
+	if ch.file.Docs != "" {
+		// The docs agent gets the change in the same fenced write: once, with complete.
+		cmds = append(cmds, bus.CmdSpec{From: c.Self, Target: ch.file.Docs, Type: bus.CmdDirective, Command: fmt.Sprintf(
+			"change %s rev %d complete on %s@%s (%d integrated, %d skipped): update the docs and open the PR to %s (skill agent-bus-docs: branch pr/%s from that head, never merge)",
+			rec.Change, rec.Rev, rec.Branch, short(head), integrated, skipped, rec.Base, rec.Change)})
+	}
+	if err := c.Store.PutChangeWithCmds(ctx, rec, cmds); err != nil {
 		return err
 	}
 	ch.rec = rec

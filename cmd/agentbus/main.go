@@ -37,6 +37,7 @@
 //	agentbus --project P dispatch  --status     # print "dispatch up" (exit 0) or "dispatch down" (exit 1)
 //	agentbus --project P request [--json] | send <task> <target> [--ref T] [--ttl 5m] <body>
 //	agentbus --project P request accept <task> | block <task> <reason> | done <task> <reply>
+//	agentbus up <project> [<path>] [--as <name>] [bootstrap flags]   # provision + open the herdr workspace (busmon first)
 //	agentbus roles  <validate|exists|tier|field|launch|install|template|check-toml> ...  # role manifest (scripts), no project/broker
 //	agentbus limits                # writer size/retention limits, no broker needed
 //	agentbus version               # print the bus protocol version (no project/broker needed)
@@ -54,6 +55,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/usage"
@@ -97,6 +99,10 @@ func main() {
 	if len(args) >= 1 && args[0] == "roles" {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}
+	// up provisions a project and opens its herdr workspace: no project flag, no broker of its own.
+	if len(args) >= 1 && args[0] == "up" {
+		os.Exit(runUp(args[1:], realUpDeps(os.Stdout, os.Stderr), os.Stdout, os.Stderr))
+	}
 	// version reads a compile-time constant — no project, no broker. Handle it
 	// before the project check and before bus.Connect.
 	if len(args) >= 1 && args[0] == "limits" {
@@ -105,14 +111,14 @@ func main() {
 		return
 	}
 	if len(args) >= 1 && args[0] == "version" {
-		fmt.Printf("agentbus protocol v%d\n", bus.ProtocolVersion)
+		fmt.Printf("agentbus protocol v%d\nagentbus version %s\n", bus.ProtocolVersion, buildinfo.Version)
 		return
 	}
 	if project == "" {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|limits|mem|roles|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|limits|mem|roles|up|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")

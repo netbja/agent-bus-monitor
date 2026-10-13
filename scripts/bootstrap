@@ -2,7 +2,7 @@
 # Provision (do NOT launch) a project's Agent Bus team. Opening the workspace is the human's
 # job via the herdr-plus fuzzy picker; this only writes the template + prepares the broker.
 # Usage:
-#   bootstrap [new|recall] <project> [<path>] [--session <name>] [--index] [--cron] [--no-dispatch] [--no-missions] [--yes]
+#   bootstrap [new|recall] <project> [<path>] [--session <name>] [--as <your-name>] [--index] [--cron] [--no-dispatch] [--no-missions] [--yes]
 #   bootstrap <project> ...           # no verb -> auto: recall if the template exists, else new
 # The template opens one tab per boot role, a busmon tab, (unless --no-dispatch) a dispatch tab
 # running `agentbus --project <p> dispatch`, which wakes idle unarmed agents when work lands for
@@ -17,15 +17,17 @@ source "$SCRIPT_DIR/lib/roles.sh"
 die()  { echo "bootstrap: $*" >&2; exit 1; }
 warn() { echo "bootstrap: $*" >&2; }
 
-verb=""; project=""; project_dir=""; session_flag=""; do_index=0; do_cron=0; assume_yes=0
+verb=""; project=""; project_dir=""; session_flag=""; do_index=0; do_cron=0; assume_yes=0; busmon_as=""; want_as=0
 do_dispatch=1
 do_missions=1
 want_session=0
 for a in "$@"; do
   if [[ "$want_session" == 1 ]]; then session_flag="$a"; want_session=0; continue; fi
+  if [[ "$want_as" == 1 ]]; then busmon_as="$a"; want_as=0; continue; fi
   case "$a" in
     new|recall) verb="$a" ;;
     --session)  want_session=1 ;;
+    --as)       want_as=1 ;;
     --index)    do_index=1 ;;
     --cron)     do_cron=1 ;;
     --no-dispatch) do_dispatch=0 ;;
@@ -38,7 +40,9 @@ for a in "$@"; do
   esac
 done
 [[ "$want_session" == 0 ]] || die "--session needs a value"
-[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [<path>] [--session <name>] [--index] [--cron] [--no-dispatch] [--no-missions] [--yes]"
+[[ "$want_as" == 0 ]] || die "--as needs a name"
+[[ -z "$busmon_as" || "$busmon_as" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid --as name: $busmon_as (lowercase, as on the bus)"
+[[ -n "$project" ]] || die "usage: bootstrap [new|recall] <project> [<path>] [--session <name>] [--as <your-name>] [--index] [--cron] [--no-dispatch] [--no-missions] [--yes]"
 [[ "$project" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid project name: $project"
 
 # The team's working directory: where every agent's cwd lands, and where --index builds the
@@ -75,7 +79,7 @@ ensure_broker() {
 
 write_template() {
   mkdir -p "$PROJECTS_DIR"
-  "$AGENTBUS_BIN" roles template "$project" "$PROJECT_DIR" "$SCRIPT_DIR" "$REPO" "$do_dispatch" "$do_missions" > "$template" \
+  "$AGENTBUS_BIN" roles template "$project" "$PROJECT_DIR" "$SCRIPT_DIR" "$REPO" "$do_dispatch" "$do_missions" ${busmon_as:+"$busmon_as"} > "$template" \
     || die "failed to write $template"
   echo "wrote $template"
 }
@@ -140,7 +144,12 @@ ensure_plugin_built() {
 # not (seeds its registry for the next `herdr --session <name>`).
 link_plugin() {
   command -v herdr >/dev/null 2>&1 || { warn "herdr not on PATH; skipping herdr-plus link"; return 0; }
-  [[ -d "$HERDR_PLUS_PATH" ]] || { warn "herdr-plus not at $HERDR_PLUS_PATH; skipping link (set HERDR_PLUS_PATH)"; return 0; }
+  # setup.sh registers herdr-plus in herdr's global registry, which every session sees: done.
+  if HERDR_SESSION="$SESSION" herdr plugin list 2>/dev/null | grep -q "cloudmanic.herdr-plus"; then
+    echo "herdr-plus: registered (agentbus up $project opens the workspace; Ctrl+B then Up reopens it)"
+    return 0
+  fi
+  [[ -d "$HERDR_PLUS_PATH" ]] || { warn "herdr-plus is not registered with herdr: run $REPO/setup.sh install --install-herdr"; return 0; }
   ensure_plugin_built
   if HERDR_SESSION="$SESSION" herdr plugin link "$HERDR_PLUS_PATH" >/dev/null 2>&1; then
     echo "herdr-plus: linked into session '$SESSION' (open the Projects picker there)"
@@ -155,7 +164,7 @@ roles_validate || die "invalid role manifest"
 case "$verb" in
   new)
     ensure_broker
-    "$SCRIPT_DIR/link-role-skills.sh"
+    "$SCRIPT_DIR/link-role-skills.sh" --missing-ok   # a missing skill warns: the agent starts without it
     write_template
     ;;
   recall)

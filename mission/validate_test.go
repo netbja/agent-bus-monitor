@@ -112,3 +112,10 @@ func TestParseRefusesTrailingData(t *testing.T) {
 		t.Errorf("trailing whitespace refused: %v", err)
 	}
 }
+
+func TestValidateDocsAgentName(t *testing.T) {
+	f := File{Change: "c", Reviewer: "codex", Docs: "Bad Name", Missions: []Mission{{ID: "t1", Title: "x", Agent: "kimi", AllowedPaths: []string{"a/**"}, Test: "true", Brief: "b.md"}}}
+	if err := Validate(f, []string{"a/x"}, allBriefs); err == nil || !strings.Contains(err.Error(), "docs") {
+		t.Fatalf("an invalid docs agent was accepted: %v", err)
+	}
+}

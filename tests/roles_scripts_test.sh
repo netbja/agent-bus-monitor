@@ -29,15 +29,12 @@ export ROLES_TOML="$manifest" ROLES_DIR="$root" REPO_SKILLS="$root/skills" POCOC
   AGENT_LAUNCH_CACHE="$root/cache" SKILLS_DEST="$root/installed" PATH="$root/bin:$PATH"
 L="$REPO/scripts/agent-launch"
 
-# Billing guard: ANTHROPIC_API_KEY dropped for claude-code only; the client's exit code propagates (exec)
+# Billing and secret guard: ANTHROPIC_API_KEY reaches no client (v0.11, all clients); the
+# client's exit code propagates (exec)
 for c in codex kimi-cli claude-code; do
   config "$c"
   out="$(ANTHROPIC_API_KEY=key "$L" coder demo 2>&1)"
-  if [[ "$c" == claude-code ]]; then
-    assert_eq "$([[ "$out" == *ANTHROPIC_API_KEY=* ]] && echo kept || echo dropped)" "dropped" "$c: API key dropped"
-  else
-    assert_contains "$out" "ANTHROPIC_API_KEY=key" "$c: API key kept"
-  fi
+  assert_eq "$([[ "$out" == *ANTHROPIC_API_KEY=* ]] && echo kept || echo dropped)" "dropped" "$c: API key dropped"
 done
 assert_exit 7 "the client's exit code propagates" -- env FAKE_EXIT=7 "$L" coder demo
 out="$(ANTHROPIC_API_KEY=key AGENT_LAUNCH_KEEP_API_KEY=1 "$L" coder demo 2>&1)"
