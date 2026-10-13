@@ -159,7 +159,7 @@ version_ge() {
 # -----------------------------------------------------------------------------
 # Shared helpers for status / uninstall / update
 # -----------------------------------------------------------------------------
-HERDR_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml"
+HERDR_CONFIG="${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
 KEYBIND_MARK="# herdr-plus Projects picker: prefix (ctrl+b) then Up"
 REDIS_CONTAINER="agent-bus-redis"
 
@@ -512,9 +512,25 @@ if command -v herdr >/dev/null 2>&1 && [ "$DRY_RUN" = "0" ] && herdr_plus_regist
 fi
 
 # Configure herdr-plus keybinding in ~/.config/herdr/config.toml idempotently
-HERDR_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml"
-if [ ! -f "$HERDR_CONFIG" ]; then
-  log_info "herdr config file not yet created at $HERDR_CONFIG (will be created on first herdr launch)."
+HERDR_CONFIG="${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
+KEYBIND_BLOCK="$(cat <<'EOF'
+
+# herdr-plus Projects picker: prefix (ctrl+b) then Up
+[[keys.command]]
+key = "prefix+up"
+type = "plugin_action"
+command = "cloudmanic.herdr-plus.projects"
+description = "herdr-plus: projects"
+EOF
+)"
+# herdr runs with a partial config.toml, so a machine where it never ran gets one holding the binding.
+if [ ! -f "$HERDR_CONFIG" ] && [ "$DRY_RUN" = "1" ]; then
+  log_info "[dry-run] would create $HERDR_CONFIG with the herdr-plus keybinding (prefix+up)"
+elif [ ! -f "$HERDR_CONFIG" ]; then
+  mkdir -p "$(dirname "$HERDR_CONFIG")"
+  printf '%s\n' "$KEYBIND_BLOCK" > "$HERDR_CONFIG"
+  log_ok "herdr config: created $HERDR_CONFIG with the Projects picker shortcut (prefix+up)"
+  KEYBIND_WRITTEN=1
 elif grep -q "cloudmanic.herdr-plus.projects" "$HERDR_CONFIG" 2>/dev/null; then
   log_ok "herdr config: Projects picker keybinding already configured"
 elif grep -qF '"prefix+up"' "$HERDR_CONFIG" 2>/dev/null; then
@@ -524,16 +540,17 @@ elif [ "$DRY_RUN" = "1" ]; then
 else
   backup="$HERDR_CONFIG.bak.$(date +%Y%m%d%H%M%S)"
   cp -p "$HERDR_CONFIG" "$backup"
-  cat <<'EOF' >> "$HERDR_CONFIG"
-
-# herdr-plus Projects picker: prefix (ctrl+b) then Up
-[[keys.command]]
-key = "prefix+up"
-type = "plugin_action"
-command = "cloudmanic.herdr-plus.projects"
-description = "herdr-plus: projects"
-EOF
+  printf '%s\n' "$KEYBIND_BLOCK" >> "$HERDR_CONFIG"
   log_ok "herdr config: added Projects picker shortcut (prefix+up) to $HERDR_CONFIG (backup: $backup)"
+  KEYBIND_WRITTEN=1
+fi
+# A herdr that is already running reads a new binding only when told to.
+if [ "${KEYBIND_WRITTEN:-0}" = "1" ] && command -v herdr >/dev/null 2>&1; then
+  if herdr server reload-config >/dev/null 2>&1; then
+    log_ok "herdr: running server reloaded its config (Ctrl+B then Up works now)"
+  else
+    log_info "herdr: the binding applies when herdr next starts (or run: herdr server reload-config)"
+  fi
 fi
 
 # -----------------------------------------------------------------------------

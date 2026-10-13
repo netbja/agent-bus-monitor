@@ -129,6 +129,12 @@ assert_eq "$(cmp -s "$T/config.taken" "$T/cfg/herdr/config.toml" && echo same)" 
 assert_contains "$taken_out" "prefix+up is already bound" "taken prefix+up is reported"
 cp "$T/config.ours" "$T/cfg/herdr/config.toml"
 
+# A machine where herdr never ran has no config yet: the binding is still added, in a new file
+fresh_cfg="$T/fresh-cfg/herdr/config.toml"; : > "$HERDR_LOG"
+HERDR_CONFIG_PATH="$fresh_cfg" run_setup install --no-skills >/dev/null
+assert_contains "$(cat "$fresh_cfg" 2>/dev/null)" "cloudmanic.herdr-plus.projects" "no herdr config yet: one is created with the binding (HERDR_CONFIG_PATH honoured)"
+assert_contains "$(cat "$HERDR_LOG")" "server reload-config" "a running herdr is told to reload its config"
+
 # status changes nothing and reports what is there
 status_out="$("$SETUP" status --bin-dir "$T/bin" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "status exits 0"
