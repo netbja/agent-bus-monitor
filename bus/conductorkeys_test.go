@@ -336,3 +336,33 @@ func TestFencedCmdsWithChangeAtomic(t *testing.T) {
 		t.Fatal("an invalid target was written")
 	}
 }
+
+// A retried script (its reply lost, go-redis runs it again) must not send the
+// signal twice: the change record it would write is the marker that it was sent.
+func TestFencedCmdsWithChangeIdempotentOnRetry(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, ConductorKey(b.project), ChangeKey(b.project, "chg")) })
+	b.AcquireConductor(ctx, "real", 15*time.Second)
+	cmds := []CmdSpec{
+		{From: "conductor", Target: "master", Type: CmdComplete, Command: "change chg complete"},
+		{From: "conductor", Target: "docs", Type: CmdDirective, Command: "update the docs"},
+	}
+	for range 2 {
+		if err := b.FencedCmdsWithChange(ctx, "real", "chg", cmds, `{"rev":1,"completed_rev":1}`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := b.FencedCmdWithChange(ctx, "real", "chg", "conductor", "master", CmdComplete, "again", `{"rev":1,"completed_rev":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if evs, _, _ := b.Recent(ctx, []string{"cmd"}, 10); len(evs) != 2 {
+		t.Fatalf("a retry with the same record appended again: %d cmds, want 2", len(evs))
+	}
+	if err := b.FencedCmdsWithChange(ctx, "real", "chg", cmds[:1], `{"rev":2,"completed_rev":2}`); err != nil {
+		t.Fatal(err)
+	}
+	if evs, _, _ := b.Recent(ctx, []string{"cmd"}, 10); len(evs) != 3 {
+		t.Fatalf("a new record must still send: %d cmds, want 3", len(evs))
+	}
+}

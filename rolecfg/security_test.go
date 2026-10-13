@@ -12,7 +12,8 @@ import (
 func TestEnvRefsRefuseLoaderAndHookVariables(t *testing.T) {
 	f := newLaunchFixture(t)
 	for _, target := range []string{"LD_LIBRARY_PATH", "LD_AUDIT", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "ENV",
-		"NODE_OPTIONS", "GIT_SSH_COMMAND", "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT", "HERDR_PANE_ID", "HERDR_ENV", "PATH"} {
+		"NODE_OPTIONS", "GIT_SSH_COMMAND", "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT", "HERDR_PANE_ID", "HERDR_ENV", "PATH",
+		"GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG", "GIT_DIR", "GIT_TEMPLATE_DIR", "GIT_ASKPASS", "SSH_ASKPASS", "GIT_PROXY_COMMAND", "GIT_EXTERNAL_DIFF", "GIT_EDITOR", "EDITOR", "VISUAL", "PAGER", "GIT_PAGER"} {
 		body := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"codex\"\nprovider = \"p\"\nmodel = \"m\"\nenv_refs = { " +
 			target + " = \"SRC\" }\n[roles.coder]\ntier = \"boot\"\nskills = []\n"
 		must(t, os.WriteFile(f.manifest, []byte(body), 0o644))

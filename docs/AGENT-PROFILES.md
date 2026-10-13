@@ -85,7 +85,7 @@ The launcher removes `ANTHROPIC_API_KEY` for every client (it would bill pay-as-
 and a role prompt could tell the model to read it) unless `AGENT_LAUNCH_KEEP_API_KEY=1`,
 or the profile names it as an `env_refs` target. Native base URL/token variables remain
 available. `env_refs` cannot set the dynamic-linker, shell, interpreter or git hook
-variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `PYTHON*`, …)
+variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG*`, `PYTHON*`, editors and pagers, …)
 nor `HERDR_*`. A profile with elevated options (`bypassPermissions`, `danger-full-access`,
 `approval = "never"`, `yolo`) is announced on stderr before the client starts. Optional profile
 `env_refs` maps target environment variable names to existing source variable names

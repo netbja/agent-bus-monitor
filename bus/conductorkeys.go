@@ -333,8 +333,10 @@ func (b *Bus) FencedMissionBatch(ctx context.Context, token, change string, miss
 }
 
 // KEYS = lease, cmd stream, change; ARGV = token, maxlen, changeRecord, then
-// the cmd field/value pairs.
+// the cmd field/value pairs. A record already stored means this exact signal
+// was sent: a retried script (its reply lost) appends nothing and returns "".
 var fencedCmdWithChange = redis.NewScript(fenceCheck + `
+if redis.call('HGET', KEYS[3], '` + ChangeRecordField + `') == ARGV[3] then return '' end
 local id = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', unpack(ARGV, 4))
 redis.call('HSET', KEYS[3], '` + ChangeRecordField + `', ARGV[3])
 return id`)
@@ -378,8 +380,10 @@ type CmdSpec struct {
 }
 
 // KEYS = lease, cmd stream, change; ARGV = token, maxlen, changeRecord, then
-// from/target/type/command for each cmd.
+// from/target/type/command for each cmd. Idempotent like fencedCmdWithChange:
+// the record is the marker that the batch was sent.
 var fencedCmdsWithChange = redis.NewScript(fenceCheck + `
+if redis.call('HGET', KEYS[3], '` + ChangeRecordField + `') == ARGV[3] then return 0 end
 for i = 4, #ARGV, 4 do
   redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', 'from', ARGV[i], 'target', ARGV[i+1],
     'type', ARGV[i+2], 'ref', '', 'command', ARGV[i+3], 'text_complete', 'yes')
