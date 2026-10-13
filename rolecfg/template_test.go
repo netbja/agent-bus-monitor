@@ -18,8 +18,8 @@ func TestTemplateMatchesBootstrapOutput(t *testing.T) {
 	project := "équipe & <x>"
 
 	base := "name = \"équipe & <x>\"\ndescription = \"Agent Bus team for équipe & <x>\"\nworking_dir = \"" + cwd + "\"\n" +
-		"\n[[tabs]]\nname = \"coder\"\ncommand = \"env 'ROLES_TOML=" + manifest + "' '" + scripts + "/agent-launch' coder 'équipe & <x>'\"\n" +
-		"\n[[tabs]]\nname = \"busmon\"\ncommand = \"'" + root + "/busmon' --project 'équipe & <x>'\"\n"
+		"\n[[tabs]]\nname = \"busmon\"\ncommand = \"'" + root + "/busmon' --project 'équipe & <x>'\"\n" +
+		"\n[[tabs]]\nname = \"coder\"\ncommand = \"env 'ROLES_TOML=" + manifest + "' '" + scripts + "/agent-launch' coder 'équipe & <x>'\"\n"
 	dispatchTab := "\n[[tabs]]\nname = \"dispatch\"\ncommand = \"'" + root + "/agentbus' --project 'équipe & <x>' dispatch\"\n"
 	missionsTab := "\n[[tabs]]\nname = \"missions\"\ncommand = \"'" + root + "/agentbus' --project 'équipe & <x>' missions --repo '" + cwd + "'\"\n"
 	for _, tc := range []struct {
@@ -27,7 +27,7 @@ func TestTemplateMatchesBootstrapOutput(t *testing.T) {
 	}{
 		{true, true}, {true, false}, {false, true}, {false, false},
 	} {
-		got := Template(m, manifest, project, cwd, scripts, root, tc.dispatch, tc.missions)
+		got := Template(m, manifest, project, cwd, scripts, root, "", tc.dispatch, tc.missions)
 		want := base
 		if tc.dispatch {
 			want += dispatchTab
@@ -52,8 +52,8 @@ func TestTemplateBootRolesFollowManifestOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := Template(m, manifest, "demo", "/work", "/repo/scripts", "/repo", false, false)
-	if !containsInOrder(got, "name = \"zeta\"", "name = \"alpha\"", "name = \"busmon\"") {
+	got := Template(m, manifest, "demo", "/work", "/repo/scripts", "/repo", "", false, false)
+	if !containsInOrder(got, "name = \"busmon\"", "name = \"zeta\"", "name = \"alpha\"") {
 		t.Fatalf("tabs do not preserve manifest order:\n%s", got)
 	}
 }
@@ -75,5 +75,16 @@ func TestTemplateJSONStringMatchesPythonEnsureASCIIFalse(t *testing.T) {
 	want := "\"line\\n\u2028 literal \\\\u2028 <>&\x7f\\u0001\""
 	if got := templateJSONString(value); got != want {
 		t.Fatalf("templateJSONString(%q) = %q, want %q", value, got, want)
+	}
+}
+
+func TestTemplateBusmonFirstWithName(t *testing.T) {
+	m := writeSkillsManifest(t,
+		"[profiles.main]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"test\"\n",
+		"[roles.coder]\ntier = \"boot\"\nskills = []\n")
+	got := Template(m, "/r/roles.toml", "demo", "/w", "/r/scripts", "/r", "bernard", false, false)
+	first := strings.Index(got, "[[tabs]]")
+	if first < 0 || !strings.HasPrefix(got[first:], "[[tabs]]\nname = \"busmon\"\ncommand = \"/r/busmon --project demo --as bernard\"\n") {
+		t.Fatalf("busmon is not the first tab with --as:\n%s", got)
 	}
 }

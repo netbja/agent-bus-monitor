@@ -138,10 +138,14 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, strings.Join(values, "\n"))
 		return nil
 	case "template":
-		if len(rest) != 6 {
-			return errors.New("usage: template <project> <cwd> <scripts> <repo> <0|1 dispatch> <0|1 missions>")
+		if len(rest) != 6 && len(rest) != 7 {
+			return errors.New("usage: template <project> <cwd> <scripts> <repo> <0|1 dispatch> <0|1 missions> [<busmon --as name>]")
 		}
-		fmt.Fprint(stdout, rolecfg.Template(m, path, rest[0], rest[1], rest[2], rest[3], rest[4] == "1", rest[5] == "1"))
+		as := ""
+		if len(rest) == 7 {
+			as = rest[6]
+		}
+		fmt.Fprint(stdout, rolecfg.Template(m, path, rest[0], rest[1], rest[2], rest[3], as, rest[4] == "1", rest[5] == "1"))
 		return nil
 	}
 	return errors.New("unknown action")

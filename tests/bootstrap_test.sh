@@ -119,4 +119,10 @@ rm -f "$hp/bin/herdr-plus" "$hp/Makefile" "$hp/scripts/build.sh"
 out="$(run new demonobuild "$projdir" 2>&1)"
 assert_contains "$out" "no bin/herdr-plus and no build script"   "warns when there is nothing to build"
 assert_exit 0 "bootstrap still succeeds without a build recipe" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demonobuild2 '$projdir'"
+# busmon is the first tab (herdr-plus focuses it); --as puts the person's name on it
+first_tab="$(grep -m1 -A1 '^\[\[tabs\]\]' "$tpl" | tail -1)"
+assert_eq "$first_tab" 'name = "busmon"' "busmon is the first tab"
+run new demoas "$projdir" --as bernard >/dev/null
+assert_contains "$(cat "$proj/demoas.toml")" "busmon --project demoas --as bernard" "--as reaches the busmon tab"
+assert_exit 1 "an invalid --as is refused" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demoas2 '$projdir' --as Bernard"
 finish
