@@ -371,3 +371,41 @@ func resultBlock(left time.Duration) (time.Duration, bool) {
 	}
 	return min(left, time.Second).Truncate(time.Millisecond), true
 }
+
+// CmdSpec is one cmd entry of a FencedCmdsWithChange batch.
+type CmdSpec struct {
+	From, Target, Type, Command string
+}
+
+// KEYS = lease, cmd stream, change; ARGV = token, maxlen, changeRecord, then
+// from/target/type/command for each cmd.
+var fencedCmdsWithChange = redis.NewScript(fenceCheck + `
+for i = 4, #ARGV, 4 do
+  redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', 'from', ARGV[i], 'target', ARGV[i+1],
+    'type', ARGV[i+2], 'ref', '', 'command', ARGV[i+3], 'text_complete', 'yes')
+end
+redis.call('HSET', KEYS[3], '` + ChangeRecordField + `', ARGV[3])
+return 1`)
+
+// FencedCmdsWithChange appends several cmd entries and writes the change
+// record in one script under the conductor lease: change complete plus the
+// docs agent's directive, sent together and exactly once with their marker.
+func (b *Bus) FencedCmdsWithChange(ctx context.Context, token, change string, cmds []CmdSpec, changeRecord string) error {
+	if !ValidName(change) {
+		return fmt.Errorf("invalid change %q", change)
+	}
+	args := []interface{}{token, streamMaxLen, changeRecord}
+	for _, c := range cmds {
+		switch {
+		case !ValidName(c.Target):
+			return fmt.Errorf("invalid target %q", c.Target)
+		case !validCmdTypes[c.Type]:
+			return fmt.Errorf("invalid cmd type %q", c.Type)
+		}
+		if err := ValidateText(c.Command, CmdMaxRunes); err != nil {
+			return err
+		}
+		args = append(args, c.From, c.Target, c.Type, c.Command)
+	}
+	return notHolder(fencedCmdsWithChange.Run(ctx, b.r, []string{ConductorKey(b.project), StreamKey(b.project, "cmd"), ChangeKey(b.project, change)}, args...).Err())
+}

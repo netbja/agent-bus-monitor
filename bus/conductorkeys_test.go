@@ -309,3 +309,30 @@ func TestResultBlockNeverRoundsToForever(t *testing.T) {
 		}
 	}
 }
+
+func TestFencedCmdsWithChangeAtomic(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, ConductorKey(b.project), ChangeKey(b.project, "chg")) })
+	b.AcquireConductor(ctx, "real", 15*time.Second)
+	cmds := []CmdSpec{
+		{From: "conductor", Target: "master", Type: CmdComplete, Command: "change chg complete"},
+		{From: "conductor", Target: "docs", Type: CmdDirective, Command: "update the docs"},
+	}
+	if err := b.FencedCmdsWithChange(ctx, "stale", "chg", cmds, `{"rev":1}`); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("stale token: %v", err)
+	}
+	if evs, _, _ := b.Recent(ctx, []string{"cmd"}, 10); len(evs) != 0 {
+		t.Fatalf("a refused write left %d cmds", len(evs))
+	}
+	if err := b.FencedCmdsWithChange(ctx, "real", "chg", cmds, `{"rev":1}`); err != nil {
+		t.Fatal(err)
+	}
+	evs, _, _ := b.Recent(ctx, []string{"cmd"}, 10)
+	if len(evs) != 2 || evs[0].Target == evs[1].Target {
+		t.Fatalf("cmds = %+v", evs)
+	}
+	if err := b.FencedCmdsWithChange(ctx, "real", "chg", []CmdSpec{{From: "conductor", Target: "Bad Name", Type: CmdDirective, Command: "x"}}, `{}`); err == nil {
+		t.Fatal("an invalid target was written")
+	}
+}

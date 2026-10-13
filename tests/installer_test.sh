@@ -32,6 +32,23 @@ esac
 exit 0
 EOF
 chmod +x "$T/fakebin/herdr"
+# A fake docker: the real one runs the live broker (agent-bus-redis) and must never be touched.
+# An earlier version of this test stopped it (uninstall --yes stops Redis by default).
+export DOCKER_LOG="$T/docker.log" DOCKER_STATE="$T/redis.state"
+echo running > "$DOCKER_STATE"
+cat > "$T/fakebin/docker" <<'EOF'
+#!/bin/sh
+echo "$*" >> "$DOCKER_LOG"
+case "$1 ${2:-}" in
+  "ps -a") cat "$DOCKER_STATE" ;;
+  "compose version") echo "Docker Compose version test" ;;
+  "compose stop") echo exited > "$DOCKER_STATE" ;;
+  "compose down") : > "$DOCKER_STATE" ;;
+  "info ") exit 1 ;;
+esac
+exit 0
+EOF
+chmod +x "$T/fakebin/docker"
 export PATH="$T/fakebin:$PATH"
 
 # A local mattpocock/skills stand-in, tagged like the pinned release.
@@ -133,6 +150,8 @@ assert_contains "$(cat "$T/cfg/herdr/config.toml")" 'theme = "dark"' "the rest o
 assert_eq "$([[ -e "$HERDR_STATE" ]] && echo kept || echo removed)" "kept" "herdr-plus kept by default (useful without agent-bus)"
 assert_eq "$([[ -d "$T/data/agentbus/skills/mattpocock" ]] && echo left || echo gone)" "gone" "the external skills folder removed"
 assert_eq "$([[ -x "$T/repo/agentbus" ]] && echo kept || echo lost)" "kept" "the repository's own build is left"
+assert_contains "$(cat "$DOCKER_LOG")" "compose stop" "uninstall --yes stops Redis (through the fake docker)"
+assert_eq "$(grep -c "compose down" "$DOCKER_LOG")" "0" "and never removes its data without --purge"
 
 # update refuses a dirty tree, then fast-forwards and reinstalls
 echo "x" >> "$T/repo/README.md"
