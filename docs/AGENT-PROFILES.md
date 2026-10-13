@@ -10,7 +10,7 @@ live session restart happens automatically.
 
 Copy [the mixed-team example](../examples/roles.mixed.toml), replace its model
 placeholders with IDs/aliases configured on your accounts, and set `ROLES_TOML`
-to its absolute path. The scripts resolve it with `agentbus roles` (build it first: `./install.sh`).
+to its absolute path. The scripts resolve it with `agentbus roles` (build it first: `./setup.sh install`).
 
 ```sh
 ROLES_TOML=/path/to/project/roles.toml AGENT_LAUNCH_DRYRUN=1 scripts/agent-launch coder demo

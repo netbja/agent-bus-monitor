@@ -45,6 +45,13 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    `agentbus challenge <reviewer> --ref pr-<c> "review the docs of PR <url>"`.
    Then report: `agentbus report <you> "PR <url> opened for <c>"`.
 
+## Shared memory
+
+Read [the shared memory index](../../docs/memory/INDEX.md) before you start, with the rules in
+[PROTOCOL.md](../../docs/memory/PROTOCOL.md). A decision note says why something is the way it
+is; it is often what the documentation should explain. Check a note against its source before
+you repeat it.
+
 ## How to write
 
 - Plain and sourced, with no marketing words.

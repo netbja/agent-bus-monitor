@@ -174,7 +174,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
@@ -290,11 +290,32 @@ It never touches Redis — see README "Deployment topology".
   `link-role-skills.sh` and `bootstrap`'s template call `${AGENTBUS_BIN:-$REPO/agentbus} roles …`
   (package `rolecfg/`: manifest, launch, skills, template — the port of the removed
   `role_config.py`; its block in `main()` sits above the project-required exit, like `mem`). The
-  repo binary must be built first (`./install.sh`); `tests/run.sh` and `tests/lib.sh` build one.
+  repo binary must be built first (`./setup.sh install`); `tests/run.sh` and `tests/lib.sh` build one.
   `agent-launch` `exec`s `agentbus`, which binds and then `syscall.Exec`s the client: the pid
   never changes, which is what `bind` relies on. Outputs are kept byte-identical to the Python
   (dry runs, adapter spec JSON via `pyJSON`, template); `tests/roles_scripts_test.sh` covers the
   scripts end to end.
+- **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
+  `update`, `uninstall`, `status` (`install.sh` is an alias). It stamps `buildinfo.Version` (from
+  `git describe` when it is a `v*` tag, else `dev`) and `buildinfo.Repo` via ldflags; `agentbus up`
+  finds `scripts/bootstrap` through `AGENTBUS_REPO`, then `buildinfo.Repo`, then the binary's
+  directory. A copy of the repository uses the same compose project and container name as the live
+  broker, so an unstubbed `uninstall --yes` in a test stops the production Redis.
+  `tests/installer_test.sh` puts fakes first on `PATH`; keep it that way. herdr-plus is registered
+  in herdr's **global** plugin registry (`herdr plugin install`), which every session sees;
+  bootstrap only links a checkout when `herdr plugin list` lacks it.
+- **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
+  `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails
+  silently and only adds a muted `↑ vX.Y.Z` to the header. Don't make it block startup or nag.
+- **`"docs": "<agent>"` in missions.json** makes the conductor send that agent one directive when
+  the change completes, written with the `complete` notice in one fenced script
+  (`Store.PutChangeWithCmds` → `FencedCmdsWithChange`). The docs agent opens a PR from
+  `pr/<change>` and never merges.
+- **The launcher's environment rules** (`rolecfg/config.go`, `launch.go`): `env_refs` may not
+  target loader/hook variables (`LD_*`, `DYLD_*`, `HERDR_*`, `BASH_ENV`, `NODE_OPTIONS`, …);
+  `ANTHROPIC_API_KEY` is dropped for every client unless `AGENT_LAUNCH_KEEP_API_KEY=1` or
+  `env_refs` names it; elevated options are announced on stderr. A missing skill warns and the
+  agent still starts; `roles install-skills` stays strict.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
