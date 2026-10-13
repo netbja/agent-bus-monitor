@@ -47,6 +47,14 @@ if [[ "$body" != *"agent-launch architect demo"* ]]; then _ok "architect not boo
 assert_contains "$body" 'name = "dispatch"'                      "dispatch tab"
 assert_contains "$body" "$REPO/agentbus --project demo dispatch" "dispatch tab runs agentbus dispatch"
 
+# A missing external skill (the download failed) warns; bootstrap still writes the template
+mv "$tmp/pocock/engineering/wayfinder" "$tmp/wayfinder.away"
+miss_out="$(run new demomiss "$projdir" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "a missing skill does not stop bootstrap"
+assert_contains "$miss_out" "warning: skill wayfinder not found" "and it is named"
+assert_eq "$([[ -f "$proj/demomiss.toml" ]] && echo written || echo missing)" "written" "the template is still written"
+mv "$tmp/wayfinder.away" "$tmp/pocock/engineering/wayfinder"
+
 # --no-dispatch omits the dispatch tab (busmon stays)
 run new demonod "$projdir" --no-dispatch >/dev/null
 body_nod="$(cat "$proj/demonod.toml")"

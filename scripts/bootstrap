@@ -164,7 +164,7 @@ roles_validate || die "invalid role manifest"
 case "$verb" in
   new)
     ensure_broker
-    "$SCRIPT_DIR/link-role-skills.sh"
+    "$SCRIPT_DIR/link-role-skills.sh" --missing-ok   # a missing skill warns: the agent starts without it
     write_template
     ;;
   recall)

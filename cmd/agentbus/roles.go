@@ -98,6 +98,9 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		}
 		return rolecfg.Launch(m, rest[0], rest[1], env, stdout, stderr, syscall.Exec)
 	case "install":
+		if len(rest) == 1 && rest[0] == "--missing-ok" {
+			return rolecfg.InstallSkillsMissingOK(m, env, stdout, stderr)
+		}
 		return rolecfg.InstallSkills(m, env, stdout)
 	case "validate":
 		for _, tier := range []string{"boot", "pop"} {

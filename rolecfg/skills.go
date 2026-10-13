@@ -14,8 +14,19 @@ type skillLink struct {
 }
 
 // InstallSkills installs role skills as symlinks in each provider's standard
-// skill directory, or in SKILLS_DEST when supplied.
+// skill directory, or in SKILLS_DEST when supplied. A missing skill is an error.
 func InstallSkills(m *Manifest, env []string, stdout io.Writer) error {
+	return installSkills(m, env, stdout, nil)
+}
+
+// InstallSkillsMissingOK links what exists and warns on stderr for a skill that
+// is not installed: the agent starts without it, as the launcher allows
+// (bootstrap, so a failed external-skills download never stops a first run).
+func InstallSkillsMissingOK(m *Manifest, env []string, stdout, stderr io.Writer) error {
+	return installSkills(m, env, stdout, stderr)
+}
+
+func installSkills(m *Manifest, env []string, stdout, missing io.Writer) error {
 	if m == nil {
 		return fmt.Errorf("manifest is required")
 	}
@@ -30,14 +41,18 @@ func InstallSkills(m *Manifest, env []string, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		sources, err := linkSkillSources(profile.Skills, env)
+		names := profile.Skills
+		if missing != nil {
+			names = presentSkills(role, names, env, missing)
+		}
+		sources, err := linkSkillSources(names, env)
 		if err != nil {
 			return err
 		}
 		for i, source := range sources {
 			// Named after the manifest's skill, never after what its directory resolves
 			// to: a symlinked skill must not take another skill's name.
-			target := filepath.Join(dest, profile.Skills[i])
+			target := filepath.Join(dest, names[i])
 			info, err := os.Lstat(target)
 			if err == nil && info.Mode()&os.ModeSymlink == 0 {
 				return fmt.Errorf("refusing to overwrite non-symlink %s", target)
@@ -105,6 +120,21 @@ func skillDestination(client string, env []string) (string, error) {
 		dir = ".claude/skills"
 	}
 	return filepath.Join(home, dir), nil
+}
+
+// presentSkills keeps the names that resolve and warns for the others.
+func presentSkills(role string, names, env []string, warn io.Writer) []string {
+	e := newEnv(env)
+	roots := skillRoots(repoRoot(e), e)
+	var kept []string
+	for _, name := range names {
+		if findSkill(name, roots) == "" {
+			fmt.Fprintf(warn, "warning: skill %s not found (run ./setup.sh install); %s starts without it\n", name, role)
+			continue
+		}
+		kept = append(kept, name)
+	}
+	return kept
 }
 
 func linkSkillSources(names, env []string) ([]string, error) {
