@@ -34,8 +34,10 @@ func InstallSkills(m *Manifest, env []string, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		for _, source := range sources {
-			target := filepath.Join(dest, filepath.Base(source))
+		for i, source := range sources {
+			// Named after the manifest's skill, never after what its directory resolves
+			// to: a symlinked skill must not take another skill's name.
+			target := filepath.Join(dest, profile.Skills[i])
 			info, err := os.Lstat(target)
 			if err == nil && info.Mode()&os.ModeSymlink == 0 {
 				return fmt.Errorf("refusing to overwrite non-symlink %s", target)

@@ -16,9 +16,29 @@ var (
 	envPattern  = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 )
 
+// forbiddenEnvRefs are the targets env_refs may never set: the launcher's identity
+// and process controls, and every variable that changes how the client or the
+// tools it runs load code (dynamic linker, shell, interpreter and git hooks).
 var forbiddenEnvRefs = map[string]bool{
-	"PATH": true, "HOME": true, "PYTHONPATH": true, "PYTHONHOME": true,
-	"LD_PRELOAD": true, "ROLES_TOML": true, "CLAUDE_CODE_SESSION_ID": true,
+	"PATH": true, "HOME": true, "ROLES_TOML": true, "CLAUDE_CODE_SESSION_ID": true,
+	"BASH_ENV": true, "ENV": true, "SHELLOPTS": true, "PROMPT_COMMAND": true, "IFS": true,
+	"NODE_OPTIONS": true, "NODE_PATH": true, "GIT_SSH": true, "GIT_SSH_COMMAND": true, "GIT_EXEC_PATH": true,
+	"GIT_CONFIG_GLOBAL": true, "GIT_CONFIG_SYSTEM": true, "PERL5OPT": true, "PERL5LIB": true,
+	"RUBYOPT": true, "RUBYLIB": true,
+}
+
+var forbiddenEnvRefPrefixes = []string{"AGENT_BUS_", "AGENT_LAUNCH_", "LD_", "DYLD_", "HERDR_", "PYTHON"}
+
+func envRefForbidden(key string) bool {
+	if forbiddenEnvRefs[key] {
+		return true
+	}
+	for _, p := range forbiddenEnvRefPrefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // Manifest is a validated role configuration. Its maps contain decoded TOML
@@ -256,7 +276,7 @@ func (m *Manifest) Resolve(role string) (Profile, error) {
 		}
 	}
 	for key := range refs {
-		if forbiddenEnvRefs[key] || strings.HasPrefix(key, "AGENT_BUS_") || strings.HasPrefix(key, "AGENT_LAUNCH_") {
+		if envRefForbidden(key) {
 			return Profile{}, fmt.Errorf("env_refs cannot override launcher identity or process controls")
 		}
 	}

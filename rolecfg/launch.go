@@ -443,6 +443,9 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 	if err != nil {
 		return err
 	}
+	if el := elevated(p); el != "" { // a swapped ROLES_TOML must not start an unsandboxed client silently
+		fmt.Fprintf(cfg.Stderr, "notice: %s runs %s with elevated %s\n", role, p.Client, el)
+	}
 	// Inside herdr, bind this process's pid before exec hands it (and its
 	// start time) to the client: the dispatcher can then verify the pane even
 	// when the client's own commands do not descend from it.
@@ -455,7 +458,8 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 				bin = "agentbus"
 			}
 		}
-		bind = []string{bin, "--project", project, "bind", role, "--pid", strconv.Itoa(os.Getpid())}
+		// The pane is the one this launcher started in, read before env_refs apply.
+		bind = []string{bin, "--project", project, "bind", role, "--pid", strconv.Itoa(os.Getpid()), "--pane", pane}
 	}
 	if dry {
 		if bind != nil {
@@ -479,6 +483,11 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 	}
 	// A child session must never publish the parent Claude session's transcript as its own.
 	e.del("CLAUDE_CODE_SESSION_ID")
+	// The API key reaches no client (it bills pay-as-you-go and a prompt could read it)
+	// unless AGENT_LAUNCH_KEEP_API_KEY=1, or the profile names it in env_refs below.
+	if e.or("AGENT_LAUNCH_KEEP_API_KEY", "") != "1" {
+		e.del("ANTHROPIC_API_KEY")
+	}
 	for _, target := range sortedKeys(p.EnvRefs) {
 		source := p.EnvRefs[target]
 		v, ok := newEnv(cfg.Env).get(source)
@@ -486,9 +495,6 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 			return fmt.Errorf("missing environment source for %s", target)
 		}
 		e.set(target, v)
-	}
-	if p.Client == "claude-code" && e.or("AGENT_LAUNCH_KEEP_API_KEY", "") != "1" {
-		e.del("ANTHROPIC_API_KEY")
 	}
 	if bind != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -800,4 +806,29 @@ func pyFloat(f float64) string {
 		sign, exp = "-", -exp
 	}
 	return fmt.Sprintf("%se%s%02d", mant, sign, exp)
+}
+
+// elevated names the builtin options that take a client out of its safe
+// defaults ("" when none): Claude without permission prompts, Codex with full
+// disk access or no approvals, Kimi in yolo mode.
+func elevated(p Profile) string {
+	var parts []string
+	switch p.Client {
+	case "claude-code":
+		if perm := p.Options["permission"]; perm == "bypassPermissions" || perm == "dontAsk" {
+			parts = append(parts, "permission="+perm)
+		}
+	case "codex":
+		if p.Options["sandbox"] == "danger-full-access" {
+			parts = append(parts, "sandbox=danger-full-access")
+		}
+		if p.Options["approval"] == "never" {
+			parts = append(parts, "approval=never")
+		}
+	case "kimi-cli":
+		if p.Options["permission"] == "yolo" {
+			parts = append(parts, "permission=yolo")
+		}
+	}
+	return strings.Join(parts, " ")
 }
