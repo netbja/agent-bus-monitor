@@ -144,7 +144,12 @@ ensure_plugin_built() {
 # not (seeds its registry for the next `herdr --session <name>`).
 link_plugin() {
   command -v herdr >/dev/null 2>&1 || { warn "herdr not on PATH; skipping herdr-plus link"; return 0; }
-  [[ -d "$HERDR_PLUS_PATH" ]] || { warn "herdr-plus not at $HERDR_PLUS_PATH; skipping link (set HERDR_PLUS_PATH)"; return 0; }
+  # setup.sh registers herdr-plus in herdr's global registry, which every session sees: done.
+  if HERDR_SESSION="$SESSION" herdr plugin list 2>/dev/null | grep -q "cloudmanic.herdr-plus"; then
+    echo "herdr-plus: registered (agentbus up $project opens the workspace; Ctrl+B then Up reopens it)"
+    return 0
+  fi
+  [[ -d "$HERDR_PLUS_PATH" ]] || { warn "herdr-plus is not registered with herdr: run $REPO/setup.sh install --install-herdr"; return 0; }
   ensure_plugin_built
   if HERDR_SESSION="$SESSION" herdr plugin link "$HERDR_PLUS_PATH" >/dev/null 2>&1; then
     echo "herdr-plus: linked into session '$SESSION' (open the Projects picker there)"
