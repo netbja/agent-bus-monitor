@@ -54,6 +54,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/usage"
@@ -105,7 +106,7 @@ func main() {
 		return
 	}
 	if len(args) >= 1 && args[0] == "version" {
-		fmt.Printf("agentbus protocol v%d\n", bus.ProtocolVersion)
+		fmt.Printf("agentbus protocol v%d\nagentbus version %s\n", bus.ProtocolVersion, buildinfo.Version)
 		return
 	}
 	if project == "" {
