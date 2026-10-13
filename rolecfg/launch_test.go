@@ -296,8 +296,8 @@ func TestLaunchPreflightAndErrors(t *testing.T) {
 		t.Fatalf("help failure: %v", err)
 	}
 	must(t, os.Remove(filepath.Join(f.skills, "test-skill", "SKILL.md")))
-	if _, _, err := f.launch(m, "coder"); err == nil || err.Error() != "skill not found in repo or Pocock collection: test-skill" {
-		t.Fatalf("missing skill: %v", err)
+	if _, errOut, _ := f.launch(m, "coder"); !strings.Contains(errOut, "warning: skill test-skill not found") {
+		t.Fatalf("missing skill must only warn: %q", errOut)
 	}
 	if _, _, err := f.launch(m, "nobody"); err == nil || err.Error() != "unknown role: nobody" {
 		t.Fatalf("unknown role: %v", err)
@@ -446,5 +446,44 @@ func TestCacheFileRefusesAWritableSharedDir(t *testing.T) {
 	must(t, os.Chmod(dir, 0o777))
 	if _, err := cacheFile([]string{"AGENT_LAUNCH_CACHE=" + dir}, "hello", ".md"); err == nil || !strings.Contains(err.Error(), "writable by others") {
 		t.Fatalf("a group/world-writable cache dir was used: %v", err)
+	}
+}
+
+// A missing skill warns and the agent still starts, without it in its prompt.
+func TestLaunchWithAMissingSkillStarts(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("codex", "", "", "")
+	must(t, os.Remove(filepath.Join(f.skills, "test-skill", "SKILL.md")))
+	_, errOut, err := f.launch(m, "coder")
+	if err != nil || f.execed == nil {
+		t.Fatalf("launch with a missing skill: err %v, execed %v", err, f.execed)
+	}
+	if !strings.Contains(errOut, "warning: skill test-skill not found (run ./setup.sh install); coder starts without it") {
+		t.Fatalf("stderr = %q", errOut)
+	}
+	if strings.Contains(strings.Join(f.execed, " "), "test-skill") {
+		t.Fatal("the missing skill is still named in the prompt")
+	}
+}
+
+// The external collection is looked for where setup.sh clones it, then at the
+// historical ~/Tools path.
+func TestExternalSkillsDefaultPaths(t *testing.T) {
+	home := t.TempDir()
+	for _, root := range []string{
+		filepath.Join(home, ".local", "share", "agentbus", "skills", "mattpocock", "skills", "engineering"),
+		filepath.Join(home, "Tools", "herdr-plugins", "skills", "skills", "engineering"),
+	} {
+		dir := filepath.Join(root, "wayfinder")
+		must(t, os.MkdirAll(dir, 0o755))
+		must(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("x"), 0o644))
+		got, err := SkillSources([]string{"wayfinder"}, t.TempDir(), []string{"HOME=" + home})
+		if err != nil || len(got) != 1 || got[0] != absResolved(dir) {
+			t.Fatalf("SkillSources = %v, %v; want %s", got, err, dir)
+		}
+		must(t, os.RemoveAll(dir)) // the next root must be found on its own
+	}
+	if _, err := SkillSources([]string{"wayfinder"}, t.TempDir(), []string{"HOME=" + home, "XDG_DATA_HOME=" + filepath.Join(home, "x")}); err == nil {
+		t.Fatal("found a skill that is nowhere")
 	}
 }
