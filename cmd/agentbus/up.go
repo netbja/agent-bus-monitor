@@ -11,14 +11,14 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/buildinfo"
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // upDeps is what `agentbus up` touches, injected for tests.
 type upDeps struct {
 	Herdr     func(args ...string) ([]byte, error) // the herdr CLI
-	Bootstrap func(args []string) error           // scripts/bootstrap <args>
+	Bootstrap func(args []string) error            // scripts/bootstrap <args>
 	Env       func(string) string
 }
 
