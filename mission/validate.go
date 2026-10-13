@@ -35,6 +35,9 @@ func Validate(f File, tree []string, brief func(path string) (resolved string, o
 	if !bus.ValidName(f.Reviewer) {
 		bad("reviewer %q: a default reviewer is required", f.Reviewer)
 	}
+	if f.Docs != "" && !bus.ValidName(f.Docs) {
+		bad("docs %q: not a valid agent name", f.Docs)
+	}
 	if f.MaxAttempts < 1 || f.MaxAttempts > 99 {
 		bad("max_attempts %d: between 1 and 99", f.MaxAttempts)
 	}
