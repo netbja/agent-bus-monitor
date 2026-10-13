@@ -217,6 +217,7 @@ type shared struct {
 	mu       sync.Mutex
 	agents   map[string]*agentState
 	pilot    string                        // pilot-lease driver, "" = autonomous
+	update   string                        // a newer release tag found by checkForUpdate, "" = none
 	budgets  map[string]bus.BudgetSnapshot // account scope, per provider
 	dispatch string                        // "", "up" or "down"
 	missions string                        // "" (no conductor, nothing loaded), "up" or "down"
@@ -350,6 +351,7 @@ func main() {
 		health:  health{ok: true, since: time.Now()},
 	}
 	u := newUI(app, st, ctx, b, project, self)
+	go checkForUpdate(ctx, st) // at most once a day; silent offline (AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
 
 	cursors := map[string]string{}
 	handle := func(e bus.Event) {
