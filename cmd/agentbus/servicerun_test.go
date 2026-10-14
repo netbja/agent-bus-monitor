@@ -415,3 +415,29 @@ func TestServiceRunAFailedMarkerReadCounts(t *testing.T) {
 		t.Fatalf("budget entries after a failed marker read = %d, want 1", n)
 	}
 }
+
+// The target up recorded in the environment file reaches the dispatcher; an
+// invalid one is a configuration error, final, not a restart.
+func TestServiceRunTakesTheRecordedEscalationTarget(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	got := ""
+	d.RunDispatch = func(_ context.Context, _ *bus.Bus, to string, _ func(bool), _ io.Writer) int { got = to; return 0 }
+	t.Setenv(service.EscalateEnv, "claude-hl-master")
+	var log bytes.Buffer
+	if code := serviceRun(context.Background(), b, service.Dispatch, nil, d, &log); code != 0 || got != "claude-hl-master" {
+		t.Fatalf("code %d, escalate-to %q", code, got)
+	}
+	got = "unset"
+	if code := serviceRun(context.Background(), b, service.Dispatch, []string{"--escalate-to", "lead"}, d, &log); code != 0 || got != "lead" {
+		t.Fatalf("an explicit argument must win: code %d, %q", code, got)
+	}
+	got = "unset"
+	t.Setenv(service.EscalateEnv, "Bad Name")
+	if code := serviceRun(context.Background(), b, service.Dispatch, nil, d, &log); code != 0 || got != "unset" {
+		t.Fatalf("invalid target: code %d, ran %q", code, got)
+	}
+	if r := record(t, b, service.Dispatch); r.State != "failed" || !strings.Contains(r.Detail+r.Error, "AGENT_BUS_ESCALATE_TO") {
+		t.Fatalf("record = %+v", r)
+	}
+}

@@ -8,7 +8,10 @@ release exists.
 
 - `setup.sh` no longer reports a missing herdr-plus projects action when herdr is just not
   running (outside a herdr session).
-- Operational guide (EN/FR), new section 6: starting a small task and a multi-day change.
+- `agentbus up --escalate-to <agent>`: the services escalate to that agent instead of `master`,
+  and a later `up` keeps it. For a team whose coordinator has another name.
+- Operational guide (EN/FR), new section 6: starting a small task and a multi-day change; and
+  scenario B2, moving a team from before v0.12.
 
 [Notes](docs/releases/v0.12.1.md)
 

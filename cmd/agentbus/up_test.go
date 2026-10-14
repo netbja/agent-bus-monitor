@@ -410,3 +410,35 @@ func TestUpRefusesAGoRunBinaryForServices(t *testing.T) {
 		t.Fatalf("calls %v stderr %q", u.m.calls, errw.String())
 	}
 }
+
+// --escalate-to is recorded for the services and survives a plain re-run;
+// a new value replaces it and an invalid one is refused before anything runs.
+func TestUpRecordsTheEscalationTarget(t *testing.T) {
+	work, _, _, boot, deps := upFixture(t)
+	u := withServices(t, &deps)
+	deps.Environ = []string{"PATH=/bin"}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work, "--escalate-to", "claude-hl-master"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up: %d %s", code, errw.String())
+	}
+	if slices.ContainsFunc(*boot, func(c string) bool { return strings.Contains(c, "escalate") }) {
+		t.Fatalf("bootstrap was given --escalate-to: %q", *boot)
+	}
+	env, _ := service.LoadEnvFile(u.paths.EnvFile("demo"))
+	if env[service.EscalateEnv] != "claude-hl-master" {
+		t.Fatalf("env = %v", env)
+	}
+	runUp([]string{"demo"}, deps, &out, &errw)
+	if env, _ = service.LoadEnvFile(u.paths.EnvFile("demo")); env[service.EscalateEnv] != "claude-hl-master" {
+		t.Fatalf("a plain re-run reset the target: %v", env)
+	}
+	runUp([]string{"demo", "--escalate-to", "master"}, deps, &out, &errw)
+	if env, _ = service.LoadEnvFile(u.paths.EnvFile("demo")); env[service.EscalateEnv] != "master" {
+		t.Fatalf("a new target was not recorded: %v", env)
+	}
+	*boot = nil
+	errw.Reset()
+	if code := runUp([]string{"demo", "--escalate-to", "Bad Name"}, deps, &out, &errw); code != 1 || len(*boot) != 0 {
+		t.Fatalf("invalid target: code %d, bootstrap %q, %s", code, *boot, errw.String())
+	}
+}

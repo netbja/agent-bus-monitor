@@ -54,11 +54,16 @@ type upTemplate struct {
 // to open it.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if len(args) == 0 || !bus.ValidName(args[0]) {
-		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
+		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--escalate-to <agent>] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
 		return 1
 	}
 	project := args[0]
 	args, tabs := extractBool(args, "--tabs")
+	args, escalate := extractFlag(args, "--escalate-to")
+	if escalate != "" && !bus.ValidName(escalate) {
+		fmt.Fprintf(stderr, "agentbus up: --escalate-to: invalid agent name %q\n", escalate)
+		return 1
+	}
 	kinds := []string{}
 	if !slices.Contains(args, "--no-dispatch") {
 		kinds = append(kinds, service.Dispatch)
@@ -91,7 +96,7 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	}
 	failed := false
 	if m != nil {
-		if err := startServices(d, m, project, tpl.WorkingDir, herdrSession(args, d.Environ), kinds, stdout); err != nil {
+		if err := startServices(d, m, project, tpl.WorkingDir, herdrSession(args, d.Environ), escalate, kinds, stdout); err != nil {
 			fmt.Fprintf(stderr, "agentbus up: services: %v\n", err)
 			if errors.Is(err, errNotInstalled) {
 				return 1
@@ -102,6 +107,9 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	} else {
 		if !tabs {
 			fmt.Fprintf(stdout, "no service manager (%s): dispatch and missions run as herdr tabs, and stop when the workspace closes\n", why)
+		}
+		if escalate != "" {
+			fmt.Fprintf(stderr, "agentbus up: --escalate-to applies to services only; the tabs escalate to master\n")
 		}
 		// A template written in service mode lacks the tabs: write it again.
 		if missingServiceTab(tpl, kinds) {
@@ -187,7 +195,9 @@ var errNotInstalled = errors.New("services not installed")
 
 // startServices writes the environment file, the marker and the units, then
 // starts each service that is not already running with this configuration.
-func startServices(d upDeps, m service.Manager, project, workdir, session string, kinds []string, stdout io.Writer) error {
+// escalate, when set, becomes the project's escalation target; when not, the
+// one an earlier up recorded is kept, so a plain re-run never resets it.
+func startServices(d upDeps, m service.Manager, project, workdir, session, escalate string, kinds []string, stdout io.Writer) error {
 	exe, err := d.Exe()
 	if err != nil {
 		return fmt.Errorf("%w: cannot find this agentbus: %v", errNotInstalled, err)
@@ -200,6 +210,13 @@ func startServices(d upDeps, m service.Manager, project, workdir, session string
 		delete(env, "HERDR_SOCKET_PATH")
 	}
 	env["HERDR_SESSION"] = session
+	if escalate != "" {
+		env[service.EscalateEnv] = escalate
+	} else if _, set := env[service.EscalateEnv]; !set {
+		if old, err := service.LoadEnvFile(d.Paths.EnvFile(project)); err == nil && bus.ValidName(old[service.EscalateEnv]) {
+			env[service.EscalateEnv] = old[service.EscalateEnv]
+		}
+	}
 	envChanged, err := service.WriteEnvFile(d.Paths.EnvFile(project), env)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNotInstalled, err)
