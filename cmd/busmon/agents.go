@@ -216,8 +216,8 @@ func updatedCell(a *agentState, tier Tier, now time.Time) []Seg {
 	full := updatedBarCells - int(int64(age)*updatedBarCells/int64(staleAfter))
 	full = clamp(full, 0, updatedBarCells)
 	ageSeg.Text = " " + ageSeg.Text
-	return []Seg{{Text: strings.Repeat(GlyphBarFull, full), Role: RoleAccent},
-		{Text: strings.Repeat(GlyphBarEmpty, updatedBarCells-full), Role: RoleDim}, ageSeg}
+	return []Seg{{Text: strings.Repeat(GlyphDotFull, full), Role: RoleAccent},
+		{Text: strings.Repeat(GlyphDotEmpty, updatedBarCells-full), Role: RoleDim}, ageSeg}
 }
 
 // agentCols are the column widths per tier (trailing gap included); the

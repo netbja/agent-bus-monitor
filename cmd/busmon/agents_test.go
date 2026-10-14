@@ -192,7 +192,7 @@ func TestAgentRowWidth(t *testing.T) {
 		t.Errorf("narrow row must fold the flag into the message: %q", nar)
 	}
 	med := agentRow("grok", hostileAgent(now), false, TierMedium, 100, now).text()
-	if strings.Contains(med, "608k") || strings.Contains(med, GlyphBarFull) || !strings.Contains(med, "gate 1") || strings.Contains(med, "deferred") {
+	if strings.Contains(med, "608k") || strings.Contains(med, GlyphDotFull) || !strings.Contains(med, "gate 1") || strings.Contains(med, "deferred") {
 		t.Errorf("medium row must drop bar and ctx and keep one flag: %q", med)
 	}
 }
@@ -213,7 +213,7 @@ func TestUpdatedBar(t *testing.T) {
 	for _, c := range cases {
 		segs := updatedCell(&agentState{state: "idle", stateAt: c.at}, TierWide, now)
 		text := Line(segs).text()
-		if n := strings.Count(text, GlyphBarFull); n != c.full {
+		if n := strings.Count(text, GlyphDotFull); n != c.full {
 			t.Errorf("at %v: %d full cells in %q, want %d", now.Sub(c.at), n, text, c.full)
 		}
 		if !strings.Contains(text, c.age) {
@@ -224,7 +224,7 @@ func TestUpdatedBar(t *testing.T) {
 	if !strings.Contains(none, strings.Repeat(GlyphNone, 10)) || !strings.Contains(none, GlyphDash) {
 		t.Errorf("no declaration: %q", none)
 	}
-	if strings.Contains(Line(updatedCell(&agentState{stateAt: now}, TierMedium, now)).text(), GlyphBarFull) {
+	if strings.Contains(Line(updatedCell(&agentState{stateAt: now}, TierMedium, now)).text(), GlyphDotFull) {
 		t.Error("medium must not draw the bar")
 	}
 }

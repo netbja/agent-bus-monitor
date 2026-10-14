@@ -165,8 +165,11 @@ const (
 	GlyphBarFull   = "█"
 	GlyphBarEmpty  = "░"
 	GlyphGauge     = "▇"
-	GlyphPrompt    = "›"
-	GlyphHuman     = "♙" // a person on the bus (busmon), never an agent
+	// The updated column's freshness gauge: the same two dots as working/idle.
+	GlyphDotFull  = GlyphWorking
+	GlyphDotEmpty = GlyphIdle
+	GlyphPrompt   = "›"
+	GlyphHuman    = "♙" // a person on the bus (busmon), never an agent
 	// Border glyphs are kept here too; Task 10 owns tview.Borders.
 	glyphVertical    = "│"
 	glyphThumb       = "┃"
