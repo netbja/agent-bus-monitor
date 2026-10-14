@@ -235,7 +235,85 @@ Assume your target project is at `~/code/myapp`.
 
 ---
 
-## 6. Command Reference Summary
+## 6. Starting Work: a Small Task, a Large Change
+
+The team is up (`agentbus up myapp …`) and busmon is open. You can hand it work in two ways,
+depending on its size.
+
+| | Small task | Large change |
+|---|---|---|
+| Size | an hour to a day; one feature, one fix | several days; several agents in parallel |
+| Who drives | `master`, in its conversation | the **conductor** (`missions` service), from a plan in Git |
+| What survives a restart | the board and the bus messages | everything: the plan is in Git, its state in Redis |
+| What you do | write the request, answer questions | approve the plan, decide on escalations, merge the result |
+
+### Small task: ask `master`
+
+1. **Write the request in busmon** (`i`), with the goal and how you will judge it done:
+   ```text
+   @master Add CSV export to the reports page. Done when: an "Export" button downloads the
+   current filter as CSV, with tests, reviewed by foureyes, on a branch ready for a PR.
+   ```
+   You can also type in master's tab directly; busmon is just quicker to reach.
+2. **master splits and dispatches.** It sends `coder` a directive, `coder` claims the task on the
+   board and works on its branch, then `foureyes` reviews (the 4-eyes rule: the author never
+   approves its own work).
+3. **Watch** the Board panel and the Activity feed. An agent that needs you sends a message
+   to master, and master asks you.
+4. **Finish.** master reports the branch and the review verdict (`agentbus --project myapp verdicts`).
+   You open or approve the PR.
+
+For a one-line fix you can skip master: `@coder Fix the typo in the README title.`
+
+### Large change: plan it as missions, let the conductor drive
+
+A change that takes days must not depend on one agent's conversation: a context fills up, a
+session restarts. The plan therefore lives in Git, and the conductor carries it out step by step.
+
+1. **Ask for a plan, not code:**
+   ```text
+   @master Plan the change "auth-v2" as missions: write docs/changes/auth-v2/brief.md and
+   docs/changes/auth-v2/missions.json on a branch, commit, and send me the commit. Do not start it.
+   ```
+   For a design-heavy change, have master pop the architect first (`scripts/agent-spawn architect
+   myapp`).
+2. **Review the plan.** In `missions.json`, each mission names its `agent`, its `reviewer` (never
+   the same agent), `depends_on`, the `allowed_paths` it may touch, its `test` and a `brief`
+   section. The change also has a `test` (the whole suite) and, optionally, `"docs": "docs"` to
+   have the docs agent update the documentation at the end. `docs/changes/roles-go/` is a real
+   example. Ask for changes until the plan is right: this is the cheapest moment to fix it.
+3. **Load it** at the reviewed commit (you or master):
+   ```bash
+   agentbus --project myapp mission load docs/changes/auth-v2/missions.json@<commit>
+   ```
+   From then on, the conductor:
+   - sends each mission to its agent as soon as its dependencies are integrated (independent
+     missions run in parallel);
+   - checks every delivery: only the allowed paths, the mission's tests green;
+   - opens the review with the mission's reviewer;
+   - merges the approved mission into `change/auth-v2` and runs the change suite.
+4. **Follow it** in busmon (`missions busy`, `missions idle`), or in detail:
+   ```bash
+   agentbus --project myapp mission status auth-v2
+   agentbus --project myapp mission show auth-v2/t3
+   ```
+5. **Decide when a mission is blocked** (failed tests, rejected review, too many attempts). The
+   conductor escalates to master, who decides or asks you:
+   `mission retry`, `mission reassign <c>/<id> <agent>`, `mission skip … --reason`, `mission abort`.
+   To change the plan, commit a new `missions.json` and `mission load` it again: missions
+   that did not change keep their state.
+6. **Over several days.** The services keep running when you close busmon, the agents or herdr.
+   Close everything in the evening if you like. The next morning, `agentbus up myapp` reopens
+   the team. Missions waiting for an agent are delivered once its tab is back. After a reboot,
+   `agentbus up myapp` is also what restarts the services. An agent whose context is full can
+   be restarted: its mission's brief and its branch are all it needs.
+7. **The end.** When every mission is integrated, master receives a `complete` notice (and the
+   docs agent its directive, if the plan named one). `change/auth-v2` is never merged into `main`
+   by the conductor: open that PR yourself, or ask master to, and merge it.
+
+---
+
+## 7. Command Reference Summary
 
 | Action | Command |
 |---|---|
@@ -257,7 +335,7 @@ Assume your target project is at `~/code/myapp`.
 
 ---
 
-## 7. Best Practices & Common Traps
+## 8. Best Practices & Common Traps
 
 1. **`AGENT_BUS_PROJECT` is Mandatory**: Export `export AGENT_BUS_PROJECT=<name>` in agent shells to avoid repeating `--project`.
 2. **Flag Syntax**: Always use double dashes with a space (`--ref abc123`, never `--ref=abc123` or `-ref abc123`).

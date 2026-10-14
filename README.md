@@ -27,6 +27,9 @@ agentbus up myproject ~/code/myproject --as <your-name>
 **What's new:** see the [CHANGELOG](CHANGELOG.md), and [`docs/releases/`](docs/releases/) for
 the full notes of each version. The step-by-step guides are in English and French:
 [Operational guide](docs/OPERATIONAL-GUIDE.md) · [Guide opérationnel](docs/OPERATIONAL-GUIDE.fr.md).
+Once the team is up, section 6 of the guide shows how to start a small task and a multi-day
+change ([EN](docs/OPERATIONAL-GUIDE.md#6-starting-work-a-small-task-a-large-change) ·
+[FR](docs/OPERATIONAL-GUIDE.fr.md#6-démarrer-le-travail--une-petite-tâche-un-grand-changement)).
 
 ## Components
 
