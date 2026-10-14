@@ -165,11 +165,9 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	}
 
 	giveUpDetail := fmt.Sprintf("%d failed starts in %v; run agentbus up %s to try again", service.BudgetStarts, service.BudgetWindow, p)
-	// fail records a failed run. The one that spends the budget gives up here,
-	// in this process: systemd's start limit refuses the next start, so no
-	// later run would get to say it.
-	// This run's start is already counted (budget.Begin below); a failure
-	// leaves it, so only the decision to give up is taken here.
+	// fail ends a failed run. Its start is already counted (budget.Begin), so
+	// only the decision is taken here: the failure that spends the budget gives
+	// up in this process, since systemd's start limit refuses the next start.
 	fail := func(why string) int {
 		if budget.Spent(d.Now()) {
 			logf("failed: %s; gave up: %s", why, giveUpDetail)
@@ -180,6 +178,21 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 		publish("failed", "restarting", why)
 		return 1
 	}
+	if budget.Spent(d.Now()) {
+		logf("gave up: %s", giveUpDetail)
+		publish("gave-up", giveUpDetail, "") // a deleted project's marker is gone: nothing written
+		return 0
+	}
+	// Every start counts as a failure until it ends cleanly: a panic or a kill
+	// never reaches a return 0, so a crash loop spends the budget too. exit
+	// starts at 1, so a panic unwinding through this defer leaves the entry.
+	exit = 1
+	start := budget.Begin(d.Now())
+	defer func() {
+		if exit == 0 {
+			_ = budget.End(start)
+		}
+	}()
 	if installed, err := b.ServicesInstalled(ctx); err != nil {
 		logf("cannot read %s: %v", bus.ServicesKey(p), err)
 		return fail(err.Error())
@@ -187,19 +200,6 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 		logf("project gone: %s has no services marker (deleted, or never set up with agentbus up); exiting", p)
 		return 0
 	}
-	if budget.Spent(d.Now()) {
-		logf("gave up: %s", giveUpDetail)
-		publish("gave-up", giveUpDetail, "")
-		return 0
-	}
-	// Every start counts as a failure until it ends cleanly: a panic or a kill
-	// never reaches the exit-0 paths, so a crash loop spends the budget too.
-	start := budget.Begin(d.Now())
-	defer func() {
-		if exit == 0 {
-			_ = budget.End(start)
-		}
-	}()
 
 	var repo string
 	escalate := ""

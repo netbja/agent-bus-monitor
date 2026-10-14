@@ -378,3 +378,40 @@ func TestServiceRunAProbeInFlightCannotRestoreReady(t *testing.T) {
 		time.Sleep(25 * time.Millisecond)
 	}
 }
+
+// A panic unwinds through serviceRun's deferred functions: it must leave its
+// start counted, or launchd would restart a panicking service forever.
+func TestServiceRunAPanicKeepsItsBudgetEntry(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	d.RunDispatch = func(context.Context, *bus.Bus, string, func(bool), io.Writer) int { panic("boom") }
+	func() {
+		defer func() { recover() }()
+		var log bytes.Buffer
+		serviceRun(context.Background(), b, service.Dispatch, nil, d, &log)
+	}()
+	raw, _ := os.ReadFile(service.Budget{Path: d.Paths.BudgetFile(b.Project(), service.Dispatch)}.Path)
+	if n := len(strings.Fields(string(raw))); n != 1 {
+		t.Fatalf("budget entries after a panic = %d, want 1", n)
+	}
+}
+
+// A marker read that fails (the broker answers, but refuses it) is a failed
+// start and counts.
+func TestServiceRunAFailedMarkerReadCounts(t *testing.T) {
+	b, d := runFixture(t)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	closed, _ := bus.Open(c, b.Project())
+	var log bytes.Buffer
+	if code := serviceRun(context.Background(), closed, service.Dispatch, nil, d, &log); code != 1 {
+		t.Fatalf("code = %d", code)
+	}
+	raw, _ := os.ReadFile(service.Budget{Path: d.Paths.BudgetFile(b.Project(), service.Dispatch)}.Path)
+	if n := len(strings.Fields(string(raw))); n != 1 {
+		t.Fatalf("budget entries after a failed marker read = %d, want 1", n)
+	}
+}
