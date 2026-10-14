@@ -202,10 +202,54 @@ func TestServiceRunMissionsIdleThenStandby(t *testing.T) {
 	}
 	cancel()
 	<-done
-	d.RunMissions = func(context.Context, *bus.Bus, mission.RunConfig) error { return mission.ErrAlreadyRunning }
-	var log bytes.Buffer
-	if code := serviceRun(context.Background(), b, service.Missions, []string{"--repo", repo}, d, &log); code != 0 {
-		t.Fatalf("code = %d", code)
+	// Another conductor first: standby, then the run once it has gone.
+	d.Standby = 20 * time.Millisecond
+	var calls atomic.Int32
+	d.RunMissions = func(ctx context.Context, _ *bus.Bus, _ mission.RunConfig) error {
+		if calls.Add(1) == 1 {
+			return mission.ErrAlreadyRunning
+		}
+		<-ctx.Done()
+		return nil
 	}
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	go func() { var log bytes.Buffer; done <- serviceRun(ctx2, b, service.Missions, []string{"--repo", repo}, d, &log) }()
 	waitState(t, b, service.Missions, "standby")
+	waitState(t, b, service.Missions, "idle")
+	cancel2()
+	if code := <-done; code != 0 || calls.Load() != 2 {
+		t.Fatalf("code %d, runs %d", code, calls.Load())
+	}
+}
+
+// A service that finds another instance holding the lease (an old tab) waits
+// in standby and takes over once the lease is free, instead of exiting for
+// good: a closed tab must not leave the project without a dispatcher.
+func TestServiceRunWaitsInStandbyThenTakesOver(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	d.Standby = 20 * time.Millisecond
+	ctx := context.Background()
+	// The "tab" holds the dispatch lease for a while.
+	if ok, err := b.AcquireDispatch(ctx, "tab-token", 300*time.Millisecond); err != nil || !ok {
+		t.Fatalf("acquire = %v %v", ok, err)
+	}
+	var calls atomic.Int32
+	d.RunDispatch = func(ctx context.Context, b *bus.Bus, _ string, onLease func(bool), _ io.Writer) int {
+		if calls.Add(1) == 1 {
+			return 0 // like superviseDispatch on ErrAlreadyRunning
+		}
+		onLease(true)
+		<-ctx.Done()
+		return 0
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan int, 1)
+	go func() { var log bytes.Buffer; done <- serviceRun(runCtx, b, service.Dispatch, nil, d, &log) }()
+	waitState(t, b, service.Dispatch, "standby")
+	waitState(t, b, service.Dispatch, "ready") // the tab's lease lapsed: taken over
+	cancel()
+	if code := <-done; code != 0 || calls.Load() != 2 {
+		t.Fatalf("code %d, runs %d", code, calls.Load())
+	}
 }

@@ -86,7 +86,7 @@ On `dispatch down`, tell the human — it means peers and master are no longer w
 lands for them, and master falls back to staying armed:
 
 ```bash
-agentbus notify "dispatch down for $AGENT_BUS_PROJECT — unarmed agents are not woken; restart the dispatch tab (agentbus --project $AGENT_BUS_PROJECT dispatch)"
+agentbus notify "dispatch down for $AGENT_BUS_PROJECT — unarmed agents are not woken; check it: agentbus --project $AGENT_BUS_PROJECT service status dispatch; restart: agentbus up $AGENT_BUS_PROJECT"
 ```
 
 Exit 1 with an `error:` line instead of `dispatch down` is a broker problem, not a verdict on

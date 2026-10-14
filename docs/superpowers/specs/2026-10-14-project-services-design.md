@@ -40,7 +40,8 @@ back to the old tabs. It never starts a hidden `nohup` process.
 
   | Situation | Exit | Restarted |
   |---|---|---|
-  | Explicit stop (SIGTERM), project deleted, another instance holds the lease, invalid configuration, restart budget spent | 0 | no |
+  | Explicit stop (SIGTERM), project deleted, invalid configuration, restart budget spent | 0 | no |
+  | Another instance holds the lease | — | the process stays in `standby`, checks the lease every 15 s, and takes over once it is free |
   | Transient failure (broker unreachable, git error, …) | 1 | yes |
 
   - Each case that is not restarted records its reason first.
@@ -67,7 +68,7 @@ back to the old tabs. It never starts a hidden `nohup` process.
   - The header shows `dispatch ready`, `dispatch waiting herdr`, `missions idle`, `missions
     busy`, `missions failed` and so on.
   - `F3` (or `s`) opens a **Services** overlay: per service the state, detail, last activity,
-    last error, host, log path, and the last 40 log lines when the log is on this machine.
+    last error, host, log path, and the last 12 log lines when the log is on this machine.
   - busmon never starts, stops or parents a service. It only reads the state and the logs.
 - **Lifecycle commands:**
   - `agentbus up <p>` installs or updates the units and the env file, clears the budget, starts

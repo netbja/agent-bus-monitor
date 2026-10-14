@@ -24,6 +24,7 @@ type serviceRunDeps struct {
 	Paths       service.Paths
 	Host        string
 	Heartbeat   time.Duration // how often the state is published
+	Standby     time.Duration // how often a standby service checks whether the lease is free (default 15s)
 	HerdrPing   func(context.Context) error
 	RunDispatch func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int
 	RunMissions func(ctx context.Context, b *bus.Bus, cfg mission.RunConfig) error
@@ -154,76 +155,112 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	publish("starting", "", "")
 	logf("starting %s for %s (pid %d)", kind, p, os.Getpid())
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var gone, leased atomic.Bool
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() { // heartbeat: state every d.Heartbeat; a vanished marker ends the run
-		defer wg.Done()
-		t := time.NewTicker(d.Heartbeat)
-		defer t.Stop()
-		for {
-			if kind == service.Dispatch && leased.Load() {
-				if err := d.HerdrPing(runCtx); err != nil && runCtx.Err() == nil {
-					st.set("waiting-herdr", "herdr does not answer; no agent is woken until it does", err.Error())
-				} else {
-					st.set("ready", "holds the dispatch lease", "")
+	// attempt runs the loop once, with the heartbeat beside it.
+	attempt := func() (code int, runErr error, gone bool) {
+		runCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		var goneFlag, leased atomic.Bool
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() { // heartbeat: state every d.Heartbeat; a vanished marker ends the run
+			defer wg.Done()
+			t := time.NewTicker(d.Heartbeat)
+			defer t.Stop()
+			for {
+				if kind == service.Dispatch && leased.Load() {
+					if err := d.HerdrPing(runCtx); err != nil && runCtx.Err() == nil {
+						st.set("waiting-herdr", "herdr does not answer; no agent is woken until it does", err.Error())
+					} else {
+						st.set("ready", "holds the dispatch lease", "")
+					}
+				}
+				if kind == service.Missions {
+					if state, detail := missionsActivity(runCtx, b); state != "" {
+						st.set(state, detail, "")
+					}
+				}
+				state, detail, e := st.get()
+				if runCtx.Err() != nil {
+					return
+				}
+				if !publish(state, detail, e) {
+					logf("project deleted: the services marker is gone; stopping")
+					goneFlag.Store(true)
+					cancel()
+					return
+				}
+				select {
+				case <-runCtx.Done():
+					return
+				case <-t.C:
 				}
 			}
-			if kind == service.Missions {
-				if state, detail := missionsActivity(runCtx, b); state != "" {
-					st.set(state, detail, "")
-				}
-			}
-			state, detail, e := st.get()
-			if runCtx.Err() != nil {
-				return
-			}
-			if !publish(state, detail, e) {
-				logf("project deleted: the services marker is gone; stopping")
-				gone.Store(true)
-				cancel()
-				return
-			}
-			select {
-			case <-runCtx.Done():
-				return
-			case <-t.C:
-			}
-		}
-	}()
+		}()
 
+		switch kind {
+		case service.Dispatch:
+			code = d.RunDispatch(runCtx, b, escalate, func(held bool) { leased.Store(held) }, errs)
+		case service.Missions:
+			cfg := mission.DefaultRunConfig()
+			cfg.StateHome = d.Paths.StateHome + "/agentbus"
+			cfg.Repo = repo
+			if escalate != "" {
+				cfg.EscalateTo = escalate
+			}
+			cfg.Log = func(format string, a ...any) { fmt.Fprintf(errs, time.Now().Format("15:04:05 ")+format+"\n", a...) }
+			runErr = d.RunMissions(runCtx, b, cfg)
+		}
+		cancel()
+		wg.Wait()
+		return code, runErr, goneFlag.Load()
+	}
+
+	standbyEvery := d.Standby
+	if standbyEvery <= 0 {
+		standbyEvery = 15 * time.Second
+	}
 	var code int
 	var runErr error
-	switch kind {
-	case service.Dispatch:
-		code = d.RunDispatch(runCtx, b, escalate, func(held bool) { leased.Store(held) }, errs)
-	case service.Missions:
-		cfg := mission.DefaultRunConfig()
-		cfg.StateHome = d.Paths.StateHome + "/agentbus"
-		cfg.Repo = repo
-		if escalate != "" {
-			cfg.EscalateTo = escalate
+	for {
+		var gone bool
+		code, runErr, gone = attempt()
+		if gone {
+			return 0
 		}
-		cfg.Log = func(format string, a ...any) { fmt.Fprintf(errs, time.Now().Format("15:04:05 ")+format+"\n", a...) }
-		runErr = d.RunMissions(runCtx, b, cfg)
+		if ctx.Err() != nil {
+			logf("stopped")
+			publish("stopped", "stopped by the service manager (agentbus down, service stop, or logout)", "")
+			return 0
+		}
+		if !(kind == service.Missions && errors.Is(runErr, mission.ErrAlreadyRunning) ||
+			kind == service.Dispatch && code == 0 && anotherDispatcher(ctx, b)) {
+			break
+		}
+		// Another instance (an old herdr tab, another machine) holds the lease:
+		// wait, then take over when it is free. Not a restart loop: this
+		// process stays and only polls the lease.
+		logf("another instance holds the lease; waiting in standby")
+		st.set("starting", "", "")
+		for {
+			if !publish("standby", "another instance holds the lease (a herdr tab, or another machine); taking over when it is free", "") {
+				logf("project deleted while in standby; exiting")
+				return 0
+			}
+			select {
+			case <-ctx.Done():
+				logf("stopped")
+				publish("stopped", "stopped by the service manager (agentbus down, service stop, or logout)", "")
+				return 0
+			case <-time.After(standbyEvery):
+			}
+			if !leaseHeld(ctx, b, kind) {
+				break
+			}
+		}
+		logf("the lease is free; taking over")
 	}
-	cancel()
-	wg.Wait()
 
 	switch {
-	case gone.Load():
-		return 0
-	case ctx.Err() != nil:
-		logf("stopped")
-		publish("stopped", "stopped by the service manager (agentbus down, service stop, or logout)", "")
-		return 0
-	case kind == service.Missions && errors.Is(runErr, mission.ErrAlreadyRunning),
-		kind == service.Dispatch && code == 0 && anotherDispatcher(ctx, b):
-		logf("another instance holds the lease; exiting")
-		publish("standby", "another instance holds the lease (a herdr tab, or another machine)", "")
-		return 0
 	case kind == service.Dispatch && code == 0, kind == service.Missions && runErr == nil:
 		if ok, _ := b.ServicesInstalled(ctx); !ok {
 			logf("project gone; exiting")
@@ -250,6 +287,16 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	logf("failed: %s; the manager restarts it", why)
 	publish("failed", "restarting", why)
 	return 1
+}
+
+// leaseHeld: someone holds the lease of this service kind. An unreadable
+// lease counts as held, so a broker hiccup never starts a second instance.
+func leaseHeld(ctx context.Context, b *bus.Bus, kind string) bool {
+	alive, err := b.DispatchAlive(ctx)
+	if kind == service.Missions {
+		alive, err = b.ConductorAlive(ctx)
+	}
+	return err != nil || alive
 }
 
 func anotherDispatcher(ctx context.Context, b *bus.Bus) bool {

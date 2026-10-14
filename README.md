@@ -126,6 +126,7 @@ What `install` does:
 just pulled.
 
 `uninstall` asks before each removal, and removes only what setup made:
+- every project's services (their units; data and logs are kept);
 - our binaries and our skill links (never a real directory);
 - the herdr key binding, if it is still exactly the block setup wrote (an edited one is kept);
 - the external skills, if setup cloned them and they have no local changes;
@@ -484,8 +485,11 @@ agentbus up myproject /path/to/your/project --as <your-name>   # inside it
 - **Provisions** the project, which is `scripts/bootstrap` underneath: broker up, skills linked,
   herdr-plus template written. It accepts bootstrap's flags (`--no-dispatch`, `--no-missions`,
   `--index`, `--cron`, `--session`).
-- **Opens the workspace** directly, with busmon first and focused, then one tab per boot role,
-  then dispatch and missions.
+- **Starts the project's services**: `dispatch` (wakes idle agents) and `missions` (the
+  conductor). They run under your system's own service manager (systemd `--user` on Linux,
+  launchd on macOS), not in a tab. Closing busmon, the workspace or herdr no longer stops them.
+  When no manager is usable, `up` says so and opens them as tabs; `--tabs` forces that.
+- **Opens the workspace** directly, with busmon first and focused, then one tab per boot role.
 - **On a re-run**, it focuses the open workspace instead of opening a second one.
 - **Outside herdr**, it only provisions, and tells you how to open the workspace.
 
@@ -499,12 +503,38 @@ agent's cwd, and where `--index` builds the index; omit it to use `$PWD`. It is 
 repo (broker, `agent-launch`, `busmon` stay here). The linked session is `$HERDR_SESSION` (so
 running from inside it just works), else the project name — pass `--session <name>` if your herdr
 session is named differently. The workspace opens with a `busmon` tab first, then one tab per boot role —
-`master`, `coder`, `foureyes`, `sentinel` — and a `dispatch` tab running
-`agentbus --project myproject dispatch` (omit it with `bootstrap new … --no-dispatch`). Each tab
-launches its configured client and role. Agents publish presence on the bus and recover tracked
-work; with the dispatch tab up, an idle unarmed agent is woken through its pane when work lands
-for it, whatever its client's background-task support (only clients with a probed screen
-signature are prompted).
+`master`, `coder`, `foureyes`, `sentinel`. Each tab launches its configured client and role.
+Agents publish presence on the bus and recover tracked work; with dispatch up, an idle unarmed
+agent is woken through its pane when work lands for it, whatever its client's background-task
+support (only clients with a probed screen signature are prompted).
+
+### Project services: start, watch, stop
+
+| Command | What it does |
+|---|---|
+| `agentbus up <p>` | installs or updates the services, starts what is not running, then opens the workspace; `--no-dispatch` / `--no-missions` skip one |
+| `agentbus down <p>` | stops the project's services and deletes nothing; the agents and the workspace stay open |
+| `agentbus --project <p> service status` | the manager's view and the last state each service published |
+| `agentbus --project <p> service logs [dispatch\|missions] [-n 50]` | the service's own log (`~/.local/state/agentbus/<p>/<kind>.log`, rotated at 1 MiB × 3) |
+| `agentbus --project <p> service restart\|stop\|start\|remove [kind]` | one service; `remove` keeps data and logs |
+| `agentbus service list` | every project's services on this machine |
+
+- **Nothing starts at login.** A reboot starts no project; `agentbus up` does.
+- **Bounded restarts.** A service that fails is restarted; after 5 failures in 10 minutes it
+  gives up and says so. It is not restarted at all when it is stopped on purpose, when its
+  project was deleted, when another instance holds the lease, or when its configuration is
+  invalid. The next `agentbus up` tries again.
+- **busmon shows it.** The header reads `dispatch ready`, `dispatch waiting herdr`,
+  `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the Services
+  overlay, with the last error and the tail of the log.
+- **Stopping during an integration** (`down`, or a stop) kills the running tests with their
+  process group. The conductor redoes that check or integration at its next start.
+- **Secrets.** The broker password is kept in `~/.config/agentbus/services/<p>.env` (0600),
+  never in a unit, an argument or a log.
+- **Removal.** `busmon --delete <p>` removes the project's services on this machine before its
+  keys. `./setup.sh uninstall` removes every project's services first.
+- **Upgrade.** A running service keeps the binary it started with. `./setup.sh install` lists
+  them; `agentbus --project <p> service restart` moves one on.
 
 From there you drive the team as a human:
 - **Watch** everything in the `busmon` tab (Agents, Activity, Board, Requests).
