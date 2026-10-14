@@ -97,6 +97,24 @@ func (t *Theme) Style(r Role) tcell.Style {
 	return tcell.StyleDefault.Foreground(t.colors[themeRole(r)]).Background(tcell.ColorDefault)
 }
 
+// Faded is r's colour at pct percent of the way from the frame line colour
+// (close to the background) to r: a fade. Without true colour there are no
+// shades to step through, so the colour stays whole (no animation).
+func (t *Theme) Faded(r Role, pct int) tcell.Color {
+	c := t.colors[themeRole(r)]
+	if t.palette != PaletteDark && t.palette != PaletteLight {
+		return c
+	}
+	pct = max(0, min(100, pct))
+	r1, g1, b1 := t.colors[RoleLine].RGB()
+	r2, g2, b2 := c.RGB()
+	mix := func(a, b int32) int32 { return a + (b-a)*int32(pct)/100 }
+	return tcell.NewRGBColor(mix(r1, r2), mix(g1, g2), mix(b1, b2))
+}
+
+// Animated: the palette has the shades a fade needs.
+func (t *Theme) Animated() bool { return t.palette == PaletteDark || t.palette == PaletteLight }
+
 func (t *Theme) Selected(r Role) tcell.Style {
 	s := t.Style(r)
 	if t.palette == PaletteNone || t.palette == Palette16 {

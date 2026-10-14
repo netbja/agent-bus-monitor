@@ -243,7 +243,7 @@ agent names, no herdr-plus template):
   `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
   Services overlay, with the last error and the tail of each log.
 - **An agent waiting for you.** When master (or any agent) needs your decision it declares
-  `waiting`: it moves to the top of Agents with a pulsing ♙, the header reads `♙ 1 waiting for
+  `waiting`: it moves to the top of Agents with ♙ and the word `waiting` slowly fading in and out, the header reads `♙ 1 waiting for
   you`, and the terminal bell rings once per new question, which herdr shows on the busmon tab.
   Answer with `@master …`; the agent then declares `working` again.
 - **The `updated` gauge** in Agents (`●●●●●●●○○○ 3m`) is how fresh the agent's last declared

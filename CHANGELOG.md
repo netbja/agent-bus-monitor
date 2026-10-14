@@ -4,6 +4,13 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.12.4 — a quieter waiting
+
+- Only the word `waiting` moves now: it fades in and out over 3 seconds (20% to 100%, eased).
+  The ♙ glyph and the header badge stay still. Without true colour, nothing moves.
+
+[Notes](docs/releases/v0.12.4.md)
+
 ## v0.12.3 — an agent waiting for you; auto-scroll stays on
 
 - New state `waiting` (a person must decide): busmon sorts it first with a pulsing ♙, shows

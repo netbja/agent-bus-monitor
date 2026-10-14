@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -73,6 +74,7 @@ type ui struct {
 	confirm       *pendingRemoval
 	rung          map[string]time.Time // agent -> the waiting declaration already rung for
 	bell          func()               // rings the terminal bell; nil = the screen's Beep
+	animate       atomic.Bool          // an agent is waiting: the fade ticker redraws ~10 times a second
 
 	feed         []feedLine
 	seq          int
@@ -107,6 +109,7 @@ func (u *ui) onTick() {
 			delete(u.rung, n)
 		}
 	}
+	u.animate.Store(len(seen) > 0 && th.Animated())
 	u.st.mu.Unlock()
 	switch {
 	case !ring:

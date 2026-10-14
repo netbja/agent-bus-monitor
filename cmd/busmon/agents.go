@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -260,13 +261,11 @@ func agentHeader(tier Tier, width int) Line {
 func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now time.Time) Line {
 	c := agentColsFor(tier)
 	glyph, word, role, _ := stateLook(a)
-	bold := false
+	w := col(word, c.state, role)
 	if a.state == "waiting" {
-		role, bold = pulse(now)
+		w.Fade = fadeLevel(now) // only the word fades; the glyph and the header stay still
 	}
-	g, w := col(glyph, c.glyph, role), col(word, c.state, role)
-	g.Bold, w.Bold = bold, bold
-	l := Line{g, col(Preview(name), c.name, RoleText), w}
+	l := Line{col(glyph, c.glyph, role), col(Preview(name), c.name, RoleText), w}
 	l = append(l, cell(updatedCell(a, tier, now), c.updated)...)
 	l = append(l, cell([]Seg{queueCell(a, tier)}, c.queue)...)
 	if c.ctx > 0 {
@@ -299,16 +298,17 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 	return FitLine(l, width)
 }
 
-// pulse is the slow fade of something waiting for a person: one step per
-// second (busmon redraws every second), bright, normal, dim, normal.
-func pulse(now time.Time) (Role, bool) {
-	switch now.Unix() % 4 {
-	case 0:
-		return RoleAttention, true
-	case 2:
-		return RoleMuted, false
-	}
-	return RoleAttention, false
+// fadePeriod is one slow breath of the waiting word: faint, full, faint.
+const fadePeriod = 3 * time.Second
+
+// fadeFrame is how often the fade redraws: ten steps a second is smooth enough.
+const fadeFrame = 100 * time.Millisecond
+
+// fadeLevel is the waiting word's intensity at now, 20 to 100 percent, eased
+// in and out (a raised cosine, like CSS ease-in-out between 0.2 and 1).
+func fadeLevel(now time.Time) int {
+	phase := float64(now.UnixMilli()%fadePeriod.Milliseconds()) / float64(fadePeriod.Milliseconds())
+	return 20 + int(math.Round(80*(1-math.Cos(2*math.Pi*phase))/2))
 }
 
 // asksFor lists the agents waiting for a person's decision, sorted: the
