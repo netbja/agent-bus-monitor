@@ -21,6 +21,8 @@ type fakeManager struct {
 	active    map[string]bool
 	calls     []string
 	failStart bool
+	failList  bool // List fails after the first removal
+	removed   int
 }
 
 func newFakeManager() *fakeManager {
@@ -51,6 +53,7 @@ func (f *fakeManager) Stop(p, k string) error {
 func (f *fakeManager) Remove(p, k string) error {
 	f.calls = append(f.calls, "remove "+p+" "+k)
 	delete(f.specs, p+"/"+k)
+	f.removed++
 	delete(f.active, p+"/"+k)
 	return nil
 }
@@ -63,6 +66,9 @@ func (f *fakeManager) State(p, k string) (service.State, error) {
 	return st, nil
 }
 func (f *fakeManager) List() ([]service.Unit, error) {
+	if f.failList && f.removed > 0 {
+		return nil, errors.New("cannot list units")
+	}
 	var out []service.Unit
 	for _, k := range service.Kinds {
 		for key := range f.specs {
@@ -202,6 +208,25 @@ func TestDownStopsServicesAndExplainsAnInterruptedIntegration(t *testing.T) {
 	}
 	if ok, _ := b.ServicesInstalled(context.Background()); !ok {
 		t.Fatal("down deleted the services marker")
+	}
+}
+
+// A unit list that fails after a removal never counts as "no unit left":
+// the marker stays, so a remaining service is not told its project is gone.
+func TestServiceRemoveKeepsTheMarkerWhenTheListFails(t *testing.T) {
+	m, d := cmdFixture(t)
+	b, r := dialMain(t)
+	t.Cleanup(func() { r.Del(context.Background(), bus.ServicesKey(b.Project())) })
+	b.MarkServicesInstalled(context.Background(), bus.ServicesInstall{Kinds: []string{"dispatch", "missions"}})
+	d.Bus = func(p string) (*bus.Bus, error) { return bus.Open(r, p) }
+	m.Install(service.Spec{Project: b.Project(), Kind: service.Dispatch})
+	m.Install(service.Spec{Project: b.Project(), Kind: service.Missions})
+	m.failList = true
+	var out, errw bytes.Buffer
+	runServiceCmd(b.Project(), []string{"remove", "dispatch"}, d, &out, &errw)
+	runServiceCmd("", []string{"remove", "--all"}, d, &out, &errw)
+	if ok, _ := b.ServicesInstalled(context.Background()); !ok {
+		t.Fatal("the marker was cleared on a failed unit list")
 	}
 }
 

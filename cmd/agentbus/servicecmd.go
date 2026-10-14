@@ -109,7 +109,7 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 				fmt.Fprintf(stdout, "removed %s %s\n", u.Project, u.Kind)
 				// Its last unit gone, the project's services marker goes too (best effort:
 				// the broker may be down during an uninstall).
-				if left, _ := projectKinds(m, u.Project); len(left) == 0 && !cleared[u.Project] && bus.ValidName(u.Project) {
+				if left, err := projectKinds(m, u.Project); err == nil && len(left) == 0 && !cleared[u.Project] && bus.ValidName(u.Project) {
 					cleared[u.Project] = true
 					if b, err := d.Bus(u.Project); err == nil {
 						_ = b.ClearServices(context.Background())
@@ -238,7 +238,7 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 			}
 			fmt.Fprintf(stdout, "%s: removed (data and logs kept)\n", k)
 		}
-		if left, _ := projectKinds(m, project); len(left) == 0 {
+		if left, err := projectKinds(m, project); err == nil && len(left) == 0 {
 			_ = os.Remove(d.Paths.EnvFile(project))
 			if b, err := d.Bus(project); err == nil {
 				_ = b.ClearServices(context.Background())
