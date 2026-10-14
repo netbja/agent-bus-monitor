@@ -242,7 +242,16 @@ herdr_plus_linked() { herdr plugin list 2>/dev/null | grep "$HERDR_PLUS_ID" | gr
 # True only for a herdr-plus setup installed from GitHub at another ref; a linked checkout is the user's.
 herdr_plus_pin_changed() { [ -f "$HERDR_PLUS_STATE" ] && [ "$(cat "$HERDR_PLUS_STATE")" != "$HERDR_PLUS_REF" ] && herdr_plus_registered && ! herdr_plus_linked; }
 herdr_plus_registered() { command -v herdr >/dev/null 2>&1 && herdr plugin list 2>/dev/null | grep -q "$HERDR_PLUS_ID"; }
-herdr_plus_action_ok()  { command -v herdr >/dev/null 2>&1 && herdr plugin action list 2>/dev/null | tr -d "\n" | grep -q "\"action_id\":\"projects\"[^}]*\"plugin_id\":\"$HERDR_PLUS_ID\""; }
+# The action list comes from the running herdr server, the plugin list from disk: outside a
+# herdr session there may be no server to ask, which says nothing about the plugin.
+herdr_plus_action_state() {
+  local out
+  command -v herdr >/dev/null 2>&1 || { echo missing; return; }
+  out="$(herdr plugin action list 2>/dev/null | tr -d "\n")"
+  if printf '%s' "$out" | grep -q "\"action_id\":\"projects\"[^}]*\"plugin_id\":\"$HERDR_PLUS_ID\""; then echo ok
+  elif printf '%s' "$out" | grep -q '"server_not_running"'; then echo noserver
+  else echo missing; fi
+}
 
 # -----------------------------------------------------------------------------
 # setup.sh status
@@ -274,12 +283,14 @@ do_status() {
   log_info "role skill links: $links"
   if ! command -v herdr >/dev/null 2>&1; then
     log_info "herdr: not on PATH"
-  elif herdr_plus_action_ok; then
-    log_ok "herdr-plus: registered, Projects picker available (Ctrl+B then Up)"
-  elif herdr_plus_registered; then
-    log_warn "herdr-plus: registered but its projects action is missing"
-  else
+  elif ! herdr_plus_registered; then
     log_info "herdr-plus: not registered (./setup.sh install --install-herdr)"
+  else
+    case "$(herdr_plus_action_state)" in
+      ok)       log_ok "herdr-plus: registered, Projects picker available (Ctrl+B then Up)" ;;
+      noserver) log_info "herdr-plus: registered; Projects picker not checked (no herdr server running here)" ;;
+      *)        log_warn "herdr-plus: registered but its projects action is missing (check: herdr plugin action list)" ;;
+    esac
   fi
   if grep -qF "$KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then log_ok "herdr key binding: prefix+up -> projects"; else log_info "herdr key binding: not added"; fi
   svcs="$(project_services)"
@@ -598,11 +609,11 @@ else
 fi
 # What Ctrl+B Up actually needs: the plugin's projects action, as herdr sees it.
 if command -v herdr >/dev/null 2>&1 && [ "$DRY_RUN" = "0" ] && herdr_plus_registered; then
-  if herdr_plus_action_ok; then
-    log_ok "herdr-plus: Projects picker action available"
-  else
-    log_warn "herdr-plus is registered but herdr lists no $HERDR_PLUS_ID.projects action (check: herdr plugin action list)."
-  fi
+  case "$(herdr_plus_action_state)" in
+    ok)       log_ok "herdr-plus: Projects picker action available" ;;
+    noserver) log_info "herdr-plus: registered; Projects picker not checked (no herdr server running here, run ./setup.sh status inside herdr)" ;;
+    *)        log_warn "herdr-plus is registered but herdr lists no $HERDR_PLUS_ID.projects action (check: herdr plugin action list)." ;;
+  esac
 fi
 
 # Configure herdr-plus keybinding in ~/.config/herdr/config.toml idempotently

@@ -282,10 +282,11 @@ For a multi-agent, multi-day change, write its plan as missions (`docs/changes/<
 agent, reviewer, dependencies, allowed paths, test, brief) and let the conductor drive it. You only
 arbitrate. For a short, Claude-only change, agent teams are lighter.
 
-- Start it once per project in its tab: `agentbus missions` (`agentbus missions --status`).
+- The conductor runs as the project's `missions` service, started by `agentbus up` (check:
+  `agentbus service status`; with `--tabs`, in its own tab).
 - Load the change at a reviewed commit: `agentbus mission load docs/changes/<c>/missions.json@<commit>`.
 - Watch: `agentbus mission status [<c>]`, `agentbus mission show <c>/<id>`; busmon shows
-  `missions up/down`.
+  `missions idle/busy/failed`.
 - On an **escalation** (blocked mission), choose:
   - `agentbus mission retry <c>/<id>` — a new attempt, same agent, fresh round of attempts;
   - `agentbus mission reassign <c>/<id> <agent>` — a new attempt for another agent (not its reviewer);

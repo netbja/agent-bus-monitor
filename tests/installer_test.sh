@@ -26,7 +26,8 @@ case "$1 ${2:-}" in
   "plugin install") [ -n "${HERDR_FAIL_INSTALL:-}" ] && exit 1; echo "github" > "$HERDR_STATE" ;;
   "plugin link") echo "local:$3" > "$HERDR_STATE" ;;
   "plugin uninstall"|"plugin unlink") rm -f "$HERDR_STATE" ;;
-  "plugin action") [ -f "$HERDR_STATE" ] && echo '{"result":{"actions":[{"action_id":"projects","command":["x"],"plugin_id":"cloudmanic.herdr-plus"}]}}' ;;
+  "plugin action") if [ -n "${HERDR_NO_SERVER:-}" ]; then echo '{"id":"cli:plugin","error":{"code":"server_not_running","message":"no herdr server is running"}}'; exit 0; fi
+    [ -f "$HERDR_STATE" ] && echo '{"result":{"actions":[{"action_id":"projects","command":["x"],"plugin_id":"cloudmanic.herdr-plus"}]}}' ;;
   "--version ") echo "herdr 0.0-test" ;;
 esac
 exit 0
@@ -180,6 +181,10 @@ assert_eq "$rc" "0" "status exits 0"
 assert_contains "$status_out" "agentbus v9.9.9: $T/bin/agentbus" "status shows the installed version"
 assert_contains "$status_out" "external skills: v1.3.1" "status shows the external skills"
 assert_contains "$status_out" "Projects picker available" "status shows herdr-plus"
+# Outside herdr there is no server to list the actions: not a missing action, and no warning
+nosrv_out="$(HERDR_NO_SERVER=1 "$SETUP" status --bin-dir "$T/bin" 2>&1)"
+assert_contains "$nosrv_out" "Projects picker not checked (no herdr server running here)" "no herdr server: the picker is reported unchecked"
+assert_eq "$([[ "$nosrv_out" == *"projects action is missing"* ]] && echo warned || echo quiet)" "quiet" "no herdr server: no false warning"
 
 # uninstall has no dry run: it refuses one rather than remove things while "dry"
 assert_exit 1 "uninstall --dry-run is refused" -- "$SETUP" uninstall --yes --dry-run --bin-dir "$T/bin"

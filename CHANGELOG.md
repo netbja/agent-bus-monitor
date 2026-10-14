@@ -4,6 +4,14 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.12.1 — no false herdr-plus warning; how to start work
+
+- `setup.sh` no longer reports a missing herdr-plus projects action when herdr is just not
+  running (outside a herdr session).
+- Operational guide (EN/FR), new section 6: starting a small task and a multi-day change.
+
+[Notes](docs/releases/v0.12.1.md)
+
 ## v0.12.0 — project services: dispatch and missions outlive the workspace
 
 - `agentbus up` runs dispatch and missions as user services (systemd `--user`, launchd), never at
