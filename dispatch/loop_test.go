@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"sync"
 	"context"
 	"errors"
 	"fmt"
@@ -569,5 +570,23 @@ func TestRunLargeBacklogOnePromptThenDrainInOrder(t *testing.T) {
 		if got[i] != sent[i] {
 			t.Fatalf("drain[%d] = %s, want %s (ascending, nothing lost)", i, got[i], sent[i])
 		}
+	}
+}
+
+// OnLease tells a supervisor (agentbus service run) when this dispatcher holds
+// the lease, so it can say "ready" rather than merely "running".
+func TestRunReportsTheLease(t *testing.T) {
+	b, _ := dialRun(t)
+	var mu sync.Mutex
+	var seen []bool
+	cfg := fastConfig()
+	cfg.OnLease = func(held bool) { mu.Lock(); seen = append(seen, held); mu.Unlock() }
+	r := start(t, b, newFakeRT(alwaysReady), cfg)
+	waitFor(t, 2*time.Second, "lease reported", func() bool { mu.Lock(); defer mu.Unlock(); return len(seen) == 1 && seen[0] })
+	r.stop(t)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 2 || seen[1] {
+		t.Fatalf("OnLease calls = %v, want [true false]", seen)
 	}
 }
