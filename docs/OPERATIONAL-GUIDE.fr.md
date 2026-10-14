@@ -253,6 +253,9 @@ noms d'onglets et d'agents, sans template herdr-plus) :
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) ouvre la fenêtre
   Services, avec la dernière erreur et la fin de chaque journal.
+- **La jauge `updated`** d'Agents (`●●●●●●●○○○ 3m`) indique la fraîcheur du dernier état déclaré
+  par l'agent : pleine juste après la déclaration, vide au bout de 10 minutes, puis l'âge seul.
+  Elle ne mesure pas un travail en cours.
 - **Défilement automatique d'Activity.** Le titre d'Activity indique `auto-scroll on` tant que les
   nouvelles lignes défilent. `f` le coupe (la vue reste en place et compte ce qui arrive :
   `auto-scroll off · 3 new`) et le rétablit ; remonter dans Activity le coupe aussi, `Fin` le

@@ -4,11 +4,12 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
-## v0.12.2 — Activity auto-scroll toggle
+## v0.12.2 — Activity auto-scroll toggle, dotted freshness gauge
 
 - busmon: `f` turns Activity's auto-scroll off and on, from any panel; the title says
   `auto-scroll on` or `auto-scroll off · N new`.
 - Today's day separator reads `── Wed 2026-10-14 - (today) ──`.
+- The Agents panel's `updated` gauge is drawn in dots (`●●●●●○○○○○`).
 
 [Notes](docs/releases/v0.12.2.md)
 

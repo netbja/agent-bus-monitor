@@ -242,6 +242,9 @@ agent names, no herdr-plus template):
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
   Services overlay, with the last error and the tail of each log.
+- **The `updated` gauge** in Agents (`●●●●●●●○○○ 3m`) is how fresh the agent's last declared
+  state is: full right after the declaration, empty after 10 minutes, then the age alone. It does
+  not measure work in progress.
 - **Activity auto-scroll.** The Activity title reads `auto-scroll on` while new lines scroll into
   view. `f` turns it off (the view stays put and counts what arrives: `auto-scroll off · 3 new`)
   and on again; moving up in Activity also turns it off, `End` back on. Today's day separator
