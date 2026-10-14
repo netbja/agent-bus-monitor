@@ -34,8 +34,18 @@ func serviceFact(rec bus.ServiceRecord, has bool, legacy string, now time.Time) 
 			return "up"
 		}
 		return "down"
+	case rec.State == "standby":
+		// The process lives and polls the lease (every 15 s, inside the stale
+		// window). While the other instance holds it, dispatch is up there.
+		if legacy == "up" {
+			return "up"
+		}
+		if now.Sub(time.UnixMilli(rec.At)) <= serviceStale {
+			return "standby"
+		}
+		return "down"
 	case legacy == "up":
-		return "up" // standby, or a final state while a tab instance runs
+		return "up" // a final state while another instance runs
 	case rec.State == "failed", rec.State == "gave-up", rec.State == "stopped":
 		return rec.State
 	}

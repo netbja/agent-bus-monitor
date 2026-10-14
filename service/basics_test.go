@@ -106,6 +106,30 @@ func TestRotatingLogIsBounded(t *testing.T) {
 	}
 }
 
+func TestRotateIfLargerBoundsTheCrashLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missions.crash.log")
+	os.WriteFile(path, []byte(strings.Repeat("x", 50)), 0o600)
+	if err := RotateIfLarger(path, 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path + ".1"); !os.IsNotExist(err) {
+		t.Fatal("a small file was rotated")
+	}
+	os.WriteFile(path, []byte(strings.Repeat("x", 150)), 0o600)
+	if err := RotateIfLarger(path, 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("a large file was kept in place")
+	}
+	if st, err := os.Stat(path + ".1"); err != nil || st.Size() != 150 {
+		t.Fatalf("rotated = %v %v", st, err)
+	}
+	if err := RotateIfLarger(filepath.Join(t.TempDir(), "none"), 100); err != nil {
+		t.Fatalf("a missing file: %v", err)
+	}
+}
+
 func TestBudgetGivesUpAfterFiveFailuresInTheWindow(t *testing.T) {
 	b := Budget{Path: filepath.Join(t.TempDir(), "d", "dispatch.restarts")}
 	now := time.Now()

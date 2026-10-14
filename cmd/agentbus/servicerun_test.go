@@ -117,7 +117,7 @@ func TestServiceRunFailureCountsAgainstTheBudget(t *testing.T) {
 		io.WriteString(log, "error: broker went away\n")
 		return 1
 	}
-	for i := 0; i < service.BudgetStarts; i++ {
+	for i := 0; i < service.BudgetStarts-1; i++ {
 		var log bytes.Buffer
 		if code := serviceRun(context.Background(), b, service.Dispatch, nil, d, &log); code != 1 {
 			t.Fatalf("run %d: code = %d, want 1 (restart)", i, code)
@@ -126,11 +126,13 @@ func TestServiceRunFailureCountsAgainstTheBudget(t *testing.T) {
 			t.Fatalf("run %d: record = %+v", i, r)
 		}
 	}
+	// The failure that spends the budget gives up in this very process:
+	// systemd's start limit refuses a sixth start, so no later run would say it.
 	var log bytes.Buffer
 	if code := serviceRun(context.Background(), b, service.Dispatch, nil, d, &log); code != 0 {
-		t.Fatalf("budget spent: code = %d, want 0 (no restart)", code)
+		t.Fatalf("fifth failure: code = %d, want 0 (no restart)", code)
 	}
-	if r := record(t, b, service.Dispatch); r.State != "gave-up" || !strings.Contains(r.Detail, "agentbus up") {
+	if r := record(t, b, service.Dispatch); r.State != "gave-up" || !strings.Contains(r.Detail, "agentbus up") || !strings.Contains(r.Error, "broker went away") {
 		t.Fatalf("record = %+v", r)
 	}
 }

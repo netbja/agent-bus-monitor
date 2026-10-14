@@ -34,7 +34,10 @@ func TestServiceFact(t *testing.T) {
 		{"failed stays visible", bus.ServiceRecord{State: "failed", At: old}, true, "down", "failed"},
 		{"gave up stays visible", bus.ServiceRecord{State: "gave-up", At: old}, true, "down", "gave-up"},
 		{"stopped by down", bus.ServiceRecord{State: "stopped", At: old}, true, "down", "stopped"},
-		{"standby, the other instance is up", bus.ServiceRecord{State: "standby", At: old}, true, "up", "up"},
+		{"standby, the other instance is up", bus.ServiceRecord{State: "standby", At: fresh}, true, "up", "up"},
+		{"standby, waiting to take over", bus.ServiceRecord{State: "standby", At: fresh}, true, "down", "standby"},
+		{"standby in the overlay", bus.ServiceRecord{State: "standby", At: fresh}, true, "", "standby"},
+		{"standby gone stale", bus.ServiceRecord{State: "standby", At: old}, true, "down", "down"},
 		{"failed but another instance runs", bus.ServiceRecord{State: "failed", At: old}, true, "up", "up"},
 	}
 	for _, c := range cases {
@@ -83,6 +86,10 @@ func TestServicesPanelShowsStateErrorAndLocalLog(t *testing.T) {
 	}
 	if strings.Contains(body, "/far/missions.log\n   old") {
 		t.Fatal("a remote log was read")
+	}
+	sb := servicesPanel(inst, map[string]bus.ServiceRecord{"dispatch": {State: "standby", Detail: "another instance holds the lease", At: now.UnixMilli(), Host: "elsewhere"}}, "here", now, 100)
+	if strings.Contains(sb, "process is gone") || !strings.Contains(sb, "standby") {
+		t.Fatalf("a live standby shown as gone:\n%s", sb)
 	}
 	none := servicesPanel(nil, nil, "here", now, 100)
 	if !strings.Contains(none, "herdr tabs") {

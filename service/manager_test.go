@@ -136,6 +136,8 @@ func TestLaunchdPlistLivesOutsideLaunchAgentsAndRestartsOnFailureOnly(t *testing
 		"<string>--env</string><string>/cfg dir/agentbus/services/my-app.env</string>",
 		"<key>SuccessfulExit</key><false/>", "<key>ThrottleInterval</key><integer>10</integer>",
 		"<key>WorkingDirectory</key><string>/src/my app</string>",
+		"<key>StandardOutPath</key><string>/dev/null</string>",
+		"<key>StandardErrorPath</key><string>" + p.StateDir("my-app") + "/missions.crash.log</string>",
 	} {
 		if !strings.Contains(x, want) {
 			t.Fatalf("plist lacks %q:\n%s", want, x)

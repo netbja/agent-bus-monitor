@@ -108,18 +108,31 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 		return ok
 	}
 
-	if installed, err := b.ServicesInstalled(ctx); err != nil {
-		logf("cannot read %s: %v; retrying", bus.ServicesKey(p), err)
+	giveUpDetail := fmt.Sprintf("%d failed starts in %v; run agentbus up %s to try again", service.BudgetStarts, service.BudgetWindow, p)
+	// fail records a failed run. The one that spends the budget gives up here,
+	// in this process: systemd's start limit refuses the next start, so no
+	// later run would get to say it.
+	fail := func(why string) int {
 		_ = budget.Failed(d.Now())
+		if budget.Spent(d.Now()) {
+			logf("failed: %s; gave up: %s", why, giveUpDetail)
+			publish("gave-up", giveUpDetail, why)
+			return 0
+		}
+		logf("failed: %s; the manager restarts it", why)
+		publish("failed", "restarting", why)
 		return 1
+	}
+	if installed, err := b.ServicesInstalled(ctx); err != nil {
+		logf("cannot read %s: %v", bus.ServicesKey(p), err)
+		return fail(err.Error())
 	} else if !installed {
 		logf("project gone: %s has no services marker (deleted, or never set up with agentbus up); exiting", p)
 		return 0
 	}
 	if budget.Spent(d.Now()) {
-		detail := fmt.Sprintf("%d failed starts in %v; run agentbus up %s to try again", service.BudgetStarts, service.BudgetWindow, p)
-		logf("gave up: %s", detail)
-		publish("gave-up", detail, "")
+		logf("gave up: %s", giveUpDetail)
+		publish("gave-up", giveUpDetail, "")
 		return 0
 	}
 
@@ -283,10 +296,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	if why == "" {
 		why = fmt.Sprintf("exit %d", code)
 	}
-	_ = budget.Failed(d.Now())
-	logf("failed: %s; the manager restarts it", why)
-	publish("failed", "restarting", why)
-	return 1
+	return fail(why)
 }
 
 // leaseHeld: someone holds the lease of this service kind. An unreadable

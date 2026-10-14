@@ -120,6 +120,13 @@ func TestServiceCmdStartStopLogsRemove(t *testing.T) {
 	if code := runServiceCmd("demo", []string{"logs", "dispatch", "-n", "2"}, d, &out, &errw); code != 0 || out.String() != "b\nc\n" {
 		t.Fatalf("logs = %d %q %s", code, out.String(), errw.String())
 	}
+	// A crash before the log opened (launchd's stderr file) is shown too.
+	os.WriteFile(filepath.Join(filepath.Dir(log), "dispatch.crash.log"), []byte("panic: boom\n"), 0o600)
+	out.Reset()
+	runServiceCmd("demo", []string{"logs", "dispatch", "-n", "2"}, d, &out, &errw)
+	if !strings.Contains(out.String(), "crash output") || !strings.Contains(out.String(), "panic: boom") {
+		t.Fatalf("logs = %q", out.String())
+	}
 	os.MkdirAll(filepath.Dir(d.Paths.EnvFile("demo")), 0o700)
 	os.WriteFile(d.Paths.EnvFile("demo"), []byte("X=\"1\"\n"), 0o600)
 	if code := runServiceCmd("demo", []string{"remove"}, d, &out, &errw); code != 0 {
@@ -150,6 +157,11 @@ func TestServiceCmdWithoutAManagerSaysWhy(t *testing.T) {
 
 func TestServiceCmdRemoveAllNeedsNoProject(t *testing.T) {
 	m, d := cmdFixture(t)
+	b, r := dialMain(t)
+	t.Cleanup(func() { r.Del(context.Background(), bus.ServicesKey(b.Project())) })
+	b.MarkServicesInstalled(context.Background(), bus.ServicesInstall{Kinds: []string{"dispatch"}})
+	d.Bus = func(p string) (*bus.Bus, error) { return bus.Open(r, p) }
+	m.Install(service.Spec{Project: b.Project(), Kind: service.Dispatch})
 	m.Install(service.Spec{Project: "a", Kind: service.Dispatch})
 	m.Install(service.Spec{Project: "b", Kind: service.Missions})
 	var out, errw bytes.Buffer
@@ -158,6 +170,9 @@ func TestServiceCmdRemoveAllNeedsNoProject(t *testing.T) {
 	}
 	if units, _ := m.List(); len(units) != 0 {
 		t.Fatalf("left = %v", units)
+	}
+	if ok, _ := b.ServicesInstalled(context.Background()); ok {
+		t.Fatal("remove --all left the services marker")
 	}
 }
 

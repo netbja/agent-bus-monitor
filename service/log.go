@@ -113,3 +113,23 @@ func TailLog(path string, n int) ([]string, error) {
 }
 
 var _ io.WriteCloser = (*RotatingFile)(nil)
+
+// CrashFile is where launchd puts a service's stderr: only what the process
+// printed before its own log opened (a fatal error, a panic).
+func (p Paths) CrashFile(project, kind string) string {
+	return filepath.Join(p.StateDir(project), kind+".crash.log")
+}
+
+// RotateIfLarger moves path to path.1 when it is over max bytes, so a file
+// the manager appends to (launchd's stderr) stays bounded. A missing file is
+// not an error.
+func RotateIfLarger(path string, max int64) error {
+	st, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil || st.Size() <= max {
+		return err
+	}
+	return os.Rename(path, path+".1")
+}

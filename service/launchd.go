@@ -36,7 +36,8 @@ func xmlEscape(s string) string {
 
 // launchdPlist: restart on a non-zero exit only (KeepAlive SuccessfulExit
 // false), at most every 10 s; the service's own budget bounds the rest. Its
-// log is its own rotating file; launchd's stdout/stderr catch only a crash.
+// log is its own rotating file; launchd's stderr catches only a crash (rotated
+// by the service at each start), stdout goes nowhere.
 func launchdPlist(s Spec) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
@@ -52,13 +53,13 @@ func launchdPlist(s Spec) string {
 	if s.WorkDir != "" {
 		fmt.Fprintf(&b, "<key>WorkingDirectory</key><string>%s</string>\n", xmlEscape(s.WorkDir))
 	}
-	crash := filepath.Join(s.Paths.StateDir(s.Project), s.Kind+".crash.log")
+	crash := s.Paths.CrashFile(s.Project, s.Kind)
 	b.WriteString("<key>RunAtLoad</key><true/>\n")
 	b.WriteString("<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>\n")
 	b.WriteString("<key>ThrottleInterval</key><integer>10</integer>\n")
 	b.WriteString("<key>ExitTimeOut</key><integer>60</integer>\n")
 	b.WriteString("<key>ProcessType</key><string>Background</string>\n")
-	fmt.Fprintf(&b, "<key>StandardOutPath</key><string>%s</string>\n", xmlEscape(crash))
+	b.WriteString("<key>StandardOutPath</key><string>/dev/null</string>\n")
 	fmt.Fprintf(&b, "<key>StandardErrorPath</key><string>%s</string>\n", xmlEscape(crash))
 	b.WriteString("</dict></plist>\n")
 	return b.String()

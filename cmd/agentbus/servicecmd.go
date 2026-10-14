@@ -98,6 +98,7 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 				return 1
 			}
 			code := 0
+			cleared := map[string]bool{}
 			for _, u := range units {
 				if err := removeProjectService(m, d.Paths, u.Project, u.Kind); err != nil {
 					fmt.Fprintf(stderr, "error: %s %s: %v\n", u.Project, u.Kind, err)
@@ -105,6 +106,14 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 					continue
 				}
 				fmt.Fprintf(stdout, "removed %s %s\n", u.Project, u.Kind)
+				// Its last unit gone, the project's services marker goes too (best effort:
+				// the broker may be down during an uninstall).
+				if left, _ := projectKinds(m, u.Project); len(left) == 0 && !cleared[u.Project] && bus.ValidName(u.Project) {
+					cleared[u.Project] = true
+					if b, err := d.Bus(u.Project); err == nil {
+						_ = b.ClearServices(context.Background())
+					}
+				}
 			}
 			return code
 		}
@@ -209,6 +218,12 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 			}
 			for _, l := range lines {
 				fmt.Fprintln(stdout, l)
+			}
+			if crash, err := service.TailLog(d.Paths.CrashFile(project, k), 20); err == nil && len(crash) > 0 {
+				fmt.Fprintf(stdout, "== %s crash output (%s)\n", k, d.Paths.CrashFile(project, k))
+				for _, l := range crash {
+					fmt.Fprintln(stdout, l)
+				}
 			}
 		}
 	case "remove":
@@ -344,6 +359,7 @@ func mainServiceRun(project, host string, args []string) int {
 	if paths, err = service.PathsFrom(os.Getenv); err != nil {
 		return 0
 	}
+	_ = service.RotateIfLarger(paths.CrashFile(project, kind), service.LogMax)
 	var w io.Writer = os.Stderr
 	if lf, err := service.OpenLog(paths.LogFile(project, kind), service.LogMax, service.LogKeep); err == nil {
 		defer lf.Close()
@@ -358,14 +374,19 @@ func mainServiceRun(project, host string, args []string) int {
 	}
 	if u := os.Getenv("REDIS_URL"); u != "" {
 		if _, err := redis.ParseURL(u); err != nil {
-			fmt.Fprintf(w, "service: invalid configuration: REDIS_URL: %v; not restarting\n", err)
+			fmt.Fprintf(w, "service: invalid configuration: REDIS_URL is not a valid Redis URL (not shown: it may hold the password); not restarting\n")
 			return 0
 		}
 	}
 	client, err := bus.Connect(host)
 	if err != nil {
+		budget := service.Budget{Path: paths.BudgetFile(project, kind)}
+		_ = budget.Failed(time.Now())
+		if budget.Spent(time.Now()) { // systemd would refuse the next start: give up now
+			fmt.Fprintf(w, "service: broker unreachable: %v; gave up after %d failed starts in %v (agentbus up %s tries again)\n", err, service.BudgetStarts, service.BudgetWindow, project)
+			return 0
+		}
 		fmt.Fprintf(w, "service: broker unreachable: %v; the manager retries\n", err)
-		_ = service.Budget{Path: paths.BudgetFile(project, kind)}.Failed(time.Now())
 		return 1
 	}
 	b, err := bus.Open(client, project)
