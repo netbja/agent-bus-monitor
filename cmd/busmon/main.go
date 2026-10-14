@@ -465,7 +465,7 @@ func main() {
 		for range time.Tick(time.Second) {
 			tick++
 			pollOnce(ctx, b, st, tick)
-			app.QueueUpdateDraw(func() {})
+			app.QueueUpdateDraw(u.onTick)
 		}
 	}()
 

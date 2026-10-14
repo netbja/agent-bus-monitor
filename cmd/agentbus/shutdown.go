@@ -27,7 +27,7 @@ func shutdownBlockers(board map[string]bus.BoardEntry, agents map[string]bus.Age
 		if name == self {
 			continue
 		}
-		if a.State != "working" && a.State != "blocked" {
+		if a.State != "working" && a.State != "blocked" && a.State != "waiting" {
 			continue
 		}
 		if now.Sub(time.UnixMilli(a.TS)) > agentStaleAfter {

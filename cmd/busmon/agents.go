@@ -105,6 +105,8 @@ func stateLook(a *agentState) (glyph, word string, role Role, group int) {
 	switch a.state {
 	case "":
 		return GlyphNone, GlyphDash, RoleMuted, 6
+	case "waiting": // a person's decision: above everything (group 0)
+		return GlyphHuman, "waiting", RoleAttention, 0
 	case "blocked":
 		return GlyphBlocked, "blocked", RoleError, 1
 	case "working":
@@ -180,7 +182,7 @@ const updatedBarCells = 10
 const dormantAfter = 24 * time.Hour
 
 func dormant(a *agentState, isPilot bool, now time.Time) bool {
-	return !isPilot && !a.armed && a.waiting == 0 && !a.lastSeen.IsZero() && now.Sub(a.lastSeen) > dormantAfter
+	return !isPilot && !a.armed && a.waiting == 0 && a.state != "waiting" && !a.lastSeen.IsZero() && now.Sub(a.lastSeen) > dormantAfter
 }
 
 // visibleAgents is the Agents panel's roster: every agent with all, else the
@@ -258,7 +260,13 @@ func agentHeader(tier Tier, width int) Line {
 func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now time.Time) Line {
 	c := agentColsFor(tier)
 	glyph, word, role, _ := stateLook(a)
-	l := Line{col(glyph, c.glyph, role), col(Preview(name), c.name, RoleText), col(word, c.state, role)}
+	bold := false
+	if a.state == "waiting" {
+		role, bold = pulse(now)
+	}
+	g, w := col(glyph, c.glyph, role), col(word, c.state, role)
+	g.Bold, w.Bold = bold, bold
+	l := Line{g, col(Preview(name), c.name, RoleText), w}
 	l = append(l, cell(updatedCell(a, tier, now), c.updated)...)
 	l = append(l, cell([]Seg{queueCell(a, tier)}, c.queue)...)
 	if c.ctx > 0 {
@@ -289,4 +297,29 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 	}
 	l = append(l, Seg{Text: Preview(a.message), Role: RoleText})
 	return FitLine(l, width)
+}
+
+// pulse is the slow fade of something waiting for a person: one step per
+// second (busmon redraws every second), bright, normal, dim, normal.
+func pulse(now time.Time) (Role, bool) {
+	switch now.Unix() % 4 {
+	case 0:
+		return RoleAttention, true
+	case 2:
+		return RoleMuted, false
+	}
+	return RoleAttention, false
+}
+
+// asksFor lists the agents waiting for a person's decision, sorted: the
+// header badge and the bell count them.
+func asksFor(m map[string]*agentState) []string {
+	var out []string
+	for n, a := range m {
+		if a.state == "waiting" {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

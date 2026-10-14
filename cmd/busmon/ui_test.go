@@ -270,10 +270,14 @@ func TestEscLadder(t *testing.T) {
 	h.draw(160, 45)
 	h.u.filter = parseFilter("tests")
 	h.key(key(tcell.KeyTab)) // Activity
-	h.key(key(tcell.KeyUp))  // select newest, leaves live
+	h.key(key(tcell.KeyUp))  // select newest; auto-scroll stays on
 	act := h.u.lists[PanelActivity]
+	if act.Selected() == "" || !act.Live() {
+		t.Fatalf("Up: sel %q live %v, want a selection and still live", act.Selected(), act.Live())
+	}
+	h.key(runeKey('f')) // auto-scroll off, selection kept
 	if act.Selected() == "" || act.Live() {
-		t.Fatal("Up did not select")
+		t.Fatalf("f: sel %q live %v", act.Selected(), act.Live())
 	}
 	h.key(key(tcell.KeyEscape))
 	if act.Selected() != "" || act.Live() {

@@ -40,7 +40,7 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 2. **The `agentbus` CLI (`cmd/agentbus`)**
    - Command-line tool used by agents and scripts to interact with the bus:
-     - Publish state/heartbeat: `agentbus status <agent> <working|idle|blocked|done> <message>`
+     - Publish state/heartbeat: `agentbus status <agent> <working|idle|blocked|waiting|done> <message>`
      - Dispatch directives: `agentbus cmd [--ref T] <agent> <directive>`
      - Submit progress reports: `agentbus report <agent> <note>`
      - Track tasks on the shared board: `agentbus board`
@@ -242,12 +242,17 @@ agent names, no herdr-plus template):
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
   Services overlay, with the last error and the tail of each log.
+- **An agent waiting for you.** When master (or any agent) needs your decision it declares
+  `waiting`: it moves to the top of Agents with a pulsing ♙, the header reads `♙ 1 waiting for
+  you`, and the terminal bell rings once per new question, which herdr shows on the busmon tab.
+  Answer with `@master …`; the agent then declares `working` again.
 - **The `updated` gauge** in Agents (`●●●●●●●○○○ 3m`) is how fresh the agent's last declared
   state is: full right after the declaration, empty after 10 minutes, then the age alone. It does
   not measure work in progress.
 - **Activity auto-scroll.** The Activity title reads `auto-scroll on` while new lines scroll into
   view. `f` turns it off (the view stays put and counts what arrives: `auto-scroll off · 3 new`)
-  and on again; moving up in Activity also turns it off, `End` back on. Today's day separator
+  and on again; moving, clicking or opening a line keeps it on. A wheel scroll up turns it off
+  (you are reading back), `End` turns it on. Today's day separator
   reads `Wed 2026-10-14 - (today)`.
 - **Agents that are gone** (a replaced team, a renamed role) keep their last declared state:
   nothing guesses that an agent died. busmon leaves out of the Agents panel, and out of `@all`, an

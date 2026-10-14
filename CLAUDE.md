@@ -256,6 +256,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   then `y` forgets an agent (`Bus.ForgetAgent`, `agentbus agents forget`, refused while it listens
   or declared within 10 min) or closes an untracked thread with a `human=yes`, `wake=no` reply
   (`Bus.HumanClose`). The Requests count covers only threads younger than `bus.DefaultHorizon`.
+  Activity auto-scroll (v0.12.3): selecting, clicking or opening a line keeps it live; only `f`
+  (`ListView.Pause`) and a wheel-up leave it.
 
 ### How the bus is actually consumed (lives outside this repo)
 
@@ -351,8 +353,10 @@ It never touches Redis — see README "Deployment topology".
   in `main()` will.
 - **`ValidName` replaced the `ValidAgents` allowlist.** Agent names must match
   `^[a-z][a-z0-9_-]{0,31}$`; `agentbus` rejects anything else. No code change needed to add agents.
-- **`ValidStates`** (`working`, `idle`, `blocked`, `done`) is still a hardcoded map in `bus.go`.
-  Adding a state means editing that map.
+- **`ValidStates`** (`working`, `idle`, `blocked`, `waiting`, `done`) is still a hardcoded map in
+  `bus.go`. Adding a state means editing that map. `waiting` (v0.12.3) means a *person* must decide:
+  busmon sorts it first, pulses ♙, counts it in the header and rings the bell once per new
+  declaration (`ui.onTick`, on the event loop after the poll, never in a draw).
 - **Connection resolution order** (matches the legacy `agent_bus.py`): `REDIS_URL` wins if set;
   otherwise `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` (defaults `localhost`/`6380`/`AgentBus2025!`).
   A non-empty `--host` overrides `REDIS_HOST` only. Note the **non-standard port 6380** (compose

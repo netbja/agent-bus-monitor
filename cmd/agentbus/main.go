@@ -6,7 +6,7 @@
 //
 // Usage:
 //
-//	agentbus --project P status    <agent> <working|idle|blocked|done> [msg...]
+//	agentbus --project P status    <agent> <working|idle|blocked|waiting|done> [msg...]
 //	agentbus --project P report    <agent> [--auto] <msg...>
 //	agentbus --project P reports   [<id>]         # list recent reports; <id> prints one report's full retained text
 //	agentbus --project P notify    <msg...>

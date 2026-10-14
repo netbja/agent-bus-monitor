@@ -4,6 +4,16 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.12.3 — an agent waiting for you; auto-scroll stays on
+
+- New state `waiting` (a person must decide): busmon sorts it first with a pulsing ♙, shows
+  `♙ N waiting for you` in the header and rings the terminal bell once per new question. The master
+  skill declares it for every decision it needs from the human.
+- Activity: selecting, clicking or opening a line no longer turns auto-scroll off; only `f` and a
+  wheel scroll up do.
+
+[Notes](docs/releases/v0.12.3.md)
+
 ## v0.12.2 — Activity auto-scroll toggle, dotted freshness gauge
 
 - busmon: `f` turns Activity's auto-scroll off and on, from any panel; the title says

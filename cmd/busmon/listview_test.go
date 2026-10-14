@@ -195,9 +195,10 @@ func TestTailModeAndPause(t *testing.T) {
 		t.Fatalf("live tail did not follow: top %d", l.Scroll().Top)
 	}
 	press(l, key(tcell.KeyUp))
-	if l.Live() || l.Selected() != "k11" {
-		t.Fatalf("Up from live: live %v sel %q, want paused on newest k11", l.Live(), l.Selected())
+	if !l.Live() || l.Selected() != "k11" {
+		t.Fatalf("Up from live: live %v sel %q, want still live with newest k11 selected", l.Live(), l.Selected())
 	}
+	l.Pause()
 	l.SetItems(numbered(15))
 	drawList(t, l)
 	if l.Scroll().Top != 8 {
@@ -216,7 +217,7 @@ func TestTailModeAndPause(t *testing.T) {
 	if !l.Live() {
 		t.Fatal("Resume did not return to live")
 	}
-	want := []string{"k11/false", "/true", "/false", "/true"}
+	want := []string{"k11/true", "k11/false", "/true", "/false", "/true"}
 	if fmt.Sprint(changes) != fmt.Sprint(want) {
 		t.Fatalf("OnChange %v, want %v", changes, want)
 	}
