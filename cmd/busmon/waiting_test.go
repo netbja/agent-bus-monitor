@@ -28,16 +28,52 @@ func TestWaitingAgentComesFirstWithThePersonGlyph(t *testing.T) {
 	}
 }
 
-func TestPulseFadesOverFourSeconds(t *testing.T) {
-	base := time.Unix(1_800_000_000, 0) // a multiple of 4
-	var roles []Role
-	var bolds []bool
-	for i := 0; i < 4; i++ {
-		r, b := pulse(base.Add(time.Duration(i) * time.Second))
-		roles, bolds = append(roles, r), append(bolds, b)
+func TestFadeBreathesBetweenTwentyAndFullOverThreeSeconds(t *testing.T) {
+	base := time.UnixMilli(1_800_000_000_000 - 1_800_000_000_000%3000)
+	at := func(ms int) int { return fadeLevel(base.Add(time.Duration(ms) * time.Millisecond)) }
+	if at(0) != 20 || at(1500) != 100 || at(3000) != 20 {
+		t.Fatalf("fade 0/1.5/3s = %d/%d/%d", at(0), at(1500), at(3000))
 	}
-	if roles[0] != RoleAttention || !bolds[0] || roles[1] != RoleAttention || bolds[1] || roles[2] != RoleMuted || roles[3] != RoleAttention {
-		t.Fatalf("roles %v bold %v", roles, bolds)
+	if q := at(750); q <= 20 || q >= 100 {
+		t.Fatalf("fade at 0.75s = %d, want in between", q)
+	}
+}
+
+func TestOnlyTheWaitingWordFades(t *testing.T) {
+	now := time.Now()
+	st := waitingShared(now)
+	row := agentRow("master", st.agents["master"], false, TierWide, 120, now)
+	faded := 0
+	for _, s := range row {
+		if s.Fade > 0 {
+			faded++
+			if !strings.Contains(s.Text, "waiting") {
+				t.Fatalf("faded segment %q", s.Text)
+			}
+		}
+	}
+	if faded != 1 {
+		t.Fatalf("%d faded segments", faded)
+	}
+	if hl := headerLines(headerData{project: "p", health: health{ok: true}, asks: 1, now: now}, 160, TierWide)[0]; true {
+		for _, s := range hl {
+			if s.Fade > 0 || (strings.Contains(s.Text, "waiting for you") && s.Bold) {
+				t.Fatalf("the header must stay still: %+v", s)
+			}
+		}
+	}
+}
+
+func TestFadedColourRunsFromTheLineColourToTheRole(t *testing.T) {
+	saved := th
+	defer func() { th = saved }()
+	th, _ = ResolveTheme("dark", "", "", false, 1<<24)
+	if th.Faded(RoleAttention, 100) != th.colors[RoleAttention] || th.Faded(RoleAttention, 0) != th.colors[RoleLine] {
+		t.Fatal("fade ends")
+	}
+	th, _ = ResolveTheme("dark", "", "", false, 16)
+	if th.Animated() || th.Faded(RoleAttention, 20) != th.colors[RoleAttention] {
+		t.Fatal("16 colours: no fade, full colour")
 	}
 }
 

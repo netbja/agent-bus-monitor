@@ -355,7 +355,7 @@ It never touches Redis — see README "Deployment topology".
   `^[a-z][a-z0-9_-]{0,31}$`; `agentbus` rejects anything else. No code change needed to add agents.
 - **`ValidStates`** (`working`, `idle`, `blocked`, `waiting`, `done`) is still a hardcoded map in
   `bus.go`. Adding a state means editing that map. `waiting` (v0.12.3) means a *person* must decide:
-  busmon sorts it first, pulses ♙, counts it in the header and rings the bell once per new
+  busmon sorts it first with ♙, fades the word `waiting` in and out (3 s, `fadeLevel`, ~10 redraws a second only while one waits; true colour only), counts it in the header and rings the bell once per new
   declaration (`ui.onTick`, on the event loop after the poll, never in a draw).
 - **Connection resolution order** (matches the legacy `agent_bus.py`): `REDIS_URL` wins if set;
   otherwise `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` (defaults `localhost`/`6380`/`AgentBus2025!`).

@@ -469,6 +469,15 @@ func main() {
 		}
 	}()
 
+	// The fade of a waiting agent's state: redraws only while one waits.
+	go func() {
+		for range time.Tick(fadeFrame) {
+			if u.animate.Load() {
+				app.QueueUpdateDraw(func() {})
+			}
+		}
+	}()
+
 	if err := app.SetRoot(u.pages, true).EnableMouse(true).SetFocus(u.lists[PanelAgents]).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

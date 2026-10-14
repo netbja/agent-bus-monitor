@@ -254,7 +254,7 @@ noms d'onglets et d'agents, sans template herdr-plus) :
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) ouvre la fenêtre
   Services, avec la dernière erreur et la fin de chaque journal.
 - **Un agent qui vous attend.** Quand master (ou un autre agent) a besoin de votre décision, il
-  déclare `waiting` : il passe en tête d'Agents avec un ♙ qui pulse, l'en-tête affiche `♙ 1
+  déclare `waiting` : il passe en tête d'Agents avec ♙ et le mot `waiting` qui s'estompe et revient lentement, l'en-tête affiche `♙ 1
   waiting for you`, et la cloche du terminal sonne une fois par nouvelle question, ce que herdr
   signale sur l'onglet busmon. Répondez avec `@master …` ; l'agent repasse ensuite en `working`.
 - **La jauge `updated`** d'Agents (`●●●●●●●○○○ 3m`) indique la fraîcheur du dernier état déclaré

@@ -12,6 +12,7 @@ type Seg struct {
 	Role    Role
 	Bold    bool
 	Reverse bool // the NO_COLOR stand-in for a highlight (active tab)
+	Fade    int  // 1-100: drawn at that intensity, between RoleLine and its colour (true colour only); 0 = full
 }
 
 type Line []Seg
@@ -135,11 +136,11 @@ func appendSegment(l Line, text string, style Seg) Line {
 	if text == "" {
 		return l
 	}
-	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold && l[n-1].Reverse == style.Reverse {
+	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold && l[n-1].Reverse == style.Reverse && l[n-1].Fade == style.Fade {
 		l[n-1].Text += text
 		return l
 	}
-	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold, Reverse: style.Reverse})
+	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold, Reverse: style.Reverse, Fade: style.Fade})
 }
 
 // FitLine pads AFTER the ellipsis, consistently with Fit. It never mutates l.
@@ -184,6 +185,9 @@ func DrawLine(s tcell.Screen, x, y, w int, l Line, selected bool) {
 		style := th.Style(seg.Role)
 		if selected {
 			style = th.Selected(seg.Role)
+		}
+		if seg.Fade > 0 {
+			style = style.Foreground(th.Faded(seg.Role, seg.Fade))
 		}
 		if seg.Bold {
 			style = style.Bold(true)

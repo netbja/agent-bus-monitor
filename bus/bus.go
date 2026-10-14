@@ -61,7 +61,7 @@ func verdictMaxLen() int {
 
 var ValidStates = map[string]bool{
 	"working": true, "idle": true, "blocked": true, "done": true,
-	"waiting": true, // waiting for a person's decision: busmon pulses it and rings once
+	"waiting": true, // waiting for a person's decision: busmon fades the word and rings once
 }
 
 type silentLogger struct{}

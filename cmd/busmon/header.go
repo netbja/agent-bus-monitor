@@ -71,8 +71,7 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 		add(Line{{Text: "(" + Preview(d.health.err) + ")", Role: RoleMuted}}, 9, second)
 	}
 	if d.asks > 0 {
-		role, bold := pulse(d.now)
-		add(Line{{Text: fmt.Sprintf("%s %d waiting for you", GlyphHuman, d.asks), Role: role, Bold: bold}}, 2, 0)
+		add(Line{{Text: fmt.Sprintf("%s %d waiting for you", GlyphHuman, d.asks), Role: RoleAttention}}, 2, 0)
 	}
 	if d.self != "" {
 		add(Line{{Text: Preview(humanLabel(d.self, d.pilot)), Role: RoleText}}, 4, second)
