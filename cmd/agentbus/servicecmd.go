@@ -372,6 +372,12 @@ func mainServiceRun(project, host string, args []string) int {
 		fmt.Fprintf(w, "service: invalid configuration: %v (agentbus up %s rewrites it); not restarting\n", envErr, project)
 		return 0
 	}
+	// A spent budget gives up before anything else can fail (launchd has no
+	// start limit: this is what bounds a broker that stays down).
+	if budget := (service.Budget{Path: paths.BudgetFile(project, kind)}); budget.Spent(time.Now()) {
+		fmt.Fprintf(w, "service: gave up: %d failed starts in %v; agentbus up %s tries again\n", service.BudgetStarts, service.BudgetWindow, project)
+		return 0
+	}
 	if u := os.Getenv("REDIS_URL"); u != "" {
 		if _, err := redis.ParseURL(u); err != nil {
 			fmt.Fprintf(w, "service: invalid configuration: REDIS_URL is not a valid Redis URL (not shown: it may hold the password); not restarting\n")

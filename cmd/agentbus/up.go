@@ -33,7 +33,6 @@ type upDeps struct {
 	Exe      func() (string, error) // this agentbus, which the units run
 	Environ  []string               // the service environment is picked from it
 	Mark     func(project string, inst bus.ServicesInstall) error
-	Busy     func(project, kind string) bool // the service reports work in progress (missions busy)
 	Host     string
 }
 
@@ -92,7 +91,7 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	}
 	failed := false
 	if m != nil {
-		if err := startServices(d, m, project, tpl.WorkingDir, kinds, stdout); err != nil {
+		if err := startServices(d, m, project, tpl.WorkingDir, herdrSession(args, d.Environ), kinds, stdout); err != nil {
 			fmt.Fprintf(stderr, "agentbus up: services: %v\n", err)
 			if errors.Is(err, errNotInstalled) {
 				return 1
@@ -106,7 +105,13 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		}
 		// A template written in service mode lacks the tabs: write it again.
 		if missingServiceTab(tpl, kinds) {
-			if err := d.Bootstrap(append([]string{"new"}, args...)); err != nil {
+			// Rewrite it in place: without a path bootstrap would take $PWD, so
+			// the project keeps the directory its template already names.
+			newArgs := append([]string{"new"}, args...)
+			if (len(args) < 2 || strings.HasPrefix(args[1], "--")) && tpl.WorkingDir != "" {
+				newArgs = append([]string{"new", project, tpl.WorkingDir}, args[1:]...)
+			}
+			if err := d.Bootstrap(newArgs); err != nil {
 				fmt.Fprintf(stderr, "agentbus up: bootstrap failed: %v\n", err)
 				return 1
 			}
@@ -144,6 +149,22 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	return code
 }
 
+// herdrSession is the session the project opens in, as bootstrap resolves
+// it: --session, else the caller's HERDR_SESSION, else the project name.
+func herdrSession(args, environ []string) string {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--session" {
+			return args[i+1]
+		}
+	}
+	for _, kv := range environ {
+		if v, ok := strings.CutPrefix(kv, "HERDR_SESSION="); ok && v != "" {
+			return v
+		}
+	}
+	return args[0]
+}
+
 // isServiceTab is a template tab that runs dispatch or missions, which a
 // service runs instead (an older template still has them).
 func isServiceTab(t upTab) bool {
@@ -166,7 +187,7 @@ var errNotInstalled = errors.New("services not installed")
 
 // startServices writes the environment file, the marker and the units, then
 // starts each service that is not already running with this configuration.
-func startServices(d upDeps, m service.Manager, project, workdir string, kinds []string, stdout io.Writer) error {
+func startServices(d upDeps, m service.Manager, project, workdir, session string, kinds []string, stdout io.Writer) error {
 	exe, err := d.Exe()
 	if err != nil {
 		return fmt.Errorf("%w: cannot find this agentbus: %v", errNotInstalled, err)
@@ -174,7 +195,12 @@ func startServices(d upDeps, m service.Manager, project, workdir string, kinds [
 	if strings.Contains(exe, "go-build") || !filepath.IsAbs(exe) {
 		return fmt.Errorf("%w: a unit must run an installed agentbus, not %s (./setup.sh install, then run that one)", errNotInstalled, exe)
 	}
-	envChanged, err := service.WriteEnvFile(d.Paths.EnvFile(project), service.CollectEnv(d.Environ))
+	env := service.CollectEnv(d.Environ)
+	if env["HERDR_SESSION"] != session { // another session's socket would reach the wrong server
+		delete(env, "HERDR_SOCKET_PATH")
+	}
+	env["HERDR_SESSION"] = session
+	envChanged, err := service.WriteEnvFile(d.Paths.EnvFile(project), env)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNotInstalled, err)
 	}
@@ -194,21 +220,28 @@ func startServices(d upDeps, m service.Manager, project, workdir string, kinds [
 		}
 		_ = service.Budget{Path: d.Paths.BudgetFile(project, k)}.Reset()
 		st, _ := m.State(project, k)
+		reconfigure := changed || envChanged
 		verb := "started"
 		switch {
-		case st.Active && !changed && !envChanged:
+		case st.Active && !reconfigure:
 			fmt.Fprintf(stdout, "%s: already running (%s)\n", k, m.Name())
 			continue
-		case st.Active && d.Busy != nil && d.Busy(project, k):
-			// Never interrupt an integration for a new configuration.
-			fmt.Fprintf(stdout, "%s: busy, left running; its new configuration applies at its next restart (agentbus --project %s service restart %s when it is idle)\n", k, project, k)
+		case st.Active && k == service.Missions:
+			// Never stop a running conductor for a new configuration: its
+			// published state can be seconds old, and a mission may have just
+			// started an integration.
+			fmt.Fprintf(stdout, "%s: running, left as is; its new configuration applies at its next restart (agentbus --project %s service restart %s when no change is integrating)\n", k, project, k)
 			continue
-		case st.Active:
+		case reconfigure:
+			// A loaded but stopped launchd job keeps its old definition until it
+			// is booted out: reload before the start, running or not.
 			if err := m.Stop(project, k); err != nil {
 				errs = append(errs, fmt.Errorf("%s: %v", k, err))
 				continue
 			}
-			verb = "restarted (its configuration changed)"
+			if st.Active {
+				verb = "restarted (its configuration changed)"
+			}
 		}
 		if err := m.Start(project, k); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %v (agentbus --project %s service logs %s)", k, err, project, k))
@@ -415,21 +448,6 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			return b.MarkServicesInstalled(ctx, inst)
-		},
-		Busy: func(project, kind string) bool {
-			c, err := bus.Connect("")
-			if err != nil {
-				return true // unknown: do not interrupt
-			}
-			defer c.Close()
-			b, err := bus.Open(c, project)
-			if err != nil {
-				return true
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_, recs, err := b.ServiceStates(ctx)
-			return err != nil || recs[kind].State == "busy"
 		},
 		Host: host,
 	}

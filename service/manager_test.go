@@ -118,6 +118,20 @@ func TestSystemdInstallStartStopRemove(t *testing.T) {
 	}
 }
 
+func TestSystemdRemoveKeepsTheUnitWhenTheStopFails(t *testing.T) {
+	s, p := testSpec(t, Dispatch)
+	f := &fakeRun{}
+	m := Systemd{Run: f.run, Paths: p}
+	m.Install(s)
+	f.fails = map[string]bool{"--user stop": true}
+	if err := m.Remove(s.Project, s.Kind); err == nil {
+		t.Fatal("remove succeeded although the service did not stop")
+	}
+	if _, err := os.Stat(filepath.Join(p.ConfigHome, "systemd", "user", UnitName(s.Project, s.Kind))); err != nil {
+		t.Fatal("the unit of a service still running was deleted")
+	}
+}
+
 func TestSystemdStateOfAnAbsentUnit(t *testing.T) {
 	_, p := testSpec(t, Dispatch)
 	f := &fakeRun{answers: map[string]string{"--user show": "LoadState=not-found\nActiveState=inactive\nSubState=dead\nMainPID=0\n"}}

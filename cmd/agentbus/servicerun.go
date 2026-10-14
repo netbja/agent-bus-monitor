@@ -65,6 +65,31 @@ func (l *lastError) last() string {
 	return l.line
 }
 
+// incidentWindow: the conductor's latest incident stays in its state this long.
+const incidentWindow = 10 * time.Minute
+
+// lastIncident is the conductor's latest logged incident and when it came.
+type lastIncident struct {
+	mu   sync.Mutex
+	text string
+	at   time.Time
+}
+
+func (l *lastIncident) set(s string) {
+	l.mu.Lock()
+	l.text, l.at = s, time.Now()
+	l.mu.Unlock()
+}
+
+func (l *lastIncident) recent(window time.Duration) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.text == "" || time.Since(l.at) > window {
+		return ""
+	}
+	return l.text + " (" + time.Since(l.at).Truncate(time.Second).String() + " ago)"
+}
+
 // serviceState is what the heartbeat publishes; the loop updates it.
 type serviceState struct {
 	mu                   sync.Mutex
@@ -163,6 +188,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	}
 
 	errs := &lastError{w: logw}
+	incident := &lastIncident{}
 	st := &serviceState{}
 	st.set("starting", "", "")
 	publish("starting", "", "")
@@ -189,7 +215,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 				}
 				if kind == service.Missions {
 					if state, detail := missionsActivity(runCtx, b); state != "" {
-						st.set(state, detail, "")
+						st.set(state, detail, incident.recent(incidentWindow))
 					}
 				}
 				state, detail, e := st.get()
@@ -212,7 +238,12 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 
 		switch kind {
 		case service.Dispatch:
-			code = d.RunDispatch(runCtx, b, escalate, func(held bool) { leased.Store(held) }, errs)
+			code = d.RunDispatch(runCtx, b, escalate, func(held bool) {
+				leased.Store(held)
+				if !held { // not ready again before it re-acquires
+					st.set("starting", "re-acquiring the dispatch lease", "")
+				}
+			}, errs)
 		case service.Missions:
 			cfg := mission.DefaultRunConfig()
 			cfg.StateHome = d.Paths.StateHome + "/agentbus"
@@ -220,7 +251,11 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			if escalate != "" {
 				cfg.EscalateTo = escalate
 			}
-			cfg.Log = func(format string, a ...any) { fmt.Fprintf(errs, time.Now().Format("15:04:05 ")+format+"\n", a...) }
+			cfg.Log = func(format string, a ...any) {
+				line := fmt.Sprintf(format, a...)
+				fmt.Fprintf(errs, "%s%s\n", time.Now().Format("15:04:05 "), line)
+				incident.set(line) // the conductor logs only incidents
+			}
 			runErr = d.RunMissions(runCtx, b, cfg)
 		}
 		cancel()

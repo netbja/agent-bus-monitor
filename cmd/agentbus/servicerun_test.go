@@ -110,6 +110,56 @@ func TestServiceRunDispatchReadyWaitingHerdrStopped(t *testing.T) {
 	waitState(t, b, service.Dispatch, "stopped")
 }
 
+// Losing the lease leaves "ready" at once: it re-acquires before it is ready again.
+func TestServiceRunDispatchLeavesReadyWhenTheLeaseIsLost(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	lose := make(chan struct{})
+	d.RunDispatch = func(ctx context.Context, _ *bus.Bus, _ string, onLease func(bool), _ io.Writer) int {
+		onLease(true)
+		<-lose
+		onLease(false)
+		<-ctx.Done()
+		return 0
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { var log bytes.Buffer; serviceRun(ctx, b, service.Dispatch, nil, d, &log) }()
+	waitState(t, b, service.Dispatch, "ready")
+	close(lose)
+	if r := waitState(t, b, service.Dispatch, "starting"); !strings.Contains(r.Detail, "lease") {
+		t.Fatalf("record = %+v", r)
+	}
+}
+
+// The conductor logs only incidents (a failed pass, ops, the inbox); the
+// latest one is published with its state, so a failing conductor never looks
+// merely busy.
+func TestServiceRunMissionsPublishesTheConductorsLastIncident(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	d.RunMissions = func(ctx context.Context, _ *bus.Bus, cfg mission.RunConfig) error {
+		cfg.Log("pass: %v", "git merge: conflict in a.go")
+		<-ctx.Done()
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { var log bytes.Buffer; serviceRun(ctx, b, service.Missions, []string{"--repo", repo}, d, &log) }()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if r := record(t, b, service.Missions); r.State == "idle" && strings.Contains(r.Error, "conflict in a.go") {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("record = %+v", record(t, b, service.Missions))
+}
+
 func TestServiceRunFailureCountsAgainstTheBudget(t *testing.T) {
 	b, d := runFixture(t)
 	mark(t, b)

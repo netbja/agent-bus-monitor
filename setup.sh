@@ -308,7 +308,7 @@ do_uninstall() {
     if ask "stop and remove the $n project services (dispatch/missions units; their data and logs are kept)?" y; then
       for ab in "$BIN_DIR/agentbus" "$REPO_DIR/agentbus"; do [ -x "$ab" ] && break; done
       if "$ab" service remove --all >"$TMP_DIR/services.log" 2>&1; then log_ok "removed $n project services"
-      else show_log "$TMP_DIR/services.log"; log_warn "some project services could not be removed (agentbus service list)"; fi
+      else show_log "$TMP_DIR/services.log"; log_fatal "some project services could not be stopped or removed (agentbus service list); nothing else was removed"; fi
     fi
   fi
   for bin_name in agentbus busmon; do

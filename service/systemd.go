@@ -79,7 +79,11 @@ func (m Systemd) Remove(project, kind string) error {
 	if _, err := os.Stat(p); os.IsNotExist(err) {
 		return nil
 	}
-	_ = m.ctl("stop", UnitName(project, kind))
+	// A service that did not stop keeps its unit: deleting it would leave a
+	// worker running that nothing manages any more.
+	if err := m.ctl("stop", UnitName(project, kind)); err != nil {
+		return err
+	}
 	if err := os.Remove(p); err != nil {
 		return err
 	}

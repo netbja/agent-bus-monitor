@@ -57,6 +57,7 @@ cat > "$T/fakebin/systemctl" <<'EOS'
 echo "$*" >> "$SYSTEMCTL_LOG"
 case "$*" in
   "--user show-environment") echo "HOME=/x" ;;
+  "--user stop "*) [ -n "${SYSTEMCTL_FAIL_STOP:-}" ] && exit 1 ;;
   "--user show "*) printf 'LoadState=loaded\nActiveState=active\nSubState=running\nMainPID=4242\n' ;;
 esac
 exit 0
@@ -185,6 +186,10 @@ assert_exit 1 "uninstall --dry-run is refused" -- "$SETUP" uninstall --yes --dry
 assert_eq "$([[ -x "$T/bin/agentbus" ]] && echo kept || echo gone)" "kept" "and removes nothing"
 # a SKILLS_DEST with a space is one directory
 mkdir -p "$T/My Skills" && ln -s "$T/repo/skills/agent-bus" "$T/My Skills/agent-bus"
+# A service that will not stop halts the uninstall: nothing else is removed
+fail_out="$(SYSTEMCTL_FAIL_STOP=1 $(command -v setsid || true) "$SETUP" uninstall --yes --bin-dir "$T/bin" < /dev/null 2>&1)"; rc=$?
+assert_eq "$rc" "1" "uninstall stops when a project service cannot be stopped"
+assert_eq "$([[ -x "$T/bin/agentbus" && -e "$T/cfg/systemd/user/agentbus-demo-dispatch.service" ]] && echo kept || echo removed)" "kept" "and keeps the binaries and the unit"
 # uninstall without a terminal and without --yes refuses to guess
 command -v setsid >/dev/null && assert_exit 1 "uninstall with no terminal and no --yes stops" -- setsid bash -c "'$SETUP' uninstall --bin-dir '$T/bin' < /dev/null"
 # uninstall --yes takes the cautious defaults: ours removed, herdr-plus kept

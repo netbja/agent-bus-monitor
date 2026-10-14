@@ -274,24 +274,86 @@ func TestUpRestartsOnlyAServiceWhoseConfigurationChanged(t *testing.T) {
 	}
 }
 
-// A re-run of up from another shell changes the env file; a busy conductor
-// is not restarted for it in the middle of an integration.
-func TestUpDoesNotRestartABusyConductor(t *testing.T) {
+// A running conductor is never restarted by up for a new configuration: its
+// published state can be seconds old, and a mission may have just started.
+func TestUpNeverRestartsARunningConductor(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
 	u := withServices(t, &deps)
-	busy := false
-	deps.Busy = func(project, kind string) bool { return busy && kind == service.Missions }
 	var out, errw bytes.Buffer
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	deps.Environ = append(deps.Environ, "LANG=fr_FR.UTF-8") // another shell
-	busy = true
 	u.m.calls, out = nil, bytes.Buffer{}
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	if u.m.saw("stop demo missions") || !u.m.saw("stop demo dispatch") {
 		t.Fatalf("calls = %v", u.m.calls)
 	}
-	if !strings.Contains(out.String(), "missions: busy") || !strings.Contains(out.String(), "service restart missions") {
+	if !strings.Contains(out.String(), "missions: running, left as is") || !strings.Contains(out.String(), "service restart missions") {
 		t.Fatalf("out = %q", out.String())
+	}
+}
+
+// A changed unit of a stopped job is reloaded (launchd keeps a loaded
+// definition until bootout), not kicked with the old one.
+func TestUpReloadsAChangedUnitThatIsNotRunning(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	var out, errw bytes.Buffer
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	u.m.Stop("demo", service.Dispatch)
+	u.exe = "/opt/ab2/agentbus"
+	u.m.calls = nil
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	stop, start := -1, -1
+	for i, c := range u.m.calls {
+		if c == "stop demo dispatch" && stop < 0 {
+			stop = i
+		}
+		if c == "start demo dispatch" {
+			start = i
+		}
+	}
+	if stop < 0 || start < stop {
+		t.Fatalf("a changed stopped unit was not reloaded before its start: %v", u.m.calls)
+	}
+}
+
+// The herdr session the project opens in reaches the services: --session,
+// else the caller's, else the project name, as bootstrap resolves it. A
+// socket of another session is not carried over.
+func TestUpGivesTheServicesTheProjectsHerdrSession(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=mine", "HERDR_SOCKET_PATH=/run/herdr/mine.sock"}
+	var out, errw bytes.Buffer
+	runUp([]string{"demo", work, "--session", "team"}, deps, &out, &errw)
+	env, _ := service.LoadEnvFile(u.paths.EnvFile("demo"))
+	if env["HERDR_SESSION"] != "team" || env["HERDR_SOCKET_PATH"] != "" {
+		t.Fatalf("--session: env = %v", env)
+	}
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	env, _ = service.LoadEnvFile(u.paths.EnvFile("demo"))
+	if env["HERDR_SESSION"] != "mine" || env["HERDR_SOCKET_PATH"] != "/run/herdr/mine.sock" {
+		t.Fatalf("caller's session: env = %v", env)
+	}
+	deps.Environ = []string{"PATH=/bin"}
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	env, _ = service.LoadEnvFile(u.paths.EnvFile("demo"))
+	if env["HERDR_SESSION"] != "demo" {
+		t.Fatalf("outside herdr: env = %v", env)
+	}
+}
+
+// The tab fallback rewrites the template but keeps the project's directory,
+// even when up runs elsewhere without a path.
+func TestUpTabsFallbackKeepsTheProjectDirectory(t *testing.T) {
+	work, _, _, boot, deps := upFixture(t)
+	withServices(t, &deps)
+	var out, errw bytes.Buffer
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	*boot = nil
+	runUp([]string{"demo", "--tabs"}, deps, &out, &errw)
+	if len(*boot) != 2 || (*boot)[1] != "new demo "+work {
+		t.Fatalf("bootstrap calls = %q, want the rewrite to keep %s", *boot, work)
 	}
 }
 
