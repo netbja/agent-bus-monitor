@@ -114,6 +114,17 @@ func (l *ListView) Resume() {
 	l.changed()
 }
 
+// Pause leaves live in tail mode without selecting anything: the viewport
+// stays where it is (anchored to its top item) while new items arrive below.
+func (l *ListView) Pause() {
+	if !l.tail || !l.live {
+		return
+	}
+	l.live = false
+	l.setAnchor()
+	l.changed()
+}
+
 // ClearSelection drops the selection without resuming live.
 func (l *ListView) ClearSelection() {
 	if l.sel == "" {

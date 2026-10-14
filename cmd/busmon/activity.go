@@ -111,7 +111,7 @@ func activityRow(fl feedLine, tier Tier, width int) Line {
 		head := strings.Repeat(glyphHorizontal, 2) + " " + fl.at.Format("Mon 2006-01-02") + " "
 		l := Line{{Text: head, Role: RoleMuted}}
 		if y, m, d := fl.at.Date(); y == todayFunc().Year() && m == todayFunc().Month() && d == todayFunc().Day() {
-			l = append(l, Seg{Text: "today", Role: RoleOK, Bold: true}, Seg{Text: " ", Role: RoleMuted})
+			l = append(l, Seg{Text: "- ", Role: RoleMuted}, Seg{Text: "(today)", Role: RoleOK, Bold: true}, Seg{Text: " ", Role: RoleMuted})
 		}
 		rest := max(0, width-l.Width())
 		return FitLine(append(l, Seg{Text: strings.Repeat(glyphHorizontal, rest), Role: RoleMuted}), width)
@@ -176,9 +176,9 @@ func (p *pauseCursor) New() int     { return p.n }
 func activityFrame(p *pauseCursor, shown, total int, f feedFilter) (title, label Line) {
 	title = Line{{Text: "Activity", Role: RoleText}}
 	if p.Paused() {
-		title = append(title, Seg{Text: fmt.Sprintf("  paused %s %d new", GlyphNone, p.New()), Role: RoleAttention})
+		title = append(title, Seg{Text: fmt.Sprintf("  auto-scroll off %s %d new", GlyphNone, p.New()), Role: RoleAttention})
 	} else {
-		title = append(title, Seg{Text: "  live", Role: RoleOK})
+		title = append(title, Seg{Text: "  auto-scroll on", Role: RoleOK})
 	}
 	count := fmt.Sprintf("%d events", total)
 	if shown != total {
