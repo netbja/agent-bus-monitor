@@ -146,13 +146,13 @@ func TestPauseCursor(t *testing.T) {
 func TestActivityFrameKeepsFilter(t *testing.T) {
 	var p pauseCursor
 	title, label := activityFrame(&p, 10, 10, feedFilter{})
-	if title.text() != "Activity  live" || label.text() != "10 events · filter: none" {
+	if title.text() != "Activity  auto-scroll on" || label.text() != "10 events · filter: none" {
 		t.Fatalf("live frame %q / %q", title.text(), label.text())
 	}
 	p.Pause(3)
 	p.Recount([]int{4})
 	title, label = activityFrame(&p, 4, 10, parseFilter("@kimi"))
-	if title.text() != "Activity  paused · 1 new" || label.text() != "4 of 10 events · filter: @kimi" {
+	if title.text() != "Activity  auto-scroll off · 1 new" || label.text() != "4 of 10 events · filter: @kimi" {
 		t.Fatalf("paused frame %q / %q", title.text(), label.text())
 	}
 	if title[len(title)-1].Role != RoleAttention {

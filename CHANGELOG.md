@@ -4,6 +4,14 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.12.2 — Activity auto-scroll toggle
+
+- busmon: `f` turns Activity's auto-scroll off and on, from any panel; the title says
+  `auto-scroll on` or `auto-scroll off · N new`.
+- Today's day separator reads `── Wed 2026-10-14 - (today) ──`.
+
+[Notes](docs/releases/v0.12.2.md)
+
 ## v0.12.1 — dormant agents, cleanup from busmon, escalation target, how to start work
 
 - `setup.sh` no longer reports a missing herdr-plus projects action when herdr is just not

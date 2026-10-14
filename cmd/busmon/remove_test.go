@@ -92,7 +92,7 @@ func TestTodaysSeparatorSaysToday(t *testing.T) {
 	}
 	found := false
 	for _, s := range today {
-		found = found || (s.Text == "today" && s.Role == RoleOK)
+		found = found || (s.Text == "(today)" && s.Role == RoleOK)
 	}
 	if !found {
 		t.Fatalf("today = %+v", today)
@@ -101,5 +101,32 @@ func TestTodaysSeparatorSaysToday(t *testing.T) {
 		if strings.Contains(s.Text, "today") {
 			t.Fatalf("yesterday = %+v", yesterday)
 		}
+	}
+}
+
+func TestTodaysSeparatorReadsDateDashToday(t *testing.T) {
+	now := time.Date(2026, 10, 14, 22, 0, 0, 0, time.Local)
+	todayFunc = func() time.Time { return now }
+	t.Cleanup(func() { todayFunc = time.Now })
+	got := activityRow(feedLine{sep: true, at: now}, TierWide, 40).text()
+	if !strings.Contains(got, " Wed 2026-10-14 - (today) ") {
+		t.Fatalf("separator %q", got)
+	}
+}
+
+func TestFTogglesAutoScroll(t *testing.T) {
+	h := newHarness(t, demoShared(time.Now()))
+	h.draw(160, 45)
+	act := h.u.lists[PanelActivity]
+	if !act.Live() {
+		t.Fatal("activity should start live")
+	}
+	h.key(letter('f'))
+	if act.Live() || act.Selected() != "" || !strings.Contains(h.draw(160, 45), "auto-scroll off") {
+		t.Fatalf("f did not pause: live %v sel %q", act.Live(), act.Selected())
+	}
+	h.key(letter('f'))
+	if !act.Live() || !strings.Contains(h.draw(160, 45), "auto-scroll on") {
+		t.Fatal("f did not resume")
 	}
 }

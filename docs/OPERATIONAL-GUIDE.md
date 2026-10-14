@@ -242,6 +242,10 @@ agent names, no herdr-plus template):
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
   Services overlay, with the last error and the tail of each log.
+- **Activity auto-scroll.** The Activity title reads `auto-scroll on` while new lines scroll into
+  view. `f` turns it off (the view stays put and counts what arrives: `auto-scroll off · 3 new`)
+  and on again; moving up in Activity also turns it off, `End` back on. Today's day separator
+  reads `Wed 2026-10-14 - (today)`.
 - **Agents that are gone** (a replaced team, a renamed role) keep their last declared state:
   nothing guesses that an agent died. busmon leaves out of the Agents panel, and out of `@all`, an
   agent silent for more than a day that is not listening and is owed nothing; the panel counts

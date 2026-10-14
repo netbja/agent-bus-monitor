@@ -292,6 +292,14 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.copySelected()
 	case ActDelete:
 		u.askRemove(l.Selected())
+	case ActFollow:
+		if act := u.lists[PanelActivity]; act.Live() {
+			act.Pause()
+			u.flash = "auto-scroll off: f or end resumes"
+		} else {
+			act.Resume()
+			u.flash = "auto-scroll on"
+		}
 	case ActShowAll:
 		u.showAll = !u.showAll
 		u.relayout()

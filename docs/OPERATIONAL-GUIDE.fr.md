@@ -253,6 +253,10 @@ noms d'onglets et d'agents, sans template herdr-plus) :
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) ouvre la fenêtre
   Services, avec la dernière erreur et la fin de chaque journal.
+- **Défilement automatique d'Activity.** Le titre d'Activity indique `auto-scroll on` tant que les
+  nouvelles lignes défilent. `f` le coupe (la vue reste en place et compte ce qui arrive :
+  `auto-scroll off · 3 new`) et le rétablit ; remonter dans Activity le coupe aussi, `Fin` le
+  rétablit. Le séparateur du jour s'affiche `Wed 2026-10-14 - (today)`.
 - **Les agents disparus** (une équipe remplacée, un rôle renommé) gardent leur dernier état
   déclaré : rien ne devine qu'un agent est mort. busmon retire du panneau Agents, et de `@all`, un
   agent silencieux depuis plus d'un jour qui n'écoute pas et à qui rien n'est dû ; le panneau les
