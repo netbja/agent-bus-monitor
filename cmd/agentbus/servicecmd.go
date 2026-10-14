@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"syscall"
 	"time"
@@ -208,8 +209,11 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 		}
 	case "logs":
 		for _, k := range kinds {
+			// The two sources are read apart: a service that died before its log
+			// existed has only the crash file.
 			lines, err := service.TailLog(d.Paths.LogFile(project, k), n)
-			if err != nil {
+			crash, cerr := service.TailLog(d.Paths.CrashFile(project, k), 20)
+			if err != nil && cerr != nil {
 				fail(k, err)
 				continue
 			}
@@ -219,7 +223,7 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 			for _, l := range lines {
 				fmt.Fprintln(stdout, l)
 			}
-			if crash, err := service.TailLog(d.Paths.CrashFile(project, k), 20); err == nil && len(crash) > 0 {
+			if cerr == nil && len(crash) > 0 {
 				fmt.Fprintf(stdout, "== %s crash output (%s)\n", k, d.Paths.CrashFile(project, k))
 				for _, l := range crash {
 					fmt.Fprintln(stdout, l)
@@ -364,6 +368,9 @@ func mainServiceRun(project, host string, args []string) int {
 	if lf, err := service.OpenLog(paths.LogFile(project, kind), service.LogMax, service.LogKeep); err == nil {
 		defer lf.Close()
 		w = lf
+		// A panic also goes to the service's own log, where service logs and busmon
+		// read; Go still copies it to stderr (launchd's crash file).
+		_ = debug.SetCrashOutput(lf.File(), debug.CrashOptions{})
 		if toStderr {
 			w = io.MultiWriter(lf, os.Stderr)
 		}

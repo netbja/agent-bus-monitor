@@ -94,6 +94,37 @@ func (l *lastIncident) recent(window time.Duration) string {
 type serviceState struct {
 	mu                   sync.Mutex
 	state, detail, error string
+	// The dispatch lease, under the same lock: a probe started with the lease
+	// applies its answer only if that lease generation still holds.
+	leased bool
+	gen    int
+}
+
+// lease records a lease change; losing it leaves "ready" at once.
+func (s *serviceState) lease(held bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gen++
+	s.leased = held
+	if !held {
+		s.state, s.detail, s.error = "starting", "re-acquiring the dispatch lease", ""
+	}
+}
+
+// leaseGen returns whether the lease is held and its generation.
+func (s *serviceState) leaseGen() (bool, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.leased, s.gen
+}
+
+// setIfLeased sets the state only while lease generation gen still holds.
+func (s *serviceState) setIfLeased(gen int, state, detail, err string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.leased && s.gen == gen {
+		s.state, s.detail, s.error = state, detail, err
+	}
 }
 
 func (s *serviceState) set(state, detail, err string) {
@@ -198,7 +229,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	attempt := func() (code int, runErr error, gone bool) {
 		runCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		var goneFlag, leased atomic.Bool
+		var goneFlag atomic.Bool
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() { // heartbeat: state every d.Heartbeat; a vanished marker ends the run
@@ -206,11 +237,11 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			t := time.NewTicker(d.Heartbeat)
 			defer t.Stop()
 			for {
-				if kind == service.Dispatch && leased.Load() {
+				if held, gen := st.leaseGen(); kind == service.Dispatch && held {
 					if err := d.HerdrPing(runCtx); err != nil && runCtx.Err() == nil {
-						st.set("waiting-herdr", "herdr does not answer; no agent is woken until it does", err.Error())
+						st.setIfLeased(gen, "waiting-herdr", "herdr does not answer; no agent is woken until it does", err.Error())
 					} else {
-						st.set("ready", "holds the dispatch lease", "")
+						st.setIfLeased(gen, "ready", "holds the dispatch lease", "")
 					}
 				}
 				if kind == service.Missions {
@@ -238,12 +269,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 
 		switch kind {
 		case service.Dispatch:
-			code = d.RunDispatch(runCtx, b, escalate, func(held bool) {
-				leased.Store(held)
-				if !held { // not ready again before it re-acquires
-					st.set("starting", "re-acquiring the dispatch lease", "")
-				}
-			}, errs)
+			code = d.RunDispatch(runCtx, b, escalate, st.lease, errs)
 		case service.Missions:
 			cfg := mission.DefaultRunConfig()
 			cfg.StateHome = d.Paths.StateHome + "/agentbus"

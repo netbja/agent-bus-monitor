@@ -204,3 +204,16 @@ func TestDownStopsServicesAndExplainsAnInterruptedIntegration(t *testing.T) {
 		t.Fatal("down deleted the services marker")
 	}
 }
+
+// A service that crashed before its log existed still shows something.
+func TestServiceLogsShowsACrashWithoutALog(t *testing.T) {
+	m, d := cmdFixture(t)
+	m.Install(service.Spec{Project: "demo", Kind: service.Dispatch})
+	crash := d.Paths.CrashFile("demo", service.Dispatch)
+	os.MkdirAll(filepath.Dir(crash), 0o700)
+	os.WriteFile(crash, []byte("fatal error: early\n"), 0o600)
+	var out, errw bytes.Buffer
+	if code := runServiceCmd("demo", []string{"logs", "dispatch"}, d, &out, &errw); code != 0 || !strings.Contains(out.String(), "fatal error: early") {
+		t.Fatalf("logs = %d %q %q", code, out.String(), errw.String())
+	}
+}

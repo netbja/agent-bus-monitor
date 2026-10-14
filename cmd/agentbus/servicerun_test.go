@@ -308,3 +308,47 @@ func TestServiceRunWaitsInStandbyThenTakesOver(t *testing.T) {
 		t.Fatalf("code %d, runs %d", code, calls.Load())
 	}
 }
+
+// A herdr probe in flight when the lease is lost must not put "ready" back:
+// its answer is for a lease generation that no longer holds.
+func TestServiceRunAProbeInFlightCannotRestoreReady(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	var blocking atomic.Bool
+	entered, release := make(chan struct{}, 1), make(chan struct{})
+	d.HerdrPing = func(context.Context) error {
+		if blocking.Load() {
+			select {
+			case entered <- struct{}{}:
+			default:
+			}
+			<-release
+		}
+		return nil
+	}
+	lose := make(chan struct{})
+	d.RunDispatch = func(ctx context.Context, _ *bus.Bus, _ string, onLease func(bool), _ io.Writer) int {
+		onLease(true)
+		<-lose
+		onLease(false)
+		<-ctx.Done()
+		return 0
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { var log bytes.Buffer; serviceRun(ctx, b, service.Dispatch, nil, d, &log) }()
+	waitState(t, b, service.Dispatch, "ready")
+	blocking.Store(true)
+	<-entered   // the heartbeat is probing with the lease held
+	close(lose) // the lease is lost meanwhile
+	time.Sleep(30 * time.Millisecond)
+	blocking.Store(false)
+	close(release) // the probe answers "herdr is fine"
+	time.Sleep(100 * time.Millisecond)
+	for i := 0; i < 5; i++ {
+		if r := record(t, b, service.Dispatch); r.State == "ready" {
+			t.Fatalf("ready came back without the lease: %+v", r)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
