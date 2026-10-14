@@ -379,6 +379,8 @@ type fakeReader struct {
 
 	conductor bool     // ConductorAlive
 	changes   []string // ChangeNames
+	svcInst   *bus.ServicesInstall
+	svcRecs   map[string]bus.ServiceRecord
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -417,6 +419,10 @@ func (f *fakeReader) Recent(context.Context, []string, int) ([]bus.Event, map[st
 	f.n("Recent")
 	return nil, nil, nil
 }
+func (f *fakeReader) ServiceStates(context.Context) (*bus.ServicesInstall, map[string]bus.ServiceRecord, error) {
+	f.n("ServiceStates")
+	return f.svcInst, f.svcRecs, nil
+}
 func (f *fakeReader) DispatchAlive(context.Context) (bool, error) {
 	f.n("DispatchAlive")
 	return true, nil
@@ -441,7 +447,7 @@ func TestNoExtraReadsPerTick(t *testing.T) {
 	f.calls = map[string]int{}
 	pollOnce(context.Background(), f, st, 6) // 6 % 5 == 1: a full tick
 	full := map[string]int{"PilotDriver": 1, "ArmedAgents": 1, "CmdLag": 1, "Agents": 1, "Usage": 1, "Budgets": 1,
-		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2}
+		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "ServiceStates": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2}
 	if fmt.Sprint(f.calls) != fmt.Sprint(full) {
 		t.Fatalf("full tick reads %v\nwant %v", f.calls, full)
 	}

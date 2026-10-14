@@ -220,7 +220,9 @@ type shared struct {
 	update   string                        // a newer release tag found by checkForUpdate, "" = none
 	budgets  map[string]bus.BudgetSnapshot // account scope, per provider
 	dispatch string                        // "", "up" or "down"
-	missions string                        // "" (no conductor, nothing loaded), "up" or "down"
+	missions string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
+	svcInst  *bus.ServicesInstall          // the {p}:services marker (nil: no services)
+	svcRecs  map[string]bus.ServiceRecord  // each service's last state
 	board    map[string]bus.BoardEntry
 	requests []request    // tracked requests read from the board
 	threads  []openThread // cmd exchanges with no answer in retained history

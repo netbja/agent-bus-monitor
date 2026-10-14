@@ -13,8 +13,8 @@ import (
 type headerData struct {
 	project  string
 	health   health
-	dispatch string // "", "up", "down"
-	missions string // "", "up", "down": shown only when not ""
+	dispatch string // "", "up", "down", or a service state (serviceFact)
+	missions string // the same; shown only when not ""
 	pilot    string // pilot-lease driver, "" = autonomous
 	self     string // the person busmon writes as (humanLabel); "" = not shown
 	update   string // a newer release tag ("" = none): the last, lowest-priority item
@@ -176,24 +176,10 @@ func healthSeg(h health, now time.Time, compact bool) Line {
 	return Line{{Text: GlyphBlocked + " bus down" + age, Role: RoleError}}
 }
 
+// dispatchSeg is the dispatcher's state: up/down from its lease, or the
+// service's own state (ready, waiting herdr, failed, …) since v0.12.
 func dispatchSeg(state string, compact bool) Line {
-	word := "dispatch"
-	if compact {
-		word = "disp"
-	}
-	switch state {
-	case "up":
-		if compact {
-			return Line{{Text: GlyphWorking + " " + word, Role: RoleOK}}
-		}
-		return Line{{Text: GlyphWorking + " " + word + " up", Role: RoleOK}}
-	case "down":
-		if compact {
-			return Line{{Text: GlyphIdle + " " + word, Role: RoleMuted}}
-		}
-		return Line{{Text: GlyphIdle + " " + word + " down", Role: RoleMuted}}
-	}
-	return Line{{Text: "? " + word, Role: RoleMuted}}
+	return serviceSeg("dispatch", "disp", state, compact)
 }
 
 // budgetRole warns before the wall: past 75 % there is time to finish, past 90 % not.
@@ -235,18 +221,8 @@ func budgetSeg(name string, b bus.BudgetSnapshot, tier Tier) Line {
 
 // missionsSeg is the conductor's state, next to the dispatcher's.
 func missionsSeg(state string, compact bool) Line {
-	word := "missions"
-	if compact {
-		word = "miss"
+	if state == "" {
+		state = "down"
 	}
-	if state == "up" {
-		if compact {
-			return Line{{Text: GlyphWorking + " " + word, Role: RoleOK}}
-		}
-		return Line{{Text: GlyphWorking + " " + word + " up", Role: RoleOK}}
-	}
-	if compact {
-		return Line{{Text: GlyphIdle + " " + word, Role: RoleMuted}}
-	}
-	return Line{{Text: GlyphIdle + " " + word + " down", Role: RoleMuted}}
+	return serviceSeg("missions", "miss", state, compact)
 }

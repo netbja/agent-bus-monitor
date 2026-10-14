@@ -20,6 +20,7 @@ type busReader interface {
 	Board(ctx context.Context) (map[string]bus.BoardEntry, error)
 	Recent(ctx context.Context, kinds []string, n int) ([]bus.Event, map[string]string, error)
 	DispatchAlive(ctx context.Context) (bool, error)
+	ServiceStates(ctx context.Context) (*bus.ServicesInstall, map[string]bus.ServiceRecord, error)
 	ConductorAlive(ctx context.Context) (bool, error)
 	ChangeNames(ctx context.Context) ([]string, error)
 	Obligation(ctx context.Context, agent string, horizon time.Duration) (bus.Obligation, error)
@@ -116,9 +117,13 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	wakes := make(map[string]wakeInfo, len(names))
 	dispAlive, dispErr := false, errNotPolled
 	missionsState, missionsErr := "", errNotPolled
+	var svcInst *bus.ServicesInstall
+	var svcRecs map[string]bus.ServiceRecord
+	svcErr := errNotPolled
 	if wakePollDue(tick) {
 		dispAlive, dispErr = b.DispatchAlive(pollCtx)
 		missionsState, missionsErr = missionsFact(pollCtx, b)
+		svcInst, svcRecs, svcErr = b.ServiceStates(pollCtx)
 		for _, n := range names {
 			var wi wakeInfo
 			if ob, err := b.Obligation(pollCtx, n, bus.DefaultHorizon); err == nil {
@@ -140,14 +145,21 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.pilot = driver
+	if svcErr == nil {
+		st.svcInst, st.svcRecs = svcInst, svcRecs
+	}
+	now := time.Now()
 	if missionsErr == nil {
-		st.missions = missionsState
+		r, has := st.svcRecs["missions"]
+		st.missions = serviceFact(r, has, missionsState, now)
 	}
 	if dispErr == nil {
-		st.dispatch = "down"
+		legacy := "down"
 		if dispAlive {
-			st.dispatch = "up"
+			legacy = "up"
 		}
+		r, has := st.svcRecs["dispatch"]
+		st.dispatch = serviceFact(r, has, legacy, now)
 	}
 	if budgetErr == nil {
 		st.budgets = budgetSnaps
