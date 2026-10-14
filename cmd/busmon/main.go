@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,6 +43,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 // streamKinds are the four streams busmon tails into the ACTIVITY feed and that
@@ -103,7 +105,7 @@ func confirmDelete(s bus.ProjectSummary, keys int, now time.Time, out io.Writer,
 // deleteProject implements `busmon --delete <project>`. A project with no keys is
 // a no-op success: that is the typo signal (you asked to delete 31 keys and were
 // told there are none) without making a repeated cleanup script fail.
-func deleteProject(host, project string, yes bool, in io.Reader, now time.Time) error {
+func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, removeServices func(project string) ([]string, error)) error {
 	client, err := bus.Connect(host)
 	if err != nil {
 		return fmt.Errorf("Redis connection failed: %w", err)
@@ -117,7 +119,7 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time) 
 	}
 	if len(keys) == 0 {
 		fmt.Fprintf(os.Stderr, "no keys for project '%s' — nothing to delete\n", project)
-		return nil
+		return reportRemovedServices(project, removeServices)
 	}
 
 	summary, err := bus.ProjectInfo(ctx, client, project)
@@ -129,12 +131,63 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time) 
 		return nil
 	}
 
+	// Its services first: stopped, they write nothing more, and no unit is
+	// left to start a project that no longer exists.
+	if err := reportRemovedServices(project, removeServices); err != nil {
+		return err
+	}
 	n, err := bus.DeleteProject(ctx, client, project)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Deleted %d %s for project '%s'.\n", n, plural(int(n), "key"), project)
 	return nil
+}
+
+// reportRemovedServices stops and removes the project's services on this
+// machine (units and environment file; logs and data stay).
+func reportRemovedServices(project string, removeServices func(string) ([]string, error)) error {
+	if removeServices == nil {
+		return nil
+	}
+	kinds, err := removeServices(project)
+	if err != nil {
+		return fmt.Errorf("removing the services of %s: %w (nothing deleted; agentbus --project %s service remove)", project, err, project)
+	}
+	if len(kinds) > 0 {
+		fmt.Printf("Stopped and removed the %s %s of '%s' on this machine.\n", strings.Join(kinds, " and "), plural(len(kinds), "service"), project)
+	}
+	return nil
+}
+
+// localServices removes a project's units under this machine's manager.
+func localServices(project string) ([]string, error) {
+	m, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
+	if m == nil {
+		return nil, nil
+	}
+	units, err := m.List()
+	if err != nil {
+		return nil, err
+	}
+	paths, err := service.PathsFrom(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	var done []string
+	for _, u := range units {
+		if u.Project != project {
+			continue
+		}
+		if err := m.Remove(u.Project, u.Kind); err != nil {
+			return done, err
+		}
+		done = append(done, u.Kind)
+	}
+	if err := os.Remove(paths.EnvFile(project)); err != nil && !os.IsNotExist(err) {
+		return done, err
+	}
+	return done, nil
 }
 
 // plural is the usual English -s. Only ever fed regular nouns here.
@@ -275,7 +328,7 @@ func main() {
 	// It also sits above --reset: purging a project's history on the way to
 	// deleting the project would be work done twice and a confirmation asked twice.
 	if *deleteFlag != "" {
-		if err := deleteProject(*host, *deleteFlag, *yesFlag, os.Stdin, time.Now()); err != nil {
+		if err := deleteProject(*host, *deleteFlag, *yesFlag, os.Stdin, time.Now(), localServices); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}

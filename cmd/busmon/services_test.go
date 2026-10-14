@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/testredis"
 )
 
 func TestServiceFact(t *testing.T) {
@@ -110,5 +113,44 @@ func TestPollShowsServiceStatesAndTheOverlayOpens(t *testing.T) {
 	h.key(runeKey('s'))
 	if screen := h.draw(160, 45); !strings.Contains(screen, "Services") || !strings.Contains(screen, "herdr: no server") {
 		t.Fatalf("services overlay not shown:\n%s", screen)
+	}
+}
+
+// --delete stops and removes the project's services before it deletes the
+// keys; a removal that fails deletes nothing.
+func TestDeleteRemovesTheServicesFirst(t *testing.T) {
+	testredis.Configure(t)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	project := "del" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	b, _ := bus.Open(c, project)
+	ctx := context.Background()
+	b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}})
+	t.Cleanup(func() { c.Del(ctx, bus.ServicesKey(project)) })
+
+	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), func(string) ([]string, error) {
+		return nil, errors.New("systemctl refused")
+	}); err == nil || !strings.Contains(err.Error(), "nothing deleted") {
+		t.Fatalf("err = %v", err)
+	}
+	if ok, _ := b.ServicesInstalled(ctx); !ok {
+		t.Fatal("keys deleted although the services were not removed")
+	}
+	var keysAtRemoval int
+	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), func(p string) ([]string, error) {
+		keys, _ := bus.ProjectKeys(ctx, c, p)
+		keysAtRemoval = len(keys)
+		return []string{"dispatch"}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if keysAtRemoval == 0 {
+		t.Fatal("the services were removed after the keys")
+	}
+	if ok, _ := b.ServicesInstalled(ctx); ok {
+		t.Fatal("the project survived --delete")
 	}
 }
