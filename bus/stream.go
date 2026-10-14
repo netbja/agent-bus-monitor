@@ -898,6 +898,19 @@ func (b *Bus) HumanCmd(ctx context.Context, from, target, command string) (strin
 	return b.cmd(ctx, from, target, CmdDirective, "", command, map[string]interface{}{"human": "yes"})
 }
 
+// HumanClose answers a cmd thread on a person's behalf to close it: a reply
+// (human=yes) on ref, addressed to whoever opened the thread, that never
+// wakes anyone. The thread's history stays; it is no longer open.
+func (b *Bus) HumanClose(ctx context.Context, from, target, ref, message string) (string, error) {
+	if !ValidName(from) {
+		return "", fmt.Errorf("invalid sender %q", from)
+	}
+	if ref == "" {
+		return "", fmt.Errorf("no thread to close")
+	}
+	return b.cmd(ctx, from, target, CmdReply, ref, message, map[string]interface{}{"human": "yes", "wake": "no"})
+}
+
 // HumanNotify is a broadcast written by a person: nobody reads it and nothing
 // wakes for it, which busmon says before sending one.
 func (b *Bus) HumanNotify(ctx context.Context, from, message string) (string, error) {

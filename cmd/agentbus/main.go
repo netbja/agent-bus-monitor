@@ -19,6 +19,7 @@
 //	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
 //	agentbus --project P agents    [--json]      # current state of all agents (one line each)
+//	agentbus --project P agents forget <agent>... [--force]  # retire gone agents (snapshot, usage, wake, group)
 //	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 //	agentbus --project P bind      <agent> [--pane P] [--pid N]   # bind a verified pane identity (lists candidates without --pid, exit 2)
 //	agentbus --project P usage     [<agent> <json>]   # write a budget snapshot, or print all (status-line tee)
@@ -420,6 +421,13 @@ func main() {
 		os.Exit(1) // gated → non-zero so a script/agent can block on it
 
 	case "agents":
+		if len(rest) > 0 && rest[0] == "forget" {
+			os.Exit(runAgentsForget(ctx, forgetDeps{Agents: b.Agents, Armed: func(ctx context.Context, a string) (bool, error) {
+				m, err := b.ArmedAgents(ctx)
+				_, ok := m[a]
+				return ok, err
+			}, Forget: b.ForgetAgent, Now: time.Now}, rest[1:], os.Stdout, os.Stderr))
+		}
 		_, asJSON := extractBool(rest, "--json")
 		m, err := b.Agents(ctx)
 		if err != nil {

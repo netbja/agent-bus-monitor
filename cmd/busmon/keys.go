@@ -46,6 +46,9 @@ const (
 	ActEscape
 	ActSend
 	ActClose
+	ActDelete
+	ActShowAll
+	ActConfirm
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -148,6 +151,8 @@ var (
 		{Keys: "end G", Help: "last row", Act: ActLast, Panels: notActivity, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
 		{Keys: "enter", Hint: "detail", Alt: "v", Act: ActOpen, match: either(keyIs(tcell.KeyEnter), runeIs('v'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
+		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(tcell.KeyDelete))},
+		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
 		{Keys: "i", Hint: "write", Alt: ":", Act: ActCompose, match: runeIs('i', ':')},
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},

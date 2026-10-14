@@ -251,6 +251,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   facts (`DispatchAlive`, `Obligation`, `Wake`); a failed read keeps the last value (queue shows
   `N?`). The usage scopes stay apart: account budget (used %) in the header, an agent's own context
   (raw tokens) in its row. The declared state is never overwritten by silence or by a report.
+  Since v0.12.1 an agent silent for over a day (`dormantAfter`), not armed, not the pilot and owed
+  nothing is **hidden** from the panel and from `@all` (`a` shows it), never relabelled; `d`/`Delete`
+  then `y` forgets an agent (`Bus.ForgetAgent`, `agentbus agents forget`, refused while it listens
+  or declared within 10 min) or closes an untracked thread with a `human=yes`, `wake=no` reply
+  (`Bus.HumanClose`). The Requests count covers only threads younger than `bus.DefaultHorizon`.
 
 ### How the bus is actually consumed (lives outside this repo)
 

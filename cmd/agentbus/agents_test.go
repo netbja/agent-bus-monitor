@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -61,5 +63,48 @@ func TestHumanAge(t *testing.T) {
 		if got := humanAge(c.d); got != c.want {
 			t.Errorf("humanAge(%v) = %q, want %q", c.d, got, c.want)
 		}
+	}
+}
+
+func TestAgentsTableShowsNeverForAnAgentWithoutAStatus(t *testing.T) {
+	out := agentsTable(map[string]bus.AgentSnapshot{"coder": {Pane: "w2:p3"}}, time.Now())
+	if !strings.Contains(out, "never") || strings.Contains(out, "h ago") || strings.Contains(out, "stale") {
+		t.Fatalf("table = %q", out)
+	}
+}
+
+func TestAgentsForgetRefusesLiveAgentsUnlessForced(t *testing.T) {
+	now := time.Now()
+	snaps := map[string]bus.AgentSnapshot{
+		"gone":   {State: "working", TS: now.Add(-20 * 24 * time.Hour).UnixMilli()},
+		"fresh":  {State: "idle", TS: now.Add(-time.Minute).UnixMilli()},
+		"armed":  {State: "idle", TS: now.Add(-time.Hour).UnixMilli()},
+		"booted": {Pane: "w2:p3"},
+	}
+	var forgot []string
+	d := forgetDeps{
+		Agents: func(context.Context) (map[string]bus.AgentSnapshot, error) { return snaps, nil },
+		Armed:  func(_ context.Context, a string) (bool, error) { return a == "armed", nil },
+		Forget: func(_ context.Context, a string) (bool, error) {
+			forgot = append(forgot, a)
+			return a != "unknown", nil
+		},
+		Now: func() time.Time { return now },
+	}
+	var out, errw bytes.Buffer
+	code := runAgentsForget(context.Background(), d, []string{"gone", "fresh", "armed", "booted", "unknown"}, &out, &errw)
+	if code != 1 || strings.Join(forgot, ",") != "gone,booted,unknown" {
+		t.Fatalf("code %d, forgot %v, %s", code, forgot, errw.String())
+	}
+	if !strings.Contains(out.String(), "gone: forgotten") || !strings.Contains(out.String(), "unknown: nothing to forget") ||
+		!strings.Contains(errw.String(), "fresh: declared a status") || !strings.Contains(errw.String(), "armed: still listening") {
+		t.Fatalf("out %q err %q", out.String(), errw.String())
+	}
+	forgot = nil
+	if code := runAgentsForget(context.Background(), d, []string{"fresh", "armed", "--force"}, &out, &errw); code != 0 || len(forgot) != 2 {
+		t.Fatalf("--force: code %d, forgot %v", code, forgot)
+	}
+	if code := runAgentsForget(context.Background(), d, []string{"Bad Name"}, &out, &errw); code != 1 {
+		t.Fatalf("invalid name: code %d", code)
 	}
 }

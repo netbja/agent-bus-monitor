@@ -191,7 +191,8 @@ Assume your target project is at `~/code/myapp`.
    - Run again, it focuses the open workspace instead of opening a second one.
 
    busmon shows you as `♙ <Name> [human]`, with `· pilot` while you hold the pilot lease. With no
-   `--as`, you are `Pilot [human]`.
+   `--as`, you are `Pilot [human]`. The name is lowercase, like an agent's: `--as bernard` shows
+   `Bernard`. `export AGENT_BUS_HUMAN=bernard` sets it for every busmon.
 
 3. **Assign the first task** from busmon's input line (`i`):
    ```text
@@ -241,6 +242,15 @@ agent names, no herdr-plus template):
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
   Services overlay, with the last error and the tail of each log.
+- **Agents that are gone** (a replaced team, a renamed role) keep their last declared state:
+  nothing guesses that an agent died. busmon leaves out of the Agents panel, and out of `@all`, an
+  agent silent for more than a day that is not listening and is owed nothing; the panel counts
+  them (`3 dormant`) and `a` shows them. To retire one for good, select it and press `d` (or
+  `Delete`), then `y`: same as `agentbus --project myapp agents forget <name>`. An agent that is
+  listening, or declared a status in the last 10 minutes, is refused.
+- **Old requests.** The Requests count only covers the last 24 hours: an older unanswered
+  directive wakes nobody. In the Requests panel, `d` then `y` closes a thread with a reply from
+  you; its history stays. A tracked request is closed by its owner (`agentbus request done`).
 - **Read the logs:** `agentbus --project myapp service logs missions -n 100`. They rotate at
   1 MiB, three files kept.
 - **Stop:** `agentbus down myapp` stops the services and deletes nothing. The agents and the

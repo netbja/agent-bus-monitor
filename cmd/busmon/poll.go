@@ -95,7 +95,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			if haveReqs {
 				known = reqs
 			}
-			threads, haveThreads = openThreads(cmds, known), true
+			threads, haveThreads = recentThreads(openThreads(cmds, known), time.Now().Add(-bus.DefaultHorizon)), true
 		}
 	}
 
@@ -181,7 +181,8 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			a = &agentState{}
 			st.agents[n] = a
 		}
-		if ts := time.UnixMilli(s.TS); ts.After(a.stateAt) {
+		// TS 0: launched and bound, no status declared yet (not 1970).
+		if ts := time.UnixMilli(s.TS); s.TS != 0 && ts.After(a.stateAt) {
 			a.state, a.message, a.stateAt = s.State, s.Message, ts
 			if ts.After(a.lastSeen) {
 				a.lastSeen = ts

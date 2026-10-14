@@ -174,6 +174,31 @@ func queueCell(a *agentState, tier Tier) Seg {
 
 const updatedBarCells = 10
 
+// dormantAfter: an agent silent this long, not listening, not the pilot and
+// owed nothing is left out of the Agents panel and of @all (a shows it). Its
+// declared state is never rewritten: it is hidden, not called offline.
+const dormantAfter = 24 * time.Hour
+
+func dormant(a *agentState, isPilot bool, now time.Time) bool {
+	return !isPilot && !a.armed && a.waiting == 0 && !a.lastSeen.IsZero() && now.Sub(a.lastSeen) > dormantAfter
+}
+
+// visibleAgents is the Agents panel's roster: every agent with all, else the
+// ones that are not dormant. It also returns how many were left out.
+func visibleAgents(m map[string]*agentState, pilot string, all bool, now time.Time) ([]string, int) {
+	names := sortedAgentNames(m, pilot)
+	if all {
+		return names, 0
+	}
+	out := names[:0:0]
+	for _, n := range names {
+		if !dormant(m[n], n == pilot, now) {
+			out = append(out, n)
+		}
+	}
+	return out, len(names) - len(out)
+}
+
 // updatedCell is the declaration's freshness: in wide a bar that empties over
 // staleAfter, then the age; elsewhere the age alone.
 func updatedCell(a *agentState, tier Tier, now time.Time) []Seg {

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -49,8 +51,11 @@ func agentsTable(m map[string]bus.AgentSnapshot, now time.Time) string {
 	for _, n := range names {
 		s := m[n]
 		age := now.Sub(time.UnixMilli(s.TS))
+		when := humanAge(age)
 		marker := ""
 		switch {
+		case s.TS == 0: // bound (agent-launch, bind) but no status declared yet
+			when = "never"
 		case age > agentStaleAfter:
 			marker = "  · bus activity stale"
 		case age > agentIdleAfter:
@@ -64,7 +69,65 @@ func agentsTable(m map[string]bus.AgentSnapshot, now time.Time) string {
 		if s.Pane != "" {
 			pane = "  ⧉" + s.Pane
 		}
-		fmt.Fprintf(&sb, "%-12s %-8s %-9s%s%s%s\n", n, s.State, humanAge(age), marker, pane, msg)
+		fmt.Fprintf(&sb, "%-12s %-8s %-9s%s%s%s\n", n, s.State, when, marker, pane, msg)
 	}
 	return sb.String()
+}
+
+// forgetDeps is what `agents forget` reads and writes, injected for tests.
+type forgetDeps struct {
+	Agents func(ctx context.Context) (map[string]bus.AgentSnapshot, error)
+	Armed  func(ctx context.Context, agent string) (bool, error)
+	Forget func(ctx context.Context, agent string) (bool, error)
+	Now    func() time.Time
+}
+
+// runAgentsForget retires agents that are gone (a replaced team, a renamed
+// role): their snapshot, usage, wake record, armed/gate/receiver keys and cmd
+// group. It refuses an agent that is listening or declared a status in the
+// last agentStaleAfter, unless --force: forgetting a live agent only makes it
+// reappear at its next status, without its consumer group.
+func runAgentsForget(ctx context.Context, d forgetDeps, args []string, out, errw io.Writer) int {
+	args, force := extractBool(args, "--force")
+	if len(args) == 0 {
+		fmt.Fprintln(errw, "usage: agents forget <agent>... [--force]")
+		return 1
+	}
+	for _, a := range args {
+		if !bus.ValidName(a) {
+			fmt.Fprintf(errw, "agents forget: invalid agent name %q\n", a)
+			return 1
+		}
+	}
+	snaps, err := d.Agents(ctx)
+	if err != nil {
+		fmt.Fprintf(errw, "agents forget: %v\n", err)
+		return 1
+	}
+	code := 0
+	for _, a := range args {
+		if !force {
+			if armed, err := d.Armed(ctx, a); err != nil || armed {
+				fmt.Fprintf(errw, "%s: still listening on the bus, not forgotten (--force to override)\n", a)
+				code = 1
+				continue
+			}
+			if s, ok := snaps[a]; ok && s.TS != 0 && d.Now().Sub(time.UnixMilli(s.TS)) < agentStaleAfter {
+				fmt.Fprintf(errw, "%s: declared a status %s, not forgotten (--force to override)\n", a, humanAge(d.Now().Sub(time.UnixMilli(s.TS))))
+				code = 1
+				continue
+			}
+		}
+		found, err := d.Forget(ctx, a)
+		switch {
+		case err != nil:
+			fmt.Fprintf(errw, "%s: %v\n", a, err)
+			code = 1
+		case found:
+			fmt.Fprintf(out, "%s: forgotten\n", a)
+		default:
+			fmt.Fprintf(out, "%s: nothing to forget\n", a)
+		}
+	}
+	return code
 }

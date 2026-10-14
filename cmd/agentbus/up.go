@@ -135,7 +135,7 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		code = 1
 	}
 	if d.Env("HERDR_ENV") != "1" {
-		fmt.Fprintf(stdout, "provisioned %s. To open it, start herdr (herdr --session %s), then run: agentbus up %s\n", project, project, project)
+		fmt.Fprintf(stdout, "provisioned %s. To open it, start herdr (herdr --session %s), then run: agentbus up %s\n", project, herdrSession(args, d.Environ), project)
 		return code
 	}
 	if id, err := openWorkspace(d, project); err != nil {
