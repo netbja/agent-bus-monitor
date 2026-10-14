@@ -87,7 +87,7 @@ Assumes `AGENT_BUS_PROJECT` is exported. If not, add `--project <p>` after `agen
 
 ```bash
 # ── PUBLISH YOUR OWN STATE (this IS your heartbeat — emit often) ──────────────
-agentbus status <agent> <working|idle|blocked|done> [message...]
+agentbus status <agent> <working|idle|blocked|waiting|done> [message...]
 agentbus status claude1 working plan 10 shipped         # message = trailing words, no quotes needed
 agentbus status claude1 done
 

@@ -19,6 +19,7 @@ type headerData struct {
 	self     string // the person busmon writes as (humanLabel); "" = not shown
 	update   string // a newer release tag ("" = none): the last, lowest-priority item
 	waiting  string // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
+	asks     int    // agents in state waiting: decisions a person owes
 	budgets  map[string]bus.BudgetSnapshot
 	now      time.Time
 }
@@ -68,6 +69,10 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	if !d.health.ok && d.health.err != "" {
 		add(Line{{Text: "(" + Preview(d.health.err) + ")", Role: RoleMuted}}, 9, second)
+	}
+	if d.asks > 0 {
+		role, bold := pulse(d.now)
+		add(Line{{Text: fmt.Sprintf("%s %d waiting for you", GlyphHuman, d.asks), Role: role, Bold: bold}}, 2, 0)
 	}
 	if d.self != "" {
 		add(Line{{Text: Preview(humanLabel(d.self, d.pilot)), Role: RoleText}}, 4, second)

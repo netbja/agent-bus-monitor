@@ -118,11 +118,13 @@ agentbus pilot status     # "piloted by <driver>"  OR  "autonomous"
 
 ## Your `status` IS your heartbeat
 Agents are one-shot CLI calls, not daemons — there is no separate heartbeat. Emit
-`agentbus status <self> <working|idle|blocked|done> <msg>` when your state changes, and
+`agentbus status <self> <working|idle|blocked|waiting|done> <msg>` when your state changes, and
 `agentbus report <self> <msg>` at milestones (its full text is retained — `reports <id>`
 reads it). busmon shows the state you DECLARED plus how old that declaration is ("no update 18m") —
 it never relabels your silence, so a stale `working` stays on screen as your own claim
-until you correct it. While armed and waiting you are **`idle`, never `blocked`**.
+until you correct it. While armed and waiting you are **`idle`, never `blocked`**. `waiting` means
+"a person must decide": busmon pulses it and rings the human once. Use it only for the human
+(usually master does); waiting for a peer is `idle`.
 
 ## Gating risky actions (the 4-eyes money-path)
 `blocked` is reserved for an **open 4-eyes gate**. Before proceeding or marking done:

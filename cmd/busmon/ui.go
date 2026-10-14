@@ -71,6 +71,8 @@ type ui struct {
 	agentsTouched bool // the operator moved in Agents: stop following the top row
 	showAll       bool // the Agents panel also lists dormant agents (a)
 	confirm       *pendingRemoval
+	rung          map[string]time.Time // agent -> the waiting declaration already rung for
+	bell          func()               // rings the terminal bell; nil = the screen's Beep
 
 	feed         []feedLine
 	seq          int
@@ -81,6 +83,38 @@ type ui struct {
 	detailEvent  bus.Event
 	detailThread threadState
 	tabSpans     []tabSpan // where each tab label was drawn, for clicks
+}
+
+// onTick runs on the event loop after each poll (never from a draw): it rings
+// the terminal bell once per new waiting declaration, so herdr marks the
+// busmon tab even when it is hidden.
+func (u *ui) onTick() {
+	u.st.mu.Lock()
+	ring := false
+	seen := map[string]bool{}
+	for _, n := range asksFor(u.st.agents) {
+		seen[n] = true
+		at := u.st.agents[n].stateAt
+		if u.rung == nil {
+			u.rung = map[string]time.Time{}
+		}
+		if last, ok := u.rung[n]; !ok || !last.Equal(at) {
+			u.rung[n], ring = at, true
+		}
+	}
+	for n := range u.rung {
+		if !seen[n] {
+			delete(u.rung, n)
+		}
+	}
+	u.st.mu.Unlock()
+	switch {
+	case !ring:
+	case u.bell != nil:
+		u.bell()
+	case u.scr != nil:
+		_ = u.scr.Beep()
+	}
 }
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.
@@ -355,7 +389,7 @@ func (u *ui) switchTab(n int) {
 func (u *ui) escape() {
 	act := u.lists[PanelActivity]
 	switch {
-	case u.lists[u.focus].Selected() != "" && !(u.focus == PanelActivity && act.Live()):
+	case u.lists[u.focus].Selected() != "":
 		u.lists[u.focus].ClearSelection()
 	case !act.Live():
 		act.Resume()
@@ -784,7 +818,7 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	now := time.Now()
 	u.st.mu.Lock()
 	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update,
-		waiting: waitingText(u.st.requests, u.st.threads, now), budgets: u.st.budgets, now: now}
+		waiting: waitingText(u.st.requests, u.st.threads, now), asks: len(asksFor(u.st.agents)), budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()
 

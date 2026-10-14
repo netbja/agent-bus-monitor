@@ -161,7 +161,7 @@ type Event struct {
 	Agent        string // status/report: the author
 	From         string // notify/cmd: the sender
 	Target       string // cmd: the addressed agent
-	State        string // status: working|idle|blocked|done
+	State        string // status: working|idle|blocked|waiting|done
 	RKind        string // report: note|auto
 	Type         string // cmd: directive|challenge|reply|verdict|escalation|blocked
 	Ref          string // cmd: correlation id
@@ -249,7 +249,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 		return "", fmt.Errorf("invalid agent %q", agent)
 	}
 	if !ValidStates[state] {
-		return "", fmt.Errorf("invalid state %q (working|idle|blocked|done)", state)
+		return "", fmt.Errorf("invalid state %q (working|idle|blocked|waiting|done)", state)
 	}
 	id, err := b.add(ctx, "status", map[string]interface{}{
 		"agent": agent, "state": state, "message": message,

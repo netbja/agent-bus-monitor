@@ -26,7 +26,8 @@ const listGutter = 2
 //
 // The viewport has three modes, decided in this order:
 //   - tail: in tail mode and live, the last rows are shown (Activity following
-//     the feed); any movement or wheel-up leaves live.
+//     the feed). Selecting a line (keys, click) keeps live: only Pause (f) and
+//     a wheel-up leave it.
 //   - anchored: after a wheel or scrollbar scroll, the item at the top stays at
 //     the top across re-sorts, until the next keyboard move.
 //   - follow: otherwise the viewport scrolls just enough to keep the selection
@@ -207,9 +208,6 @@ func (l *ListView) setSel(i int) {
 	}
 	prevSel, prevLive := l.sel, l.live
 	l.sel, l.selIdx, l.anchor = l.items[i].Key, i, ""
-	if l.tail {
-		l.live = false
-	}
 	if l.sel != prevSel || l.live != prevLive {
 		l.changed()
 	}

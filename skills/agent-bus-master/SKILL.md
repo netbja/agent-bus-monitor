@@ -58,6 +58,21 @@ herdr pane send-text "$pane" "<text / context to inject>"
 herdr pane send-keys "$pane" Enter
 ```
 
+## When you need the human's decision: declare `waiting`
+
+A decision only the human can take (a GO, a merge, a deploy, a priority) is not a `report` they
+may never read. Declare it:
+
+```bash
+agentbus status master waiting "<the decision you need, in one line: 4 decisions in report <id>>"
+```
+
+busmon puts you first with ♙ pulsing, shows `♙ 1 waiting for you` in its header, and rings the
+terminal bell once, so herdr marks the busmon tab even when it is hidden. Put the full question
+in a `report` and name its id in the message. Arm `subscribe` for the answer (`@master …` from
+busmon). Once answered, declare `working` (or `idle`) again — `waiting` is only ever the human's
+turn, never a peer's: a peer you wait for is `idle` + armed, a 4-eyes gate is `blocked`.
+
 ## Unblock — answer an agent stuck on a question
 1. **Detect** blocked peers:
    ```bash

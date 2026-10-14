@@ -40,7 +40,7 @@ Ce guide pratique est conçu en complément du `README.md`. Il fournit une march
 
 2. **Le CLI `agentbus` (`cmd/agentbus`)**
    - Outil en ligne de commande permettant aux agents et aux scripts d'interagir avec le bus :
-     - Émettre un état / pulsation : `agentbus status <agent> <working|idle|blocked|done> <message>`
+     - Émettre un état / pulsation : `agentbus status <agent> <working|idle|blocked|waiting|done> <message>`
      - Assigner des ordres : `agentbus cmd [--ref T] <agent> <directive>`
      - Publier un rapport d'étape : `agentbus report <agent> <note>`
      - Consulter le tableau de bord partagé : `agentbus board`
@@ -253,13 +253,17 @@ noms d'onglets et d'agents, sans template herdr-plus) :
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) ouvre la fenêtre
   Services, avec la dernière erreur et la fin de chaque journal.
+- **Un agent qui vous attend.** Quand master (ou un autre agent) a besoin de votre décision, il
+  déclare `waiting` : il passe en tête d'Agents avec un ♙ qui pulse, l'en-tête affiche `♙ 1
+  waiting for you`, et la cloche du terminal sonne une fois par nouvelle question, ce que herdr
+  signale sur l'onglet busmon. Répondez avec `@master …` ; l'agent repasse ensuite en `working`.
 - **La jauge `updated`** d'Agents (`●●●●●●●○○○ 3m`) indique la fraîcheur du dernier état déclaré
   par l'agent : pleine juste après la déclaration, vide au bout de 10 minutes, puis l'âge seul.
   Elle ne mesure pas un travail en cours.
 - **Défilement automatique d'Activity.** Le titre d'Activity indique `auto-scroll on` tant que les
   nouvelles lignes défilent. `f` le coupe (la vue reste en place et compte ce qui arrive :
-  `auto-scroll off · 3 new`) et le rétablit ; remonter dans Activity le coupe aussi, `Fin` le
-  rétablit. Le séparateur du jour s'affiche `Wed 2026-10-14 - (today)`.
+  `auto-scroll off · 3 new`) et le rétablit ; se déplacer, cliquer ou ouvrir une ligne le laisse actif. La
+  molette vers le haut le coupe (vous relisez), `Fin` le rétablit. Le séparateur du jour s'affiche `Wed 2026-10-14 - (today)`.
 - **Les agents disparus** (une équipe remplacée, un rôle renommé) gardent leur dernier état
   déclaré : rien ne devine qu'un agent est mort. busmon retire du panneau Agents, et de `@all`, un
   agent silencieux depuis plus d'un jour qui n'écoute pas et à qui rien n'est dû ; le panneau les
