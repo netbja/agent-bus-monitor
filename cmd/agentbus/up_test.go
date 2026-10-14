@@ -210,7 +210,7 @@ func TestUpStartsTheServicesAndOpensNoServiceTab(t *testing.T) {
 		}
 	}
 	ms := u.m.specs["demo/missions"]
-	if ms.Exe != "/opt/ab/agentbus" || strings.Join(ms.Args, " ") != "--repo "+work || ms.WorkDir != work {
+	if ms.Exe != "/opt/ab/agentbus" || strings.Join(ms.Args, " ") != "--repo "+work || ms.WorkDir != work || ms.EnvFile != u.paths.EnvFile("demo") {
 		t.Fatalf("missions spec = %+v", ms)
 	}
 	env, err := service.LoadEnvFile(u.paths.EnvFile("demo"))
@@ -271,6 +271,27 @@ func TestUpRestartsOnlyAServiceWhoseConfigurationChanged(t *testing.T) {
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	if !u.m.saw("stop demo dispatch") || !u.m.saw("start demo dispatch") || !strings.Contains(out.String(), "restarted") {
 		t.Fatalf("a changed unit was not restarted: %v\n%s", u.m.calls, out.String())
+	}
+}
+
+// A re-run of up from another shell changes the env file; a busy conductor
+// is not restarted for it in the middle of an integration.
+func TestUpDoesNotRestartABusyConductor(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	busy := false
+	deps.Busy = func(project, kind string) bool { return busy && kind == service.Missions }
+	var out, errw bytes.Buffer
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	deps.Environ = append(deps.Environ, "LANG=fr_FR.UTF-8") // another shell
+	busy = true
+	u.m.calls, out = nil, bytes.Buffer{}
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	if u.m.saw("stop demo missions") || !u.m.saw("stop demo dispatch") {
+		t.Fatalf("calls = %v", u.m.calls)
+	}
+	if !strings.Contains(out.String(), "missions: busy") || !strings.Contains(out.String(), "service restart missions") {
+		t.Fatalf("out = %q", out.String())
 	}
 }
 

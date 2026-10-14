@@ -213,7 +213,10 @@ func TestServiceRunMissionsIdleThenStandby(t *testing.T) {
 		return nil
 	}
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	go func() { var log bytes.Buffer; done <- serviceRun(ctx2, b, service.Missions, []string{"--repo", repo}, d, &log) }()
+	go func() {
+		var log bytes.Buffer
+		done <- serviceRun(ctx2, b, service.Missions, []string{"--repo", repo}, d, &log)
+	}()
 	waitState(t, b, service.Missions, "standby")
 	waitState(t, b, service.Missions, "idle")
 	cancel2()

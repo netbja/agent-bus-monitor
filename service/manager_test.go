@@ -45,7 +45,7 @@ func testSpec(t *testing.T, kind string) (Spec, Paths) {
 	t.Helper()
 	root := t.TempDir()
 	p := Paths{Home: root, ConfigHome: filepath.Join(root, "cfg"), StateHome: filepath.Join(root, "state"), DataHome: filepath.Join(root, "data")}
-	s := Spec{Project: "my-app", Kind: kind, Exe: "/opt/agent bus/agentbus", WorkDir: "/src/my app", Paths: p}
+	s := Spec{Project: "my-app", Kind: kind, Exe: "/opt/agent bus/agentbus", WorkDir: "/src/my app", Paths: p, EnvFile: "/cfg dir/agentbus/services/my-app.env"}
 	if kind == Missions {
 		s.Args = []string{"--repo", "/src/my app"}
 	}
@@ -57,7 +57,7 @@ func TestSystemdUnitQuotesAndHoldsNoSecret(t *testing.T) {
 	s.Args = append(s.Args, "--escalate-to", "50%$x")
 	u := systemdUnit(s)
 	for _, want := range []string{
-		`ExecStart="/opt/agent bus/agentbus" "--project" "my-app" "service" "run" "missions" "--stderr" "--repo" "/src/my app" "--escalate-to" "50%%$$x"`,
+		`ExecStart="/opt/agent bus/agentbus" "--project" "my-app" "service" "run" "missions" "--env" "/cfg dir/agentbus/services/my-app.env" "--stderr" "--repo" "/src/my app" "--escalate-to" "50%%$$x"`,
 		"WorkingDirectory=/src/my app",
 		"Restart=on-failure", "RestartSec=5s", "StartLimitBurst=5", "StartLimitIntervalSec=600",
 	} {
@@ -133,6 +133,7 @@ func TestLaunchdPlistLivesOutsideLaunchAgentsAndRestartsOnFailureOnly(t *testing
 	for _, want := range []string{
 		"<key>Label</key><string>dev.agentbus.my-app.missions</string>",
 		"<string>/opt/agent bus/agentbus</string>", "<string>--repo</string>", "<string>/src/my app</string>",
+		"<string>--env</string><string>/cfg dir/agentbus/services/my-app.env</string>",
 		"<key>SuccessfulExit</key><false/>", "<key>ThrottleInterval</key><integer>10</integer>",
 		"<key>WorkingDirectory</key><string>/src/my app</string>",
 	} {

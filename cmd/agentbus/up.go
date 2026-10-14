@@ -33,6 +33,7 @@ type upDeps struct {
 	Exe      func() (string, error) // this agentbus, which the units run
 	Environ  []string               // the service environment is picked from it
 	Mark     func(project string, inst bus.ServicesInstall) error
+	Busy     func(project, kind string) bool // the service reports work in progress (missions busy)
 	Host     string
 }
 
@@ -182,7 +183,7 @@ func startServices(d upDeps, m service.Manager, project, workdir string, kinds [
 	}
 	var errs []error
 	for _, k := range kinds {
-		spec := service.Spec{Project: project, Kind: k, Exe: exe, WorkDir: workdir, Paths: d.Paths}
+		spec := service.Spec{Project: project, Kind: k, Exe: exe, WorkDir: workdir, Paths: d.Paths, EnvFile: d.Paths.EnvFile(project)}
 		if k == service.Missions {
 			spec.Args = []string{"--repo", workdir}
 		}
@@ -197,6 +198,10 @@ func startServices(d upDeps, m service.Manager, project, workdir string, kinds [
 		switch {
 		case st.Active && !changed && !envChanged:
 			fmt.Fprintf(stdout, "%s: already running (%s)\n", k, m.Name())
+			continue
+		case st.Active && d.Busy != nil && d.Busy(project, k):
+			// Never interrupt an integration for a new configuration.
+			fmt.Fprintf(stdout, "%s: busy, left running; its new configuration applies at its next restart (agentbus --project %s service restart %s when it is idle)\n", k, project, k)
 			continue
 		case st.Active:
 			if err := m.Stop(project, k); err != nil {
@@ -410,6 +415,21 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			return b.MarkServicesInstalled(ctx, inst)
+		},
+		Busy: func(project, kind string) bool {
+			c, err := bus.Connect("")
+			if err != nil {
+				return true // unknown: do not interrupt
+			}
+			defer c.Close()
+			b, err := bus.Open(c, project)
+			if err != nil {
+				return true
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, recs, err := b.ServiceStates(ctx)
+			return err != nil || recs[kind].State == "busy"
 		},
 		Host: host,
 	}

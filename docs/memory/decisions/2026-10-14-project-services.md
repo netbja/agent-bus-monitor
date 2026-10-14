@@ -47,6 +47,9 @@ Shape of the decision, each part with its reason:
   `waiting-herdr`, `idle`, `busy`, `failed`, …) in `{p}:services`, so busmon shows it from any
   machine. Its log rotates at 1 MiB × 3. busmon reads both, never parents a service, and never
   starts one.
+- **The env file is named in the unit** (`--env <path>`), because the manager may resolve the
+  XDG directories differently from the shell that ran `up`. A re-run of `up` never restarts a
+  busy conductor; its new configuration waits for `service restart`.
 - **No secret in a unit.** The broker connection and the herdr session are in
   `~/.config/agentbus/services/<p>.env`, mode 0600. A unit or plist holds only paths and
   names.

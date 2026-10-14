@@ -8,18 +8,23 @@ import (
 
 // Spec is one service of one project, as a unit runs it:
 //
-//	<Exe> --project <Project> service run <Kind> [--stderr] <Args…>
+//	<Exe> --project <Project> service run <Kind> --env <EnvFile> [--stderr] <Args…>
 //
-// in WorkDir. Exe is the absolute path of the agentbus that wrote the unit.
+// in WorkDir. Exe is the absolute path of the agentbus that wrote the unit;
+// EnvFile is named explicitly because the manager's environment may resolve
+// the XDG directories differently from the shell that ran `agentbus up`.
 type Spec struct {
-	Project, Kind, Exe, WorkDir string
-	Args                        []string
-	Paths                       Paths
+	Project, Kind, Exe, WorkDir, EnvFile string
+	Args                                 []string
+	Paths                                Paths
 }
 
 // argv is the service command; stderr is true where stderr is a journal.
 func (s Spec) argv(stderr bool) []string {
 	a := []string{s.Exe, "--project", s.Project, "service", "run", s.Kind}
+	if s.EnvFile != "" {
+		a = append(a, "--env", s.EnvFile)
+	}
 	if stderr {
 		a = append(a, "--stderr")
 	}

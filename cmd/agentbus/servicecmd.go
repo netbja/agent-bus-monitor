@@ -321,6 +321,10 @@ func mainServiceRun(project, host string, args []string) int {
 		return 0
 	}
 	kind, rest := args[0], args[1:]
+	envFile := ""
+	if len(rest) > 1 && rest[0] == "--env" {
+		envFile, rest = rest[1], rest[2:]
+	}
 	toStderr := false
 	if len(rest) > 0 && rest[0] == "--stderr" {
 		toStderr, rest = true, rest[1:]
@@ -330,7 +334,9 @@ func mainServiceRun(project, host string, args []string) int {
 		fmt.Fprintln(os.Stderr, "agentbus service run: "+err.Error())
 		return 0
 	}
-	envFile := paths.EnvFile(project)
+	if envFile == "" {
+		envFile = paths.EnvFile(project)
+	}
 	env, envErr := service.LoadEnvFile(envFile)
 	for k, v := range env {
 		os.Setenv(k, v)
