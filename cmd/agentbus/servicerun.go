@@ -218,6 +218,15 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			return 0
 		}
 	}
+	if v := os.Getenv(service.EscalateEnv); escalate == "" && v != "" {
+		if !bus.ValidName(v) {
+			msg := fmt.Sprintf("invalid configuration: %s=%q is not a valid agent name", service.EscalateEnv, v)
+			logf("%s", msg)
+			publish("failed", "", msg)
+			return 0
+		}
+		escalate = v
+	}
 	if kind == service.Missions {
 		if out, err := exec.Command("git", "-C", repo, "rev-parse", "--git-dir").CombinedOutput(); repo == "" || err != nil {
 			msg := fmt.Sprintf("invalid configuration: --repo %q is not a git repository (%s)", repo, strings.TrimSpace(string(out)))

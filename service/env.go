@@ -24,6 +24,10 @@ var envKeys = []string{
 	"GOPATH", "GOCACHE", "GOMODCACHE", "GOTOOLCHAIN", "GOFLAGS",
 }
 
+// EscalateEnv names the agent the project's services escalate to (default
+// master), recorded by `agentbus up --escalate-to`.
+const EscalateEnv = "AGENT_BUS_ESCALATE_TO"
+
 // envPrefixes are copied whole, except the names below.
 var envPrefixes = []string{"AGENT_BUS_"}
 

@@ -221,6 +221,31 @@ Votre projet est dans `~/code/myapp`.
 
 ---
 
+### Cas B2 : Passer une équipe d'avant la v0.12
+
+Une équipe dont dispatch et missions tournaient dans des onglets, ou montée à la main (ses propres
+noms d'onglets et d'agents, sans template herdr-plus) :
+
+1. **Les services seuls, depuis un terminal hors de herdr.** Hors de herdr, `agentbus up`
+   installe et démarre les services sans rien ouvrir : il n'ajoute jamais une seconde équipe à
+   côté de la vôtre.
+   ```bash
+   agentbus up myapp ~/code/myapp --session <session-herdr> --escalate-to <coordinateur>
+   ```
+   - `--session` : la session herdr où vivent les agents, quand son nom n'est pas celui du
+     projet. Le dispatcher y cherche leurs onglets.
+   - `--escalate-to` : l'agent qui reçoit les escalades et les avis `complete`, quand le
+     coordinateur ne s'appelle pas `master`. Le choix est enregistré : un `agentbus up myapp`
+     ultérieur le garde.
+2. **Fermez les anciens onglets** qui lançaient `agentbus dispatch`, `agentbus missions` ou une
+   ancienne boucle de réveil : le dispatcher doit être le seul à écrire dans les onglets.
+3. **Chaque agent se déclare une fois** depuis son onglet
+   (`agentbus --project myapp status <nom> idle "back"`), ou le coordinateur le fait pour
+   l'équipe. Tant qu'un agent ne l'a pas fait, le dispatcher ne connaît pas son onglet et n'y
+   écrit jamais.
+
+---
+
 ### Cas C : Surveiller et Arrêter un Projet
 
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,

@@ -214,6 +214,28 @@ Assume your target project is at `~/code/myapp`.
 
 ---
 
+### Scenario B2: Moving a team from before v0.12
+
+A team whose dispatch and missions ran as tabs, or one built by hand (its own tab names, its own
+agent names, no herdr-plus template):
+
+1. **Services only, from a terminal outside herdr.** Outside herdr, `agentbus up` installs and
+   starts the services and opens nothing, so it never adds a second team next to yours:
+   ```bash
+   agentbus up myapp ~/code/myapp --session <herdr-session> --escalate-to <coordinator>
+   ```
+   - `--session`: the herdr session the agents live in, when its name is not the project's.
+     The dispatcher looks for its panes there.
+   - `--escalate-to`: the agent that receives escalations and `complete` notices, when the
+     coordinator is not named `master`. It is recorded: a later `agentbus up myapp` keeps it.
+2. **Close the old tabs** that ran `agentbus dispatch`, `agentbus missions` or any older wake
+   loop: the dispatcher must be the only process that types into panes.
+3. **Each agent declares itself once** from its own tab
+   (`agentbus --project myapp status <name> idle "back"`), or the coordinator does it for the
+   team. Until an agent has, the dispatcher does not know its pane and never types into it.
+
+---
+
 ### Scenario C: Watching and Stopping a Project
 
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
