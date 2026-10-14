@@ -124,10 +124,17 @@ func servicesPanel(inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord,
 		lines, err := service.TailLog(r.Log, 12)
 		if err != nil {
 			fmt.Fprintf(&sb, "   %s\n", tag("gray", Preview(err.Error())))
-			continue
 		}
 		for _, l := range lines {
 			fmt.Fprintf(&sb, "   %s\n", tag("gray", tview.Escape(clip(Preview(l), width-4))))
+		}
+		// A panic, or what was printed before the log opened.
+		crashFile := strings.TrimSuffix(r.Log, ".log") + ".crash.log"
+		if crash, err := service.TailLog(crashFile, 6); err == nil && len(crash) > 0 {
+			fmt.Fprintf(&sb, "   %s %s\n", tag("red", "crash output:"), tview.Escape(Preview(crashFile)))
+			for _, l := range crash {
+				fmt.Fprintf(&sb, "   %s\n", tview.Escape(clip(Preview(l), width-4)))
+			}
 		}
 	}
 	sb.WriteString("\n" + tag("gray", "agentbus down <p> stops them; agentbus --project <p> service status|logs|restart") + "\n")

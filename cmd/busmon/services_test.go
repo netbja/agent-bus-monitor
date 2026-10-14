@@ -91,6 +91,10 @@ func TestServicesPanelShowsStateErrorAndLocalLog(t *testing.T) {
 	if strings.Contains(sb, "process is gone") || !strings.Contains(sb, "standby") {
 		t.Fatalf("a live standby shown as gone:\n%s", sb)
 	}
+	os.WriteFile(filepath.Join(dir, "dispatch.crash.log"), []byte("panic: boom\n"), 0o600)
+	if crash := servicesPanel(inst, recs, "here", now, 100); !strings.Contains(crash, "panic: boom") {
+		t.Fatalf("the crash file is not shown:\n%s", crash)
+	}
 	none := servicesPanel(nil, nil, "here", now, 100)
 	if !strings.Contains(none, "herdr tabs") {
 		t.Fatalf("no-services panel = %q", none)

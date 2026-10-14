@@ -130,6 +130,25 @@ func TestRotateIfLargerBoundsTheCrashLog(t *testing.T) {
 	}
 }
 
+// A start counts until it ends cleanly: a process that panics or is killed
+// never calls End, so a crash loop spends the budget like any failure.
+func TestBudgetCountsAStartUntilItEndsCleanly(t *testing.T) {
+	b := Budget{Path: filepath.Join(t.TempDir(), "d", "dispatch.restarts")}
+	now := time.Now()
+	for i := 0; i < BudgetStarts-1; i++ {
+		b.End(b.Begin(now.Add(time.Duration(i) * time.Millisecond)))
+	}
+	if b.Spent(now.Add(time.Second)) {
+		t.Fatal("clean runs spent the budget")
+	}
+	for i := 0; i < BudgetStarts; i++ {
+		b.Begin(now.Add(time.Duration(10+i) * time.Millisecond)) // crashed: no End
+	}
+	if !b.Spent(now.Add(time.Second)) {
+		t.Fatal("five crashed starts did not spend the budget")
+	}
+}
+
 func TestBudgetGivesUpAfterFiveFailuresInTheWindow(t *testing.T) {
 	b := Budget{Path: filepath.Join(t.TempDir(), "d", "dispatch.restarts")}
 	now := time.Now()

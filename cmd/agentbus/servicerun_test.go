@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync/atomic"
@@ -58,6 +59,30 @@ func waitState(t *testing.T, b *bus.Bus, kind, state string) bus.ServiceRecord {
 	}
 	t.Fatalf("%s never reached %q (last %+v)", kind, state, record(t, b, kind))
 	return bus.ServiceRecord{}
+}
+
+// A clean run leaves nothing in the budget; a run that fails leaves its start.
+func TestServiceRunCountsOnlyRunsThatDoNotEndCleanly(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	budget := service.Budget{Path: d.Paths.BudgetFile(b.Project(), service.Dispatch)}
+	d.RunDispatch = func(ctx context.Context, _ *bus.Bus, _ string, onLease func(bool), _ io.Writer) int { return 0 }
+	for i := 0; i < service.BudgetStarts+1; i++ {
+		var log bytes.Buffer
+		serviceRun(context.Background(), b, service.Dispatch, nil, d, &log)
+	}
+	if budget.Spent(time.Now()) {
+		t.Fatal("clean exits spent the budget")
+	}
+	d.RunDispatch = func(context.Context, *bus.Bus, string, func(bool), io.Writer) int { return 1 }
+	var log bytes.Buffer
+	if code := serviceRun(context.Background(), b, service.Dispatch, nil, d, &log); code != 1 {
+		t.Fatalf("code = %d", code)
+	}
+	raw, _ := os.ReadFile(budget.Path)
+	if n := len(strings.Fields(string(raw))); n != 1 {
+		t.Fatalf("budget holds %d entries after one failure, want 1", n)
+	}
 }
 
 func TestServiceRunExitsWithoutTheMarker(t *testing.T) {
@@ -326,11 +351,12 @@ func TestServiceRunAProbeInFlightCannotRestoreReady(t *testing.T) {
 		}
 		return nil
 	}
-	lose := make(chan struct{})
+	lose, lost := make(chan struct{}), make(chan struct{})
 	d.RunDispatch = func(ctx context.Context, _ *bus.Bus, _ string, onLease func(bool), _ io.Writer) int {
 		onLease(true)
 		<-lose
 		onLease(false)
+		close(lost)
 		<-ctx.Done()
 		return 0
 	}
@@ -341,7 +367,7 @@ func TestServiceRunAProbeInFlightCannotRestoreReady(t *testing.T) {
 	blocking.Store(true)
 	<-entered   // the heartbeat is probing with the lease held
 	close(lose) // the lease is lost meanwhile
-	time.Sleep(30 * time.Millisecond)
+	<-lost      // and the loss is recorded before the probe answers
 	blocking.Store(false)
 	close(release) // the probe answers "herdr is fine"
 	time.Sleep(100 * time.Millisecond)

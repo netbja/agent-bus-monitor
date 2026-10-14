@@ -143,7 +143,7 @@ func (s *serviceState) get() (string, string, string) {
 // code is the restart rule both managers follow: 0 is final (stopped, project
 // gone, another instance, invalid configuration, budget spent), 1 is a failure
 // worth a restart, counted against the budget.
-func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d serviceRunDeps, logw io.Writer) int {
+func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d serviceRunDeps, logw io.Writer) (exit int) {
 	p := b.Project()
 	logf := func(format string, a ...any) {
 		fmt.Fprintf(logw, time.Now().Format("2006-01-02 15:04:05 ")+"service: "+format+"\n", a...)
@@ -168,8 +168,9 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	// fail records a failed run. The one that spends the budget gives up here,
 	// in this process: systemd's start limit refuses the next start, so no
 	// later run would get to say it.
+	// This run's start is already counted (budget.Begin below); a failure
+	// leaves it, so only the decision to give up is taken here.
 	fail := func(why string) int {
-		_ = budget.Failed(d.Now())
 		if budget.Spent(d.Now()) {
 			logf("failed: %s; gave up: %s", why, giveUpDetail)
 			publish("gave-up", giveUpDetail, why)
@@ -191,6 +192,14 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 		publish("gave-up", giveUpDetail, "")
 		return 0
 	}
+	// Every start counts as a failure until it ends cleanly: a panic or a kill
+	// never reaches the exit-0 paths, so a crash loop spends the budget too.
+	start := budget.Begin(d.Now())
+	defer func() {
+		if exit == 0 {
+			_ = budget.End(start)
+		}
+	}()
 
 	var repo string
 	escalate := ""

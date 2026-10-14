@@ -364,13 +364,17 @@ func mainServiceRun(project, host string, args []string) int {
 		return 0
 	}
 	_ = service.RotateIfLarger(paths.CrashFile(project, kind), service.LogMax)
+	// A panic goes to the crash file, which service logs and busmon read (and
+	// which launchd also appends stderr to). Opened here, never rotated while
+	// this process runs, so the descriptor never goes stale.
+	if cf, err := os.OpenFile(paths.CrashFile(project, kind), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+		_ = debug.SetCrashOutput(cf, debug.CrashOptions{})
+		cf.Close()
+	}
 	var w io.Writer = os.Stderr
 	if lf, err := service.OpenLog(paths.LogFile(project, kind), service.LogMax, service.LogKeep); err == nil {
 		defer lf.Close()
 		w = lf
-		// A panic also goes to the service's own log, where service logs and busmon
-		// read; Go still copies it to stderr (launchd's crash file).
-		_ = debug.SetCrashOutput(lf.File(), debug.CrashOptions{})
 		if toStderr {
 			w = io.MultiWriter(lf, os.Stderr)
 		}

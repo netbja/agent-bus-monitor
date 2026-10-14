@@ -57,3 +57,33 @@ func (b Budget) Reset() error {
 	}
 	return nil
 }
+
+// Begin counts this start as a failure until End: a process that panics or is
+// killed never reaches End, so a crash loop spends the budget too. It returns
+// the start's mark for End.
+func (b Budget) Begin(now time.Time) time.Time {
+	_ = b.Failed(now)
+	return now
+}
+
+// End withdraws a start that ended cleanly. A zero mark is a no-op.
+func (b Budget) End(mark time.Time) error {
+	if mark.IsZero() {
+		return nil
+	}
+	raw, err := os.ReadFile(b.Path)
+	if err != nil {
+		return nil
+	}
+	want := strconv.FormatInt(mark.UnixMilli(), 10)
+	var s strings.Builder
+	removed := false
+	for _, f := range strings.Fields(string(raw)) {
+		if f == want && !removed {
+			removed = true
+			continue
+		}
+		s.WriteString(f + "\n")
+	}
+	return os.WriteFile(b.Path, []byte(s.String()), 0o600)
+}

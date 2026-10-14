@@ -120,13 +120,12 @@ func (p Paths) CrashFile(project, kind string) string {
 	return filepath.Join(p.StateDir(project), kind+".crash.log")
 }
 
-// RotateIfLarger moves path to path.1 when it is over max bytes. It is a
-// best-effort bound on launchd's stderr file, run at each start: a process
-// still writing to the renamed file keeps its descriptor. That file only gets
-// lines printed before the service's log opens and a copy of a fatal crash
-// (which is also in the log, via debug.SetCrashOutput); a crash ends the
-// process, so the restart budget (5 in 10 minutes) bounds its growth too.
-// A missing file is not an error.
+// RotateIfLarger moves path to path.1 when it is over max bytes. The service
+// runs it on its crash file at each start: a best-effort bound (launchd keeps
+// the descriptor it opened for stderr), not a byte limit. The file gets what
+// is printed before the log opens and each fatal crash; crashes count against
+// the restart budget (Budget.Begin), so a crash loop gives up after 5 in 10
+// minutes. A missing file is not an error.
 func RotateIfLarger(path string, max int64) error {
 	st, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -136,12 +135,4 @@ func RotateIfLarger(path string, max int64) error {
 		return err
 	}
 	return os.Rename(path, path+".1")
-}
-
-// File is the log's current file, for debug.SetCrashOutput: a fatal crash
-// (a panic) is written to the service's own log as well as to stderr.
-func (r *RotatingFile) File() *os.File {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.f
 }
