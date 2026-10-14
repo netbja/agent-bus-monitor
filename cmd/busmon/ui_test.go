@@ -38,6 +38,20 @@ func (f *fakeWriter) HumanNotify(_ context.Context, from, message string) (strin
 	return "1-0", f.fail
 }
 
+func (f *fakeWriter) HumanClose(_ context.Context, from, target, ref, message string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "close "+target+" "+ref)
+	return "1-0", f.fail
+}
+
+func (f *fakeWriter) ForgetAgent(_ context.Context, agent string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "forget "+agent)
+	return true, f.fail
+}
+
 func (f *fakeWriter) Thread(_ context.Context, id string) ([]bus.Event, error) {
 	f.mu.Lock()
 	f.threads++
@@ -381,6 +395,7 @@ type fakeReader struct {
 	changes   []string // ChangeNames
 	svcInst   *bus.ServicesInstall
 	svcRecs   map[string]bus.ServiceRecord
+	snaps     map[string]bus.AgentSnapshot // Agents, when set
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -401,6 +416,9 @@ func (f *fakeReader) CmdLag(context.Context) (map[string]int64, error) {
 }
 func (f *fakeReader) Agents(context.Context) (map[string]bus.AgentSnapshot, error) {
 	f.n("Agents")
+	if f.snaps != nil {
+		return f.snaps, nil
+	}
 	return map[string]bus.AgentSnapshot{"coder": {State: "working", TS: 1, PID: 42}, "kimi": {State: "idle", TS: 1}}, nil
 }
 func (f *fakeReader) Usage(context.Context) (map[string]bus.UsageSnapshot, error) {

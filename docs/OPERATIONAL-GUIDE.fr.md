@@ -196,7 +196,9 @@ Votre projet est dans `~/code/myapp`.
    - Relancée, elle remet au premier plan l'espace déjà ouvert au lieu d'en ouvrir un second.
 
    busmon vous affiche comme `♙ <Nom> [human]`, avec `· pilot` tant que vous tenez le bail
-   pilote. Sans `--as`, vous êtes `Pilot [human]`.
+   pilote. Sans `--as`, vous êtes `Pilot [human]`. Le nom s'écrit en minuscules, comme celui d'un
+   agent : `--as bernard` affiche `Bernard`. `export AGENT_BUS_HUMAN=bernard` le fixe pour tous
+   les busmon.
 
 3. **Donner la première tâche** depuis la ligne de saisie de busmon (`i`) :
    ```text
@@ -251,6 +253,16 @@ noms d'onglets et d'agents, sans template herdr-plus) :
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) ouvre la fenêtre
   Services, avec la dernière erreur et la fin de chaque journal.
+- **Les agents disparus** (une équipe remplacée, un rôle renommé) gardent leur dernier état
+  déclaré : rien ne devine qu'un agent est mort. busmon retire du panneau Agents, et de `@all`, un
+  agent silencieux depuis plus d'un jour qui n'écoute pas et à qui rien n'est dû ; le panneau les
+  compte (`3 dormant`) et `a` les affiche. Pour en retirer un définitivement, sélectionnez-le et
+  faites `d` (ou `Suppr`), puis `y` : c'est `agentbus --project myapp agents forget <nom>`. Un
+  agent qui écoute, ou qui a déclaré un état dans les 10 dernières minutes, est refusé.
+- **Les vieilles requêtes.** Le compteur Requests ne porte que sur les dernières 24 heures : une
+  directive plus ancienne restée sans réponse ne réveille personne. Dans le panneau Requests,
+  `d` puis `y` clôt un fil par une réponse de votre part ; son historique reste. Une requête
+  suivie est close par son destinataire (`agentbus request done`).
 - **Lire les journaux :** `agentbus --project myapp service logs missions -n 100`. Ils tournent
   à 1 Mio, trois fichiers gardés.
 - **Arrêter :** `agentbus down myapp` arrête les services et ne supprime rien. Les agents et

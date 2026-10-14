@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -101,12 +102,19 @@ func activityHeader(tier Tier, width int) Line {
 	return FitLine(l, width)
 }
 
+// todayFunc is the clock the day separator compares with (a test seam).
+var todayFunc = time.Now
+
 // activityRow renders one feed line, event or day separator, in exactly width cells.
 func activityRow(fl feedLine, tier Tier, width int) Line {
 	if fl.sep {
 		head := strings.Repeat(glyphHorizontal, 2) + " " + fl.at.Format("Mon 2006-01-02") + " "
-		rest := max(0, width-Width(head))
-		return FitLine(Line{{Text: head + strings.Repeat(glyphHorizontal, rest), Role: RoleMuted}}, width)
+		l := Line{{Text: head, Role: RoleMuted}}
+		if y, m, d := fl.at.Date(); y == todayFunc().Year() && m == todayFunc().Month() && d == todayFunc().Day() {
+			l = append(l, Seg{Text: "today", Role: RoleOK, Bold: true}, Seg{Text: " ", Role: RoleMuted})
+		}
+		rest := max(0, width-l.Width())
+		return FitLine(append(l, Seg{Text: strings.Repeat(glyphHorizontal, rest), Role: RoleMuted}), width)
 	}
 	look := lookEvent(fl.ev)
 	c := colsFor(tier)

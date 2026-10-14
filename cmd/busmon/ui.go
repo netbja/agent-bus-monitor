@@ -18,6 +18,8 @@ import (
 type busWriter interface {
 	HumanCmd(ctx context.Context, from, target, command string) (string, error)
 	HumanNotify(ctx context.Context, from, message string) (string, error)
+	HumanClose(ctx context.Context, from, target, ref, message string) (string, error)
+	ForgetAgent(ctx context.Context, agent string) (bool, error)
 	Thread(ctx context.Context, threadID string) ([]bus.Event, error)
 }
 
@@ -67,6 +69,8 @@ type ui struct {
 	flash         string
 	flashErr      bool // the flash reports a failure (RoleError)
 	agentsTouched bool // the operator moved in Agents: stop following the top row
+	showAll       bool // the Agents panel also lists dormant agents (a)
+	confirm       *pendingRemoval
 
 	feed         []feedLine
 	seq          int
@@ -77,6 +81,12 @@ type ui struct {
 	detailEvent  bus.Event
 	detailThread threadState
 	tabSpans     []tabSpan // where each tab label was drawn, for clicks
+}
+
+// pendingRemoval is a d that waits for its y: the next key confirms or drops it.
+type pendingRemoval struct {
+	key   string // "agent:<name>", "thr:<id>"
+	label string
 }
 
 type tabSpan struct {
@@ -167,7 +177,8 @@ func (u *ui) tier() Tier { return u.layout.Tier }
 func (u *ui) counts() Counts {
 	u.st.mu.Lock()
 	defer u.st.mu.Unlock()
-	return Counts{Agents: len(u.st.agents), Board: len(u.st.board), Composing: u.composing != ModePanel}
+	shown, _ := visibleAgents(u.st.agents, u.st.pilot, u.showAll, time.Now())
+	return Counts{Agents: len(shown), Board: len(u.st.board), Composing: u.composing != ModePanel}
 }
 
 func (u *ui) computeLayout(w, h int) Layout {
@@ -220,6 +231,15 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.app.Stop()
 		return nil
 	}
+	if c := u.confirm; c != nil && m == ModePanel {
+		u.confirm = nil
+		if ev.Key() == tcell.KeyRune && ev.Rune() == 'y' {
+			u.remove(c.key)
+		} else {
+			u.flash, u.flashErr = "not removed", false
+		}
+		return nil
+	}
 	if act != ActNone {
 		u.flash, u.flashErr = "", false
 	}
@@ -270,6 +290,11 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		l.Open()
 	case ActCopy:
 		u.copySelected()
+	case ActDelete:
+		u.askRemove(l.Selected())
+	case ActShowAll:
+		u.showAll = !u.showAll
+		u.relayout()
 	case ActFilter:
 		u.startFilter()
 	case ActCompose:
@@ -826,7 +851,7 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 	st := u.st
 
 	agents := u.lists[PanelAgents]
-	names := sortedAgentNames(st.agents, st.pilot)
+	names, hidden := visibleAgents(st.agents, st.pilot, u.showAll, now)
 	items := make([]ListItem, 0, len(names))
 	working, blocked := 0, 0
 	for _, n := range names {
@@ -848,6 +873,11 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 		agents.First() // the top (most urgent) agent, until the operator moves
 	}
 	label := fmt.Sprintf("%d agents %s %d working %s %d blocked", len(names), GlyphNone, working, GlyphNone, blocked)
+	if hidden > 0 {
+		label += fmt.Sprintf(" %s %d dormant (a shows)", GlyphNone, hidden)
+	} else if u.showAll {
+		label += fmt.Sprintf(" %s all (a hides dormant)", GlyphNone)
+	}
 	if sc := agents.Scroll(); sc.Total > sc.Visible && sc.Visible > 0 {
 		label += fmt.Sprintf(" %s %d-%d of %d", GlyphNone, sc.Top+1, min(sc.Total, sc.Top+sc.Visible), sc.Total)
 	}

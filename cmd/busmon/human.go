@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -53,8 +54,11 @@ func humanLabel(self, pilot string) string {
 func (u *ui) agentNames() []string {
 	u.st.mu.Lock()
 	defer u.st.mu.Unlock()
-	names := make([]string, 0, len(u.st.agents))
-	for n := range u.st.agents {
+	// @all reaches the agents the panel shows: a dormant one (a team that was
+	// replaced, say) is not sent directives it will never read.
+	visible, _ := visibleAgents(u.st.agents, u.st.pilot, false, time.Now())
+	names := make([]string, 0, len(visible))
+	for _, n := range visible {
 		if n != u.self {
 			names = append(names, n)
 		}

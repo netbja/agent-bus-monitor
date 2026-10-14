@@ -235,3 +235,12 @@ func TestSupersededIsNotWaiting(t *testing.T) {
 		t.Fatalf("waitingCount = %d, want 1", n)
 	}
 }
+
+func TestRecentThreadsDropsThreadsOlderThanTheHorizon(t *testing.T) {
+	now := time.Now()
+	in := []openThread{{ID: "old", At: now.Add(-92 * 24 * time.Hour)}, {ID: "edge", At: now.Add(-25 * time.Hour)}, {ID: "new", At: now.Add(-time.Hour)}}
+	got := recentThreads(in, now.Add(-bus.DefaultHorizon))
+	if len(got) != 1 || got[0].ID != "new" || len(in) != 3 || in[0].ID != "old" {
+		t.Fatalf("recent = %+v, input %+v", got, in)
+	}
+}

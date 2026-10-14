@@ -339,6 +339,20 @@ func openThreads(cmds []bus.Event, tracked []request) []openThread {
 	return out
 }
 
+// recentThreads keeps the open threads started after since (the dispatcher's
+// horizon): an unanswered directive older than that wakes nobody, and in a
+// long-lived project hundreds of them, answered by a status or a report rather
+// than a reply, would otherwise read as work waiting.
+func recentThreads(threads []openThread, since time.Time) []openThread {
+	out := threads[:0:0]
+	for _, t := range threads {
+		if t.At.After(since) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // requestsPanel renders the whole follow-up view: tracked requests first, then
 // the untracked cmd threads, each section labelled with what it can and cannot
 // tell the reader.

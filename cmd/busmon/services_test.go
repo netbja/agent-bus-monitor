@@ -165,3 +165,14 @@ func TestDeleteRemovesTheServicesFirst(t *testing.T) {
 		t.Fatal("the project survived --delete")
 	}
 }
+
+// An agent launched and bound but with no status yet has TS 0: no 1970 age.
+func TestPollKeepsAnAgentWithoutAStatusUndated(t *testing.T) {
+	f := &fakeReader{calls: map[string]int{}, snaps: map[string]bus.AgentSnapshot{"coder": {Pane: "w2:p3", PID: 7}}}
+	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
+	pollOnce(context.Background(), f, st, 1)
+	a := st.agents["coder"]
+	if a == nil || !a.stateAt.IsZero() {
+		t.Fatalf("agent = %+v, want an undated entry", a)
+	}
+}
