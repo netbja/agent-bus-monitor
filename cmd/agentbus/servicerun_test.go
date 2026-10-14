@@ -144,7 +144,10 @@ func TestServiceRunStopsWhenTheProjectIsDeleted(t *testing.T) {
 		return 0
 	}
 	done := make(chan int, 1)
-	go func() { var log bytes.Buffer; done <- serviceRun(context.Background(), b, service.Dispatch, nil, d, &log) }()
+	go func() {
+		var log bytes.Buffer
+		done <- serviceRun(context.Background(), b, service.Dispatch, nil, d, &log)
+	}()
 	waitState(t, b, service.Dispatch, "ready")
 	b.ClearServices(context.Background()) // busmon --delete
 	select {
@@ -190,7 +193,10 @@ func TestServiceRunMissionsIdleThenStandby(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
-	go func() { var log bytes.Buffer; done <- serviceRun(ctx, b, service.Missions, []string{"--repo", repo}, d, &log) }()
+	go func() {
+		var log bytes.Buffer
+		done <- serviceRun(ctx, b, service.Missions, []string{"--repo", repo}, d, &log)
+	}()
 	if r := waitState(t, b, service.Missions, "idle"); !strings.Contains(r.Detail, "waiting for missions") {
 		t.Fatalf("record = %+v", r)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,11 +9,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 // upDeps is what `agentbus up` touches, injected for tests.
@@ -20,15 +25,26 @@ type upDeps struct {
 	Herdr     func(args ...string) ([]byte, error) // the herdr CLI
 	Bootstrap func(args []string) error            // scripts/bootstrap <args>
 	Env       func(string) string
+
+	// The project services (v0.12). Services finds the manager, or says why
+	// there is none; nil means none.
+	Services func() (service.Manager, string)
+	Paths    service.Paths
+	Exe      func() (string, error) // this agentbus, which the units run
+	Environ  []string               // the service environment is picked from it
+	Mark     func(project string, inst bus.ServicesInstall) error
+	Host     string
+}
+
+type upTab struct {
+	Name    string `toml:"name"`
+	Command string `toml:"command"`
 }
 
 type upTemplate struct {
-	Name       string `toml:"name"`
-	WorkingDir string `toml:"working_dir"`
-	Tabs       []struct {
-		Name    string `toml:"name"`
-		Command string `toml:"command"`
-	} `toml:"tabs"`
+	Name       string  `toml:"name"`
+	WorkingDir string  `toml:"working_dir"`
+	Tabs       []upTab `toml:"tabs"`
 }
 
 // runUp provisions a project (bootstrap, idempotent) and, inside herdr, opens
@@ -38,30 +54,82 @@ type upTemplate struct {
 // to open it.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if len(args) == 0 || !bus.ValidName(args[0]) {
-		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
+		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
 		return 1
 	}
 	project := args[0]
-	if err := d.Bootstrap(args); err != nil {
+	args, tabs := extractBool(args, "--tabs")
+	kinds := []string{}
+	if !slices.Contains(args, "--no-dispatch") {
+		kinds = append(kinds, service.Dispatch)
+	}
+	if !slices.Contains(args, "--no-missions") {
+		kinds = append(kinds, service.Missions)
+	}
+	// Service mode unless --tabs or no manager: then the template holds no
+	// dispatch or missions tab, and the services run whatever herdr does.
+	var m service.Manager
+	why := "--tabs"
+	if !tabs && d.Services != nil {
+		m, why = d.Services()
+	} else if !tabs {
+		why = "no service manager configured"
+	}
+	bootArgs := args
+	if m != nil {
+		bootArgs = append(slices.Clone(args), "--no-dispatch", "--no-missions")
+	}
+	if err := d.Bootstrap(bootArgs); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: bootstrap failed: %v\n", err)
 		return 1
-	}
-	if d.Env("HERDR_ENV") != "1" {
-		fmt.Fprintf(stdout, "provisioned %s. To open it, start herdr (herdr --session %s), then run: agentbus up %s\n", project, project, project)
-		return 0
-	}
-	if id, err := openWorkspace(d, project); err != nil {
-		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
-		return 1
-	} else if id != "" {
-		fmt.Fprintf(stdout, "%s is already open: focused workspace %s\n", project, id)
-		return 0
 	}
 	path := templatePath(d, project)
 	var tpl upTemplate
 	if _, err := toml.DecodeFile(path, &tpl); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
 		return 1
+	}
+	failed := false
+	if m != nil {
+		if err := startServices(d, m, project, tpl.WorkingDir, kinds, stdout); err != nil {
+			fmt.Fprintf(stderr, "agentbus up: services: %v\n", err)
+			if errors.Is(err, errNotInstalled) {
+				return 1
+			}
+			failed = true
+		}
+		tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab)
+	} else {
+		if !tabs {
+			fmt.Fprintf(stdout, "no service manager (%s): dispatch and missions run as herdr tabs, and stop when the workspace closes\n", why)
+		}
+		// A template written in service mode lacks the tabs: write it again.
+		if missingServiceTab(tpl, kinds) {
+			if err := d.Bootstrap(append([]string{"new"}, args...)); err != nil {
+				fmt.Fprintf(stderr, "agentbus up: bootstrap failed: %v\n", err)
+				return 1
+			}
+			tpl = upTemplate{}
+			if _, err := toml.DecodeFile(path, &tpl); err != nil {
+				fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
+				return 1
+			}
+		}
+	}
+	code := 0
+	if failed {
+		code = 1
+	}
+	if d.Env("HERDR_ENV") != "1" {
+		fmt.Fprintf(stdout, "provisioned %s. To open it, start herdr (herdr --session %s), then run: agentbus up %s\n", project, project, project)
+		return code
+	}
+	if id, err := openWorkspace(d, project); err != nil {
+		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
+		return 1
+	} else if id != "" {
+		fmt.Fprintf(stdout, "%s is already open: focused workspace %s\n", project, id)
+		return code
 	}
 	if len(tpl.Tabs) == 0 {
 		fmt.Fprintf(stderr, "agentbus up: %s has no tabs\n", path)
@@ -72,7 +140,86 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "opened %s: %d tabs, busmon first (reopen later with Ctrl+B then Up)\n", project, len(tpl.Tabs))
-	return 0
+	return code
+}
+
+// isServiceTab is a template tab that runs dispatch or missions, which a
+// service runs instead (an older template still has them).
+func isServiceTab(t upTab) bool {
+	cmd := strings.TrimSpace(t.Command)
+	return t.Name == service.Dispatch || t.Name == service.Missions ||
+		strings.HasSuffix(cmd, " dispatch") || strings.Contains(cmd, " missions --repo")
+}
+
+func missingServiceTab(tpl upTemplate, kinds []string) bool {
+	for _, k := range kinds {
+		if !slices.ContainsFunc(tpl.Tabs, func(t upTab) bool { return t.Name == k }) {
+			return true
+		}
+	}
+	return false
+}
+
+// errNotInstalled: up refused to write a unit at all.
+var errNotInstalled = errors.New("services not installed")
+
+// startServices writes the environment file, the marker and the units, then
+// starts each service that is not already running with this configuration.
+func startServices(d upDeps, m service.Manager, project, workdir string, kinds []string, stdout io.Writer) error {
+	exe, err := d.Exe()
+	if err != nil {
+		return fmt.Errorf("%w: cannot find this agentbus: %v", errNotInstalled, err)
+	}
+	if strings.Contains(exe, "go-build") || !filepath.IsAbs(exe) {
+		return fmt.Errorf("%w: a unit must run an installed agentbus, not %s (./setup.sh install, then run that one)", errNotInstalled, exe)
+	}
+	envChanged, err := service.WriteEnvFile(d.Paths.EnvFile(project), service.CollectEnv(d.Environ))
+	if err != nil {
+		return fmt.Errorf("%w: %v", errNotInstalled, err)
+	}
+	if err := d.Mark(project, bus.ServicesInstall{Kinds: kinds, Manager: m.Name(), Host: d.Host}); err != nil {
+		return fmt.Errorf("%w: marking %s: %v", errNotInstalled, bus.ServicesKey(project), err)
+	}
+	var errs []error
+	for _, k := range kinds {
+		spec := service.Spec{Project: project, Kind: k, Exe: exe, WorkDir: workdir, Paths: d.Paths}
+		if k == service.Missions {
+			spec.Args = []string{"--repo", workdir}
+		}
+		changed, err := m.Install(spec)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %v", k, err))
+			continue
+		}
+		_ = service.Budget{Path: d.Paths.BudgetFile(project, k)}.Reset()
+		st, _ := m.State(project, k)
+		verb := "started"
+		switch {
+		case st.Active && !changed && !envChanged:
+			fmt.Fprintf(stdout, "%s: already running (%s)\n", k, m.Name())
+			continue
+		case st.Active:
+			if err := m.Stop(project, k); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %v", k, err))
+				continue
+			}
+			verb = "restarted (its configuration changed)"
+		}
+		if err := m.Start(project, k); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %v (agentbus --project %s service logs %s)", k, err, project, k))
+			continue
+		}
+		fmt.Fprintf(stdout, "%s: %s as a %s service; logs: agentbus --project %s service logs %s\n", k, verb, m.Name(), project, k)
+	}
+	for _, k := range service.Kinds {
+		if slices.Contains(kinds, k) {
+			continue
+		}
+		if st, err := m.State(project, k); err == nil && st.Active {
+			fmt.Fprintf(stdout, "%s: still running from before (stop it: agentbus --project %s service stop %s)\n", k, project, k)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // openWorkspace focuses an already open workspace labelled project and returns
@@ -216,6 +363,8 @@ func repoDir(env func(string) string) (string, error) {
 
 // realUpDeps runs the real herdr and the repository's bootstrap.
 func realUpDeps(stdout, stderr io.Writer) upDeps {
+	paths, _ := service.PathsFrom(os.Getenv)
+	host, _ := os.Hostname()
 	return upDeps{
 		Herdr: func(args ...string) ([]byte, error) {
 			bin := os.Getenv("HERDR_BIN")
@@ -236,5 +385,32 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			return cmd.Run()
 		},
 		Env: os.Getenv,
+		Services: func() (service.Manager, string) {
+			return service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
+		},
+		Paths: paths,
+		Exe: func() (string, error) {
+			exe, err := os.Executable()
+			if err != nil {
+				return "", err
+			}
+			return filepath.EvalSymlinks(exe)
+		},
+		Environ: os.Environ(),
+		Mark: func(project string, inst bus.ServicesInstall) error {
+			c, err := bus.Connect("")
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+			b, err := bus.Open(c, project)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return b.MarkServicesInstalled(ctx, inst)
+		},
+		Host: host,
 	}
 }

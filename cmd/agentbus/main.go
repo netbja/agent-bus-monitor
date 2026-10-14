@@ -37,7 +37,10 @@
 //	agentbus --project P dispatch  --status     # print "dispatch up" (exit 0) or "dispatch down" (exit 1)
 //	agentbus --project P request [--json] | send <task> <target> [--ref T] [--ttl 5m] <body>
 //	agentbus --project P request accept <task> | block <task> <reason> | done <task> <reply>
-//	agentbus up <project> [<path>] [--as <name>] [bootstrap flags]   # provision + open the herdr workspace (busmon first)
+//	agentbus up <project> [<path>] [--as <name>] [--tabs] [bootstrap flags]   # provision, start the services, open the herdr workspace (busmon first)
+//	agentbus down <project>        # stop the project's services; deletes nothing
+//	agentbus --project P service status|start|stop|restart|remove [dispatch|missions] | logs [kind] [-n 50]
+//	agentbus service list | service remove --all   # every project's services (systemd --user / launchd), no broker
 //	agentbus roles  <validate|exists|tier|field|launch|install|template|check-toml> ...  # role manifest (scripts), no project/broker
 //	agentbus limits                # writer size/retention limits, no broker needed
 //	agentbus version               # print the bus protocol version (no project/broker needed)
@@ -102,6 +105,18 @@ func main() {
 	// up provisions a project and opens its herdr workspace: no project flag, no broker of its own.
 	if len(args) >= 1 && args[0] == "up" {
 		os.Exit(runUp(args[1:], realUpDeps(os.Stdout, os.Stderr), os.Stdout, os.Stderr))
+	}
+	// service drives the project's user services (v0.12); run is what a unit
+	// executes and loads its environment file before it connects. list and
+	// remove --all need no project; down stops a project's services.
+	if len(args) >= 1 && args[0] == "service" {
+		if len(args) >= 2 && args[1] == "run" {
+			os.Exit(mainServiceRun(project, host, args[2:]))
+		}
+		os.Exit(runServiceCmd(project, args[1:], realServiceCmdDeps(host), os.Stdout, os.Stderr))
+	}
+	if len(args) >= 1 && args[0] == "down" {
+		os.Exit(runDown(args[1:], realServiceCmdDeps(host), os.Stdout, os.Stderr))
 	}
 	// version reads a compile-time constant — no project, no broker. Handle it
 	// before the project check and before bus.Connect.
