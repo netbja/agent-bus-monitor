@@ -33,6 +33,9 @@ type Config struct {
 	MaxTries                                                   int
 	EscalateTo                                                 string
 	Log                                                        io.Writer // one JSON line per decision
+	// OnLease, when set, is told when this dispatcher takes the lease (true)
+	// and when Run gives it up (false): agentbus service run reports "ready".
+	OnLease func(held bool)
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -141,12 +144,18 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 	inner, cancel := context.WithCancel(ctx)
 	var lost atomic.Bool
 	var wg sync.WaitGroup
+	if cfg.OnLease != nil {
+		cfg.OnLease(true)
+	}
 	defer func() {
 		cancel()
 		wg.Wait()
 		rctx, rcancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer rcancel()
 		_ = b.ReleaseDispatch(rctx, token) // CAS: a no-op when the lease is gone
+		if cfg.OnLease != nil {
+			cfg.OnLease(false)
+		}
 	}()
 
 	wg.Add(2)

@@ -49,6 +49,25 @@ esac
 exit 0
 EOF
 chmod +x "$T/fakebin/docker"
+# A fake systemctl (and launchctl): the real user manager runs live project services and must
+# never be touched. It answers show-environment, reports units as active, logs everything else.
+export SYSTEMCTL_LOG="$T/systemctl.log"
+cat > "$T/fakebin/systemctl" <<'EOS'
+#!/bin/sh
+echo "$*" >> "$SYSTEMCTL_LOG"
+case "$*" in
+  "--user show-environment") echo "HOME=/x" ;;
+  "--user stop "*) [ -n "${SYSTEMCTL_FAIL_STOP:-}" ] && exit 1 ;;
+  "--user show "*) printf 'LoadState=loaded\nActiveState=active\nSubState=running\nMainPID=4242\n' ;;
+esac
+exit 0
+EOS
+cat > "$T/fakebin/launchctl" <<'EOS'
+#!/bin/sh
+echo "launchctl $*" >> "$SYSTEMCTL_LOG"
+exit 1
+EOS
+chmod +x "$T/fakebin/systemctl" "$T/fakebin/launchctl"
 export PATH="$T/fakebin:$PATH"
 
 # A local mattpocock/skills stand-in, tagged like the pinned release.
@@ -134,6 +153,12 @@ assert_contains "$(cat "$HERDR_LOG")" "plugin link $T/hp" "a local checkout is l
 : > "$HERDR_LOG"; HERDR_PLUS_PATH="$T/hp" HERDR_PLUS_REF=v0.3.0 "$SETUP" install --bin-dir "$T/bin" --no-docker --no-skills >/dev/null 2>&1
 assert_eq "$(grep -c "plugin install" "$HERDR_LOG")" "0" "a linked checkout is never reinstalled from GitHub"
 
+# Project services: install says which ones run the previous binary; uninstall removes them first
+mkdir -p "$T/cfg/systemd/user" && printf '[Service]\nExecStart="%s/agentbus"\n' "$T/bin" > "$T/cfg/systemd/user/agentbus-demo-dispatch.service"
+svc_out="$(run_setup install --no-skills)"
+assert_contains "$svc_out" "demo dispatch" "install lists the project services that run the previous binary"
+assert_contains "$svc_out" "service restart" "and how to restart them"
+
 # A key already bound to prefix+up is not overridden
 cp "$T/cfg/herdr/config.toml" "$T/config.ours"
 printf '[[keys.command]]\nkey = "prefix+up"\ntype = "split"\n' > "$T/cfg/herdr/config.toml"
@@ -161,6 +186,10 @@ assert_exit 1 "uninstall --dry-run is refused" -- "$SETUP" uninstall --yes --dry
 assert_eq "$([[ -x "$T/bin/agentbus" ]] && echo kept || echo gone)" "kept" "and removes nothing"
 # a SKILLS_DEST with a space is one directory
 mkdir -p "$T/My Skills" && ln -s "$T/repo/skills/agent-bus" "$T/My Skills/agent-bus"
+# A service that will not stop halts the uninstall: nothing else is removed
+fail_out="$(SYSTEMCTL_FAIL_STOP=1 $(command -v setsid || true) "$SETUP" uninstall --yes --bin-dir "$T/bin" < /dev/null 2>&1)"; rc=$?
+assert_eq "$rc" "1" "uninstall stops when a project service cannot be stopped"
+assert_eq "$([[ -x "$T/bin/agentbus" && -e "$T/cfg/systemd/user/agentbus-demo-dispatch.service" ]] && echo kept || echo removed)" "kept" "and keeps the binaries and the unit"
 # uninstall without a terminal and without --yes refuses to guess
 command -v setsid >/dev/null && assert_exit 1 "uninstall with no terminal and no --yes stops" -- setsid bash -c "'$SETUP' uninstall --bin-dir '$T/bin' < /dev/null"
 # uninstall --yes takes the cautious defaults: ours removed, herdr-plus kept
@@ -175,6 +204,8 @@ assert_contains "$(cat "$T/cfg/herdr/config.toml")" 'theme = "dark"' "the rest o
 assert_eq "$([[ -e "$HERDR_STATE" ]] && echo kept || echo removed)" "kept" "herdr-plus kept by default (useful without agent-bus)"
 assert_eq "$([[ -d "$T/data/agentbus/skills/mattpocock" ]] && echo left || echo gone)" "gone" "the external skills folder removed"
 assert_eq "$([[ -x "$T/repo/agentbus" ]] && echo kept || echo lost)" "kept" "the repository's own build is left"
+assert_eq "$([[ -e "$T/cfg/systemd/user/agentbus-demo-dispatch.service" ]] && echo left || echo gone)" "gone" "uninstall --yes removes the project services first"
+assert_contains "$(cat "$SYSTEMCTL_LOG")" "--user stop agentbus-demo-dispatch.service" "through the (fake) user manager"
 assert_contains "$(cat "$DOCKER_LOG")" "compose stop" "uninstall --yes stops Redis (through the fake docker)"
 assert_eq "$(grep -c "compose down" "$DOCKER_LOG")" "0" "and never removes its data without --purge"
 assert_eq "$([[ -L "$T/My Skills/agent-bus" ]] && echo left || echo gone)" "gone" "a link in a SKILLS_DEST with a space is removed"

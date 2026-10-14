@@ -125,6 +125,7 @@ herdr-plus pin reinstalls the herdr-plus that setup installed (a linked checkout
 
 `uninstall` removes only what setup made, and has no `--dry-run` (run it without `--yes` and
 answer each question):
+- every project's services (their units; data and logs are kept);
 - our binaries and our skill links (never a real directory);
 - the key binding, if it is still exactly the block setup wrote; an edited one is kept;
 - the external skills, if setup cloned them and they have no local changes.
@@ -175,13 +176,18 @@ Assume your target project is at `~/code/myapp`.
    - starts the Redis broker if needed, links the role skills and writes the herdr-plus
      template (`scripts/bootstrap` underneath; its flags work: `--no-dispatch`, `--no-missions`,
      `--index`, `--cron`);
+   - starts the project's **services** under your system's service manager (systemd `--user`
+     on Linux, launchd on macOS):
+     - `dispatch`: wakes idle agents when work lands for them;
+     - `missions`: the conductor for large changes.
+
+     They do not live in a tab, so closing busmon, the workspace or herdr does not stop them.
+     When no manager is usable, `up` says so and runs them as tabs; `--tabs` forces that;
    - opens the workspace directly, with **busmon first and focused**, then:
      - `master`: team coordinator;
      - `coder`: implementation agent;
      - `foureyes`: code review agent;
-     - `sentinel`: health and budget watch;
-     - `dispatch`: wakes idle agents when work lands for them;
-     - `missions`: the conductor for large changes.
+     - `sentinel`: health and budget watch.
    - Run again, it focuses the open workspace instead of opening a second one.
 
    busmon shows you as `♙ <Name> [human]`, with `· pilot` while you hold the pilot lease. With no
@@ -203,6 +209,30 @@ Assume your target project is at `~/code/myapp`.
    > Tabs open with fresh agent sessions. To resume an earlier Claude Code conversation, use
    > `claude --resume` and pick `myapp:master` or `myapp:coder`.
 
+   The picker reopens the workspace only. After a reboot, nothing has started the services:
+   `agentbus up myapp` starts them, and busmon shows `dispatch down` until then.
+
+---
+
+### Scenario C: Watching and Stopping a Project
+
+- **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
+  `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
+  Services overlay, with the last error and the tail of each log.
+- **Read the logs:** `agentbus --project myapp service logs missions -n 100`. They rotate at
+  1 MiB, three files kept.
+- **Stop:** `agentbus down myapp` stops the services and deletes nothing. The agents and the
+  workspace stay open; close them in herdr. If the conductor was checking or integrating, its
+  tests are killed with their process group, and it redoes that step at its next start.
+- **Restart one service:** `agentbus --project myapp service restart dispatch`, for example
+  after `./setup.sh install`, since a running service keeps its old binary.
+- **Failures.** A service that fails is restarted. After 5 failures in 10 minutes it gives up
+  and busmon shows `gave up`; the next `agentbus up` tries again. It is never restarted in a
+  loop on an invalid configuration, on a deleted project, or when another instance already
+  holds its lease.
+- **Remove.** `busmon --delete myapp` also removes the project's services on this machine.
+  `./setup.sh uninstall` removes every project's services first.
+
 ---
 
 ## 6. Command Reference Summary
@@ -210,6 +240,8 @@ Assume your target project is at `~/code/myapp`.
 | Action | Command |
 |---|---|
 | Provision + open a team | `agentbus up myapp ~/code/myapp --as <your-name>` |
+| Stop a project's services | `agentbus down myapp` |
+| Service state and logs | `agentbus --project myapp service status` / `service logs [dispatch\|missions]` |
 | Update the tools | `./setup.sh update` |
 | What is installed | `./setup.sh status` |
 | Remove the tools | `./setup.sh uninstall` |

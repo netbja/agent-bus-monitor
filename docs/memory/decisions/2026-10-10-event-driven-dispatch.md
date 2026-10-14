@@ -46,7 +46,9 @@ Shape of the decision, each part with its reason:
   sentinel, woken by cron rather than by the dispatcher, checks `dispatch --status` and notifies
   the human when it is down.
 - **A herdr pane, not systemd.** The bootstrap template gains a `dispatch` tab
-  (`--no-dispatch` omits it).
+  (`--no-dispatch` omits it). *Superseded on 2026-10-14 (v0.12):* dispatch and missions now run
+  as user services (systemd `--user`, launchd), with herdr tabs only as an explicit fallback —
+  see [project services](2026-10-14-project-services.md).
 
 Why the old rule no longer holds (spec §11): `cmd/busbridge` was dropped for hard-coded pane ids
 and because wake-on-exit made a relay unnecessary for Claude Code. Since v0.7 other clients are

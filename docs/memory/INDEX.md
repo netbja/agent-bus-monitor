@@ -13,6 +13,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 
 ## Decisions
 
+- [Project services: dispatch and missions under systemd/launchd, not tabs (active)](decisions/2026-10-14-project-services.md)
 - [Event-driven dispatch: the one automated pane writer (active)](decisions/2026-10-10-event-driven-dispatch.md)
 - [Provider-neutral roles and security review](decisions/2026-09-27-provider-neutral-security.md)
 - [Markdown reference, Obsidian view, Redis operational state](decisions/2026-09-19-shared-memory.md)

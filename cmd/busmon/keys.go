@@ -42,6 +42,7 @@ const (
 	ActComposeAt
 	ActHelp
 	ActRequests
+	ActServices
 	ActEscape
 	ActSend
 	ActClose
@@ -152,6 +153,7 @@ var (
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},
 		{Keys: "esc", Hint: "back", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
 		{Keys: "F2", Hint: "requests", Alt: "r", Act: ActRequests, match: either(keyIs(tcell.KeyF2), runeIs('r'))},
+		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(tcell.KeyF3), runeIs('s'))},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(tcell.KeyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}

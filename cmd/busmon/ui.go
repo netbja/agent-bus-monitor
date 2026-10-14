@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,7 @@ const (
 	ovTask
 	ovRequest
 	ovRequests
+	ovServices
 	ovHelp
 )
 
@@ -278,6 +280,8 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.showOverlay(ovHelp, "Help", helpText(), "", "")
 	case ActRequests:
 		u.openRequestsOverlay()
+	case ActServices:
+		u.openServicesOverlay()
 	case ActEscape:
 		u.escape()
 	}
@@ -583,6 +587,16 @@ func (u *ui) openRequestsOverlay() {
 	n := waitingCount(u.st.requests, u.st.threads)
 	u.st.mu.Unlock()
 	u.showOverlay(ovRequests, fmt.Sprintf("Requests %s %d waiting", GlyphNone, n), body, "", "")
+}
+
+// openServicesOverlay shows the project's services. It reads the log tail
+// from disk once, on the key press, never from a draw.
+func (u *ui) openServicesOverlay() {
+	u.st.mu.Lock()
+	inst, recs := u.st.svcInst, u.st.svcRecs
+	u.st.mu.Unlock()
+	host, _ := os.Hostname()
+	u.showOverlay(ovServices, "Services", servicesPanel(inst, recs, host, time.Now(), max(20, overlayInnerWidth(u.width))), "", "")
 }
 
 func (u *ui) openFeedLine(id string) {

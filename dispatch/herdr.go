@@ -446,3 +446,10 @@ func (h Herdr) Prompt(ctx context.Context, pane, text, nonce string) (bool, erro
 	}
 	return false, err
 }
+
+// Ping reports whether herdr answers (its server for this session runs): a
+// supervisor shows "waiting for herdr" while it does not.
+func (h Herdr) Ping(ctx context.Context) error {
+	_, err := h.run(ctx, 3*time.Second, "workspace", "list")
+	return err
+}

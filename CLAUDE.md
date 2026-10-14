@@ -132,7 +132,9 @@ the shared ownership registry — owner + state + branch, claimed via `agentbus 
 `{p}:dispatch` (Redis string, the dispatcher lease → token, `PX 15000` renewed every 5s; its
 presence is what `agentbus dispatch --status` and busmon's `dispatch up/down` report; in
 `projectKinds`), `{p}:wake:{agent}` (Redis hash, the dispatcher's per-agent wake record — state,
-`at` from Redis `TIME`, tries, pid, escalated, gap flag; two colons, so it cannot forge a project).
+`at` from Redis `TIME`, tries, pid, escalated, gap flag; two colons, so it cannot forge a project),
+`{p}:services` (v0.12, Redis hash: the `installed` marker `agentbus up` writes, plus one JSON state per
+service kind — state, detail, `at` from Redis `TIME`, pid, host, last error, log path; in `projectKinds`).
 `AgentSnapshot` also carries `pid`/`pid_start`/`terminal`, recorded by `agentbus status` inside
 herdr — the identity the dispatcher checks before typing into a pane — or by `agentbus bind`
 (v0.10.1, `Bus.Bind` in `bus/ident.go`) for a client whose commands do not descend from its pane
@@ -174,7 +176,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
@@ -270,8 +272,9 @@ line is fixed — `[agentbus#<nonce>] <project>: <n> message(s) waiting for <age
 --project <project> subscribe --drain <agent>` — and the agent then drains through Redis. The
 dispatcher touches only unarmed agents with a real obligation, in a pane that is ready, unfocused
 and pid-verified. Don't add a second pane writer, and don't make the dispatcher type message
-content. It runs as a herdr pane (the bootstrap template's `dispatch` tab, `--no-dispatch` to omit
-it), not under systemd.
+content. Since v0.12 it runs, with the conductor, as a **user service** (systemd `--user`,
+launchd), started by `agentbus up`; herdr tabs remain only as the explicit fallback
+(`docs/memory/decisions/2026-10-14-project-services.md`).
 
 There is also a parallel notification path that is **not** on this bus: an `adv-trading-ai` `Stop`
 hook POSTs (via `hermes-notify`) to a hermes gateway on the VDR (`:8644`) that delivers to Signal.
@@ -304,6 +307,18 @@ It never touches Redis — see README "Deployment topology".
   `tests/installer_test.sh` puts fakes first on `PATH`; keep it that way. herdr-plus is registered
   in herdr's **global** plugin registry (`herdr plugin install`), which every session sees;
   bootstrap only links a checkout when `herdr plugin list` lacks it.
+- **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
+  writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
+  services load, the rotating log and the restart budget. Every unit runs `agentbus --project P
+  service run <kind>` (`cmd/agentbus/servicerun.go`), whose exit code *is* the restart rule: 0 is
+  final (stopped, project gone, another instance, invalid config, budget spent), 1 restarts. Its
+  state goes to `{p}:services` through an `EXISTS`-guarded script (`bus/services.go`); without the
+  `installed` marker that `up` writes, a service exits and writes nothing, so a deleted project is
+  never resurrected. Don't add a supervisor loop, a `nohup` fallback or a login autostart; don't
+  put a secret in a unit; tests use fake `systemctl`/`launchctl` (`tests/installer_test.sh`,
+  `service/manager_test.go`) and never the user's manager. busmon only reads the state and the
+  local log (`F3`), never starts or parents a service; `busmon --delete` removes the local
+  units before the keys.
 - **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
   `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails
   silently and only adds a muted `↑ vX.Y.Z` to the header. Don't make it block startup or nag.

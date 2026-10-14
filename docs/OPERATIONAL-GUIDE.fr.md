@@ -127,6 +127,7 @@ dossier local lié n'est jamais remplacé).
 
 `uninstall` ne retire que ce que setup a installé. Il n'a pas de `--dry-run` : lancez-le sans
 `--yes` et répondez à chaque question. Il retire :
+- les services de tous les projets (leurs unités ; données et journaux gardés) ;
 - nos binaires et nos liens de skills (jamais un vrai dossier) ;
 - le raccourci, s'il est encore exactement le bloc écrit par setup ; un bloc modifié est gardé ;
 - les skills externes, si setup les a clonés et qu'ils n'ont pas de changements locaux.
@@ -178,14 +179,20 @@ Votre projet est dans `~/code/myapp`.
    - démarre le broker Redis si besoin, lie les skills et écrit le modèle herdr-plus (c'est
      `scripts/bootstrap` en dessous ; ses options marchent aussi : `--no-dispatch`,
      `--no-missions`, `--index`, `--cron`) ;
+   - démarre les **services** du projet avec le gestionnaire de services du système (systemd
+     `--user` sous Linux, launchd sous macOS) :
+     - `dispatch` : réveille les agents inactifs quand du travail arrive ;
+     - `missions` : le conductor des gros changements.
+
+     Ils ne vivent pas dans un onglet : fermer busmon, l'espace de travail ou herdr ne les arrête
+     pas. Sans gestionnaire utilisable, `up` le dit et les lance en onglets ; `--tabs` force ce
+     mode ;
    - ouvre directement l'espace de travail, avec **busmon en premier et au premier plan**,
      puis :
      - `master` : coordinateur de l'équipe ;
      - `coder` : agent d'implémentation ;
      - `foureyes` : agent de relecture ;
-     - `sentinel` : surveillance de la santé et du budget ;
-     - `dispatch` : réveille les agents inactifs quand du travail arrive ;
-     - `missions` : le conductor des gros changements.
+     - `sentinel` : surveillance de la santé et du budget.
    - Relancée, elle remet au premier plan l'espace déjà ouvert au lieu d'en ouvrir un second.
 
    busmon vous affiche comme `♙ <Nom> [human]`, avec `· pilot` tant que vous tenez le bail
@@ -208,6 +215,32 @@ Votre projet est dans `~/code/myapp`.
    > Claude Code précédente, utilisez `claude --resume`, puis choisissez `myapp:master` ou
    > `myapp:coder`.
 
+   Le sélecteur ne rouvre que l'espace de travail. Après un redémarrage de la machine, rien n'a
+   relancé les services : `agentbus up myapp` les démarre, et busmon affiche `dispatch down`
+   d'ici là.
+
+---
+
+### Cas C : Surveiller et Arrêter un Projet
+
+- **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
+  `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) ouvre la fenêtre
+  Services, avec la dernière erreur et la fin de chaque journal.
+- **Lire les journaux :** `agentbus --project myapp service logs missions -n 100`. Ils tournent
+  à 1 Mio, trois fichiers gardés.
+- **Arrêter :** `agentbus down myapp` arrête les services et ne supprime rien. Les agents et
+  l'espace de travail restent ouverts ; fermez-les dans herdr. Si le conductor vérifiait ou
+  intégrait, ses tests sont tués avec leur groupe de processus, et il refait cette étape à son
+  prochain démarrage.
+- **Redémarrer un service :** `agentbus --project myapp service restart dispatch`, par exemple
+  après `./setup.sh install`, car un service en cours garde son ancien binaire.
+- **Pannes.** Un service qui échoue est relancé. Après 5 échecs en 10 minutes, il abandonne et
+  busmon affiche `gave up` ; le prochain `agentbus up` réessaie. Il n'est jamais relancé en
+  boucle sur une configuration invalide, un projet supprimé, ou quand une autre instance tient
+  déjà son bail.
+- **Supprimer.** `busmon --delete myapp` retire aussi les services du projet sur cette machine.
+  `./setup.sh uninstall` retire d'abord les services de tous les projets.
+
 ---
 
 ## 6. Synthèse des Commandes Essentielles
@@ -215,6 +248,8 @@ Votre projet est dans `~/code/myapp`.
 | Action | Commande |
 |---|---|
 | Créer et ouvrir une équipe | `agentbus up mon-app ~/code/mon-app --as <votre-nom>` |
+| Arrêter les services d'un projet | `agentbus down mon-app` |
+| État et journaux des services | `agentbus --project mon-app service status` / `service logs [dispatch\|missions]` |
 | Mettre à jour les outils | `./setup.sh update` |
 | Voir ce qui est installé | `./setup.sh status` |
 | Retirer les outils | `./setup.sh uninstall` |

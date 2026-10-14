@@ -4,6 +4,17 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.12.0 — project services: dispatch and missions outlive the workspace
+
+- `agentbus up` runs dispatch and missions as user services (systemd `--user`, launchd), never at
+  login, with an explicit fallback to herdr tabs (`--tabs`).
+- Bounded restarts that never loop on a stop, a deleted project, another instance or a bad
+  configuration.
+- busmon shows each service's state (`F3` for details and logs). New commands: `agentbus down`
+  and `agentbus service status|logs|restart|…`.
+
+[Notes](docs/releases/v0.12.0.md)
+
 ## v0.11.0 — a first run that works; setup, update, uninstall; the docs agent
 
 - `./setup.sh install | update | uninstall | status`. `install.sh` stays as an alias.

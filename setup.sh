@@ -227,6 +227,17 @@ redis_state() { # running | stopped | absent
   case "$st" in running) echo running ;; "") echo absent ;; *) echo stopped ;; esac
 }
 
+# project_services: "<project> <kind> <state>" per agentbus user service (systemd --user /
+# launchd), read through the agentbus that is installed; empty when there is none.
+project_services() {
+  for ab in "$BIN_DIR/agentbus" "$REPO_DIR/agentbus"; do
+    if [ -x "$ab" ]; then
+      "$ab" service list 2>/dev/null | grep -v '^no ' || true
+      return
+    fi
+  done
+}
+
 herdr_plus_linked() { herdr plugin list 2>/dev/null | grep "$HERDR_PLUS_ID" | grep -q "local:"; }
 # True only for a herdr-plus setup installed from GitHub at another ref; a linked checkout is the user's.
 herdr_plus_pin_changed() { [ -f "$HERDR_PLUS_STATE" ] && [ "$(cat "$HERDR_PLUS_STATE")" != "$HERDR_PLUS_REF" ] && herdr_plus_registered && ! herdr_plus_linked; }
@@ -271,6 +282,12 @@ do_status() {
     log_info "herdr-plus: not registered (./setup.sh install --install-herdr)"
   fi
   if grep -qF "$KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then log_ok "herdr key binding: prefix+up -> projects"; else log_info "herdr key binding: not added"; fi
+  svcs="$(project_services)"
+  if [ -n "$svcs" ]; then
+    printf '%s\n' "$svcs" | while IFS= read -r line; do log_info "project service: $line"; done
+  else
+    log_info "project services: none"
+  fi
   case "$(redis_state)" in
     running) log_ok "Redis broker: running ($REDIS_CONTAINER, 127.0.0.1:6380)" ;;
     stopped) log_info "Redis broker: stopped ($REDIS_CONTAINER)" ;;
@@ -284,6 +301,16 @@ do_status() {
 # -----------------------------------------------------------------------------
 do_uninstall() {
   log_step "Agent Bus Monitor — uninstall"
+  # The project services first, while an agentbus is still there to remove them.
+  svcs="$(project_services)"
+  if [ -n "$svcs" ]; then
+    n="$(printf '%s\n' "$svcs" | wc -l | tr -d ' ')"
+    if ask "stop and remove the $n project services (dispatch/missions units; their data and logs are kept)?" y; then
+      for ab in "$BIN_DIR/agentbus" "$REPO_DIR/agentbus"; do [ -x "$ab" ] && break; done
+      if "$ab" service remove --all >"$TMP_DIR/services.log" 2>&1; then log_ok "removed $n project services"
+      else show_log "$TMP_DIR/services.log"; log_fatal "some project services could not be stopped or removed (agentbus service list); nothing else was removed"; fi
+    fi
+  fi
   for bin_name in agentbus busmon; do
     p="$BIN_DIR/$bin_name"
     if [ -x "$p" ] && is_our_binary "$p"; then
@@ -655,6 +682,17 @@ build_and_install_binary() {
 [ "$DRY_RUN" = "1" ] || mkdir -p "$BIN_DIR"
 build_and_install_binary "agentbus" "./cmd/agentbus"
 build_and_install_binary "busmon"   "./cmd/busmon"
+
+# A running project service keeps the binary it started with: say which, and how to move it on.
+if [ "$DRY_RUN" = "0" ]; then
+  svcs="$(project_services)"
+  if [ -n "$svcs" ]; then
+    log_info "project services keep running the previous agentbus until restarted:"
+    printf '%s\n' "$svcs" | while read -r sp sk srest; do
+      log_info "  $sp $sk ($srest): agentbus --project $sp service restart $sk"
+    done
+  fi
+fi
 
 # Verify PATH: BIN_DIR must be on it, and nothing earlier on it may shadow the new binaries
 case ":$PATH:" in
