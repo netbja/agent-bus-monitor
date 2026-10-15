@@ -59,7 +59,7 @@ func (u *ui) agentNames() []string {
 	visible, _ := visibleAgents(u.st.agents, u.st.pilot, false, time.Now())
 	names := make([]string, 0, len(visible))
 	for _, n := range visible {
-		if n != u.self {
+		if n != u.self && u.st.agents[n].registered {
 			names = append(names, n)
 		}
 	}

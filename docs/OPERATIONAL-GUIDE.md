@@ -242,6 +242,14 @@ agent names, no herdr-plus template):
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
   Services overlay, with the last error and the tail of each log.
+- **Pause the project** when the quota runs out: `agentbus --project myapp pause --until-reset quota`
+  (or `--for 2h`, `--until 02:15`). Nobody is woken until then, and busmon's header reads
+  `paused · resumes in 1h52 (quota)`. At the deadline the dispatcher ends the pause and sends master
+  one resume directive. `agentbus --project myapp resume` ends it early; `pause --status` shows it.
+  master does this itself when sentinel warns that the session budget is at 90%.
+- **`@all`** reaches the agents listed in Agents (not the conductor, which only reports). It is still
+  one message per agent, so each is delivered on its own, but Activity shows a single
+  `→ @all (6)` line.
 - **An agent waiting for you.** When master (or any agent) needs your decision it declares
   `waiting`: it moves to the top of Agents with ♙ and the word `waiting` slowly fading in and out, the header reads `♙ 1 waiting for
   you`, and the terminal bell rings once per new question, which herdr shows on the busmon tab.

@@ -144,6 +144,11 @@ You start from a blank context; read before you write, assume nothing.
      ```
      At 75% master still lands the in-flight task; at ≥ 90% it holds everything until the
      reset. 75% suits a small subscription — raise it only if the account has headroom.
+   - **Session budget** ≥ 90%, and `agentbus pause --status` says `not paused`:
+     ```bash
+     agentbus cmd master "Session <NN>% — pause the project: agentbus pause --until-reset quota"
+     ```
+     The pause is master's call (it knows what is in flight); you only remind it once.
    - **All quiet** — `agentbus board` non-empty and all `done`, and no peer
      `working`/`blocked`: the team may be idling for nothing:
      ```bash

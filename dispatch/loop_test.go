@@ -590,3 +590,34 @@ func TestRunReportsTheLease(t *testing.T) {
 		t.Fatalf("OnLease calls = %v, want [true false]", seen)
 	}
 }
+
+// A paused project wakes nobody; when the pause is due the dispatcher ends it
+// with one resume directive, which then wakes its target like any directive.
+func TestRunPauseHoldsWakesThenResumes(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.PauseKey(b.Project())) })
+	register(t, b, "coder", "p-coder")
+	register(t, b, "master", "p-master")
+	if _, err := b.SetPause(ctx, "master", "master", "quota", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	send(t, b, "coder", "build it")
+	rt := newFakeRT(alwaysReady)
+	start(t, b, rt, fastConfig())
+	time.Sleep(400 * time.Millisecond)
+	if n := len(rt.Prompts()); n != 0 {
+		t.Fatalf("%d prompts while paused", n)
+	}
+	r.Set(ctx, bus.PauseKey(b.Project()), `{"until":1,"reason":"quota","by":"master","notify":"master","at":1}`, 0)
+	waitFor(t, 3*time.Second, "the resume and the wakes", func() bool {
+		panes := map[string]bool{}
+		for _, p := range rt.Prompts() {
+			panes[p.Pane] = true
+		}
+		return panes["p-master"] && panes["p-coder"]
+	})
+	if p, _ := b.Pause(ctx); p != nil {
+		t.Fatal("pause kept")
+	}
+}

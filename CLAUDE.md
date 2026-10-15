@@ -133,7 +133,8 @@ the shared ownership registry — owner + state + branch, claimed via `agentbus 
 presence is what `agentbus dispatch --status` and busmon's `dispatch up/down` report; in
 `projectKinds`), `{p}:wake:{agent}` (Redis hash, the dispatcher's per-agent wake record — state,
 `at` from Redis `TIME`, tries, pid, escalated, gap flag; two colons, so it cannot forge a project),
-`{p}:services` (v0.12, Redis hash: the `installed` marker `agentbus up` writes, plus one JSON state per
+`{p}:pause` (v0.12.5, a JSON string: until in Unix ms from Redis `TIME`, reason, by, notify; absent = not
+paused; in `projectKinds`), `{p}:services` (v0.12, Redis hash: the `installed` marker `agentbus up` writes, plus one JSON state per
 service kind — state, detail, `at` from Redis `TIME`, pid, host, last error, log path; in `projectKinds`).
 `AgentSnapshot` also carries `pid`/`pid_start`/`terminal`, recorded by `agentbus status` inside
 herdr — the identity the dispatcher checks before typing into a pane — or by `agentbus bind`
@@ -405,6 +406,14 @@ It never touches Redis — see README "Deployment topology".
   replaces the identity only if it is newer than `ident_ts` (the last proof). Don't write the
   snapshot with a bare HSET — Codex's app-server env carries another session's `HERDR_PANE_ID`,
   and a blind write would erase the bound pane. One runtime per agent name.
+- **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`
+  writes `{p}:pause` (`bus/pause.go`); the dispatcher's `paused` check at the top of each pass
+  wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script
+  that checks the lease, that the record is unchanged and that Redis `TIME` is past the deadline,
+  then deletes it and XADDs the resume directive to `notify`. `agentbus resume` (`Bus.Resume`) ends
+  it early. busmon shows it in the header; `@all` targets only agents in `{p}:agents`
+  (`agentState.registered`) and a human fan-out within a second reads as one `@all (N)` line
+  (`sameFanOut`, display only: one entry per agent stays on the bus).
 - **Every dispatcher write is fenced.** Wake records, escalation/notify XADDs, deletes and group
   creation go through Lua that first checks `GET {p}:dispatch == token`, so a dispatcher that lost
   its lease — or whose project was deleted — writes nothing and recreates no key. Persisted times

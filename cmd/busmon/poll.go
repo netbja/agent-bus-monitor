@@ -26,6 +26,7 @@ type busReader interface {
 	Obligation(ctx context.Context, agent string, horizon time.Duration) (bus.Obligation, error)
 	Wake(ctx context.Context, agent string) (bus.WakeRecord, bool, error)
 	OpenChallenges(ctx context.Context, agent string) (map[string]string, error)
+	Pause(ctx context.Context) (*bus.PauseRecord, error)
 }
 
 // setHealth records the monitor's OWN link to the broker. A transition stamps
@@ -142,9 +143,14 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		}
 	}
 
+	pause, pauseErr := b.Pause(pollCtx)
+
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.pilot = driver
+	if pauseErr == nil {
+		st.pause = pause
+	}
 	if svcErr == nil {
 		st.svcInst, st.svcRecs = svcInst, svcRecs
 	}
@@ -182,6 +188,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			st.agents[n] = a
 		}
 		// TS 0: launched and bound, no status declared yet (not 1970).
+		a.registered = true // in {p}:agents: an agent, not a service that only reports
 		if ts := time.UnixMilli(s.TS); s.TS != 0 && ts.After(a.stateAt) {
 			a.state, a.message, a.stateAt = s.State, s.Message, ts
 			if ts.After(a.lastSeen) {

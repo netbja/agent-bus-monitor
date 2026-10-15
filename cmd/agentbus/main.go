@@ -19,6 +19,7 @@
 //	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
 //	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
 //	agentbus --project P agents    [--json]      # current state of all agents (one line each)
+//	agentbus --project P pause --for 2h | --until 02:15 | --until-reset [--to master] [reason]  # nobody is woken until then; resume [msg] ends it
 //	agentbus --project P agents forget <agent>... [--force]  # retire gone agents (snapshot, usage, wake, group)
 //	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 //	agentbus --project P bind      <agent> [--pane P] [--pid N]   # bind a verified pane identity (lists candidates without --pid, exit 2)
@@ -134,7 +135,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|limits|mem|roles|up|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|pause|resume|limits|mem|roles|up|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -419,6 +420,13 @@ func main() {
 			fmt.Printf("%s\t%s\n", ref, meta)
 		}
 		os.Exit(1) // gated → non-zero so a script/agent can block on it
+
+	case "pause", "resume":
+		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv}
+		if cmd == "pause" {
+			os.Exit(runPause(ctx, d, self, rest, os.Stdout, os.Stderr))
+		}
+		os.Exit(runResume(ctx, d, self, rest, os.Stdout, os.Stderr))
 
 	case "agents":
 		if len(rest) > 0 && rest[0] == "forget" {

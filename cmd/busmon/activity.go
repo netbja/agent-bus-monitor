@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -102,6 +103,26 @@ func activityHeader(tier Tier, width int) Line {
 	return FitLine(l, width)
 }
 
+// sameFanOut: e repeats the last line's directive to another agent, written
+// by the same person within a second: busmon's @all, sent one entry per agent
+// (each agent keeps its own delivery) but read as one line.
+func sameFanOut(fl feedLine, e bus.Event, at time.Time) bool {
+	p := fl.ev
+	if fl.sep || e.Kind != "cmd" || p.Kind != "cmd" || !e.Human || !p.Human || e.Type != bus.CmdDirective ||
+		p.Type != bus.CmdDirective || e.From != p.From || e.Message != p.Message || e.Target == p.Target {
+		return false
+	}
+	if at.Sub(fl.at) > time.Second || at.Before(fl.at) {
+		return false
+	}
+	for _, t := range fl.to {
+		if t == e.Target {
+			return false
+		}
+	}
+	return true
+}
+
 // todayFunc is the clock the day separator compares with (a test seam).
 var todayFunc = time.Now
 
@@ -117,6 +138,9 @@ func activityRow(fl feedLine, tier Tier, width int) Line {
 		return FitLine(append(l, Seg{Text: strings.Repeat(glyphHorizontal, rest), Role: RoleMuted}), width)
 	}
 	look := lookEvent(fl.ev)
+	if len(fl.to) > 1 {
+		look.To = "@all (" + strconv.Itoa(len(fl.to)) + ")"
+	}
 	c := colsFor(tier)
 	l := Line{col(fl.at.Format("15:04"), c.time, RoleMuted), col(Preview(look.From), c.from, RoleText)}
 	msg := Preview(look.Text)

@@ -262,6 +262,9 @@ type loop struct {
 // pass at once; any other error is logged and the pass goes on to the next
 // agent, returning the first error so Run backs off.
 func (l *loop) reconcile(ctx context.Context) error {
+	if paused, err := l.paused(ctx); err != nil || paused {
+		return err
+	}
 	snaps, err := l.b.Agents(ctx)
 	if err != nil {
 		return err
@@ -597,4 +600,40 @@ func (l *loop) log(v map[string]any) {
 	l.logMu.Lock()
 	defer l.logMu.Unlock()
 	_, _ = l.cfg.Log.Write(append(line, '\n'))
+}
+
+// paused handles a project pause: while it runs nobody is woken or escalated
+// (the pass stops here); once due, one fenced script ends it and sends the
+// resume directive, and the pass goes on, so that directive wakes its target.
+func (l *loop) paused(ctx context.Context) (bool, error) {
+	p, err := l.b.Pause(ctx)
+	if err != nil || p == nil {
+		if err != nil {
+			l.logError("", "read pause", err)
+		}
+		return false, nil
+	}
+	id, err := l.b.FencedResume(ctx, l.token, dispatchFrom)
+	switch {
+	case errors.Is(err, bus.ErrNotHolder):
+		return true, err
+	case err != nil:
+		l.logError("", "resume", err)
+		return true, nil
+	case id != "":
+		l.log(map[string]any{"action": "resume", "notify": p.Notify, "id": id})
+		l.logMu.Lock()
+		delete(l.last, "")
+		l.logMu.Unlock()
+		return false, nil
+	}
+	key := fmt.Sprintf("paused|%d", p.Until)
+	l.logMu.Lock()
+	same := l.last[""] == key
+	l.last[""] = key
+	l.logMu.Unlock()
+	if !same {
+		l.log(map[string]any{"action": "paused", "until": p.UntilTime().Format(time.RFC3339), "reason": p.Reason})
+	}
+	return true, nil
 }

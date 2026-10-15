@@ -58,6 +58,22 @@ herdr pane send-text "$pane" "<text / context to inject>"
 herdr pane send-keys "$pane" Enter
 ```
 
+## Quota running out: pause the project, never a sleep
+
+When the session budget is nearly spent (sentinel nudges at 90%, or the human tells you), land
+or park what is in flight, then pause the whole project until the window resets:
+
+```bash
+agentbus pause --until-reset quota      # or: --for 2h, --until 02:15
+agentbus pause --status                 # what is set, and when it ends
+```
+
+While paused the dispatcher wakes nobody (no prompt, no escalation) and busmon shows
+`paused · resumes in 1h52 (quota)`. At the deadline the dispatcher ends the pause and sends you
+one resume directive (`--to` another agent, or `AGENT_BUS_ESCALATE_TO`, changes who): drain it and
+restart the team's work. `agentbus resume` ends it early. Never schedule a resume with a sleep or a
+background shell in your own session: it is invisible to the team and dies with your pane.
+
 ## When you need the human's decision: declare `waiting`
 
 A decision only the human can take (a GO, a merge, a deploy, a priority) is not a `report` they

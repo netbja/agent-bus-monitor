@@ -260,6 +260,7 @@ type agentState struct {
 	queueFailed bool      // the latest attempted Obligation read failed (or the broker is down)
 	queueAt     time.Time // time of the last successful Obligation read
 	ctxRaw      string    // UsageSnapshot.Ctx exactly as read
+	registered  bool      // listed in {p}:agents (the conductor only reports: not an @all target)
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.
@@ -275,6 +276,7 @@ type shared struct {
 	dispatch string                        // "", "up" or "down"
 	missions string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
 	svcInst  *bus.ServicesInstall          // the {p}:services marker (nil: no services)
+	pause    *bus.PauseRecord              // the project pause (nil: not paused)
 	svcRecs  map[string]bus.ServiceRecord  // each service's last state
 	board    map[string]bus.BoardEntry
 	requests []request    // tracked requests read from the board
