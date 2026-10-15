@@ -41,3 +41,13 @@ func TestReportDetailCompleteness(t *testing.T) {
 		}
 	}
 }
+
+func TestReportNoticeNamesTheReportAndItsFirstLine(t *testing.T) {
+	got := reportNotice("1-0", "act4 APPROVED at 4d5d51b\nsecond line")
+	if !strings.Contains(got, "agentbus reports 1-0") || !strings.Contains(got, "act4 APPROVED at 4d5d51b") || strings.Contains(got, "second line") {
+		t.Fatalf("notice %q", got)
+	}
+	if n := len([]rune(reportNotice("1-0", strings.Repeat("x", 900)))); n > 400 {
+		t.Fatalf("notice not bounded: %d runes", n)
+	}
+}
