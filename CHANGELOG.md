@@ -4,6 +4,18 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.13.0 — quotas: stop before the limit, for any AI
+
+- The dispatch service reads every provider's usage windows from first-party local sources
+  (Claude Code through `agentbus statusline`, Codex through its app-server, Grok's log; any other
+  AI through `quota.toml`: a file, a script, or unlimited) and acts: one warning to master at 85%
+  of a window, the provider's agents held at 95% until the reset, the project paused when master's
+  own provider runs out.
+- busmon: one gauge per provider (`claude 5h 82% ~25m`), `held` on agents; `agentbus quota`.
+- No dependency on ccstatusline any more.
+
+[Notes](docs/releases/v0.13.0.md)
+
 ## v0.12.7 — what an agent needs from you, at the top
 
 - busmon: an agent's detail shows its last report in full right after its status message; for an

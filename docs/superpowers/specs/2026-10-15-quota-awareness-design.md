@@ -1,6 +1,6 @@
 # v0.13 — Quota awareness: stop before the limit, for any AI
 
-Status: rev 2, 2026-10-15. Rev 1 (0056998) reviewed by Grok: approve with fixes
+Status: rev 2, implemented in v0.13.0 (2026-10-15). Rev 1 (0056998) reviewed by Grok: approve with fixes
 (`.superpowers/brainstorm/GROK-v0.13-spec-review.md`, local); every finding is applied below and
 listed in §13. Rev 2 also makes the readers generic (Bernard: "any AI except a local one").
 Research: `.superpowers/brainstorm/QUOTA-{codex,grok,kimi}.md` (local, not committed).

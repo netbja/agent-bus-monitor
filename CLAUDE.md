@@ -406,6 +406,20 @@ It never touches Redis — see README "Deployment topology".
   replaces the identity only if it is newer than `ident_ts` (the last proof). Don't write the
   snapshot with a bare HSET — Codex's app-server env carries another session's `HERDR_PANE_ID`,
   and a blind write would erase the bound pane. One runtime per agent name.
+- **Quotas (v0.13): first-party readers behind one contract, policy in the dispatcher.**
+  Package `quota/`: `Reading` (provider, windows: used %, reset, minutes; observed_at vs
+  collected_at; unknown/unlimited) and readers — Claude via `agentbus statusline` (Claude Code's
+  `statusLine` stdin `rate_limits` merged into `~/.cache/agentbus/quota-claude.json`, plus a
+  transcript backstop for a live rejection), Codex via `codex app-server` `account/rateLimits/read`
+  (session logs as fallback), declarative file readers (Grok's billing log line is one, built in),
+  an external command, unlimited; configured in `~/.config/agentbus/quota.toml`. No reader opens a
+  credential. The dispatch service (`serviceQuota` → `dispatch.QuotaConfig`) collects every minute,
+  publishes `{p}:budget` (`windows` etc., additive) and acts in `dispatch/quota.go`: warn once per
+  window and reset, hold a provider's agents (`{p}:quota` marks; no prompt, no escalation), pause
+  for the coordinator's provider (`FencedQuotaPause`, never replacing another pause). Agents carry
+  `client`/`provider` from the launcher's env. Unknown or aged (>30 min) readings never act; every
+  write is fenced. busmon shows a gauge per provider and `held`. `refresh` reads ccstatusline only
+  when no dispatcher runs.
 - **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`
   writes `{p}:pause` (`bus/pause.go`); the dispatcher's `paused` check at the top of each pass
   wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script
