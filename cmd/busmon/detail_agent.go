@@ -47,6 +47,22 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		sb.WriteString(text(DetailText(a.message)) + "\n")
 	}
 	sb.WriteString("\n")
+	// What the agent last wrote at length: for an agent waiting for a person,
+	// that is the decision asked for, so it comes before every other fact.
+	if rep, at, ok := lastReport(name, recent); ok {
+		head := "Last report"
+		if a.state == "waiting" {
+			head = "What " + Preview(name) + " needs from you"
+		}
+		sb.WriteString(tg(RoleAccent, head) + tg(RoleMuted, " "+GlyphNone+" "+ago(at)) + "\n")
+		sb.WriteString(text(DetailText(rep)) + "\n")
+		if a.state == "waiting" {
+			sb.WriteString(tg(RoleMuted, "Answer: i, then @"+Preview(name)+" <your decision>") + "\n")
+		}
+		sb.WriteString("\n")
+	} else if a.state == "waiting" {
+		sb.WriteString(tg(RoleMuted, "Its last report is older than the Activity window: agentbus reports") + "\n\n")
+	}
 
 	if a.stateAt.IsZero() {
 		row("Declared", tg(RoleMuted, "never declared"))
@@ -204,4 +220,20 @@ func requestDetail(r request, now time.Time) (title, body, plain string) {
 	deadline, _ := deadlineWords(r, now)
 	plain = strings.Join([]string{r.Task, target(r), r.State, next, deadline}, " | ")
 	return "Request " + GlyphNone + " " + Preview(r.Task), requestBlock(r, now), plain
+}
+
+// lastReport is the agent's newest report in the Activity window, full text
+// when it was retained, with its time.
+func lastReport(name string, feed []feedLine) (string, time.Time, bool) {
+	for i := len(feed) - 1; i >= 0; i-- {
+		e := feed[i].ev
+		if feed[i].sep || e.Kind != "report" || e.Agent != name {
+			continue
+		}
+		if e.Full != "" {
+			return e.Full, feed[i].at, true
+		}
+		return e.Message, feed[i].at, true
+	}
+	return "", time.Time{}, false
 }

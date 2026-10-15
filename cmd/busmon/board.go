@@ -78,6 +78,46 @@ func boardFrame(m map[string]bus.BoardEntry) (title, label Line) {
 	return Line{{Text: "Board", Role: RoleText}}, Line{{Text: fmt.Sprintf("%d/%d done", done, len(m)), Role: RoleMuted}}
 }
 
+// forPerson keeps what is addressed to the person running busmon: tracked
+// requests and untracked threads whose target is self. Threads between agents
+// stay in the Requests list but are theirs to answer, not the person's.
+func forPerson(reqs []request, threads []openThread, self string) ([]request, []openThread) {
+	var rs []request
+	for _, r := range reqs {
+		if r.Target == self {
+			rs = append(rs, r)
+		}
+	}
+	var ts []openThread
+	for _, t := range threads {
+		if t.Target == self {
+			ts = append(ts, t)
+		}
+	}
+	return rs, ts
+}
+
+// requestsLabel is the Requests frame label: what waits for you first, the
+// agents' own open threads muted.
+func requestsLabel(reqs []request, threads []openThread, self string) Line {
+	mine := waitingCount(forPerson(reqs, threads, self))
+	others := waitingCount(reqs, threads) - mine
+	l := Line{}
+	if mine > 0 {
+		l = append(l, Seg{Text: fmt.Sprintf("%d for you", mine), Role: RoleAttention})
+	}
+	if others > 0 {
+		if len(l) > 0 {
+			l = append(l, Seg{Text: " " + GlyphNone + " ", Role: RoleMuted})
+		}
+		l = append(l, Seg{Text: fmt.Sprintf("%d between agents", others), Role: RoleMuted})
+	}
+	if len(l) == 0 {
+		l = Line{{Text: "nothing waiting", Role: RoleMuted}}
+	}
+	return l
+}
+
 // waitingCount is what the header and the Requests title count: tracked
 // requests still waiting plus untracked threads with no answer (openThreads
 // already leaves out the threads a tracked request accounts for).

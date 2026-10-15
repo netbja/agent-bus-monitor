@@ -253,7 +253,9 @@ agent names, no herdr-plus template):
 - **An agent waiting for you.** When master (or any agent) needs your decision it declares
   `waiting`: it moves to the top of Agents with ♙ and the word `waiting` slowly fading in and out, the header reads `♙ 1 waiting for
   you`, and the terminal bell rings once per new question, which herdr shows on the busmon tab.
-  Answer with `@master …`; the agent then declares `working` again.
+  Open it (Enter on its row): its last report, the decision it needs, comes right after its
+  status message. Answer with `@master …`; the agent then declares `working` again. The Requests
+  panel counts what is for you (`1 for you`) apart from the agents' own threads.
 - **The `updated` gauge** in Agents (`●●●●●●●○○○ 3m`) is how fresh the agent's last declared
   state is: full right after the declaration, empty after 10 minutes, then the age alone. It does
   not measure work in progress.
