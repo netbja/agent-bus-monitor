@@ -420,6 +420,15 @@ It never touches Redis — see README "Deployment topology".
   `client`/`provider` from the launcher's env. Unknown or aged (>30 min) readings never act; every
   write is fenced. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
   nor writes `{p}:budget` (the service replaces that hash as a whole).
+- **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
+  `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write
+  one Lua script (`askCreate`, `askAnswer`, `askWithdraw`); the id is the stream id of the `ask` cmd
+  (`target=people`, `wake=no`, no `ref`; `people` is never a cmd target or consumer group). First
+  answer wins; an answer to a replaced ask follows `replaced_by` only for an unchanged question; one
+  open ask per agent; each answer is a `reply` (ref = ask id, `human=yes`) that wakes the agent. Client
+  JSON never carries answers. busmon: `askpanel.go` (ModeAsk, `!`/F4), counts and fade follow open
+  questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,
+  overlay bodies only; rows stay on `Preview`).
 - **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`
   writes `{p}:pause` (`bus/pause.go`); the dispatcher's `paused` check at the top of each pass
   wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script

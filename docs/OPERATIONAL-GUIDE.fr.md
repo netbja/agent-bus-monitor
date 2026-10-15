@@ -282,6 +282,14 @@ noms d'onglets et d'agents, sans template herdr-plus) :
 - **`@all`** touche les agents listés dans Agents (pas le conductor, qui ne fait que publier des
   rapports). C'est toujours un message par agent, pour que chacun soit livré à part, mais Activity
   n'affiche qu'une ligne `→ @all (6)`.
+- **Des questions pour vous.** Quand master a besoin de décisions, il les pose comme des questions
+  (`agentbus ask`) : l'en-tête compte les questions ouvertes (`♙ 2 waiting for you`) et la ligne de
+  l'agent affiche `waiting` en fondu. Faites `!` (ou F4) pour les ouvrir : un onglet par question,
+  `↑↓` ou un chiffre pour choisir une option, Entrée pour envoyer cette réponse tout de suite,
+  `Other…` pour écrire la vôtre, `←→` pour changer de question, Échap pour fermer. Une question
+  répondue affiche sa réponse et ne revient jamais. `agentbus asks --open` les liste dans un
+  terminal, `agentbus answer <id> <question> --choice <libellé>` répond sans busmon. Les textes longs
+  (rapports, messages) s'affichent en Markdown : titres, listes, paragraphes.
 - **Un agent qui vous attend.** Quand master (ou un autre agent) a besoin de votre décision, il
   déclare `waiting` : il passe en tête d'Agents avec ♙ et le mot `waiting` qui s'estompe et revient lentement, l'en-tête affiche `♙ 1
   waiting for you`, et la cloche du terminal sonne une fois par nouvelle question, ce que herdr

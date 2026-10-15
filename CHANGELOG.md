@@ -4,6 +4,17 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.14.0 — questions for you, and text you can read
+
+- `agentbus ask`: an agent asks a person structured questions (options, a recommended one, free
+  text always possible). busmon opens them with `!` / F4 as tabs, like Claude Code's questions; each
+  answer is sent at once and wakes the agent; an answered question never comes back; a changed
+  recommendation replaces the ask, keeping the answers already given. `agentbus asks`, `agentbus answer`.
+- The header counts open questions; the agent's detail starts with them.
+- Reports and messages are shown as Markdown readable in a terminal (headings, lists, paragraphs).
+
+[Notes](docs/releases/v0.14.0.md)
+
 ## v0.13.0 — quotas: stop before the limit, for any AI
 
 - The dispatch service reads every provider's usage windows from first-party local sources
