@@ -13,13 +13,13 @@ import (
 type headerData struct {
 	project  string
 	health   health
-	dispatch string // "", "up", "down", or a service state (serviceFact)
-	missions string // the same; shown only when not ""
-	pilot    string // pilot-lease driver, "" = autonomous
-	self     string // the person busmon writes as (humanLabel); "" = not shown
-	update   string // a newer release tag ("" = none): the last, lowest-priority item
-	waiting  string // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
-	asks     int    // agents in state waiting: decisions a person owes
+	dispatch string           // "", "up", "down", or a service state (serviceFact)
+	missions string           // the same; shown only when not ""
+	pilot    string           // pilot-lease driver, "" = autonomous
+	self     string           // the person busmon writes as (humanLabel); "" = not shown
+	update   string           // a newer release tag ("" = none): the last, lowest-priority item
+	waiting  string           // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
+	asks     int              // agents in state waiting: decisions a person owes
 	pause    *bus.PauseRecord // the project pause, nil when not paused
 	budgets  map[string]bus.BudgetSnapshot
 	now      time.Time

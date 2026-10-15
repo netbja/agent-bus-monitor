@@ -147,3 +147,14 @@ func TestDelayedVerifiedStatusAfterBindRedis(t *testing.T) {
 		t.Fatalf("snapshot = %+v, want the bind kept", s)
 	}
 }
+
+func TestMergeKeepsClientAndProvider(t *testing.T) {
+	bound := mergeSnapshot(nil, AgentSnapshot{Pane: "p", PID: 7, IdentTS: 10, Client: "codex", Provider: "openai"}, true)
+	if bound.Client != "codex" || bound.Provider != "openai" {
+		t.Fatalf("bind: %+v", bound)
+	}
+	st := mergeSnapshot(&bound, AgentSnapshot{State: "working", TS: 20}, false)
+	if st.Client != "codex" || st.Provider != "openai" {
+		t.Fatalf("a status without them erased them: %+v", st)
+	}
+}

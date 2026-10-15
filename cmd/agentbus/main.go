@@ -734,8 +734,10 @@ func main() {
 // HERDR_BIN overrides the herdr binary.
 func statusIdent(ctx context.Context) bus.AgentIdent {
 	who := bus.AgentIdent{
-		Pane:    os.Getenv("HERDR_PANE_ID"),
-		Session: os.Getenv("CLAUDE_CODE_SESSION_ID"),
+		Pane:     os.Getenv("HERDR_PANE_ID"),
+		Session:  os.Getenv("CLAUDE_CODE_SESSION_ID"),
+		Client:   os.Getenv("AGENT_BUS_CLIENT"),
+		Provider: os.Getenv("AGENT_BUS_PROVIDER"),
 	}
 	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
 		return who
