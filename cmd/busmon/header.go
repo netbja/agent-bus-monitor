@@ -13,14 +13,16 @@ import (
 type headerData struct {
 	project  string
 	health   health
-	dispatch string           // "", "up", "down", or a service state (serviceFact)
-	missions string           // the same; shown only when not ""
-	pilot    string           // pilot-lease driver, "" = autonomous
-	self     string           // the person busmon writes as (humanLabel); "" = not shown
-	update   string           // a newer release tag ("" = none): the last, lowest-priority item
-	waiting  string           // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
-	asks     int              // agents in state waiting: decisions a person owes
-	pause    *bus.PauseRecord // the project pause, nil when not paused
+	dispatch string            // "", "up", "down", or a service state (serviceFact)
+	missions string            // the same; shown only when not ""
+	pilot    string            // pilot-lease driver, "" = autonomous
+	self     string            // the person busmon writes as (humanLabel); "" = not shown
+	update   string            // a newer release tag ("" = none): the last, lowest-priority item
+	waiting  string            // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
+	asks     int               // agents in state waiting: decisions a person owes
+	pause    *bus.PauseRecord  // the project pause, nil when not paused
+	holds    map[string]int64  // provider → quota hold reset
+	pace     map[string]string // provider → "~25m"
 	budgets  map[string]bus.BudgetSnapshot
 	now      time.Time
 }
@@ -94,7 +96,15 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	sort.Strings(names)
 	for i, n := range names {
-		add(budgetSeg(n, d.budgets[n], tier), 6+i, second) // the rightmost provider has the lowest priority
+		b := d.budgets[n]
+		if len(b.Windows) == 0 && !b.Unknown && !b.Unlimited {
+			add(budgetSeg(n, b, tier), 6+i, second) // a legacy snapshot (no dispatcher): the old gauge
+			continue
+		}
+		until, isHeld := held(d.holds, n, d.now)
+		if l := quotaSeg(n, b, until, isHeld, d.pace[n], d.now); l != nil {
+			add(l, 6+i, second) // the rightmost provider has the lowest priority
+		}
 	}
 	if d.update != "" { // a newer release: the first item to go when space is short
 		add(Line{{Text: GlyphUp + " " + Preview(d.update), Role: RoleMuted}}, 101, second)

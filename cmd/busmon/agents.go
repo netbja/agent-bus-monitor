@@ -69,6 +69,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 			add("escalating", RoleError, 2, 1)
 		}
 	}
+	if a.held {
+		add("held", RoleAttention, 2, 2)
+	}
 	if a.gated > 0 {
 		add(fmt.Sprintf("gate %d", a.gated), RoleError, 3, 1)
 	}

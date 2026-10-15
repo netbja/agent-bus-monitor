@@ -831,7 +831,7 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	u.st.mu.Lock()
 	mineReqs, mineThreads := forPerson(u.st.requests, u.st.threads, u.self)
 	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update,
-		waiting: waitingText(mineReqs, mineThreads, now), asks: len(asksFor(u.st.agents)), pause: u.st.pause, budgets: u.st.budgets, now: now}
+		waiting: waitingText(mineReqs, mineThreads, now), asks: len(asksFor(u.st.agents)), pause: u.st.pause, holds: u.st.holds, pace: u.st.pace.last, budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()
 

@@ -261,6 +261,8 @@ type agentState struct {
 	queueAt     time.Time // time of the last successful Obligation read
 	ctxRaw      string    // UsageSnapshot.Ctx exactly as read
 	registered  bool      // listed in {p}:agents (the conductor only reports: not an @all target)
+	provider    string    // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
+	held        bool      // its provider is held by the dispatcher (quota)
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.
@@ -277,6 +279,8 @@ type shared struct {
 	missions string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
 	svcInst  *bus.ServicesInstall          // the {p}:services marker (nil: no services)
 	pause    *bus.PauseRecord              // the project pause (nil: not paused)
+	holds    map[string]int64              // provider → reset (Unix s) of its quota hold
+	pace     paceTracker                   // per provider window: rate of use, display only
 	svcRecs  map[string]bus.ServiceRecord  // each service's last state
 	board    map[string]bus.BoardEntry
 	requests []request    // tracked requests read from the board
