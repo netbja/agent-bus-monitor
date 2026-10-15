@@ -1,0 +1,326 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/gdamore/tcell/v2"
+
+	"github.com/netbja/agent-bus-monitor/bus"
+)
+
+// The ask panel (v0.14, spec §6 and §11): an agent's open questions, one tab
+// per question, options to pick, free text always possible. Each answer is
+// sent as soon as it is given (Bus.Answer) and the panel moves to the next
+// open question. It is its own key mode (ModeAsk); "?" stays help.
+
+// askPanel is the panel's cursor: which ask, which question, which option
+// (len(options) = "Other…"), and the free text being typed.
+type askPanel struct {
+	id     string
+	q, opt int
+	typing bool
+	text   []rune
+}
+
+// openAsks are the asks still open, oldest first.
+func openAsks(asks []bus.Ask) []bus.Ask {
+	var out []bus.Ask
+	for _, a := range asks {
+		if a.State == "open" {
+			out = append(out, a)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt < out[j].CreatedAt })
+	return out
+}
+
+func findAsk(asks []bus.Ask, id string) (bus.Ask, bool) {
+	for _, a := range asks {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return bus.Ask{}, false
+}
+
+// firstOpenQuestion is the index of the first unanswered question from i
+// (wrapping), or -1.
+func firstOpenQuestion(a bus.Ask, from int) int {
+	n := len(a.Questions)
+	for k := 0; k < n; k++ {
+		i := (from + k) % n
+		if a.Questions[i].Answer == nil {
+			return i
+		}
+	}
+	return -1
+}
+
+// openAskPanel opens the ask of agent (or, with "", the oldest open ask).
+func (u *ui) openAskPanel(agent string) {
+	u.st.mu.Lock()
+	asks := openAsks(u.st.asks)
+	u.st.mu.Unlock()
+	var target *bus.Ask
+	for i := range asks {
+		if agent == "" || asks[i].From == agent {
+			target = &asks[i]
+			break
+		}
+	}
+	if target == nil {
+		u.flash, u.flashErr = "no open question", false
+		return
+	}
+	q := max(firstOpenQuestion(*target, 0), 0)
+	u.ask = askPanel{id: target.ID, q: q, opt: recommendedIndex(target.Questions[q].AskQuestion)}
+	u.showOverlay(ovAsk, askTitle(*target), "", "", "")
+	u.renderAsk()
+}
+
+func askTitle(a bus.Ask) string {
+	return fmt.Sprintf("%s %s asks %s %s", GlyphHuman, Preview(a.From), GlyphNone, Preview(a.Title))
+}
+
+func recommendedIndex(q bus.AskQuestion) int {
+	for i, o := range q.Options {
+		if o.Recommended {
+			return i
+		}
+	}
+	return 0
+}
+
+// renderAsk redraws the panel body from the shared asks.
+func (u *ui) renderAsk() {
+	u.st.mu.Lock()
+	a, ok := findAsk(u.st.asks, u.ask.id)
+	u.st.mu.Unlock()
+	if !ok {
+		u.closeOverlay()
+		return
+	}
+	u.overlay.SetText(askPanelBody(a, u.ask, max(30, overlayInnerWidth(u.width))))
+}
+
+// askPanelBody is the panel's text: the tab strip, the question, its context
+// (Markdown), then its options (or its recorded answer). Pure, for tests.
+func askPanelBody(a bus.Ask, p askPanel, width int) string {
+	var sb strings.Builder
+	// Tab strip, fit to the width: ✓ answered, ● current, ○ open.
+	var tabs []string
+	for i, q := range a.Questions {
+		g := GlyphIdle
+		switch {
+		case i == p.q:
+			g = GlyphWorking
+		case q.Answer != nil:
+			g = GlyphDone
+		}
+		label := g + " " + Preview(q.Header)
+		if i == p.q {
+			label = tg(RoleAccent, label)
+		} else {
+			label = tg(RoleMuted, label)
+		}
+		tabs = append(tabs, label)
+	}
+	strip := strings.Join(tabs, "   ")
+	if Width(tagRE2.ReplaceAllString(strip, "")) > width { // too wide: the current tab and its position
+		strip = tabs[p.q] + tg(RoleMuted, fmt.Sprintf("   (%d/%d, %s%s for the others)", p.q+1, len(a.Questions), GlyphArrowL, GlyphArrowR))
+	}
+	sb.WriteString(strip + "\n\n")
+	if p.q < 0 || p.q >= len(a.Questions) {
+		return sb.String()
+	}
+	q := a.Questions[p.q]
+	sb.WriteString(wrapPlain(q.Question, width, RoleText, true) + "\n")
+	if strings.TrimSpace(q.Context) != "" {
+		sb.WriteString(renderMarkdown(q.Context, width) + "\n")
+	}
+	sb.WriteString("\n")
+	if q.Answer != nil {
+		sb.WriteString(tg(RoleOK, GlyphDone+" answered: "+Preview(q.Answer.Value())) +
+			tg(RoleMuted, fmt.Sprintf(" (by %s)", Preview(q.Answer.By))) + "\n")
+		return sb.String()
+	}
+	for i, o := range q.Options {
+		mark := "  "
+		role := RoleText
+		if i == p.opt && !p.typing {
+			mark, role = GlyphSelect+" ", RoleAccent
+		}
+		line := fmt.Sprintf("%s%d. %s", mark, i+1, o.Label)
+		if o.Recommended {
+			line += "  (recommended)"
+		}
+		sb.WriteString(wrapPlain(line, width, role, false) + "\n")
+		if o.Description != "" {
+			sb.WriteString(wrapIndented(o.Description, width, "      ") + "\n")
+		}
+	}
+	other := len(q.Options)
+	mark, role := "  ", RoleText
+	if p.opt == other {
+		mark, role = GlyphSelect+" ", RoleAccent
+	}
+	if p.typing {
+		sb.WriteString(tg(RoleAccent, GlyphSelect+" "+fmt.Sprintf("%d. ", other+1)) + tg(RoleText, string(p.text)) + tg(RoleAccent, "_") + "\n")
+		sb.WriteString(tg(RoleMuted, "      Enter sends this answer · Esc back to the options") + "\n")
+	} else {
+		sb.WriteString(wrapPlain(fmt.Sprintf("%s%d. Other... (type your answer)", mark, other+1), width, role, false) + "\n")
+	}
+	sb.WriteString("\n" + tg(RoleMuted, GlyphUp+GlyphDownArrow+" or 1-9 choose · Enter answer · "+GlyphArrowL+GlyphArrowR+" question · Esc close") + "\n")
+	return sb.String()
+}
+
+// wrapPlain wraps text (no Markdown) to width in one role.
+func wrapPlain(s string, width int, role Role, bold bool) string {
+	return strings.Join(wrapSpans([]mdSpan{{text: DetailText(s), role: role, bold: bold}}, width, "", ""), "\n")
+}
+
+func wrapIndented(s string, width int, indent string) string {
+	return strings.Join(wrapSpans([]mdSpan{{text: DetailText(s), role: RoleMuted}}, width, indent, indent), "\n")
+}
+
+// askKey is the panel's key handler (ModeAsk).
+func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
+	u.st.mu.Lock()
+	a, ok := findAsk(u.st.asks, u.ask.id)
+	u.st.mu.Unlock()
+	if !ok {
+		u.closeOverlay()
+		return nil
+	}
+	p := &u.ask
+	if p.q >= len(a.Questions) {
+		p.q = 0
+	}
+	q := a.Questions[p.q]
+	if p.typing {
+		switch ev.Key() {
+		case tcell.KeyEscape:
+			p.typing, p.text = false, nil
+		case tcell.KeyEnter:
+			if text := strings.TrimSpace(string(p.text)); text != "" {
+				u.sendAnswer(a, q, "", text)
+			}
+		case tcell.KeyBackspace, tcell.KeyBackspace2:
+			if len(p.text) > 0 {
+				p.text = p.text[:len(p.text)-1]
+			}
+		case tcell.KeyRune:
+			if len(p.text) < 2000 {
+				p.text = append(p.text, ev.Rune())
+			}
+		}
+		u.renderAsk()
+		return nil
+	}
+	act := lookup(ModeAsk, u.focus, u.tier(), ev)
+	switch act {
+	case ActQuit:
+		u.app.Stop()
+	case ActClose:
+		u.closeOverlay()
+		return nil
+	case ActHelp:
+		u.showOverlay(ovHelp, "Help", helpText(), "", "")
+		return nil
+	case ActUp:
+		p.opt = max(p.opt-1, 0)
+	case ActDown:
+		p.opt = min(p.opt+1, len(q.Options))
+	case ActAskNext, ActAskPrev:
+		step := 1
+		if act == ActAskPrev {
+			step = len(a.Questions) - 1
+		}
+		p.q = (p.q + step) % len(a.Questions)
+		p.opt = recommendedIndex(a.Questions[p.q].AskQuestion)
+	case ActAskPick:
+		if n := int(ev.Rune() - '1'); n >= 0 && n <= len(q.Options) {
+			p.opt = n
+		}
+	case ActSend:
+		if q.Answer != nil {
+			break
+		}
+		if p.opt == len(q.Options) {
+			p.typing, p.text = true, nil
+		} else {
+			u.sendAnswer(a, q, q.Options[p.opt].Label, "")
+		}
+	}
+	if u.ov == ovAsk {
+		u.renderAsk()
+	}
+	return nil
+}
+
+// sendAnswer sends one answer now, records it locally, and moves on to the
+// next open question; the last one closes the panel.
+func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) {
+	ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
+	defer cancel()
+	id, left, err := u.w.Answer(ctx, a.ID, q.ID, u.self, choice, text)
+	u.ask.typing, u.ask.text = false, nil
+	if err != nil {
+		u.flash, u.flashErr = "answer not sent: "+Preview(err.Error()), true
+		u.closeOverlay()
+		return
+	}
+	value := choice
+	if value == "" {
+		value = text
+	}
+	u.st.mu.Lock()
+	for i := range u.st.asks {
+		if u.st.asks[i].ID != id {
+			continue
+		}
+		for j := range u.st.asks[i].Questions {
+			if u.st.asks[i].Questions[j].ID == q.ID {
+				if choice != "" {
+					u.st.asks[i].Questions[j].Answer = &bus.AskAnswer{Choice: choice, By: u.self, At: time.Now().UnixMilli()}
+				} else {
+					u.st.asks[i].Questions[j].Answer = &bus.AskAnswer{Text: text, By: u.self, At: time.Now().UnixMilli()}
+				}
+			}
+		}
+		if left == 0 {
+			u.st.asks[i].State = "answered"
+		}
+	}
+	updated, _ := findAsk(u.st.asks, id)
+	u.st.mu.Unlock()
+	u.flash, u.flashErr = fmt.Sprintf("%s %s: %s sent to %s", GlyphDone, Preview(q.Header), Preview(value), Preview(a.From)), false
+	if left == 0 {
+		u.closeOverlay()
+		return
+	}
+	u.ask.id = id
+	if n := firstOpenQuestion(updated, u.ask.q+1); n >= 0 {
+		u.ask.q = n
+		u.ask.opt = recommendedIndex(updated.Questions[n].AskQuestion)
+	}
+}
+
+// askSummary leads an agent's detail when it has an open ask.
+func askSummary(a bus.Ask) string {
+	var sb strings.Builder
+	sb.WriteString(tg(RoleAccent, fmt.Sprintf("Questions for you %s %s", GlyphNone, Preview(a.Title))) + "\n")
+	for _, q := range a.Questions {
+		if q.Answer != nil {
+			sb.WriteString(tg(RoleMuted, fmt.Sprintf("  %s %s: %s", GlyphDone, Preview(q.Header), Preview(q.Answer.Value()))) + "\n")
+		} else {
+			sb.WriteString(tg(RoleAttention, fmt.Sprintf("  %s %s", GlyphIdle, Preview(q.Header))) + tg(RoleText, " "+Preview(q.Question)) + "\n")
+		}
+	}
+	sb.WriteString(tg(RoleMuted, "  ! or F4 to answer") + "\n\n")
+	return sb.String()
+}

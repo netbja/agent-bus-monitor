@@ -13,6 +13,7 @@ const (
 	ModeInput
 	ModeFilter
 	ModeOverlay
+	ModeAsk // the ask panel: answering an agent's questions
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -50,6 +51,10 @@ const (
 	ActShowAll
 	ActConfirm
 	ActFollow
+	ActAsk
+	ActAskNext
+	ActAskPrev
+	ActAskPick
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -153,6 +158,7 @@ var (
 		{Keys: "enter", Hint: "detail", Alt: "v", Act: ActOpen, match: either(keyIs(tcell.KeyEnter), runeIs('v'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "f", Hint: "auto-scroll", Act: ActFollow, match: runeIs('f')},
+		{Keys: "! F4", Hint: "answer", Act: ActAsk, match: either(keyIs(tcell.KeyF4), runeIs('!'))},
 		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(tcell.KeyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
@@ -172,6 +178,16 @@ var (
 	filterBindings = []binding{
 		{Keys: "enter", Hint: "apply", Act: ActSend, match: keyIs(tcell.KeyEnter)},
 		{Keys: "esc", Hint: "cancel", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
+	}
+	askBindings = []binding{
+		{Keys: arrows + " j k", Hint: "choose", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
+		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},
+		{Keys: "1-9", Help: "choose an option by its number", Act: ActAskPick, match: runeIs('1', '2', '3', '4', '5', '6', '7', '8', '9')},
+		{Keys: "enter", Hint: "answer", Act: ActSend, match: keyIs(tcell.KeyEnter)},
+		{Keys: GlyphArrowL + GlyphArrowR + " tab", Hint: "question", Act: ActAskNext, match: either(keyIs(tcell.KeyRight), keyIs(tcell.KeyTab))},
+		{Keys: GlyphArrowL, Act: ActAskPrev, match: either(keyIs(tcell.KeyLeft), keyIs(tcell.KeyBacktab))},
+		{Keys: "?", Help: "help", Act: ActHelp, match: runeIs('?')},
+		{Keys: "esc", Hint: "close", Act: ActClose, match: keyIs(tcell.KeyEscape)},
 	}
 	overlayBindings = []binding{
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
@@ -198,6 +214,8 @@ func bindings(m Mode) []binding {
 		bs = filterBindings
 	case ModeOverlay:
 		bs = overlayBindings
+	case ModeAsk:
+		bs = askBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }

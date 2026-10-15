@@ -99,8 +99,8 @@ func forPerson(reqs []request, threads []openThread, self string) ([]request, []
 
 // requestsLabel is the Requests frame label: what waits for you first, the
 // agents' own open threads muted.
-func requestsLabel(reqs []request, threads []openThread, self string) Line {
-	mine := waitingCount(forPerson(reqs, threads, self))
+func requestsLabel(reqs []request, threads []openThread, self string, questions int) Line {
+	mine := waitingCount(forPerson(reqs, threads, self)) + questions
 	others := waitingCount(reqs, threads) - mine
 	l := Line{}
 	if mine > 0 {
