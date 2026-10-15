@@ -190,3 +190,51 @@ directive and reply bodies in the message detail. One-line previews (Activity ro
 - Markdown renderer: headings, nested lists with hanging indent, paragraph re-wrap, code block
   verbatim, emphasis markers removed, width edge cases, no character lost, sanitising kept.
 - CLI: `ask` from file/stdin with error messages, `--replace`, `--withdraw`, `asks`, `answer`.
+
+## 11. Rev 2 — Grok review applied (overrides the sections above)
+
+Review: `.superpowers/brainstorm/GROK-v0.14-spec-review.md` (local), approve with fixes.
+
+**Storage.** `{p}:asks` is one hash with flat fields, every write one Lua script:
+`<id>` = the question definitions (JSON written by Go: `from`, `title`, `questions` with `id`,
+`header`, `question`, `context`, `options` — never an answer); `<id>|q` = the question ids, comma
+separated; `<id>|s` = state; `<id>|a|<qid>` = the answer JSON (`choice` or `text`, `by`, `at` from
+Redis `TIME`); `<id>|r` = replaced_by; `<id>|c` = the question ids carried to the replacement
+(unchanged definition); `<id>|e` = expiry (Redis `TIME` + 7 days, set only when the ask leaves
+`open`); `open:<agent>` = the agent's open ask id. Expired groups are deleted by the next write.
+
+**Id and cmd.** The ask cmd entry is `type=ask`, `from=<agent>`, `target=people`, `wake=no`, no
+`ref`; the ask id is that entry's stream id (created in the same script), so `created_at` is
+Redis's clock. `people` is excluded from `CmdTargets` and never gets a consumer group.
+
+**Rules.** Client JSON may not carry ids, state, times or answers (Go builds the definition from
+typed fields only). At most one open ask per agent: `Ask` without `replaces` is refused while one is
+open. A replacement may reuse a question id only with the same header, question and option labels
+(Go compares with the old definition; different wording = rejected, the agent picks a new id); such
+questions carry their answer. A replacement fully answered is stored `answered` and publishes no
+`waiting`. `Answer`: `choice` must equal an option label, `text` non-empty, the reply fits
+`CmdMaxRunes`; first answer wins; on a `replaced` ask it follows `replaced_by` when the question id
+is in `<id>|c`. The answer script writes the reply cmd (`type=reply`, `human=yes`, no `wake` field,
+`from` = the person, `target` = the agent, `ref` = ask id). `by` is the human identity (busmon's
+`--as` / `AGENT_BUS_HUMAN` / `pilot`; `agentbus answer --as`), never `AGENT_BUS_AGENT` — the same
+local trust as every busmon write. Withdraw of a partly answered ask is allowed.
+
+**What busmon counts.** The header count, the fading row and the detail's opening lines follow
+unanswered questions of open asks; an agent `waiting` with no open ask still counts as one (pre-v0.14
+behaviour). The bell rings once per new ask id (and, as before, per new `waiting` without an ask).
+Publishing `waiting` after `Ask` is best effort; the bus never writes `working`.
+
+**Threads.** An `ask` entry is not an open-thread root; replies whose `ref` is an ask id do not close
+anything else. "For you" adds the unanswered questions once. Activity lines for an ask and its reply
+read the hash while the ask exists, the cmd text otherwise.
+
+**Keys.** Enter / `v` still open the agent detail, which leads with the open ask. The answer panel is
+a new mode, opened with `!` or F4 (on the agent row, else the oldest open ask): ↑↓ / 1–9 pick, ←/→ /
+Tab change question, Enter sends, Esc leaves "Other…" or closes, `?` stays help. The tab strip is fit
+to the width; ←/→ reach every question. Only `context` goes through the Markdown renderer; headers,
+labels, descriptions and answers are plain wrapped text.
+
+**Renderer contract (§7).** `DetailText` runs first; Markdown markers are removed; a fenced line or a
+word wider than the width may be cut with the ellipsis; width is grapheme width; HTML and URLs stay
+literal; block syntax at a line start wins over inline emphasis; segments go through `tg`; the copy
+buffer keeps the sanitised source; Activity rows stay on `Preview`.
