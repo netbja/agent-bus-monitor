@@ -26,6 +26,12 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 	setIdentity := func(at int64) {
 		out.Pane, out.PID, out.PIDStart, out.Terminal, out.IdentTS = next.Pane, next.PID, next.PIDStart, next.Terminal, at
 	}
+	if next.Client != "" {
+		out.Client = next.Client
+	}
+	if next.Provider != "" {
+		out.Provider = next.Provider
+	}
 	if identityOnly {
 		setIdentity(next.IdentTS)
 		return out
@@ -103,5 +109,6 @@ func (b *Bus) Bind(ctx context.Context, agent string, who AgentIdent) error {
 	if err != nil {
 		return err
 	}
-	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, IdentTS: now}, true)
+	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, IdentTS: now,
+		Client: who.Client, Provider: who.Provider}, true)
 }

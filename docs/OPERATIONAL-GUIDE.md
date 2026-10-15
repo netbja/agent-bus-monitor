@@ -242,6 +242,24 @@ agent names, no herdr-plus template):
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
   Services overlay, with the last error and the tail of each log.
+- **Quotas: stop before the limit.** The dispatch service reads every provider's usage windows
+  (used %, reset) from local sources, every minute, with no model call. busmon's header shows one
+  gauge per provider (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`); `agentbus quota`
+  prints them in a terminal. At 85% of a window master gets one warning; at 95% the agents of that
+  provider are no longer woken (shown `held`) until the reset; when master's own provider is at
+  95%, the whole project pauses until the reset. A reading that is missing or older than 30
+  minutes never stops anyone.
+  - **Claude Code**, once per machine: `agentbus statusline --print-install` prints the `statusLine`
+    block to put in `~/.claude/settings.json`. Claude Code then hands agentbus its usage on every
+    refresh, and agentbus draws the status line itself (`Opus 5.5 · myapp · ctx 41% · 5h 12% (08:33) ·
+    7d 54%`): no other tool is needed, ccstatusline can be removed. To keep another status line, add
+    `--then '<its command>'`.
+  - **Codex** and **Grok** work out of the box when their CLI is installed.
+  - **Any other AI**: describe its source in `~/.config/agentbus/quota.toml` — a file and its fields
+    (`kind = "json"` or `"jsonl-last"`), or a script that prints the reading as JSON
+    (`kind = "command"`), or `kind = "unlimited"` for a local model. Thresholds:
+    `AGENT_BUS_QUOTA_WARN` (85), `AGENT_BUS_QUOTA_HOLD` (95), `AGENT_BUS_QUOTA_MAX_AGE` (30m),
+    `AGENT_BUS_QUOTA=off`, exported before `agentbus up`.
 - **Pause the project** when the quota runs out: `agentbus --project myapp pause --until-reset quota`
   (or `--for 2h`, `--until 02:15`). Nobody is woken until then, and busmon's header reads
   `paused · resumes in 1h52 (quota)`. At the deadline the dispatcher ends the pause and sends master

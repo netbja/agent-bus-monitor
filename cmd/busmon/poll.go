@@ -27,6 +27,7 @@ type busReader interface {
 	Wake(ctx context.Context, agent string) (bus.WakeRecord, bool, error)
 	OpenChallenges(ctx context.Context, agent string) (map[string]string, error)
 	Pause(ctx context.Context) (*bus.PauseRecord, error)
+	QuotaMarks(ctx context.Context) (map[string]string, error)
 }
 
 // setHealth records the monitor's OWN link to the broker. A transition stamps
@@ -121,7 +122,10 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	var svcInst *bus.ServicesInstall
 	var svcRecs map[string]bus.ServiceRecord
 	svcErr := errNotPolled
+	var marks map[string]string
+	marksErr := errNotPolled
 	if wakePollDue(tick) {
+		marks, marksErr = b.QuotaMarks(pollCtx)
 		dispAlive, dispErr = b.DispatchAlive(pollCtx)
 		missionsState, missionsErr = missionsFact(pollCtx, b)
 		svcInst, svcRecs, svcErr = b.ServiceStates(pollCtx)
@@ -150,6 +154,12 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	st.pilot = driver
 	if pauseErr == nil {
 		st.pause = pause
+	}
+	if marksErr == nil {
+		st.holds = quotaHolds(marks)
+	}
+	if budgetErr == nil {
+		st.pace.observe(budgetSnaps, time.Now())
 	}
 	if svcErr == nil {
 		st.svcInst, st.svcRecs = svcInst, svcRecs
@@ -214,6 +224,10 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		if snapsErr == nil {
 			a.pane = snaps[n].Pane
 			a.pid, a.pidStart = snaps[n].PID, snaps[n].PIDStart
+			a.provider = snaps[n].Provider
+		}
+		if st.holds != nil {
+			_, a.held = held(st.holds, a.provider, time.Now())
 		}
 		if usageErr == nil {
 			a.ctxRaw = usageSnaps[n].Ctx

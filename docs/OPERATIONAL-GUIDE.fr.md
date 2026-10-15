@@ -253,6 +253,26 @@ noms d'onglets et d'agents, sans template herdr-plus) :
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) ouvre la fenêtre
   Services, avec la dernière erreur et la fin de chaque journal.
+- **Quotas : s'arrêter avant la limite.** Le service dispatch lit chaque minute les fenêtres
+  d'usage de chaque fournisseur (% utilisé, remise à zéro) dans des sources locales, sans appel au
+  modèle. L'en-tête de busmon affiche une jauge par fournisseur
+  (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`) ; `agentbus quota` les affiche dans
+  un terminal. À 85 % d'une fenêtre, master reçoit un avertissement ; à 95 %, les agents de ce
+  fournisseur ne sont plus réveillés (affichés `held`) jusqu'à la remise à zéro ; quand le
+  fournisseur de master lui-même atteint 95 %, tout le projet se met en pause jusqu'à la remise à
+  zéro. Un relevé absent ou de plus de 30 minutes n'arrête jamais personne.
+  - **Claude Code**, une fois par machine : `agentbus statusline --print-install` affiche le bloc
+    `statusLine` à mettre dans `~/.claude/settings.json`. Claude Code transmet alors son usage à
+    agentbus à chaque rafraîchissement. agentbus dessine lui-même
+    la ligne d'état (`Opus 5.5 · myapp · ctx 41% · 5h 12% (08:33) · 7d 54%`) : aucun autre outil
+    n'est nécessaire, ccstatusline peut être désinstallé. Pour garder une autre ligne d'état, ajoutez
+    `--then '<sa commande>'`.
+  - **Codex** et **Grok** fonctionnent d'office quand leur CLI est installée.
+  - **Toute autre IA** : décrivez sa source dans `~/.config/agentbus/quota.toml` — un fichier et ses
+    champs (`kind = "json"` ou `"jsonl-last"`), ou un script qui imprime le relevé en JSON
+    (`kind = "command"`), ou `kind = "unlimited"` pour un modèle local. Seuils :
+    `AGENT_BUS_QUOTA_WARN` (85), `AGENT_BUS_QUOTA_HOLD` (95), `AGENT_BUS_QUOTA_MAX_AGE` (30m),
+    `AGENT_BUS_QUOTA=off`, exportés avant `agentbus up`.
 - **Mettre le projet en pause** quand le quota s'épuise : `agentbus --project myapp pause
   --until-reset quota` (ou `--for 2h`, `--until 02:15`). Personne n'est réveillé d'ici là, et
   l'en-tête de busmon affiche `paused · resumes in 1h52 (quota)`. À l'échéance, le dispatcher lève

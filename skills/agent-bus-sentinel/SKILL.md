@@ -138,17 +138,13 @@ You start from a blank context; read before you write, assume nothing.
      ```bash
      agentbus cmd master "Ctx <NN>% — write a hand-off (step, committed, in-progress) then /clear"
      ```
-   - **Session budget** ≥ 75% of the account window:
+   - **Session budget**: no nudge any more. Since v0.13 the dispatch service reads every
+     provider's windows itself (`agentbus quota`), warns master once per window at 85%, holds
+     a provider's agents at 95% and pauses the project when master's own provider runs out.
+     Only nudge if `agentbus dispatch --status` says `dispatch down` and a gauge is ≥ 90%:
      ```bash
-     agentbus cmd master "Session <NN>% (resets <HH:MM>) — wrap up: finish in-flight, dispatch nothing new"
+     agentbus cmd master "Session <NN>% and no dispatcher — pause: agentbus pause --until-reset quota"
      ```
-     At 75% master still lands the in-flight task; at ≥ 90% it holds everything until the
-     reset. 75% suits a small subscription — raise it only if the account has headroom.
-   - **Session budget** ≥ 90%, and `agentbus pause --status` says `not paused`:
-     ```bash
-     agentbus cmd master "Session <NN>% — pause the project: agentbus pause --until-reset quota"
-     ```
-     The pause is master's call (it knows what is in flight); you only remind it once.
    - **All quiet** — `agentbus board` non-empty and all `done`, and no peer
      `working`/`blocked`: the team may be idling for nothing:
      ```bash

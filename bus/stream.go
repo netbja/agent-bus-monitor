@@ -76,6 +76,22 @@ type AgentSnapshot struct {
 	// IdentTS (ms, Redis time) is when the identity was last proved: by a
 	// verified status (its stream id) or a bind. Only a newer proof replaces it.
 	IdentTS int64 `json:"ident_ts,omitempty"`
+	// Client and Provider (v0.13) come from the launcher's AGENT_BUS_CLIENT /
+	// AGENT_BUS_PROVIDER: which AI runs the agent, and whose quota it draws on.
+	Client   string `json:"client,omitempty"`
+	Provider string `json:"provider,omitempty"`
+}
+
+// clientProviders is the fallback when the launcher set no provider: the
+// provider whose quota a known client draws on (rolecfg's profile wins).
+var clientProviders = map[string]string{"claude-code": "anthropic", "codex": "openai", "kimi-cli": "moonshot", "grok": "xai", "agy": "google"}
+
+// ProviderFor is provider, else the fallback for client, else "".
+func ProviderFor(client, provider string) string {
+	if provider != "" {
+		return provider
+	}
+	return clientProviders[client]
 }
 
 // AgentIdent is the ambient identity an agent's own process already knows about
@@ -89,6 +105,8 @@ type AgentIdent struct {
 	PID      int    // agent's foreground pid in its herdr pane (0 = unknown)
 	PIDStart uint64 // that pid's start time, /proc/<pid>/stat field 22
 	Terminal string // herdr terminal id, display only
+	Client   string // AGENT_BUS_CLIENT
+	Provider string // AGENT_BUS_PROVIDER
 }
 
 // Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
@@ -151,6 +169,23 @@ type BudgetSnapshot struct {
 	Extra        map[string]float64 `json:"extra,omitempty"`
 	Source       string             `json:"source,omitempty"` // where the reader got it
 	TS           int64              `json:"ts"`
+	// v0.13 (additive): every window of the provider, how fresh the reading
+	// is, and whether it is unknown or unlimited. Readers of the legacy
+	// percent fields above get them only when a 5h / 7d window exists.
+	Windows     []BudgetWindow `json:"windows,omitempty"`
+	ObservedAt  int64          `json:"observed_at,omitempty"`
+	CollectedAt int64          `json:"collected_at,omitempty"`
+	Unknown     bool           `json:"unknown,omitempty"`
+	Unlimited   bool           `json:"unlimited,omitempty"`
+}
+
+// BudgetWindow is one usage window of a provider (quota.Window on the bus).
+type BudgetWindow struct {
+	Name       string  `json:"name"`
+	UsedPct    float64 `json:"used_pct"`
+	ResetsAt   int64   `json:"resets_at"`
+	Minutes    int     `json:"minutes,omitempty"`
+	ObservedAt int64   `json:"observed_at,omitempty"` // this window's own observation (Unix ms)
 }
 
 // Event is a parsed stream entry. Which fields are populated depends on Kind.
@@ -262,7 +297,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
-		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal}
+		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider}
 	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.

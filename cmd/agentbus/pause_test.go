@@ -23,7 +23,11 @@ func pauseFixture(now time.Time) (*pauseDeps, *bus.PauseRecord) {
 			}
 			return rec, nil
 		},
-		Resume: func(context.Context, string, string) (bool, error) { ok := rec.Until != 0; *rec = bus.PauseRecord{}; return ok, nil },
+		Resume: func(context.Context, string, string) (bool, error) {
+			ok := rec.Until != 0
+			*rec = bus.PauseRecord{}
+			return ok, nil
+		},
 		Budgets: func(context.Context) (map[string]bus.BudgetSnapshot, error) {
 			return map[string]bus.BudgetSnapshot{"anthropic": {SessionReset: now.Add(90 * time.Minute).UTC().Format(time.RFC3339)}}, nil
 		},

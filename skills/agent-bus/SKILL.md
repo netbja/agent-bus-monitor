@@ -129,6 +129,12 @@ agentbus report <self> --to master "<task> done — <one-line summary>"   # repo
 sat idle for half an hour: coder and foureyes had reported an approval, master waited for a
 message that never came.
 
+## How much quota is left: ask, don't guess
+
+`agentbus quota` prints every provider's usage windows (used %, reset, age of the reading) from
+local sources, without spending a turn. If the dispatcher holds your provider, you are simply
+not woken until its reset.
+
 ## Your `status` IS your heartbeat
 Agents are one-shot CLI calls, not daemons — there is no separate heartbeat. Emit
 `agentbus status <self> <working|idle|blocked|waiting|done> <msg>` when your state changes, and

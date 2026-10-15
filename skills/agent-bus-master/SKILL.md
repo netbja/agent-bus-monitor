@@ -58,10 +58,19 @@ herdr pane send-text "$pane" "<text / context to inject>"
 herdr pane send-keys "$pane" Enter
 ```
 
-## Quota running out: pause the project, never a sleep
+## Quota running out: the dispatcher handles it
 
-When the session budget is nearly spent (sentinel nudges at 90%, or the human tells you), land
-or park what is in flight, then pause the whole project until the window resets:
+Since v0.13 the dispatch service reads every provider's usage windows (`agentbus quota` shows
+them) and acts on them, with no help from you:
+- at **85%** of a window it sends you one directive, `Quota <provider> NN% (<window>, resets
+  HH:MM): finish what is in flight, start nothing new.` Do exactly that: land or park the task
+  in flight, dispatch nothing new to agents of that provider.
+- at **95%** it stops waking that provider's agents (busmon shows them `held`) until the reset;
+  their directives wait in their queues.
+- when **your own** provider reaches 95%, it pauses the whole project until the reset and sends
+  you the resume directive then. Nothing to schedule.
+
+You can still pause by hand (the human asks, or no dispatcher runs):
 
 ```bash
 agentbus pause --until-reset quota      # or: --for 2h, --until 02:15

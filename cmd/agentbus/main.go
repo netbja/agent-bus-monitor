@@ -127,6 +127,13 @@ func main() {
 		fmt.Println(string(out))
 		return
 	}
+	// quota and statusline read local files only: no project, no broker.
+	if len(args) >= 1 && args[0] == "quota" {
+		os.Exit(runQuota(args[1:], os.Stdout, os.Stderr))
+	}
+	if len(args) >= 1 && args[0] == "statusline" {
+		os.Exit(runStatusline(args[1:], os.Stdin, os.Stdout))
+	}
 	if len(args) >= 1 && args[0] == "version" {
 		fmt.Printf("agentbus protocol v%d\nagentbus version %s\n", bus.ProtocolVersion, buildinfo.Version)
 		return
@@ -623,13 +630,9 @@ func main() {
 		_, quiet := extractBool(rest, "--quiet")
 		notes := []string{}
 
-		budgets, bnotes := collectBudgets(usage.CCStatuslinePath())
-		notes = append(notes, bnotes...)
-		for provider, snap := range budgets {
-			if err := b.SetBudget(ctx, provider, snap); err != nil {
-				notes = append(notes, fmt.Sprintf("publishing %s budget: %v", provider, err))
-			}
-		}
+		// v0.13: the dispatch service publishes every provider's windows from
+		// first-party readers (agentbus quota); refresh no longer reads
+		// ccstatusline nor writes {p}:budget.
 
 		agents, err := b.Agents(ctx)
 		if err != nil {
@@ -644,7 +647,7 @@ func main() {
 		}
 
 		if !quiet {
-			fmt.Printf("refresh: %d provider budget(s), %d agent snapshot(s)\n", len(budgets), len(snaps))
+			fmt.Printf("refresh: %d agent snapshot(s)\n", len(snaps))
 			for _, n := range notes {
 				fmt.Fprintln(os.Stderr, "refresh: "+n)
 			}
@@ -727,8 +730,10 @@ func main() {
 // HERDR_BIN overrides the herdr binary.
 func statusIdent(ctx context.Context) bus.AgentIdent {
 	who := bus.AgentIdent{
-		Pane:    os.Getenv("HERDR_PANE_ID"),
-		Session: os.Getenv("CLAUDE_CODE_SESSION_ID"),
+		Pane:     os.Getenv("HERDR_PANE_ID"),
+		Session:  os.Getenv("CLAUDE_CODE_SESSION_ID"),
+		Client:   os.Getenv("AGENT_BUS_CLIENT"),
+		Provider: bus.ProviderFor(os.Getenv("AGENT_BUS_CLIENT"), os.Getenv("AGENT_BUS_PROVIDER")),
 	}
 	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
 		return who

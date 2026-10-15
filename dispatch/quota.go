@@ -1,0 +1,203 @@
+package dispatch
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/quota"
+)
+
+// Quota policy (spec 2026-10-15-quota-awareness-design.md §7): readings are
+// collected every QuotaEvery, published to {p}:budget, and turned into one
+// warn per window and reset, a per-provider hold (no prompt, no escalation for
+// its agents) and, for the coordinator's own provider, a project pause. Every
+// write is fenced. Unknown or aged readings never warn, hold or release.
+
+// QuotaConfig enables the policy; a nil Read disables it.
+type QuotaConfig struct {
+	Read    func(ctx context.Context) []quota.Reading
+	Every   time.Duration // collection interval (default 60 s)
+	WarnPct float64       // default 85
+	HoldPct float64       // default 95
+	MaxAge  time.Duration // a reading older than this is unknown for policy (default 30 min)
+	Now     func() time.Time
+}
+
+func (q QuotaConfig) filled() QuotaConfig {
+	if q.Every <= 0 {
+		q.Every = time.Minute
+	}
+	if q.WarnPct <= 0 {
+		q.WarnPct = 85
+	}
+	if q.HoldPct <= 0 {
+		q.HoldPct = 95
+	}
+	if q.MaxAge <= 0 {
+		q.MaxAge = 30 * time.Minute
+	}
+	if q.Now == nil {
+		q.Now = time.Now
+	}
+	return q
+}
+
+// resumeMargin: resume a little after a reset, never into a window that has
+// not reopened yet.
+const resumeMargin = 2 * time.Minute
+
+type quotaState struct {
+	readings map[string]quota.Reading
+	at       time.Time
+	held     map[string]bool // provider → held this pass
+}
+
+// quotaPass collects (when due), publishes, warns, holds and pauses. It runs
+// at the top of every reconcile, before the pause check, so a quota pause can
+// also end early.
+func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot) error {
+	q := l.cfg.Quota
+	if q.Read == nil {
+		return nil
+	}
+	now := q.Now()
+	if l.quota.readings == nil || now.Sub(l.quota.at) >= q.Every {
+		l.quota.readings = map[string]quota.Reading{}
+		for _, r := range q.Read(ctx) {
+			l.quota.readings[r.Provider] = r
+		}
+		l.quota.at = now
+	}
+	used := map[string]bool{}
+	for _, s := range snaps {
+		if s.Provider != "" {
+			used[s.Provider] = true
+		}
+	}
+	coord := snaps[l.cfg.EscalateTo].Provider
+
+	budgets := map[string]bus.BudgetSnapshot{}
+	for p := range used {
+		if r, ok := l.quota.readings[p]; ok {
+			budgets[p] = budgetOf(r, now)
+		}
+	}
+	if err := l.b.FencedPutBudgets(ctx, l.token, budgets); err != nil {
+		return err
+	}
+	marks, err := l.b.QuotaMarks(ctx)
+	if err != nil {
+		return err
+	}
+	l.quota.held = map[string]bool{}
+	for p := range used {
+		r := l.quota.readings[p]
+		usable := r.Usable(now, q.MaxAge)
+		for _, w := range usable {
+			if w.UsedPct < q.WarnPct {
+				continue
+			}
+			field := "warn:" + p + ":" + w.Name
+			reset := strconv.FormatInt(w.ResetsAt, 10)
+			if marks[field] == reset {
+				continue
+			}
+			msg := fmt.Sprintf("Quota %s %.0f%% (%s, resets %s): finish what is in flight, start nothing new.",
+				p, w.UsedPct, w.Name, w.Reset().Local().Format("15:04"))
+			if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, l.cfg.EscalateTo, bus.CmdDirective, msg); err != nil {
+				return err
+			}
+			if err := l.b.FencedQuotaSet(ctx, l.token, field, reset); err != nil {
+				return err
+			}
+			l.log(map[string]any{"action": "quota-warn", "provider": p, "window": w.Name, "used_pct": w.UsedPct})
+		}
+
+		holdField := "hold:" + p
+		recorded, _ := strconv.ParseInt(marks[holdField], 10, 64)
+		tight, ok := quota.Tightest(usable)
+		switch {
+		case ok && tight.UsedPct >= q.HoldPct:
+			if recorded != tight.ResetsAt {
+				if err := l.b.FencedQuotaSet(ctx, l.token, holdField, strconv.FormatInt(tight.ResetsAt, 10)); err != nil {
+					return err
+				}
+				l.log(map[string]any{"action": "quota-hold", "provider": p, "window": tight.Name, "used_pct": tight.UsedPct})
+			}
+			recorded = tight.ResetsAt
+			l.quota.held[p] = true
+		case ok: // a usable reading under the threshold releases, and ends a quota pause early
+			if recorded != 0 {
+				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
+					return err
+				}
+				l.log(map[string]any{"action": "quota-release", "provider": p})
+			}
+			recorded = 0
+			if p == coord {
+				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p); err != nil {
+					return err
+				}
+			}
+		default: // unknown: a recorded hold stands until its reset
+			if recorded != 0 && time.Unix(recorded, 0).Before(now) {
+				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
+					return err
+				}
+				recorded = 0
+			} else if recorded != 0 {
+				l.quota.held[p] = true
+			}
+		}
+		// A hold that expired at its reset leaves the quota pause to
+		// FencedResume, which ends it at reset + resumeMargin.
+		if p == coord && l.quota.held[p] {
+			until := time.Unix(recorded, 0).Add(resumeMargin).UnixMilli()
+			if wrote, err := l.b.FencedQuotaPause(ctx, l.token, p, l.cfg.EscalateTo, until); err != nil {
+				return err
+			} else if wrote {
+				l.logOnce("quota-pause:"+p, map[string]any{"action": "quota-pause", "provider": p, "until": time.UnixMilli(until).Format(time.RFC3339)})
+			}
+		}
+	}
+	return nil
+}
+
+// heldBy reports whether agent's provider is held this pass.
+func (l *loop) heldBy(snap *bus.AgentSnapshot) bool {
+	return snap != nil && snap.Provider != "" && l.quota.held[snap.Provider]
+}
+
+// budgetOf is a reading as {p}:budget carries it; the legacy percent fields
+// only when a 5h / 7d window exists, never a 0 placeholder.
+func budgetOf(r quota.Reading, now time.Time) bus.BudgetSnapshot {
+	s := bus.BudgetSnapshot{Provider: r.Provider, Source: r.Source, TS: now.UnixMilli(),
+		ObservedAt: r.ObservedAt, CollectedAt: r.CollectedAt, Unknown: r.Unknown, Unlimited: r.Unlimited}
+	for _, w := range r.Windows {
+		s.Windows = append(s.Windows, bus.BudgetWindow{Name: w.Name, UsedPct: w.UsedPct, ResetsAt: w.ResetsAt, Minutes: w.Minutes,
+			ObservedAt: w.Observed(r).UnixMilli()})
+		reset := w.Reset().UTC().Format(time.RFC3339)
+		switch w.Name {
+		case "5h":
+			s.SessionPct, s.SessionReset = w.UsedPct, reset
+		case "7d", "weekly":
+			s.WeeklyPct, s.WeeklyReset = w.UsedPct, reset
+		}
+	}
+	return s
+}
+
+// logOnce logs v once per key until the key's value changes.
+func (l *loop) logOnce(key string, v map[string]any) {
+	l.logMu.Lock()
+	val := fmt.Sprint(v)
+	same := l.last[key] == val
+	l.last[key] = val
+	l.logMu.Unlock()
+	if !same {
+		l.log(v)
+	}
+}
