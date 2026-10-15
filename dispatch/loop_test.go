@@ -1,12 +1,12 @@
 package dispatch
 
 import (
-	"sync"
 	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 

@@ -129,7 +129,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			}
 			recorded = tight.ResetsAt
 			l.quota.held[p] = true
-		case ok: // a usable reading under the threshold releases
+		case ok: // a usable reading under the threshold releases, and ends a quota pause early
 			if recorded != 0 {
 				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
 					return err
@@ -137,6 +137,11 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.log(map[string]any{"action": "quota-release", "provider": p})
 			}
 			recorded = 0
+			if p == coord {
+				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p); err != nil {
+					return err
+				}
+			}
 		default: // unknown: a recorded hold stands until its reset
 			if recorded != 0 && time.Unix(recorded, 0).Before(now) {
 				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
@@ -147,16 +152,14 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.quota.held[p] = true
 			}
 		}
-		if p == coord {
-			if l.quota.held[p] {
-				until := time.Unix(recorded, 0).Add(resumeMargin).UnixMilli()
-				if wrote, err := l.b.FencedQuotaPause(ctx, l.token, p, l.cfg.EscalateTo, until); err != nil {
-					return err
-				} else if wrote {
-					l.logOnce("quota-pause:"+p, map[string]any{"action": "quota-pause", "provider": p, "until": time.UnixMilli(until).Format(time.RFC3339)})
-				}
-			} else if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p); err != nil {
+		// A hold that expired at its reset leaves the quota pause to
+		// FencedResume, which ends it at reset + resumeMargin.
+		if p == coord && l.quota.held[p] {
+			until := time.Unix(recorded, 0).Add(resumeMargin).UnixMilli()
+			if wrote, err := l.b.FencedQuotaPause(ctx, l.token, p, l.cfg.EscalateTo, until); err != nil {
 				return err
+			} else if wrote {
+				l.logOnce("quota-pause:"+p, map[string]any{"action": "quota-pause", "provider": p, "until": time.UnixMilli(until).Format(time.RFC3339)})
 			}
 		}
 	}
@@ -174,7 +177,8 @@ func budgetOf(r quota.Reading, now time.Time) bus.BudgetSnapshot {
 	s := bus.BudgetSnapshot{Provider: r.Provider, Source: r.Source, TS: now.UnixMilli(),
 		ObservedAt: r.ObservedAt, CollectedAt: r.CollectedAt, Unknown: r.Unknown, Unlimited: r.Unlimited}
 	for _, w := range r.Windows {
-		s.Windows = append(s.Windows, bus.BudgetWindow{Name: w.Name, UsedPct: w.UsedPct, ResetsAt: w.ResetsAt, Minutes: w.Minutes})
+		s.Windows = append(s.Windows, bus.BudgetWindow{Name: w.Name, UsedPct: w.UsedPct, ResetsAt: w.ResetsAt, Minutes: w.Minutes,
+			ObservedAt: w.Observed(r).UnixMilli()})
 		reset := w.Reset().UTC().Format(time.RFC3339)
 		switch w.Name {
 		case "5h":

@@ -19,6 +19,17 @@ type Window struct {
 	UsedPct  float64 `json:"used_pct"`
 	ResetsAt int64   `json:"resets_at"` // Unix seconds
 	Minutes  int     `json:"minutes,omitempty"`
+	// ObservedAt (Unix ms) is when this window's number was true; 0 = the
+	// reading's ObservedAt. A source may refresh one window and not another.
+	ObservedAt int64 `json:"observed_at,omitempty"`
+}
+
+// Observed is the window's own observation time, else the reading's.
+func (w Window) Observed(r Reading) time.Time {
+	if w.ObservedAt > 0 {
+		return time.UnixMilli(w.ObservedAt)
+	}
+	return time.UnixMilli(r.ObservedAt)
 }
 
 // Reset is ResetsAt as a time.
@@ -75,19 +86,45 @@ func (r Reading) Validate() error {
 }
 
 // Usable is the windows the policy may act on at now: the reading is known,
-// observed within maxAge, and each window's reset is still ahead (spec §7.1).
-// Display keeps the others, aged.
+// each window was itself observed within maxAge, and its reset is still ahead
+// (spec §7.1). Display keeps the others, aged.
 func (r Reading) Usable(now time.Time, maxAge time.Duration) []Window {
-	if r.Unknown || r.Unlimited || r.ObservedAt == 0 || now.Sub(time.UnixMilli(r.ObservedAt)) > maxAge {
+	if r.Unknown || r.Unlimited {
 		return nil
 	}
 	var out []Window
 	for _, w := range r.Windows {
-		if w.Reset().After(now) {
-			out = append(out, w)
+		obs := w.Observed(r)
+		if obs.UnixMilli() <= 0 || now.Sub(obs) > maxAge || !w.Reset().After(now) {
+			continue
 		}
+		out = append(out, w)
 	}
 	return out
+}
+
+// validWindow: a number the policy can trust (spec §10: non-numeric is unknown).
+func validWindow(w Window) bool {
+	return w.Name != "" && !math.IsNaN(w.UsedPct) && !math.IsInf(w.UsedPct, 0) && w.UsedPct >= 0 && w.UsedPct <= 1000 && w.ResetsAt > 0
+}
+
+// Clean drops the windows that fail validation; a reading left with none is
+// unknown (F4: a NaN must never release a hold).
+func (r Reading) Clean() Reading {
+	if r.Unknown || r.Unlimited {
+		return r
+	}
+	var ws []Window
+	for _, w := range r.Windows {
+		if validWindow(w) {
+			ws = append(ws, w)
+		}
+	}
+	if len(ws) == 0 {
+		return Unknown(r.Provider, r.Source, "no valid window")
+	}
+	r.Windows = ws
+	return r
 }
 
 // Tightest is the window closest to its limit (highest used percent; the

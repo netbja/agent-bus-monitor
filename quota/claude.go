@@ -206,7 +206,9 @@ func (c ClaudeReader) Read(ctx context.Context) (Reading, error) {
 		return Unknown("anthropic", "statusline", "no statusline reading yet (agentbus statusline --print-install)"), nil
 	}
 	for _, s := range stored {
-		r.Windows = append(r.Windows, s.Window)
+		w := s.Window
+		w.ObservedAt = s.ObservedAt
+		r.Windows = append(r.Windows, w)
 		if s.ObservedAt > r.ObservedAt {
 			r.ObservedAt = s.ObservedAt
 		}

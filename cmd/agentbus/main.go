@@ -631,14 +631,9 @@ func main() {
 		notes := []string{}
 
 		// v0.13: the dispatch service publishes every provider's windows from
-		// first-party readers; the ccstatusline cache is only a fallback for a
-		// project with no dispatcher, and never overwrites the service's.
+		// first-party readers (agentbus quota); refresh no longer reads
+		// ccstatusline nor writes {p}:budget.
 		budgets := map[string]bus.BudgetSnapshot{}
-		if alive, err := b.DispatchAlive(ctx); err == nil && !alive {
-			var bnotes []string
-			budgets, bnotes = collectBudgets(usage.CCStatuslinePath())
-			notes = append(notes, bnotes...)
-		}
 		for provider, snap := range budgets {
 			if err := b.SetBudget(ctx, provider, snap); err != nil {
 				notes = append(notes, fmt.Sprintf("publishing %s budget: %v", provider, err))
@@ -744,7 +739,7 @@ func statusIdent(ctx context.Context) bus.AgentIdent {
 		Pane:     os.Getenv("HERDR_PANE_ID"),
 		Session:  os.Getenv("CLAUDE_CODE_SESSION_ID"),
 		Client:   os.Getenv("AGENT_BUS_CLIENT"),
-		Provider: os.Getenv("AGENT_BUS_PROVIDER"),
+		Provider: bus.ProviderFor(os.Getenv("AGENT_BUS_CLIENT"), os.Getenv("AGENT_BUS_PROVIDER")),
 	}
 	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
 		return who

@@ -76,7 +76,7 @@ func runBind(ctx context.Context, d bindDeps, args []string, out, errw io.Writer
 		return 1
 	}
 	if err := d.Bind(ctx, agent, bus.AgentIdent{Pane: pane, PID: pid, PIDStart: start, Terminal: terminal,
-		Client: d.Env("AGENT_BUS_CLIENT"), Provider: d.Env("AGENT_BUS_PROVIDER")}); err != nil {
+		Client: d.Env("AGENT_BUS_CLIENT"), Provider: bus.ProviderFor(d.Env("AGENT_BUS_CLIENT"), d.Env("AGENT_BUS_PROVIDER"))}); err != nil {
 		fmt.Fprintf(errw, "bind: %v\n", err)
 		return 1
 	}

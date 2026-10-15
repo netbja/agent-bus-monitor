@@ -53,18 +53,34 @@ func toAny(ss []string) []interface{} {
 	return out
 }
 
-// FencedPutBudgets writes provider readings to {p}:budget while token holds
-// the dispatch lease.
+// quotaReplace: 0 not the holder, else 1; the hash becomes exactly the given
+// field/value pairs (none = deleted).
+var quotaReplace = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+redis.call('DEL', KEYS[2])
+if #ARGV > 1 then redis.call('HSET', KEYS[2], unpack(ARGV, 2)) end
+return 1`)
+
+// FencedPutBudgets replaces {p}:budget with the given provider readings while
+// token holds the dispatch lease: a provider no longer used, or a legacy row,
+// does not linger.
 func (b *Bus) FencedPutBudgets(ctx context.Context, token string, snaps map[string]BudgetSnapshot) error {
-	var args []string
+	argv := []interface{}{token}
 	for p, s := range snaps {
 		v, err := json.Marshal(s)
 		if err != nil {
 			return err
 		}
-		args = append(args, p, string(v))
+		argv = append(argv, p, string(v))
 	}
-	return b.fencedHash(ctx, quotaHSet, token, BudgetKey(b.project), args...)
+	n, err := quotaReplace.Run(ctx, b.r, []string{DispatchKey(b.project), BudgetKey(b.project)}, argv...).Int()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrNotHolder
+	}
+	return nil
 }
 
 // QuotaMarks reads {p}:quota.

@@ -144,3 +144,26 @@ func TestRunQuotaUnknownNeverHolds(t *testing.T) {
 	start(t, b, rt, quotaConfig(f))
 	waitFor(t, 3*time.Second, "coder woken despite an aged 99%", func() bool { return len(rt.Prompts()) == 1 })
 }
+
+// F2: a coordinator hold that expires at its reset (readings now unknown)
+// leaves the quota pause in place; FencedResume ends it at reset + margin.
+func TestRunQuotaPauseOutlivesAnExpiredHold(t *testing.T) {
+	b, _ := dialRun(t)
+	cleanupQuota(t, b)
+	registerAs(t, b, "master", "p-master", "anthropic")
+	now := time.Now()
+	r := quota.Reading{Provider: "anthropic", ObservedAt: now.UnixMilli(),
+		Windows: []quota.Window{{Name: "5h", UsedPct: 99, ResetsAt: now.Add(1500*time.Millisecond).Unix() + 1}}}
+	f := &fakeQuota{}
+	f.set(r)
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "a quota pause", func() bool { p, _ := b.Pause(context.Background()); return p != nil })
+	f.set(quota.Unknown("anthropic", "x", "gone"))
+	time.Sleep(3500 * time.Millisecond) // past the reset, well before reset + 2 min
+	if marks, _ := b.QuotaMarks(context.Background()); marks["hold:anthropic"] != "" {
+		t.Fatal("the expired hold was kept")
+	}
+	if p, _ := b.Pause(context.Background()); p == nil {
+		t.Fatal("the quota pause was deleted at the reset instead of reset + margin")
+	}
+}

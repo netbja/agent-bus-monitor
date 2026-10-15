@@ -3,6 +3,7 @@ package quota
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -238,5 +239,30 @@ every = "5m"
 	}
 	if cfg["local"].Kind != "unlimited" || cfg["anthropic"].Kind != "claude" || cfg["moonshot"].Every != "5m" {
 		t.Fatalf("cfg %+v", cfg)
+	}
+}
+
+// F1: a window observed long ago is not usable just because another window
+// of the same reading is fresh.
+func TestUsableAgesEachWindow(t *testing.T) {
+	r := Reading{Provider: "anthropic", ObservedAt: t0.UnixMilli(), Windows: []Window{
+		{Name: "5h", UsedPct: 10, ResetsAt: t0.Add(time.Hour).Unix(), ObservedAt: t0.UnixMilli()},
+		{Name: "7d", UsedPct: 97, ResetsAt: t0.Add(72 * time.Hour).Unix(), ObservedAt: t0.Add(-5 * time.Hour).UnixMilli()},
+	}}
+	u := r.Usable(t0, 30*time.Minute)
+	if len(u) != 1 || u[0].Name != "5h" {
+		t.Fatalf("usable %+v: the aged 7d window must be dropped", u)
+	}
+}
+
+// F4: a non-numeric or out-of-range window never reaches the policy.
+func TestCleanDropsInvalidWindows(t *testing.T) {
+	r := Reading{Provider: "openai", ObservedAt: 1, Windows: []Window{{Name: "5h", UsedPct: math.NaN(), ResetsAt: 2}, {Name: "7d", UsedPct: -3, ResetsAt: 2}}}
+	if c := r.Clean(); !c.Unknown {
+		t.Fatalf("all invalid: %+v", c)
+	}
+	r.Windows = append(r.Windows, Window{Name: "ok", UsedPct: 40, ResetsAt: 2})
+	if c := r.Clean(); c.Unknown || len(c.Windows) != 1 || c.Windows[0].Name != "ok" {
+		t.Fatalf("one valid: %+v", c)
 	}
 }

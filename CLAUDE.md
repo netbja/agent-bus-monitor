@@ -418,8 +418,8 @@ It never touches Redis — see README "Deployment topology".
   window and reset, hold a provider's agents (`{p}:quota` marks; no prompt, no escalation), pause
   for the coordinator's provider (`FencedQuotaPause`, never replacing another pause). Agents carry
   `client`/`provider` from the launcher's env. Unknown or aged (>30 min) readings never act; every
-  write is fenced. busmon shows a gauge per provider and `held`. `refresh` reads ccstatusline only
-  when no dispatcher runs.
+  write is fenced. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
+  nor writes `{p}:budget` (the service replaces that hash as a whole).
 - **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`
   writes `{p}:pause` (`bus/pause.go`); the dispatcher's `paused` check at the top of each pass
   wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script

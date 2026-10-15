@@ -79,7 +79,7 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 	if win == "weekly" {
 		win = "wk"
 	}
-	aged := b.ObservedAt == 0 || now.Sub(time.UnixMilli(b.ObservedAt)) > quotaMaxAge
+	aged := windowAged(w, b, now)
 	role := budgetRole(w.UsedPct)
 	if aged {
 		role = RoleMuted
@@ -139,4 +139,65 @@ func (p *paceTracker) observe(budgets map[string]bus.BudgetSnapshot, now time.Ti
 			delete(p.last, prov)
 		}
 	}
+}
+
+// windowAged: the window's own observation (else the reading's) is missing or
+// older than quotaMaxAge.
+func windowAged(w bus.BudgetWindow, b bus.BudgetSnapshot, now time.Time) bool {
+	obs := w.ObservedAt
+	if obs == 0 {
+		obs = b.ObservedAt
+	}
+	return obs == 0 || now.Sub(time.UnixMilli(obs)) > quotaMaxAge
+}
+
+// quotaDetail is the Quota section of an agent's detail (spec §8): its
+// provider, every window with its reset, the source and the age of the
+// reading, and whether the dispatcher holds it.
+func quotaDetail(provider string, b bus.BudgetSnapshot, has bool, holdUntil time.Time, isHeld bool, now time.Time) string {
+	var sb strings.Builder
+	sb.WriteString("\n" + tg(RoleAccent, "Quota") + "\n")
+	if provider == "" {
+		sb.WriteString(tg(RoleMuted, "provider not recorded (launched before v0.13): never held") + "\n")
+		return sb.String()
+	}
+	label := Preview(providerLabel(provider))
+	switch {
+	case !has:
+		sb.WriteString(tg(RoleMuted, label+": no reading published (agentbus quota)") + "\n")
+		return sb.String()
+	case b.Unlimited:
+		sb.WriteString(tg(RoleMuted, label+": unlimited") + "\n")
+		return sb.String()
+	case b.Unknown || len(b.Windows) == 0:
+		sb.WriteString(tg(RoleMuted, label+": unknown - never holds") + "\n")
+		return sb.String()
+	}
+	for _, w := range b.Windows {
+		reset := "reset past"
+		if d := time.Unix(w.ResetsAt, 0).Sub(now); d > 0 {
+			reset = "resets " + time.Unix(w.ResetsAt, 0).Local().Format("Mon 15:04") + " (in " + compactDur(d) + ")"
+		}
+		age := "age unknown"
+		obs := w.ObservedAt
+		if obs == 0 {
+			obs = b.ObservedAt
+		}
+		if obs > 0 {
+			age = "observed " + humanAge(now.Sub(time.UnixMilli(obs))) + " ago"
+		}
+		line := fmt.Sprintf("%s %s %.0f%% %s %s %s %s", label, Preview(w.Name), w.UsedPct, GlyphNone, reset, GlyphNone, age)
+		role := RoleText
+		if windowAged(w, b, now) {
+			role = RoleMuted
+		}
+		sb.WriteString(tg(role, line) + "\n")
+	}
+	if b.Source != "" {
+		sb.WriteString(tg(RoleMuted, "source: "+Preview(b.Source)) + "\n")
+	}
+	if isHeld {
+		sb.WriteString(tg(RoleAttention, "held by the dispatcher until "+holdUntil.Local().Format("15:04")+": not woken") + "\n")
+	}
+	return sb.String()
 }

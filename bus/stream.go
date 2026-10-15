@@ -82,6 +82,18 @@ type AgentSnapshot struct {
 	Provider string `json:"provider,omitempty"`
 }
 
+// clientProviders is the fallback when the launcher set no provider: the
+// provider whose quota a known client draws on (rolecfg's profile wins).
+var clientProviders = map[string]string{"claude-code": "anthropic", "codex": "openai", "kimi-cli": "moonshot", "grok": "xai", "agy": "google"}
+
+// ProviderFor is provider, else the fallback for client, else "".
+func ProviderFor(client, provider string) string {
+	if provider != "" {
+		return provider
+	}
+	return clientProviders[client]
+}
+
 // AgentIdent is the ambient identity an agent's own process already knows about
 // itself. The CLI reads it from the environment on every status publish — the
 // agent never types it, so it cannot drift or be forgotten. Grouped in a struct
@@ -169,10 +181,11 @@ type BudgetSnapshot struct {
 
 // BudgetWindow is one usage window of a provider (quota.Window on the bus).
 type BudgetWindow struct {
-	Name     string  `json:"name"`
-	UsedPct  float64 `json:"used_pct"`
-	ResetsAt int64   `json:"resets_at"`
-	Minutes  int     `json:"minutes,omitempty"`
+	Name       string  `json:"name"`
+	UsedPct    float64 `json:"used_pct"`
+	ResetsAt   int64   `json:"resets_at"`
+	Minutes    int     `json:"minutes,omitempty"`
+	ObservedAt int64   `json:"observed_at,omitempty"` // this window's own observation (Unix ms)
 }
 
 // Event is a parsed stream entry. Which fields are populated depends on Kind.

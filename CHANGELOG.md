@@ -12,7 +12,7 @@ release exists.
   of a window, the provider's agents held at 95% until the reset, the project paused when master's
   own provider runs out.
 - busmon: one gauge per provider (`claude 5h 82% ~25m`), `held` on agents; `agentbus quota`.
-- No dependency on ccstatusline any more.
+- No dependency on ccstatusline any more: `agentbus refresh` no longer reads it nor writes `{p}:budget`.
 
 [Notes](docs/releases/v0.13.0.md)
 

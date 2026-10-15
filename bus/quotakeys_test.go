@@ -68,3 +68,30 @@ func TestQuotaPauseNeverReplacesAnotherPause(t *testing.T) {
 		t.Fatalf("lost lease: %v", err)
 	}
 }
+
+// F5: the budget hash is replaced, not merged; the lease is checked even for
+// an empty set.
+func TestFencedPutBudgetsReplaces(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	p := b.Project()
+	t.Cleanup(func() { b.r.Del(ctx, DispatchKey(p)) })
+	b.AcquireDispatch(ctx, "tok", time.Minute)
+	b.SetBudget(ctx, "legacy", BudgetSnapshot{Provider: "legacy", SessionPct: 50})
+	if err := b.FencedPutBudgets(ctx, "tok", map[string]BudgetSnapshot{"openai": {Provider: "openai"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := b.Budgets(ctx)
+	if _, ok := got["legacy"]; ok || len(got) != 1 {
+		t.Fatalf("budgets %v: the legacy row lingered", got)
+	}
+	if err := b.FencedPutBudgets(ctx, "other", nil); err != ErrNotHolder {
+		t.Fatalf("empty set with a lost lease: %v", err)
+	}
+}
+
+func TestProviderForFallsBackOnTheClient(t *testing.T) {
+	if ProviderFor("grok", "") != "xai" || ProviderFor("codex", "custom") != "custom" || ProviderFor("mystery", "") != "" {
+		t.Fatal("ProviderFor")
+	}
+}

@@ -619,7 +619,11 @@ func (u *ui) openAgent(name string) {
 		u.st.mu.Unlock()
 		return
 	}
-	title, body := agentDetail(name, a, name == u.st.pilot, u.st.board, u.feed, time.Now())
+	now := time.Now()
+	title, body := agentDetail(name, a, name == u.st.pilot, u.st.board, u.feed, now)
+	snap, has := u.st.budgets[a.provider]
+	until, isHeld := held(u.st.holds, a.provider, now)
+	body += quotaDetail(a.provider, snap, has, until, isHeld, now)
 	plain := agentDetailPlain(a)
 	u.st.mu.Unlock()
 	u.showOverlay(ovAgent, title, body, plain, "")

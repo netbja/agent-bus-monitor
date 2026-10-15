@@ -68,3 +68,17 @@ func TestHeldAgentsAreFlagged(t *testing.T) {
 		t.Fatalf("flags %+v", flags)
 	}
 }
+
+func TestAgentDetailNamesItsQuota(t *testing.T) {
+	now := time.Now()
+	b := bus.BudgetSnapshot{Source: "codex app-server", Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 96, ResetsAt: now.Add(time.Hour).Unix(), ObservedAt: now.Add(-time.Minute).UnixMilli()}}}
+	got := quotaDetail("openai", b, true, now.Add(time.Hour), true, now)
+	for _, want := range []string{"Quota", "codex 5h 96%", "resets ", "observed 1m ago", "source: codex app-server", "held by the dispatcher"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in:\n%s", want, got)
+		}
+	}
+	if got := quotaDetail("", b, false, time.Time{}, false, now); !strings.Contains(got, "never held") {
+		t.Fatalf("no provider: %s", got)
+	}
+}

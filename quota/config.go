@@ -55,13 +55,14 @@ func ConfigPath() string {
 // file, Codex, and Grok's billing line — each only when its CLI is on PATH.
 func Builtins(lookPath func(string) (string, error)) map[string]ProviderConfig {
 	out := map[string]ProviderConfig{}
-	if _, err := lookPath("claude"); err == nil {
+	if _, err := lookPath("claude"); err == nil || exists(ClaudeCachePath()) {
 		out["anthropic"] = ProviderConfig{Kind: "claude"}
 	}
 	if _, err := lookPath("codex"); err == nil {
 		out["openai"] = ProviderConfig{Kind: "codex", Every: "5m"}
 	}
-	if _, err := lookPath("grok"); err == nil {
+	home, _ := os.UserHomeDir()
+	if _, err := lookPath("grok"); err == nil || exists(filepath.Join(home, ".grok", "logs", "unified.jsonl")) {
 		out["xai"] = ProviderConfig{Kind: "jsonl-last", Path: "~/.grok/logs/unified.jsonl",
 			Match: map[string]string{"msg": "billing: fetched credits config"}, ObservedAt: "ts",
 			Windows: []FieldWindow{{NameFrom: "ctx.config.currentPeriod.type",
@@ -186,7 +187,9 @@ func ReadAll(ctx context.Context, rs []Reader) []Reading {
 		if got.Provider == "" {
 			got.Provider = r.Provider()
 		}
-		out = append(out, got)
+		out = append(out, got.Clean())
 	}
 	return out
 }
+
+func exists(p string) bool { _, err := os.Stat(p); return err == nil }
