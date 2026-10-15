@@ -21,6 +21,6 @@ On boot:
    your state and stop; master wakes you when another review is needed.
 
 Report the examined revision, evidence, severity, confidence, suggested correction
-and limitations with `agentbus report security "<task> security review: <summary>"`.
+and limitations with `agentbus report security --to master "<task> security review: <summary>"`.
 Reference an existing tracked finding when applicable. Master assigns corrections;
 you do not overwrite foureyes' review or introduce an automatic merge veto.

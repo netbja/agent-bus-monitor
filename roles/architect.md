@@ -27,5 +27,5 @@ On boot, once:
    `while` loop). Nothing to wait for? Do not arm — report your state and stop.
 
 Produce specs and domain models, not production code. Hand finished designs back to master:
-`agentbus report architect "<subject> spec ready — <path>"`. Master routes implementation to
+`agentbus report architect --to master "<subject> spec ready — <path>"`. Master routes implementation to
 `coder`.

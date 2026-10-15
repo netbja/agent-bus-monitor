@@ -42,3 +42,14 @@ func reportDetail(e bus.Event) string {
 	}
 	return body
 }
+
+// reportNotice is the directive report --to sends: the report's id (its full
+// text is "agentbus reports <id>") and the first line of it.
+func reportNotice(id, msg string) string {
+	first, _, _ := strings.Cut(msg, "\n")
+	first = bus.SanitizeReportMessage(first)
+	if r := []rune(first); len(r) > 300 {
+		first = string(r[:300]) + "…"
+	}
+	return "Report " + id + " for you (full text: agentbus reports " + id + "): " + first
+}

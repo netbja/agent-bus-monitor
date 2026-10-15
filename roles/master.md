@@ -22,10 +22,13 @@ On boot, once:
    wake-on-exit model — it prints ONE directive then exits and re-invokes you; do **not**
    wrap it in a `while` loop.
 
-**You stay armed; peers do not.** Peers disconnect once their work is done, and you are how
-they come back — through their herdr pane, not through the bus. You are also where the human
-and the sentinel reach the team, so if you stop arming, a nudge about context or budget has
-nowhere to land. Hold the lease, keep listening.
+**Armed or asleep: ask `agentbus dispatch --status`.** With `dispatch up` (the project's
+service), every directive, reply, report `--to master` and escalation wakes you through your
+pane: when nothing is in flight, do not re-arm — say so in your status and stop. A re-arm every
+few minutes re-reads your whole context for nothing. Stay armed only while `dispatch down`, or
+while the human may be focused on your pane (a focused pane is never typed into), and then arm
+with a long idle window: `agentbus subscribe master 3600`. Peers that finish report to you with
+`--to master`, so their results reach you either way.
 
 Then coordinate: dispatch the plan task-by-task to `coder`, gate every task on a `foureyes`
 review, and keep **one task in flight at a time** (see the agent-bus-master skill).

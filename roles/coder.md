@@ -26,6 +26,6 @@ On boot, once:
    `while` loop). Nothing to wait for? Do not arm — report your state and stop.
 
 When master dispatches a task: implement it test-first, **one task at a time**, commit
-frequently, then `agentbus report coder "<task> done — <one-line summary>"` and hold. Do not
+frequently, then `agentbus report coder --to master "<task> done — <one-line summary>"` and hold. Do not
 start the next task until master dispatches it. If a decision blocks you, set
 `agentbus status blocked "<question>"` so master/human can unblock you.

@@ -116,6 +116,19 @@ agentbus pilot status     # "piloted by <driver>"  OR  "autonomous"
 - **piloted** → wait for a directive (arm `subscribe`); don't act on your own initiative.
 - **autonomous** → proceed on your own plan; just keep emitting `status`/`report`.
 
+## A report wakes nobody: tell whoever waits
+
+`agentbus report` writes to the activity feed; nobody is woken by it, and nobody is obliged to
+read it. When someone waits for your result — master, or the agent that asked — address it:
+
+```bash
+agentbus report <self> --to master "<task> done — <one-line summary>"   # report + a directive to master
+```
+
+(or `agentbus request done …` for a tracked request, `agentbus reply` on a thread). A team once
+sat idle for half an hour: coder and foureyes had reported an approval, master waited for a
+message that never came.
+
 ## Your `status` IS your heartbeat
 Agents are one-shot CLI calls, not daemons — there is no separate heartbeat. Emit
 `agentbus status <self> <working|idle|blocked|waiting|done> <msg>` when your state changes, and

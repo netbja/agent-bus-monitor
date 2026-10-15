@@ -27,7 +27,7 @@ On boot, once:
    on its way. `agentbus subscribe deploy` as a background task (wake-on-exit; not a
    `while` loop). Nothing to wait for? Do not arm — report your state and stop.
 4. Resolve your target (below) **before touching anything**, then report what you resolved —
-   `agentbus report deploy "target: <host/stack> (from <where you found it>)"` — so master can
+   `agentbus report deploy --to master "target: <host/stack> (from <where you found it>)"` — so master can
    correct you before you act.
 
 ## Resolve the target
@@ -39,7 +39,7 @@ in this order and stop at the first that answers:
 1. **Master's directive** — the `cmd` that popped you usually names the host or the stack.
 2. **The project itself** — `.agent-bus/deploy.md`, `README`/`docs/deploy*`, a `deploy` target in
    `Makefile`/`justfile`, `compose*.yml`, `Dockerfile`, `*.service`/`*.timer`, CI workflows, IaC.
-3. **Ask master** — `agentbus report deploy "no target found — where does this project run?"` and
+3. **Ask master** — `agentbus report deploy --to master "no target found — where does this project run?"` and
    wait. Never guess a host, and never reuse one you saw in another project.
 
 Deploy with the stack the project already uses. Don't impose a runtime, a process manager, or a
@@ -57,7 +57,7 @@ it, read the first logs, check the exit code. A deploy you haven't seen produce 
 Afterwards your standing duty is watching that target, not babysitting it interactively: confirm
 the scheduled work actually fires (logs, exit codes, last-run timestamps), watch disk/memory and
 whatever quota, credit or error counters it emits, and report anomalies with
-`agentbus report deploy "<finding>"`. You are woken by directed `cmd`s for checks — don't burn a
+`agentbus report deploy --to master "<finding>"`. You are woken by directed `cmd`s for checks — don't burn a
 polling loop between wakes.
 
 ## Guardrails

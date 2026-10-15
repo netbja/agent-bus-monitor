@@ -4,6 +4,17 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.12.6 — results reach master
+
+- `agentbus report <agent> --to <agent> <message>`: the report, plus a directive to whoever waits
+  for it (`Report <id> for you … : <first line>`). A plain report still wakes nobody.
+- Role prompts (coder, foureyes, deploy, architect, security) report `--to master`; the agent-bus
+  skill says why.
+- master no longer re-arms every few minutes while the dispatcher runs: the dispatcher wakes it.
+  When it must stay armed, it uses a one-hour idle window.
+
+[Notes](docs/releases/v0.12.6.md)
+
 ## v0.12.5 — project pause; @all as one line
 
 - `agentbus pause --for 2h | --until 02:15 | --until-reset [reason]`, `pause --status`, `resume`:
