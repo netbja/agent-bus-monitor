@@ -52,7 +52,8 @@ func ConfigPath() string {
 }
 
 // Builtins is the default configuration: Claude Code through the statusline
-// file, Codex, and Grok's billing line — each only when its CLI is on PATH.
+// file, Codex, and Grok's billing line — each when its CLI is on PATH, or (for
+// the file readers) when its local source exists.
 func Builtins(lookPath func(string) (string, error)) map[string]ProviderConfig {
 	out := map[string]ProviderConfig{}
 	if _, err := lookPath("claude"); err == nil || exists(ClaudeCachePath()) {

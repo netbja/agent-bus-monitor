@@ -71,9 +71,16 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 		return nil
 	}
 	name := Preview(providerLabel(provider))
-	w, ok := tightestWindow(b.Windows, now)
+	w, ok := tightestWindow(freshWindows(b, now), now)
+	if !ok {
+		w, ok = tightestWindow(b.Windows, now) // all aged: show the tightest, marked ?
+	}
 	if b.Unknown || !ok {
-		return Line{{Text: name + " ?", Role: RoleMuted}}
+		l := Line{{Text: name + " ?", Role: RoleMuted}}
+		if isHeld {
+			l = append(l, Seg{Text: " held " + holdUntil.Local().Format("15:04"), Role: RoleAttention})
+		}
+		return l
 	}
 	win := w.Name
 	if win == "weekly" {
@@ -170,7 +177,12 @@ func quotaDetail(provider string, b bus.BudgetSnapshot, has bool, holdUntil time
 		sb.WriteString(tg(RoleMuted, label+": unlimited") + "\n")
 		return sb.String()
 	case b.Unknown || len(b.Windows) == 0:
-		sb.WriteString(tg(RoleMuted, label+": unknown - never holds") + "\n")
+		if isHeld {
+			sb.WriteString(tg(RoleMuted, label+": reading unknown now") + "\n")
+			sb.WriteString(tg(RoleAttention, "still held by the dispatcher until "+holdUntil.Local().Format("15:04")+" (the reset it recorded): not woken") + "\n")
+		} else {
+			sb.WriteString(tg(RoleMuted, label+": unknown - never holds") + "\n")
+		}
 		return sb.String()
 	}
 	for _, w := range b.Windows {
@@ -200,4 +212,15 @@ func quotaDetail(provider string, b bus.BudgetSnapshot, has bool, holdUntil time
 		sb.WriteString(tg(RoleAttention, "held by the dispatcher until "+holdUntil.Local().Format("15:04")+": not woken") + "\n")
 	}
 	return sb.String()
+}
+
+// freshWindows: the windows observed within quotaMaxAge.
+func freshWindows(b bus.BudgetSnapshot, now time.Time) []bus.BudgetWindow {
+	var out []bus.BudgetWindow
+	for _, w := range b.Windows {
+		if !windowAged(w, b, now) {
+			out = append(out, w)
+		}
+	}
+	return out
 }

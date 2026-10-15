@@ -633,12 +633,6 @@ func main() {
 		// v0.13: the dispatch service publishes every provider's windows from
 		// first-party readers (agentbus quota); refresh no longer reads
 		// ccstatusline nor writes {p}:budget.
-		budgets := map[string]bus.BudgetSnapshot{}
-		for provider, snap := range budgets {
-			if err := b.SetBudget(ctx, provider, snap); err != nil {
-				notes = append(notes, fmt.Sprintf("publishing %s budget: %v", provider, err))
-			}
-		}
 
 		agents, err := b.Agents(ctx)
 		if err != nil {
@@ -653,7 +647,7 @@ func main() {
 		}
 
 		if !quiet {
-			fmt.Printf("refresh: %d provider budget(s), %d agent snapshot(s)\n", len(budgets), len(snaps))
+			fmt.Printf("refresh: %d agent snapshot(s)\n", len(snaps))
 			for _, n := range notes {
 				fmt.Fprintln(os.Stderr, "refresh: "+n)
 			}

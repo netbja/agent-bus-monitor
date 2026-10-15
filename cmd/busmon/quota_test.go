@@ -82,3 +82,20 @@ func TestAgentDetailNamesItsQuota(t *testing.T) {
 		t.Fatalf("no provider: %s", got)
 	}
 }
+
+func TestHeaderPrefersFreshWindowsAndShowsAStickyHold(t *testing.T) {
+	now := time.Now()
+	b := bus.BudgetSnapshot{Windows: []bus.BudgetWindow{
+		{Name: "7d", UsedPct: 97, ResetsAt: now.Add(72 * time.Hour).Unix(), ObservedAt: now.Add(-5 * time.Hour).UnixMilli()},
+		{Name: "5h", UsedPct: 10, ResetsAt: now.Add(time.Hour).Unix(), ObservedAt: now.UnixMilli()}}}
+	if got := quotaSeg("anthropic", b, time.Time{}, false, "", now).text(); got != "claude 5h 10%" {
+		t.Fatalf("header %q: a stale window outranked a fresh one", got)
+	}
+	unknown := bus.BudgetSnapshot{Unknown: true}
+	if got := quotaSeg("openai", unknown, now.Add(time.Hour), true, "", now).text(); !strings.Contains(got, "codex ? held") {
+		t.Fatalf("sticky hold header %q", got)
+	}
+	if got := quotaDetail("openai", unknown, true, now.Add(time.Hour), true, now); !strings.Contains(got, "still held by the dispatcher") || strings.Contains(got, "never holds") {
+		t.Fatalf("sticky hold detail:\n%s", got)
+	}
+}
