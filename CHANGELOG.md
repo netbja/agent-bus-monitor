@@ -4,6 +4,15 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.12.7 — what an agent needs from you, at the top
+
+- busmon: an agent's detail shows its last report in full right after its status message; for an
+  agent `waiting`, under "What <agent> needs from you", with how to answer.
+- The Requests count shows what is addressed to you (`1 for you`), and the agents' own open threads
+  apart (`2 between agents`); the header counts only yours.
+
+[Notes](docs/releases/v0.12.7.md)
+
 ## v0.12.6 — results reach master
 
 - `agentbus report <agent> --to <agent> <message>`: the report, plus a directive to whoever waits

@@ -265,7 +265,10 @@ noms d'onglets et d'agents, sans template herdr-plus) :
 - **Un agent qui vous attend.** Quand master (ou un autre agent) a besoin de votre décision, il
   déclare `waiting` : il passe en tête d'Agents avec ♙ et le mot `waiting` qui s'estompe et revient lentement, l'en-tête affiche `♙ 1
   waiting for you`, et la cloche du terminal sonne une fois par nouvelle question, ce que herdr
-  signale sur l'onglet busmon. Répondez avec `@master …` ; l'agent repasse ensuite en `working`.
+  signale sur l'onglet busmon. Ouvrez-le (Entrée sur sa ligne) : son dernier rapport, la décision
+  attendue, vient juste après son message de statut. Répondez avec `@master …` ; l'agent repasse
+  ensuite en `working`. Le panneau Requests compte ce qui est pour vous (`1 for you`), à part des
+  fils entre agents.
 - **La jauge `updated`** d'Agents (`●●●●●●●○○○ 3m`) indique la fraîcheur du dernier état déclaré
   par l'agent : pleine juste après la déclaration, vide au bout de 10 minutes, puis l'âge seul.
   Elle ne mesure pas un travail en cours.

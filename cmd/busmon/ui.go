@@ -654,9 +654,9 @@ func (u *ui) openRequestItem(key string) {
 func (u *ui) openRequestsOverlay() {
 	u.st.mu.Lock()
 	body := requestsPanel(u.st.requests, u.st.threads, time.Now(), max(20, overlayInnerWidth(u.width)))
-	n := waitingCount(u.st.requests, u.st.threads)
+	label := requestsLabel(u.st.requests, u.st.threads, u.self).text()
 	u.st.mu.Unlock()
-	u.showOverlay(ovRequests, fmt.Sprintf("Requests %s %d waiting", GlyphNone, n), body, "", "")
+	u.showOverlay(ovRequests, fmt.Sprintf("Requests %s %s", GlyphNone, label), body, "", "")
 }
 
 // openServicesOverlay shows the project's services. It reads the log tail
@@ -829,8 +829,9 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	}
 	now := time.Now()
 	u.st.mu.Lock()
+	mineReqs, mineThreads := forPerson(u.st.requests, u.st.threads, u.self)
 	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update,
-		waiting: waitingText(u.st.requests, u.st.threads, now), asks: len(asksFor(u.st.agents)), pause: u.st.pause, budgets: u.st.budgets, now: now}
+		waiting: waitingText(mineReqs, mineThreads, now), asks: len(asksFor(u.st.agents)), pause: u.st.pause, budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()
 
@@ -961,12 +962,7 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 
 	reqs := u.lists[PanelRequests]
 	reqs.SetItems(requestItems(st.requests, st.threads, now, rowW(PanelRequests)))
-	n := waitingCount(st.requests, st.threads)
-	role := RoleMuted
-	if n > 0 {
-		role = RoleAttention
-	}
-	reqs.SetFrame(Line{{Text: "Requests", Role: RoleText}}, Line{{Text: fmt.Sprintf("%d waiting", n), Role: role}})
+	reqs.SetFrame(Line{{Text: "Requests", Role: RoleText}}, requestsLabel(st.requests, st.threads, u.self))
 }
 
 // MouseHandler routes clicks and the wheel to the panel under the pointer,
