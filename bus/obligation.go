@@ -80,6 +80,9 @@ func (b *Bus) CmdTargets(ctx context.Context) ([]string, error) {
 	var out []string
 	for _, m := range msgs {
 		t, _ := m.Values["target"].(string)
+		if t == PeopleTarget { // an ask's audience, not an agent: no group, no wake
+			continue
+		}
 		if ValidName(t) && !seen[t] {
 			seen[t] = true
 			out = append(out, t)
