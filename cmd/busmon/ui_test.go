@@ -67,9 +67,9 @@ func demoShared(now time.Time) *shared {
 	return &shared{
 		agents: map[string]*agentState{
 			"coder": {state: "working", message: "refactoring the parser",
-				stateAt: now.Add(-18 * time.Minute), lastSeen: now.Add(-18 * time.Minute)},
-			"foureyes": {state: "blocked", message: "waiting for the API key", stateAt: now.Add(-30 * time.Second), gated: 1},
-			"sentinel": {lastSeen: now.Add(-90 * time.Second)},
+				stateAt: now.Add(-18 * time.Minute), lastSeen: now.Add(-18 * time.Minute), registered: true},
+			"foureyes": {state: "blocked", message: "waiting for the API key", stateAt: now.Add(-30 * time.Second), gated: 1, registered: true},
+			"sentinel": {lastSeen: now.Add(-90 * time.Second), registered: true},
 		},
 		budgets: map[string]bus.BudgetSnapshot{"anthropic": {SessionPct: 25, WeeklyPct: 44}},
 		board:   map[string]bus.BoardEntry{"ui-theme": {Owner: "coder", State: "working", Updated: now.Unix()}},
@@ -400,6 +400,7 @@ type fakeReader struct {
 	svcInst   *bus.ServicesInstall
 	svcRecs   map[string]bus.ServiceRecord
 	snaps     map[string]bus.AgentSnapshot // Agents, when set
+	pause     *bus.PauseRecord
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -469,14 +470,14 @@ func TestNoExtraReadsPerTick(t *testing.T) {
 	f.calls = map[string]int{}
 	pollOnce(context.Background(), f, st, 6) // 6 % 5 == 1: a full tick
 	full := map[string]int{"PilotDriver": 1, "ArmedAgents": 1, "CmdLag": 1, "Agents": 1, "Usage": 1, "Budgets": 1,
-		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "ServiceStates": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2}
+		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "ServiceStates": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2, "Pause": 1}
 	if fmt.Sprint(f.calls) != fmt.Sprint(full) {
 		t.Fatalf("full tick reads %v\nwant %v", f.calls, full)
 	}
 	f.calls = map[string]int{}
 	pollOnce(context.Background(), f, st, 7)
 	light := map[string]int{"PilotDriver": 1, "ArmedAgents": 1, "CmdLag": 1, "Agents": 1, "Usage": 1, "Budgets": 1,
-		"Board": 1, "OpenChallenges": 2}
+		"Board": 1, "OpenChallenges": 2, "Pause": 1}
 	if fmt.Sprint(f.calls) != fmt.Sprint(light) {
 		t.Fatalf("light tick reads %v\nwant %v", f.calls, light)
 	}
@@ -661,4 +662,9 @@ func TestPollMissionsState(t *testing.T) {
 			t.Errorf("alive=%v changes=%v: missions %q, want %q", c.alive, c.changes, st.missions, c.want)
 		}
 	}
+}
+
+func (f *fakeReader) Pause(context.Context) (*bus.PauseRecord, error) {
+	f.n("Pause")
+	return f.pause, nil
 }

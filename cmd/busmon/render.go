@@ -90,6 +90,7 @@ type feedLine struct {
 	text string // tag-free, for the clipboard
 	ev   bus.Event
 	at   time.Time
+	to   []string // a fan-out (@all): every target of the same directive, shown as one line
 }
 
 // health is what the monitor knows about its OWN link to the broker. It is

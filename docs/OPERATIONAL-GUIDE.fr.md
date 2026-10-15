@@ -253,6 +253,15 @@ noms d'onglets et d'agents, sans template herdr-plus) :
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) ouvre la fenêtre
   Services, avec la dernière erreur et la fin de chaque journal.
+- **Mettre le projet en pause** quand le quota s'épuise : `agentbus --project myapp pause
+  --until-reset quota` (ou `--for 2h`, `--until 02:15`). Personne n'est réveillé d'ici là, et
+  l'en-tête de busmon affiche `paused · resumes in 1h52 (quota)`. À l'échéance, le dispatcher lève
+  la pause et envoie une seule directive de reprise à master. `agentbus --project myapp resume` la
+  lève plus tôt ; `pause --status` l'affiche. master le fait lui-même quand sentinel signale que la
+  session atteint 90 %.
+- **`@all`** touche les agents listés dans Agents (pas le conductor, qui ne fait que publier des
+  rapports). C'est toujours un message par agent, pour que chacun soit livré à part, mais Activity
+  n'affiche qu'une ligne `→ @all (6)`.
 - **Un agent qui vous attend.** Quand master (ou un autre agent) a besoin de votre décision, il
   déclare `waiting` : il passe en tête d'Agents avec ♙ et le mot `waiting` qui s'estompe et revient lentement, l'en-tête affiche `♙ 1
   waiting for you`, et la cloche du terminal sonne une fois par nouvelle question, ce que herdr

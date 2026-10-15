@@ -733,6 +733,15 @@ func (u *ui) appendEvent(e bus.Event) {
 		_, plain := daySeparator(et)
 		u.feed = append(u.feed, feedLine{id: strconv.Itoa(u.seq), seq: u.seq, sep: true, text: plain, at: et})
 	}
+	if last := len(u.feed) - 1; last >= 0 && sameFanOut(u.feed[last], e, et) {
+		fl := &u.feed[last]
+		if len(fl.to) == 0 {
+			fl.to = []string{fl.ev.Target}
+		}
+		fl.to = append(fl.to, e.Target)
+		fl.text = plainLine(fl.ev, fl.at) + " (+" + strconv.Itoa(len(fl.to)-1) + " more)"
+		return
+	}
 	u.seq++
 	fl := feedLine{id: strconv.Itoa(u.seq), seq: u.seq, text: plainLine(e, et), ev: e, at: et}
 	u.feed = append(u.feed, fl)
@@ -821,7 +830,7 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	now := time.Now()
 	u.st.mu.Lock()
 	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update,
-		waiting: waitingText(u.st.requests, u.st.threads, now), asks: len(asksFor(u.st.agents)), budgets: u.st.budgets, now: now}
+		waiting: waitingText(u.st.requests, u.st.threads, now), asks: len(asksFor(u.st.agents)), pause: u.st.pause, budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()
 

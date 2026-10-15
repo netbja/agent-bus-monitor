@@ -4,6 +4,18 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.12.5 — project pause; @all as one line
+
+- `agentbus pause --for 2h | --until 02:15 | --until-reset [reason]`, `pause --status`, `resume`:
+  nobody is woken while the project is paused; at the deadline the dispatcher ends the pause and
+  sends master one resume directive. busmon's header: `paused · resumes in 1h52 (quota)`.
+- master pauses the project itself when the quota runs out (sentinel reminds it at 90%), instead
+  of a sleep in its own session.
+- `@all` reaches only the agents in `{p}:agents` (not the conductor), and Activity shows the fan-out
+  as one `→ @all (N)` line.
+
+[Notes](docs/releases/v0.12.5.md)
+
 ## v0.12.4 — a quieter waiting
 
 - Only the word `waiting` moves now: it fades in and out over 3 seconds (20% to 100%, eased).

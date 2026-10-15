@@ -71,7 +71,7 @@ func (f feedFilter) match(fl feedLine) bool {
 	if f.agent != "" &&
 		!strings.EqualFold(e.Agent, f.agent) &&
 		!strings.EqualFold(e.From, f.agent) &&
-		!strings.EqualFold(e.Target, f.agent) {
+		!strings.EqualFold(e.Target, f.agent) && !hasFold(fl.to, f.agent) {
 		return false
 	}
 	if f.thread != "" {
@@ -100,4 +100,13 @@ func (f feedFilter) describe() string {
 		parts = append(parts, "\""+f.text+"\"")
 	}
 	return strings.Join(parts, " + ")
+}
+
+func hasFold(list []string, s string) bool {
+	for _, x := range list {
+		if strings.EqualFold(x, s) {
+			return true
+		}
+	}
+	return false
 }

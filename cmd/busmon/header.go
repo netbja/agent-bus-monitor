@@ -20,6 +20,7 @@ type headerData struct {
 	update   string // a newer release tag ("" = none): the last, lowest-priority item
 	waiting  string // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
 	asks     int    // agents in state waiting: decisions a person owes
+	pause    *bus.PauseRecord // the project pause, nil when not paused
 	budgets  map[string]bus.BudgetSnapshot
 	now      time.Time
 }
@@ -69,6 +70,9 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	if !d.health.ok && d.health.err != "" {
 		add(Line{{Text: "(" + Preview(d.health.err) + ")", Role: RoleMuted}}, 9, second)
+	}
+	if d.pause != nil {
+		add(pauseSeg(d.pause, d.now), 1, 0)
 	}
 	if d.asks > 0 {
 		add(Line{{Text: fmt.Sprintf("%s %d waiting for you", GlyphHuman, d.asks), Role: RoleAttention}}, 2, 0)
@@ -229,4 +233,31 @@ func missionsSeg(state string, compact bool) Line {
 		state = "down"
 	}
 	return serviceSeg("missions", "miss", state, compact)
+}
+
+// pauseSeg: "paused · resumes in 1h52 (quota)"; past the deadline, before the
+// dispatcher has ended it, "paused · resume due" (no dispatcher runs, or it is
+// about to).
+func pauseSeg(p *bus.PauseRecord, now time.Time) Line {
+	left := p.UntilTime().Sub(now)
+	text := "paused " + GlyphNone + " resume due"
+	if left > 0 {
+		text = "paused " + GlyphNone + " resumes in " + compactDur(left)
+	}
+	if p.Reason != "" {
+		text += " (" + Preview(p.Reason) + ")"
+	}
+	return Line{{Text: text, Role: RoleAttention}}
+}
+
+// compactDur: 1h52, 7m, <1m.
+func compactDur(d time.Duration) string {
+	d = d.Round(time.Minute)
+	switch {
+	case d < time.Minute:
+		return "<1m"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	return fmt.Sprintf("%dh%02d", int(d.Hours()), int(d.Minutes())%60)
 }
