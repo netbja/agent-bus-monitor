@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestStatuslineNeverFailsAndPassesStdinThrough(t *testing.T) {
@@ -26,5 +27,21 @@ func TestStatuslineNeverFailsAndPassesStdinThrough(t *testing.T) {
 	out.Reset()
 	if code := runStatusline(nil, strings.NewReader("garbage"), &out); code != 0 {
 		t.Fatal("bad input failed the status line")
+	}
+}
+
+func TestBuiltinStatuslineNeedsNoOtherTool(t *testing.T) {
+	in := `{"model":{"display_name":"Opus 5.5"},"workspace":{"current_dir":"/x/myapp"},"context_window":{"used_percentage":41},
+		"rate_limits":{"five_hour":{"used_percentage":12,"resets_at":4102444800},"seven_day":{"used_percentage":54,"resets_at":4102444800}}}`
+	got := builtinStatusline([]byte(in), time.Unix(4102444000, 0))
+	for _, want := range []string{"Opus 5.5", "myapp", "ctx 41%", "5h 12% (", "7d 54%"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("line %q lacks %q", got, want)
+		}
+	}
+	var out bytes.Buffer
+	statuslineInstall("", &out)
+	if strings.Contains(out.String(), `"command": "`) && strings.Contains(strings.SplitN(out.String(), "\n}", 2)[0], "--then") {
+		t.Fatalf("the default install chains another tool:\n%s", out.String())
 	}
 }

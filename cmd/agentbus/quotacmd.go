@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -87,28 +88,46 @@ func runStatusline(args []string, stdin io.Reader, out io.Writer) int {
 		_ = cmd.Run()
 		return 0
 	}
-	fmt.Fprintln(out, builtinStatusline(raw))
+	fmt.Fprintln(out, builtinStatusline(raw, time.Now()))
 	return 0
 }
 
-// builtinStatusline: model · 5h N% · 7d N%.
-func builtinStatusline(raw []byte) string {
+// builtinStatusline is agentbus's own status line, from Claude Code's stdin
+// only: model · folder · context · 5h % (reset) · 7d %. No other tool needed.
+func builtinStatusline(raw []byte, now time.Time) string {
 	var in struct {
 		Model struct {
 			DisplayName string `json:"display_name"`
 		} `json:"model"`
+		Workspace struct {
+			CurrentDir string `json:"current_dir"`
+		} `json:"workspace"`
+		ContextWindow struct {
+			UsedPercentage *float64 `json:"used_percentage"`
+		} `json:"context_window"`
 	}
 	_ = json.Unmarshal(raw, &in)
 	parts := []string{}
 	if in.Model.DisplayName != "" {
 		parts = append(parts, in.Model.DisplayName)
 	}
+	if d := in.Workspace.CurrentDir; d != "" {
+		parts = append(parts, filepath.Base(d))
+	}
+	if p := in.ContextWindow.UsedPercentage; p != nil {
+		parts = append(parts, fmt.Sprintf("ctx %.0f%%", *p))
+	}
 	if ws, err := quota.ParseStatusline(raw); err == nil {
 		for _, name := range []string{"5h", "7d"} {
 			for _, w := range ws {
-				if w.Name == name {
-					parts = append(parts, fmt.Sprintf("%s %.0f%%", name, w.UsedPct))
+				if w.Name != name {
+					continue
 				}
+				part := fmt.Sprintf("%s %.0f%%", name, w.UsedPct)
+				if name == "5h" && w.Reset().After(now) {
+					part += " (" + w.Reset().Local().Format("15:04") + ")"
+				}
+				parts = append(parts, part)
 			}
 		}
 	}
@@ -116,27 +135,26 @@ func builtinStatusline(raw []byte) string {
 }
 
 // statuslineInstall prints the statusLine block to put in
-// ~/.claude/settings.json; it edits nothing.
+// ~/.claude/settings.json; it edits nothing. By default agentbus draws the
+// line itself (no other tool); --then <command> chains one on purpose.
 func statuslineInstall(then string, out io.Writer) int {
 	exe, err := os.Executable()
 	if err != nil {
 		exe = "agentbus"
 	}
 	current, interval := currentStatusline()
-	if then == "" {
-		then = current
-	}
 	if interval <= 0 {
-		interval = 60
+		interval = 10
 	}
 	cmd := exe + " statusline"
-	if then != "" && !strings.Contains(then, "agentbus") {
+	if then != "" {
 		cmd += " --then " + shellQuote(then)
 	}
 	b, _ := json.MarshalIndent(map[string]any{"statusLine": map[string]any{"type": "command", "command": cmd, "refreshInterval": interval}}, "", "  ")
 	fmt.Fprintf(out, "Put this in ~/.claude/settings.json (replace the existing \"statusLine\" key):\n%s\n", b)
-	if then != "" && !strings.Contains(then, "agentbus") {
-		fmt.Fprintln(out, "Your current status line is kept through --then; drop --then to use agentbus's own line.")
+	if then == "" && current != "" && !strings.Contains(current, "agentbus") {
+		fmt.Fprintf(out, "It replaces your current status line (%s): agentbus draws its own and needs no other tool.\n"+
+			"To keep that one instead, run: agentbus statusline --print-install --then %s\n", current, shellQuote(current))
 	}
 	return 0
 }

@@ -251,7 +251,9 @@ agent names, no herdr-plus template):
   minutes never stops anyone.
   - **Claude Code**, once per machine: `agentbus statusline --print-install` prints the `statusLine`
     block to put in `~/.claude/settings.json`. Claude Code then hands agentbus its usage on every
-    refresh. Your current status line is kept (`--then`); nothing else is changed.
+    refresh, and agentbus draws the status line itself (`Opus 5.5 · myapp · ctx 41% · 5h 12% (08:33) ·
+    7d 54%`): no other tool is needed, ccstatusline can be removed. To keep another status line, add
+    `--then '<its command>'`.
   - **Codex** and **Grok** work out of the box when their CLI is installed.
   - **Any other AI**: describe its source in `~/.config/agentbus/quota.toml` — a file and its fields
     (`kind = "json"` or `"jsonl-last"`), or a script that prints the reading as JSON

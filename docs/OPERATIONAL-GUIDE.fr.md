@@ -263,8 +263,10 @@ noms d'onglets et d'agents, sans template herdr-plus) :
   zéro. Un relevé absent ou de plus de 30 minutes n'arrête jamais personne.
   - **Claude Code**, une fois par machine : `agentbus statusline --print-install` affiche le bloc
     `statusLine` à mettre dans `~/.claude/settings.json`. Claude Code transmet alors son usage à
-    agentbus à chaque rafraîchissement. Votre ligne d'état actuelle est conservée (`--then`) ;
-    rien d'autre n'est modifié.
+    agentbus à chaque rafraîchissement. agentbus dessine lui-même
+    la ligne d'état (`Opus 5.5 · myapp · ctx 41% · 5h 12% (08:33) · 7d 54%`) : aucun autre outil
+    n'est nécessaire, ccstatusline peut être désinstallé. Pour garder une autre ligne d'état, ajoutez
+    `--then '<sa commande>'`.
   - **Codex** et **Grok** fonctionnent d'office quand leur CLI est installée.
   - **Toute autre IA** : décrivez sa source dans `~/.config/agentbus/quota.toml` — un fichier et ses
     champs (`kind = "json"` ou `"jsonl-last"`), ou un script qui imprime le relevé en JSON
