@@ -127,6 +127,13 @@ func main() {
 		fmt.Println(string(out))
 		return
 	}
+	// quota and statusline read local files only: no project, no broker.
+	if len(args) >= 1 && args[0] == "quota" {
+		os.Exit(runQuota(args[1:], os.Stdout, os.Stderr))
+	}
+	if len(args) >= 1 && args[0] == "statusline" {
+		os.Exit(runStatusline(args[1:], os.Stdin, os.Stdout))
+	}
 	if len(args) >= 1 && args[0] == "version" {
 		fmt.Printf("agentbus protocol v%d\nagentbus version %s\n", bus.ProtocolVersion, buildinfo.Version)
 		return
