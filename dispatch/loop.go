@@ -36,6 +36,9 @@ type Config struct {
 	// OnLease, when set, is told when this dispatcher takes the lease (true)
 	// and when Run gives it up (false): agentbus service run reports "ready".
 	OnLease func(held bool)
+	// Quota, when its Read is set, collects provider readings and holds the
+	// agents of a provider near its limit (v0.13).
+	Quota QuotaConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -73,6 +76,9 @@ func (c Config) filled() (Config, error) {
 	}
 	if c.Log == nil {
 		c.Log = d.Log
+	}
+	if c.Quota.Read != nil {
+		c.Quota = c.Quota.filled()
 	}
 	if !bus.ValidName(c.EscalateTo) {
 		return c, fmt.Errorf("invalid escalation recipient %q", c.EscalateTo)
@@ -255,6 +261,8 @@ type loop struct {
 
 	logMu sync.Mutex
 	last  map[string]string // agent → last logged decision, so a steady state logs once
+
+	quota quotaState
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
@@ -262,11 +270,19 @@ type loop struct {
 // pass at once; any other error is logged and the pass goes on to the next
 // agent, returning the first error so Run backs off.
 func (l *loop) reconcile(ctx context.Context) error {
-	if paused, err := l.paused(ctx); err != nil || paused {
-		return err
-	}
 	snaps, err := l.b.Agents(ctx)
 	if err != nil {
+		return err
+	}
+	// Quota first: it may set or end a quota pause, and its holds must apply
+	// even when the pause cannot be read (paused() fails open).
+	if err := l.quotaPass(ctx, snaps); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "quota", err)
+	}
+	if paused, err := l.paused(ctx); err != nil || paused {
 		return err
 	}
 	groups, err := l.b.GroupNames(ctx)
@@ -301,6 +317,10 @@ func (l *loop) reconcile(ctx context.Context) error {
 		var snap *bus.AgentSnapshot
 		if s, ok := snaps[a]; ok {
 			snap = &s
+		}
+		if l.heldBy(snap) { // its provider is at its limit: no prompt, no escalation
+			l.logOnce(a, map[string]any{"agent": a, "action": "none", "reason": "quota held: " + snap.Provider})
+			continue
 		}
 		err := l.agent(ctx, a, snap, hasGroup[a], isTarget[a])
 		if err == nil {

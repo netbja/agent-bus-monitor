@@ -8,10 +8,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/quota"
 )
 
@@ -158,3 +160,27 @@ func currentStatusline() (string, int) {
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// serviceQuota is the dispatch service's quota policy: the configured readers
+// and the thresholds from the environment (AGENT_BUS_QUOTA_WARN, _HOLD,
+// _MAX_AGE; AGENT_BUS_QUOTA=off disables it).
+func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfig {
+	if getenv("AGENT_BUS_QUOTA") == "off" {
+		return dispatch.QuotaConfig{}
+	}
+	cfg, err := quota.LoadConfig(quota.ConfigPath(), exec.LookPath)
+	if err != nil {
+		fmt.Fprintf(log, "%s quota config: %v (built-in readers only)\n", time.Now().Format("15:04:05"), err)
+	}
+	readers := quota.Readers(cfg, time.Now)
+	q := dispatch.QuotaConfig{Read: func(ctx context.Context) []quota.Reading { return quota.ReadAll(ctx, readers) }}
+	num := func(k string) float64 {
+		f, _ := strconv.ParseFloat(getenv(k), 64)
+		return f
+	}
+	q.WarnPct, q.HoldPct = num("AGENT_BUS_QUOTA_WARN"), num("AGENT_BUS_QUOTA_HOLD")
+	if d, err := time.ParseDuration(getenv("AGENT_BUS_QUOTA_MAX_AGE")); err == nil {
+		q.MaxAge = d
+	}
+	return q
+}

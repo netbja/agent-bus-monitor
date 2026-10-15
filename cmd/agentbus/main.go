@@ -630,8 +630,15 @@ func main() {
 		_, quiet := extractBool(rest, "--quiet")
 		notes := []string{}
 
-		budgets, bnotes := collectBudgets(usage.CCStatuslinePath())
-		notes = append(notes, bnotes...)
+		// v0.13: the dispatch service publishes every provider's windows from
+		// first-party readers; the ccstatusline cache is only a fallback for a
+		// project with no dispatcher, and never overwrites the service's.
+		budgets := map[string]bus.BudgetSnapshot{}
+		if alive, err := b.DispatchAlive(ctx); err == nil && !alive {
+			var bnotes []string
+			budgets, bnotes = collectBudgets(usage.CCStatuslinePath())
+			notes = append(notes, bnotes...)
+		}
 		for provider, snap := range budgets {
 			if err := b.SetBudget(ctx, provider, snap); err != nil {
 				notes = append(notes, fmt.Sprintf("publishing %s budget: %v", provider, err))

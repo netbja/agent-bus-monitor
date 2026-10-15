@@ -419,6 +419,7 @@ func mainServiceRun(project, host string, args []string) int {
 		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
 			cfg := dispatchBaseConfig()
 			cfg.Log, cfg.OnLease = log, onLease
+			cfg.Quota = serviceQuota(os.Getenv, log)
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
 			}
