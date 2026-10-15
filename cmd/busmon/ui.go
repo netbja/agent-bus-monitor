@@ -74,10 +74,10 @@ type ui struct {
 	agentsTouched bool // the operator moved in Agents: stop following the top row
 	showAll       bool // the Agents panel also lists dormant agents (a)
 	confirm       *pendingRemoval
-	ask           askPanel // the ask panel's cursor
+	ask           askPanel          // the ask panel's cursor
 	rung          map[string]string // agent -> the ask (or waiting declaration) already rung for
-	bell          func()               // rings the terminal bell; nil = the screen's Beep
-	animate       atomic.Bool          // an agent is waiting: the fade ticker redraws ~10 times a second
+	bell          func()            // rings the terminal bell; nil = the screen's Beep
+	animate       atomic.Bool       // an agent is waiting: the fade ticker redraws ~10 times a second
 
 	feed         []feedLine
 	seq          int
@@ -235,6 +235,7 @@ func (u *ui) computeLayout(w, h int) Layout {
 // relayout runs on the UI goroutine after a size change: it recomputes the
 // layout and restores the logical focus (outside any draw).
 func (u *ui) relayout() {
+	mdWidth = max(30, overlayInnerWidth(u.width))
 	u.layout = u.computeLayout(u.width, u.height)
 	u.app.SetFocus(u.focusPrimitive())
 }

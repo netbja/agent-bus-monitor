@@ -197,7 +197,7 @@ func detailText(e bus.Event, at, now time.Time, th threadState) string {
 	fmt.Fprintf(&sb, "%s  %s\n\n", tview.Escape(Preview(who)),
 		tag("gray", at.Format("2006-01-02 15:04:05")+" ("+humanAge(now.Sub(at))+" ago)"))
 	if body := messageBody(e); body != "" {
-		sb.WriteString(tview.Escape(DetailText(body)))
+		sb.WriteString(renderMarkdown(body, mdWidth))
 	} else {
 		sb.WriteString(tag("gray", "(no text)"))
 	}

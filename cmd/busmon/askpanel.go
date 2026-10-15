@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -156,7 +157,7 @@ func askPanelBody(a bus.Ask, p askPanel, width int) string {
 		}
 		line := fmt.Sprintf("%s%d. %s", mark, i+1, o.Label)
 		if o.Recommended {
-			line += "  (recommended)"
+			line += " (recommended)"
 		}
 		sb.WriteString(wrapPlain(line, width, role, false) + "\n")
 		if o.Description != "" {
@@ -324,3 +325,6 @@ func askSummary(a bus.Ask) string {
 	sb.WriteString(tg(RoleMuted, "  ! or F4 to answer") + "\n\n")
 	return sb.String()
 }
+
+// tagRE2 strips colour tags, to measure a tagged line.
+var tagRE2 = regexp.MustCompile(`\[[a-zA-Z0-9#:,\-]*\]`)

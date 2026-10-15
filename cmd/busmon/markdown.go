@@ -12,6 +12,10 @@ import (
 // colour-tagged through tg(), like every overlay body; it only moves
 // whitespace and drops the Markdown markers themselves.
 
+// mdWidth is the overlay text width, kept by relayout (overlay bodies are
+// built outside a draw, from the last known terminal size).
+var mdWidth = 96
+
 type mdSpan struct {
 	text string
 	role Role
@@ -156,7 +160,8 @@ func indexRune(rs []rune, r rune, from int) int {
 }
 
 // wrapSpans word-wraps spans to width: the first line starts with first, the
-// following ones with hang (a hanging indent). Words longer than a line are cut.
+// following ones with hang (a hanging indent). Words longer than a line are
+// cut. Consecutive words of one style share one colour tag.
 func wrapSpans(spans []mdSpan, width int, first, hang string) []string {
 	type word struct {
 		text string
@@ -165,42 +170,58 @@ func wrapSpans(spans []mdSpan, width int, first, hang string) []string {
 	}
 	var words []word
 	for _, sp := range spans {
-		parts := strings.Fields(sp.text)
-		for i, p := range parts {
-			// keep a span's leading/trailing adjacency simple: words separated by one space
-			_ = i
+		for _, p := range strings.Fields(sp.text) {
 			words = append(words, word{p, sp.role, sp.bold})
 		}
 	}
 	var lines []string
-	prefix := first
-	var line strings.Builder
-	used := Width(prefix)
-	line.WriteString(tg(RoleMuted, prefix))
-	empty := true
-	push := func() {
-		lines = append(lines, line.String())
-		line.Reset()
-		prefix = hang
-		line.WriteString(tg(RoleMuted, prefix))
-		used = Width(prefix)
-		empty = true
+	var line strings.Builder // finished runs of the current line
+	var run strings.Builder  // the run being built, in runRole/runBold
+	runRole, runBold := RoleText, false
+	used, empty := 0, true
+	flushRun := func() {
+		if run.Len() > 0 {
+			line.WriteString(styled(run.String(), runRole, runBold))
+			run.Reset()
+		}
 	}
+	start := func(prefix string) {
+		line.Reset()
+		if prefix != "" {
+			line.WriteString(tg(RoleMuted, prefix))
+		}
+		used, empty = Width(prefix), true
+	}
+	push := func() {
+		flushRun()
+		lines = append(lines, line.String())
+		start(hang)
+	}
+	add := func(text string, role Role, bold bool, space bool) {
+		if role != runRole || bold != runBold {
+			flushRun()
+			runRole, runBold = role, bold
+		}
+		if space {
+			run.WriteString(" ")
+			used++
+		}
+		run.WriteString(text)
+		used += Width(text)
+		empty = false
+	}
+	start(first)
 	for _, w := range words {
 		text := w.text
 		for Width(text) > width-Width(hang) && Width(text) > 0 { // a word longer than any line
 			if !empty {
 				push()
 			}
-			room := width - used
-			head := Fit(text, room)
-			head = strings.TrimSuffix(head, GlyphEllipsis)
+			head := strings.TrimSuffix(Fit(text, width-used), GlyphEllipsis)
 			if head == "" {
 				break
 			}
-			line.WriteString(styled(head, w.role, w.bold))
-			used += Width(head)
-			empty = false
+			add(head, w.role, w.bold, false)
 			text = text[len(head):]
 			push()
 		}
@@ -211,15 +232,10 @@ func wrapSpans(spans []mdSpan, width int, first, hang string) []string {
 		if used+need > width && !empty {
 			push()
 		}
-		if !empty {
-			line.WriteString(" ")
-			used++
-		}
-		line.WriteString(styled(text, w.role, w.bold))
-		used += Width(text)
-		empty = false
+		add(text, w.role, w.bold, !empty)
 	}
 	if !empty {
+		flushRun()
 		lines = append(lines, line.String())
 	}
 	return lines

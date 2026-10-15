@@ -17,6 +17,7 @@ func TestWaitingAgentDetailShowsWhatItNeeds(t *testing.T) {
 		{ev: bus.Event{Kind: "report", Agent: "master", Message: "preview", Full: "Decision needed:\n1. opening date T\n2. budget cap"}, at: now.Add(-2 * time.Minute)},
 	}
 	_, body := agentDetail("master", a, true, nil, feed, now)
+	body = tagRE.ReplaceAllString(body, "")
 	status := strings.Index(body, "Status message")
 	need := strings.Index(body, "What master needs from you")
 	if status < 0 || need < status || !strings.Contains(body, "1. opening date T") || !strings.Contains(body, "Answer: i, then @master") {
@@ -28,20 +29,20 @@ func TestWaitingAgentDetailShowsWhatItNeeds(t *testing.T) {
 		t.Fatalf("the wrong report was shown:\n%s", section)
 	}
 	a.state = "working"
-	if _, body = agentDetail("master", a, true, nil, feed, now); !strings.Contains(body, "Last report") || strings.Contains(body, "Answer:") {
+	if _, body = agentDetail("master", a, true, nil, feed, now); !strings.Contains(tagRE.ReplaceAllString(body, ""), "Last report") || strings.Contains(body, "Answer:") {
 		t.Fatalf("a working agent's detail:\n%s", body)
 	}
 }
 
 func TestRequestsCountOnlyWhatIsForYou(t *testing.T) {
 	threads := []openThread{{ID: "1", Target: "bernard"}, {ID: "2", Target: "foureyes"}, {ID: "3", Target: "coder"}}
-	if got := requestsLabel(nil, threads, "bernard").text(); got != "1 for you · 2 between agents" {
+	if got := requestsLabel(nil, threads, "bernard", 0).text(); got != "1 for you · 2 between agents" {
 		t.Fatalf("label %q", got)
 	}
-	if got := requestsLabel(nil, threads[1:], "bernard").text(); got != "2 between agents" {
+	if got := requestsLabel(nil, threads[1:], "bernard", 0).text(); got != "2 between agents" {
 		t.Fatalf("label %q", got)
 	}
-	if got := requestsLabel(nil, nil, "bernard").text(); got != "nothing waiting" {
+	if got := requestsLabel(nil, nil, "bernard", 0).text(); got != "nothing waiting" {
 		t.Fatalf("label %q", got)
 	}
 	mineR, mineT := forPerson(nil, threads, "bernard")

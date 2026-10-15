@@ -263,6 +263,8 @@ type agentState struct {
 	registered  bool      // listed in {p}:agents (the conductor only reports: not an @all target)
 	provider    string    // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
 	held        bool      // its provider is held by the dispatcher (quota)
+	openAsk     int       // unanswered questions of its open ask
+	askID       string    // that ask's id
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.
@@ -280,6 +282,7 @@ type shared struct {
 	svcInst  *bus.ServicesInstall          // the {p}:services marker (nil: no services)
 	pause    *bus.PauseRecord              // the project pause (nil: not paused)
 	holds    map[string]int64              // provider → reset (Unix s) of its quota hold
+	asks     []bus.Ask                     // agents' questions for people
 	pace     paceTracker                   // per provider window: rate of use, display only
 	svcRecs  map[string]bus.ServiceRecord  // each service's last state
 	board    map[string]bus.BoardEntry

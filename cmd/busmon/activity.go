@@ -63,6 +63,8 @@ func lookEvent1(e bus.Event) eventLook {
 			look.Role = RoleOK
 		case bus.CmdBlocked:
 			look.Role = RoleError
+		case bus.CmdAsk: // questions for people: the title, never a target
+			look.Role, look.To, look.Text = RoleAttention, "", "asks "+GlyphNone+" "+e.Message
 		}
 		return look
 	}

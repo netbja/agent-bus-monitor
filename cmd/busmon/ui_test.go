@@ -22,6 +22,7 @@ type fakeWriter struct {
 	threads int
 	release chan struct{}
 	fail    error // returned by Cmd and Notify when set
+	left    int   // questions left after an Answer
 }
 
 func (f *fakeWriter) HumanCmd(_ context.Context, from, target, command string) (string, error) {
@@ -402,6 +403,7 @@ type fakeReader struct {
 	snaps     map[string]bus.AgentSnapshot // Agents, when set
 	pause     *bus.PauseRecord
 	marks     map[string]string
+	asks      []bus.Ask
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -471,14 +473,14 @@ func TestNoExtraReadsPerTick(t *testing.T) {
 	f.calls = map[string]int{}
 	pollOnce(context.Background(), f, st, 6) // 6 % 5 == 1: a full tick
 	full := map[string]int{"PilotDriver": 1, "ArmedAgents": 1, "CmdLag": 1, "Agents": 1, "Usage": 1, "Budgets": 1,
-		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "ServiceStates": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2, "Pause": 1, "QuotaMarks": 1}
+		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "ServiceStates": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2, "Pause": 1, "QuotaMarks": 1, "Asks": 1}
 	if fmt.Sprint(f.calls) != fmt.Sprint(full) {
 		t.Fatalf("full tick reads %v\nwant %v", f.calls, full)
 	}
 	f.calls = map[string]int{}
 	pollOnce(context.Background(), f, st, 7)
 	light := map[string]int{"PilotDriver": 1, "ArmedAgents": 1, "CmdLag": 1, "Agents": 1, "Usage": 1, "Budgets": 1,
-		"Board": 1, "OpenChallenges": 2, "Pause": 1}
+		"Board": 1, "OpenChallenges": 2, "Pause": 1, "Asks": 1}
 	if fmt.Sprint(f.calls) != fmt.Sprint(light) {
 		t.Fatalf("light tick reads %v\nwant %v", f.calls, light)
 	}
@@ -673,4 +675,16 @@ func (f *fakeReader) Pause(context.Context) (*bus.PauseRecord, error) {
 func (f *fakeReader) QuotaMarks(context.Context) (map[string]string, error) {
 	f.n("QuotaMarks")
 	return f.marks, nil
+}
+
+func (f *fakeWriter) Answer(_ context.Context, askID, qid, by, choice, text string) (string, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "answer "+askID+" "+qid+" "+choice+text)
+	return askID, f.left, f.fail
+}
+
+func (f *fakeReader) Asks(context.Context) ([]bus.Ask, error) {
+	f.n("Asks")
+	return f.asks, nil
 }
