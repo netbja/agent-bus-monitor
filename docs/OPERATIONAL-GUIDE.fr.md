@@ -258,9 +258,10 @@ noms d'onglets et d'agents, sans template herdr-plus) :
   modèle. L'en-tête de busmon affiche une jauge par fournisseur
   (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`) ; `agentbus quota` les affiche dans
   un terminal. À 85 % d'une fenêtre, master reçoit un avertissement ; à 95 %, les agents de ce
-  fournisseur ne sont plus réveillés (affichés `held`) jusqu'à la remise à zéro ; quand le
+  fournisseur ne sont plus réveillés jusqu'à la remise à zéro (leur colonne state affiche `quota`, ou le
+  marqueur `held` s'ils ont déclaré blocked ou done) ; quand le
   fournisseur de master lui-même atteint 95 %, tout le projet se met en pause jusqu'à la remise à
-  zéro. Un relevé absent ou de plus de 30 minutes n'arrête jamais personne.
+  zéro (les agents affichent alors `paused` ; leur état déclaré reste dans leur fiche). Un relevé absent ou de plus de 30 minutes n'arrête jamais personne.
   - **Claude Code**, une fois par machine : `agentbus statusline --print-install` affiche le bloc
     `statusLine` à mettre dans `~/.claude/settings.json`. Claude Code transmet alors son usage à
     agentbus à chaque rafraîchissement. agentbus dessine lui-même

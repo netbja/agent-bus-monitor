@@ -959,7 +959,7 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 	for _, n := range names {
 		a := st.agents[n]
 		items = append(items, ListItem{Key: n, Line: agentRow(n, a, n == st.pilot, l.Tier, rowW(PanelAgents), now), Selectable: true})
-		switch a.state {
+		switch _, word, _, _ := stateLook(a); word { // as shown: a paused agent is not working
 		case "working":
 			working++
 		case "blocked":

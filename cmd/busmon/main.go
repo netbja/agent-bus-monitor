@@ -265,6 +265,7 @@ type agentState struct {
 	held        bool      // its provider is held by the dispatcher (quota)
 	openAsk     int       // unanswered questions of its open ask
 	askID       string    // that ask's id
+	paused      bool      // the project is paused ({p}:pause holds a record)
 	obsBusy     bool      // the dispatcher saw its pane running a turn ({p}:observed)
 	obsState    string    // herdr's status of the pane at that inspection
 	obsAt       time.Time // when ({p}:observed at, Redis TIME); zero = not observed

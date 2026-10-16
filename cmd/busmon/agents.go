@@ -81,7 +81,7 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 			add("escalating", RoleError, 2, 1)
 		}
 	}
-	if a.held {
+	if _, word, _, _ := stateLook(a); a.held && word != "quota" { // the state column already says quota
 		add("held", RoleAttention, 2, 2)
 	}
 	if busyUndeclared(a, time.Now()) {
@@ -120,10 +120,22 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 
 // stateLook is the declared state's glyph, word, colour and sort group (spec
 // §3.3.1). A report-only or armed-only agent declared nothing: "—", group 6.
+// Bus facts that stop an agent whatever it declared come first: its open
+// questions (waiting), then, for an agent that declared working or idle, its
+// provider at its limit (quota) or the project pause (paused). The declared
+// state stays in the detail; blocked, waiting and done are never covered.
 func stateLook(a *agentState) (glyph, word string, role Role, group int) {
 	state := a.state
 	if a.openAsk > 0 { // its open questions make it waiting, whatever it declared since
 		state = "waiting"
+	}
+	if state == "working" || state == "idle" || state == "" {
+		switch {
+		case a.held:
+			return GlyphIdle, "quota", RoleAttention, 4
+		case a.paused && a.registered:
+			return GlyphIdle, "paused", RoleAttention, 4
+		}
 	}
 	switch state {
 	case "":

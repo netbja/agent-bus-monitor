@@ -63,9 +63,46 @@ func TestHeldAgentsAreFlagged(t *testing.T) {
 	if !st.agents["coder"].held || st.agents["master"].held {
 		t.Fatalf("held: coder %v master %v", st.agents["coder"].held, st.agents["master"].held)
 	}
-	flags := agentFlags(st.agents["coder"], false)
-	if len(flags) == 0 || flags[0].Word != "held" {
-		t.Fatalf("flags %+v", flags)
+	// An idle (or working) agent held by its quota reads "quota" in the
+	// state column, and the flag would only repeat it.
+	if _, word, _, _ := stateLook(st.agents["coder"]); word != "quota" {
+		t.Fatalf("held idle agent shows %q, want quota", word)
+	}
+	for _, f := range agentFlags(st.agents["coder"], false) {
+		if f.Word == "held" {
+			t.Fatalf("held flag repeats the quota state: %+v", f)
+		}
+	}
+	// A blocked agent keeps its state; held is then a flag.
+	blocked := &agentState{state: "blocked", held: true}
+	if _, word, _, _ := stateLook(blocked); word != "blocked" {
+		t.Fatalf("blocked held agent shows %q", word)
+	}
+	if fs := agentFlags(blocked, false); len(fs) == 0 || fs[0].Word != "held" {
+		t.Fatalf("blocked held agent flags %+v", fs)
+	}
+}
+
+func TestPausedProjectShowsInTheStateColumn(t *testing.T) {
+	until := time.Now().Add(time.Hour).UnixMilli()
+	f := &fakeReader{calls: map[string]int{}, pause: &bus.PauseRecord{Until: until, Reason: "quota anthropic", By: "dispatch", Notify: "master"},
+		snaps: map[string]bus.AgentSnapshot{"master": {State: "working", TS: 1}, "foureyes": {State: "waiting", TS: 1}, "coder": {State: "done", TS: 1}}}
+	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
+	pollOnce(context.Background(), f, st, 1)
+	pollOnce(context.Background(), f, st, 1)
+	for name, want := range map[string]string{"master": "paused", "foureyes": "waiting", "coder": "done"} {
+		if _, word, _, _ := stateLook(st.agents[name]); word != want {
+			t.Errorf("%s shows %q while paused, want %q", name, word, want)
+		}
+	}
+	_, body := agentDetail("master", st.agents["master"], false, nil, nil, time.Now())
+	if !strings.Contains(body, "working") || !strings.Contains(body, "shown as paused") || !strings.Contains(body, "the project is paused") {
+		t.Errorf("detail lost the declared state or the reason:\n%s", body)
+	}
+	f.pause = nil
+	pollOnce(context.Background(), f, st, 1)
+	if _, word, _, _ := stateLook(st.agents["master"]); word != "working" {
+		t.Errorf("after the resume master shows %q, want working", word)
 	}
 }
 
