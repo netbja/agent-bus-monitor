@@ -269,6 +269,8 @@ type agentState struct {
 	obsBusy     bool      // the dispatcher saw its pane running a turn ({p}:observed)
 	obsState    string    // herdr's status of the pane at that inspection
 	obsAt       time.Time // when ({p}:observed at, Redis TIME); zero = not observed
+	obsSince    time.Time // first reading of that state (an episode, v0.15)
+	obsPrompt   bool      // its pane was seen blocked, fresh: its client asks something
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.

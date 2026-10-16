@@ -32,28 +32,55 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 	defer func() { l.observedAt = time.Now() }()
 	pctx, cancel := context.WithTimeout(ctx, observeBudget)
 	defer cancel()
+	// The previous pass (from Redis, so a restart keeps the episodes) carries
+	// `since` forward and stands in for a pane whose inspection fails, until
+	// it ages out (v0.15 §13).
+	prev, err := l.b.Observed(pctx)
+	if err != nil {
+		prev = l.obs
+	}
+	start, err := l.b.ServerTime(pctx)
+	if err != nil {
+		return err
+	}
 	obs := map[string]Observation{}
+	keep := func(a string) {
+		if p, ok := prev[a]; ok && p.Fresh(start.UnixMilli()) {
+			obs[a] = p
+		}
+	}
 	for a, s := range snaps {
 		if s.Pane == "" || s.PID == 0 {
 			continue
 		}
 		if pctx.Err() != nil {
-			break
+			keep(a)
+			continue
 		}
 		snap := s
 		in := l.rt.Inspect(pctx, snap.Pane)
 		if in.Err != nil || in.Gone || !identityOK(&snap, in) {
+			if in.Err != nil && !in.Gone {
+				keep(a) // a failed look is not a new fact; a gone or foreign pane is
+			}
 			continue
 		}
 		now, err := l.b.ServerTime(pctx)
 		if err != nil {
 			if pctx.Err() != nil {
-				break // out of budget: publish what was observed
+				keep(a)
+				continue // out of budget: publish what was observed
 			}
 			return err
 		}
-		obs[a] = Observation{Busy: in.State == "working" || in.Busy, State: in.State, At: now.UnixMilli()}
+		o := Observation{Busy: in.State == "working" || in.Busy, State: in.State, At: now.UnixMilli(),
+			Since: now.UnixMilli(), PID: snap.PID}
+		if p, ok := prev[a]; ok && p.State == o.State && p.PID == o.PID && p.Since != 0 {
+			o.Since = p.Since
+		}
+		obs[a] = o
 	}
+	l.obs = obs
 	// The write has its own short bound, so a spent budget still publishes
 	// the partial snapshot and a slow broker cannot hold the pass.
 	wctx, wcancel := context.WithTimeout(ctx, observeWrite)

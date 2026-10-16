@@ -25,7 +25,16 @@ type Observation struct {
 	Busy  bool   `json:"busy"`            // the client is running a turn (herdr status or busy signature)
 	State string `json:"state,omitempty"` // herdr's agent status: working, idle, blocked, done, unknown
 	At    int64  `json:"at"`              // Unix ms, Redis TIME of the inspection
+	// Since (v0.15) is the Redis TIME of the first reading of the current
+	// state by the same process: it identifies an episode (one bell for one
+	// blocked tab). PID is the process inspected.
+	Since int64 `json:"since,omitempty"`
+	PID   int   `json:"pid,omitempty"`
 }
+
+// Fresh reports whether the observation is younger than ObservedTTL at
+// nowMs: a reading carried forward past a failed inspection ages out.
+func (o Observation) Fresh(nowMs int64) bool { return nowMs-o.At < ObservedTTL }
 
 // observedReplace: 0 not the holder, else 1; the hash becomes exactly the
 // given agent/observation pairs (none = deleted) and expires after ARGV[2] ms.

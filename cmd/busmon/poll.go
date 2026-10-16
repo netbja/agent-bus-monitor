@@ -260,10 +260,16 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		}
 		if observedErr == nil {
 			o, ok := observed[n]
-			a.obsBusy, a.obsState, a.obsAt = ok && o.Busy, o.State, time.Time{}
+			a.obsBusy, a.obsState, a.obsAt, a.obsSince = ok && o.Busy, o.State, time.Time{}, time.Time{}
 			if ok && o.At > 0 {
 				a.obsAt = time.UnixMilli(o.At)
 			}
+			if ok && o.Since > 0 {
+				a.obsSince = time.UnixMilli(o.Since)
+			} else {
+				a.obsSince = a.obsAt // a dispatcher before v0.15 writes no since
+			}
+			a.obsPrompt = ok && o.State == "blocked" && o.Fresh(time.Now().UnixMilli())
 		}
 		if wi, ok := wakes[n]; ok {
 			if wi.obOK {

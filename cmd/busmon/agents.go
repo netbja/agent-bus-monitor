@@ -70,6 +70,20 @@ func busyUndeclared(a *agentState, now time.Time) bool {
 	return a.obsBusy && a.state != "working" && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
 }
 
+// promptWaiting (v0.15 §13): the agent's own client is asking something in
+// its tab (a limit menu, a permission prompt), seen by the dispatcher as a
+// blocked pane, while the agent itself declares neither blocked nor waiting
+// and has no open ask. Only a person can answer it, in that tab: it reads as
+// waiting, beside the declared state, never instead of it.
+func promptWaiting(a *agentState) bool {
+	return a.obsPrompt && a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
+}
+
+// waitsForPerson: a declared wait, an open ask or a prompt in its tab.
+func waitsForPerson(a *agentState) bool {
+	return a.state == "waiting" || a.openAsk > 0 || promptWaiting(a)
+}
+
 func agentFlags(a *agentState, pilot bool) []agentFlag {
 	var fs []agentFlag
 	add := func(w string, r Role, prio, group int) { fs = append(fs, agentFlag{w, r, prio, group}) }
@@ -83,6 +97,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	}
 	if _, word, _, _ := stateLook(a); a.held && word != "quota" { // the state column already says quota
 		add("held", RoleAttention, 2, 2)
+	}
+	if promptWaiting(a) {
+		add("prompt", RoleAttention, 1, 0)
 	}
 	if busyUndeclared(a, time.Now()) {
 		add("busy", RoleOK, 3, 2)
@@ -126,7 +143,7 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 // state stays in the detail; blocked, waiting and done are never covered.
 func stateLook(a *agentState) (glyph, word string, role Role, group int) {
 	state := a.state
-	if a.openAsk > 0 { // its open questions make it waiting, whatever it declared since
+	if a.openAsk > 0 || promptWaiting(a) { // its open questions, or its client's, make it waiting
 		state = "waiting"
 	}
 	if state == "working" || state == "idle" || state == "" {
@@ -217,7 +234,7 @@ const updatedBarCells = 10
 const dormantAfter = 24 * time.Hour
 
 func dormant(a *agentState, isPilot bool, now time.Time) bool {
-	return !isPilot && !a.armed && a.waiting == 0 && a.state != "waiting" && a.openAsk == 0 && !a.lastSeen.IsZero() && now.Sub(a.lastSeen) > dormantAfter
+	return !isPilot && !a.armed && a.waiting == 0 && !waitsForPerson(a) && !a.lastSeen.IsZero() && now.Sub(a.lastSeen) > dormantAfter
 }
 
 // visibleAgents is the Agents panel's roster: every agent with all, else the
@@ -296,7 +313,7 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 	c := agentColsFor(tier)
 	glyph, word, role, _ := stateLook(a)
 	w := col(word, c.state, role)
-	if a.state == "waiting" || a.openAsk > 0 {
+	if waitsForPerson(a) {
 		w.Fade = fadeLevel(now) // only the word fades; the glyph and the header stay still
 	}
 	l := Line{col(glyph, c.glyph, role), col(Preview(name), c.name, RoleText), w}
@@ -350,7 +367,7 @@ func fadeLevel(now time.Time) int {
 func asksFor(m map[string]*agentState) []string {
 	var out []string
 	for n, a := range m {
-		if a.state == "waiting" || a.openAsk > 0 {
+		if waitsForPerson(a) {
 			out = append(out, n)
 		}
 	}
@@ -367,7 +384,7 @@ func waitingQuestions(m map[string]*agentState) int {
 		switch {
 		case a.openAsk > 0:
 			n += a.openAsk
-		case a.state == "waiting":
+		case a.state == "waiting", promptWaiting(a):
 			n++
 		}
 	}

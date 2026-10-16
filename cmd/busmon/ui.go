@@ -107,6 +107,9 @@ func (u *ui) onTick() {
 			u.rung, u.rungAsks = map[string]string{}, map[string]bool{}
 		}
 		key := "status:" + a.stateAt.String()
+		if promptWaiting(a) { // one ring per blocked episode of its tab
+			key = "prompt:" + a.obsSince.String()
+		}
 		switch {
 		case a.askID != "": // one ring per new ask; its waiting declaration is covered
 			if !u.rungAsks[a.askID] {

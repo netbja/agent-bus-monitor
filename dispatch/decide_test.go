@@ -249,3 +249,54 @@ func TestIdentityChanged(t *testing.T) {
 		}
 	}
 }
+
+// v0.15 §14: an escalation caused by the pane's state is re-armed once the
+// pane is ready again; any other escalation still waits for progress.
+func TestEscalationReArmedWhenItsCauseEnds(t *testing.T) {
+	blocked := ready()
+	blocked.State = "blocked"
+	esc := func(cause, reason string, at int64) *bus.WakeRecord {
+		w := mark(0, "true", at)
+		w.EscCause, w.Reason = cause, reason
+		return w
+	}
+	cases := []struct {
+		name  string
+		w     *bus.WakeRecord
+		in    Inspection
+		since time.Duration
+		act   Action
+		rule  int
+	}{
+		{"cause-ended-prompts", esc("agent blocked", "", 0), ready(), 0, ActPrompt, 9},
+		{"cause-still-there", esc("agent blocked", "", 0), blocked, 0, ActNone, 3},
+		{"legacy-record-from-reason", esc("", "agent blocked, escalating; tries reset (progress)", 0), ready(), 0, ActPrompt, 9},
+		{"not-a-pane-cause", esc("", "tries exhausted without progress", 0), ready(), 0, ActNone, 3},
+		{"retry-window-kept", esc("pane focused", "", 1), ready(), time.Second, ActNone, 5},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			x := Input{Obligation: owed(), Snap: snap(), In: c.in, Wake: c.w, OldestAge: time.Hour, SinceWake: c.since}
+			d := Decide(testPolicy, x)
+			if d.Action != c.act || d.Rule != c.rule {
+				t.Fatalf("got %v rule %d (%s), want %v rule %d", d.Action, d.Rule, d.Reason, c.act, c.rule)
+			}
+			if c.act == ActPrompt && (!d.ResetTries || !strings.Contains(d.Reason, "re-armed")) {
+				t.Fatalf("re-arm not reported: %+v", d)
+			}
+		})
+	}
+}
+
+// A wait on the pane carries its cause, so the escalation can record it.
+func TestPaneWaitCarriesCause(t *testing.T) {
+	in := ready()
+	in.State = "blocked"
+	d := Decide(testPolicy, Input{Obligation: owed(), Snap: snap(), In: in, OldestAge: time.Hour})
+	if d.Action != ActEscalate || d.Cause != "agent blocked" {
+		t.Fatalf("got %+v, want an escalation caused by agent blocked", d)
+	}
+	if d := Decide(testPolicy, Input{Obligation: owed(), OldestAge: time.Hour}); d.Cause != "" {
+		t.Fatalf("rule 6 carries a cause: %+v", d)
+	}
+}

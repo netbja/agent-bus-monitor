@@ -90,6 +90,12 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row("Last seen", text(ago(a.lastSeen)+" (any status or report)"))
 	}
 	switch {
+	case promptWaiting(a):
+		where := "its tab"
+		if a.pane != "" {
+			where += " (pane " + Preview(a.pane) + ")"
+		}
+		rowWrap("Observed", RoleAttention, "blocked "+GlyphNone+" since "+ago(a.obsSince)+": its client is asking something in "+where+". Answer it there.")
 	case a.obsAt.IsZero():
 		row("Observed", tg(RoleMuted, "pane not observed (no dispatch service, or no verified pane)"))
 	case busyUndeclared(a, now):

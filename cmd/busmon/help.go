@@ -47,6 +47,7 @@ func helpText() string {
 	more("then working, idle, other states, done, no state declared. Names inside each.")
 	blank()
 	sb.WriteString("  " + tg(RoleMuted, "flags") + "\n")
+	row("prompt", "its own client asks something in its tab (a limit menu, a permission): it reads waiting; answer it in that tab.")
 	row("escalated", "the dispatcher could not wake this agent and told the escalation target.")
 	row("escalating", "that escalation is being published.")
 	row("gate N", "N open 4-eyes challenges gate this agent: it must wait for a verdict.")
