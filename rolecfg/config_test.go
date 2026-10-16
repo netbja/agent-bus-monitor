@@ -363,3 +363,49 @@ func writeConfig(t *testing.T, contents string) string {
 	}
 	return path
 }
+
+// v0.15 §4: fallback_profiles are validated at load and resolve on their own
+// profile; ResolveWith keeps the role's tier and skills.
+func TestFallbackProfiles(t *testing.T) {
+	head := "schema_version = 2\n[defaults]\nprofile = \"main\"\n" +
+		"[profiles.main]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m\"\n" +
+		"[profiles.twin]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m2\"\n" +
+		"[profiles.opus]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\n" +
+		"[profiles.k]\nclient = \"kimi-cli\"\nprovider = \"moonshot\"\nmodel = \"alias\"\n" +
+		"[profiles.g]\nclient = \"claude-code\"\nprovider = \"other\"\nmodel = \"x\"\n" +
+		"[profiles.h]\nclient = \"claude-code\"\nprovider = \"third\"\nmodel = \"y\"\n"
+	role := func(fb string) string {
+		return head + "[roles.foureyes]\ntier = \"pop\"\nskills = [\"s\"]\nfallback_profiles = " + fb + "\n"
+	}
+	refusals := map[string]string{
+		`["missing"]`:          "role foureyes: unknown fallback profile missing",
+		`["main"]`:             "role foureyes: fallback profile main is the role's own profile",
+		`["twin"]`:             "role foureyes: fallback profile twin is on the same provider (openai): it would be held too",
+		`["opus", "opus"]`:     "role foureyes: fallback profile opus listed twice",
+		`["opus","k","g","h"]`: "role foureyes: at most 3 fallback_profiles",
+		`"opus"`:               "role foureyes: fallback_profiles must be an array of profile names",
+	}
+	for fb, want := range refusals {
+		if _, err := Load(writeConfig(t, role(fb))); err == nil || err.Error() != want {
+			t.Errorf("%s: err = %v, want %q", fb, err, want)
+		}
+	}
+	m, err := Load(writeConfig(t, role(`["opus", "k"]`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Fallbacks("foureyes"); len(got) != 2 || got[0] != "opus" || got[1] != "k" {
+		t.Fatalf("Fallbacks = %v", got)
+	}
+	p, err := m.ResolveWith("foureyes", "opus")
+	if err != nil || p.Provider != "anthropic" || p.Profile != "opus" || len(p.Skills) != 1 {
+		t.Fatalf("ResolveWith = %+v, %v", p, err)
+	}
+	if _, err := m.ResolveWith("foureyes", "nope"); err == nil {
+		t.Fatal("ResolveWith accepted an unknown profile")
+	}
+	v1 := "schema_version = 1\n[roles.alpha]\nmodel=\"m\"\ntier=\"boot\"\npermission=\"auto\"\nfallback_profiles=[\"x\"]\n"
+	if _, err := Load(writeConfig(t, v1)); err == nil || err.Error() != "role alpha: fallback_profiles needs schema_version 2" {
+		t.Fatalf("v1: %v", err)
+	}
+}

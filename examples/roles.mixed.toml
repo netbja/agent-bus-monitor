@@ -34,11 +34,15 @@ skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 [roles.coder]
 tier = "boot"
 skills = ["agent-bus", "tdd", "implement"]
+# When anthropic is out for long, master may ask you to swap coder (agentbus swap, v0.15).
+# At most 3, each on another provider; `agentbus roles fallbacks coder` lists them.
+# fallback_profiles = ["review"]
 
 [roles.foureyes]
 profile = "review"
 tier = "boot"
 skills = ["agent-bus", "code-review", "diagnosing-bugs"]
+# fallback_profiles = ["kimi"]   # on claude it would share coder's provider: less diversity
 
 [roles.sentinel]
 profile = "kimi"

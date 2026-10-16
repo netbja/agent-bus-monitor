@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -93,10 +94,15 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 	}
 	switch action {
 	case "launch":
-		if len(rest) != 2 {
-			return errors.New("usage: agent-launch <role> <project>")
+		switch {
+		case len(rest) == 2:
+			return rolecfg.Launch(m, rest[0], rest[1], env, stdout, stderr, syscall.Exec)
+		case len(rest) == 4 && rest[2] == "--profile":
+			return rolecfg.LaunchProfile(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
 		}
-		return rolecfg.Launch(m, rest[0], rest[1], env, stdout, stderr, syscall.Exec)
+		return errors.New("usage: agent-launch <role> <project> [--profile <profile>]")
+	case "fallbacks":
+		return rolesFallbacks(m, rest, stdout)
 	case "install":
 		if len(rest) == 1 && rest[0] == "--missing-ok" {
 			return rolecfg.InstallSkillsMissingOK(m, env, stdout, stderr)
@@ -152,4 +158,69 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		return nil
 	}
 	return errors.New("unknown action")
+}
+
+// fallbackRow is one line of `roles fallbacks`.
+type fallbackRow struct {
+	Profile  string `json:"profile"`
+	Client   string `json:"client"`
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	Own      bool   `json:"own,omitempty"`
+	Note     string `json:"note,omitempty"`
+}
+
+// reviewerRoles lose their model diversity on the coder's provider.
+var reviewerRoles = map[string]bool{"foureyes": true, "security": true}
+
+// rolesFallbacks prints a role's profile, then each fallback (v0.15 §4).
+func rolesFallbacks(m *rolecfg.Manifest, rest []string, stdout io.Writer) error {
+	asJSON := len(rest) == 2 && rest[1] == "--json"
+	if len(rest) != 1 && !asJSON {
+		return errors.New("usage: fallbacks <role> [--json]")
+	}
+	role := rest[0]
+	if _, ok := m.Roles[role]; !ok {
+		return errRoleMissing
+	}
+	own, err := m.Resolve(role)
+	if err != nil {
+		return err
+	}
+	coderProvider := ""
+	if _, ok := m.Roles["coder"]; ok && role != "coder" {
+		if c, err := m.Resolve("coder"); err == nil {
+			coderProvider = c.Provider
+		}
+	}
+	rows := []fallbackRow{{Profile: own.Profile, Client: own.Client, Provider: own.Provider, Model: own.Model, Own: true}}
+	for _, name := range m.Fallbacks(role) {
+		p, err := m.ResolveWith(role, name)
+		if err != nil {
+			return err
+		}
+		r := fallbackRow{Profile: name, Client: p.Client, Provider: p.Provider, Model: p.Model}
+		if reviewerRoles[role] && coderProvider != "" && p.Provider == coderProvider {
+			r.Note = "same provider as coder: the review loses its model diversity"
+		}
+		rows = append(rows, r)
+	}
+	if asJSON {
+		return json.NewEncoder(stdout).Encode(rows)
+	}
+	for _, r := range rows {
+		kind := "fallback"
+		if r.Own {
+			kind = "profile "
+		}
+		line := fmt.Sprintf("%s %-12s %-12s %-12s %s", kind, r.Profile, r.Client, r.Provider, r.Model)
+		if r.Note != "" {
+			line += "  (" + r.Note + ")"
+		}
+		fmt.Fprintln(stdout, line)
+	}
+	if len(rows) == 1 {
+		fmt.Fprintln(stdout, "no fallback_profiles for "+role)
+	}
+	return nil
 }
