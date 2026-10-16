@@ -188,7 +188,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 
 // agentDetailPlain is what y copies from the agent detail: the status message
 // exactly as retained.
-func agentDetailPlain(a *agentState) string { return a.message }
+func agentDetailPlain(a *agentState) string { return DetailText(a.message) }
 
 // taskDetail is the board-task overlay; plain is the one-line copy.
 func taskDetail(e bus.BoardEntry, task string, now time.Time) (title, body, plain string) {

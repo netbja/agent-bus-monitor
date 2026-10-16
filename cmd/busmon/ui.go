@@ -21,6 +21,7 @@ type busWriter interface {
 	HumanNotify(ctx context.Context, from, message string) (string, error)
 	HumanClose(ctx context.Context, from, target, ref, message string) (string, error)
 	Answer(ctx context.Context, askID, qid, by, choice, text string) (string, int, error)
+	Asks(ctx context.Context) ([]bus.Ask, error)
 	ForgetAgent(ctx context.Context, agent string) (bool, error)
 	Thread(ctx context.Context, threadID string) ([]bus.Event, error)
 }
@@ -75,7 +76,8 @@ type ui struct {
 	showAll       bool // the Agents panel also lists dormant agents (a)
 	confirm       *pendingRemoval
 	ask           askPanel          // the ask panel's cursor
-	rung          map[string]string // agent -> the ask (or waiting declaration) already rung for
+	rung          map[string]string // agent -> the waiting declaration already rung for
+	rungAsks      map[string]bool   // ask ids already rung for
 	bell          func()            // rings the terminal bell; nil = the screen's Beep
 	animate       atomic.Bool       // an agent is waiting: the fade ticker redraws ~10 times a second
 
@@ -100,14 +102,17 @@ func (u *ui) onTick() {
 	for _, n := range asksFor(u.st.agents) {
 		seen[n] = true
 		a := u.st.agents[n]
-		key := "ask:" + a.askID // one ring per new ask, whatever the agent declares
-		if a.askID == "" {
-			key = "status:" + a.stateAt.String()
-		}
 		if u.rung == nil {
-			u.rung = map[string]string{}
+			u.rung, u.rungAsks = map[string]string{}, map[string]bool{}
 		}
-		if last, ok := u.rung[n]; !ok || last != key {
+		key := "status:" + a.stateAt.String()
+		switch {
+		case a.askID != "": // one ring per new ask; its waiting declaration is covered
+			if !u.rungAsks[a.askID] {
+				u.rungAsks[a.askID], ring = true, true
+			}
+			u.rung[n] = key
+		case u.rung[n] != key: // a new waiting declaration without an ask
 			u.rung[n], ring = key, true
 		}
 	}
@@ -937,6 +942,10 @@ func (u *ui) tabsLine(tabs []PanelID, active PanelID, x, y int) Line {
 // fillPanels refreshes rows, headers and frames from the model. The caller
 // holds st.mu.
 func (u *ui) fillPanels(l Layout, now time.Time) {
+	currentAsks = map[string]bus.Ask{}
+	for _, a := range u.st.asks {
+		currentAsks[a.ID] = a
+	}
 	rowW := func(p PanelID) int { return max(0, l.panelRect(p).W-2-listGutter) }
 	st := u.st
 

@@ -134,3 +134,43 @@ func TestReplacementFullyAnsweredIsAnswered(t *testing.T) {
 		t.Fatalf("replacement keeping only the answered question: %v %s", err, state)
 	}
 }
+
+// Fix 5: a withdraw sweeps expired groups too; a partly answered withdrawn ask
+// keeps its answers until then.
+func TestWithdrawSweepsExpiredAsks(t *testing.T) {
+	b := dialTest(t)
+	cleanAsks(t, b)
+	ctx := context.Background()
+	k := AsksKey(b.Project())
+	b.r.HSet(ctx, k, "1-0", `{"from":"x","title":"old","questions":[]}`, "1-0|s", "answered", "1-0|e", "1", "1-0|a|q", `{"choice":"a"}`)
+	id, _, err := b.Ask(ctx, AskDef{From: "master", Title: "T", Questions: []AskQuestion{q("a", "A", "1"), q("b", "B", "1")}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.r.HSet(ctx, k, "2-0", `{}`, "2-0|e", "1") // expired again after the create swept
+	if _, _, err := b.Answer(ctx, id, "a", "bernard", "1", ""); err != nil {
+		t.Fatal(err)
+	}
+	b.r.HSet(ctx, k, "3-0", `{}`, "3-0|e", "1")
+	if err := b.Withdraw(ctx, "master", id); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := b.r.HExists(ctx, k, "3-0").Result(); n {
+		t.Fatal("withdraw did not sweep an expired group")
+	}
+	asks, _ := b.Asks(ctx)
+	if len(asks) != 1 || asks[0].State != "withdrawn" || asks[0].Questions[0].Answer == nil {
+		t.Fatalf("withdrawn ask %+v: its answer must stay", asks)
+	}
+}
+
+// Fix 6: the reply, suffix included, must fit CmdMaxRunes.
+func TestAnswerTextFitsTheCapWithItsSuffix(t *testing.T) {
+	b := dialTest(t)
+	cleanAsks(t, b)
+	ctx := context.Background()
+	id, _, _ := b.Ask(ctx, AskDef{From: "master", Title: "T", Questions: []AskQuestion{q("a", "A", "1"), q("b", "B", "1")}}, "")
+	if _, _, err := b.Answer(ctx, id, "a", "bernard", "", strings.Repeat("x", CmdMaxRunes-20)); err == nil {
+		t.Fatal("an answer that only fits without the suffix was accepted")
+	}
+}

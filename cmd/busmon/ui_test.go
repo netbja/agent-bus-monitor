@@ -17,12 +17,14 @@ import (
 
 // fakeWriter records sends; Thread blocks until release is closed (when set).
 type fakeWriter struct {
-	mu      sync.Mutex
-	sent    []string
-	threads int
-	release chan struct{}
-	fail    error // returned by Cmd and Notify when set
-	left    int   // questions left after an Answer
+	mu       sync.Mutex
+	sent     []string
+	threads  int
+	release  chan struct{}
+	fail     error     // returned by Cmd and Notify when set
+	left     int       // questions left after an Answer
+	answerID string    // the ask id Answer reports (default: the one given)
+	asks     []bus.Ask // what Asks returns
 }
 
 func (f *fakeWriter) HumanCmd(_ context.Context, from, target, command string) (string, error) {
@@ -681,10 +683,19 @@ func (f *fakeWriter) Answer(_ context.Context, askID, qid, by, choice, text stri
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "answer "+askID+" "+qid+" "+choice+text)
+	if f.answerID != "" {
+		askID = f.answerID
+	}
 	return askID, f.left, f.fail
 }
 
 func (f *fakeReader) Asks(context.Context) ([]bus.Ask, error) {
 	f.n("Asks")
+	return f.asks, nil
+}
+
+func (f *fakeWriter) Asks(context.Context) ([]bus.Ask, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.asks, nil
 }

@@ -63,8 +63,11 @@ func lookEvent1(e bus.Event) eventLook {
 			look.Role = RoleOK
 		case bus.CmdBlocked:
 			look.Role = RoleError
-		case bus.CmdAsk: // questions for people: the title, never a target
+		case bus.CmdAsk: // questions for people: read from the hash while it holds the ask
 			look.Role, look.To, look.Text = RoleAttention, "", "asks "+GlyphNone+" "+e.Message
+			if a, ok := currentAsks[e.ID]; ok {
+				look.Text = fmt.Sprintf("asks %s %s (%d question(s), %d open)", GlyphNone, a.Title, len(a.Questions), a.Open())
+			}
 		}
 		return look
 	}
@@ -233,3 +236,6 @@ func admittedEvents(feed []feedLine, f feedFilter) (admitted []int, events int) 
 	}
 	return admitted, events
 }
+
+// currentAsks is the asks the last fill saw, by id (draw goroutine only).
+var currentAsks = map[string]bus.Ask{}

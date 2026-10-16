@@ -63,7 +63,15 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, out
 	}
 	fmt.Fprintf(out, "%s %s\n", id, state)
 	if state == "open" { // best effort: the ask is the record, waiting only shows it
-		msg := fmt.Sprintf("%d question(s): %s", len(def.Questions), def.Title)
+		open := len(def.Questions)
+		if asks, err := b.Asks(ctx); err == nil {
+			for _, a := range asks {
+				if a.ID == id {
+					open = a.Open()
+				}
+			}
+		}
+		msg := fmt.Sprintf("%d question(s): %s", open, def.Title)
 		if _, err := b.Status(ctx, agent, "waiting", msg, statusIdent(ctx)); err != nil {
 			fmt.Fprintf(errw, "ask: stored, but declaring waiting failed: %v\n", err)
 		}

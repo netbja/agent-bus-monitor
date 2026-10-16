@@ -96,16 +96,75 @@ func recommendedIndex(q bus.AskQuestion) int {
 	return 0
 }
 
-// renderAsk redraws the panel body from the shared asks.
+// renderAsk redraws the panel body from the shared asks, following a
+// replacement to the open version (a reload when it is not known yet).
 func (u *ui) renderAsk() {
-	u.st.mu.Lock()
-	a, ok := findAsk(u.st.asks, u.ask.id)
-	u.st.mu.Unlock()
+	a, ok := u.currentAsk()
 	if !ok {
+		u.reloadAsks()
+		if a, ok = u.currentAsk(); !ok {
+			u.closeOverlay()
+			return
+		}
+	}
+	if a.Open() == 0 && a.State != "open" {
 		u.closeOverlay()
 		return
 	}
+	if u.ask.q >= len(a.Questions) {
+		u.ask.q = 0
+	}
 	u.overlay.SetText(askPanelBody(a, u.ask, max(30, overlayInnerWidth(u.width))))
+	q := a.Questions[u.ask.q]
+	plain := q.Question
+	if q.Context != "" {
+		plain += "\n\n" + q.Context
+	}
+	for i, o := range q.Options {
+		plain += fmt.Sprintf("\n%d. %s", i+1, o.Label)
+		if o.Description != "" {
+			plain += " - " + o.Description
+		}
+	}
+	u.ovPlain = DetailText(plain)
+}
+
+// currentAsk is the panel's ask, following replaced_by to the open version.
+func (u *ui) currentAsk() (bus.Ask, bool) {
+	u.st.mu.Lock()
+	defer u.st.mu.Unlock()
+	id := u.ask.id
+	for hops := 0; hops < 8; hops++ {
+		a, ok := findAsk(u.st.asks, id)
+		if !ok {
+			return bus.Ask{}, false
+		}
+		if a.State == "replaced" && a.ReplacedBy != "" {
+			id = a.ReplacedBy
+			continue
+		}
+		if id != u.ask.id {
+			u.ask.id = id
+			u.ask.q = max(firstOpenQuestion(a, 0), 0)
+			u.ask.opt = recommendedIndex(a.Questions[u.ask.q].AskQuestion)
+		}
+		return a, true
+	}
+	return bus.Ask{}, false
+}
+
+// reloadAsks reads the asks now (after a refusal, or to find a replacement
+// the poll has not brought yet).
+func (u *ui) reloadAsks() {
+	ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
+	defer cancel()
+	asks, err := u.w.Asks(ctx)
+	if err != nil {
+		return
+	}
+	u.st.mu.Lock()
+	u.st.asks = asks
+	u.st.mu.Unlock()
 }
 
 // askPanelBody is the panel's text: the tab strip, the question, its context
@@ -270,9 +329,9 @@ func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) 
 	defer cancel()
 	id, left, err := u.w.Answer(ctx, a.ID, q.ID, u.self, choice, text)
 	u.ask.typing, u.ask.text = false, nil
-	if err != nil {
+	if err != nil { // say why, and show the ask as it is now (answered elsewhere, replaced)
 		u.flash, u.flashErr = "answer not sent: "+Preview(err.Error()), true
-		u.closeOverlay()
+		u.reloadAsks()
 		return
 	}
 	value := choice
@@ -297,8 +356,14 @@ func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) 
 			u.st.asks[i].State = "answered"
 		}
 	}
-	updated, _ := findAsk(u.st.asks, id)
+	updated, known := findAsk(u.st.asks, id)
 	u.st.mu.Unlock()
+	if !known { // answered on a replacement the poll has not brought yet
+		u.reloadAsks()
+		u.st.mu.Lock()
+		updated, _ = findAsk(u.st.asks, id)
+		u.st.mu.Unlock()
+	}
 	u.flash, u.flashErr = fmt.Sprintf("%s %s: %s sent to %s", GlyphDone, Preview(q.Header), Preview(value), Preview(a.From)), false
 	if left == 0 {
 		u.closeOverlay()

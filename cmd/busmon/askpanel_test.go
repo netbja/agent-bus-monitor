@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -99,5 +100,75 @@ func TestAskRowFadesWhateverTheAgentDeclared(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("an agent with open questions must read waiting (fading): %+v", row)
+	}
+}
+
+func TestRequestsLabelAddsQuestionsOnce(t *testing.T) {
+	threads := []openThread{{ID: "1", Target: "bernard"}, {ID: "2", Target: "foureyes"}, {ID: "3", Target: "coder"}}
+	if got := requestsLabel(nil, threads, "bernard", 3).text(); got != "4 for you · 2 between agents" {
+		t.Fatalf("label %q", got)
+	}
+}
+
+func TestAskPanelStaysOnARefusal(t *testing.T) {
+	h := newHarness(t, askShared(time.Now()))
+	h.draw(160, 45)
+	h.key(runeKey('!'))
+	h.w.fail = errors.New("ask refused: this question is already answered")
+	h.w.asks = []bus.Ask{demoAsk()}
+	h.key(key(tcell.KeyEnter))
+	if h.u.ov != ovAsk || !strings.Contains(h.u.flash, "already answered") {
+		t.Fatalf("panel %v flash %q: a refusal must keep the panel and say why", h.u.ov, h.u.flash)
+	}
+}
+
+func TestAskPanelFollowsAReplacement(t *testing.T) {
+	now := time.Now()
+	st := askShared(now)
+	old := demoAsk()
+	h := newHarness(t, st)
+	h.draw(160, 45)
+	h.key(runeKey('!'))
+	repl := demoAsk()
+	repl.ID = "200-0"
+	repl.Questions[1].Answer = &bus.AskAnswer{Choice: "Mon 10:00", By: "bernard"}
+	old.State, old.ReplacedBy = "replaced", "200-0"
+	h.w.asks = []bus.Ask{old, repl}
+	h.w.answerID, h.w.left = "200-0", 1
+	h.key(key(tcell.KeyEnter))
+	if h.u.ov != ovAsk || h.u.ask.id != "200-0" || h.u.ask.q != 2 {
+		t.Fatalf("panel %v on %s q %d: must follow the replacement to its open question", h.u.ov, h.u.ask.id, h.u.ask.q)
+	}
+}
+
+func TestBellRingsOncePerAskNotOnItsCompletion(t *testing.T) {
+	now := time.Now()
+	h := newHarness(t, demoShared(now))
+	rings := 0
+	h.u.bell = func() { rings++ }
+	h.u.st.agents["master"] = &agentState{state: "waiting", stateAt: now}
+	h.u.onTick() // a plain waiting declaration
+	h.u.st.agents["master"].askID, h.u.st.agents["master"].openAsk = "100-0", 2
+	h.u.onTick() // the ask
+	h.u.onTick()
+	h.u.st.agents["master"].askID, h.u.st.agents["master"].openAsk = "", 0
+	h.u.onTick() // answered: the same waiting declaration again
+	if rings != 2 {
+		t.Fatalf("rings %d, want 2 (the waiting, the ask; not the completion)", rings)
+	}
+}
+
+func TestActivityAskRowReadsTheHash(t *testing.T) {
+	currentAsks = map[string]bus.Ask{"100-0": demoAsk()}
+	t.Cleanup(func() { currentAsks = map[string]bus.Ask{} })
+	look := lookEvent(bus.Event{ID: "100-0", Kind: "cmd", Type: bus.CmdAsk, From: "master", Target: bus.PeopleTarget, Message: "Opening of act 4"})
+	if !strings.Contains(look.Text, "(3 question(s), 2 open)") || look.To != "" {
+		t.Fatalf("look %+v", look)
+	}
+}
+
+func TestCopiesAreSanitised(t *testing.T) {
+	if got := agentDetailPlain(&agentState{message: "ok\x1b[31m‮evil"}); strings.ContainsAny(got, "\x1b‮") {
+		t.Fatalf("copy kept a control: %q", got)
 	}
 }

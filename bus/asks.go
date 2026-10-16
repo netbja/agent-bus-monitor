@@ -312,6 +312,7 @@ return {id, left, reply}`)
 // askWithdraw: KEYS asks. ARGV id, agent, retention ms.
 var askWithdraw = redis.NewScript(sweepLua + `
 local now = nowms()
+sweep(KEYS[1], now)
 local s = redis.call('HGET', KEYS[1], ARGV[1] .. '|s')
 if s ~= 'open' then return redis.error_reply('ASK_NOT_OPEN') end
 if redis.call('HGET', KEYS[1], 'open:' .. ARGV[2]) ~= ARGV[1] then return redis.error_reply('ASK_NOT_YOURS') end
@@ -441,7 +442,8 @@ func (b *Bus) Answer(ctx context.Context, askID, qid, by, choice, text string) (
 		return "", 0, fmt.Errorf("an answer is an option or some text")
 	}
 	reply := fmt.Sprintf("Answer to %q: %s", q.Header, a.Value())
-	if err := ValidateText(reply, CmdMaxRunes); err != nil {
+	// the script may add " (N question(s) still open)": the whole line must fit
+	if err := ValidateText(reply+fmt.Sprintf(" (%d question(s) still open)", AskMaxQuestions), CmdMaxRunes); err != nil {
 		return "", 0, err
 	}
 	raw, _ := json.Marshal(a)
