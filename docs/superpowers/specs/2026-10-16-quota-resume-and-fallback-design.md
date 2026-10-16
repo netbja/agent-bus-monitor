@@ -1,75 +1,91 @@
 # Resume after a quota reset, fallback when the wait is long (v0.15)
 
-Status: draft, 2026-10-16. Builds on the quota spec (`2026-10-15-quota-awareness-design.md`)
-and on asks (`2026-10-16-asks-and-readable-text-design.md`).
+Status: rev 2, 2026-10-16. Rev 1 was challenged by Codex (8 points, §12). Builds on the quota spec
+(`2026-10-15-quota-awareness-design.md`) and on asks (`2026-10-16-asks-and-readable-text-design.md`).
 
 ## 1. What happened
 
 On hyperliquid, foureyes (Codex, profile `review`) had accepted `dca-open-plan-v7-review`.
-The OpenAI limit stopped it in the middle of its run, with "You've hit your usage limit" on its
-screen. The dispatch service did its part: it saw the limit, held the OpenAI agents, and let them
-go at the reset. But nobody restarted foureyes:
+The OpenAI limit stopped it in the middle of its run ("You've hit your usage limit"). The dispatch
+service saw the limit, held the OpenAI agents, and let them go at the reset. But nobody restarted
+foureyes:
 
 - The dispatcher wakes an agent only for **unread** messages. foureyes had already drained and
-  accepted its request, so it owed nothing. An interrupted turn is invisible to it.
-- master waited for a verdict that would never come. A person had to notice and relaunch it.
-- Had the limit been the **weekly** one, the wait would have been days long. master can pop a
-  role (`agent-spawn`), but only with the client its `roles.toml` profile names (the same,
-  exhausted one), and not under the same agent name while the old one is registered.
+  accepted its request, so it owed nothing. An interrupted turn is invisible to the dispatcher.
+- master waited for a verdict that would never come. A person had to notice.
+- Had it been the **weekly** limit, the wait would have been days. master can pop a role
+  (`agent-spawn`), but only on the profile `roles.toml` gives it (the exhausted one), and not
+  under the same name while the old agent is registered.
 
-## 2. Goals
+## 2. Scope of v0.15
 
-1. **Resume.** When a provider's hold ends, every agent of that provider that had work in
-   flight is told to resume it, and master is told. No person has to notice.
-2. **Fallback.** When a hold will last long, the person is asked, through an ask in busmon,
-   whether to replace the held agents by the same role on a fallback profile until the reset.
-   Nothing changes model or cost without a person's yes.
-3. **Swap back.** At the reset, master is told that a role runs on its fallback, and how to
-   swap it back.
+In:
 
-Not goals: an automatic swap without a person's answer; the dispatcher launching processes (it
-still never runs code and never creates panes); choosing a model by cost.
+1. **Resume.** When a provider's hold ends, every agent of that provider with accepted or declared
+   work is told to resume it, exactly once, and master is told.
+2. **Fallback profiles** in `roles.toml`, and `agentbus roles fallbacks <role>`.
+3. **Long hold → the person decides.** For a hold that will last long, the person gets the
+   question, through master's ask or, when master itself is held, directly in busmon.
+4. **`agentbus swap <role> --profile <p>`**: a manual, checked replacement of an agent by the same
+   role on another profile, run by master after a yes or by the person.
+
+Deferred (Codex §12.8): a durable swap record, a busmon `fallback` flag and an automatic
+swap-back at the reset. In v0.15 the resume notice reminds master to swap back what it swapped,
+and the agent's row already shows its client and provider.
+
+Not goals: a swap without a person's yes; the dispatcher launching processes or closing panes;
+choosing a model by cost.
 
 ## 3. Resume (dispatcher)
 
 ### 3.1 When
 
-In `quotaPass`, at the transition that ends a hold for provider `p`:
+In `quotaPass`, when the hold of provider `p` ends:
 
 - a usable reading under `HoldPct` while a hold is recorded (`quota-release`), or
 - a recorded hold whose reset has passed with no usable reading (the hold expires).
 
-### 3.2 Who
+The reset value `R` of that hold (Unix s, the `hold:<p>` mark) identifies the episode.
 
-The agents of `p` (snapshot `Provider == p`) with **work in flight**:
+### 3.2 Who: an observable predicate
 
-- a board entry they own whose state is not `done` (`accepted`, `requested` but already drained,
-  `blocked`, any free-form state), or
-- a declared state of `working`.
+The agents with `Provider == p` that have, at that pass:
 
-An agent with none of these is left alone: it has nothing to resume, and an unread message would
-wake it through the normal path anyway.
+- a board entry they own in state **`accepted`**, or
+- a declared state **`working`**.
 
-### 3.3 What
+Excluded on purpose:
 
-- To each such agent, one fenced directive from `dispatch` (it creates an obligation, so the
-  normal wake follows):
+- `requested`: an unread request still wakes the agent through the normal path, and a drained but
+  unaccepted one is not observable.
+- `blocked`: it needs a person or a dependency, not a resume.
+- `done` and every other state.
 
-  > Your provider's limit (openai, 5h) has reset. Work interrupted by it: dca-open-plan-v7-review
-  > (accepted 1h ago). Resume it where you stopped, then report as usual.
+### 3.3 What, exactly once
 
-  The task list names the board tasks found in §3.2, or says "your declared work: <message>".
-- To the escalation target (master), one fenced `wake=no` notice listing who was told to resume.
-  master is not woken for it: the verdicts it waits for come through the normal path.
-- Once per hold. A mark `resumed:<p>` = the hold's reset (Unix s) in `{p}:quota`, written in the
-  same pass, prevents a second notice if the release flaps.
+- To each such agent, one directive from `dispatch`. The text is bounded: at most 5 tasks named,
+  then "and N more". The whole is cut to `CmdMaxRunes`.
 
-The quota pause of the coordinator's provider already ends with the resume directive to master
-(`FencedResume`). Resume adds the other agents of that provider.
+  > Your provider's limit (openai, 5h) has reset. Work interrupted by it: dca-open-plan-v7-review.
+  > Resume it where you stopped, then report as usual.
+
+- To the escalation target (master), one `wake=no` notice: who was told to resume, plus, when it
+  applies, "if you swapped a role during this hold, swap it back when its work is done (`agentbus
+  swap <role> --profile <its profile>`)".
+- **Exactly once per recipient and episode**, crash-safe. Each message is written by one new
+  fenced script, `FencedCmdOnce`. In a single script it:
+  1. checks the lease;
+  2. checks the per-recipient mark `resumed:<p>:<agent>` in `{p}:quota` against `R`;
+  3. if the mark differs, XADDs the entry and sets the mark.
+
+  A pass that crashes halfway leaves the sent ones marked and resends only the others. A flapping
+  release finds every mark set and sends nothing.
+- One recipient's failure (validation, a transport error) is logged and does not stop the others.
+  A lease error still ends the pass.
+- The marks of an episode are removed when the next hold for `p` is recorded, so the next episode
+  starts clean.
 
 ## 4. Fallback profiles (roles.toml)
-
-A role may list the profiles it can run on when its own provider is out:
 
 ```toml
 [roles.foureyes]
@@ -77,128 +93,197 @@ profile = "review"                  # Codex
 fallback_profiles = ["opus"]        # Claude Opus, in order of preference
 ```
 
-- Schema v2 only. Each name must be a defined profile, distinct from `profile`, and must
-  resolve like any profile. A profile on the **same provider** as the role's own is refused,
-  because it would be held too.
-- `agentbus roles fallbacks <role>` prints the role's profile and its fallbacks, with client,
-  provider and model, one per line (and `--json`).
-- The bootstrap template gets `fallback_profiles` on foureyes (`review` → `opus`) and on coder
-  (`opus` → `review`), commented, so a new project sees the option.
-- The 4-eyes rule is reviewer ≠ author **by agent name**, so a swap never breaks it. Still, when
-  the fallback puts the reviewer on the **same provider** as the author of the work it reviews
-  (coder), `roles fallbacks` and the ask say so, because the review loses its model diversity.
+Validation (schema v2 only):
 
-## 5. Long hold → a question for the person
+- each fallback must be a defined profile that resolves, distinct from `profile`;
+- at most **3** fallbacks, so that an ask question (6 options at most) fits them plus "Wait";
+- a fallback on the **same provider** as the role's own profile is refused, because it would be
+  held too.
+
+`agentbus roles fallbacks <role> [--json]` prints the role's profile, then each fallback with its
+client, provider and model. When a fallback would put a reviewer role (foureyes, security) on the
+provider of `coder`'s profile, it adds "same provider as coder: the review loses its model
+diversity". The 4-eyes rule itself (reviewer ≠ author by name) is never broken by a swap.
+
+The bootstrap template shows `fallback_profiles` commented on foureyes and coder.
+
+## 5. Long hold → the person decides
 
 ### 5.1 Trigger (dispatcher)
 
 When a hold for `p` is first recorded and its reset is more than `LongHold` away (default 2 h;
-`AGENT_BUS_QUOTA_LONG_HOLD` in the service env, `0` disables it), the dispatcher sends **master**
-one fenced directive:
+`AGENT_BUS_QUOTA_LONG_HOLD` in the service env; `0` disables), once per episode (mark
+`longhold:<p>` = `R`, written by `FencedCmdOnce`):
 
-> openai is held until Mon 20/10 03:00 (61h, weekly window). Held agents with work in flight:
-> foureyes (dca-open-plan-v7-review). If their roles have fallback profiles
-> (`agentbus roles fallbacks <role>`), ask the person whether to swap them until the reset.
+- **`p` is not the coordinator's provider:** one directive to master:
 
-It is sent once per hold (mark `longhold:<p>` = reset). The dispatcher does not read `roles.toml`:
-the role manifest belongs to the launcher and master, not to the service.
+  > openai is held until Mon 20/10 03:00 (61h, weekly window). Held agents with work in flight:
+  > foureyes (dca-open-plan-v7-review). If their roles have fallback profiles
+  > (`agentbus roles fallbacks <role>`), ask the person whether to swap them until the reset.
+
+- **`p` is the coordinator's provider** (Codex §12.1): master is paused and held; it cannot ask
+  anyone. The dispatcher writes a `notify` from `dispatch` instead, which busmon shows in Activity
+  and, while the quota pause lasts, in the header:
+
+  > The project is paused until Mon 03:00 (anthropic, weekly). To continue before, swap master
+  > to another provider from a terminal: `agentbus roles fallbacks master`, then
+  > `agentbus --project hyperliquid swap master --profile <fallback>`.
+
+  busmon's pause segment adds "long pause, see Activity" for a pause over `LongHold`.
+
+The dispatcher does not read `roles.toml`. The role manifest belongs to the launcher, to master and
+to the person.
 
 ### 5.2 master's part (skill)
 
-On that directive, master:
+On the directive of §5.1, master:
 
-1. Runs `agentbus roles fallbacks <role>` for each held agent with work in flight.
-2. If at least one has a fallback, creates **one ask** (`agentbus ask master --file`), one
-   question per role. Example question `foureyes`:
-   - header "foureyes until Mon 03:00"
-   - question "OpenAI is out until Monday 03:00. Replace foureyes (Codex) until then?"
-   - options:
-     - "Swap to opus (Claude Opus)" — recommended when the wait is longer than a day;
-       description: cost on the Anthropic account, and the same-provider note of §4 if it applies.
-     - "Wait for the reset".
-3. On "swap", runs `agentbus swap <role> --profile <fallback>` (§6), then tells the swapped
-   agent what to resume (the §3.3 text).
-4. On "wait", does nothing. Resume (§3) will restart the agent at the reset.
-5. With no fallback anywhere, it reports the wait to the person in its status (`waiting`, or an
-   ask with the single choice "OK"), never silence.
+1. Runs `agentbus roles fallbacks <role>` for each held agent named.
+2. If at least one role has a fallback, creates one ask with one question per role, **at most 6**.
+   If more roles are concerned, it asks first for those with work in flight, and asks for the rest
+   after this ask is answered. The question id is the role name, so each answer maps to one role.
+   - question: "OpenAI is out until Monday 03:00. Replace foureyes (Codex) until then?"
+   - options: one per fallback ("Swap to opus — Claude Opus", recommended if the wait is longer
+     than a day, its description noting the cost and the same-provider remark), then
+     "Wait for the reset".
+3. On a swap answer, runs `agentbus swap <role> --profile <fallback>` (§6). If the swap refuses,
+   it reports why in the thread of the ask (`agentbus reply`), so the person sees it.
+4. On "Wait", does nothing: resume (§3) restarts the agent at the reset.
+5. With no fallback anywhere, it tells the person the expected wait in its status.
 
-## 6. `agentbus swap <role> --profile <profile>`
+## 6. `agentbus swap <role> --profile <profile> [--now]`
 
-Run by master (or a person) inside the project's herdr session. Steps, each checked before the
-next:
+Run inside the project's herdr session, by master or by a person. Each step is checked before the
+next; nothing is closed before everything that can be checked has been.
 
-1. Resolve `<role>` in the project's `ROLES_TOML`; `<profile>` must be the role's own profile
-   (swap back) or one of its `fallback_profiles`. `--force` accepts any defined profile and says so.
-2. Read the agent's snapshot (agent name = role). Its pane must be live and its identity verified
-   (pid and start time, as the dispatcher checks before typing). It must not be the caller itself:
-   master cannot swap itself this way.
-3. If the agent's pane shows a running turn (observed busy, §v0.14.3) or it declared `working`
-   less than 2 minutes ago, refuse without `--now`: a swap kills that turn.
-4. Close the old pane (`herdr pane close`), then wait until its pid is gone.
-5. Launch the role on the chosen profile: `agent-spawn <role> <project> --profile <profile>`.
-   `agent-launch`/`agentbus roles launch` accept `--profile` and resolve that profile instead of
-   the role's. The new agent keeps the name `<role>`, binds its new pid (a verified identity
-   replaces the old one), drains its queue and reads the board as at any boot.
-6. Record the swap in `{p}:swaps` (hash, role → JSON `{from, to, by, at, provider_from}`;
-   `at` from Redis `TIME`), so busmon and the dispatcher can tell it runs on a fallback.
-7. Print what was done. The cmd consumer group, the board and the asks are keyed by agent name,
-   so nothing is lost or moved.
+### 6.1 Preflight (nothing changed yet)
 
-Swapping back is the same command with the role's own profile, which clears `{p}:swaps[role]`.
+1. Resolve `<role>` in the project's `ROLES_TOML`. `<profile>` must be the role's own profile
+   (swap back) or one of its `fallback_profiles`. `--force` accepts any defined profile and says
+   so. The profile must resolve, and its client executable must be on `PATH`.
+2. The agent (name = role) must have a snapshot with a live pane and a verified identity (pid
+   and start time, as the dispatcher checks). The caller must not run inside that pane: an agent
+   cannot swap itself. A person in a terminal can swap master.
+3. Refuse when the agent is part of an open review (Codex §12.4):
+   - an open 4-eyes challenge in which it is the gated author (`{p}:gate:<role>` not empty), or
+     the reviewer (any gate meta naming it as reviewer);
+   - a mission attempt where it is the reviewer with the review open (`ReviewOpen`), or the
+     assignee of an attempt in progress.
 
-## 7. Swap back at the reset
+   The refusal lists them. v0.15 has no transfer of an open review: it must be closed first
+   (verdict, `mission reassign`), which is audited where it already is.
+4. Refuse when the pane shows a running turn (`{p}:observed` busy) or the agent declared
+   `working` less than 2 minutes ago, unless `--now` (a swap kills that turn).
 
-When a hold ends (§3.1) and `{p}:swaps` holds a role whose `provider_from` is that provider, the
-dispatcher adds to its §3.3 notice to master:
+### 6.2 Handoff
 
-> foureyes runs on its fallback (opus) since Fri 14:40. openai has reset: swap back with
-> `agentbus swap foureyes --profile review` when its current work is done.
+5. Write the **swap intent** `{p}:swap:<role>`, a Redis string with `SET NX PX 180000`. Its value
+   is `{to_profile, by, old_pid, old_start}`. A second swap of the same role is refused while it
+   exists.
+6. The dispatcher treats an agent with a swap intent as **not promptable**. `Decide` gets a rule
+   before the pane inspection: "swap in progress → wait". The prompt path re-reads the intent
+   right before `Prompt` and gives up if it appeared.
+   - Residual race: a wake line typed into the old pane in the instant before it closes is lost
+     with the pane. The wake record then stays `prompted` or `unobserved` with no progress. The
+     identity change (new pid) resets its tries, so the next pass wakes the new pane.
+   - Nothing is lost from the queue. The consumer group is keyed by the agent name, and an entry
+     the old process did not ACK stays pending for the new one.
+7. Close the old pane (`herdr pane close`) and wait, up to 15 s, for the old pid to be gone. The
+   old background `subscribe` dies with its process group, and its receiver lease expires by TTL.
 
-master swaps it back when the agent is idle, without asking: returning to the configured
-profile is not a new decision. Agents swapped by hand with `--force` are only reported.
+### 6.3 Launch and proof
 
-## 8. busmon
+8. Launch the role on the profile: `agent-spawn <role> <project> --profile <profile>`.
+   `agent-launch` and `agentbus roles launch` accept `--profile`, which resolves that profile
+   instead of the role's. In swap mode (`AGENT_LAUNCH_REQUIRE_BIND=1`), a failed `bind` is fatal
+   instead of a warning (Codex §12.5).
+9. Wait, up to 60 s, for the **proof of replacement**. The snapshot of `<role>` must show:
+   - a pid different from the old one, alive, with a matching start time;
+   - the pane of the new tab;
+   - a client and provider equal to the chosen profile's.
 
-- An agent on a fallback shows the flag `fallback` (attention) and, in its detail, the row
-  `Profile  opus (fallback for review since 14:40, openai held until Mon 03:00)`.
-- The resume notices appear in Activity as directives from `dispatch`, like the quota warnings.
+   This is the launcher's own pre-exec `bind`, the one Codex needs because its commands run under
+   a shared app-server.
+10. Delete the swap intent, print what was done, and (when run by master) report it. The
+    resumption of the agent's work is the §3 text, sent by the caller as a directive once the
+    proof holds, so the dead old process can never consume it.
+
+### 6.4 Failure and recovery
+
+- **Before step 7** (preflight, intent refused): nothing changed. Print the reason.
+- **Spawn or proof fails after the close:** delete the intent and print a loud error with the
+  recovery command: `agent-spawn <role> <project>` on the role's own profile. Exit non-zero. The
+  role is down until then; the dispatcher escalates its unread messages as for any dead pane.
+- **The caller dies mid-swap:** the intent expires after 3 minutes, and the dispatcher resumes
+  normal handling.
+
+## 7. busmon
+
+- The quota pause segment keeps its reason and adds "long pause, see Activity" past `LongHold`.
+- Resume directives and the `dispatch` notify appear in Activity like the quota warnings.
+- An agent under a swap intent shows the flag `swapping`.
+
+## 8. Coordinator swapped during its own quota pause
+
+When master is swapped to another provider while a quota pause for `p` is in place, the next
+`quotaPass` sees the coordinator's provider differ from `p`. It then ends that quota pause
+(`FencedQuotaUnpause(p)`): the pause existed only because the coordinator was out. The resume
+directive of `FencedResume` goes to master as usual.
 
 ## 9. Safety rules kept
 
-- The dispatcher only writes fenced bus entries. It never reads `roles.toml`, never launches,
-  never closes a pane.
-- Panes are closed and launched only by `agentbus swap`, run by master or a person, after an
-  identity check, and never on a running turn without `--now`.
-- No model or cost change without a person's yes, except the swap back to the configured profile.
-- Tests use fakes for herdr and `agent-spawn`, the isolated Redis, and never the user's session.
+- The dispatcher only writes fenced bus entries (`FencedCmdOnce` is one more). It never reads
+  `roles.toml`, launches anything or closes a pane.
+- Panes are closed and launched only by `agentbus swap`. It runs after an identity check and a
+  review check, never on a running turn without `--now`, and only with proof before it reports
+  success.
+- No model or cost change without a person's yes. Swapping back to the configured profile is
+  not a new decision.
+- Tests use fake herdr and `agent-spawn`, the isolated Redis (:6392), and never the user's session.
 
 ## 10. Tests
 
 - **dispatch:**
-  - a release sends resume directives only to the provider's agents with work in flight, plus one
-    notice to master;
-  - nothing is sent twice when the release flaps;
-  - an expired hold with no reading resumes too;
-  - a long hold sends one master directive, and none under `LongHold` or when it is 0;
-  - a swap recorded for the provider is mentioned at the release.
+  - a release resumes only the agents with `accepted` tasks or `working`, never `blocked` or
+    `requested`;
+  - a crash between two recipients (injected error) resends only the missing one;
+  - a flapping release sends nothing more;
+  - an expired hold resumes too;
+  - a long hold sends one directive to master for another provider, and one notify for the
+    coordinator's provider; none under `LongHold` or when it is 0;
+  - a swap intent blocks prompting;
+  - a coordinator whose provider changed ends the quota pause.
+- **bus:** `FencedCmdOnce` (lease, mark, idempotence) and the swap intent (`NX`, expiry).
 - **rolecfg:**
-  - `fallback_profiles` is validated (unknown profile, same profile, same provider, schema v1);
+  - `fallback_profiles` is validated (unknown, same profile, same provider, more than 3, schema v1);
   - `roles fallbacks` prints them and flags the same-provider review;
-  - launch accepts `--profile`.
+  - launch accepts `--profile`, and a bind failure is fatal with `AGENT_LAUNCH_REQUIRE_BIND`.
 - **swap (fake herdr, fake agent-spawn):**
-  - refuses an unknown profile, a profile not listed (without `--force`), a dead or unverified
-    pane, a busy agent (without `--now`) and the caller itself;
-  - in order: closes the pane, waits for the pid, spawns with the profile, records `{p}:swaps`;
-  - swap back clears the record.
-- **busmon:** the `fallback` flag and the detail row.
-- **Skill:** master's section "When a provider is out for long" (§5.2), and its handling of the
-  swap-back notice (§7).
+  - every refusal of §6.1 and a second concurrent swap;
+  - the order intent, close, wait for the pid, spawn, proof, intent deleted;
+  - a spawn failure and a missing proof leave no intent and print the recovery.
+- **busmon:** the `swapping` flag and the long-pause hint.
+- **Skill:** master's section "When a provider is out for long" (§5.2).
 
-## 11. Open questions for review
+## 11. Open questions (answered in review)
 
-1. Should resume also wake agents of other providers that were waiting on a held agent (master
-   waiting for foureyes)? Proposal: no. Their wait ends when the held agent delivers.
-2. `LongHold` default 2 h: long enough to skip a 5-hour window near its end, short enough to
-   catch the weekly one.
-3. Should master be allowed to swap without asking when the person pre-authorised it
-   (`auto_fallback = true` per role)? Proposal: not in v0.15. Ask first, see how it is used.
+- Resume wakes only the held provider's agents; master's waiting ends when the resumed agent
+  delivers (agreed).
+- `LongHold` defaults to 2 h and is configurable (agreed).
+- No `auto_fallback` before the consent and recovery path has been used for real (agreed).
+
+## 12. Codex review of rev 1 (2026-10-16) and what changed
+
+1. A held coordinator cannot ask anyone → §5.1 sends a `notify` to the person instead, the person
+   can swap master from a terminal (§6.1.2), and §8 ends the pause once master's provider changes.
+2. Per-hold mark not crash-safe; unbounded text → per-recipient `FencedCmdOnce` (§3.3), bounded
+   text, a failure does not stop the others.
+3. Swap races the dispatcher's prompt → swap intent, a `Decide` rule, a re-check before `Prompt`,
+   the residual race named, the queue kept by name, the resume sent only after the proof (§6.2-6.3).
+4. Open reviews keyed by name → refused while open (§6.1.3), no transfer in v0.15.
+5. Spawn is not proof → preflight before the close, a fatal bind in swap mode, proof by the new
+   identity and profile, failure and recovery (§6.3-6.4).
+6. Ask limits → at most 3 fallbacks, at most 6 roles per ask, then sequential asks keyed by role
+   (§4, §5.2).
+7. Resume predicate → `accepted` or `working` only, `blocked` and `requested` excluded (§3.2).
+8. Scope → durable swap record, `fallback` flag and automatic swap-back deferred (§2).
