@@ -266,3 +266,65 @@ func TestCleanDropsInvalidWindows(t *testing.T) {
 		t.Fatalf("one valid: %+v", c)
 	}
 }
+
+// A limit hit is void once the API has answered since, in any transcript of
+// the account: a quota reset granted before the announced time.
+func TestClaudeBackstopVoidedByALaterAnswer(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "projects")
+	weekly := t0.Add(96 * time.Hour).Unix()
+	write := func(name string, lines ...string) {
+		p := filepath.Join(root, "p", name)
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte("\n"+strings.Join(lines, "\n")+"\n"), 0o600)
+		os.Chtimes(p, t0, t0)
+	}
+	hit := `{"type":"assistant","timestamp":"2026-10-15T21:40:00Z","isApiErrorMessage":true,"error":"rate_limit","message":{"model":"<synthetic>"},"quotaLimits":{"status":"rejected","rateLimitType":"seven_day","resetsAt":` + itoa(weekly) + `}}`
+	read := func() Reading {
+		r, _ := ClaudeReader{Cache: filepath.Join(dir, "none.json"), Transcripts: root, Now: fixed}.Read(context.Background())
+		return r
+	}
+	// The hit alone holds the weekly window.
+	write("a.jsonl", hit, `{"type":"assistant","timestamp":"2026-10-15T21:30:00Z","message":{"model":"claude-opus-5-5"}}`)
+	if r := read(); len(r.Windows) != 1 || r.Windows[0].UsedPct != 100 {
+		t.Fatalf("hit not read: %+v", r)
+	}
+	// A synthetic error after it proves nothing.
+	write("b.jsonl", `{"type":"assistant","timestamp":"2026-10-15T21:45:00Z","isApiErrorMessage":true,"message":{"model":"<synthetic>"}}`)
+	if r := read(); len(r.Windows) != 1 {
+		t.Fatalf("a synthetic error voided the hit: %+v", r)
+	}
+	// A real answer in another session after it voids it.
+	write("c.jsonl", `{"type":"assistant","timestamp":"2026-10-15T21:50:00Z","message":{"model":"claude-opus-5-5","content":"secret"}}`)
+	r := read()
+	if len(r.Windows) != 0 || !r.Unknown || r.AvailableAt != time.Date(2026, 10, 15, 21, 50, 0, 0, time.UTC).UnixMilli() {
+		t.Fatalf("a later answer did not void the hit: %+v", r)
+	}
+	if !r.ServedSince(t0, 30*time.Minute) {
+		t.Fatalf("ServedSince false at %v for %v", t0, time.UnixMilli(r.AvailableAt))
+	}
+	// A new hit after that answer holds again.
+	write("d.jsonl", strings.Replace(hit, "21:40:00Z", "21:55:00Z", 1))
+	if r := read(); len(r.Windows) != 1 {
+		t.Fatalf("a newer hit was voided by an older answer: %+v", r)
+	}
+}
+
+// One account per Claude config dir: an answer in another dir's transcripts
+// (another account) never voids this dir's limit hit.
+func TestClaudeBackstopIsBoundToItsConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	weekly := t0.Add(96 * time.Hour).Unix()
+	put := func(root, line string) {
+		p := filepath.Join(dir, root, "p", "s.jsonl")
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte("\n"+line+"\n"), 0o600)
+		os.Chtimes(p, t0, t0)
+	}
+	put("a", `{"type":"assistant","timestamp":"2026-10-15T21:40:00Z","isApiErrorMessage":true,"message":{"model":"<synthetic>"},"quotaLimits":{"status":"rejected","rateLimitType":"seven_day","resetsAt":`+itoa(weekly)+`}}`)
+	put("b", `{"type":"assistant","timestamp":"2026-10-15T21:50:00Z","message":{"model":"claude-opus-5-5"}}`)
+	r, _ := ClaudeReader{Cache: filepath.Join(dir, "none.json"), Transcripts: filepath.Join(dir, "a"), Now: fixed}.Read(context.Background())
+	if len(r.Windows) != 1 || r.AvailableAt != 0 {
+		t.Fatalf("another config dir's answer voided the hit: %+v", r)
+	}
+}

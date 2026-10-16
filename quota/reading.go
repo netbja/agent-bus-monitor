@@ -46,6 +46,10 @@ type Reading struct {
 	Unlimited   bool     `json:"unlimited,omitempty"`
 	Unknown     bool     `json:"unknown,omitempty"`
 	Note        string   `json:"note,omitempty"` // why unknown, for agentbus quota; never source text
+	// AvailableAt (Unix ms) is the last call the provider served, seen after
+	// any limit hit: evidence that no limit stops it now, even with no window
+	// to read (Claude's transcript backstop; a quota reset granted early).
+	AvailableAt int64 `json:"available_at,omitempty"`
 }
 
 // Reader is one provider's source.
@@ -88,6 +92,12 @@ func (r Reading) Validate() error {
 // Usable is the windows the policy may act on at now: the reading is known,
 // each window was itself observed within maxAge, and its reset is still ahead
 // (spec §7.1). Display keeps the others, aged.
+// ServedSince reports whether the provider served a call within maxAge of now
+// (AvailableAt): no limit is stopping it, whatever a stale reset said.
+func (r Reading) ServedSince(now time.Time, maxAge time.Duration) bool {
+	return r.AvailableAt > 0 && now.Sub(time.UnixMilli(r.AvailableAt)) <= maxAge
+}
+
 func (r Reading) Usable(now time.Time, maxAge time.Duration) []Window {
 	if r.Unknown || r.Unlimited {
 		return nil
@@ -121,7 +131,9 @@ func (r Reading) Clean() Reading {
 		}
 	}
 	if len(ws) == 0 {
-		return Unknown(r.Provider, r.Source, "no valid window")
+		u := Unknown(r.Provider, r.Source, "no valid window")
+		u.AvailableAt = r.AvailableAt
+		return u
 	}
 	r.Windows = ws
 	return r

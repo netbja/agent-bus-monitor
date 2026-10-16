@@ -135,22 +135,44 @@ func (b *Bus) FencedQuotaPause(ctx context.Context, token, provider, notify stri
 	return n == 1, nil
 }
 
-// fencedQuotaUnpause: -1 not the holder; 0 no quota pause of this provider;
-// 1 deleted.
+// fencedQuotaUnpause: -1 not the holder; 0 the pause is no longer exactly
+// the record read (ARGV[5]); 1 deleted, and the resume directive XADDed when
+// a target is given.
 var fencedQuotaUnpause = redis.NewScript(`
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
-local v = redis.call('GET', KEYS[2])
-if not v then return 0 end
-local ok, p = pcall(cjson.decode, v)
-if not ok or p['reason'] ~= ARGV[2] then return 0 end
+if redis.call('GET', KEYS[2]) ~= ARGV[5] then return 0 end
 redis.call('DEL', KEYS[2])
+if ARGV[3] ~= '' then
+  redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[4], '*', unpack(ARGV, 6))
+end
 return 1`)
 
 // FencedQuotaUnpause ends this provider's quota pause early (a reading back
-// under the threshold); it never touches another pause.
-func (b *Bus) FencedQuotaUnpause(ctx context.Context, token, provider string) (bool, error) {
-	n, err := fencedQuotaUnpause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project)},
-		token, QuotaPauseReason(provider)).Int()
+// under the threshold, a call served after the limit hit); it never touches
+// another pause. Like FencedResume, it sends the pause's notify target the
+// resume directive in the same script, so the coordinator learns the team
+// may go on.
+func (b *Bus) FencedQuotaUnpause(ctx context.Context, token, provider, from string) (bool, error) {
+	reason := QuotaPauseReason(provider)
+	// The record read here is the one the script deletes, byte for byte (as in
+	// FencedResume): a pause replaced meanwhile, even with the same reason, is
+	// left alone and nobody is told about the old one.
+	target, text, seen := "", "", ""
+	if raw, err := b.r.Get(ctx, PauseKey(b.project)).Result(); err == nil {
+		var p PauseRecord
+		if json.Unmarshal([]byte(raw), &p) == nil && p.Reason == reason && p.By == "dispatch" {
+			seen = raw
+			if ValidName(p.Notify) {
+				target, text = p.Notify, resumeText(p, "The provider's limit was lifted before the announced reset.")
+			}
+		}
+	}
+	if seen == "" {
+		return false, nil
+	}
+	n, err := fencedQuotaUnpause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project), StreamKey(b.project, "cmd")},
+		token, reason, target, streamMaxLen, seen,
+		"from", from, "target", target, "type", CmdDirective, "ref", "", "command", text, "text_complete", "yes").Int()
 	if err != nil {
 		return false, err
 	}
