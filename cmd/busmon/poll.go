@@ -28,6 +28,7 @@ type busReader interface {
 	OpenChallenges(ctx context.Context, agent string) (map[string]string, error)
 	Pause(ctx context.Context) (*bus.PauseRecord, error)
 	QuotaMarks(ctx context.Context) (map[string]string, error)
+	Observed(ctx context.Context) (map[string]bus.Observation, error)
 	Asks(ctx context.Context) ([]bus.Ask, error)
 }
 
@@ -125,8 +126,11 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	svcErr := errNotPolled
 	var marks map[string]string
 	marksErr := errNotPolled
+	var observed map[string]bus.Observation
+	observedErr := errNotPolled
 	if wakePollDue(tick) {
 		marks, marksErr = b.QuotaMarks(pollCtx)
+		observed, observedErr = b.Observed(pollCtx)
 		dispAlive, dispErr = b.DispatchAlive(pollCtx)
 		missionsState, missionsErr = missionsFact(pollCtx, b)
 		svcInst, svcRecs, svcErr = b.ServiceStates(pollCtx)
@@ -250,6 +254,13 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		}
 		if c, ok := gates[n]; ok {
 			a.gated = c
+		}
+		if observedErr == nil {
+			o, ok := observed[n]
+			a.obsBusy, a.obsState, a.obsAt = ok && o.Busy, o.State, time.Time{}
+			if ok && o.At > 0 {
+				a.obsAt = time.UnixMilli(o.At)
+			}
 		}
 		if wi, ok := wakes[n]; ok {
 			if wi.obOK {

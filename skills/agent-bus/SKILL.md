@@ -95,7 +95,11 @@ a line that starts with `[agentbus#`:
    session's start is not new work either** (the id's leading number is its Unix-ms send time):
    it was left for a previous session — treat it like a stale one, never act on it without
    confirmation from its sender or master.
-3. Handle the rest as usual (tracked request → `request accept` first, then the work).
+3. **Before you start working, declare it**: `agentbus status <self> working "<what you are doing>"`.
+   busmon shows only what you declare; without it you stay `idle` on screen for the whole
+   task (since v0.14.3 busmon marks such a pane `busy`, observed, but that is a safety net,
+   not your status). Then handle the entries as usual (tracked request → `request accept`
+   first, then the work).
 4. When nothing is left: `agentbus status <self> idle "<what you finished>"` and stop. Do not
    arm `subscribe`.
 

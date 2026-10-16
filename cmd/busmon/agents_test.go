@@ -228,3 +228,31 @@ func TestUpdatedBar(t *testing.T) {
 		t.Error("medium must not draw the bar")
 	}
 }
+
+func TestBusyFlagIsObservedNotDeclared(t *testing.T) {
+	now := time.Now()
+	has := func(a *agentState) bool {
+		for _, f := range agentFlags(a, false) {
+			if f.Word == "busy" {
+				return true
+			}
+		}
+		return false
+	}
+	idle := &agentState{state: "idle", obsBusy: true, obsAt: now.Add(-10 * time.Second)}
+	if !has(idle) {
+		t.Error("an idle agent seen busy has no busy flag")
+	}
+	if w := (&agentState{state: "working", obsBusy: true, obsAt: now}); has(w) {
+		t.Error("a declared working agent repeats busy")
+	}
+	if old := (&agentState{state: "idle", obsBusy: true, obsAt: now.Add(-2 * observedFresh)}); has(old) {
+		t.Error("an old observation still flags busy")
+	}
+	if quiet := (&agentState{state: "idle", obsAt: now}); has(quiet) {
+		t.Error("a quiet pane flags busy")
+	}
+	if _, word, _, _ := stateLook(idle); word != "idle" {
+		t.Errorf("the declared state became %q", word)
+	}
+}

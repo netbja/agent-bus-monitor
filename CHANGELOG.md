@@ -4,6 +4,16 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.14.3 — an agent at work is seen at work
+
+- Agents declare `working` before they start (skill `agent-bus`): deploy worked six minutes
+  on hyperliquid while busmon showed it idle.
+- Safety net: the dispatch service looks at every verified pane every 15 s; busmon flags `busy`
+  an agent whose pane runs a turn without declaring `working`, beside its declared state, never
+  instead of it. The detail shows the observation (`Observed`).
+
+[Notes](docs/releases/v0.14.3.md)
+
 ## v0.14.2 — a person's answer is never lost
 
 - A plain `agentbus subscribe` (no `--since`) still skips an agent's backlog, but now delivers

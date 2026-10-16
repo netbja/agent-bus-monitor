@@ -420,6 +420,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg := dispatchBaseConfig()
 			cfg.Log, cfg.OnLease = log, onLease
 			cfg.Quota = serviceQuota(os.Getenv, log)
+			cfg.Observe = dispatch.ObserveEvery
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
 			}

@@ -39,6 +39,9 @@ type Config struct {
 	// Quota, when its Read is set, collects provider readings and holds the
 	// agents of a provider near its limit (v0.13).
 	Quota QuotaConfig
+	// Observe, when positive, is how often every verified pane is inspected
+	// and published to {p}:observed (ObserveEvery in the services; 0 = off).
+	Observe time.Duration
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -263,6 +266,8 @@ type loop struct {
 	last  map[string]string // agent → last logged decision, so a steady state logs once
 
 	quota quotaState
+
+	observedAt time.Time // last observePass (local clock: a throttle, never persisted)
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
@@ -281,6 +286,13 @@ func (l *loop) reconcile(ctx context.Context) error {
 			return err
 		}
 		l.logError("", "quota", err)
+	}
+	// Observation runs paused or not: it only reads panes.
+	if err := l.observePass(ctx, snaps); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "observe", err)
 	}
 	if paused, err := l.paused(ctx); err != nil || paused {
 		return err
