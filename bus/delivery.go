@@ -156,6 +156,20 @@ func (rc *receiver) mapErr(err error) error {
 // recovered delivery may have been output already: deduplicate by project/ID.
 // Missing/expired entries carry no executable payload and Delivery explains why.
 func (b *Bus) WatchCmdDelivery(ctx context.Context, agent, consumer, floor string, deliver func(Event) (bool, error)) error {
+	return b.watchCmdDelivery(ctx, agent, consumer, floor, false, deliver)
+}
+
+// WatchCmdDeliveryFromNow is a plain subscribe: floor is the server's "now"
+// (ServerFloor), so the backlog is acknowledged unseen — except what a person
+// wrote to this agent within DefaultHorizon (human=yes, a waking entry: an
+// answer to its question, a directive from busmon), which is delivered. An
+// agent that re-arms without its cursor must never lose a person's answer
+// because it arrived while it was busy.
+func (b *Bus) WatchCmdDeliveryFromNow(ctx context.Context, agent, consumer, floor string, deliver func(Event) (bool, error)) error {
+	return b.watchCmdDelivery(ctx, agent, consumer, floor, true, deliver)
+}
+
+func (b *Bus) watchCmdDelivery(ctx context.Context, agent, consumer, floor string, keepHuman bool, deliver func(Event) (bool, error)) error {
 	if !ValidName(agent) {
 		return fmt.Errorf("invalid agent %q", agent)
 	}
@@ -174,6 +188,12 @@ func (b *Bus) WatchCmdDelivery(ctx context.Context, agent, consumer, floor strin
 	if createAt == "" {
 		createAt = "$"
 	}
+	if keepHuman && validStreamID(floor) {
+		// A new group starts a horizon back, so a person's entry written before
+		// the agent's first subscribe is still seen; the rest is skipped below.
+		fms, _ := splitID(floor)
+		createAt = strconv.FormatInt(max(fms-DefaultHorizon.Milliseconds(), 0), 10) + "-0"
+	}
 	if err := b.r.XGroupCreateMkStream(ctx, stream, agent, createAt).Err(); err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return err
 	}
@@ -182,7 +202,7 @@ func (b *Bus) WatchCmdDelivery(ctx context.Context, agent, consumer, floor strin
 			return rc.leaseError(ctx.Err())
 		}
 		done := false
-		handled, err := b.deliverOne(ctx, agent, consumer, rc.token, floor, time.Second, func(e Event) error {
+		handled, err := b.deliverOne(ctx, agent, consumer, rc.token, floor, keepHuman, time.Second, func(e Event) error {
 			d, err := deliver(e)
 			done = d
 			return err
@@ -229,7 +249,7 @@ func (b *Bus) DrainCmd(ctx context.Context, agent, consumer string, horizon time
 			return n, rc.leaseError(ctx.Err())
 		}
 		delivered := false
-		handled, err := b.deliverOne(ctx, agent, consumer, rc.token, "", -1, func(e Event) error {
+		handled, err := b.deliverOne(ctx, agent, consumer, rc.token, "", false, -1, func(e Event) error {
 			ms, _ := splitID(e.ID)
 			e.Stale = ms < cutoff
 			if e.AgeS = (nowMs - ms) / 1000; e.AgeS < 0 {
@@ -256,7 +276,7 @@ func (b *Bus) DrainCmd(ctx context.Context, agent, consumer string, horizon time
 // either skipped and ACKed (other target, at/below floor) or passed to deliver
 // and, on a nil callback error, finished (metadata + XACK behind the fence).
 // Errors that may come from a lost lease are wrapped in transportErr.
-func (b *Bus) deliverOne(ctx context.Context, agent, consumer, token, floor string, block time.Duration, deliver func(Event) error) (bool, error) {
+func (b *Bus) deliverOne(ctx context.Context, agent, consumer, token, floor string, keepHuman bool, block time.Duration, deliver func(Event) error) (bool, error) {
 	stream := StreamKey(b.project, "cmd")
 	lease := ReceiverKey(b.project, agent)
 	// XPENDING includes IDs whose bodies have been trimmed. XAUTOCLAIM would
@@ -343,7 +363,8 @@ func (b *Bus) deliverOne(ctx context.Context, agent, consumer, token, floor stri
 	}
 	// The v1 floor is an explicit skip, not an acceptance signal. Other targets
 	// are acknowledged only in THIS agent's group; their groups remain intact.
-	if (e.Target != agent && !(e.Delivery == "missing" && e.Target == "")) || !aboveFloor(floor, e.ID) {
+	below := !aboveFloor(floor, e.ID) && !(keepHuman && keptForPerson(e, agent, floor))
+	if (e.Target != agent && !(e.Delivery == "missing" && e.Target == "")) || below {
 		if err := b.finishDelivery(ctx, agent, token, e, false); err != nil {
 			return false, err
 		}
@@ -435,3 +456,16 @@ if redis.call('GET',KEYS[2])~=ARGV[4] then return redis.error_reply('subscriber 
 local body=redis.call('XRANGE',KEYS[1],ARGV[3],ARGV[3])
 if #body==0 then return {} end
 return redis.call('XCLAIM',KEYS[1],ARGV[1],ARGV[2],0,ARGV[3])`)
+
+// keptForPerson reports whether an entry below a plain subscribe's floor is
+// still delivered: a person wrote it to this agent (human=yes), it wakes
+// (not wake=no, so not a busmon close), its body is retained and not expired,
+// and it is younger than DefaultHorizon at the floor.
+func keptForPerson(e Event, agent, floor string) bool {
+	if !e.Human || e.NoWake || e.Target != agent || e.Delivery == "missing" || e.Delivery == "expired" {
+		return false
+	}
+	fms, _ := splitID(floor)
+	ems, _ := splitID(e.ID)
+	return fms-ems <= DefaultHorizon.Milliseconds()
+}

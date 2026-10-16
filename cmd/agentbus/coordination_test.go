@@ -56,7 +56,7 @@ func TestSubscribeOutputFailureAndRecovery(t *testing.T) {
 				interrupted = &interruptAfterWrite{cancel: cancel}
 				out = interrupted
 			}
-			code := runSubscribe(c, b, "dev", "old-process", time.Second, "0", false, out)
+			code := runSubscribe(c, b, "dev", "old-process", time.Second, "0", false, false, out)
 			if code != 75 {
 				t.Fatalf("output failure exit %d", code)
 			}
@@ -71,7 +71,7 @@ func TestSubscribeOutputFailureAndRecovery(t *testing.T) {
 				t.Fatalf("lost pending %v %v", p, err)
 			}
 			var retry bytes.Buffer
-			code = runSubscribe(ctx, b, "dev", "new-process", time.Second, "0", false, &retry)
+			code = runSubscribe(ctx, b, "dev", "new-process", time.Second, "0", false, false, &retry)
 			if code != 0 {
 				t.Fatalf("recovery exit %d: %s", code, retry.String())
 			}
@@ -95,7 +95,7 @@ func TestSubscribeUnavailableIsNotCommand(t *testing.T) {
 	r.XReadGroup(ctx, &redis.XReadGroupArgs{Group: "dev", Consumer: "dead", Streams: []string{stream, ">"}, Count: 1})
 	r.XTrimMaxLen(ctx, stream, 0)
 	var out bytes.Buffer
-	code := runSubscribe(ctx, b, "dev", "new", time.Second, "0", false, &out)
+	code := runSubscribe(ctx, b, "dev", "new", time.Second, "0", false, false, &out)
 	ev := lastEvent(t, out.String())
 	if code != 75 || ev.Event != "error" || ev.Body != "" || ev.ID != id || ev.Delivery != "missing" || ev.Rearm == nil || !*ev.Rearm {
 		t.Fatalf("unsafe missing event %+v code=%d", ev, code)
@@ -156,7 +156,7 @@ func TestCoordinationSubscriberHelper(t *testing.T) {
 	if phase := os.Getenv("AGENTBUS_TEST_CRASH"); phase != "" {
 		out = processCrashWriter{after: phase == "after"}
 	}
-	code := runSubscribe(context.Background(), b, "dev", "child-process", time.Second, "0", false, out)
+	code := runSubscribe(context.Background(), b, "dev", "child-process", time.Second, "0", false, false, out)
 	os.Exit(code)
 }
 
@@ -241,7 +241,7 @@ func TestSubscribeContendedLeaseWaitsForIdle(t *testing.T) {
 	defer r.Del(ctx, key)
 	start := time.Now()
 	var out bytes.Buffer
-	code := runSubscribe(ctx, b, "dev", "waiting", 200*time.Millisecond, "0", false, &out)
+	code := runSubscribe(ctx, b, "dev", "waiting", 200*time.Millisecond, "0", false, false, &out)
 	if time.Since(start) < 190*time.Millisecond {
 		t.Fatal("contention woke session immediately")
 	}
@@ -265,7 +265,7 @@ func TestSubscribeTakesOverWhenLeaseExpires(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if code := runSubscribe(ctx, b, "dev", "new", time.Second, "0", false, &out); code != 0 {
+	if code := runSubscribe(ctx, b, "dev", "new", time.Second, "0", false, false, &out); code != 0 {
 		t.Fatalf("takeover failed: %d %s", code, out.String())
 	}
 }

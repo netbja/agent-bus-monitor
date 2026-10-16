@@ -74,7 +74,7 @@ func dialMain(t *testing.T) (*bus.Bus, *redis.Client) {
 func TestRunSubscribeFatalOnBadAgent(t *testing.T) {
 	var buf bytes.Buffer
 	// b is nil on purpose: ValidName rejects the agent before any Redis call.
-	code := runSubscribe(context.Background(), nil, "Bad Agent", "host-1", time.Second, "0", false, &buf)
+	code := runSubscribe(context.Background(), nil, "Bad Agent", "host-1", time.Second, "0", false, false, &buf)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (fatal)", code)
 	}
@@ -98,7 +98,7 @@ func TestRunSubscribeDelivers(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	code := runSubscribe(ctx, b, "dev", "host-1", 4*time.Second, "0", false, &buf)
+	code := runSubscribe(ctx, b, "dev", "host-1", 4*time.Second, "0", false, false, &buf)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (delivered)", code)
 	}
@@ -129,7 +129,7 @@ func TestRunSubscribeFloorSkipsBacklog(t *testing.T) {
 		t.Fatalf("Cmd NEW: %v", err)
 	}
 	var buf bytes.Buffer
-	code := runSubscribe(ctx, b, "dev", "host-1", 4*time.Second, oldID, false, &buf)
+	code := runSubscribe(ctx, b, "dev", "host-1", 4*time.Second, oldID, false, false, &buf)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
@@ -143,7 +143,7 @@ func TestRunSubscribeHeartbeat(t *testing.T) {
 	b, _ := dialMain(t)
 	var buf bytes.Buffer
 	// No cmd published: WatchCmd blocks, the 1s idle window elapses → heartbeat.
-	code := runSubscribe(context.Background(), b, "dev", "host-1", 1*time.Second, "0", false, &buf)
+	code := runSubscribe(context.Background(), b, "dev", "host-1", 1*time.Second, "0", false, false, &buf)
 	if code != 64 {
 		t.Fatalf("exit code = %d, want 64 (heartbeat)", code)
 	}
@@ -196,7 +196,7 @@ func TestRunSubscribeLoopDeliversMany(t *testing.T) {
 
 	buf := &syncBuf{}
 	done := make(chan int, 1)
-	go func() { done <- runSubscribe(ctx, b, "dev", "host-1", 2*time.Second, "0", true, buf) }()
+	go func() { done <- runSubscribe(ctx, b, "dev", "host-1", 2*time.Second, "0", false, true, buf) }()
 
 	deadline := time.After(5 * time.Second)
 	for !(strings.Contains(buf.String(), "do 0") && strings.Contains(buf.String(), "do 1")) {
@@ -369,5 +369,77 @@ func TestCmdEventCarriesHuman(t *testing.T) {
 	_ = emit(&buf, cmdEvent(bus.Event{ID: "1-0", Type: bus.CmdDirective, From: "codex", Target: "claude", Message: "x"}, nil))
 	if strings.Contains(buf.String(), `"human"`) {
 		t.Fatalf("an agent's cmd carries human: %s", buf.String())
+	}
+}
+
+// A plain subscribe (no --since) skips the backlog but never a person's waking
+// entry: an answer that arrived while the agent was busy is delivered.
+func TestRunSubscribeFromNowKeepsAPersonsEntry(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	stream := bus.StreamKey(b.Project(), "cmd")
+	if err := r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
+		t.Fatalf("XGroupCreate: %v", err)
+	}
+	if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", "OLD from an agent"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.HumanClose(ctx, "bernard", "dev", "1-0", "closed by a person"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.HumanCmd(ctx, "bernard", "dev", "ANSWER"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond) // the floor is "<ms>-0": entries of its own millisecond count as new
+	floor, err := b.ServerFloor(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if code := runSubscribe(ctx, b, "dev", "host-1", 2*time.Second, floor, true, false, &buf); code != 0 {
+		t.Fatalf("exit code = %d, want 0: %s", code, buf.String())
+	}
+	if ev := lastEvent(t, buf.String()); ev.Body != "ANSWER" || !ev.Human {
+		t.Fatalf("delivered %+v, want the person's ANSWER", ev)
+	}
+	buf.Reset()
+	if code := runSubscribe(ctx, b, "dev", "host-1", time.Second, floor, true, false, &buf); code != 64 {
+		t.Fatalf("second plain subscribe: exit %d, want 64 (agent backlog and the close skipped): %s", code, buf.String())
+	}
+
+	// No group yet (the agent never listened): a person's entry written just
+	// before its first plain subscribe is delivered, an agent's is not.
+	if _, err := b.Cmd(ctx, "hermes", "fresh", bus.CmdDirective, "", "agent backlog"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.HumanCmd(ctx, "bernard", "fresh", "FIRST ANSWER"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	fresh, err := b.ServerFloor(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	if code := runSubscribe(ctx, b, "fresh", "host-1", 2*time.Second, fresh, true, false, &buf); code != 0 {
+		t.Fatalf("first plain subscribe of a new agent: exit %d: %s", code, buf.String())
+	}
+	if ev := lastEvent(t, buf.String()); ev.Body != "FIRST ANSWER" {
+		t.Fatalf("new agent got %+v, want FIRST ANSWER", ev)
+	}
+	buf.Reset()
+	if code := runSubscribe(ctx, b, "fresh", "host-1", time.Second, fresh, true, false, &buf); code != 64 {
+		t.Fatalf("new agent, second plain subscribe: exit %d, want 64: %s", code, buf.String())
+	}
+
+	// An explicit cursor is the agent's own record of what it handled: a
+	// person's entry at or below it is not delivered again.
+	id, err := b.HumanCmd(ctx, "bernard", "dev", "HANDLED")
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	if code := runSubscribe(ctx, b, "dev", "host-1", time.Second, id, false, false, &buf); code != 64 {
+		t.Fatalf("--since past a person's entry: exit %d, want 64: %s", code, buf.String())
 	}
 }

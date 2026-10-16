@@ -4,6 +4,15 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.14.2 — a person's answer is never lost
+
+- A plain `agentbus subscribe` (no `--since`) still skips an agent's backlog, but now delivers
+  what a person wrote to that agent within 24h (answers to its questions, busmon directives).
+  Two answers sent seconds apart reached master as one: the second was acknowledged unseen
+  when master re-armed without its cursor.
+
+[Notes](docs/releases/v0.14.2.md)
+
 ## v0.14.1 — questions you can open, texts you can read
 
 - busmon opens the questions with `!` or `w`, and with Enter in the detail of an agent that asks
