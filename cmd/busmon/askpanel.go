@@ -126,7 +126,7 @@ func (u *ui) renderAsk() {
 			plain += " - " + o.Description
 		}
 	}
-	u.ovPlain = DetailText(plain)
+	u.ovPlain = CopyText(plain)
 }
 
 // currentAsk is the panel's ask, following replaced_by to the open version.

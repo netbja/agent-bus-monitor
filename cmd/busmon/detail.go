@@ -287,7 +287,7 @@ func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // detailPlain is what `y` copies: the message text exactly as stored, newlines
 // intact, no colour tags, no metadata framing.
-func detailPlain(e bus.Event) string { return DetailText(messageBody(e)) }
+func detailPlain(e bus.Event) string { return CopyText(messageBody(e)) }
 
 // threadPlain is what `Y` copies: the whole retained exchange as plain text, so
 // a request interrupted halfway can be pasted somewhere else in one piece.
