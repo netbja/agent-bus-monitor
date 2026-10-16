@@ -204,5 +204,14 @@ func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfi
 	if d, err := time.ParseDuration(getenv("AGENT_BUS_QUOTA_MAX_AGE")); err == nil {
 		q.MaxAge = d
 	}
+	switch v := getenv("AGENT_BUS_QUOTA_LONG_HOLD"); v {
+	case "":
+	case "0":
+		q.LongHold = -1 // off
+	default:
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			q.LongHold = d
+		}
+	}
 	return q
 }

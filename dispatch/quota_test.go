@@ -374,3 +374,70 @@ func TestRunQuotaReleaseRetriesAFailedResume(t *testing.T) {
 		t.Fatalf("resumes = %v, want coder and kimi once each", got)
 	}
 }
+
+// v0.15 §5.1: a long hold asks for a decision once per episode: a directive
+// to master for another provider, a notify for the person for master's own.
+func TestRunQuotaLongHoldAsksOnce(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "foureyes", "p-4", "openai")
+	r.HSet(ctx, bus.BoardKey(b.Project()), "plan-review", `{"owner":"foureyes","state":"accepted"}`)
+	t.Cleanup(func() { r.Del(ctx, bus.BoardKey(b.Project())) })
+	far := time.Now().Add(61 * time.Hour).Unix()
+	week := func(p string, pct float64) quota.Reading {
+		return quota.Reading{Provider: p, ObservedAt: time.Now().UnixMilli(),
+			Windows: []quota.Window{{Name: "7d", UsedPct: pct, ResetsAt: far, Minutes: 10080}}}
+	}
+	f := &fakeQuota{}
+	f.set(week("anthropic", 10), week("openai", 100))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	count := func() (directives, notes int) {
+		for _, m := range entries(t, r, b, "cmd") {
+			if cmd, _ := m.Values["command"].(string); m.Values["from"] == "dispatch" && strings.HasPrefix(cmd, "openai is held until") {
+				if m.Values["target"] != "master" || !strings.Contains(cmd, "foureyes (plan-review)") || !strings.Contains(cmd, "61h") {
+					t.Errorf("long-hold directive %v", m.Values)
+				}
+				directives++
+			}
+		}
+		for _, m := range entries(t, r, b, "notify") {
+			if msg, _ := m.Values["message"].(string); strings.HasPrefix(msg, "The project is paused until") {
+				if !strings.Contains(msg, "swap master --profile <fallback>") {
+					t.Errorf("long-pause notify %q", msg)
+				}
+				notes++
+			}
+		}
+		return
+	}
+	waitFor(t, 3*time.Second, "one directive to master", func() bool { d, _ := count(); return d == 1 })
+	f.set(week("anthropic", 100), week("openai", 100))
+	waitFor(t, 3*time.Second, "one notify for master's own provider", func() bool { _, n := count(); return n == 1 })
+	time.Sleep(300 * time.Millisecond)
+	if d, n := count(); d != 1 || n != 1 {
+		t.Fatalf("directives %d, notifies %d: want one each", d, n)
+	}
+}
+
+// A short hold, or LongHold disabled, asks nothing.
+func TestRunQuotaShortHoldAsksNothing(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "coder", "p-coder", "openai")
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 10), reading("openai", 99)) // resets in 1 h
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "openai held", func() bool {
+		m, _ := b.QuotaMarks(context.Background())
+		return m["hold:openai"] != ""
+	})
+	time.Sleep(200 * time.Millisecond)
+	for _, m := range entries(t, r, b, "cmd") {
+		if cmd, _ := m.Values["command"].(string); strings.Contains(cmd, "is held until") {
+			t.Fatalf("a 1 h hold asked: %q", cmd)
+		}
+	}
+}

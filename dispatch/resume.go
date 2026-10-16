@@ -7,8 +7,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/quota"
 )
 
 // Resume after a hold (spec 2026-10-16-quota-resume-and-fallback-design.md
@@ -155,4 +157,89 @@ func (l *loop) clearEpisodeMarks(ctx context.Context, p string, R int64, marks m
 	}
 	sort.Strings(fields)
 	return l.b.FencedQuotaDel(ctx, l.token, fields...)
+}
+
+// longHoldMark is the {p}:quota field of a long hold's one message.
+func longHoldMark(provider string) string { return "longhold:" + provider }
+
+// inFlight lists provider p's agents with accepted work or a declared working,
+// each with its accepted tasks, sorted by name.
+func inFlight(p string, snaps map[string]bus.AgentSnapshot, board map[string]bus.BoardEntry) []string {
+	accepted := map[string][]string{}
+	for task, e := range board {
+		if e.State == "accepted" && e.Owner != "" {
+			accepted[e.Owner] = append(accepted[e.Owner], task)
+		}
+	}
+	var out []string
+	for a, s := range snaps {
+		if s.Provider != p || !bus.ValidName(a) {
+			continue
+		}
+		tasks := accepted[a]
+		sort.Strings(tasks)
+		switch {
+		case len(tasks) > 0:
+			if len(tasks) > resumeTasksShown {
+				tasks = append(tasks[:resumeTasksShown], fmt.Sprintf("%d more", len(accepted[a])-resumeTasksShown))
+			}
+			out = append(out, a+" ("+strings.Join(tasks, ", ")+")")
+		case s.State == "working":
+			out = append(out, a+" (working)")
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// longHold (v0.15 §5.1): a hold whose reset is further away than LongHold is
+// for a person to decide. For another provider than the coordinator's,
+// master gets one directive (it asks whether to swap); for the coordinator's
+// own provider master is held and cannot ask, so the person gets one notify.
+// Once per episode (mark longhold:<p> = the reset), entry and mark together.
+func (l *loop) longHold(ctx context.Context, p string, w quota.Window, now time.Time, coord string,
+	snaps map[string]bus.AgentSnapshot) error {
+	q := l.cfg.Quota
+	if q.LongHold < 0 || w.ResetsAt == 0 || w.Reset().Sub(now) <= q.LongHold || !bus.ValidName(l.cfg.EscalateTo) {
+		return nil
+	}
+	episode := strconv.FormatInt(w.ResetsAt, 10)
+	marks, err := l.b.QuotaMarks(ctx)
+	if err != nil {
+		return err
+	}
+	if marks[longHoldMark(p)] == episode {
+		return nil
+	}
+	until := w.Reset().Local().Format("Mon 02/01 15:04")
+	wait := fmt.Sprintf("%dh", int(w.Reset().Sub(now).Round(time.Hour).Hours()))
+	var sent bool
+	if p == coord {
+		msg := fmt.Sprintf("The project is paused until %s (%s, %s window, %s). To continue before, swap %s to "+
+			"another provider from a terminal: agentbus roles fallbacks %s, then agentbus --project %s swap %s --profile <fallback>.",
+			until, p, w.Name, wait, l.cfg.EscalateTo, l.cfg.EscalateTo, l.b.Project(), l.cfg.EscalateTo)
+		sent, err = l.b.FencedNotifyOnce(ctx, l.token, longHoldMark(p), episode, dispatchFrom, truncRunes(msg, bus.CmdMaxRunes))
+	} else {
+		board, berr := l.b.Board(ctx)
+		if berr != nil {
+			return berr
+		}
+		held := inFlight(p, snaps, board)
+		who := "none right now"
+		if len(held) > 0 {
+			who = strings.Join(held, ", ")
+		}
+		msg := fmt.Sprintf("%s is held until %s (%s, %s window). Held agents with work in flight: %s. "+
+			"If their roles have fallback profiles (agentbus roles fallbacks <role>), ask the person whether "+
+			"to swap them until the reset.", p, until, wait, w.Name, who)
+		sent, err = l.b.FencedCmdOnce(ctx, l.token, longHoldMark(p), episode, dispatchFrom, l.cfg.EscalateTo,
+			bus.CmdDirective, truncRunes(msg, bus.CmdMaxRunes), false)
+	}
+	if err != nil {
+		return err
+	}
+	if sent {
+		l.log(map[string]any{"action": "quota-long-hold", "provider": p, "until": w.Reset().UTC().Format(time.RFC3339)})
+	}
+	return nil
 }

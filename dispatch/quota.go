@@ -23,7 +23,10 @@ type QuotaConfig struct {
 	WarnPct float64       // default 85
 	HoldPct float64       // default 95
 	MaxAge  time.Duration // a reading older than this is unknown for policy (default 30 min)
-	Now     func() time.Time
+	// LongHold (v0.15 §5): a hold whose reset is further away than this asks
+	// for a decision, once per episode (default 2 h; negative disables).
+	LongHold time.Duration
+	Now      func() time.Time
 }
 
 func (q QuotaConfig) filled() QuotaConfig {
@@ -38,6 +41,9 @@ func (q QuotaConfig) filled() QuotaConfig {
 	}
 	if q.MaxAge <= 0 {
 		q.MaxAge = 30 * time.Minute
+	}
+	if q.LongHold == 0 {
+		q.LongHold = 2 * time.Hour
 	}
 	if q.Now == nil {
 		q.Now = time.Now
@@ -145,6 +151,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			}
 			recorded = tight.ResetsAt
 			l.quota.held[p] = true
+			if err := l.longHold(ctx, p, tight, now, coord, snaps); err != nil {
+				return err
+			}
 		case ok: // a usable reading under the threshold releases, and ends a quota pause early
 			if recorded != 0 {
 				if err := l.release(ctx, p, recorded, snaps, p == coord, ""); err != nil {
