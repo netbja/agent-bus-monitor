@@ -11,9 +11,13 @@ import (
 // registered pane to publish what it sees ({p}:observed, v0.14.3).
 const ObserveEvery = 15 * time.Second
 
-// observeBudget bounds one observation pass: panes not reached in time wait
-// for the next pass, so observing never starves the wake reconciliation.
+// observeBudget bounds the inspections and time reads of one pass (the
+// final write adds at most observeWrite): panes not reached in time wait for
+// the next pass, so observing never starves the wake reconciliation.
 const observeBudget = 5 * time.Second
+
+// observeWrite bounds the publication that ends a pass.
+const observeWrite = 2 * time.Second
 
 // observePass inspects each agent with a verified pane, at most once per
 // cfg.Observe counted from the end of the previous pass, and replaces
@@ -41,13 +45,20 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 		if in.Err != nil || in.Gone || !identityOK(&snap, in) {
 			continue
 		}
-		now, err := l.b.ServerTime(ctx)
+		now, err := l.b.ServerTime(pctx)
 		if err != nil {
+			if pctx.Err() != nil {
+				break // out of budget: publish what was observed
+			}
 			return err
 		}
 		obs[a] = Observation{Busy: in.State == "working" || in.Busy, State: in.State, At: now.UnixMilli()}
 	}
-	return l.b.FencedPutObserved(ctx, l.token, obs)
+	// The write has its own short bound, so a spent budget still publishes
+	// the partial snapshot and a slow broker cannot hold the pass.
+	wctx, wcancel := context.WithTimeout(ctx, observeWrite)
+	defer wcancel()
+	return l.b.FencedPutObserved(wctx, l.token, obs)
 }
 
 // Observation is bus.Observation, named here for the loop.

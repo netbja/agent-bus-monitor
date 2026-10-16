@@ -436,7 +436,7 @@ It never touches Redis — see README "Deployment topology".
 - **Observed is not declared (v0.14.3).** The services' dispatcher inspects every verified pane
   every `ObserveEvery` (15 s; `Config.Observe`, 0 = off, so the default config and its tests
   inspect nothing) and replaces `{p}:observed` (`bus/observed.go`, fenced, whole hash, `PEXPIRE`
-  120 s), after the pause check (a paused project is not observed), within a 5 s budget per pass,
+  120 s), after the pause check (a paused project is not observed), within a 5 s budget per pass (inspections and time reads; the final write has its own 2 s bound),
   the interval counted from the pass's end. It only reads panes: no typing, no state change; a pane
   failing `identityOK` is not observed. `{p}:observed` is not in `projectKinds` and
   `HasKeysBesidesDispatch` ignores it, so a write racing `busmon --delete` never revives a project. busmon reads it with the dispatcher facts and adds the flag `busy` (and an `Observed`
