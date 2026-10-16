@@ -104,6 +104,15 @@ func (l *loop) resumeAfterHold(ctx context.Context, p string, R int64, snaps map
 		if len(tasks) == 0 && s.State != "working" {
 			continue
 		}
+		// Under a swap intent the swap sends this resume itself, after its
+		// proof, through the same mark (§3.3): no mark here.
+		if swapping, serr := l.b.Swapping(ctx, a); serr != nil || swapping {
+			if serr != nil {
+				l.logError(a, "resume", serr)
+				complete = false
+			}
+			continue
+		}
 		var sent bool
 		if l.h.resumeErr != nil {
 			err = l.h.resumeErr(a)

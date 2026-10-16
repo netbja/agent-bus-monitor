@@ -662,3 +662,30 @@ func TestRunBlockedSelfEscalationReArmsWhenTheTabIsBack(t *testing.T) {
 		t.Fatalf("prompts = %d, want 1 (retry window)", n)
 	}
 }
+
+// v0.15 §6.2: a pane under a swap intent is never prompted; once the intent
+// goes, the agent is woken as usual.
+func TestRunSwapIntentBlocksPrompting(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "coder", "p-coder")
+	if err := b.BeginSwap(ctx, "coder", bus.SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	send(t, b, "coder", "build it")
+	rt := newFakeRT(alwaysReady)
+	cfg := fastConfig()
+	cfg.EscalateAfter = 50 * time.Millisecond
+	start(t, b, rt, cfg)
+	time.Sleep(300 * time.Millisecond)
+	if n := len(rt.Prompts()); n != 0 {
+		t.Fatalf("prompted under a swap intent: %d", n)
+	}
+	if w, _ := wakeOf(t, b, "coder"); w.Escalated != "" {
+		t.Fatalf("escalated under a swap intent: %+v", w)
+	}
+	if err := b.EndSwap(ctx, "coder"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 3*time.Second, "a wake once the swap is over", func() bool { return len(rt.Prompts()) == 1 })
+}

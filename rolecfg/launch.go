@@ -850,3 +850,13 @@ func elevated(p Profile) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// ClientExecutable is the program a resolved profile runs: the builtin
+// client's binary, or the adapter's executable (v0.15 §6.1: a swap checks it
+// is there before it closes anything).
+func ClientExecutable(p Profile) string {
+	if bin, ok := builtinBinary[p.Client]; ok {
+		return bin
+	}
+	return p.Adapter
+}

@@ -381,6 +381,14 @@ func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot,
 	if !o.Wakes() && !exists && !o.GapPossible {
 		return nil // nothing owed, nothing recorded: no writes, no log
 	}
+	// v0.15 §6.2: a pane being replaced by `agentbus swap` is never prompted
+	// nor escalated about; the new process gets its turn once the intent goes.
+	if swapping, err := l.b.Swapping(ctx, agent); err != nil {
+		return err
+	} else if swapping {
+		l.logOnce(agent, map[string]any{"agent": agent, "action": "none", "reason": "swap in progress"})
+		return nil
+	}
 	armed, err := l.b.Armed(ctx, agent)
 	if err != nil {
 		return err
@@ -500,7 +508,14 @@ func (l *loop) deferTo(ctx context.Context, s *step, d Decision) error {
 // prompt is spec §3.3: re-check, reserve (fenced, server-windowed), confirm
 // the lease, prompt, record the outcome.
 func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
-	// Step 0: readiness and focus can change between the inspection and now.
+	// Step 0: readiness and focus can change between the inspection and now,
+	// and a swap may have begun.
+	if swapping, err := l.b.Swapping(ctx, s.agent); err != nil || swapping {
+		if err == nil {
+			l.logOnce(s.agent, map[string]any{"agent": s.agent, "action": "none", "reason": "swap in progress"})
+		}
+		return err
+	}
 	s.x.In = l.inspect(ctx, s.snap)
 	if d2 := Decide(l.policy, s.x); d2.Action != ActPrompt {
 		return l.act(ctx, s, d2)
