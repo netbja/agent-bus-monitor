@@ -20,6 +20,8 @@ type busWriter interface {
 	HumanCmd(ctx context.Context, from, target, command string) (string, error)
 	HumanNotify(ctx context.Context, from, message string) (string, error)
 	HumanClose(ctx context.Context, from, target, ref, message string) (string, error)
+	Answer(ctx context.Context, askID, qid, by, choice, text string) (string, int, error)
+	Asks(ctx context.Context) ([]bus.Ask, error)
 	ForgetAgent(ctx context.Context, agent string) (bool, error)
 	Thread(ctx context.Context, threadID string) ([]bus.Event, error)
 }
@@ -35,6 +37,7 @@ const (
 	ovRequests
 	ovServices
 	ovHelp
+	ovAsk
 )
 
 var panelOrder = []PanelID{PanelAgents, PanelActivity, PanelBoard, PanelRequests}
@@ -72,9 +75,11 @@ type ui struct {
 	agentsTouched bool // the operator moved in Agents: stop following the top row
 	showAll       bool // the Agents panel also lists dormant agents (a)
 	confirm       *pendingRemoval
-	rung          map[string]time.Time // agent -> the waiting declaration already rung for
-	bell          func()               // rings the terminal bell; nil = the screen's Beep
-	animate       atomic.Bool          // an agent is waiting: the fade ticker redraws ~10 times a second
+	ask           askPanel          // the ask panel's cursor
+	rung          map[string]string // agent -> the waiting declaration already rung for
+	rungAsks      map[string]bool   // ask ids already rung for
+	bell          func()            // rings the terminal bell; nil = the screen's Beep
+	animate       atomic.Bool       // an agent is waiting: the fade ticker redraws ~10 times a second
 
 	feed         []feedLine
 	seq          int
@@ -96,12 +101,19 @@ func (u *ui) onTick() {
 	seen := map[string]bool{}
 	for _, n := range asksFor(u.st.agents) {
 		seen[n] = true
-		at := u.st.agents[n].stateAt
+		a := u.st.agents[n]
 		if u.rung == nil {
-			u.rung = map[string]time.Time{}
+			u.rung, u.rungAsks = map[string]string{}, map[string]bool{}
 		}
-		if last, ok := u.rung[n]; !ok || !last.Equal(at) {
-			u.rung[n], ring = at, true
+		key := "status:" + a.stateAt.String()
+		switch {
+		case a.askID != "": // one ring per new ask; its waiting declaration is covered
+			if !u.rungAsks[a.askID] {
+				u.rungAsks[a.askID], ring = true, true
+			}
+			u.rung[n] = key
+		case u.rung[n] != key: // a new waiting declaration without an ask
+			u.rung[n], ring = key, true
 		}
 	}
 	for n := range u.rung {
@@ -203,6 +215,9 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 
 // mode is who owns the keyboard right now.
 func (u *ui) mode() Mode {
+	if u.ov == ovAsk {
+		return ModeAsk
+	}
 	if u.ov != ovNone {
 		return ModeOverlay
 	}
@@ -225,6 +240,7 @@ func (u *ui) computeLayout(w, h int) Layout {
 // relayout runs on the UI goroutine after a size change: it recomputes the
 // layout and restores the logical focus (outside any draw).
 func (u *ui) relayout() {
+	mdWidth = max(30, overlayInnerWidth(u.width))
 	u.layout = u.computeLayout(u.width, u.height)
 	u.app.SetFocus(u.focusPrimitive())
 }
@@ -276,6 +292,10 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 			u.flash, u.flashErr = "not removed", false
 		}
 		return nil
+	}
+	if m == ModeAsk {
+		u.flash, u.flashErr = "", false
+		return u.askKey(ev)
 	}
 	if act != ActNone {
 		u.flash, u.flashErr = "", false
@@ -329,6 +349,17 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.copySelected()
 	case ActDelete:
 		u.askRemove(l.Selected())
+	case ActAsk:
+		agent := ""
+		if u.focus == PanelAgents {
+			agent = u.lists[PanelAgents].Selected()
+			u.st.mu.Lock()
+			if a := u.st.agents[agent]; a == nil || a.openAsk == 0 {
+				agent = ""
+			}
+			u.st.mu.Unlock()
+		}
+		u.openAskPanel(agent)
 	case ActFollow:
 		if act := u.lists[PanelActivity]; act.Live() {
 			act.Pause()
@@ -624,6 +655,11 @@ func (u *ui) openAgent(name string) {
 	snap, has := u.st.budgets[a.provider]
 	until, isHeld := held(u.st.holds, a.provider, now)
 	body += quotaDetail(a.provider, snap, has, until, isHeld, now)
+	for _, ask := range openAsks(u.st.asks) {
+		if ask.From == name {
+			body = askSummary(ask) + body
+		}
+	}
 	plain := agentDetailPlain(a)
 	u.st.mu.Unlock()
 	u.showOverlay(ovAgent, title, body, plain, "")
@@ -658,7 +694,7 @@ func (u *ui) openRequestItem(key string) {
 func (u *ui) openRequestsOverlay() {
 	u.st.mu.Lock()
 	body := requestsPanel(u.st.requests, u.st.threads, time.Now(), max(20, overlayInnerWidth(u.width)))
-	label := requestsLabel(u.st.requests, u.st.threads, u.self).text()
+	label := requestsLabel(u.st.requests, u.st.threads, u.self, openQuestionCount(u.st.asks)).text()
 	u.st.mu.Unlock()
 	u.showOverlay(ovRequests, fmt.Sprintf("Requests %s %s", GlyphNone, label), body, "", "")
 }
@@ -835,7 +871,7 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	u.st.mu.Lock()
 	mineReqs, mineThreads := forPerson(u.st.requests, u.st.threads, u.self)
 	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update,
-		waiting: waitingText(mineReqs, mineThreads, now), asks: len(asksFor(u.st.agents)), pause: u.st.pause, holds: u.st.holds, pace: u.st.pace.last, budgets: u.st.budgets, now: now}
+		waiting: waitingText(mineReqs, mineThreads, now), asks: waitingQuestions(u.st.agents), pause: u.st.pause, holds: u.st.holds, pace: u.st.pace.last, budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()
 
@@ -906,6 +942,10 @@ func (u *ui) tabsLine(tabs []PanelID, active PanelID, x, y int) Line {
 // fillPanels refreshes rows, headers and frames from the model. The caller
 // holds st.mu.
 func (u *ui) fillPanels(l Layout, now time.Time) {
+	currentAsks = map[string]bus.Ask{}
+	for _, a := range u.st.asks {
+		currentAsks[a.ID] = a
+	}
 	rowW := func(p PanelID) int { return max(0, l.panelRect(p).W-2-listGutter) }
 	st := u.st
 
@@ -966,7 +1006,7 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 
 	reqs := u.lists[PanelRequests]
 	reqs.SetItems(requestItems(st.requests, st.threads, now, rowW(PanelRequests)))
-	reqs.SetFrame(Line{{Text: "Requests", Role: RoleText}}, requestsLabel(st.requests, st.threads, u.self))
+	reqs.SetFrame(Line{{Text: "Requests", Role: RoleText}}, requestsLabel(st.requests, st.threads, u.self, openQuestionCount(st.asks)))
 }
 
 // MouseHandler routes clicks and the wheel to the panel under the pointer,

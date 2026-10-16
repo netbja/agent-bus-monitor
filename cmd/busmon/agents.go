@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // parseCtx reads UsageSnapshot.Ctx as a token count: an optional trailing
@@ -106,7 +108,11 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 // stateLook is the declared state's glyph, word, colour and sort group (spec
 // §3.3.1). A report-only or armed-only agent declared nothing: "—", group 6.
 func stateLook(a *agentState) (glyph, word string, role Role, group int) {
-	switch a.state {
+	state := a.state
+	if a.openAsk > 0 { // its open questions make it waiting, whatever it declared since
+		state = "waiting"
+	}
+	switch state {
 	case "":
 		return GlyphNone, GlyphDash, RoleMuted, 6
 	case "waiting": // a person's decision: above everything (group 0)
@@ -186,7 +192,7 @@ const updatedBarCells = 10
 const dormantAfter = 24 * time.Hour
 
 func dormant(a *agentState, isPilot bool, now time.Time) bool {
-	return !isPilot && !a.armed && a.waiting == 0 && a.state != "waiting" && !a.lastSeen.IsZero() && now.Sub(a.lastSeen) > dormantAfter
+	return !isPilot && !a.armed && a.waiting == 0 && a.state != "waiting" && a.openAsk == 0 && !a.lastSeen.IsZero() && now.Sub(a.lastSeen) > dormantAfter
 }
 
 // visibleAgents is the Agents panel's roster: every agent with all, else the
@@ -265,7 +271,7 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 	c := agentColsFor(tier)
 	glyph, word, role, _ := stateLook(a)
 	w := col(word, c.state, role)
-	if a.state == "waiting" {
+	if a.state == "waiting" || a.openAsk > 0 {
 		w.Fade = fadeLevel(now) // only the word fades; the glyph and the header stay still
 	}
 	l := Line{col(glyph, c.glyph, role), col(Preview(name), c.name, RoleText), w}
@@ -319,10 +325,35 @@ func fadeLevel(now time.Time) int {
 func asksFor(m map[string]*agentState) []string {
 	var out []string
 	for n, a := range m {
-		if a.state == "waiting" {
+		if a.state == "waiting" || a.openAsk > 0 {
 			out = append(out, n)
 		}
 	}
 	sort.Strings(out)
 	return out
+}
+
+// waitingQuestions is the header's "N waiting for you": the open questions of
+// every agent's open ask, and one for an agent waiting with no ask (a plain
+// waiting declaration, as before v0.14).
+func waitingQuestions(m map[string]*agentState) int {
+	n := 0
+	for _, a := range m {
+		switch {
+		case a.openAsk > 0:
+			n += a.openAsk
+		case a.state == "waiting":
+			n++
+		}
+	}
+	return n
+}
+
+// openQuestionCount is the open questions across open asks.
+func openQuestionCount(asks []bus.Ask) int {
+	n := 0
+	for _, a := range asks {
+		n += a.Open()
+	}
+	return n
 }

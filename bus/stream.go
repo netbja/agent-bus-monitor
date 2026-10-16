@@ -35,7 +35,7 @@ const (
 
 var validCmdTypes = map[string]bool{
 	CmdDirective: true, CmdChallenge: true, CmdReply: true, CmdVerdict: true,
-	CmdEscalation: true, CmdBlocked: true, CmdComplete: true,
+	CmdEscalation: true, CmdBlocked: true, CmdComplete: true, CmdAsk: true,
 }
 
 // nameRE bounds project slugs and agent names: lowercase, starts with a letter,

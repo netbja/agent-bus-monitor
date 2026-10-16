@@ -293,3 +293,17 @@ func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
 		put(x+w-1, y+2+start+i, glyphThumb)
 	}
 }
+
+// CopyText is what `y` copies: the stored text with controls and bidi
+// overrides removed (as on screen), newlines and tabs kept as written.
+func CopyText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if r == '\r' || removedControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}

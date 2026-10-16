@@ -19,7 +19,7 @@ func helpText() string {
 	for _, sec := range []struct {
 		name string
 		m    Mode
-	}{{"panels", ModePanel}, {"writing a message", ModeInput}, {"editing the filter", ModeFilter}, {"an open detail", ModeOverlay}} {
+	}{{"panels", ModePanel}, {"writing a message", ModeInput}, {"editing the filter", ModeFilter}, {"an open detail", ModeOverlay}, {"answering questions", ModeAsk}} {
 		sb.WriteString("  " + tg(RoleMuted, sec.name) + "\n")
 		for _, b := range bindings(sec.m) {
 			if k, d, ok := helpRow(b); ok {

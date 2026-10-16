@@ -83,20 +83,38 @@ one resume directive (`--to` another agent, or `AGENT_BUS_ESCALATE_TO`, changes 
 restart the team's work. `agentbus resume` ends it early. Never schedule a resume with a sleep or a
 background shell in your own session: it is invisible to the team and dies with your pane.
 
-## When you need the human's decision: declare `waiting`
+## When you need the human's decision: `agentbus ask`
 
-A decision only the human can take (a GO, a merge, a deploy, a priority) is not a `report` they
-may never read. Declare it:
+A decision only the human can take (a GO, a merge, a date, a choice between options) is an
+**ask**, never a question inside a report or a `notify`. One question per decision, with options:
 
 ```bash
-agentbus status master waiting "<the decision you need, in one line: 4 decisions in report <id>>"
+agentbus ask master --file /tmp/ask.json        # prints the ask id; you are declared waiting
 ```
 
-busmon puts you first with ♙ and the word `waiting` fading in and out, shows `♙ 1 waiting for you` in its header, and rings the
-terminal bell once, so herdr marks the busmon tab even when it is hidden. Put the full question
-in a `report` and name its id in the message. Arm `subscribe` for the answer (`@master …` from
-busmon). Once answered, declare `working` (or `idle`) again — `waiting` is only ever the human's
-turn, never a peer's: a peer you wait for is `idle` + armed, a 4-eyes gate is `blocked`.
+```json
+{"title": "Opening of DCA act 4",
+ "questions": [
+  {"id": "date", "header": "Date T", "question": "When should the new session open?",
+   "context": "Act n4 approved at 4d5d51b. Opening must be at least 48 h after its merge.",
+   "options": [
+     {"label": "Mon 19/10 10:00 UTC", "description": "Before the 12-13 h DCA slice", "recommended": true},
+     {"label": "Wed 21/10 10:00 UTC", "description": "Two more days of margin"}]}]}
+```
+
+- Ids are lowercase names; `header` ≤ 16 characters (it is the tab), at most 6 questions and 6
+  options each, one `recommended` at most with the reason in its description. `context` is short
+  Markdown; the full analysis stays in a report, which the context may name.
+- busmon shows the questions as tabs; the human picks an option or writes an answer. **Each answer
+  arrives at once**, as a reply to you (`ref` = the ask id, `Answer to "Date T": Mon 19/10 10:00 UTC`),
+  and wakes you. Act on it right away; the other questions may come later.
+- Changed your mind (a review found a problem)? `agentbus ask master --replace <id> --file …`: keep
+  a question's id only if its header, question and labels are unchanged (its answer is kept);
+  give a reworded question a new id. Never send the new question in a `notify`.
+- `agentbus asks --open` shows what is still open; `--withdraw <id>` cancels an ask.
+- When nothing is open any more, declare `working` again. One open ask at a time.
+- Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
+  answer it in busmon: prefer the ask.
 
 ## Unblock — answer an agent stuck on a question
 1. **Detect** blocked peers:

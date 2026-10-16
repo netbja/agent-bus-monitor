@@ -197,7 +197,7 @@ func detailText(e bus.Event, at, now time.Time, th threadState) string {
 	fmt.Fprintf(&sb, "%s  %s\n\n", tview.Escape(Preview(who)),
 		tag("gray", at.Format("2006-01-02 15:04:05")+" ("+humanAge(now.Sub(at))+" ago)"))
 	if body := messageBody(e); body != "" {
-		sb.WriteString(tview.Escape(DetailText(body)))
+		sb.WriteString(renderMarkdown(body, mdWidth))
 	} else {
 		sb.WriteString(tag("gray", "(no text)"))
 	}
@@ -287,7 +287,7 @@ func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // detailPlain is what `y` copies: the message text exactly as stored, newlines
 // intact, no colour tags, no metadata framing.
-func detailPlain(e bus.Event) string { return messageBody(e) }
+func detailPlain(e bus.Event) string { return CopyText(messageBody(e)) }
 
 // threadPlain is what `Y` copies: the whole retained exchange as plain text, so
 // a request interrupted halfway can be pasted somewhere else in one piece.
@@ -300,7 +300,7 @@ func threadPlain(e bus.Event, th threadState) string {
 	for _, t := range th.Entries {
 		fmt.Fprintf(&sb, "\n[%s] %s %s → %s\n%s\n",
 			entryTime(t.ID).Format("2006-01-02 15:04:05"),
-			t.Type, t.From, t.Target, messageBody(t))
+			CopyText(t.Type), CopyText(t.From), CopyText(t.Target), CopyText(messageBody(t)))
 	}
 	return sb.String()
 }

@@ -153,7 +153,7 @@ func TestDetailTextKeepsNewlinesAndUnicode(t *testing.T) {
 		Full:    "résumé:\n  1. relire le contrat ✅\n  2. écrire les tests\n\t3. 日本語もOK",
 	}
 	got := detailText(e, time.Unix(0, 0), time.Unix(60, 0), threadState{})
-	if !strings.Contains(got, "1. relire le contrat ✅\n") {
+	if !strings.Contains(tagRE.ReplaceAllString(got, ""), "1. relire le contrat ✅\n") {
 		t.Errorf("newlines must survive into the detail view:\n%s", got)
 	}
 	if !strings.Contains(got, "日本語もOK") {

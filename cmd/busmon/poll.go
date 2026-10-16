@@ -28,6 +28,7 @@ type busReader interface {
 	OpenChallenges(ctx context.Context, agent string) (map[string]string, error)
 	Pause(ctx context.Context) (*bus.PauseRecord, error)
 	QuotaMarks(ctx context.Context) (map[string]string, error)
+	Asks(ctx context.Context) ([]bus.Ask, error)
 }
 
 // setHealth records the monitor's OWN link to the broker. A transition stamps
@@ -148,12 +149,27 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	}
 
 	pause, pauseErr := b.Pause(pollCtx)
+	asks, asksErr := b.Asks(pollCtx)
 
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.pilot = driver
 	if pauseErr == nil {
 		st.pause = pause
+	}
+	if asksErr == nil {
+		st.asks = asks
+		open := map[string]bus.Ask{}
+		for _, a := range openAsks(asks) {
+			open[a.From] = a
+		}
+		for n, a := range st.agents {
+			ask, ok := open[n]
+			a.openAsk, a.askID = 0, ""
+			if ok {
+				a.openAsk, a.askID = ask.Open(), ask.ID
+			}
+		}
 	}
 	if marksErr == nil {
 		st.holds = quotaHolds(marks)

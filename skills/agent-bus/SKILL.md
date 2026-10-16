@@ -116,6 +116,12 @@ agentbus pilot status     # "piloted by <driver>"  OR  "autonomous"
 - **piloted** → wait for a directive (arm `subscribe`); don't act on your own initiative.
 - **autonomous** → proceed on your own plan; just keep emitting `status`/`report`.
 
+## Write reports people can read
+
+busmon renders reports as Markdown: a `## heading` per part, `-` lists for items, short
+paragraphs, `code` for ids and commits. Never one block of 1 500 characters. A decision for the
+human is not a paragraph in a report: master asks it with `agentbus ask`.
+
 ## A report wakes nobody: tell whoever waits
 
 `agentbus report` writes to the activity feed; nobody is woken by it, and nobody is obliged to
