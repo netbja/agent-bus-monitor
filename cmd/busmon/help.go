@@ -48,6 +48,7 @@ func helpText() string {
 	blank()
 	sb.WriteString("  " + tg(RoleMuted, "flags") + "\n")
 	row("prompt", "its own client asks something in its tab (a limit menu, a permission): it reads waiting; answer it in that tab.")
+	row("swapping", "agentbus swap is replacing it by its role on another profile: the dispatcher leaves its pane alone.")
 	row("escalated", "the dispatcher could not wake this agent and told the escalation target.")
 	row("escalating", "that escalation is being published.")
 	row("gate N", "N open 4-eyes challenges gate this agent: it must wait for a verdict.")

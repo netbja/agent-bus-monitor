@@ -294,3 +294,25 @@ func TestPromptAgesOutWithoutNewReads(t *testing.T) {
 		t.Fatal("a 3-minute-old blocked reading still reads waiting")
 	}
 }
+
+// v0.15 §7: a swap in progress is flagged; a long quota pause points at
+// Activity, a person's pause or a short one does not.
+func TestSwappingFlagAndLongPauseHint(t *testing.T) {
+	fs := agentFlags(&agentState{state: "idle", swapping: true}, false)
+	if len(fs) == 0 || fs[0].Word != "swapping" {
+		t.Fatalf("flags %+v", fs)
+	}
+	now := time.Now()
+	long := &bus.PauseRecord{Until: now.Add(61 * time.Hour).UnixMilli(), Reason: "quota anthropic", By: "dispatch"}
+	if got := pauseSeg(long, now)[0].Text; !strings.Contains(got, "long pause, see Activity") {
+		t.Fatalf("long quota pause = %q", got)
+	}
+	for _, p := range []*bus.PauseRecord{
+		{Until: now.Add(time.Hour).UnixMilli(), Reason: "quota anthropic", By: "dispatch"},
+		{Until: now.Add(61 * time.Hour).UnixMilli(), Reason: "quota anthropic", By: "bernard"},
+	} {
+		if got := pauseSeg(p, now)[0].Text; strings.Contains(got, "long pause") {
+			t.Fatalf("pause %+v = %q", p, got)
+		}
+	}
+}
