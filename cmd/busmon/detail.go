@@ -277,12 +277,15 @@ func threadLine(e bus.Event, now time.Time, self bool) string {
 	if typ == "" {
 		typ = "cmd"
 	}
-	return fmt.Sprintf("%s%s %s %s %s",
-		marker,
-		tag("gray", at.Format("15:04:05")),
-		tag("fuchsia", pad(typ, 9)),
-		tag("gray", pad(Preview(e.From)+"→"+Preview(e.Target), 16)),
-		tview.Escape(clip(oneLine(Preview(e.Message)), max(20, mdWidth-threadPrefix-1))))
+	who := Preview(e.From) + "→" + Preview(e.Target)
+	text := oneLine(Preview(e.Message))
+	stamp := marker + tag("gray", at.Format("15:04:05")) + " " + tag("fuchsia", Fit(typ, 9))
+	if avail := mdWidth - threadPrefix - 1; avail >= 20 {
+		return stamp + " " + tag("gray", Fit(who, 16)) + " " + tview.Escape(clip(text, avail))
+	}
+	// Too narrow for the text beside its metadata (20 cells): who and the text
+	// go on their own indented line, still inside the width.
+	return stamp + "\n    " + tview.Escape(clip(who+"  "+text, max(1, mdWidth-5)))
 }
 
 // oneLine flattens a body for a transcript row; the full text stays one Enter
