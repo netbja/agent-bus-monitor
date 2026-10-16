@@ -407,6 +407,31 @@ func TestRunSubscribeFromNowKeepsAPersonsEntry(t *testing.T) {
 		t.Fatalf("second plain subscribe: exit %d, want 64 (agent backlog and the close skipped): %s", code, buf.String())
 	}
 
+	// No group yet (the agent never listened): a person's entry written just
+	// before its first plain subscribe is delivered, an agent's is not.
+	if _, err := b.Cmd(ctx, "hermes", "fresh", bus.CmdDirective, "", "agent backlog"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.HumanCmd(ctx, "bernard", "fresh", "FIRST ANSWER"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	fresh, err := b.ServerFloor(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	if code := runSubscribe(ctx, b, "fresh", "host-1", 2*time.Second, fresh, true, false, &buf); code != 0 {
+		t.Fatalf("first plain subscribe of a new agent: exit %d: %s", code, buf.String())
+	}
+	if ev := lastEvent(t, buf.String()); ev.Body != "FIRST ANSWER" {
+		t.Fatalf("new agent got %+v, want FIRST ANSWER", ev)
+	}
+	buf.Reset()
+	if code := runSubscribe(ctx, b, "fresh", "host-1", time.Second, fresh, true, false, &buf); code != 64 {
+		t.Fatalf("new agent, second plain subscribe: exit %d, want 64: %s", code, buf.String())
+	}
+
 	// An explicit cursor is the agent's own record of what it handled: a
 	// person's entry at or below it is not delivered again.
 	id, err := b.HumanCmd(ctx, "bernard", "dev", "HANDLED")

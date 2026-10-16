@@ -188,6 +188,12 @@ func (b *Bus) watchCmdDelivery(ctx context.Context, agent, consumer, floor strin
 	if createAt == "" {
 		createAt = "$"
 	}
+	if keepHuman && validStreamID(floor) {
+		// A new group starts a horizon back, so a person's entry written before
+		// the agent's first subscribe is still seen; the rest is skipped below.
+		fms, _ := splitID(floor)
+		createAt = strconv.FormatInt(max(fms-DefaultHorizon.Milliseconds(), 0), 10) + "-0"
+	}
 	if err := b.r.XGroupCreateMkStream(ctx, stream, agent, createAt).Err(); err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return err
 	}
