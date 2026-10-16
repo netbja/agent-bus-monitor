@@ -268,7 +268,7 @@ type loop struct {
 
 	quota quotaState
 
-	observedAt time.Time // last observePass (local clock: a throttle, never persisted)
+	observedAt time.Time                    // last observePass (local clock: a throttle, never persisted)
 	snaps      map[string]bus.AgentSnapshot // this pass's snapshots
 	obs        map[string]Observation       // the last observation written
 }
