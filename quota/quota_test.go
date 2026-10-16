@@ -309,3 +309,22 @@ func TestClaudeBackstopVoidedByALaterAnswer(t *testing.T) {
 		t.Fatalf("a newer hit was voided by an older answer: %+v", r)
 	}
 }
+
+// One account per Claude config dir: an answer in another dir's transcripts
+// (another account) never voids this dir's limit hit.
+func TestClaudeBackstopIsBoundToItsConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	weekly := t0.Add(96 * time.Hour).Unix()
+	put := func(root, line string) {
+		p := filepath.Join(dir, root, "p", "s.jsonl")
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte("\n"+line+"\n"), 0o600)
+		os.Chtimes(p, t0, t0)
+	}
+	put("a", `{"type":"assistant","timestamp":"2026-10-15T21:40:00Z","isApiErrorMessage":true,"message":{"model":"<synthetic>"},"quotaLimits":{"status":"rejected","rateLimitType":"seven_day","resetsAt":`+itoa(weekly)+`}}`)
+	put("b", `{"type":"assistant","timestamp":"2026-10-15T21:50:00Z","message":{"model":"claude-opus-5-5"}}`)
+	r, _ := ClaudeReader{Cache: filepath.Join(dir, "none.json"), Transcripts: filepath.Join(dir, "a"), Now: fixed}.Read(context.Background())
+	if len(r.Windows) != 1 || r.AvailableAt != 0 {
+		t.Fatalf("another config dir's answer voided the hit: %+v", r)
+	}
+}

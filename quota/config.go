@@ -111,7 +111,13 @@ func Readers(cfg map[string]ProviderConfig, now func() time.Time) []Reader {
 		var r Reader
 		switch p.Kind {
 		case "claude":
-			r = ClaudeReader{Cache: ClaudeCachePath(), Transcripts: filepath.Join(home, ".claude", "projects"), Now: now}
+			// One account per Claude config dir: the transcripts the backstop
+			// reads, and the answers that void a limit hit, are that dir's only.
+			claudeHome := os.Getenv("CLAUDE_CONFIG_DIR")
+			if claudeHome == "" {
+				claudeHome = filepath.Join(home, ".claude")
+			}
+			r = ClaudeReader{Cache: ClaudeCachePath(), Transcripts: filepath.Join(claudeHome, "projects"), Now: now}
 		case "codex":
 			codexHome := os.Getenv("CODEX_HOME")
 			if codexHome == "" {

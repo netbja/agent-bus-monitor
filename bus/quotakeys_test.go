@@ -65,6 +65,17 @@ func TestQuotaPauseNeverReplacesAnotherPause(t *testing.T) {
 	if len(msgs) != 1 || msgs[0].Values["target"] != "master" || msgs[0].Values["from"] != "dispatch" || !strings.Contains(fmt.Sprint(msgs[0].Values["command"]), "Project resumed") {
 		t.Fatalf("no resume directive after an early quota unpause: %+v", msgs)
 	}
+	// A person's pause carrying the same reason is never taken for the
+	// dispatcher's: only the exact record the dispatcher wrote is ended.
+	if _, err := b.SetPause(ctx, "bernard", "master", "quota anthropic", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := b.FencedQuotaUnpause(ctx, "tok", "anthropic", "dispatch"); ok {
+		t.Fatal("ended a person's pause that only shares the reason")
+	}
+	if pz, _ := b.Pause(ctx); pz == nil || pz.By != "bernard" {
+		t.Fatalf("the person's pause is gone: %+v", pz)
+	}
 	if _, err := b.SetPause(ctx, "bernard", "master", "dinner", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
