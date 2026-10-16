@@ -436,7 +436,23 @@ It never touches Redis — see README "Deployment topology".
   in one script; the episode is the hold's reset; written before the hold mark is deleted). The
   dispatcher's own quota pause is reconciled even when nobody uses its provider any more: if the
   coordinator now runs on a free provider it ends (`FencedQuotaUnpauseWhy`), on a held one it is
-  replaced (`FencedQuotaRepause`, exact record, no resume). busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
+  replaced (`FencedQuotaRepause`, exact record, no resume). A hold whose reset is more than
+  `LongHold` away (2 h, `AGENT_BUS_QUOTA_LONG_HOLD`, `0` = off) sends one message per episode
+  (`longhold:<p>`): a directive to master naming the held agents with work in flight (master asks
+  the person, then `agentbus swap`), or, for master's own provider, a `notify` for the person
+  (busmon's pause segment adds "long pause, see Activity"). **`agentbus swap <role> --profile
+  <p> [--now] [--force]`** (`cmd/agentbus/swap.go`) replaces an agent by its role on one of its
+  `fallback_profiles` (`rolecfg`: schema 2, defined, not its own profile, another provider, at
+  most 3; `agentbus roles fallbacks <role>`): everything is checked before anything is closed
+  (profile, client on PATH, live verified identity, not its own pane, no open challenge on either
+  side — `Bus.ReviewsOf` scans every gate — no mission attempt in progress, no running turn
+  without `--now`), then the swap intent `{p}:swap:<role>` (`SET NX PX 180000`; the dispatcher
+  neither prompts nor escalates nor resumes that agent), `herdr pane close`, the old pid gone,
+  `agent-spawn <role> <p> --profile <p>` with `AGENT_LAUNCH_REQUIRE_BIND=1` (a failed bind is
+  fatal), the proof (new pid alive, new pane, the profile's client and provider), and only then
+  the resume of its work (`Bus.CmdOnce` on the episode's `resumed:` mark when its provider is
+  held). A failure after the close prints the recovery (`agent-spawn <role> <project>`). busmon
+  flags `swapping`. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
   nor writes `{p}:budget` (the service replaces that hash as a whole).
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write
