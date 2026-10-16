@@ -265,6 +265,9 @@ type agentState struct {
 	held        bool      // its provider is held by the dispatcher (quota)
 	openAsk     int       // unanswered questions of its open ask
 	askID       string    // that ask's id
+	obsBusy     bool      // the dispatcher saw its pane running a turn ({p}:observed)
+	obsState    string    // herdr's status of the pane at that inspection
+	obsAt       time.Time // when ({p}:observed at, Redis TIME); zero = not observed
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.

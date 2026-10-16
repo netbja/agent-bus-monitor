@@ -223,14 +223,16 @@ func sortProjects(list []ProjectSummary) {
 // its dispatcher lease. A dispatcher that lost its lease asks this before it
 // re-acquires: a project that still has keys lost the lease to a lapse
 // (suspend, broker restart) and wants a dispatcher back; one with none was
-// deleted, and re-acquiring would recreate it.
+// deleted, and re-acquiring would recreate it. {p}:observed does not count
+// either: the dispatcher itself rewrites it every few seconds, so one write
+// racing a delete must not make the project look alive (it expires anyway).
 func (b *Bus) HasKeysBesidesDispatch(ctx context.Context) (bool, error) {
 	keys, err := ProjectKeys(ctx, b.r, b.project)
 	if err != nil {
 		return false, err
 	}
 	for _, k := range keys {
-		if k != DispatchKey(b.project) {
+		if k != DispatchKey(b.project) && k != ObservedKey(b.project) {
 			return true, nil
 		}
 	}

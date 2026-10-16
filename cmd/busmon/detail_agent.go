@@ -79,6 +79,18 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	} else {
 		row("Last seen", text(ago(a.lastSeen)+" (any status or report)"))
 	}
+	switch {
+	case a.obsAt.IsZero():
+		row("Observed", tg(RoleMuted, "pane not observed (no dispatch service, or no verified pane)"))
+	case busyUndeclared(a, now):
+		rowWrap("Observed", RoleOK, "busy "+GlyphNone+" "+ago(a.obsAt)+": the pane runs a turn, but the agent does not declare working")
+	case now.Sub(a.obsAt) > observedFresh:
+		row("Observed", tg(RoleMuted, "last observation "+ago(a.obsAt)+" (too old to count)"))
+	case a.obsBusy:
+		row("Observed", text("busy "+GlyphNone+" "+ago(a.obsAt)))
+	default:
+		row("Observed", text("not running a turn "+GlyphNone+" "+ago(a.obsAt)))
+	}
 	if a.pane == "" && a.pid == 0 {
 		row("Pane", tg(RoleMuted, "not recorded"))
 	} else {

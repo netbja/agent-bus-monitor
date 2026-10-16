@@ -60,6 +60,16 @@ type agentFlag struct {
 
 // agentFlags lists the agent's flags by priority. None of them changes the
 // declared state: they are leases, counts and dispatcher records beside it.
+// observedFresh is how long a pane observation counts: the dispatcher
+// observes every 15 s, busmon reads every 5 s.
+const observedFresh = 60 * time.Second
+
+// busyUndeclared reports whether the dispatcher saw the agent at work while it
+// does not declare working: shown beside the declared state, never instead.
+func busyUndeclared(a *agentState, now time.Time) bool {
+	return a.obsBusy && a.state != "working" && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
+}
+
 func agentFlags(a *agentState, pilot bool) []agentFlag {
 	var fs []agentFlag
 	add := func(w string, r Role, prio, group int) { fs = append(fs, agentFlag{w, r, prio, group}) }
@@ -73,6 +83,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	}
 	if a.held {
 		add("held", RoleAttention, 2, 2)
+	}
+	if busyUndeclared(a, time.Now()) {
+		add("busy", RoleOK, 3, 2)
 	}
 	if a.gated > 0 {
 		add(fmt.Sprintf("gate %d", a.gated), RoleError, 3, 1)

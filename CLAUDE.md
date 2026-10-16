@@ -433,6 +433,15 @@ It never touches Redis — see README "Deployment topology".
   JSON never carries answers. busmon: `askpanel.go` (ModeAsk, `!`/`w`/F4, Enter in the agent detail), counts and fade follow open
   questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,
   overlay bodies only; rows stay on `Preview`).
+- **Observed is not declared (v0.14.3).** The services' dispatcher inspects every verified pane
+  every `ObserveEvery` (15 s; `Config.Observe`, 0 = off, so the default config and its tests
+  inspect nothing) and replaces `{p}:observed` (`bus/observed.go`, fenced, whole hash, `PEXPIRE`
+  120 s), after the pause check (a paused project is not observed), within a 5 s budget per pass (inspections and time reads; the final write has its own 2 s bound),
+  the interval counted from the pass's end. It only reads panes: no typing, no state change; a pane
+  failing `identityOK` is not observed. `{p}:observed` is not in `projectKinds` and
+  `HasKeysBesidesDispatch` ignores it, so a write racing `busmon --delete` never revives a project. busmon reads it with the dispatcher facts and adds the flag `busy` (and an `Observed`
+  detail row) when the pane runs a turn but the agent does not declare `working`. Never let it
+  rewrite or replace the declared state.
 - **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`
   writes `{p}:pause` (`bus/pause.go`); the dispatcher's `paused` check at the top of each pass
   wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script

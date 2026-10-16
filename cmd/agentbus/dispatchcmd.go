@@ -25,6 +25,7 @@ var dispatchBaseConfig = dispatch.DefaultConfig
 func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Runtime, stdout, stderr io.Writer) int {
 	cfg := dispatchBaseConfig()
 	cfg.Log = stderr
+	cfg.Observe = dispatch.ObserveEvery
 	status := false
 	usage := func(msg string) int {
 		fmt.Fprintln(stderr, "error: "+msg)
