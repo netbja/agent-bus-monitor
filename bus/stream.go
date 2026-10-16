@@ -803,6 +803,12 @@ func (b *Bus) OpenChallenge(ctx context.Context, agent, ref, meta string) error 
 	if meta == "" {
 		return fmt.Errorf("challenge meta required (audit trail)")
 	}
+	challenger, _, _ := strings.Cut(meta, "|")
+	for _, a := range []string{agent, challenger} {
+		if err := b.refuseWhileSwapping(ctx, a); err != nil {
+			return err
+		}
+	}
 	return b.r.HSet(ctx, GateKey(b.project, agent), ref, meta).Err()
 }
 

@@ -48,3 +48,31 @@ func TestFencedEntryOnce(t *testing.T) {
 		t.Fatalf("cmd entries = %d after a fenced-out write", n)
 	}
 }
+
+// v0.15 §6.1.3: no request or challenge opens on an agent being swapped, on
+// either side of the challenge.
+func TestNoWorkOpensOnASwappingAgent(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if err := b.BeginSwap(ctx, "foureyes", SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BeginSwap(ctx, "foureyes", SwapIntent{ToProfile: "opus", By: "bernard"}); !errors.Is(err, ErrSwapInProgress) {
+		t.Fatalf("second BeginSwap = %v", err)
+	}
+	if err := b.OpenChallenge(ctx, "foureyes", "pr-1", "coder|review"); err == nil {
+		t.Fatal("a challenge gated a swapping agent")
+	}
+	if err := b.OpenChallenge(ctx, "coder", "pr-2", "foureyes|fix"); err == nil {
+		t.Fatal("a swapping agent opened a challenge")
+	}
+	if _, err := b.Request(ctx, "task-1", "master", "foureyes", "", "do it", 0); err == nil {
+		t.Fatal("a request reached a swapping agent")
+	}
+	if err := b.EndSwap(ctx, "foureyes"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.OpenChallenge(ctx, "foureyes", "pr-1", "coder|review"); err != nil {
+		t.Fatalf("after the swap: %v", err)
+	}
+}

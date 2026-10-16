@@ -551,6 +551,17 @@ func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
 	if !held {
 		return ErrLeaseLost
 	}
+	// The last look at the swap intent, after the reservation: a swap that
+	// begins from here on sees this record "prompting" and waits for it.
+	if swapping, err := l.b.Swapping(ctx, s.agent); err != nil || swapping {
+		if err == nil {
+			l.logOnce(s.agent, map[string]any{"agent": s.agent, "action": "none", "reason": "swap in progress"})
+			r := stored
+			r.State, r.Reason = "deferred", "swap in progress"
+			return l.put(ctx, s, r)
+		}
+		return err
+	}
 	nonce := randomHex(3)
 	observed, perr := l.rt.Prompt(ctx, s.snap.Pane, WakeText(l.b.Project(), s.agent, nonce, s.o.Size()), nonce)
 	call(l.h.afterPrompt)

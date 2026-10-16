@@ -106,11 +106,13 @@ func (l *loop) resumeAfterHold(ctx context.Context, p string, R int64, snaps map
 		}
 		// Under a swap intent the swap sends this resume itself, after its
 		// proof, through the same mark (§3.3): no mark here.
+		// The hold mark stays until the swap is over (complete false): if it
+		// fails, the next pass resumes the agent it leaves.
 		if swapping, serr := l.b.Swapping(ctx, a); serr != nil || swapping {
 			if serr != nil {
 				l.logError(a, "resume", serr)
-				complete = false
 			}
+			complete = false
 			continue
 		}
 		var sent bool

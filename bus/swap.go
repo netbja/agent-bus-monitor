@@ -137,3 +137,21 @@ func (b *Bus) CmdOnce(ctx context.Context, mark, episode, from, target, command 
 	}
 	return n == 1, nil
 }
+
+// refuseWhileSwapping (v0.15 §6.1.3): work keyed by an agent's name is not
+// opened while `agentbus swap` replaces it; the swap re-checks just before
+// it closes the pane, so a request or challenge either lands before (and the
+// swap refuses) or is refused here.
+func (b *Bus) refuseWhileSwapping(ctx context.Context, agent string) error {
+	if !ValidName(agent) {
+		return nil
+	}
+	swapping, err := b.Swapping(ctx, agent)
+	if err != nil {
+		return err
+	}
+	if swapping {
+		return fmt.Errorf("%s is being swapped (agentbus swap): retry in a minute", agent)
+	}
+	return nil
+}

@@ -154,21 +154,8 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		return fail("an agent cannot swap itself: run it from master's pane or a terminal")
 	}
 
-	var open []string
-	reviews, err := b.ReviewsOf(ctx, role)
-	if err != nil {
-		return fail("%v", err)
-	}
-	open = append(open, reviews...)
-	missions, err := missionsOf(ctx, b, role)
-	if err != nil {
-		return fail("%v", err)
-	}
-	open = append(open, missions...)
-	if len(open) > 0 {
-		sort.Strings(open)
-		return fail("it takes part in open work that is keyed by its name; close it first (verdict, mission reassign):\n  %s",
-			strings.Join(open, "\n  "))
+	if code := openWork(ctx, b, role, fail); code != 0 {
+		return code
 	}
 	if !now {
 		obs, err := b.Observed(ctx)
@@ -196,6 +183,22 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	}
 	defer end()
 	recovery := fmt.Sprintf("recover with: agent-spawn %s %s (its own profile, %s)", role, b.Project(), own.Profile)
+	// With the intent written, no request or challenge opens on it any more
+	// (refuseWhileSwapping): look again for what opened since the first scan.
+	if code := openWork(ctx, b, role, fail); code != 0 {
+		return code
+	}
+	// A wake the dispatcher reserved before the intent may still be typing:
+	// let it land in the old pane rather than in a closing one.
+	for deadline := d.Now().Add(10 * time.Second); ; d.Sleep(200 * time.Millisecond) {
+		w, ok, err := b.Wake(ctx, role)
+		if err != nil || !ok || w.State != "prompting" {
+			break
+		}
+		if d.Now().After(deadline) {
+			return fail("a wake is still being typed into its pane; retry in a minute")
+		}
+	}
 	if err := d.ClosePane(ctx, snap.Pane); err != nil {
 		return fail("%v; nothing was replaced", err)
 	}
@@ -232,17 +235,50 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 
 	// The work it had in flight, sent only now, so the old process never
 	// read it; through the hold's resume mark when its old provider is held.
-	if text, ok := swapResumeText(ctx, b, role, snap, profile); ok {
-		marks, _ := b.QuotaMarks(ctx)
-		if episode := marks["hold:"+snap.Provider]; episode != "" && snap.Provider != "" {
-			if _, err := b.CmdOnce(ctx, "resumed:"+snap.Provider+":"+role, episode, self, role, text); err != nil {
-				fmt.Fprintf(errw, "swap %s: resume directive: %v\n", role, err)
-			}
-		} else if _, err := b.Cmd(ctx, self, role, bus.CmdDirective, "", text); err != nil {
-			fmt.Fprintf(errw, "swap %s: resume directive: %v\n", role, err)
-		}
+	// The swap is done either way; a resume that cannot be sent is a failure
+	// the caller must see, with the command that sends it.
+	retry := fmt.Sprintf("send it with: agentbus --project %s cmd %s \"Resume the work your previous process left (agentbus board, your thread).\"", b.Project(), role)
+	text, ok, err := swapResumeText(ctx, b, role, snap, profile)
+	if err != nil {
+		return fail("swapped, but its in-flight work could not be read (%v); %s", err, retry)
 	}
+	if !ok {
+		return 0
+	}
+	marks, err := b.QuotaMarks(ctx)
+	if err != nil {
+		return fail("swapped, but the resume was not sent (%v); %s", err, retry)
+	}
+	if episode := marks["hold:"+snap.Provider]; episode != "" && snap.Provider != "" {
+		_, err = b.CmdOnce(ctx, "resumed:"+snap.Provider+":"+role, episode, self, role, text)
+	} else {
+		_, err = b.Cmd(ctx, self, role, bus.CmdDirective, "", text)
+	}
+	if err != nil {
+		return fail("swapped, but the resume was not sent (%v); %s", err, retry)
+	}
+	fmt.Fprintf(out, "resume sent to %s\n", role)
 	return 0
+}
+
+// openWork refuses (exit 1) while agent takes part in open work keyed by its
+// name: a 4-eyes challenge on either side, a mission attempt in progress.
+func openWork(ctx context.Context, b *bus.Bus, agent string, fail func(string, ...any) int) int {
+	reviews, err := b.ReviewsOf(ctx, agent)
+	if err != nil {
+		return fail("%v", err)
+	}
+	missions, err := missionsOf(ctx, b, agent)
+	if err != nil {
+		return fail("%v", err)
+	}
+	open := append(reviews, missions...)
+	if len(open) == 0 {
+		return 0
+	}
+	sort.Strings(open)
+	return fail("it takes part in open work that is keyed by its name; close it first (verdict, mission reassign):\n  %s",
+		strings.Join(open, "\n  "))
 }
 
 // replaced: the snapshot proves a new process of the chosen profile.
@@ -257,10 +293,10 @@ func replaced(s, old bus.AgentSnapshot, p rolecfg.Profile, procStart func(int) (
 }
 
 // swapResumeText is the directive of the agent's in-flight work, if any.
-func swapResumeText(ctx context.Context, b *bus.Bus, role string, old bus.AgentSnapshot, profile string) (string, bool) {
+func swapResumeText(ctx context.Context, b *bus.Bus, role string, old bus.AgentSnapshot, profile string) (string, bool, error) {
 	board, err := b.Board(ctx)
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	var tasks []string
 	for task, e := range board {
@@ -270,7 +306,7 @@ func swapResumeText(ctx context.Context, b *bus.Bus, role string, old bus.AgentS
 	}
 	sort.Strings(tasks)
 	if len(tasks) == 0 && old.State != "working" {
-		return "", false
+		return "", false, nil
 	}
 	what := "the turn you were running"
 	if len(tasks) > 0 {
@@ -280,7 +316,7 @@ func swapResumeText(ctx context.Context, b *bus.Bus, role string, old bus.AgentS
 		what = strings.Join(tasks, ", ")
 	}
 	return fmt.Sprintf("You replace %s on the profile %s: the previous process stopped mid-work. "+
-		"Resume where it stopped (%s): read the board and your thread, then report as usual.", role, profile, what), true
+		"Resume where it stopped (%s): read the board and your thread, then report as usual.", role, profile, what), true, nil
 }
 
 // missionsOf lists the mission attempts agent is assigned to, in progress.

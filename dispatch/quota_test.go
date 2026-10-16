@@ -441,3 +441,41 @@ func TestRunQuotaShortHoldAsksNothing(t *testing.T) {
 		}
 	}
 }
+
+// Codex review: a release does not end the hold while a held agent is being
+// swapped; once the intent goes without a resume (a failed swap), the next
+// pass resumes it.
+func TestRunQuotaReleaseWaitsForASwap(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	if _, err := b.Status(ctx, "coder", "working", "mid-turn", bus.AgentIdent{Pane: "p-coder", PID: testPID, PIDStart: testStart, Provider: "openai"}); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 10), reading("openai", 97))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "openai held", func() bool { m, _ := b.QuotaMarks(ctx); return m["hold:openai"] != "" })
+	if err := b.BeginSwap(ctx, "coder", bus.SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	f.set(reading("anthropic", 10), reading("openai", 40))
+	time.Sleep(300 * time.Millisecond)
+	if m, _ := b.QuotaMarks(ctx); m["hold:openai"] == "" {
+		t.Fatal("the hold ended while coder was being swapped")
+	}
+	if err := b.EndSwap(ctx, "coder"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 3*time.Second, "coder resumed and the hold ended", func() bool {
+		m, _ := b.QuotaMarks(ctx)
+		n := 0
+		for _, e := range entries(t, r, b, "cmd") {
+			if cmd, _ := e.Values["command"].(string); e.Values["target"] == "coder" && strings.Contains(cmd, "limit (openai) has reset") {
+				n++
+			}
+		}
+		return m["hold:openai"] == "" && n == 1
+	})
+}

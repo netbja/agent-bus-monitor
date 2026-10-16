@@ -43,6 +43,9 @@ func (b *Bus) Request(ctx context.Context, task, from, target, ref, body string,
 	if err := ValidateText(body, CmdMaxRunes); err != nil {
 		return "", err
 	}
+	if err := b.refuseWhileSwapping(ctx, target); err != nil {
+		return "", err
+	}
 	return publishRequest.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, from, target, ref, body, ttl.Milliseconds(), streamMaxLen).Text()
 }
 
