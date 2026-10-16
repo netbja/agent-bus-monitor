@@ -102,9 +102,10 @@ func WakeText(project, agent, nonce string, n int64) string {
 
 // hooks are crash-injection points for tests; production leaves them nil.
 type hooks struct {
-	afterReserve         func() // the reservation is written, the prompt not sent
-	afterPrompt          func() // the prompt returned, its outcome not recorded
-	afterEscalatePending func() // escalated=pending is written, nothing sent
+	afterReserve         func()                   // the reservation is written, the prompt not sent
+	afterPrompt          func()                   // the prompt returned, its outcome not recorded
+	afterEscalatePending func()                   // escalated=pending is written, nothing sent
+	resumeErr            func(agent string) error // a resume write fails for agent
 }
 
 // testHooks is read once when Run starts; only tests set it.

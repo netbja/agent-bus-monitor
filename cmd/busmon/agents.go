@@ -76,7 +76,14 @@ func busyUndeclared(a *agentState, now time.Time) bool {
 // and has no open ask. Only a person can answer it, in that tab: it reads as
 // waiting, beside the declared state, never instead of it.
 func promptWaiting(a *agentState) bool {
-	return a.obsPrompt && a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
+	return a.obsPrompt && obsFresh(a, time.Now()) && a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
+}
+
+// obsFresh: the last observation is younger than its TTL. It is checked when
+// shown, not when read, so a busmon whose reads fail stops showing a prompt
+// once the reading it holds is too old.
+func obsFresh(a *agentState, now time.Time) bool {
+	return !a.obsAt.IsZero() && now.Sub(a.obsAt) < time.Duration(bus.ObservedTTL)*time.Millisecond
 }
 
 // waitsForPerson: a declared wait, an open ask or a prompt in its tab.

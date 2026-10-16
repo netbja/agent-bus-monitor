@@ -59,16 +59,22 @@ func truncRunes(s string, n int) string {
 }
 
 // resumeAfterHold sends the resume directives of provider p's episode R. One
-// recipient's failure is logged and does not stop the others; a lost lease
-// ends the pass.
-func (l *loop) resumeAfterHold(ctx context.Context, p string, R int64, snaps map[string]bus.AgentSnapshot) error {
+// recipient's failure is logged and does not stop the others, but makes the
+// release incomplete (complete false): the caller keeps the hold mark so the
+// next pass retries. A lost lease ends the pass.
+func (l *loop) resumeAfterHold(ctx context.Context, p string, R int64, snaps map[string]bus.AgentSnapshot) (complete bool, err error) {
 	if R == 0 {
-		return nil
+		return true, nil
 	}
 	board, err := l.b.Board(ctx)
 	if err != nil {
-		return err
+		if errors.Is(err, bus.ErrNotHolder) {
+			return false, err
+		}
+		l.logError("", "resume", err)
+		return false, nil
 	}
+	complete = true
 	accepted := map[string][]string{}
 	for task, e := range board {
 		if e.State == "accepted" && e.Owner != "" {
@@ -96,13 +102,20 @@ func (l *loop) resumeAfterHold(ctx context.Context, p string, R int64, snaps map
 		if len(tasks) == 0 && s.State != "working" {
 			continue
 		}
-		sent, err := l.b.FencedCmdOnce(ctx, l.token, resumeMark(p, a), episode, dispatchFrom, a,
-			bus.CmdDirective, resumeText(p, tasks), false)
+		var sent bool
+		if l.h.resumeErr != nil {
+			err = l.h.resumeErr(a)
+		}
+		if err == nil {
+			sent, err = l.b.FencedCmdOnce(ctx, l.token, resumeMark(p, a), episode, dispatchFrom, a,
+				bus.CmdDirective, resumeText(p, tasks), false)
+		}
 		if errors.Is(err, bus.ErrNotHolder) {
-			return err
+			return false, err
 		}
 		if err != nil {
 			l.logError(a, "resume", err)
+			complete = false
 			continue
 		}
 		told = append(told, a)
@@ -111,16 +124,19 @@ func (l *loop) resumeAfterHold(ctx context.Context, p string, R int64, snaps map
 		}
 	}
 	if len(told) == 0 || !bus.ValidName(l.cfg.EscalateTo) {
-		return nil
+		return complete, nil
 	}
 	note := fmt.Sprintf("%s's limit has reset: told to resume their interrupted work: %s.", p, strings.Join(told, ", "))
 	_, err = l.b.FencedCmdOnce(ctx, l.token, resumeNoticeMark(p), episode, dispatchFrom, l.cfg.EscalateTo,
 		bus.CmdDirective, truncRunes(note, bus.CmdMaxRunes), true)
-	if err != nil && !errors.Is(err, bus.ErrNotHolder) {
-		l.logError(l.cfg.EscalateTo, "resume notice", err)
-		return nil
+	if errors.Is(err, bus.ErrNotHolder) {
+		return false, err
 	}
-	return err
+	if err != nil {
+		l.logError(l.cfg.EscalateTo, "resume notice", err)
+		return false, nil
+	}
+	return complete, nil
 }
 
 // clearEpisodeMarks drops provider p's marks of other episodes when a hold

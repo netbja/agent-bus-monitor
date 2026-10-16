@@ -269,7 +269,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			} else {
 				a.obsSince = a.obsAt // a dispatcher before v0.15 writes no since
 			}
-			a.obsPrompt = ok && o.State == "blocked" && o.Fresh(time.Now().UnixMilli())
+			// Only the agent's current process: a reading carried for an older
+			// one (a replaced agent) is not its prompt.
+			a.obsPrompt = ok && o.State == "blocked" && (o.PID == 0 || o.PID == a.pid)
 		}
 		if wi, ok := wakes[n]; ok {
 			if wi.obOK {

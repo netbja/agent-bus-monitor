@@ -2,8 +2,10 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -325,5 +327,50 @@ func TestRunQuotaPauseFollowsTheCoordinatorsProvider(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if p, _ := b.Pause(ctx); p == nil || p.By != "bernard" {
 		t.Fatalf("a person's pause was touched: %+v", p)
+	}
+}
+
+// Codex review: a resume that fails to be written keeps the hold mark, so the
+// next pass retries that one (and only that one) before the hold ends.
+func TestRunQuotaReleaseRetriesAFailedResume(t *testing.T) {
+	var fails atomic.Int32
+	fails.Store(3)
+	withHooks(t, hooks{resumeErr: func(agent string) error {
+		if agent == "coder" && fails.Add(-1) >= 0 {
+			return errors.New("injected write failure")
+		}
+		return nil
+	}})
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "coder", "p-coder", "openai")
+	registerAs(t, b, "kimi", "p-kimi", "openai")
+	for _, a := range []string{"coder", "kimi"} {
+		if _, err := b.Status(ctx, a, "working", "mid-turn", bus.AgentIdent{Pane: "p-" + a, PID: testPID, PIDStart: testStart, Provider: "openai"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 10), reading("openai", 97))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "openai held", func() bool {
+		m, _ := b.QuotaMarks(ctx)
+		return m["hold:openai"] != ""
+	})
+	f.set(reading("anthropic", 10), reading("openai", 40))
+	waitFor(t, 3*time.Second, "the hold released after the retries", func() bool {
+		m, _ := b.QuotaMarks(ctx)
+		return m["hold:openai"] == "" && fails.Load() < 0
+	})
+	got := map[string]int{}
+	for _, m := range entries(t, r, b, "cmd") {
+		if cmd, _ := m.Values["command"].(string); m.Values["from"] == "dispatch" && strings.Contains(cmd, "limit (openai) has reset") {
+			got[m.Values["target"].(string)]++
+		}
+	}
+	if got["coder"] != 1 || got["kimi"] != 1 {
+		t.Fatalf("resumes = %v, want coder and kimi once each", got)
 	}
 }

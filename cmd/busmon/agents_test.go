@@ -261,7 +261,7 @@ func TestBusyFlagIsObservedNotDeclared(t *testing.T) {
 // prompt, counted and sorted like a person's decision; the declared state
 // stays, and a declared blocked or waiting is not covered.
 func TestPromptInTheTabReadsWaiting(t *testing.T) {
-	a := &agentState{state: "working", held: true, paused: true, registered: true, obsPrompt: true}
+	a := &agentState{state: "working", held: true, paused: true, registered: true, obsPrompt: true, obsAt: time.Now()}
 	if _, w, _, g := stateLook(a); w != "waiting" || g != 0 {
 		t.Fatalf("stateLook = %q group %d, want waiting group 0 (it beats quota and paused)", w, g)
 	}
@@ -278,11 +278,19 @@ func TestPromptInTheTabReadsWaiting(t *testing.T) {
 		t.Fatalf("asksFor = %v, want master (the bell)", got)
 	}
 	for _, st := range []string{"blocked", "waiting"} {
-		if promptWaiting(&agentState{state: st, obsPrompt: true}) {
+		if promptWaiting(&agentState{state: st, obsPrompt: true, obsAt: time.Now()}) {
 			t.Errorf("declared %s is covered by prompt", st)
 		}
 	}
-	if promptWaiting(&agentState{state: "idle", obsPrompt: true, openAsk: 1}) {
+	if promptWaiting(&agentState{state: "idle", obsPrompt: true, openAsk: 1, obsAt: time.Now()}) {
 		t.Error("an open ask is covered by prompt")
+	}
+}
+
+// A prompt read before the reads started failing ends with its reading's age.
+func TestPromptAgesOutWithoutNewReads(t *testing.T) {
+	old := &agentState{state: "idle", obsPrompt: true, obsAt: time.Now().Add(-3 * time.Minute)}
+	if promptWaiting(old) {
+		t.Fatal("a 3-minute-old blocked reading still reads waiting")
 	}
 }

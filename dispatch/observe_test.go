@@ -109,6 +109,8 @@ func TestObserveCarriesTheEpisodeAndSurvivesAFailedLook(t *testing.T) {
 			in.State, in.Ready = "blocked", false
 		case 1:
 			return Inspection{Err: errors.New("herdr timeout")}
+		case 3:
+			in.PIDs = []int{9999}
 		}
 		return in
 	})
@@ -131,6 +133,12 @@ func TestObserveCarriesTheEpisodeAndSurvivesAFailedLook(t *testing.T) {
 	obs, _ := b.Observed(ctx)
 	if o, ok := obs["master"]; !ok || o.State != "blocked" || o.Since != first.Since {
 		t.Fatalf("after a failed look = %+v (present %v), want the previous reading", o, ok)
+	}
+	mode.Store(3) // another process in the pane: the reading stands, with its pid
+	time.Sleep(200 * time.Millisecond)
+	obs, _ = b.Observed(ctx)
+	if o, ok := obs["master"]; !ok || o.Since != first.Since || o.PID != testPID {
+		t.Fatalf("after a foreign process = %+v (present %v), want the previous reading", o, ok)
 	}
 	mode.Store(2)
 	waitFor(t, 5*time.Second, "a new episode", func() bool {

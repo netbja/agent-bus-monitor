@@ -147,47 +147,27 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			l.quota.held[p] = true
 		case ok: // a usable reading under the threshold releases, and ends a quota pause early
 			if recorded != 0 {
-				// Resume before the hold mark goes: a crash in between resends
-				// only what is not marked yet.
-				if err := l.resumeAfterHold(ctx, p, recorded, snaps); err != nil {
+				if err := l.release(ctx, p, recorded, snaps, p == coord, ""); err != nil {
 					return err
 				}
-				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
-					return err
-				}
-				l.log(map[string]any{"action": "quota-release", "provider": p})
-			}
-			recorded = 0
-			if p == coord {
+			} else if p == coord {
 				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {
 					return err
 				}
 			}
+			recorded = 0
 		case recorded != 0 && r.ServedSince(now, q.MaxAge):
 			// No window to read, but the provider served a call after the
 			// limit hit (a quota reset granted early): the hold is over.
-			if err := l.resumeAfterHold(ctx, p, recorded, snaps); err != nil {
+			if err := l.release(ctx, p, recorded, snaps, p == coord, "served after the limit hit"); err != nil {
 				return err
 			}
-			if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
-				return err
-			}
-			l.log(map[string]any{"action": "quota-release", "provider": p, "reason": "served after the limit hit"})
 			recorded = 0
-			if p == coord {
-				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {
-					return err
-				}
-			}
 		default: // unknown: a recorded hold stands until its reset
 			if recorded != 0 && time.Unix(recorded, 0).Before(now) {
-				if err := l.resumeAfterHold(ctx, p, recorded, snaps); err != nil {
+				if err := l.release(ctx, p, recorded, snaps, false, "reset passed"); err != nil {
 					return err
 				}
-				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
-					return err
-				}
-				l.log(map[string]any{"action": "quota-release", "provider": p, "reason": "reset passed"})
 				recorded = 0
 			} else if recorded != 0 {
 				l.quota.held[p] = true
@@ -237,6 +217,36 @@ func (l *loop) coordinatorMoved(ctx context.Context, paused, coord string, reset
 	if ok {
 		l.log(map[string]any{"action": "quota-unpause", "provider": paused, "reason": "coordinator moved to " + coord})
 	}
+	return nil
+}
+
+// release ends provider p's hold of episode recorded. The hold mark is what
+// sends a pass down a release branch, so it goes last: the resumes first
+// (each marked), then the coordinator's quota pause, then the mark, only once
+// every resume is written. A crash or a failed write anywhere leaves the mark,
+// and the next pass redoes what is missing and nothing else.
+func (l *loop) release(ctx context.Context, p string, recorded int64, snaps map[string]bus.AgentSnapshot, unpause bool, reason string) error {
+	complete, err := l.resumeAfterHold(ctx, p, recorded, snaps)
+	if err != nil {
+		return err
+	}
+	if unpause {
+		if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {
+			return err
+		}
+	}
+	if !complete {
+		l.logOnce("quota-release:"+p, map[string]any{"action": "quota-release-pending", "provider": p, "reason": "a resume was not written; retried next pass"})
+		return nil
+	}
+	if err := l.b.FencedQuotaDel(ctx, l.token, "hold:"+p); err != nil {
+		return err
+	}
+	entry := map[string]any{"action": "quota-release", "provider": p}
+	if reason != "" {
+		entry["reason"] = reason
+	}
+	l.log(entry)
 	return nil
 }
 

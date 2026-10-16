@@ -60,8 +60,12 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 		snap := s
 		in := l.rt.Inspect(pctx, snap.Pane)
 		if in.Err != nil || in.Gone || !identityOK(&snap, in) {
-			if in.Err != nil && !in.Gone {
-				keep(a) // a failed look is not a new fact; a gone or foreign pane is
+			if !in.Gone {
+				// A failed look, or a pane whose process is not the agent's at
+				// this instant, is no new fact: the last reading stands until it
+				// ages out. Its pid says whose it was; busmon shows it only for
+				// that process. A gone pane is a fact: nothing is kept.
+				keep(a)
 			}
 			continue
 		}
