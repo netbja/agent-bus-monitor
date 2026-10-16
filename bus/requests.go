@@ -43,13 +43,13 @@ func (b *Bus) Request(ctx context.Context, task, from, target, ref, body string,
 	if err := ValidateText(body, CmdMaxRunes); err != nil {
 		return "", err
 	}
-	if err := b.refuseWhileSwapping(ctx, target); err != nil {
-		return "", err
-	}
-	return publishRequest.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, from, target, ref, body, ttl.Milliseconds(), streamMaxLen).Text()
+	id, err := publishRequest.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd"), SwapKey(b.project, target)},
+		task, from, target, ref, body, ttl.Milliseconds(), streamMaxLen).Text()
+	return id, swapping(err, target)
 }
 
 var publishRequest = redis.NewScript(`
+if redis.call('EXISTS',KEYS[3])==1 then return redis.error_reply('SWAPPING') end
 local raw=redis.call('HGET',KEYS[1],ARGV[1])
 if raw then
  local e=cjson.decode(raw)

@@ -138,20 +138,17 @@ func (b *Bus) CmdOnce(ctx context.Context, mark, episode, from, target, command 
 	return n == 1, nil
 }
 
-// refuseWhileSwapping (v0.15 §6.1.3): work keyed by an agent's name is not
-// opened while `agentbus swap` replaces it; the swap re-checks just before
-// it closes the pane, so a request or challenge either lands before (and the
-// swap refuses) or is refused here.
-func (b *Bus) refuseWhileSwapping(ctx context.Context, agent string) error {
-	if !ValidName(agent) {
-		return nil
+// openGate: SWAPPING when either side is being swapped, else the gate field.
+var openGate = redis.NewScript(`
+if redis.call('EXISTS',KEYS[2])==1 or redis.call('EXISTS',KEYS[3])==1 then return redis.error_reply('SWAPPING') end
+return redis.call('HSET',KEYS[1],ARGV[1],ARGV[2])`)
+
+// swapping turns a script's SWAPPING refusal (v0.15 §6.1.3: work keyed by an
+// agent's name is not opened while `agentbus swap` replaces it, checked in
+// the same script as the write) into a readable error.
+func swapping(err error, who string) error {
+	if err != nil && strings.Contains(err.Error(), "SWAPPING") {
+		return fmt.Errorf("%s is being swapped (agentbus swap): retry in a minute", who)
 	}
-	swapping, err := b.Swapping(ctx, agent)
-	if err != nil {
-		return err
-	}
-	if swapping {
-		return fmt.Errorf("%s is being swapped (agentbus swap): retry in a minute", agent)
-	}
-	return nil
+	return err
 }

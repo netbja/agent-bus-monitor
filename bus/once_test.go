@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -74,5 +75,23 @@ func TestNoWorkOpensOnASwappingAgent(t *testing.T) {
 	}
 	if err := b.OpenChallenge(ctx, "foureyes", "pr-1", "coder|review"); err != nil {
 		t.Fatalf("after the swap: %v", err)
+	}
+}
+
+// The conductor's fenced paths refuse a swapping agent too, in the script.
+func TestFencedWorkRefusesASwappingAgent(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireConductor(ctx, "c-tok", 15*time.Second); err != nil || !ok {
+		t.Skipf("conductor lease: %v %v", ok, err)
+	}
+	if err := b.BeginSwap(ctx, "coder", SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.FencedRequest(ctx, "c-tok", "m-1", "missions", "coder", "", "do it"); err == nil || !strings.Contains(err.Error(), "being swapped") {
+		t.Fatalf("FencedRequest = %v", err)
+	}
+	if err := b.FencedChallenge(ctx, "c-tok", "coder", "rev-1", "missions", "review"); err == nil || !strings.Contains(err.Error(), "being swapped") {
+		t.Fatalf("FencedChallenge = %v", err)
 	}
 }

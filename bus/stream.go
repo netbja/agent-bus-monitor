@@ -803,13 +803,11 @@ func (b *Bus) OpenChallenge(ctx context.Context, agent, ref, meta string) error 
 	if meta == "" {
 		return fmt.Errorf("challenge meta required (audit trail)")
 	}
+	// The gate opens in one script with the check that neither side is being
+	// swapped (v0.15 §6.1.3): an intent written a moment before is honoured.
 	challenger, _, _ := strings.Cut(meta, "|")
-	for _, a := range []string{agent, challenger} {
-		if err := b.refuseWhileSwapping(ctx, a); err != nil {
-			return err
-		}
-	}
-	return b.r.HSet(ctx, GateKey(b.project, agent), ref, meta).Err()
+	keys := []string{GateKey(b.project, agent), SwapKey(b.project, agent), SwapKey(b.project, challenger)}
+	return swapping(openGate.Run(ctx, b.r, keys, ref, meta).Err(), agent+" or "+challenger)
 }
 
 // ResolveChallenge closes the challenge identified by ref (the verdict step). It

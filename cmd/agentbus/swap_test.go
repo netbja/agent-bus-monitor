@@ -247,3 +247,29 @@ func TestSwapFailureAfterTheClose(t *testing.T) {
 		})
 	}
 }
+
+// Codex review: during a hold, the swap's resume shares the episode mark, so
+// the dispatcher's release finds it set; the intent lasts until it is sent.
+func TestSwapResumeSharesTheHoldMark(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	_, _ = w.b.Status(ctx, "foureyes", "working", "reviewing", bus.AgentIdent{})
+	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), "hold:openai", "1792500000")
+	code, out := w.swap(d, "foureyes", "--profile", "opus", "--now")
+	if code != 0 || !strings.Contains(out, "resume sent to foureyes") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	if m, _ := w.b.QuotaMarks(ctx); m["resumed:openai:foureyes"] != "1792500000" {
+		t.Fatalf("marks %v", m)
+	}
+}
+
+// A wake record that cannot be read stops the swap before anything closes.
+func TestSwapAbortsWhenTheWakeRecordIsUnreadable(t *testing.T) {
+	w, d := newSwapWorld(t)
+	w.r.Set(context.Background(), bus.WakeKey(w.b.Project(), "foureyes"), "not a hash", 0)
+	code, out := w.swap(d, "foureyes", "--profile", "opus")
+	if code == 0 || w.closed() || !strings.Contains(out, "nothing was replaced") {
+		t.Fatalf("exit %d, closed %v: %s", code, w.closed(), out)
+	}
+}

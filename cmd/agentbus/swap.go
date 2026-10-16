@@ -192,7 +192,10 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	// let it land in the old pane rather than in a closing one.
 	for deadline := d.Now().Add(10 * time.Second); ; d.Sleep(200 * time.Millisecond) {
 		w, ok, err := b.Wake(ctx, role)
-		if err != nil || !ok || w.State != "prompting" {
+		if err != nil { // unknown is not "not typing": nothing is closed
+			return fail("cannot read its wake record (%v); nothing was replaced", err)
+		}
+		if !ok || w.State != "prompting" {
 			break
 		}
 		if d.Now().After(deadline) {
@@ -229,7 +232,6 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 				d.Proof, target.Client, target.Provider, recovery)
 		}
 	}
-	end()
 	fmt.Fprintf(out, "swapped %s: %s (%s, %s) -> %s (%s, %s), pane %s, pid %d\n",
 		role, own.Profile, own.Provider, own.Model, profile, target.Provider, target.Model, proved.Pane, proved.PID)
 
@@ -242,6 +244,9 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	if err != nil {
 		return fail("swapped, but its in-flight work could not be read (%v); %s", err, retry)
 	}
+	// The intent stays until this resume is written (end() runs on return):
+	// the dispatcher keeps the hold and sends no resume of its own meanwhile,
+	// and after it, finds the shared mark set.
 	if !ok {
 		return 0
 	}
@@ -249,9 +254,14 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	if err != nil {
 		return fail("swapped, but the resume was not sent (%v); %s", err, retry)
 	}
+	sent := false
 	if episode := marks["hold:"+snap.Provider]; episode != "" && snap.Provider != "" {
-		_, err = b.CmdOnce(ctx, "resumed:"+snap.Provider+":"+role, episode, self, role, text)
-	} else {
+		// Marked, so the dispatcher's release sends no second one. A mark
+		// already set means its resume went to the old process before the
+		// intent: the new one still needs it.
+		sent, err = b.CmdOnce(ctx, "resumed:"+snap.Provider+":"+role, episode, self, role, text)
+	}
+	if err == nil && !sent {
 		_, err = b.Cmd(ctx, self, role, bus.CmdDirective, "", text)
 	}
 	if err != nil {
