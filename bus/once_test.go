@@ -113,3 +113,21 @@ func TestFencedCmdOnceRefusesASwappingRecipient(t *testing.T) {
 		t.Fatal("marked although not sent")
 	}
 }
+
+// A mark already set does not hide a swap: the release stays incomplete.
+func TestFencedCmdOnceSwapBeforeMark(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if _, err := b.FencedCmdOnce(ctx, "tok", "resumed:openai:coder", "1", "dispatch", "coder", CmdDirective, "resume", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BeginSwap(ctx, "coder", SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.FencedCmdOnce(ctx, "tok", "resumed:openai:coder", "1", "dispatch", "coder", CmdDirective, "resume", false); !errors.Is(err, ErrSwapInProgress) {
+		t.Fatalf("err = %v, want ErrSwapInProgress even with the mark set", err)
+	}
+}

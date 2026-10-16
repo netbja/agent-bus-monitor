@@ -17,8 +17,8 @@ import (
 // swap sends it, v0.15 §3.3); 1 XADDed and marked.
 var fencedEntryOnce = redis.NewScript(`
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
-if redis.call('HGET', KEYS[2], ARGV[2]) == ARGV[3] then return 0 end
 if redis.call('EXISTS', KEYS[4]) == 1 then return 2 end
+if redis.call('HGET', KEYS[2], ARGV[2]) == ARGV[3] then return 0 end
 redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[4], '*', unpack(ARGV, 5))
 redis.call('HSET', KEYS[2], ARGV[2], ARGV[3])
 return 1`)

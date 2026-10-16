@@ -152,3 +152,17 @@ func swapping(err error, who string) error {
 	}
 	return err
 }
+
+// PendingFor reports whether entry id of the cmd stream is in agent's
+// pending list (delivered, not acknowledged): the next read reclaims it.
+func (b *Bus) PendingFor(ctx context.Context, agent, id string) (bool, error) {
+	res, err := b.r.XPendingExt(ctx, &redis.XPendingExtArgs{Stream: StreamKey(b.project, "cmd"), Group: agent,
+		Start: id, End: id, Count: 1}).Result()
+	if err != nil {
+		if strings.Contains(err.Error(), "NOGROUP") {
+			return false, nil
+		}
+		return false, err
+	}
+	return len(res) == 1, nil
+}

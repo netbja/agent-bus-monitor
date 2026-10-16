@@ -254,21 +254,25 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	if err != nil {
 		return fail("swapped, but the resume was not sent (%v); %s", err, retry)
 	}
+	// A release that published its resume before the intent (the hold may be
+	// gone since): if it is still unread or unacknowledged, the new process
+	// gets it from the queue (keyed by the name), and nothing more is sent.
+	if snap.Provider != "" {
+		queued, err := releaseResumeQueued(ctx, b, role, snap.Provider)
+		if err != nil {
+			return fail("swapped, but the resume was not sent (%v); %s", err, retry)
+		}
+		if queued {
+			fmt.Fprintf(out, "the release's resume is already queued for %s\n", role)
+			return 0
+		}
+	}
 	sent := false
 	if episode := marks["hold:"+snap.Provider]; episode != "" && snap.Provider != "" {
-		// Marked, so the dispatcher's release sends no second one. A mark
-		// already set means the release published its resume before the
-		// intent: if the group has not read it, the new process will (the
-		// queue is keyed by the name), and nothing more is sent.
+		// Marked, so the release, still to come, sends no second one. A mark
+		// already set with nothing queued: the old process read it, the new
+		// one still needs it (below).
 		sent, err = b.CmdOnce(ctx, "resumed:"+snap.Provider+":"+role, episode, self, role, text)
-		if err == nil && !sent {
-			var queued bool
-			queued, err = releaseResumeQueued(ctx, b, role, snap.Provider)
-			if err == nil && queued {
-				fmt.Fprintf(out, "the release's resume is already queued for %s\n", role)
-				return 0
-			}
-		}
 	}
 	if err == nil && !sent {
 		_, err = b.Cmd(ctx, self, role, bus.CmdDirective, "", text)
@@ -384,7 +388,10 @@ func releaseResumeQueued(ctx context.Context, b *bus.Bus, agent, provider string
 	if err != nil {
 		return false, err
 	}
-	return streamIDAfter(latest, o.LastDelivered), nil
+	if streamIDAfter(latest, o.LastDelivered) {
+		return true, nil // unread
+	}
+	return b.PendingFor(ctx, agent, latest) // delivered, not acknowledged: reclaimed by the next read
 }
 
 // streamIDAfter: stream id a is strictly after b ("" is before everything).

@@ -296,3 +296,22 @@ func TestSwapDoesNotDoubleAQueuedReleaseResume(t *testing.T) {
 		}
 	}
 }
+
+// The same, once the hold is gone and with the resume delivered but not
+// acknowledged (the next read reclaims it).
+func TestSwapSeesAPendingReleaseResumeAfterTheHold(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	_, _ = w.b.Status(ctx, "foureyes", "working", "reviewing", bus.AgentIdent{})
+	if _, err := w.b.Cmd(ctx, "dispatch", "foureyes", bus.CmdDirective, "", "Your provider's limit (openai) has reset. Resume it."); err != nil {
+		t.Fatal(err)
+	}
+	stream := bus.StreamKey(w.b.Project(), "cmd")
+	if _, err := w.r.XReadGroup(ctx, &redis.XReadGroupArgs{Group: "foureyes", Consumer: "old", Streams: []string{stream, ">"}, Count: 10}).Result(); err != nil {
+		t.Fatal(err)
+	}
+	code, out := w.swap(d, "foureyes", "--profile", "opus", "--now")
+	if code != 0 || !strings.Contains(out, "already queued") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+}
