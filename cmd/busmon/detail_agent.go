@@ -73,7 +73,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row("Declared", tg(RoleMuted, "never declared"))
 	} else {
 		declared := tg(role, word)
-		if word == "quota" || word == "paused" { // a bus fact covers it in the row; say what was declared
+		if a.state != "" && word != Preview(a.state) { // a bus fact covers it in the row (quota, paused, a question): say what was declared
 			declared = tg(RoleText, Preview(a.state)) + tg(RoleMuted, " (shown as "+word+")")
 		}
 		row("Declared", declared+text(fmt.Sprintf(" %s %s (%s)", GlyphNone, ago(a.stateAt), a.stateAt.Format("15:04:05"))))

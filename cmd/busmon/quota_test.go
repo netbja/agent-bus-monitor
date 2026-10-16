@@ -136,3 +136,28 @@ func TestHeaderPrefersFreshWindowsAndShowsAStickyHold(t *testing.T) {
 		t.Fatalf("sticky hold detail:\n%s", got)
 	}
 }
+
+// v0.15 §13 through the poll: a blocked observation of the agent's own pid
+// reads waiting; the detail keeps the declared state and names the tab; an
+// observation of another pid is not its prompt.
+func TestPromptThroughThePoll(t *testing.T) {
+	now := time.Now().UnixMilli()
+	f := &fakeReader{calls: map[string]int{},
+		snaps:    map[string]bus.AgentSnapshot{"master": {State: "working", TS: 1, Pane: "w2:p2", PID: 4242, PIDStart: 7}},
+		observed: map[string]bus.Observation{"master": {State: "blocked", At: now, Since: now - 60000, PID: 4242}}}
+	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
+	pollOnce(context.Background(), f, st, 1)
+	pollOnce(context.Background(), f, st, 1)
+	if _, word, _, _ := stateLook(st.agents["master"]); word != "waiting" {
+		t.Fatalf("master shows %q, want waiting", word)
+	}
+	_, body := agentDetail("master", st.agents["master"], false, nil, nil, time.Now())
+	if !strings.Contains(body, "shown as waiting") || !strings.Contains(body, "pane w2:p2") || !strings.Contains(body, "Answer it there") {
+		t.Errorf("detail:\n%s", body)
+	}
+	f.observed = map[string]bus.Observation{"master": {State: "blocked", At: now, Since: now, PID: 999}}
+	pollOnce(context.Background(), f, st, 1)
+	if promptWaiting(st.agents["master"]) {
+		t.Fatal("an observation of another process reads as master's prompt")
+	}
+}
