@@ -300,7 +300,7 @@ func threadPlain(e bus.Event, th threadState) string {
 	for _, t := range th.Entries {
 		fmt.Fprintf(&sb, "\n[%s] %s %s → %s\n%s\n",
 			entryTime(t.ID).Format("2006-01-02 15:04:05"),
-			t.Type, t.From, t.Target, messageBody(t))
+			CopyText(t.Type), CopyText(t.From), CopyText(t.Target), CopyText(messageBody(t)))
 	}
 	return sb.String()
 }

@@ -172,3 +172,16 @@ func TestCopiesAreSanitised(t *testing.T) {
 		t.Fatalf("copy kept a control: %q", got)
 	}
 }
+
+func TestYCopiesTheQuestion(t *testing.T) {
+	h := newHarness(t, askShared(time.Now()))
+	h.draw(160, 45)
+	h.key(runeKey('!'))
+	if !strings.Contains(h.u.ovPlain, "When should it open?") || !strings.Contains(h.u.ovPlain, "1. Mon 10:00") {
+		t.Fatalf("copy buffer %q", h.u.ovPlain)
+	}
+	h.key(runeKey('y'))
+	if h.u.ov != ovAsk || !strings.Contains(h.u.flash, "question copied") {
+		t.Fatalf("y: panel %v flash %q", h.u.ov, h.u.flash)
+	}
+}

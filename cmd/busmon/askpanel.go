@@ -291,6 +291,8 @@ func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
 	case ActHelp:
 		u.showOverlay(ovHelp, "Help", helpText(), "", "")
 		return nil
+	case ActCopy:
+		u.copyText(u.ovPlain, "question")
 	case ActUp:
 		p.opt = max(p.opt-1, 0)
 	case ActDown:

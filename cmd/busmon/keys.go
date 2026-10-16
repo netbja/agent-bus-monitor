@@ -186,6 +186,7 @@ var (
 		{Keys: "enter", Hint: "answer", Act: ActSend, match: keyIs(tcell.KeyEnter)},
 		{Keys: GlyphArrowL + GlyphArrowR + " tab", Hint: "question", Act: ActAskNext, match: either(keyIs(tcell.KeyRight), keyIs(tcell.KeyTab))},
 		{Keys: GlyphArrowL, Act: ActAskPrev, match: either(keyIs(tcell.KeyLeft), keyIs(tcell.KeyBacktab))},
+		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "?", Help: "help", Act: ActHelp, match: runeIs('?')},
 		{Keys: "esc", Hint: "close", Act: ActClose, match: keyIs(tcell.KeyEscape)},
 	}
