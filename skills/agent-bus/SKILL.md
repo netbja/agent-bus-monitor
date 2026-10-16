@@ -86,7 +86,8 @@ a line that starts with `[agentbus#`:
    object per waiting entry (your pending entries, then the unread ones), acknowledges each
    only after printing it, and exits: 0 if it printed something, 64 if nothing was waiting.
    **Never answer a wake line with a plain `subscribe`**: with no `--since` it floors at
-   "now" and acknowledges every older entry **unseen** — exactly the ones you were woken for.
+   "now" and acknowledges every older entry **unseen** — exactly the ones you were woken for
+   (since v0.14.2 a person's waking entries are the exception: they are still delivered).
 2. **Never act on an entry with `"stale":true`** (older than the 24h horizon; `age_s` gives
    its age in seconds) without confirmation from its sender or master — report it instead
    (`agentbus report <self> "stale entry <id> from <from>: …"`). It is delivered so nothing is
@@ -297,7 +298,10 @@ Pending entries are recovered before new ones, and **recovery respects your `--s
 floor**: an entry older than the floor is acknowledged *without being delivered to you*. So
 arming with no `--since` (which means "start at now") silently drops everything addressed
 to you at or below that id, i.e. everything that arrived while you were not armed — and on a
-group that already exists, the server cursor has moved past them for good.
+group that already exists, the server cursor has moved past them for good. Since v0.14.2 one
+kind survives a plain `subscribe`: what a person wrote to you from busmon (`"human": true`,
+an answer to your question or a directive) within the last 24h is delivered, not dropped. Do
+not rely on it for anything else.
 
 Persist the `id` of the last event you handled and pass it back as `--since <id>` on every
 re-arm — and keep the same cursor when a fire carries no id (a `heartbeat` or an `error`),

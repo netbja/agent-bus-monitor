@@ -71,13 +71,17 @@ func emit(out io.Writer, ev subEvent) error {
 // the process exit code. floor is the stream-id floor passed to WatchCmd ("" or
 // "0" = no floor). WatchCmdDelivery owns the receiver lease and output/ACK
 // ordering. Normal return releases it; process death leaves only its bounded TTL.
-func runSubscribe(ctx context.Context, b *bus.Bus, agent, consumer string, idle time.Duration, floor string, loop bool, out io.Writer) int {
+func runSubscribe(ctx context.Context, b *bus.Bus, agent, consumer string, idle time.Duration, floor string, fromNow, loop bool, out io.Writer) int {
+	watch := b.WatchCmdDelivery
+	if fromNow { // no --since: the backlog is skipped, a person's entries are not
+		watch = b.WatchCmdDeliveryFromNow
+	}
 	if !bus.ValidName(agent) {
 		emit(out, subEvent{Event: "fatal", Rearm: boolPtr(false), Msg: "invalid agent " + agent})
 		return 1
 	}
 	if loop {
-		err := b.WatchCmdDelivery(ctx, agent, consumer, floor, func(e bus.Event) (bool, error) { return false, emit(out, cmdEvent(e, nil)) })
+		err := watch(ctx, agent, consumer, floor, func(e bus.Event) (bool, error) { return false, emit(out, cmdEvent(e, nil)) })
 		if err != nil && !errors.Is(err, context.Canceled) {
 			_ = emit(out, subEvent{Event: "error", Rearm: boolPtr(true), Msg: err.Error()})
 			return 75
@@ -89,7 +93,7 @@ func runSubscribe(ctx context.Context, b *bus.Bus, agent, consumer string, idle 
 	wctx, cancel := context.WithTimeout(ctx, idle)
 	defer cancel()
 	emitted := false
-	werr := b.WatchCmdDelivery(wctx, agent, consumer, floor, func(e bus.Event) (bool, error) {
+	werr := watch(wctx, agent, consumer, floor, func(e bus.Event) (bool, error) {
 		last = e
 		err := emit(out, cmdEvent(e, boolPtr(true)))
 		emitted = true // even a partial write must not be followed by a second JSON object

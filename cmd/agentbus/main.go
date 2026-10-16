@@ -689,9 +689,11 @@ func main() {
 		if sa.idle != "" {
 			idle = parseIdle(sa.idle, heartbeat)
 		}
+		fromNow := false
 		floor := since
 		switch {
 		case floor == "":
+			fromNow = true
 			f, ferr := b.ServerFloor(ctx)
 			if ferr != nil {
 				die("could not resolve server-time floor: " + ferr.Error())
@@ -700,7 +702,7 @@ func main() {
 		case floor != "0" && !strings.Contains(floor, "-"):
 			floor += "-0" // accept a bare <ms> cursor
 		}
-		os.Exit(runSubscribe(ctx, b, agent, consumer, idle, floor, loop, os.Stdout))
+		os.Exit(runSubscribe(ctx, b, agent, consumer, idle, floor, fromNow, loop, os.Stdout))
 
 	case "listen":
 		kinds := rest
