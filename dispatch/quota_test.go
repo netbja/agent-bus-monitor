@@ -167,3 +167,45 @@ func TestRunQuotaPauseOutlivesAnExpiredHold(t *testing.T) {
 		t.Fatal("the quota pause was deleted at the reset instead of reset + margin")
 	}
 }
+
+// A quota reset granted before the announced time: the readings have no
+// window any more, but the provider served a call after the hit. The hold
+// and the coordinator's quota pause end at once, and master is told to go on.
+func TestRunQuotaEndsWhenTheProviderServesAgain(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	registerAs(t, b, "master", "p-master", "anthropic")
+	now := time.Now()
+	weekly := quota.Reading{Provider: "anthropic", ObservedAt: now.UnixMilli(),
+		Windows: []quota.Window{{Name: "7d", UsedPct: 100, ResetsAt: now.Add(96 * time.Hour).Unix(), Minutes: 10080}}}
+	f := &fakeQuota{}
+	f.set(weekly)
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "a quota pause", func() bool { p, _ := b.Pause(context.Background()); return p != nil })
+
+	// Unknown and never served since: the hold stands (the pre-v0.14.6 rule).
+	f.set(quota.Unknown("anthropic", "statusline", "no reading"))
+	time.Sleep(200 * time.Millisecond)
+	if p, _ := b.Pause(context.Background()); p == nil {
+		t.Fatal("an unknown reading ended the pause")
+	}
+	// Served a minute ago: over.
+	served := quota.Unknown("anthropic", "statusline", "no reading")
+	served.AvailableAt = time.Now().Add(-time.Minute).UnixMilli()
+	f.set(served)
+	waitFor(t, 3*time.Second, "the hold and the pause ended", func() bool {
+		p, _ := b.Pause(context.Background())
+		marks, _ := b.QuotaMarks(context.Background())
+		return p == nil && marks["hold:anthropic"] == ""
+	})
+	msgs, _ := r.XRevRangeN(context.Background(), bus.StreamKey(b.Project(), "cmd"), "+", "-", 5).Result()
+	found := false
+	for _, m := range msgs {
+		if m.Values["target"] == "master" && strings.Contains(m.Values["command"].(string), "Project resumed") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("master got no resume directive: %+v", msgs)
+	}
+}

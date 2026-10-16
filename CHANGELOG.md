@@ -4,6 +4,17 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.14.6 — a quota reset granted early is seen
+
+- Anthropic granted a quota reset before the weekly one, but hyperliquid stayed paused for 96
+  hours: the only Claude reading was the old "weekly limit" refusal in a transcript, believed
+  until its announced reset. Now a refusal no longer counts once Claude has answered since, in any
+  session of the account; the hold and the project pause end at once and master is told to go on.
+- An early end of a quota pause now sends master the resume directive (it ended silently).
+- `agentbus quota` shows `served 2m ago` for a provider with no window to read.
+
+[Notes](docs/releases/v0.14.6.md)
+
 ## v0.14.5 — panels you can tell apart
 
 - Each busmon panel has its colour, btop-like: Agents blue, Activity green, Board violet,

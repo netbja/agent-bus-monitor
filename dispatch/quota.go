@@ -138,7 +138,20 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			}
 			recorded = 0
 			if p == coord {
-				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p); err != nil {
+				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {
+					return err
+				}
+			}
+		case recorded != 0 && r.ServedSince(now, q.MaxAge):
+			// No window to read, but the provider served a call after the
+			// limit hit (a quota reset granted early): the hold is over.
+			if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
+				return err
+			}
+			l.log(map[string]any{"action": "quota-release", "provider": p, "reason": "served after the limit hit"})
+			recorded = 0
+			if p == coord {
+				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {
 					return err
 				}
 			}

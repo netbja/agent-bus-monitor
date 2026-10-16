@@ -195,7 +195,9 @@ func (c ClaudeReader) Read(ctx context.Context) (Reading, error) {
 			stored = st.Windows
 		}
 	}
-	for name, hit := range transcriptRejections(c.Transcripts, now) {
+	hits, served := transcriptRejections(c.Transcripts, now)
+	r.AvailableAt = served
+	for name, hit := range hits {
 		if s, ok := stored[name]; ok && (s.ResetsAt > hit.ResetsAt || s.ObservedAt > hit.ObservedAt) {
 			continue // a fresher statusline reading outranks the backstop
 		}
@@ -203,7 +205,9 @@ func (c ClaudeReader) Read(ctx context.Context) (Reading, error) {
 		r.Source = "statusline+transcript"
 	}
 	if len(stored) == 0 {
-		return Unknown("anthropic", "statusline", "no statusline reading yet (agentbus statusline --print-install)"), nil
+		u := Unknown("anthropic", "statusline", "no statusline reading yet (agentbus statusline --print-install)")
+		u.AvailableAt = served
+		return u, nil
 	}
 	for _, s := range stored {
 		w := s.Window
@@ -218,9 +222,13 @@ func (c ClaudeReader) Read(ctx context.Context) (Reading, error) {
 
 // transcriptRejections: live limit hits in recent Claude transcripts (spec
 // §5.1 backstop) — only status, type and reset are read; a reset in the past
-// is ignored; a hit sets that window to 100 %.
-func transcriptRejections(root string, now time.Time) map[string]storedWindow {
+// is ignored; a hit sets that window to 100 %. served is the newest answer
+// the API gave (an assistant turn that is not a synthetic error) in any of
+// them: a hit older than it no longer holds — the account was served since,
+// as after a quota reset granted before the announced time.
+func transcriptRejections(root string, now time.Time) (map[string]storedWindow, int64) {
 	out := map[string]storedWindow{}
+	var served int64
 	files, _ := filepath.Glob(filepath.Join(root, "*", "*.jsonl"))
 	for _, f := range files {
 		st, err := os.Stat(f)
@@ -229,6 +237,9 @@ func transcriptRejections(root string, now time.Time) map[string]storedWindow {
 		}
 		for _, line := range tailLines(f, 256<<10) {
 			if !bytes.Contains(line, []byte(`"rateLimitType"`)) {
+				if at := servedAt(line); at > served {
+					served = at
+				}
 				continue
 			}
 			var e struct {
@@ -257,7 +268,37 @@ func transcriptRejections(root string, now time.Time) map[string]storedWindow {
 			}
 		}
 	}
-	return out
+	for name, w := range out {
+		if w.ObservedAt <= served {
+			delete(out, name)
+		}
+	}
+	return out, served
+}
+
+// servedAt is the time of an assistant turn the API really answered (Unix
+// ms), 0 for anything else: a synthetic error (a limit hit, an outage) is not
+// an answer. Only type, timestamp, the error flag and the model are read.
+func servedAt(line []byte) int64 {
+	if !bytes.Contains(line, []byte(`"type":"assistant"`)) {
+		return 0
+	}
+	var e struct {
+		Type      string `json:"type"`
+		Timestamp string `json:"timestamp"`
+		APIError  bool   `json:"isApiErrorMessage"`
+		Message   struct {
+			Model string `json:"model"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &e) != nil || e.Type != "assistant" || e.APIError || e.Message.Model == "" || e.Message.Model == "<synthetic>" {
+		return 0
+	}
+	at, err := time.Parse(time.RFC3339Nano, e.Timestamp)
+	if err != nil {
+		return 0
+	}
+	return at.UnixMilli()
 }
 
 // tailLines returns the complete lines of the last max bytes of a file.

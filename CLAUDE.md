@@ -426,7 +426,10 @@ It never touches Redis — see README "Deployment topology".
   window and reset, hold a provider's agents (`{p}:quota` marks; no prompt, no escalation), pause
   for the coordinator's provider (`FencedQuotaPause`, never replacing another pause). Agents carry
   `client`/`provider` from the launcher's env. Unknown or aged (>30 min) readings never act; every
-  write is fenced. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
+  write is fenced. A limit hit read from a transcript is void once the API has answered since
+  (v0.14.6: `servedAt`, `Reading.AvailableAt`): with no window to read, a recent answer ends the
+  hold and the coordinator's quota pause at once (a reset granted early), and `FencedQuotaUnpause`
+  sends master the resume directive like `FencedResume`. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
   nor writes `{p}:budget` (the service replaces that hash as a whole).
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write

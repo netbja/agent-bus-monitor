@@ -47,7 +47,11 @@ func runQuota(args []string, out, errw io.Writer) int {
 			fmt.Fprintf(tw, "%s\t-\tunlimited\t-\t-\t%s\n", r.Provider, r.Source)
 			continue
 		case r.Unknown:
-			fmt.Fprintf(tw, "%s\t?\tunknown\t-\t-\t%s (%s)\n", r.Provider, r.Source, r.Note)
+			observed := "-"
+			if r.AvailableAt > 0 { // no window, but the provider answered: not stopped
+				observed = "served " + roundDur(now.Sub(time.UnixMilli(r.AvailableAt))) + " ago"
+			}
+			fmt.Fprintf(tw, "%s\t?\tunknown\t-\t%s\t%s (%s)\n", r.Provider, observed, r.Source, r.Note)
 			continue
 		}
 		for _, w := range r.Windows {

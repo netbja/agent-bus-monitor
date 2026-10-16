@@ -2,6 +2,8 @@ package bus
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -39,7 +41,7 @@ func TestQuotaPauseNeverReplacesAnotherPause(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
 	p := b.Project()
-	t.Cleanup(func() { b.r.Del(ctx, DispatchKey(p), PauseKey(p)) })
+	t.Cleanup(func() { b.r.Del(ctx, DispatchKey(p), PauseKey(p), StreamKey(p, "cmd")) })
 	b.AcquireDispatch(ctx, "tok", time.Minute)
 	until := time.Now().Add(time.Hour).UnixMilli()
 	if ok, err := b.FencedQuotaPause(ctx, "tok", "anthropic", "master", until); err != nil || !ok {
@@ -52,11 +54,16 @@ func TestQuotaPauseNeverReplacesAnotherPause(t *testing.T) {
 	if ok, _ := b.FencedQuotaPause(ctx, "tok", "openai", "master", until); ok {
 		t.Fatal("another provider replaced the quota pause")
 	}
-	if ok, _ := b.FencedQuotaUnpause(ctx, "tok", "openai"); ok {
+	if ok, _ := b.FencedQuotaUnpause(ctx, "tok", "openai", "dispatch"); ok {
 		t.Fatal("unpaused another provider's pause")
 	}
-	if ok, _ := b.FencedQuotaUnpause(ctx, "tok", "anthropic"); !ok {
+	if ok, _ := b.FencedQuotaUnpause(ctx, "tok", "anthropic", "dispatch"); !ok {
 		t.Fatal("own quota pause not removed")
+	}
+	// The early end tells the notify target, like a pause ending on time.
+	msgs, _ := b.r.XRevRangeN(ctx, StreamKey(p, "cmd"), "+", "-", 1).Result()
+	if len(msgs) != 1 || msgs[0].Values["target"] != "master" || msgs[0].Values["from"] != "dispatch" || !strings.Contains(fmt.Sprint(msgs[0].Values["command"]), "Project resumed") {
+		t.Fatalf("no resume directive after an early quota unpause: %+v", msgs)
 	}
 	if _, err := b.SetPause(ctx, "bernard", "master", "dinner", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)

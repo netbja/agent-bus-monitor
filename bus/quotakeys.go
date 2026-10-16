@@ -144,13 +144,28 @@ if not v then return 0 end
 local ok, p = pcall(cjson.decode, v)
 if not ok or p['reason'] ~= ARGV[2] then return 0 end
 redis.call('DEL', KEYS[2])
+if ARGV[3] ~= '' then
+  redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[4], '*', unpack(ARGV, 5))
+end
 return 1`)
 
 // FencedQuotaUnpause ends this provider's quota pause early (a reading back
-// under the threshold); it never touches another pause.
-func (b *Bus) FencedQuotaUnpause(ctx context.Context, token, provider string) (bool, error) {
-	n, err := fencedQuotaUnpause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project)},
-		token, QuotaPauseReason(provider)).Int()
+// under the threshold, a call served after the limit hit); it never touches
+// another pause. Like FencedResume, it sends the pause's notify target the
+// resume directive in the same script, so the coordinator learns the team
+// may go on.
+func (b *Bus) FencedQuotaUnpause(ctx context.Context, token, provider, from string) (bool, error) {
+	reason := QuotaPauseReason(provider)
+	target, text := "", ""
+	if raw, err := b.r.Get(ctx, PauseKey(b.project)).Result(); err == nil {
+		var p PauseRecord
+		if json.Unmarshal([]byte(raw), &p) == nil && p.Reason == reason && ValidName(p.Notify) {
+			target, text = p.Notify, resumeText(p, "The provider's limit was lifted before the announced reset.")
+		}
+	}
+	n, err := fencedQuotaUnpause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project), StreamKey(b.project, "cmd")},
+		token, reason, target, streamMaxLen,
+		"from", from, "target", target, "type", CmdDirective, "ref", "", "command", text, "text_complete", "yes").Int()
 	if err != nil {
 		return false, err
 	}
