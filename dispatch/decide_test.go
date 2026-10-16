@@ -300,3 +300,18 @@ func TestPaneWaitCarriesCause(t *testing.T) {
 		t.Fatalf("rule 6 carries a cause: %+v", d)
 	}
 }
+
+func TestResumeTextIsBounded(t *testing.T) {
+	tasks := []string{"a", "b", "c", "d", "e", "f", "g"}
+	got := resumeText("openai", tasks)
+	if !strings.Contains(got, "a, b, c, d, e and 2 more.") || strings.Contains(got, "f,") {
+		t.Fatalf("text = %q", got)
+	}
+	long := []string{strings.Repeat("x", 5000)}
+	if n := len([]rune(resumeText("openai", long))); n > bus.CmdMaxRunes {
+		t.Fatalf("text has %d runes, cap %d", n, bus.CmdMaxRunes)
+	}
+	if got := resumeText("openai", nil); !strings.Contains(got, "declared working") {
+		t.Fatalf("no-task text = %q", got)
+	}
+}

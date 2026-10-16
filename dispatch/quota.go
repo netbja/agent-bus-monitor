@@ -122,6 +122,11 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		switch {
 		case ok && tight.UsedPct >= q.HoldPct:
 			if recorded != tight.ResetsAt {
+				if recorded == 0 { // a new episode: the last one's resume marks go
+					if err := l.clearEpisodeMarks(ctx, p, tight.ResetsAt, marks); err != nil {
+						return err
+					}
+				}
 				if err := l.b.FencedQuotaSet(ctx, l.token, holdField, strconv.FormatInt(tight.ResetsAt, 10)); err != nil {
 					return err
 				}
@@ -131,6 +136,11 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			l.quota.held[p] = true
 		case ok: // a usable reading under the threshold releases, and ends a quota pause early
 			if recorded != 0 {
+				// Resume before the hold mark goes: a crash in between resends
+				// only what is not marked yet.
+				if err := l.resumeAfterHold(ctx, p, recorded, snaps); err != nil {
+					return err
+				}
 				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
 					return err
 				}
@@ -145,6 +155,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		case recorded != 0 && r.ServedSince(now, q.MaxAge):
 			// No window to read, but the provider served a call after the
 			// limit hit (a quota reset granted early): the hold is over.
+			if err := l.resumeAfterHold(ctx, p, recorded, snaps); err != nil {
+				return err
+			}
 			if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
 				return err
 			}
@@ -157,9 +170,13 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			}
 		default: // unknown: a recorded hold stands until its reset
 			if recorded != 0 && time.Unix(recorded, 0).Before(now) {
+				if err := l.resumeAfterHold(ctx, p, recorded, snaps); err != nil {
+					return err
+				}
 				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
 					return err
 				}
+				l.log(map[string]any{"action": "quota-release", "provider": p, "reason": "reset passed"})
 				recorded = 0
 			} else if recorded != 0 {
 				l.quota.held[p] = true

@@ -209,3 +209,72 @@ func TestRunQuotaEndsWhenTheProviderServesAgain(t *testing.T) {
 		t.Fatalf("master got no resume directive: %+v", msgs)
 	}
 }
+
+// v0.15 §3: when a hold ends, the provider's agents with accepted work or a
+// declared working are told to resume, once per episode; the others are not,
+// and the escalation target gets one wake=no notice naming them.
+func TestRunQuotaReleaseResumesInterruptedWork(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "foureyes", "p-4", "openai")
+	registerAs(t, b, "coder", "p-coder", "openai")
+	registerAs(t, b, "kimi", "p-kimi", "openai")
+	registerAs(t, b, "arch", "p-arch", "openai")
+	if _, err := b.Status(ctx, "coder", "working", "mid-build", bus.AgentIdent{Pane: "p-coder", PID: testPID, PIDStart: testStart, Provider: "openai"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Status(ctx, "arch", "blocked", "needs Bernard", bus.AgentIdent{Pane: "p-arch", PID: testPID, PIDStart: testStart, Provider: "openai"}); err != nil {
+		t.Fatal(err)
+	}
+	board := bus.BoardKey(b.Project())
+	r.HSet(ctx, board, "plan-v7-review", `{"owner":"foureyes","state":"accepted"}`, "later", `{"owner":"kimi","state":"requested"}`)
+	t.Cleanup(func() { r.Del(ctx, board) })
+
+	reset := time.Now().Add(time.Hour).Unix()
+	at := func(pct float64) quota.Reading {
+		return quota.Reading{Provider: "openai", ObservedAt: time.Now().UnixMilli(),
+			Windows: []quota.Window{{Name: "5h", UsedPct: pct, ResetsAt: reset, Minutes: 300}}}
+	}
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 10), at(97))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "openai held", func() bool {
+		m, _ := b.QuotaMarks(ctx)
+		return m["hold:openai"] != ""
+	})
+	resumes := func() map[string]int {
+		out := map[string]int{}
+		for _, m := range entries(t, r, b, "cmd") {
+			cmd, _ := m.Values["command"].(string)
+			if m.Values["from"] == "dispatch" && strings.Contains(cmd, "limit (openai) has reset") {
+				out[m.Values["target"].(string)]++
+			}
+			if m.Values["from"] == "dispatch" && strings.HasPrefix(cmd, "openai's limit has reset") {
+				if m.Values["wake"] != "no" || !strings.Contains(cmd, "coder, foureyes") {
+					t.Errorf("notice %v", m.Values)
+				}
+				out["@notice"]++
+			}
+		}
+		return out
+	}
+	// Release, flap back to the same reset, release again: one episode.
+	for _, pct := range []float64{40, 97, 40} {
+		f.set(reading("anthropic", 10), at(pct))
+		time.Sleep(150 * time.Millisecond)
+	}
+	waitFor(t, 3*time.Second, "resume directives", func() bool { return resumes()["@notice"] == 1 })
+	got := resumes()
+	if got["foureyes"] != 1 || got["coder"] != 1 || got["kimi"] != 0 || got["arch"] != 0 || got["master"] != 0 {
+		t.Fatalf("resumes = %v, want foureyes and coder once, nobody else", got)
+	}
+	for _, m := range entries(t, r, b, "cmd") {
+		if m.Values["target"] == "foureyes" && m.Values["from"] == "dispatch" {
+			if cmd, _ := m.Values["command"].(string); !strings.Contains(cmd, "plan-v7-review") {
+				t.Fatalf("foureyes directive %q does not name its task", cmd)
+			}
+		}
+	}
+}
