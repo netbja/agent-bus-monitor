@@ -13,7 +13,8 @@ import (
 
 // ObservedKey is the {p}:observed hash: agent → Observation JSON. The whole
 // hash expires ObservedTTL after the last write, so a stopped dispatcher
-// leaves no stale "busy" behind.
+// leaves no stale "busy" behind. It proves nothing about the project: it is
+// not in projectKinds and HasKeysBesidesDispatch ignores it.
 func ObservedKey(project string) string { return project + ":observed" }
 
 // ObservedTTL bounds how long an observation outlives its dispatcher.

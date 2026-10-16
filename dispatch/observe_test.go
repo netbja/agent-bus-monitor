@@ -73,3 +73,22 @@ func TestObserveOffByDefault(t *testing.T) {
 		t.Errorf("observed without Observe: %+v", obs)
 	}
 }
+
+// A paused project is not observed: nothing to wake, so nothing to pay for.
+func TestObserveSkipsAPausedProject(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "dev", "p1")
+	if _, err := b.SetPause(ctx, "bernard", "master", "test", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	rt := newFakeRT(alwaysReady)
+	cfg := fastConfig()
+	cfg.Observe = 20 * time.Millisecond
+	r := start(t, b, rt, cfg)
+	time.Sleep(300 * time.Millisecond)
+	r.stop(t)
+	if n := rt.Inspections("p1"); n != 0 {
+		t.Errorf("a paused project was inspected %d times", n)
+	}
+}

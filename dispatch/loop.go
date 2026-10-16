@@ -287,15 +287,15 @@ func (l *loop) reconcile(ctx context.Context) error {
 		}
 		l.logError("", "quota", err)
 	}
-	// Observation runs paused or not: it only reads panes.
+	if paused, err := l.paused(ctx); err != nil || paused {
+		return err
+	}
+	// Observation only reads panes; a paused project skips it (and its cost).
 	if err := l.observePass(ctx, snaps); err != nil {
 		if errors.Is(err, bus.ErrNotHolder) {
 			return err
 		}
 		l.logError("", "observe", err)
-	}
-	if paused, err := l.paused(ctx); err != nil || paused {
-		return err
 	}
 	groups, err := l.b.GroupNames(ctx)
 	if err != nil {

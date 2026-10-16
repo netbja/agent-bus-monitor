@@ -300,6 +300,17 @@ func TestHasKeysBesidesDispatch(t *testing.T) {
 	if ok, err := b.HasKeysBesidesDispatch(ctx); err != nil || ok {
 		t.Fatalf("lease only = %v %v, want false nil", ok, err)
 	}
+	// The dispatcher's own observation, raced into a deleted project, does
+	// not bring it back; nor does it list the project.
+	if err := b.FencedPutObserved(ctx, "tok", map[string]Observation{"dev": {Busy: true, At: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := b.HasKeysBesidesDispatch(ctx); err != nil || ok {
+		t.Fatalf("lease + observed = %v %v, want false nil", ok, err)
+	}
+	if _, ok := projectFromKey(ObservedKey(b.project)); ok {
+		t.Fatalf("%s names a project", ObservedKey(b.project))
+	}
 	if _, err := b.Notify(ctx, "me", "hi"); err != nil {
 		t.Fatal(err)
 	}
