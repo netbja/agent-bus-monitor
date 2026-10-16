@@ -201,3 +201,12 @@ func (l Layout) panelRect(p PanelID) Rect {
 	}
 	return Rect{}
 }
+
+// panelHue is each panel's colour, btop-like: its frame and its title say
+// which panel it is before a word is read.
+var panelHue = map[PanelID]Role{
+	PanelAgents:   RoleAccent,
+	PanelActivity: RoleOK,
+	PanelBoard:    RoleDispatch,
+	PanelRequests: RoleAttention,
+}

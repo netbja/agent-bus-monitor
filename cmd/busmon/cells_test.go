@@ -159,3 +159,43 @@ func TestDrawLineStylesAndBounds(t *testing.T) {
 		t.Fatal("combining cluster lost", r, c)
 	}
 }
+
+// A frame title keeps its width whatever the focus (tab click spans are
+// computed from it); focused, its name is a pill that takes the spaces around
+// it; muted tabs and status words keep their roles.
+func TestFrameTitleHueAndPill(t *testing.T) {
+	cases := []Line{
+		{{Text: "Agents", Role: RoleText}},
+		{{Text: "Activity", Role: RoleText}, {Text: "  auto-scroll on", Role: RoleOK}},
+		{{Text: " 1 Activity ", Role: RoleOK, Bold: true}, {Text: " 2 Board ", Role: RoleMuted}, {Text: " 3 Requests ", Role: RoleMuted}},
+		{{Text: " 1 Activity ", Role: RoleMuted}, {Text: " 2 Board ", Role: RoleDispatch, Bold: true}},
+	}
+	for _, c := range cases {
+		want := c.Width() + 2
+		for _, focused := range []bool{false, true} {
+			got := frameTitle(c, RoleOK, focused)
+			if got.Width() != want {
+				t.Errorf("%+v focused=%v: width %d, want %d", c, focused, got.Width(), want)
+			}
+			for _, s := range got {
+				if s.Role == RoleText && strings.TrimSpace(s.Text) != "" {
+					t.Errorf("%+v focused=%v: a name kept RoleText: %+v", c, focused, s)
+				}
+				if !focused && s.Pill {
+					t.Errorf("unfocused title has a pill: %+v", s)
+				}
+				if s.Role == RoleMuted && s.Pill {
+					t.Errorf("an inactive tab became a pill: %+v", s)
+				}
+			}
+		}
+	}
+	got := frameTitle(Line{{Text: "Agents", Role: RoleText}}, RoleAccent, true)
+	if len(got) != 1 || got[0].Text != " Agents " || !got[0].Pill || got[0].Role != RoleAccent {
+		t.Errorf("focused simple title = %+v, want one pill \" Agents \"", got)
+	}
+	got = frameTitle(Line{{Text: "Activity", Role: RoleText}, {Text: "  auto-scroll on", Role: RoleOK}}, RoleOK, true)
+	if got[0].Text != " Activity " || !got[0].Pill || got[1].Text != " auto-scroll on" || got[1].Pill {
+		t.Errorf("focused Activity title = %+v", got)
+	}
+}

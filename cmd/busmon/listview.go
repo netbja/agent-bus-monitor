@@ -36,6 +36,7 @@ type ListView struct {
 	*tview.Box
 	header       Line
 	title, label Line
+	hue          Role // the frame's colour (panelHue)
 	items        []ListItem
 	sel          string
 	selIdx       int // index of sel at the last SetItems/move, for a departed key
@@ -55,6 +56,9 @@ func NewListView() *ListView {
 func (l *ListView) SetHeader(h Line) *ListView { l.header = h; return l }
 
 func (l *ListView) SetFrame(title, label Line) { l.title, l.label = title, label }
+
+// SetHue gives the list's frame its panel colour.
+func (l *ListView) SetHue(r Role) { l.hue = r }
 
 func (l *ListView) SetOnChange(f func(key string, live bool)) { l.onChange = f }
 
@@ -308,7 +312,7 @@ func (l *ListView) Draw(screen tcell.Screen) {
 		return
 	}
 	l.viewport()
-	DrawFrame(screen, x, y, w, h, Frame{Title: l.title, Label: l.label, Focused: l.HasFocus(), Scroll: l.Scroll()})
+	DrawFrame(screen, x, y, w, h, Frame{Title: l.title, Label: l.label, Focused: l.HasFocus(), Scroll: l.Scroll(), Hue: l.hue})
 	ix, iy, iw, ih := l.inner()
 	if iw <= 0 {
 		return

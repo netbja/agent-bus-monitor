@@ -247,7 +247,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   the focused child. Rows are `Line` values (role-tagged segments), measured in cells; only overlay
   bodies use colour tags, through `tag()`/`tg()`, which resolve to theme roles. No literal outside
   the glyph set (`TestNoStrayNonASCIILiterals`); `TestAlignmentSuite` draws every size × palette ×
-  hostile fixture and checks every frame's corners and borders. The tick reads every second
+  hostile fixture and checks every frame's corners and borders. Each panel has its colour
+  (`panelHue`, v0.14.5: Agents accent, Activity ok, Board dispatch, Requests attention): its frame
+  is that colour when focused and faded towards the background when not (`Theme.FrameBorder`), and
+  its title's name is a pill when focused (`frameTitle`, `Seg.Pill`, `Theme.Pill`) without changing
+  the title's width, which the tab click spans rely on. The tick reads every second
   (pilot, armed, lag, agents, usage, budgets, board, challenges) and every 5th tick the dispatcher
   facts (`DispatchAlive`, `Obligation`, `Wake`); a failed read keeps the last value (queue shows
   `N?`). The usage scopes stay apart: account budget (used %) in the header, an agent's own context
