@@ -1,6 +1,7 @@
 # Resume after a quota reset, fallback when the wait is long (v0.15)
 
-Status: rev 2, 2026-10-16. Rev 1 was challenged by Codex (8 points, §12). Builds on the quota spec
+Status: rev 3, 2026-10-16. Rev 1 was challenged by Codex (8 points, §12), rev 2 re-checked
+(4 points, §15). Rev 3 also adds two defects seen live the same day (§13, §14). Builds on the quota spec
 (`2026-10-15-quota-awareness-design.md`) and on asks (`2026-10-16-asks-and-readable-text-design.md`).
 
 ## 1. What happened
@@ -28,6 +29,10 @@ In:
    question, through master's ask or, when master itself is held, directly in busmon.
 4. **`agentbus swap <role> --profile <p>`**: a manual, checked replacement of an agent by the same
    role on another profile, run by master after a yes or by the person.
+5. **A pane that waits for the person is shown as such** (§13): a client's own modal (Claude
+   Code's limit menu, a permission prompt) reads as `waiting` for the person in busmon.
+6. **An escalation never sticks** (§14): one caused by a pane state is re-armed when that state
+   ends, and an agent's own stall is never escalated to itself.
 
 Deferred (Codex §12.8): a durable swap record, a busmon `fallback` flag and an automatic
 swap-back at the reset. In v0.15 the resume notice reminds master to swap back what it swapped,
@@ -73,10 +78,16 @@ Excluded on purpose:
   applies, "if you swapped a role during this hold, swap it back when its work is done (`agentbus
   swap <role> --profile <its profile>`)".
 - **Exactly once per recipient and episode**, crash-safe. Each message is written by one new
-  fenced script, `FencedCmdOnce`. In a single script it:
+  fenced script, `FencedEntryOnce(stream, mark, R, fields)`, where `stream` is `cmd` or `notify`
+  (Codex §15.2: the notify of §5.1 needs the same guarantee). In a single script it:
   1. checks the lease;
-  2. checks the per-recipient mark `resumed:<p>:<agent>` in `{p}:quota` against `R`;
-  3. if the mark differs, XADDs the entry and sets the mark.
+  2. checks the mark (`resumed:<p>:<agent>`, `longhold:<p>`) in `{p}:quota` against `R`;
+  3. if the mark differs, XADDs the entry to that stream and sets the mark.
+
+  The mark and the entry are written together or not at all.
+- **A recipient under a swap intent** (`{p}:swap:<role>`, §6.2) is skipped without a mark: the
+  swap sends that resume itself, after its proof (§6.3.10), through the same mark (Codex §15.3).
+  Whichever writes first sets `resumed:<p>:<role>`; the other finds it and sends nothing.
 
   A pass that crashes halfway leaves the sent ones marked and resends only the others. A flapping
   release finds every mark set and sends nothing.
@@ -113,7 +124,7 @@ The bootstrap template shows `fallback_profiles` commented on foureyes and coder
 
 When a hold for `p` is first recorded and its reset is more than `LongHold` away (default 2 h;
 `AGENT_BUS_QUOTA_LONG_HOLD` in the service env; `0` disables), once per episode (mark
-`longhold:<p>` = `R`, written by `FencedCmdOnce`):
+`longhold:<p>` = `R`, written by `FencedEntryOnce`, on `cmd` or on `notify`):
 
 - **`p` is not the coordinator's provider:** one directive to master:
 
@@ -166,7 +177,9 @@ next; nothing is closed before everything that can be checked has been.
    cannot swap itself. A person in a terminal can swap master.
 3. Refuse when the agent is part of an open review (Codex §12.4):
    - an open 4-eyes challenge in which it is the gated author (`{p}:gate:<role>` not empty), or
-     the reviewer (any gate meta naming it as reviewer);
+     the challenger. A gate is keyed by the gated agent and its meta is `<challenger>|<text>`
+     (`cmd/agentbus/main.go`), so the check SCANs `{p}:gate:*` and refuses when any field's meta
+     names `<role>` before the first `|` (Codex §15.4);
    - a mission attempt where it is the reviewer with the review open (`ReviewOpen`), or the
      assignee of an attempt in progress.
 
@@ -206,7 +219,10 @@ next; nothing is closed before everything that can be checked has been.
    a shared app-server.
 10. Delete the swap intent, print what was done, and (when run by master) report it. The
     resumption of the agent's work is the §3 text, sent by the caller as a directive once the
-    proof holds, so the dead old process can never consume it.
+    proof holds, so the dead old process can never consume it. When the swapped role was held,
+    that directive goes through the episode's mark `resumed:<p>:<role>` (one script, `CmdOnce`:
+    no lease, mark checked and set with the XADD), so a release in the same instant does not
+    send a second one (§3.3).
 
 ### 6.4 Failure and recovery
 
@@ -225,14 +241,24 @@ next; nothing is closed before everything that can be checked has been.
 
 ## 8. Coordinator swapped during its own quota pause
 
-When master is swapped to another provider while a quota pause for `p` is in place, the next
-`quotaPass` sees the coordinator's provider differ from `p`. It then ends that quota pause
-(`FencedQuotaUnpause(p)`): the pause existed only because the coordinator was out. The resume
-directive of `FencedResume` goes to master as usual.
+v0.14.6 already ends a quota pause early when its provider answers again (`FencedQuotaUnpause`:
+only the exact record the dispatcher wrote, `By == dispatch`, byte-compared in the script, with
+the resume directive in the same script). v0.15 adds the case where the provider is still out
+but master no longer depends on it (Codex §15.1):
+
+- **Discovery.** Each `quotaPass` reads `{p}:pause`. When it is a dispatcher quota pause for
+  provider `p`, `p` is reconciled even if no registered agent uses it any more (master moved
+  away), so the pause is never orphaned.
+- **Coordinator now on `q ≠ p`, `q` not held:** `FencedQuotaUnpause(p)` ends that pause and
+  sends the resume directive. A person's pause, or any record the dispatcher did not write, is
+  never touched.
+- **Coordinator now on `q`, `q` held too:** one script, `FencedQuotaRepause(p → q)`, replaces the
+  exact old record with a quota pause for `q` (its reset), without a resume directive: the
+  project stays paused, now for the right reason. busmon shows the new reason.
 
 ## 9. Safety rules kept
 
-- The dispatcher only writes fenced bus entries (`FencedCmdOnce` is one more). It never reads
+- The dispatcher only writes fenced bus entries (`FencedEntryOnce` and `FencedQuotaRepause` are two more). It never reads
   `roles.toml`, launches anything or closes a pane.
 - Panes are closed and launched only by `agentbus swap`. It runs after an identity check and a
   review check, never on a running turn without `--now`, and only with proof before it reports
@@ -253,13 +279,23 @@ directive of `FencedResume` goes to master as usual.
     coordinator's provider; none under `LongHold` or when it is 0;
   - a swap intent blocks prompting;
   - a coordinator whose provider changed ends the quota pause.
-- **bus:** `FencedCmdOnce` (lease, mark, idempotence) and the swap intent (`NX`, expiry).
+- **bus:** `FencedEntryOnce` on cmd and notify (lease, mark and entry together, idempotence),
+  `CmdOnce` sharing the mark, `FencedQuotaRepause` (exact record only), the swap intent (`NX`,
+  expiry).
+- **dispatch (rev 3):** a release skips a recipient under a swap intent; a quota pause whose
+  provider no registered agent uses is still ended; a coordinator moved to a held provider gets
+  the pause replaced, not lifted; a blocked escalation is re-armed when the pane is ready again
+  (one prompt, then the normal rules); an agent that is its own escalation target is escalated
+  to the person by `notify`, never by a cmd to itself.
+- **busmon (rev 3):** a pane observed `blocked` reads `waiting` with the flag `prompt` and the
+  detail row "its client asks something in its tab"; the bell rings once per episode; a
+  declared `blocked` stays `blocked`.
 - **rolecfg:**
   - `fallback_profiles` is validated (unknown, same profile, same provider, more than 3, schema v1);
   - `roles fallbacks` prints them and flags the same-provider review;
   - launch accepts `--profile`, and a bind failure is fatal with `AGENT_LAUNCH_REQUIRE_BIND`.
 - **swap (fake herdr, fake agent-spawn):**
-  - every refusal of §6.1 and a second concurrent swap;
+  - every refusal of §6.1 (the challenger found by scanning gates) and a second concurrent swap;
   - the order intent, close, wait for the pid, spawn, proof, intent deleted;
   - a spawn failure and a missing proof leave no intent and print the recovery.
 - **busmon:** the `swapping` flag and the long-pause hint.
@@ -287,3 +323,55 @@ directive of `FencedResume` goes to master as usual.
    (§4, §5.2).
 7. Resume predicate → `accepted` or `working` only, `blocked` and `requested` excluded (§3.2).
 8. Scope → durable swap record, `fallback` flag and automatic swap-back deferred (§2).
+
+## 13. A pane that waits for the person (seen 2026-10-16)
+
+After a weekly limit, Claude Code showed master a modal menu ("Stop and wait for limit to reset /
+Wait here, then continue automatically at Oct 20, 3pm / Switch to usage credits / Upgrade your
+plan"). herdr reported the pane `blocked`. busmon showed master `working` (its declared state, covered
+by the quota pause), and nothing told Bernard that a choice was waiting in that tab. The same
+happens with any permission prompt.
+
+- **Source.** `{p}:observed` (v0.14.3) already carries herdr's state per verified pane. The dispatcher
+  does not change: it never answers a prompt and never types into a blocked pane.
+- **busmon.** An agent whose observation is `blocked` while it does not declare `blocked` or `waiting`
+  is shown `waiting` (sorted first, faded like a declared wait), with the flag `prompt` and, in the
+  detail, "Its client is asking something in its tab (pane w2:p2). Answer it there." It counts
+  in the header's waiting total and rings the bell once per episode (observation `at` of the
+  first blocked reading). Like `busy`, it never rewrites the declared state, and the detail keeps
+  it. Enter or a double-click on the row does not open an ask (there is none): it opens the
+  detail, which names the pane.
+- **Limit.** The observation is refreshed every 15 s and expires after 120 s, so the flag can lag
+  by that much, and it disappears if the services stop.
+
+## 14. An escalation that sticks (seen 2026-10-16)
+
+Same incident. The dispatcher escalated master's unread messages ("agent blocked") once, to the
+escalation target, which is master. The wake record kept `escalated=true`. Once Bernard closed the
+modal, master was idle and ready with the resume directive unread, but rule 3 ("already
+escalated") kept the dispatcher quiet until a delivery that nothing would cause.
+
+- **Cause recorded.** The wake record gains `esc_cause`: the pane state that caused the escalation
+  (`blocked`, `working`, `gone`, …), empty for the other rules.
+- **Re-armed when the cause ends.** In `Decide`, an escalated record whose cause was a pane state
+  and whose pane now inspects idle (or done), ready, unfocused and identity-verified counts as a
+  reset, like progress: tries and `escalated` are cleared, `At` is kept, so rule 5's retry window
+  still spaces the prompts. If the pane blocks again, one new escalation follows: one per
+  episode, not one per pass.
+- **Never to itself.** When the agent is its own escalation target (master), or the target is
+  itself held, paused for quota or observed blocked, the escalation goes to the person: one
+  `notify` from `dispatch` ("master has 1 message waiting and its tab is blocked: answer it there"),
+  through `FencedNotify`. busmon shows it in Activity, and §13 already marks the row.
+
+## 15. Codex re-check of rev 2 (2026-10-16) and what changed
+
+1. §8 discovery: a quota pause whose provider no registered role uses would be orphaned, and a
+   coordinator moved to a provider that is also held would lift the pause wrongly → §8 reads the
+   pause record to reconcile its provider, lifts only the dispatcher's exact record, and replaces
+   it with `FencedQuotaRepause` when the new provider is held.
+2. The long-hold notify was outside `FencedCmdOnce` → `FencedEntryOnce` covers cmd and notify, mark and entry
+   in one script (§3.3, §5.1).
+3. A release racing a swap could queue two resume directives → the dispatcher skips a recipient
+   under a swap intent, and the swap's own resume shares the mark (§3.3, §6.3.10).
+4. The gate is keyed by the gated agent and its meta names the challenger → §6.1.3 scans the gates
+   and refuses both sides.
