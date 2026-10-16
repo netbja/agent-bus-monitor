@@ -151,6 +151,7 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 	for _, p := range panelOrder {
 		p := p
 		l := NewListView()
+		l.SetHue(panelHue[p])
 		l.SetFocusFunc(func() { u.onPanelFocus(p) })
 		u.lists[p] = l
 	}
@@ -933,7 +934,7 @@ func (u *ui) tabsLine(tabs []PanelID, active PanelID, x, y int) Line {
 		label := fmt.Sprintf(" %d %s ", i+1, name)
 		role := RoleMuted
 		if p == active {
-			role = RoleAccent
+			role = panelHue[p]
 		}
 		l = append(l, Seg{Text: label, Role: role, Bold: p == active, Reverse: p == active && th.Palette() == PaletteNone})
 		u.tabSpans = append(u.tabSpans, tabSpan{x0: pos, x1: pos + Width(label), y: y, panel: p})

@@ -123,6 +123,38 @@ func (t *Theme) Selected(r Role) tcell.Style {
 	return s.Background(t.selection)
 }
 
+// FrameBorder is a panel frame in its own colour: whole when the panel has
+// the focus, faded towards the background when it does not (true colour;
+// the 16-colour and no-colour palettes keep the plain line).
+func (t *Theme) FrameBorder(hue Role, focused bool) tcell.Style {
+	if focused {
+		s := t.Style(hue)
+		if t.palette == PaletteNone {
+			s = s.Bold(true)
+		}
+		return s
+	}
+	if t.Animated() {
+		return tcell.StyleDefault.Foreground(t.Faded(hue, frameFade)).Background(tcell.ColorDefault)
+	}
+	return t.Style(RoleLine)
+}
+
+// frameFade is how much of its colour an unfocused frame keeps.
+const frameFade = 35
+
+// Pill is text on its role's colour: a focused frame's title. Without true
+// colour it is the reverse of the role's colour.
+func (t *Theme) Pill(r Role) tcell.Style {
+	switch t.palette {
+	case PaletteDark:
+		return tcell.StyleDefault.Foreground(tcell.GetColor("#0D1117")).Background(t.colors[themeRole(r)]).Bold(true)
+	case PaletteLight:
+		return tcell.StyleDefault.Foreground(tcell.GetColor("#FFFFFF")).Background(t.colors[themeRole(r)]).Bold(true)
+	}
+	return t.Style(r).Reverse(true).Bold(true)
+}
+
 func (t *Theme) Border(focused bool) tcell.Style {
 	if focused {
 		s := t.Style(RoleAccent)

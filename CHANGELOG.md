@@ -4,6 +4,15 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.14.5 — panels you can tell apart
+
+- Each busmon panel has its colour, btop-like: Agents blue, Activity green, Board violet,
+  Requests yellow. The focused panel's frame is drawn in its colour and its title becomes a
+  coloured pill; the other frames are faded and their titles keep their colour. Only colours
+  changed: the frames and their alignment are the same.
+
+[Notes](docs/releases/v0.14.5.md)
+
 ## v0.14.4 — a stopped agent says why
 
 - While the project is paused, an agent that declared working or idle reads `paused` in busmon's

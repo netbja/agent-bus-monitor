@@ -13,6 +13,7 @@ type Seg struct {
 	Bold    bool
 	Reverse bool // the NO_COLOR stand-in for a highlight (active tab)
 	Fade    int  // 1-100: drawn at that intensity, between RoleLine and its colour (true colour only); 0 = full
+	Pill    bool // drawn on its role's colour (a focused frame's title)
 }
 
 type Line []Seg
@@ -136,11 +137,11 @@ func appendSegment(l Line, text string, style Seg) Line {
 	if text == "" {
 		return l
 	}
-	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold && l[n-1].Reverse == style.Reverse && l[n-1].Fade == style.Fade {
+	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold && l[n-1].Reverse == style.Reverse && l[n-1].Fade == style.Fade && l[n-1].Pill == style.Pill {
 		l[n-1].Text += text
 		return l
 	}
-	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold, Reverse: style.Reverse, Fade: style.Fade})
+	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold, Reverse: style.Reverse, Fade: style.Fade, Pill: style.Pill})
 }
 
 // FitLine pads AFTER the ellipsis, consistently with Fit. It never mutates l.
@@ -195,6 +196,9 @@ func DrawLine(s tcell.Screen, x, y, w int, l Line, selected bool) {
 		if seg.Reverse {
 			style = style.Reverse(true)
 		}
+		if seg.Pill {
+			style = th.Pill(seg.Role)
+		}
 		// Match tview's continuation-cell write order.
 		if width > 0 {
 			runes := []rune(text)
@@ -220,6 +224,57 @@ type Frame struct {
 	Title, Label Line
 	Focused      bool
 	Scroll       ScrollState
+	Hue          Role // the panel's colour: its border and title (RoleAccent when unset)
+}
+
+// frameTitle pads the title with one space each side and colours its name in
+// the panel's hue: plain when the frame is not focused, a pill when it is. A
+// name is a plain-text segment or a bold one (the active tab); inactive tabs
+// (muted) and coloured status words keep their own look. The pill takes the
+// spaces around the name from its neighbours, so the width never changes
+// (tab click spans are computed from it).
+func frameTitle(t Line, hue Role, focused bool) Line {
+	if t.Width() == 0 {
+		return nil
+	}
+	name := func(s Seg) bool { return s.Role == RoleText || (s.Bold && s.Role != RoleMuted) }
+	l := append(append(Line{{Text: " ", Role: RoleText}}, t...), Seg{Text: " ", Role: RoleText})
+	var out Line
+	for i := 0; i < len(l); i++ {
+		s := l[i]
+		inner := i > 0 && i < len(l)-1
+		if !inner || !name(s) {
+			out = append(out, s)
+			continue
+		}
+		s.Role = hue
+		if !focused {
+			out = append(out, s)
+			continue
+		}
+		s.Pill, s.Bold = true, true
+		// Borrow one leading space from the previous segment, one trailing
+		// space from the next, when they have one to give.
+		if n := len(out); n > 0 && strings.HasSuffix(out[n-1].Text, " ") && !strings.HasPrefix(s.Text, " ") {
+			out[n-1].Text = strings.TrimSuffix(out[n-1].Text, " ")
+			s.Text = " " + s.Text
+			if out[n-1].Text == "" {
+				out = out[:n-1]
+			}
+		}
+		out = append(out, s)
+		if !strings.HasSuffix(s.Text, " ") && strings.HasPrefix(l[i+1].Text, " ") {
+			out[len(out)-1].Text += " "
+			l[i+1].Text = strings.TrimPrefix(l[i+1].Text, " ")
+		}
+	}
+	var kept Line
+	for _, s := range out {
+		if s.Text != "" {
+			kept = append(kept, s)
+		}
+	}
+	return kept
 }
 
 // DrawFrame draws only the perimeter and top labels; callers own the interior.
@@ -229,7 +284,11 @@ func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
 		return
 	}
 	sw, sh := s.Size()
-	style := th.Border(f.Focused)
+	hue := f.Hue
+	if hue == RoleText {
+		hue = RoleAccent
+	}
+	style := th.FrameBorder(hue, f.Focused)
 	put := func(px, py int, g string) {
 		if px >= 0 && px < sw && py >= 0 && py < sh {
 			s.SetContent(px, py, []rune(g)[0], nil, style)
@@ -248,12 +307,7 @@ func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
 	put(x, y+h-1, glyphBottomLeft)
 	put(x+w-1, y+h-1, glyphBottomRight)
 	available := max(0, w-4) // x+2 through x+w-3 inclusive.
-	var title Line
-	if f.Title.Width() > 0 {
-		title = append(title, Seg{Text: " ", Role: RoleText})
-		title = append(title, f.Title...)
-		title = append(title, Seg{Text: " ", Role: RoleText})
-	}
+	title := frameTitle(f.Title, hue, f.Focused)
 	var label Line
 	if f.Label.Width() > 0 {
 		label = append(append(Line{{Text: " ", Role: RoleText}}, f.Label...), Seg{Text: " ", Role: RoleText})
