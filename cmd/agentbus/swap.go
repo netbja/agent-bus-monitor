@@ -257,9 +257,18 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	sent := false
 	if episode := marks["hold:"+snap.Provider]; episode != "" && snap.Provider != "" {
 		// Marked, so the dispatcher's release sends no second one. A mark
-		// already set means its resume went to the old process before the
-		// intent: the new one still needs it.
+		// already set means the release published its resume before the
+		// intent: if the group has not read it, the new process will (the
+		// queue is keyed by the name), and nothing more is sent.
 		sent, err = b.CmdOnce(ctx, "resumed:"+snap.Provider+":"+role, episode, self, role, text)
+		if err == nil && !sent {
+			var queued bool
+			queued, err = releaseResumeQueued(ctx, b, role, snap.Provider)
+			if err == nil && queued {
+				fmt.Fprintf(out, "the release's resume is already queued for %s\n", role)
+				return 0
+			}
+		}
 	}
 	if err == nil && !sent {
 		_, err = b.Cmd(ctx, self, role, bus.CmdDirective, "", text)
@@ -352,4 +361,47 @@ func missionsOf(ctx context.Context, b *bus.Bus, agent string) ([]string, error)
 		}
 	}
 	return out, nil
+}
+
+// releaseResumeQueued: the dispatcher's latest resume to agent for provider
+// is still unread by agent's group (after its last-delivered id), so the new
+// process will drain it.
+func releaseResumeQueued(ctx context.Context, b *bus.Bus, agent, provider string) (bool, error) {
+	evs, _, err := b.Recent(ctx, []string{"cmd"}, 1000)
+	if err != nil {
+		return false, err
+	}
+	latest := ""
+	for _, e := range evs {
+		if e.From == "dispatch" && e.Target == agent && strings.Contains(e.Message, "limit ("+provider+") has reset") {
+			latest = e.ID
+		}
+	}
+	if latest == "" {
+		return false, nil
+	}
+	o, err := b.Obligation(ctx, agent, bus.DefaultHorizon)
+	if err != nil {
+		return false, err
+	}
+	return streamIDAfter(latest, o.LastDelivered), nil
+}
+
+// streamIDAfter: stream id a is strictly after b ("" is before everything).
+func streamIDAfter(a, b string) bool {
+	parse := func(id string) (uint64, uint64, bool) {
+		ms, seq, _ := strings.Cut(id, "-")
+		m, err1 := strconv.ParseUint(ms, 10, 64)
+		s, err2 := strconv.ParseUint(seq, 10, 64)
+		return m, s, err1 == nil && err2 == nil
+	}
+	am, as, ok := parse(a)
+	if !ok {
+		return false
+	}
+	bm, bs, ok := parse(b)
+	if !ok {
+		return true
+	}
+	return am > bm || am == bm && as > bs
 }

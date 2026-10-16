@@ -126,6 +126,10 @@ func (l *loop) resumeAfterHold(ctx context.Context, p string, R int64, snaps map
 		if errors.Is(err, bus.ErrNotHolder) {
 			return false, err
 		}
+		if errors.Is(err, bus.ErrSwapInProgress) { // a swap began since the check: it sends this one
+			complete = false
+			continue
+		}
 		if err != nil {
 			l.logError(a, "resume", err)
 			complete = false

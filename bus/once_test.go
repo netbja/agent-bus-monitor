@@ -95,3 +95,21 @@ func TestFencedWorkRefusesASwappingAgent(t *testing.T) {
 		t.Fatalf("FencedChallenge = %v", err)
 	}
 }
+
+// The swap check is in the same script as the resume write.
+func TestFencedCmdOnceRefusesASwappingRecipient(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if err := b.BeginSwap(ctx, "coder", SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.FencedCmdOnce(ctx, "tok", "resumed:openai:coder", "1", "dispatch", "coder", CmdDirective, "resume", false); !errors.Is(err, ErrSwapInProgress) {
+		t.Fatalf("err = %v, want ErrSwapInProgress", err)
+	}
+	if m, _ := b.QuotaMarks(ctx); m["resumed:openai:coder"] != "" {
+		t.Fatal("marked although not sent")
+	}
+}

@@ -273,3 +273,26 @@ func TestSwapAbortsWhenTheWakeRecordIsUnreadable(t *testing.T) {
 		t.Fatalf("exit %d, closed %v: %s", code, w.closed(), out)
 	}
 }
+
+// Codex review: the release published its resume just before the intent; it
+// is still unread, so the new process gets it from the queue and the swap
+// sends no second one.
+func TestSwapDoesNotDoubleAQueuedReleaseResume(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	_, _ = w.b.Status(ctx, "foureyes", "working", "reviewing", bus.AgentIdent{})
+	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), "hold:openai", "1792500000", "resumed:openai:foureyes", "1792500000")
+	if _, err := w.b.Cmd(ctx, "dispatch", "foureyes", bus.CmdDirective, "", "Your provider's limit (openai) has reset. Resume it."); err != nil {
+		t.Fatal(err)
+	}
+	code, out := w.swap(d, "foureyes", "--profile", "opus", "--now")
+	if code != 0 || !strings.Contains(out, "already queued") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	evs, _, _ := w.b.Recent(ctx, []string{"cmd"}, 50)
+	for _, e := range evs {
+		if e.From == "master" && e.Target == "foureyes" {
+			t.Fatalf("a second resume was sent: %q", e.Message)
+		}
+	}
+}

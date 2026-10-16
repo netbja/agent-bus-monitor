@@ -13,26 +13,35 @@ import (
 // nothing more.
 
 // fencedEntryOnce: -1 not the holder; 0 the mark already holds ARGV[3] (sent
-// in this episode); 1 XADDed and marked.
+// in this episode); 2 the recipient is being swapped (KEYS[4] exists: the
+// swap sends it, v0.15 §3.3); 1 XADDed and marked.
 var fencedEntryOnce = redis.NewScript(`
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
 if redis.call('HGET', KEYS[2], ARGV[2]) == ARGV[3] then return 0 end
+if redis.call('EXISTS', KEYS[4]) == 1 then return 2 end
 redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[4], '*', unpack(ARGV, 5))
 redis.call('HSET', KEYS[2], ARGV[2], ARGV[3])
 return 1`)
 
-func (b *Bus) fencedEntryOnce(ctx context.Context, token, kind, mark, episode string, fields ...interface{}) (bool, error) {
+func (b *Bus) fencedEntryOnce(ctx context.Context, token, kind, mark, episode, recipient string, fields ...interface{}) (bool, error) {
 	if mark == "" || episode == "" {
 		return false, fmt.Errorf("entry once: mark and episode required")
 	}
+	swapKey := b.project + ":swap:" // no role: never exists
+	if recipient != "" {
+		swapKey = SwapKey(b.project, recipient)
+	}
 	args := append([]interface{}{token, mark, episode, streamMaxLen}, fields...)
 	n, err := fencedEntryOnce.Run(ctx, b.r,
-		[]string{DispatchKey(b.project), QuotaKey(b.project), StreamKey(b.project, kind)}, args...).Int()
+		[]string{DispatchKey(b.project), QuotaKey(b.project), StreamKey(b.project, kind), swapKey}, args...).Int()
 	if err != nil {
 		return false, err
 	}
-	if n == -1 {
+	switch n {
+	case -1:
 		return false, ErrNotHolder
+	case 2:
+		return false, ErrSwapInProgress
 	}
 	return n == 1, nil
 }
@@ -54,7 +63,7 @@ func (b *Bus) FencedCmdOnce(ctx context.Context, token, mark, episode, from, tar
 	if noWake {
 		fields = append(fields, "wake", "no")
 	}
-	return b.fencedEntryOnce(ctx, token, "cmd", mark, episode, fields...)
+	return b.fencedEntryOnce(ctx, token, "cmd", mark, episode, target, fields...)
 }
 
 // FencedNotifyOnce is FencedCmdOnce for the notify stream.
@@ -62,5 +71,5 @@ func (b *Bus) FencedNotifyOnce(ctx context.Context, token, mark, episode, from, 
 	if err := ValidateText(message, CmdMaxRunes); err != nil {
 		return false, err
 	}
-	return b.fencedEntryOnce(ctx, token, "notify", mark, episode, "from", from, "message", message)
+	return b.fencedEntryOnce(ctx, token, "notify", mark, episode, "", "from", from, "message", message)
 }
