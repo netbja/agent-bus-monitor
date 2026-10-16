@@ -246,8 +246,10 @@ agent names, no herdr-plus template):
   (used %, reset) from local sources, every minute, with no model call. busmon's header shows one
   gauge per provider (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`); `agentbus quota`
   prints them in a terminal. At 85% of a window master gets one warning; at 95% the agents of that
-  provider are no longer woken (shown `held`) until the reset; when master's own provider is at
-  95%, the whole project pauses until the reset. A reading that is missing or older than 30
+  provider are no longer woken until the reset (their state column reads `quota`, the flag `held`
+  when they declared blocked or done); when master's own provider is at
+  95%, the whole project pauses until the reset (the agents then read `paused`; their declared
+  state stays in their detail). A reading that is missing or older than 30
   minutes never stops anyone.
   - **Claude Code**, once per machine: `agentbus statusline --print-install` prints the `statusLine`
     block to put in `~/.claude/settings.json`. Claude Code then hands agentbus its usage on every

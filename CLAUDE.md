@@ -447,7 +447,10 @@ It never touches Redis — see README "Deployment topology".
   wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script
   that checks the lease, that the record is unchanged and that Redis `TIME` is past the deadline,
   then deletes it and XADDs the resume directive to `notify`. `agentbus resume` (`Bus.Resume`) ends
-  it early. busmon shows it in the header; `@all` targets only agents in `{p}:agents`
+  it early. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
+  that declared working or idle reads `paused`, or `quota` when its provider is held; blocked,
+  waiting and done are never covered; the detail keeps the declared state, the panel counts what
+  is shown); `@all` targets only agents in `{p}:agents`
   (`agentState.registered`) and a human fan-out within a second reads as one `@all (N)` line
   (`sameFanOut`, display only: one entry per agent stays on the bus).
 - **Every dispatcher write is fenced.** Wake records, escalation/notify XADDs, deletes and group

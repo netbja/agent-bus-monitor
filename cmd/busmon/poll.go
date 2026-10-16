@@ -249,6 +249,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		if st.holds != nil {
 			_, a.held = held(st.holds, a.provider, time.Now())
 		}
+		if pauseErr == nil {
+			a.paused = pause != nil
+		}
 		if usageErr == nil {
 			a.ctxRaw = usageSnaps[n].Ctx
 		}

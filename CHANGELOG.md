@@ -4,6 +4,15 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.14.4 — a stopped agent says why
+
+- While the project is paused, an agent that declared working or idle reads `paused` in busmon's
+  state column; while its provider is at its limit, `quota`. master no longer shows `working`
+  while Claude's quota has stopped everyone. Blocked, waiting and done stay as declared; the
+  detail keeps the declared state and says why the agent is stopped.
+
+[Notes](docs/releases/v0.14.4.md)
+
 ## v0.14.3 — an agent at work is seen at work
 
 - Agents declare `working` before they start (skill `agent-bus`): deploy worked six minutes

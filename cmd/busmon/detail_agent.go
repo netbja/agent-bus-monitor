@@ -72,7 +72,17 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	if a.stateAt.IsZero() {
 		row("Declared", tg(RoleMuted, "never declared"))
 	} else {
-		row("Declared", tg(role, word)+text(fmt.Sprintf(" %s %s (%s)", GlyphNone, ago(a.stateAt), a.stateAt.Format("15:04:05"))))
+		declared := tg(role, word)
+		if word == "quota" || word == "paused" { // a bus fact covers it in the row; say what was declared
+			declared = tg(RoleText, Preview(a.state)) + tg(RoleMuted, " (shown as "+word+")")
+		}
+		row("Declared", declared+text(fmt.Sprintf(" %s %s (%s)", GlyphNone, ago(a.stateAt), a.stateAt.Format("15:04:05"))))
+	}
+	switch {
+	case word == "quota":
+		rowWrap("Stopped", RoleAttention, "its provider ("+Preview(a.provider)+") is at its limit: the dispatcher wakes it again after the reset")
+	case word == "paused":
+		rowWrap("Stopped", RoleAttention, "the project is paused: nobody is woken until it resumes")
 	}
 	if a.lastSeen.IsZero() {
 		row("Last seen", tg(RoleMuted, GlyphDash))
