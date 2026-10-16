@@ -278,3 +278,52 @@ func TestRunQuotaReleaseResumesInterruptedWork(t *testing.T) {
 		}
 	}
 }
+
+// v0.15 §8: master moved off the provider of its quota pause. On a free
+// provider the pause ends with the resume directive; on a held one it is
+// replaced, without a resume; a person's pause is never touched.
+func TestRunQuotaPauseFollowsTheCoordinatorsProvider(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 99), reading("openai", 99))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "a quota pause for anthropic", func() bool {
+		p, _ := b.Pause(ctx)
+		return p != nil && p.Reason == "quota anthropic"
+	})
+	// master swapped to openai, held too: the pause now names openai.
+	registerAs(t, b, "master", "p-master", "openai")
+	waitFor(t, 3*time.Second, "the pause replaced for openai", func() bool {
+		p, _ := b.Pause(ctx)
+		return p != nil && p.Reason == "quota openai" && p.By == "dispatch"
+	})
+	resumed := func() int {
+		n := 0
+		for _, m := range entries(t, r, b, "cmd") {
+			if cmd, _ := m.Values["command"].(string); m.Values["target"] == "master" && strings.HasPrefix(cmd, "Project resumed") {
+				n++
+			}
+		}
+		return n
+	}
+	if n := resumed(); n != 0 {
+		t.Fatalf("a replaced pause sent %d resume directives", n)
+	}
+	// master on a free provider: the pause ends, master is told why.
+	registerAs(t, b, "master", "p-master", "moonshot")
+	f.set(reading("anthropic", 99), reading("openai", 99), reading("moonshot", 10))
+	waitFor(t, 3*time.Second, "the pause ended", func() bool { p, _ := b.Pause(ctx); return p == nil })
+	waitFor(t, 3*time.Second, "one resume directive", func() bool { return resumed() == 1 })
+
+	// A person's pause, whatever its reason, stays.
+	if _, err := b.SetPause(ctx, "bernard", "master", "quota anthropic", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if p, _ := b.Pause(ctx); p == nil || p.By != "bernard" {
+		t.Fatalf("a person's pause was touched: %+v", p)
+	}
+}

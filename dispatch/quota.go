@@ -78,6 +78,17 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		}
 	}
 	coord := snaps[l.cfg.EscalateTo].Provider
+	// v0.15 §8: the provider of the dispatcher's own quota pause is
+	// reconciled even when no registered agent uses it any more (master was
+	// moved to another provider), so that pause is never orphaned.
+	paused := ""
+	if pr, err := l.b.Pause(ctx); err == nil {
+		paused = bus.QuotaPauseProvider(pr)
+	}
+	if paused != "" {
+		used[paused] = true
+	}
+	resetOf := map[string]int64{}
 
 	budgets := map[string]bus.BudgetSnapshot{}
 	for p := range used {
@@ -182,6 +193,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.quota.held[p] = true
 			}
 		}
+		resetOf[p] = recorded
 		// A hold that expired at its reset leaves the quota pause to
 		// FencedResume, which ends it at reset + resumeMargin.
 		if p == coord && l.quota.held[p] {
@@ -192,6 +204,38 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.logOnce("quota-pause:"+p, map[string]any{"action": "quota-pause", "provider": p, "until": time.UnixMilli(until).Format(time.RFC3339)})
 			}
 		}
+	}
+	return l.coordinatorMoved(ctx, paused, coord, resetOf)
+}
+
+// coordinatorMoved (v0.15 §8): the project is paused for provider paused's
+// quota, but the coordinator now runs on coord. If coord is free, the pause
+// ends with its resume directive; if coord is held too, the pause is
+// replaced by one for coord, without a resume. A person's pause is never
+// touched (QuotaPauseProvider is "" for it).
+func (l *loop) coordinatorMoved(ctx context.Context, paused, coord string, resetOf map[string]int64) error {
+	if paused == "" || coord == "" || paused == coord {
+		return nil
+	}
+	if l.quota.held[coord] {
+		until := time.Unix(resetOf[coord], 0).Add(resumeMargin).UnixMilli()
+		ok, err := l.b.FencedQuotaRepause(ctx, l.token, paused, coord, until)
+		if err != nil {
+			return err
+		}
+		if ok {
+			l.log(map[string]any{"action": "quota-repause", "from": paused, "provider": coord,
+				"until": time.UnixMilli(until).Format(time.RFC3339)})
+		}
+		return nil
+	}
+	why := fmt.Sprintf("%s now runs on %s, which is not at its limit.", l.cfg.EscalateTo, coord)
+	ok, err := l.b.FencedQuotaUnpauseWhy(ctx, l.token, paused, dispatchFrom, why)
+	if err != nil {
+		return err
+	}
+	if ok {
+		l.log(map[string]any{"action": "quota-unpause", "provider": paused, "reason": "coordinator moved to " + coord})
 	}
 	return nil
 }
