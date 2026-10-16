@@ -1,6 +1,6 @@
 # Resume after a quota reset, fallback when the wait is long (v0.15)
 
-Status: rev 3, 2026-10-16. Rev 1 was challenged by Codex (8 points, §12), rev 2 re-checked
+Status: rev 3.1, 2026-10-16. Rev 1 was challenged by Codex (8 points, §12), rev 2 re-checked
 (4 points, §15). Rev 3 also adds two defects seen live the same day (§13, §14). Builds on the quota spec
 (`2026-10-15-quota-awareness-design.md`) and on asks (`2026-10-16-asks-and-readable-text-design.md`).
 
@@ -289,7 +289,11 @@ but master no longer depends on it (Codex §15.1):
   to the person by `notify`, never by a cmd to itself.
 - **busmon (rev 3):** a pane observed `blocked` reads `waiting` with the flag `prompt` and the
   detail row "its client asks something in its tab"; the bell rings once per episode; a
-  declared `blocked` stays `blocked`.
+  declared `blocked` stays `blocked`; `since` is carried while the state and pid hold and reset
+  otherwise; a failed inspection keeps the previous observation and an observation older than
+  120 s is ignored.
+- **dispatch (rev 3, loop):** an escalated record with a pane-state cause is inspected before
+  `Decide`; a `pending` one is replayed without inspection.
 - **rolecfg:**
   - `fallback_profiles` is validated (unknown, same profile, same provider, more than 3, schema v1);
   - `roles fallbacks` prints them and flags the same-provider review;
@@ -337,12 +341,19 @@ happens with any permission prompt.
 - **busmon.** An agent whose observation is `blocked` while it does not declare `blocked` or `waiting`
   is shown `waiting` (sorted first, faded like a declared wait), with the flag `prompt` and, in the
   detail, "Its client is asking something in its tab (pane w2:p2). Answer it there." It counts
-  in the header's waiting total and rings the bell once per episode (observation `at` of the
-  first blocked reading). Like `busy`, it never rewrites the declared state, and the detail keeps
+  in the header's waiting total and rings the bell once per episode, keyed by the observation's
+  `since`. Like `busy`, it never rewrites the declared state, and the detail keeps
   it. Enter or a double-click on the row does not open an ask (there is none): it opens the
   detail, which names the pane.
-- **Limit.** The observation is refreshed every 15 s and expires after 120 s, so the flag can lag
-  by that much, and it disappears if the services stop.
+- **Episode (Codex §16.2).** `Observation` gains `since` (Unix ms): the Redis `TIME` of the
+  first reading of the current state. `observePass` reads the previous hash before it replaces
+  it and carries `since` forward while the agent keeps the same state and the same pid; any
+  change starts a new episode at `at`.
+- **A failed inspection (Codex §16.3).** An inspection error or a failed identity check no longer
+  drops the pane's entry: the pass carries the previous observation forward unchanged (its `at`
+  kept), and busmon ignores an observation whose `at` is more than 120 s old. So the flag stays
+  through a missed pass and ends at most 120 s after the last valid reading; it disappears if
+  the services stop (the hash expires).
 
 ## 14. An escalation that sticks (seen 2026-10-16)
 
@@ -353,6 +364,10 @@ escalated") kept the dispatcher quiet until a delivery that nothing would cause.
 
 - **Cause recorded.** The wake record gains `esc_cause`: the pane state that caused the escalation
   (`blocked`, `working`, `gone`, …), empty for the other rules.
+- **Inspected before rule 3 (Codex §16.1).** Today the loop calls `Decide` before inspecting
+  the pane and inspects only for rules 7 and later, so an escalated record never reaches an
+  inspection. The loop now also inspects first when the record is `escalated=true` with a
+  non-empty `esc_cause`. `pending` is replayed as before, without inspection.
 - **Re-armed when the cause ends.** In `Decide`, an escalated record whose cause was a pane state
   and whose pane now inspects idle (or done), ready, unfocused and identity-verified counts as a
   reset, like progress: tries and `escalated` are cleared, `At` is kept, so rule 5's retry window
@@ -375,3 +390,13 @@ escalated") kept the dispatcher quiet until a delivery that nothing would cause.
    under a swap intent, and the swap's own resume shares the mark (§3.3, §6.3.10).
 4. The gate is keyed by the gated agent and its meta names the challenger → §6.1.3 scans the gates
    and refuses both sides.
+
+## 16. Codex re-check of rev 3 (2026-10-16) and what changed
+
+The four rev 2 points were found resolved. Three details of §13–§14:
+
+1. The loop inspects only from rule 7, so rule 3 hid the ready pane → the loop inspects an
+   escalated record with a pane-state cause before `Decide` (§14).
+2. `at` is fresh each pass, so it cannot key a bell episode → `since`, carried forward (§13).
+3. A failed inspection dropped the pane from the replaced hash → the previous observation is
+   carried forward and busmon ages it out after 120 s (§13).
