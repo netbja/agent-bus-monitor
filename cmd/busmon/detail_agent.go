@@ -34,6 +34,10 @@ func wakeMeaning(state string) string {
 func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.BoardEntry, recent []feedLine, now time.Time) (title, body string) {
 	var sb strings.Builder
 	row := func(k, v string) { fmt.Fprintf(&sb, "%s %s\n", tg(RoleMuted, Fit(k, 15)), v) }
+	// rowWrap is a row whose long value wraps under the value column.
+	rowWrap := func(k string, r Role, v string) {
+		sb.WriteString(strings.Join(wrapSpans([]mdSpan{{text: v, role: r}}, mdWidth, Fit(k, 15)+" ", strings.Repeat(" ", 16)), "\n") + "\n")
+	}
 	ago := func(t time.Time) string { return humanAge(now.Sub(t)) + " ago" }
 	text := func(s string) string { return tg(RoleText, s) }
 
@@ -44,19 +48,20 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	if a.message == "" {
 		sb.WriteString(tg(RoleMuted, "no status message") + "\n")
 	} else {
-		sb.WriteString(text(DetailText(a.message)) + "\n")
+		sb.WriteString(renderMarkdown(a.message, mdWidth) + "\n")
 	}
 	sb.WriteString("\n")
 	// What the agent last wrote at length: for an agent waiting for a person,
 	// that is the decision asked for, so it comes before every other fact.
 	if rep, at, ok := lastReport(name, recent); ok {
 		head := "Last report"
-		if a.state == "waiting" {
+		asking := a.openAsk > 0 // the questions above say what it needs
+		if a.state == "waiting" && !asking {
 			head = "What " + Preview(name) + " needs from you"
 		}
 		sb.WriteString(tg(RoleAccent, head) + tg(RoleMuted, " "+GlyphNone+" "+ago(at)) + "\n")
 		sb.WriteString(renderMarkdown(rep, mdWidth) + "\n")
-		if a.state == "waiting" {
+		if a.state == "waiting" && !asking {
 			sb.WriteString(tg(RoleMuted, "Answer: i, then @"+Preview(name)+" <your decision>") + "\n")
 		}
 		sb.WriteString("\n")
@@ -100,7 +105,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	default:
 		row("Queue", text(fmt.Sprintf("%d waiting %s %d stale %s measured %s", a.waiting, GlyphNone, a.stale, GlyphNone, ago(a.queueAt))))
 	}
-	row("", tg(RoleMuted, fmt.Sprintf("lag %d: entries of the SHARED cmd stream this agent's group has not read - not a work queue", a.lag)))
+	rowWrap("", RoleMuted, fmt.Sprintf("lag %d: entries of the SHARED cmd stream this agent's group has not read - not a work queue", a.lag))
 	if a.wake == nil {
 		row("Wake", tg(RoleMuted, "no wake record"))
 	} else {
@@ -117,7 +122,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row("Wake", text(w))
 	}
 	if a.gap {
-		row("Gap", tg(RoleAttention, "entries may have been trimmed before this agent read them - possible, not proven"))
+		rowWrap("Gap", RoleAttention, "entries may have been trimmed before this agent read them - possible, not proven")
 	}
 	if a.gated > 0 {
 		row("Gate", tg(RoleError, fmt.Sprintf("%d open 4-eyes challenge(s): wait for a verdict", a.gated)))
@@ -181,7 +186,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		if look.To != "" {
 			to = " " + GlyphArrowR + " " + Preview(look.To)
 		}
-		sb.WriteString(tg(RoleMuted, fl.at.Format("15:04")+" ") + tg(look.Role, Fit(look.Type, 10)) + text(Preview(look.From)+to+"  "+Preview(look.Text)) + "\n")
+		sb.WriteString(activityEntry(fl.at.Format("15:04"), look.Type, look.Role, Preview(look.From)+to, Preview(look.Text), mdWidth) + "\n")
 	}
 	return title, sb.String()
 }
@@ -236,4 +241,25 @@ func lastReport(name string, feed []feedLine) (string, time.Time, bool) {
 		return e.Message, feed[i].at, true
 	}
 	return "", time.Time{}, false
+}
+
+// recentLines is how many lines one Recent activity entry may take; the
+// whole text is one Enter away in the Activity panel.
+const recentLines = 3
+
+// activityEntry is one Recent activity line of an agent detail: time and
+// type, then who and the text wrapped under the text column, at most
+// recentLines lines.
+func activityEntry(at, typ string, r Role, who, msg string, width int) string {
+	pad := strings.Repeat(" ", Width(at)+1+10)
+	lines := wrapSpans([]mdSpan{{text: who, role: RoleText}, {text: " " + GlyphNone + " ", role: RoleMuted}, {text: msg, role: RoleText}}, width-2, pad, pad) // room for the ellipsis
+	if len(lines) == 0 {
+		return tg(RoleMuted, at+" ") + tg(r, Fit(typ, 10))
+	}
+	if len(lines) > recentLines {
+		lines = lines[:recentLines]
+		lines[recentLines-1] += tg(RoleMuted, " "+GlyphEllipsis)
+	}
+	lines[0] = tg(RoleMuted, at+" ") + tg(r, Fit(typ, 10)) + strings.TrimPrefix(lines[0], tg(RoleMuted, pad))
+	return strings.Join(lines, "\n")
 }

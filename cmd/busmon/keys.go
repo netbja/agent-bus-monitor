@@ -158,7 +158,7 @@ var (
 		{Keys: "enter", Hint: "detail", Alt: "v", Act: ActOpen, match: either(keyIs(tcell.KeyEnter), runeIs('v'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "f", Hint: "auto-scroll", Act: ActFollow, match: runeIs('f')},
-		{Keys: "! F4", Hint: "answer", Act: ActAsk, match: either(keyIs(tcell.KeyF4), runeIs('!'))},
+		{Keys: "! w", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(tcell.KeyF4), runeIs('!', 'w'))},
 		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(tcell.KeyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
@@ -199,6 +199,7 @@ var (
 		{Keys: "end G", Help: "last row", Act: ActLast, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "Y", Hint: "copy thread", Act: ActCopyThread, match: runeIs('Y')},
+		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(tcell.KeyEnter), keyIs(tcell.KeyF4), runeIs('!', 'w'))},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(tcell.KeyEscape), runeIs('q'))},
 	}
 )

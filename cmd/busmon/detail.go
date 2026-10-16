@@ -261,6 +261,10 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 	return sb.String()
 }
 
+// threadPrefix is the width of a transcript row before its text: marker, time,
+// type and sender→target with their separators (clip adds one cell, its ellipsis).
+const threadPrefix = 2 + 8 + 1 + 9 + 1 + 16 + 1
+
 // threadLine is one transcript row: time, type, sender→target, text. The entry
 // the operator opened is marked so it can be found in its own thread.
 func threadLine(e bus.Event, now time.Time, self bool) string {
@@ -273,12 +277,15 @@ func threadLine(e bus.Event, now time.Time, self bool) string {
 	if typ == "" {
 		typ = "cmd"
 	}
-	return fmt.Sprintf("%s%s %s %s %s",
-		marker,
-		tag("gray", at.Format("15:04:05")),
-		tag("fuchsia", pad(typ, 9)),
-		tag("gray", pad(Preview(e.From)+"→"+Preview(e.Target), 16)),
-		tview.Escape(clip(oneLine(Preview(e.Message)), 60)))
+	who := Preview(e.From) + "→" + Preview(e.Target)
+	text := oneLine(Preview(e.Message))
+	stamp := marker + tag("gray", at.Format("15:04:05")) + " " + tag("fuchsia", Fit(typ, 9))
+	if avail := mdWidth - threadPrefix - 1; avail >= 20 {
+		return stamp + " " + tag("gray", Fit(who, 16)) + " " + tview.Escape(Truncate(text, avail+1))
+	}
+	// Too narrow for the text beside its metadata (20 cells): who and the text
+	// go on their own indented line, still inside the width.
+	return stamp + "\n    " + tview.Escape(Truncate(who+"  "+text, max(1, mdWidth-4)))
 }
 
 // oneLine flattens a body for a transcript row; the full text stays one Enter

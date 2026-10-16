@@ -426,7 +426,7 @@ It never touches Redis — see README "Deployment topology".
   (`target=people`, `wake=no`, no `ref`; `people` is never a cmd target or consumer group). First
   answer wins; an answer to a replaced ask follows `replaced_by` only for an unchanged question; one
   open ask per agent; each answer is a `reply` (ref = ask id, `human=yes`) that wakes the agent. Client
-  JSON never carries answers. busmon: `askpanel.go` (ModeAsk, `!`/F4), counts and fade follow open
+  JSON never carries answers. busmon: `askpanel.go` (ModeAsk, `!`/`w`/F4, Enter in the agent detail), counts and fade follow open
   questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,
   overlay bodies only; rows stay on `Preview`).
 - **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`

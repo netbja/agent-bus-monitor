@@ -4,6 +4,15 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.14.1 — questions you can open, texts you can read
+
+- busmon opens the questions with `!` or `w`, and with Enter in the detail of an agent that asks
+  (`!` did nothing there; F4 is taken by some desktops).
+- A report written on one line gets the paragraphs, bold labels and choice lists its author typed
+  inline; agent detail lines wrap under their column instead of at column 0.
+
+[Notes](docs/releases/v0.14.1.md)
+
 ## v0.14.0 — questions for you, and text you can read
 
 - `agentbus ask`: an agent asks a person structured questions (options, a recommended one, free

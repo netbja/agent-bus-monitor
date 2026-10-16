@@ -245,3 +245,19 @@ func TestThreadPlainFallsBackToTheEntry(t *testing.T) {
 		t.Errorf("threadPlain fallback = %q, want the entry body", got)
 	}
 }
+
+func TestThreadLineFitsTheOverlay(t *testing.T) {
+	saved := mdWidth
+	defer func() { mdWidth = saved }()
+	e := bus.Event{ID: "1792100010309-0", Kind: "cmd", Type: "reply", From: "a-very-long-reviewer-name", Target: "master", Message: strings.Repeat("blocker ", 40)}
+	wide := e
+	wide.Message = strings.Repeat("\u4e2d", 60)
+	for _, w := range []int{30, 45, 58, 59, 96} {
+		mdWidth = w
+		for _, l := range strings.Split(tagRE.ReplaceAllString(threadLine(e, time.Now(), true)+"\n"+threadLine(wide, time.Now(), false), ""), "\n") {
+			if Width(l) > w {
+				t.Errorf("width %d: row is %d cells: %q", w, Width(l), l)
+			}
+		}
+	}
+}
