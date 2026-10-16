@@ -83,6 +83,14 @@ func (u *ui) openAskPanel(agent string) {
 	u.renderAsk()
 }
 
+// agentHasAsk reports whether the agent has an open ask.
+func (u *ui) agentHasAsk(agent string) bool {
+	u.st.mu.Lock()
+	defer u.st.mu.Unlock()
+	a := u.st.agents[agent]
+	return a != nil && a.openAsk > 0
+}
+
 func askTitle(a bus.Ask) string {
 	return fmt.Sprintf("%s %s asks %s %s", GlyphHuman, Preview(a.From), GlyphNone, Preview(a.Title))
 }
@@ -389,7 +397,7 @@ func askSummary(a bus.Ask) string {
 			sb.WriteString(tg(RoleAttention, fmt.Sprintf("  %s %s", GlyphIdle, Preview(q.Header))) + tg(RoleText, " "+Preview(q.Question)) + "\n")
 		}
 	}
-	sb.WriteString(tg(RoleMuted, "  ! or F4 to answer") + "\n\n")
+	sb.WriteString(tg(RoleAttention, "  enter") + tg(RoleMuted, " (or ! or w) to answer") + "\n\n")
 	return sb.String()
 }
 

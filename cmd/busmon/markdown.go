@@ -3,6 +3,7 @@ package main
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Markdown readable in a terminal (v0.14, spec §7): long texts — reports,
@@ -28,12 +29,56 @@ var (
 	mdNumber  = regexp.MustCompile(`^(\s*)(\d{1,3})[.)]\s+(.*)$`)
 	mdQuote   = regexp.MustCompile(`^\s*>\s?(.*)$`)
 	mdFence   = regexp.MustCompile("^\\s*(```|~~~)")
+
+	// flatLabel is an upper-case label opening a sentence of a one-line text:
+	// "DECISION 2 - ", "CE QUE FAIT L'OUVERTURE: ", "VERIFIED: ".
+	flatLabel = regexp.MustCompile(`([.!?;])\s+((?:\p{Lu}[\p{Lu}\d'\x{2019}]*\s+){0,4}\p{Lu}[\p{Lu}\d'\x{2019}]{2,}(?:\s+\d{1,2})?(?::|\s[-\x{2013}\x{2014}]))\s+`)
+	// flatItem is an enumerated choice inside a sentence: " (1) ", " (X) ".
+	flatItem = regexp.MustCompile(`\s\((\d{1,2}|\p{Lu})\)\s`)
 )
+
+// flatMin is the length from which a text written on one line is given the
+// structure its author typed inline.
+const flatMin = 240
+
+// structureFlat gives a long one-line text (most agents' reports, written
+// before v0.14 asked for Markdown) the paragraphs and lists it spells inline:
+// a paragraph at each upper-case label opening a sentence, shown in bold, and
+// a list item at each enumerated choice when there are at least two. A text
+// with a line break, or a short one, is returned unchanged.
+func structureFlat(s string) string {
+	if strings.Contains(strings.TrimSpace(s), "\n") || Width(s) < flatMin {
+		return s
+	}
+	s = strings.TrimSpace(s)
+	if end := strings.Index(s, ". "); end > 0 && end <= 80 && shouting(s[:end]) {
+		s = "**" + s[:end+1] + "**\n\n" + s[end+2:] // an upper-case opening sentence is its title
+	}
+	s = flatLabel.ReplaceAllString(s, "$1\n\n**$2** ")
+	if items := flatItem.FindAllStringSubmatch(s, -1); len(items) >= 2 && items[0][1] != items[1][1] {
+		s = flatItem.ReplaceAllString(s, "\n- ($1) ")
+	}
+	return s
+}
+
+// shouting reports whether most letters of s are upper case.
+func shouting(s string) bool {
+	upper, letters := 0, 0
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			letters++
+			if unicode.IsUpper(r) {
+				upper++
+			}
+		}
+	}
+	return letters >= 6 && upper*10 >= letters*8
+}
 
 // renderMarkdown turns src into tagged lines no wider than width cells.
 func renderMarkdown(src string, width int) string {
 	width = max(width, 20)
-	src = DetailText(src)
+	src = structureFlat(DetailText(src))
 	var out []string
 	blank := func() {
 		if len(out) > 0 && out[len(out)-1] != "" {

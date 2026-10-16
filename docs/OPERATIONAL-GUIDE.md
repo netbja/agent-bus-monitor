@@ -270,11 +270,13 @@ agent names, no herdr-plus template):
   `→ @all (6)` line.
 - **Questions for you.** When master needs decisions it asks them as questions (`agentbus ask`):
   the header counts the open questions (`♙ 2 waiting for you`) and the agent row fades `waiting`.
-  Press `!` (or F4) to open them: one tab per question, `↑↓` or a digit to pick an option, Enter to
+  Press `!` or `w` (or Enter in the agent's detail) to open them: one tab per question, `↑↓` or a digit to pick an option, Enter to
   send that answer at once, `Other…` to write your own, `←→` to change question, Esc to close. An
   answered question shows its answer and never comes back. `agentbus asks --open` lists them in a
   terminal, `agentbus answer <id> <question> --choice <label>` answers without busmon. Long texts
-  (reports, messages) are shown as Markdown: headings, lists, paragraphs.
+  (reports, messages) are shown as Markdown: headings, lists, paragraphs; a text written on one
+  line gets a paragraph at each upper-case label (`DECISION 1 -`, `VERIFIED:`) and a list for
+  inline choices (`(X) … (Y) …`).
 - **An agent waiting for you.** When master (or any agent) needs your decision it declares
   `waiting`: it moves to the top of Agents with ♙ and the word `waiting` slowly fading in and out, the header reads `♙ 1 waiting for
   you`, and the terminal bell rings once per new question, which herdr shows on the busmon tab.

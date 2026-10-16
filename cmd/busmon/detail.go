@@ -261,6 +261,10 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 	return sb.String()
 }
 
+// threadPrefix is the width of a transcript row before its text: marker, time,
+// type and sender→target with their separators (clip adds one cell, its ellipsis).
+const threadPrefix = 2 + 8 + 1 + 9 + 1 + 16 + 1
+
 // threadLine is one transcript row: time, type, sender→target, text. The entry
 // the operator opened is marked so it can be found in its own thread.
 func threadLine(e bus.Event, now time.Time, self bool) string {
@@ -278,7 +282,7 @@ func threadLine(e bus.Event, now time.Time, self bool) string {
 		tag("gray", at.Format("15:04:05")),
 		tag("fuchsia", pad(typ, 9)),
 		tag("gray", pad(Preview(e.From)+"→"+Preview(e.Target), 16)),
-		tview.Escape(clip(oneLine(Preview(e.Message)), 60)))
+		tview.Escape(clip(oneLine(Preview(e.Message)), max(20, mdWidth-threadPrefix-1))))
 }
 
 // oneLine flattens a body for a transcript row; the full text stays one Enter

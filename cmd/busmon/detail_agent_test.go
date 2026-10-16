@@ -36,7 +36,7 @@ func TestAgentDetailFieldsAndAbsent(t *testing.T) {
 		"Pane", "w3:p1", "pid 41822",
 		"Receiver lease", "armed",
 		"Queue", "2 waiting", "1 stale", "measured 3s ago",
-		"lag 40", "not a work queue",
+		"lag 40", "SHARED cmd stream",
 		"Wake", "woken", "nonce echoed", "not read or accepted", "tries 2", "escalating", "pane focused",
 		"Gap", "possible, not proven",
 		"Gate", "1 open",

@@ -57,3 +57,53 @@ func TestMarkdownSanitises(t *testing.T) {
 		t.Fatalf("escape kept or text lost: %q", got)
 	}
 }
+
+func TestStructureFlatSplitsLabelsAndChoices(t *testing.T) {
+	src := "SYNTHESE ACTE n4. Etat verifie: acte approuve par foureyes et le texte fige est intact, deploy a atteste en lecture seule. " +
+		"CE QUE FAIT L'OUVERTURE: arret propre, archive du log verifiee, nouvelle session en base. " +
+		"DECISION 1 - date cible T: lundi 19/10. DECISION 2 - code a figer. Deux choix: (X) figer un SHA de dev avec PR#91, " +
+		"(Y) rester sur 82c216c. VERIFIED: exact preservation."
+	got := structureFlat(src)
+	for _, want := range []string{"\n\n**CE QUE FAIT L'OUVERTURE:** arret", "\n\n**DECISION 1 -** date", "\n\n**DECISION 2 -** code", "\n- (X) figer", "\n- (Y) rester", "\n\n**VERIFIED:** exact"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("structureFlat lacks %q:\n%s", want, got)
+		}
+	}
+	if !strings.HasPrefix(got, "**SYNTHESE ACTE n4.**\n\nEtat") || strings.Contains(got, "(acte") {
+		t.Errorf("structureFlat missed the title or split a parenthesis:\n%s", got)
+	}
+	for _, keep := range []string{"short. DECISION 1 - x", "line one\nDECISION 1 - " + strings.Repeat("x ", 200)} {
+		if structureFlat(keep) != keep {
+			t.Errorf("structureFlat changed a short or multi-line text: %q", keep)
+		}
+	}
+	one := strings.Repeat("word ", 60) + "only (1) one choice here."
+	if structureFlat(one) != one {
+		t.Errorf("a single enumerated item became a list")
+	}
+	plain := strings.Join(plainMD(renderMarkdown(src, 60)), "\n")
+	for _, w := range strings.Fields(strings.NewReplacer("**", "").Replace(src)) {
+		if !strings.Contains(plain, strings.TrimSuffix(w, ".")) {
+			t.Errorf("rendering lost %q", w)
+		}
+	}
+}
+
+func TestActivityEntryHangsAndCaps(t *testing.T) {
+	got := strings.Join(plainMD(activityEntry("23:33", "reply", RoleText, "foureyes -> master", strings.Repeat("blocker ", 60), 60)), "\n")
+	lines := strings.Split(got, "\n")
+	if len(lines) != recentLines {
+		t.Fatalf("want %d lines, got %d:\n%s", recentLines, len(lines), got)
+	}
+	if !strings.HasPrefix(lines[0], "23:33 reply") || !strings.HasPrefix(lines[1], strings.Repeat(" ", 16)+" ") && !strings.HasPrefix(lines[1], strings.Repeat(" ", 16)) {
+		t.Errorf("no hanging indent:\n%s", got)
+	}
+	for _, l := range lines {
+		if Width(l) > 60 {
+			t.Errorf("line wider than 60: %q", l)
+		}
+	}
+	if !strings.HasSuffix(lines[2], GlyphEllipsis) {
+		t.Errorf("a cut entry must end with an ellipsis: %q", lines[2])
+	}
+}

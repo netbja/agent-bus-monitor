@@ -70,6 +70,7 @@ type ui struct {
 	ov            overlayKind
 	ovPlain       string
 	ovThreadPlain string
+	ovAgent       string // the agent an ovAgent overlay shows
 	flash         string
 	flashErr      bool // the flash reports a failure (RoleError)
 	agentsTouched bool // the operator moved in Agents: stop following the top row
@@ -311,6 +312,12 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 			if u.ovThreadPlain != "" {
 				u.copyText(u.ovThreadPlain, "thread")
 			}
+		case ActAsk:
+			if u.ov == ovAgent && u.agentHasAsk(u.ovAgent) {
+				u.openAskPanel(u.ovAgent)
+			} else if ev.Key() != tcell.KeyEnter {
+				u.openAskPanel("")
+			}
 		case ActUp, ActDown, ActPageUp, ActPageDown, ActFirst, ActLast:
 			return ev // the TextView scrolls itself
 		}
@@ -351,13 +358,8 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.askRemove(l.Selected())
 	case ActAsk:
 		agent := ""
-		if u.focus == PanelAgents {
+		if u.focus == PanelAgents && u.agentHasAsk(u.lists[PanelAgents].Selected()) {
 			agent = u.lists[PanelAgents].Selected()
-			u.st.mu.Lock()
-			if a := u.st.agents[agent]; a == nil || a.openAsk == 0 {
-				agent = ""
-			}
-			u.st.mu.Unlock()
 		}
 		u.openAskPanel(agent)
 	case ActFollow:
@@ -663,6 +665,7 @@ func (u *ui) openAgent(name string) {
 	plain := agentDetailPlain(a)
 	u.st.mu.Unlock()
 	u.showOverlay(ovAgent, title, body, plain, "")
+	u.ovAgent = name
 }
 
 func (u *ui) openTask(task string) {
