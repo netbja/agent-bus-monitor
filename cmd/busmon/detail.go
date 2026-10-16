@@ -281,11 +281,11 @@ func threadLine(e bus.Event, now time.Time, self bool) string {
 	text := oneLine(Preview(e.Message))
 	stamp := marker + tag("gray", at.Format("15:04:05")) + " " + tag("fuchsia", Fit(typ, 9))
 	if avail := mdWidth - threadPrefix - 1; avail >= 20 {
-		return stamp + " " + tag("gray", Fit(who, 16)) + " " + tview.Escape(clip(text, avail))
+		return stamp + " " + tag("gray", Fit(who, 16)) + " " + tview.Escape(Truncate(text, avail+1))
 	}
 	// Too narrow for the text beside its metadata (20 cells): who and the text
 	// go on their own indented line, still inside the width.
-	return stamp + "\n    " + tview.Escape(clip(who+"  "+text, max(1, mdWidth-5)))
+	return stamp + "\n    " + tview.Escape(Truncate(who+"  "+text, max(1, mdWidth-4)))
 }
 
 // oneLine flattens a body for a transcript row; the full text stays one Enter
