@@ -4,6 +4,19 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.15.0 — work resumes after a quota reset, and a long wait has a way out
+
+- A tab blocked by its own client (Claude Code's limit menu, a permission prompt) now reads
+  `waiting` with the flag `prompt` in busmon, and its detail names the pane to answer in.
+- An escalation caused by a blocked or busy pane is re-armed once the pane is ready, and goes to
+  you when its recipient cannot act (master escalated to itself and stayed stuck).
+- When a provider's hold ends, its agents with interrupted work are told to resume, once.
+- A long hold (over 2 h) asks for a decision. `fallback_profiles` in `roles.toml` and
+  `agentbus swap <role> --profile <p>` let master, or you, replace an agent by another model
+  until the reset, with every check made before anything is closed.
+
+[Notes](docs/releases/v0.15.0.md)
+
 ## v0.14.6 — a quota reset granted early is seen
 
 - Anthropic granted a quota reset before the weekly one, but hyperliquid stayed paused for 96

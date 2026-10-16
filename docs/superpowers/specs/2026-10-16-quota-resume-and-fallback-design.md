@@ -1,6 +1,6 @@
 # Resume after a quota reset, fallback when the wait is long (v0.15)
 
-Status: rev 3.1, 2026-10-16. Rev 1 was challenged by Codex (8 points, §12), rev 2 re-checked
+Status: rev 3.1, 2026-10-16, implemented in v0.15.0. Rev 1 was challenged by Codex (8 points, §12), rev 2 re-checked
 (4 points, §15), rev 3 re-checked (3 points, §16). Rev 3 adds two defects seen live the same day (§13, §14). Builds on the quota spec
 (`2026-10-15-quota-awareness-design.md`) and on asks (`2026-10-16-asks-and-readable-text-design.md`).
 
