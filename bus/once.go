@@ -59,7 +59,10 @@ func (b *Bus) FencedCmdOnce(ctx context.Context, token, mark, episode, from, tar
 	if !validCmdTypes[typ] {
 		return false, fmt.Errorf("invalid cmd type %q", typ)
 	}
-	fields := []interface{}{"from", from, "target", target, "type", typ, "ref", "", "command", command, "text_complete", "yes"}
+	// The episode travels with the entry, so a swap can tell this episode's
+	// resume from an older one still in the queue.
+	fields := []interface{}{"from", from, "target", target, "type", typ, "ref", "", "command", command, "text_complete", "yes",
+		"episode", mark + "=" + episode}
 	if noWake {
 		fields = append(fields, "wake", "no")
 	}

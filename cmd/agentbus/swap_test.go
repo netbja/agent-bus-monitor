@@ -281,10 +281,8 @@ func TestSwapDoesNotDoubleAQueuedReleaseResume(t *testing.T) {
 	w, d := newSwapWorld(t)
 	ctx := context.Background()
 	_, _ = w.b.Status(ctx, "foureyes", "working", "reviewing", bus.AgentIdent{})
-	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), "hold:openai", "1792500000", "resumed:openai:foureyes", "1792500000")
-	if _, err := w.b.Cmd(ctx, "dispatch", "foureyes", bus.CmdDirective, "", "Your provider's limit (openai) has reset. Resume it."); err != nil {
-		t.Fatal(err)
-	}
+	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), "hold:openai", "1792500000")
+	w.releaseResume(ctx, "1792500000")
 	code, out := w.swap(d, "foureyes", "--profile", "opus", "--now")
 	if code != 0 || !strings.Contains(out, "already queued") {
 		t.Fatalf("exit %d: %s", code, out)
@@ -303,15 +301,41 @@ func TestSwapSeesAPendingReleaseResumeAfterTheHold(t *testing.T) {
 	w, d := newSwapWorld(t)
 	ctx := context.Background()
 	_, _ = w.b.Status(ctx, "foureyes", "working", "reviewing", bus.AgentIdent{})
-	if _, err := w.b.Cmd(ctx, "dispatch", "foureyes", bus.CmdDirective, "", "Your provider's limit (openai) has reset. Resume it."); err != nil {
-		t.Fatal(err)
-	}
+	w.releaseResume(ctx, "1792500000")
 	stream := bus.StreamKey(w.b.Project(), "cmd")
 	if _, err := w.r.XReadGroup(ctx, &redis.XReadGroupArgs{Group: "foureyes", Consumer: "old", Streams: []string{stream, ">"}, Count: 10}).Result(); err != nil {
 		t.Fatal(err)
 	}
 	code, out := w.swap(d, "foureyes", "--profile", "opus", "--now")
 	if code != 0 || !strings.Contains(out, "already queued") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+}
+
+// releaseResume writes the dispatcher's resume of an episode as FencedCmdOnce
+// does: the entry with its episode field, and the mark.
+func (w *swapWorld) releaseResume(ctx context.Context, episode string) {
+	w.t.Helper()
+	mark := "resumed:openai:foureyes"
+	if err := w.r.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(w.b.Project(), "cmd"), Values: []any{"from", "dispatch",
+		"target", "foureyes", "type", "directive", "ref", "", "command", "Your provider's limit (openai) has reset. Resume it.",
+		"text_complete", "yes", "episode", mark + "=" + episode}}).Err(); err != nil {
+		w.t.Fatal(err)
+	}
+	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), mark, episode)
+}
+
+// Codex review: an older episode's resume still unread does not stand for
+// the current one: the swap sends its own.
+func TestSwapIgnoresAnOlderEpisodesResume(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	_, _ = w.b.Status(ctx, "foureyes", "working", "reviewing", bus.AgentIdent{})
+	w.releaseResume(ctx, "1700000000")
+	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), "hold:openai", "1792500000", "resumed:openai:foureyes", "")
+	w.r.HDel(ctx, bus.QuotaKey(w.b.Project()), "resumed:openai:foureyes")
+	code, out := w.swap(d, "foureyes", "--profile", "opus", "--now")
+	if code != 0 || !strings.Contains(out, "resume sent to foureyes") {
 		t.Fatalf("exit %d: %s", code, out)
 	}
 }

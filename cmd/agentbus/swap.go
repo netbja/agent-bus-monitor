@@ -367,22 +367,23 @@ func missionsOf(ctx context.Context, b *bus.Bus, agent string) ([]string, error)
 	return out, nil
 }
 
-// releaseResumeQueued: the dispatcher's latest resume to agent for provider
+// releaseResumeQueued: the dispatcher's resume to agent for provider's current episode
 // is still unread by agent's group (after its last-delivered id), so the new
 // process will drain it.
 func releaseResumeQueued(ctx context.Context, b *bus.Bus, agent, provider string) (bool, error) {
-	evs, _, err := b.Recent(ctx, []string{"cmd"}, 1000)
+	// Only the current episode's resume counts: the entry written under the
+	// mark's present value (an older episode's, still unread, is not it).
+	mark := "resumed:" + provider + ":" + agent
+	marks, err := b.QuotaMarks(ctx)
 	if err != nil {
 		return false, err
 	}
-	latest := ""
-	for _, e := range evs {
-		if e.From == "dispatch" && e.Target == agent && strings.Contains(e.Message, "limit ("+provider+") has reset") {
-			latest = e.ID
-		}
-	}
-	if latest == "" {
+	if marks[mark] == "" {
 		return false, nil
+	}
+	latest, err := b.EpisodeEntry(ctx, agent, mark, marks[mark])
+	if err != nil || latest == "" {
+		return false, err
 	}
 	o, err := b.Obligation(ctx, agent, bus.DefaultHorizon)
 	if err != nil {
