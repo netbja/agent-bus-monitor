@@ -36,6 +36,7 @@ type WakeRecord struct {
 	PID           int
 	PIDStart      uint64
 	Escalated     string // "" | "pending" | "true"
+	EscCause      string // the pane state that caused the escalation (rules 7–8); "" otherwise
 	LastDelivered string // progress marks at last reservation
 	PendingTotal  int64
 	GapNotified   bool
@@ -52,6 +53,7 @@ func (w WakeRecord) fields(withAt bool) []interface{} {
 		"pid", strconv.Itoa(w.PID),
 		"pid_start", strconv.FormatUint(w.PIDStart, 10),
 		"escalated", w.Escalated,
+		"esc_cause", w.EscCause,
 		"last_delivered", w.LastDelivered,
 		"pending_total", strconv.FormatInt(w.PendingTotal, 10),
 		"gap_notified", strconv.FormatBool(w.GapNotified),
@@ -72,7 +74,8 @@ func wakeFromHash(h map[string]string) WakeRecord {
 	gap, _ := strconv.ParseBool(h["gap_notified"])
 	return WakeRecord{
 		State: h["state"], At: at, Tries: tries, HighID: h["high_id"], PID: pid, PIDStart: pidStart,
-		Escalated: h["escalated"], LastDelivered: h["last_delivered"], PendingTotal: pending,
+		Escalated: h["escalated"], EscCause: h["esc_cause"], LastDelivered: h["last_delivered"], PendingTotal: pending,
+
 		GapNotified: gap, Reason: h["reason"],
 	}
 }

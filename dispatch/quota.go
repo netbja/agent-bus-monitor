@@ -23,7 +23,10 @@ type QuotaConfig struct {
 	WarnPct float64       // default 85
 	HoldPct float64       // default 95
 	MaxAge  time.Duration // a reading older than this is unknown for policy (default 30 min)
-	Now     func() time.Time
+	// LongHold (v0.15 §5): a hold whose reset is further away than this asks
+	// for a decision, once per episode (default 2 h; negative disables).
+	LongHold time.Duration
+	Now      func() time.Time
 }
 
 func (q QuotaConfig) filled() QuotaConfig {
@@ -38,6 +41,9 @@ func (q QuotaConfig) filled() QuotaConfig {
 	}
 	if q.MaxAge <= 0 {
 		q.MaxAge = 30 * time.Minute
+	}
+	if q.LongHold == 0 {
+		q.LongHold = 2 * time.Hour
 	}
 	if q.Now == nil {
 		q.Now = time.Now
@@ -78,6 +84,17 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		}
 	}
 	coord := snaps[l.cfg.EscalateTo].Provider
+	// v0.15 §8: the provider of the dispatcher's own quota pause is
+	// reconciled even when no registered agent uses it any more (master was
+	// moved to another provider), so that pause is never orphaned.
+	paused := ""
+	if pr, err := l.b.Pause(ctx); err == nil {
+		paused = bus.QuotaPauseProvider(pr)
+	}
+	if paused != "" {
+		used[paused] = true
+	}
+	resetOf := map[string]int64{}
 
 	budgets := map[string]bus.BudgetSnapshot{}
 	for p := range used {
@@ -122,6 +139,11 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		switch {
 		case ok && tight.UsedPct >= q.HoldPct:
 			if recorded != tight.ResetsAt {
+				if recorded == 0 { // a new episode: the last one's resume marks go
+					if err := l.clearEpisodeMarks(ctx, p, tight.ResetsAt, marks); err != nil {
+						return err
+					}
+				}
 				if err := l.b.FencedQuotaSet(ctx, l.token, holdField, strconv.FormatInt(tight.ResetsAt, 10)); err != nil {
 					return err
 				}
@@ -129,35 +151,30 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			}
 			recorded = tight.ResetsAt
 			l.quota.held[p] = true
+			if err := l.longHold(ctx, p, tight, now, coord, snaps); err != nil {
+				return err
+			}
 		case ok: // a usable reading under the threshold releases, and ends a quota pause early
 			if recorded != 0 {
-				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
+				if err := l.release(ctx, p, recorded, snaps, p == coord, ""); err != nil {
 					return err
 				}
-				l.log(map[string]any{"action": "quota-release", "provider": p})
-			}
-			recorded = 0
-			if p == coord {
+			} else if p == coord {
 				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {
 					return err
 				}
 			}
+			recorded = 0
 		case recorded != 0 && r.ServedSince(now, q.MaxAge):
 			// No window to read, but the provider served a call after the
 			// limit hit (a quota reset granted early): the hold is over.
-			if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
+			if err := l.release(ctx, p, recorded, snaps, p == coord, "served after the limit hit"); err != nil {
 				return err
 			}
-			l.log(map[string]any{"action": "quota-release", "provider": p, "reason": "served after the limit hit"})
 			recorded = 0
-			if p == coord {
-				if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {
-					return err
-				}
-			}
 		default: // unknown: a recorded hold stands until its reset
 			if recorded != 0 && time.Unix(recorded, 0).Before(now) {
-				if err := l.b.FencedQuotaDel(ctx, l.token, holdField); err != nil {
+				if err := l.release(ctx, p, recorded, snaps, false, "reset passed"); err != nil {
 					return err
 				}
 				recorded = 0
@@ -165,6 +182,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.quota.held[p] = true
 			}
 		}
+		resetOf[p] = recorded
 		// A hold that expired at its reset leaves the quota pause to
 		// FencedResume, which ends it at reset + resumeMargin.
 		if p == coord && l.quota.held[p] {
@@ -176,6 +194,68 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			}
 		}
 	}
+	return l.coordinatorMoved(ctx, paused, coord, resetOf)
+}
+
+// coordinatorMoved (v0.15 §8): the project is paused for provider paused's
+// quota, but the coordinator now runs on coord. If coord is free, the pause
+// ends with its resume directive; if coord is held too, the pause is
+// replaced by one for coord, without a resume. A person's pause is never
+// touched (QuotaPauseProvider is "" for it).
+func (l *loop) coordinatorMoved(ctx context.Context, paused, coord string, resetOf map[string]int64) error {
+	if paused == "" || coord == "" || paused == coord {
+		return nil
+	}
+	if l.quota.held[coord] {
+		until := time.Unix(resetOf[coord], 0).Add(resumeMargin).UnixMilli()
+		ok, err := l.b.FencedQuotaRepause(ctx, l.token, paused, coord, until)
+		if err != nil {
+			return err
+		}
+		if ok {
+			l.log(map[string]any{"action": "quota-repause", "from": paused, "provider": coord,
+				"until": time.UnixMilli(until).Format(time.RFC3339)})
+		}
+		return nil
+	}
+	why := fmt.Sprintf("%s now runs on %s, which is not at its limit.", l.cfg.EscalateTo, coord)
+	ok, err := l.b.FencedQuotaUnpauseWhy(ctx, l.token, paused, dispatchFrom, why)
+	if err != nil {
+		return err
+	}
+	if ok {
+		l.log(map[string]any{"action": "quota-unpause", "provider": paused, "reason": "coordinator moved to " + coord})
+	}
+	return nil
+}
+
+// release ends provider p's hold of episode recorded. The hold mark is what
+// sends a pass down a release branch, so it goes last: the resumes first
+// (each marked), then the coordinator's quota pause, then the mark, only once
+// every resume is written. A crash or a failed write anywhere leaves the mark,
+// and the next pass redoes what is missing and nothing else.
+func (l *loop) release(ctx context.Context, p string, recorded int64, snaps map[string]bus.AgentSnapshot, unpause bool, reason string) error {
+	complete, err := l.resumeAfterHold(ctx, p, recorded, snaps)
+	if err != nil {
+		return err
+	}
+	if unpause {
+		if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {
+			return err
+		}
+	}
+	if !complete {
+		l.logOnce("quota-release:"+p, map[string]any{"action": "quota-release-pending", "provider": p, "reason": "a resume was not written; retried next pass"})
+		return nil
+	}
+	if err := l.b.FencedQuotaDel(ctx, l.token, "hold:"+p); err != nil {
+		return err
+	}
+	entry := map[string]any{"action": "quota-release", "provider": p}
+	if reason != "" {
+		entry["reason"] = reason
+	}
+	l.log(entry)
 	return nil
 }
 

@@ -83,6 +83,35 @@ one resume directive (`--to` another agent, or `AGENT_BUS_ESCALATE_TO`, changes 
 restart the team's work. `agentbus resume` ends it early. Never schedule a resume with a sleep or a
 background shell in your own session: it is invisible to the team and dies with your pane.
 
+Since v0.15, when a hold ends, the dispatcher tells each agent of that provider whose accepted
+task or `working` turn was cut to resume it, and sends you one `wake=no` notice naming them. You
+do not restart them yourself; their verdicts and reports come back as usual.
+
+## When a provider is out for long: ask, then swap
+
+When a hold will last more than 2 h (a weekly limit), the dispatcher sends you one directive:
+`<provider> is held until <time> (<N>h, <window> window). Held agents with work in flight: …`.
+Then:
+
+1. For each held agent named, run `agentbus roles fallbacks <role>`. A role with no fallback
+   waits: say the expected wait in your status.
+2. If at least one role has a fallback, open **one** ask, one question per role (the question id
+   is the role name), at most 6; ask first for the roles with work in flight, the rest after this
+   ask is answered. Options: one per fallback ("Swap to opus: Claude Opus", recommended when the
+   wait is over a day; put in its description the cost and any "same provider as coder" note from
+   `roles fallbacks`), then "Wait for the reset".
+3. On a swap answer, run `agentbus --project <p> swap <role> --profile <fallback>`. It refuses
+   while the agent takes part in an open review or mission, or runs a turn (`--now` takes the
+   turn); then it closes the old tab, launches the role on the fallback, proves the new process and
+   sends it the resume of its work. If it refuses or fails, reply in the ask's thread
+   (`agentbus reply --ref <ask id> …`) with what it printed, so the person sees why.
+4. On "Wait", do nothing: the resume restarts the agent at the reset.
+5. Once the provider is back and the swapped agent's work is done, swap it back to its own
+   profile (`agentbus swap <role> --profile <its profile>`): that is not a new decision.
+
+Never swap without the person's yes, and never swap yourself: when **your own** provider is out
+for long, the dispatcher tells the person in busmon how to swap you from a terminal.
+
 ## When you need the human's decision: `agentbus ask`
 
 A decision only the human can take (a GO, a merge, a date, a choice between options) is an

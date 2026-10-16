@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -620,4 +621,71 @@ func TestRunPauseHoldsWakesThenResumes(t *testing.T) {
 	if p, _ := b.Pause(ctx); p != nil {
 		t.Fatal("pause kept")
 	}
+}
+
+// v0.15 §14, the incident of 2026-10-16: master's tab blocked by its client's
+// menu, escalated to itself (a notify for the person, naming the tab), then,
+// once the menu is closed, woken without any delivery in between.
+func TestRunBlockedSelfEscalationReArmsWhenTheTabIsBack(t *testing.T) {
+	b, r := dialRun(t)
+	register(t, b, "master", "p-master")
+	send(t, b, "master", "resume the team's work")
+	var back atomic.Bool
+	rt := newFakeRT(func(string, int) Inspection {
+		in := readyIn()
+		if !back.Load() {
+			in.State, in.Ready = "blocked", false
+		}
+		return in
+	})
+	cfg := fastConfig()
+	cfg.EscalateAfter = 100 * time.Millisecond
+	start(t, b, rt, cfg)
+	waitFor(t, 3*time.Second, "escalated", func() bool {
+		w, _ := wakeOf(t, b, "master")
+		return w.Escalated == "true" && w.EscCause == "agent blocked"
+	})
+	ns := notifies(t, r, b, "master")
+	if len(ns) != 1 {
+		t.Fatalf("notifies = %d, want 1", len(ns))
+	}
+	if msg, _ := ns[0].Values["message"].(string); !strings.Contains(msg, "pane p-master") || !strings.Contains(msg, "answer it there") {
+		t.Fatalf("notify = %q, want the tab named", msg)
+	}
+	if n := len(rt.Prompts()); n != 0 {
+		t.Fatalf("prompted a blocked pane: %d", n)
+	}
+	back.Store(true)
+	waitFor(t, 3*time.Second, "a wake once the tab is back", func() bool { return len(rt.Prompts()) == 1 })
+	time.Sleep(200 * time.Millisecond)
+	if n := len(rt.Prompts()); n != 1 {
+		t.Fatalf("prompts = %d, want 1 (retry window)", n)
+	}
+}
+
+// v0.15 §6.2: a pane under a swap intent is never prompted; once the intent
+// goes, the agent is woken as usual.
+func TestRunSwapIntentBlocksPrompting(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "coder", "p-coder")
+	if err := b.BeginSwap(ctx, "coder", bus.SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	send(t, b, "coder", "build it")
+	rt := newFakeRT(alwaysReady)
+	cfg := fastConfig()
+	cfg.EscalateAfter = 50 * time.Millisecond
+	start(t, b, rt, cfg)
+	time.Sleep(300 * time.Millisecond)
+	if n := len(rt.Prompts()); n != 0 {
+		t.Fatalf("prompted under a swap intent: %d", n)
+	}
+	if w, _ := wakeOf(t, b, "coder"); w.Escalated != "" {
+		t.Fatalf("escalated under a swap intent: %+v", w)
+	}
+	if err := b.EndSwap(ctx, "coder"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 3*time.Second, "a wake once the swap is over", func() bool { return len(rt.Prompts()) == 1 })
 }

@@ -257,6 +257,9 @@ func pauseSeg(p *bus.PauseRecord, now time.Time) Line {
 	if p.Reason != "" {
 		text += " (" + Preview(p.Reason) + ")"
 	}
+	if p.By == "dispatch" && strings.HasPrefix(p.Reason, "quota ") && left > longPause {
+		text += " " + GlyphNone + " long pause, see Activity"
+	}
 	return Line{{Text: text, Role: RoleAttention}}
 }
 
@@ -271,3 +274,7 @@ func compactDur(d time.Duration) string {
 	}
 	return fmt.Sprintf("%dh%02d", int(d.Hours()), int(d.Minutes())%60)
 }
+
+// longPause is the dispatcher's default LongHold (v0.15 §5): past it, its
+// notify in Activity says how to continue before the reset.
+const longPause = 2 * time.Hour

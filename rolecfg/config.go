@@ -138,6 +138,9 @@ func Load(path string) (*Manifest, error) {
 		if skills, exists := info["skills"]; exists && !validNames(skills) {
 			return nil, fmt.Errorf("role %s: invalid skills", role)
 		}
+		if _, exists := info["fallback_profiles"]; exists && version != 2 {
+			return nil, fmt.Errorf("role %s: fallback_profiles needs schema_version 2", role)
+		}
 	}
 
 	if version == 2 {
@@ -178,13 +181,85 @@ func Load(path string) (*Manifest, error) {
 			if _, err := m.Resolve(role); err != nil {
 				return nil, err
 			}
+			if err := m.checkFallbacks(role); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return m, nil
 }
 
 // Resolve expands one role using the selected/default profile.
-func (m *Manifest) Resolve(role string) (Profile, error) {
+func (m *Manifest) Resolve(role string) (Profile, error) { return m.resolve(role, "") }
+
+// ResolveWith expands one role on another profile (schema 2): the role's
+// tier and skills, that profile's client, provider, model and options. It is
+// what `agentbus swap` launches (v0.15 §6).
+func (m *Manifest) ResolveWith(role, profile string) (Profile, error) {
+	if profile == "" {
+		return m.Resolve(role)
+	}
+	if m.SchemaVersion != 2 {
+		return Profile{}, fmt.Errorf("--profile needs a schema_version 2 manifest")
+	}
+	return m.resolve(role, profile)
+}
+
+// MaxFallbacks bounds fallback_profiles: an ask question (six options at
+// most) must hold them plus "Wait for the reset".
+const MaxFallbacks = 3
+
+// Fallbacks is the role's fallback_profiles, in order (schema 2; none in v1).
+func (m *Manifest) Fallbacks(role string) []string {
+	info, _ := asTable(m.Roles[role])
+	names, _ := stringNames(info["fallback_profiles"])
+	return names
+}
+
+// checkFallbacks (v0.15 §4): each fallback is a defined profile that resolves
+// for the role, not the role's own profile, not on the same provider (it
+// would be held too), at most MaxFallbacks, no repeats.
+func (m *Manifest) checkFallbacks(role string) error {
+	info, _ := asTable(m.Roles[role])
+	raw, exists := info["fallback_profiles"]
+	if !exists {
+		return nil
+	}
+	names, ok := stringNames(raw)
+	if !ok {
+		return fmt.Errorf("role %s: fallback_profiles must be an array of profile names", role)
+	}
+	if len(names) > MaxFallbacks {
+		return fmt.Errorf("role %s: at most %d fallback_profiles", role, MaxFallbacks)
+	}
+	own, err := m.Resolve(role)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, name := range names {
+		if seen[name] {
+			return fmt.Errorf("role %s: fallback profile %s listed twice", role, name)
+		}
+		seen[name] = true
+		if name == own.Profile {
+			return fmt.Errorf("role %s: fallback profile %s is the role's own profile", role, name)
+		}
+		if _, ok := m.Profiles[name]; !ok {
+			return fmt.Errorf("role %s: unknown fallback profile %s", role, name)
+		}
+		fb, err := m.resolve(role, name)
+		if err != nil {
+			return fmt.Errorf("role %s: fallback profile %s: %w", role, name, err)
+		}
+		if fb.Provider == own.Provider {
+			return fmt.Errorf("role %s: fallback profile %s is on the same provider (%s): it would be held too", role, name, own.Provider)
+		}
+	}
+	return nil
+}
+
+func (m *Manifest) resolve(role, override string) (Profile, error) {
 	infoRaw, exists := m.Roles[role]
 	if !exists {
 		return Profile{}, fmt.Errorf("unknown role: %s", role)
@@ -209,12 +284,15 @@ func (m *Manifest) Resolve(role string) (Profile, error) {
 		}
 		profile["options"] = options
 	} else {
-		if err := checkKeys(info, set("profile", "tier", "skills"), "role "+role+" (move execution fields into a profile)"); err != nil {
+		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles"), "role "+role+" (move execution fields into a profile)"); err != nil {
 			return Profile{}, err
 		}
 		profileNameValue, ok := info["profile"]
 		if !ok {
 			profileNameValue = m.Defaults["profile"]
+		}
+		if override != "" {
+			profileNameValue = override
 		}
 		var valid bool
 		profileName, valid = profileNameValue.(string)

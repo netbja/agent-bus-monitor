@@ -406,6 +406,7 @@ type fakeReader struct {
 	pause     *bus.PauseRecord
 	marks     map[string]string
 	observed  map[string]bus.Observation
+	swaps     map[string]bool
 	asks      []bus.Ask
 }
 
@@ -476,7 +477,7 @@ func TestNoExtraReadsPerTick(t *testing.T) {
 	f.calls = map[string]int{}
 	pollOnce(context.Background(), f, st, 6) // 6 % 5 == 1: a full tick
 	full := map[string]int{"PilotDriver": 1, "ArmedAgents": 1, "CmdLag": 1, "Agents": 1, "Usage": 1, "Budgets": 1,
-		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "ServiceStates": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2, "Pause": 1, "QuotaMarks": 1, "Observed": 1, "Asks": 1}
+		"Board": 1, "Recent": 1, "DispatchAlive": 1, "ConductorAlive": 1, "ChangeNames": 1, "ServiceStates": 1, "Obligation": 2, "Wake": 2, "OpenChallenges": 2, "Pause": 1, "QuotaMarks": 1, "Observed": 1, "Swaps": 1, "Asks": 1}
 	if fmt.Sprint(f.calls) != fmt.Sprint(full) {
 		t.Fatalf("full tick reads %v\nwant %v", f.calls, full)
 	}
@@ -678,6 +679,10 @@ func (f *fakeReader) Pause(context.Context) (*bus.PauseRecord, error) {
 func (f *fakeReader) Observed(context.Context) (map[string]bus.Observation, error) {
 	f.n("Observed")
 	return f.observed, nil
+}
+func (f *fakeReader) Swaps(context.Context) (map[string]bool, error) {
+	f.n("Swaps")
+	return f.swaps, nil
 }
 func (f *fakeReader) QuotaMarks(context.Context) (map[string]string, error) {
 	f.n("QuotaMarks")

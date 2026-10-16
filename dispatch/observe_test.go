@@ -2,6 +2,8 @@ package dispatch
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -91,4 +93,57 @@ func TestObserveSkipsAPausedProject(t *testing.T) {
 	if n := rt.Inspections("p1"); n != 0 {
 		t.Errorf("a paused project was inspected %d times", n)
 	}
+}
+
+// v0.15 §13: since stays while the state and the pid hold, and a failed
+// inspection keeps the previous reading instead of dropping the pane.
+func TestObserveCarriesTheEpisodeAndSurvivesAFailedLook(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "master", "p1")
+	var mode atomic.Int32 // 0 blocked, 1 inspection error, 2 idle
+	rt := newFakeRT(func(string, int) Inspection {
+		in := readyIn()
+		switch mode.Load() {
+		case 0:
+			in.State, in.Ready = "blocked", false
+		case 1:
+			return Inspection{Err: errors.New("herdr timeout")}
+		case 3:
+			in.PIDs = []int{9999}
+		}
+		return in
+	})
+	cfg := fastConfig()
+	cfg.Observe = 30 * time.Millisecond
+	start(t, b, rt, cfg)
+	var first bus.Observation
+	waitFor(t, 5*time.Second, "a blocked observation", func() bool {
+		obs, err := b.Observed(ctx)
+		first = obs["master"]
+		return err == nil && first.State == "blocked" && first.Since != 0
+	})
+	waitFor(t, 5*time.Second, "a later pass, same episode", func() bool {
+		obs, _ := b.Observed(ctx)
+		o := obs["master"]
+		return o.At > first.At && o.Since == first.Since
+	})
+	mode.Store(1)
+	time.Sleep(200 * time.Millisecond)
+	obs, _ := b.Observed(ctx)
+	if o, ok := obs["master"]; !ok || o.State != "blocked" || o.Since != first.Since {
+		t.Fatalf("after a failed look = %+v (present %v), want the previous reading", o, ok)
+	}
+	mode.Store(3) // another process in the pane: the reading stands, with its pid
+	time.Sleep(200 * time.Millisecond)
+	obs, _ = b.Observed(ctx)
+	if o, ok := obs["master"]; !ok || o.Since != first.Since || o.PID != testPID {
+		t.Fatalf("after a foreign process = %+v (present %v), want the previous reading", o, ok)
+	}
+	mode.Store(2)
+	waitFor(t, 5*time.Second, "a new episode", func() bool {
+		obs, _ := b.Observed(ctx)
+		o := obs["master"]
+		return o.State == "idle" && o.Since > first.Since
+	})
 }

@@ -429,7 +429,30 @@ It never touches Redis — see README "Deployment topology".
   write is fenced. A limit hit read from a transcript is void once the API has answered since
   (v0.14.6: `servedAt`, `Reading.AvailableAt`): with no window to read, a recent answer ends the
   hold and the coordinator's quota pause at once (a reset granted early), and `FencedQuotaUnpause`
-  sends master the resume directive like `FencedResume`. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
+  sends master the resume directive like `FencedResume`. v0.15: when a hold ends (released,
+  served again or reset passed), the provider's agents with an `accepted` board task or a declared
+  `working` get a resume directive, and the escalation target one `wake=no` notice, each once per
+  episode (`FencedCmdOnce`/`FencedNotifyOnce`, `bus/once.go`: entry and `resumed:<p>:<agent>` mark
+  in one script; the episode is the hold's reset; written before the hold mark is deleted). The
+  dispatcher's own quota pause is reconciled even when nobody uses its provider any more: if the
+  coordinator now runs on a free provider it ends (`FencedQuotaUnpauseWhy`), on a held one it is
+  replaced (`FencedQuotaRepause`, exact record, no resume). A hold whose reset is more than
+  `LongHold` away (2 h, `AGENT_BUS_QUOTA_LONG_HOLD`, `0` = off) sends one message per episode
+  (`longhold:<p>`): a directive to master naming the held agents with work in flight (master asks
+  the person, then `agentbus swap`), or, for master's own provider, a `notify` for the person
+  (busmon's pause segment adds "long pause, see Activity"). **`agentbus swap <role> --profile
+  <p> [--now] [--force]`** (`cmd/agentbus/swap.go`) replaces an agent by its role on one of its
+  `fallback_profiles` (`rolecfg`: schema 2, defined, not its own profile, another provider, at
+  most 3; `agentbus roles fallbacks <role>`): everything is checked before anything is closed
+  (profile, client on PATH, live verified identity, not its own pane, no open challenge on either
+  side — `Bus.ReviewsOf` scans every gate — no mission attempt in progress, no running turn
+  without `--now`), then the swap intent `{p}:swap:<role>` (`SET NX PX 180000`; the dispatcher
+  neither prompts nor escalates nor resumes that agent), `herdr pane close`, the old pid gone,
+  `agent-spawn <role> <p> --profile <p>` with `AGENT_LAUNCH_REQUIRE_BIND=1` (a failed bind is
+  fatal), the proof (new pid alive, new pane, the profile's client and provider), and only then
+  the resume of its work (`Bus.CmdOnce` on the episode's `resumed:` mark when its provider is
+  held). A failure after the close prints the recovery (`agent-spawn <role> <project>`). busmon
+  flags `swapping`. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
   nor writes `{p}:budget` (the service replaces that hash as a whole).
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write
@@ -448,7 +471,15 @@ It never touches Redis — see README "Deployment topology".
   failing `identityOK` is not observed. `{p}:observed` is not in `projectKinds` and
   `HasKeysBesidesDispatch` ignores it, so a write racing `busmon --delete` never revives a project. busmon reads it with the dispatcher facts and adds the flag `busy` (and an `Observed`
   detail row) when the pane runs a turn but the agent does not declare `working`. Never let it
-  rewrite or replace the declared state.
+  rewrite or replace the declared state. v0.15: an observation carries `since` (first reading of
+  that state by the same pid, carried forward) and a failed inspection keeps the previous reading
+  (`Observation.Fresh`, 120 s); a pane seen `blocked` (its client's own menu or permission prompt)
+  reads `waiting` with the flag `prompt` (`promptWaiting`), one bell per `since`, unless the agent
+  declares blocked/waiting or has an open ask. An escalation caused by the pane's state (rules
+  7-8, `Decision.Cause` → wake `esc_cause`, or read from the reason of an older record) is
+  re-armed once the pane is ready: the loop inspects such a record before `Decide`, tries clear
+  and `at` stays. When the escalation target cannot act (it is the agent, its provider is held,
+  its tab is blocked), the escalation is a `notify` for the person only (`recipientCannotAct`).
 - **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`
   writes `{p}:pause` (`bus/pause.go`); the dispatcher's `paused` check at the top of each pass
   wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script

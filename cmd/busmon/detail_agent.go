@@ -73,7 +73,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row("Declared", tg(RoleMuted, "never declared"))
 	} else {
 		declared := tg(role, word)
-		if word == "quota" || word == "paused" { // a bus fact covers it in the row; say what was declared
+		if a.state != "" && word != Preview(a.state) { // a bus fact covers it in the row (quota, paused, a question): say what was declared
 			declared = tg(RoleText, Preview(a.state)) + tg(RoleMuted, " (shown as "+word+")")
 		}
 		row("Declared", declared+text(fmt.Sprintf(" %s %s (%s)", GlyphNone, ago(a.stateAt), a.stateAt.Format("15:04:05"))))
@@ -90,6 +90,12 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row("Last seen", text(ago(a.lastSeen)+" (any status or report)"))
 	}
 	switch {
+	case promptWaiting(a):
+		where := "its tab"
+		if a.pane != "" {
+			where += " (pane " + Preview(a.pane) + ")"
+		}
+		rowWrap("Observed", RoleAttention, "blocked "+GlyphNone+" since "+ago(a.obsSince)+": its client is asking something in "+where+". Answer it there.")
 	case a.obsAt.IsZero():
 		row("Observed", tg(RoleMuted, "pane not observed (no dispatch service, or no verified pane)"))
 	case busyUndeclared(a, now):

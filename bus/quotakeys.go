@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -153,6 +154,12 @@ return 1`)
 // resume directive in the same script, so the coordinator learns the team
 // may go on.
 func (b *Bus) FencedQuotaUnpause(ctx context.Context, token, provider, from string) (bool, error) {
+	return b.FencedQuotaUnpauseWhy(ctx, token, provider, from, "The provider's limit was lifted before the announced reset.")
+}
+
+// FencedQuotaUnpauseWhy is FencedQuotaUnpause with the reason told to the
+// coordinator (v0.15 §8: master no longer runs on that provider).
+func (b *Bus) FencedQuotaUnpauseWhy(ctx context.Context, token, provider, from, why string) (bool, error) {
 	reason := QuotaPauseReason(provider)
 	// The record read here is the one the script deletes, byte for byte (as in
 	// FencedResume): a pause replaced meanwhile, even with the same reason, is
@@ -163,7 +170,7 @@ func (b *Bus) FencedQuotaUnpause(ctx context.Context, token, provider, from stri
 		if json.Unmarshal([]byte(raw), &p) == nil && p.Reason == reason && p.By == "dispatch" {
 			seen = raw
 			if ValidName(p.Notify) {
-				target, text = p.Notify, resumeText(p, "The provider's limit was lifted before the announced reset.")
+				target, text = p.Notify, resumeText(p, why)
 			}
 		}
 	}
@@ -180,4 +187,60 @@ func (b *Bus) FencedQuotaUnpause(ctx context.Context, token, provider, from stri
 		return false, ErrNotHolder
 	}
 	return n == 1, nil
+}
+
+// fencedQuotaRepause: -1 not the holder; 0 the pause is no longer exactly
+// ARGV[2]; 1 replaced by the record in ARGV[3] (no resume directive: the
+// project stays paused).
+var fencedQuotaRepause = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
+if redis.call('GET', KEYS[2]) ~= ARGV[2] then return 0 end
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+local p = cjson.decode(ARGV[3])
+redis.call('SET', KEYS[2], cjson.encode({['until']=p['until'], reason=p['reason'], by='dispatch', notify=p['notify'], at=now}))
+return 1`)
+
+// FencedQuotaRepause (v0.15 §8) replaces the dispatcher's quota pause for
+// provider from by one for provider to, until untilMS, when the coordinator
+// now runs on to and to is held too. Only the exact record the dispatcher
+// wrote is replaced; a person's pause is never touched. It reports whether
+// it replaced.
+func (b *Bus) FencedQuotaRepause(ctx context.Context, token, from, to string, untilMS int64) (bool, error) {
+	raw, err := b.r.Get(ctx, PauseKey(b.project)).Result()
+	if err == redis.Nil {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var p PauseRecord
+	if json.Unmarshal([]byte(raw), &p) != nil || p.Reason != QuotaPauseReason(from) || p.By != "dispatch" {
+		return false, nil
+	}
+	next, err := json.Marshal(map[string]any{"until": untilMS, "reason": QuotaPauseReason(to), "notify": p.Notify})
+	if err != nil {
+		return false, err
+	}
+	n, err := fencedQuotaRepause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project)}, token, raw, string(next)).Int()
+	if err != nil {
+		return false, err
+	}
+	if n == -1 {
+		return false, ErrNotHolder
+	}
+	return n == 1, nil
+}
+
+// QuotaPauseProvider is the provider of the dispatcher's own quota pause, or
+// "" for any other pause (a person's, master's) or none.
+func QuotaPauseProvider(p *PauseRecord) string {
+	if p == nil || p.By != "dispatch" {
+		return ""
+	}
+	prov, ok := strings.CutPrefix(p.Reason, "quota ")
+	if !ok || !ValidName(prov) {
+		return ""
+	}
+	return prov
 }

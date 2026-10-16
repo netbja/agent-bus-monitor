@@ -29,6 +29,7 @@ type busReader interface {
 	Pause(ctx context.Context) (*bus.PauseRecord, error)
 	QuotaMarks(ctx context.Context) (map[string]string, error)
 	Observed(ctx context.Context) (map[string]bus.Observation, error)
+	Swaps(ctx context.Context) (map[string]bool, error)
 	Asks(ctx context.Context) ([]bus.Ask, error)
 }
 
@@ -128,9 +129,12 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	marksErr := errNotPolled
 	var observed map[string]bus.Observation
 	observedErr := errNotPolled
+	var swaps map[string]bool
+	swapsErr := errNotPolled
 	if wakePollDue(tick) {
 		marks, marksErr = b.QuotaMarks(pollCtx)
 		observed, observedErr = b.Observed(pollCtx)
+		swaps, swapsErr = b.Swaps(pollCtx)
 		dispAlive, dispErr = b.DispatchAlive(pollCtx)
 		missionsState, missionsErr = missionsFact(pollCtx, b)
 		svcInst, svcRecs, svcErr = b.ServiceStates(pollCtx)
@@ -258,12 +262,23 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		if c, ok := gates[n]; ok {
 			a.gated = c
 		}
+		if swapsErr == nil {
+			a.swapping = swaps[n]
+		}
 		if observedErr == nil {
 			o, ok := observed[n]
-			a.obsBusy, a.obsState, a.obsAt = ok && o.Busy, o.State, time.Time{}
+			a.obsBusy, a.obsState, a.obsAt, a.obsSince = ok && o.Busy, o.State, time.Time{}, time.Time{}
 			if ok && o.At > 0 {
 				a.obsAt = time.UnixMilli(o.At)
 			}
+			if ok && o.Since > 0 {
+				a.obsSince = time.UnixMilli(o.Since)
+			} else {
+				a.obsSince = a.obsAt // a dispatcher before v0.15 writes no since
+			}
+			// Only the agent's current process: a reading carried for an older
+			// one (a replaced agent) is not its prompt.
+			a.obsPrompt = ok && o.State == "blocked" && o.PID != 0 && o.PID == a.pid
 		}
 		if wi, ok := wakes[n]; ok {
 			if wi.obOK {

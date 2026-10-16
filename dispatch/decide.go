@@ -51,13 +51,16 @@ func (a Action) String() string {
 // that decided. ResetTries asks the caller to clear tries and escalated (there
 // was progress or the agent's identity changed). Clear (rule 1 only) asks the
 // caller to write a cleared wake record that keeps At — never to delete it, which
-// would erase the retry window of rule 5.
+// would erase the retry window of rule 5. Cause (rules 7–8) is the pane state
+// behind a wait, recorded with an escalation so that it can be re-armed once
+// that state ends (v0.15 §14).
 type Decision struct {
 	Action     Action
 	Rule       int
 	Reason     string
 	ResetTries bool
 	Clear      bool
+	Cause      string
 }
 
 // Policy holds the tunables of the decision.
@@ -127,7 +130,17 @@ func Decide(p Policy, x Input) Decision {
 	case "pending":
 		return d(ActEscalate, 3, "escalation pending, resending")
 	case "true":
-		return d(ActNone, 3, "already escalated")
+		// An escalation caused by the pane's state is re-armed once that state
+		// has ended (the loop inspects such a record first): tries clear, At is
+		// kept so rule 5 still spaces the prompts. Anything else waits for
+		// progress, as before.
+		cause := EscCause(w)
+		if cause == "" || !paneReady(p, x) {
+			return d(ActNone, 3, "already escalated")
+		}
+		w.Tries, w.Escalated = 0, ""
+		reset = true
+		suffix += "; escalation re-armed (" + cause + " ended)"
 	}
 	if w.Tries >= p.MaxTries {
 		return d(ActEscalate, 4, "tries exhausted without progress")
@@ -139,10 +152,16 @@ func Decide(p Policy, x Input) Decision {
 	// From here the outcome is defer, escalating once the oldest entry is
 	// older than the threshold (escalated is "" here: rule 3 caught the rest).
 	wait := func(rule int, reason string, after time.Duration) Decision {
+		var r Decision
 		if x.OldestAge > after {
-			return d(ActEscalate, rule, reason+", escalating")
+			r = d(ActEscalate, rule, reason+", escalating")
+		} else {
+			r = d(ActDefer, rule, reason)
 		}
-		return d(ActDefer, rule, reason)
+		if rule >= 7 {
+			r.Cause = reason
+		}
+		return r
 	}
 	T := p.EscalateAfter
 
@@ -182,7 +201,41 @@ func Decide(p Policy, x Input) Decision {
 	return d(ActPrompt, 9, "ready")
 }
 
+// paneCauses are the reasons of rules 7–8, the pane states an escalation can
+// be re-armed from. A record written before v0.15 has no esc_cause, only its
+// reason: EscCause reads the cause from there.
+var paneCauses = []string{"inspection error", "pane gone", "client unsupported",
+	"agent ", "client busy", "input not ready", "pane focused"}
+
+// EscCause is the pane state behind a record's escalation, or "".
+func EscCause(w bus.WakeRecord) string {
+	if w.EscCause != "" {
+		return w.EscCause
+	}
+	for _, c := range paneCauses {
+		if strings.HasPrefix(w.Reason, c) {
+			reason, _, _ := strings.Cut(w.Reason, ",")
+			return reason
+		}
+	}
+	return ""
+}
+
+// paneReady: the inspection shows a verified pane that would take a prompt now
+// (the conditions of rule 9).
+func paneReady(p Policy, x Input) bool {
+	in := x.In
+	if x.Snap == nil || x.Snap.PID == 0 || in.Err != nil || in.Gone || !p.Supported[in.Client] {
+		return false
+	}
+	if !identityOK(x.Snap, in) {
+		return false
+	}
+	return (in.State == "idle" || in.State == "done") && !in.Busy && in.Ready && !in.Focused
+}
+
 func stateWord(s string) string {
+
 	if s == "" {
 		return "unknown"
 	}

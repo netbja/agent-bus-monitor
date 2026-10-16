@@ -84,6 +84,7 @@ func (b *Bus) FencedHashSet(ctx context.Context, token, key, field, value string
 // fencedPublishRequest is publishRequest (requests.go) behind the lease check:
 // KEYS = lease, board, cmd; ARGV = token, task, from, target, ref, body, maxlen.
 var fencedPublishRequest = redis.NewScript(fenceCheck + `
+if redis.call('EXISTS',KEYS[4])==1 then return redis.error_reply('SWAPPING') end
 local raw=redis.call('HGET',KEYS[2],ARGV[2])
 if raw then
  local e=cjson.decode(raw)
@@ -105,9 +106,9 @@ func (b *Bus) FencedRequest(ctx context.Context, token, task, from, target, ref,
 	if err := ValidateText(body, CmdMaxRunes); err != nil {
 		return "", err
 	}
-	id, err := fencedPublishRequest.Run(ctx, b.r, []string{ConductorKey(b.project), BoardKey(b.project), StreamKey(b.project, "cmd")},
+	id, err := fencedPublishRequest.Run(ctx, b.r, []string{ConductorKey(b.project), BoardKey(b.project), StreamKey(b.project, "cmd"), SwapKey(b.project, target)},
 		token, task, from, target, ref, body, streamMaxLen).Text()
-	return id, notHolder(err)
+	return id, swapping(notHolder(err), target)
 }
 
 var fencedBoardState = redis.NewScript(fenceCheck + `
@@ -124,6 +125,7 @@ func (b *Bus) FencedBoardState(ctx context.Context, token, task, state string) e
 
 // KEYS = lease, gate, cmd; ARGV = token, ref, meta, maxlen, from, target, message.
 var fencedChallenge = redis.NewScript(fenceCheck + `
+if redis.call('EXISTS',KEYS[4])==1 or redis.call('EXISTS',KEYS[5])==1 then return redis.error_reply('SWAPPING') end
 redis.call('HSET',KEYS[2],ARGV[2],ARGV[3])
 return redis.call('XADD',KEYS[3],'MAXLEN','~',ARGV[4],'*','from',ARGV[5],'target',ARGV[6],'type','challenge','ref',ARGV[2],'command',ARGV[7],'text_complete','yes')`)
 
@@ -136,8 +138,10 @@ func (b *Bus) FencedChallenge(ctx context.Context, token, reviewer, ref, from, m
 	if err := ValidateText(msg, CmdMaxRunes); err != nil {
 		return err
 	}
-	return notHolder(fencedChallenge.Run(ctx, b.r, []string{ConductorKey(b.project), GateKey(b.project, reviewer), StreamKey(b.project, "cmd")},
-		token, ref, from+"|"+msg, streamMaxLen, from, reviewer, msg).Err())
+	keys := []string{ConductorKey(b.project), GateKey(b.project, reviewer), StreamKey(b.project, "cmd"),
+		SwapKey(b.project, reviewer), SwapKey(b.project, from)}
+	return swapping(notHolder(fencedChallenge.Run(ctx, b.r, keys, token, ref, from+"|"+msg, streamMaxLen, from, reviewer, msg).Err()),
+		reviewer+" or "+from)
 }
 
 var fencedHDel = redis.NewScript(fenceCheck + `return redis.call('HDEL', KEYS[2], ARGV[2])`)

@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -101,9 +102,10 @@ func WakeText(project, agent, nonce string, n int64) string {
 
 // hooks are crash-injection points for tests; production leaves them nil.
 type hooks struct {
-	afterReserve         func() // the reservation is written, the prompt not sent
-	afterPrompt          func() // the prompt returned, its outcome not recorded
-	afterEscalatePending func() // escalated=pending is written, nothing sent
+	afterReserve         func()                   // the reservation is written, the prompt not sent
+	afterPrompt          func()                   // the prompt returned, its outcome not recorded
+	afterEscalatePending func()                   // escalated=pending is written, nothing sent
+	resumeErr            func(agent string) error // a resume write fails for agent
 }
 
 // testHooks is read once when Run starts; only tests set it.
@@ -267,7 +269,9 @@ type loop struct {
 
 	quota quotaState
 
-	observedAt time.Time // last observePass (local clock: a throttle, never persisted)
+	observedAt time.Time                    // last observePass (local clock: a throttle, never persisted)
+	snaps      map[string]bus.AgentSnapshot // this pass's snapshots
+	obs        map[string]Observation       // the last observation written
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
@@ -279,6 +283,7 @@ func (l *loop) reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	l.snaps = snaps
 	// Quota first: it may set or end a quota pause, and its holds must apply
 	// even when the pause cannot be read (paused() fails open).
 	if err := l.quotaPass(ctx, snaps); err != nil {
@@ -376,6 +381,14 @@ func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot,
 	if !o.Wakes() && !exists && !o.GapPossible {
 		return nil // nothing owed, nothing recorded: no writes, no log
 	}
+	// v0.15 §6.2: a pane being replaced by `agentbus swap` is never prompted
+	// nor escalated about; the new process gets its turn once the intent goes.
+	if swapping, err := l.b.Swapping(ctx, agent); err != nil {
+		return err
+	} else if swapping {
+		l.logOnce(agent, map[string]any{"agent": agent, "action": "none", "reason": "swap in progress"})
+		return nil
+	}
 	armed, err := l.b.Armed(ctx, agent)
 	if err != nil {
 		return err
@@ -396,9 +409,16 @@ func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot,
 		s.x.OldestAge = time.Duration(now.UnixMilli()-int64(ms)) * time.Millisecond
 	}
 
-	// Rules 1–6 never look at the pane; inspect only when Decide gets past them.
+	// Rules 1–6 never look at the pane; inspect only when Decide gets past them,
+	// or first when an escalation caused by the pane's state may have ended
+	// (rule 3 needs the inspection to re-arm it; a pending one is replayed
+	// without).
+	inspected := false
+	if exists && w.Escalated == "true" && EscCause(w) != "" {
+		s.x.In, inspected = l.inspect(ctx, snap), true
+	}
 	d := Decide(l.policy, s.x)
-	if d.Rule >= 7 {
+	if d.Rule >= 7 && !inspected {
 		s.x.In = l.inspect(ctx, snap)
 		d = Decide(l.policy, s.x)
 	}
@@ -431,7 +451,7 @@ func (l *loop) put(ctx context.Context, s *step, rec bus.WakeRecord) error {
 func (s *step) base(d Decision) bus.WakeRecord {
 	r := s.w
 	if d.ResetTries {
-		r.Tries, r.Escalated = 0, ""
+		r.Tries, r.Escalated, r.EscCause = 0, "", ""
 		r.LastDelivered, r.PendingTotal = s.o.LastDelivered, s.o.PendingTotal
 		r.PID, r.PIDStart = 0, 0
 		if s.snap != nil {
@@ -465,7 +485,8 @@ func (l *loop) act(ctx context.Context, s *step, d Decision) error {
 // flag. Written only when it is not already in that state.
 func (l *loop) clear(ctx context.Context, s *step) error {
 	r := s.w
-	r.State, r.Tries, r.Escalated, r.Reason, r.HighID = "clear", 0, "", "", ""
+	r.State, r.Tries, r.Escalated, r.EscCause, r.Reason, r.HighID = "clear", 0, "", "", "", ""
+
 	r.LastDelivered, r.PendingTotal = s.o.LastDelivered, s.o.PendingTotal
 	if r == s.w {
 		return nil
@@ -487,7 +508,14 @@ func (l *loop) deferTo(ctx context.Context, s *step, d Decision) error {
 // prompt is spec §3.3: re-check, reserve (fenced, server-windowed), confirm
 // the lease, prompt, record the outcome.
 func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
-	// Step 0: readiness and focus can change between the inspection and now.
+	// Step 0: readiness and focus can change between the inspection and now,
+	// and a swap may have begun.
+	if swapping, err := l.b.Swapping(ctx, s.agent); err != nil || swapping {
+		if err == nil {
+			l.logOnce(s.agent, map[string]any{"agent": s.agent, "action": "none", "reason": "swap in progress"})
+		}
+		return err
+	}
 	s.x.In = l.inspect(ctx, s.snap)
 	if d2 := Decide(l.policy, s.x); d2.Action != ActPrompt {
 		return l.act(ctx, s, d2)
@@ -523,6 +551,17 @@ func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
 	if !held {
 		return ErrLeaseLost
 	}
+	// The last look at the swap intent, after the reservation: a swap that
+	// begins from here on sees this record "prompting" and waits for it.
+	if swapping, err := l.b.Swapping(ctx, s.agent); err != nil || swapping {
+		if err == nil {
+			l.logOnce(s.agent, map[string]any{"agent": s.agent, "action": "none", "reason": "swap in progress"})
+			r := stored
+			r.State, r.Reason = "deferred", "swap in progress"
+			return l.put(ctx, s, r)
+		}
+		return err
+	}
 	nonce := randomHex(3)
 	observed, perr := l.rt.Prompt(ctx, s.snap.Pane, WakeText(l.b.Project(), s.agent, nonce, s.o.Size()), nonce)
 	call(l.h.afterPrompt)
@@ -557,6 +596,10 @@ func (l *loop) escalate(ctx context.Context, s *step, d Decision) error {
 		r.State = "deferred"
 	}
 	r.Escalated, r.Reason = "pending", d.Reason
+	if d.Rule != 3 { // a replay keeps the cause recorded with the first attempt
+		r.EscCause = d.Cause
+	}
+
 	if !s.exists || r != s.w {
 		if err := l.put(ctx, s, r); err != nil {
 			return err
@@ -569,8 +612,12 @@ func (l *loop) escalate(ctx context.Context, s *step, d Decision) error {
 
 	body := fmt.Sprintf("%s: %s; %d waiting, oldest %s", s.agent, d.Reason, s.o.Size(), s.o.OldestID)
 	note := body
-	if s.agent == l.cfg.EscalateTo {
-		note = "⚠ " + body + " (the escalation recipient itself is stuck)"
+	if why := l.recipientCannotAct(s.agent); why != "" {
+		// Nobody on the bus can act: the notify is for the person (busmon).
+		note = "⚠ " + body + " (" + why + ")"
+		if strings.HasPrefix(d.Reason, "agent blocked") && s.snap != nil && s.snap.Pane != "" {
+			note += ": its client is asking something in its tab (pane " + s.snap.Pane + "), answer it there"
+		}
 	} else if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, l.cfg.EscalateTo, bus.CmdEscalation, body); err != nil {
 		return err
 	}
@@ -579,6 +626,23 @@ func (l *loop) escalate(ctx context.Context, s *step, d Decision) error {
 	}
 	r.Escalated = "true"
 	return l.put(ctx, s, r)
+}
+
+// recipientCannotAct says why the escalation target cannot act on agent's
+// escalation (v0.15 §14), or "": the agent is the target itself, or the
+// target's provider is held, or its own tab was last seen blocked.
+func (l *loop) recipientCannotAct(agent string) string {
+	t := l.cfg.EscalateTo
+	if agent == t {
+		return "the escalation recipient itself is stuck"
+	}
+	if s, ok := l.snaps[t]; ok && l.heldBy(&s) {
+		return t + " is held by its provider's limit"
+	}
+	if o, ok := l.obs[t]; ok && o.State == "blocked" {
+		return t + "'s own tab is blocked"
+	}
+	return ""
 }
 
 // gap sends the one notify of a possible trim-before-read (spec §6) and

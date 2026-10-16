@@ -256,3 +256,63 @@ func TestBusyFlagIsObservedNotDeclared(t *testing.T) {
 		t.Errorf("the declared state became %q", word)
 	}
 }
+
+// v0.15 §13: a tab whose client asks something reads waiting, flagged
+// prompt, counted and sorted like a person's decision; the declared state
+// stays, and a declared blocked or waiting is not covered.
+func TestPromptInTheTabReadsWaiting(t *testing.T) {
+	a := &agentState{state: "working", held: true, paused: true, registered: true, obsPrompt: true, obsAt: time.Now()}
+	if _, w, _, g := stateLook(a); w != "waiting" || g != 0 {
+		t.Fatalf("stateLook = %q group %d, want waiting group 0 (it beats quota and paused)", w, g)
+	}
+	if fs := agentFlags(a, false); len(fs) == 0 || fs[0].Word != "prompt" {
+		t.Fatalf("flags = %+v, want prompt first", fs)
+	}
+	if a.state != "working" {
+		t.Fatal("the declared state was rewritten")
+	}
+	if n := waitingQuestions(map[string]*agentState{"master": a}); n != 1 {
+		t.Fatalf("waiting = %d, want 1", n)
+	}
+	if got := asksFor(map[string]*agentState{"master": a}); len(got) != 1 {
+		t.Fatalf("asksFor = %v, want master (the bell)", got)
+	}
+	for _, st := range []string{"blocked", "waiting"} {
+		if promptWaiting(&agentState{state: st, obsPrompt: true, obsAt: time.Now()}) {
+			t.Errorf("declared %s is covered by prompt", st)
+		}
+	}
+	if promptWaiting(&agentState{state: "idle", obsPrompt: true, openAsk: 1, obsAt: time.Now()}) {
+		t.Error("an open ask is covered by prompt")
+	}
+}
+
+// A prompt read before the reads started failing ends with its reading's age.
+func TestPromptAgesOutWithoutNewReads(t *testing.T) {
+	old := &agentState{state: "idle", obsPrompt: true, obsAt: time.Now().Add(-3 * time.Minute)}
+	if promptWaiting(old) {
+		t.Fatal("a 3-minute-old blocked reading still reads waiting")
+	}
+}
+
+// v0.15 §7: a swap in progress is flagged; a long quota pause points at
+// Activity, a person's pause or a short one does not.
+func TestSwappingFlagAndLongPauseHint(t *testing.T) {
+	fs := agentFlags(&agentState{state: "idle", swapping: true}, false)
+	if len(fs) == 0 || fs[0].Word != "swapping" {
+		t.Fatalf("flags %+v", fs)
+	}
+	now := time.Now()
+	long := &bus.PauseRecord{Until: now.Add(61 * time.Hour).UnixMilli(), Reason: "quota anthropic", By: "dispatch"}
+	if got := pauseSeg(long, now)[0].Text; !strings.Contains(got, "long pause, see Activity") {
+		t.Fatalf("long quota pause = %q", got)
+	}
+	for _, p := range []*bus.PauseRecord{
+		{Until: now.Add(time.Hour).UnixMilli(), Reason: "quota anthropic", By: "dispatch"},
+		{Until: now.Add(61 * time.Hour).UnixMilli(), Reason: "quota anthropic", By: "bernard"},
+	} {
+		if got := pauseSeg(p, now)[0].Text; strings.Contains(got, "long pause") {
+			t.Fatalf("pause %+v = %q", p, got)
+		}
+	}
+}

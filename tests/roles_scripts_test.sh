@@ -57,6 +57,25 @@ assert_contains "$out" "$(printf '%q' "ROLES_TOML=$manifest")" "the manifest pat
 assert_exit 1 "an injected project name is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder 'demo;touch injected'"
 assert_eq "$([[ -e "$root/injected" ]] && echo yes || echo no)" "no" "nothing was injected"
 
+# v0.15: a role launched on another profile, a fallback list, and swap mode's fatal bind
+config claude-code '[profiles.alt]
+client = "codex"
+provider = "other-provider"
+model = "alt-model"'
+sed -i 's/^skills = \["test-skill"\]$/skills = ["test-skill"]\nfallback_profiles = ["alt"]/' "$manifest"
+out="$(env -u HERDR_ENV "$L" coder demo --profile alt 2>&1)"; rc=$?
+assert_eq "$rc" "0" "agent-launch --profile exits 0"
+assert_contains "$out" "AGENT_BUS_PROVIDER=other-provider" "and runs the other profile's provider"
+assert_contains "$out" "AGENT_BUS_PROFILE=alt" "under that profile's name"
+out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 AGENT_LAUNCH_REQUIRE_BIND=1 "$REPO/scripts/agent-spawn" coder demo --profile alt 2>&1)"
+assert_contains "$out" "--profile alt" "agent-spawn passes the profile on"
+assert_contains "$out" "AGENT_LAUNCH_REQUIRE_BIND=1" "and swap mode"
+assert_exit 1 "an injected profile name is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder demo --profile 'alt;touch injected'"
+assert_exit 1 "swap mode outside a herdr pane fails" -- env -u HERDR_ENV AGENT_LAUNCH_REQUIRE_BIND=1 "$L" coder demo --profile alt
+out="$("$AGENTBUS_BIN" roles fallbacks coder 2>&1)"
+assert_contains "$out" "fallback alt" "roles fallbacks lists the fallback"
+config claude-code
+
 # bootstrap writes a template whose tab command runs the launcher with the selected manifest
 printf '#!/bin/sh\nexit 0\n' > "$root/bin/docker"; printf '#!/bin/sh\nexit 0\n' > "$root/bin/herdr"; chmod +x "$root/bin/docker" "$root/bin/herdr"
 project="$root/project \"quoted\" \$literal 🧪"; mkdir -p "$project"

@@ -413,6 +413,14 @@ func lookPath(name, pathEnv string) (string, error) {
 // env is the launcher's environment (os.Environ() in production); execFn
 // replaces the process (syscall.Exec in production, which keeps the pid).
 func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.Writer, execFn func(argv0 string, argv, env []string) error) error {
+	return LaunchProfile(m, role, project, "", env, stdout, stderr, execFn)
+}
+
+// LaunchProfile is Launch on another profile than the role's (v0.15 §6, the
+// swap; "" is the role's own). With AGENT_LAUNCH_REQUIRE_BIND=1 (swap mode) a
+// launch that cannot bind its pane fails instead of starting an agent the
+// dispatcher cannot verify.
+func LaunchProfile(m *Manifest, role, project, profile string, env []string, stdout, stderr io.Writer, execFn func(argv0 string, argv, env []string) error) error {
 	cfg := struct {
 		Env            []string
 		Stdout, Stderr io.Writer
@@ -421,11 +429,15 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 	if !namePattern.MatchString(role) || !namePattern.MatchString(project) {
 		return errors.New("invalid role or project name")
 	}
-	p, err := m.Resolve(role)
+	if profile != "" && !namePattern.MatchString(profile) {
+		return errors.New("invalid profile name")
+	}
+	p, err := m.ResolveWith(role, profile)
 	if err != nil {
 		return err
 	}
 	e := newEnv(cfg.Env)
+	requireBind := e.or("AGENT_LAUNCH_REQUIRE_BIND", "") == "1"
 	promptPath, prompt, missing, err := promptFor(p, repoRoot(e), e)
 	if err != nil {
 		return err
@@ -460,6 +472,9 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 		}
 		// The pane is the one this launcher started in, read before env_refs apply.
 		bind = []string{bin, "--project", project, "bind", role, "--pid", strconv.Itoa(os.Getpid()), "--pane", pane}
+	}
+	if requireBind && bind == nil {
+		return errors.New("AGENT_LAUNCH_REQUIRE_BIND=1 but not inside a herdr pane: nothing to bind")
 	}
 	if dry {
 		if bind != nil {
@@ -502,6 +517,9 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 		c.Env, c.Stdout, c.Stderr = e.list(), cfg.Stderr, cfg.Stderr
 		err := c.Run()
 		cancel()
+		if err != nil && requireBind { // a swap proves the replacement by this bind
+			return fmt.Errorf("agentbus bind failed (AGENT_LAUNCH_REQUIRE_BIND=1): %w", err)
+		}
 		if err != nil { // an agent the dispatcher cannot wake beats no agent
 			fmt.Fprintf(cfg.Stderr, "warning: agentbus bind failed; the dispatcher will not wake %s until it is bound (agentbus --project %s bind %s --pane %s)\n",
 				role, project, role, pane)
@@ -831,4 +849,14 @@ func elevated(p Profile) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// ClientExecutable is the program a resolved profile runs: the builtin
+// client's binary, or the adapter's executable (v0.15 §6.1: a swap checks it
+// is there before it closes anything).
+func ClientExecutable(p Profile) string {
+	if bin, ok := builtinBinary[p.Client]; ok {
+		return bin
+	}
+	return p.Adapter
 }

@@ -2,7 +2,9 @@
 # The master's "pop": open a new herdr tab that runs agent-launch <role> <project>.
 # Requires HERDR_ENV=1 (you must be inside herdr to drive it) — same precondition as the
 # agent-bus-master skill. Reuses the exact boot recipe (agent-launch), so pop == boot.
-# Usage: agent-spawn <role> <project>
+# Usage: agent-spawn <role> <project> [--profile <profile>]
+#   --profile launches the role on another profile of ROLES_TOML (agentbus swap, v0.15).
+#   AGENT_LAUNCH_REQUIRE_BIND=1 is passed on: the launch fails if it cannot bind its pane.
 #   AGENT_SPAWN_DRYRUN=1 -> print the herdr command instead of running it (test seam).
 set -euo pipefail
 
@@ -12,8 +14,14 @@ source "$SCRIPT_DIR/lib/roles.sh"
 
 die() { echo "agent-spawn: $*" >&2; exit 1; }
 
-role="${1:?usage: agent-spawn <role> <project>}"
-project="${2:?usage: agent-spawn <role> <project>}"
+role="${1:?usage: agent-spawn <role> <project> [--profile <profile>]}"
+project="${2:?usage: agent-spawn <role> <project> [--profile <profile>]}"
+profile=""
+if [[ $# -gt 2 ]]; then
+  [[ $# -eq 4 && "$3" == "--profile" ]] || die "usage: agent-spawn <role> <project> [--profile <profile>]"
+  profile="$4"
+  [[ "$profile" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid profile name"
+fi
 
 [[ "${HERDR_ENV:-}" == "1" ]] || die "not inside herdr (HERDR_ENV != 1); open via the herdr-plus picker instead"
 [[ "$project" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid project name"
@@ -21,7 +29,12 @@ role_exists "$role" || die "unknown role: $role"
 roles_validate || die "invalid role manifest"
 
 # The command that turns a pane into the agent (exec so the pane *becomes* it, like the boot tabs).
-printf -v launch 'exec env %q %q %q %q' "ROLES_TOML=$ROLES_TOML" "$SCRIPT_DIR/agent-launch" "$role" "$project"
+envs=("ROLES_TOML=$ROLES_TOML")
+[[ "${AGENT_LAUNCH_REQUIRE_BIND:-}" == "1" ]] && envs+=("AGENT_LAUNCH_REQUIRE_BIND=1")
+args=("$SCRIPT_DIR/agent-launch" "$role" "$project")
+[[ -n "$profile" ]] && args+=(--profile "$profile")
+printf -v launch 'exec env'
+for w in "${envs[@]}" "${args[@]}"; do printf -v launch '%s %q' "$launch" "$w"; done
 
 if [[ "${AGENT_SPAWN_DRYRUN:-0}" == "1" ]]; then
   # `herdr agent start` (the old recipe) split the current pane; a popped agent should get its
