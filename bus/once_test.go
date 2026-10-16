@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // v0.15 §3.3: the entry and its mark go together; the same episode writes
@@ -129,5 +131,22 @@ func TestFencedCmdOnceSwapBeforeMark(t *testing.T) {
 	}
 	if _, err := b.FencedCmdOnce(ctx, "tok", "resumed:openai:coder", "1", "dispatch", "coder", CmdDirective, "resume", false); !errors.Is(err, ErrSwapInProgress) {
 		t.Fatalf("err = %v, want ErrSwapInProgress even with the mark set", err)
+	}
+}
+
+// EpisodeEntry reads the whole retained stream, past any page size.
+func TestEpisodeEntryScansTheWholeStream(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	stream := StreamKey(b.project, "cmd")
+	first, err := b.r.XAdd(ctx, &redis.XAddArgs{Stream: stream, Values: []any{"target", "coder", "episode", "m=1"}}).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 1200; i++ {
+		b.r.XAdd(ctx, &redis.XAddArgs{Stream: stream, Values: []any{"target", "other"}})
+	}
+	if id, err := b.EpisodeEntry(ctx, "coder", "m", "1"); err != nil || id != first {
+		t.Fatalf("EpisodeEntry = %q, %v; want %q", id, err, first)
 	}
 }

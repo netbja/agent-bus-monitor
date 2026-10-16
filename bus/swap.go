@@ -169,17 +169,24 @@ func (b *Bus) PendingFor(ctx context.Context, agent, id string) (bool, error) {
 
 // EpisodeEntry is the id of the newest cmd entry to agent written under
 // {p}:quota mark = episode (FencedCmdOnce's "episode" field), within the
-// retained stream; "" if none.
+// retained stream (all of it: MAXLEN ~ keeps more than its nominal cap);
+// "" if none.
 func (b *Bus) EpisodeEntry(ctx context.Context, agent, mark, episode string) (string, error) {
-	msgs, err := b.r.XRevRangeN(ctx, StreamKey(b.project, "cmd"), "+", "-", 1000).Result()
-	if err != nil {
-		return "", err
-	}
 	want := mark + "=" + episode
-	for _, m := range msgs {
-		if m.Values["target"] == agent && m.Values["episode"] == want {
-			return m.ID, nil
+	end := "+"
+	for {
+		msgs, err := b.r.XRevRangeN(ctx, StreamKey(b.project, "cmd"), end, "-", 500).Result()
+		if err != nil {
+			return "", err
 		}
+		for _, m := range msgs {
+			if m.Values["target"] == agent && m.Values["episode"] == want {
+				return m.ID, nil
+			}
+		}
+		if len(msgs) < 500 {
+			return "", nil
+		}
+		end = "(" + msgs[len(msgs)-1].ID
 	}
-	return "", nil
 }
