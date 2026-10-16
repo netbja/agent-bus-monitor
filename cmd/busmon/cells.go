@@ -196,7 +196,7 @@ func DrawLine(s tcell.Screen, x, y, w int, l Line, selected bool) {
 		if seg.Reverse {
 			style = style.Reverse(true)
 		}
-		if seg.Pill {
+		if seg.Pill { // replaces the style whole: a pill has no fade; NO_COLOR keeps its reverse in th.Pill
 			style = th.Pill(seg.Role)
 		}
 		// Match tview's continuation-cell write order.
@@ -237,7 +237,9 @@ func frameTitle(t Line, hue Role, focused bool) Line {
 	if t.Width() == 0 {
 		return nil
 	}
-	name := func(s Seg) bool { return s.Role == RoleText || (s.Bold && s.Role != RoleMuted) }
+	name := func(s Seg) bool {
+		return strings.TrimSpace(s.Text) != "" && (s.Role == RoleText || (s.Bold && s.Role != RoleMuted))
+	}
 	l := append(append(Line{{Text: " ", Role: RoleText}}, t...), Seg{Text: " ", Role: RoleText})
 	var out Line
 	for i := 0; i < len(l); i++ {
