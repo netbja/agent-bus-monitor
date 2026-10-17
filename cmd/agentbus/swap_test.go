@@ -46,8 +46,9 @@ type swapWorld struct {
 	mu      sync.Mutex
 	procs   map[int]uint64
 	calls   []string
-	spawnFn func(role, profile string) error
-	paneEnv string
+	spawnFn    func(role, profile string) error
+	paneEnv    string
+	approvalID string
 }
 
 func newSwapWorld(t *testing.T) (*swapWorld, swapDeps) {
@@ -96,9 +97,10 @@ func newSwapWorld(t *testing.T) (*swapWorld, swapDeps) {
 			}
 			return nil
 		},
-		Spawn: func(_ context.Context, role, _ string, profile string) error {
+		Spawn: func(_ context.Context, role, _ string, profile, approvalID string) error {
 			w.mu.Lock()
 			w.calls = append(w.calls, "spawn "+role+" "+profile)
+			w.approvalID = approvalID
 			w.mu.Unlock()
 			return w.spawnFn(role, profile)
 		},
@@ -467,5 +469,38 @@ func TestRetireClosesOneAgent(t *testing.T) {
 	w2.paneEnv = "p-old"
 	if code := runRetire(ctx, w2.b, d2, "foureyes", []string{"foureyes"}, &out, &errw); code == 0 || w2.closed() {
 		t.Fatal("an agent retired itself")
+	}
+}
+
+// v0.17 §5.3: a role that needs a person's approval is swapped by an agent
+// only with one, spent before any pane is closed and handed to agent-spawn.
+func TestSwapSpendsApprovalBeforeClose(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "roles.toml")
+	if err := os.WriteFile(path, []byte(swapManifest+"approval = \"person\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d.Manifest = func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }
+	d.Env = func(k string) string { return map[string]string{"AGENT_BUS_AGENT": "master"}[k] }
+	code, out := w.swap(d, "foureyes", "--profile", "opus")
+	if code != 1 || !strings.Contains(out, "agentbus approval ask foureyes") || w.closed() || w.intent() {
+		t.Fatalf("without approval: exit %d %q closed=%v", code, out, w.closed())
+	}
+	id, err := w.b.ApprovalAsk(ctx, "master", "foureyes", "quota")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := w.b.Answer(ctx, id, bus.ApprovalQuestion("foureyes"), "bernard", bus.ApprovalAnswer, ""); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := w.swap(d, "foureyes", "--profile", "opus"); code != 0 {
+		t.Fatalf("with approval: exit %d %s", code, out)
+	}
+	if w.approvalID != id {
+		t.Fatalf("agent-spawn got approval %q, want %q", w.approvalID, id)
+	}
+	if u := w.r.HGet(ctx, bus.AsksKey(w.b.Project()), id+"|u|spawn-foureyes").Val(); !strings.HasPrefix(u, "swap:") {
+		t.Fatalf("spend marker %q", u)
 	}
 }

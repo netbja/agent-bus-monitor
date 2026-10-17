@@ -33,7 +33,7 @@ type swapDeps struct {
 	LookPath  func(string) (string, error)
 	ProcStart func(pid int) (uint64, error)
 	ClosePane func(ctx context.Context, pane string) error
-	Spawn     func(ctx context.Context, role, project, profile string) error
+	Spawn     func(ctx context.Context, role, project, profile, approvalID string) error
 	Now       func() time.Time
 	Sleep     func(time.Duration)
 	PIDGone   time.Duration // wait for the old process (15 s)
@@ -60,13 +60,16 @@ func realSwapDeps(env []string) swapDeps {
 			}
 			return nil
 		},
-		Spawn: func(ctx context.Context, role, project, profile string) error {
+		Spawn: func(ctx context.Context, role, project, profile, approvalID string) error {
 			repo, err := repoDir(os.Getenv)
 			if err != nil {
 				return err
 			}
 			c := exec.CommandContext(ctx, filepath.Join(repo, "scripts", "agent-spawn"), role, project, "--profile", profile)
 			c.Env = append(os.Environ(), "AGENT_LAUNCH_REQUIRE_BIND=1")
+			if approvalID != "" { // the approval this swap spent (v0.17 §5.3)
+				c.Env = append(c.Env, "AGENT_SPAWN_APPROVAL="+approvalID)
+			}
 			out, err := c.CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("agent-spawn: %v: %s", err, strings.TrimSpace(string(out)))
@@ -200,6 +203,21 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		}
 	}
 
+	// v0.17 §5.3: an agent swapping a role that needs a person's approval
+	// spends it now, before anything is closed, and hands it to agent-spawn.
+	approvalID := ""
+	if m.Approval(role) == "person" && d.Env("AGENT_BUS_AGENT") != "" {
+		ttl := bus.DefaultApprovalTTL
+		if v := d.Env("AGENT_BUS_APPROVAL_TTL"); v != "" {
+			if ttl, err = time.ParseDuration(v); err != nil || ttl <= 0 {
+				return fail("AGENT_BUS_APPROVAL_TTL %q is not a positive duration", v)
+			}
+		}
+		if approvalID, err = b.ApprovalUse(ctx, self, role, bus.SpendSwap, "", ttl); err != nil {
+			return fail("%v; run `agentbus approval ask %s <reason>` and wait for a person's answer", err, role)
+		}
+	}
+
 	// 6.2 Handoff. A begin left without an end by a dead caller is closed in
 	// the ledger first (§11.2); the new begin goes with the intent.
 	if bad, ev, err := b.Interrupted(ctx, role); err == nil && bad {
@@ -267,7 +285,7 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	}
 
 	// 6.3 Launch and proof.
-	if err := d.Spawn(ctx, role, b.Project(), profile); err != nil {
+	if err := d.Spawn(ctx, role, b.Project(), profile, approvalID); err != nil {
 		return failed("launch", "the old pane is closed and the launch failed: %v\n%s", err, recovery)
 	}
 	var proved bus.AgentSnapshot

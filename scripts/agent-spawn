@@ -28,6 +28,14 @@ fi
 role_exists "$role" || die "unknown role: $role"
 roles_validate || die "invalid role manifest"
 
+# v0.17: an agent pops a role marked approval = "person" only with a person's approval on the
+# bus, spent here (a swap hands over the one it spent). A person's own shell is not gated.
+if [[ -n "${AGENT_BUS_AGENT:-}" && "$(role_field "$role" approval)" == person ]]; then
+  use=(approval use "$role")
+  [[ -n "${AGENT_SPAWN_APPROVAL:-}" ]] && use+=(--by-swap "$AGENT_SPAWN_APPROVAL")
+  "$AGENTBUS_BIN" --project "$project" "${use[@]}" >/dev/null || die "$role needs a person's approval: agentbus approval ask $role <reason>, then wait for the answer in busmon"
+fi
+
 # The command that turns a pane into the agent (exec so the pane *becomes* it, like the boot tabs).
 envs=("ROLES_TOML=$ROLES_TOML")
 [[ "${AGENT_LAUNCH_REQUIRE_BIND:-}" == "1" ]] && envs+=("AGENT_LAUNCH_REQUIRE_BIND=1")
