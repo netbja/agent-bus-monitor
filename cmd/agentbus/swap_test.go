@@ -40,12 +40,12 @@ fallback_profiles = ["opus"]
 // swapWorld is a fake herdr session: processes by pid, one pane per agent,
 // and a spawn that binds the new process like the launcher does.
 type swapWorld struct {
-	t       *testing.T
-	b       *bus.Bus
-	r       *redis.Client
-	mu      sync.Mutex
-	procs   map[int]uint64
-	calls   []string
+	t          *testing.T
+	b          *bus.Bus
+	r          *redis.Client
+	mu         sync.Mutex
+	procs      map[int]uint64
+	calls      []string
 	spawnFn    func(role, profile string) error
 	paneEnv    string
 	approvalID string
