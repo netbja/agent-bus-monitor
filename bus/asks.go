@@ -25,6 +25,9 @@ import (
 //	<id>|c        question ids carried to the replacement
 //	<id>|e        expiry (ms), set when the ask leaves open
 //	open:<agent>  the agent's open ask id
+//	approval:<agent>:<role>  the id of an approval ask (v0.17, approval.go),
+//	              kept outside the one-open-ask rule; |u|<qid> and |s|<qid>
+//	              mark it spent and handed over
 //
 // The id is the stream id of the ask's cmd entry (type=ask, target=people,
 // wake=no, no ref); each answer is a reply cmd (ref = the ask id) that wakes
@@ -229,7 +232,16 @@ local function sweep(key, now)
     local f = all[i]
     local id = string.match(f, '^([^|]+)')
     if id and dead[id] then redis.call('HDEL', key, f) end
+    if string.sub(f, 1, 9) == 'approval:' and dead[all[i+1]] then redis.call('HDEL', key, f) end
   end
+end
+-- approvalRole: the role whose approval index holds id for from, else nil.
+local function approvalRole(key, from, id)
+  local qs = redis.call('HGET', key, id .. '|q')
+  if not qs then return nil end
+  local role = string.match(qs, '^spawn%-([^,]+)$')
+  if role and redis.call('HGET', key, 'approval:' .. from .. ':' .. role) == id then return role end
+  return nil
 end
 local function nowms()
   local t = redis.call('TIME')
@@ -259,10 +271,12 @@ sweep(KEYS[1], now)
 local from, replaces = ARGV[2], ARGV[6]
 local open = redis.call('HGET', KEYS[1], 'open:' .. from)
 if open and redis.call('HGET', KEYS[1], open .. '|s') ~= 'open' then open = nil end
+local arole = nil
 if replaces == '' then
   if open then return redis.error_reply('ASK_OPEN ' .. open) end
-else
-  if open ~= replaces then return redis.error_reply('ASK_NOT_OPEN') end
+elseif open ~= replaces then
+  arole = approvalRole(KEYS[1], from, replaces)
+  if not arole or redis.call('HGET', KEYS[1], replaces .. '|s') ~= 'open' then return redis.error_reply('ASK_NOT_OPEN') end
 end
 local id = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[1], '*', 'from', from, 'target', 'people',
   'type', 'ask', 'command', ARGV[3], 'wake', 'no', 'text_complete', 'yes')
@@ -276,6 +290,18 @@ if replaces ~= '' then
     replaces .. '|e', tostring(now + tonumber(ARGV[8])))
 end
 local state = 'open'
+if arole then -- an approval ask replaced: its index follows, open:<from> is not touched
+  if ARGV[5] == 'spawn-' .. arole then
+    redis.call('HSET', KEYS[1], 'approval:' .. from .. ':' .. arole, id)
+  else
+    redis.call('HDEL', KEYS[1], 'approval:' .. from .. ':' .. arole)
+  end
+  if remaining(KEYS[1], id) == 0 then
+    state = 'answered'
+    redis.call('HSET', KEYS[1], id .. '|s', 'answered', id .. '|e', tostring(now + tonumber(ARGV[8])))
+  end
+  return {id, state}
+end
 if remaining(KEYS[1], id) == 0 then
   state = 'answered'
   redis.call('HSET', KEYS[1], id .. '|s', 'answered', id .. '|e', tostring(now + tonumber(ARGV[8])))
@@ -321,9 +347,14 @@ local now = nowms()
 sweep(KEYS[1], now)
 local s = redis.call('HGET', KEYS[1], ARGV[1] .. '|s')
 if s ~= 'open' then return redis.error_reply('ASK_NOT_OPEN') end
-if redis.call('HGET', KEYS[1], 'open:' .. ARGV[2]) ~= ARGV[1] then return redis.error_reply('ASK_NOT_YOURS') end
+local slot = 'open:' .. ARGV[2]
+if redis.call('HGET', KEYS[1], slot) ~= ARGV[1] then
+  local role = approvalRole(KEYS[1], ARGV[2], ARGV[1])
+  if not role then return redis.error_reply('ASK_NOT_YOURS') end
+  slot = 'approval:' .. ARGV[2] .. ':' .. role
+end
 redis.call('HSET', KEYS[1], ARGV[1] .. '|s', 'withdrawn', ARGV[1] .. '|e', tostring(now + tonumber(ARGV[3])))
-redis.call('HDEL', KEYS[1], 'open:' .. ARGV[2])
+redis.call('HDEL', KEYS[1], slot)
 return 1`)
 
 // askWithdrawQuestion: KEYS asks, cmd. ARGV id, agent, qid, note, retention
@@ -337,7 +368,12 @@ sweep(KEYS[1], now)
 local id, qid = ARGV[1], ARGV[3]
 local s = redis.call('HGET', KEYS[1], id .. '|s')
 if s ~= 'open' then return redis.error_reply('ASK_NOT_OPEN') end
-if redis.call('HGET', KEYS[1], 'open:' .. ARGV[2]) ~= id then return redis.error_reply('ASK_NOT_YOURS') end
+local slot = 'open:' .. ARGV[2]
+if redis.call('HGET', KEYS[1], slot) ~= id then
+  local role = approvalRole(KEYS[1], ARGV[2], id)
+  if not role then return redis.error_reply('ASK_NOT_YOURS') end
+  slot = 'approval:' .. ARGV[2] .. ':' .. role
+end
 if not csvhas(redis.call('HGET', KEYS[1], id .. '|q'), qid) then return redis.error_reply('ASK_NO_QUESTION') end
 if redis.call('HEXISTS', KEYS[1], id .. '|a|' .. qid) == 1 then return redis.error_reply('ASK_ANSWERED') end
 redis.call('HSET', KEYS[1], id .. '|a|' .. qid, cjson.encode({withdrawn = true, by = ARGV[2], text = ARGV[4], at = now}))
@@ -351,7 +387,7 @@ if left == 0 then
     if not a['withdrawn'] then state = 'answered' end
   end
   redis.call('HSET', KEYS[1], id .. '|s', state, id .. '|e', tostring(now + tonumber(ARGV[5])))
-  redis.call('HDEL', KEYS[1], 'open:' .. ARGV[2])
+  redis.call('HDEL', KEYS[1], slot)
 end
 return left`)
 
@@ -518,7 +554,7 @@ func (b *Bus) Asks(ctx context.Context) ([]Ask, error) {
 	}
 	var out []Ask
 	for f, v := range all {
-		if strings.Contains(f, "|") || strings.HasPrefix(f, "open:") {
+		if strings.Contains(f, "|") || strings.HasPrefix(f, "open:") || strings.HasPrefix(f, "approval:") {
 			continue
 		}
 		var d AskDef
