@@ -100,7 +100,7 @@ func upgradeTarget(raw json.RawMessage) string {
 	}
 	var o map[string]any
 	if json.Unmarshal(raw, &o) == nil {
-		for _, k := range []string{"model", "slug", "id", "to"} {
+		for _, k := range []string{"model", "slug", "id", "to", "value"} {
 			if v, ok := o[k].(string); ok {
 				return v
 			}
@@ -141,11 +141,28 @@ func readClaude(e Env) ([]Row, string, error) {
 			Label       string `json:"label"`
 			Description string `json:"description"`
 		} `json:"additionalModelOptionsCache"`
+		OrgDefault json.RawMessage `json:"orgModelDefaultCache"`
 	}
 	if json.Unmarshal(b, &cfg) == nil {
 		for _, o := range cfg.Options {
 			if o.Value != "" {
 				rows = append(rows, Row{Provider: "anthropic", Client: "claude-code", ID: o.Value, Label: o.Label, Note: o.Description})
+			}
+		}
+		// The organisation's default model, when set: a string, or an object
+		// naming it. It becomes the default row.
+		if id := upgradeTarget(cfg.OrgDefault); id != "" {
+			for i := range rows {
+				rows[i].Default = false
+			}
+			found := false
+			for i := range rows {
+				if rows[i].ID == id {
+					rows[i].Default, found = true, true
+				}
+			}
+			if !found {
+				rows = append(rows, Row{Provider: "anthropic", Client: "claude-code", ID: id, Label: "organisation default", Default: true})
 			}
 		}
 	}
@@ -194,14 +211,21 @@ func readKimi(e Env) ([]Row, string, error) {
 			DisplayName string `toml:"display_name"`
 		} `toml:"models"`
 	}
-	if _, err := toml.Decode(string(b), &cfg); err != nil {
+	meta, err := toml.Decode(string(b), &cfg)
+	if err != nil {
 		return nil, path, err
 	}
-	ids := make([]string, 0, len(cfg.Models))
-	for id := range cfg.Models {
-		ids = append(ids, id)
+	// The config's own declaration order (§12.1), not alphabetical.
+	var ids []string
+	seen := map[string]bool{}
+	for _, k := range meta.Keys() {
+		if len(k) >= 2 && k[0] == "models" && !seen[k[1]] {
+			if _, ok := cfg.Models[k[1]]; ok {
+				seen[k[1]] = true
+				ids = append(ids, k[1])
+			}
+		}
 	}
-	sort.Strings(ids)
 	var rows []Row
 	for _, id := range ids {
 		rows = append(rows, Row{Provider: "moonshot", Client: "kimi-cli", ID: id, Label: cfg.Models[id].DisplayName,

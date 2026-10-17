@@ -162,3 +162,17 @@ func TestDoctorPartialCatalogueNeverGone(t *testing.T) {
 		t.Fatalf("an id a partial catalogue does not list was judged %q", v)
 	}
 }
+
+// Codex re-check: "newer" only names a model the fresh catalogue lists.
+func TestDoctorNewerMustExist(t *testing.T) {
+	now := time.Now()
+	tbl := &models.Table{Providers: map[string]*models.Provider{
+		"openai": {OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{
+			{ID: "gpt-6-sol", Tier: models.Legacy, Newer: "gpt-7-missing"},
+		}},
+	}}
+	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
+	if v, _ := catalogueVerdict(d, "openai", "gpt-6-sol"); v != "" {
+		t.Fatalf("newer pointed at a missing model: %q", v)
+	}
+}

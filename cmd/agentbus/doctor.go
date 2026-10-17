@@ -298,12 +298,17 @@ func catalogueVerdict(d doctorDeps, provider, launched string) (string, string) 
 	if !found {
 		return "gone", fmt.Sprintf("%s is no longer in %s's model list (agentbus models): relaunch on a listed model", launched, provider)
 	}
-	newer := row.Newer
-	if newer == "" && row.Tier == models.Legacy {
-		newer = "a newer model of its family"
-	}
-	if n := d.Config.NewerByOrder(launched); n != "" {
-		newer = n
+	// Evidence names a model, and that model must be in the same fresh
+	// catalogue: never point a relaunch at something the provider lacks.
+	newer := ""
+	for _, cand := range []string{d.Config.NewerByOrder(launched), row.Newer} {
+		if cand == "" {
+			continue
+		}
+		if _, ok := p.Find(cand); ok {
+			newer = cand
+			break
+		}
 	}
 	if newer != "" && !row.Alias {
 		return "newer", fmt.Sprintf("%s runs %s; its source lists %s as newer", provider, launched, newer)

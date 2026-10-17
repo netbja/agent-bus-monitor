@@ -224,7 +224,9 @@ func (t *Table) Resolve(provider, tier string, now time.Time) (Row, bool) {
 	var first *Row
 	for i := range p.Rows {
 		r := p.Rows[i]
-		if r.Tier != tier || r.Family != "" {
+		// Another maker's model served on this provider's account (agy's
+		// Claude) is as selectable as its own: same quota, same client.
+		if r.Tier != tier {
 			continue
 		}
 		if r.Default {

@@ -138,3 +138,31 @@ func TestSaveLoad(t *testing.T) {
 		t.Fatalf("missing file: %+v %v", empty, err)
 	}
 }
+
+// Codex re-check: Kimi keeps its declaration order; Claude's organisation
+// default becomes the default row; agy's other-family rows resolve too.
+func TestSourceOrderOrgDefaultAndFamilies(t *testing.T) {
+	kimi := "default_model = \"z\"\n[models.\"zeta\"]\nmodel = \"z\"\n[models.\"alpha\"]\nmodel = \"a\"\n"
+	e := fakeEnv(map[string]string{
+		filepath.Join("/h", ".kimi-code", "config.toml"): kimi,
+		filepath.Join("/h", ".claude.json"):              `{"orgModelDefaultCache":{"value":"claude-sonnet-5-5"}}`,
+	}, map[string]string{"agy": "claude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\n"})
+	tbl := &Table{Providers: map[string]*Provider{}}
+	now := time.Now()
+	tbl.Refresh(context.Background(), Readers(e), DefaultTiers(), now)
+	if k := tbl.Providers["moonshot"].Rows; k[0].ID != "zeta" || k[1].ID != "alpha" {
+		t.Fatalf("kimi order %+v", k)
+	}
+	var def []string
+	for _, r := range tbl.Providers["anthropic"].Rows {
+		if r.Default {
+			def = append(def, r.ID)
+		}
+	}
+	if len(def) != 1 || def[0] != "claude-sonnet-5-5" {
+		t.Fatalf("claude defaults %v", def)
+	}
+	if r, ok := tbl.Resolve("google", Frontier, now); !ok || r.ID != "claude-opus-4-6-thinking" {
+		t.Fatalf("agy family row not selectable: %+v %v", r, ok)
+	}
+}
