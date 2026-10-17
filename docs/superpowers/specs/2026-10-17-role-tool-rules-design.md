@@ -30,20 +30,20 @@ the denial, and asked Bernard to add a permission rule or type `! agent-spawn de
 
 - master pops ordinary roles (architect, coder, docs, security…) **without a prompt and without
   the classifier**.
-- For a **risky role** (deploy today), master still pops it, but **only after Bernard has agreed**.
-  He gives his agreement; he does not type the command.
-- rev 5: the agreement is **a Claude Code permission prompt in master's pane** (the ask rule of
-  §4.3). The bus approval of rev 2-4 (asked in busmon, recorded, valid for every client) was built
-  and then dropped by Bernard: he accepts that the prompt is a convenience, not a lock (§7).
+- For a **risky role** (deploy today), master still pops it, and Claude Code asks Bernard in
+  master's pane first — **for the usual command form only** (`agent-spawn deploy …`). Another
+  form (quoted role, variable, path) is not guaranteed to prompt or be denied (§7, §9).
+- *Not built (rev 2-4, dropped in rev 5):* an agreement on the bus, asked and answered in busmon,
+  recorded and valid for every client, with the pane prompt as a second net.
 - All of it is part of agent-bus-monitor, versioned with `roles.toml`.
 
 ## 3. Goals, non-goals, anti-goals
 
 Goals
 
-- A role may require a person's approval to be popped (`approval = "person"`).
-- `agent-spawn` refuses such a role unless the bus holds an unused, recent approval from a person,
-  and spends it.
+- A role may be marked `approval = "person"`: a popping role's session gets an `ask` rule for it.
+- *Not built (dropped in rev 5):* `agent-spawn` refusing such a role without an unused, recent
+  approval from a person on the bus, and spending it.
 - A role that pops others (`pops = true`, master) gets Claude Code permission rules derived from
   `roles.toml`: one `allow` per ordinary role, one `ask` per approval role.
 - A role may declare extra rules of its own (`tool_rules`), validated.
@@ -51,7 +51,7 @@ Goals
 Non-goals
 
 - No change to target projects' `.claude/settings*.json`.
-- No rule mechanism for Codex, Kimi or adapters (the bus approval covers them).
+- No rule mechanism for Codex, Kimi or adapters (they pop under their own approval mode).
 - No change to the dispatcher or the conductor.
 
 Anti-goals
@@ -60,7 +60,7 @@ Anti-goals
   the latter lets `agent-spawn "deploy" p` or `agent-spawn $ROLE p` through an allow that the
   `ask` does not match (Claude Code documents that an ask rule "isn't a security boundary").
   Spawn rules are generated per role, never written by hand (§4.3).
-- **Claiming a security boundary.** See §7: this is a procedure gate.
+- **Claiming a security boundary.** See §7: the ask is a convenience, not a lock.
 - **Rules that leak** to every Claude Code session in the project. They live only in the session
   the launcher starts.
 
@@ -113,8 +113,10 @@ For every role `r` in the manifest except the popping role itself:
 - `approval` absent → `allow` `Bash(agent-spawn r *)`
 - `approval = "person"` → `ask` `Bash(agent-spawn r *)`
 
-A form no allow matches (quoted role, variable, path, `bash -c`) falls to the mode: a prompt in
-acceptEdits, the classifier in auto, the safe direction. A new role needs no rule edit.
+A form no rule matches (quoted role, variable, path, `bash -c`) falls to the mode: a prompt in
+acceptEdits, the classifier in auto. **That is not a safe fallback:** checked live (§9), the
+classifier let `agent-spawn "deploy" z` run without a prompt. The ask covers the exact form the
+agent usually writes, nothing more. A new role needs no rule edit.
 
 ### 4.4 What ships
 
