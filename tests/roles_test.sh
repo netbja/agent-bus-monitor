@@ -4,7 +4,7 @@ REPO="$(cd "$DIR/.." && pwd)"
 source "$DIR/lib.sh"
 source "$REPO/scripts/lib/roles.sh"
 
-assert_eq   "$(role_field master model)"      "claude-sonnet-5-5"  "master model"
+assert_eq   "$(role_field master model)"      "sonnet"  "master model"
 assert_eq   "$(role_field master permission)" "acceptEdits"      "master permission"
 assert_eq   "$(role_field coder permission)"  "bypassPermissions" "coder permission"
 assert_eq   "$(role_field architect fallback)" "claude-opus-5" "architect fallback"
@@ -14,5 +14,5 @@ assert_exit 0 "role_exists coder"    -- role_exists coder
 assert_exit 3 "role_exists nobody"   -- role_exists nobody
 assert_contains "$(roles_by_tier boot | tr '\n' ' ')" "sentinel" "sentinel is boot-tier"
 assert_eq   "$(roles_by_tier pop | tr '\n' ' ')" "architect deploy security docs " "architect + deploy + security + docs are the pop roles"
-assert_eq   "$(role_field deploy model)"      "claude-sonnet-5-5"  "deploy model"
+assert_eq   "$(role_field deploy model)"      "sonnet"  "deploy model"
 finish

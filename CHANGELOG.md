@@ -3,6 +3,14 @@
 One entry per release. The full notes for each are in [`docs/releases/`](docs/releases/).
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
+## v0.15.3 — a quota hold that does not flap
+
+- A quota hold ends only when the window that set it is read low, renewed or past its reset; an
+  aged reading at the limit no longer lets another window release it (master got "Project
+  resumed" every ten minutes).
+- master declares `waiting` only while one of its questions is open.
+
+[Notes](docs/releases/v0.15.3.md)
 
 ## v0.15.2 — a model table that keeps itself current
 

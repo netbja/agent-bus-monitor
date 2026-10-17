@@ -426,7 +426,7 @@ It never touches Redis — see README "Deployment topology".
   window and reset, hold a provider's agents (`{p}:quota` marks; no prompt, no escalation), pause
   for the coordinator's provider (`FencedQuotaPause`, never replacing another pause). Agents carry
   `client`/`provider` from the launcher's env. Unknown or aged (>30 min) readings never act; every
-  write is fenced. A limit hit read from a transcript is void once the API has answered since
+  write is fenced. A hold ends only when the window that set it is read under the threshold, renewed or past its reset (v0.15.3: an aged reading of it is not set aside for another, lower window). A limit hit read from a transcript is void once the API has answered since
   (v0.14.6: `servedAt`, `Reading.AvailableAt`): with no window to read, a recent answer ends the
   hold and the coordinator's quota pause at once (a reset granted early), and `FencedQuotaUnpause`
   sends master the resume directive like `FencedResume`. v0.15: when a hold ends (released,

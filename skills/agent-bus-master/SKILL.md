@@ -127,7 +127,7 @@ Then:
    waits: say the expected wait in your status.
 2. If at least one role has a fallback, open **one** ask, one question per role (the question id
    is the role name), at most 6; ask first for the roles with work in flight, the rest after this
-   ask is answered. Options: one per fallback ("Swap to opus: Claude Opus", recommended when the
+   ask is answered. Options: one per fallback ("Swap to <profile>: <its client and model>", recommended when the
    wait is over a day; put in its description the cost and any "same provider as coder" note from
    `roles fallbacks`), then "Wait for the reset".
 3. On a swap answer, run `agentbus --project <p> swap <role> --profile <fallback>`. It refuses
@@ -175,7 +175,10 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
   Act on it, then close exactly the questions it answers, citing the message, and leave the others
   open: `agentbus ask master --withdraw <id> --question <qid> --note "answered by message <msg id>: <answer>"`.
   Otherwise busmon keeps showing a decision waiting for the person.
-- When nothing is open any more, declare `working` again. One open ask at a time.
+- When nothing is open any more, declare `working` again — or `idle` when the answers leave
+  nothing to do (the team paused, the next step is the person's to start). One open ask at a time.
+- `waiting` means a person must decide **now**: busmon fades it and rings for it. Declare it only
+  while one of your asks is open. Waiting for a future instruction, or for a date, is `idle`.
 - Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
   answer it in busmon: prefer the ask.
 
