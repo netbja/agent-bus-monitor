@@ -1,51 +1,54 @@
 # The single role manifest. Add a role by adding a [roles.<name>] table — no code change.
 # <name> must match ValidName: ^[a-z][a-z0-9_-]{0,31}$ (lowercase, letter-first, <=32).
+# model: Claude Code's aliases (opus, sonnet, haiku) follow the latest model of each family, so a
+# renamed model never breaks a launch. Write an exact id (claude-opus-5-5) only to pin a version;
+# `agentbus roles doctor` shows what each agent really runs.
 
 [roles.master]
-model = "claude-sonnet-5-5"
+model = "sonnet"
 permission = "acceptEdits"
 tier = "boot"
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 
 [roles.coder]
-model = "claude-opus-5-5"
+model = "opus"
 permission = "bypassPermissions"
 tier = "boot"
 skills = ["agent-bus", "tdd", "implement"]
 
 [roles.foureyes]
-model = "claude-opus-5-5"
+model = "opus"
 permission = "bypassPermissions"
 tier = "boot"
 skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 
 [roles.sentinel]
-model = "claude-haiku-5-5"
+model = "haiku"
 permission = "bypassPermissions"
 tier = "boot"
 skills = ["agent-bus", "agent-bus-sentinel"]
 
 [roles.architect]
-model = "claude-opus-5-5"
+model = "opus"
 fallback = "claude-opus-5"
 permission = "bypassPermissions"
 tier = "pop"
 skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
 
 [roles.deploy]
-model = "claude-sonnet-5-5"
+model = "sonnet"
 permission = "bypassPermissions"
 tier = "pop"
 skills = ["agent-bus", "diagnosing-bugs"]
 
 [roles.security]
-model = "claude-opus-5-5"
+model = "opus"
 permission = "manual"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-security"]
 
 [roles.docs]
-model = "claude-sonnet-5-5"
+model = "sonnet"
 permission = "acceptEdits"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-docs"]

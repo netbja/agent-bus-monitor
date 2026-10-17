@@ -178,6 +178,8 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 			r.Verdict, r.Why = "unknown model", used.ModelError
 		case r.Launched == "":
 			r.Verdict, r.Why = "not reported", "no launched model recorded and none on the process command line"
+		case claudeAlias.MatchString(r.Configured) && strings.Contains(r.Launched, "-"+r.Configured+"-"):
+			r.Verdict = "ok" // an alias launched as the id of its family: never drift (§7.1)
 		case !sameModel(r.Launched, r.Configured):
 			r.Verdict, r.Why = "drift", fmt.Sprintf("launched %s, roles.toml now %s: relaunch with agentbus swap %s --back", r.Launched, r.Configured, n)
 		case r.Used != "" && !stale && !claudeAlias.MatchString(r.Launched) && !sameModel(r.Used, r.Launched):

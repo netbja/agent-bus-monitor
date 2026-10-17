@@ -38,6 +38,33 @@ agentbus pane claude1           # just the pane id; non-zero exit if none
 herdr pane ids are NOT durable. Before acting, confirm the stored id is still live with
 `herdr pane list`; if it's gone, re-resolve by matching the agent/cwd in that output.
 
+## Choosing who works on it
+
+The model follows the role (`roles.toml`): you never name a model. To get a stronger model on a
+task, give it to a role that runs one (`agentbus roles fallbacks <role>` and the manifest show
+which).
+
+- **Pop architect** (`agent-spawn architect <project>`) for: a design or architecture choice; a spec
+  touching several modules or services; a disagreement between coder and foureyes that survived
+  one round; a cross-cutting risk (security, data loss, deployment, money). Not for a routine
+  change: that stays with coder.
+- You run on a lighter model than architect. On a heavy decision, have architect instruct it
+  (options, risks, recommendation) and put the decision to the person with an ask, rather than
+  deciding alone.
+- **Close architect** once its recommendation is delivered and recorded (a report; a memory note
+  if it is durable): `agentbus retire architect`. Never `agentbus shutdown`: that stops the whole
+  team. The same goes for security (pop for a review, retire after the verdict) and docs.
+- `agentbus retire <role>` refuses while the agent takes part in an open review or mission or runs
+  a turn (`--now` takes the turn); it closes its tab and records it in `agentbus swaps`.
+
+## When the model drifts
+
+The sentinel runs `agentbus roles doctor` daily and reports agents whose launched model is not the
+one `roles.toml` now configures (busmon flags them `model≠`), or whose model the provider refused.
+Ask the person whether to relaunch each one; on a yes, when the agent is idle,
+`agentbus swap <role> --back` relaunches it on its own profile and model, with the usual checks and
+the resume of its work. Never relaunch without that yes: a model change changes cost and behaviour.
+
 ## Spawn a peer
 The team's boot roles (coder, foureyes, sentinel) come up with the workspace. When you need a
 role that isn't up — design work, or surge capacity — **pop** it. Popping runs the *exact* boot
@@ -141,6 +168,10 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
   a question's id only if its header, question and labels are unchanged (its answer is kept);
   give a reworded question a new id. Never send the new question in a `notify`.
 - `agentbus asks --open` shows what is still open; `--withdraw <id>` cancels an ask.
+- **The person answered outside the panel** (a message `@master …` instead of the question tabs)?
+  Act on it, then close exactly the questions it answers, citing the message, and leave the others
+  open: `agentbus ask master --withdraw <id> --question <qid> --note "answered by message <msg id>: <answer>"`.
+  Otherwise busmon keeps showing a decision waiting for the person.
 - When nothing is open any more, declare `working` again. One open ask at a time.
 - Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
   answer it in busmon: prefer the ask.
