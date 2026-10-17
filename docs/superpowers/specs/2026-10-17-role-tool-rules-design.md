@@ -248,6 +248,17 @@ one, spent before the close and accepted by the spawn.
    acceptEdits then auto: `agent-spawn architect x` runs unprompted (stub script), `agent-spawn
    deploy x` prompts, `agent-spawn "deploy" x` reaches the classifier or a prompt (never runs
    unasked), a user `deny` still wins. Record the results here.
+
+   **Result (2026-10-17, Claude Code 2.1.302, Sonnet 5.5, stub `agent-spawn`, `--settings` with
+   allow `Bash(agent-spawn architect *)` and ask `Bash(agent-spawn deploy *)`):**
+   - auto mode: `agent-spawn architect y` ran unprompted; `agent-spawn deploy y` prompted
+     ("Ask rule Bash(agent-spawn deploy *) overrides auto mode for this command");
+     `agent-spawn "deploy" z` matched no rule, went to the classifier, which **let it run
+     unasked**.
+   - acceptEdits: `agent-spawn "deploy" w` prompted ("This command requires approval").
+   - Not run: the user-scope `deny` case (documented precedence, confirmed by the rev 1 review).
+   - Consequence: the ask rule is a convenience, never the guarantee; the classifier passes a
+     quoted role. The bus gate (§5) is what holds, as designed.
 2. Manifest keys, validation, derived rules.
 3. Launch flag, preflight, announcement, dry run.
 4. `approval ask` / `approval use` and the Lua scripts; `answer` refused for agents.
