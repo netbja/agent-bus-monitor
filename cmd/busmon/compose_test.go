@@ -297,3 +297,42 @@ func TestComposeShowsEveryLine(t *testing.T) {
 		t.Fatalf("a line is hidden:\n%s", screen)
 	}
 }
+
+// The open-question hint holds while recipient and text are unchanged:
+// moving the cursor or the field keeps Ctrl+T available; an edit ends it.
+func TestComposeHintSurvivesMoves(t *testing.T) {
+	sh := demoShared(time.Now())
+	sh.agents["coder"].openAsk = 1
+	sh.asks = []bus.Ask{{ID: "1-0", From: "coder", Title: "GO", State: "open",
+		Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "go", Header: "GO", Question: "Run it?",
+			Options: []bus.AskOption{{Label: "Yes"}, {Label: "No"}}}}}}}
+	h := newHarness(t, sh)
+	h.draw(160, 45)
+	h.u.lists[PanelAgents].Select("coder")
+	h.key(runeKey('I'))
+	h.typeText("go now")
+	h.key(ctrl(tcell.KeyCtrlS))
+	h.key(key(tcell.KeyLeft))
+	h.key(key(tcell.KeyTab))
+	h.key(key(tcell.KeyTab))
+	h.key(ctrl(tcell.KeyCtrlT))
+	if h.u.ov != ovAsk || h.u.comp.kind != composeAnswer || h.u.comp.area.GetText() != "go now" {
+		t.Fatalf("Ctrl+T after moves: ov %v kind %v text %q", h.u.ov, h.u.comp.kind, h.u.comp.area.GetText())
+	}
+
+	h2 := newHarness(t, sh)
+	h2.draw(160, 45)
+	h2.u.lists[PanelAgents].Select("coder")
+	h2.key(runeKey('I'))
+	h2.typeText("go now")
+	h2.key(ctrl(tcell.KeyCtrlS))
+	h2.typeText("!")
+	h2.key(ctrl(tcell.KeyCtrlT))
+	if h2.u.ov == ovAsk {
+		t.Fatal("Ctrl+T acted on an edited text")
+	}
+	h2.key(ctrl(tcell.KeyCtrlS)) // a new text: the hint again, nothing sent
+	if len(h2.sentNow()) != 0 || !strings.Contains(h2.u.flash, "open question") {
+		t.Fatalf("edited text: sent %v flash %q", h2.sentNow(), h2.u.flash)
+	}
+}

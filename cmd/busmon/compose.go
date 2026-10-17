@@ -41,7 +41,6 @@ type composer struct {
 	askID  string // composeAnswer: the ask and question answered
 	qid    string
 	header string // composeAnswer: the question's header
-	held   bool   // the last Ctrl+S was held by a warning (open question, broadcast)
 
 	msgTo, msgBody string // the message draft while the window shows an answer or is closed
 }
@@ -351,7 +350,7 @@ func (u *ui) openAnswerComposer(a bus.Ask, q bus.AskQuestionState, text string) 
 
 func (u *ui) showComposer() {
 	c := u.comp
-	c.open, c.held = true, false
+	c.open = true
 	u.askDraft, u.broadcastDraft = "", ""
 	if u.composing != ModePanel {
 		u.leaveInput(true)
@@ -404,10 +403,9 @@ func (u *ui) composeKey(ev *tcell.EventKey) *tcell.EventKey {
 	c := u.comp
 	act := lookup(ModeCompose, u.focus, u.tier(), ev)
 	u.flash, u.flashErr = "", false
-	if act != ActSend && act != ActComposeAsk {
-		c.held = false
-		u.askDraft, u.broadcastDraft = "", ""
-	}
+	// A warning (open question, broadcast) holds while the recipient and the
+	// text are unchanged: send compares them, so moving the cursor or the
+	// field keeps it, and an edit ends it.
 	switch act {
 	case ActQuit:
 		u.app.Stop()
@@ -423,9 +421,9 @@ func (u *ui) composeKey(ev *tcell.EventKey) *tcell.EventKey {
 			}
 		}
 	case ActComposeAsk:
-		if c.kind == composeMessage && c.held && u.askDraft != "" {
-			tgt := c.recipient()
-			body := normalizeCompose(c.area.GetText())
+		tgt := c.recipient()
+		body := normalizeCompose(c.area.GetText())
+		if c.kind == composeMessage && u.askDraft != "" && u.askDraft == draftKey(tgt, body) {
 			c.saveMessage()
 			if u.answerInPanel(tgt, body, tgt != "") {
 				c.msgTo, c.msgBody = "", ""
@@ -470,19 +468,13 @@ func (u *ui) composeSend() {
 		return
 	}
 	tgt := c.recipient()
-	switch res := u.send(tgt, body, tgt != "", true); res {
-	case sendSent, sendPartial:
+	if res := u.send(tgt, body, tgt != "", true); res == sendSent || res == sendPartial {
 		c.msgTo, c.msgBody = "", ""
 		c.to.SetText("")
 		c.area.SetText("", false)
-		c.held = false
 		flash, isErr := u.flash, u.flashErr
 		u.hideComposer()
 		u.flash, u.flashErr = flash, isErr
-	case sendHeld:
-		c.held = true
-	default:
-		c.held = false
 	}
 }
 
