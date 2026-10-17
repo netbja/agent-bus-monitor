@@ -94,6 +94,15 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 	if paused != "" {
 		used[paused] = true
 	}
+	// v0.15.1: a role swapped away keeps its own provider watched, so its
+	// release (and the swap-back notice) is seen even when nobody else uses it.
+	if fbs, err := l.b.Fallbacks(ctx); err == nil {
+		for _, f := range fbs {
+			if bus.ValidName(f.OwnProvider) {
+				used[f.OwnProvider] = true
+			}
+		}
+	}
 	resetOf := map[string]int64{}
 
 	budgets := map[string]bus.BudgetSnapshot{}
@@ -238,6 +247,11 @@ func (l *loop) release(ctx context.Context, p string, recorded int64, snaps map[
 	complete, err := l.resumeAfterHold(ctx, p, recorded, snaps)
 	if err != nil {
 		return err
+	}
+	if ok, err := l.backNotices(ctx, p, recorded); err != nil {
+		return err
+	} else if !ok {
+		complete = false
 	}
 	if unpause {
 		if _, err := l.b.FencedQuotaUnpause(ctx, l.token, p, dispatchFrom); err != nil {

@@ -163,7 +163,7 @@ func (l *loop) clearEpisodeMarks(ctx context.Context, p string, R int64, marks m
 	episode := strconv.FormatInt(R, 10)
 	var fields []string
 	for f, v := range marks {
-		if (strings.HasPrefix(f, "resumed:"+p+":") || f == "longhold:"+p) && v != episode {
+		if (strings.HasPrefix(f, "resumed:"+p+":") || strings.HasPrefix(f, "back:"+p+":") || f == "longhold:"+p) && v != episode {
 			fields = append(fields, f)
 		}
 	}
@@ -257,4 +257,49 @@ func (l *loop) longHold(ctx context.Context, p string, w quota.Window, now time.
 		l.log(map[string]any{"action": "quota-long-hold", "provider": p, "until": w.Reset().UTC().Format(time.RFC3339)})
 	}
 	return nil
+}
+
+// backMark is the {p}:quota field of a role's swap-back notice.
+func backMark(provider, role string) string { return "back:" + provider + ":" + role }
+
+// backNotices (v0.15.1 §4.2, §11.3): when provider p's hold of episode R
+// ends, every role that was swapped away from p during that very episode
+// (its fallback record's held_episode is R) earns master one wake=no notice,
+// once per episode. It reports false when a notice could not be written, so
+// the hold mark stays and the next pass retries.
+func (l *loop) backNotices(ctx context.Context, p string, R int64) (bool, error) {
+	if R == 0 || !bus.ValidName(l.cfg.EscalateTo) {
+		return true, nil
+	}
+	fbs, err := l.b.Fallbacks(ctx)
+	if err != nil {
+		l.logError("", "back notice", err)
+		return false, nil
+	}
+	episode := strconv.FormatInt(R, 10)
+	roles := make([]string, 0, len(fbs))
+	for r := range fbs {
+		roles = append(roles, r)
+	}
+	sort.Strings(roles)
+	ok := true
+	for _, role := range roles {
+		f := fbs[role]
+		if f.OwnProvider != p || f.HeldEpisode != episode {
+			continue
+		}
+		since := time.UnixMilli(f.Since).Local().Format("Mon 15:04")
+		text := fmt.Sprintf("%s is back. %s runs on its fallback %s since %s: swap it back when its current work is done (agentbus swap %s --back).",
+			p, role, f.Profile, since, role)
+		_, err := l.b.FencedCmdOnce(ctx, l.token, backMark(p, role), episode, dispatchFrom, l.cfg.EscalateTo,
+			bus.CmdDirective, truncRunes(text, bus.CmdMaxRunes), true)
+		if errors.Is(err, bus.ErrNotHolder) {
+			return false, err
+		}
+		if err != nil {
+			l.logError(role, "back notice", err)
+			ok = false
+		}
+	}
+	return ok, nil
 }

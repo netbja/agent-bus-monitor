@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -478,4 +479,51 @@ func TestRunQuotaReleaseWaitsForASwap(t *testing.T) {
 		}
 		return m["hold:openai"] == "" && n == 1
 	})
+}
+
+// v0.15.1 §4.2: the release of the episode a role was swapped away from
+// earns master one notice; a role swapped during another episode, or for
+// another provider, earns none.
+func TestRunQuotaReleaseRemindsTheSwapBack(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "foureyes", "p-4", "anthropic")
+	reset := time.Now().Add(time.Hour).Unix()
+	ep := strconv.FormatInt(reset, 10)
+	fb := map[string]string{
+		"foureyes": `{"own_profile":"review","own_provider":"openai","profile":"opus","provider":"anthropic","since":1,"held_episode":"` + ep + `"}`,
+		"coder":    `{"own_profile":"main","own_provider":"openai","profile":"opus","provider":"anthropic","since":1,"held_episode":"123"}`,
+		"kimi":     `{"own_profile":"k","own_provider":"moonshot","profile":"opus","provider":"anthropic","since":1,"held_episode":"` + ep + `"}`,
+	}
+	for k, v := range fb {
+		r.HSet(ctx, bus.FallbackKey(b.Project()), k, v)
+	}
+	at := func(pct float64) quota.Reading {
+		return quota.Reading{Provider: "openai", ObservedAt: time.Now().UnixMilli(),
+			Windows: []quota.Window{{Name: "5h", UsedPct: pct, ResetsAt: reset, Minutes: 300}}}
+	}
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 10), at(97))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "openai held", func() bool { m, _ := b.QuotaMarks(ctx); return m["hold:openai"] != "" })
+	f.set(reading("anthropic", 10), at(40))
+	waitFor(t, 3*time.Second, "hold released", func() bool { m, _ := b.QuotaMarks(ctx); return m["hold:openai"] == "" })
+	notices := map[string]int{}
+	for _, m := range entries(t, r, b, "cmd") {
+		if cmd, _ := m.Values["command"].(string); strings.HasPrefix(cmd, "openai is back.") {
+			if m.Values["target"] != "master" || m.Values["wake"] != "no" {
+				t.Errorf("notice %v", m.Values)
+			}
+			for role := range fb {
+				if strings.Contains(cmd, " "+role+" runs") {
+					notices[role]++
+				}
+			}
+		}
+	}
+	if notices["foureyes"] != 1 || notices["coder"] != 0 || notices["kimi"] != 0 {
+		t.Fatalf("notices = %v, want foureyes once only", notices)
+	}
 }
