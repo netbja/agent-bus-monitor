@@ -749,6 +749,7 @@ func statusIdent(ctx context.Context) bus.AgentIdent {
 		Session:  os.Getenv("CLAUDE_CODE_SESSION_ID"),
 		Client:   os.Getenv("AGENT_BUS_CLIENT"),
 		Provider: bus.ProviderFor(os.Getenv("AGENT_BUS_CLIENT"), os.Getenv("AGENT_BUS_PROVIDER")),
+		Model:    os.Getenv("AGENT_BUS_MODEL"),
 	}
 	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
 		return who

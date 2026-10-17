@@ -145,7 +145,7 @@ func TestSwapReplacesTheAgentAndProvesIt(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, out)
 	}
-	if !strings.Contains(out, "swapped foureyes: review (openai, codex-model) -> opus (anthropic, opus), pane p-new, pid 5151") {
+	if !strings.Contains(out, "swapped foureyes: review -> opus (anthropic, opus), pane p-new, pid 5151") {
 		t.Fatalf("output %q", out)
 	}
 	if got := strings.Join(w.calls, ";"); got != "close p-old;spawn foureyes opus" {
@@ -337,5 +337,105 @@ func TestSwapIgnoresAnOlderEpisodesResume(t *testing.T) {
 	code, out := w.swap(d, "foureyes", "--profile", "opus", "--now")
 	if code != 0 || !strings.Contains(out, "resume sent to foureyes") {
 		t.Fatalf("exit %d: %s", code, out)
+	}
+}
+
+// v0.15.1: a swap leaves begin and done in the ledger and a fallback record;
+// --back returns, writes back and clears it; once back on the same model,
+// --back refuses; a model that drifted is relaunched.
+func TestSwapLedgerFallbackAndBack(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), "hold:openai", "1792500000")
+	if code, out := w.swap(d, "foureyes", "--profile", "opus", "--reason", "ask 42: swap until monday"); code != 0 {
+		t.Fatalf("swap: %d %s", code, out)
+	}
+	fbs, _ := w.b.Fallbacks(ctx)
+	if r := fbs["foureyes"]; r.OwnProfile != "review" || r.Profile != "opus" || r.HeldEpisode != "1792500000" || r.Reason != "ask 42: swap until monday" {
+		t.Fatalf("fallback = %+v", r)
+	}
+	// Back: the new process (pid 5151) is replaced by one on review.
+	w.mu.Lock()
+	w.procs = map[int]uint64{5151: 9}
+	w.calls = nil
+	w.mu.Unlock()
+	w.spawnFn = func(role, profile string) error {
+		w.mu.Lock()
+		w.procs[6161] = 3
+		w.mu.Unlock()
+		_, err := w.b.Status(ctx, role, "idle", "", bus.AgentIdent{Pane: "p-back", PID: 6161, PIDStart: 3, Client: "codex", Provider: "openai", Model: "codex-model"})
+		return err
+	}
+	d.ClosePane = func(_ context.Context, pane string) error {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		delete(w.procs, 5151)
+		return nil
+	}
+	if code, out := w.swap(d, "foureyes", "--back", "--now"); code != 0 {
+		t.Fatalf("back: %d %s", code, out)
+	}
+	if fbs, _ := w.b.Fallbacks(ctx); len(fbs) != 0 {
+		t.Fatalf("fallback kept after back: %+v", fbs)
+	}
+	log, _ := w.b.SwapLog(ctx, "foureyes", 0)
+	var events []string
+	for _, e := range log {
+		events = append(events, e.Event)
+	}
+	if strings.Join(events, ",") != "back,begin,done,begin" {
+		t.Fatalf("ledger = %v", events)
+	}
+	if code, out := w.swap(d, "foureyes", "--back"); code == 0 || !strings.Contains(out, "already on its own profile") {
+		t.Fatalf("a second back: %d %s", code, out)
+	}
+	// The manifest moved on: the same profile, another model, is drift.
+	_, _ = w.b.Status(ctx, "foureyes", "idle", "", bus.AgentIdent{Pane: "p-back", PID: 6161, PIDStart: 3, Client: "codex", Provider: "openai", Model: "codex-old"})
+	w.spawnFn = func(role, profile string) error {
+		w.mu.Lock()
+		w.procs[7171] = 4
+		w.mu.Unlock()
+		_, err := w.b.Status(ctx, role, "idle", "", bus.AgentIdent{Pane: "p-new2", PID: 7171, PIDStart: 4, Client: "codex", Provider: "openai", Model: "codex-model"})
+		return err
+	}
+	d.ClosePane = func(_ context.Context, pane string) error {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		delete(w.procs, 6161)
+		return nil
+	}
+	if code, out := w.swap(d, "foureyes", "--back"); code != 0 {
+		t.Fatalf("drift relaunch: %d %s", code, out)
+	}
+}
+
+// A failed swap writes failed; a begin left by a dead caller is closed as
+// interrupted by the next swap.
+func TestSwapLedgerFailureAndInterruption(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	w.spawnFn = func(string, string) error { return errors.New("herdr refused") }
+	if code, _ := w.swap(d, "foureyes", "--profile", "opus"); code == 0 {
+		t.Fatal("a failed launch exited 0")
+	}
+	log, _ := w.b.SwapLog(ctx, "foureyes", 1)
+	if len(log) != 1 || log[0].Event != bus.SwapFailed || !strings.HasPrefix(log[0].Error, "launch:") {
+		t.Fatalf("ledger = %+v", log)
+	}
+	if err := w.b.BeginSwap(ctx, "coder", bus.SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.b.EndSwap(ctx, "coder") // the caller died: begin without an end
+	if bad, _, _ := w.b.Interrupted(ctx, "coder"); !bad {
+		t.Fatal("not seen as interrupted")
+	}
+}
+
+func TestSwapUsageBackAndProfileExclusive(t *testing.T) {
+	w, d := newSwapWorld(t)
+	for _, args := range [][]string{{"foureyes"}, {"foureyes", "--back", "--profile", "opus"}} {
+		if code, _ := w.swap(d, args...); code != 2 {
+			t.Fatalf("%v: exit %d, want 2", args, code)
+		}
 	}
 }

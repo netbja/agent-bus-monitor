@@ -2,7 +2,6 @@ package bus
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -33,24 +32,6 @@ type SwapIntent struct {
 // ErrSwapInProgress: another swap of the same role holds the intent.
 var ErrSwapInProgress = fmt.Errorf("a swap of this role is already in progress")
 
-// BeginSwap writes the intent (SET NX PX); a second swap is refused.
-func (b *Bus) BeginSwap(ctx context.Context, role string, in SwapIntent) error {
-	if !ValidName(role) {
-		return fmt.Errorf("invalid role %q", role)
-	}
-	v, err := json.Marshal(in)
-	if err != nil {
-		return err
-	}
-	ok, err := b.r.SetNX(ctx, SwapKey(b.project, role), string(v), SwapTTL).Result()
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrSwapInProgress
-	}
-	return nil
-}
 
 // EndSwap deletes the intent.
 func (b *Bus) EndSwap(ctx context.Context, role string) error {
