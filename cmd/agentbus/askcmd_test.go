@@ -46,3 +46,19 @@ func TestAskCLIRoundTrip(t *testing.T) {
 		t.Fatal("an ask with no question was accepted")
 	}
 }
+
+func TestAnswerRefusedForAgents(t *testing.T) {
+	var out, errw bytes.Buffer
+	getenv := func(k string) string {
+		if k == "AGENT_BUS_AGENT" {
+			return "master"
+		}
+		return ""
+	}
+	if code := runAnswer(context.Background(), nil, []string{"1-1", "q", "--choice", "Yes"}, getenv, &out, &errw); code != 2 {
+		t.Fatalf("exit %d", code)
+	}
+	if want := "answer: agents do not answer asks; a person answers in busmon or from a shell without AGENT_BUS_AGENT\n"; errw.String() != want {
+		t.Fatalf("stderr = %q", errw.String())
+	}
+}
