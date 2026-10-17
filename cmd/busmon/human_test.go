@@ -222,6 +222,14 @@ func TestAllWithSeveralOpenQuestionsAsksWhich(t *testing.T) {
 	if !strings.Contains(screen, "answer whose question? 1 coder") || h.u.ov == ovAsk {
 		t.Fatalf("no chooser:\n%s", screen)
 	}
+	h.key(key(tcell.KeyEnter)) // swallowed: nothing is sent while the choice is open
+	h.key(runeKey('7'))        // not a choice: swallowed too
+	h.w.mu.Lock()
+	n := len(h.w.sent)
+	h.w.mu.Unlock()
+	if n != 0 || h.u.input.GetText() != "@all hold on" {
+		t.Fatalf("a key during the choice sent %d or typed: %q", n, h.u.input.GetText())
+	}
 	h.key(runeKey('2'))
 	if h.u.ov != ovAsk || string(h.u.ask.text) != "hold on" {
 		t.Fatalf("pick 2: overlay %v text %q", h.u.ov, string(h.u.ask.text))

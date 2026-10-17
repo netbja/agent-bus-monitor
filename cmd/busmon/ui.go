@@ -288,17 +288,19 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	m := u.mode()
 	// v0.15.1 §11.5: after Tab with several recipients holding questions, a
 	// number picks whose panel opens; Esc goes back to editing.
+	// Every other key is swallowed while the choice is open: nothing is sent
+	// or typed until the person picks or goes back.
 	if pick := u.askChoose; pick != nil {
-		u.askChoose = nil
-		if ev.Key() == tcell.KeyRune && ev.Rune() >= '1' && int(ev.Rune()-'0') <= len(pick.holders) {
+		switch {
+		case ev.Key() == tcell.KeyRune && ev.Rune() >= '1' && int(ev.Rune()-'0') <= len(pick.holders):
+			u.askChoose = nil
 			u.leaveInput(true)
 			u.openAskPrefilled(pick.holders[ev.Rune()-'1'], pick.body)
-			return nil
+		case ev.Key() == tcell.KeyEscape:
+			u.askChoose = nil
+			u.flash, u.flashErr = "", false
 		}
-		u.flash, u.flashErr = "", false
-		if ev.Key() == tcell.KeyEscape {
-			return nil
-		}
+		return nil
 	}
 	act := lookup(m, u.focus, u.tier(), ev)
 	if act == ActQuit {
@@ -585,13 +587,19 @@ func (u *ui) inputDone(key tcell.Key) {
 			u.openAskPrefilled(holders[0], body)
 			return
 		}
-		// Several recipients hold questions: the person picks one, by number.
+		// Several recipients hold questions: the person picks one, by number
+		// (one digit: the first nine; the others stay reachable with w).
+		more := ""
+		if len(holders) > 9 {
+			more = fmt.Sprintf(" %s %d more: w on its row", GlyphNone, len(holders)-9)
+			holders = holders[:9]
+		}
 		var opts []string
 		for i, h := range holders {
 			opts = append(opts, fmt.Sprintf("%d %s", i+1, h))
 		}
 		u.askChoose = &askChoice{holders: holders, body: body}
-		u.flash, u.flashErr = "answer whose question? "+strings.Join(opts, " "+GlyphNone+" ")+" (its number; Esc: back to editing)", false
+		u.flash, u.flashErr = "answer whose question? "+strings.Join(opts, " "+GlyphNone+" ")+more+" (its number; Esc: back to editing)", false
 	case tcell.KeyEscape:
 		u.askDraft = ""
 		u.leaveInput(true)
