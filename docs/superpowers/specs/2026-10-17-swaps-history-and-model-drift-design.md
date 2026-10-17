@@ -290,3 +290,25 @@ These rules replace the corresponding text above where they differ.
    its time (a separate reader from the usage-bearing one). Other clients show `used: not
    available` until a reader bound to their session exists (v0.15.2 or later). A `used` older
    than 24 h is shown as stale and never judged.
+
+## 12. Rev 3 — Codex re-check of §10 (2026-10-17)
+
+§11 was found to resolve the rev 1 points. For the model table (v0.15.2):
+
+1. **Order and "newer" need evidence.** Rows keep their source's order (the client's own
+   catalogue order). A tier resolves to the source's `default` row when it is in that tier, else
+   to the first row of that tier in source order. `newer` is reported only from stated evidence:
+   a description that marks generations ("Latest…", "Previous generation…", "Older…", as Codex
+   does), or a person's ranking in `models.toml` (`[families.<name>] order = [ids, newest
+   first]`). Without such evidence the verdict is `unknown`, never `newer`.
+2. **A failed read is not a gone model.** The table keeps, per provider, the last refresh's
+   outcome (`ok`, `at`, `error`) and the rows of the last **complete, successful** read. `gone`
+   and `newer` are judged only from a successful read younger than 7 days; otherwise the doctor
+   says "catalogue unavailable (since …)" and judges nothing for that provider.
+3. **Aliases resolve first.** The doctor resolves a launched alias through the catalogue (Claude's
+   alias → id map, the last id a transcript showed for it) before the presence check. An alias
+   whose id changed is not drift; an alias the catalogue no longer knows is `gone`.
+4. **Read the client's own home.** Each reader honours the override its client honours:
+   `CODEX_HOME` for Codex (as the quota reader does), `CLAUDE_CONFIG_DIR` for Claude Code (as the
+   transcript backstop does); for Kimi, Grok and agy the CLI or config path the launched client
+   uses. The table row records which home it came from.
