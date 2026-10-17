@@ -274,7 +274,7 @@ func jsonString(s string) string {
 
 // build is Python's build(): the client command line. dry replaces the
 // prompt and the generated files with placeholders and writes nothing.
-func build(p Profile, project, prompt, promptPath string, dry bool, env []string) ([]string, error) {
+func build(p Profile, rules ToolRules, project, prompt, promptPath string, dry bool, env []string) ([]string, error) {
 	model, opts := p.Model, p.Options
 	switch p.Client {
 	case "claude-code":
@@ -284,6 +284,13 @@ func build(p Profile, project, prompt, promptPath string, dry bool, env []string
 		}
 		if perm := opts["permission"]; perm != "" && perm != "default" {
 			cmd = append(cmd, "--permission-mode", perm)
+		}
+		if !rules.Empty() {
+			settings, err := settingsJSON(rules)
+			if err != nil {
+				return nil, err
+			}
+			cmd = append(cmd, "--settings", settings)
 		}
 		if p.Reasoning != "" {
 			cmd = append(cmd, "--effort", p.Reasoning)
@@ -345,7 +352,7 @@ func build(p Profile, project, prompt, promptPath string, dry bool, env []string
 
 // preflight checks a builtin client's --help for the flags this launch will
 // pass, before any cache file is written. --help never starts a session.
-func preflight(p Profile, e *envMap) error {
+func preflight(p Profile, rules ToolRules, e *envMap) error {
 	binary := builtinBinary[p.Client]
 	path, err := lookPath(binary, e.or("PATH", ""))
 	if err != nil {
@@ -374,6 +381,9 @@ func preflight(p Profile, e *envMap) error {
 		}
 		if perm != "" && perm != "default" {
 			needed = append(needed, "--permission-mode")
+		}
+		if !rules.Empty() {
+			needed = append(needed, "--settings")
 		}
 	}
 	if p.Client == "kimi-cli" && perm != "" && perm != "default" {
@@ -453,17 +463,25 @@ func LaunchProfile(m *Manifest, role, project, profile string, env []string, std
 	for _, name := range missing { // a team that does not start is worse than an agent short of a skill
 		fmt.Fprintf(cfg.Stderr, "warning: skill %s not found (run ./setup.sh install); %s starts without it\n", name, role)
 	}
-	dry := e.or("AGENT_LAUNCH_DRYRUN", "") == "1"
-	if _, builtin := builtinBinary[p.Client]; !dry && !p.Legacy && builtin {
-		if err := preflight(p, e); err != nil {
-			return err
-		}
-	}
-	cmd, err := build(p, project, prompt, promptPath, dry, cfg.Env)
+	rules, err := m.LaunchRules(role)
 	if err != nil {
 		return err
 	}
-	if el := elevated(p); el != "" { // a swapped ROLES_TOML must not start an unsandboxed client silently
+	if p.Client != "claude-code" && !rules.Empty() { // v0.17 §6: the bus approval still gates the pop
+		fmt.Fprintf(cfg.Stderr, "note: tool_rules not applied for %s\n", p.Client)
+		rules = ToolRules{}
+	}
+	dry := e.or("AGENT_LAUNCH_DRYRUN", "") == "1"
+	if _, builtin := builtinBinary[p.Client]; !dry && !p.Legacy && builtin {
+		if err := preflight(p, rules, e); err != nil {
+			return err
+		}
+	}
+	cmd, err := build(p, rules, project, prompt, promptPath, dry, cfg.Env)
+	if err != nil {
+		return err
+	}
+	if el := elevated(p, rules); el != "" { // a swapped ROLES_TOML must not start an unsandboxed client silently
 		fmt.Fprintf(cfg.Stderr, "notice: %s runs %s with elevated %s\n", role, p.Client, el)
 	}
 	// Inside herdr, bind this process's pid before exec hands it (and its
@@ -551,6 +569,24 @@ func sortedKeys(m map[string]string) []string {
 		}
 	}
 	return keys
+}
+
+// settingsJSON is the --settings value carrying a role's tool rules:
+// {"permissions": {"allow": [...], "ask": [...], "deny": [...]}}, empty lists
+// left out, in Python's json.dumps form like every other generated JSON here.
+func settingsJSON(r ToolRules) (string, error) {
+	perms := newOrdered()
+	for _, l := range []struct {
+		key  string
+		list []string
+	}{{"allow", r.Allow}, {"ask", r.Ask}, {"deny", r.Deny}} {
+		if len(l.list) > 0 {
+			perms.set(l.key, l.list)
+		}
+	}
+	root := newOrdered()
+	root.set("permissions", perms)
+	return pyJSON(root)
 }
 
 // ordered is a JSON object that keeps its keys in insertion order, as a
@@ -837,12 +873,15 @@ func pyFloat(f float64) string {
 // elevated names the builtin options that take a client out of its safe
 // defaults ("" when none): Claude without permission prompts, Codex with full
 // disk access or no approvals, Kimi in yolo mode.
-func elevated(p Profile) string {
+func elevated(p Profile, rules ToolRules) string {
 	var parts []string
 	switch p.Client {
 	case "claude-code":
 		if perm := p.Options["permission"]; perm == "bypassPermissions" || perm == "dontAsk" {
 			parts = append(parts, "permission="+perm)
+		}
+		if n := len(rules.Allow); n > 0 { // commands that skip the prompt and the classifier
+			parts = append(parts, fmt.Sprintf("allow=%d rules", n))
 		}
 	case "codex":
 		if p.Options["sandbox"] == "danger-full-access" {
