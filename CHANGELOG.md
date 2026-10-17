@@ -3,6 +3,15 @@
 One entry per release. The full notes for each are in [`docs/releases/`](docs/releases/).
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
+## v0.16.0 — a compose window in busmon
+
+- `I` opens a multi-line compose window: Enter is a new line, Ctrl+S sends, Tab the recipient, Esc
+  keeps the draft. Ctrl+O or a multi-line paste moves the line's text there.
+- The question panel's free answer uses the same window; pasting works everywhere.
+- Agents use a code-index MCP server first when one is available.
+
+[Notes](docs/releases/v0.16.0.md)
+
 ## v0.15.3 — a quota hold that does not flap
 
 - A quota hold ends only when the window that set it is read low, renewed or past its reset; an

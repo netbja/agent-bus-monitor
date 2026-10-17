@@ -21,16 +21,20 @@ type fakeWriter struct {
 	sent     []string
 	threads  int
 	release  chan struct{}
-	fail     error     // returned by Cmd and Notify when set
-	left     int       // questions left after an Answer
-	answerID string    // the ask id Answer reports (default: the one given)
-	asks     []bus.Ask // what Asks returns
+	fail     error           // returned by Cmd and Notify when set
+	left     int             // questions left after an Answer
+	answerID string          // the ask id Answer reports (default: the one given)
+	asks     []bus.Ask       // what Asks returns
+	failFor  map[string]bool // HumanCmd fails for these targets
 }
 
 func (f *fakeWriter) HumanCmd(_ context.Context, from, target, command string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "cmd "+target+" "+command)
+	if f.failFor[target] {
+		return "", errors.New("refused")
+	}
 	return "1-0", f.fail
 }
 

@@ -177,8 +177,8 @@ func TestDirectiveToAnAgentWithAnOpenQuestion(t *testing.T) {
 		t.Fatalf("first Enter sent %d / footer:\n%s", n, screen)
 	}
 	h.key(key(tcell.KeyTab))
-	if h.u.ov != ovAsk || !h.u.ask.typing || string(h.u.ask.text) != "yes go!" {
-		t.Fatalf("Tab: overlay %v typing %v text %q", h.u.ov, h.u.ask.typing, string(h.u.ask.text))
+	if h.u.ov != ovAsk || h.u.mode() != ModeCompose || h.u.comp.area.GetText() != "yes go!" {
+		t.Fatalf("Tab: overlay %v mode %v text %q", h.u.ov, h.u.mode(), h.u.comp.area.GetText())
 	}
 	h.w.mu.Lock()
 	n = len(h.w.sent)
@@ -231,8 +231,8 @@ func TestAllWithSeveralOpenQuestionsAsksWhich(t *testing.T) {
 		t.Fatalf("a key during the choice sent %d or typed: %q", n, h.u.input.GetText())
 	}
 	h.key(runeKey('2'))
-	if h.u.ov != ovAsk || string(h.u.ask.text) != "hold on" {
-		t.Fatalf("pick 2: overlay %v text %q", h.u.ov, string(h.u.ask.text))
+	if h.u.ov != ovAsk || h.u.mode() != ModeCompose || h.u.comp.area.GetText() != "hold on" {
+		t.Fatalf("pick 2: overlay %v text %q", h.u.ov, h.u.comp.area.GetText())
 	}
 	if a, ok := h.u.currentAsk(); !ok || a.From != "foureyes" {
 		t.Fatalf("opened %+v", a)

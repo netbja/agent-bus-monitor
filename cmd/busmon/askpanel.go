@@ -19,12 +19,10 @@ import (
 // open question. It is its own key mode (ModeAsk); "?" stays help.
 
 // askPanel is the panel's cursor: which ask, which question, which option
-// (len(options) = "Other…"), and the free text being typed.
+// (len(options) = "Other…", written in the compose window since v0.16).
 type askPanel struct {
 	id     string
 	q, opt int
-	typing bool
-	text   []rune
 }
 
 // openAsks are the asks still open, oldest first.
@@ -219,7 +217,7 @@ func askPanelBody(a bus.Ask, p askPanel, width int) string {
 	for i, o := range q.Options {
 		mark := "  "
 		role := RoleText
-		if i == p.opt && !p.typing {
+		if i == p.opt {
 			mark, role = GlyphSelect+" ", RoleAccent
 		}
 		line := fmt.Sprintf("%s%d. %s", mark, i+1, o.Label)
@@ -236,12 +234,7 @@ func askPanelBody(a bus.Ask, p askPanel, width int) string {
 	if p.opt == other {
 		mark, role = GlyphSelect+" ", RoleAccent
 	}
-	if p.typing {
-		sb.WriteString(tg(RoleAccent, GlyphSelect+" "+fmt.Sprintf("%d. ", other+1)) + tg(RoleText, string(p.text)) + tg(RoleAccent, "_") + "\n")
-		sb.WriteString(tg(RoleMuted, "      Enter sends this answer · Esc back to the options") + "\n")
-	} else {
-		sb.WriteString(wrapPlain(fmt.Sprintf("%s%d. Other... (type your answer)", mark, other+1), width, role, false) + "\n")
-	}
+	sb.WriteString(wrapPlain(fmt.Sprintf("%s%d. Other... (type your answer)", mark, other+1), width, role, false) + "\n")
 	sb.WriteString("\n" + tg(RoleMuted, GlyphUp+GlyphDownArrow+" or 1-9 choose · Enter answer · "+GlyphArrowL+GlyphArrowR+" question · Esc close") + "\n")
 	return sb.String()
 }
@@ -269,26 +262,6 @@ func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
 		p.q = 0
 	}
 	q := a.Questions[p.q]
-	if p.typing {
-		switch ev.Key() {
-		case tcell.KeyEscape:
-			p.typing, p.text = false, nil
-		case tcell.KeyEnter:
-			if text := strings.TrimSpace(string(p.text)); text != "" {
-				u.sendAnswer(a, q, "", text)
-			}
-		case tcell.KeyBackspace, tcell.KeyBackspace2:
-			if len(p.text) > 0 {
-				p.text = p.text[:len(p.text)-1]
-			}
-		case tcell.KeyRune:
-			if len(p.text) < 2000 {
-				p.text = append(p.text, ev.Rune())
-			}
-		}
-		u.renderAsk()
-		return nil
-	}
 	act := lookup(ModeAsk, u.focus, u.tier(), ev)
 	switch act {
 	case ActQuit:
@@ -321,7 +294,8 @@ func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
 			break
 		}
 		if p.opt == len(q.Options) {
-			p.typing, p.text = true, nil
+			u.openAnswerComposer(a, q, "")
+			return nil
 		} else {
 			u.sendAnswer(a, q, q.Options[p.opt].Label, "")
 		}
@@ -333,16 +307,16 @@ func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
 }
 
 // sendAnswer sends one answer now, records it locally, and moves on to the
-// next open question; the last one closes the panel.
-func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) {
+// next open question; the last one closes the panel. It reports whether the
+// answer was accepted: a failure keeps the caller's text (v0.16 §6).
+func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) bool {
 	ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
 	defer cancel()
 	id, left, err := u.w.Answer(ctx, a.ID, q.ID, u.self, choice, text)
-	u.ask.typing, u.ask.text = false, nil
 	if err != nil { // say why, and show the ask as it is now (answered elsewhere, replaced)
 		u.flash, u.flashErr = "answer not sent: "+Preview(err.Error()), true
 		u.reloadAsks()
-		return
+		return false
 	}
 	value := choice
 	if value == "" {
@@ -377,13 +351,14 @@ func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) 
 	u.flash, u.flashErr = fmt.Sprintf("%s %s: %s sent to %s", GlyphDone, Preview(q.Header), Preview(value), Preview(a.From)), false
 	if left == 0 {
 		u.closeOverlay()
-		return
+		return true
 	}
 	u.ask.id = id
 	if n := firstOpenQuestion(updated, u.ask.q+1); n >= 0 {
 		u.ask.q = n
 		u.ask.opt = recommendedIndex(updated.Questions[n].AskQuestion)
 	}
+	return true
 }
 
 // askSummary leads an agent's detail when it has an open ask.
@@ -408,9 +383,11 @@ var tagRE2 = regexp.MustCompile(`\[[a-zA-Z0-9#:,\-]*\]`)
 // a free answer being typed: nothing is sent before the panel's own submit.
 func (u *ui) openAskPrefilled(agent, text string) {
 	u.openAskPanel(agent)
-	if u.ov == ovAsk && text != "" {
-		u.ask.typing, u.ask.text = true, []rune(text)
-		u.renderAsk()
+	if u.ov != ovAsk || text == "" {
+		return
+	}
+	if a, ok := u.currentAsk(); ok && u.ask.q < len(a.Questions) && a.Questions[u.ask.q].Answer == nil {
+		u.openAnswerComposer(a, a.Questions[u.ask.q], text)
 	}
 }
 

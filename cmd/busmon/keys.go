@@ -13,7 +13,8 @@ const (
 	ModeInput
 	ModeFilter
 	ModeOverlay
-	ModeAsk // the ask panel: answering an agent's questions
+	ModeAsk     // the ask panel: answering an agent's questions
+	ModeCompose // the compose window (v0.16): a message or a free answer, several lines
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -55,6 +56,9 @@ const (
 	ActAskNext
 	ActAskPrev
 	ActAskPick
+	ActComposeOpen  // open the compose window
+	ActComposeField // the window: text <-> recipient
+	ActComposeAsk   // the window: answer the open question in its panel
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -164,6 +168,7 @@ var (
 		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
 		{Keys: "i", Hint: "write", Alt: ":", Act: ActCompose, match: runeIs('i', ':')},
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},
+		{Keys: "I", Help: "write in the compose window (several lines, Ctrl+S sends)", Act: ActComposeOpen, match: runeIs('I')},
 		{Keys: "esc", Hint: "back", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
 		{Keys: "F2", Hint: "requests", Alt: "r", Act: ActRequests, match: either(keyIs(tcell.KeyF2), runeIs('r'))},
 		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(tcell.KeyF3), runeIs('s'))},
@@ -171,6 +176,7 @@ var (
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}
 	inputBindings = []binding{
+		{Keys: "^O", Hint: "several lines", Alt: "alt-enter", Act: ActComposeOpen, match: either(keyIs(tcell.KeyCtrlO), altEnter)},
 		{Keys: "enter", Hint: "send", Act: ActSend, match: keyIs(tcell.KeyEnter)},
 		{Keys: "tab", Hint: "complete @agent", Act: ActNone, match: keyIs(tcell.KeyTab)},
 		{Keys: "esc", Hint: "back (draft kept)", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
@@ -190,7 +196,14 @@ var (
 		{Keys: "?", Help: "help", Act: ActHelp, match: runeIs('?')},
 		{Keys: "esc", Hint: "close", Act: ActClose, match: keyIs(tcell.KeyEscape)},
 	}
+	composeBindings = []binding{
+		{Keys: "^S", Hint: "send", Act: ActSend, match: keyIs(tcell.KeyCtrlS)},
+		{Keys: "tab", Hint: "recipient", Act: ActComposeField, match: keyIs(tcell.KeyTab)},
+		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(tcell.KeyCtrlT)},
+		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(tcell.KeyEscape)},
+	}
 	overlayBindings = []binding{
+		{Keys: "I", Help: "in an agent's detail: write to that agent in the compose window", Act: ActComposeOpen, match: runeIs('I')},
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},
 		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
@@ -218,6 +231,8 @@ func bindings(m Mode) []binding {
 		bs = overlayBindings
 	case ModeAsk:
 		bs = askBindings
+	case ModeCompose:
+		bs = composeBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }
@@ -251,4 +266,10 @@ func footerHints(m Mode, p PanelID, t Tier, width int) Line {
 		l = append(l, pair...)
 	}
 	return FitLine(l, width)
+}
+
+// altEnter is Alt+Enter (most terminals send it as Esc then Enter, which
+// tcell reports as Enter with the Alt modifier).
+func altEnter(ev *tcell.EventKey) bool {
+	return ev.Key() == tcell.KeyEnter && ev.Modifiers()&tcell.ModAlt != 0
 }

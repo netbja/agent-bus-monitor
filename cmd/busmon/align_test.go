@@ -90,6 +90,11 @@ func alignCases() []alignCase {
 		{"help", func(h *harness) { h.key(key(tcell.KeyF1)) }},
 		{"requests overlay", func(h *harness) { h.key(key(tcell.KeyF2)) }},
 		{"composing", func(h *harness) { feed(h); h.key(runeKey('i')); h.typeText(hostileText[:12]) }},
+		{"compose window", func(h *harness) {
+			feed(h)
+			h.key(runeKey('I'))
+			h.u.comp.area.SetText(hostileText+"\n"+hostileText, true)
+		}},
 	}
 }
 
@@ -163,6 +168,9 @@ func TestAlignmentSuite(t *testing.T) {
 					if h.u.ov != ovNone {
 						x, y, w, hh := h.u.overlay.GetRect()
 						checkFrame(t, h.sim, name+" overlay", Rect{x, y, w, hh}, true)
+					}
+					if h.u.comp.open {
+						checkFrame(t, h.sim, name+" compose", composeRect(sz[0], sz[1], l.Header.H), false)
 					}
 					first := strings.SplitN(screen, "\n", 2)[0]
 					if !strings.Contains(first, " bus") || !strings.Contains(first, " disp") {

@@ -55,12 +55,14 @@ type ui struct {
 	askDraft       string     // a directed text held once because its recipient has an open ask (v0.15.1)
 	askChoose      *askChoice // Tab found several recipients with questions: the next key picks one
 
-	pages   *tview.Pages
-	screen  *screenView
-	modal   *modalView
-	overlay *tview.TextView
-	input   *tview.InputField
-	lists   [4]*ListView
+	pages     *tview.Pages
+	screen    *screenView
+	modal     *modalView
+	overlay   *tview.TextView
+	input     *tview.InputField
+	comp      *composer         // the compose window (v0.16)
+	askDrafts map[string]string // "<ask>|<question>" -> a free answer being written
+	lists     [4]*ListView
 
 	layout        Layout
 	width, height int // size of the last relayout
@@ -175,7 +177,7 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 
 	u.input = tview.NewInputField().SetLabel(GlyphPrompt + " ")
 	th.StyleInput(u.input)
-	u.input.SetPlaceholder("i or : to write " + GlyphNone + " @agent or @all text wakes them " + GlyphNone + " plain text: a broadcast nobody reads")
+	u.input.SetPlaceholder("i or : to write, I for several lines " + GlyphNone + " @agent or @all text wakes them " + GlyphNone + " plain text: a broadcast nobody reads")
 	u.input.SetFocusFunc(func() {
 		if u.composing == ModePanel { // reached by a click
 			u.composing = ModeInput
@@ -203,9 +205,13 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 
 	u.screen = &screenView{Box: tview.NewBox(), u: u}
 	u.modal = &modalView{Box: tview.NewBox(), u: u}
+	u.comp = newComposer(u)
+	u.askDrafts = map[string]string{}
 	u.pages = tview.NewPages().
 		AddPage("main", u.screen, true, true).
-		AddPage("overlay", u.modal, true, false)
+		AddPage("overlay", u.modal, true, false).
+		AddPage("compose", u.comp, true, false)
+	app.EnablePaste(true)
 
 	app.SetBeforeDrawFunc(func(s tcell.Screen) bool {
 		u.scr = s // for OSC52 clipboard writes
@@ -222,6 +228,9 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 
 // mode is who owns the keyboard right now.
 func (u *ui) mode() Mode {
+	if u.comp.open {
+		return ModeCompose
+	}
 	if u.ov == ovAsk {
 		return ModeAsk
 	}
@@ -254,6 +263,8 @@ func (u *ui) relayout() {
 
 func (u *ui) focusPrimitive() tview.Primitive {
 	switch {
+	case u.comp.open:
+		return u.comp.focused()
 	case u.ov != ovNone:
 		return u.overlay
 	case u.composing != ModePanel:
@@ -294,13 +305,18 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case ev.Key() == tcell.KeyRune && ev.Rune() >= '1' && int(ev.Rune()-'0') <= len(pick.holders):
 			u.askChoose = nil
-			u.leaveInput(true)
+			if u.composing != ModePanel {
+				u.leaveInput(true)
+			}
 			u.openAskPrefilled(pick.holders[ev.Rune()-'1'], pick.body)
 		case ev.Key() == tcell.KeyEscape:
 			u.askChoose = nil
 			u.flash, u.flashErr = "", false
 		}
 		return nil
+	}
+	if m == ModeCompose {
+		return u.composeKey(ev)
 	}
 	act := lookup(m, u.focus, u.tier(), ev)
 	if act == ActQuit {
@@ -340,12 +356,27 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 			} else if ev.Key() != tcell.KeyEnter {
 				u.openAskPanel("")
 			}
+		case ActComposeOpen:
+			if u.ov == ovAgent {
+				agent := u.ovAgent
+				u.closeOverlay()
+				u.openComposer("", agent)
+			}
 		case ActUp, ActDown, ActPageUp, ActPageDown, ActFirst, ActLast:
 			return ev // the TextView scrolls itself
 		}
 		return nil
-	case ModeInput, ModeFilter:
+	case ModeInput:
+		if act == ActComposeOpen { // Ctrl+O: the line's text goes to the window
+			text := strings.TrimSpace(u.input.GetText())
+			u.leaveInput(false)
+			u.msgDraft = ""
+			u.openComposer(text, "")
+			return nil
+		}
 		return ev // Enter/Esc/Tab reach the field: autocomplete first, then inputDone
+	case ModeFilter:
+		return ev
 	}
 	l := u.lists[u.focus]
 	if u.focus == PanelAgents && act != ActNone {
@@ -398,7 +429,21 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	case ActFilter:
 		u.startFilter()
 	case ActCompose:
-		u.startCompose("")
+		if u.comp.hasDraft() { // a window draft is never flattened into the line
+			u.openComposer("", "")
+		} else {
+			u.startCompose("")
+		}
+	case ActComposeOpen:
+		to := ""
+		if u.focus == PanelAgents {
+			to = u.lists[PanelAgents].Selected()
+		}
+		line := ""
+		if !u.comp.hasDraft() {
+			line, u.msgDraft = strings.TrimSpace(u.msgDraft), ""
+		}
+		u.openComposer(line, to)
 	case ActComposeAt:
 		u.startCompose("@")
 	case ActHelp:
@@ -503,108 +548,155 @@ func (u *ui) inputDone(key tcell.Key) {
 		}
 		if text == "" {
 			u.broadcastDraft = ""
-		}
-		if text != "" {
-			tgt, body, directed := parseDirected(text)
-			// v0.15.1 §11.5: a recipient with an open question gets one hint on
-			// the first Enter; Enter again sends, Tab answers in its panel.
-			if holders := u.askHolders(tgt, directed); len(holders) > 0 && u.askDraft != text {
-				u.askDraft = text
-				u.flash, u.flashErr = fmt.Sprintf("%s has an open question. Enter: send as a message %s Tab: answer in its question panel %s Esc: back to editing",
-					strings.Join(holders, ", "), GlyphNone, GlyphNone), false
-				return
-			}
-			u.askDraft = ""
-			if !directed && u.broadcastDraft != text {
-				// Nobody reads a notify and nothing wakes for it: say so once.
-				u.broadcastDraft = text
-				u.flash, u.flashErr = "nobody reads a broadcast: start with @agent or @all; Enter again to broadcast", true
-				return
-			}
-			u.broadcastDraft = ""
-			ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
-			var err error
-			switch {
-			case directed && tgt == "all":
-				targets := u.agentNames()
-				if len(targets) == 0 {
-					cancel()
-					u.flash, u.flashErr = "no agent to send to", true
-					return
-				}
-				// Every agent is tried. If some were served, the draft is cleared:
-				// a retry of @all would send them the directive twice.
-				var failed []string
-				var lastErr error
-				for _, a := range targets {
-					if _, e := u.w.HumanCmd(ctx, u.self, a, body); e != nil {
-						failed, lastErr = append(failed, a), e
-					}
-				}
-				u.flash = fmt.Sprintf("directive sent to %d agents", len(targets))
-				switch {
-				case len(failed) == len(targets):
-					err = lastErr // nothing sent: keep the draft, a retry is safe
-				case len(failed) > 0:
-					cancel()
-					u.flash = fmt.Sprintf("sent to %d of %d agents; failed: %s (%s)", len(targets)-len(failed), len(targets),
-						strings.Join(failed, ", "), Preview(lastErr.Error()))
-					u.flashErr = true
-					u.input.SetText("")
-					u.msgDraft = ""
-					return
-				}
-			case directed:
-				_, err = u.w.HumanCmd(ctx, u.self, tgt, body)
-				u.flash = "directive sent to " + tgt
-			default:
-				_, err = u.w.HumanNotify(ctx, u.self, text)
-				u.flash = "broadcast sent"
-			}
-			cancel()
-			u.flashErr = err != nil
-			if err != nil {
-				// keep the draft: the operator retries once the bus is back
-				u.flash = "send failed: " + Preview(err.Error())
-				return
-			}
-		}
-		u.input.SetText("")
-		u.msgDraft = ""
-	case tcell.KeyTab:
-		text := strings.TrimSpace(u.input.GetText())
-		if u.composing != ModeInput || u.askDraft == "" || text != u.askDraft {
+			u.input.SetText("")
+			u.msgDraft = ""
 			return
 		}
 		tgt, body, directed := parseDirected(text)
-		holders := u.askHolders(tgt, directed)
-		if len(holders) == 0 {
+		if res := u.send(tgt, body, directed, false); res == sendSent || res == sendPartial {
+			u.input.SetText("")
+			u.msgDraft = ""
+		}
+	case tcell.KeyTab:
+		text := strings.TrimSpace(u.input.GetText())
+		if u.composing != ModeInput || u.askDraft == "" {
 			return
 		}
-		u.askDraft = ""
-		if len(holders) == 1 {
-			u.leaveInput(true)
-			u.openAskPrefilled(holders[0], body)
+		tgt, body, directed := parseDirected(text)
+		if u.askDraft != draftKey(tgt, body) {
 			return
 		}
-		// Several recipients hold questions: the person picks one, by number
-		// (one digit: the first nine; the others stay reachable with w).
-		more := ""
-		if len(holders) > 9 {
-			more = fmt.Sprintf(" %s %d more: w on its row", GlyphNone, len(holders)-9)
-			holders = holders[:9]
-		}
-		var opts []string
-		for i, h := range holders {
-			opts = append(opts, fmt.Sprintf("%d %s", i+1, h))
-		}
-		u.askChoose = &askChoice{holders: holders, body: body}
-		u.flash, u.flashErr = "answer whose question? "+strings.Join(opts, " "+GlyphNone+" ")+more+" (its number; Esc: back to editing)", false
+		u.answerInPanel(tgt, body, directed)
 	case tcell.KeyEscape:
 		u.askDraft = ""
 		u.leaveInput(true)
 		u.app.SetFocus(u.focusPrimitive())
 	}
+}
+
+// sendResult is what one send did (v0.16 §7); the caller closes or keeps.
+type sendResult int
+
+const (
+	sendSent    sendResult = iota // everything sent: close, clear the draft
+	sendPartial                   // @all, some served: close, clear the draft (a retry would send twice)
+	sendHeld                      // a warning waits for a second Enter / Ctrl+S: keep the draft
+	sendFailed                    // nothing sent: keep the draft
+	sendRefused                   // empty body, unknown recipient: keep the draft
+)
+
+// draftKey identifies a held message: the recipient and the body.
+func draftKey(tgt, body string) string { return tgt + "\x00" + body }
+
+// send is the one send path of the line and of the compose window: the
+// open-question hint, the broadcast warning, the @all fan-out and its partial
+// failures. The window passes its fields as they are (never rebuilt into an
+// "@name body" line); the line adapts its text with parseDirected.
+func (u *ui) send(tgt, body string, directed, window bool) sendResult {
+	body = normalizeCompose(body)
+	if body == "" {
+		u.flash, u.flashErr = "nothing to send", true
+		return sendRefused
+	}
+	if directed && tgt != "all" && (!bus.ValidName(tgt) || window && !u.knownAgent(tgt)) {
+		u.flash, u.flashErr = "unknown recipient: "+Preview(tgt), true
+		return sendRefused
+	}
+	again, answer := "Enter", "Tab"
+	if window {
+		again, answer = "Ctrl+S", "Ctrl+T"
+	}
+	// v0.15.1 §11.5: a recipient with an open question gets one hint on the
+	// first send; sending again sends, Tab (Ctrl+T in the window) answers in
+	// its panel.
+	if holders := u.askHolders(tgt, directed); len(holders) > 0 && u.askDraft != draftKey(tgt, body) {
+		u.askDraft = draftKey(tgt, body)
+		u.flash, u.flashErr = fmt.Sprintf("%s has an open question. %s: send as a message %s %s: answer in its question panel %s Esc: back to editing",
+			strings.Join(holders, ", "), again, GlyphNone, answer, GlyphNone), false
+		return sendHeld
+	}
+	u.askDraft = ""
+	if !directed && u.broadcastDraft != body {
+		// Nobody reads a notify and nothing wakes for it: say so once.
+		u.broadcastDraft = body
+		u.flash, u.flashErr = "nobody reads a broadcast: start with @agent or @all; "+again+" again to broadcast", true
+		return sendHeld
+	}
+	u.broadcastDraft = ""
+	ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
+	defer cancel()
+	var err error
+	switch {
+	case directed && tgt == "all":
+		targets := u.agentNames()
+		if len(targets) == 0 {
+			u.flash, u.flashErr = "no agent to send to", true
+			return sendRefused
+		}
+		// Every agent is tried. If some were served, the draft is cleared:
+		// a retry of @all would send them the directive twice.
+		var failed []string
+		var lastErr error
+		for _, a := range targets {
+			if _, e := u.w.HumanCmd(ctx, u.self, a, body); e != nil {
+				failed, lastErr = append(failed, a), e
+			}
+		}
+		u.flash = fmt.Sprintf("directive sent to %d agents", len(targets))
+		switch {
+		case len(failed) == len(targets):
+			err = lastErr // nothing sent: keep the draft, a retry is safe
+		case len(failed) > 0:
+			u.flash = fmt.Sprintf("sent to %d of %d agents; failed: %s (%s)", len(targets)-len(failed), len(targets),
+				strings.Join(failed, ", "), Preview(lastErr.Error()))
+			u.flashErr = true
+			return sendPartial
+		}
+	case directed:
+		_, err = u.w.HumanCmd(ctx, u.self, tgt, body)
+		u.flash = "directive sent to " + tgt
+	default:
+		_, err = u.w.HumanNotify(ctx, u.self, body)
+		u.flash = "broadcast sent"
+	}
+	u.flashErr = err != nil
+	if err != nil {
+		// keep the draft: the operator retries once the bus is back
+		u.flash = "send failed: " + Preview(err.Error())
+		return sendFailed
+	}
+	return sendSent
+}
+
+// answerInPanel opens the question panel of the recipient holding an open
+// question, with body as a free answer; with several, the person picks one.
+func (u *ui) answerInPanel(tgt, body string, directed bool) bool {
+	holders := u.askHolders(tgt, directed)
+	if len(holders) == 0 {
+		return false
+	}
+	u.askDraft = ""
+	if len(holders) == 1 {
+		if u.composing != ModePanel {
+			u.leaveInput(true)
+		}
+		u.openAskPrefilled(holders[0], body)
+		return true
+	}
+	// Several recipients hold questions: the person picks one, by number
+	// (one digit: the first nine; the others stay reachable with w).
+	more := ""
+	if len(holders) > 9 {
+		more = fmt.Sprintf(" %s %d more: w on its row", GlyphNone, len(holders)-9)
+		holders = holders[:9]
+	}
+	var opts []string
+	for i, h := range holders {
+		opts = append(opts, fmt.Sprintf("%d %s", i+1, h))
+	}
+	u.askChoose = &askChoice{holders: holders, body: body}
+	u.flash, u.flashErr = "answer whose question? "+strings.Join(opts, " "+GlyphNone+" ")+more+" (its number; Esc: back to editing)", false
+	return true
 }
 
 // askHolders lists the recipients of a directed text that have an open ask:
@@ -937,6 +1029,27 @@ func (s *screenView) InputHandler() func(event *tcell.EventKey, setFocus func(p 
 	})
 }
 
+// PasteHandler relays a paste to the focused child, as InputHandler does
+// (Box drops it). A paste with a newline into the line moves the text to the
+// compose window: the line cannot hold it.
+func (s *screenView) PasteHandler() func(text string, setFocus func(p tview.Primitive)) {
+	return s.WrapPasteHandler(func(text string, setFocus func(p tview.Primitive)) {
+		u := s.u
+		if !u.input.HasFocus() {
+			return
+		}
+		if u.composing == ModeInput && strings.ContainsAny(text, "\r\n") {
+			line := u.input.GetText()
+			u.leaveInput(false)
+			u.msgDraft = ""
+			u.openComposer(strings.TrimSpace(line), "")
+			u.comp.PasteHandler()(text, setFocus)
+			return
+		}
+		u.input.PasteHandler()(strings.NewReplacer("\r", " ", "\n", " ").Replace(text), setFocus)
+	})
+}
+
 func (s *screenView) Draw(screen tcell.Screen) {
 	u := s.u
 	x0, y0, w, h := s.GetRect()
@@ -982,7 +1095,14 @@ func (s *screenView) Draw(screen tcell.Screen) {
 		u.lists[p].Draw(screen)
 	}
 	if l.Input.H > 0 {
-		u.input.SetRect(x0+l.Input.X, y0+l.Input.Y, l.Input.W, 1)
+		iw := l.Input.W
+		// While writing in the line, its end says how to go to several lines.
+		hint := Line{{Text: " ^O", Role: RoleAccent, Bold: true}, {Text: " several lines ", Role: RoleMuted}}
+		if u.composing == ModeInput && iw >= 60 {
+			iw -= hint.Width()
+			DrawLine(screen, x0+l.Input.X+iw, y0+l.Input.Y, hint.Width(), hint, false)
+		}
+		u.input.SetRect(x0+l.Input.X, y0+l.Input.Y, iw, 1)
 		u.input.Draw(screen)
 	}
 	var footer Line

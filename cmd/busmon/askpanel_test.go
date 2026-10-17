@@ -77,11 +77,11 @@ func TestAskPanelSendsEachAnswerAtOnce(t *testing.T) {
 	h.w.left = 0
 	h.key(runeKey('3')) // Other...
 	h.key(key(tcell.KeyEnter))
-	if !h.u.ask.typing {
-		t.Fatal("Other did not start typing")
+	if h.u.mode() != ModeCompose || h.u.comp.kind != composeAnswer {
+		t.Fatal("Other did not open the compose window for an answer")
 	}
 	h.typeText("ship dev")
-	h.key(key(tcell.KeyEnter))
+	h.key(key(tcell.KeyCtrlS))
 	if got := h.w.sent[len(h.w.sent)-1]; got != "answer 100-0 sha ship dev" {
 		t.Fatalf("free text sent %q", got)
 	}

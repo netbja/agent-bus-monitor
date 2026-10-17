@@ -235,7 +235,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (the one selectable scrolling list: Agents, Activity, Board and Requests are all instances;
   selection and wheel anchor follow keys, tail mode for Activity), `agents.go` (attention sort,
   flags, ctx-token parser), `activity.go` (event → row, pause cursor), `board.go`, `header.go`,
-  `detail.go` + `detail_agent.go` (overlays), `keys.go` (one key table per mode drives the handler,
+  `detail.go` + `detail_agent.go` (overlays), `compose.go` (v0.16: the compose window, a `tview.TextArea` with a rune limit of its own — `SetMaxLength` counts bytes — used for a message and for a free answer; `ui.send` is the one send path of the line and the window, which passes recipient and body as fields, never an `@name body` line), `keys.go` (one key table per mode drives the handler,
   the footer and the help), `poll.go` (`pollOnce` behind the `busReader` interface: the 1 s tick and
   its read inventory), `ui.go` (stable primitives, `screenView`, the modal layer), `main.go` (flags,
   CLI paths, tail and poll goroutines).
