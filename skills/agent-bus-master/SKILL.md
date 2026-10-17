@@ -81,6 +81,21 @@ it requires `HERDR_ENV=1` (you're inside herdr) and a role defined in `roles.tom
 agent arms its own `subscribe` and publishes `status`, so it shows up in busmon and in
 `agentbus agents` within a few seconds — dispatch to it once it reports `online`.
 
+Call `agent-spawn` by its bare name, never by path: your session allows `agent-spawn <role> *` for
+each ordinary role, so a path, a quoted role or a variable falls back to a prompt or the classifier.
+
+**A role marked `approval = "person"` (deploy) needs a person's approval first.** `agent-spawn`
+refuses it until one is on the bus:
+```bash
+agentbus approval ask deploy "move the DuckDB temp files off /tmp onto /mnt/aitradex"
+# wait for the answer (a reply wakes you), then:
+agent-spawn deploy "$AGENT_BUS_PROJECT"
+```
+The question shows in busmon like any ask; one approval is good for one pop within 30 minutes.
+`Refuse` is final for that reason: report it, do not ask again. Never answer your own question —
+`agentbus answer` refuses agents, and working round it defeats the point. To swap such a role,
+the same approval is spent by `agentbus swap` before it closes anything.
+
 ## Resync — inject text into an agent's pane
 ```bash
 pane=$(agentbus pane claude1) || { echo "claude1 has no registered pane"; exit 1; }
