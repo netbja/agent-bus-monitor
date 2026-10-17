@@ -219,3 +219,29 @@ func TestApprovalSweepAndListing(t *testing.T) {
 	_, err = b.ApprovalUse(ctx, "master", "deploy", SpendSpawn, "", DefaultApprovalTTL)
 	noApproval(t, err, "no approval asked")
 }
+
+// Codex v0.17 review: a generic --replace of an approval ask with the same
+// question and another reason must not carry an answer from the old panel.
+func TestApprovalReplaceCarriesNothing(t *testing.T) {
+	b := dialTest(t)
+	cleanApproval(t, b)
+	ctx := context.Background()
+	old, err := b.ApprovalAsk(ctx, "master", "deploy", "move /tmp to the volume")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def := AskDef{From: "master", Title: "Pop deploy?", Questions: []AskQuestion{{ID: "spawn-deploy", Header: "Pop deploy",
+		Question: "Pop deploy for " + b.Project() + "?", Context: "restart the bot",
+		Options: []AskOption{{Label: ApprovalAnswer, Recommended: true}, {Label: ApprovalRefuse}}}}}
+	if _, _, err := b.Ask(ctx, def, old); err != nil {
+		t.Fatal(err)
+	}
+	if c := b.r.HGet(ctx, AsksKey(b.Project()), old+"|c").Val(); c != "" {
+		t.Fatalf("carried %q", c)
+	}
+	if _, _, err := b.Answer(ctx, old, "spawn-deploy", "bernard", ApprovalAnswer, ""); !errors.Is(err, ErrAskRefused) {
+		t.Fatalf("an answer on the old panel reached the new reason: %v", err)
+	}
+	_, err = b.ApprovalUse(ctx, "master", "deploy", SpendSpawn, "", DefaultApprovalTTL)
+	noApproval(t, err, "not answered")
+}

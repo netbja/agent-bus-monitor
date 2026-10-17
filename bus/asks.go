@@ -282,11 +282,14 @@ local id = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[1], '*', 'from', from
   'type', 'ask', 'command', ARGV[3], 'wake', 'no', 'text_complete', 'yes')
 redis.call('HSET', KEYS[1], id, ARGV[4], id .. '|q', ARGV[5], id .. '|s', 'open')
 if replaces ~= '' then
-  for q in string.gmatch(ARGV[7], '[^,]+') do
+  -- an approval answers one reason: nothing crosses a replacement (v0.17)
+  local carried = ARGV[7]
+  if arole then carried = '' end
+  for q in string.gmatch(carried, '[^,]+') do
     local a = redis.call('HGET', KEYS[1], replaces .. '|a|' .. q)
     if a then redis.call('HSET', KEYS[1], id .. '|a|' .. q, a) end
   end
-  redis.call('HSET', KEYS[1], replaces .. '|s', 'replaced', replaces .. '|r', id, replaces .. '|c', ARGV[7],
+  redis.call('HSET', KEYS[1], replaces .. '|s', 'replaced', replaces .. '|r', id, replaces .. '|c', carried,
     replaces .. '|e', tostring(now + tonumber(ARGV[8])))
 end
 local state = 'open'
