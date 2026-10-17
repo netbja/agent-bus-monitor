@@ -175,7 +175,10 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
   Act on it, then close exactly the questions it answers, citing the message, and leave the others
   open: `agentbus ask master --withdraw <id> --question <qid> --note "answered by message <msg id>: <answer>"`.
   Otherwise busmon keeps showing a decision waiting for the person.
-- When nothing is open any more, declare `working` again. One open ask at a time.
+- When nothing is open any more, declare `working` again — or `idle` when the answers leave
+  nothing to do (the team paused, the next step is the person's to start). One open ask at a time.
+- `waiting` means a person must decide **now**: busmon fades it and rings for it. Declare it only
+  while one of your asks is open. Waiting for a future instruction, or for a date, is `idle`.
 - Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
   answer it in busmon: prefer the ask.
 

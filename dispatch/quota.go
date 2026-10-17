@@ -145,6 +145,11 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		holdField := "hold:" + p
 		recorded, _ := strconv.ParseInt(marks[holdField], 10, 64)
 		tight, ok := quota.Tightest(usable)
+		// v0.15.3: the window that set the hold, read at any age. An aged
+		// reading of it does not end the hold because another window is low:
+		// within a window, use only grows until its reset.
+		heldWin, heldKnown := windowAt(r, recorded)
+		heldOpen := heldKnown && !windowClear(usable, heldWin.Name, q.HoldPct)
 		switch {
 		case ok && tight.UsedPct >= q.HoldPct:
 			if recorded != tight.ResetsAt {
@@ -163,7 +168,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			if err := l.longHold(ctx, p, tight, now, coord, snaps); err != nil {
 				return err
 			}
-		case ok: // a usable reading under the threshold releases, and ends a quota pause early
+		case ok && !heldOpen: // a usable reading under the threshold releases, and ends a quota pause early
 			if recorded != 0 {
 				if err := l.release(ctx, p, recorded, snaps, p == coord, ""); err != nil {
 					return err
@@ -174,9 +179,11 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				}
 			}
 			recorded = 0
-		case recorded != 0 && r.ServedSince(now, q.MaxAge):
+		case recorded != 0 && r.ServedSince(now, q.MaxAge) && (!heldKnown || servedPast(r, heldWin)):
 			// No window to read, but the provider served a call after the
-			// limit hit (a quota reset granted early): the hold is over.
+			// limit hit (a quota reset granted early): the hold is over. An
+			// aged reading of the held window counts only at the limit itself
+			// and only when the answer came after it.
 			if err := l.release(ctx, p, recorded, snaps, p == coord, "served after the limit hit"); err != nil {
 				return err
 			}
@@ -271,6 +278,36 @@ func (l *loop) release(ctx context.Context, p string, recorded int64, snaps map[
 	}
 	l.log(entry)
 	return nil
+}
+
+// windowAt is the reading's window whose reset is the recorded hold's, at
+// any age; none when the hold's window is gone (renewed) or never recorded.
+func windowAt(r quota.Reading, recorded int64) (quota.Window, bool) {
+	if recorded == 0 || r.Unknown || r.Unlimited {
+		return quota.Window{}, false
+	}
+	for _, w := range r.Windows {
+		if w.ResetsAt == recorded {
+			return w, true
+		}
+	}
+	return quota.Window{}, false
+}
+
+// windowClear: a usable reading of the named window is under the threshold.
+func windowClear(usable []quota.Window, name string, hold float64) bool {
+	for _, w := range usable {
+		if w.Name == name && w.UsedPct < hold {
+			return true
+		}
+	}
+	return false
+}
+
+// servedPast: the held window was read at its limit and the provider
+// answered after that reading.
+func servedPast(r quota.Reading, w quota.Window) bool {
+	return w.UsedPct >= 100 && r.AvailableAt > w.Observed(r).UnixMilli()
 }
 
 // heldBy reports whether agent's provider is held this pass.

@@ -527,3 +527,79 @@ func TestRunQuotaReleaseRemindsTheSwapBack(t *testing.T) {
 		t.Fatalf("notices = %v, want foureyes once only", notices)
 	}
 }
+
+// v0.15.3: a hold set by the 5h window is not released because that
+// window's reading aged (an unchanged 100 % keeps its observation time)
+// while the 7d window stays fresh and low — the loop that sent master
+// "Project resumed" every ten minutes. A served call after the aged 100 %
+// still ends it (a reset granted early).
+func TestRunQuotaAgedHeldWindowKeepsTheHold(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	registerAs(t, b, "master", "p-master", "anthropic")
+	now := time.Now()
+	reset5h := now.Add(2 * time.Hour).Unix()
+	fresh := quota.Reading{Provider: "anthropic", ObservedAt: now.UnixMilli(), Windows: []quota.Window{
+		{Name: "5h", UsedPct: 100, ResetsAt: reset5h, Minutes: 300, ObservedAt: now.UnixMilli()},
+		{Name: "7d", UsedPct: 48, ResetsAt: now.Add(72 * time.Hour).Unix(), Minutes: 10080, ObservedAt: now.UnixMilli()}}}
+	f := &fakeQuota{}
+	f.set(fresh)
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "a quota pause", func() bool { p, _ := b.Pause(context.Background()); return p != nil })
+
+	aged := fresh
+	old := now.Add(-time.Hour).UnixMilli()
+	aged.Windows = []quota.Window{fresh.Windows[0], fresh.Windows[1]}
+	aged.Windows[0].ObservedAt = old
+	f.set(aged)
+	time.Sleep(300 * time.Millisecond)
+	if p, _ := b.Pause(context.Background()); p == nil {
+		t.Fatal("an aged 100 % with a low 7d ended the pause")
+	}
+	if marks, _ := b.QuotaMarks(context.Background()); marks["hold:anthropic"] != strconv.FormatInt(reset5h, 10) {
+		t.Fatalf("the hold was released: %v", marks)
+	}
+	msgs, _ := r.XRevRangeN(context.Background(), bus.StreamKey(b.Project(), "cmd"), "+", "-", 20).Result()
+	for _, m := range msgs {
+		if strings.Contains(m.Values["command"].(string), "Project resumed") {
+			t.Fatal("master was told to resume")
+		}
+	}
+
+	// Served before the aged reading: still held. Served after it: over.
+	aged.AvailableAt = old - 1000
+	f.set(aged)
+	time.Sleep(200 * time.Millisecond)
+	if p, _ := b.Pause(context.Background()); p == nil {
+		t.Fatal("an answer older than the limit reading ended the pause")
+	}
+	aged.AvailableAt = time.Now().Add(-time.Minute).UnixMilli()
+	f.set(aged)
+	waitFor(t, 3*time.Second, "the hold ended after a served call", func() bool {
+		p, _ := b.Pause(context.Background())
+		marks, _ := b.QuotaMarks(context.Background())
+		return p == nil && marks["hold:anthropic"] == ""
+	})
+}
+
+// A fresh reading of the held window under the threshold still releases,
+// and so does its renewal (a new reset).
+func TestRunQuotaHeldWindowReadLowReleases(t *testing.T) {
+	b, _ := dialRun(t)
+	cleanupQuota(t, b)
+	registerAs(t, b, "master", "p-master", "anthropic")
+	now := time.Now()
+	w5 := quota.Window{Name: "5h", UsedPct: 99, ResetsAt: now.Add(2 * time.Hour).Unix(), Minutes: 300}
+	w7 := quota.Window{Name: "7d", UsedPct: 40, ResetsAt: now.Add(72 * time.Hour).Unix(), Minutes: 10080}
+	f := &fakeQuota{}
+	f.set(quota.Reading{Provider: "anthropic", ObservedAt: now.UnixMilli(), Windows: []quota.Window{w5, w7}})
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "a quota pause", func() bool { p, _ := b.Pause(context.Background()); return p != nil })
+	w5.ResetsAt = now.Add(7 * time.Hour).Unix() // renewed
+	w5.UsedPct = 3
+	f.set(quota.Reading{Provider: "anthropic", ObservedAt: time.Now().UnixMilli(), Windows: []quota.Window{w5, w7}})
+	waitFor(t, 3*time.Second, "released on the renewed window", func() bool {
+		p, _ := b.Pause(context.Background())
+		return p == nil
+	})
+}
