@@ -158,9 +158,9 @@ func (b *Bus) LogSwap(ctx context.Context, e SwapEvent) error {
 	return b.r.Do(ctx, append([]interface{}{"XADD"}, args...)...).Err()
 }
 
-// swapDone: the done (or back) entry and the fallback set (ARGV[2] != '')
+// swapDone: the done (or back) entry and the fallback set (ARGV[2] != ”)
 // or cleared, in one script. KEYS: ledger, fallback. ARGV: role, record
-// JSON or '', maxlen, fields... The record's since is Redis TIME.
+// JSON or ”, maxlen, fields... The record's since is Redis TIME.
 var swapDone = redis.NewScript(`
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)

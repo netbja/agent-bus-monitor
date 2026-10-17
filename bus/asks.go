@@ -72,10 +72,16 @@ type AskAnswer struct {
 	Text   string `json:"text,omitempty"`
 	By     string `json:"by"`
 	At     int64  `json:"at"`
+	// Withdrawn (v0.15.1): the asking agent closed this question itself,
+	// because the person answered it elsewhere (Text says where).
+	Withdrawn bool `json:"withdrawn,omitempty"`
 }
 
 // Value is the answer as one line: the chosen label or the free text.
 func (a AskAnswer) Value() string {
+	if a.Withdrawn {
+		return "withdrawn by " + a.By + ": " + a.Text
+	}
 	if a.Choice != "" {
 		return a.Choice
 	}
@@ -320,6 +326,31 @@ redis.call('HSET', KEYS[1], ARGV[1] .. '|s', 'withdrawn', ARGV[1] .. '|e', tostr
 redis.call('HDEL', KEYS[1], 'open:' .. ARGV[2])
 return 1`)
 
+// askWithdrawQuestion: KEYS asks. ARGV id, agent, qid, note, retention ms.
+// One question closed by its own agent; the ask ends when none is left open:
+// "answered" if any question has a person's answer, else "withdrawn".
+var askWithdrawQuestion = redis.NewScript(sweepLua + `
+local now = nowms()
+sweep(KEYS[1], now)
+local id, qid = ARGV[1], ARGV[3]
+local s = redis.call('HGET', KEYS[1], id .. '|s')
+if s ~= 'open' then return redis.error_reply('ASK_NOT_OPEN') end
+if redis.call('HGET', KEYS[1], 'open:' .. ARGV[2]) ~= id then return redis.error_reply('ASK_NOT_YOURS') end
+if not csvhas(redis.call('HGET', KEYS[1], id .. '|q'), qid) then return redis.error_reply('ASK_NO_QUESTION') end
+if redis.call('HEXISTS', KEYS[1], id .. '|a|' .. qid) == 1 then return redis.error_reply('ASK_ANSWERED') end
+redis.call('HSET', KEYS[1], id .. '|a|' .. qid, cjson.encode({withdrawn = true, by = ARGV[2], text = ARGV[4], at = now}))
+local left = remaining(KEYS[1], id)
+if left == 0 then
+  local state = 'withdrawn'
+  for q in string.gmatch(redis.call('HGET', KEYS[1], id .. '|q'), '[^,]+') do
+    local a = cjson.decode(redis.call('HGET', KEYS[1], id .. '|a|' .. q))
+    if not a['withdrawn'] then state = 'answered' end
+  end
+  redis.call('HSET', KEYS[1], id .. '|s', state, id .. '|e', tostring(now + tonumber(ARGV[5])))
+  redis.call('HDEL', KEYS[1], 'open:' .. ARGV[2])
+end
+return left`)
+
 // ErrAskRefused wraps a refusal from an ask script (already answered,
 // replaced, another ask open, …); the message says which.
 var ErrAskRefused = errors.New("ask refused")
@@ -461,6 +492,17 @@ func (b *Bus) Answer(ctx context.Context, askID, qid, by, choice, text string) (
 func (b *Bus) Withdraw(ctx context.Context, agent, askID string) error {
 	err := askWithdraw.Run(ctx, b.r, []string{AsksKey(b.project)}, askID, agent, askRetention.Milliseconds()).Err()
 	return askErr(err)
+}
+
+// WithdrawQuestion closes one question of agent's open ask (v0.15.1 §11.4):
+// the person answered it elsewhere, note says where. It returns how many
+// questions stay open; the ask ends with the last one.
+func (b *Bus) WithdrawQuestion(ctx context.Context, agent, askID, qid, note string) (int, error) {
+	if err := ValidateText(note, CmdMaxRunes); err != nil {
+		return 0, err
+	}
+	n, err := askWithdrawQuestion.Run(ctx, b.r, []string{AsksKey(b.project)}, askID, agent, qid, note, askRetention.Milliseconds()).Int()
+	return n, askErr(err)
 }
 
 // Asks reads every ask, oldest first.

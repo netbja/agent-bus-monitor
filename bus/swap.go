@@ -32,7 +32,6 @@ type SwapIntent struct {
 // ErrSwapInProgress: another swap of the same role holds the intent.
 var ErrSwapInProgress = fmt.Errorf("a swap of this role is already in progress")
 
-
 // EndSwap deletes the intent.
 func (b *Bus) EndSwap(ctx context.Context, role string) error {
 	return b.r.Del(ctx, SwapKey(b.project, role)).Err()

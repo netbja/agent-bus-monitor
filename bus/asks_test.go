@@ -174,3 +174,53 @@ func TestAnswerTextFitsTheCapWithItsSuffix(t *testing.T) {
 		t.Fatal("an answer that only fits without the suffix was accepted")
 	}
 }
+
+// v0.15.1 §11.4: master closes only the questions the person answered
+// elsewhere; the others stay open, and the ask ends with the last one.
+func TestWithdrawOneQuestion(t *testing.T) {
+	b := dialTest(t)
+	cleanAsks(t, b)
+	ctx := context.Background()
+	def := AskDef{From: "master", Title: "GO", Questions: []AskQuestion{q("go", "GO execution", "Yes", "No"), q("date", "Date", "Mon", "Wed")}}
+	id, _, err := b.Ask(ctx, def, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.WithdrawQuestion(ctx, "coder", id, "go", "x"); !errors.Is(err, ErrAskRefused) {
+		t.Fatalf("another agent withdrew a question: %v", err)
+	}
+	left, err := b.WithdrawQuestion(ctx, "master", id, "go", "answered by message 1792-0: oui GO")
+	if err != nil || left != 1 {
+		t.Fatalf("withdraw: %v, %d left", err, left)
+	}
+	if _, err := b.WithdrawQuestion(ctx, "master", id, "go", "again"); !errors.Is(err, ErrAskRefused) {
+		t.Fatalf("withdrew a closed question twice: %v", err)
+	}
+	asks, _ := b.Asks(ctx)
+	if len(asks) != 1 || asks[0].State != "open" || asks[0].Open() != 1 {
+		t.Fatalf("after one withdrawal: %+v", asks)
+	}
+	if v := asks[0].Questions[0].Answer.Value(); !strings.Contains(v, "withdrawn by master") {
+		t.Fatalf("value %q", v)
+	}
+	if _, _, err := b.Answer(ctx, id, "date", "bernard", "Mon", ""); err != nil {
+		t.Fatal(err)
+	}
+	asks, _ = b.Asks(ctx)
+	if asks[0].State != "answered" || asks[0].Open() != 0 {
+		t.Fatalf("after the last answer: %+v", asks[0])
+	}
+	// Every question withdrawn: the ask ends withdrawn.
+	id2, _, err := b.Ask(ctx, AskDef{From: "master", Title: "One", Questions: []AskQuestion{q("a", "A", "Yes", "No")}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left, err := b.WithdrawQuestion(ctx, "master", id2, "a", "answered by message"); err != nil || left != 0 {
+		t.Fatalf("%v %d", err, left)
+	}
+	for _, a := range func() []Ask { x, _ := b.Asks(ctx); return x }() {
+		if a.ID == id2 && a.State != "withdrawn" {
+			t.Fatalf("all-withdrawn ask state %q", a.State)
+		}
+	}
+}
