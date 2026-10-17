@@ -439,3 +439,33 @@ func TestSwapUsageBackAndProfileExclusive(t *testing.T) {
 		}
 	}
 }
+
+// v0.15.1 §11.1: retire closes one agent's tab, launches nothing, logs a
+// retire entry and drops its fallback; it refuses like swap does.
+func TestRetireClosesOneAgent(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	var out, errw bytes.Buffer
+	if code := runRetire(ctx, w.b, d, "master", []string{"foureyes", "--reason", "recommendation delivered"}, &out, &errw); code != 0 {
+		t.Fatalf("retire: %d %s", code, errw.String())
+	}
+	if got := strings.Join(w.calls, ";"); got != "close p-old" {
+		t.Fatalf("calls %q (a retire must launch nothing)", got)
+	}
+	log, _ := w.b.SwapLog(ctx, "foureyes", 0)
+	if len(log) != 2 || log[0].Event != bus.SwapRetire || log[1].Event != bus.SwapBegin || log[0].Reason != "recommendation delivered" {
+		t.Fatalf("ledger %+v", log)
+	}
+	if w.intent() {
+		t.Fatal("intent left behind")
+	}
+	out.Reset()
+	if code := runSwaps(ctx, w.b, nil, &out, &errw); code != 0 || !strings.Contains(out.String(), "retire") {
+		t.Fatalf("swaps: %d %q", code, out.String())
+	}
+	w2, d2 := newSwapWorld(t)
+	w2.paneEnv = "p-old"
+	if code := runRetire(ctx, w2.b, d2, "foureyes", []string{"foureyes"}, &out, &errw); code == 0 || w2.closed() {
+		t.Fatal("an agent retired itself")
+	}
+}

@@ -462,6 +462,12 @@ func main() {
 	case "swap":
 		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
 
+	case "retire":
+		os.Exit(runRetire(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
+
+	case "swaps":
+		os.Exit(runSwaps(ctx, b, rest, os.Stdout, os.Stderr))
+
 	case "pause", "resume":
 		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv}
 		if cmd == "pause" {

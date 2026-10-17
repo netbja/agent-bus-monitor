@@ -251,3 +251,14 @@ func (b *Bus) Interrupted(ctx context.Context, role string) (bool, SwapEvent, er
 	}
 	return !live, last[0], nil
 }
+
+// RetireSwap ends a retire: the retire entry and the role's fallback record
+// removed, in one script (a retired agent runs on no profile at all).
+func (b *Bus) RetireSwap(ctx context.Context, e SwapEvent) error {
+	e.Event = SwapRetire
+	if err := e.valid(); err != nil {
+		return err
+	}
+	args := append([]interface{}{e.Role, "", streamMaxLen}, e.fields()...)
+	return swapDone.Run(ctx, b.r, []string{SwapsKey(b.project), FallbackKey(b.project)}, args...).Err()
+}
