@@ -30,6 +30,8 @@ type busReader interface {
 	QuotaMarks(ctx context.Context) (map[string]string, error)
 	Observed(ctx context.Context) (map[string]bus.Observation, error)
 	Swaps(ctx context.Context) (map[string]bool, error)
+	Fallbacks(ctx context.Context) (map[string]bus.FallbackRecord, error)
+	ModelVerdicts(ctx context.Context) (map[string]bus.ModelVerdict, error)
 	Asks(ctx context.Context) ([]bus.Ask, error)
 }
 
@@ -131,10 +133,16 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	observedErr := errNotPolled
 	var swaps map[string]bool
 	swapsErr := errNotPolled
+	var fallbacks map[string]bus.FallbackRecord
+	fallbacksErr := errNotPolled
+	var verdicts map[string]bus.ModelVerdict
+	verdictsErr := errNotPolled
 	if wakePollDue(tick) {
 		marks, marksErr = b.QuotaMarks(pollCtx)
 		observed, observedErr = b.Observed(pollCtx)
 		swaps, swapsErr = b.Swaps(pollCtx)
+		fallbacks, fallbacksErr = b.Fallbacks(pollCtx)
+		verdicts, verdictsErr = b.ModelVerdicts(pollCtx)
 		dispAlive, dispErr = b.DispatchAlive(pollCtx)
 		missionsState, missionsErr = missionsFact(pollCtx, b)
 		svcInst, svcRecs, svcErr = b.ServiceStates(pollCtx)
@@ -264,6 +272,18 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		}
 		if swapsErr == nil {
 			a.swapping = swaps[n]
+		}
+		if fallbacksErr == nil {
+			a.fallback = nil
+			if f, ok := fallbacks[n]; ok {
+				a.fallback = &f
+			}
+		}
+		if verdictsErr == nil {
+			a.model = nil
+			if v, ok := verdicts[n]; ok {
+				a.model = &v
+			}
 		}
 		if observedErr == nil {
 			o, ok := observed[n]

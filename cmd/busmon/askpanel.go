@@ -403,3 +403,13 @@ func askSummary(a bus.Ask) string {
 
 // tagRE2 strips colour tags, to measure a tagged line.
 var tagRE2 = regexp.MustCompile(`\[[a-zA-Z0-9#:,\-]*\]`)
+
+// openAskPrefilled opens agent's ask on its first open question, with text as
+// a free answer being typed: nothing is sent before the panel's own submit.
+func (u *ui) openAskPrefilled(agent, text string) {
+	u.openAskPanel(agent)
+	if u.ov == ovAsk && text != "" {
+		u.ask.typing, u.ask.text = true, []rune(text)
+		u.renderAsk()
+	}
+}

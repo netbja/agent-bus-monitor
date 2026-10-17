@@ -52,6 +52,7 @@ type ui struct {
 	w              busWriter
 	project, self  string
 	broadcastDraft string // a draft with no @ already warned about: the next Enter sends it
+	askDraft       string // a directed text held once because its recipient has an open ask (v0.15.1)
 
 	pages   *tview.Pages
 	screen  *screenView
@@ -488,6 +489,15 @@ func (u *ui) inputDone(key tcell.Key) {
 		}
 		if text != "" {
 			tgt, body, directed := parseDirected(text)
+			// v0.15.1 §11.5: a recipient with an open question gets one hint on
+			// the first Enter; Enter again sends, Tab answers in its panel.
+			if holders := u.askHolders(tgt, directed); len(holders) > 0 && u.askDraft != text {
+				u.askDraft = text
+				u.flash, u.flashErr = fmt.Sprintf("%s has an open question. Enter: send as a message %s Tab: answer in its question panel %s Esc: back to editing",
+					strings.Join(holders, ", "), GlyphNone, GlyphNone), false
+				return
+			}
+			u.askDraft = ""
 			if !directed && u.broadcastDraft != text {
 				// Nobody reads a notify and nothing wakes for it: say so once.
 				u.broadcastDraft = text
@@ -544,10 +554,46 @@ func (u *ui) inputDone(key tcell.Key) {
 		}
 		u.input.SetText("")
 		u.msgDraft = ""
+	case tcell.KeyTab:
+		text := strings.TrimSpace(u.input.GetText())
+		if u.composing != ModeInput || u.askDraft == "" || text != u.askDraft {
+			return
+		}
+		tgt, body, directed := parseDirected(text)
+		holders := u.askHolders(tgt, directed)
+		if len(holders) == 0 {
+			return
+		}
+		u.askDraft = ""
+		u.leaveInput(true)
+		u.openAskPrefilled(holders[0], body)
+		if len(holders) > 1 {
+			u.flash, u.flashErr = "also waiting for an answer: "+strings.Join(holders[1:], ", ")+" (w on its row)", false
+		}
 	case tcell.KeyEscape:
+		u.askDraft = ""
 		u.leaveInput(true)
 		u.app.SetFocus(u.focusPrimitive())
 	}
+}
+
+// askHolders lists the recipients of a directed text that have an open ask:
+// the named agent, or for @all the agents it reaches, in that order.
+func (u *ui) askHolders(tgt string, directed bool) []string {
+	if !directed {
+		return nil
+	}
+	names := []string{tgt}
+	if tgt == "all" {
+		names = u.agentNames()
+	}
+	var out []string
+	for _, n := range names {
+		if u.agentHasAsk(n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func (u *ui) copyText(s, what string) {
