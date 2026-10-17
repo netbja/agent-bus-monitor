@@ -465,7 +465,20 @@ It never touches Redis — see README "Deployment topology".
   launched (bind, else the live process's `--model`) and used (Claude transcript, `usage.ReadUsedModel`)
   models; `--publish` leaves verdicts in `{p}:doctor` for busmon's `model≠` flag (only for the judged
   pid). Claude aliases (`opus`, `sonnet`, `haiku`) are the default in roles.toml; an alias launched as
-  an id of its family is never drift. busmon flags `fallback <profile>`. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
+  an id of its family is never drift. busmon flags `fallback <profile>`. v0.15.2, package `models/`:
+  the machine's model table (`~/.cache/agentbus/models.json`, `agentbus models [--refresh]`, no project,
+  no broker) read from each client's own free catalogue (Codex `$CODEX_HOME/models_cache.json` with
+  its priority, visibility and `upgrade`; Claude Code's aliases plus the model keys of `.claude.json`,
+  a *partial* catalogue, so an id missing from it is never `gone`; `grok models`; Kimi's
+  `config.toml`; `agy models`, whose other-maker rows carry `family`). No reader opens a credential.
+  Tiers (frontier, workhorse, fast, legacy) come from the sources' own words, else
+  `~/.config/agentbus/models.toml` rules; a failed read keeps the last good rows, and only a
+  successful read under 7 days judges. A schema-2 profile may set `tier` instead of `model`
+  (never both): the launch resolves it (`rolecfg.ResolveTier`: the source's default row of that tier,
+  else the first in source order) and exports `AGENT_BUS_MODEL_TIER`. The doctor adds `gone` and
+  `newer` (only on stated evidence: `upgrade`, generation words, a models.toml family order).
+  setup.sh refreshes the table at the end of an install (`AGENTBUS_SETUP_NO_MODELS=1` skips it; the
+  installer tests set it); the sentinel refreshes it daily. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
   nor writes `{p}:budget` (the service replaces that hash as a whole).
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write

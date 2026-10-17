@@ -64,6 +64,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
 
@@ -102,6 +103,10 @@ func main() {
 	}
 	// roles reads the role manifest (the scripts' launcher): no project, no
 	// broker. launch replaces this process with the client.
+	// models is the machine's model table (v0.15.2): no project, no broker.
+	if len(args) >= 1 && args[0] == "models" {
+		os.Exit(runModels(context.Background(), args[1:], models.RealEnv(), models.CachePath(), models.ConfigPath(), time.Now(), os.Stdout, os.Stderr))
+	}
 	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && args[1] == "doctor") {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}

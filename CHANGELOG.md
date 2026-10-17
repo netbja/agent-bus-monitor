@@ -4,6 +4,15 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.15.2 — a model table that keeps itself current
+
+- `agentbus models` lists every provider's current models (OpenAI, Anthropic, xAI, Moonshot,
+  Google) from each client's own catalogue, refreshed daily by the sentinel and by setup.
+- A role can name a tier (`tier = "frontier"`) instead of a model: each launch takes the current one.
+- `roles doctor` adds `gone` and `newer`, on stated evidence only.
+
+[Notes](docs/releases/v0.15.2.md)
+
 ## v0.15.1 — swaps you can trace, and models that drift are seen
 
 - A question you answer by message is closed by master, and busmon offers the question panel when

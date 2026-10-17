@@ -59,8 +59,11 @@ which).
 
 ## When the model drifts
 
-The sentinel runs `agentbus roles doctor` daily and reports agents whose launched model is not the
-one `roles.toml` now configures (busmon flags them `model≠`), or whose model the provider refused.
+The sentinel refreshes the model table (`agentbus models`) and runs `agentbus roles doctor` daily,
+and reports agents whose launched model is not the one `roles.toml` now configures, whose model the
+provider refused or no longer lists, or for which the provider names a newer model (busmon flags
+them `model≠`). A profile may name a `tier` (frontier, workhorse, fast) instead of a model: each
+launch takes the provider's current model of that tier from the table.
 Ask the person whether to relaunch each one; on a yes, when the agent is idle,
 `agentbus swap <role> --back` relaunches it on its own profile and model, with the usual checks and
 the resume of its work. Never relaunch without that yes: a model change changes cost and behaviour.

@@ -6,10 +6,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
@@ -116,5 +118,61 @@ func TestDoctorVerdicts(t *testing.T) {
 	v, _ := b.ModelVerdicts(ctx)
 	if v["foureyes"].Verdict != "drift" || v["foureyes"].PID != 12 || v["foureyes"].At == 0 {
 		t.Fatalf("published %+v", v["foureyes"])
+	}
+}
+
+// v0.15.2: the table turns a matching launch into gone or newer, from a
+// fresh complete read only, and resolves a tier.
+func TestDoctorCatalogueVerdicts(t *testing.T) {
+	now := time.Now()
+	tbl := &models.Table{Providers: map[string]*models.Provider{
+		"openai": {OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{
+			{ID: "gpt-6.1-sol", Tier: models.Workhorse},
+			{ID: "gpt-6-sol", Tier: models.Legacy, Newer: "gpt-6.1-sol"},
+			{ID: "gpt-6-astra", Tier: models.Frontier},
+		}},
+		"stale": {OK: false, ReadAt: now.Add(-10 * 24 * time.Hour).UnixMilli()},
+	}}
+	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
+	for _, c := range []struct{ provider, launched, want string }{
+		{"openai", "gpt-6.1-sol", ""},
+		{"openai", "gpt-6-sol", "newer"},
+		{"openai", "gpt-5-old", "gone"},
+		{"stale", "anything", ""}, // an old catalogue judges nothing
+	} {
+		if v, _ := catalogueVerdict(d, c.provider, c.launched); v != c.want {
+			t.Errorf("%s/%s: %q, want %q", c.provider, c.launched, v, c.want)
+		}
+	}
+	cfg := models.Config{Families: map[string][]string{"grok": {"grok-4.7", "grok-4.6"}}}
+	tbl.Providers["xai"] = &models.Provider{OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{{ID: "grok-4.7"}, {ID: "grok-4.6"}}}
+	d.Config = cfg
+	if v, why := catalogueVerdict(d, "xai", "grok-4.6"); v != "newer" || !strings.Contains(why, "grok-4.7") {
+		t.Fatalf("family order: %q %q", v, why)
+	}
+}
+
+func TestDoctorPartialCatalogueNeverGone(t *testing.T) {
+	now := time.Now()
+	tbl := &models.Table{Providers: map[string]*models.Provider{
+		"anthropic": {OK: true, ReadAt: now.UnixMilli(), Partial: true, Rows: []models.Row{{ID: "opus", Alias: true}}},
+	}}
+	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
+	if v, _ := catalogueVerdict(d, "anthropic", "claude-opus-5-5"); v != "" {
+		t.Fatalf("an id a partial catalogue does not list was judged %q", v)
+	}
+}
+
+// Codex re-check: "newer" only names a model the fresh catalogue lists.
+func TestDoctorNewerMustExist(t *testing.T) {
+	now := time.Now()
+	tbl := &models.Table{Providers: map[string]*models.Provider{
+		"openai": {OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{
+			{ID: "gpt-6-sol", Tier: models.Legacy, Newer: "gpt-7-missing"},
+		}},
+	}}
+	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
+	if v, _ := catalogueVerdict(d, "openai", "gpt-6-sol"); v != "" {
+		t.Fatalf("newer pointed at a missing model: %q", v)
 	}
 }

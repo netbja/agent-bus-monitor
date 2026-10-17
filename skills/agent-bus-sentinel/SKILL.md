@@ -109,8 +109,11 @@ You start from a blank context; read before you write, assume nothing.
    or past its deadline. **Report it, do not chase it** — you surface, master decides, and an
    unaccepted request means only that no acceptance was recorded, never that an agent is
    ignoring work.
-3. Check the models: `agentbus roles doctor --publish` (it publishes the verdicts busmon shows as
-   `model≠`). On exit 3, add to your summary the agents in `drift` or `unknown model` with the
+3. Check the models: first `agentbus models --refresh` (each client's own free catalogue: the
+   models every provider offers now), then `agentbus roles doctor --publish` (it publishes the
+   verdicts busmon shows as `model≠`). On exit 3, add to your summary the agents in `drift`,
+   `unknown model`, `gone` (its model left the provider's list) or `newer` (its source names a
+   newer model) with the
    line it prints for each, and tell master once with
    `agentbus cmd master "model drift: <agents>; see agentbus roles doctor"`. Do not repeat it on
    later days while the same agents drift; do not relaunch anything yourself.

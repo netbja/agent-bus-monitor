@@ -16,7 +16,9 @@ permission = "acceptEdits"
 [profiles.review]
 client = "codex"
 provider = "openai"
-model = "your-codex-model"
+# A tier instead of a model: each launch takes the provider's current frontier model from the
+# model table (agentbus models), so a renamed model never breaks it. `model = "<id>"` pins one.
+tier = "frontier"
 [profiles.review.options]
 sandbox = "read-only"
 approval = "on-request"
