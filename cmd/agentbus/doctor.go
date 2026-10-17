@@ -173,6 +173,10 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 			r.UsedAge = age.Round(time.Minute).String()
 			stale = age > 24*time.Hour
 		}
+		// A model error counts for a day: an old refusal says nothing now (§11.7).
+		if used.ModelError != "" && (used.ErrorTS == 0 || d.Now().Sub(time.UnixMilli(used.ErrorTS)) > 24*time.Hour) {
+			used.ModelError = ""
+		}
 		switch {
 		case used.ModelError != "":
 			r.Verdict, r.Why = "unknown model", used.ModelError

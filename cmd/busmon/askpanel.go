@@ -413,3 +413,9 @@ func (u *ui) openAskPrefilled(agent, text string) {
 		u.renderAsk()
 	}
 }
+
+// askChoice is the pending pick between several recipients' questions.
+type askChoice struct {
+	holders []string
+	body    string
+}

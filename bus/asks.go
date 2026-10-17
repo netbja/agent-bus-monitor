@@ -326,9 +326,11 @@ redis.call('HSET', KEYS[1], ARGV[1] .. '|s', 'withdrawn', ARGV[1] .. '|e', tostr
 redis.call('HDEL', KEYS[1], 'open:' .. ARGV[2])
 return 1`)
 
-// askWithdrawQuestion: KEYS asks. ARGV id, agent, qid, note, retention ms.
-// One question closed by its own agent; the ask ends when none is left open:
-// "answered" if any question has a person's answer, else "withdrawn".
+// askWithdrawQuestion: KEYS asks, cmd. ARGV id, agent, qid, note, retention
+// ms, maxlen. One question closed by its own agent, with its trace on the
+// ask's thread (a wake=no reply to people, citing where it was answered);
+// the ask ends when none is left open: "answered" if any question has a
+// person's answer, else "withdrawn".
 var askWithdrawQuestion = redis.NewScript(sweepLua + `
 local now = nowms()
 sweep(KEYS[1], now)
@@ -339,6 +341,8 @@ if redis.call('HGET', KEYS[1], 'open:' .. ARGV[2]) ~= id then return redis.error
 if not csvhas(redis.call('HGET', KEYS[1], id .. '|q'), qid) then return redis.error_reply('ASK_NO_QUESTION') end
 if redis.call('HEXISTS', KEYS[1], id .. '|a|' .. qid) == 1 then return redis.error_reply('ASK_ANSWERED') end
 redis.call('HSET', KEYS[1], id .. '|a|' .. qid, cjson.encode({withdrawn = true, by = ARGV[2], text = ARGV[4], at = now}))
+redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[6], '*', 'from', ARGV[2], 'target', 'people', 'type', 'reply',
+  'ref', id, 'command', 'Question ' .. qid .. ' closed: ' .. ARGV[4], 'wake', 'no', 'text_complete', 'yes')
 local left = remaining(KEYS[1], id)
 if left == 0 then
   local state = 'withdrawn'
@@ -501,7 +505,8 @@ func (b *Bus) WithdrawQuestion(ctx context.Context, agent, askID, qid, note stri
 	if err := ValidateText(note, CmdMaxRunes); err != nil {
 		return 0, err
 	}
-	n, err := askWithdrawQuestion.Run(ctx, b.r, []string{AsksKey(b.project)}, askID, agent, qid, note, askRetention.Milliseconds()).Int()
+	n, err := askWithdrawQuestion.Run(ctx, b.r, []string{AsksKey(b.project), StreamKey(b.project, "cmd")},
+		askID, agent, qid, note, askRetention.Milliseconds(), streamMaxLen).Int()
 	return n, askErr(err)
 }
 

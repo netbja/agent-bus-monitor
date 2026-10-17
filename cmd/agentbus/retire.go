@@ -67,7 +67,12 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 		bus.SwapEvent{FromProvider: snap.Provider, By: self, Reason: reason, OldPID: snap.PID, OldPane: snap.Pane}); err != nil {
 		return fail("%v", err)
 	}
-	defer func() { _ = b.EndSwap(context.Background(), role) }()
+	keepIntent := false
+	defer func() {
+		if !keepIntent {
+			_ = b.EndSwap(context.Background(), role)
+		}
+	}()
 	failed := func(step, format string, a ...any) int {
 		msg := fmt.Sprintf(format, a...)
 		_ = b.LogSwap(context.Background(), bus.SwapEvent{Role: role, Event: bus.SwapFailed, By: self, Error: step + ": " + msg})
@@ -101,7 +106,8 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	}
 	if err := b.RetireSwap(ctx, bus.SwapEvent{Role: role, FromProvider: snap.Provider, By: self, Reason: reason,
 		OldPID: snap.PID, OldPane: snap.Pane}); err != nil {
-		fmt.Fprintf(errw, "retire %s: closed, but the ledger was not written: %v\n", role, err)
+		keepIntent = true // the begin reads as interrupted; the next swap or retire records it
+		return fail("closed (pane %s), but the ledger was not written: %v; check agentbus swaps", snap.Pane, err)
 	}
 	fmt.Fprintf(out, "retired %s: pane %s closed, pid %d gone\n", role, snap.Pane, snap.PID)
 	return 0

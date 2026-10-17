@@ -224,3 +224,22 @@ func TestWithdrawOneQuestion(t *testing.T) {
 		}
 	}
 }
+
+// The withdrawal leaves its trace on the ask's thread.
+func TestWithdrawOneQuestionLeavesATrace(t *testing.T) {
+	b := dialTest(t)
+	cleanAsks(t, b)
+	ctx := context.Background()
+	id, _, err := b.Ask(ctx, AskDef{From: "master", Title: "GO", Questions: []AskQuestion{q("go", "GO", "Yes", "No")}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.WithdrawQuestion(ctx, "master", id, "go", "answered by message 17-0: oui GO"); err != nil {
+		t.Fatal(err)
+	}
+	evs, _, _ := b.Recent(ctx, []string{"cmd"}, 10)
+	last := evs[len(evs)-1]
+	if last.Ref != id || last.From != "master" || !last.NoWake || !strings.Contains(last.Message, "oui GO") {
+		t.Fatalf("trace %+v", last)
+	}
+}

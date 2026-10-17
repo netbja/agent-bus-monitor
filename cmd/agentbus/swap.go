@@ -280,16 +280,18 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	// The commit point (§11.2): done (or back) and the fallback state together.
 	var fb *bus.FallbackRecord
 	if profile != own.Profile {
+		// The episode current at this swap's begin (§11.3), even when the role
+		// was already on another fallback.
 		held := marks0["hold:"+own.Provider]
-		if onFallback {
-			held = fbRec.HeldEpisode
-		}
 		fb = &bus.FallbackRecord{OwnProfile: own.Profile, OwnProvider: own.Provider, Profile: profile, Provider: target.Provider,
 			By: self, Reason: reason, HeldEpisode: held}
 	}
 	if err := b.FinishSwap(ctx, bus.SwapEvent{Role: role, FromProfile: fromProfile, ToProfile: profile, ToProvider: target.Provider,
 		ToModel: target.Model, By: self, Reason: reason, NewPID: proved.PID, NewPane: proved.Pane}, fb); err != nil {
-		fmt.Fprintf(errw, "swap %s: replaced, but the ledger was not written: %v\n", role, err)
+		// The agent is replaced but not recorded: keep the intent (it expires in
+		// 3 min), so the begin reads as interrupted and the next swap records it.
+		ended = true
+		return fail("replaced (pane %s, pid %d), but the ledger and fallback state were not written: %v; check agentbus swaps", proved.Pane, proved.PID, err)
 	}
 	fmt.Fprintf(out, "swapped %s: %s -> %s (%s, %s), pane %s, pid %d\n",
 		role, fromProfile, profile, target.Provider, target.Model, proved.Pane, proved.PID)

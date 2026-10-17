@@ -51,8 +51,9 @@ type ui struct {
 	ctx            context.Context
 	w              busWriter
 	project, self  string
-	broadcastDraft string // a draft with no @ already warned about: the next Enter sends it
-	askDraft       string // a directed text held once because its recipient has an open ask (v0.15.1)
+	broadcastDraft string     // a draft with no @ already warned about: the next Enter sends it
+	askDraft       string     // a directed text held once because its recipient has an open ask (v0.15.1)
+	askChoose      *askChoice // Tab found several recipients with questions: the next key picks one
 
 	pages   *tview.Pages
 	screen  *screenView
@@ -285,6 +286,20 @@ func (u *ui) setFocusPanel(p PanelID) {
 // the focused primitive (text for the input field, scrolling for an overlay).
 func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	m := u.mode()
+	// v0.15.1 §11.5: after Tab with several recipients holding questions, a
+	// number picks whose panel opens; Esc goes back to editing.
+	if pick := u.askChoose; pick != nil {
+		u.askChoose = nil
+		if ev.Key() == tcell.KeyRune && ev.Rune() >= '1' && int(ev.Rune()-'0') <= len(pick.holders) {
+			u.leaveInput(true)
+			u.openAskPrefilled(pick.holders[ev.Rune()-'1'], pick.body)
+			return nil
+		}
+		u.flash, u.flashErr = "", false
+		if ev.Key() == tcell.KeyEscape {
+			return nil
+		}
+	}
 	act := lookup(m, u.focus, u.tier(), ev)
 	if act == ActQuit {
 		u.app.Stop()
@@ -565,11 +580,18 @@ func (u *ui) inputDone(key tcell.Key) {
 			return
 		}
 		u.askDraft = ""
-		u.leaveInput(true)
-		u.openAskPrefilled(holders[0], body)
-		if len(holders) > 1 {
-			u.flash, u.flashErr = "also waiting for an answer: "+strings.Join(holders[1:], ", ")+" (w on its row)", false
+		if len(holders) == 1 {
+			u.leaveInput(true)
+			u.openAskPrefilled(holders[0], body)
+			return
 		}
+		// Several recipients hold questions: the person picks one, by number.
+		var opts []string
+		for i, h := range holders {
+			opts = append(opts, fmt.Sprintf("%d %s", i+1, h))
+		}
+		u.askChoose = &askChoice{holders: holders, body: body}
+		u.flash, u.flashErr = "answer whose question? "+strings.Join(opts, " "+GlyphNone+" ")+" (its number; Esc: back to editing)", false
 	case tcell.KeyEscape:
 		u.askDraft = ""
 		u.leaveInput(true)

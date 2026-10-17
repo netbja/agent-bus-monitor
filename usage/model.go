@@ -16,6 +16,7 @@ type UsedModel struct {
 	Model      string
 	TS         int64  // ms since epoch
 	ModelError string // the error text, when the API refused the model
+	ErrorTS    int64  // when it was refused (ms since epoch)
 }
 
 type modelEntry struct {
@@ -83,6 +84,9 @@ func ReadUsedModel(path string) (UsedModel, error) {
 	}
 	if out.ModelError != "" && out.TS > errTS {
 		out.ModelError = "" // answered since: the model works
+	}
+	if out.ModelError != "" {
+		out.ErrorTS = errTS
 	}
 	return out, nil
 }

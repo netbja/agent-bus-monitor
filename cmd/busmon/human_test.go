@@ -200,3 +200,33 @@ func TestDirectiveToAnAgentWithAnOpenQuestion(t *testing.T) {
 		t.Fatalf("second Enter sent %q", sent)
 	}
 }
+
+// With several recipients holding questions, Tab asks which one; its number
+// opens that panel, prefilled.
+func TestAllWithSeveralOpenQuestionsAsksWhich(t *testing.T) {
+	sh := demoShared(time.Now())
+	q := func(from string) bus.Ask {
+		return bus.Ask{ID: from + "-1", From: from, Title: "Q", State: "open",
+			Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "a", Header: "A", Question: "?",
+				Options: []bus.AskOption{{Label: "Yes"}, {Label: "No"}}}}}}
+	}
+	sh.agents["coder"].openAsk, sh.agents["foureyes"].openAsk = 1, 1
+	sh.asks = []bus.Ask{q("coder"), q("foureyes")}
+	h := newHarness(t, sh)
+	h.draw(160, 40)
+	h.key(runeKey('i'))
+	h.typeText("@all hold on")
+	h.key(key(tcell.KeyEnter))
+	h.key(key(tcell.KeyTab))
+	screen := h.draw(160, 40)
+	if !strings.Contains(screen, "answer whose question? 1 coder") || h.u.ov == ovAsk {
+		t.Fatalf("no chooser:\n%s", screen)
+	}
+	h.key(runeKey('2'))
+	if h.u.ov != ovAsk || string(h.u.ask.text) != "hold on" {
+		t.Fatalf("pick 2: overlay %v text %q", h.u.ov, string(h.u.ask.text))
+	}
+	if a, ok := h.u.currentAsk(); !ok || a.From != "foureyes" {
+		t.Fatalf("opened %+v", a)
+	}
+}

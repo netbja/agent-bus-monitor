@@ -36,6 +36,8 @@ profile = "alias"
 tier = "pop"
 [roles.sentinel]
 tier = "boot"
+[roles.architect]
+tier = "pop"
 [roles.docs]
 tier = "pop"
 `
@@ -62,6 +64,7 @@ func TestDoctorVerdicts(t *testing.T) {
 	reg("deploy", 14, "", "")                            // no model recorded: the process says
 	reg("sentinel", 15, "claude-opus-5-5", "s-sentinel") // its transcript shows another model
 	reg("docs", 16, "claude-opus-5-5", "s-docs")         // the API refused the model
+	reg("architect", 17, "claude-opus-5-5", "s-old")     // refused two days ago: stale, not a verdict
 	now := time.Now()
 	d := doctorDeps{
 		Manifest:  func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
@@ -81,7 +84,9 @@ func TestDoctorVerdicts(t *testing.T) {
 			case "s-sentinel":
 				return usage.UsedModel{Model: "claude-haiku-4-5", TS: now.UnixMilli()}, nil
 			case "s-docs":
-				return usage.UsedModel{Model: "claude-opus-5-5", ModelError: "404 not_found_error model", TS: now.UnixMilli()}, nil
+				return usage.UsedModel{Model: "claude-opus-5-5", ModelError: "404 not_found_error model", ErrorTS: now.UnixMilli()}, nil
+			case "s-old":
+				return usage.UsedModel{Model: "claude-opus-5-5", ModelError: "404 not_found_error model", ErrorTS: now.Add(-48 * time.Hour).UnixMilli()}, nil
 			}
 			return usage.UsedModel{}, errors.New("no transcript")
 		},
@@ -91,7 +96,7 @@ func TestDoctorVerdicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"coder": "ok", "foureyes": "drift", "master": "ok", "deploy": "drift", "sentinel": "drift", "docs": "unknown model"}
+	want := map[string]string{"coder": "ok", "foureyes": "drift", "master": "ok", "deploy": "drift", "sentinel": "drift", "docs": "unknown model", "architect": "ok"}
 	got := map[string]string{}
 	for _, row := range rows {
 		got[row.Agent] = row.Verdict
