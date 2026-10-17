@@ -77,7 +77,7 @@ type Profile struct {
 	Manifest        string                 `json:"manifest"`
 	Adapter         string                 `json:"adapter,omitempty"`
 	Pops            bool                   `json:"pops,omitempty"`      // v0.17: pops other roles; spawn rules derived
-	Approval        string                 `json:"approval,omitempty"`  // v0.17: "person" = popping it needs a person's approval
+	Approval        string                 `json:"approval,omitempty"`  // v0.17: "person" = a popping role's session asks before agent-spawn
 	ToolRules       ToolRules              `json:"tool_rules,omitzero"` // v0.17: declared Claude Code rules
 }
 

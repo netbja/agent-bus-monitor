@@ -8,6 +8,8 @@
 
 **Tech Stack:** Go 1.26, go-redis v9 + Lua, BurntSushi TOML, bash test suite (`tests/`).
 
+**Scope (rev 5 of the spec):** Tasks 3, 4 and 5 (bus approval, `agentbus approval`, the `answer` refusal, the `agent-spawn` gate, the swap spend) were built, reviewed and then removed at Bernard's request; Tasks 0, 1, 2 and 6 ship.
+
 **Spec:** `docs/superpowers/specs/2026-10-17-role-tool-rules-design.md` (rev 4, approved). Read it first; section numbers below refer to it.
 
 ## Global Constraints

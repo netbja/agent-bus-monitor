@@ -5,8 +5,8 @@
 # `agentbus roles doctor` shows what each agent really runs.
 # pops = true: the role pops others; its session gets one Claude Code allow rule per role
 # (`Bash(agent-spawn <role> *)`), or an ask rule for a role with approval = "person".
-# approval = "person": agent-spawn pops the role for an agent only after a person approved it on
-# the bus (`agentbus approval ask <role> <reason>`, answered in busmon). v0.17.
+# approval = "person": that rule is an ask, so Claude Code asks the person in the popping agent's
+# pane before it runs `agent-spawn <role>`. A convenience, not a lock. v0.17.
 
 [roles.master]
 model = "sonnet"

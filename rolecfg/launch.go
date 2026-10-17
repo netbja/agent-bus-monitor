@@ -467,7 +467,7 @@ func LaunchProfile(m *Manifest, role, project, profile string, env []string, std
 	if err != nil {
 		return err
 	}
-	if p.Client != "claude-code" && !rules.Empty() { // v0.17 §6: the bus approval still gates the pop
+	if p.Client != "claude-code" && !rules.Empty() { // v0.17 §6: Codex and Kimi have no such rules; their own approval mode applies
 		fmt.Fprintf(cfg.Stderr, "note: tool_rules not applied for %s\n", p.Client)
 		rules = ToolRules{}
 	}

@@ -3,14 +3,15 @@
 One entry per release. The full notes for each are in [`docs/releases/`](docs/releases/).
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
-## v0.17.0 — master pops agents without the classifier, a person approves the risky ones
+## v0.17.0 — master pops agents without the classifier, and asks before deploy
 
 - A role that pops others (`pops = true`, master) launches with one Claude Code allow rule per
   ordinary role, so `agent-spawn architect` no longer reaches the auto-mode classifier.
-- A role marked `approval = "person"` (deploy) is popped by an agent only after a person approved
-  it in busmon: `agentbus approval ask <role> <reason>`, then `agent-spawn`. One approval, one pop,
-  30 minutes. A procedure gate, not a security boundary.
-- Agents can no longer answer asks with `agentbus answer`.
+- A role marked `approval = "person"` (deploy) gets an ask rule instead: Claude Code asks in
+  master's pane before `agent-spawn deploy`. A convenience, not a lock: a quoted role reaches the
+  classifier, which may let it run.
+- `[roles.<r>.tool_rules]` adds Claude Code rules of a role's own; a rule allowing every shell
+  command, or naming `agent-spawn`, is refused.
 
 [Notes](docs/releases/v0.17.0.md)
 

@@ -346,9 +346,8 @@ It never touches Redis — see README "Deployment topology".
   a role with `pops = true` gets `Bash(agent-spawn <role> *)` per other role (allow, or ask when
   that role has `approval = "person"`) plus its own `tool_rules`, in one `--settings` JSON for
   Claude Code only (other clients: a note); free-form rules naming `agent-spawn` or allowing all
-  of Bash are refused. `scripts/agent-spawn` gates an approval role for a caller with
-  `AGENT_BUS_AGENT` through `agentbus approval use` (`--by-swap` for the id `swap` spent first);
-  `agentbus answer` refuses agents. A procedure gate, not a security boundary. A missing skill warns and the
+  of Bash are refused. The ask matches command text only (a quoted role reaches the classifier):
+  a convenience, not a lock. A missing skill warns and the
   agent still starts; `roles install-skills` stays strict.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
@@ -494,11 +493,7 @@ It never touches Redis — see README "Deployment topology".
   open ask per agent; each answer is a `reply` (ref = ask id, `human=yes`) that wakes the agent. Client
   JSON never carries answers. v0.15.1: `ask <agent> --withdraw <id> --question <qid> --note …` closes one
   question (`AskAnswer.Withdrawn`), the ask ends with the last one; a directive typed to an agent with an
-  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). v0.17 (`bus/approval.go`):
-  an approval ask (`spawn-<role>`, Approve/Refuse) is indexed by `approval:<agent>:<role>`, outside
-  `open:<agent>`; withdraw, withdraw-question and replace accept that index; `ApprovalUse` spends it
-  once (`<id>|u|spawn-<role>` = `spawn:`/`swap:<ms>`), refuses an answer by a name in `{p}:agents`,
-  and a swap's hand-over is used once (`<id>|s|spawn-<role>`). busmon: `askpanel.go` (ModeAsk, `!`/`w`/F4, Enter in the agent detail), counts and fade follow open
+  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). busmon: `askpanel.go` (ModeAsk, `!`/`w`/F4, Enter in the agent detail), counts and fade follow open
   questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,
   overlay bodies only; rows stay on `Preview`).
 - **Observed is not declared (v0.14.3).** The services' dispatcher inspects every verified pane

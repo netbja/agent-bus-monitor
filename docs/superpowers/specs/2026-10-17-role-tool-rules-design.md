@@ -1,6 +1,10 @@
-# Per-role tool rules and a person's approval to pop a risky role (v0.17)
+# Per-role tool rules: master pops agents without the classifier, asks before a risky role (v0.17)
 
-Status: rev 4, 2026-10-17, APPROVED by Bernard. rev 1 reviewed by Claude Code (abm-claude, verdict CHANGES,
+Status: rev 5, 2026-10-17. **Scope reduced by Bernard after implementation:** only the per-role
+rules ship (derived allows, the Claude Code ask for an `approval = "person"` role, `tool_rules`).
+The bus approval (§5), the CLI refusal of `answer` (§5.4), the `agent-spawn` gate and the swap
+spend are **dropped**; §5 and §7 are kept below, struck as "not built", for the record of what was
+weighed. rev 4 was APPROVED by Bernard. rev 1 reviewed by Claude Code (abm-claude, verdict CHANGES,
 `2026-10-17-role-tool-rules-review.md`); Bernard chose "bus approval + Claude prompt" (§2). rev 2
 reviewed by the same (5 points: no text-matching deny, approval asks outside the one-open-ask rule,
 O(1) lookup, swap spends before it closes, the manual path from master's tab); rev 3: a swap
@@ -28,8 +32,9 @@ the denial, and asked Bernard to add a permission rule or type `! agent-spawn de
   the classifier**.
 - For a **risky role** (deploy today), master still pops it, but **only after Bernard has agreed**.
   He gives his agreement; he does not type the command.
-- The agreement is a **bus fact**: asked and answered in busmon like any ask, recorded, valid for
-  every client. A Claude Code prompt in master's pane is a **second net**, not the guarantee.
+- rev 5: the agreement is **a Claude Code permission prompt in master's pane** (the ask rule of
+  §4.3). The bus approval of rev 2-4 (asked in busmon, recorded, valid for every client) was built
+  and then dropped by Bernard: he accepts that the prompt is a convenience, not a lock (§7).
 - All of it is part of agent-bus-monitor, versioned with `roles.toml`.
 
 ## 3. Goals, non-goals, anti-goals
@@ -115,7 +120,13 @@ acceptEdits, the classifier in auto, the safe direction. A new role needs no rul
 
 `roles.toml`: master `pops = true`; deploy `approval = "person"`. No `tool_rules`.
 
-## 5. The approval on the bus
+## 5. The approval on the bus — NOT BUILT (dropped in rev 5)
+
+Kept for the record. None of §5 ships: no `agentbus approval`, no `approval:<agent>:<role>` index,
+no gate in `agent-spawn`, no spend in `swap`, and `agentbus answer` is unchanged. Codex's review of
+the implementation found one Important defect in it (an approval answer carried across a generic
+`--replace` with another reason, `2026-10-17-role-tool-rules-impl-review.md`); it was fixed before
+the scope was cut, and leaves with it.
 
 ### 5.1 Asking: `agentbus approval ask <role> <reason...>`
 
@@ -200,11 +211,19 @@ paths are: answer in busmon, or run `agent-spawn` from his own shell.
   mode rules resolve before the classifier, and a narrow allow like `Bash(agent-spawn architect *)`
   is not dropped on entering auto mode. A user or project `deny` still wins.
 
-Other clients: rules are not applied, with one stderr note (`tool_rules not applied for <client>`).
-The bus approval still gates the pop, so master may be swapped to Codex or Kimi; rev 1's swap
-refusal is dropped. `bypassPermissions`: rules have no effect; the bus approval still gates.
+Other clients: rules are not applied, with one stderr note (`tool_rules not applied for <client>`):
+master swapped to Codex or Kimi pops under that client's own approval mode. rev 1's swap refusal
+is not built. `bypassPermissions`: rules have no effect, and an `ask` in `tool_rules` is refused.
 
 ## 7. What this guarantees, and what it does not
+
+**rev 5 (what ships):** the derived allows keep the ordinary pops away from the classifier; the
+ask makes Claude Code prompt for `agent-spawn deploy …` as the agent usually writes it. It matches
+command text only: checked live (§9), `agent-spawn "deploy" z` matched no rule, reached the
+classifier and ran unasked in auto mode. A convenience for the usual command, not a lock; the
+skill tells master never to get round it.
+
+The rest of §7 described the bus approval (not built):
 
 - **A procedure gate, not a security boundary.** It stops an honest, eager agent from popping a
   risky role on its own, records who approved what and when, and puts the decision in busmon.

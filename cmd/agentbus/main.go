@@ -21,7 +21,6 @@
 //	agentbus --project P agents    [--json]      # current state of all agents (one line each)
 //	agentbus --project P pause --for 2h | --until 02:15 | --until-reset [--to master] [reason]  # nobody is woken until then; resume [msg] ends it
 //	agentbus --project P ask <agent> [--file f.json] [--replace id] | --withdraw id  # questions for a person; asks [--open]; answer <id> <q> --choice L | --text ...
-//	agentbus --project P approval ask <role> <reason...> | use <role> [--check|--for-swap|--by-swap id]  # a person's approval to pop a role (v0.17)
 //	agentbus --project P agents forget <agent>... [--force]  # retire gone agents (snapshot, usage, wake, group)
 //	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
 //	agentbus --project P bind      <agent> [--pane P] [--pid N]   # bind a verified pane identity (lists candidates without --pid, exit 2)
@@ -464,9 +463,6 @@ func main() {
 
 	case "answer":
 		os.Exit(runAnswer(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
-
-	case "approval":
-		os.Exit(runApproval(ctx, b, realApprovalDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
 
 	case "swap":
 		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))

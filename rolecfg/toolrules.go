@@ -110,8 +110,8 @@ func checkAskPermission(role string, rules ToolRules, client, permission string)
 	return nil
 }
 
-// Approval is "person" when popping role needs a person's approval on the
-// bus, "" otherwise (and for an unknown role).
+// Approval is "person" when a popping role's session must ask the person
+// before it pops role (an ask rule), "" otherwise (and for an unknown role).
 func (m *Manifest) Approval(role string) string {
 	info, ok := asTable(m.Roles[role])
 	if !ok {

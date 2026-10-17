@@ -137,10 +137,6 @@ func runAsks(ctx context.Context, b *bus.Bus, args []string, out, errw io.Writer
 
 // runAnswer answers one question as a person, without busmon.
 func runAnswer(ctx context.Context, b *bus.Bus, args []string, getenv func(string) string, out, errw io.Writer) int {
-	if getenv("AGENT_BUS_AGENT") != "" { // v0.17 §5.4: the launcher sets it for every agent
-		fmt.Fprintln(errw, "answer: agents do not answer asks; a person answers in busmon or from a shell without AGENT_BUS_AGENT")
-		return 2
-	}
 	args, choice := extractFlag(args, "--choice")
 	args, as := extractFlag(args, "--as")
 	args, isText := extractBool(args, "--text")
