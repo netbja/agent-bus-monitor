@@ -452,7 +452,20 @@ It never touches Redis — see README "Deployment topology".
   fatal), the proof (new pid alive, new pane, the profile's client and provider), and only then
   the resume of its work (`Bus.CmdOnce` on the episode's `resumed:` mark when its provider is
   held). A failure after the close prints the recovery (`agent-spawn <role> <project>`). busmon
-  flags `swapping`. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
+  flags `swapping`. v0.15.1 (`bus/swaplog.go`): every swap is in the ledger `{p}:swaps` (`begin` in
+  the same script as the intent, `done`/`back` with the fallback state `{p}:fallback` at the proof,
+  `failed`/`warning` on every failure path, a `begin` without end and without intent read as
+  interrupted and closed by the next swap); `swap --back` returns a role to its own profile and
+  model (refused only when profile, client, provider and launched model all match); `agentbus
+  retire <role>` closes one role's tab with the same checks (not `shutdown`, which is team-wide);
+  `agentbus swaps` lists the ledger. A fallback record keeps `held_episode`, and the release of that
+  episode earns master one `back:<p>:<role>` notice; its own provider stays watched. The launched
+  model (`AGENT_BUS_MODEL`) is part of the verified identity (`AgentSnapshot.Model`, set only with a
+  proof). `agentbus roles doctor [--publish]` compares configured (roles.toml, the current profile),
+  launched (bind, else the live process's `--model`) and used (Claude transcript, `usage.ReadUsedModel`)
+  models; `--publish` leaves verdicts in `{p}:doctor` for busmon's `model≠` flag (only for the judged
+  pid). Claude aliases (`opus`, `sonnet`, `haiku`) are the default in roles.toml; an alias launched as
+  an id of its family is never drift. busmon flags `fallback <profile>`. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
   nor writes `{p}:budget` (the service replaces that hash as a whole).
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write
@@ -460,7 +473,9 @@ It never touches Redis — see README "Deployment topology".
   (`target=people`, `wake=no`, no `ref`; `people` is never a cmd target or consumer group). First
   answer wins; an answer to a replaced ask follows `replaced_by` only for an unchanged question; one
   open ask per agent; each answer is a `reply` (ref = ask id, `human=yes`) that wakes the agent. Client
-  JSON never carries answers. busmon: `askpanel.go` (ModeAsk, `!`/`w`/F4, Enter in the agent detail), counts and fade follow open
+  JSON never carries answers. v0.15.1: `ask <agent> --withdraw <id> --question <qid> --note …` closes one
+  question (`AskAnswer.Withdrawn`), the ask ends with the last one; a directive typed to an agent with an
+  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). busmon: `askpanel.go` (ModeAsk, `!`/`w`/F4, Enter in the agent detail), counts and fade follow open
   questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,
   overlay bodies only; rows stay on `Preview`).
 - **Observed is not declared (v0.14.3).** The services' dispatcher inspects every verified pane

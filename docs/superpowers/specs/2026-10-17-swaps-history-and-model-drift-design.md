@@ -1,6 +1,6 @@
 # Swap history, swap back, asks answered elsewhere, architect guidance, model drift (v0.15.1)
 
-Status: rev 1, 2026-10-17, for Codex review. Builds on v0.15
+Status: rev 3, 2026-10-17, approved by Codex; v0.15.1 implemented, §10 and §12 are v0.15.2. Builds on v0.15
 (`2026-10-16-quota-resume-and-fallback-design.md`), which deferred the durable swap record, the
 `fallback` flag and the swap back (§2 there).
 
