@@ -1,6 +1,7 @@
 # busmon compose window (v0.16) — design
 
-Status: draft rev 1, 2026-10-17. Asked by Bernard; options settled with him and Kimi.
+Status: rev 2, 2026-10-17. Asked by Bernard; options settled with him and Kimi. Rev 2 applies
+Kimi's review of rev 1 (structured send, rune limit, keys, send results, modes, paste).
 
 ## 1. Why
 
@@ -19,17 +20,17 @@ no paste across lines.
 | 3 | Draft kept on Esc, shared with the one-line input | yes |
 | 4 | Markdown preview | **no** (no use) |
 | 5 | External `$EDITOR` | **no** (the built-in editor must be enough) |
-| 6 | Reply in a thread from an Activity line | yes, **separate lot** (§8) |
+| 6 | Reply in a thread from an Activity line | yes, **separate lot** (§9) |
 | 7 | The same editor for a free answer in the question panel | yes |
 
-Kimi's review adds: one send path shared by the line and the window (never duplicated); the
-message type is inferred, not a second field; the counter counts runes, like the bus.
+From Kimi: one send path shared by the line and the window (never duplicated); the message type
+is inferred, not a second field; the counter counts runes, like the bus.
 
 ## 3. The window
 
-A modal overlay (the modal layer of `ui.go`, like the question panel), centred, its frame in the
-Activity hue (`panelHue`), width `min(screen − 4, 100)`, height `min(screen − 6, 16)` with a
-minimum of 6 text lines; in the narrow tier it takes the whole screen less the header.
+A modal overlay, centred, its frame in the Activity hue (`panelHue`), width `min(screen − 4, 100)`,
+height `min(screen − 6, 16)` with at least 6 text lines; in the narrow tier it takes the whole screen
+less the header.
 
 ```
 ┌ Compose ───────────────────────────────── to: @master · directive ┐
@@ -42,27 +43,36 @@ minimum of 6 text lines; in the narrow tier it takes the whole screen less the h
 └──────────────────────────────────────────────────── 142 / 65536 ──┘
 ```
 
-- **Editor:** `tview.TextArea` (present in tview v0.42.0, `go.mod`): wrap, cursor keys, Home/End,
-  word moves, selection, undo, paste. Its own bindings stay as they are (Ctrl+E is its end of
-  line, Ctrl+A its start). Enter inserts a new line.
-- **Header:** `to: <recipient> · <type>`. The type is read from the recipient: an agent or `@all`
-  → `directive`; empty → `broadcast` (shown in the attention colour). No type field to edit.
-- **Footer:** the window's bindings from the key table (§5), as everywhere else.
-- **Counter:** runes of the trimmed text / the limit (`bus.CmdMaxRunes` for a message, the
-  answer limit for an answer, §6); at the limit the editor accepts no more input
-  (`SetMaxLength` counts what the bus counts: verify, else enforce on change) and the counter
-  turns attention.
+- **Editor:** `tview.TextArea` (tview v0.42.0): wrap, cursor keys, Home/End, word moves,
+  selection, undo, its own copy/paste keys (Ctrl+Q copies a selection, Ctrl+E/Ctrl+A end/start of
+  line — all left to it). Enter inserts a new line.
+- **Header:** `to: <recipient> · <type>`: an agent or `@all` → `directive`; empty → `broadcast`
+  (attention colour). No type field to edit.
+- **Footer:** the window's bindings from the key table (§5); a send's flash (§7) replaces it until
+  the next key.
+- **Rune limit, ours, not tview's.** `TextArea.SetMaxLength` counts bytes (textarea.go:848) and
+  `GetTextLength` too, so neither is used. The composer keeps its own limit in runes
+  (`utf8.RuneCountInString`, the count `bus.ValidateText` applies): a `SetChangedFunc` hook rejects a
+  change that would exceed it by restoring the last accepted text and cursor; a paste is cut at the
+  last whole rune that fits (never mid-UTF-8) and the flash says how much was dropped. Limits:
+  `bus.CmdMaxRunes` for a message, 2000 for an answer (§6). Counter `n / limit`, attention colour
+  at the limit.
+- **Paste.** busmon enables bracketed paste (`app.EnablePaste(true)`), and `screenView` and
+  `modalView` gain a `PasteHandler` that relays to the focused child, as their `InputHandler` does
+  (today both embed `*tview.Box`, whose paste handler drops it). The one-line input gets pastes too;
+  a newline pasted into it moves the text to the window (§7, one draft).
 - **Glyphs:** only the existing set (`TestNoStrayNonASCIILiterals`); the frame passes
-  `TestAlignmentSuite` at every size and palette (a new fixture: an open compose window).
+  `TestAlignmentSuite` at every size and palette (new fixture: the window open).
 
 ## 4. Recipient
 
-- `Tab` moves the focus from the text to the recipient field (one line, the current
-  autocompletion of `@agent`/`@all` from `parseDirected` and `agentNames`); `Tab` again returns to
-  the text. Enter in the recipient field returns to the text too (it never sends).
-- Opening rules: from the line, the recipient is the `@name` the line starts with (and the body
-  is the rest); from a panel with an agent selected (Agents panel, or its detail), that agent;
-  otherwise empty.
+- `Tab` moves the focus between the text and the recipient field (one line, the current
+  autocompletion of `@agent`/`@all` from `agentNames`). Tab is consumed by the composer: TextArea
+  would insert a tab or call `finished` (textarea.go:2119). Enter in the recipient field returns to
+  the text; it never sends.
+- Opening: from the line, the `@name` the line starts with (the rest is the body, through
+  `parseDirected` once, at opening only); from the Agents panel or an agent's detail (`ovAgent`),
+  the selected agent; otherwise empty.
 - A recipient that is neither a known agent, `all`, nor empty is shown in the attention colour and
   Ctrl+S refuses with a flash (`unknown recipient`), the draft kept.
 
@@ -73,87 +83,116 @@ the help).
 
 | Where | Key | Action |
 |---|---|---|
-| Panels (any) | `I` | open the window (draft, else empty; recipient per §4) |
-| One-line input | `Ctrl+O` | open the window with the line's text (recipient split off) |
+| Panels (any) and the agent detail (`ovAgent`) | `I` | open the window (draft, else empty; recipient per §4) |
+| One-line input | `Ctrl+O` | open the window with the line's text |
 | Window | `Ctrl+S` | send (§7) |
-| Window | `Tab` | text ↔ recipient |
+| Window | `Tab` | text ↔ recipient (message); nothing (answer: consumed, no tab inserted) |
+| Window | `Ctrl+T` | after the open-question hint only: answer in that agent's panel (§7) |
 | Window | `Esc` | close, keep the draft |
-| Window | `Ctrl+Q` | quit busmon (the global binding, unchanged) |
+| Everywhere | `Ctrl+C` | quit busmon (the global binding, `keys.go:139`, unchanged) |
 
-`i` keeps opening the one-line input. Ctrl+S is safe: tcell's raw mode disables XON/XOFF. Alt+Enter
-is **not** bound (not reliably distinguished by every terminal; may come later once tested).
-Mouse: a click outside the window closes it like Esc (the v0.9 overlay rule).
+- `i` keeps opening the one-line input. In the line, `I` is a letter like any other.
+- **Ctrl+O in the line** is intercepted before `ModeInput` hands the event to the field
+  (`ui.go:347` returns every key to it today); the line's footer reads `Ctrl+O: edit in the window`.
+- **`I` in the agent detail** is bound in `overlayBindings` for `ovAgent` only (unbound keys in an
+  overlay are swallowed today, `ui.go:327`).
+- Ctrl+S is safe: tcell's raw mode (`term.MakeRaw`) clears IXON. Ctrl+S and Ctrl+T have no TextArea
+  binding. Alt+Enter is not bound.
 
 ## 6. One editor, two uses
 
-The window is one component, `composer` (new file `cmd/busmon/compose.go`), parameterised by
-title, limit, a header line, whether it has a recipient field, and an `onSend(text) error`:
+One component, `composer` (new file `cmd/busmon/compose.go`), created once at startup like every
+primitive, parameterised when opened: title, rune limit, whether it has a recipient field, the
+parent to return to, and `onSend(target, body string) sendResult`.
 
-- **Message** (§3-§4): limit `bus.CmdMaxRunes`, recipient field, sends through §7.
+- **Message** (§3-§4): limit `bus.CmdMaxRunes`, recipient field, parent none, sends through §7.
 - **Free answer** in the question panel: opened by Enter on the "write an answer" option, title
-  `Answer: <question header>`, no recipient field, limit 2000 runes (today's cap in `askKey`; if
-  the bus validates a different cap, that one wins), sends through `sendAnswer(a, q, "", text)`.
-  Esc returns to the question panel with the text kept for that question (`ask.text` keyed by ask
-  id and question id, cleared once answered). The `typing`/`[]rune` path of `askKey` is removed.
+  `Answer: <question header>`, no recipient field, limit 2000 runes (today's cap; if the bus
+  validates a lower cap for answers, that one wins), parent the question panel. Its text is kept per
+  ask id and question id (`ask.drafts`), and cleared **only once the answer is accepted**:
+  `sendAnswer` today clears the text before it checks the error (`askpanel.go:341`); it now returns a
+  `sendResult`, and a failure keeps the text, the window and its flash. The `typing`/`[]rune` path
+  of `askKey` is removed.
+
+**Modes and focus.** `mode()` returns `ModeCompose` whenever the composer is open, ahead of
+`ModeAsk` and `ModeOverlay` (`ui.go:224`), and `focusPrimitive()` returns the composer's text or
+recipient field (`ui.go:255`). There is still one overlay layer, no stack: opening the composer over
+the question panel records the panel as its parent; closing (Esc, or a click outside — the same
+function, draft included) reopens the parent and gives it the focus, or returns to the panel that had
+it. A resize relayouts the open composer without touching its text, cursor or field focus.
 
 ## 7. One send path
 
-`inputDone`'s Enter branch becomes `u.send(text) (sent bool)`, called by the line (Enter) and by the
-window (Ctrl+S, with `@<recipient> ` prefixed to the body when there is one). Everything it does
-today stays in that one function and applies to both:
+`inputDone`'s Enter branch becomes `u.send(target, body string, directed bool) sendResult`:
 
-- the open-question hint (`askHolders`/`askDraft`: first Ctrl+S shows the hint, second sends, Tab
-  opens the panel — in the window, the hint's "Tab" becomes "Ctrl+T: answer in its panel", since Tab
-  moves to the recipient);
-- the broadcast warning (`broadcastDraft`: a second Ctrl+S sends it);
-- `@all` fan-out with partial failures (the draft is cleared when some were served);
-- a failed send keeps the draft.
+- the **line** adapts its text with `parseDirected` and calls it;
+- the **window** passes its fields as they are: never rebuilt into an `@name body` string, so an
+  empty recipient with a body starting `@coder` stays a broadcast, and `@master` with an empty body
+  is not turned into one.
 
-On success the window closes and the shared draft (`u.msgDraft`) is cleared; on a warning or a
-failure it stays open with the flash shown in its footer. Multi-line text is sent as written:
-`HumanCmd`/`HumanNotify` already keep newlines (`SanitizeReportFull` is not involved: cmd bodies
-are bounded by `CmdMaxRunes` only (`ValidateText`: valid UTF-8 and a rune count). The composer
-normalises before sending: `\r\n` and `\r` become `\n`, other control characters except `\n` and
-`\t` are removed, trailing spaces on each line and blank lines at both ends are trimmed.
+An empty body (after normalisation) is refused before anything else (`nothing to send`).
+Everything `inputDone` does today stays in `send`, for both callers: the open-question hint
+(`askHolders`/`askDraft`), the broadcast warning (`broadcastDraft`), the `@all` fan-out with partial
+failures, the failed send.
 
-**One draft.** `u.msgDraft` holds the text, newlines included, for both. The line shows a one-line
-draft as today; a draft with several lines is never flattened into it: `i` then opens the window
-on it (the line cannot show it without loss), and the footer of the line's mode says
-`I: edit the draft`.
+```go
+type sendResult int
+const (
+	sendSent    sendResult = iota // everything sent: close, clear the draft
+	sendPartial                   // @all, some served: close, clear the draft (a retry would send twice), flash the failures
+	sendHeld                      // a warning that waits for a second Ctrl+S/Enter: stay, keep the draft
+	sendFailed                    // nothing sent: stay, keep the draft, flash the error
+	sendRefused                   // empty body, unknown recipient: stay, keep the draft
+)
+```
 
-## 8. Later lot: reply in a thread (not in v0.16.0)
+In the window the open-question hint reads "Ctrl+S: send as a message · Ctrl+T: answer in its
+panel · Esc: back to editing"; in the line it is unchanged (Enter, Tab, Esc).
 
-`R` on an Activity line opens the window with the recipient (the line's author) and the thread
-root (the line's `ref`, else its id), header `to: @x · reply in <short id>`. It needs a bus
-primitive: `HumanCmd` sends a directive without `ref` and `HumanClose` replies with `wake=no`, so a
-new `Bus.HumanReply(ctx, from, to, ref, body)` (`type=reply`, `human=yes`, waking) is required, with
-its own tests. Specified when that lot starts.
+**Text normalisation** before sending: `\r\n` and `\r` become `\n`; control characters other than
+`\n` and `\t` are removed; trailing spaces on each line and blank lines at both ends are trimmed. Cmd
+bodies are bounded by `CmdMaxRunes` only (`ValidateText`: valid UTF-8 and a rune count), so newlines
+reach `HumanCmd`/`HumanNotify` as written.
 
-## 9. Agents use a code index when one is present
+**One draft.** `u.msgDraft` holds the text, newlines included, for both. A draft with several lines
+is never flattened into the line: `i` then opens the window on it, and a newline pasted into the line
+moves the text to the window.
 
-Bernard asks that agents use a code-graph MCP when the machine has one. This repository's
-`AGENTS.md` already says so; the projects the bus serves do not. The `agent-bus` peer skill (read by
-every role in every project) gains a short section: if a code-index MCP server is available
-(codebase-memory-mcp, codegraph), use it first for structural questions (where is X defined, who
-calls Y, what breaks if Z changes) and grep for literals, configuration and documents; index the
-repository once if it is not; an index is the code at its indexed revision, never evidence of what
-is deployed. Doc-only; no client is configured by agent-bus.
+## 8. Agents use a code index when one is present
+
+Bernard asks that agents use a code-graph MCP when the machine has one. This repository's `AGENTS.md`
+already says so; the projects the bus serves do not. The `agent-bus` peer skill (read by every role in
+every project) gains a short section: if a code-index MCP server is available (codebase-memory-mcp,
+codegraph), use it first for structural questions (where is X defined, who calls Y, what breaks if Z
+changes) and grep for literals, configuration and documents; index the repository once if it is not;
+an index is the code at its indexed revision, never evidence of what is deployed. Doc-only; agent-bus
+configures no client.
+
+## 9. Later lot: reply in a thread (not in v0.16.0)
+
+`R` on an Activity line opens the window with the recipient (the line's author) and the thread root
+(the line's `ref`, else its id), header `to: @x · reply in <short id>`. It needs a bus primitive:
+`HumanCmd` sends a directive without `ref` and `HumanClose` replies with `wake=no`, so a new
+`Bus.HumanReply(ctx, from, to, ref, body)` (`type=reply`, `human=yes`, waking) is required, with its
+own tests. Specified when that lot starts.
 
 ## 10. Tests
 
-- `composer`: rune counter and limit, Esc keeps text, Ctrl+S calls `onSend` once, recipient Tab
-  cycle, unknown recipient refused.
-- `send`: the existing `inputDone` tests run through `send`; the same cases driven from the window
-  (hint, broadcast warning, `@all` partial failure, failed send keeps the draft); a multi-line body
-  reaches `HumanCmd` intact.
-- Shared draft: line → Ctrl+O → window keeps text and recipient; window → Esc → `i` reopens the
-  window when the draft has several lines, the line when it has one; normalisation (`\r\n`, control
-  characters, trims) tested on pasted input.
-- Free answer: Enter on "write an answer" opens the composer; Ctrl+S sends one answer; Esc keeps
-  the text per question.
+- `composer`: rune limit with multi-byte text at the exact limit and limit + 1 (typed and pasted, cut
+  on a rune boundary); counter; Esc keeps text; Ctrl+S calls `onSend` once; Tab consumed (toggle for
+  a message, nothing for an answer, never a tab character); unknown recipient refused.
+- `send`: the existing `inputDone` tests run through the line adapter; from the window: empty
+  recipient + body `@coder …` is a broadcast (warning), `@master` + empty body refused, hint then
+  Ctrl+T, broadcast second Ctrl+S, `@all` partial failure closes and clears, total failure stays; a
+  multi-line body reaches `HumanCmd` intact; normalisation of pasted `\r\n` and control characters.
+- Answers: Enter on "write an answer" opens the composer over the panel; Ctrl+S sends one answer; a
+  failed `sendAnswer` keeps the text; Esc and a click outside return to the panel with the text kept
+  for that question.
+- Modes: `mode()` priority, `focusPrimitive()`, resize with the window open keeps text and focus,
+  Ctrl+O from the line, `I` from a panel and from `ovAgent`, paste relayed by `screenView`/`modalView`.
 - Keys: `ModeCompose` table in the help and the footer; `TestAlignmentSuite` with the window open.
 
 ## 11. Out of scope
 
-Preview, external editor, reply in a thread (§8), templates, spell check, saving drafts across
-busmon restarts.
+Preview, external editor, reply in a thread (§9), templates, spell check, drafts across busmon
+restarts.
