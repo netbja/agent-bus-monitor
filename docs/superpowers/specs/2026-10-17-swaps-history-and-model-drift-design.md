@@ -198,3 +198,45 @@ Rules:
 - **roles doctor:** alias vs id, launched vs configured, used vs launched, `<synthetic>` ignored,
   unknown-model error, exit codes.
 - **skill:** master sections (§5.1, §6), sentinel daily doctor.
+
+## 10. Next: a model table per provider (v0.15.2, reviewed with this spec)
+
+Bernard's request (2026-10-17): model names should not be hard-coded in `roles.toml`; a table per
+provider should keep itself current. Every client already keeps a free local catalogue; none is
+read by calling a model.
+
+### 10.1 Sources (one reader per client, like the quota readers)
+
+| Provider | Source | Read |
+|---|---|---|
+| openai (Codex) | `~/.codex/models_cache.json`, refreshed by Codex itself | `slug`, `display_name`, `description` ("Latest workhorse…", "Frontier…", "Fast…", "Older…") |
+| xai (Grok) | `grok models` (fixed argv, 10 s bound) | the list and the default marker |
+| moonshot (Kimi) | `~/.kimi*/config.toml` `[models.*]`, `default_model` | ids and aliases |
+| anthropic (Claude) | Claude Code's aliases (`opus`, `sonnet`, `haiku`, `fable`); the model options cached in `~/.claude.json` (only the model keys: `additionalModelOptionsCache`, `orgModelDefaultCache`; never the account fields); the resolved id last seen per alias in transcripts | alias → id, label |
+
+No reader opens a credential file (`auth.json`, `.credentials.json`, `credentials`). A missing or
+unreadable source is a note, never an error that stops the others.
+
+### 10.2 The table
+
+`~/.cache/agentbus/models.json` (machine scope, like the quota cache), one row per model:
+`provider, client, id, label, tier, default, source, seen_at`. `tier` is `frontier`,
+`workhorse`, `fast` or `legacy`: from the description when it says so, else from
+`~/.config/agentbus/models.toml` (a person-maintained map of id patterns → tier), else empty.
+`agentbus models [--provider p] [--json]` prints it; `agentbus models --refresh` rereads every
+source. The sentinel refreshes it on its daily wake; `setup.sh update` refreshes it too.
+
+### 10.3 Roles name a tier, not an id
+
+A schema-2 profile may set `tier = "frontier"` instead of `model`. At launch, `rolecfg` resolves
+it to the table's `default`-or-first row of that provider and tier and passes the id to the
+client; `AGENT_BUS_MODEL` records the resolved id, and `AGENT_BUS_MODEL_TIER` the tier. An exact
+`model` always wins; `model` and `tier` together are refused. With no matching row, the launch
+fails with the table's state and the fix (`agentbus models --refresh`, or set `model`).
+
+### 10.4 Never behind the person's back
+
+The table changes by itself; a running agent never does. The doctor (§7.2) adds two verdicts:
+`newer` (a newer row exists for the agent's tier; for an exact id, a row of the same family
+ranked newer) and `gone` (the launched id is no longer in its provider's table). busmon shows
+`model≠` for both; master asks the person; `agentbus swap <role> --back` relaunches.
