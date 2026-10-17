@@ -242,3 +242,51 @@ The table changes by itself; a running agent never does. The doctor (§7.2) adds
 `newer` (a newer row exists for the agent's tier; for an exact id, a row of the same family
 ranked newer) and `gone` (the launched id is no longer in its provider's table). busmon shows
 `model≠` for both; master asks the person; `agentbus swap <role> --back` relaunches.
+
+## 11. Rev 2 — Codex review of rev 1 (2026-10-17), what changes
+
+These rules replace the corresponding text above where they differ.
+
+1. **Closing one role (§6).** `agentbus shutdown` is a team-wide broadcast, so the skill must not
+   use it for architect. New `agentbus retire <role> [--now]`: the swap's preflight (verified
+   identity, not the caller's pane, no open challenge or mission, no running turn unless `--now`),
+   then the swap intent, `herdr pane close`, the old pid gone, a `retire` ledger entry, the intent
+   deleted. It launches nothing. The skill tells master to ask architect for its final report,
+   then `agentbus retire architect`.
+2. **Ledger lifecycle (§3).** `begin` is written in the same script as the swap intent (`SET NX
+   PX` + `XADD`, refused together). The commit point is the proof: `done` (with the fallback
+   set/clear) is written then, in one script. Every failure path writes `failed` with the step.
+   A resume that cannot be sent after the proof writes a `warning` entry (the swap stays done)
+   and exits 1 with the command that sends it. A crash between `begin` and a terminal entry
+   leaves an intent that expires in 3 min: `agentbus swaps` shows such a `begin` without a
+   terminal entry and without a live intent as `interrupted`, and the next `swap` or `retire` of
+   that role first appends `failed (interrupted)` for it.
+3. **`--back` and the back notice (§4).** `--back` is self-contained: it resolves the role's own
+   profile and compares its configured `model` (or tier, v0.15.2) with the snapshot's launched
+   `model`; it relaunches when the profile differs, when the models differ, or when a fallback
+   record exists, and refuses only when all three agree ("already on its own profile and
+   model"). The fallback record stores `held_episode`: the `hold:<own_provider>` value at the
+   swap's `begin`, empty when that provider was not held. The §4.2 notice goes only when the
+   released episode equals `held_episode`.
+4. **Asks answered elsewhere (§5.1).** Withdrawal becomes question-scoped:
+   `agentbus ask <agent> --withdraw <id> [--question <qid>]` marks one question withdrawn (one
+   Lua script, like the others); the ask closes when no question remains open. The skill: on a
+   direct answer, withdraw exactly the questions it answers, citing the message id in a reply on
+   the ask's thread; leave the others open.
+5. **busmon hint (§5.2).** Typing stays literal (`!` is just a character). The check happens on
+   Enter: when a recipient (the named agent, or the registered agents `@all` reaches) has an open
+   ask, the input line shows "master has an open question. Enter: send as a message · Tab:
+   answer in its question panel · Esc: back to editing". Tab opens the ask panel of that agent,
+   with the typed text as the free answer of its first open question; with several recipients
+   holding asks, Tab first shows a chooser listing only them. Nothing is sent before Enter or the
+   panel's own submit.
+6. **The launched model and the snapshot merge (§7.1).** `model` is part of the identity: it is
+   written only together with a verified identity (pid and start) that `putSnapshot` accepts as
+   current (`bind`, or a verified `status` newer than `ident_ts`). An unverified or delayed
+   status never sets or erases it. Tests: an unverified status with a non-empty model, a delayed
+   verified status, a bind.
+7. **The used model (§7.1).** v0.15.1 reports `used` for Claude Code only: the last assistant
+   entry of the agent's transcript whose `message.model` is set and is not `<synthetic>`, with
+   its time (a separate reader from the usage-bearing one). Other clients show `used: not
+   available` until a reader bound to their session exists (v0.15.2 or later). A `used` older
+   than 24 h is shown as stale and never judged.
