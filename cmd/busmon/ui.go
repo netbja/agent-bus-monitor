@@ -1095,7 +1095,14 @@ func (s *screenView) Draw(screen tcell.Screen) {
 		u.lists[p].Draw(screen)
 	}
 	if l.Input.H > 0 {
-		u.input.SetRect(x0+l.Input.X, y0+l.Input.Y, l.Input.W, 1)
+		iw := l.Input.W
+		// While writing in the line, its end says how to go to several lines.
+		hint := Line{{Text: " ^O", Role: RoleAccent, Bold: true}, {Text: " several lines ", Role: RoleMuted}}
+		if u.composing == ModeInput && iw >= 60 {
+			iw -= hint.Width()
+			DrawLine(screen, x0+l.Input.X+iw, y0+l.Input.Y, hint.Width(), hint, false)
+		}
+		u.input.SetRect(x0+l.Input.X, y0+l.Input.Y, iw, 1)
 		u.input.Draw(screen)
 	}
 	var footer Line

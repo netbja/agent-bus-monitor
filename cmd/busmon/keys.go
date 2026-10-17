@@ -176,9 +176,9 @@ var (
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}
 	inputBindings = []binding{
+		{Keys: "^O", Hint: "several lines", Alt: "alt-enter", Act: ActComposeOpen, match: either(keyIs(tcell.KeyCtrlO), altEnter)},
 		{Keys: "enter", Hint: "send", Act: ActSend, match: keyIs(tcell.KeyEnter)},
 		{Keys: "tab", Hint: "complete @agent", Act: ActNone, match: keyIs(tcell.KeyTab)},
-		{Keys: "^O", Hint: "compose window", Act: ActComposeOpen, match: keyIs(tcell.KeyCtrlO)},
 		{Keys: "esc", Hint: "back (draft kept)", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
 	}
 	filterBindings = []binding{
@@ -266,4 +266,10 @@ func footerHints(m Mode, p PanelID, t Tier, width int) Line {
 		l = append(l, pair...)
 	}
 	return FitLine(l, width)
+}
+
+// altEnter is Alt+Enter (most terminals send it as Esc then Enter, which
+// tcell reports as Enter with the Alt modifier).
+func altEnter(ev *tcell.EventKey) bool {
+	return ev.Key() == tcell.KeyEnter && ev.Modifiers()&tcell.ModAlt != 0
 }

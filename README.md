@@ -361,7 +361,7 @@ A btop-style dashboard (v0.9); the [screenshot at the top](#new-in-v090--busmon-
   second one sends it. Esc leaves it and keeps the draft. For more than one line, **`I`** opens
   the **compose window** (v0.16): Enter is a new line, **Ctrl+S** sends, **Tab** moves to the
   recipient (`@agent`, `@all`, empty for a broadcast), **Esc** closes and keeps the draft;
-  **Ctrl+O** in the line, or a paste with several lines, moves the text there. `I` in an agent's
+  **Ctrl+O** or **Alt+Enter** in the line (its end says so), or a paste with several lines, moves the text there. `I` in an agent's
   detail writes to that agent. The free answer in the question panel uses the same window. You write as a **person**: `busmon
   --as bernard` (or `AGENT_BUS_HUMAN`) shows "♙ Bernard [human · pilot]" in the header (`pilot`
   while you hold the lease); with no name it is "♙ Pilot [human]". Your entries carry `human=yes`,

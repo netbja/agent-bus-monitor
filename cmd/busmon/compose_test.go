@@ -336,3 +336,19 @@ func TestComposeHintSurvivesMoves(t *testing.T) {
 		t.Fatalf("edited text: sent %v flash %q", h2.sentNow(), h2.u.flash)
 	}
 }
+
+// From the line, Alt+Enter also moves the text to the window, and the line
+// shows how while it is being written.
+func TestLineToWindowWithAltEnter(t *testing.T) {
+	h := newHarness(t, demoShared(time.Now()))
+	h.draw(160, 45)
+	h.key(runeKey('i'))
+	h.typeText("@coder first")
+	if screen := h.draw(160, 45); !strings.Contains(screen, "^O several lines") {
+		t.Fatalf("no hint on the line:\n%s", screen)
+	}
+	h.key(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModAlt))
+	if h.u.mode() != ModeCompose || h.u.comp.recipient() != "coder" || h.u.comp.area.GetText() != "first" || len(h.sentNow()) != 0 {
+		t.Fatalf("Alt+Enter: mode %v to %q text %q sent %v", h.u.mode(), h.u.comp.recipient(), h.u.comp.area.GetText(), h.sentNow())
+	}
+}
