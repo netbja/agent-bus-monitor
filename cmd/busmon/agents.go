@@ -70,6 +70,14 @@ func busyUndeclared(a *agentState, now time.Time) bool {
 	return a.obsBusy && a.state != "working" && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
 }
 
+// modelDrift (v0.15.1 §7.2): the last doctor verdict says this process does
+// not run the model roles.toml configures, or its model was refused. A
+// verdict about another pid (the agent was relaunched since) says nothing.
+func modelDrift(a *agentState) bool {
+	return a.model != nil && (a.model.Verdict == "drift" || a.model.Verdict == "unknown model") &&
+		a.model.PID != 0 && a.model.PID == a.pid
+}
+
 // promptWaiting (v0.15 §13): the agent's own client is asking something in
 // its tab (a limit menu, a permission prompt), seen by the dispatcher as a
 // blocked pane, while the agent itself declares neither blocked nor waiting
@@ -110,6 +118,12 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	}
 	if a.swapping {
 		add("swapping", RoleDispatch, 1, 1)
+	}
+	if a.fallback != nil {
+		add("fallback "+Preview(a.fallback.Profile), RoleDispatch, 3, 0)
+	}
+	if modelDrift(a) {
+		add("model"+GlyphNotEqual, RoleAttention, 4, 0)
 	}
 	if busyUndeclared(a, time.Now()) {
 		add("busy", RoleOK, 3, 2)

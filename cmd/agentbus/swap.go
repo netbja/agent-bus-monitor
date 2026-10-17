@@ -78,16 +78,20 @@ func realSwapDeps(env []string) swapDeps {
 	}
 }
 
-const swapUsage = "usage: agentbus swap <role> --profile <profile> [--now] [--force]"
+const swapUsage = "usage: agentbus swap <role> (--profile <profile> | --back) [--reason <text>] [--now] [--force]"
 
 func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []string, out, errw io.Writer) int {
 	args, now := extractBool(args, "--now")
 	args, force := extractBool(args, "--force")
-	var role, profile string
+	args, back := extractBool(args, "--back")
+	var role, profile, reason string
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--profile" && i+1 < len(args):
 			profile = args[i+1]
+			i++
+		case args[i] == "--reason" && i+1 < len(args):
+			reason = args[i+1]
 			i++
 		case role == "" && !strings.HasPrefix(args[i], "-"):
 			role = args[i]
@@ -96,8 +100,8 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 			return 2
 		}
 	}
-	if role == "" || profile == "" || !bus.ValidName(role) || !bus.ValidName(profile) {
-		fmt.Fprintln(errw, swapUsage)
+	if back == (profile != "") || role == "" || !bus.ValidName(role) || (profile != "" && !bus.ValidName(profile)) {
+		fmt.Fprintln(errw, swapUsage) // exactly one of --profile and --back
 		return 2
 	}
 	fail := func(format string, a ...any) int {
@@ -116,6 +120,9 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	own, err := m.Resolve(role)
 	if err != nil {
 		return fail("%v", err)
+	}
+	if back {
+		profile = own.Profile
 	}
 	allowed := profile == own.Profile
 	for _, f := range m.Fallbacks(role) {
@@ -154,6 +161,22 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		return fail("an agent cannot swap itself: run it from master's pane or a terminal")
 	}
 
+	// Back to its own profile (§11.3): only when something differs — it runs
+	// on a fallback, another client or provider, or a model other than the
+	// one roles.toml now configures (an unknown launched model counts).
+	fallbacks, err := b.Fallbacks(ctx)
+	if err != nil {
+		return fail("%v", err)
+	}
+	fbRec, onFallback := fallbacks[role]
+	if profile == own.Profile && !onFallback && snap.Client == own.Client && snap.Provider == own.Provider && snap.Model == own.Model {
+		return fail("already on its own profile (%s) and model (%s): nothing to swap back", own.Profile, own.Model)
+	}
+	fromProfile := own.Profile
+	if onFallback {
+		fromProfile = fbRec.Profile
+	}
+
 	if code := openWork(ctx, b, role, fail); code != 0 {
 		return code
 	}
@@ -170,9 +193,31 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		}
 	}
 
-	// 6.2 Handoff.
-	if err := b.BeginSwap(ctx, role, bus.SwapIntent{ToProfile: profile, By: self, OldPID: snap.PID, OldStart: snap.PIDStart}); err != nil {
+	// 6.2 Handoff. A begin left without an end by a dead caller is closed in
+	// the ledger first (§11.2); the new begin goes with the intent.
+	if bad, ev, err := b.Interrupted(ctx, role); err == nil && bad {
+		_ = b.LogSwap(ctx, bus.SwapEvent{Role: role, Event: bus.SwapFailed, ToProfile: ev.ToProfile, By: self,
+			Error: "interrupted: the swap begun at " + ev.ID + " never finished"})
+	}
+	marks0, err := b.QuotaMarks(ctx)
+	if err != nil {
 		return fail("%v", err)
+	}
+	if err := b.BeginSwap(ctx, role, bus.SwapIntent{ToProfile: profile, By: self, OldPID: snap.PID, OldStart: snap.PIDStart},
+		bus.SwapEvent{FromProfile: fromProfile, ToProfile: profile, FromProvider: snap.Provider, ToProvider: target.Provider,
+			ToModel: target.Model, By: self, Reason: reason, OldPID: snap.PID, OldPane: snap.Pane,
+			Episode: marks0["hold:"+snap.Provider]}); err != nil {
+		return fail("%v", err)
+	}
+	failed := func(step, format string, a ...any) int {
+		msg := fmt.Sprintf(format, a...)
+		_ = b.LogSwap(context.Background(), bus.SwapEvent{Role: role, Event: bus.SwapFailed, ToProfile: profile, By: self, Error: step + ": " + msg})
+		return fail("%s", msg)
+	}
+	warn := func(format string, a ...any) int {
+		msg := fmt.Sprintf(format, a...)
+		_ = b.LogSwap(context.Background(), bus.SwapEvent{Role: role, Event: bus.SwapWarning, ToProfile: profile, By: self, Error: msg})
+		return fail("%s", msg)
 	}
 	ended := false
 	end := func() {
@@ -185,7 +230,7 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	recovery := fmt.Sprintf("recover with: agent-spawn %s %s (its own profile, %s)", role, b.Project(), own.Profile)
 	// With the intent written, no request or challenge opens on it any more
 	// (refuseWhileSwapping): look again for what opened since the first scan.
-	if code := openWork(ctx, b, role, fail); code != 0 {
+	if code := openWork(ctx, b, role, func(f string, a ...any) int { return failed("open work", f, a...) }); code != 0 {
 		return code
 	}
 	// A wake the dispatcher reserved before the intent may still be typing:
@@ -193,30 +238,30 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	for deadline := d.Now().Add(10 * time.Second); ; d.Sleep(200 * time.Millisecond) {
 		w, ok, err := b.Wake(ctx, role)
 		if err != nil { // unknown is not "not typing": nothing is closed
-			return fail("cannot read its wake record (%v); nothing was replaced", err)
+			return failed("wake record", "cannot read its wake record (%v); nothing was replaced", err)
 		}
 		if !ok || w.State != "prompting" {
 			break
 		}
 		if d.Now().After(deadline) {
-			return fail("a wake is still being typed into its pane; retry in a minute")
+			return failed("wake in progress", "a wake is still being typed into its pane; retry in a minute")
 		}
 	}
 	if err := d.ClosePane(ctx, snap.Pane); err != nil {
-		return fail("%v; nothing was replaced", err)
+		return failed("close", "%v; nothing was replaced", err)
 	}
 	for deadline := d.Now().Add(d.PIDGone); ; d.Sleep(200 * time.Millisecond) {
 		if start, err := d.ProcStart(snap.PID); err != nil || start != snap.PIDStart {
 			break
 		}
 		if d.Now().After(deadline) {
-			return fail("pane %s closed but pid %d is still running after %s; %s", snap.Pane, snap.PID, d.PIDGone, recovery)
+			return failed("old process", "pane %s closed but pid %d is still running after %s; %s", snap.Pane, snap.PID, d.PIDGone, recovery)
 		}
 	}
 
 	// 6.3 Launch and proof.
 	if err := d.Spawn(ctx, role, b.Project(), profile); err != nil {
-		return fail("the old pane is closed and the launch failed: %v\n%s", err, recovery)
+		return failed("launch", "the old pane is closed and the launch failed: %v\n%s", err, recovery)
 	}
 	var proved bus.AgentSnapshot
 	for deadline := d.Now().Add(d.Proof); ; d.Sleep(500 * time.Millisecond) {
@@ -228,12 +273,28 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 			}
 		}
 		if d.Now().After(deadline) {
-			return fail("no proof of replacement after %s (a new pid, alive, in a new pane, on %s/%s)\n%s",
+			return failed("proof", "no proof of replacement after %s (a new pid, alive, in a new pane, on %s/%s)\n%s",
 				d.Proof, target.Client, target.Provider, recovery)
 		}
 	}
-	fmt.Fprintf(out, "swapped %s: %s (%s, %s) -> %s (%s, %s), pane %s, pid %d\n",
-		role, own.Profile, own.Provider, own.Model, profile, target.Provider, target.Model, proved.Pane, proved.PID)
+	// The commit point (§11.2): done (or back) and the fallback state together.
+	var fb *bus.FallbackRecord
+	if profile != own.Profile {
+		// The episode current at this swap's begin (§11.3), even when the role
+		// was already on another fallback.
+		held := marks0["hold:"+own.Provider]
+		fb = &bus.FallbackRecord{OwnProfile: own.Profile, OwnProvider: own.Provider, Profile: profile, Provider: target.Provider,
+			By: self, Reason: reason, HeldEpisode: held}
+	}
+	if err := b.FinishSwap(ctx, bus.SwapEvent{Role: role, FromProfile: fromProfile, ToProfile: profile, ToProvider: target.Provider,
+		ToModel: target.Model, By: self, Reason: reason, NewPID: proved.PID, NewPane: proved.Pane}, fb); err != nil {
+		// The agent is replaced but not recorded: keep the intent (it expires in
+		// 3 min), so the begin reads as interrupted and the next swap records it.
+		ended = true
+		return fail("replaced (pane %s, pid %d), but the ledger and fallback state were not written: %v; check agentbus swaps", proved.Pane, proved.PID, err)
+	}
+	fmt.Fprintf(out, "swapped %s: %s -> %s (%s, %s), pane %s, pid %d\n",
+		role, fromProfile, profile, target.Provider, target.Model, proved.Pane, proved.PID)
 
 	// The work it had in flight, sent only now, so the old process never
 	// read it; through the hold's resume mark when its old provider is held.
@@ -242,7 +303,7 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	retry := fmt.Sprintf("send it with: agentbus --project %s cmd %s \"Resume the work your previous process left (agentbus board, your thread).\"", b.Project(), role)
 	text, ok, err := swapResumeText(ctx, b, role, snap, profile)
 	if err != nil {
-		return fail("swapped, but its in-flight work could not be read (%v); %s", err, retry)
+		return warn("swapped, but its in-flight work could not be read (%v); %s", err, retry)
 	}
 	// The intent stays until this resume is written (end() runs on return):
 	// the dispatcher keeps the hold and sends no resume of its own meanwhile,
@@ -252,7 +313,7 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	}
 	marks, err := b.QuotaMarks(ctx)
 	if err != nil {
-		return fail("swapped, but the resume was not sent (%v); %s", err, retry)
+		return warn("swapped, but the resume was not sent (%v); %s", err, retry)
 	}
 	// A release that published its resume before the intent (the hold may be
 	// gone since): if it is still unread or unacknowledged, the new process
@@ -260,7 +321,7 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	if snap.Provider != "" {
 		queued, err := releaseResumeQueued(ctx, b, role, snap.Provider)
 		if err != nil {
-			return fail("swapped, but the resume was not sent (%v); %s", err, retry)
+			return warn("swapped, but the resume was not sent (%v); %s", err, retry)
 		}
 		if queued {
 			fmt.Fprintf(out, "the release's resume is already queued for %s\n", role)
@@ -278,7 +339,7 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		_, err = b.Cmd(ctx, self, role, bus.CmdDirective, "", text)
 	}
 	if err != nil {
-		return fail("swapped, but the resume was not sent (%v); %s", err, retry)
+		return warn("swapped, but the resume was not sent (%v); %s", err, retry)
 	}
 	fmt.Fprintf(out, "resume sent to %s\n", role)
 	return 0

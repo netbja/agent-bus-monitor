@@ -107,6 +107,29 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	default:
 		row("Observed", text("not running a turn "+GlyphNone+" "+ago(a.obsAt)))
 	}
+	if f := a.fallback; f != nil {
+		since := "?"
+		if f.Since > 0 {
+			since = time.UnixMilli(f.Since).Local().Format("Mon 15:04")
+		}
+		by := ""
+		if f.By != "" {
+			by = ", by " + Preview(f.By)
+		}
+		rowWrap("Fallback", RoleDispatch, fmt.Sprintf("on %s (%s) since %s%s %s own profile %s (%s); back with: agentbus swap %s --back",
+			Preview(f.Profile), Preview(f.Provider), since, by, GlyphNone, Preview(f.OwnProfile), Preview(f.OwnProvider), Preview(name)))
+	}
+	if v := a.model; v != nil && v.PID == a.pid && a.pid != 0 {
+		switch {
+		case modelDrift(a):
+			rowWrap("Model", RoleAttention, Preview(v.Why))
+		case v.Launched != "":
+			row("Model", text(Preview(v.Launched)+" "+GlyphNone+" as roles.toml configures"))
+		}
+		if v.Used != "" {
+			row("Used", text(Preview(v.Used)+" (its transcript)"))
+		}
+	}
 	if a.pane == "" && a.pid == 0 {
 		row("Pane", tg(RoleMuted, "not recorded"))
 	} else {

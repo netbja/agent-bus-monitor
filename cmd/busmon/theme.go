@@ -220,6 +220,7 @@ const (
 	GlyphDotEmpty = GlyphIdle
 	GlyphPrompt   = "›"
 	GlyphHuman    = "♙" // a person on the bus (busmon), never an agent
+	GlyphNotEqual = "≠" // model≠: the running model is not the configured one
 	// Border glyphs are kept here too; Task 10 owns tview.Borders.
 	glyphVertical    = "│"
 	glyphThumb       = "┃"
@@ -235,4 +236,5 @@ var UIGlyphs = []string{
 	GlyphSelect, GlyphArrowR, GlyphArrowL, GlyphUp, GlyphDownArrow, GlyphEllipsis,
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
+	GlyphNotEqual,
 }

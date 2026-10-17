@@ -9,7 +9,7 @@ profile = "claude"
 [profiles.claude]
 client = "claude-code"
 provider = "anthropic"
-model = "sonnet"
+model = "sonnet"   # an alias follows the latest Sonnet; an exact id pins one version
 [profiles.claude.options]
 permission = "acceptEdits"
 

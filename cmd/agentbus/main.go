@@ -102,7 +102,7 @@ func main() {
 	}
 	// roles reads the role manifest (the scripts' launcher): no project, no
 	// broker. launch replaces this process with the client.
-	if len(args) >= 1 && args[0] == "roles" {
+	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && args[1] == "doctor") {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}
 	// up provisions a project and opens its herdr workspace: no project flag, no broker of its own.
@@ -462,6 +462,15 @@ func main() {
 	case "swap":
 		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
 
+	case "roles": // only doctor reaches here (it needs the project's bus)
+		os.Exit(runDoctor(ctx, b, realDoctorDeps(os.Environ()), rest[1:], os.Stdout, os.Stderr))
+
+	case "retire":
+		os.Exit(runRetire(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
+
+	case "swaps":
+		os.Exit(runSwaps(ctx, b, rest, os.Stdout, os.Stderr))
+
 	case "pause", "resume":
 		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv}
 		if cmd == "pause" {
@@ -749,6 +758,7 @@ func statusIdent(ctx context.Context) bus.AgentIdent {
 		Session:  os.Getenv("CLAUDE_CODE_SESSION_ID"),
 		Client:   os.Getenv("AGENT_BUS_CLIENT"),
 		Provider: bus.ProviderFor(os.Getenv("AGENT_BUS_CLIENT"), os.Getenv("AGENT_BUS_PROVIDER")),
+		Model:    os.Getenv("AGENT_BUS_MODEL"),
 	}
 	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
 		return who

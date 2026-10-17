@@ -109,8 +109,13 @@ You start from a blank context; read before you write, assume nothing.
    or past its deadline. **Report it, do not chase it** — you surface, master decides, and an
    unaccepted request means only that no acceptance was recorded, never that an agent is
    ignoring work.
-3. Post a one-line summary to the bus: `agentbus report sentinel "daily review: <what changed>"`.
-4. Write a checkpoint **only if you verified something worth keeping** — a milestone with its
+3. Check the models: `agentbus roles doctor --publish` (it publishes the verdicts busmon shows as
+   `model≠`). On exit 3, add to your summary the agents in `drift` or `unknown model` with the
+   line it prints for each, and tell master once with
+   `agentbus cmd master "model drift: <agents>; see agentbus roles doctor"`. Do not repeat it on
+   later days while the same agents drift; do not relaunch anything yourself.
+4. Post a one-line summary to the bus: `agentbus report sentinel "daily review: <what changed>"`.
+5. Write a checkpoint **only if you verified something worth keeping** — a milestone with its
    evidence, a decision that landed, a claim you re-checked. Create
    `docs/memory/journal/$(date +%F)-<topic>.md` following
    [the protocol](../../docs/memory/PROTOCOL.md), link it from the journal index, and commit
@@ -119,7 +124,7 @@ You start from a blank context; read before you write, assume nothing.
 
    **A cron firing is not a reason to write.** If nothing was verified, say so in your one-line
    summary and write nothing. A journal of empty days buries the days that mattered.
-5. Run `agentbus mem check` first. If it prints `error: no docs/memory/INDEX.md`, this project
+6. Run `agentbus mem check` first. If it prints `error: no docs/memory/INDEX.md`, this project
    has no shared memory: say so in your summary and skip the rest of this step. On any `FAIL:`
    or `WARN:` line, tell master with
    `agentbus notify "memory check: <n> FAIL, <m> WARN — run agentbus mem check"`. Then

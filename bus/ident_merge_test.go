@@ -158,3 +158,29 @@ func TestMergeKeepsClientAndProvider(t *testing.T) {
 		t.Fatalf("a status without them erased them: %+v", st)
 	}
 }
+
+// v0.15.1: the launched model belongs to the proved identity. An unverified or
+// delayed status never sets or erases it; a bind sets it; a verified status for
+// the same process keeps it when it carries none; another process takes its own.
+func TestMergeModelFollowsTheProvedIdentity(t *testing.T) {
+	bound := mergeSnapshot(nil, AgentSnapshot{Pane: "p1", PID: 10, PIDStart: 5, IdentTS: 100, Model: "opus"}, true)
+	if bound.Model != "opus" {
+		t.Fatalf("bind: model %q", bound.Model)
+	}
+	unverified := mergeSnapshot(&bound, AgentSnapshot{State: "idle", TS: 200, Model: "sonnet"}, false)
+	if unverified.Model != "opus" {
+		t.Fatalf("an unverified status changed the model to %q", unverified.Model)
+	}
+	delayed := mergeSnapshot(&bound, AgentSnapshot{State: "idle", TS: 50, Pane: "p1", PID: 11, PIDStart: 6, Model: "haiku"}, false)
+	if delayed.Model != "opus" || delayed.PID != 10 {
+		t.Fatalf("a delayed verified status changed the identity: %+v", delayed)
+	}
+	same := mergeSnapshot(&bound, AgentSnapshot{State: "working", TS: 300, Pane: "p1", PID: 10, PIDStart: 5}, false)
+	if same.Model != "opus" {
+		t.Fatalf("a verified status of the same process without a model erased it: %q", same.Model)
+	}
+	other := mergeSnapshot(&bound, AgentSnapshot{State: "idle", TS: 400, Pane: "p2", PID: 20, PIDStart: 7}, false)
+	if other.Model != "" {
+		t.Fatalf("another process inherited the model %q", other.Model)
+	}
+}

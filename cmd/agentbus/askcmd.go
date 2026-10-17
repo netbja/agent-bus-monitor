@@ -13,7 +13,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-const askUsage = "usage: ask <agent> [--file questions.json | < questions.json] [--replace <id>] | ask <agent> --withdraw <id>"
+const askUsage = "usage: ask <agent> [--file questions.json | < questions.json] [--replace <id>] | ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"
 
 // askFile is what an agent writes: a title and its questions. Any other field
 // (an id, a state, an answer) is ignored: only Answer stores an answer.
@@ -27,11 +27,25 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, out
 	args, file := extractFlag(args, "--file")
 	args, replaces := extractFlag(args, "--replace")
 	args, withdraw := extractFlag(args, "--withdraw")
-	if len(args) != 1 || !bus.ValidName(args[0]) {
+	args, question := extractFlag(args, "--question")
+	args, note := extractFlag(args, "--note")
+	if len(args) != 1 || !bus.ValidName(args[0]) || (question != "" && withdraw == "") {
 		fmt.Fprintln(errw, askUsage)
 		return 2
 	}
 	agent := args[0]
+	if question != "" {
+		if note == "" {
+			note = "answered outside the question panel"
+		}
+		left, err := b.WithdrawQuestion(ctx, agent, withdraw, question, note)
+		if err != nil {
+			fmt.Fprintf(errw, "ask: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(out, "withdrawn %s question %s (%d still open)\n", withdraw, question, left)
+		return 0
+	}
 	if withdraw != "" {
 		if err := b.Withdraw(ctx, agent, withdraw); err != nil {
 			fmt.Fprintf(errw, "ask: %v\n", err)

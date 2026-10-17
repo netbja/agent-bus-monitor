@@ -24,6 +24,13 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 		out = *old
 	}
 	setIdentity := func(at int64) {
+		// The launched model is part of a proved identity (v0.15.1): a proof for
+		// the same process keeps it when the caller does not know it; a proof
+		// for another process takes the caller's, even empty. Nothing unproved
+		// (at == 0) touches it.
+		if at != 0 && (next.Model != "" || next.PID != out.PID || next.PIDStart != out.PIDStart) {
+			out.Model = next.Model
+		}
 		out.Pane, out.PID, out.PIDStart, out.Terminal, out.IdentTS = next.Pane, next.PID, next.PIDStart, next.Terminal, at
 	}
 	if next.Client != "" {
@@ -110,5 +117,5 @@ func (b *Bus) Bind(ctx context.Context, agent string, who AgentIdent) error {
 		return err
 	}
 	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, IdentTS: now,
-		Client: who.Client, Provider: who.Provider}, true)
+		Client: who.Client, Provider: who.Provider, Model: who.Model}, true)
 }

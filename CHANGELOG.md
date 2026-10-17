@@ -4,6 +4,17 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.15.1 — swaps you can trace, and models that drift are seen
+
+- A question you answer by message is closed by master, and busmon offers the question panel when
+  you write to an agent that has one open.
+- `agentbus roles doctor` shows each agent's configured, launched and used model; busmon flags
+  `model≠`, the sentinel checks daily, `agentbus swap <role> --back` relaunches after your yes.
+- `agentbus swaps` keeps the history of every swap; `swap --back`, `agentbus retire <role>`.
+- roles.toml uses Claude's aliases (opus, sonnet, haiku), so a renamed model never breaks a launch.
+
+[Notes](docs/releases/v0.15.1.md)
+
 ## v0.15.0 — work resumes after a quota reset, and a long wait has a way out
 
 - A tab blocked by its own client (Claude Code's limit menu, a permission prompt) now reads

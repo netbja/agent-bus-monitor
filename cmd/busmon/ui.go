@@ -51,7 +51,9 @@ type ui struct {
 	ctx            context.Context
 	w              busWriter
 	project, self  string
-	broadcastDraft string // a draft with no @ already warned about: the next Enter sends it
+	broadcastDraft string     // a draft with no @ already warned about: the next Enter sends it
+	askDraft       string     // a directed text held once because its recipient has an open ask (v0.15.1)
+	askChoose      *askChoice // Tab found several recipients with questions: the next key picks one
 
 	pages   *tview.Pages
 	screen  *screenView
@@ -284,6 +286,22 @@ func (u *ui) setFocusPanel(p PanelID) {
 // the focused primitive (text for the input field, scrolling for an overlay).
 func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	m := u.mode()
+	// v0.15.1 §11.5: after Tab with several recipients holding questions, a
+	// number picks whose panel opens; Esc goes back to editing.
+	// Every other key is swallowed while the choice is open: nothing is sent
+	// or typed until the person picks or goes back.
+	if pick := u.askChoose; pick != nil {
+		switch {
+		case ev.Key() == tcell.KeyRune && ev.Rune() >= '1' && int(ev.Rune()-'0') <= len(pick.holders):
+			u.askChoose = nil
+			u.leaveInput(true)
+			u.openAskPrefilled(pick.holders[ev.Rune()-'1'], pick.body)
+		case ev.Key() == tcell.KeyEscape:
+			u.askChoose = nil
+			u.flash, u.flashErr = "", false
+		}
+		return nil
+	}
 	act := lookup(m, u.focus, u.tier(), ev)
 	if act == ActQuit {
 		u.app.Stop()
@@ -488,6 +506,15 @@ func (u *ui) inputDone(key tcell.Key) {
 		}
 		if text != "" {
 			tgt, body, directed := parseDirected(text)
+			// v0.15.1 §11.5: a recipient with an open question gets one hint on
+			// the first Enter; Enter again sends, Tab answers in its panel.
+			if holders := u.askHolders(tgt, directed); len(holders) > 0 && u.askDraft != text {
+				u.askDraft = text
+				u.flash, u.flashErr = fmt.Sprintf("%s has an open question. Enter: send as a message %s Tab: answer in its question panel %s Esc: back to editing",
+					strings.Join(holders, ", "), GlyphNone, GlyphNone), false
+				return
+			}
+			u.askDraft = ""
 			if !directed && u.broadcastDraft != text {
 				// Nobody reads a notify and nothing wakes for it: say so once.
 				u.broadcastDraft = text
@@ -544,10 +571,59 @@ func (u *ui) inputDone(key tcell.Key) {
 		}
 		u.input.SetText("")
 		u.msgDraft = ""
+	case tcell.KeyTab:
+		text := strings.TrimSpace(u.input.GetText())
+		if u.composing != ModeInput || u.askDraft == "" || text != u.askDraft {
+			return
+		}
+		tgt, body, directed := parseDirected(text)
+		holders := u.askHolders(tgt, directed)
+		if len(holders) == 0 {
+			return
+		}
+		u.askDraft = ""
+		if len(holders) == 1 {
+			u.leaveInput(true)
+			u.openAskPrefilled(holders[0], body)
+			return
+		}
+		// Several recipients hold questions: the person picks one, by number
+		// (one digit: the first nine; the others stay reachable with w).
+		more := ""
+		if len(holders) > 9 {
+			more = fmt.Sprintf(" %s %d more: w on its row", GlyphNone, len(holders)-9)
+			holders = holders[:9]
+		}
+		var opts []string
+		for i, h := range holders {
+			opts = append(opts, fmt.Sprintf("%d %s", i+1, h))
+		}
+		u.askChoose = &askChoice{holders: holders, body: body}
+		u.flash, u.flashErr = "answer whose question? "+strings.Join(opts, " "+GlyphNone+" ")+more+" (its number; Esc: back to editing)", false
 	case tcell.KeyEscape:
+		u.askDraft = ""
 		u.leaveInput(true)
 		u.app.SetFocus(u.focusPrimitive())
 	}
+}
+
+// askHolders lists the recipients of a directed text that have an open ask:
+// the named agent, or for @all the agents it reaches, in that order.
+func (u *ui) askHolders(tgt string, directed bool) []string {
+	if !directed {
+		return nil
+	}
+	names := []string{tgt}
+	if tgt == "all" {
+		names = u.agentNames()
+	}
+	var out []string
+	for _, n := range names {
+		if u.agentHasAsk(n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func (u *ui) copyText(s, what string) {

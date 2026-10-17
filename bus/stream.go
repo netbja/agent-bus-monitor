@@ -80,6 +80,10 @@ type AgentSnapshot struct {
 	// AGENT_BUS_PROVIDER: which AI runs the agent, and whose quota it draws on.
 	Client   string `json:"client,omitempty"`
 	Provider string `json:"provider,omitempty"`
+	// Model (v0.15.1) is the launcher's AGENT_BUS_MODEL: the model the running
+	// process was started with. It belongs to the identity: only a verified
+	// proof (bind, a verified newer status) sets or clears it.
+	Model string `json:"model,omitempty"`
 }
 
 // clientProviders is the fallback when the launcher set no provider: the
@@ -107,6 +111,7 @@ type AgentIdent struct {
 	Terminal string // herdr terminal id, display only
 	Client   string // AGENT_BUS_CLIENT
 	Provider string // AGENT_BUS_PROVIDER
+	Model    string // AGENT_BUS_MODEL (v0.15.1)
 }
 
 // Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
@@ -297,7 +302,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
-		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider}
+		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model}
 	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.
