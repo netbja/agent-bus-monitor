@@ -154,9 +154,9 @@ panel · Esc: back to editing"; in the line it is unchanged (Enter, Tab, Esc).
 bodies are bounded by `CmdMaxRunes` only (`ValidateText`: valid UTF-8 and a rune count), so newlines
 reach `HumanCmd`/`HumanNotify` as written.
 
-**One draft.** `u.msgDraft` holds the text, newlines included, for both. A draft with several lines
-is never flattened into the line: `i` then opens the window on it, and a newline pasted into the line
-moves the text to the window.
+**One draft at a time.** The line keeps its text (`u.msgDraft`); the window keeps its recipient and
+text. Ctrl+O, `I`, or a newline pasted into the line move the line's text into the window; a window
+draft is never flattened into the line: while the window holds one, `i` opens the window.
 
 ## 8. Agents use a code index when one is present
 

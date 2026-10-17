@@ -318,6 +318,15 @@ is no garbage collection, so a tracked request stays visible even once its body 
 reads back. `--since 0` lifts the floor for what is still deliverable; it does not resurrect
 what your group already acknowledged.
 
+## Finding your way in the code — a code index first, when there is one
+
+If a code-index MCP server is available in your session (codebase-memory-mcp, codegraph), use it
+first for structural questions: where X is defined, who calls Y, what breaks if Z changes. It
+answers from a parsed graph in one call where grep needs several reads. Keep grep for literals,
+configuration and documents, and for what the index does not cover. If the repository is not
+indexed yet, index it once. An index is the code at its indexed revision: it says nothing about
+what is merged since, built or deployed. No such server? Work as usual; agent-bus configures none.
+
 ## Shared memory — read it before you work, write only what lasts
 
 What the team has learned lives in the repository, not in anyone's conversation:
