@@ -342,7 +342,12 @@ It never touches Redis — see README "Deployment topology".
 - **The launcher's environment rules** (`rolecfg/config.go`, `launch.go`): `env_refs` may not
   target loader/hook variables (`LD_*`, `DYLD_*`, `HERDR_*`, `BASH_ENV`, `NODE_OPTIONS`, …);
   `ANTHROPIC_API_KEY` is dropped for every client unless `AGENT_LAUNCH_KEEP_API_KEY=1` or
-  `env_refs` names it; elevated options are announced on stderr. A missing skill warns and the
+  `env_refs` names it; elevated options are announced on stderr. v0.17 (`rolecfg/toolrules.go`):
+  a role with `pops = true` gets `Bash(agent-spawn <role> *)` per other role (allow, or ask when
+  that role has `approval = "person"`) plus its own `tool_rules`, in one `--settings` JSON for
+  Claude Code only (other clients: a note); free-form rules naming `agent-spawn` or allowing all
+  of Bash are refused. The ask matches command text only (a quoted role reaches the classifier):
+  a convenience, not a lock. A missing skill warns and the
   agent still starts; `roles install-skills` stays strict.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the

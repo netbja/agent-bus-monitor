@@ -119,4 +119,15 @@ assert_eq "$after" "$before" "a second install rewrites nothing"
 for d in .claude/skills .agents/skills; do
   assert_eq "$(cd "$home/$d/test-skill" && pwd -P)" "$(cd "$root/skills/test-skill" && pwd -P)" "$d/test-skill points at the skill"
 done
+# v0.17: a role that pops others gets its spawn rules in one --settings flag
+config claude-code 'pops = true
+[roles.deploy]
+tier = "pop"
+approval = "person"
+[roles.architect]
+tier = "pop"'
+out="$(AGENT_LAUNCH_DRYRUN=1 "$L" coder demo 2>&1)"
+assert_contains "$out" "--settings" "a popping role launches with --settings"
+assert_contains "$out" '"allow": ["Bash(agent-spawn architect *)"]' "an ordinary role is allowed"
+assert_contains "$out" '"ask": ["Bash(agent-spawn deploy *)"]' "an approval role is asked"
 finish

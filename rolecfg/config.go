@@ -76,6 +76,9 @@ type Profile struct {
 	Skills          []string               `json:"skills"`
 	Manifest        string                 `json:"manifest"`
 	Adapter         string                 `json:"adapter,omitempty"`
+	Pops            bool                   `json:"pops,omitempty"`      // v0.17: pops other roles; spawn rules derived
+	Approval        string                 `json:"approval,omitempty"`  // v0.17: "person" = a popping role's session asks before agent-spawn
+	ToolRules       ToolRules              `json:"tool_rules,omitzero"` // v0.17: declared Claude Code rules
 }
 
 // Load reads, validates, and resolves every role in a manifest. Callers should
@@ -142,6 +145,14 @@ func Load(path string) (*Manifest, error) {
 		}
 		if _, exists := info["fallback_profiles"]; exists && version != 2 {
 			return nil, fmt.Errorf("role %s: fallback_profiles needs schema_version 2", role)
+		}
+		if _, _, rules, err := roleRules(role, info); err != nil {
+			return nil, err
+		} else if version == 1 {
+			perm, _ := info["permission"].(string)
+			if err := checkAskPermission(role, rules, "claude-code", perm); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -286,7 +297,7 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		}
 		profile["options"] = options
 	} else {
-		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles"), "role "+role+" (move execution fields into a profile)"); err != nil {
+		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles", "pops", "approval", "tool_rules"), "role "+role+" (move execution fields into a profile)"); err != nil {
 			return Profile{}, err
 		}
 		profileNameValue, ok := info["profile"]
@@ -415,6 +426,13 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 	}
 	if rawSkills, exists := info["skills"]; exists {
 		resolved.Skills, _ = stringNames(rawSkills)
+	}
+	var err error
+	if resolved.Pops, resolved.Approval, resolved.ToolRules, err = roleRules(role, info); err != nil {
+		return Profile{}, err
+	}
+	if err := checkAskPermission(role, resolved.ToolRules, client, resolved.Options["permission"]); err != nil {
+		return Profile{}, err
 	}
 	if client == "claude-code" {
 		if err := checkKeys(optionMap, set("permission", "fallback"), "Claude options"); err != nil {

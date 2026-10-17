@@ -81,6 +81,16 @@ it requires `HERDR_ENV=1` (you're inside herdr) and a role defined in `roles.tom
 agent arms its own `subscribe` and publishes `status`, so it shows up in busmon and in
 `agentbus agents` within a few seconds — dispatch to it once it reports `online`.
 
+Call `agent-spawn` by its bare name, never by path: your session allows `agent-spawn <role> *` for
+each ordinary role, so a path, a quoted role or a variable falls back to a prompt or the classifier.
+
+**A role marked `approval = "person"` (deploy) is asked, not allowed.** Write exactly
+`agent-spawn deploy "$AGENT_BUS_PROJECT"`: that form brings up a permission prompt in your pane; say
+in your status why you pop it and wait for the person's answer there. The prompt matches that
+command text only — another form (a quoted role, a variable, a path, `bash -c`) is not guaranteed to
+prompt or be denied, and in auto mode the classifier may run it unasked. Never use one to get round
+the prompt: pop a risky role only with the person's yes.
+
 ## Resync — inject text into an agent's pane
 ```bash
 pane=$(agentbus pane claude1) || { echo "claude1 has no registered pane"; exit 1; }

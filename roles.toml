@@ -3,11 +3,16 @@
 # model: Claude Code's aliases (opus, sonnet, haiku) follow the latest model of each family, so a
 # renamed model never breaks a launch. Write an exact id (claude-opus-5-5) only to pin a version;
 # `agentbus roles doctor` shows what each agent really runs.
+# pops = true: the role pops others; its session gets one Claude Code allow rule per role
+# (`Bash(agent-spawn <role> *)`), or an ask rule for a role with approval = "person".
+# approval = "person": that rule is an ask, so Claude Code asks the person in the popping agent's
+# pane before it runs `agent-spawn <role>`. A convenience, not a lock. v0.17.
 
 [roles.master]
 model = "sonnet"
 permission = "acceptEdits"
 tier = "boot"
+pops = true
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 
 [roles.coder]
@@ -39,6 +44,7 @@ skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
 model = "sonnet"
 permission = "bypassPermissions"
 tier = "pop"
+approval = "person"
 skills = ["agent-bus", "diagnosing-bugs"]
 
 [roles.security]

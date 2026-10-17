@@ -38,7 +38,7 @@ type launchFixture struct {
 	execEnv                     []string
 }
 
-const fakeHelp = "--model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan"
+const fakeHelp = "--settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan"
 
 func newLaunchFixture(t *testing.T) *launchFixture {
 	t.Helper()
@@ -528,5 +528,62 @@ func TestTierValidation(t *testing.T) {
 	}
 	if _, err := Load(writeConfig(t, head+"tier = \"fast\"\n[roles.a]\ntier = \"boot\"\n")); err != nil {
 		t.Fatalf("a tier profile: %v", err)
+	}
+}
+
+const popsRoles = "pops = true\n[roles.coder.tool_rules]\ndeny = [\"WebFetch\"]\n[roles.deploy]\ntier = \"pop\"\napproval = \"person\"\n[roles.architect]\ntier = \"pop\"\n"
+
+const popsSettings = `{"permissions": {"allow": ["Bash(agent-spawn architect *)"], "ask": ["Bash(agent-spawn deploy *)"], "deny": ["WebFetch"]}}`
+
+func TestLaunchSettingsFlag(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("claude-code", "", popsRoles, "[profiles.main.options]\npermission = \"acceptEdits\"")
+	if _, e, err := f.launch(m, "coder"); err != nil {
+		t.Fatal(err, e)
+	}
+	want := []string{"claude", "--model", "test-model", "--permission-mode", "acceptEdits", "--settings", popsSettings, "--name", "demo:coder", "--append-system-prompt"}
+	if got := f.execed[1 : len(f.execed)-1]; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("claude argv = %q", got)
+	}
+	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")
+	must(t, err)
+	if !strings.Contains(out, "--settings "+ShellJoin([]string{popsSettings})+" --name") {
+		t.Fatalf("dry run = %q", out)
+	}
+}
+
+func TestPreflightNeedsSettingsOnlyWithRules(t *testing.T) {
+	f := newLaunchFixture(t)
+	f.fake("claude", "#!/bin/sh\necho '"+strings.Replace(fakeHelp, "--settings ", "", 1)+"'\n")
+	m := f.config("claude-code", "", "", "")
+	if _, e, err := f.launch(m, "coder"); err != nil {
+		t.Fatalf("no rules: %v %s", err, e)
+	}
+	m = f.config("claude-code", "", popsRoles, "")
+	if _, _, err := f.launch(m, "coder"); err == nil || err.Error() != "claude lacks required launch flags; inspect its version/help" {
+		t.Fatalf("rules without --settings: %v", err)
+	}
+}
+
+func TestElevatedAnnouncesAllow(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("claude-code", "", popsRoles, "")
+	_, errOut, err := f.launch(m, "coder")
+	must(t, err)
+	if !strings.Contains(errOut, "notice: coder runs claude-code with elevated allow=1 rules") {
+		t.Fatalf("stderr = %q", errOut)
+	}
+}
+
+func TestRulesNotAppliedNote(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("codex", "", popsRoles, "")
+	_, errOut, err := f.launch(m, "coder")
+	must(t, err)
+	if !strings.Contains(errOut, "note: tool_rules not applied for codex") {
+		t.Fatalf("stderr = %q", errOut)
+	}
+	if strings.Contains(strings.Join(f.execed, " "), "--settings") {
+		t.Fatalf("codex got --settings: %q", f.execed)
 	}
 }
