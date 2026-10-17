@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -485,5 +486,47 @@ func TestExternalSkillsDefaultPaths(t *testing.T) {
 	}
 	if _, err := SkillSources([]string{"wayfinder"}, t.TempDir(), []string{"HOME=" + home, "XDG_DATA_HOME=" + filepath.Join(home, "x")}); err == nil {
 		t.Fatal("found a skill that is nowhere")
+	}
+}
+
+// v0.15.2 §10.3: a profile naming a tier launches the model the table gives
+// for it now; with no such model the launch fails and says how to fix it.
+func TestLaunchResolvesATier(t *testing.T) {
+	f := newLaunchFixture(t)
+	body := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"kimi-cli\"\nprovider = \"test-provider\"\ntier = \"frontier\"\n[roles.coder]\ntier = \"boot\"\nskills = [\"test-skill\"]\n"
+	must(t, os.WriteFile(f.manifest, []byte(body), 0o644))
+	m, err := Load(f.manifest)
+	must(t, err)
+	old := ResolveTier
+	t.Cleanup(func() { ResolveTier = old })
+	ResolveTier = func(provider, tier string) (string, error) {
+		if provider == "test-provider" && tier == "frontier" {
+			return "best-model", nil
+		}
+		return "", errors.New("no model")
+	}
+	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")
+	must(t, err)
+	if !strings.HasPrefix(out, "kimi --model best-model ") {
+		t.Fatalf("dry run = %q", out)
+	}
+	ResolveTier = func(string, string) (string, error) { return "", errors.New("no frontier model known") }
+	if _, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1"); err == nil || !strings.Contains(err.Error(), "no frontier model") {
+		t.Fatalf("missing tier model: %v", err)
+	}
+}
+
+func TestTierValidation(t *testing.T) {
+	head := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"kimi-cli\"\nprovider = \"p\"\n"
+	for body, want := range map[string]string{
+		head + "tier = \"best\"\n[roles.a]\ntier = \"boot\"\n":                "tier must be one of frontier, workhorse, fast, legacy",
+		head + "tier = \"fast\"\nmodel = \"m\"\n[roles.a]\ntier = \"boot\"\n": "profile main: set model or tier, not both",
+	} {
+		if _, err := Load(writeConfig(t, body)); err == nil || err.Error() != want {
+			t.Errorf("err = %v, want %q", err, want)
+		}
+	}
+	if _, err := Load(writeConfig(t, head+"tier = \"fast\"\n[roles.a]\ntier = \"boot\"\n")); err != nil {
+		t.Fatalf("a tier profile: %v", err)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/models"
 	"io"
 	"math"
 	"os"
@@ -436,6 +437,13 @@ func LaunchProfile(m *Manifest, role, project, profile string, env []string, std
 	if err != nil {
 		return err
 	}
+	if p.Tier != "" { // v0.15.2 §10.3: the table's model for this tier, now
+		id, err := ResolveTier(p.Provider, p.Tier)
+		if err != nil {
+			return err
+		}
+		p.Model = id
+	}
 	e := newEnv(cfg.Env)
 	requireBind := e.or("AGENT_LAUNCH_REQUIRE_BIND", "") == "1"
 	promptPath, prompt, missing, err := promptFor(p, repoRoot(e), e)
@@ -492,7 +500,7 @@ func LaunchProfile(m *Manifest, role, project, profile string, env []string, std
 		return nil
 	}
 	for k, v := range map[string]string{"AGENT_BUS_PROJECT": project, "AGENT_BUS_AGENT": role,
-		"AGENT_BUS_CLIENT": p.Client, "AGENT_BUS_PROVIDER": p.Provider, "AGENT_BUS_MODEL": p.Model,
+		"AGENT_BUS_CLIENT": p.Client, "AGENT_BUS_PROVIDER": p.Provider, "AGENT_BUS_MODEL": p.Model, "AGENT_BUS_MODEL_TIER": p.Tier,
 		"AGENT_BUS_PROFILE": p.Profile, "AGENT_BUS_REASONING": p.Reasoning, "ROLES_TOML": p.Manifest} {
 		e.set(k, v)
 	}
@@ -859,4 +867,18 @@ func ClientExecutable(p Profile) string {
 		return bin
 	}
 	return p.Adapter
+}
+
+// ResolveTier is the model a tier stands for at provider in the machine's
+// model table (agentbus models). Tests replace it.
+var ResolveTier = func(provider, tier string) (string, error) {
+	t, err := models.Load(models.CachePath())
+	if err != nil {
+		return "", fmt.Errorf("model table: %w", err)
+	}
+	r, ok := t.Resolve(provider, tier, time.Now())
+	if !ok {
+		return "", fmt.Errorf("no %s model known for %s in the model table: run agentbus models --refresh, or set model in the profile", tier, provider)
+	}
+	return r.ID, nil
 }

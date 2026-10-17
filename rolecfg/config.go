@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/netbja/agent-bus-monitor/models"
 )
 
 var (
@@ -63,6 +64,7 @@ type Profile struct {
 	Client          string                 `json:"client"`
 	Provider        string                 `json:"provider"`
 	Model           string                 `json:"model"`
+	Tier            string                 `json:"tier,omitempty"` // v0.15.2: resolved to Model at launch
 	Reasoning       string                 `json:"reasoning,omitempty"`
 	ReasoningLevels []string               `json:"reasoning_levels,omitempty"`
 	Options         map[string]string      `json:"-"`
@@ -305,7 +307,7 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		if !profileIsTable {
 			return Profile{}, fmt.Errorf("profile %s must be a table", profileName)
 		}
-		if err := checkKeys(profile, set("client", "provider", "model", "reasoning", "reasoning_levels", "options", "env_refs"), "profile "+profileName); err != nil {
+		if err := checkKeys(profile, set("client", "provider", "model", "tier", "reasoning", "reasoning_levels", "options", "env_refs"), "profile "+profileName); err != nil {
 			return Profile{}, err
 		}
 	}
@@ -317,7 +319,23 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 	if !ok {
 		return Profile{}, fmt.Errorf("provider must be a non-empty string without control characters")
 	}
+	// v0.15.2 §10.3: a profile names a tier instead of a model; the launch
+	// resolves it from the model table. Never both.
+	tier := ""
+	if v, exists := profile["tier"]; exists {
+		t, ok := v.(string)
+		if !ok || !models.ValidTier(t) {
+			return Profile{}, fmt.Errorf("tier must be one of frontier, workhorse, fast, legacy")
+		}
+		if _, both := profile["model"]; both {
+			return Profile{}, fmt.Errorf("profile %s: set model or tier, not both", profileName)
+		}
+		tier = t
+	}
 	model, ok := checkedString(profile["model"], "model")
+	if tier != "" {
+		model, ok = "", true // resolved at launch
+	}
 	if !ok {
 		return Profile{}, fmt.Errorf("model must be a non-empty string without control characters")
 	}
@@ -383,7 +401,7 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		}
 	}
 	resolved := Profile{
-		Client: client, Provider: provider, Model: model, Reasoning: reasoning,
+		Client: client, Provider: provider, Model: model, Tier: tier, Reasoning: reasoning,
 		ReasoningLevels: levels, Options: map[string]string{}, OptionsRaw: cloneTable(optionMap), EnvRefs: refs,
 		Profile: profileName, Role: role, Legacy: legacy, Manifest: m.manifestPath,
 	}
