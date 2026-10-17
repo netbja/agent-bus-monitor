@@ -212,9 +212,11 @@ read by calling a model.
 | openai (Codex) | `~/.codex/models_cache.json`, refreshed by Codex itself | `slug`, `display_name`, `description` ("Latest workhorse…", "Frontier…", "Fast…", "Older…") |
 | xai (Grok) | `grok models` (fixed argv, 10 s bound) | the list and the default marker |
 | moonshot (Kimi) | `~/.kimi*/config.toml` `[models.*]`, `default_model` | ids and aliases |
+| google (agy, Antigravity) | `agy models` (fixed argv, 15 s bound) | id and label (`gemini-3.8-flash-high	Gemini 3.8 Flash (High)`); agy also serves other families (Claude, GPT-OSS) on the Google account: such rows keep `provider = google` (whose quota they draw on) and add `family` (`anthropic`, `openai`) |
 | anthropic (Claude) | Claude Code's aliases (`opus`, `sonnet`, `haiku`, `fable`); the model options cached in `~/.claude.json` (only the model keys: `additionalModelOptionsCache`, `orgModelDefaultCache`; never the account fields); the resolved id last seen per alias in transcripts | alias → id, label |
 
-No reader opens a credential file (`auth.json`, `.credentials.json`, `credentials`). A missing or
+No reader opens a credential file (`auth.json`, `.credentials.json`, `credentials`,
+`oauth_creds.json`, `google_accounts.json`). A missing or
 unreadable source is a note, never an error that stops the others.
 
 ### 10.2 The table
