@@ -841,6 +841,18 @@ if [ "$found_client" = "0" ]; then
   log_warn "No recognized agent CLI found on PATH (claude, codex, kimi, agy). Install at least one agent client."
 fi
 
+# The model table (v0.15.2): each client's own free catalogue, never a model call.
+# AGENTBUS_SETUP_NO_MODELS=1 skips it (the installer tests do).
+if [ "$DRY_RUN" = "1" ]; then
+  log_info "[dry-run] would refresh the model table (agentbus models --refresh)"
+elif [ "${AGENTBUS_SETUP_NO_MODELS:-0}" != "1" ] && [ -x "$BIN_DIR/agentbus" ]; then
+  if "$BIN_DIR/agentbus" models --refresh >"$TMP_DIR/models.log" 2>&1; then
+    log_ok "model table refreshed (agentbus models)"
+  else
+    log_warn "model table not refreshed: $(tail -1 "$TMP_DIR/models.log")"
+  fi
+fi
+
 # -----------------------------------------------------------------------------
 # Summary & Next Steps
 # -----------------------------------------------------------------------------

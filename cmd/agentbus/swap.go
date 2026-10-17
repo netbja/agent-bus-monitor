@@ -169,8 +169,15 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		return fail("%v", err)
 	}
 	fbRec, onFallback := fallbacks[role]
-	if profile == own.Profile && !onFallback && snap.Client == own.Client && snap.Provider == own.Provider && snap.Model == own.Model {
-		return fail("already on its own profile (%s) and model (%s): nothing to swap back", own.Profile, own.Model)
+	ownModel := own.Model
+	if own.Tier != "" { // the model its tier stands for now (v0.15.2)
+		ownModel = ""
+		if id, err := rolecfg.ResolveTier(own.Provider, own.Tier); err == nil {
+			ownModel = id
+		}
+	}
+	if profile == own.Profile && !onFallback && snap.Client == own.Client && snap.Provider == own.Provider && ownModel != "" && snap.Model == ownModel {
+		return fail("already on its own profile (%s) and model (%s): nothing to swap back", own.Profile, ownModel)
 	}
 	fromProfile := own.Profile
 	if onFallback {

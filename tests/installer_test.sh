@@ -12,7 +12,7 @@ T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 # Keep Go's caches where they are: a throwaway HOME must not mean a cold build.
 export GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" GOPATH="$(go env GOPATH)"
-export NO_COLOR=1 HOME="$T/home" XDG_CONFIG_HOME="$T/cfg" XDG_DATA_HOME="$T/data" HERDR_PLUS_PATH="$T/no-herdr-plus"
+export AGENTBUS_SETUP_NO_MODELS=1 NO_COLOR=1 HOME="$T/home" XDG_CONFIG_HOME="$T/cfg" XDG_DATA_HOME="$T/data" HERDR_PLUS_PATH="$T/no-herdr-plus"
 mkdir -p "$HOME"
 
 # A fake herdr: records calls; the plugin is "registered" once installed or linked.

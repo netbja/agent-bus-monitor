@@ -57,6 +57,9 @@ type Provider struct {
 	Error  string `json:"error,omitempty"` // the last attempt's error
 	Home   string `json:"home,omitempty"`  // which client home the rows came from
 	Rows   []Row  `json:"rows"`
+	// Partial: the source lists aliases and a few options, not every id it
+	// accepts (Claude Code); an id missing from it is not "gone".
+	Partial bool `json:"partial,omitempty"`
 }
 
 // Table is the machine's model table.
@@ -123,6 +126,7 @@ func (t *Table) Save(path string) error {
 // Reader reads one provider's catalogue.
 type Reader struct {
 	Provider string
+	Partial  bool
 	Read     func(ctx context.Context) (rows []Row, home string, err error)
 }
 
@@ -151,7 +155,7 @@ func (t *Table) Refresh(ctx context.Context, readers []Reader, tiers TierMap, no
 				rows[i].Tier = tiers.Tier(rows[i])
 			}
 		}
-		p.OK, p.Error, p.ReadAt, p.Home, p.Rows = true, "", now.UnixMilli(), home, rows
+		p.OK, p.Error, p.ReadAt, p.Home, p.Rows, p.Partial = true, "", now.UnixMilli(), home, rows, r.Partial
 	}
 }
 

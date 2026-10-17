@@ -14,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
@@ -43,6 +44,10 @@ type doctorDeps struct {
 	Cmdline    func(pid int) ([]string, error)
 	Transcript func(session string) (usage.UsedModel, error)
 	Now        func() time.Time
+	// Table and Config (v0.15.2): the machine's model table and models.toml;
+	// a nil Table judges nothing against a catalogue.
+	Table  *models.Table
+	Config models.Config
 }
 
 func realDoctorDeps(env []string) doctorDeps {
@@ -73,8 +78,23 @@ func realDoctorDeps(env []string) doctorDeps {
 			}
 			return usage.ReadUsedModel(path)
 		},
-		Now: time.Now,
+		Now:    time.Now,
+		Table:  doctorTable(),
+		Config: doctorConfig(),
 	}
+}
+
+func doctorTable() *models.Table {
+	t, err := models.Load(models.CachePath())
+	if err != nil {
+		return nil
+	}
+	return t
+}
+
+func doctorConfig() models.Config {
+	c, _ := models.LoadConfig(models.ConfigPath())
+	return c
 }
 
 // claudeAlias: Claude Code's family aliases follow the latest model; an
@@ -147,6 +167,14 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 			}
 		}
 		r.Profile, r.Configured = cur.Profile, cur.Model
+		if cur.Tier != "" { // the model the tier stands for now (§10.3)
+			r.Configured = "tier " + cur.Tier
+			if d.Table != nil {
+				if row, ok := d.Table.Resolve(cur.Provider, cur.Tier, d.Now()); ok {
+					r.Configured = row.ID
+				}
+			}
+		}
 		// Launched: the bound identity's model, else the live process's own
 		// command line (agents launched before v0.15.1 recorded none).
 		r.Launched, r.LaunchedBy = s.Model, "bind"
@@ -182,6 +210,8 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 			r.Verdict, r.Why = "unknown model", used.ModelError
 		case r.Launched == "":
 			r.Verdict, r.Why = "not reported", "no launched model recorded and none on the process command line"
+		case strings.HasPrefix(r.Configured, "tier "):
+			r.Verdict, r.Why = "not reported", "the model table cannot resolve this "+r.Configured+" (catalogue unavailable): agentbus models --refresh"
 		case claudeAlias.MatchString(r.Configured) && strings.Contains(r.Launched, "-"+r.Configured+"-"):
 			r.Verdict = "ok" // an alias launched as the id of its family: never drift (§7.1)
 		case !sameModel(r.Launched, r.Configured):
@@ -190,6 +220,9 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 			r.Verdict, r.Why = "drift", fmt.Sprintf("launched %s but its transcript shows %s", r.Launched, r.Used)
 		default:
 			r.Verdict = "ok"
+			if v, why := catalogueVerdict(d, cur.Provider, r.Launched); v != "" {
+				r.Verdict, r.Why = v, why
+			}
 		}
 		rows = append(rows, r)
 	}
@@ -221,7 +254,7 @@ func runDoctor(ctx context.Context, b *bus.Bus, d doctorDeps, args []string, out
 	}
 	code := 0
 	for _, r := range rows {
-		if r.Verdict == "drift" || r.Verdict == "unknown model" {
+		if r.Verdict == "drift" || r.Verdict == "unknown model" || r.Verdict == "gone" || r.Verdict == "newer" {
 			code = 3
 		}
 	}
@@ -242,4 +275,38 @@ func runDoctor(ctx context.Context, b *bus.Bus, d doctorDeps, args []string, out
 		fmt.Fprintln(out, "no registered agent has a role in roles.toml")
 	}
 	return code
+}
+
+// catalogueVerdict (v0.15.2 §10.4, §12): what the model table says about a
+// launched model that matches its configuration — "gone" when its provider's
+// fresh, complete catalogue no longer lists it (aliases resolved first: an
+// alias is a row of its own), "newer" only on stated evidence (the source's
+// upgrade or generation words, or a family order in models.toml). An old or
+// failed catalogue judges nothing.
+func catalogueVerdict(d doctorDeps, provider, launched string) (string, string) {
+	if d.Table == nil || launched == "" || provider == "" {
+		return "", ""
+	}
+	p, fresh := d.Table.Fresh(provider, d.Now())
+	if !fresh {
+		return "", ""
+	}
+	row, found := p.Find(launched)
+	if !found && p.Partial {
+		return "", "" // the source does not list every id it accepts
+	}
+	if !found {
+		return "gone", fmt.Sprintf("%s is no longer in %s's model list (agentbus models): relaunch on a listed model", launched, provider)
+	}
+	newer := row.Newer
+	if newer == "" && row.Tier == models.Legacy {
+		newer = "a newer model of its family"
+	}
+	if n := d.Config.NewerByOrder(launched); n != "" {
+		newer = n
+	}
+	if newer != "" && !row.Alias {
+		return "newer", fmt.Sprintf("%s runs %s; its source lists %s as newer", provider, launched, newer)
+	}
+	return "", ""
 }

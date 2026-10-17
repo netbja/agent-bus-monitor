@@ -43,7 +43,7 @@ func RealEnv() Env {
 func Readers(e Env) []Reader {
 	return []Reader{
 		{Provider: "openai", Read: func(ctx context.Context) ([]Row, string, error) { return readCodex(e) }},
-		{Provider: "anthropic", Read: func(ctx context.Context) ([]Row, string, error) { return readClaude(e) }},
+		{Provider: "anthropic", Partial: true, Read: func(ctx context.Context) ([]Row, string, error) { return readClaude(e) }},
 		{Provider: "xai", Read: func(ctx context.Context) ([]Row, string, error) { return readGrok(ctx, e) }},
 		{Provider: "moonshot", Read: func(ctx context.Context) ([]Row, string, error) { return readKimi(e) }},
 		{Provider: "google", Read: func(ctx context.Context) ([]Row, string, error) { return readAgy(ctx, e) }},
