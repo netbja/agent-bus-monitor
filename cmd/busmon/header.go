@@ -102,7 +102,8 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 			continue
 		}
 		until, isHeld := held(d.holds, n, d.now)
-		if l := quotaSeg(n, b, until, isHeld, d.pace[n], d.now); l != nil {
+		cells := map[Tier]int{TierWide: 10, TierMedium: 5}[tier] // narrow: the percentage alone
+		if l := quotaSeg(n, b, until, isHeld, d.pace[n], d.now, cells); l != nil {
 			add(l, 6+i, second) // the rightmost provider has the lowest priority
 		}
 	}
