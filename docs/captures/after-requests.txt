@@ -3,7 +3,7 @@
 │archite╔══════════════════════════ REQUESTS · 5 waiting  [↑↓/jk scroll · Esc back] ══════════════════════════╗… 3m    │
 │coder: ║── tracked requests (3 waiting of 4) ──                                                              ║0m      │
 │foureye║task-22 → coder blocked  asked 3h ago                                                                ║        │
-│⬢ herme║   blocked by coder: clé API absente sur le VDR                                                      ║        │
+│⬢ herme║   blocked by coder: clé API absente sur host1                                                      ║        │
 │sentine║   no deadline set · written to subscriber output (not proof it was read) · body still on the bus    ║… 3h    │
 └───────║task-20 → foureyes requested  asked 42m ago                                                          ║────────┘
 ┌───────║   not accepted yet — foureyes has not taken it                                                      ║────────┐

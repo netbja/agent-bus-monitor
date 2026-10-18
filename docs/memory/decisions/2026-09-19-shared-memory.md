@@ -33,7 +33,7 @@ comparing the Markdown/Obsidian/Redis proposal. The implementable specification 
 [the shared protocol](../PROTOCOL.md) and [access boundaries](../ACCESS.md).
 The local audit found two brain files last modified July 31 and no references to
 that vault in this project's roles/skills. Claude reports a living journal in
-ai-tradex-solana maintained by its sentinel; this is his observation, not an
+project-a maintained by its sentinel; this is his observation, not an
 independent audit of that project's runtime here.
 
 ## Limits

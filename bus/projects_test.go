@@ -27,7 +27,7 @@ func TestProjectFromKey(t *testing.T) {
 		{"dev:missions:chg", ""},
 		{"dev:change:chg", ""},
 		{"dev:missionops:results", ""},
-		{"ai-tradex-solana:status", "ai-tradex-solana"},
+		{"project-a:status", "project-a"},
 
 		// two-colon keys: the "project" keeps a colon, so ValidName rejects them
 		// and they need no special case in the scanner.

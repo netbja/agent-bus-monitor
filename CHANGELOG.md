@@ -68,7 +68,7 @@ release exists.
 
 ## v0.14.6 — a quota reset granted early is seen
 
-- Anthropic granted a quota reset before the weekly one, but hyperliquid stayed paused for 96
+- Anthropic granted a quota reset before the weekly one, but project-b stayed paused for 96
   hours: the only Claude reading was the old "weekly limit" refusal in a transcript, believed
   until its announced reset. Now a refusal no longer counts once Claude has answered since, in any
   session of the account; the hold and the project pause end at once and master is told to go on.
@@ -98,7 +98,7 @@ release exists.
 ## v0.14.3 — an agent at work is seen at work
 
 - Agents declare `working` before they start (skill `agent-bus`): deploy worked six minutes
-  on hyperliquid while busmon showed it idle.
+  on project-b while busmon showed it idle.
 - Safety net: the dispatch service looks at every verified pane every 15 s; busmon flags `busy`
   an agent whose pane runs a turn without declaring `working`, beside its declared state, never
   instead of it. The detail shows the observation (`Observed`).

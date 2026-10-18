@@ -270,7 +270,7 @@ func TestParseProcessInfoProcs(t *testing.T) {
 			node = &procs[i]
 		}
 	}
-	if node == nil || node.Name != "MainThread" || node.Cmdline != "node /home/sysnet/.nvm/versions/node/v24.10.0/bin/codex" {
+	if node == nil || node.Name != "MainThread" || node.Cmdline != "node /home/user/.nvm/versions/node/v24.10.0/bin/codex" {
 		t.Fatalf("procs = %+v, want the codex node process with its command line", procs)
 	}
 	if len(procs) != 4 {

@@ -20,7 +20,7 @@ policy is separate and is not silently included in this memory diff.
 
 No Go runtime source is changed by this memory slice. A full Redis integration
 run is not claimed here; the final release must validate its exact merged tree
-on an isolated broker. Fresh-context adoption by each client, VDR availability,
+on an isolated broker. Fresh-context adoption by each client, host1 availability,
 and opening the vault in Obsidian remain explicit follow-up checks, not inferred
 from the presence of files.
 

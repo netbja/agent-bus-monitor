@@ -7,7 +7,7 @@ import (
 )
 
 // ToolRules are Claude Code permission rules a role's session gets at launch
-// (v0.17, spec docs/superpowers/specs/2026-10-17-role-tool-rules-design.md):
+// (v0.17, spec specs/2026-10-17-role-tool-rules-design.md):
 // passed through unchanged in one --settings JSON.
 type ToolRules struct {
 	Allow []string `json:"allow,omitempty"`

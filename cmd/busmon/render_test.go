@@ -64,7 +64,7 @@ func TestProjectTable(t *testing.T) {
 	ms := func(d time.Duration) int64 { return now.Add(-d).UnixMilli() }
 
 	out := projectTable([]bus.ProjectSummary{
-		{Project: "ai-tradex-solana", Agents: 5, Master: "master", LastTS: ms(2 * time.Minute)},
+		{Project: "project-a", Agents: 5, Master: "master", LastTS: ms(2 * time.Minute)},
 		{Project: "agent-bus-monitor", Agents: 2, LastTS: ms(3 * time.Hour)},
 		{Project: "demo", Agents: 1, LastTS: ms(6 * 24 * time.Hour)},
 	}, now)
@@ -78,7 +78,7 @@ func TestProjectTable(t *testing.T) {
 			t.Errorf("header %q missing %q", lines[0], want)
 		}
 	}
-	if !strings.Contains(lines[1], "ai-tradex-solana") || !strings.Contains(lines[1], "2m ago") {
+	if !strings.Contains(lines[1], "project-a") || !strings.Contains(lines[1], "2m ago") {
 		t.Errorf("row 1 = %q, want the newest project with its age", lines[1])
 	}
 	if !strings.Contains(lines[2], "3h ago") || !strings.Contains(lines[3], "6d ago") {
@@ -89,7 +89,7 @@ func TestProjectTable(t *testing.T) {
 		t.Errorf("masterless row = %q, want a '-' placeholder", lines[2])
 	}
 	// the table renders in the order given: bus.Projects owns the sort
-	if strings.Index(out, "ai-tradex-solana") > strings.Index(out, "demo") {
+	if strings.Index(out, "project-a") > strings.Index(out, "demo") {
 		t.Error("projectTable reordered its input")
 	}
 	// columns line up: every row starts its AGENTS column at the same offset

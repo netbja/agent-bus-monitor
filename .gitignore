@@ -5,3 +5,4 @@
 # local bootstrap markers
 .agent-bus/
 __pycache__/
+/docs/superpowers/

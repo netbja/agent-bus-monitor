@@ -16,7 +16,7 @@ confidence: verified
 At the start of this memory work the local reference was a2c2fa1 (merge of PR37),
 following the transport/busmon integration in PR36. The source separates delivery,
 acceptance and completion and documents explicit cursor skips. This is a dated
-source checkpoint, not a claim about every running binary or VDR deployment.
+source checkpoint, not a claim about every running binary or host1 deployment.
 
 The shared-memory slice adds a reference index, evidence-backed lessons and
 read/write duties. It is being prepared in an isolated worktree; this note does

@@ -2,7 +2,7 @@
 // services under the operating system's own manager: systemd --user on Linux,
 // launchd on macOS. It writes the units, the environment file the services
 // read, rotates their logs and keeps the restart budget; it never supervises a
-// process itself (v0.12, docs/superpowers/specs/2026-10-14-project-services-design.md).
+// process itself (v0.12, specs/2026-10-14-project-services-design.md).
 package service
 
 import (

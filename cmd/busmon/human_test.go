@@ -20,7 +20,7 @@ func TestHumanIdentity(t *testing.T) {
 			t.Fatalf("humanIdentity(%q, %q) = %q, %v; want %q", c.flag, c.env, got, err, c.want)
 		}
 	}
-	if _, err := humanIdentity("Bernard Jaulin", ""); err == nil {
+	if _, err := humanIdentity("Jane Doe", ""); err == nil {
 		t.Fatal("an invalid name was accepted")
 	}
 }

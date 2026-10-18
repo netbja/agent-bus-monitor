@@ -12,7 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Asks (v0.14, spec docs/superpowers/specs/2026-10-16-asks-and-readable-text-design.md
+// Asks (v0.14, spec specs/2026-10-16-asks-and-readable-text-design.md
 // §11): an agent's structured questions to a person, in the {p}:asks hash.
 // Flat fields, every write one Lua script, so an answer, a replacement and a
 // withdrawal never interleave:

@@ -1,6 +1,6 @@
 
       ▄▀▀▄        Antigravity CLI 1.3.3
-     ▀▀▀▀▀▀       bernard.jaulin@gmail.com (Antigravity Starter Quota)
+     ▀▀▀▀▀▀       user@example.com (Antigravity Starter Quota)
     ▀▀▀▀▀▀▀▀      Gemini 3.8 Flash (High)
    ▄▀▀    ▀▀▄     /data/projects/agent-bus-monitor
   ▄▀▀      ▀▀▄

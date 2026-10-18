@@ -5,13 +5,13 @@
 # It never touches the real broker, and it never touches a container it did not
 # create: it runs its own redis on port 6390 (the project's broker is 6380) in a
 # container labelled busmon-demo=1, and every key it writes belongs to the
-# throwaway project "demo". A container of the same name without that label is
+# throwaway project "acme-shop" (a fictional web shop). A container of the same name without that label is
 # somebody else's, and this script refuses it rather than reusing it — the seed
 # wipes state, and wiping state you do not own is how a demo eats a real bus.
 #
 #   scripts/busmon-demo.sh up                 start the container and seed it
 #   scripts/busmon-demo.sh run [args…]        run ./busmon against the demo bus
-#   scripts/busmon-demo.sh capture OUT [BIN]  capture one screen to OUT (tmux)
+#   scripts/busmon-demo.sh capture OUT [BIN]  capture one screen to OUT (tmux; ANSI=1 keeps colours)
 #   scripts/busmon-demo.sh down               remove the container
 #
 # The seeded data is deliberately awkward: an agent that declared "working" and
@@ -24,7 +24,7 @@ NAME=agent-bus-demo
 LABEL=busmon-demo
 PORT=6390
 PASS=AgentBus2025!
-PROJECT=demo
+PROJECT=acme-shop
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 r() { docker exec -i "$NAME" redis-cli -a "$PASS" --no-auth-warning "$@" >/dev/null; }
@@ -83,48 +83,48 @@ seed() {
   # ---- status: coder declared working 18 minutes ago and has said nothing since
   r XADD "$PROJECT:status" $((now - 18 * min))-0 agent coder state working message "refactoring the stream parser"
   r XADD "$PROJECT:status" $((now - 9 * min))-0 agent foureyes state idle message "waiting for a diff to review"
-  r XADD "$PROJECT:status" $((now - 40000))-0 agent hermes state working message "driving the slice"
+  r XADD "$PROJECT:status" $((now - 40000))-0 agent master state working message "driving the slice"
   r XADD "$PROJECT:status" $((now - 25000))-0 agent sentinel state blocked message "no API key for the nightly refresh"
 
   # ---- the agents hash: authoritative roster. architect last spoke long before
   # the ACTIVITY window, so only this hash knows about it.
   r HSET "$PROJECT:agents" coder "{\"state\":\"working\",\"message\":\"refactoring the stream parser\",\"ts\":$((now - 18 * min)),\"pane\":\"w1:p1\",\"session\":\"s-coder\"}"
   r HSET "$PROJECT:agents" foureyes "{\"state\":\"idle\",\"message\":\"waiting for a diff to review\",\"ts\":$((now - 9 * min)),\"pane\":\"w1:p2\"}"
-  r HSET "$PROJECT:agents" hermes "{\"state\":\"working\",\"message\":\"driving the slice\",\"ts\":$((now - 40000)),\"pane\":\"w2:p1\"}"
+  r HSET "$PROJECT:agents" master "{\"state\":\"working\",\"message\":\"driving the slice\",\"ts\":$((now - 40000)),\"pane\":\"w2:p1\"}"
   r HSET "$PROJECT:agents" sentinel "{\"state\":\"blocked\",\"message\":\"no API key for the nightly refresh\",\"ts\":$((now - 25000))}"
-  r HSET "$PROJECT:agents" architect "{\"state\":\"done\",\"message\":\"verdict on the gRPC question\",\"ts\":$((now - 300 * min))}"
+  r HSET "$PROJECT:agents" architect "{\"state\":\"done\",\"message\":\"verdict on the caching question\",\"ts\":$((now - 300 * min))}"
 
   # ---- reports: one long multi-line Unicode report with retained full text,
   # one from before full-text retention existed (preview only, unmarked).
   r XADD "$PROJECT:report" $((now - 12 * min))-0 agent coder kind note \
-    message "résumé du refactor: 3 étapes, 2 faites — le parser accepte désormais les entrées sans champ full…" \
-    full "résumé du refactor:
+    message "refactor summary: 3 steps, 2 done — the parser now accepts entries with no full field…" \
+    full "refactor summary:
 
-  1. relire le contrat Coordination v1 ✅
-  2. écrire les tests de rendu ✅
-  3. brancher la vue de suivi sur le board — en cours
+  1. read the Coordination v1 contract ✅
+  2. write the render tests ✅
+  3. wire the tracking view to the board — in progress
 
-détails:
-  - les entrées anciennes n'ont pas de marqueur text_complete, donc la
-    complétude est inconnue et l'écran doit le dire
+details:
+  - old entries carry no text_complete marker, so completeness is unknown
+    and the screen has to say so
   - 日本語の行も通る
-  - la ligne suivante est délibérément très longue pour vérifier le retour à la ligne dans un terminal étroit"
+  - the next line is deliberately very long to check wrapping in a narrow terminal"
   r XADD "$PROJECT:report" $((now - 6 * min))-0 agent foureyes kind note \
-    message "relecture du diff: deux remarques, rien de bloquant"
+    message "diff review: two remarks, nothing blocking"
   # A Coordination v1 writer marks completeness. Seeded alongside the unmarked
   # ones above so the demo shows both readings side by side: this entry can be
   # promised whole, the older ones cannot.
   r XADD "$PROJECT:report" $((now - 3 * min))-0 agent sentinel kind note text_complete yes \
-    message "revue quotidienne: budget 25%/44%, aucune tâche bloquée depuis hier" \
-    full "revue quotidienne
+    message "daily review: budget 25%/44%, no task blocked since yesterday" \
+    full "daily review
 
-budget: 25% de la fenêtre de session, 44% de la semaine
-tâches: aucune bloquée depuis hier
-remarque: cette entrée porte le marqueur text_complete, donc son texte peut
-être annoncé comme complet — contrairement aux entrées plus anciennes."
+budget: 25% of the session window, 44% of the week
+tasks: none blocked since yesterday
+note: this entry carries the text_complete marker, so its text can be
+announced as complete — unlike the older entries."
 
   # ---- notify
-  r XADD "$PROJECT:notify" $((now - 5 * min))-0 from hermes message "slice 1 gelée pour revue — ne pas merger"
+  r XADD "$PROJECT:notify" $((now - 5 * min))-0 from master message "slice 1 frozen for review — do not merge"
 
   # ---- cmd, in id order (XADD only accepts increasing ids).
   #
@@ -134,35 +134,36 @@ remarque: cette entrée porte le marqueur text_complete, donc son texte peut
   # so a request whose id names nothing would render as "not retained".
   # task-19 is the deliberate exception — five hours old, its body no longer in
   # the stream, which is what an aged-out request actually looks like.
-  r XADD "$PROJECT:cmd" $((now - 180 * min))-0 from hermes target coder type directive ref "" \
-    command "instrumente le chemin de reprise du sentinel" task task-22 expires_at 0 text_complete yes
-  r XADD "$PROJECT:cmd" $((now - 120 * min))-0 from hermes target coder type directive ref "" \
-    command "ajoute les compteurs de remise au board" task task-21 expires_at 0 text_complete yes
-  r XADD "$PROJECT:cmd" $((now - 42 * min))-0 from hermes target foureyes type directive ref "" \
-    command "relis la tranche coordination avant gel" task task-20 expires_at $((now + 18 * min)) text_complete yes
-  r XADD "$PROJECT:cmd" $((now - 30 * min))-0 from hermes target coder type directive ref "" command "rebase sur main et relance la suite"
-  r XADD "$PROJECT:cmd" $((now - 28 * min))-0 from coder target hermes type reply ref $((now - 30 * min))-0 command "fait, suite verte"
-  r XADD "$PROJECT:cmd" $((now - 11 * min))-0 from hermes target foureyes type directive ref "" command "relis la tranche busmon quand elle est stable"
-  r XADD "$PROJECT:cmd" $((now - 4 * min))-0 from foureyes target coder type challenge ref "pr-42" command "explique pourquoi le parser ignore le champ full"
+  r XADD "$PROJECT:cmd" $((now - 180 * min))-0 from master target coder type directive ref "" \
+    command "instrument the sentinel's resume path" task task-22 expires_at 0 text_complete yes
+  r XADD "$PROJECT:cmd" $((now - 120 * min))-0 from master target coder type directive ref "" \
+    command "add the delivery counters to the board" task task-21 expires_at 0 text_complete yes
+  r XADD "$PROJECT:cmd" $((now - 42 * min))-0 from master target foureyes type directive ref "" \
+    command "review the coordination slice before the freeze" task task-20 expires_at $((now + 18 * min)) text_complete yes
+  r XADD "$PROJECT:cmd" $((now - 30 * min))-0 from master target coder type directive ref "" command "rebase on main and rerun the suite"
+  r XADD "$PROJECT:cmd" $((now - 28 * min))-0 from coder target master type reply ref $((now - 30 * min))-0 command "done, suite green"
+  r XADD "$PROJECT:cmd" $((now - 11 * min))-0 from master target foureyes type directive ref "" command "review the busmon slice once it is stable"
+  r XADD "$PROJECT:cmd" $((now - 4 * min))-0 from foureyes target coder type challenge ref "pr-42" command "explain why the parser ignores the full field"
 
   # ---- board: four tracked requests (one per state) plus a plain task.
   # Shape and field names come straight from the Coordination v1 contract.
-  r HSET "$PROJECT:board" task-20 "{\"owner\":\"foureyes\",\"state\":\"requested\",\"updated\":$(((now - 42 * min) / 1000)),\"request\":{\"id\":\"$((now - 42 * min))-0\",\"thread\":\"$((now - 42 * min))-0\",\"from\":\"hermes\",\"target\":\"foureyes\",\"created_at\":$((now - 42 * min)),\"expires_at\":$((now + 18 * min)),\"delivery\":\"output_written\",\"attempts\":1}}"
-  r HSET "$PROJECT:board" task-21 "{\"owner\":\"coder\",\"state\":\"accepted\",\"branch\":\"coder/task-21\",\"updated\":$(((now - 20 * min) / 1000)),\"request\":{\"id\":\"$((now - 120 * min))-0\",\"thread\":\"$((now - 120 * min))-0\",\"from\":\"hermes\",\"target\":\"coder\",\"created_at\":$((now - 120 * min)),\"expires_at\":0,\"delivery\":\"queued\",\"accepted_at\":$((now - 20 * min))}}"
-  r HSET "$PROJECT:board" task-22 "{\"owner\":\"coder\",\"state\":\"blocked\",\"updated\":$(((now - 60 * min) / 1000)),\"request\":{\"id\":\"$((now - 180 * min))-0\",\"thread\":\"$((now - 180 * min))-0\",\"from\":\"hermes\",\"target\":\"coder\",\"created_at\":$((now - 180 * min)),\"expires_at\":0,\"delivery\":\"output_written\",\"blocked_reason\":\"clé API absente sur le VDR\"}}"
-  r HSET "$PROJECT:board" task-19 "{\"owner\":\"architect\",\"state\":\"done\",\"branch\":\"architect/task-19\",\"updated\":$(((now - 200 * min) / 1000)),\"request\":{\"id\":\"$((now - 300 * min))-0\",\"thread\":\"$((now - 300 * min))-0\",\"from\":\"hermes\",\"target\":\"architect\",\"created_at\":$((now - 300 * min)),\"expires_at\":0,\"delivery\":\"output_written\",\"accepted_at\":$((now - 280 * min)),\"response_id\":\"$((now - 200 * min))-0\",\"responded_at\":$((now - 200 * min))}}"
+  r HSET "$PROJECT:board" task-20 "{\"owner\":\"foureyes\",\"state\":\"requested\",\"updated\":$(((now - 42 * min) / 1000)),\"request\":{\"id\":\"$((now - 42 * min))-0\",\"thread\":\"$((now - 42 * min))-0\",\"from\":\"master\",\"target\":\"foureyes\",\"created_at\":$((now - 42 * min)),\"expires_at\":$((now + 18 * min)),\"delivery\":\"output_written\",\"attempts\":1}}"
+  r HSET "$PROJECT:board" task-21 "{\"owner\":\"coder\",\"state\":\"accepted\",\"branch\":\"coder/task-21\",\"updated\":$(((now - 20 * min) / 1000)),\"request\":{\"id\":\"$((now - 120 * min))-0\",\"thread\":\"$((now - 120 * min))-0\",\"from\":\"master\",\"target\":\"coder\",\"created_at\":$((now - 120 * min)),\"expires_at\":0,\"delivery\":\"queued\",\"accepted_at\":$((now - 20 * min))}}"
+  r HSET "$PROJECT:board" task-22 "{\"owner\":\"coder\",\"state\":\"blocked\",\"updated\":$(((now - 60 * min) / 1000)),\"request\":{\"id\":\"$((now - 180 * min))-0\",\"thread\":\"$((now - 180 * min))-0\",\"from\":\"master\",\"target\":\"coder\",\"created_at\":$((now - 180 * min)),\"expires_at\":0,\"delivery\":\"output_written\",\"blocked_reason\":\"API key missing on host1\"}}"
+  r HSET "$PROJECT:board" task-19 "{\"owner\":\"architect\",\"state\":\"done\",\"branch\":\"architect/task-19\",\"updated\":$(((now - 200 * min) / 1000)),\"request\":{\"id\":\"$((now - 300 * min))-0\",\"thread\":\"$((now - 300 * min))-0\",\"from\":\"master\",\"target\":\"architect\",\"created_at\":$((now - 300 * min)),\"expires_at\":0,\"delivery\":\"output_written\",\"accepted_at\":$((now - 280 * min)),\"response_id\":\"$((now - 200 * min))-0\",\"responded_at\":$((now - 200 * min))}}"
   r HSET "$PROJECT:board" task-23 "{\"owner\":\"sentinel\",\"state\":\"working\",\"branch\":\"sentinel/task-23\",\"updated\":$(((now - 3 * min) / 1000))}"
 
   # ---- leases, budget, per-agent usage
-  r SET "$PROJECT:pilot" hermes EX 300
+  r SET "$PROJECT:pilot" master EX 300
+  r SET "$PROJECT:dispatch" demo-dispatcher EX 300
   r SET "$PROJECT:armed:coder" "coder@laptop" EX 240
   r SET "$PROJECT:armed:foureyes" "foureyes@laptop" EX 240
   r HSET "$PROJECT:budget" anthropic "{\"provider\":\"anthropic\",\"session_pct\":25,\"weekly_pct\":44,\"ts\":$now}"
   r HSET "$PROJECT:usage" coder "{\"model\":\"opus\",\"ctx\":\"120k ctx\",\"provider\":\"anthropic\",\"ts\":$now}"
-  r HSET "$PROJECT:usage" hermes "{\"model\":\"opus\",\"ctx\":\"84k ctx\",\"provider\":\"anthropic\",\"ts\":$now}"
+  r HSET "$PROJECT:usage" master "{\"model\":\"opus\",\"ctx\":\"84k ctx\",\"provider\":\"anthropic\",\"ts\":$now}"
 
   # ---- a gate on coder, so the 🔒 badge has something to show
-  r HSET "$PROJECT:gate:coder" "pr-42" "foureyes|explique le champ full"
+  r HSET "$PROJECT:gate:coder" "pr-42" "foureyes|explain the full field"
 }
 
 # REDIS_URL wins over REDIS_HOST/PORT in bus.Connect, so leaving it set would
@@ -189,7 +190,8 @@ capture() {
     "REDIS_URL= REDIS_HOST=127.0.0.1 REDIS_PORT=$PORT REDIS_PASSWORD='$PASS' '$bin' --project $PROJECT --limit 25"
   sleep 2.5
   for key in "${@:3}"; do tmux send-keys -t "$session" "$key"; sleep 0.6; done
-  tmux capture-pane -p -t "$session" >"$out"
+  # ANSI=1 keeps the colours, for a renderer such as freeze
+  tmux capture-pane -p ${ANSI:+-e} -t "$session" >"$out"
   tmux kill-session -t "$session" 2>/dev/null || true
   echo "captured $cols×$rows → $out"
 }

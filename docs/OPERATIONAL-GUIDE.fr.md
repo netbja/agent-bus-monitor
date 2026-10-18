@@ -65,7 +65,7 @@ Ce guide pratique est conçu en complément du `README.md`. Il fournit une march
 
 - **Zéro coût de jetons au repos** : Grâce au dispatcher événementiel, un agent inactif ne consomme aucun token en boucle de veille inutile ; il est réveillé uniquement lorsqu'une tâche concrète lui est assignée.
 - **Claude par défaut, adaptable à tout modèle** : Le projet utilise Claude Code par défaut (`roles.toml`), mais supporte nativement des équipes mixtes avec OpenAI Codex ou Kimi CLI via des profils configurables (`docs/AGENT-PROFILES.md`).
-- **100% local, prêt pour le distant** : Fonctionne entièrement en local sur votre machine (`127.0.0.1:6380`), tout en étant nativement conçu pour relier des serveurs distants (VDR, serveurs GPU) via un simple tunnel SSH chiffré.
+- **100% local, prêt pour le distant** : Fonctionne entièrement en local sur votre machine (`127.0.0.1:6380`), tout en étant nativement conçu pour relier des serveurs distants (host1, serveurs GPU) via un simple tunnel SSH chiffré.
 - **Observabilité et gouvernance** : Visibilité immédiate pour l'humain via le TUI `busmon`, combinée à une barrière de relecture obligatoire à 4 yeux (`foureyes`, `security`).
 
 ---
@@ -143,7 +143,7 @@ ou ne rien toucher.
 ### Déploiement 100% Local (par défaut)
 Tous les processus tournent sur la même machine. Les agents et `busmon` se connectent directement à `127.0.0.1:6380` (mot de passe par défaut : `AgentBus2025!`).
 
-### Déploiement Hybride avec Serveur Distant (VDR / GPU)
+### Déploiement Hybride avec Serveur Distant (host1 / GPU)
 Le broker Redis reste confiné au loopback (`127.0.0.1:6380`) pour des raisons de sécurité. La connexion distante s'opère via un tunnel SSH sécurisé :
 
 - **Cas A : Vous surveillez depuis votre machine un bus tournant sur un serveur distant** :
