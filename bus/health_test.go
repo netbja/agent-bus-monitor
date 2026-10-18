@@ -169,3 +169,58 @@ func TestHealthKeysDoNotProveProjectExists(t *testing.T) {
 		}
 	}
 }
+
+// A failed read between two failures (fail, unknown, fail) is one episode:
+// sentinel is woken once, while the log still records every transition.
+func TestFencedHealthPutUnknownDoesNotOpenANewFailEpisode(t *testing.T) {
+	b := dialHealth(t)
+	ctx := context.Background()
+	installHealthProject(t, b, "holder")
+	for _, st := range []health.Status{health.Fail, health.Unknown, health.Fail} {
+		if err := b.FencedHealthPut(ctx, "holder", "master", health.Record{
+			ID: "herdr-probe", Status: st, Detail: "probe", Fingerprint: "probe-v1"}); err != nil {
+			t.Fatalf("FencedHealthPut(%s): %v", st, err)
+		}
+	}
+	cmds, _ := b.r.XRange(ctx, StreamKey(b.project, "cmd"), "-", "+").Result()
+	transitions, _, _ := b.HealthTransitions(ctx, "", 10)
+	if len(cmds) != 1 || len(transitions) != 3 {
+		t.Fatalf("wakes=%d transitions=%d, want 1 wake and 3 transitions", len(cmds), len(transitions))
+	}
+}
+
+// Without a registered sentinel the daily round wakes nobody: a daily
+// directive to master would only spend its tokens.
+func TestFencedHealthDailyWakeNeedsSentinel(t *testing.T) {
+	b := dialHealth(t)
+	ctx := context.Background()
+	installHealthProject(t, b, "holder")
+	if err := b.r.HDel(ctx, AgentsKey(b.project), "sentinel").Err(); err != nil {
+		t.Fatal(err)
+	}
+	if sent, err := b.FencedHealthDailyWake(ctx, "holder", "master"); err != nil || sent {
+		t.Fatalf("daily wake without sentinel = %v, %v; want nothing sent", sent, err)
+	}
+	if n, _ := b.r.XLen(ctx, StreamKey(b.project, "cmd")).Result(); n != 0 {
+		t.Fatalf("cmd entries = %d, want 0", n)
+	}
+}
+
+func TestLegacyPasswordInUseComparesWithoutDisclosing(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	cases := []struct {
+		m    map[string]string
+		want bool
+	}{
+		{map[string]string{}, true},
+		{map[string]string{"REDIS_PASSWORD": LegacyPassword}, true},
+		{map[string]string{"REDIS_PASSWORD": "generated-x"}, false},
+		{map[string]string{"REDIS_URL": "redis://:" + LegacyPassword + "@127.0.0.1:6380"}, true},
+		{map[string]string{"REDIS_URL": "redis://:generated-x@127.0.0.1:6380", "REDIS_PASSWORD": LegacyPassword}, false},
+	}
+	for i, c := range cases {
+		if got := LegacyPasswordInUse(env(c.m)); got != c.want {
+			t.Errorf("case %d: got %v want %v", i, got, c.want)
+		}
+	}
+}

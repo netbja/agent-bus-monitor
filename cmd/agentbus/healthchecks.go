@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -57,6 +58,7 @@ func healthTask(id string, run func(context.Context) (health.Status, string, err
 func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, paths service.Paths) []dispatch.HealthCheck {
 	var usageMu sync.Mutex
 	baselines := map[string]usageBaseline{}
+	runawayThresholds, runawayThresholdsOK := runawayThresholdsFromEnv(os.Getenv)
 	var probeMu sync.Mutex
 	probeFailures := 0
 	return []dispatch.HealthCheck{
@@ -272,15 +274,15 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 					last = latest[agent]
 				}
 				row := usageRows[agent]
-				tokens := parseContextTokens(row.Ctx)
-				known := last > 0 && row.TS > 0 && row.Ctx != ""
+				tokens, tokensKnown := contextTokenCount(row.Ctx)
+				known := runawayThresholdsOK && last > 0 && row.TS > 0 && tokensKnown
 				age := time.Duration(0)
 				if last > 0 {
 					age = now.Sub(time.UnixMilli(last))
 				}
 				base := baselines[agent]
 				growth, span := 0, time.Duration(0)
-				if base.at.IsZero() || now.Sub(base.at) > health.RunawayGrowthSpan {
+				if base.at.IsZero() || now.Sub(base.at) > runawayThresholds.GrowthSpan {
 					baselines[agent] = usageBaseline{at: now, tokens: tokens}
 				} else {
 					growth, span = tokens-base.tokens, now.Sub(base.at)
@@ -295,7 +297,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 				} else {
 					known = false
 				}
-				out := health.EvaluateRunawayKnown(age, growth, span, repeats, known)
+				out := health.EvaluateRunawayWithThresholds(age, growth, span, repeats, known, runawayThresholds)
 				if out.Status == health.Warn {
 					warned++
 				} else if out.Status == health.Unknown {
@@ -431,9 +433,6 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			return out.Status, out.Detail, nil
 		}),
 		healthTask("redis-password", func(ctx context.Context) (health.Status, string, error) {
-			if os.Getenv("REDIS_URL") != "" {
-				return health.Unknown, "Redis URL credential source cannot be classified without reading its credential", errors.New("Redis URL credential source")
-			}
 			host := os.Getenv("REDIS_HOST")
 			if h, _, err := net.SplitHostPort(host); err == nil {
 				host = h
@@ -466,10 +465,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 					}
 				}
 			}
-			if os.Getenv("REDIS_PASSWORD") != "" {
-				return health.Unknown, "explicit Redis credential cannot be classified without reading its value", errors.New("credential source unknown")
-			}
-			outcome := health.EvaluateRedis(local, bus.LegacyPasswordFallback())
+			outcome := health.EvaluateRedis(local, bus.LegacyPasswordInUse(os.Getenv))
 			return outcome.Status, outcome.Detail, nil
 		}),
 		healthTask("service-env", func(ctx context.Context) (health.Status, string, error) {
@@ -610,9 +606,17 @@ func streamIDMillis(id string) int64 {
 }
 
 func parseContextTokens(value string) int {
+	n, ok := contextTokenCount(value)
+	if !ok {
+		return 0
+	}
+	return n
+}
+
+func contextTokenCount(value string) (int, bool) {
 	fields := strings.Fields(value)
 	if len(fields) == 0 {
-		return 0
+		return 0, false
 	}
 	value = fields[0]
 	multiplier := 1
@@ -621,8 +625,45 @@ func parseContextTokens(value string) int {
 	} else if strings.HasSuffix(strings.ToLower(value), "m") {
 		multiplier, value = 1_000_000, value[:len(value)-1]
 	}
-	n, _ := strconv.ParseFloat(value, 64)
-	return int(n * float64(multiplier))
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > float64(int(^uint(0)>>1))/float64(multiplier) {
+		return 0, false
+	}
+	return int(n * float64(multiplier)), true
+}
+
+func runawayThresholdsFromEnv(getenv func(string) string) (health.RunawayThresholds, bool) {
+	t := health.DefaultRunawayThresholds()
+	valid := true
+	parseDuration := func(key string, dst *time.Duration) {
+		value := getenv(key)
+		if value == "" {
+			return
+		}
+		d, err := time.ParseDuration(value)
+		if err != nil || d <= 0 {
+			valid = false
+			return
+		}
+		*dst = d
+	}
+	parseInt := func(key string, dst *int) {
+		value := getenv(key)
+		if value == "" {
+			return
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil || n <= 0 {
+			valid = false
+			return
+		}
+		*dst = n
+	}
+	parseDuration("AGENTBUS_HEALTH_RUNAWAY_SILENT_AFTER", &t.SilentAfter)
+	parseInt("AGENTBUS_HEALTH_RUNAWAY_CONTEXT_GROWTH", &t.FastGrowth)
+	parseDuration("AGENTBUS_HEALTH_RUNAWAY_GROWTH_SPAN", &t.GrowthSpan)
+	parseInt("AGENTBUS_HEALTH_RUNAWAY_SCREEN_REPEATS", &t.RepeatedScreens)
+	return t, valid
 }
 
 func trackedPaths(ctx context.Context, root string) ([]string, error) {

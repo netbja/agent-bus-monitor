@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -15,10 +15,24 @@ import (
 
 const healthLogMaxLen = 1000
 
-// LegacyPasswordFallback reports only whether Connect will rely on its
-// historical fallback. It never returns or logs the credential itself.
-func LegacyPasswordFallback() bool {
-	return os.Getenv("REDIS_URL") == "" && os.Getenv("REDIS_PASSWORD") == ""
+// LegacyPassword is the historical default every install shared. It is public
+// (it was in the README), so comparing a credential with it discloses nothing.
+const LegacyPassword = "AgentBus2025!"
+
+// LegacyPasswordInUse reports whether the credential Connect would use is the
+// historical default: no explicit password, or one equal to it in REDIS_PASSWORD
+// or in REDIS_URL. It never returns or logs a credential.
+func LegacyPasswordInUse(getenv func(string) string) bool {
+	if raw := getenv("REDIS_URL"); raw != "" {
+		u, err := url.Parse(raw)
+		if err != nil || u.User == nil {
+			return false
+		}
+		pw, _ := u.User.Password()
+		return pw == LegacyPassword
+	}
+	pw := getenv("REDIS_PASSWORD")
+	return pw == "" || pw == LegacyPassword
 }
 
 type CmdDeliveryGroup struct {
@@ -77,31 +91,37 @@ if not keytype(KEYS[2], 'hash') or not keytype(KEYS[3], 'stream') or
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 if redis.call('HEXISTS', KEYS[6], 'installed') == 0 then return -2 end
 local old = redis.call('HGET', KEYS[2], ARGV[2])
-local previous, since = '', 0
+local previous, since, known = '', 0, ''
 if old then
   local ok, rec = pcall(cjson.decode, old)
   if ok and type(rec) == 'table' then
     previous = rec.status or ''
     since = tonumber(rec.since or '0') or 0
+    known = rec.last_known or previous
   end
 end
+-- The fail episode follows the last KNOWN status: fail, unknown (a failed read), fail
+-- is still one episode, so a flaky read never wakes sentinel twice.
+local wake = ARGV[4] == 'fail' and known ~= 'fail'
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 if previous ~= ARGV[4] or since == 0 then since = now end
 local rec = cjson.decode(ARGV[3])
 rec.observed_at = now
 rec.since = since
+rec.last_known = known
+if ARGV[4] ~= 'unknown' then rec.last_known = ARGV[4] end
 redis.call('HSET', KEYS[2], ARGV[2], cjson.encode(rec))
 if previous ~= ARGV[4] then
   local target = ''
-  if ARGV[4] == 'fail' then
+  if wake then
     target = ARGV[7]
     if redis.call('HEXISTS', KEYS[4], 'sentinel') == 1 then target = 'sentinel' end
   end
   redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[8], '*',
     'check', ARGV[2], 'previous', previous, 'status', ARGV[4],
     'fingerprint', ARGV[5], 'target', target, 'at', tostring(now))
-  if ARGV[4] == 'fail' then
+  if wake then
     local message = 'Health check ' .. ARGV[2] .. ' entered fail (' .. ARGV[5] .. '); inspect with agentbus --project ' .. ARGV[6] .. ' health detail ' .. ARGV[2]
     redis.call('XADD', KEYS[5], 'MAXLEN', '~', '1000', '*',
       'from', 'dispatch', 'target', target, 'type', 'directive', 'ref', '',
@@ -166,8 +186,10 @@ local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local day = math.floor(now / 86400000)
 if redis.call('GET', KEYS[4]) == tostring(day) then return 0 end
 redis.call('SET', KEYS[4], tostring(day), 'EX', 172800)
-local target = ARGV[3]
-if redis.call('HEXISTS', KEYS[5], 'sentinel') == 1 then target = 'sentinel' end
+-- The daily round is sentinel's alone: without a registered sentinel nobody is woken
+-- (a daily directive would cost master tokens for nothing); the next pass checks again.
+if redis.call('HEXISTS', KEYS[5], 'sentinel') == 0 then return 0 end
+local target = 'sentinel'
 local message = 'Daily health review; run agentbus --project ' .. ARGV[2] .. ' health'
 redis.call('XADD', KEYS[2], 'MAXLEN', '~', '1000', '*', 'from', 'dispatch',
   'target', target, 'type', 'directive', 'ref', '', 'command', message,
@@ -176,7 +198,7 @@ return 1
 `)
 
 // FencedHealthDailyWake records a once-per-Redis-day mark and its directive
-// atomically. target is used if sentinel is not registered.
+// atomically, only when sentinel is registered: target is kept for the signature.
 func (b *Bus) FencedHealthDailyWake(ctx context.Context, token, target string) (bool, error) {
 	if !ValidName(target) {
 		return false, fmt.Errorf("invalid health escalation recipient")

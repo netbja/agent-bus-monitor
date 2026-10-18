@@ -4,6 +4,29 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.19.0 — project health core
+
+- The dispatch service runs bounded, non-overlapping health checks under its lease. Results,
+  transition history and fail wakes are fenced and stamped with Redis time; uncertain or stale
+  evidence stays `unknown`.
+- `agentbus health` lists checks, shows detail and remediation, reads transitions, and stores a
+  separate sentinel note. A transition into `fail` wakes sentinel once per episode, with one daily
+  review directive.
+- Sentinel may restart one identified failed service when its restart budget allows, or refresh a
+  failed local model catalogue. Other changes are escalated for a human decision.
+- The service refreshes per-agent usage at most every 15 minutes and the host's model catalogue
+  daily under a local lock. Usage writes are fenced.
+- busmon adds a health pill, F5 details and health transitions in the R recap. Missing or stale
+  readings never render as healthy.
+- Checks cover services and agent identity/launch, model drift, runaway work, cmd delivery and
+  targets, quota freshness, tracked secret-like paths, Redis exposure/password source, service env
+  permissions, installed versions and the herdr probe. The runaway check only warns; it never
+  interrupts an agent.
+- Secret scanning, canary, project key inventory, project-defined checks and Redis password
+  generation/rotation remain outside this release.
+
+[Notes](docs/releases/v0.19.0.md)
+
 ## v0.18.0 — busmon attention and project recap
 
 - busmon distinguishes a human-answered `waiting` declaration from an unanswered one using

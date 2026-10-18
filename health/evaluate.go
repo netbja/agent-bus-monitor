@@ -25,6 +25,18 @@ type Outcome struct {
 	Detail string
 }
 
+type RunawayThresholds struct {
+	SilentAfter     time.Duration
+	FastGrowth      int
+	GrowthSpan      time.Duration
+	RepeatedScreens int
+}
+
+func DefaultRunawayThresholds() RunawayThresholds {
+	return RunawayThresholds{SilentAfter: RunawaySilentAfter, FastGrowth: RunawayFastGrowth,
+		GrowthSpan: RunawayGrowthSpan, RepeatedScreens: 4}
+}
+
 type ServiceEvidence struct {
 	Known, Installed, Active bool
 	RecentFailures           int
@@ -108,10 +120,17 @@ func EvaluateRunaway(silent time.Duration, contextGrowth int, growthSpan time.Du
 }
 
 func EvaluateRunawayKnown(silent time.Duration, contextGrowth int, growthSpan time.Duration, repeatedScreens int, known bool) Outcome {
+	return EvaluateRunawayWithThresholds(silent, contextGrowth, growthSpan, repeatedScreens, known, DefaultRunawayThresholds())
+}
+
+func EvaluateRunawayWithThresholds(silent time.Duration, contextGrowth int, growthSpan time.Duration, repeatedScreens int, known bool, thresholds RunawayThresholds) Outcome {
 	if !known {
 		return Outcome{Unknown, "working agent progress evidence is incomplete"}
 	}
-	if silent >= RunawaySilentAfter || (contextGrowth >= RunawayFastGrowth && growthSpan <= RunawayGrowthSpan && repeatedScreens >= 4) {
+	if thresholds.SilentAfter <= 0 || thresholds.FastGrowth <= 0 || thresholds.GrowthSpan <= 0 || thresholds.RepeatedScreens <= 0 {
+		return Outcome{Unknown, "runaway thresholds are invalid"}
+	}
+	if silent >= thresholds.SilentAfter || (contextGrowth >= thresholds.FastGrowth && growthSpan <= thresholds.GrowthSpan && repeatedScreens >= thresholds.RepeatedScreens) {
 		return Outcome{Warn, "working agent has little visible progress"}
 	}
 	return Outcome{OK, "working agents show recent progress"}
@@ -192,8 +211,8 @@ func EvaluateRedis(local, legacy bool) Outcome {
 	if !local {
 		return Outcome{Unknown, "Redis binding or credential source is not locally verifiable"}
 	}
-	if legacy {
-		return Outcome{Fail, "the historical Redis password fallback is active"}
+	if legacy { // warn until v0.19.1 ships the rotation command: there is nothing to run yet
+		return Outcome{Warn, "Redis still uses the historical default password"}
 	}
 	return Outcome{OK, "Redis is loopback-bound and uses an explicit credential source"}
 }
