@@ -35,7 +35,9 @@ Use the last visit timestamp for the selected project. For stream-backed section
 
 Store the last visit per project in a local file under `~/.cache/agentbus/`, never in Redis. At startup, capture the prior timestamp, build the recap from it, and record this visit only after busmon has successfully connected and initialized. Show it automatically when the previous visit is older than `recap.auto_after` (default eight hours); `0` disables automatic display. With no prior timestamp, do not auto-open. A recap key opens it at any time; `R` is proposed because it is free in the current panel bindings. Esc closes it.
 
-Each recap row is selectable and opens the most relevant existing view: agent detail, ask panel, or the matching activity/thread detail. An optional “ask master for a summary” row is not included in this version; it would send a human directive, consume agent tokens, and needs a separate explicit decision.
+Each recap row is selectable and opens the most relevant existing view: agent detail, ask panel, or the matching activity/thread detail.
+
+The recap ends with one action row, “Ask master for a summary” (Bernard approved it). It is never sent automatically: Enter on it asks a one-line confirmation (“sends a message to master, uses its tokens — y/n”), then sends one human directive to the project's escalation target (`master` by default) through the existing `ui.send` path: “Summarise where the project stands for me: what was done since <last visit>, what is in progress, what you expect from me. Answer on the bus with agentbus reply.” The row shows when the last such request was sent and whether a reply arrived in its thread; the reply is read in the normal thread/activity views. It is disabled, with the reason, when the target is not a registered agent, its provider is held, or the project is paused.
 
 ## Data read
 
@@ -47,7 +49,7 @@ The local cache stores only the project key, last-visit time, and reminder snooz
 
 ## Keys
 
-- `R`: open the recap from the normal panel mode (proposed free key).
+- `R`: open the recap from the normal panel mode (free: `r` is Requests). On its last row, Enter then `y` sends the summary request to master.
 - In a reminder popup, Up/Down (or `j`/`k`) selects an item; Enter opens a selected ask; `i` opens a selected unanswered-waiting item in the compose window; Esc snoozes the displayed batch.
 - In the recap, Up/Down (or `j`/`k`) selects a row, Enter opens its linked detail, and Esc closes the recap.
 - Existing keys and mode priority remain unchanged. A modal, compose window, or active line draft is never displaced by an automatic reminder or recap.
@@ -98,7 +100,7 @@ Settings are global in this version. `[project.<name>]` overrides are a future e
 ## Out of scope
 
 - OS, desktop, terminal, or phone notifications.
-- LLM-generated summaries or automatic “ask master for a summary” directives.
+- LLM-generated summaries inside busmon, or any summary request sent without the person's explicit confirmation.
 - Per-project settings overrides and an in-app settings editor.
 - Any bus write to record answered waiting, recap visits, or reminder snoozes.
 - Changing agent-declared state, dispatch decisions, or how agents are woken.
