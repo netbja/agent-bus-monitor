@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -13,6 +14,46 @@ import (
 )
 
 const healthLogMaxLen = 1000
+
+// LegacyPasswordFallback reports only whether Connect will rely on its
+// historical fallback. It never returns or logs the credential itself.
+func LegacyPasswordFallback() bool {
+	return os.Getenv("REDIS_URL") == "" && os.Getenv("REDIS_PASSWORD") == ""
+}
+
+type CmdDeliveryGroup struct {
+	Group    string
+	Pending  int64
+	OldestAt int64
+	Lag      int64
+}
+
+// CmdDeliveryGroups reads only consumer-group metadata and pending IDs; it
+// never reads command bodies.
+func (b *Bus) CmdDeliveryGroups(ctx context.Context) ([]CmdDeliveryGroup, error) {
+	stream := StreamKey(b.project, "cmd")
+	groups, err := b.r.XInfoGroups(ctx, stream).Result()
+	if err != nil {
+		if strings.Contains(err.Error(), "no such key") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make([]CmdDeliveryGroup, 0, len(groups))
+	for _, group := range groups {
+		row := CmdDeliveryGroup{Group: group.Name, Lag: group.Lag}
+		pending, err := b.r.XPending(ctx, stream, group.Name).Result()
+		if err != nil {
+			return nil, err
+		}
+		row.Pending = pending.Count
+		if pending.Count > 0 {
+			row.OldestAt, _ = splitID(pending.Lower)
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
 
 var ErrProjectNotInstalled = errors.New("project services are not installed")
 
@@ -52,12 +93,15 @@ rec.observed_at = now
 rec.since = since
 redis.call('HSET', KEYS[2], ARGV[2], cjson.encode(rec))
 if previous ~= ARGV[4] then
+  local target = ''
+  if ARGV[4] == 'fail' then
+    target = ARGV[7]
+    if redis.call('HEXISTS', KEYS[4], 'sentinel') == 1 then target = 'sentinel' end
+  end
   redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[8], '*',
     'check', ARGV[2], 'previous', previous, 'status', ARGV[4],
-    'fingerprint', ARGV[5], 'at', tostring(now))
+    'fingerprint', ARGV[5], 'target', target, 'at', tostring(now))
   if ARGV[4] == 'fail' then
-    local target = ARGV[7]
-    if redis.call('HEXISTS', KEYS[4], 'sentinel') == 1 then target = 'sentinel' end
     local message = 'Health check ' .. ARGV[2] .. ' entered fail (' .. ARGV[5] .. '); inspect with agentbus --project ' .. ARGV[6] .. ' health detail ' .. ARGV[2]
     redis.call('XADD', KEYS[5], 'MAXLEN', '~', '1000', '*',
       'from', 'dispatch', 'target', target, 'type', 'directive', 'ref', '',
@@ -120,7 +164,7 @@ if redis.call('HEXISTS', KEYS[3], 'installed') == 0 then return -2 end
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local day = math.floor(now / 86400000)
-if redis.call('EXISTS', KEYS[4]) == 1 then return 0 end
+if redis.call('GET', KEYS[4]) == tostring(day) then return 0 end
 redis.call('SET', KEYS[4], tostring(day), 'EX', 172800)
 local target = ARGV[3]
 if redis.call('HEXISTS', KEYS[5], 'sentinel') == 1 then target = 'sentinel' end
@@ -222,7 +266,7 @@ func (b *Bus) HealthTransitions(ctx context.Context, afterID string, limit int64
 		f := toStringMap(row.Values)
 		at, _ := strconv.ParseInt(f["at"], 10, 64)
 		out = append(out, health.Transition{ID: f["check"], Previous: health.Status(f["previous"]),
-			Status: health.Status(f["status"]), At: at, Fingerprint: f["fingerprint"], StreamID: row.ID})
+			Status: health.Status(f["status"]), Target: f["target"], At: at, Fingerprint: f["fingerprint"], StreamID: row.ID})
 	}
 	return out, floorID, nil
 }

@@ -421,6 +421,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg.Log, cfg.OnLease = log, onLease
 			cfg.Quota = serviceQuota(os.Getenv, log)
 			cfg.Observe = dispatch.ObserveEvery
+			cfg.Health = realHealthConfig(b, h, paths)
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
 			}

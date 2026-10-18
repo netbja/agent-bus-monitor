@@ -43,6 +43,9 @@ type Config struct {
 	// Observe, when positive, is how often every verified pane is inspected
 	// and published to {p}:observed (ObserveEvery in the services; 0 = off).
 	Observe time.Duration
+	// Health runs deterministic checks in a separate bounded goroutine. Nil
+	// Checks leaves the scheduler disabled for callers that do not configure it.
+	Health HealthConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -84,6 +87,7 @@ func (c Config) filled() (Config, error) {
 	if c.Quota.Read != nil {
 		c.Quota = c.Quota.filled()
 	}
+	c.Health = c.Health.filled()
 	if !bus.ValidName(c.EscalateTo) {
 		return c, fmt.Errorf("invalid escalation recipient %q", c.EscalateTo)
 	}
@@ -195,6 +199,16 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 			}
 		}
 	}()
+	if len(cfg.Health.Checks) > 0 || cfg.Health.DailyWake {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := l.healthLoop(inner); errors.Is(err, ErrLeaseLost) {
+				lost.Store(true)
+				cancel()
+			}
+		}()
+	}
 
 	signal := make(chan struct{}, 1)
 	go func() { // XREAD BLOCK on {p}:cmd from "$": a latency signal only

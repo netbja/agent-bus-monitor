@@ -77,6 +77,7 @@ type Transition struct {
 	ID          string `json:"id"`
 	Previous    Status `json:"previous,omitempty"`
 	Status      Status `json:"status"`
+	Target      string `json:"target,omitempty"`
 	At          int64  `json:"at"`
 	Fingerprint string `json:"fingerprint"`
 	StreamID    string `json:"stream_id,omitempty"`

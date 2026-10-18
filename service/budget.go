@@ -37,6 +37,33 @@ func (b Budget) read(now time.Time) []time.Time {
 // Spent reports whether the recent failures used up the budget.
 func (b Budget) Spent(now time.Time) bool { return len(b.read(now)) >= BudgetStarts }
 
+// FailureCount is the number of starts still inside the restart window.
+func (b Budget) FailureCount(now time.Time) int { return len(b.read(now)) }
+
+// FailureCountChecked is the health reader variant: a missing budget is empty,
+// while unreadable or malformed state is not silently reported as healthy.
+func (b Budget) FailureCountChecked(now time.Time) (int, error) {
+	raw, err := os.ReadFile(b.Path)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer clear(raw)
+	count := 0
+	for _, field := range strings.Fields(string(raw)) {
+		ms, err := strconv.ParseInt(field, 10, 64)
+		if err != nil || ms <= 0 {
+			return 0, os.ErrInvalid
+		}
+		if age := now.Sub(time.UnixMilli(ms)); age >= 0 && age < BudgetWindow {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // Failed records one failed run.
 func (b Budget) Failed(now time.Time) error {
 	ts := append(b.read(now), now)

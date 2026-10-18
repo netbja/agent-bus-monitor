@@ -3,6 +3,8 @@ package dispatch
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -421,6 +423,10 @@ func (h Herdr) Inspect(ctx context.Context, pane string) Inspection {
 	r2, b2 := sig.match(second)
 	in.Busy = b1 || b2
 	in.Ready = first == second && r1 && r2
+	if first == second {
+		sum := sha256.Sum256([]byte(first))
+		in.ScreenHash = hex.EncodeToString(sum[:12])
+	}
 	return in
 }
 

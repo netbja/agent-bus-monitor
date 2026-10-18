@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 const dispatchUsage = "usage: dispatch [--horizon D] [--escalate-after D] [--escalate-to NAME] | dispatch --status"
@@ -26,6 +28,9 @@ func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Run
 	cfg := dispatchBaseConfig()
 	cfg.Log = stderr
 	cfg.Observe = dispatch.ObserveEvery
+	if paths, err := service.PathsFrom(os.Getenv); err == nil {
+		cfg.Health = realHealthConfig(b, rt, paths)
+	}
 	status := false
 	usage := func(msg string) int {
 		fmt.Fprintln(stderr, "error: "+msg)

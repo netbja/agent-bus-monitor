@@ -12,15 +12,16 @@ import (
 
 // Inspection is what herdr says about an agent's pane at one instant.
 type Inspection struct {
-	State   string // idle|working|blocked|done|unknown
-	Client  string
-	Focused bool
-	PIDs    []int
-	Starts  map[int]uint64
-	Ready   bool // the client's ready signature matched on a settled screen
-	Busy    bool // the client's busy signature matched
-	Gone    bool
-	Err     error
+	State      string // idle|working|blocked|done|unknown
+	Client     string
+	Focused    bool
+	PIDs       []int
+	Starts     map[int]uint64
+	Ready      bool   // the client's ready signature matched on a settled screen
+	Busy       bool   // the client's busy signature matched
+	ScreenHash string // opaque hash of a stable screen; the text itself is never retained
+	Gone       bool
+	Err        error
 }
 
 // Action is what the dispatcher should do for one agent now.
