@@ -22,10 +22,12 @@ type HealthCheck struct {
 }
 
 type HealthConfig struct {
-	Checks     []HealthCheck
-	PassBudget time.Duration
-	Tick       time.Duration
-	DailyWake  bool
+	Checks        []HealthCheck
+	PassBudget    time.Duration
+	Tick          time.Duration
+	DailyWake     bool
+	UsageRefresh  func(context.Context, string) error
+	ModelsRefresh func(context.Context) error
 }
 
 func (c HealthConfig) filled() HealthConfig {
@@ -44,12 +46,39 @@ func (c HealthConfig) filled() HealthConfig {
 func (l *loop) healthLoop(ctx context.Context) error {
 	cfg := l.cfg.Health.filled()
 	next := make(map[string]time.Time, len(cfg.Checks))
+	nextUsage, nextModels := time.Time{}, time.Time{}
 	lastDaily := time.Time{}
 	ticker := time.NewTicker(cfg.Tick)
 	defer ticker.Stop()
 	for {
 		passCtx, cancel := context.WithTimeout(ctx, cfg.PassBudget)
 		passEnd := time.Now().Add(cfg.PassBudget)
+		if cfg.UsageRefresh != nil && !time.Now().Before(nextUsage) && time.Until(passEnd) > 0 {
+			cctx, ccancel := context.WithTimeout(passCtx, 10*time.Second)
+			err := cfg.UsageRefresh(cctx, l.token)
+			ccancel()
+			nextUsage = time.Now().Add(15 * time.Minute)
+			if errors.Is(err, bus.ErrNotHolder) {
+				cancel()
+				return ErrLeaseLost
+			}
+			if errors.Is(err, bus.ErrProjectNotInstalled) {
+				cancel()
+				return nil
+			}
+			if err != nil && ctx.Err() == nil {
+				l.logError("", "health usage refresh", err)
+			}
+		}
+		if cfg.ModelsRefresh != nil && !time.Now().Before(nextModels) && time.Until(passEnd) > 0 {
+			cctx, ccancel := context.WithTimeout(passCtx, 30*time.Second)
+			err := cfg.ModelsRefresh(cctx)
+			ccancel()
+			nextModels = time.Now().Add(24 * time.Hour)
+			if err != nil && ctx.Err() == nil {
+				l.logError("", "health model refresh", err)
+			}
+		}
 		for _, check := range cfg.Checks {
 			if check.Run == nil || check.Definition.ID == "" || time.Now().Before(next[check.Definition.ID]) {
 				continue

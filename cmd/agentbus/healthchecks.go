@@ -42,7 +42,8 @@ type usageBaseline struct {
 // runs these outside reconciliation and fences every resulting write.
 func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths) dispatch.HealthConfig {
 	manager, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
-	return dispatch.HealthConfig{Checks: realHealthChecks(b, rt, manager, paths), DailyWake: true}
+	return dispatch.HealthConfig{Checks: realHealthChecks(b, rt, manager, paths), DailyWake: true,
+		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(b)}
 }
 
 func healthTask(id string, run func(context.Context) (health.Status, string, error)) dispatch.HealthCheck {
