@@ -38,7 +38,7 @@ type launchFixture struct {
 	execEnv                     []string
 }
 
-const fakeHelp = "--settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan"
+const fakeHelp = "--settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan --resume"
 
 func newLaunchFixture(t *testing.T) *launchFixture {
 	t.Helper()
@@ -187,6 +187,52 @@ func TestLaunchWithoutSharedToolRulesKeepsTheOldCommandLine(t *testing.T) {
 	if strings.Join(f.execed[1:len(f.execed)-1], "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("launch argv changed without [tool_rules]: got %q want %q", f.execed, want)
 	}
+}
+
+func TestLaunchResumeKeepsRoleSettingsAndRejectsOtherClients(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("claude-code", "", "", "[profiles.main.options]\npermission = \"bypassPermissions\"")
+	if err := os.WriteFile(f.manifest, []byte(strings.Replace(string(mustRead(t, f.manifest)), "[roles.coder]", "[tool_rules]\ndeny = [\"Read(**/.env)\"]\n[roles.coder]", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := Load(f.manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.launchWithResume(m, "coder", "session-123"); err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Join(f.execed, " ")
+	for _, want := range []string{"--resume session-123", "--permission-mode bypassPermissions", "--settings", "Read(**/.env)"} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("resumed launch lacks %q: %s", want, args)
+		}
+	}
+
+	codex := f.config("codex", "", "", "")
+	if _, _, err := f.launchWithResume(codex, "coder", "session-123"); err == nil || !strings.Contains(err.Error(), "only for Claude Code") {
+		t.Fatalf("Codex resume error = %v", err)
+	}
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func (f *launchFixture) launchWithResume(m *Manifest, role, resumeID string, extraEnv ...string) (string, string, error) {
+	var out, errw bytes.Buffer
+	f.execed, f.execEnv = nil, nil
+	err := LaunchResume(m, role, "demo", resumeID, append(append([]string{}, f.env...), extraEnv...), &out, &errw,
+		func(argv0 string, argv, env []string) error {
+			f.execed, f.execEnv = append([]string{argv0}, argv...), env
+			return nil
+		})
+	return out.String(), errw.String(), err
 }
 
 func TestLaunchAdapterSpec(t *testing.T) {

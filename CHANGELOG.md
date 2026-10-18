@@ -4,6 +4,21 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.17.4 — reachable role tools, safe session resume, and both quota windows
+
+- `setup.sh install/update` installs `agent-launch` and `agent-spawn` in `BIN_DIR`; status reports
+  them and uninstall removes only this repository's symlinks.
+- `agent-launch <role> <project> --resume <session-id>` resumes a Claude Code conversation with
+  its role rules and launcher identity; other clients refuse the option.
+- busmon shows both account quota windows in wide and medium layouts, with markers per window;
+  narrow keeps the tightest. The agent detail has one Account row with both resets and says the
+  account is shared by every agent using that provider.
+- `i` in an agent detail opens a reply compose window addressed to that agent.
+- Human bus messages are answered with a threaded `agentbus reply`, so the answer appears in
+  busmon; dispatch does not escalate a target whose name is a retained human sender identity.
+
+[Notes](docs/releases/v0.17.4.md)
+
 ## v0.17.3 — shared secret-file denies for Claude Code roles
 
 - A top-level `[tool_rules]` table applies validated Claude Code permission rules to every role.

@@ -35,6 +35,8 @@ func TestLookupMatrix(t *testing.T) {
 		{"overlay Esc closes", ModeOverlay, PanelAgents, TierWide, key(tcell.KeyEscape), ActClose},
 		{"overlay Tab ignored", ModeOverlay, PanelAgents, TierWide, key(tcell.KeyTab), ActNone},
 		{"overlay Y", ModeOverlay, PanelAgents, TierWide, runeKey('Y'), ActCopyThread},
+		{"overlay i replies", ModeOverlay, PanelAgents, TierWide, runeKey('i'), ActComposeOpen},
+		{"overlay I remains a reply", ModeOverlay, PanelAgents, TierWide, runeKey('I'), ActComposeOpen},
 		{"overlay Enter answers", ModeOverlay, PanelAgents, TierWide, key(tcell.KeyEnter), ActAsk},
 		{"overlay ! answers", ModeOverlay, PanelAgents, TierWide, runeKey('!'), ActAsk},
 		{"overlay w answers", ModeOverlay, PanelAgents, TierWide, runeKey('w'), ActAsk},

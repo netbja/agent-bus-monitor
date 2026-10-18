@@ -1,6 +1,7 @@
 # Agent execution profiles
 
-`agent-launch <role> <project>` supports Claude Code, Codex and **Kimi CLI**.
+`agent-launch <role> <project>` supports Claude Code, Codex and **Kimi CLI**; Claude Code also
+supports resuming a session through the launcher.
 Roles and skills describe the work. A profile selects the client, provider, model
 and optional native permissions. Boot and `agent-spawn` use the same launcher.
 The existing unversioned `roles.toml` keeps its Claude behavior; no migration or
@@ -16,6 +17,7 @@ to its absolute path. The scripts resolve it with `agentbus roles` (build it fir
 ROLES_TOML=/path/to/project/roles.toml AGENT_LAUNCH_DRYRUN=1 scripts/agent-launch coder demo
 ROLES_TOML=/path/to/project/roles.toml scripts/link-role-skills.sh
 ROLES_TOML=/path/to/project/roles.toml scripts/agent-launch coder demo
+ROLES_TOML=/path/to/project/roles.toml scripts/agent-launch coder demo --resume <session-id>
 ```
 
 The dry-run validates the manifest, role prompt and required skill files; it does
@@ -23,6 +25,9 @@ not contact a provider, launch a client, write cache files or publish on the bus
 It shows the requested configuration, not a measurement of the model actually
 served. At execution, the launcher checks the client's required flags via `--help`.
 Authentication and model availability remain the native client's responsibility.
+Resume only Claude Code sessions with `agent-launch <role> <project> --resume <session-id>`; this
+keeps the role's settings and launcher environment. Do not run `claude --resume` by hand. Other
+clients are rejected for resume until their native flags are explicitly supported.
 
 For a homogeneous team, omit each role's `profile` override: every role uses
 `defaults.profile`. For a mixed team, select a complete profile per role. Profiles

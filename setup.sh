@@ -221,6 +221,30 @@ our_skill_links() {
   done
 }
 
+# The public launcher names are symlinks into this checkout. Only that exact
+# target is ours: status and uninstall must preserve any user's replacement.
+our_role_script_link() {
+  [ -L "$1" ] && [ "$(readlink "$1")" = "$REPO_DIR/scripts/$(basename "$1")" ]
+}
+
+install_role_script_links() {
+  for script in agent-launch agent-spawn; do
+    target="$BIN_DIR/$script"
+    source="$REPO_DIR/scripts/$script"
+    if our_role_script_link "$target"; then
+      log_ok "$script: linked to $source"
+    elif [ -e "$target" ] || [ -L "$target" ]; then
+      log_warn "$target exists and is not this repository's $script link; left as it is"
+    elif [ "$DRY_RUN" = "1" ]; then
+      log_info "[dry-run] would link $target -> $source"
+    elif ln -s "$source" "$target"; then
+      log_ok "$script: linked to $source"
+    else
+      log_warn "could not link $target -> $source"
+    fi
+  done
+}
+
 redis_state() { # running | stopped | absent
   command -v docker >/dev/null 2>&1 || { echo absent; return; }
   st="$(docker ps -a --filter "name=^${REDIS_CONTAINER}\$" --format '{{.State}}' 2>/dev/null | head -n 1)"
@@ -274,6 +298,18 @@ do_status() {
     found="$(command -v "$bin_name" 2>/dev/null || true)"
     [ -n "$found" ] && [ "$found" != "$BIN_DIR/$bin_name" ] && log_warn "$bin_name on PATH is $found (shadows $BIN_DIR/$bin_name)"
   done
+  for script in agent-launch agent-spawn; do
+    p="$BIN_DIR/$script"
+    if our_role_script_link "$p"; then
+      log_ok "$script: $p -> $(readlink "$p")"
+    elif [ -e "$p" ] || [ -L "$p" ]; then
+      log_warn "$script: $p exists but is not this repository's link"
+    else
+      log_info "$script: not installed at $p"
+    fi
+    found="$(command -v "$script" 2>/dev/null || true)"
+    [ -n "$found" ] && [ "$found" != "$p" ] && log_warn "$script on PATH is $found (shadows $p)"
+  done
   if [ -d "$SKILLS_HOME/.git" ]; then
     log_ok "external skills: $(git -C "$SKILLS_HOME" describe --tags --always 2>/dev/null) at $SKILLS_HOME"
   else
@@ -325,6 +361,12 @@ do_uninstall() {
   for bin_name in agentbus busmon; do
     p="$BIN_DIR/$bin_name"
     if [ -x "$p" ] && is_our_binary "$p"; then
+      if ask "remove $p?" y; then rm -f "$p"; log_ok "removed $p"; else log_info "kept $p"; fi
+    fi
+  done
+  for script in agent-launch agent-spawn; do
+    p="$BIN_DIR/$script"
+    if our_role_script_link "$p"; then
       if ask "remove $p?" y; then rm -f "$p"; log_ok "removed $p"; else log_info "kept $p"; fi
     fi
   done
@@ -693,6 +735,7 @@ build_and_install_binary() {
 [ "$DRY_RUN" = "1" ] || mkdir -p "$BIN_DIR"
 build_and_install_binary "agentbus" "./cmd/agentbus"
 build_and_install_binary "busmon"   "./cmd/busmon"
+install_role_script_links
 
 # A running project service keeps the binary it started with: say which, and how to move it on.
 if [ "$DRY_RUN" = "0" ]; then

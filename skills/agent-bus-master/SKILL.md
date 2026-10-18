@@ -81,6 +81,9 @@ it requires `HERDR_ENV=1` (you're inside herdr) and a role defined in `roles.tom
 agent arms its own `subscribe` and publishes `status`, so it shows up in busmon and in
 `agentbus agents` within a few seconds — dispatch to it once it reports `online`.
 
+To resume a Claude Code session, run `agent-launch <role> "$AGENT_BUS_PROJECT" --resume <session-id>`
+so the role's settings and Agent Bus identity are restored; never run `claude --resume` by hand.
+
 Call `agent-spawn` by its bare name, never by path: your session allows `agent-spawn <role> *` for
 each ordinary role, so a path, a quoted role or a variable falls back to a prompt or the classifier.
 
@@ -249,6 +252,13 @@ visible input line, **not focused** in herdr, and whose foreground process match
 and start time the agent registered with its last `agentbus status`. Anything else is
 deferred, and escalated to you if it stays stuck (below). At most one wake per agent per 60s
 and three per backlog before escalating.
+
+A received cmd with `"human": true` is a person's message from busmon. Answer every question in
+it on the bus with `agentbus reply --ref <id> <from> <answer...>`; text typed only in your pane
+does not reach the person. For a long multi-line answer, publish it with
+`agentbus report master "<multi-line answer>"` and reply with that report's id. When `@all` fans a human
+message out to several agents, each addressed agent answers for itself. The dispatcher recognizes
+sender names on retained `human=yes` cmd entries as people, not missing agents to escalate.
 
 - **While `dispatch up`:** `request send` (or `cmd`) is enough — the dispatcher wakes the
   target, and the reply, a `blocked` notice or an escalation wakes **you** the same way. You

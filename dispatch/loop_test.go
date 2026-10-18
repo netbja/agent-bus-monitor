@@ -449,6 +449,30 @@ func TestRunUnregisteredTargetEscalatesOnce(t *testing.T) {
 	}
 }
 
+func TestRunDoesNotEscalateToHumanSender(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "coder", "p-coder")
+	if _, err := b.HumanCmd(ctx, "bernard", "coder", "please check this"); err != nil {
+		t.Fatal(err)
+	}
+	send(t, b, "bernard", "this target is a person")
+	rt := newFakeRT(alwaysReady)
+	cfg := fastConfig()
+	cfg.EscalateAfter = 100 * time.Millisecond
+	start(t, b, rt, cfg)
+	time.Sleep(500 * time.Millisecond)
+	if got := escalations(t, r, b, "bernard"); len(got) != 0 {
+		t.Fatalf("human identity got escalated: %+v", got)
+	}
+	if got := notifies(t, r, b, "bernard"); len(got) != 0 {
+		t.Fatalf("human identity got dispatcher notify: %+v", got)
+	}
+	if _, ok := wakeOf(t, b, "bernard"); ok {
+		t.Fatal("human identity got an agent wake record")
+	}
+}
+
 // Controller ruling 2: after progress the escalation that follows refreshes the
 // progress marks, so the next tick is quiet instead of re-escalating forever.
 func TestRunProgressThenEscalateOnceMore(t *testing.T) {
@@ -688,4 +712,17 @@ func TestRunSwapIntentBlocksPrompting(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, 3*time.Second, "a wake once the swap is over", func() bool { return len(rt.Prompts()) == 1 })
+}
+
+func TestRunStillWakesARegisteredAgentNamedLikeAHuman(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "coder", "p-coder")
+	if _, err := b.HumanCmd(ctx, "coder", "master", "a person once typed as coder"); err != nil {
+		t.Fatal(err)
+	}
+	send(t, b, "coder", "real work for the agent")
+	rt := newFakeRT(alwaysReady)
+	start(t, b, rt, fastConfig())
+	waitFor(t, 3*time.Second, "a prompt to coder", func() bool { return len(rt.Prompts()) >= 1 })
 }

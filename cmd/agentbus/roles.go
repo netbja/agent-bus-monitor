@@ -99,8 +99,10 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 			return rolecfg.Launch(m, rest[0], rest[1], env, stdout, stderr, syscall.Exec)
 		case len(rest) == 4 && rest[2] == "--profile":
 			return rolecfg.LaunchProfile(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
+		case len(rest) == 4 && rest[2] == "--resume":
+			return rolecfg.LaunchResume(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
 		}
-		return errors.New("usage: agent-launch <role> <project> [--profile <profile>]")
+		return errors.New("usage: agent-launch <role> <project> [--profile <profile> | --resume <session-id>]")
 	case "fallbacks":
 		return rolesFallbacks(m, rest, stdout)
 	case "install":

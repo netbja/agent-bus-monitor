@@ -556,8 +556,8 @@ From there you drive the team as a human:
 - **Watch** everything in the `busmon` tab (Agents, Activity, Board, Requests).
 - **Talk** to an agent from busmon (press `@`): `@master start on the plan at docs/…` (`@` autocompletes
   agent names), or just type in the master's own tab.
-- **Grow** the team on demand — from the master: `scripts/agent-spawn architect myproject` (design
-  work), `scripts/agent-spawn deploy myproject` (ship it + watch the target), or a second `coder`
+- **Grow** the team on demand — from the master: `agent-spawn architect myproject` (design
+  work), `agent-spawn deploy myproject` (ship it + watch the target), or a second `coder`
   for surge.
 
 Add `--index` (warm codegraph / code-index for the repo) or `--cron` (a daily sentinel review) to
@@ -571,12 +571,15 @@ scripts/bootstrap myproject          # no verb -> recall: ensures the broker is 
 
 Re-open it the same way through the **Projects** picker. Mind the brique-1 scope: **recall restores
 the _workspace_ (tabs / layout) with _fresh_ agent sessions** — not the previous conversations. To
-pick up an earlier conversation, use that client’s native resume mechanism. For
-Claude Code, sessions are named `<project>:<role>`:
+resume a Claude Code conversation, use the role launcher so its permission rules and Agent Bus
+identity stay attached:
 
 ```bash
-claude --resume                      # then choose e.g. myproject:coder from the list
+agent-launch coder myproject --resume <session-id>
 ```
+
+Never run `claude --resume` by hand. Session resume through the launcher is Claude Code only;
+other clients are refused until their resume flags are defined.
 
 (Automatic scripted recall — every agent's conversation restored in one go — is deferred to the S4
 follow-on; see the spec.)
@@ -602,9 +605,9 @@ provider configuration and extension adapters.
 
 - **`scripts/agent-launch <role> <project>`** — resolves the selected profile and starts
   its client with the role instructions and skills. Both boot tabs and pop use it.
-- **`scripts/agent-spawn <role> <project>`** — the master's pop: opens a new herdr tab running
-  `agent-launch` (pop == boot). Requires `HERDR_ENV=1`; also documented in the master skill's
-  "Spawn a peer" section.
+- **`agent-spawn <role> <project>`** — the master's pop: opens a new herdr tab running
+  `agent-launch` (pop == boot). `setup.sh install` puts the bare name on `BIN_DIR`/PATH; call it
+  by that bare name. Requires `HERDR_ENV=1`; also documented in the master skill's "Spawn a peer" section.
 - **`scripts/link-role-skills.sh`** — symlinks skills into `~/.claude/skills` for Claude or
   `~/.agents/skills` for Codex/Kimi, from this repo and the Matt Pocock collection.
   All sources and collisions are checked before writing; real user files are preserved.

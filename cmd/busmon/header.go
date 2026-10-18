@@ -102,8 +102,7 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 			continue
 		}
 		until, isHeld := held(d.holds, n, d.now)
-		cells := map[Tier]int{TierWide: 10, TierMedium: 5}[tier] // narrow: the percentage alone
-		if l := quotaSeg(n, b, until, isHeld, d.pace[n], d.now, cells); l != nil {
+		if l := quotaSeg(n, b, until, isHeld, d.pace, d.now, tier); l != nil {
 			add(l, 6+i, second) // the rightmost provider has the lowest priority
 		}
 	}
@@ -201,12 +200,12 @@ func dispatchSeg(state string, compact bool) Line {
 	return serviceSeg("dispatch", "disp", state, compact)
 }
 
-// budgetRole warns before the wall: past 75 % there is time to finish, past 90 % not.
+// budgetRole warns at 85% and turns red at 95%, before the provider limit.
 func budgetRole(pct float64) Role {
 	switch {
-	case pct >= 90:
+	case pct >= 95:
 		return RoleError
-	case pct >= 75:
+	case pct >= 85:
 		return RoleAttention
 	}
 	return RoleOK
