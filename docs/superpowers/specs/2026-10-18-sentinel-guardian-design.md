@@ -225,10 +225,8 @@ command prints how to roll back. Any process that still carries an explicit `RED
 environment (an old unit, a shell profile) is reported by the health check, never edited.
 
 If the old credential is not the known historical default, setup must not rotate it silently; it
-reports the situation and provides a guided migration. If a step fails, both credentials remain
-valid and the old source is retained until the operator can recover. Tests use their own isolated
-Redis and do not inherit these production settings.
-documents multiple active passwords on a user.
+reports the situation and leaves it to the person. Tests use their own isolated Redis and do not
+inherit these production settings.
 
 ## busmon
 
