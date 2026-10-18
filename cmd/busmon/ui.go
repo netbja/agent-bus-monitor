@@ -30,6 +30,7 @@ type overlayKind int
 
 const (
 	ovNone overlayKind = iota
+	ovReminder
 	ovMessage
 	ovAgent
 	ovTask
@@ -51,6 +52,11 @@ type ui struct {
 	ctx            context.Context
 	w              busWriter
 	project, self  string
+	settings       busmonSettings
+	cache          *busmonCache
+	cachePath      string
+	reminders      []attentionItem
+	reminderIndex  int
 	broadcastDraft string     // a draft with no @ already warned about: the next Enter sends it
 	askDraft       string     // a directed text held once because its recipient has an open ask (v0.15.1)
 	askChoose      *askChoice // Tab found several recipients with questions: the next key picks one
@@ -129,15 +135,16 @@ func (u *ui) onTick() {
 			delete(u.rung, n)
 		}
 	}
-	u.animate.Store(len(seen) > 0 && th.Animated())
+	u.animate.Store(len(seen) > 0 && u.settings.Fade && th.Animated())
 	u.st.mu.Unlock()
 	switch {
-	case !ring:
+	case !ring || !u.settings.Bell:
 	case u.bell != nil:
 		u.bell()
 	case u.scr != nil:
 		_ = u.scr.Beep()
 	}
+	u.maybeReminder()
 }
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.
@@ -154,7 +161,7 @@ type tabSpan struct {
 func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter, project, self string) *ui {
 	setRoundedBorders()
 	u := &ui{app: app, st: st, ctx: ctx, w: w, project: project, self: self,
-		focus: PanelAgents, lowerTab: PanelActivity, composing: ModePanel}
+		focus: PanelAgents, lowerTab: PanelActivity, composing: ModePanel, settings: defaultBusmonSettings()}
 	for _, p := range panelOrder {
 		p := p
 		l := NewListView()
@@ -297,6 +304,9 @@ func (u *ui) setFocusPanel(p PanelID) {
 // the focused primitive (text for the input field, scrolling for an overlay).
 func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	m := u.mode()
+	if m == ModeOverlay && u.ov == ovReminder {
+		return u.reminderKey(ev)
+	}
 	// v0.15.1 §11.5: after Tab with several recipients holding questions, a
 	// number picks whose panel opens; Esc goes back to editing.
 	// Every other key is swallowed while the choice is open: nothing is sent
@@ -815,6 +825,7 @@ func (u *ui) closeOverlay() {
 	u.detailGen++ // a thread read still in flight must not reopen anything
 	u.pages.HidePage("overlay")
 	u.app.SetFocus(u.focusPrimitive())
+	u.maybeReminder()
 }
 
 func (u *ui) openAgent(name string) {

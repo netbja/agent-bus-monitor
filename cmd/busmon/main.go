@@ -441,6 +441,14 @@ func main() {
 		configNote: settings.Note,
 	}
 	u := newUI(app, st, ctx, b, project, self)
+	u.settings = settings
+	u.cachePath = busmonCachePath(project)
+	if cache, cacheErr := loadBusmonCache(u.cachePath, project); cacheErr != nil {
+		st.configNote = joinNote(st.configNote, "local busmon cache unavailable")
+		u.cache = cache
+	} else {
+		u.cache = cache
+	}
 	go checkForUpdate(ctx, st) // at most once a day; silent offline (AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
 
 	cursors := map[string]string{}

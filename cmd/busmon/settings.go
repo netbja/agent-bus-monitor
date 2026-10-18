@@ -165,6 +165,16 @@ func ifSet(set bool, value string) string {
 	return ""
 }
 
+func joinNote(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return a + "; " + b
+}
+
 func (s busmonSettings) validateIdentity() error {
 	if s.Identity != "" && !bus.ValidName(s.Identity) {
 		return fmt.Errorf("invalid human identity %q", s.Identity)
