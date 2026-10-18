@@ -5,7 +5,7 @@ if [[ -z "${REPO:-}" ]]; then
   REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 AGENTBUS_BIN="${AGENTBUS_BIN:-$REPO/agentbus}"
-[[ -x "$AGENTBUS_BIN" ]] || { echo "agent roles: $AGENTBUS_BIN not built (run ./install.sh or: go build -o agentbus ./cmd/agentbus)" >&2; exit 1; }
+[[ -x "$AGENTBUS_BIN" ]] || { echo "agent roles: $AGENTBUS_BIN not built (run ./setup.sh install or: go build -o agentbus ./cmd/agentbus)" >&2; exit 1; }
 export AGENTBUS_BIN AGENTBUS_REPO="$REPO"
 ROLES_TOML="${ROLES_TOML:-$REPO/roles.toml}"
 # Absolute, symlinks resolved (Python's Path.resolve()); the file may not exist yet.

@@ -4,6 +4,11 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.17.2 — `install.sh` removed
+
+- `install.sh` (an alias of `./setup.sh install`) is gone: use `./setup.sh install`. Docs, the
+  roles-script hint and the installer test follow. Nothing else changes.
+
 ## v0.17.1 — a gauge bar for each provider's quota in busmon
 
 - busmon's header draws each provider's tightest quota window as a gauge (10 cells wide, 5 medium)
