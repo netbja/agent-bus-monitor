@@ -9,7 +9,8 @@ import (
 )
 
 type guardianSummary struct {
-	Unhealthy int
+	Unhealthy int // every check not ok, unknown included
+	Problems  int // fail and warn only: what the pill counts
 	Total     int
 	Worst     guardian.Status
 }
@@ -24,6 +25,9 @@ func summarizeGuardian(records map[string]guardian.Record, now time.Time) guardi
 		}
 		if status != guardian.OK {
 			s.Unhealthy++
+		}
+		if status == guardian.Fail || status == guardian.Warn {
+			s.Problems++
 		}
 		if status == guardian.Fail {
 			s.Worst = guardian.Fail
@@ -50,7 +54,10 @@ func guardianSeg(s guardianSummary) Line {
 	case guardian.Warn:
 		role = RoleAttention
 	}
-	label := fmt.Sprintf("!%d", s.Unhealthy)
+	label := fmt.Sprintf("!%d", s.Problems)
+	if s.Problems == 0 { // only unknown: not measured yet or unreadable, never shown as healthy
+		label = fmt.Sprintf("?%d", s.Unhealthy)
+	}
 	return Line{{Text: label, Role: role}}
 }
 

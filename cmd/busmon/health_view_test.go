@@ -13,7 +13,7 @@ func TestGuardianSummaryNeverCallsUnknownHealthy(t *testing.T) {
 	if got := summarizeGuardian(nil, now); got.Unhealthy != got.Total || got.Worst != guardian.Unknown {
 		t.Fatalf("empty records summarized as %+v", got)
 	}
-	if got := guardianSeg(summarizeGuardian(nil, now)).text(); got != "!13" {
+	if got := guardianSeg(summarizeGuardian(nil, now)).text(); got != "?13" { // unknown only: "?", not a problem count
 		t.Fatalf("unknown health pill=%q", got)
 	}
 	rows := map[string]guardian.Record{}
@@ -62,8 +62,20 @@ func TestHealthPillFitsSupportedHeaderWidths(t *testing.T) {
 			tier = TierMedium
 		}
 		lines := headerLines(headerData{project: "demo", health: health{ok: true}, guardian: guardianSummary{Unhealthy: 13, Total: 13, Worst: guardian.Unknown}, dispatch: "down", now: now}, width, tier)
-		if len(lines) == 0 || !strings.Contains(lines[0].text(), "!13") {
+		if len(lines) == 0 || !strings.Contains(lines[0].text(), "?13") { // only unknown: "?", never "!" nor healthy
 			t.Errorf("width %d lost health pill: %q", width, lines[0].text())
 		}
+	}
+}
+
+// The pill counts real problems (fail, warn), not checks merely unknown.
+func TestHealthPillCountsProblems(t *testing.T) {
+	now := time.Now()
+	recs := map[string]guardian.Record{
+		"services":       {ID: "services", Status: guardian.Fail, ObservedAt: now.UnixMilli(), Since: now.UnixMilli()},
+		"redis-password": {ID: "redis-password", Status: guardian.Warn, ObservedAt: now.UnixMilli(), Since: now.UnixMilli()},
+	}
+	if got := guardianSeg(summarizeGuardian(recs, now)).text(); got != "!2" {
+		t.Fatalf("pill = %q, want !2", got)
 	}
 }
