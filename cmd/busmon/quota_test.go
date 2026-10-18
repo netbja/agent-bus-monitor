@@ -146,6 +146,32 @@ func TestAgentDetailNamesItsQuota(t *testing.T) {
 	}
 }
 
+func TestAgentOverlayShowsOneSharedAccountRowWithBothResets(t *testing.T) {
+	now := time.Now()
+	st := demoShared(now)
+	a := st.agents["coder"]
+	a.provider = "anthropic"
+	st.agents["coder"] = a
+	st.budgets["anthropic"] = bus.BudgetSnapshot{Windows: []bus.BudgetWindow{
+		{Name: "weekly", UsedPct: 76, ResetsAt: now.Add(72 * time.Hour).Unix(), Minutes: 10080, ObservedAt: now.UnixMilli()},
+		{Name: "session", UsedPct: 6, ResetsAt: now.Add(time.Hour).Unix(), Minutes: 300, ObservedAt: now.UnixMilli()},
+	}}
+	h := newHarness(t, st)
+	h.u.openAgent("coder")
+	body := h.u.overlay.GetText(true)
+	if got := strings.Count(body, "Account  claude:"); got != 1 {
+		t.Fatalf("account rows = %d, want one:\n%s", got, body)
+	}
+	for _, want := range []string{"5h 6% (resets ", "7d 76% (resets ", "shared by every agent using this provider"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("agent detail lacks %q:\n%s", want, body)
+		}
+	}
+	if !strings.Contains(body, "Account  claude: 5h 6%") || !strings.Contains(body, " · 7d 76%") {
+		t.Fatalf("account row does not contain both windows:\n%s", body)
+	}
+}
+
 func TestHeaderPrefersFreshWindowsAndShowsAStickyHold(t *testing.T) {
 	now := time.Now()
 	b := bus.BudgetSnapshot{Windows: []bus.BudgetWindow{

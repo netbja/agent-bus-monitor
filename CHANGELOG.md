@@ -11,8 +11,11 @@ release exists.
 - `agent-launch <role> <project> --resume <session-id>` resumes a Claude Code conversation with
   its role rules and launcher identity; other clients refuse the option.
 - busmon shows both account quota windows in wide and medium layouts, with markers per window;
-  narrow keeps the tightest. Agent detail says the account window is shared by that provider's roles.
+  narrow keeps the tightest. The agent detail has one Account row with both resets and says the
+  account is shared by every agent using that provider.
 - `i` in an agent detail opens a reply compose window addressed to that agent.
+- Human bus messages are answered with a threaded `agentbus reply`, so the answer appears in
+  busmon; dispatch does not escalate a target whose name is a retained human sender identity.
 
 [Notes](docs/releases/v0.17.4.md)
 

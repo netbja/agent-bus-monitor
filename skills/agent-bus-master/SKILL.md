@@ -253,6 +253,13 @@ and start time the agent registered with its last `agentbus status`. Anything el
 deferred, and escalated to you if it stays stuck (below). At most one wake per agent per 60s
 and three per backlog before escalating.
 
+A received cmd with `"human": true` is a person's message from busmon. Answer every question in
+it on the bus with `agentbus reply --ref <id> <from> <answer...>`; text typed only in your pane
+does not reach the person. For a long multi-line answer, publish it with
+`agentbus report master "<multi-line answer>"` and reply with that report's id. When `@all` fans a human
+message out to several agents, each addressed agent answers for itself. The dispatcher recognizes
+sender names on retained `human=yes` cmd entries as people, not missing agents to escalate.
+
 - **While `dispatch up`:** `request send` (or `cmd`) is enough — the dispatcher wakes the
   target, and the reply, a `blocked` notice or an escalation wakes **you** the same way. You
   **may** stop arming and sleep — **only if your pane is not the one the human works in**.

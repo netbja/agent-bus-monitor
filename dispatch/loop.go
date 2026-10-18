@@ -306,11 +306,15 @@ func (l *loop) reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	targets, err := l.b.CmdTargets(ctx)
+	targets, humanSenders, err := l.b.CmdTargetsAndHumanSenders(ctx)
 	if err != nil {
 		return err
 	}
 	hasGroup, isTarget := map[string]bool{}, map[string]bool{}
+	humanIdentity := make(map[string]bool, len(humanSenders))
+	for _, name := range humanSenders {
+		humanIdentity[name] = true
+	}
 	names := map[string]bool{}
 	for a := range snaps {
 		names[a] = true
@@ -331,6 +335,10 @@ func (l *loop) reconcile(ctx context.Context) error {
 
 	var first error
 	for _, a := range sorted {
+		if humanIdentity[a] {
+			l.logOnce(a, map[string]any{"agent": a, "action": "none", "reason": "target is a human identity"})
+			continue
+		}
 		var snap *bus.AgentSnapshot
 		if s, ok := snaps[a]; ok {
 			snap = &s

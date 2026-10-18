@@ -58,8 +58,10 @@ never wakes a terminal session.
   exact table is GUIDE §3.
 - **`"human": true` means a person wrote it** (the operator, from busmon; `from` is their
   name, or `pilot`). A human directive comes first: act on it before your queued agent work,
-  and answer them on the bus (`agentbus cmd --ref <id> <from> "<answer>"`) so busmon shows it.
-  A directive to `@all` reaches every agent; each one answers for itself.
+  and answer every question in it on the bus with `agentbus reply --ref <id> <from> <answer...>`.
+  Text typed only in your pane does not reach the person. For a long multi-line answer, publish
+  it with `agentbus report <self> "<multi-line answer>"` and reply with that report's id. A directive to
+  `@all` reaches every agent; each one answers for itself.
 - **Re-arm iff `rearm` is `true`** *and you still have work in flight*. A `fatal` event is
   `rearm:false` → stop, you're misconfigured. When your work is done, stop re-arming on
   purpose — see "Disconnect when you have nothing left to do".

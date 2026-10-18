@@ -72,24 +72,46 @@ func (b *Bus) GroupNames(ctx context.Context) ([]string, error) {
 // CmdTargets returns the distinct valid targets present in the retained
 // {p}:cmd stream (capped near streamMaxLen, so a full XRANGE is cheap).
 func (b *Bus) CmdTargets(ctx context.Context) ([]string, error) {
+	targets, _, err := b.CmdTargetsAndHumanSenders(ctx)
+	return targets, err
+}
+
+// CmdTargetsAndHumanSenders returns the distinct valid command targets and
+// the sender names on retained human=yes commands. The dispatcher uses the
+// latter to avoid treating a person's identity as a missing agent.
+func (b *Bus) CmdTargetsAndHumanSenders(ctx context.Context) (targets, humanSenders []string, err error) {
 	msgs, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), "-", "+").Result()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	seen := map[string]bool{}
-	var out []string
+	seenTargets, seenHumans := map[string]bool{}, map[string]bool{}
 	for _, m := range msgs {
 		t, _ := m.Values["target"].(string)
-		if t == PeopleTarget { // an ask's audience, not an agent: no group, no wake
-			continue
+		if t != PeopleTarget && ValidName(t) {
+			seenTargets[t] = true
 		}
-		if ValidName(t) && !seen[t] {
-			seen[t] = true
-			out = append(out, t)
+		if m.Values["human"] == "yes" {
+			from, _ := m.Values["from"].(string)
+			if ValidName(from) {
+				seenHumans[from] = true
+			}
 		}
 	}
-	sort.Strings(out)
-	return out, nil
+	if len(seenTargets) > 0 {
+		targets = make([]string, 0, len(seenTargets))
+		for name := range seenTargets {
+			targets = append(targets, name)
+		}
+	}
+	if len(seenHumans) > 0 {
+		humanSenders = make([]string, 0, len(seenHumans))
+		for name := range seenHumans {
+			humanSenders = append(humanSenders, name)
+		}
+	}
+	sort.Strings(targets)
+	sort.Strings(humanSenders)
+	return targets, humanSenders, nil
 }
 
 // Obligation is what an agent still owes the bus: commands addressed to it
