@@ -62,7 +62,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		sb.WriteString(tg(RoleAccent, head) + tg(RoleMuted, " "+GlyphNone+" "+ago(at)) + "\n")
 		sb.WriteString(renderMarkdown(rep, mdWidth) + "\n")
 		if a.state == "waiting" && !asking {
-			sb.WriteString(tg(RoleMuted, "Answer: i, then @"+Preview(name)+" <your decision>") + "\n")
+			sb.WriteString(tg(RoleMuted, "Answer: i (reply to @"+Preview(name)+")") + "\n")
 		}
 		sb.WriteString("\n")
 	} else if a.state == "waiting" {

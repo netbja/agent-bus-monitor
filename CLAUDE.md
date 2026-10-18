@@ -352,6 +352,10 @@ It never touches Redis — see README "Deployment topology".
   merged into every role before its own rules; the shipped Claude Code Read/Edit denies cover
   common secret-file names even with `bypassPermissions`. This is defense in depth, not a boundary:
   processes an agent starts (tests, dotenv, and similar tools) can still read environment files.
+  `setup.sh install/update` also links `agent-launch` and `agent-spawn` into `BIN_DIR`; those links
+  resolve back to this repository's scripts, and uninstall removes only links to these exact files.
+  Resume Claude Code with `agent-launch <role> <project> --resume <session-id>` to retain role
+  settings and identity; never use `claude --resume` by hand. Other clients currently refuse resume.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of

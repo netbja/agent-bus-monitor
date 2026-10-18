@@ -20,7 +20,7 @@ func TestWaitingAgentDetailShowsWhatItNeeds(t *testing.T) {
 	body = tagRE.ReplaceAllString(body, "")
 	status := strings.Index(body, "Status message")
 	need := strings.Index(body, "What master needs from you")
-	if status < 0 || need < status || !strings.Contains(body, "1. opening date T") || !strings.Contains(body, "Answer: i, then @master") {
+	if status < 0 || need < status || !strings.Contains(body, "1. opening date T") || !strings.Contains(body, "Answer: i (reply to @master)") {
 		t.Fatalf("body:\n%s", body)
 	}
 	section := body[need:]

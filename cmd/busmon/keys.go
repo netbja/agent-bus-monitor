@@ -203,7 +203,7 @@ var (
 		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(tcell.KeyEscape)},
 	}
 	overlayBindings = []binding{
-		{Keys: "I", Help: "in an agent's detail: write to that agent in the compose window", Act: ActComposeOpen, match: runeIs('I')},
+		{Keys: "i I", Help: "in an agent's detail: reply to that agent in the compose window", Act: ActComposeOpen, match: runeIs('i', 'I')},
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},
 		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},

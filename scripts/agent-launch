@@ -3,7 +3,13 @@
 # AGENT_LAUNCH_DRYRUN=1 prints a plan without executing a client or writing files.
 # exec keeps this pid all the way to the client: `agentbus roles launch` binds it, then execs.
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  TARGET="$(readlink "$SOURCE")"
+  [[ "$TARGET" == /* ]] && SOURCE="$TARGET" || SOURCE="$SOURCE_DIR/$TARGET"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/roles.sh"
 exec "$AGENTBUS_BIN" roles launch "$@"

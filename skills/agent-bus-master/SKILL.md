@@ -81,6 +81,9 @@ it requires `HERDR_ENV=1` (you're inside herdr) and a role defined in `roles.tom
 agent arms its own `subscribe` and publishes `status`, so it shows up in busmon and in
 `agentbus agents` within a few seconds — dispatch to it once it reports `online`.
 
+To resume a Claude Code session, run `agent-launch <role> "$AGENT_BUS_PROJECT" --resume <session-id>`
+so the role's settings and Agent Bus identity are restored; never run `claude --resume` by hand.
+
 Call `agent-spawn` by its bare name, never by path: your session allows `agent-spawn <role> *` for
 each ordinary role, so a path, a quoted role or a variable falls back to a prompt or the classifier.
 

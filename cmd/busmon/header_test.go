@@ -119,7 +119,7 @@ func TestHeaderDispatchStates(t *testing.T) {
 }
 
 func TestHeaderBudgetUsedLabel(t *testing.T) {
-	for pct, role := range map[float64]Role{74: RoleOK, 75: RoleAttention, 90: RoleError} {
+	for pct, role := range map[float64]Role{84: RoleOK, 85: RoleAttention, 95: RoleError} {
 		d := fullHeader()
 		d.budgets = map[string]bus.BudgetSnapshot{"anthropic": {SessionPct: pct, WeeklyPct: 10}}
 		l := headerLines(d, 200, TierWide)[0]

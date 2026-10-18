@@ -118,6 +118,12 @@ assert_contains "$("$T/bin/busmon" --version 2>&1)" "busmon version v9.9.9" "bus
 assert_contains "$("$T/repo/agentbus" version 2>&1)" "agentbus protocol" "agentbus also built in the repo (the herdr tabs use it)"
 assert_contains "$(cat "$HERDR_LOG")" "plugin install cloudmanic/herdr-plus --ref v0.1.16 --yes" "herdr-plus installed through herdr, pinned"
 assert_contains "$inst_out" "Projects picker action available" "the picker action is checked"
+assert_eq "$(readlink "$T/bin/agent-launch" 2>/dev/null)" "$T/repo/scripts/agent-launch" "agent-launch symlink installed into BIN_DIR"
+assert_eq "$(readlink "$T/bin/agent-spawn" 2>/dev/null)" "$T/repo/scripts/agent-spawn" "agent-spawn symlink installed into BIN_DIR"
+launch_out="$(PATH="$T/bin:$PATH" ROLES_TOML="$T/repo/roles.toml" AGENT_LAUNCH_DRYRUN=1 agent-launch master myproject 2>&1)"
+assert_contains "$launch_out" "claude --model" "agent-launch works by its bare name through the installed symlink"
+spawn_out="$(PATH="$T/bin:$PATH" ROLES_TOML="$T/repo/roles.toml" HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 agent-spawn coder myproject 2>&1)"
+assert_contains "$spawn_out" "$T/repo/scripts/agent-launch coder myproject" "agent-spawn works by its bare name through the installed symlink"
 assert_contains "$(cat "$T/cfg/herdr/config.toml")" "cloudmanic.herdr-plus.projects" "herdr keybinding added"
 assert_eq "$(ls "$T/cfg/herdr" | grep -c '^config.toml.bak.')" "1" "herdr config backed up before the edit"
 assert_eq "$(git -C "$T/data/agentbus/skills/mattpocock" describe --tags 2>/dev/null)" "v1.3.1" "external skills cloned at the pinned tag"
@@ -179,6 +185,8 @@ assert_contains "$(cat "$HERDR_LOG")" "server reload-config" "a running herdr is
 status_out="$("$SETUP" status --bin-dir "$T/bin" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "status exits 0"
 assert_contains "$status_out" "agentbus v9.9.9: $T/bin/agentbus" "status shows the installed version"
+assert_contains "$status_out" "agent-launch: $T/bin/agent-launch -> $T/repo/scripts/agent-launch" "status reports agent-launch"
+assert_contains "$status_out" "agent-spawn: $T/bin/agent-spawn -> $T/repo/scripts/agent-spawn" "status reports agent-spawn"
 assert_contains "$status_out" "external skills: v1.3.1" "status shows the external skills"
 assert_contains "$status_out" "Projects picker available" "status shows herdr-plus"
 # Outside herdr there is no server to list the actions: not a missing action, and no warning
@@ -199,9 +207,13 @@ assert_eq "$([[ -x "$T/bin/agentbus" && -e "$T/cfg/systemd/user/agentbus-demo-di
 command -v setsid >/dev/null && assert_exit 1 "uninstall with no terminal and no --yes stops" -- setsid bash -c "'$SETUP' uninstall --bin-dir '$T/bin' < /dev/null"
 # uninstall --yes takes the cautious defaults: ours removed, herdr-plus kept
 mkdir -p "$HOME/.claude/skills/real-dir"
+rm -f "$T/bin/agent-spawn"
+ln -s "$T/fakebin/herdr" "$T/bin/agent-spawn" # a user's replacement is not setup's link
 un_out="$(SKILLS_DEST="$T/My Skills" $(command -v setsid || true) "$SETUP" uninstall --yes --bin-dir "$T/bin" < /dev/null 2>&1)"; rc=$?
 assert_eq "$rc" "0" "uninstall --yes exits 0"
 assert_eq "$([[ -e "$T/bin/agentbus" || -e "$T/bin/busmon" ]] && echo left || echo gone)" "gone" "our binaries removed"
+assert_eq "$([[ -e "$T/bin/agent-launch" || -L "$T/bin/agent-launch" ]] && echo left || echo gone)" "gone" "our agent-launch symlink removed"
+assert_eq "$(readlink "$T/bin/agent-spawn" 2>/dev/null)" "$T/fakebin/herdr" "a foreign agent-spawn symlink is preserved"
 assert_eq "$([[ -L "$HOME/.claude/skills/wayfinder" ]] && echo left || echo gone)" "gone" "our skill links removed"
 assert_eq "$([[ -d "$HOME/.claude/skills/real-dir" ]] && echo kept || echo lost)" "kept" "a real directory is never removed"
 assert_eq "$(grep -c 'cloudmanic.herdr-plus.projects' "$T/cfg/herdr/config.toml")" "0" "the key binding block is removed"

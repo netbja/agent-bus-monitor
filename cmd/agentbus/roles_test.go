@@ -69,6 +69,51 @@ func TestRolesErrors(t *testing.T) {
 	}
 }
 
+func TestRolesLaunchResumeRoutesToClaudeLauncher(t *testing.T) {
+	manifest, env := rolesFixture(t)
+	repo := strings.TrimPrefix(env[1], "AGENTBUS_REPO=")
+	if err := os.MkdirAll(filepath.Join(repo, "roles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "roles", "coder.md"), []byte("coder prompt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body := `schema_version = 2
+[defaults]
+profile = "main"
+[profiles.main]
+client = "claude-code"
+provider = "anthropic"
+model = "sonnet"
+options = { permission = "bypassPermissions" }
+[tool_rules]
+deny = ["Read(**/.env)"]
+[roles.coder]
+tier = "boot"
+`
+	if err := os.WriteFile(manifest, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env = append(env, "AGENT_LAUNCH_DRYRUN=1")
+	code, out, errOut := roles(env, "launch", "coder", "demo", "--resume", "session-123")
+	if code != 0 {
+		t.Fatalf("launch resume = %d: %s", code, errOut)
+	}
+	for _, want := range []string{"claude --model sonnet --resume session-123", "--permission-mode bypassPermissions", "--settings", "Read(**/.env)"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("resume dry run lacks %q: %s", want, out)
+		}
+	}
+	code, _, errOut = roles(env, "launch", "coder", "demo", "--resume")
+	if code != 1 || !strings.Contains(errOut, "usage: agent-launch") {
+		t.Fatalf("missing resume id = %d %q", code, errOut)
+	}
+	code, _, errOut = roles(env, "launch", "coder", "demo", "--resume", "")
+	if code != 1 || !strings.Contains(errOut, "resume session id is required") {
+		t.Fatalf("empty resume id = %d %q", code, errOut)
+	}
+}
+
 func TestRolesTemplateAndCheckToml(t *testing.T) {
 	manifest, env := rolesFixture(t)
 	code, out, errOut := roles(env, "template", "demo", "/work dir", "/repo/scripts", "/repo", "1", "0")

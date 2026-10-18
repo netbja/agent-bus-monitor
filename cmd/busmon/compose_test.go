@@ -51,6 +51,19 @@ func TestComposeSendsSeveralLines(t *testing.T) {
 	}
 }
 
+func TestAgentDetailIRepliesToThatAgent(t *testing.T) {
+	h := newHarness(t, demoShared(time.Now()))
+	h.draw(160, 45)
+	h.u.openAgent("coder")
+	if h.u.mode() != ModeOverlay || h.u.ov != ovAgent {
+		t.Fatalf("agent detail did not open: mode=%v overlay=%v", h.u.mode(), h.u.ov)
+	}
+	h.key(runeKey('i'))
+	if h.u.mode() != ModeCompose || !h.u.comp.open || h.u.comp.recipient() != "coder" {
+		t.Fatalf("i did not open a reply compose window: mode=%v open=%v to=%q", h.u.mode(), h.u.comp.open, h.u.comp.recipient())
+	}
+}
+
 // The window passes its fields as they are: an empty recipient with a body
 // starting "@coder" is a broadcast (warned once), and a recipient with an
 // empty body is refused.

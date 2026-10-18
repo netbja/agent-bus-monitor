@@ -274,11 +274,14 @@ func jsonString(s string) string {
 
 // build is Python's build(): the client command line. dry replaces the
 // prompt and the generated files with placeholders and writes nothing.
-func build(p Profile, rules ToolRules, project, prompt, promptPath string, dry bool, env []string) ([]string, error) {
+func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID string, dry bool, env []string) ([]string, error) {
 	model, opts := p.Model, p.Options
 	switch p.Client {
 	case "claude-code":
 		cmd := []string{"claude", "--model", model}
+		if resumeID != "" {
+			cmd = append(cmd, "--resume", resumeID)
+		}
 		if opts["fallback"] != "" {
 			cmd = append(cmd, "--fallback-model", opts["fallback"])
 		}
@@ -352,7 +355,7 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath string, dry b
 
 // preflight checks a builtin client's --help for the flags this launch will
 // pass, before any cache file is written. --help never starts a session.
-func preflight(p Profile, rules ToolRules, e *envMap) error {
+func preflight(p Profile, rules ToolRules, resume bool, e *envMap) error {
 	binary := builtinBinary[p.Client]
 	path, err := lookPath(binary, e.or("PATH", ""))
 	if err != nil {
@@ -373,6 +376,9 @@ func preflight(p Profile, rules ToolRules, e *envMap) error {
 	}[p.Client]
 	perm := p.Options["permission"]
 	if p.Client == "claude-code" {
+		if resume {
+			needed = append(needed, "--resume")
+		}
 		if p.Reasoning != "" {
 			needed = append(needed, "--effort")
 		}
@@ -432,6 +438,20 @@ func Launch(m *Manifest, role, project string, env []string, stdout, stderr io.W
 // launch that cannot bind its pane fails instead of starting an agent the
 // dispatcher cannot verify.
 func LaunchProfile(m *Manifest, role, project, profile string, env []string, stdout, stderr io.Writer, execFn func(argv0 string, argv, env []string) error) error {
+	return LaunchProfileResume(m, role, project, profile, "", env, stdout, stderr, execFn)
+}
+
+// LaunchResume restarts a Claude Code session through the role launcher so
+// its permissions, identity, and role environment remain attached.
+func LaunchResume(m *Manifest, role, project, resumeID string, env []string, stdout, stderr io.Writer, execFn func(argv0 string, argv, env []string) error) error {
+	if resumeID == "" {
+		return errors.New("resume session id is required")
+	}
+	return LaunchProfileResume(m, role, project, "", resumeID, env, stdout, stderr, execFn)
+}
+
+// LaunchProfileResume is LaunchProfile with an optional Claude Code session id.
+func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, env []string, stdout, stderr io.Writer, execFn func(argv0 string, argv, env []string) error) error {
 	cfg := struct {
 		Env            []string
 		Stdout, Stderr io.Writer
@@ -443,6 +463,9 @@ func LaunchProfile(m *Manifest, role, project, profile string, env []string, std
 	if profile != "" && !namePattern.MatchString(profile) {
 		return errors.New("invalid profile name")
 	}
+	if strings.TrimSpace(resumeID) != resumeID {
+		return errors.New("resume session id must not have surrounding whitespace")
+	}
 	p, err := m.ResolveWith(role, profile)
 	if err != nil {
 		return err
@@ -453,6 +476,9 @@ func LaunchProfile(m *Manifest, role, project, profile string, env []string, std
 			return err
 		}
 		p.Model = id
+	}
+	if resumeID != "" && p.Client != "claude-code" {
+		return fmt.Errorf("session resume is supported only for Claude Code (role %s uses %s)", role, p.Client)
 	}
 	e := newEnv(cfg.Env)
 	requireBind := e.or("AGENT_LAUNCH_REQUIRE_BIND", "") == "1"
@@ -473,11 +499,11 @@ func LaunchProfile(m *Manifest, role, project, profile string, env []string, std
 	}
 	dry := e.or("AGENT_LAUNCH_DRYRUN", "") == "1"
 	if _, builtin := builtinBinary[p.Client]; !dry && !p.Legacy && builtin {
-		if err := preflight(p, rules, e); err != nil {
+		if err := preflight(p, rules, resumeID != "", e); err != nil {
 			return err
 		}
 	}
-	cmd, err := build(p, rules, project, prompt, promptPath, dry, cfg.Env)
+	cmd, err := build(p, rules, project, prompt, promptPath, resumeID, dry, cfg.Env)
 	if err != nil {
 		return err
 	}
