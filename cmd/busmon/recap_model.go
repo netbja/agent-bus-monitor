@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	guardian "github.com/netbja/agent-bus-monitor/health"
 )
 
 type recapRow struct {
@@ -31,20 +32,22 @@ type recapModel struct {
 }
 
 type recapInput struct {
-	Now      time.Time
-	Since    time.Time
-	Agents   map[string]*agentState
-	Asks     []bus.Ask
-	Board    map[string]bus.BoardEntry
-	Commands []bus.Event
-	Reports  []bus.Event
-	Verdicts []bus.Verdict
-	Swaps    []bus.SwapEvent
-	Services map[string]bus.ServiceRecord
-	Pause    *bus.PauseRecord
-	Holds    map[string]int64
-	Human    string
-	Errors   map[string]error
+	Now         time.Time
+	Since       time.Time
+	Agents      map[string]*agentState
+	Asks        []bus.Ask
+	Board       map[string]bus.BoardEntry
+	Commands    []bus.Event
+	Reports     []bus.Event
+	Verdicts    []bus.Verdict
+	Swaps       []bus.SwapEvent
+	Health      []guardian.Transition
+	HealthFloor string
+	Services    map[string]bus.ServiceRecord
+	Pause       *bus.PauseRecord
+	Holds       map[string]int64
+	Human       string
+	Errors      map[string]error
 }
 
 func buildRecap(in recapInput) recapModel {
@@ -250,6 +253,16 @@ func buildRecap(in recapInput) recapModel {
 	}
 	for _, warning := range m.Warnings {
 		add(recapRow{Section: "Since your last visit", Title: warning})
+	}
+	for _, row := range healthRecapRows(in.Health) {
+		row.Section = "Since your last visit"
+		add(row)
+	}
+	if !in.Since.IsZero() && in.HealthFloor != "" && eventTimestamp(in.HealthFloor).After(in.Since) {
+		add(recapRow{Section: "Since your last visit", Title: "health transition history before " + eventTimestamp(in.HealthFloor).Local().Format("2006-01-02 15:04") + " is not retained"})
+	}
+	if in.Errors["Health"] != nil {
+		add(recapRow{Section: "Since your last visit", Title: "Health transitions unavailable"})
 	}
 	if in.Errors["cmd"] != nil {
 		m.SummaryStatus = "request status unavailable"

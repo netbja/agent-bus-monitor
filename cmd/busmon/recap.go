@@ -8,6 +8,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/netbja/agent-bus-monitor/bus"
+	guardian "github.com/netbja/agent-bus-monitor/health"
 )
 
 const recapHistoryLimit = 1000
@@ -23,6 +24,10 @@ type recapReader interface {
 	Asks(context.Context) ([]bus.Ask, error)
 	Verdicts(context.Context, string) ([]bus.Verdict, error)
 	SwapLog(context.Context, string, int) ([]bus.SwapEvent, error)
+}
+
+type healthTransitionReader interface {
+	HealthTransitions(context.Context, string, int64) ([]guardian.Transition, string, error)
 }
 
 func (u *ui) maybeAutoRecap() {
@@ -151,6 +156,17 @@ func readRecap(ctx context.Context, r recapReader, st *shared, since time.Time, 
 		input.Errors["swap"] = err
 	} else {
 		input.Swaps = swaps
+	}
+	if hr, ok := r.(healthTransitionReader); ok {
+		after := ""
+		if !since.IsZero() {
+			after = fmt.Sprintf("%d-0", since.UnixMilli()-1)
+		}
+		if rows, floor, err := hr.HealthTransitions(ctx, after, recapHistoryLimit); err != nil {
+			input.Errors["Health"] = err
+		} else {
+			input.Health, input.HealthFloor = rows, floor
+		}
 	}
 	return buildRecap(input)
 }
