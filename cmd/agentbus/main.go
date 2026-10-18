@@ -38,6 +38,7 @@
 //	agentbus --project P listen    [status report notify cmd]    # debug tail
 //	agentbus --project P dispatch  [--horizon 24h] [--escalate-after 10m] [--escalate-to master]  # wake unarmed agents through herdr (JSON log on stderr)
 //	agentbus --project P dispatch  --status     # print "dispatch up" (exit 0) or "dispatch down" (exit 1)
+//	agentbus --project P health     [list|detail <id>|log [after-id]|note <id> <text...>]
 //	agentbus --project P request [--json] | send <task> <target> [--ref T] [--ttl 5m] <body>
 //	agentbus --project P request accept <task> | block <task> <reason> | done <task> <reply>
 //	agentbus up <project> [<path>] [--as <name>] [--tabs] [bootstrap flags]   # provision, start the services, open the herdr workspace (busmon first)
@@ -148,7 +149,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|missions|mission|pause|resume|ask|asks|answer|limits|mem|roles|up|subscribe|watch|listen> ...")
+		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|health|missions|mission|pause|resume|ask|asks|answer|limits|mem|roles|up|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
@@ -466,6 +467,9 @@ func main() {
 
 	case "swap":
 		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
+
+	case "health":
+		os.Exit(runHealth(ctx, b, self, rest, os.Stdout, os.Stderr))
 
 	case "roles": // only doctor reaches here (it needs the project's bus)
 		os.Exit(runDoctor(ctx, b, realDoctorDeps(os.Environ()), rest[1:], os.Stdout, os.Stderr))
