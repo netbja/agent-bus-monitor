@@ -61,8 +61,7 @@ they must be named and unit-tested, not scattered through the loop.
 | Agent identity | Every minute, compare each applicable snapshot's `pid`, `pid_start`, pane, and terminal with a live process and `Herdr.Inspect`; verify the pane still matches that process. Check launcher evidence (`AGENT_BUS_ROLE` key presence or another proof) without printing process environment values. | Fail only on a positive contradiction (PID reuse or a different process occupying the verified pane); warn when an active/recent agent lacks sufficient proof. An ended/dormant agent is not failed merely because its old PID exited. | Re-check with `agentbus agents --json` and herdr; if identity still conflicts, ask the person to inspect the pane before any action. | `/proc`, herdr, or snapshot unavailable, or identity could not be checked. |
 | Agent launch and identity | Every five minutes, verify active client argv has the expected launcher/settings evidence, that required role tool rules are present, and that the bus snapshot is keyed by the agent name rather than the legacy default identity. Inspect only required argv markers; never print argv or environment values. | Warn for a role not launched through `agent-launch`, missing required role rules, missing Claude `--settings`, or a default/mismatched bus identity. A non-Claude role is not required to have Claude settings. | Relaunch through `agentbus` with the configured role; do not edit a live pane's command or rules. | Client/profile cannot be established from a live process. |
 | Model drift | Daily, reuse the `roles doctor` resolution and the fresh local model catalogue. | Warn for the same `drift`, `newer`, or `gone` verdicts the doctor publishes. | Review the role's configured model with `agentbus roles doctor`; update roles.toml only after human review. | Catalogue stale/partial or doctor source failed; never convert missing evidence to `gone`. |
-| Human attention | Every minute, use open ask questions and the retained addressed `human=yes` command history. | Warn when a waiting declaration or open question exceeds 15 minutes. This is an attention signal, never an agent failure. | Read the question and answer it in busmon or `agentbus asks`; do not treat age alone as permission to close it. | Ask/cmd read failed or the relevant history floor predates the question/declaration. |
-| Working but silent | Every minute, compare active `working` snapshots with their last status/report; initial warning after 30 minutes without either. | Warn only. Long-running work is not failed or interrupted. | Inspect the agent's current pane and ask for a status update; do not restart it solely for silence. | No usable timestamp or activity read failed. |
+| Runaway (works, nothing moves) | Every minute, for agents declared `working`: time since their last status, report, bus message or commit on their branch; growth of their context tokens (`{p}:usage`) over the same span; and, from the existing read-only pane observation, the same screen content repeating. Bernard decided: no per-task time or token caps (unrealistic to estimate); this check replaces them. | Warn only, never fail and never stop or interrupt an agent: after 30 minutes with no visible progress, or context growing fast (named threshold) while nothing visible moves, or the same pane content repeated over several observations. Thresholds are named, configurable and unit-tested. | Sentinel inspects the pane read-only, then asks master or the person; never restart or interrupt an agent for this alone. | No usable timestamp, usage or observation read failed. |
 | Cmd delivery | Every minute, inspect consumer groups, pending-entry age, and group lag. | Warn for a pending entry older than 10 minutes or lag above 100; fail above one hour pending or 1,000 unread entries. Report the group and count, never message bodies. | Inspect the named consumer group with `agentbus`; recover delivery only through its normal owner/consumer. | `XINFO`/`XPENDING` failed or stream disappeared during inspection. |
 | Cmd targets | Every five minutes, compare retained addressed entries with registered agents and reserved protocol targets. | Warn on an unregistered target after excluding `people`, service identities, and the internal canary target. Do not escalate or rewrite the entry. | Correct the target through the normal sender; do not replay or delete the entry automatically. | The cmd stream or agents hash could not be read. |
 | Project key inventory | Hourly, use bounded `SCAN` over the validated exact project prefix and compare suffixes with the documented key catalogue. | Warn on an unknown suffix. Never delete, repair, or classify another project's key. | Ask the person to identify the owner before changing or deleting the key. | Scan incomplete, Redis unavailable, or project deletion in progress. |
@@ -75,6 +74,9 @@ they must be named and unit-tested, not scattered through the loop.
 | herdr command probe | Every five minutes, run the same bounded read-only herdr probes the dispatcher needs, without sending text or changing focus. | Fail on a conclusive incompatible/error response; one transient failure is warn and repeated failures become fail. | Check herdr status and restart herdr only through its documented service command after confirming the affected workspace. | herdr is not available in this service environment or its response is unparseable. |
 | Project-defined checks | Interval and timeout from `.agentbus/checks.toml`; run each entry as a separate argv/process group with no shell, bounded output, and a small allow-listed environment without Redis or provider credentials. | Exit codes map to `ok`, `warn`, or `fail` in the file. Store the exit code and only a sanitized first-line summary; never retain raw output. | Follow the reviewed remediation text declared alongside the check; otherwise ask the person. | File malformed, timeout, or runner unavailable. |
 | End-to-end canary | Every five minutes, append one internal `wake=no` probe through cmd delivery to a reserved health consumer group; measure append→read→ack with Redis time. | Warn over 2 seconds; fail over 10 seconds. It never wakes a pane. | Inspect Redis and cmd delivery health; do not replay or acknowledge another consumer's entry. | Any step cannot be proved, including a stale pending probe. |
+
+Questions waiting for the person are not a health check: busmon's v0.18 attention (answered, reminders,
+recap) already owns them, and counting them here would keep the health pill red for a normal wait.
 
 `fail` is reserved for a concrete, reproducible fault; uncertain evidence is `unknown`, not `fail`.
 No check changes service state, agent state, quota marks, gates, board ownership, files, or repo
@@ -201,24 +203,26 @@ env files remain `0600`; `agentbus up` resolves the password and writes it into 
 service env so restarts use the same credential. Remote clients behind the SSH tunnel use their
 own local `redis.env` or explicit `REDIS_URL` and keep the tunnel topology unchanged.
 
-Use Redis ACL's support for multiple active passwords on the default user during migration. The
-container must persist an ACL file on its existing data volume and use that file at start. Do not
-depend on `ACL SAVE` while the server is still configured only with command-line `--requirepass`.
-The staged migration is:
+Keep the migration simple (review decision). Every `agentbus` call is a fresh process that resolves
+the credential at start, and agents only ever reach Redis through such calls, so once the new
+binaries read `redis.env`, a running agent picks up the new password on its next command. No
+dual-password ACL machinery is needed. The migration is one explicit, operator-started command
+(`./setup.sh rotate-redis-password`, also run by `install` on the historical default only after
+a `[y/N]`):
 
-1. Read the current credential without displaying it; generate/store the new password atomically.
-   Write an ACL file that preserves the default user's existing access and accepts both credentials,
-   then atomically switch Compose to use that file on the existing data volume.
-2. Restart Redis once in a planned window. Existing TCP connections will briefly drop, but agent
-   processes stay running and reconnect; AOF/stream state remains on the existing volume. Verify
-   both credentials with non-disclosing probes before continuing. If clients do not reconnect
-   reliably, stop here and require an operator-led migration plan.
-3. Update Compose, local/service env sources and the remote client's local secret file to the new
-   password. Restart dispatch and missions services, then ask the person to restart any remaining
-   agent panes that cannot reload credentials.
-4. Retain the old credential until the person explicitly confirms all clients have moved. Then
-   atomically remove only that password from the ACL file and reload the ACL; never revoke it
-   automatically based only on a heartbeat or process list.
+1. Generate and store the new password atomically in `redis.env` (`0600`, directory `0700`).
+2. Recreate the Redis container with it (data volume and AOF unchanged). Armed `subscribe` calls
+   and the services drop for a few seconds: the services restart through their manager, and a
+   `subscribe` that fails exits with its normal error and is re-armed by its agent, now with the
+   new credential.
+3. Restart the project services and verify with non-disclosing probes (`agentbus dispatch
+   --status` for every installed project).
+4. Print one line for the remote SSH-tunnel client: copy `redis.env` there (never the value on
+   screen). Until it is copied that client fails to authenticate, which the person sees at once.
+
+If the rotation fails after step 1, the previous password file is kept beside the new one and the
+command prints how to roll back. Any process that still carries an explicit `REDIS_PASSWORD` in its
+environment (an old unit, a shell profile) is reported by the health check, never edited.
 
 If the old credential is not the known historical default, setup must not rotate it silently; it
 reports the situation and provides a guided migration. If a step fails, both credentials remain
@@ -302,7 +306,7 @@ with dispatch but no registered sentinel still get health data and a master/pers
   appear in logs/errors. Installer tests stub Docker and systemd and use temporary XDG homes.
 - Password resolution tests cover `REDIS_URL > REDIS_PASSWORD > file > migration fallback`,
   malformed URL, file modes, atomic generation, existing-file preservation, Compose env-file use,
-  dual-password migration and explicit finalization. Test Redis stays explicitly isolated and
+  the rotate command with fake docker (never the live container) and rollback. Test Redis stays explicitly isolated and
   unchanged.
 - busmon tests cover header states, unknown/stale rendering, F5 overlay, notes, recap transitions
   and history floor, plus alignment/glyph tests across supported widths and palettes.
@@ -310,13 +314,27 @@ with dispatch but no registered sentinel still get health data and a master/pers
   `AGENTBUS_TEST_REDIS_URL` set only to a disposable broker, and `bash tests/run.sh` with fake
   Docker/systemd. Never use production Redis or the user's systemd in tests.
 
+## Release split (review decision, keep each release small)
+
+1. **v0.19.0 — health core**: the scheduler, `{p}:health`/`:health:log`/`:health:notes`, fenced
+   writes, `agentbus health` (list, detail, log, note), busmon pill + F5 + recap, the sentinel
+   wake/notes and its rewritten skill, the usage/models chores moved into the service, and the
+   checks that need no new machinery: services, agent identity, agent launch and identity, model
+   drift, runaway, cmd delivery, cmd targets, quota freshness, tracked secret-like files, Redis
+   exposure and password (detects the default), service env permissions, installed versions,
+   herdr command probe.
+2. **v0.19.1 — Redis password**: generation at install and `rotate-redis-password` as above.
+3. **v0.19.2 — extended checks**: secret scanner, end-to-end canary, project key inventory, and
+   project-defined checks with their digest trust step (how the person's approval of a digest is
+   stored is decided in that release's plan).
+
 ## Out of scope
 
 - A sentinel daemon, crontab, polling loop, second pane writer, or health-driven autonomous code
   changes.
 - Treating health as an authorization boundary, secret vault, or substitute for OS isolation.
-- Automatically rotating a non-default operator password or revoking the migration credential
-  without human confirmation.
+- Automatically rotating a non-default operator password (rotation is always started by the person)
+
 - Project-specific health policy beyond the optional reviewed checks file; no LLM-defined checks.
 - Healing arbitrary agent, model, Redis, repo, or network failures; unlisted repairs are escalated.
 - Changing quota/hold policy, delivery semantics, project deletion semantics, service-manager
