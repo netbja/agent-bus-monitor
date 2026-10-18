@@ -154,7 +154,6 @@ just pulled.
 
 herdr-plus is asked separately, because it is useful without agent-bus. The repository itself is
 left in place. It has no `--dry-run`: run it without `--yes` and answer each question.
-`./install.sh` remains an alias of `./setup.sh install`.
 
 ### Manual build
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test setup.sh (and its install.sh alias): flags, a dry run that changes nothing, a real install
+# Test setup.sh: flags, a dry run that changes nothing, a real install
 # into a copy of the repository (stale binaries replaced, version stamped, idempotent herdr
 # config edit, herdr-plus registered through herdr, external skills cloned), status, uninstall
 # and the Go floor. Hermetic: a fake herdr, a local skills repository, a throwaway HOME; it never
@@ -82,7 +82,7 @@ export SKILLS_REPO="$src"
 # A copy of the repository: setup never runs against this checkout.
 mkdir -p "$T/repo" "$T/bin"
 git -C "$REPO" ls-files -z | (cd "$REPO" && xargs -0 tar cf -) | tar xf - -C "$T/repo"
-cp "$REPO/setup.sh" "$REPO/install.sh" "$T/repo/"
+cp "$REPO/setup.sh" "$T/repo/"
 git -C "$T/repo" init -q && git -C "$T/repo" add -A && git -C "$T/repo" -c user.email=t@t -c user.name=t commit -qm copy && git -C "$T/repo" tag v9.9.9
 SETUP="$T/repo/setup.sh"
 
@@ -98,8 +98,8 @@ assert_exit 1 "unknown flag exits with code 1" -- "$SETUP" install --unknown-fla
 mkdir -p "$T/cfg/herdr"
 printf '[ui]\ntheme = "dark"\n' > "$T/cfg/herdr/config.toml"
 cp "$T/cfg/herdr/config.toml" "$T/config.orig"
-dry_out="$("$T/repo/install.sh" --dry-run --bin-dir "$T/dry-bin" 2>&1)"; rc=$?
-assert_eq "$rc" "0" "dry-run (through the install.sh alias) exits 0"
+dry_out="$("$T/repo/setup.sh" install --dry-run --bin-dir "$T/dry-bin" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "dry-run exits 0"
 assert_contains "$dry_out" "would compile ./cmd/agentbus -> $T/dry-bin/agentbus" "dry-run names the target"
 assert_contains "$dry_out" "Dry run complete" "dry-run says it is a dry run"
 assert_eq "$([[ -e "$T/dry-bin" ]] && echo exists || echo absent)" "absent" "dry-run creates no bin dir"

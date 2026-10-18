@@ -312,7 +312,7 @@ It never touches Redis — see README "Deployment topology".
   (dry runs, adapter spec JSON via `pyJSON`, template); `tests/roles_scripts_test.sh` covers the
   scripts end to end.
 - **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
-  `update`, `uninstall`, `status` (`install.sh` is an alias). It stamps `buildinfo.Version` (from
+  `update`, `uninstall`, `status`. It stamps `buildinfo.Version` (from
   `git describe` when it is a `v*` tag, else `dev`) and `buildinfo.Repo` via ldflags; `agentbus up`
   finds `scripts/bootstrap` through `AGENTBUS_REPO`, then `buildinfo.Repo`, then the binary's
   directory. A copy of the repository uses the same compose project and container name as the live
