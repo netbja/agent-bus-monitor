@@ -49,14 +49,15 @@ func envRefForbidden(key string) bool {
 // Manifest is a validated role configuration. Its maps contain decoded TOML
 // values; roleOrder preserves the declaration order used by Python's dicts.
 type Manifest struct {
-	SchemaVersion int
-	Defaults      map[string]interface{}
-	Profiles      map[string]interface{}
-	Roles         map[string]interface{}
-	Adapters      map[string]interface{}
-	manifestPath  string
-	roleOrder     []string
-	profileOrder  []string
+	SchemaVersion   int
+	Defaults        map[string]interface{}
+	Profiles        map[string]interface{}
+	Roles           map[string]interface{}
+	Adapters        map[string]interface{}
+	SharedToolRules ToolRules
+	manifestPath    string
+	roleOrder       []string
+	profileOrder    []string
 }
 
 // Profile is the resolved, client-ready configuration for one role.
@@ -113,6 +114,12 @@ func Load(path string) (*Manifest, error) {
 		Roles:         roles,
 		manifestPath:  abs,
 	}
+	if sharedRaw, exists := raw["tool_rules"]; exists {
+		m.SharedToolRules, err = parseToolRules("manifest tool_rules", sharedRaw)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for _, key := range meta.Keys() {
 		parts := []string(key)
 		if len(parts) >= 2 {
@@ -146,9 +153,13 @@ func Load(path string) (*Manifest, error) {
 		if _, exists := info["fallback_profiles"]; exists && version != 2 {
 			return nil, fmt.Errorf("role %s: fallback_profiles needs schema_version 2", role)
 		}
-		if _, _, rules, err := roleRules(role, info); err != nil {
+		if _, _, localRules, err := roleRules(role, info); err != nil {
 			return nil, err
 		} else if version == 1 {
+			rules, err := mergeToolRules(role, m.SharedToolRules, localRules)
+			if err != nil {
+				return nil, err
+			}
 			perm, _ := info["permission"].(string)
 			if err := checkAskPermission(role, rules, "claude-code", perm); err != nil {
 				return nil, err
@@ -157,7 +168,7 @@ func Load(path string) (*Manifest, error) {
 	}
 
 	if version == 2 {
-		if err := checkKeys(raw, set("schema_version", "defaults", "profiles", "roles", "adapters"), "manifest"); err != nil {
+		if err := checkKeys(raw, set("schema_version", "defaults", "profiles", "roles", "adapters", "tool_rules"), "manifest"); err != nil {
 			return nil, err
 		}
 		defaultsValue, exists := raw["defaults"]
@@ -428,7 +439,11 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		resolved.Skills, _ = stringNames(rawSkills)
 	}
 	var err error
-	if resolved.Pops, resolved.Approval, resolved.ToolRules, err = roleRules(role, info); err != nil {
+	var localRules ToolRules
+	if resolved.Pops, resolved.Approval, localRules, err = roleRules(role, info); err != nil {
+		return Profile{}, err
+	}
+	if resolved.ToolRules, err = mergeToolRules(role, m.SharedToolRules, localRules); err != nil {
 		return Profile{}, err
 	}
 	if err := checkAskPermission(role, resolved.ToolRules, client, resolved.Options["permission"]); err != nil {

@@ -13,6 +13,9 @@ risky actions with `challenge`/`verdict`, and a human watches in busmon.
 This skill is the mental model + the parts agents get wrong. Read the GUIDE before guessing
 any flag or JSON field — don't invent them.**
 
+If `betterleaks` or `gitleaks` is installed, run it on your changes before opening a PR; this is
+useful but never a blocker.
+
 ## Client portability
 
 Your role is independent of client, provider and model; the launch profile selects

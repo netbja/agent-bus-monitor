@@ -348,7 +348,10 @@ It never touches Redis — see README "Deployment topology".
   Claude Code only (other clients: a note); free-form rules naming `agent-spawn` or allowing all
   of Bash are refused. The ask matches command text only (a quoted role reaches the classifier):
   a convenience, not a lock. A missing skill warns and the
-  agent still starts; `roles install-skills` stays strict.
+  agent still starts; `roles install-skills` stays strict. Top-level `[tool_rules]` rules are
+  merged into every role before its own rules; the shipped Claude Code Read/Edit denies cover
+  common secret-file names even with `bypassPermissions`. This is defense in depth, not a boundary:
+  processes an agent starts (tests, dotenv, and similar tools) can still read environment files.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
