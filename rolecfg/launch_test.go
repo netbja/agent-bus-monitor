@@ -173,6 +173,22 @@ func TestLaunchCommandLines(t *testing.T) {
 	}
 }
 
+func TestLaunchWithoutSharedToolRulesKeepsTheOldCommandLine(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("claude-code", "", "", "[profiles.main.options]\npermission = \"bypassPermissions\"")
+	rules, err := m.LaunchRules("coder")
+	if err != nil || !rules.Empty() {
+		t.Fatalf("LaunchRules without shared table = %+v, %v", rules, err)
+	}
+	if _, _, err := f.launch(m, "coder"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"claude", "--model", "test-model", "--permission-mode", "bypassPermissions", "--name", "demo:coder", "--append-system-prompt"}
+	if strings.Join(f.execed[1:len(f.execed)-1], "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("launch argv changed without [tool_rules]: got %q want %q", f.execed, want)
+	}
+}
+
 func TestLaunchAdapterSpec(t *testing.T) {
 	f := newLaunchFixture(t)
 	f.fake("extra", "#!/bin/sh\nexit 0\n")

@@ -20,7 +20,7 @@ func (r ToolRules) Empty() bool { return len(r.Allow)+len(r.Ask)+len(r.Deny) == 
 
 const (
 	maxRuleBytes = 200
-	maxRules     = 20
+	maxRules     = 40 // v0.17.3 shared rules need Read and Edit forms of each deny.
 )
 
 var (
@@ -47,12 +47,18 @@ func roleRules(role string, info map[string]interface{}) (pops bool, approval st
 	if !exists {
 		return pops, approval, rules, nil
 	}
+	rules, err = parseToolRules("role "+role+" tool_rules", raw)
+	return pops, approval, rules, err
+}
+
+func parseToolRules(label string, raw interface{}) (ToolRules, error) {
+	var rules ToolRules
 	table, ok := asTable(raw)
 	if !ok {
-		return false, "", rules, fmt.Errorf("role %s: tool_rules must be a table", role)
+		return rules, fmt.Errorf("%s must be a table", label)
 	}
-	if err := checkKeys(table, set("allow", "ask", "deny"), "role "+role+" tool_rules"); err != nil {
-		return false, "", rules, err
+	if err := checkKeys(table, set("allow", "ask", "deny"), label); err != nil {
+		return rules, err
 	}
 	seen := map[string]string{}
 	for _, list := range []struct {
@@ -65,29 +71,56 @@ func roleRules(role string, info map[string]interface{}) (pops bool, approval st
 		}
 		items, ok := v.([]interface{})
 		if !ok || len(items) > maxRules {
-			return false, "", rules, fmt.Errorf("role %s: tool_rules.%s: invalid rule list", role, list.name)
+			return rules, fmt.Errorf("%s.%s: invalid rule list", label, list.name)
 		}
 		for _, item := range items {
 			rule, ok := item.(string)
 			if !ok || !validRule(rule) {
-				return false, "", rules, fmt.Errorf("role %s: tool_rules.%s: invalid rule %q", role, list.name, fmt.Sprint(item))
+				return rules, fmt.Errorf("%s.%s: invalid rule %q", label, list.name, fmt.Sprint(item))
 			}
 			if list.name == "allow" {
 				if rule == "Bash" || (strings.HasPrefix(rule, "Bash(") && starsOnly.MatchString(rule[5:len(rule)-1])) {
-					return false, "", rules, fmt.Errorf("role %s: tool_rules.allow: %s would allow every shell command", role, rule)
+					return rules, fmt.Errorf("%s.allow: %s would allow every shell command", label, rule)
 				}
 			}
 			if strings.Contains(rule, "agent-spawn") {
-				return false, "", rules, fmt.Errorf("role %s: tool_rules.%s: agent-spawn rules are derived from the manifest", role, list.name)
+				return rules, fmt.Errorf("%s.%s: agent-spawn rules are derived from the manifest", label, list.name)
 			}
 			if other, dup := seen[rule]; dup {
-				return false, "", rules, fmt.Errorf("role %s: tool_rules: %s in two lists (%s, %s)", role, rule, other, list.name)
+				return rules, fmt.Errorf("%s: %s in two lists (%s, %s)", label, rule, other, list.name)
 			}
 			seen[rule] = list.name
 			*list.dst = append(*list.dst, rule)
 		}
 	}
-	return pops, approval, rules, nil
+	return rules, nil
+}
+
+// mergeToolRules keeps shared rules first, then role rules. Same-list repeats
+// across the two tables are harmless and removed; cross-list conflicts remain
+// invalid in the effective result.
+func mergeToolRules(role string, shared, local ToolRules) (ToolRules, error) {
+	out := ToolRules{}
+	seen := map[string]string{}
+	for _, group := range []ToolRules{shared, local} {
+		for _, list := range []struct {
+			name string
+			src  []string
+			dst  *[]string
+		}{{"allow", group.Allow, &out.Allow}, {"ask", group.Ask, &out.Ask}, {"deny", group.Deny, &out.Deny}} {
+			for _, rule := range list.src {
+				if other, exists := seen[rule]; exists {
+					if other != list.name {
+						return ToolRules{}, fmt.Errorf("role %s: tool_rules: %s in two lists (%s, %s)", role, rule, other, list.name)
+					}
+					continue
+				}
+				seen[rule] = list.name
+				*list.dst = append(*list.dst, rule)
+			}
+		}
+	}
+	return out, nil
 }
 
 func validRule(rule string) bool {
@@ -132,7 +165,7 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 	if err != nil {
 		return ToolRules{}, err
 	}
-	var out ToolRules
+	var derived ToolRules
 	if p.Pops {
 		for _, other := range m.roleOrder {
 			if other == role {
@@ -140,14 +173,25 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 			}
 			rule := "Bash(agent-spawn " + other + " *)"
 			if m.Approval(other) == "person" {
-				out.Ask = append(out.Ask, rule)
+				derived.Ask = append(derived.Ask, rule)
 			} else {
-				out.Allow = append(out.Allow, rule)
+				derived.Allow = append(derived.Allow, rule)
 			}
 		}
 	}
-	out.Allow = append(out.Allow, p.ToolRules.Allow...)
-	out.Ask = append(out.Ask, p.ToolRules.Ask...)
-	out.Deny = append(out.Deny, p.ToolRules.Deny...)
+	out, err := mergeToolRules(role, m.SharedToolRules, derived)
+	if err != nil {
+		return ToolRules{}, err
+	}
+	info, _ := asTable(m.Roles[role])
+	_, _, local, err := roleRules(role, info)
+	if err != nil {
+		return ToolRules{}, err
+	}
+	merged, err := mergeToolRules(role, out, local)
+	if err != nil {
+		return ToolRules{}, err
+	}
+	out = merged
 	return out, nil
 }

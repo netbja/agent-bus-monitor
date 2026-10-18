@@ -125,9 +125,12 @@ config claude-code 'pops = true
 tier = "pop"
 approval = "person"
 [roles.architect]
-tier = "pop"'
+tier = "pop"
+[tool_rules]
+deny = ["Read(**/.env)", "Edit(**/.env)"]'
 out="$(AGENT_LAUNCH_DRYRUN=1 "$L" coder demo 2>&1)"
 assert_contains "$out" "--settings" "a popping role launches with --settings"
 assert_contains "$out" '"allow": ["Bash(agent-spawn architect *)"]' "an ordinary role is allowed"
 assert_contains "$out" '"ask": ["Bash(agent-spawn deploy *)"]' "an approval role is asked"
+assert_contains "$out" '"deny": ["Read(**/.env)", "Edit(**/.env)"]' "shared rules reach the dry-run launch"
 finish

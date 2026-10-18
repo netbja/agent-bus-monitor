@@ -1,6 +1,7 @@
 package rolecfg
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -71,9 +72,86 @@ func TestToolRulesAcceptedInBothSchemas(t *testing.T) {
 	}
 }
 
+func TestSharedToolRulesMergeBeforeRoleRulesAndDeduplicate(t *testing.T) {
+	path := writeConfig(t, `schema_version = 2
+[tool_rules]
+allow = ["Read", "Glob"]
+deny = ["WebFetch"]
+[profiles.claude]
+client = "claude-code"
+provider = "anthropic"
+model = "sonnet"
+options = { permission = "acceptEdits" }
+[roles.master]
+profile = "claude"
+tier = "boot"
+pops = true
+[roles.master.tool_rules]
+allow = ["Glob", "Write"]
+deny = ["WebFetch", "Bash(rm *)"]
+`)
+	m, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, err := m.LaunchRules("master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantAllow := append([]string{"Read", "Glob"}, "Write")
+	if !reflect.DeepEqual(rules.Allow, wantAllow) {
+		t.Fatalf("allow=%v want %v", rules.Allow, wantAllow)
+	}
+	if !reflect.DeepEqual(rules.Deny, []string{"WebFetch", "Bash(rm *)"}) {
+		t.Fatalf("deny=%v", rules.Deny)
+	}
+	resolved, err := m.Resolve("master")
+	if err != nil || !reflect.DeepEqual(resolved.ToolRules.Allow, []string{"Read", "Glob", "Write"}) {
+		t.Fatalf("resolved rules=%+v err=%v", resolved.ToolRules, err)
+	}
+}
+
+func TestSharedToolRulesValidationAppliesToMergedResult(t *testing.T) {
+	base := `schema_version = 2
+[tool_rules]
+%s
+[profiles.claude]
+client = "claude-code"
+provider = "anthropic"
+model = "sonnet"
+options = { permission = "%s" }
+[roles.coder]
+profile = "claude"
+tier = "boot"
+%s
+`
+	for _, tc := range []struct{ name, shared, permission, local, want string }{
+		{"unknown shared key", "extra = [\"Read\"]", "acceptEdits", "", "unknown"},
+		{"cross-list conflict", "allow = [\"Read\"]", "acceptEdits", "[roles.coder.tool_rules]\ndeny = [\"Read\"]", "in two lists"},
+		{"ask forbidden with bypass", "ask = [\"Read\"]", "bypassPermissions", "", "has no effect with bypassPermissions"},
+		{"same-list duplicate is allowed across tables", "deny = [\"Read\"]", "bypassPermissions", "[roles.coder.tool_rules]\ndeny = [\"Read\"]", ""},
+		{"invalid shared rule", "deny = [\"9bad\"]", "acceptEdits", "", "invalid rule"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, err := Load(writeConfig(t, fmt.Sprintf(base, tc.shared, tc.permission, tc.local)))
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := m.LaunchRules("coder")
+				if err != nil || !reflect.DeepEqual(got.Deny, []string{"Read"}) {
+					t.Fatalf("rules=%+v err=%v", got, err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err=%v want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestToolRulesRejections(t *testing.T) {
 	long := "Read(" + strings.Repeat("x", 196) + ")"
-	many := make([]string, 21)
+	many := make([]string, 41)
 	for i := range many {
 		many[i] = `"Read"`
 	}
@@ -144,6 +222,20 @@ func TestShippedManifestRules(t *testing.T) {
 	}
 	if len(r.Allow) != others {
 		t.Fatalf("master allow = %v, want one per role but master and deploy (%d)", r.Allow, others)
+	}
+	for _, role := range m.roleOrder {
+		resolved, err := m.Resolve(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(resolved.ToolRules.Deny, m.SharedToolRules.Deny) {
+			t.Fatalf("%s shared deny rules = %v", role, resolved.ToolRules.Deny)
+		}
+	}
+	for _, rule := range m.SharedToolRules.Deny {
+		if strings.Contains(rule, ".env.example") {
+			t.Fatalf("example env file is denied: %s", rule)
+		}
 	}
 	for _, rule := range r.Allow {
 		if strings.Contains(rule, "deploy") {

@@ -4,6 +4,16 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.17.3 — shared secret-file denies for Claude Code roles
+
+- A top-level `[tool_rules]` table applies validated Claude Code permission rules to every role.
+  The shipped Read/Edit denies cover common environment, key and wallet filenames while leaving
+  `.env.example` available. They also apply in `bypassPermissions`; they are defense in depth, not
+  a boundary, since processes started by an agent can still read their environment.
+- The agent-bus skill recommends running betterleaks or gitleaks before a PR when installed.
+
+[Notes](docs/releases/v0.17.3.md)
+
 ## v0.17.2 — `install.sh` removed
 
 - `install.sh` (an alias of `./setup.sh install`) is gone: use `./setup.sh install`. Docs, the
