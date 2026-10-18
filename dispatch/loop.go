@@ -335,7 +335,7 @@ func (l *loop) reconcile(ctx context.Context) error {
 
 	var first error
 	for _, a := range sorted {
-		if humanIdentity[a] {
+		if _, agent := snaps[a]; humanIdentity[a] && !agent { // a registered agent stays an agent
 			l.logOnce(a, map[string]any{"agent": a, "action": "none", "reason": "target is a human identity"})
 			continue
 		}

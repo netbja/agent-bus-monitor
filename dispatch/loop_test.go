@@ -713,3 +713,16 @@ func TestRunSwapIntentBlocksPrompting(t *testing.T) {
 	}
 	waitFor(t, 3*time.Second, "a wake once the swap is over", func() bool { return len(rt.Prompts()) == 1 })
 }
+
+func TestRunStillWakesARegisteredAgentNamedLikeAHuman(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "coder", "p-coder")
+	if _, err := b.HumanCmd(ctx, "coder", "master", "a person once typed as coder"); err != nil {
+		t.Fatal(err)
+	}
+	send(t, b, "coder", "real work for the agent")
+	rt := newFakeRT(alwaysReady)
+	start(t, b, rt, fastConfig())
+	waitFor(t, 3*time.Second, "a prompt to coder", func() bool { return len(rt.Prompts()) >= 1 })
+}
