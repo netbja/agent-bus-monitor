@@ -18,6 +18,7 @@ type headerData struct {
 	pilot    string            // pilot-lease driver, "" = autonomous
 	self     string            // the person busmon writes as (humanLabel); "" = not shown
 	update   string            // a newer release tag ("" = none): the last, lowest-priority item
+	note     string            // non-fatal local settings note
 	waiting  string            // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
 	asks     int               // agents in state waiting: decisions a person owes
 	pause    *bus.PauseRecord  // the project pause, nil when not paused
@@ -108,6 +109,9 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	if d.update != "" { // a newer release: the first item to go when space is short
 		add(Line{{Text: GlyphUp + " " + Preview(d.update), Role: RoleMuted}}, 101, second)
+	}
+	if d.note != "" {
+		add(Line{{Text: Preview(d.note), Role: RoleMuted}}, 2, second)
 	}
 	clock := add(Line{{Text: d.now.Format("15:04:05"), Role: RoleMuted}}, 100, 0)
 	clock.right = true

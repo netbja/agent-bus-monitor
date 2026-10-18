@@ -96,7 +96,7 @@ func obsFresh(a *agentState, now time.Time) bool {
 
 // waitsForPerson: a declared wait, an open ask or a prompt in its tab.
 func waitsForPerson(a *agentState) bool {
-	return a.state == "waiting" || a.openAsk > 0 || promptWaiting(a)
+	return a.openAsk > 0 || a.state == "waiting" && !answered(a) || promptWaiting(a)
 }
 
 func agentFlags(a *agentState, pilot bool) []agentFlag {
@@ -167,6 +167,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 // state stays in the detail; blocked, waiting and done are never covered.
 func stateLook(a *agentState) (glyph, word string, role Role, group int) {
 	state := a.state
+	if answered(a) && !promptWaiting(a) {
+		return GlyphIdle, "answered", RoleMuted, 4
+	}
 	if a.openAsk > 0 || promptWaiting(a) { // its open questions, or its client's, make it waiting
 		state = "waiting"
 	}
@@ -286,7 +289,11 @@ func updatedCell(a *agentState, tier Tier, now time.Time) []Seg {
 		}
 		return []Seg{{Text: strings.Repeat(GlyphNone, updatedBarCells), Role: RoleDim}, {Text: " " + GlyphDash, Role: RoleMuted}}
 	}
-	age := max(0, now.Sub(a.stateAt))
+	at := a.stateAt
+	if answered(a) {
+		at = a.answeredAt
+	}
+	age := max(0, now.Sub(at))
 	ageSeg := Seg{Text: humanAge(age), Role: RoleMuted}
 	if tier != TierWide {
 		return []Seg{ageSeg}
@@ -408,7 +415,7 @@ func waitingQuestions(m map[string]*agentState) int {
 		switch {
 		case a.openAsk > 0:
 			n += a.openAsk
-		case a.state == "waiting", promptWaiting(a):
+		case a.state == "waiting" && !answered(a), promptWaiting(a):
 			n++
 		}
 	}

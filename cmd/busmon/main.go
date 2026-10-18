@@ -229,7 +229,7 @@ const (
 	tailRetry      = 2 * time.Second // pause before resuming the feed after a broker error
 	requestPoll    = 5               // ticks between follow-up view refreshes
 	wakePoll       = 5               // ticks between dispatcher-badge reads (Obligation/Wake/DispatchAlive)
-	openThreadScan = 200             // cmd entries scanned for unanswered exchanges
+	openThreadScan = 1000            // cmd entries scanned for unanswered exchanges and waiting replies
 )
 
 // agentState is what busmon knows about one agent, with the three facts the old
@@ -241,18 +241,19 @@ const (
 //	                        declared state, so the two stamps differ on purpose.
 //	armed                 — a live subscribe lease. A lease, not a state.
 type agentState struct {
-	state    string
-	message  string
-	stateAt  time.Time       // when the state above was declared
-	lastSeen time.Time       // last activity of any kind on the bus
-	gated    int             // open 4-eyes challenges (flag "gate N")
-	armed    bool            // a live subscribe lease exists (flag "armed")
-	lag      int64           // unconsumed {p}:cmd entries of the agent's group (detail only)
-	pane     string          // HERDR_PANE_ID from the agents hash (detail only)
-	waiting  int64           // wake-relevant messages (pending + unread): the queue column
-	stale    int             // addressed entries older than the dispatch horizon (flag "stale N")
-	gap      bool            // entries may have been trimmed unread (detail only)
-	wake     *bus.WakeRecord // the dispatcher's wake record, nil when none
+	state      string
+	message    string
+	stateAt    time.Time       // when the state above was declared
+	answeredAt time.Time       // qualifying human reply after a waiting declaration; display-only
+	lastSeen   time.Time       // last activity of any kind on the bus
+	gated      int             // open 4-eyes challenges (flag "gate N")
+	armed      bool            // a live subscribe lease exists (flag "armed")
+	lag        int64           // unconsumed {p}:cmd entries of the agent's group (detail only)
+	pane       string          // HERDR_PANE_ID from the agents hash (detail only)
+	waiting    int64           // wake-relevant messages (pending + unread): the queue column
+	stale      int             // addressed entries older than the dispatch horizon (flag "stale N")
+	gap        bool            // entries may have been trimmed unread (detail only)
+	wake       *bus.WakeRecord // the dispatcher's wake record, nil when none
 
 	pid         int                 // AgentSnapshot.PID (0 = not recorded)
 	pidStart    uint64              // AgentSnapshot.PIDStart
@@ -281,23 +282,28 @@ type agentState struct {
 // readers are the render functions on the tview loop, and the whole snapshot is
 // small enough that finer locking would only buy bugs.
 type shared struct {
-	mu       sync.Mutex
-	agents   map[string]*agentState
-	pilot    string                        // pilot-lease driver, "" = autonomous
-	update   string                        // a newer release tag found by checkForUpdate, "" = none
-	budgets  map[string]bus.BudgetSnapshot // account scope, per provider
-	dispatch string                        // "", "up" or "down"
-	missions string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
-	svcInst  *bus.ServicesInstall          // the {p}:services marker (nil: no services)
-	pause    *bus.PauseRecord              // the project pause (nil: not paused)
-	holds    map[string]int64              // provider → reset (Unix s) of its quota hold
-	asks     []bus.Ask                     // agents' questions for people
-	pace     paceTracker                   // per provider window: rate of use, display only
-	svcRecs  map[string]bus.ServiceRecord  // each service's last state
-	board    map[string]bus.BoardEntry
-	requests []request    // tracked requests read from the board
-	threads  []openThread // cmd exchanges with no answer in retained history
-	health   health       // the MONITOR's own link to the broker
+	mu           sync.Mutex
+	agents       map[string]*agentState
+	pilot        string                        // pilot-lease driver, "" = autonomous
+	update       string                        // a newer release tag found by checkForUpdate, "" = none
+	budgets      map[string]bus.BudgetSnapshot // account scope, per provider
+	dispatch     string                        // "", "up" or "down"
+	missions     string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
+	svcInst      *bus.ServicesInstall          // the {p}:services marker (nil: no services)
+	pause        *bus.PauseRecord              // the project pause (nil: not paused)
+	holds        map[string]int64              // provider → reset (Unix s) of its quota hold
+	asks         []bus.Ask                     // agents' questions for people
+	pace         paceTracker                   // per provider window: rate of use, display only
+	svcRecs      map[string]bus.ServiceRecord  // each service's last state
+	board        map[string]bus.BoardEntry
+	requests     []request    // tracked requests read from the board
+	threads      []openThread // cmd exchanges with no answer in retained history
+	health       health       // the MONITOR's own link to the broker
+	configNote   string       // non-fatal user configuration issue
+	cmdHistory   []bus.Event  // bounded retained cmd sample used for waiting/reply correlation
+	cmdOldest    time.Time    // oldest event in the retained sample; zero when none
+	cmdHistoryOK bool         // last bounded cmd read succeeded
+	lastPollAt   time.Time    // last fully successful snapshot tick
 }
 
 func main() {
@@ -316,20 +322,31 @@ func main() {
 		fmt.Println("busmon version " + buildinfo.Version)
 		return
 	}
-	// A typo in the cosmetic --theme must fail before anything destructive
-	// (--reset, --delete) runs; the colour depth is resolved later.
-	if _, err := ResolveTheme(*themeFlag, os.Getenv("AGENT_BUS_BUSMON_THEME"), "", false, 1<<24); err != nil {
+	limitSet, themeSet, asSet := false, false, false
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "limit":
+			limitSet = true
+		case "theme":
+			themeSet = true
+		case "as":
+			asSet = true
+		}
+	})
+	settings := loadBusmonSettings(busmonConfigPath(), settingsOverrides{
+		LimitSet: limitSet, LimitFlag: *limitFlag, LimitEnv: os.Getenv("AGENT_BUS_BUSMON_LIMIT"),
+		ThemeFlag: ifSet(themeSet, *themeFlag), ThemeEnv: os.Getenv("AGENT_BUS_BUSMON_THEME"),
+		AsFlag: ifSet(asSet, *asFlag), AsEnv: os.Getenv("AGENT_BUS_HUMAN"),
+	})
+	if err := settings.validateIdentity(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: --as: %v\n", err)
+		os.Exit(1)
+	}
+	limit := settings.Limit
+	if _, err := ResolveTheme(settings.Theme, "", "", false, 1<<24); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
-
-	limitSet := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "limit" {
-			limitSet = true
-		}
-	})
-	limit := resolveLimit(limitSet, *limitFlag, os.Getenv("AGENT_BUS_BUSMON_LIMIT"))
 
 	// --list answers "which projects are on this bus?", so it MUST run before the
 	// project-required exit below — that error is the very thing it exists to
@@ -362,7 +379,7 @@ func main() {
 		os.Exit(1)
 	}
 	// busmon writes as a person, never as an agent: --as, AGENT_BUS_HUMAN, else "pilot".
-	self, err := humanIdentity(*asFlag, os.Getenv("AGENT_BUS_HUMAN"))
+	self, err := humanIdentity(settings.Identity, "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: --as: "+err.Error())
 		os.Exit(1)
@@ -396,7 +413,7 @@ func main() {
 		fmt.Printf("Purged: %d entries removed.\n", removed)
 	}
 
-	themeVal := *themeFlag
+	themeVal := settings.Theme
 	// tview initialises the screen it is given (exactly once); the colour
 	// depth is read from that same screen before anything is drawn.
 	scr, err := tcell.NewScreen()
@@ -406,7 +423,7 @@ func main() {
 	}
 	app := tview.NewApplication().SetScreen(scr)
 	_, noColor := os.LookupEnv("NO_COLOR")
-	t, err := ResolveTheme(themeVal, os.Getenv("AGENT_BUS_BUSMON_THEME"), os.Getenv("COLORFGBG"), noColor, scr.Colors())
+	t, err := ResolveTheme(themeVal, "", os.Getenv("COLORFGBG"), noColor, scr.Colors())
 	if err != nil {
 		scr.Fini()
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -418,12 +435,24 @@ func main() {
 	// first tick: an unknown budget stays blank rather than implying 0% used.
 	// The monitor's link starts healthy because bus.Connect just pinged it.
 	st := &shared{
-		agents:  map[string]*agentState{},
-		budgets: map[string]bus.BudgetSnapshot{},
-		board:   map[string]bus.BoardEntry{},
-		health:  health{ok: true, since: time.Now()},
+		agents:     map[string]*agentState{},
+		budgets:    map[string]bus.BudgetSnapshot{},
+		board:      map[string]bus.BoardEntry{},
+		health:     health{ok: true, since: time.Now()},
+		configNote: settings.Note,
 	}
 	u := newUI(app, st, ctx, b, project, self)
+	u.settings = settings
+	u.cachePath = busmonCachePath(project)
+	if cache, cacheErr := loadBusmonCache(u.cachePath, project); cacheErr != nil {
+		st.configNote = joinNote(st.configNote, "local busmon cache unavailable")
+		u.cache = cache
+	} else {
+		u.cache = cache
+	}
+	if u.cache != nil && u.cache.LastVisit > 0 {
+		u.priorVisit = time.UnixMilli(u.cache.LastVisit)
+	}
 	go checkForUpdate(ctx, st) // at most once a day; silent offline (AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
 
 	cursors := map[string]string{}

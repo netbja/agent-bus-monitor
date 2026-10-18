@@ -59,6 +59,7 @@ const (
 	ActComposeOpen  // open the compose window
 	ActComposeField // the window: text <-> recipient
 	ActComposeAsk   // the window: answer the open question in its panel
+	ActRecap        // open the deterministic project recap
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -172,6 +173,7 @@ var (
 		{Keys: "esc", Hint: "back", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
 		{Keys: "F2", Hint: "requests", Alt: "r", Act: ActRequests, match: either(keyIs(tcell.KeyF2), runeIs('r'))},
 		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(tcell.KeyF3), runeIs('s'))},
+		{Keys: "R", Help: "where was I? open the project recap", Act: ActRecap, match: runeIs('R')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(tcell.KeyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}

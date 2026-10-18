@@ -4,6 +4,21 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.18.0 — busmon attention and project recap
+
+- busmon distinguishes a human-answered `waiting` declaration from an unanswered one using
+  retained, addressed `human=yes` commands; open asks remain separate attention items.
+- Configurable waiting reminders group due asks and unanswered declarations, respect snoozes, and
+  wait until the person is out of a draft or another modal.
+- `R` opens a deterministic project recap from snapshots and retained events. A confirmed action
+  can ask the project's escalation target (master by default) for a summary; no request is sent
+  without an explicit `y` confirmation.
+- Global settings live in `~/.config/agentbus/busmon.toml` (or `$XDG_CONFIG_HOME/agentbus/`);
+  command-line flags and environment variables retain precedence. Local visit and snooze state is
+  stored atomically under `~/.cache/agentbus/` with user-only permissions.
+
+[Notes](docs/releases/v0.18.0.md)
+
 ## v0.17.4 — reachable role tools, safe session resume, and both quota windows
 
 - `setup.sh install/update` installs `agent-launch` and `agent-spawn` in `BIN_DIR`; status reports

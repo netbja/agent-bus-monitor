@@ -30,6 +30,9 @@ type overlayKind int
 
 const (
 	ovNone overlayKind = iota
+	ovReminder
+	ovRecap
+	ovSummaryConfirm
 	ovMessage
 	ovAgent
 	ovTask
@@ -51,6 +54,17 @@ type ui struct {
 	ctx            context.Context
 	w              busWriter
 	project, self  string
+	settings       busmonSettings
+	cache          *busmonCache
+	cachePath      string
+	reminders      []attentionItem
+	reminderIndex  int
+	priorVisit     time.Time
+	recap          recapModel
+	recapCursor    int
+	recapLoading   bool
+	recapPending   bool
+	recapAutoDone  bool
 	broadcastDraft string     // a draft with no @ already warned about: the next Enter sends it
 	askDraft       string     // a directed text held once because its recipient has an open ask (v0.15.1)
 	askChoose      *askChoice // Tab found several recipients with questions: the next key picks one
@@ -129,15 +143,18 @@ func (u *ui) onTick() {
 			delete(u.rung, n)
 		}
 	}
-	u.animate.Store(len(seen) > 0 && th.Animated())
+	u.animate.Store(len(seen) > 0 && u.settings.Fade && th.Animated())
 	u.st.mu.Unlock()
 	switch {
-	case !ring:
+	case !ring || !u.settings.Bell:
 	case u.bell != nil:
 		u.bell()
 	case u.scr != nil:
 		_ = u.scr.Beep()
 	}
+	u.maybeAutoRecap()
+	u.maybeOpenRecap()
+	u.maybeReminder()
 }
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.
@@ -154,7 +171,7 @@ type tabSpan struct {
 func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter, project, self string) *ui {
 	setRoundedBorders()
 	u := &ui{app: app, st: st, ctx: ctx, w: w, project: project, self: self,
-		focus: PanelAgents, lowerTab: PanelActivity, composing: ModePanel}
+		focus: PanelAgents, lowerTab: PanelActivity, composing: ModePanel, settings: defaultBusmonSettings()}
 	for _, p := range panelOrder {
 		p := p
 		l := NewListView()
@@ -297,6 +314,15 @@ func (u *ui) setFocusPanel(p PanelID) {
 // the focused primitive (text for the input field, scrolling for an overlay).
 func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	m := u.mode()
+	if m == ModeOverlay && u.ov == ovReminder {
+		return u.reminderKey(ev)
+	}
+	if m == ModeOverlay && u.ov == ovRecap {
+		return u.recapKey(ev)
+	}
+	if m == ModeOverlay && u.ov == ovSummaryConfirm {
+		return u.summaryConfirmKey(ev)
+	}
 	// v0.15.1 §11.5: after Tab with several recipients holding questions, a
 	// number picks whose panel opens; Esc goes back to editing.
 	// Every other key is swallowed while the choice is open: nothing is sent
@@ -452,6 +478,8 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.openRequestsOverlay()
 	case ActServices:
 		u.openServicesOverlay()
+	case ActRecap:
+		u.requestRecap(false)
 	case ActEscape:
 		u.escape()
 	}
@@ -811,6 +839,12 @@ func (u *ui) showOverlay(kind overlayKind, title, body, plain, threadPlain strin
 }
 
 func (u *ui) closeOverlay() {
+	u.closeOverlayQuiet()
+	u.maybeOpenRecap()
+	u.maybeReminder()
+}
+
+func (u *ui) closeOverlayQuiet() {
 	u.ov = ovNone
 	u.detailGen++ // a thread read still in flight must not reopen anything
 	u.pages.HidePage("overlay")
@@ -1066,7 +1100,7 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	now := time.Now()
 	u.st.mu.Lock()
 	mineReqs, mineThreads := forPerson(u.st.requests, u.st.threads, u.self)
-	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update,
+	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update, note: u.st.configNote,
 		waiting: waitingText(mineReqs, mineThreads, now), asks: waitingQuestions(u.st.agents), pause: u.st.pause, holds: u.st.holds, pace: u.st.pace.last, budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()
