@@ -4,7 +4,7 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
-## Unreleased
+## v0.17.1 — a gauge bar for each provider's quota in busmon
 
 - busmon's header draws each provider's tightest quota window as a gauge (10 cells wide, 5 medium)
   before its percentage; the narrow layout keeps the percentage alone.
