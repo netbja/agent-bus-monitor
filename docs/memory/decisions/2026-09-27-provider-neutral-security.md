@@ -36,11 +36,11 @@ de session Claude hérité pour éviter d'attribuer le transcript du parent à u
 ## Evidence
 
 - Besoins explicités dans la conversation utilisateur du 2026-09-27, retranscrits
-  dans la [conception](../../superpowers/specs/2026-09-27-provider-neutral-security-design.md).
+  dans la conception (`specs/2026-09-27-provider-neutral-security-design.md`, kept out of the repository).
 - [Guide livré](../../AGENT-PROFILES.md), [résolveur/adaptateurs](../../../rolecfg/) (Go depuis le
   changement roles-go du 2026-10-11, `agentbus roles` ; le résolveur Python d'origine, `scripts/lib/role_config.py`, a été retiré)
   et [tests de lancement isolés](../../../tests/roles_scripts_test.sh) (bout en bout) plus les tests de `rolecfg/`.
-- [Plan de réalisation](../../superpowers/plans/2026-09-27-provider-neutral-security.md).
+- Plan de réalisation (`plans/2026-09-27-provider-neutral-security.md`, kept out of the repository).
 - État des scripts examiné à la révision `00fe199`, sources détaillées dans la conception.
 
 ## Limits / what would invalidate it

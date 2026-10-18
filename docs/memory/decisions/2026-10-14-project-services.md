@@ -66,7 +66,7 @@ Any change to how dispatch or the conductor are started, stopped, restarted or o
 
 ## Evidence
 
-- [Design](../../superpowers/specs/2026-10-14-project-services-design.md).
+- Design (`specs/2026-10-14-project-services-design.md`, kept out of the repository).
 - Branch `feat/services`. The tests use doubles of systemctl, launchctl and herdr, and a
   disposable Redis (`AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392`). They cover:
   - `service/` (units, plist, env file, log, budget, detection);

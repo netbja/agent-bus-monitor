@@ -64,10 +64,10 @@ pane, or to the `{p}:dispatch` / `{p}:wake:{agent}` keys and the `wake=no` / `es
 
 ## Evidence
 
-- [Design spec, revision 3](../../superpowers/specs/2026-10-10-event-driven-dispatch-design.md):
+- Design spec, revision 3 (`specs/2026-10-10-event-driven-dispatch-design.md`, kept out of the repository):
   §3 policy, §10 runtime probes per client (2026-10-10, herdr session `busmon`), §11 the revision
   of the pane-relay rule, §13 review traceability (Codex counter-audit and spec review).
-- [Implementation plan](../../superpowers/plans/2026-10-10-event-driven-dispatch.md).
+- Implementation plan (`plans/2026-10-10-event-driven-dispatch.md`, kept out of the repository).
 - Branch `feat/v0.8-dispatch`, commits `ce79170`…`e869259` (protocol, drain, lease and fenced
   writes, `dispatch/` package, busmon indicators), plus the docs commit that adds this note.
 - At `e869259`: `go test ./... -count=1` passed against a disposable Redis 8.6.3
