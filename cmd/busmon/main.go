@@ -2,7 +2,7 @@
 //
 // Tails one project's streams ({project}:status|report|notify|cmd) and renders
 // a btop-style screen of framed panels (spec:
-// docs/superpowers/specs/2026-10-10-busmon-ui-redesign-design.md):
+// specs/2026-10-10-busmon-ui-redesign-design.md):
 //
 //	HEADER   project, pilot driver, account budget per provider, dispatcher
 //	         (disp up/down) and the monitor's own link to the broker (bus).

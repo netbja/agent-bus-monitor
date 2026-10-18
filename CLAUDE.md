@@ -85,7 +85,7 @@ record → none/prompt/defer/escalate), the `Runtime` interface and its only imp
 without one is never prompted), process identity (`ident.go`: `AncestorAmong`, `ProcStart`), and
 `Run` (`loop.go`). It holds no durable local state: every decision is recomputed from Redis plus
 herdr, so a restart loses nothing. Spec:
-`docs/superpowers/specs/2026-10-10-event-driven-dispatch-design.md`.
+`specs/2026-10-10-event-driven-dispatch-design.md`.
 
 **`mission/`** (v0.10) runs large changes as **missions**: a versioned `docs/changes/<c>/missions.json`
 read from Git at a commit, a pure state machine (`Next` in `state.go`), validation (`validate.go`,
@@ -97,7 +97,7 @@ repair; `ops.go` — operator `load` (`--force`, `--recover`)/`retry`/`reassign`
 on `{p}:missionops`; `reload.go` — revisions; `recover.go` — rebuild from merge trailers; `run.go` — flock,
 lease, inbox, tick). Its Redis primitives are in `bus/conductorkeys.go`: the `{p}:conductor` lease
 (`PX 15000`, renewed every 5s) and fenced writes on `{p}:change:{c}`, `{p}:missions:{c}`, the board,
-gates and cmd. Spec: `docs/superpowers/specs/2026-10-11-missions-design.md`.
+gates and cmd. Spec: `specs/2026-10-11-missions-design.md`.
 
 `bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
 function taking a raw client**, not a `*Bus` method, because it answers the question you have
@@ -213,7 +213,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   project still has keys, and exits 0 once it is deleted); `dispatch --status` prints `dispatch up`
   (exit 0) or `dispatch down` (exit 1).
 - **`busmon`** — `tview`/`tcell` TUI, btop-style since v0.9 (spec
-  `docs/superpowers/specs/2026-10-10-busmon-ui-redesign-design.md`). On launch it backfills only
+  `specs/2026-10-10-busmon-ui-redesign-design.md`). On launch it backfills only
   the **last `--limit` Activity lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all
   history) via `Bus.Recent`, then live-tails from the per-stream cursors `Recent` returns through
   `Bus.TailFrom` (no replay, no `"$"` gap); `--limit 0` falls back to `Bus.Tail(ctx, "0", …)`.
@@ -289,8 +289,8 @@ content. Since v0.12 it runs, with the conductor, as a **user service** (systemd
 launchd), started by `agentbus up`; herdr tabs remain only as the explicit fallback
 (`docs/memory/decisions/2026-10-14-project-services.md`).
 
-There is also a parallel notification path that is **not** on this bus: an `adv-trading-ai` `Stop`
-hook POSTs (via `hermes-notify`) to a hermes gateway on the VDR (`:8644`) that delivers to Signal.
+There is also a parallel notification path that is **not** on this bus: a `project-c` `Stop`
+hook POSTs (via `hermes-notify`) to a hermes gateway on host1 (`:8644`) that delivers to Signal.
 It never touches Redis — see README "Deployment topology".
 
 ### Things that bite

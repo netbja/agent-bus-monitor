@@ -7,6 +7,23 @@ around it. Agents publish status, commands and notifications on a shared Redis i
 a required project namespace. `busmon`, a terminal dashboard, shows the traffic live. The
 broker, the client and the monitor all live here; nothing depends on any other project.
 
+<p align="center"><img src="docs/assets/busmon.png" alt="busmon showing the fictional acme-shop project: five agents, the activity feed, the task board and the tracked requests" width="900"></p>
+
+<p align="center"><sub>busmon on a fictional project (<code>acme-shop</code>), seeded by <code>scripts/busmon-demo.sh</code>.</sub></p>
+
+**What you get**
+
+- **A shared bus** — status, reports, directives and notifications per project, with
+  at-least-once delivery to each agent (`agentbus subscribe`).
+- **A live dashboard** — who is working, blocked or waiting for a person; the board of tracked
+  tasks; the requests nobody answered yet (`busmon`).
+- **Wake-ups without polling** — a dispatcher nudges an idle agent's terminal pane when work
+  is waiting for it, and escalates when nobody answers (`agentbus dispatch`).
+- **A team in one command** — master, coder, reviewer and sentinel roles, launched for Claude
+  Code, Codex and others from one manifest (`agentbus up`, `roles.toml`).
+- **Large changes as missions** — a conductor merges, tests and reviews agents' work
+  (`agentbus missions`).
+
 ## Quick start
 
 ```bash
@@ -48,7 +65,7 @@ today — and, importantly, where they *don't* connect.
 
 - **Broker** runs on the **laptop/desktop** (`docker compose up`, redis:8-alpine on `:6380`).
 - The **remotebox** (`user@remotebox`) reaches it through an SSH tunnel it opens *to* the laptop/desktop:
-  `ssh -L 6380:localhost:6380 user@laptop.local -N`. So `agentbus --host 127.0.0.1`
+  `ssh -L 6380:localhost:6380 user@laptop -N`. So `agentbus --host 127.0.0.1`
   on the remote box publishes onto the laptop's bus.
 - Two Claude Code sessions run on the laptop under **herdr** in `~/myproject`
   (agents `claude1`, `claude2`); a **hermes agent** runs on the remote box.
@@ -221,7 +238,7 @@ invocation that does **not** need `--project`, since that is the question it ans
 ```
 $ busmon --list
 PROJECT             AGENTS  MASTER  LAST ACTIVITY
-ai-tradex-solana         6  master  2m ago
+project-a         6  master  2m ago
 agent-bus-monitor        2  -       3h ago
 demo                     0  -       23d ago
 ```
@@ -297,7 +314,7 @@ conductor and the agents share one machine and repository, and running a mission
 agent's committed code as your user — load only plans you have reviewed, and keep secrets out of
 the conductor's environment. A mission accepted but not delivered within its `timeout` (4h by
 default) is blocked and escalated. busmon shows `missions up/down`; the bootstrap template opens a
-`missions` tab (`--no-missions` to omit it). Spec: [`docs/superpowers/specs/2026-10-11-missions-design.md`](docs/superpowers/specs/2026-10-11-missions-design.md).
+`missions` tab (`--no-missions` to omit it). Spec: `specs/2026-10-11-missions-design.md` (design spec, kept out of the repository).
 
 ## busmon panes
 
@@ -437,7 +454,7 @@ acceptance only from an explicit request transition.
 ### Reproducing the screens
 
 `scripts/busmon-demo.sh` builds an isolated bus for demos and renders — its own
-Redis container on port 6390, its own throwaway `demo` project, never the real
+Redis container on port 6390, its own throwaway `acme-shop` project (a fictional web shop), never the real
 broker on 6380:
 
 ```bash
@@ -447,21 +464,14 @@ scripts/busmon-demo.sh capture out.txt ./busmon F2 # one screen, via tmux, to a 
 scripts/busmon-demo.sh down                        # remove the container
 ```
 
+The README screenshot is rendered from that bus by [vhs](https://github.com/charmbracelet/vhs)
+(needs `ttyd` and `ffmpeg`): `scripts/busmon-demo.sh up && vhs scripts/busmon-demo.tape`.
+
 The seeded data is deliberately awkward — an agent that declared `working` and went
 quiet, an agent known only to the agents hash, a long multi-line Unicode report, a
 pre-retention report, an answered thread, an unanswered directive, and a tracked
 request in each state. `docs/captures/` holds the before/after renders produced this
 way.
-
-The README image comes from `TestCaptureScreen`, which renders one screen of a project on the
-**test** broker to HTML; a headless browser turns it into the PNG:
-
-```bash
-AGENTBUS_TEST_REDIS_URL=redis://127.0.0.1:6392 BUSMON_CAPTURE=$PWD/busmon.html \
-  go test ./cmd/busmon -run TestCaptureScreen -count=1      # BUSMON_CAPTURE_PROJECT, _THEME=light
-google-chrome --headless --hide-scrollbars --force-device-scale-factor=2 \
-  --window-size=1460,880 --screenshot=busmon.png busmon.html
-```
 
 ## Bootstrap a team
 
@@ -603,7 +613,7 @@ provider configuration and extension adapters.
   via `agentbus pane sentinel`) once a day to write a project review; the sentinel also nudges the
   master to reset its context when it saturates — **notify-only**, it never clears the master's pane.
 
-Design/rationale live in `docs/superpowers/specs/2026-07-16-master-bootstrap-design.md`. Tests are a
+Design/rationale live in `specs/2026-07-16-master-bootstrap-design.md`. Tests are a
 bash suite (it builds `agentbus` once): `bash tests/run.sh` (see **One-time setup** above for prerequisites).
 
 ## Master skill
@@ -656,14 +666,14 @@ travels in plaintext, so the bus is never exposed raw over the network. To watch
 box, forward its port through SSH and point a tool at the local end of the tunnel:
 
 ```bash
-ssh -NL 6381:localhost:6380 user@192.168.1.5 &   # tunnel VDR bus -> local :6381
+ssh -NL 6381:localhost:6380 user@host1 &   # tunnel host1 bus -> local :6381
 REDIS_PORT=6381 ./busmon                          # watch it
 
 # one shot, with automatic tunnel teardown:
-./remote-bus.sh user@192.168.1.5
+./remote-bus.sh user@host1
 ```
 
-> The deployed laptop⇄VDR setup runs this **in reverse**: the VDR opens the tunnel *into* the
+> The deployed laptop⇄host1 setup runs this **in reverse**: host1 opens the tunnel *into* the
 > laptop's bus (`ssh -L 6380:localhost:6380 …`) rather than the laptop reaching out. See
 > **Deployment topology** above.
 

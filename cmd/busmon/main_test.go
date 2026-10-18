@@ -52,14 +52,14 @@ func TestConfirmDeleteAccepts(t *testing.T) {
 func TestConfirmDeletePromptShowsWhatGoes(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	s := bus.ProjectSummary{
-		Project: "ai-tradex-solana",
+		Project: "project-a",
 		Agents:  6,
 		LastTS:  now.Add(-2 * time.Minute).UnixMilli(),
 	}
 	var out strings.Builder
 	confirmDelete(s, 31, now, &out, strings.NewReader("n\n"))
 
-	for _, want := range []string{"31 keys", "ai-tradex-solana", "6 agents", "2m ago", "DEL", "[y/N]"} {
+	for _, want := range []string{"31 keys", "project-a", "6 agents", "2m ago", "DEL", "[y/N]"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("prompt missing %q:\n%s", want, out.String())
 		}

@@ -1,6 +1,6 @@
 // Package quota reads how much of each AI provider's usage windows is spent,
 // from first-party local sources, with no model call (spec
-// docs/superpowers/specs/2026-10-15-quota-awareness-design.md). Every reader
+// specs/2026-10-15-quota-awareness-design.md). Every reader
 // returns the same Reading; the policy and busmon know nothing else.
 package quota
 

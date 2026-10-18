@@ -1,7 +1,7 @@
 // Package mission runs a change's missions: a versioned missions.json read
 // from Git, a pure state machine, and the conductor that requests, checks,
 // reviews and integrates each mission (spec
-// docs/superpowers/specs/2026-10-11-missions-design.md).
+// specs/2026-10-11-missions-design.md).
 package mission
 
 import (

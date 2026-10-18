@@ -65,7 +65,7 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 - **Zero Token Cost While Idle**: With the event-driven dispatcher, idle agents do not run token-wasting polling loops; they are awakened only when concrete work is assigned.
 - **Claude by Default, Adaptable to Any Model**: Uses Claude Code by default (`roles.toml`), with full support for mixed teams running OpenAI Codex or Kimi CLI through declarative profiles (`docs/AGENT-PROFILES.md`).
-- **100% Local, Ready for Remote**: Operates entirely on your local workstation (`127.0.0.1:6380`), while natively supporting remote servers (VDR, GPU clusters) via secure SSH port forwarding.
+- **100% Local, Ready for Remote**: Operates entirely on your local workstation (`127.0.0.1:6380`), while natively supporting remote servers (host1, GPU clusters) via secure SSH port forwarding.
 - **Observability & Governance**: Full human visibility through `busmon`, enforced with mandatory 4-eyes code review gates (`foureyes`, `security`).
 
 ---
@@ -140,7 +140,7 @@ offers: stop it and keep the data (the default), remove it together with its dat
 ### 100% Local Setup (Default)
 All processes run on the same workstation. Agents and `busmon` connect directly to `127.0.0.1:6380` (default password: `AgentBus2025!`).
 
-### Hybrid Setup with Remote Servers (VDR / GPU)
+### Hybrid Setup with Remote Servers (host1 / GPU)
 For security, the broker binds strictly to loopback (`127.0.0.1:6380`). Remote access uses SSH tunnels:
 
 - **Scenario A: Monitoring a remote bus from your local machine**:

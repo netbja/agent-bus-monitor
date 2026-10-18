@@ -12,7 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// The missions conductor (spec docs/superpowers/specs/2026-10-11-missions-design.md
+// The missions conductor (spec specs/2026-10-11-missions-design.md
 // §5.1) holds its own lease, {p}:conductor, and every write it makes goes
 // through one of the scripts below, which first check GET {p}:conductor ==
 // token. They mirror the dispatcher's fenced writes; a conductor that lost its
