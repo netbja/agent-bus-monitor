@@ -200,11 +200,11 @@ func TestPromptThroughThePoll(t *testing.T) {
 	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
 	pollOnce(context.Background(), f, st, 1)
 	pollOnce(context.Background(), f, st, 1)
-	if _, word, _, _ := stateLook(st.agents["master"]); word != "working" {
-		t.Fatalf("master shows %q, want declared working beside its prompt flag", word)
+	if _, word, _, _ := stateLook(st.agents["master"]); word != "waiting" {
+		t.Fatalf("master shows %q, want waiting", word)
 	}
 	_, body := agentDetail("master", st.agents["master"], false, nil, nil, time.Now())
-	if strings.Contains(body, "shown as waiting") || !strings.Contains(body, "pane w2:p2") || !strings.Contains(body, "Answer it there") {
+	if !strings.Contains(body, "shown as waiting") || !strings.Contains(body, "pane w2:p2") || !strings.Contains(body, "Answer it there") {
 		t.Errorf("detail:\n%s", body)
 	}
 	f.observed = map[string]bus.Observation{"master": {State: "blocked", At: now, Since: now, PID: 999}}

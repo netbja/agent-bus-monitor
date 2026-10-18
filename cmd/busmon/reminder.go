@@ -42,7 +42,7 @@ func attentionItems(agents map[string]*agentState, asks []bus.Ask) []attentionIt
 		}
 	}
 	for name, a := range agents {
-		if a.state != "waiting" || !a.answeredAt.IsZero() || a.stateAt.IsZero() {
+		if a.state != "waiting" || answered(a) || a.stateAt.IsZero() {
 			continue
 		}
 		out = append(out, attentionItem{Key: fmt.Sprintf("wait:%s:%d", name, a.stateAt.UnixMilli()),
@@ -141,7 +141,7 @@ func (u *ui) renderReminder() {
 		b.WriteString("\n\n")
 	}
 	u.overlay.SetTitle(" " + tg(RoleText, fmt.Sprintf("Waiting for you %s %d", GlyphNone, len(u.reminders))) +
-		"  " + tg(RoleMuted, GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter ask "+GlyphNone+" i message "+GlyphNone+" Esc later") + " ")
+		"  " + tg(RoleMuted, GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter answer "+GlyphNone+" i message "+GlyphNone+" Esc later") + " ")
 	u.overlay.SetText(strings.TrimRight(b.String(), "\n"))
 	u.overlay.ScrollToBeginning()
 }
@@ -170,14 +170,16 @@ func (u *ui) reminderKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.renderReminder()
 	case ev.Key() == tcell.KeyEnter:
 		item := u.reminders[u.reminderIndex]
+		u.closeOverlayQuiet()
 		if item.AskID != "" {
-			u.closeOverlay()
 			u.openAskPanel(item.Agent)
+		} else { // a declared wait: Enter answers it like i
+			u.openComposer("", item.Agent)
 		}
 	case ev.Key() == tcell.KeyRune && ev.Rune() == 'i':
 		item := u.reminders[u.reminderIndex]
 		if item.AskID == "" {
-			u.closeOverlay()
+			u.closeOverlayQuiet()
 			u.openComposer("", item.Agent)
 		}
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -158,4 +159,60 @@ func TestAnsweredWaitingIsDisplayOnlyAndDoesNotRingOrCount(t *testing.T) {
 	if _, word, _, _ := stateLook(a); word != "waiting" {
 		t.Fatalf("open ask did not reactivate waiting: %q", word)
 	}
+}
+
+// A reply found for an older declaration never covers a newer one, even
+// before the next history scan recomputes it.
+func TestAnsweredNeverCoversANewerDeclaration(t *testing.T) {
+	now := time.Now()
+	a := &agentState{state: "waiting", stateAt: now.Add(-time.Minute), answeredAt: now.Add(-2 * time.Minute)}
+	if answered(a) {
+		t.Fatal("a reply older than the declaration answered it")
+	}
+	a.answeredAt = now
+	if !answered(a) {
+		t.Fatal("a later human reply did not answer the wait")
+	}
+	if _, w, _, _ := stateLook(a); w != "answered" {
+		t.Fatalf("stateLook = %q, want answered", w)
+	}
+	a.openAsk = 1
+	if answered(a) || !waitsForPerson(a) {
+		t.Fatal("an open ask keeps the agent waiting for the person")
+	}
+}
+
+// A client prompt in the pane is a person's decision: it beats answered.
+func TestPromptBeatsAnswered(t *testing.T) {
+	now := time.Now()
+	a := &agentState{state: "working", stateAt: now.Add(-time.Minute), obsPrompt: true, obsAt: now}
+	if _, w, _, _ := stateLook(a); w != "waiting" || !waitsForPerson(a) {
+		t.Fatalf("stateLook = %q, want waiting for a pane prompt", w)
+	}
+}
+
+// A directive addressed to the person's own identity is expected from them;
+// once the person replies in its thread it is not.
+func TestRecapListsDirectivesToThePerson(t *testing.T) {
+	now := time.Now()
+	id := func(d time.Duration) string { return strconv.FormatInt(now.Add(d).UnixMilli(), 10) + "-0" }
+	cmds := []bus.Event{{Kind: "cmd", ID: id(-time.Hour), From: "master", Target: "bernard", Type: bus.CmdDirective, Message: "pick a window"}}
+	m := buildRecap(recapInput{Now: now, Human: "bernard", Commands: cmds, Agents: map[string]*agentState{}})
+	if !recapHas(m, "pick a window") {
+		t.Fatal("a directive to the person is missing from Expected from you")
+	}
+	cmds = append(cmds, bus.Event{Kind: "cmd", ID: id(-time.Minute), From: "bernard", Target: "master", Type: bus.CmdReply, Ref: cmds[0].ID, Human: true})
+	m = buildRecap(recapInput{Now: now, Human: "bernard", Commands: cmds, Agents: map[string]*agentState{}})
+	if recapHas(m, "pick a window") {
+		t.Fatal("a directive the person answered is still expected")
+	}
+}
+
+func recapHas(m recapModel, detail string) bool {
+	for _, r := range m.Rows {
+		if r.Section == "Expected from you" && r.Detail == detail {
+			return true
+		}
+	}
+	return false
 }

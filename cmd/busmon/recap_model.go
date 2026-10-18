@@ -70,7 +70,7 @@ func buildRecap(in recapInput) recapModel {
 	}
 	for _, n := range names {
 		a := in.Agents[n]
-		if a.state == "waiting" && a.answeredAt.IsZero() {
+		if a.state == "waiting" && !answered(a) {
 			add(recapRow{Key: fmt.Sprintf("wait:%s:%d", n, a.stateAt.UnixMilli()), Section: "Expected from you",
 				Title: n + " waiting " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(a.stateAt))), Detail: a.message,
 				Kind: "agent", Agent: n, Selectable: true})
@@ -78,19 +78,19 @@ func buildRecap(in recapInput) recapModel {
 	}
 	threadReplies := make(map[string]bool)
 	for _, e := range in.Commands {
-		if e.Type == bus.CmdReply && e.Ref != "" {
+		if e.Type == bus.CmdReply && e.Ref != "" && e.Human {
 			threadReplies[e.Ref] = true
 		}
 	}
 	for _, e := range in.Commands {
-		if e.Target != bus.PeopleTarget || e.From == in.Human || e.Type != bus.CmdDirective && e.Type != bus.CmdEscalation {
+		if e.Target != bus.PeopleTarget && (in.Human == "" || e.Target != in.Human) || e.Human || e.Type != bus.CmdDirective && e.Type != bus.CmdEscalation {
 			continue
 		}
 		thread := threadID(e)
-		if threadReplies[thread] {
+		if threadReplies[thread] || in.Now.Sub(eventTimestamp(e.ID)) > bus.DefaultHorizon { // same window as the Requests count
 			continue
 		}
-		add(recapRow{Key: "cmd:" + e.ID, Section: "Expected from you", Title: e.From + " " + GlyphArrowR + " people " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(eventTimestamp(e.ID)))),
+		add(recapRow{Key: "cmd:" + e.ID, Section: "Expected from you", Title: e.From + " " + GlyphArrowR + " " + e.Target + " " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(eventTimestamp(e.ID)))),
 			Detail: e.Message, Kind: "thread", Agent: e.From, Ref: thread, Event: e, Selectable: true})
 	}
 	for _, n := range names {
@@ -112,6 +112,9 @@ func buildRecap(in recapInput) recapModel {
 		state := a.state
 		if state == "" {
 			state = "undeclared"
+		}
+		if answered(a) {
+			state = "answered"
 		}
 		age := "age unknown"
 		if !a.stateAt.IsZero() {

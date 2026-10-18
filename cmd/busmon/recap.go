@@ -65,11 +65,9 @@ func (u *ui) requestRecap(auto bool) {
 	}
 	u.recapLoading = true
 	since, human := u.priorVisit, u.self
-	u.app.QueueUpdateDraw(func() {
-		if auto {
-			u.flash, u.flashErr = "building project recap"+GlyphEllipsis, false
-		}
-	})
+	if auto { // already on the event loop (key or tick): no queued update
+		u.flash, u.flashErr = "building project recap"+GlyphEllipsis, false
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(u.ctx, 7*time.Second)
 		defer cancel()
@@ -304,6 +302,7 @@ func (u *ui) activateRecapRow() {
 func (u *ui) renderRecap() {
 	var b strings.Builder
 	lastSection := ""
+	cursorLine := 0
 	for i, row := range u.recap.Rows {
 		if row.Section != lastSection {
 			if b.Len() > 0 {
@@ -318,6 +317,7 @@ func (u *ui) renderRecap() {
 		}
 		mark := "  "
 		if i == u.recapCursor && row.Selectable {
+			cursorLine = strings.Count(b.String(), "\n")
 			mark = tg(RoleAccent, "> ")
 		}
 		role := RoleText
@@ -329,10 +329,9 @@ func (u *ui) renderRecap() {
 			b.WriteString("    " + tg(RoleMuted, Preview(row.Detail)) + "\n")
 		}
 	}
-	status := recapSummaryStatus(u.recap)
 	u.overlay.SetTitle(" " + tg(RoleText, "Where was I?") + "  " + tg(RoleMuted, GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter open "+GlyphNone+" Esc close") + " ")
-	u.overlay.SetText(strings.TrimRight(b.String()+"\n"+tg(RoleMuted, status), "\n"))
-	u.overlay.ScrollToBeginning()
+	u.overlay.SetText(strings.TrimRight(b.String(), "\n"))
+	u.overlay.ScrollTo(max(0, cursorLine-3), 0) // keep the selected row in view
 }
 
 func (u *ui) openSummaryConfirmation() {

@@ -61,3 +61,10 @@ func attentionHistoryFloor(events []bus.Event) time.Time {
 	}
 	return floor
 }
+
+// answered: a declared wait that a person has replied to since it was
+// declared, with no open question left. A reply computed for an older
+// declaration never covers a newer one, even before the next history scan.
+func answered(a *agentState) bool {
+	return a.state == "waiting" && a.openAsk == 0 && !a.answeredAt.IsZero() && a.answeredAt.After(a.stateAt)
+}

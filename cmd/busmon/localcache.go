@@ -55,6 +55,12 @@ func (c *busmonCache) save(path string) error {
 	if err := os.Chmod(dir, 0700); err != nil {
 		return err
 	}
+	now := time.Now().UnixMilli()
+	for key, until := range c.Snoozes { // expired snoozes would only grow the file
+		if until <= now {
+			delete(c.Snoozes, key)
+		}
+	}
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
