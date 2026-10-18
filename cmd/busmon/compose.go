@@ -396,6 +396,7 @@ func (u *ui) hideComposer() {
 		u.renderAsk()
 	}
 	u.app.SetFocus(u.focusPrimitive())
+	u.maybeOpenRecap()
 	u.maybeReminder()
 }
 

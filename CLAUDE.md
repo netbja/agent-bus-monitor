@@ -382,6 +382,14 @@ It never touches Redis — see README "Deployment topology".
 - **`docker-compose.yml` binds `6380` to loopback** (`127.0.0.1:6380:6379`) so the bus is not
   LAN-reachable (the password travels in plaintext); the SSH tunnel is the only remote path. Don't
   revert to a bare `6380:6379` (= `0.0.0.0`) without a reason.
+- **Attention and recap (v0.18)** — busmon derives answered `waiting` declarations only from a
+  later addressed `human=yes` command or a reply in the agent's thread; open asks remain separate
+  attention items. Due reminders wait until drafts and other modals clear, then group oldest-first
+  and snooze locally. `R` opens a recap built from current snapshots and retained events; capped
+  history boundaries and failed reads are labelled instead of treated as empty. The optional
+  summary directive requires an explicit `y` confirmation and uses the normal `ui.send` path.
+  Global settings are in `~/.config/agentbus/busmon.toml` (or `$XDG_CONFIG_HOME/agentbus/`), and
+  local last-visit/snooze data is atomically cached under `~/.cache/agentbus/` with mode `0600`.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

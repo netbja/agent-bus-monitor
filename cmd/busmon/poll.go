@@ -325,6 +325,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			a.answeredAt = waitingAnswerAt(name, a.stateAt, st.cmdHistory)
 		}
 	}
+	st.lastPollAt = time.Now()
 }
 
 // errNotPolled marks a dispatcher read skipped on this tick: like a failed

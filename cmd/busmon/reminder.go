@@ -84,7 +84,7 @@ func dueAttention(items []attentionItem, cache *busmonCache, now time.Time, popu
 }
 
 func (u *ui) maybeReminder() {
-	if u.settings.PopupAfter <= 0 || u.ov != ovNone || u.comp.open || u.composing != ModePanel ||
+	if u.settings.PopupAfter <= 0 || u.recapLoading || u.recapPending || u.ov != ovNone || u.comp.open || u.composing != ModePanel ||
 		strings.TrimSpace(u.msgDraft) != "" || strings.TrimSpace(u.input.GetText()) != "" || u.askChoose != nil {
 		return
 	}
@@ -134,14 +134,14 @@ func (u *ui) renderReminder() {
 			marker = tg(RoleAccent, "> ")
 		}
 		b.WriteString(marker)
-		b.WriteString(tg(RoleAttention, Preview(item.Agent)+" · "+humanAge(max(0, time.Since(item.At)))))
+		b.WriteString(tg(RoleAttention, Preview(item.Agent)+" "+GlyphNone+" "+humanAge(max(0, time.Since(item.At)))))
 		b.WriteByte('\n')
 		b.WriteString("    ")
 		b.WriteString(tg(RoleText, Preview(item.Text)))
 		b.WriteString("\n\n")
 	}
-	u.overlay.SetTitle(" " + tg(RoleText, fmt.Sprintf("Waiting for you · %d", len(u.reminders))) +
-		"  " + tg(RoleMuted, "↑↓ select · Enter ask · i message · Esc later") + " ")
+	u.overlay.SetTitle(" " + tg(RoleText, fmt.Sprintf("Waiting for you %s %d", GlyphNone, len(u.reminders))) +
+		"  " + tg(RoleMuted, GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter ask "+GlyphNone+" i message "+GlyphNone+" Esc later") + " ")
 	u.overlay.SetText(strings.TrimRight(b.String(), "\n"))
 	u.overlay.ScrollToBeginning()
 }

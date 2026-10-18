@@ -9,11 +9,9 @@ import (
 )
 
 type busmonCache struct {
-	Project          string           `json:"project"`
-	LastVisit        int64            `json:"last_visit,omitempty"`
-	Snoozes          map[string]int64 `json:"snoozes,omitempty"`
-	SummaryRequestID string           `json:"summary_request_id,omitempty"`
-	SummaryThread    string           `json:"summary_thread,omitempty"`
+	Project   string           `json:"project"`
+	LastVisit int64            `json:"last_visit,omitempty"`
+	Snoozes   map[string]int64 `json:"snoozes,omitempty"`
 }
 
 func busmonCachePath(project string) string {
@@ -46,6 +44,9 @@ func loadBusmonCache(path, project string) (*busmonCache, error) {
 func (c *busmonCache) save(path string) error {
 	if c == nil {
 		return nil
+	}
+	if path == "" {
+		return fmt.Errorf("empty busmon cache path")
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {

@@ -303,6 +303,7 @@ type shared struct {
 	cmdHistory   []bus.Event  // bounded retained cmd sample used for waiting/reply correlation
 	cmdOldest    time.Time    // oldest event in the retained sample; zero when none
 	cmdHistoryOK bool         // last bounded cmd read succeeded
+	lastPollAt   time.Time    // last fully successful snapshot tick
 }
 
 func main() {
@@ -448,6 +449,9 @@ func main() {
 		u.cache = cache
 	} else {
 		u.cache = cache
+	}
+	if u.cache != nil && u.cache.LastVisit > 0 {
+		u.priorVisit = time.UnixMilli(u.cache.LastVisit)
 	}
 	go checkForUpdate(ctx, st) // at most once a day; silent offline (AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
 

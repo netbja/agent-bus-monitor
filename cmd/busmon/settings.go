@@ -69,12 +69,16 @@ func busmonConfigPath() string {
 func resolveBusmonSettings(file busmonFileConfig, overrides settingsOverrides) busmonSettings {
 	s := defaultBusmonSettings()
 	var notes []string
-	setDuration := func(name, raw string, dst *time.Duration) {
+	setDuration := func(name, raw string, dst *time.Duration, zeroOK bool) {
 		if raw == "" {
 			return
 		}
 		if raw == "0" {
-			*dst = 0
+			if zeroOK {
+				*dst = 0
+			} else {
+				notes = append(notes, "invalid "+name)
+			}
 			return
 		}
 		d, err := time.ParseDuration(raw)
@@ -84,9 +88,9 @@ func resolveBusmonSettings(file busmonFileConfig, overrides settingsOverrides) b
 		}
 		*dst = d
 	}
-	setDuration("waiting.popup_after", file.Waiting.PopupAfter, &s.PopupAfter)
-	setDuration("waiting.snooze", file.Waiting.Snooze, &s.Snooze)
-	setDuration("recap.auto_after", file.Recap.AutoAfter, &s.AutoAfter)
+	setDuration("waiting.popup_after", file.Waiting.PopupAfter, &s.PopupAfter, true)
+	setDuration("waiting.snooze", file.Waiting.Snooze, &s.Snooze, false)
+	setDuration("recap.auto_after", file.Recap.AutoAfter, &s.AutoAfter, true)
 	if file.Waiting.Bell != nil {
 		s.Bell = *file.Waiting.Bell
 	}

@@ -31,6 +31,8 @@ type overlayKind int
 const (
 	ovNone overlayKind = iota
 	ovReminder
+	ovRecap
+	ovSummaryConfirm
 	ovMessage
 	ovAgent
 	ovTask
@@ -57,6 +59,12 @@ type ui struct {
 	cachePath      string
 	reminders      []attentionItem
 	reminderIndex  int
+	priorVisit     time.Time
+	recap          recapModel
+	recapCursor    int
+	recapLoading   bool
+	recapPending   bool
+	recapAutoDone  bool
 	broadcastDraft string     // a draft with no @ already warned about: the next Enter sends it
 	askDraft       string     // a directed text held once because its recipient has an open ask (v0.15.1)
 	askChoose      *askChoice // Tab found several recipients with questions: the next key picks one
@@ -144,6 +152,8 @@ func (u *ui) onTick() {
 	case u.scr != nil:
 		_ = u.scr.Beep()
 	}
+	u.maybeAutoRecap()
+	u.maybeOpenRecap()
 	u.maybeReminder()
 }
 
@@ -307,6 +317,12 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	if m == ModeOverlay && u.ov == ovReminder {
 		return u.reminderKey(ev)
 	}
+	if m == ModeOverlay && u.ov == ovRecap {
+		return u.recapKey(ev)
+	}
+	if m == ModeOverlay && u.ov == ovSummaryConfirm {
+		return u.summaryConfirmKey(ev)
+	}
 	// v0.15.1 §11.5: after Tab with several recipients holding questions, a
 	// number picks whose panel opens; Esc goes back to editing.
 	// Every other key is swallowed while the choice is open: nothing is sent
@@ -462,6 +478,8 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.openRequestsOverlay()
 	case ActServices:
 		u.openServicesOverlay()
+	case ActRecap:
+		u.requestRecap(false)
 	case ActEscape:
 		u.escape()
 	}
@@ -821,11 +839,16 @@ func (u *ui) showOverlay(kind overlayKind, title, body, plain, threadPlain strin
 }
 
 func (u *ui) closeOverlay() {
+	u.closeOverlayQuiet()
+	u.maybeOpenRecap()
+	u.maybeReminder()
+}
+
+func (u *ui) closeOverlayQuiet() {
 	u.ov = ovNone
 	u.detailGen++ // a thread read still in flight must not reopen anything
 	u.pages.HidePage("overlay")
 	u.app.SetFocus(u.focusPrimitive())
-	u.maybeReminder()
 }
 
 func (u *ui) openAgent(name string) {
