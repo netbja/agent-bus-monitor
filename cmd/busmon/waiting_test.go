@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 func waitingShared(now time.Time) *shared {
@@ -98,5 +100,62 @@ func TestHeaderSaysWhoWaitsForYouAndTheBellRingsOncePerDeclaration(t *testing.T)
 	h.u.onTick()
 	if rings != 3 {
 		t.Fatalf("rings %d, want one per new waiting declaration (3)", rings)
+	}
+}
+
+func TestWaitingAnswerRequiresLaterHumanEntryAddressedToTheAgentOrItsThread(t *testing.T) {
+	declared := time.UnixMilli(1_800_000_000_000)
+	rootID := "1800000000001-0"
+	root := bus.Event{ID: rootID, Kind: "cmd", From: "master", Target: bus.PeopleTarget, Type: bus.CmdAsk}
+	cases := []struct {
+		name   string
+		event  bus.Event
+		wantAt time.Time
+	}{
+		{name: "direct human", event: bus.Event{ID: "1800000000002-0", Kind: "cmd", From: "bernard", Target: "master", Human: true}, wantAt: time.UnixMilli(1_800_000_000_002)},
+		{name: "all fanout", event: bus.Event{ID: "1800000000003-0", Kind: "cmd", From: "bernard", Target: "master", Human: true}, wantAt: time.UnixMilli(1_800_000_000_003)},
+		{name: "thread reply", event: bus.Event{ID: "1800000000004-0", Kind: "cmd", From: "bernard", Target: bus.PeopleTarget, Type: bus.CmdReply, Ref: rootID, Human: true}, wantAt: time.UnixMilli(1_800_000_000_004)},
+		{name: "not human", event: bus.Event{ID: "1800000000005-0", Kind: "cmd", From: "agent", Target: "master"}},
+		{name: "wrong recipient", event: bus.Event{ID: "1800000000006-0", Kind: "cmd", From: "bernard", Target: "coder", Human: true}},
+		{name: "same millisecond", event: bus.Event{ID: "1800000000000-9", Kind: "cmd", From: "bernard", Target: "master", Human: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			events := []bus.Event{root, tc.event}
+			if got := waitingAnswerAt("master", declared, events); !got.Equal(tc.wantAt) {
+				t.Fatalf("answerAt = %v, want %v", got, tc.wantAt)
+			}
+		})
+	}
+	if got := waitingAnswerAt("master", declared, []bus.Event{{ID: "1800000000007-0", Kind: "notify", From: "bernard", Human: true}}); !got.IsZero() {
+		t.Fatalf("human notify answered a wait: %v", got)
+	}
+	if got := waitingAnswerAt("master", time.UnixMilli(1_800_000_000_003), []bus.Event{root, cases[0].event}); !got.IsZero() {
+		t.Fatalf("reply before a later declaration carried forward: %v", got)
+	}
+}
+
+func TestAnsweredWaitingIsDisplayOnlyAndDoesNotRingOrCount(t *testing.T) {
+	now := time.Now()
+	a := &agentState{state: "waiting", message: "waiting for direction", stateAt: now.Add(-10 * time.Minute), answeredAt: now.Add(-2 * time.Minute)}
+	glyph, word, _, _ := stateLook(a)
+	if word != "answered" || glyph == GlyphHuman || waitsForPerson(a) || waitingQuestions(map[string]*agentState{"master": a}) != 0 {
+		t.Fatalf("answered state still looks like waiting: glyph=%q word=%q", glyph, word)
+	}
+	if len(asksFor(map[string]*agentState{"master": a})) != 0 {
+		t.Fatal("answered wait is still in bell list")
+	}
+	row := agentRow("master", a, false, TierWide, 120, now)
+	for _, seg := range row {
+		if seg.Fade > 0 {
+			t.Fatalf("answered row fades: %+v", seg)
+		}
+	}
+	if got := updatedCell(a, TierNarrow, now)[0].Text; got != "2m" {
+		t.Fatalf("answered age %q, want age since reply", got)
+	}
+	a.openAsk = 1
+	if _, word, _, _ := stateLook(a); word != "waiting" {
+		t.Fatalf("open ask did not reactivate waiting: %q", word)
 	}
 }

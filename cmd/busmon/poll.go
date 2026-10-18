@@ -91,11 +91,14 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	var haveReqs bool
 	var threads []openThread
 	var haveThreads bool
+	var cmdHistory []bus.Event
+	var haveCmdHistory bool
 	if boardErr == nil {
 		reqs, haveReqs = boardRequests(boardSnap), true
 	}
 	if tick%requestPoll == 1 {
 		if cmds, _, err := b.Recent(pollCtx, []string{"cmd"}, openThreadScan); err == nil {
+			cmdHistory, haveCmdHistory = cmds, true
 			st.mu.Lock()
 			known := st.requests
 			st.mu.Unlock()
@@ -314,6 +317,12 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 					a.wake = &rec
 				}
 			}
+		}
+	}
+	if haveCmdHistory {
+		st.cmdHistory, st.cmdOldest, st.cmdHistoryOK = cmdHistory, attentionHistoryFloor(cmdHistory), true
+		for name, a := range st.agents {
+			a.answeredAt = waitingAnswerAt(name, a.stateAt, st.cmdHistory)
 		}
 	}
 }

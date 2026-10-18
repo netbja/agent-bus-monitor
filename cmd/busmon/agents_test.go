@@ -257,13 +257,12 @@ func TestBusyFlagIsObservedNotDeclared(t *testing.T) {
 	}
 }
 
-// v0.15 §13: a tab whose client asks something reads waiting, flagged
-// prompt, counted and sorted like a person's decision; the declared state
-// stays, and a declared blocked or waiting is not covered.
-func TestPromptInTheTabReadsWaiting(t *testing.T) {
-	a := &agentState{state: "working", held: true, paused: true, registered: true, obsPrompt: true, obsAt: time.Now()}
-	if _, w, _, g := stateLook(a); w != "waiting" || g != 0 {
-		t.Fatalf("stateLook = %q group %d, want waiting group 0 (it beats quota and paused)", w, g)
+// A client prompt remains a separate flag; only an ask or an unanswered
+// declared wait gets the human waiting marker.
+func TestPromptInTheTabIsSeparateFromWaiting(t *testing.T) {
+	a := &agentState{state: "working", registered: true, obsPrompt: true, obsAt: time.Now()}
+	if _, w, _, g := stateLook(a); w != "working" || g != 3 {
+		t.Fatalf("stateLook = %q group %d, want declared working", w, g)
 	}
 	if fs := agentFlags(a, false); len(fs) == 0 || fs[0].Word != "prompt" {
 		t.Fatalf("flags = %+v, want prompt first", fs)
@@ -271,11 +270,11 @@ func TestPromptInTheTabReadsWaiting(t *testing.T) {
 	if a.state != "working" {
 		t.Fatal("the declared state was rewritten")
 	}
-	if n := waitingQuestions(map[string]*agentState{"master": a}); n != 1 {
-		t.Fatalf("waiting = %d, want 1", n)
+	if n := waitingQuestions(map[string]*agentState{"master": a}); n != 0 {
+		t.Fatalf("waiting = %d, want 0 for a pane prompt", n)
 	}
-	if got := asksFor(map[string]*agentState{"master": a}); len(got) != 1 {
-		t.Fatalf("asksFor = %v, want master (the bell)", got)
+	if got := asksFor(map[string]*agentState{"master": a}); len(got) != 0 {
+		t.Fatalf("asksFor = %v, pane prompts are not waiting declarations", got)
 	}
 	for _, st := range []string{"blocked", "waiting"} {
 		if promptWaiting(&agentState{state: st, obsPrompt: true, obsAt: time.Now()}) {

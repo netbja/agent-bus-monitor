@@ -229,7 +229,7 @@ const (
 	tailRetry      = 2 * time.Second // pause before resuming the feed after a broker error
 	requestPoll    = 5               // ticks between follow-up view refreshes
 	wakePoll       = 5               // ticks between dispatcher-badge reads (Obligation/Wake/DispatchAlive)
-	openThreadScan = 200             // cmd entries scanned for unanswered exchanges
+	openThreadScan = 1000            // cmd entries scanned for unanswered exchanges and waiting replies
 )
 
 // agentState is what busmon knows about one agent, with the three facts the old
@@ -241,18 +241,19 @@ const (
 //	                        declared state, so the two stamps differ on purpose.
 //	armed                 — a live subscribe lease. A lease, not a state.
 type agentState struct {
-	state    string
-	message  string
-	stateAt  time.Time       // when the state above was declared
-	lastSeen time.Time       // last activity of any kind on the bus
-	gated    int             // open 4-eyes challenges (flag "gate N")
-	armed    bool            // a live subscribe lease exists (flag "armed")
-	lag      int64           // unconsumed {p}:cmd entries of the agent's group (detail only)
-	pane     string          // HERDR_PANE_ID from the agents hash (detail only)
-	waiting  int64           // wake-relevant messages (pending + unread): the queue column
-	stale    int             // addressed entries older than the dispatch horizon (flag "stale N")
-	gap      bool            // entries may have been trimmed unread (detail only)
-	wake     *bus.WakeRecord // the dispatcher's wake record, nil when none
+	state      string
+	message    string
+	stateAt    time.Time       // when the state above was declared
+	answeredAt time.Time       // qualifying human reply after a waiting declaration; display-only
+	lastSeen   time.Time       // last activity of any kind on the bus
+	gated      int             // open 4-eyes challenges (flag "gate N")
+	armed      bool            // a live subscribe lease exists (flag "armed")
+	lag        int64           // unconsumed {p}:cmd entries of the agent's group (detail only)
+	pane       string          // HERDR_PANE_ID from the agents hash (detail only)
+	waiting    int64           // wake-relevant messages (pending + unread): the queue column
+	stale      int             // addressed entries older than the dispatch horizon (flag "stale N")
+	gap        bool            // entries may have been trimmed unread (detail only)
+	wake       *bus.WakeRecord // the dispatcher's wake record, nil when none
 
 	pid         int                 // AgentSnapshot.PID (0 = not recorded)
 	pidStart    uint64              // AgentSnapshot.PIDStart
@@ -281,24 +282,27 @@ type agentState struct {
 // readers are the render functions on the tview loop, and the whole snapshot is
 // small enough that finer locking would only buy bugs.
 type shared struct {
-	mu         sync.Mutex
-	agents     map[string]*agentState
-	pilot      string                        // pilot-lease driver, "" = autonomous
-	update     string                        // a newer release tag found by checkForUpdate, "" = none
-	budgets    map[string]bus.BudgetSnapshot // account scope, per provider
-	dispatch   string                        // "", "up" or "down"
-	missions   string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
-	svcInst    *bus.ServicesInstall          // the {p}:services marker (nil: no services)
-	pause      *bus.PauseRecord              // the project pause (nil: not paused)
-	holds      map[string]int64              // provider → reset (Unix s) of its quota hold
-	asks       []bus.Ask                     // agents' questions for people
-	pace       paceTracker                   // per provider window: rate of use, display only
-	svcRecs    map[string]bus.ServiceRecord  // each service's last state
-	board      map[string]bus.BoardEntry
-	requests   []request    // tracked requests read from the board
-	threads    []openThread // cmd exchanges with no answer in retained history
-	health     health       // the MONITOR's own link to the broker
-	configNote string       // non-fatal user configuration issue
+	mu           sync.Mutex
+	agents       map[string]*agentState
+	pilot        string                        // pilot-lease driver, "" = autonomous
+	update       string                        // a newer release tag found by checkForUpdate, "" = none
+	budgets      map[string]bus.BudgetSnapshot // account scope, per provider
+	dispatch     string                        // "", "up" or "down"
+	missions     string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
+	svcInst      *bus.ServicesInstall          // the {p}:services marker (nil: no services)
+	pause        *bus.PauseRecord              // the project pause (nil: not paused)
+	holds        map[string]int64              // provider → reset (Unix s) of its quota hold
+	asks         []bus.Ask                     // agents' questions for people
+	pace         paceTracker                   // per provider window: rate of use, display only
+	svcRecs      map[string]bus.ServiceRecord  // each service's last state
+	board        map[string]bus.BoardEntry
+	requests     []request    // tracked requests read from the board
+	threads      []openThread // cmd exchanges with no answer in retained history
+	health       health       // the MONITOR's own link to the broker
+	configNote   string       // non-fatal user configuration issue
+	cmdHistory   []bus.Event  // bounded retained cmd sample used for waiting/reply correlation
+	cmdOldest    time.Time    // oldest event in the retained sample; zero when none
+	cmdHistoryOK bool         // last bounded cmd read succeeded
 }
 
 func main() {
