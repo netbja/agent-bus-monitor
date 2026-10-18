@@ -3,6 +3,12 @@
 One entry per release. The full notes for each are in [`docs/releases/`](docs/releases/).
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
+
+## v0.17.1 — a gauge bar for each provider's quota in busmon
+
+- busmon's header draws each provider's tightest quota window as a gauge (10 cells wide, 5 medium)
+  before its percentage; the narrow layout keeps the percentage alone.
+
 ## v0.17.0 — master pops agents without the classifier, and asks before deploy
 
 - A role that pops others (`pops = true`, master) launches with one Claude Code allow rule per

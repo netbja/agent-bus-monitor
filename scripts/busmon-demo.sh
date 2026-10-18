@@ -158,7 +158,8 @@ announced as complete — unlike the older entries."
   r SET "$PROJECT:dispatch" demo-dispatcher EX 300
   r SET "$PROJECT:armed:coder" "coder@laptop" EX 240
   r SET "$PROJECT:armed:foureyes" "foureyes@laptop" EX 240
-  r HSET "$PROJECT:budget" anthropic "{\"provider\":\"anthropic\",\"session_pct\":25,\"weekly_pct\":44,\"ts\":$now}"
+  r HSET "$PROJECT:budget" anthropic "{\"provider\":\"anthropic\",\"windows\":[{\"name\":\"5h\",\"used_pct\":52,\"resets_at\":$((now / 1000 + 2 * 3600))},{\"name\":\"weekly\",\"used_pct\":44,\"resets_at\":$((now / 1000 + 3 * 86400))}],\"observed_at\":$now,\"collected_at\":$now,\"ts\":$now}"
+  r HSET "$PROJECT:budget" openai "{\"provider\":\"openai\",\"windows\":[{\"name\":\"5h\",\"used_pct\":31,\"resets_at\":$((now / 1000 + 3 * 3600))}],\"observed_at\":$now,\"collected_at\":$now,\"ts\":$now}"
   r HSET "$PROJECT:usage" coder "{\"model\":\"opus\",\"ctx\":\"120k ctx\",\"provider\":\"anthropic\",\"ts\":$now}"
   r HSET "$PROJECT:usage" master "{\"model\":\"opus\",\"ctx\":\"84k ctx\",\"provider\":\"anthropic\",\"ts\":$now}"
 

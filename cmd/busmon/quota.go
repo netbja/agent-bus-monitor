@@ -65,8 +65,9 @@ func tightestWindow(ws []bus.BudgetWindow, now time.Time) (bus.BudgetWindow, boo
 }
 
 // quotaSeg is one provider's gauge: "claude 5h 82% ~25m", "codex 5h 96% held
-// 03:10", "grok wk 59% ?". nil for an unlimited provider.
-func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld bool, pace string, now time.Time) Line {
+// 03:10", "grok wk 59% ?". nil for an unlimited provider. With cells > 0 a bar
+// of that many cells sits before the percentage ("claude 5h ████████░░ 82%").
+func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld bool, pace string, now time.Time, cells int) Line {
 	if b.Unlimited {
 		return nil
 	}
@@ -91,7 +92,13 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 	if aged {
 		role = RoleMuted
 	}
-	l := Line{{Text: name + " " + Preview(win) + " ", Role: RoleMuted}, {Text: fmt.Sprintf("%.0f%%", w.UsedPct), Role: role}}
+	l := Line{{Text: name + " " + Preview(win) + " ", Role: RoleMuted}}
+	if cells > 0 {
+		n := clamp(int(w.UsedPct*float64(cells)/100+0.5), 0, cells)
+		l = append(l, Seg{Text: strings.Repeat(GlyphGauge, n), Role: role},
+			Seg{Text: strings.Repeat(GlyphBarEmpty, cells-n) + " ", Role: RoleDim})
+	}
+	l = append(l, Seg{Text: fmt.Sprintf("%.0f%%", w.UsedPct), Role: role})
 	switch {
 	case isHeld:
 		l = append(l, Seg{Text: " held " + holdUntil.Local().Format("15:04"), Role: RoleAttention})

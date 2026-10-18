@@ -16,21 +16,21 @@ func TestQuotaGauges(t *testing.T) {
 	fresh := bus.BudgetSnapshot{ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{
 		{Name: "5h", UsedPct: 82, ResetsAt: reset}, {Name: "7d", UsedPct: 40, ResetsAt: now.Add(72 * time.Hour).Unix()},
 		{Name: "old", UsedPct: 99, ResetsAt: now.Add(-time.Minute).Unix()}}}
-	if got := quotaSeg("anthropic", fresh, time.Time{}, false, "~25m", now).text(); got != "claude 5h 82% ~25m" {
+	if got := quotaSeg("anthropic", fresh, time.Time{}, false, "~25m", now, 0).text(); got != "claude 5h 82% ~25m" {
 		t.Fatalf("fresh %q", got)
 	}
-	if got := quotaSeg("openai", fresh, now.Add(time.Hour), true, "", now).text(); !strings.HasPrefix(got, "codex 5h 82% held ") {
+	if got := quotaSeg("openai", fresh, now.Add(time.Hour), true, "", now, 0).text(); !strings.HasPrefix(got, "codex 5h 82% held ") {
 		t.Fatalf("held %q", got)
 	}
 	aged := fresh
 	aged.ObservedAt = now.Add(-time.Hour).UnixMilli()
-	if got := quotaSeg("xai", aged, time.Time{}, false, "~5m", now).text(); got != "grok 5h 82% ?" {
+	if got := quotaSeg("xai", aged, time.Time{}, false, "~5m", now, 0).text(); got != "grok 5h 82% ?" {
 		t.Fatalf("aged %q", got)
 	}
-	if got := quotaSeg("moonshot", bus.BudgetSnapshot{Unknown: true}, time.Time{}, false, "", now).text(); got != "kimi ?" {
+	if got := quotaSeg("moonshot", bus.BudgetSnapshot{Unknown: true}, time.Time{}, false, "", now, 0).text(); got != "kimi ?" {
 		t.Fatalf("unknown %q", got)
 	}
-	if quotaSeg("local", bus.BudgetSnapshot{Unlimited: true}, time.Time{}, false, "", now) != nil {
+	if quotaSeg("local", bus.BudgetSnapshot{Unlimited: true}, time.Time{}, false, "", now, 0) != nil {
 		t.Fatal("an unlimited provider has a gauge")
 	}
 }
@@ -125,11 +125,11 @@ func TestHeaderPrefersFreshWindowsAndShowsAStickyHold(t *testing.T) {
 	b := bus.BudgetSnapshot{Windows: []bus.BudgetWindow{
 		{Name: "7d", UsedPct: 97, ResetsAt: now.Add(72 * time.Hour).Unix(), ObservedAt: now.Add(-5 * time.Hour).UnixMilli()},
 		{Name: "5h", UsedPct: 10, ResetsAt: now.Add(time.Hour).Unix(), ObservedAt: now.UnixMilli()}}}
-	if got := quotaSeg("anthropic", b, time.Time{}, false, "", now).text(); got != "claude 5h 10%" {
+	if got := quotaSeg("anthropic", b, time.Time{}, false, "", now, 0).text(); got != "claude 5h 10%" {
 		t.Fatalf("header %q: a stale window outranked a fresh one", got)
 	}
 	unknown := bus.BudgetSnapshot{Unknown: true}
-	if got := quotaSeg("openai", unknown, now.Add(time.Hour), true, "", now).text(); !strings.Contains(got, "codex ? held") {
+	if got := quotaSeg("openai", unknown, now.Add(time.Hour), true, "", now, 0).text(); !strings.Contains(got, "codex ? held") {
 		t.Fatalf("sticky hold header %q", got)
 	}
 	if got := quotaDetail("openai", unknown, true, now.Add(time.Hour), true, now); !strings.Contains(got, "still held by the dispatcher") || strings.Contains(got, "never holds") {
@@ -159,5 +159,18 @@ func TestPromptThroughThePoll(t *testing.T) {
 	pollOnce(context.Background(), f, st, 1)
 	if promptWaiting(st.agents["master"]) {
 		t.Fatal("an observation of another process reads as master's prompt")
+	}
+}
+
+func TestQuotaGaugeBar(t *testing.T) {
+	now := time.Now()
+	b := bus.BudgetSnapshot{ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{
+		{Name: "5h", UsedPct: 80, ResetsAt: now.Add(time.Hour).Unix()}}}
+	want := "claude 5h " + strings.Repeat(GlyphGauge, 8) + strings.Repeat(GlyphBarEmpty, 2) + " 80% ~25m"
+	if got := quotaSeg("anthropic", b, time.Time{}, false, "~25m", now, 10).text(); got != want {
+		t.Fatalf("bar %q, want %q", got, want)
+	}
+	if got := quotaSeg("anthropic", b, time.Time{}, false, "", now, 0).text(); got != "claude 5h 80%" {
+		t.Fatalf("no bar in narrow: %q", got)
 	}
 }
