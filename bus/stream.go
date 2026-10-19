@@ -866,6 +866,44 @@ func (b *Bus) SetUsage(ctx context.Context, agent string, snap UsageSnapshot) er
 	return b.r.HSet(ctx, UsageKey(b.project), agent, v).Err()
 }
 
+var fencedSetUsage = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+if redis.call('HEXISTS', KEYS[3], 'installed') == 0 then return -2 end
+local t = redis.call('TYPE', KEYS[2]).ok
+if t ~= 'none' and t ~= 'hash' then return -1 end
+local row = cjson.decode(ARGV[3])
+local now = redis.call('TIME')
+row.ts = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+redis.call('HSET', KEYS[2], ARGV[2], cjson.encode(row))
+return 1
+`)
+
+// FencedSetUsage publishes a service-collected snapshot only while the caller
+// holds the project's dispatch lease. Redis TIME owns the persisted timestamp.
+func (b *Bus) FencedSetUsage(ctx context.Context, token, agent string, snap UsageSnapshot) error {
+	if !ValidName(agent) {
+		return fmt.Errorf("invalid agent")
+	}
+	raw, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	n, err := fencedSetUsage.Run(ctx, b.r, []string{DispatchKey(b.project), UsageKey(b.project), ServicesKey(b.project)}, token, agent, string(raw)).Int()
+	if err != nil {
+		return err
+	}
+	switch n {
+	case 1:
+		return nil
+	case 0:
+		return ErrNotHolder
+	case -2:
+		return ErrProjectNotInstalled
+	default:
+		return fmt.Errorf("usage key has unexpected Redis type")
+	}
+}
+
 // Usage returns agent → latest usage snapshot. Unparseable fields are skipped.
 func (b *Bus) Usage(ctx context.Context) (map[string]UsageSnapshot, error) {
 	raw, err := b.r.HGetAll(ctx, UsageKey(b.project)).Result()

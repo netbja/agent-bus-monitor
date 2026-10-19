@@ -13,6 +13,7 @@ import (
 type headerData struct {
 	project  string
 	health   health
+	guardian guardianSummary
 	dispatch string            // "", "up", "down", or a service state (serviceFact)
 	missions string            // the same; shown only when not ""
 	pilot    string            // pilot-lease driver, "" = autonomous
@@ -67,6 +68,9 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	add(Line{{Text: Preview(d.project), Role: RoleText, Bold: true}}, 3, 0).trunc = true
 	add(healthSeg(d.health, d.now, compact), 1, 0)
+	if d.guardian.Total > 0 {
+		add(guardianSeg(d.guardian), 1, 0)
+	}
 	add(dispatchSeg(d.dispatch, compact), 2, 0)
 	if d.missions != "" {
 		add(missionsSeg(d.missions, compact), 2, 0)

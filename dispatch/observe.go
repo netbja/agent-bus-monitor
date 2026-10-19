@@ -78,9 +78,15 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 			return err
 		}
 		o := Observation{Busy: in.State == "working" || in.Busy, State: in.State, At: now.UnixMilli(),
-			Since: now.UnixMilli(), PID: snap.PID}
+			Since: now.UnixMilli(), PID: snap.PID, ScreenHash: in.ScreenHash}
 		if p, ok := prev[a]; ok && p.State == o.State && p.PID == o.PID && p.Since != 0 {
 			o.Since = p.Since
+		}
+		if o.ScreenHash != "" {
+			o.ScreenRepeats = 1
+			if p, ok := prev[a]; ok && p.PID == o.PID && p.ScreenHash == o.ScreenHash {
+				o.ScreenRepeats = min(p.ScreenRepeats+1, 10000)
+			}
 		}
 		obs[a] = o
 	}

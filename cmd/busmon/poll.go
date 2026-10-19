@@ -6,7 +6,14 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	guardian "github.com/netbja/agent-bus-monitor/health"
 )
+
+type guardianReader interface {
+	Health(context.Context) (map[string]guardian.Record, error)
+	HealthNotes(context.Context) (map[string]guardian.Note, error)
+	ServerTime(context.Context) (time.Time, error)
+}
 
 // busReader is everything the 1 s tick reads. *bus.Bus satisfies it; tests use
 // a counting fake to pin the read inventory (spec §9).
@@ -169,10 +176,34 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 
 	pause, pauseErr := b.Pause(pollCtx)
 	asks, asksErr := b.Asks(pollCtx)
+	var guardRecords map[string]guardian.Record
+	var guardNotes map[string]guardian.Note
+	var guardNow time.Time
+	guardRecordsOK, guardNotesOK, guardNowOK := false, false, false
+	if gr, ok := b.(guardianReader); ok {
+		if rows, err := gr.Health(pollCtx); err == nil {
+			guardRecords, guardRecordsOK = rows, true
+		}
+		if rows, err := gr.HealthNotes(pollCtx); err == nil {
+			guardNotes, guardNotesOK = rows, true
+		}
+		if now, err := gr.ServerTime(pollCtx); err == nil {
+			guardNow, guardNowOK = now, true
+		}
+	}
 
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.pilot = driver
+	if guardRecordsOK {
+		st.guardianHealth = guardRecords
+	}
+	if guardNotesOK {
+		st.guardianNotes = guardNotes
+	}
+	if guardNowOK {
+		st.guardianNow = guardNow
+	}
 	if pauseErr == nil {
 		st.pause = pause
 	}

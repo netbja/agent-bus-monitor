@@ -43,6 +43,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	guardian "github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -282,28 +283,31 @@ type agentState struct {
 // readers are the render functions on the tview loop, and the whole snapshot is
 // small enough that finer locking would only buy bugs.
 type shared struct {
-	mu           sync.Mutex
-	agents       map[string]*agentState
-	pilot        string                        // pilot-lease driver, "" = autonomous
-	update       string                        // a newer release tag found by checkForUpdate, "" = none
-	budgets      map[string]bus.BudgetSnapshot // account scope, per provider
-	dispatch     string                        // "", "up" or "down"
-	missions     string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
-	svcInst      *bus.ServicesInstall          // the {p}:services marker (nil: no services)
-	pause        *bus.PauseRecord              // the project pause (nil: not paused)
-	holds        map[string]int64              // provider → reset (Unix s) of its quota hold
-	asks         []bus.Ask                     // agents' questions for people
-	pace         paceTracker                   // per provider window: rate of use, display only
-	svcRecs      map[string]bus.ServiceRecord  // each service's last state
-	board        map[string]bus.BoardEntry
-	requests     []request    // tracked requests read from the board
-	threads      []openThread // cmd exchanges with no answer in retained history
-	health       health       // the MONITOR's own link to the broker
-	configNote   string       // non-fatal user configuration issue
-	cmdHistory   []bus.Event  // bounded retained cmd sample used for waiting/reply correlation
-	cmdOldest    time.Time    // oldest event in the retained sample; zero when none
-	cmdHistoryOK bool         // last bounded cmd read succeeded
-	lastPollAt   time.Time    // last fully successful snapshot tick
+	mu             sync.Mutex
+	agents         map[string]*agentState
+	pilot          string                        // pilot-lease driver, "" = autonomous
+	update         string                        // a newer release tag found by checkForUpdate, "" = none
+	budgets        map[string]bus.BudgetSnapshot // account scope, per provider
+	dispatch       string                        // "", "up" or "down"
+	missions       string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
+	svcInst        *bus.ServicesInstall          // the {p}:services marker (nil: no services)
+	pause          *bus.PauseRecord              // the project pause (nil: not paused)
+	holds          map[string]int64              // provider → reset (Unix s) of its quota hold
+	asks           []bus.Ask                     // agents' questions for people
+	pace           paceTracker                   // per provider window: rate of use, display only
+	svcRecs        map[string]bus.ServiceRecord  // each service's last state
+	board          map[string]bus.BoardEntry
+	requests       []request    // tracked requests read from the board
+	threads        []openThread // cmd exchanges with no answer in retained history
+	health         health       // the MONITOR's own link to the broker
+	guardianHealth map[string]guardian.Record
+	guardianNotes  map[string]guardian.Note
+	guardianNow    time.Time
+	configNote     string      // non-fatal user configuration issue
+	cmdHistory     []bus.Event // bounded retained cmd sample used for waiting/reply correlation
+	cmdOldest      time.Time   // oldest event in the retained sample; zero when none
+	cmdHistoryOK   bool        // last bounded cmd read succeeded
+	lastPollAt     time.Time   // last fully successful snapshot tick
 }
 
 func main() {

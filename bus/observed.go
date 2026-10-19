@@ -30,6 +30,10 @@ type Observation struct {
 	// blocked tab). PID is the process inspected.
 	Since int64 `json:"since,omitempty"`
 	PID   int   `json:"pid,omitempty"`
+	// ScreenHash is an opaque digest of a stable inspected screen. Screen text
+	// is never written to Redis; repeats support the health runaway warning.
+	ScreenHash    string `json:"screen_hash,omitempty"`
+	ScreenRepeats int    `json:"screen_repeats,omitempty"`
 }
 
 // Fresh reports whether the observation is younger than ObservedTTL at

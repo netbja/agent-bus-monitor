@@ -60,6 +60,7 @@ const (
 	ActComposeField // the window: text <-> recipient
 	ActComposeAsk   // the window: answer the open question in its panel
 	ActRecap        // open the deterministic project recap
+	ActHealth       // open project health details
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -148,6 +149,7 @@ var (
 	panelBindings = []binding{
 		{Keys: "tab", Hint: "focus", Act: ActNextPanel, match: keyIs(tcell.KeyTab)},
 		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(tcell.KeyBacktab)},
+		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(tcell.KeyF5)},
 		{Keys: "1-3", Hint: "view", Act: ActTab1, Tiers: []Tier{TierMedium}, match: runeIs('1')},
 		{Keys: "1-4", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
 		{Keys: "2", Act: ActTab2, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('2')},
@@ -205,6 +207,7 @@ var (
 		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(tcell.KeyEscape)},
 	}
 	overlayBindings = []binding{
+		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(tcell.KeyF5)},
 		{Keys: "i I", Help: "in an agent's detail: reply to that agent in the compose window", Act: ActComposeOpen, match: runeIs('i', 'I')},
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},

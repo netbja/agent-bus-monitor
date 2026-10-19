@@ -39,6 +39,7 @@ const (
 	ovRequest
 	ovRequests
 	ovServices
+	ovHealth
 	ovHelp
 	ovAsk
 )
@@ -388,6 +389,8 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 				u.closeOverlay()
 				u.openComposer("", agent)
 			}
+		case ActHealth:
+			u.openHealthOverlay()
 		case ActUp, ActDown, ActPageUp, ActPageDown, ActFirst, ActLast:
 			return ev // the TextView scrolls itself
 		}
@@ -478,6 +481,8 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.openRequestsOverlay()
 	case ActServices:
 		u.openServicesOverlay()
+	case ActHealth:
+		u.openHealthOverlay()
 	case ActRecap:
 		u.requestRecap(false)
 	case ActEscape:
@@ -918,6 +923,16 @@ func (u *ui) openServicesOverlay() {
 	u.showOverlay(ovServices, "Services", servicesPanel(inst, recs, host, time.Now(), max(20, overlayInnerWidth(u.width))), "", "")
 }
 
+func (u *ui) openHealthOverlay() {
+	u.st.mu.Lock()
+	records, notes, now := u.st.guardianHealth, u.st.guardianNotes, u.st.guardianNow
+	u.st.mu.Unlock()
+	if now.IsZero() {
+		now = time.Now()
+	}
+	u.showOverlay(ovHealth, "Project health", healthOverlayText(records, notes, now), "", "")
+}
+
 func (u *ui) openFeedLine(id string) {
 	if i := u.feedIndex(id); i >= 0 && !u.feed[i].sep {
 		u.openMessage(u.feed[i].ev, u.feed[i].at)
@@ -1100,7 +1115,11 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	now := time.Now()
 	u.st.mu.Lock()
 	mineReqs, mineThreads := forPerson(u.st.requests, u.st.threads, u.self)
-	hd := headerData{project: u.project, health: u.st.health, dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update, note: u.st.configNote,
+	guardNow := u.st.guardianNow
+	if guardNow.IsZero() {
+		guardNow = now
+	}
+	hd := headerData{project: u.project, health: u.st.health, guardian: summarizeGuardian(u.st.guardianHealth, guardNow), dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update, note: u.st.configNote,
 		waiting: waitingText(mineReqs, mineThreads, now), asks: waitingQuestions(u.st.agents), pause: u.st.pause, holds: u.st.holds, pace: u.st.pace.last, budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	u.st.mu.Unlock()

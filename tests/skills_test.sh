@@ -10,9 +10,9 @@ assert_contains "$body" "name: agent-bus-sentinel"        "sentinel skill frontm
 assert_contains "$body" "index_repository"                "sentinel documents index warm-up"
 assert_contains "$body" ".agent-bus/index-requested"      "sentinel checks the index marker"
 assert_contains "$body" "cmd master"                      "sentinel documents the notify-only nudge"
-assert_contains "$body" "agentbus refresh"                "sentinel refreshes budget+usage on wake"
+assert_contains "$body" "agentbus health list"            "sentinel reads measured health on wake"
 r="$(cat "$REPO/roles/sentinel.md")"
-assert_contains "$r" "agentbus refresh"                   "sentinel role prompt runs refresh"
+assert_contains "$r" "agentbus health"                    "sentinel role prompt reads health"
 
 m="$(cat "$REPO/skills/agent-bus-master/SKILL.md")"
 assert_contains "$m" "Spawn a peer"                       "master skill has Spawn a peer section"

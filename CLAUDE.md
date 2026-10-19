@@ -390,6 +390,17 @@ It never touches Redis — see README "Deployment topology".
   summary directive requires an explicit `y` confirmation and uses the normal `ui.send` path.
   Global settings are in `~/.config/agentbus/busmon.toml` (or `$XDG_CONFIG_HOME/agentbus/`), and
   local last-visit/snooze data is atomically cached under `~/.cache/agentbus/` with mode `0600`.
+- **Project health (v0.19)** — the dispatcher's separate bounded health loop writes
+  `{p}:health`, transition-only `{p}:health:log`, and `{p}:health:notes` through fenced scripts;
+  Redis `TIME` owns persisted timestamps. Health keys do not discover a project or make
+  `HasKeysBesidesDispatch` true. Missing/stale evidence is `unknown`, never `ok`; remediation text
+  is static guidance. A new `fail` episode wakes sentinel once, plus one separate daily directive.
+  Sentinel may restart an identified failed project service once within its budget, or refresh the
+  local model table; everything else is escalated. Usage refresh is at most every 15 minutes with
+  a fenced writer; model refresh is daily under a host-local lock. busmon shows the health pill, F5
+  details and retained transitions in its R recap. Runaway is warning-only. Scanner, canary, key
+  inventory, project-defined checks and password rotation belong to later releases; health is not
+  a security boundary.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

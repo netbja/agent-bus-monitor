@@ -99,7 +99,7 @@ func Connect(host string) (*redis.Client, error) {
 		client = redis.NewClient(&redis.Options{
 			ContextTimeoutEnabled: true,
 			Addr:                  host + ":" + envOr("REDIS_PORT", "6380"),
-			Password:              envOr("REDIS_PASSWORD", "AgentBus2025!"),
+			Password:              envOr("REDIS_PASSWORD", LegacyPassword),
 		})
 	}
 	if err := client.Ping(context.Background()).Err(); err != nil {
