@@ -103,6 +103,9 @@ the hook's JSON on stdin and the environment Claude inherited from the launcher,
    - `--profile` only when `AGENT_BUS_PROFILE` is not the role's own profile (a swapped role);
      this needs `agent-launch` to accept `--profile` **and** `--resume` together (today it takes one
      or the other; `LaunchProfileResume` already supports both);
+   - a profile that sets `tier` instead of `model` is resolved again at resume
+     (`rolecfg.ResolveTier`), so a resumed session may run a newer model of that tier than the
+     one it started on; that is the tier's meaning, and the doctor reports the launched model;
    - refused (logged, nothing reported) if any argument holds an apostrophe or control character,
      or the whole exceeds 64 arguments / 8 KiB;
 3. **prints nothing on stdout** (a SessionStart hook's stdout becomes Claude's context), starts the
@@ -110,7 +113,8 @@ the hook's JSON on stdin and the environment Claude inherited from the launcher,
 4. the child runs `"$HERDR_BIN_PATH" pane report-agent-session "$HERDR_PANE_ID" --source agentbus
    --agent claude --seq <unix ns> -- <argv>`, retrying once a second for up to 15 s while herdr
    answers `resume_not_accepted` (Claude not yet detected), and logs the outcome to
-   `~/.local/state/agentbus/<project>/resume.log` (the services' state directory).
+   `resume.log` in the project's state directory, `service.Paths.StateDir` (by default
+   `~/.local/state/agentbus/<project>`, shared with the services and the conductor).
 
 It runs on every `SessionStart`: `startup`, `resume`, `clear`, `compact`. So the recorded command
 follows the conversation when `/clear` starts a new session.
@@ -159,31 +163,58 @@ the v6 minimum for native restore, so the test is valid as it is, and it tests w
 Updating it (`herdr integration install claude`) rewrites `~/.claude/settings.json` hooks for every
 Claude session on the machine: Bernard's decision, before or after the test, not coder's.
 
-What Bernard does:
+Environment: herdr 0.9.5 starts its server daemon with the environment of the `herdr` command
+that starts it (`build_server_daemon_command`, `server/autodetect.rs`: a plain `Command`, which
+inherits), and every pane, restored shells included, inherits the server's. A variable exported
+*inside* a pane is lost at the restart, so the resumed `agent-launch` and the agent's own `status`
+would fall back to `localhost:6380`, **the live broker**. Both variables are therefore exported in
+the **outer** terminal, before each start of the session's server.
 
-1. In a terminal **outside** any herdr session: `herdr --session abm-resume-test`.
-2. In its first pane:
+What Bernard does, all in one terminal that is **outside** any herdr session:
+
+1. Check that no server of that session runs yet (`herdr session list` does not show
+   `abm-resume-test` as running; an existing server would keep its old environment). Then set the
+   environment and start the test session:
    ```bash
-   export REDIS_URL=redis://127.0.0.1:6392 AGENTBUS_BIN=/data/projects/agent-bus-monitor/.worktrees/<branch>/agentbus
+   export REDIS_URL=redis://127.0.0.1:6392
+   export AGENTBUS_BIN=/data/projects/agent-bus-monitor/.worktrees/<branch>/agentbus
+   herdr --session abm-resume-test
+   ```
+2. In its first pane (it inherited both variables; `echo $REDIS_URL` shows 6392):
+   ```bash
    /data/projects/agent-bus-monitor/.worktrees/<branch>/scripts/agent-launch coder abm-resume-test
    ```
 3. In Claude, type: `Remember the word PELICAN. Reply only OK.`
-4. From **another** terminal (not inside that session): `herdr session stop abm-resume-test`.
-5. Send coder the session file path from `herdr session list --json` (coder checks that the pane's
-   saved `agent_resume` is the `env ROLES_TOML=… agent-launch coder abm-resume-test --resume <id>` argv).
-6. Attach again: `herdr --session abm-resume-test`.
-7. Expected: the pane runs that command by itself, Claude resumes. Ask: `What word did I give you?`
-   → `PELICAN`. Then run in another pane: `agentbus --project abm-resume-test agents`
-   (with the same `REDIS_URL`) → `coder` bound to the new pane and pid.
-8. In Claude, type `/clear`, then repeat steps 4–6: the pane resumes the **new** (empty) session,
+4. Detach (`ctrl+b q`), then in the same outer terminal: `herdr session stop abm-resume-test`.
+5. Tell coder it is stopped. Coder reads `<session dir>/session.json`, where `<session dir>` is the
+   directory `herdr session list --json` gives for `abm-resume-test`, and checks that the pane's
+   saved `agent_resume` is `env ROLES_TOML=… agent-launch coder abm-resume-test --resume <id>`.
+6. In the same outer terminal, with `REDIS_URL` and `AGENTBUS_BIN` still exported (`echo $REDIS_URL`
+   first), attach again: `herdr --session abm-resume-test`.
+7. Expected: the pane runs that command by itself and Claude resumes. Ask: `What word did I give
+   you?` → `PELICAN`. Then, in a second pane of the session (it inherited `REDIS_URL`):
+   `agentbus --project abm-resume-test agents` → `coder` bound to the new pane and pid.
+8. Check the live broker was not touched: in a terminal **without** `REDIS_URL`,
+   `busmon --list` must not list `abm-resume-test`. If it does, coder deletes it there too
+   (`busmon --delete abm-resume-test --yes`, no `REDIS_URL`) and the test is reported as failed on
+   that point.
+9. In Claude, type `/clear`, then repeat steps 4–7: the pane resumes the **new** (empty) session,
    not the old one.
-9. Clean up: `herdr session stop abm-resume-test`; coder deletes the test project from the test
-   broker (`REDIS_URL=… busmon --delete abm-resume-test --yes`).
+10. Clean up: `herdr session stop abm-resume-test`; coder deletes the test project from the test
+    broker (`REDIS_URL=redis://127.0.0.1:6392 busmon --delete abm-resume-test --yes`).
 
 Pass: step 7 resumes through the launcher (identity bound, role settings present: `ps` shows
-`--settings` on the claude process) and step 8 follows `/clear`. If step 5 shows no `agent_resume`,
+`--settings` on the claude process), step 8 finds nothing on the live broker, and step 9 follows
+`/clear`. If step 5 shows no `agent_resume`,
 herdr refused the session-only report: the caveat above is real, and the fallback (today's
 behaviour) is what Bernard will have seen.
+
+## Review
+
+foureyes on `04a65a1`: herdr and repository claims verified; changes requested on the live test
+(environment exported inside the pane would reach the live broker after the restart), the session
+file path, the tier note and the log directory. All four are addressed above. Open questions 1–4
+were answered as proposed.
 
 ## Open questions for review
 
