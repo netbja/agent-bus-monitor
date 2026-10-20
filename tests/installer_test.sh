@@ -193,6 +193,20 @@ assert_contains "$for_out" "$T/elsewhere" "a plugin linked from another checkout
 assert_eq "$(grep -c 'plugin link\|plugin unlink' "$HERDR_LOG")" "0" "and never unlinked nor relinked"
 assert_eq "$(cat "$PLUGIN_RECORD")" "$T/repo" "the record is not rewritten"
 
+# Unlink succeeds but the relink fails: the warning says the plugin is now not linked
+set_registry "$T/old-repo"; printf '%s\n' "$T/old-repo" > "$PLUGIN_RECORD"; : > "$HERDR_LOG"
+relink_out="$(HERDR_FAIL_LINK=1 run_setup install --no-skills)"
+assert_contains "$relink_out" "is now NOT linked" "a failed relink says the plugin is now not linked"
+assert_contains "$relink_out" "re-run ./setup.sh install" "and how to fix it"
+
+# A record that cannot be written is a visible warning, not a silent or fatal one
+: > "$HERDR_PLUGINS"; rm -f "$PLUGIN_RECORD"
+rec_dir="$(dirname "$PLUGIN_RECORD")"; rm -rf "$rec_dir"; : > "$rec_dir"
+rec_out="$(run_setup install --no-skills)"; rec_rc=$?
+assert_eq "$rec_rc" "0" "an unwritable record does not fail the install"
+assert_contains "$rec_out" "could not record the plugin path" "and is reported"
+rm -f "$rec_dir"
+
 # A failed link leaves the key binding unwritten (and records nothing)
 : > "$HERDR_PLUGINS"; rm -f "$PLUGIN_RECORD"
 printf '[ui]\ntheme = "dark"\n' > "$T/cfg/herdr/config.toml"; cp "$T/cfg/herdr/config.toml" "$T/config.nolink"

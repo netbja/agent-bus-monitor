@@ -761,11 +761,16 @@ link_plugin() {
   if [ "$DRY_RUN" = "1" ]; then
     log_info "[dry-run] would run: herdr plugin link $REPO_DIR"
   elif herdr plugin link "$REPO_DIR" >"$TMP_DIR/herdr-link.log" 2>&1; then
-    mkdir -p "$(dirname "$PLUGIN_RECORD")" && printf '%s\n' "$REPO_DIR" > "$PLUGIN_RECORD"
+    if ! { mkdir -p "$(dirname "$PLUGIN_RECORD")" && printf '%s\n' "$REPO_DIR" > "$PLUGIN_RECORD"; }; then
+      log_warn "could not record the plugin path in $PLUGIN_RECORD: setup will not follow this checkout if it moves (it will not unlink the registration either)."
+    fi
     log_ok "herdr plugin $PLUGIN_ID: linked ($REPO_DIR)"
   else
     show_log "$TMP_DIR/herdr-link.log"
     log_warn "herdr plugin link $REPO_DIR failed: the Projects picker is not available."
+    if [ "${1:-}" = "relink" ]; then
+      log_warn "$PLUGIN_ID is now NOT linked (setup had just unlinked the previous checkout): re-run ./setup.sh install to link this one."
+    fi
     PLUGIN_LINK_FAILED=1
   fi
 }
@@ -794,7 +799,7 @@ else
     elif herdr plugin unlink "$PLUGIN_ID" >"$TMP_DIR/herdr-unlink.log" 2>&1; then
       log_info "herdr plugin $PLUGIN_ID: unlinked from $root (setup's previous checkout)"
       rm -f "$PLUGIN_RECORD"
-      link_plugin
+      link_plugin relink
     else
       show_log "$TMP_DIR/herdr-unlink.log"
       log_warn "herdr plugin unlink $PLUGIN_ID failed: still linked from $root."
