@@ -343,8 +343,9 @@ func pickMain(host, theme string) int {
 	dir := rolecfg.ProjectsDir(os.Getenv)
 	rows, listErr := projlist.Templates(dir)
 	m := newPickModel(dir, rows, listErr)
-	// Why the picker was opened instead of a dashboard (the plugin's reason)
-	// belongs on the status line: m.setStatus(reason, false), here.
+	if reason := os.Getenv("AGENTBUS_PLUGIN_REASON"); reason != "" {
+		m.setStatus(reason, false)
+	}
 	conn := dialBroker(host)
 	defer conn.shutdown()
 

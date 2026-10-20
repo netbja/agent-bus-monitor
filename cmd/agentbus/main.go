@@ -112,6 +112,10 @@ func main() {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}
 	// up provisions a project and opens its herdr workspace: no project flag, no broker of its own.
+	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
+	if len(args) >= 1 && args[0] == "plugin" {
+		os.Exit(runPlugin(args[1:], realPluginDeps(), os.Stdout, os.Stderr))
+	}
 	if len(args) >= 1 && args[0] == "up" {
 		os.Exit(runUp(args[1:], realUpDeps(os.Stdout, os.Stderr), os.Stdout, os.Stderr))
 	}

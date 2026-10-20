@@ -649,3 +649,23 @@ func TestRulesNotAppliedNote(t *testing.T) {
 		t.Fatalf("codex got --settings: %q", f.execed)
 	}
 }
+
+func TestShellSplitRoundTrip(t *testing.T) {
+	for _, x := range [][]string{
+		{"/r/busmon", "--project", "demo", "--as", "Bernard J"},
+		{"a", "it's", "", "x\"y", "$(z)"},
+	} {
+		got, err := ShellSplit(ShellJoin(x))
+		if err != nil || strings.Join(got, "\x00") != strings.Join(x, "\x00") || len(got) != len(x) {
+			t.Fatalf("ShellSplit(ShellJoin(%q)) = %q, %v", x, got, err)
+		}
+	}
+}
+
+func TestShellSplitRejectsUnbalancedQuote(t *testing.T) {
+	for _, s := range []string{`a 'b`, `a "b`, `a\`} {
+		if got, err := ShellSplit(s); err == nil {
+			t.Fatalf("ShellSplit(%q) = %q, want an error", s, got)
+		}
+	}
+}

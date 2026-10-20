@@ -947,3 +947,63 @@ var ResolveTier = func(provider, tier string) (string, error) {
 	}
 	return r.ID, nil
 }
+
+// ShellSplit is the inverse of ShellJoin: it splits a POSIX-quoted command
+// line into words (single quotes, double quotes and backslashes). It runs
+// nothing and expands nothing; an unbalanced quote is an error.
+func ShellSplit(s string) ([]string, error) {
+	var words []string
+	var cur strings.Builder
+	inWord := false
+	flush := func() {
+		if inWord {
+			words = append(words, cur.String())
+			cur.Reset()
+			inWord = false
+		}
+	}
+	rs := []rune(s)
+	for i := 0; i < len(rs); i++ {
+		c := rs[i]
+		switch {
+		case c == ' ' || c == '\t' || c == '\n':
+			flush()
+		case c == '\'':
+			inWord = true
+			j := i + 1
+			for j < len(rs) && rs[j] != '\'' {
+				cur.WriteRune(rs[j])
+				j++
+			}
+			if j == len(rs) {
+				return nil, errors.New("unbalanced single quote")
+			}
+			i = j
+		case c == '"':
+			inWord = true
+			j := i + 1
+			for ; j < len(rs) && rs[j] != '"'; j++ {
+				if rs[j] == '\\' && j+1 < len(rs) && strings.ContainsRune("\"\\$`", rs[j+1]) {
+					j++
+				}
+				cur.WriteRune(rs[j])
+			}
+			if j == len(rs) {
+				return nil, errors.New("unbalanced double quote")
+			}
+			i = j
+		case c == '\\':
+			if i+1 == len(rs) {
+				return nil, errors.New("trailing backslash")
+			}
+			inWord = true
+			i++
+			cur.WriteRune(rs[i])
+		default:
+			inWord = true
+			cur.WriteRune(c)
+		}
+	}
+	flush()
+	return words, nil
+}
