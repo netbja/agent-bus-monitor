@@ -17,6 +17,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -79,6 +80,10 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		m, why = d.Services()
 	} else if !tabs {
 		why = "no service manager configured"
+	}
+	if m != nil && herdrSession(args, d.Environ) == "" {
+		fmt.Fprintln(stderr, "agentbus up: cannot tell the herdr session: HERDR_SESSION is unset and HERDR_SOCKET_PATH is not <config>/sessions/<name>/herdr.sock; pass --session <name>")
+		return 1
 	}
 	bootArgs := args
 	if m != nil {
@@ -158,7 +163,9 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 }
 
 // herdrSession is the session the project opens in, as bootstrap resolves
-// it: --session, else the caller's HERDR_SESSION, else the project name.
+// it: --session, else the caller's HERDR_SESSION, else the session named by
+// the caller's HERDR_SOCKET_PATH, else the project name. A socket path that
+// names no session gives "": the services must not guess.
 func herdrSession(args, environ []string) string {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == "--session" {
@@ -168,6 +175,12 @@ func herdrSession(args, environ []string) string {
 	for _, kv := range environ {
 		if v, ok := strings.CutPrefix(kv, "HERDR_SESSION="); ok && v != "" {
 			return v
+		}
+	}
+	for _, kv := range environ {
+		if v, ok := strings.CutPrefix(kv, "HERDR_SOCKET_PATH="); ok && v != "" {
+			name, _ := sessionFromSocket(v)
+			return name
 		}
 	}
 	return args[0]
@@ -375,23 +388,10 @@ func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
 	return nil
 }
 
-// templatePath is where bootstrap writes the project's herdr-plus template
-// (scripts/bootstrap projects_dir).
+// templatePath is where bootstrap writes the project's template
+// (rolecfg.ProjectsDir, which scripts/bootstrap reads through roles projects-dir).
 func templatePath(d upDeps, project string) string {
-	dir := d.Env("HERDR_PLUS_PROJECTS_DIR")
-	if dir == "" {
-		if out, err := d.Herdr("plugin", "config-dir", "cloudmanic.herdr-plus"); err == nil && strings.TrimSpace(string(out)) != "" {
-			dir = filepath.Join(strings.TrimSpace(string(out)), "projects")
-		}
-	}
-	if dir == "" {
-		cfg := d.Env("XDG_CONFIG_HOME")
-		if cfg == "" {
-			cfg = filepath.Join(d.Env("HOME"), ".config")
-		}
-		dir = filepath.Join(cfg, "herdr-plus", "projects")
-	}
-	return filepath.Join(dir, project+".toml")
+	return filepath.Join(rolecfg.ProjectsDir(d.Env), project+".toml")
 }
 
 // repoDir is the agent-bus-monitor checkout that holds scripts/bootstrap:
@@ -422,11 +422,7 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 	host, _ := os.Hostname()
 	return upDeps{
 		Herdr: func(args ...string) ([]byte, error) {
-			bin := os.Getenv("HERDR_BIN")
-			if bin == "" {
-				bin = "herdr"
-			}
-			cmd := exec.Command(bin, args...)
+			cmd := exec.Command(herdrBin(os.Getenv), args...)
 			cmd.Stderr = stderr
 			return cmd.Output()
 		},

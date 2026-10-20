@@ -150,3 +150,12 @@ func TestRolesManifestDefaultsToRepo(t *testing.T) {
 		t.Fatalf("tier pop with <repo>/roles.toml = %d %q %s", code, out, errOut)
 	}
 }
+
+func TestRolesProjectsDirNeedsNoManifest(t *testing.T) {
+	dir := t.TempDir()
+	env := []string{"ROLES_TOML=" + filepath.Join(dir, "missing.toml"), "AGENTBUS_PROJECTS_DIR=" + filepath.Join(dir, "p")}
+	code, out, errw := roles(env, "projects-dir")
+	if code != 0 || out != filepath.Join(dir, "p")+"\n" {
+		t.Fatalf("exit %d, out %q, err %q", code, out, errw)
+	}
+}

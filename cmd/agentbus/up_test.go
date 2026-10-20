@@ -47,7 +47,7 @@ func upFixture(t *testing.T) (string, string, *fakeHerdr, *[]string, upDeps) {
 	}
 	h := &fakeHerdr{}
 	var boot []string
-	env := map[string]string{"HERDR_ENV": "1", "HERDR_PLUS_PROJECTS_DIR": templates}
+	env := map[string]string{"HERDR_ENV": "1", "AGENTBUS_PROJECTS_DIR": templates}
 	deps := upDeps{
 		Herdr: h.run,
 		Bootstrap: func(args []string) error {
@@ -120,7 +120,7 @@ func TestUpFocusesAnOpenWorkspace(t *testing.T) {
 func TestUpOutsideHerdrProvisionsAndExplains(t *testing.T) {
 	work, templates, h, boot, deps := upFixture(t)
 	deps.Env = func(k string) string { // outside herdr: no HERDR_ENV
-		if k == "HERDR_PLUS_PROJECTS_DIR" {
+		if k == "AGENTBUS_PROJECTS_DIR" {
 			return templates
 		}
 		return ""
@@ -440,5 +440,70 @@ func TestUpRecordsTheEscalationTarget(t *testing.T) {
 	errw.Reset()
 	if code := runUp([]string{"demo", "--escalate-to", "Bad Name"}, deps, &out, &errw); code != 1 || len(*boot) != 0 {
 		t.Fatalf("invalid target: code %d, bootstrap %q, %s", code, *boot, errw.String())
+	}
+}
+
+func TestUpNamesTheExpectedTemplatePath(t *testing.T) {
+	work, templates, _, _, deps := upFixture(t)
+	deps.Bootstrap = func([]string) error { return nil } // writes no template
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work, "--tabs"}, deps, &out, &errw); code != 1 {
+		t.Fatalf("exit %d, want 1", code)
+	}
+	if want := filepath.Join(templates, "demo.toml"); !strings.Contains(errw.String(), want) {
+		t.Fatalf("stderr %q does not name %s", errw.String(), want)
+	}
+}
+
+func TestHerdrSessionFallsBackToTheSocket(t *testing.T) {
+	sock := "HERDR_SOCKET_PATH=/h/.config/herdr/sessions/agent-bus/herdr.sock"
+	cases := []struct {
+		args, environ []string
+		want          string
+	}{
+		{[]string{"demo"}, []string{sock}, "agent-bus"},
+		{[]string{"demo", "--session", "team"}, []string{sock}, "team"},
+		{[]string{"demo"}, []string{"HERDR_SESSION=mine", sock}, "mine"},
+		{[]string{"demo"}, []string{"PATH=/bin"}, "demo"},
+		{[]string{"demo"}, []string{"HERDR_SOCKET_PATH=/tmp/odd.sock"}, ""},
+	}
+	for _, c := range cases {
+		if got := herdrSession(c.args, c.environ); got != c.want {
+			t.Errorf("herdrSession(%v, %v) = %q, want %q", c.args, c.environ, got, c.want)
+		}
+	}
+}
+
+func TestUpRefusesServicesOnAnUnreadableSocket(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	deps.Environ = []string{"PATH=/bin", "HERDR_SOCKET_PATH=/tmp/odd.sock"}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 {
+		t.Fatalf("exit %d, want 1", code)
+	}
+	for _, w := range []string{"HERDR_SOCKET_PATH", "--session"} {
+		if !strings.Contains(errw.String(), w) {
+			t.Fatalf("stderr %q does not name %s", errw.String(), w)
+		}
+	}
+	if _, err := os.Stat(u.paths.EnvFile("demo")); err == nil {
+		t.Fatal("an env file was written")
+	}
+}
+
+func TestHerdrBinOrder(t *testing.T) {
+	cases := []struct {
+		env  map[string]string
+		want string
+	}{
+		{map[string]string{"HERDR_BIN_PATH": "/p/herdr", "HERDR_BIN": "/b/herdr"}, "/p/herdr"},
+		{map[string]string{"HERDR_BIN": "/b/herdr"}, "/b/herdr"},
+		{map[string]string{}, "herdr"},
+	}
+	for _, c := range cases {
+		if got := herdrBin(func(k string) string { return c.env[k] }); got != c.want {
+			t.Errorf("herdrBin(%v) = %q, want %q", c.env, got, c.want)
+		}
 	}
 }
