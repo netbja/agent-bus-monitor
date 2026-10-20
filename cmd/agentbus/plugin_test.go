@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type pluginRig struct {
@@ -147,4 +149,37 @@ func TestPluginNeedsNoProject(t *testing.T) {
 
 func runOut(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
+}
+
+func TestPluginBusmonPaneWaitsWhenExecFails(t *testing.T) {
+	r := newPluginRig(t, "")
+	r.env["AGENTBUS_PLUGIN_PROJECT"] = "demo"
+	pr, pw := io.Pipe()
+	r.d.Stdin = pr
+	done := make(chan int, 1)
+	go func() { done <- r.run("busmon-pane") }()
+	select {
+	case <-done:
+		t.Fatal("returned before a line was supplied")
+	case <-time.After(150 * time.Millisecond):
+	}
+	pw.Write([]byte("\n"))
+	select {
+	case code := <-done:
+		if code != 1 || !strings.Contains(r.out.String(), "fake exec returned") {
+			t.Fatalf("code %d out %q", code, r.out.String())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not return after the line")
+	}
+}
+
+func TestPluginUnparsableTemplateCommandYieldsNoAs(t *testing.T) {
+	r := newPluginRig(t, `{"workspace_id":"w2","workspace_label":"demo"}`)
+	os.WriteFile(filepath.Join(r.env["AGENTBUS_PROJECTS_DIR"], "demo.toml"),
+		[]byte("working_dir = \"/w\"\n[[tabs]]\nname = \"busmon\"\ncommand = \"'/r/busmon --as X\"\n"), 0o600)
+	r.run("busmon")
+	if len(r.calls) != 1 || r.calls[0] != open+"busmon --workspace w2 --env AGENTBUS_PLUGIN_PROJECT=demo" {
+		t.Fatalf("calls %q", r.calls)
+	}
 }

@@ -151,11 +151,7 @@ func pluginIdentity(env func(string) string, templatePath string) string {
 func pluginBusmonPane(d pluginDeps, stdout, stderr io.Writer) int {
 	project := d.Env("AGENTBUS_PLUGIN_PROJECT")
 	if !bus.ValidName(project) {
-		fmt.Fprintf(stdout, "busmon: no valid project was passed to this pane (AGENTBUS_PLUGIN_PROJECT=%q).\nPress Enter to close.\n", project)
-		if d.Stdin != nil {
-			_, _ = bufio.NewReader(d.Stdin).ReadString('\n')
-		}
-		return 1
+		return pluginPaneFail(d, stdout, fmt.Sprintf("busmon: no valid project was passed to this pane (AGENTBUS_PLUGIN_PROJECT=%q).", project))
 	}
 	exe, err := os.Executable()
 	if err == nil {
@@ -164,8 +160,7 @@ func pluginBusmonPane(d pluginDeps, stdout, stderr io.Writer) int {
 		}
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "agentbus plugin: cannot locate busmon: %v\n", err)
-		return 1
+		return pluginPaneFail(d, stdout, fmt.Sprintf("agentbus plugin: cannot locate busmon: %v", err))
 	}
 	busmon := filepath.Join(filepath.Dir(exe), "busmon")
 	argv := []string{busmon, "--project", project}
@@ -173,6 +168,15 @@ func pluginBusmonPane(d pluginDeps, stdout, stderr io.Writer) int {
 		argv = append(argv, "--as", as)
 	}
 	err = d.Exec(busmon, argv)
-	fmt.Fprintf(stderr, "agentbus plugin: exec %s: %v\n", busmon, err)
+	return pluginPaneFail(d, stdout, fmt.Sprintf("agentbus plugin: exec %s: %v", busmon, err))
+}
+
+// pluginPaneFail shows why the pane cannot start and keeps it open until a
+// line arrives on stdin, so the reason can be read.
+func pluginPaneFail(d pluginDeps, stdout io.Writer, reason string) int {
+	fmt.Fprintf(stdout, "%s\nPress Enter to close.\n", reason)
+	if d.Stdin != nil {
+		_, _ = bufio.NewReader(d.Stdin).ReadString('\n')
+	}
 	return 1
 }
