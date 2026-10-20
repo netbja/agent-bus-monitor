@@ -76,6 +76,10 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		return errors.New("expected action: launch, install, validate, exists, tier, field, template, check-toml")
 	}
 	action, rest := args[0], args[1:]
+	if action == "projects-dir" { // needs no manifest: bootstrap asks before any exists
+		fmt.Fprintln(stdout, rolecfg.ProjectsDir(func(k string) string { v, _ := lookupEnv(env, k); return v }))
+		return nil
+	}
 	if action == "check-toml" {
 		if len(rest) != 1 {
 			return errors.New("usage: check-toml <file>")

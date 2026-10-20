@@ -39,13 +39,13 @@ chmod +x "$stub/crontab"
 export SKILLS_DEST="$tmp/skills" POCOCK_SKILLS_ROOT="$tmp/pocock" REPO_SKILLS="$tmp/reposkills"
 for s in tdd implement code-review diagnosing-bugs codebase-design domain-modeling to-spec wayfinder to-tickets; do mkdir -p "$tmp/pocock/engineering/$s"; echo x >"$tmp/pocock/engineering/$s/SKILL.md"; done
 for s in agent-bus agent-bus-master agent-bus-sentinel agent-bus-security agent-bus-docs; do mkdir -p "$tmp/reposkills/$s"; echo x >"$tmp/reposkills/$s/SKILL.md"; done
-run_cron() { PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$tmp/projects" "$B" new demo --cron >/dev/null; }
+run_cron() { PATH="$stub:$PATH" AGENTBUS_PROJECTS_DIR="$tmp/projects" "$B" new demo --cron >/dev/null; }
 run_cron; run_cron
 assert_eq "$(grep -c 'daily-review: demo' "$cronfile")" "1" "cron line installed exactly once"
 
 # (d) prefix collision: "dem" is a substring of "demo" — whole-line tag match must still install it
 #     (regression guard for grep -qxF vs -qF).
-PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$tmp/projects" "$B" new dem --cron >/dev/null
+PATH="$stub:$PATH" AGENTBUS_PROJECTS_DIR="$tmp/projects" "$B" new dem --cron >/dev/null
 assert_eq "$(grep -c 'daily-review: dem$' "$cronfile")"  "1" "prefix project 'dem' installs despite 'demo' present"
 assert_eq "$(grep -c 'daily-review: demo$' "$cronfile")" "1" "'demo' cron still present after 'dem' install"
 finish

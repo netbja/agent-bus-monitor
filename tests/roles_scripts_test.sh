@@ -79,7 +79,7 @@ config claude-code
 # bootstrap writes a template whose tab command runs the launcher with the selected manifest
 printf '#!/bin/sh\nexit 0\n' > "$root/bin/docker"; printf '#!/bin/sh\nexit 0\n' > "$root/bin/herdr"; chmod +x "$root/bin/docker" "$root/bin/herdr"
 project="$root/project \"quoted\" \$literal 🧪"; mkdir -p "$project"
-out="$(HERDR_PLUS_PROJECTS_DIR="$root/templates" HERDR_PLUS_PATH="$root/absent-plugin" "$REPO/scripts/bootstrap" new demo "$project" 2>&1)"; rc=$?
+out="$(AGENTBUS_PROJECTS_DIR="$root/templates" HERDR_PLUS_PATH="$root/absent-plugin" "$REPO/scripts/bootstrap" new demo "$project" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "bootstrap with a hostile project path exits 0"
 tpl="$root/templates/demo.toml"
 assert_exit 0 "the template is valid TOML" -- "$AGENTBUS_BIN" roles check-toml "$tpl"
