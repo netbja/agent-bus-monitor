@@ -342,6 +342,19 @@ It never touches Redis — see README "Deployment topology".
   `HERDR_SESSION`/`HERDR_SOCKET_PATH`/`HERDR_BIN_PATH` from herdr and the cwd is the plugin root
   (`./agentbus`, `./busmon`). Decision:
   `docs/memory/decisions/2026-10-19-herdr-plugin.md`.
+- **Relaunch and the workspace hook (v0.21) are the person's gesture, not a second pane writer.**
+  `agentbus up <p>` on an open workspace and `agentbus plugin workspace-event` (herdr's
+  `workspace.created`/`workspace.focused`, the only `[[events]]` the manifest test allows) rerun a
+  template tab's command (`relaunch.go`: `decideRelaunch`, a pure table) only in a pane whose
+  foreground is a bare shell, for an agent that is not alive by its snapshot (`snapLife`: pid +
+  `pid_start`, the dispatcher's rule; Linux only, elsewhere the pane decides). The hook creates no
+  tab, never provisions (template + broker `present`, like the picker), and starts stopped services
+  with `Manager.Start` only: it must never call `startServices`, whose `Install` rewrites a unit
+  when the binary path differs (the plugin runs `./agentbus`, installs run `~/.local/bin`) and so
+  restarts a running dispatcher. `upLock` (`~/.cache/agentbus/up-<p>.lock`, flock + mtime)
+  keeps the hook out of a running up and out of the minute after one, so up's own layout is never
+  typed into twice. `agentbus projects` and `agentbus identity` sit above the project-required
+  exit. `missions` without a Git repository publishes `waiting-git` and waits, never exits.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P

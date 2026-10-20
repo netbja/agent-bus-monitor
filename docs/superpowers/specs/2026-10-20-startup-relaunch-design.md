@@ -1,6 +1,7 @@
 # Startup and relaunch (v0.21)
 
-Status: spec for Bernard's review. Code by Claude, review by Codex. Builds on the herdr plugin
+Status: approved by Bernard (2026-10-20), implemented on `feat/v021`; the amendments made while
+coding are marked **Built:**. Code by Claude, review by Codex. Builds on the herdr plugin
 (v0.20, by the other Claude): its three `cmd/agentbus/up.go` changes and its shared project-listing
 function land first (`docs/recon/2026-10-20-plugin-coordination.md`); this release rebases on them.
 
@@ -34,6 +35,8 @@ project-required exit in `main()` (like `mem`, `limits`, `version`).
   from section 2's liveness rule; `?` without Redis).
 - Ends with the next step when something is down: `agentbus up <p>` to restart it.
 - `--json` for scripts. Exit 0 even when a source is unreachable (the line says `?`).
+- **Built:** agents are counted for the template's agent tabs by the snapshot rule only (`?` without
+  a pid); the pane check needs herdr and the workspace open, so it stays in `up`.
 
 ## 2. `agentbus up <p>` relaunches dead agents
 
@@ -60,11 +63,27 @@ each agent tab of the template and relaunches the dead ones, in their existing p
   dispatcher is up when the agents register.
 - The relaunch never closes a pane, never types anything but the template command, and never
   touches a pane of another workspace.
+- **Built:** "busy" is any foreground process other than a shell (`herdr pane process-info`);
+  busmon and the other non-agent tabs are rerun the same way (shell → rerun, else `running`).
+  `--dry-run` reads only: no bootstrap, no service, no focus. A per-project lock
+  (`~/.cache/agentbus/up-<p>.lock`) serialises ups. The person's recorded name is the default
+  `--as`.
 - This is not a second automated pane writer (decision 2026-10-10-event-driven-dispatch): it runs
   only on the person's gesture (`agentbus up`, or the workspace-open event below, which the person
   triggers), exactly like the first open already runs the template commands.
 
-### Trigger when the workspace opens (only if herdr provides it)
+### Trigger when the workspace opens
+
+**Built:** herdr 0.9.5 emits `workspace.created` and `workspace.focused` to plugins, with
+`HERDR_PLUGIN_EVENT_JSON` = `{"event":…,"data":{"workspace":{"workspace_id","label",…}}}` (checked
+with a throwaway probe plugin, unlinked after). Re-focusing the focused workspace emits nothing.
+The manifest runs `./agentbus plugin workspace-event` on both. The hook differs from `up` on
+purpose: no bootstrap; stopped services are started with the manager's start only (no unit or
+environment rewrite: a binary at another path would otherwise reconfigure and restart a running
+dispatcher); no tab is created, so a retired role stays retired; it skips while an up holds the
+lock and for a minute after one ended (the lock file's mtime), so up's own `workspace create`
+event never types into panes up is filling. The original text follows.
+
 
 If herdr 0.9.3 emits `workspace.created`/`workspace.focused` to plugins (reported by Kimi,
 unverified), the plugin manifest gains one `[[events]]` entry that runs `agentbus up <p>` for a
@@ -77,13 +96,16 @@ To verify before coding: `herdr` emits the event with the workspace label; one r
 
 `agentbus service run missions` with a `--repo` that is not a Git repository no longer exits with
 "invalid configuration". It publishes the state `waiting` with the detail `no Git repository in
-<dir>: run git init`, checks again every 30 s (no restart budget spent, no log flood: one line when
+<dir>: run git init` (**Built:** the state is `waiting-git`, shown `missions waiting git`, like
+`waiting-herdr`; it checks on each 5 s heartbeat, which also keeps the record fresh), checks again every 30 s (no restart budget spent, no log flood: one line when
 it starts waiting, one when the repository appears), and starts the conductor as soon as `git
 rev-parse` succeeds. busmon shows `missions waiting` (attention colour) with that detail in F3; the
 `services` health check reads `waiting` as `warn` with the remediation `git init in <dir>`.
 
 ## 4. The person's name, asked once
 
+- **Built:** `agentbus identity [set <name>]` (no project, no broker) reads and records it; setup
+  calls it, so bash never edits TOML. `--yes` and `AGENTBUS_SETUP_NO_IDENTITY=1` skip the question.
 - `./setup.sh install` asks, on a terminal only, `Your name on the bus (lowercase, e.g. bernard):`
   when `~/.config/agentbus/busmon.toml` has no `[identity] as`, validates it with the agent-name
   rule and writes it there (the file is created 0600 if absent; other sections untouched).

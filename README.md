@@ -537,13 +537,16 @@ support (only clients with a probed screen signature are prompted).
 | `agentbus --project <p> service restart\|stop\|start\|remove [kind]` | one service; `remove` keeps data and logs |
 | `agentbus service list` | every project's services on this machine |
 
-- **Nothing starts at login.** A reboot starts no project; `agentbus up` does.
+- **Nothing starts at login.** A reboot starts no project; opening its workspace in herdr (the
+  plugin's workspace hook) or `agentbus up` does. See [Resume a project](#resume-a-project).
+- **A project directory without Git** is not an error: `missions` waits (`missions waiting git`,
+  health `warn`) and starts by itself once you run `git init` there.
 - **Bounded restarts.** A service that fails is restarted; after 5 failures in 10 minutes it
   gives up and says so. It is not restarted at all when it is stopped on purpose, when its
   project was deleted, when another instance holds the lease, or when its configuration is
   invalid. The next `agentbus up` tries again.
 - **busmon shows it.** The header reads `dispatch ready`, `dispatch waiting herdr`,
-  `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the Services
+  `missions idle`, `missions busy`, `missions waiting git`, `missions failed` and so on. `F3` (or `s`) opens the Services
   overlay, with the last error and the tail of the log.
 - **Stopping during an integration** (`down`, or a stop) kills the running tests with their
   process group. The conductor redoes that check or integration at its next start.
@@ -589,14 +592,26 @@ the `bootstrap new` line when you want them.
 
 ### Resume a project
 
-```bash
-scripts/bootstrap myproject          # no verb -> recall: ensures the broker is up, reuses the template
-```
+After a reboot, herdr restores the project's workspace and tabs, but the agents and the
+services are gone. Switching to the workspace (or `agentbus up <p>` in it) brings them back:
 
-Re-open it the same way through the **Projects** picker (`Ctrl+B` then `↑`). Mind the brique-1 scope: **recall restores
-the _workspace_ (tabs / layout) with _fresh_ agent sessions** — not the previous conversations. To
-resume a Claude Code conversation, use the role launcher so its permission rules and Agent Bus
-identity stay attached:
+- **The workspace hook (v0.21).** The plugin listens to herdr's `workspace.created` and
+  `workspace.focused`. For a workspace labelled with a project that has a template and that the
+  broker confirms, it starts the project's stopped services as they are installed and relaunches
+  the dead agents in their existing tabs. It creates no tab (a retired role stays retired),
+  rewrites no unit, and does nothing while an `agentbus up` runs or within a minute after one.
+  Its output is in `herdr plugin log netbja.agentbus`.
+- **`agentbus up <p>` on an open workspace** checks every template tab: `alive`, `relaunched`,
+  `relaunched (new tab)`, `skipped (busy)`, `unknown`. An agent is alive when its recorded pid
+  still runs with the recorded start time; without a record, herdr's detected agent decides. Only
+  a pane whose foreground is a bare shell is typed into, and only the template's command.
+  `--dry-run` prints the plan and changes nothing; `--resume` resumes a Claude Code agent's
+  recorded session through the launcher (other clients start fresh).
+- **`agentbus projects`** lists every known project with its broker state, services and agents,
+  even with Redis down, and names the `agentbus up` to run.
+
+To resume one Claude Code conversation by hand, use the role launcher so its permission rules and
+Agent Bus identity stay attached:
 
 ```bash
 agent-launch coder myproject --resume <session-id>
@@ -604,9 +619,6 @@ agent-launch coder myproject --resume <session-id>
 
 Never run `claude --resume` by hand. Session resume through the launcher is Claude Code only;
 other clients are refused until their resume flags are defined.
-
-(Automatic scripted recall — every agent's conversation restored in one go — is deferred to the S4
-follow-on; see the spec.)
 
 ### Roles & pieces
 
