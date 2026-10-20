@@ -148,6 +148,10 @@ func TestAlignmentSuite(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		checkPick(t, palette) // the --pick picker: its own screen, same frames and rules
+		if t.Failed() {
+			return
+		}
 		for _, down := range []bool{false, true} {
 			for _, c := range alignCases() {
 				for _, sz := range alignSizes {

@@ -321,6 +321,7 @@ func main() {
 	themeFlag := flag.String("theme", "", "colour theme: auto, dark or light (or AGENT_BUS_BUSMON_THEME; default auto)")
 	asFlag := flag.String("as", "", "your name on the bus, shown as a human (or AGENT_BUS_HUMAN; default \"pilot\")")
 	versionFlag := flag.Bool("version", false, "print the version and exit")
+	pickFlag := flag.Bool("pick", false, "choose a project template and open it with agentbus up (the herdr plugin's Projects picker)")
 	flag.Parse()
 	if *versionFlag {
 		fmt.Println("busmon version " + buildinfo.Version)
@@ -342,6 +343,13 @@ func main() {
 		ThemeFlag: ifSet(themeSet, *themeFlag), ThemeEnv: os.Getenv("AGENT_BUS_BUSMON_THEME"),
 		AsFlag: ifSet(asSet, *asFlag), AsEnv: os.Getenv("AGENT_BUS_HUMAN"),
 	})
+	// --pick chooses the project, so like --list it must run before the
+	// project-required exit, and before --reset and --delete: a picker never
+	// purges or deletes, whatever else is on the line. It needs only the
+	// theme, so a bad --as (it writes nothing) cannot stop it.
+	if *pickFlag {
+		os.Exit(runPicker(*host, settings.Theme))
+	}
 	if err := settings.validateIdentity(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: --as: %v\n", err)
 		os.Exit(1)

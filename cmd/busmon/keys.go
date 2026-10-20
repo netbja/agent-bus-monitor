@@ -15,6 +15,7 @@ const (
 	ModeOverlay
 	ModeAsk     // the ask panel: answering an agent's questions
 	ModeCompose // the compose window (v0.16): a message or a free answer, several lines
+	ModePick    // busmon --pick (v0.20): the Projects picker, its own screen
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -61,6 +62,7 @@ const (
 	ActComposeAsk   // the window: answer the open question in its panel
 	ActRecap        // open the deterministic project recap
 	ActHealth       // open project health details
+	ActPickType     // the picker: a typed character or backspace edits the filter
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -206,6 +208,15 @@ var (
 		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(tcell.KeyCtrlT)},
 		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(tcell.KeyEscape)},
 	}
+	pickBindings = []binding{
+		{Keys: "type", Hint: "to filter", Act: ActPickType, match: keyIs(tcell.KeyRune, tcell.KeyBackspace, tcell.KeyBackspace2)},
+		{Keys: arrows, Hint: "select", Act: ActUp, match: keyIs(tcell.KeyUp)},
+		{Keys: GlyphDownArrow, Act: ActDown, match: keyIs(tcell.KeyDown)},
+		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
+		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(tcell.KeyPgDn)},
+		{Keys: "enter", Hint: "open", Act: ActOpen, match: keyIs(tcell.KeyEnter)},
+		{Keys: "esc", Hint: "close", Act: ActClose, match: keyIs(tcell.KeyEscape)},
+	}
 	overlayBindings = []binding{
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(tcell.KeyF5)},
 		{Keys: "i I", Help: "in an agent's detail: reply to that agent in the compose window", Act: ActComposeOpen, match: runeIs('i', 'I')},
@@ -238,6 +249,8 @@ func bindings(m Mode) []binding {
 		bs = askBindings
 	case ModeCompose:
 		bs = composeBindings
+	case ModePick:
+		bs = pickBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }
