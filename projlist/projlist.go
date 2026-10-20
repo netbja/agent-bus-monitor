@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -104,12 +105,19 @@ func Exists(ctx context.Context, keys KeysFunc, project string, timeout time.Dur
 	}
 }
 
-// Annotate returns a copy of rows with Broker set on every row.
+// Annotate returns a copy of rows with Broker set on every row. Rows are
+// probed concurrently, so a hung broker costs about one timeout in total.
 func Annotate(ctx context.Context, rows []Row, keys KeysFunc, timeout time.Duration) []Row {
 	out := make([]Row, len(rows))
 	copy(out, rows)
+	var wg sync.WaitGroup
 	for i := range out {
-		out[i].Broker, _ = Exists(ctx, keys, out[i].Name, timeout)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out[i].Broker, _ = Exists(ctx, keys, out[i].Name, timeout)
+		}()
 	}
+	wg.Wait()
 	return out
 }

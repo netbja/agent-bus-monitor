@@ -106,3 +106,18 @@ func TestStateString(t *testing.T) {
 		t.Fatal("strings")
 	}
 }
+
+func TestAnnotateIsBoundedWhenBrokerHangs(t *testing.T) {
+	block := func(c context.Context, _ string) ([]string, error) { <-c.Done(); return nil, c.Err() }
+	rows := []Row{{Name: "a"}, {Name: "b"}, {Name: "c"}, {Name: "d"}, {Name: "e"}}
+	start := time.Now()
+	out := Annotate(context.Background(), rows, block, 50*time.Millisecond)
+	if d := time.Since(start); d > 200*time.Millisecond {
+		t.Fatalf("took %v", d)
+	}
+	for _, r := range out {
+		if r.Broker != Unknown {
+			t.Fatalf("%+v", out)
+		}
+	}
+}
