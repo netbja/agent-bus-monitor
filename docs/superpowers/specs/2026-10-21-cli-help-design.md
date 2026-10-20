@@ -1,6 +1,6 @@
 # CLI help and GNU-style flags — design
 
-Status: draft for review (coder, 2026-10-21). Task `cli-help`, branch `feat/cli-help`.
+Status: implemented on `feat/cli-help` (coder, 2026-10-21); revised to match the code. Task `cli-help`, branch `feat/cli-help`.
 
 ## Goal
 
@@ -51,9 +51,9 @@ project-required exit:
    `extractFlag` takes `--host`/`--project` as today.
 2. `help`, `--help`, `-h` as `args[0]` → index (exit 0). `help <cmd>` → that command
    (unknown → error listing the names, exit 2).
-3. `<cmd> --help` / `<cmd> -h` **as the first argument after the command** (or after one
-   subcommand word: `board claim --help`) → that command's help, exit 0. Only that position:
-   a message such as `report coder see --help` is still a report.
+3. `<cmd> --help` / `<cmd> -h` **as the first argument after the command** → that command's
+   help, exit 0. Only that position: a message such as `report coder see --help` is still a
+   report. (`board claim --help` is not help: `board --help` lists the board's subcommands.)
 4. `cli.Expand(globalFlags, cmd.Flags, args[1:])` for a non-`Internal` command, then the
    existing dispatch, untouched.
 
@@ -87,7 +87,7 @@ Recurring meanings, used wherever the flag exists: `-j --json`, `-r --ref`, `-f 
 | command | shorts |
 |---|---|
 | report | `-a --auto`, `-t --to` |
-| reports, agents, usage, budget, projects, swaps | `-j --json` |
+| reports, agents, usage, budget, projects, quota | `-j --json` |
 | agents forget | `-f --force` |
 | cmd | `-r --ref`, `-n --no-wake` |
 | challenge, reply | `-r --ref` |
@@ -106,12 +106,12 @@ Recurring meanings, used wherever the flag exists: `-j --json`, `-r --ref`, `-f 
 | asks | `-o --open`, `-j --json` |
 | answer | `-c --choice`, `-T --text`, `-a --as` |
 | swap | `-P --profile`, `-n --now`, `-f --force`, `-b --back`, `-r --reason` |
-| retire | `-n --now`, `-r --reason`, `-R --role`, `-j --json` |
+| retire | `-n --now`, `-r --reason` |
+| swaps | `-R --role`, `-j --json` |
 | missions | `-s --status`, `-C --repo`, `-e --escalate-to` |
 | mission | `-w --wait`, `-f --force`, `-R --recover`, `-r --reason` |
 | mem | `-C --root`, `-S --stale-after`, `-x --strict`, `-T --title`, `-s --scope`, `-N --note-project` |
 | models | `-j --json`, `-P --provider`, `-r --refresh` |
-| quota | `-j --json`, `-i --print-install`, `-T --then` |
 | roles doctor | `-j --json`, `-u --publish` |
 | up | `-a --as`, `-T --tabs`, `-R --resume`, `-n --dry-run`, `-e --escalate-to`, `-S --session` |
 | service | `-a --all` |
@@ -120,7 +120,8 @@ Recurring meanings, used wherever the flag exists: `-j --json`, `-r --ref`, `-f 
 does not define, so it passes through unchanged. Its `--no-dispatch`, `--no-missions`,
 `--index`, `--cron` stay long only.
 
-**Internal, long only, no expansion:** `service run`, `plugin`, `statusline`, and the
+**Internal, long only, no expansion:** `service run` (`--env`, `--stderr`), `plugin`,
+`statusline` (`--then`, `--print-install`), and the
 script-facing `roles` verbs (`launch`, `template`, `field`, …; their argv is matched by
 position, e.g. `rest[2] == "--profile"`). They are listed under "internal" in `agentbus help`.
 

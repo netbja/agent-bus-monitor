@@ -37,7 +37,8 @@ agentbus notify "<name> online"      # sanity check → returns silently, exit 0
 
 ## Four traps that make a well-formed command fail
 1. **Project is mandatory** — pass `--project` or export `AGENT_BUS_PROJECT`.
-2. **Flags are `--double-dash <space> value`** — never `=`, never a single dash.
+2. **Flags are `--long <space> value`**, or the short `-x value` listed by `agentbus help <cmd>`;
+   never a long name with one dash (`-project`), never bundled shorts (`-jr`).
 3. **Positional order is fixed;** the message is trailing words (goes **last**), no quotes needed.
 4. **`<agent>`/`<project>` match `^[a-z][a-z0-9_-]{0,31}$`** — lowercase, letter-first, ≤32.
 
