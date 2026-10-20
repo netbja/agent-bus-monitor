@@ -465,6 +465,7 @@ func TestHerdrSessionFallsBackToTheSocket(t *testing.T) {
 		{[]string{"demo", "--session", "team"}, []string{sock}, "team"},
 		{[]string{"demo"}, []string{"HERDR_SESSION=mine", sock}, "mine"},
 		{[]string{"demo"}, []string{"PATH=/bin"}, "demo"},
+		{[]string{"demo"}, []string{"HERDR_SOCKET_PATH=/h/.config/herdr/herdr.sock"}, "default"},
 		{[]string{"demo"}, []string{"HERDR_SOCKET_PATH=/tmp/odd.sock"}, ""},
 	}
 	for _, c := range cases {

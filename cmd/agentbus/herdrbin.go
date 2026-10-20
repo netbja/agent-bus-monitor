@@ -14,12 +14,16 @@ func herdrBin(env func(string) string) string {
 	return "herdr"
 }
 
-// sessionFromSocket reads the session name out of a herdr socket path,
-// <config>/sessions/<name>/herdr.sock.
+// sessionFromSocket reads the session name out of a herdr socket path:
+// <config>/herdr/sessions/<name>/herdr.sock, or <config>/herdr/herdr.sock for
+// herdr's "default" session (as `herdr session list` shows it).
 func sessionFromSocket(path string) (string, bool) {
 	rest, ok := strings.CutSuffix(path, "/herdr.sock")
 	if !ok {
 		return "", false
+	}
+	if strings.HasSuffix(rest, "/herdr") {
+		return "default", true
 	}
 	i := strings.LastIndex(rest, "/")
 	if i < 0 || !strings.HasSuffix(rest[:i], "/sessions") || rest[i+1:] == "" {
