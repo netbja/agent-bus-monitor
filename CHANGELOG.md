@@ -4,20 +4,22 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
-## Unreleased
+## v0.20.0 — agent-bus as a herdr plugin
 
-- Project templates now live in `~/.config/agentbus/projects` (`AGENTBUS_PROJECTS_DIR`, else
-  `$XDG_CONFIG_HOME/agentbus/projects`), resolved by `agentbus roles projects-dir`, which bootstrap
-  and `agentbus up` share. `HERDR_PLUS_PROJECTS_DIR` is no longer read. Move existing templates from
-  herdr-plus's `projects/` directory by hand, once.
-  v0.20 install step, by hand, once (after `./setup.sh install` has linked the herdr plugin):
-  `mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/{ai-tradex-solana,hyperliquid}.toml ~/.config/agentbus/projects/`
-  (elsewhere: `herdr plugin config-dir cloudmanic.herdr-plus` gives the directory, its `projects/` holds them).
-  The Projects picker (`Ctrl+B` then `Up`) is now the plugin's `busmon --pick`, which reads the new
-  directory; herdr-plus is no longer installed.
-- `agentbus up` reads the herdr session from `HERDR_SOCKET_PATH` when `HERDR_SESSION` is unset, and
-  refuses to start services when neither names one (`--session` still wins). The herdr binary is
-  `HERDR_BIN_PATH`, then `HERDR_BIN`, then `herdr`.
+- This checkout is the herdr plugin `netbja.agentbus`, linked by `./setup.sh install`; herdr-plus is
+  no longer installed or needed (an older one is reported by `status`, never removed). setup owns
+  only the registration and key-binding block it wrote.
+- `Ctrl+B` then `Up` opens the Projects picker (`busmon --pick`): templates from
+  `~/.config/agentbus/projects` with their broker state, filter by typing, Enter opens a project the
+  broker confirms; it never provisions. The **Agent Bus: busmon** action opens busmon for the
+  focused workspace's project.
+- Templates live in `~/.config/agentbus/projects` (`AGENTBUS_PROJECTS_DIR`), resolved by
+  `agentbus roles projects-dir`; no migration code: move existing ones by hand once
+  (`mv "$(herdr plugin config-dir cloudmanic.herdr-plus)"/projects/*.toml ~/.config/agentbus/projects/`).
+- `agentbus up` reads the herdr session from `HERDR_SOCKET_PATH` when `HERDR_SESSION` is unset and
+  refuses services when neither names one; the herdr binary is `HERDR_BIN_PATH`, `HERDR_BIN`, `herdr`.
+- Health checks the plugin's registration, checkout and version instead of herdr-plus.
+- Fixed: plugin panes are opened without `--workspace`, which herdr 0.9.3 refuses (#92).
 
 ## v0.19.0 — project health core
 
