@@ -26,3 +26,14 @@ id = "busmon"
 title = "busmon"
 placement = "zoomed"
 command = ["./agentbus", "plugin", "busmon-pane"]
+
+# v0.21: opening a project's workspace (a session restored after a reboot, or
+# switching to it) starts its stopped services and relaunches its dead agents.
+# Only for a workspace labelled with a known project the broker confirms.
+[[events]]
+on = "workspace.created"
+command = ["./agentbus", "plugin", "workspace-event"]
+
+[[events]]
+on = "workspace.focused"
+command = ["./agentbus", "plugin", "workspace-event"]

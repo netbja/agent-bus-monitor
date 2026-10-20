@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 func TestSnapLife(t *testing.T) {
@@ -310,9 +311,58 @@ func TestUpLockExcludesASecondUp(t *testing.T) {
 		t.Fatal("another project is not locked")
 	}
 	unlock()
-	u2, ok := lock("demo", false)
+	if _, ok := lock("demo", false); ok {
+		t.Fatal("the hook ran right after an up ended")
+	}
+	u2, ok := lock("demo", true)
 	if !ok {
 		t.Fatal("lock not released")
 	}
 	u2()
+}
+
+// The workspace hook starts a stopped service as installed (no Install, so a
+// unit is never rewritten), leaves a running one, and relaunches without
+// creating tabs.
+func TestUpHookStartsStoppedServicesAndRelaunches(t *testing.T) {
+	_, templates, _, boot, deps := upFixture(t)
+	u := withServices(t, &deps)
+	u.m.specs["demo/dispatch"] = service.Spec{Project: "demo", Kind: "dispatch"}
+	u.m.specs["demo/missions"] = service.Spec{Project: "demo", Kind: "missions"}
+	u.m.active["demo/missions"] = true
+	if err := os.MkdirAll(templates, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "name = \"demo\"\n[[tabs]]\nname = \"master\"\ncommand = \"agent-launch master demo\"\n" +
+		"[[tabs]]\nname = \"coder\"\ncommand = \"agent-launch coder demo\"\n" +
+		"[[tabs]]\nname = \"dispatch\"\ncommand = \"/r/agentbus --project demo dispatch\"\n"
+	if err := os.WriteFile(templates+"/demo.toml", []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &relaunchHerdr{tabs: `{"label":"master","tab_id":"w4:t3"}`, panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`, fg: map[string]string{"w4:p3": "bash"}}
+	deps.Herdr = h.run
+	var out, errw bytes.Buffer
+	if code := upHook(deps, "demo", "w4", &out, &errw); code != 0 {
+		t.Fatalf("hook = %d: %s", code, errw.String())
+	}
+	if got := strings.Join(u.m.calls, ","); got != "start demo dispatch" {
+		t.Fatalf("manager calls = %q", got)
+	}
+	if got := strings.Join(h.ran(), ","); got != "pane run w4:p3 agent-launch master demo" {
+		t.Fatalf("herdr = %q", got)
+	}
+	if len(*boot) != 0 || !strings.Contains(out.String(), "coder: missing") || !strings.Contains(out.String(), "dispatch: started") {
+		t.Fatalf("boot %q out %s", *boot, out.String())
+	}
+}
+
+func TestUpHookDoesNothingWhileAnUpRuns(t *testing.T) {
+	_, _, _, _, deps := upFixture(t)
+	h := &relaunchHerdr{}
+	deps.Herdr = h.run
+	deps.Lock = func(string, bool) (func(), bool) { return func() {}, false }
+	var out, errw bytes.Buffer
+	if code := upHook(deps, "demo", "w4", &out, &errw); code != 0 || len(h.calls) != 0 {
+		t.Fatalf("code %d calls %q", code, h.calls)
+	}
 }

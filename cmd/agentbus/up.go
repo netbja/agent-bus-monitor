@@ -558,15 +558,21 @@ func upDryRun(d upDeps, project string, resume bool, stdout, stderr io.Writer) i
 
 // upLock takes ~/.cache/agentbus/up-<project>.lock: one up per project at a
 // time, so the workspace-open hook never types into a pane up is filling.
-// wait=false gives up at once when another holds it.
+// wait=false gives up at once when another holds it, or when an up ended
+// less than upFresh ago (the file's mtime, set at unlock).
 func upLock(cacheDir string) func(project string, wait bool) (func(), bool) {
 	return func(project string, wait bool) (func(), bool) {
 		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 			return func() {}, true // no lock to take is no reason to refuse the person's gesture
 		}
-		f, err := os.OpenFile(filepath.Join(cacheDir, "up-"+project+".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+		path := filepath.Join(cacheDir, "up-"+project+".lock")
+		_, statErr := os.Stat(path)
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 		if err != nil {
 			return func() {}, true
+		}
+		if errors.Is(statErr, os.ErrNotExist) {
+			_ = os.Chtimes(path, time.Unix(0, 0), time.Unix(0, 0)) // new: no up has ended yet
 		}
 		how := syscall.LOCK_EX
 		if !wait {
@@ -575,6 +581,11 @@ func upLock(cacheDir string) func(project string, wait bool) (func(), bool) {
 		if err := syscall.Flock(int(f.Fd()), how); err != nil {
 			f.Close()
 			return func() {}, false
+		}
+		if st, err := f.Stat(); !wait && err == nil && time.Since(st.ModTime()) < upFresh {
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			f.Close()
+			return func() {}, false // an up just ended: its layout is settling
 		}
 		return func() {
 			now := time.Now()
@@ -616,4 +627,55 @@ func readAgents(project string) (map[string]bus.AgentSnapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return b.Agents(ctx)
+}
+
+// upFresh: a workspace event this soon after an up ended is that up's own
+// layout settling, not a person coming back.
+const upFresh = time.Minute
+
+// upHook is what herdr's workspace event runs for a known project's open
+// workspace ws: it starts the project's stopped services as they are
+// installed (no unit or environment is rewritten, so a binary at another path
+// never reconfigures a running service) and relaunches the dead agents in their
+// existing tabs. It creates no tab, so a retired role stays retired, and it
+// does nothing while another up runs or just ran.
+func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
+	if d.Lock != nil {
+		unlock, ok := d.Lock(project, false)
+		if !ok {
+			fmt.Fprintf(stdout, "%s: an agentbus up runs or just ran; nothing to do\n", project)
+			return 0
+		}
+		defer unlock()
+	}
+	path := templatePath(d, project)
+	var tpl upTemplate
+	if _, err := toml.DecodeFile(path, &tpl); err != nil {
+		fmt.Fprintf(stderr, "agentbus: reading %s: %v\n", path, err)
+		return 1
+	}
+	code := 0
+	if d.Services != nil {
+		if m, _ := d.Services(); m != nil {
+			tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab)
+			for _, k := range service.Kinds {
+				st, err := m.State(project, k)
+				if err != nil || !st.Installed || st.Active {
+					continue
+				}
+				_ = service.Budget{Path: d.Paths.BudgetFile(project, k)}.Reset()
+				if err := m.Start(project, k); err != nil {
+					fmt.Fprintf(stderr, "agentbus: %s: start: %v\n", k, err)
+					code = 1
+					continue
+				}
+				fmt.Fprintf(stdout, "%s: started (it was stopped)\n", k)
+			}
+		}
+	}
+	if err := relaunchUp(d, project, ws, tpl, relaunchOptions{}, stdout); err != nil {
+		fmt.Fprintf(stderr, "agentbus: %v\n", err)
+		code = 1
+	}
+	return code
 }

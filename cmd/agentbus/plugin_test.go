@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/projlist"
 )
 
 type pluginRig struct {
@@ -254,5 +256,65 @@ func TestRunChildPropagatesExitCode(t *testing.T) {
 	}
 	if _, err := runChild(filepath.Join(t.TempDir(), "missing"), []string{"x"}); err == nil {
 		t.Fatal("expected a start error")
+	}
+}
+
+// workspaceEventRig: a template for demo, a broker answer and a recorded hook.
+func workspaceEventRig(t *testing.T, ev string, broker projlist.State) (*pluginRig, *[]string) {
+	r := newPluginRig(t, "")
+	dir := r.env["AGENTBUS_PROJECTS_DIR"]
+	if err := os.WriteFile(filepath.Join(dir, "demo.toml"), []byte("name = \"demo\"\nworking_dir = \"/w\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.env["HERDR_PLUGIN_EVENT_JSON"] = ev
+	var hooked []string
+	r.d.Exists = func(string) projlist.State { return broker }
+	r.d.Hook = func(p, ws string, _, _ io.Writer) int { hooked = append(hooked, p+" "+ws); return 0 }
+	return r, &hooked
+}
+
+const focusedDemo = `{"event":"workspace_focused","data":{"type":"workspace_focused","workspace":{"workspace_id":"w7","label":"demo"}}}`
+
+func TestPluginWorkspaceEventRunsTheHookForAKnownProject(t *testing.T) {
+	r, hooked := workspaceEventRig(t, focusedDemo, projlist.Present)
+	if code := r.run("workspace-event"); code != 0 || strings.Join(*hooked, ",") != "demo w7" {
+		t.Fatalf("code %d hooked %q", code, *hooked)
+	}
+}
+
+func TestPluginWorkspaceEventLeavesOtherWorkspacesAlone(t *testing.T) {
+	for name, ev := range map[string]string{
+		"no template":   `{"data":{"workspace":{"workspace_id":"w7","label":"other"}}}`,
+		"not a name":    `{"data":{"workspace":{"workspace_id":"w7","label":"My Notes"}}}`,
+		"no workspace":  `{"data":{}}`,
+		"malformed":     `{`,
+		"empty payload": ``,
+	} {
+		r, hooked := workspaceEventRig(t, ev, projlist.Present)
+		if code := r.run("workspace-event"); code != 0 || len(*hooked) != 0 {
+			t.Errorf("%s: code %d hooked %q", name, code, *hooked)
+		}
+	}
+}
+
+// The hook never provisions: a project the broker does not confirm is left.
+func TestPluginWorkspaceEventNeedsTheBroker(t *testing.T) {
+	for _, st := range []projlist.State{projlist.Absent, projlist.Unknown} {
+		r, hooked := workspaceEventRig(t, focusedDemo, st)
+		if code := r.run("workspace-event"); code != 0 || len(*hooked) != 0 {
+			t.Errorf("%s: code %d hooked %q", st, code, *hooked)
+		}
+	}
+}
+
+// Without a label in the event, herdr's workspace list names it.
+func TestPluginWorkspaceEventFindsTheLabel(t *testing.T) {
+	r, hooked := workspaceEventRig(t, "", projlist.Present)
+	r.env["HERDR_WORKSPACE_ID"] = "w7"
+	r.d.Herdr = func(args ...string) ([]byte, error) {
+		return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w7"}]}}`), nil
+	}
+	if code := r.run("workspace-event"); code != 0 || strings.Join(*hooked, ",") != "demo w7" {
+		t.Fatalf("code %d hooked %q", code, *hooked)
 	}
 }
