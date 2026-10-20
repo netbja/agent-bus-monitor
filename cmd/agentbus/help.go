@@ -1,0 +1,90 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/netbja/agent-bus-monitor/cli"
+)
+
+// expandArgs rewrites the short flags of the command line to their long
+// forms from the table: the leading global flags, then the command's own
+// flags (and the globals) after it. An internal entry point, the scripts'
+// roles verbs and an unknown command keep their arguments as they are.
+func expandArgs(args []string) []string {
+	i := 0
+	for i < len(args) {
+		a := args[i]
+		f, ok := globalFlag(a)
+		if !ok {
+			break
+		}
+		i++
+		if f.Arg != "" && !strings.Contains(a, "=") {
+			i++
+		}
+	}
+	i = min(i, len(args))
+	out := cli.Expand(globalFlags, nil, args[:i])
+	if i == len(args) {
+		return out
+	}
+	name, rest := args[i], args[i+1:]
+	c, ok := cli.Lookup(commands, name)
+	switch {
+	case !ok || c.Internal,
+		name == "roles" && (len(rest) == 0 || rest[0] != "doctor"),
+		name == "service" && len(rest) > 0 && rest[0] == "run":
+		return append(append(out, name), rest...)
+	}
+	return append(append(out, name), cli.Expand(globalFlags, c.Flags, rest)...)
+}
+
+// globalFlag reports whether a is a global flag: -p, --project or
+// --project=value.
+func globalFlag(a string) (cli.Flag, bool) {
+	name, _, _ := strings.Cut(a, "=")
+	for _, f := range globalFlags {
+		if a == "-"+string(f.Short) || name == "--"+f.Long {
+			return f, true
+		}
+	}
+	return cli.Flag{}, false
+}
+
+// helpRequest reports whether args (the global flags removed) ask for help,
+// and for which command ("" for the index): help [cmd], --help, -h, or
+// <cmd> --help|-h right after the command. Anywhere else --help is a word of
+// a message.
+func helpRequest(args []string) (string, bool) {
+	isHelp := func(s string) bool { return s == "help" || s == "--help" || s == "-h" }
+	switch {
+	case len(args) == 0:
+		return "", false
+	case isHelp(args[0]):
+		if len(args) > 1 {
+			return args[1], true
+		}
+		return "", true
+	case len(args) > 1 && args[1] != "help" && isHelp(args[1]):
+		return args[0], true
+	}
+	return "", false
+}
+
+// runHelp prints the index, or one command's help: exit 0, or 2 for an
+// unknown command.
+func runHelp(name string, out, errw io.Writer) int {
+	if name == "" {
+		cli.Index(out, "agentbus", globalFlags, commands)
+		return 0
+	}
+	c, ok := cli.Lookup(commands, name)
+	if !ok {
+		fmt.Fprintf(errw, "error: unknown command %q; agentbus help lists them\n", name)
+		return 2
+	}
+	cli.Render(out, "agentbus", c)
+	return 0
+}

@@ -120,7 +120,7 @@ var foreignFlags = []string{
 // Every flag an agentbus command reads (a "--x" literal in a non-test file of
 // this package) is in the table, unless it belongs to another program.
 func TestEveryFlagLiteralIsInTheTable(t *testing.T) {
-	known := map[string]bool{}
+	known := map[string]bool{"--help": true}
 	for _, g := range globalFlags {
 		known["--"+g.Long] = true
 	}

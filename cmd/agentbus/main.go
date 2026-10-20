@@ -4,51 +4,9 @@
 // namespaced {project}:{kind}. Self identity (for `from`/pilot driver) is
 // AGENT_BUS_AGENT (default "hermes"). Trailing words are joined into one message.
 //
-// Usage:
-//
-//	agentbus --project P status    <agent> <working|idle|blocked|waiting|done> [msg...]
-//	agentbus --project P report    <agent> [--auto] <msg...>
-//	agentbus --project P reports   [<id>]         # list recent reports; <id> prints one report's full retained text
-//	agentbus --project P notify    <msg...>
-//	agentbus --project P cmd       [--ref T] [--no-wake] <target> <command...>   # prints the entry id (= thread root); --no-wake: never wakes the target
-//	agentbus --project P thread    <thread-id>   # show the :cmd thread (entries where ref or id == thread-id), chronological
-//	agentbus --project P challenge <target> [--ref R] <msg...>   # opens a 4-eyes gate
-//	agentbus --project P reply     --ref R <target> <msg...>
-//	agentbus --project P verdict   (--pr N | --subject S) [--ref R] <author> <approve|reject> [msg...]  # records to the ledger; resolves a matching gate as a bonus
-//	agentbus --project P verdicts  [--pr N | --subject S]   # roll-up 4-eyes state of a subject (exit 0=approved/2=pending/3=rejected), or recent across all
-//	agentbus --project P pilot     <claim|renew|release|status> [--ttl 90s]
-//	agentbus --project P gate      <agent>      # lists open challenges; exit 1 if gated
-//	agentbus --project P agents    [--json]      # current state of all agents (one line each)
-//	agentbus --project P pause --for 2h | --until 02:15 | --until-reset [--to master] [reason]  # nobody is woken until then; resume [msg] ends it
-//	agentbus --project P ask <agent> [--file f.json] [--replace id] | --withdraw id  # questions for a person; asks [--open]; answer <id> <q> --choice L | --text ...
-//	agentbus --project P agents forget <agent>... [--force]  # retire gone agents (snapshot, usage, wake, group)
-//	agentbus --project P pane      <agent>       # print the agent's herdr pane (HERDR_PANE_ID); non-zero if none
-//	agentbus --project P bind      <agent> [--pane P] [--pid N]   # bind a verified pane identity (lists candidates without --pid, exit 2)
-//	agentbus --project P usage     [<agent> <json>]   # write a budget snapshot, or print all (status-line tee)
-//	agentbus --project P subscribe [--since <cursor>] <agent> [idle_secs]  # JSON per fire; persist id, pass back as --since
-//	agentbus --project P subscribe --drain <agent>  # JSONL, one line per waiting entry (PEL then unread); exit 0 output, 64 empty, 75 error
-//	agentbus --project P watch     <agent>      # alias of subscribe (legacy name)
-//	agentbus --project P budget    [--json]     # account budget window, one row per provider
-//	agentbus --project P budget    <provider> <json>             # publish a provider's window
-//	agentbus --project P board     [--json]     # shared task board: task → owner/state/branch
-//	agentbus --project P board     claim <task> [--branch b]     # fails if a peer owns it
-//	agentbus --project P board     state <task> <state> | done <task> | drop <task>
-//	agentbus --project P shutdown  [--force]    # broadcast a shutdown directive (wake=no, expires in 10m) to every peer; refused while tasks aren't done or peers are busy
-//	agentbus --project P refresh   [--quiet]    # read local sources -> publish budget + per-agent usage
-//	agentbus --project P listen    [status report notify cmd]    # debug tail
-//	agentbus --project P dispatch  [--horizon 24h] [--escalate-after 10m] [--escalate-to master]  # wake unarmed agents through herdr (JSON log on stderr)
-//	agentbus --project P dispatch  --status     # print "dispatch up" (exit 0) or "dispatch down" (exit 1)
-//	agentbus --project P health     [list|detail <id>|log [after-id]|note <id> <text...>]
-//	agentbus --project P request [--json] | send <task> <target> [--ref T] [--ttl 5m] <body>
-//	agentbus --project P request accept <task> | block <task> <reason> | done <task> <reply>
-//	agentbus up <project> [<path>] [--as <name>] [--tabs] [bootstrap flags]   # provision, start the services, open the herdr workspace (busmon first)
-//	agentbus down <project>        # stop the project's services; deletes nothing
-//	agentbus --project P service status|start|stop|restart|remove [dispatch|missions] | logs [kind] [-n 50]
-//	agentbus service list | service remove --all   # every project's services (systemd --user / launchd), no broker
-//	agentbus roles  <validate|exists|tier|field|launch|install|template|check-toml> ...  # role manifest (scripts), no project/broker
-//	agentbus limits                # writer size/retention limits, no broker needed
-//	agentbus version               # print the bus protocol version (no project/broker needed)
-//	agentbus --host <host> ...
+// Every command's usage, flags (long and short) and examples are in one
+// table, commands.go: `agentbus help`, `agentbus help <cmd>` or
+// `agentbus <cmd> --help` prints them.
 package main
 
 import (
@@ -64,6 +22,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/usage"
@@ -90,11 +49,21 @@ func envOr(key, def string) string {
 }
 
 func main() {
-	args := os.Args[1:]
+	// Short flags become long ones (the table in commands.go), so every
+	// parser below sees only the long forms it always read.
+	args := expandArgs(os.Args[1:])
 	args, host := extractFlag(args, "--host")
 	args, project := extractFlag(args, "--project")
 	if project == "" {
 		project = os.Getenv("AGENT_BUS_PROJECT")
+	}
+	// help reads the table only: no project, no broker.
+	if name, ok := helpRequest(args); ok {
+		os.Exit(runHelp(name, os.Stdout, os.Stderr))
+	}
+	if len(args) == 0 {
+		cli.Index(os.Stderr, "agentbus", globalFlags, commands)
+		os.Exit(1)
 	}
 	// mem works on files in the working tree — no project, no broker — so it
 	// runs before the project check, like limits and version.
@@ -160,9 +129,6 @@ func main() {
 	}
 	if project == "" {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
-	}
-	if len(args) < 1 {
-		die("usage: agentbus --project <p> <status|report|reports|notify|cmd|thread|challenge|reply|verdict|verdicts|version|pilot|gate|agents|pane|bind|usage|budget|board|shutdown|refresh|request|dispatch|health|missions|mission|pause|resume|ask|asks|answer|limits|mem|roles|up|subscribe|watch|listen> ...")
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
