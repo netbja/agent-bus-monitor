@@ -9,9 +9,12 @@ import (
 )
 
 // expandArgs rewrites the short flags of the command line to their long
-// forms from the table: the leading global flags, then the command's own
-// flags (and the globals) after it. An internal entry point, the scripts'
-// roles verbs and an unknown command keep their arguments as they are.
+// forms from the table: the global flags before the command, then the
+// command's own flags after it. Global shorts are never expanded after the
+// command: there -p is a message word (mkdir -p), and --project is read
+// anywhere, so expanding it would write to another project. An internal
+// entry point, the scripts' roles verbs and an unknown command keep their
+// arguments as they are.
 func expandArgs(args []string) []string {
 	i := 0
 	for i < len(args) {
@@ -38,7 +41,7 @@ func expandArgs(args []string) []string {
 		name == "service" && len(rest) > 0 && rest[0] == "run":
 		return append(append(out, name), rest...)
 	}
-	return append(append(out, name), cli.Expand(globalFlags, c.Flags, rest)...)
+	return append(append(out, name), cli.Expand(nil, c.Flags, rest)...)
 }
 
 // globalFlag reports whether a is a global flag: -p, --project or

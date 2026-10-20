@@ -54,16 +54,18 @@ project-required exit:
 3. `<cmd> --help` / `<cmd> -h` **as the first argument after the command** → that command's
    help, exit 0. Only that position: a message such as `report coder see --help` is still a
    report. (`board claim --help` is not help: `board --help` lists the board's subcommands.)
-4. `cli.Expand(globalFlags, cmd.Flags, args[1:])` for a non-`Internal` command, then the
-   existing dispatch, untouched.
+4. `cli.Expand(nil, cmd.Flags, args[1:])` for a non-`Internal` command, then the existing
+   dispatch, untouched. Global shorts are **not** expanded after the command (foureyes'
+   review of `2477a0a`): there `-p` is a message word (`mkdir -p`, `ssh -p`, `git log -p`), and
+   since `--project` is read anywhere, expanding it would silently write to another project.
 
 The bare `agentbus --project P` without a command prints the index instead of today's
 one-line list, still exit 1.
 
 ### Expansion rules (both binaries)
 
-- A token equal to `-x`, where `x` is a short defined **for this command or globally**,
-  becomes `--long`. Anything else is left as it is: an unknown `-z`, `-n 50` of
+- A token equal to `-x` becomes `--long` when `x` is a global short and the token precedes
+  the command, or `x` is a short of this command and the token follows it. Anything else is left as it is: an unknown `-z`, `-n 50` of
   `service logs` (kept as it is today), a negative number, a bootstrap flag passed through
   by `up`.
 - `--long=value` for a defined flag that takes a value becomes `--long value`.

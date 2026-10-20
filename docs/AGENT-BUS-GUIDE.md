@@ -39,6 +39,8 @@ them before retrying anything.
    AGENT_BUS_PROJECT=<p>`). No default. Missing it → `error: project required`.
 2. **Flags: `--long value`, or the short `-x value` that `agentbus help <cmd>` lists.**
    - ✅ `agentbus --project trading ...` = `agentbus -p trading ...`   ✅ `--ref abc123` = `-r abc123`
+   - The global shorts `-p`/`-H` are read **only before the command**: after it, `-p` is a
+     message word (`notify fixed with mkdir -p build` stays as written).
    - ✅ `--ref=abc123` (split for a flag that takes a value)
    - ❌ `-project trading` (single dash with a long name — not a flag → "project required")
    - ❌ `-jr` / `-pdemo` (no bundled shorts, no attached values)

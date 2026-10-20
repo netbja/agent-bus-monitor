@@ -29,6 +29,11 @@ func TestExpandArgs(t *testing.T) {
 		{[]string{"-p", "demo", "roles", "doctor", "-j", "-u"}, []string{"--project", "demo", "roles", "doctor", "--json", "--publish"}},
 		// An unknown command: only the leading globals.
 		{[]string{"-p", "demo", "nope", "-j"}, []string{"--project", "demo", "nope", "-j"}},
+		// Global shorts only before the command: in a message, -p is a word.
+		{[]string{"notify", "fixed", "with", "mkdir", "-p", "fe-build"}, []string{"notify", "fixed", "with", "mkdir", "-p", "fe-build"}},
+		{[]string{"-p", "demo", "notify", "mkdir", "-p", "x", "-H"}, []string{"--project", "demo", "notify", "mkdir", "-p", "x", "-H"}},
+		{[]string{"report", "coder", "-t", "master", "git", "log", "-p"}, []string{"report", "coder", "--to", "master", "git", "log", "-p"}},
+		{[]string{"notify", "see", "--project=x"}, []string{"notify", "see", "--project=x"}},
 		{nil, []string{}},
 	}
 	for _, c := range cases {
