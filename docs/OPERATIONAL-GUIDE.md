@@ -1,6 +1,6 @@
 # Operational Guide: Agent Bus Monitor (`agent-bus`)
 
-This practical guide complements the `README.md`. It provides a complete step-by-step walkthrough to install, configure, and use `agent-bus-monitor`, the `herdr` workspace manager, the `herdr-plus` plugin, and day-to-day team workflows on new and existing projects.
+This practical guide complements the `README.md`. It provides a complete step-by-step walkthrough to install, configure, and use `agent-bus-monitor`, the `herdr` workspace manager, the `netbja.agentbus` herdr plugin, and day-to-day team workflows on new and existing projects.
 
 ---
 

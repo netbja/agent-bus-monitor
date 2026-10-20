@@ -119,7 +119,7 @@ Run it from a clone. It is idempotent, so re-running it is safe:
 ```bash
 ./setup.sh install                 # check the toolchain (Go from go.mod), build agentbus + busmon,
                                    # clone the external skills, link role skills, start Redis
-./setup.sh install --install-herdr # also install herdr (if missing); the plugin is linked either way
+./setup.sh install --install-herdr # also install herdr (if missing); the plugin is linked when herdr is on PATH
 ./setup.sh install --dry-run       # list what is missing and what would change; changes nothing
 ./setup.sh update                  # git pull --ff-only, then install; prints vA -> vB
 ./setup.sh status                  # versions, PATH shadowing, skills, herdr plugin, Redis
@@ -175,7 +175,7 @@ no Python any more).
 > cause retries) lives in [`docs/AGENT-BUS-GUIDE.md`](docs/AGENT-BUS-GUIDE.md).
 >
 > **Operators / Getting Started:** A step-by-step operational guide for setup, herdr,
-> herdr-plus and workflows is available in [English](docs/OPERATIONAL-GUIDE.md) and
+> the herdr plugin netbja.agentbus and workflows is available in [English](docs/OPERATIONAL-GUIDE.md) and
 > [French](docs/OPERATIONAL-GUIDE.fr.md).
 
 ```bash

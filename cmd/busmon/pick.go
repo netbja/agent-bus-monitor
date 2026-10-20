@@ -165,6 +165,7 @@ func (m *pickModel) setBusy(s string) {
 // close: true only after a successful run. A refusal or a failure is left on
 // the status line. It blocks: the picker calls it off the event loop.
 func (m *pickModel) open(ctx context.Context, keys projlist.KeysFunc, run func(project string) error) (closePicker bool) {
+	defer m.setBusy("")
 	m.mu.Lock()
 	row, ok := m.selectedLocked()
 	timeout := m.timeout
@@ -172,7 +173,6 @@ func (m *pickModel) open(ctx context.Context, keys projlist.KeysFunc, run func(p
 	if !ok {
 		return false
 	}
-	defer m.setBusy("")
 	m.setBusy("checking " + row.Name + " on the broker")
 	state, err := projlist.Exists(ctx, keys, row.Name, timeout)
 	m.mu.Lock()
