@@ -538,7 +538,7 @@ support (only clients with a probed screen signature are prompted).
 | `agentbus service list` | every project's services on this machine |
 
 - **Nothing starts at login.** A reboot starts no project; opening its workspace in herdr (the
-  plugin's workspace hook) or `agentbus up` does. See [Resume a project](#resume-a-project).
+  plugin's workspace hook starts its services) or `agentbus up` does. See [Resume a project](#resume-a-project).
 - **A project directory without Git** is not an error: `missions` waits (`missions waiting git`,
   health `warn`) and starts by itself once you run `git init` there.
 - **Bounded restarts.** A service that fails is restarted; after 5 failures in 10 minutes it
@@ -595,16 +595,17 @@ the `bootstrap new` line when you want them.
 After a reboot, herdr restores the project's workspace and tabs, but the agents and the
 services are gone. Switching to the workspace (or `agentbus up <p>` in it) brings them back:
 
+- **herdr restores the agents.** After a reboot, herdr's native session restore relaunches the
+  agents it knows how to resume, in the shells it has just spawned.
 - **The workspace hook (v0.21).** The plugin listens to herdr's `workspace.created` and
   `workspace.focused`. For a workspace labelled with a project that has a template and that the
-  broker confirms, it starts the project's stopped services as they are installed and relaunches
-  the dead agents in their existing tabs. It creates no tab (a retired role stays retired),
-  rewrites no unit, and does nothing while an `agentbus up` runs or within a minute after one.
-  Its output is in `herdr plugin log netbja.agentbus`.
+  broker confirms, it starts the project's stopped services. It rewrites no unit and touches no
+  pane. Its output is in `herdr plugin log netbja.agentbus`.
 - **`agentbus up <p>` on an open workspace** checks every template tab: `alive`, `relaunched`,
-  `relaunched (new tab)`, `skipped (busy)`, `unknown`. An agent is alive when its recorded pid
-  still runs with the recorded start time; without a record, herdr's detected agent decides. Only
-  a pane whose foreground is a bare shell is typed into, and only the template's command.
+  `relaunched (new pane)`, `relaunched (new tab)`, `skipped (busy)`, `unknown`. An agent is alive
+  when its recorded pid still runs with the recorded start time; without a record, herdr's detected
+  agent decides. Nothing is typed into an existing pane: a dead agent comes back in a new pane
+  split beside its old one, which is left as it is.
   `--dry-run` prints the plan and changes nothing; `--resume` resumes a Claude Code agent's
   recorded session through the launcher (other clients start fresh).
 - **`agentbus projects`** lists every known project with its broker state, services and agents,

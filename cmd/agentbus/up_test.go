@@ -71,8 +71,7 @@ func upFixture(t *testing.T) (string, string, *fakeHerdr, *[]string, upDeps) {
 			}
 			return os.WriteFile(path, []byte(body), 0o644)
 		},
-		Env:      func(k string) string { return env[k] },
-		AtPrompt: fakePrompt,
+		Env: func(k string) string { return env[k] },
 	}
 	return work, templates, h, &boot, deps
 }

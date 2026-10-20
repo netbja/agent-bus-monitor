@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -64,12 +63,14 @@ func TestDecideRelaunch(t *testing.T) {
 		{"no snapshot, bare shell", true, lifeUnknown, true, shell, true, verdictRelaunch},
 		{"no snapshot, herdr sees an agent", true, lifeUnknown, true, withAgent, true, verdictAlive},
 		{"dead, another agent in its pane", true, lifeDead, true, withAgent, true, verdictBusy},
-		{"dead, the shell runs something", true, lifeDead, true, busy, true, verdictBusy},
+		{"dead, the old pane runs something: a new pane", true, lifeDead, true, busy, true, verdictRelaunch},
+		{"no snapshot, something runs: no proof", true, lifeUnknown, true, busy, true, verdictBusy},
 		{"pane unreadable", true, lifeDead, true, paneFacts{}, true, verdictUnknown},
 		{"no tab: created", true, lifeDead, false, paneFacts{}, true, verdictCreate},
 		{"no tab, not asked to create", true, lifeDead, false, paneFacts{}, false, verdictMissing},
 		{"busmon still runs", false, lifeUnknown, true, busy, true, verdictRunning},
 		{"busmon gone", false, lifeUnknown, true, shell, true, verdictRelaunch},
+		{"an agent where busmon was", false, lifeUnknown, true, withAgent, true, verdictRunning},
 	} {
 		if got := decideRelaunch(c.agent, c.snap, c.hasPane, c.pane, c.create); got != c.want {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
@@ -135,16 +136,12 @@ func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
 		if !ok {
 			return nil, errors.New("no such pane")
 		}
-		// "bash" waits at its prompt; "bash @busy" is the same argv running a
-		// builtin (its terminal canonical). The pid encodes which.
-		pid := 100
-		if strings.HasSuffix(cmdline, " @busy") {
-			cmdline, pid = strings.TrimSuffix(cmdline, " @busy"), 200
-		}
 		argv, _ := json.Marshal(strings.Fields(cmdline))
-		return []byte(`{"result":{"process_info":{"foreground_processes":[{"pid":` + strconv.Itoa(pid) + `,"argv":` + string(argv) + `}]}}}`), nil
+		return []byte(`{"result":{"process_info":{"foreground_processes":[{"argv":` + string(argv) + `}]}}}`), nil
 	case strings.HasPrefix(line, "tab create --workspace w4"):
 		return []byte(`{"result":{"root_pane":{"pane_id":"w4:p9"}}}`), nil
+	case strings.HasPrefix(line, "pane split "):
+		return []byte(`{"result":{"pane":{"pane_id":"` + args[2] + `s"}}}`), nil
 	}
 	return []byte(`{"result":{}}`), nil
 }
@@ -152,7 +149,7 @@ func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
 func (f *relaunchHerdr) ran() []string {
 	var out []string
 	for _, c := range f.calls {
-		if strings.HasPrefix(c, "pane run ") || strings.HasPrefix(c, "tab create ") {
+		if strings.HasPrefix(c, "pane run ") || strings.HasPrefix(c, "tab create ") || strings.HasPrefix(c, "pane split ") {
 			out = append(out, c)
 		}
 	}
@@ -182,20 +179,25 @@ func TestRelaunchOpenRelaunchesOnlyWhatIsGone(t *testing.T) {
 	}
 	ps := func(int) (uint64, error) { return 0, os.ErrNotExist }
 	var out bytes.Buffer
-	err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", relaunchTemplate(), relaunchOptions{Resume: true, Create: true, AtPrompt: fakePrompt}, &out)
+	err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", relaunchTemplate(), relaunchOptions{Resume: true, Create: true}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
-		"pane run w4:p3 /r/scripts/agent-launch master demo", // master first
-		"pane run w4:p2 /r/scripts/agent-launch coder demo --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf",
+		"pane split w4:p3 --direction right", // master first, in a new pane
+		"pane run w4:p3s /r/scripts/agent-launch master demo",
+		"pane split w4:p2 --direction right",
+		"pane run w4:p2s /r/scripts/agent-launch coder demo --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf",
 		"tab create --workspace w4 --label sentinel --no-focus",
 		"pane run w4:p9 /r/scripts/agent-launch sentinel demo",
 	}
 	if got := h.ran(); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	for _, w := range []string{"master: relaunched (fresh", "busmon: running", "coder: relaunched (resumed)", "foureyes: alive", "sentinel: relaunched (new tab)"} {
+	if bad := h.typedIntoExisting(); len(bad) != 0 {
+		t.Fatalf("typed into an existing pane: %q", bad)
+	}
+	for _, w := range []string{"master: relaunched (new pane; the old one is left as it is) (fresh", "busmon: running", "coder: relaunched (new pane; the old one is left as it is) (resumed)", "foureyes: alive", "sentinel: relaunched (new tab)"} {
 		if !strings.Contains(out.String(), w) {
 			t.Errorf("output lacks %q:\n%s", w, out.String())
 		}
@@ -209,7 +211,7 @@ func TestRelaunchOpenDryRunTypesNothing(t *testing.T) {
 		fg:    map[string]string{"w4:p3": "bash"},
 	}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), relaunchOptions{DryRun: true, Create: true, AtPrompt: fakePrompt}, &out); err != nil {
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), relaunchOptions{DryRun: true, Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 {
@@ -231,7 +233,7 @@ func TestRelaunchOpenLeavesALiveAgent(t *testing.T) {
 	ps := func(int) (uint64, error) { return 7, nil }
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fakePrompt}, &out); err != nil {
+	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: alive") {
@@ -245,7 +247,7 @@ func TestRelaunchOpenWithoutCreateLeavesMissingTabs(t *testing.T) {
 	h := &relaunchHerdr{}
 	tpl := upTemplate{Tabs: []upTab{{Name: "coder", Command: "agent-launch coder demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{AtPrompt: fakePrompt}, &out); err != nil {
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "coder: missing") {
@@ -273,8 +275,9 @@ func TestUpRelaunchesInAnOpenWorkspace(t *testing.T) {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
 	got := strings.Join(h.ran(), "\n")
-	if !strings.Contains(got, "pane run w4:p3 env ROLES_TOML=/r/roles.toml /r/scripts/agent-launch master demo") ||
-		!strings.Contains(got, "pane run w4:p1 /r/busmon --project demo") || locked != 1 {
+	if !strings.Contains(got, "pane split w4:p3 --direction right --cwd "+work) ||
+		!strings.Contains(got, "pane run w4:p3s env ROLES_TOML=/r/roles.toml /r/scripts/agent-launch master demo") ||
+		!strings.Contains(got, "pane run w4:p1s /r/busmon --project demo") || locked != 1 {
 		t.Fatalf("calls:\n%s\nlocked %d out %s", got, locked, out.String())
 	}
 }
@@ -308,14 +311,13 @@ func TestUpDryRunProvisionsNothing(t *testing.T) {
 }
 
 func TestUpLockExcludesASecondUp(t *testing.T) {
-	dir := t.TempDir()
-	lock := upLock(dir)
+	lock := upLock(t.TempDir())
 	unlock, err := lock("demo", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := lock("demo", false); !errors.Is(err, errUpBusy) {
-		t.Fatalf("a hook during an up: %v", err)
+		t.Fatalf("a second up during an up: %v", err)
 	}
 	if u, err := lock("other", false); err != nil {
 		t.Fatalf("another project is locked: %v", err)
@@ -323,40 +325,22 @@ func TestUpLockExcludesASecondUp(t *testing.T) {
 		u()
 	}
 	unlock()
-	if _, err := lock("demo", false); !errors.Is(err, errUpFresh) {
-		t.Fatalf("the hook right after an up ended: %v", err)
-	}
-	u2, err := lock("demo", true)
+	u2, err := lock("demo", false)
 	if err != nil {
 		t.Fatalf("an up after an up: %v", err)
 	}
 	u2()
 }
 
-// First use (an empty lock file, whoever created it) is not a recent up: only
-// an unlock writes the end time, and always under the lock.
-func TestUpLockFirstUseIsNotFresh(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(dir+"/up-demo.lock", nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	u, err := upLock(dir)("demo", false)
-	if err != nil {
-		t.Fatalf("first use: %v", err)
-	}
-	u()
-}
-
-// No lock, no pane: an unwritable cache refuses both up and the hook.
+// No lock, no pane: an unwritable cache refuses up.
 func TestUpLockFailsClosed(t *testing.T) {
-	dir := t.TempDir()
-	blocker := dir + "/file"
+	blocker := t.TempDir() + "/file"
 	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	lock := upLock(blocker + "/cache") // a file where the directory should be
 	for _, wait := range []bool{true, false} {
-		if _, err := lock("demo", wait); err == nil || errors.Is(err, errUpBusy) || errors.Is(err, errUpFresh) {
+		if _, err := lock("demo", wait); err == nil || errors.Is(err, errUpBusy) {
 			t.Errorf("wait=%v: %v", wait, err)
 		}
 	}
@@ -366,30 +350,17 @@ func TestUpLockFailsClosed(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 || len(h.calls) != 0 {
 		t.Fatalf("up without its lock: code %d calls %q", code, h.calls)
 	}
-	if code := upHook(deps, "demo", "w4", &out, &errw); code != 1 || len(h.calls) != 0 {
-		t.Fatalf("hook without its lock: code %d calls %q", code, h.calls)
-	}
 }
 
 // The workspace hook starts a stopped service as installed (no Install, so a
-// unit is never rewritten), leaves a running one, and relaunches without
-// creating tabs.
-func TestUpHookStartsStoppedServicesAndRelaunches(t *testing.T) {
-	_, templates, _, boot, deps := upFixture(t)
+// unit is never rewritten), leaves a running one, and touches no pane.
+func TestUpHookStartsStoppedServicesOnly(t *testing.T) {
+	_, _, _, boot, deps := upFixture(t)
 	u := withServices(t, &deps)
 	u.m.specs["demo/dispatch"] = service.Spec{Project: "demo", Kind: "dispatch"}
 	u.m.specs["demo/missions"] = service.Spec{Project: "demo", Kind: "missions"}
 	u.m.active["demo/missions"] = true
-	if err := os.MkdirAll(templates, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	body := "name = \"demo\"\n[[tabs]]\nname = \"master\"\ncommand = \"agent-launch master demo\"\n" +
-		"[[tabs]]\nname = \"coder\"\ncommand = \"agent-launch coder demo\"\n" +
-		"[[tabs]]\nname = \"dispatch\"\ncommand = \"/r/agentbus --project demo dispatch\"\n"
-	if err := os.WriteFile(templates+"/demo.toml", []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &relaunchHerdr{tabs: `{"label":"master","tab_id":"w4:t3"}`, panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`, fg: map[string]string{"w4:p3": "bash"}}
+	h := &relaunchHerdr{}
 	deps.Herdr = h.run
 	var out, errw bytes.Buffer
 	if code := upHook(deps, "demo", "w4", &out, &errw); code != 0 {
@@ -398,22 +369,8 @@ func TestUpHookStartsStoppedServicesAndRelaunches(t *testing.T) {
 	if got := strings.Join(u.m.calls, ","); got != "start demo dispatch" {
 		t.Fatalf("manager calls = %q", got)
 	}
-	if got := strings.Join(h.ran(), ","); got != "pane run w4:p3 agent-launch master demo" {
-		t.Fatalf("herdr = %q", got)
-	}
-	if len(*boot) != 0 || !strings.Contains(out.String(), "coder: missing") || !strings.Contains(out.String(), "dispatch: started") {
-		t.Fatalf("boot %q out %s", *boot, out.String())
-	}
-}
-
-func TestUpHookDoesNothingWhileAnUpRuns(t *testing.T) {
-	_, _, _, _, deps := upFixture(t)
-	h := &relaunchHerdr{}
-	deps.Herdr = h.run
-	deps.Lock = func(string, bool) (func(), error) { return nil, errUpBusy }
-	var out, errw bytes.Buffer
-	if code := upHook(deps, "demo", "w4", &out, &errw); code != 0 || len(h.calls) != 0 {
-		t.Fatalf("code %d calls %q", code, h.calls)
+	if len(h.calls) != 0 || len(*boot) != 0 || !strings.Contains(out.String(), "dispatch started") {
+		t.Fatalf("herdr %q boot %q out %s", h.calls, *boot, out.String())
 	}
 }
 
@@ -438,7 +395,7 @@ func TestRelaunchOpenNeverTypesIntoAShellRunningACommand(t *testing.T) {
 	}
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fakePrompt}, &out); err != nil {
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: skipped (busy)") {
@@ -455,7 +412,7 @@ func TestRelaunchOpenLeavesDuplicateLabels(t *testing.T) {
 	}
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fakePrompt}, &out); err != nil {
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: unknown (several tabs") {
@@ -463,41 +420,44 @@ func TestRelaunchOpenLeavesDuplicateLabels(t *testing.T) {
 	}
 }
 
-// fakePrompt is the kernel's answer in the fakes: pid 100 waits at its prompt.
-func fakePrompt(pid int, _ string) (bool, error) { return pid == 100, nil }
-
-// Codex's round-2 case: an interactive shell running a builtin (read) keeps
-// its argv; only the kernel's terminal mode tells it from a prompt.
-func TestRelaunchOpenNeverTypesIntoAShellRunningABuiltin(t *testing.T) {
-	h := &relaunchHerdr{
-		tabs:  `{"label":"master","tab_id":"w4:t3"}`,
-		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
-		fg:    map[string]string{"w4:p3": "sh -i @busy"},
+// The invariant of every relaunch: text goes only into a pane up has just
+// created (a split, ending in s here, or a new tab's root, p9), never into a
+// pane that already existed.
+func (f *relaunchHerdr) typedIntoExisting() []string {
+	var bad []string
+	for _, c := range f.calls {
+		if p, ok := strings.CutPrefix(c, "pane run "); ok {
+			pane, _, _ := strings.Cut(p, " ")
+			if !strings.HasSuffix(pane, "s") && pane != "w4:p9" {
+				bad = append(bad, c)
+			}
+		}
 	}
-	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
-	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fakePrompt}, &out); err != nil {
-		t.Fatal(err)
-	}
-	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: skipped (busy)") {
-		t.Fatalf("calls %q out %s", got, out.String())
-	}
+	return bad
 }
 
-// The prompt check failing (no /proc, not Linux) is unknown, never a relaunch.
-func TestRelaunchOpenUnknownWhenThePromptCannotBeRead(t *testing.T) {
-	h := &relaunchHerdr{
-		tabs:  `{"label":"master","tab_id":"w4:t3"}`,
-		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
-		fg:    map[string]string{"w4:p3": "bash"},
-	}
-	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
-	fail := func(int, string) (bool, error) { return false, errors.New("no /proc") }
-	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fail}, &out); err != nil {
-		t.Fatal(err)
-	}
-	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: unknown") {
-		t.Fatalf("calls %q out %s", got, out.String())
+// Codex's rounds 2 and 3: the old pane of a dead agent may run a builtin read
+// (read -e, after stty -icanon...). Whatever it runs, it receives nothing: the
+// agent comes back in a new pane beside it.
+func TestRelaunchOpenLeavesTheOldPaneOfADeadAgentAlone(t *testing.T) {
+	for _, fg := range []string{"bash", "/bin/bash -i", "bash -c read", "vim notes"} {
+		h := &relaunchHerdr{
+			tabs:  `{"label":"master","tab_id":"w4:t3"}`,
+			panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+			fg:    map[string]string{"w4:p3": fg},
+		}
+		snaps := map[string]bus.AgentSnapshot{"master": {PID: 30, PIDStart: 7}}
+		ps := func(int) (uint64, error) { return 0, os.ErrNotExist }
+		tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
+		var out bytes.Buffer
+		if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+			t.Fatal(err)
+		}
+		if bad := h.typedIntoExisting(); len(bad) != 0 {
+			t.Fatalf("%q: typed into the old pane: %q", fg, bad)
+		}
+		if got := strings.Join(h.ran(), ","); got != "pane split w4:p3 --direction right,pane run w4:p3s agent-launch master demo" {
+			t.Fatalf("%q: calls %q", fg, got)
+		}
 	}
 }

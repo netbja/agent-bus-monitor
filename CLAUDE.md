@@ -342,24 +342,26 @@ It never touches Redis — see README "Deployment topology".
   `HERDR_SESSION`/`HERDR_SOCKET_PATH`/`HERDR_BIN_PATH` from herdr and the cwd is the plugin root
   (`./agentbus`, `./busmon`). Decision:
   `docs/memory/decisions/2026-10-19-herdr-plugin.md`.
-- **Relaunch and the workspace hook (v0.21) are the person's gesture, not a second pane writer.**
-  `agentbus up <p>` on an open workspace and `agentbus plugin workspace-event` (herdr's
-  `workspace.created`/`workspace.focused`, the only `[[events]]` the manifest test allows) rerun a
-  template tab's command (`relaunch.go`: `decideRelaunch`, a pure table) only in a pane whose
-  its one foreground process is bash or zsh with only `-l`/`-i` flags (`idleShell`) **and** the
-  kernel says it waits at its prompt (`shellAtPrompt`, `prompt_linux.go`: the terminal is non-canonical,
-  which readline and ZLE set only while reading a command line; a builtin `read` or a command leaves it
-  canonical; argv alone is not proof; elsewhere than Linux: unknown), and never under a duplicate tab label, for an agent that is not alive by its snapshot (`snapLife`: pid +
-  `pid_start`, the dispatcher's rule; Linux only, elsewhere the pane decides). The hook creates no
-  tab, never provisions (template + broker `present`, like the picker), and starts stopped services
-  with `Manager.Start` only: it must never call `startServices`, whose `Install` rewrites a unit
-  when the binary path differs (the plugin runs `./agentbus`, installs run `~/.local/bin`) and so
-  restarts a running dispatcher. Since v0.21 the units always run `buildinfo.Bin` (setup's
-  `$BIN_DIR/agentbus`) when it exists, so that flip no longer happens; the hook still stays off
-  `Install`. `upLock` (`~/.cache/agentbus/up-<p>.lock`: flock, with the last end time written in
-  the file under the lock, never the mtime; any failure to lock refuses, for up and hook) keeps the hook out of a running up and out of the minute after one, so up's own layout is never
-  typed into twice. `agentbus projects` and `agentbus identity` sit above the project-required
-  exit. `missions` without a Git repository publishes `waiting-git` and waits, never exits.
+- **Relaunch (v0.21) never types into a pane that already exists.** Whether a shell waits at its
+  prompt cannot be proven from outside: a builtin `read` keeps the shell's argv, and `read -e` or
+  an earlier `stty -icanon` even leave the terminal non-canonical (Codex's reviews, real PTYs).
+  So `agentbus up <p>` on an open workspace (`relaunch.go`: `decideRelaunch`, a pure table) runs a
+  dead agent's template command in a **new pane split from its tab** (`splitPane`), or in a new tab
+  when the tab is gone, and leaves the old pane as it is. An agent is dead by its snapshot
+  (`snapLife`: pid + `pid_start`, the dispatcher's rule; Linux only, elsewhere unknown); without a
+  snapshot only a tab whose one foreground process is a plain interactive shell (`idleShell`, argv
+  only: a classification, never a licence to type) counts as gone. Duplicate tab labels are
+  `unknown`. The invariant test is `typedIntoExisting`. `upLock` serialises ups per project and
+  fails closed. The workspace hook (`agentbus plugin workspace-event`, herdr's
+  `workspace.created`/`workspace.focused`, the only `[[events]]` the manifest test allows) touches
+  no pane: it only starts stopped services with `Manager.Start`, never `startServices`/`Install`,
+  and never provisions (template + broker `present`). After a reboot, agents are herdr's native
+  session restore's job (`pane report-agent … -- <resume argv>`, which runs in a shell herdr has
+  just spawned); making the launcher report its own resume command is the next step (open: the
+  Claude Code integration `herdr:claude` already holds those panes and reports a raw
+  `claude --resume`, which bypasses agent-launch). Units always run `buildinfo.Bin` (setup's
+  `$BIN_DIR/agentbus`) when it exists. `agentbus projects` and `agentbus identity` sit above the
+  project-required exit. `missions` without a Git repository publishes `waiting-git` and waits.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P

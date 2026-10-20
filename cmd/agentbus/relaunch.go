@@ -57,7 +57,7 @@ func snapLife(s bus.AgentSnapshot, has bool, procStart func(int) (uint64, error)
 type paneFacts struct {
 	Known bool   // herdr answered for this pane
 	Agent string // the agent herdr detects in it, "" for none
-	Shell bool   // its foreground is a shell and nothing else
+	Shell bool   // its one foreground process is an interactive shell by its argv (no proof it is idle)
 }
 
 // relaunchVerdict is what up does with one template tab of an open workspace.
@@ -65,18 +65,20 @@ type relaunchVerdict string
 
 const (
 	verdictAlive    relaunchVerdict = "alive"
-	verdictRunning  relaunchVerdict = "running" // a tab that is not an agent: its command still runs
-	verdictRelaunch relaunchVerdict = "relaunch"
-	verdictCreate   relaunchVerdict = "create" // no tab of that label: create it, then run
+	verdictRunning  relaunchVerdict = "running"  // a tab that is not an agent: something runs in it
+	verdictRelaunch relaunchVerdict = "relaunch" // in a new pane split from the tab's pane
+	verdictCreate   relaunchVerdict = "create"   // no tab of that label: create it, then run
 	verdictBusy     relaunchVerdict = "skipped (busy)"
 	verdictUnknown  relaunchVerdict = "unknown"
 	verdictMissing  relaunchVerdict = "missing" // no tab, and creating one was not asked for
 )
 
 // decideRelaunch is the pure rule. agent says the tab runs an agent-launch
-// line; snap is that agent's life by its snapshot. Only a pane whose
-// foreground is a bare shell is ever typed into: herdr's agent in it, or any
-// other foreground process, is not ours to interrupt.
+// line; snap is that agent's life by its snapshot. A relaunch never types into
+// an existing pane: whether a shell waits at its prompt cannot be proven from
+// outside (a builtin read keeps its argv and can even keep a raw terminal), so
+// the command runs in a new pane split from the tab's, and the old pane is
+// left exactly as it is.
 func decideRelaunch(agent bool, snap life, hasPane bool, pane paneFacts, create bool) relaunchVerdict {
 	if agent && snap == lifeAlive {
 		return verdictAlive // alive, wherever its pane is
@@ -92,16 +94,19 @@ func decideRelaunch(agent bool, snap life, hasPane bool, pane paneFacts, create 
 	}
 	if pane.Agent != "" {
 		if !agent {
-			return verdictBusy
+			return verdictRunning
 		}
 		if snap == lifeDead {
-			return verdictBusy // another agent runs where ours died
+			return verdictBusy // another agent runs in its tab
 		}
 		return verdictAlive
 	}
+	if agent && snap == lifeDead {
+		return verdictRelaunch // its process is gone: whatever the old pane runs is left alone
+	}
 	if !pane.Shell {
 		if agent {
-			return verdictBusy
+			return verdictBusy // no proof: maybe the agent under a name herdr does not detect
 		}
 		return verdictRunning
 	}
@@ -205,10 +210,14 @@ func workspacePanes(herdr func(args ...string) ([]byte, error), ws string) (map[
 			m[t.Label] = ref
 			continue
 		}
+		// A tab split by an earlier relaunch holds the old pane and the new one:
+		// the one herdr sees an agent in speaks for the tab, else the first.
 		for _, p := range panes.Result.Panes {
-			if p.TabID == t.TabID {
+			if p.TabID != t.TabID {
+				continue
+			}
+			if ref, seen := m[t.Label]; !seen || ref.Agent == "" && p.Agent != "" {
 				m[t.Label] = paneRef{Pane: p.PaneID, Agent: p.Agent}
-				break
 			}
 		}
 		if _, ok := m[t.Label]; !ok {
@@ -223,10 +232,11 @@ type paneRef struct {
 	Dup         bool // more than one tab carries this label
 }
 
-// paneShell asks herdr for the pane's foreground processes: true only when
-// there is exactly one, an interactive shell by its argv (idleShell), and the
-// kernel says it waits at its prompt (atPrompt). An error means unknown.
-func paneShell(herdr func(args ...string) ([]byte, error), pane string, atPrompt func(pid int, argv0 string) (bool, error)) (bool, error) {
+// paneShell asks herdr for the pane's foreground processes: true when there is
+// one, an interactive shell by its argv (idleShell). It only classifies a
+// tab (its command is gone, so relaunch it in a new pane); it is never a
+// licence to type into this pane. An error means unknown.
+func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, error) {
 	out, err := herdr("pane", "process-info", "--pane", pane)
 	if err != nil {
 		return false, err
@@ -235,7 +245,6 @@ func paneShell(herdr func(args ...string) ([]byte, error), pane string, atPrompt
 		Result struct {
 			ProcessInfo struct {
 				Foreground []struct {
-					PID  int      `json:"pid"`
 					Argv []string `json:"argv"`
 				} `json:"foreground_processes"`
 			} `json:"process_info"`
@@ -248,17 +257,13 @@ func paneShell(herdr func(args ...string) ([]byte, error), pane string, atPrompt
 	if len(fg) == 0 {
 		return false, errors.New("no foreground process reported")
 	}
-	if len(fg) != 1 || !idleShell(fg[0].Argv) || fg[0].PID <= 0 {
-		return false, nil
-	}
-	return atPrompt(fg[0].PID, fg[0].Argv[0])
+	return len(fg) == 1 && idleShell(fg[0].Argv), nil
 }
 
 // relaunchOptions are up's flags for an open workspace.
 type relaunchOptions struct {
 	Resume, DryRun, Create bool
-	// AtPrompt says whether a shell waits at its prompt (shellAtPrompt; tests fake it).
-	AtPrompt func(pid int, argv0 string) (bool, error)
+	Dir                    string // the project directory a new pane starts in
 }
 
 // relaunchOpen checks every tab of an open workspace and reruns the template
@@ -271,10 +276,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 	if err != nil {
 		return err
 	}
-	atPrompt := o.AtPrompt
-	if atPrompt == nil {
-		atPrompt = shellAtPrompt
-	}
+	dir := o.Dir
 	tabs := slices.Clone(tpl.Tabs)
 	slices.SortStableFunc(tabs, func(a, b upTab) int {
 		ra, _ := launchRole(a.Command, project)
@@ -313,7 +315,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 			facts.Agent = ref.Agent
 			facts.Known = true
 			if ref.Agent == "" && !(isAgent && sl == lifeAlive) {
-				shell, err := paneShell(herdr, ref.Pane, atPrompt)
+				shell, err := paneShell(herdr, ref.Pane)
 				facts.Known, facts.Shell = err == nil, shell
 			}
 		}
@@ -332,6 +334,9 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 			if o.DryRun {
 				word = "would relaunch"
 			}
+			if v == verdictRelaunch {
+				word += " (new pane; the old one is left as it is)"
+			}
 			if v == verdictCreate {
 				word += " (new tab)"
 			}
@@ -345,6 +350,14 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 			pane := ref.Pane
 			if v == verdictCreate {
 				pane, err = createTab(herdr, ws, t.Name)
+				if err != nil {
+					errs = append(errs, err)
+					fmt.Fprintf(stdout, "%s: %v\n", t.Name, err)
+					continue
+				}
+			}
+			if v == verdictRelaunch {
+				pane, err = splitPane(herdr, ref.Pane, dir)
 				if err != nil {
 					errs = append(errs, err)
 					fmt.Fprintf(stdout, "%s: %v\n", t.Name, err)
@@ -389,3 +402,27 @@ func shellName(argv0 string) string {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// splitPane opens a new pane beside pane, unfocused, in dir: a shell nobody
+// has typed into, which is the only kind a relaunch writes to.
+func splitPane(herdr func(args ...string) ([]byte, error), pane, dir string) (string, error) {
+	args := []string{"pane", "split", pane, "--direction", "right"}
+	if dir != "" {
+		args = append(args, "--cwd", dir)
+	}
+	out, err := herdr(args...)
+	if err != nil {
+		return "", fmt.Errorf("herdr pane split: %w", err)
+	}
+	var v struct {
+		Result struct {
+			Pane struct {
+				PaneID string `json:"pane_id"`
+			} `json:"pane"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil || v.Result.Pane.PaneID == "" {
+		return "", fmt.Errorf("herdr pane split: unexpected reply %s", strings.TrimSpace(string(out)))
+	}
+	return v.Result.Pane.PaneID, nil
+}

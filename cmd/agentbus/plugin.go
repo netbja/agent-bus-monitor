@@ -255,8 +255,8 @@ func pluginPaneFail(d pluginDeps, stdout io.Writer, reason string) int {
 
 // pluginWorkspaceEvent runs on herdr's workspace.created and workspace.focused
 // events: for a workspace labelled with a known project whose template exists
-// and which the broker confirms, it runs up's hook (stopped services started,
-// dead agents relaunched in their tabs). Like the picker it never provisions:
+// and which the broker confirms, it runs up's hook, which starts
+// the stopped services and touches no pane. Like the picker it never provisions:
 // any other workspace is left alone, silently.
 func pluginWorkspaceEvent(d pluginDeps, stdout, stderr io.Writer) int {
 	var ev struct {
@@ -308,7 +308,7 @@ func pluginWorkspaceEvent(d pluginDeps, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if st := d.Exists(label); st != projlist.Present {
-		fmt.Fprintf(stdout, "%s: broker %s; nothing relaunched (agentbus up %s once the broker answers)\n", label, st, label)
+		fmt.Fprintf(stdout, "%s: broker %s; nothing started (agentbus up %s once the broker answers)\n", label, st, label)
 		return 0
 	}
 	return d.Hook(label, ws, stdout, stderr)

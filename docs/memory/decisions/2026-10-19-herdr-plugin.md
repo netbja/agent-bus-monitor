@@ -18,7 +18,8 @@ installed or needed. Each part of the decision with its reason:
 - **Go, not Rust.** The plugin is the two binaries this repository already builds
   (`./agentbus plugin …`, `./busmon --pick`), declared in `herdr-plugin.toml` with no `[[build]]`.
   v0.20 had no `[[events]]`; v0.21 adds exactly two, `workspace.created` and `workspace.focused`,
-  both running `./agentbus plugin workspace-event` (the relaunch hook; see the v0.21 spec).
+  both running `./agentbus plugin workspace-event`, the hook that starts stopped services (see
+  the v0.21 spec).
   A second toolchain would add nothing: every fact the picker needs
   (templates, `bus.Projects`, `agentbus up`) is already Go.
 - **Link, not install.** `setup.sh` runs `herdr plugin link` on this checkout, so the plugin root

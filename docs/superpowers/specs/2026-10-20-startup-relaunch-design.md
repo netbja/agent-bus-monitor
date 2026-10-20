@@ -5,6 +5,26 @@ coding are marked **Built:**. Code by Claude, review by Codex. Builds on the her
 (v0.20, by the other Claude): its three `cmd/agentbus/up.go` changes and its shared project-listing
 function land first (`docs/recon/2026-10-20-plugin-coordination.md`); this release rebases on them.
 
+## Revision after review (Bernard's choice, 2026-10-20)
+
+Codex's three reviews showed, with real PTYs, that no outside check proves a shell waits at its
+prompt: a builtin `read` keeps the shell's argv, and `read -e` or an earlier `stty -icanon` even
+leave the terminal non-canonical. So:
+
+- **`agentbus up <p>` never types into an existing pane.** A dead agent (or a tab whose command is
+  gone) is relaunched in a new pane split from its tab (`herdr pane split --direction right --cwd
+  <project dir>`), or in a new tab when the tab is gone; the old pane is left exactly as it is. The
+  sections below that speak of "relaunching in its existing pane" are superseded on that point.
+- **The workspace hook touches no pane.** It only starts the project's stopped services (no unit
+  rewritten). It does not relaunch agents.
+- **After a reboot, agents come back through herdr's native session restore** (`pane report-agent
+  … -- <resume argv>`), which runs the command in a shell herdr has just spawned. Next step, not in
+  this release: the launcher reports its own resume command (`agent-launch <role> <p> [--resume
+  <id>]`) so the restore keeps the role's rules and identity. Open question first: herdr's Claude
+  Code integration (`herdr:claude`) already holds those panes and reports a raw `claude --resume`;
+  the docs say other reporters should use metadata, not take over. To be tested in a separate herdr
+  session with Bernard attached (restore runs only once a client attaches).
+
 ## Problem
 
 After a laptop reboot, Bernard reconnects to a project and nothing works:
@@ -64,10 +84,7 @@ each agent tab of the template and relaunches the dead ones, in their existing p
   dispatcher is up when the agents register.
 - The relaunch never closes a pane, never types anything but the template command, and never
   touches a pane of another workspace.
-- **Built:** a pane is free only when its one foreground process is bash or zsh with no argument
-  but `-l`/`-i`, and its terminal is in non-canonical mode, which the line editor sets only at the
-  prompt (after Codex's two reviews: argv alone does not tell a prompt from a builtin `read`). Anything
-  else is busy, or unknown when it cannot be read (no /proc, not Linux);
+- **Built (superseded, see "Revision after review"):** no existing pane is ever typed into;
   busmon and the other non-agent tabs are rerun the same way (shell → rerun, else `running`).
   `--dry-run` reads only: no bootstrap, no service, no focus. A per-project lock
   (`~/.cache/agentbus/up-<p>.lock`) serialises ups; it fails closed. Duplicate tab labels are `unknown`. The person's recorded name is the default
