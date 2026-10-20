@@ -97,9 +97,9 @@ cd ~/agent-bus-monitor
 - builds `agentbus` and `busmon`, into the repository and into `~/.local/bin`, stamped with
   their release;
 - installs **herdr** if it is missing (`--install-herdr`);
-- registers **herdr-plus** with herdr (`herdr plugin install cloudmanic/herdr-plus --ref <tag>`)
-  and checks that its Projects action exists;
-- adds the `Ctrl+B` then `↑` binding, creating herdr's `config.toml` if herdr has never run, and
+- links this checkout into herdr as the plugin **`netbja.agentbus`** (`herdr plugin link`) and
+  checks that its Projects action exists; herdr-plus is no longer installed or needed;
+- adds the `Ctrl+B` then `↑` (prefix+up) binding for the plugin's Projects picker, creating herdr's `config.toml` if herdr has never run, and
   tells a running herdr to reload it;
 - clones the external role skills (`mattpocock/skills`, pinned) into
   `~/.local/share/agentbus/skills/mattpocock` and links the role skills. If one is still missing,
@@ -109,10 +109,25 @@ cd ~/agent-bus-monitor
 Make sure `~/.local/bin` is on your `PATH`; `install` warns when it is not, or when another copy
 shadows it.
 
+### The Projects picker and the busmon action
+
+- **Picker** (`Ctrl+B` then `↑`, or `busmon --pick`): one row per template in
+  `~/.config/agentbus/projects`, with the broker's state (`present`, `absent`, `?`). Type to
+  filter (substring of the name or the directory). Enter opens a project the broker confirms
+  (`agentbus up <p>`). It never provisions: for an `absent` project run `agentbus up <p> <path>`.
+- **busmon**: in herdr's action menu, **Agent Bus: busmon** opens busmon for the focused
+  workspace's project, or the picker when the workspace is not a project.
+- **Moving to v0.20**: the templates used to live in herdr-plus's directory. There is no migration
+  code; move them by hand, once:
+
+  ```bash
+  mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/{ai-tradex-solana,hyperliquid}.toml ~/.config/agentbus/projects/
+  ```
+
 ### Step 3: Check, update, remove
 
 ```bash
-./setup.sh status       # versions, PATH shadowing, skills, herdr-plus, key binding, Redis
+./setup.sh status       # versions, PATH shadowing, skills, herdr plugin, key binding, Redis
 ./setup.sh update       # git pull --ff-only, then install; prints vA -> vB and the release notes
 ./setup.sh uninstall    # asks at every step; --yes = cautious defaults; --purge = Redis data too
 ```
@@ -120,8 +135,9 @@ shadows it.
 busmon shows a discreet `↑ vX.Y.Z` in its header when a newer release exists. It checks once a
 day; `AGENT_BUS_NO_UPDATE_CHECK=1` turns the check off.
 
-`update` refuses a tree with uncommitted changes, then runs the `setup.sh` it just pulled. A new
-herdr-plus pin reinstalls the herdr-plus that setup installed (a linked checkout is never replaced).
+`update` refuses a tree with uncommitted changes, then runs the `setup.sh` it just pulled. The plugin
+root is the checkout, so the update reaches it too. A herdr-plus installed by an older setup is
+reported by `status` and never removed.
 
 `uninstall` removes only what setup made, and has no `--dry-run` (run it without `--yes` and
 answer each question):
@@ -130,7 +146,7 @@ answer each question):
 - the key binding, if it is still exactly the block setup wrote; an edited one is kept;
 - the external skills, if setup cloned them and they have no local changes.
 
-It asks about herdr-plus separately, since herdr-plus is useful without agent-bus. For Redis it
+It unlinks the herdr plugin only when setup linked it, after asking. For Redis it
 offers: stop it and keep the data (the default), remove it together with its data, or leave it.
 
 ---
@@ -173,7 +189,7 @@ Assume your target project is at `~/code/myapp`.
    agentbus up myapp ~/code/myapp --as <your-name>
    ```
    This command:
-   - starts the Redis broker if needed, links the role skills and writes the herdr-plus
+   - starts the Redis broker if needed, links the role skills and writes the project
      template (`scripts/bootstrap` underneath; its flags work: `--no-dispatch`, `--no-missions`,
      `--index`, `--cron`);
    - starts the project's **services** under your system's service manager (systemd `--user`
@@ -218,7 +234,7 @@ Assume your target project is at `~/code/myapp`.
 ### Scenario B2: Moving a team from before v0.12
 
 A team whose dispatch and missions ran as tabs, or one built by hand (its own tab names, its own
-agent names, no herdr-plus template):
+agent names, no project template):
 
 1. **Services only, from a terminal outside herdr.** Outside herdr, `agentbus up` installs and
    starts the services and opens nothing, so it never adds a second team next to yours:

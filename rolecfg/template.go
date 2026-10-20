@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// Template returns the herdr-plus project template produced by bootstrap.
-// busmon comes first: herdr-plus focuses the first tab. as, when set, is the
+// Template returns the project template bootstrap writes.
+// busmon comes first: herdr focuses the first tab. as, when set, is the
 // person busmon writes as (busmon --as).
 func Template(m *Manifest, manifestPath, project, cwd, scriptsDir, repo, as string, dispatch, missions bool) string {
 	if m == nil {

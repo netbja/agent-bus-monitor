@@ -476,7 +476,7 @@ func TestHerdrSessionFallsBackToTheSocket(t *testing.T) {
 }
 
 func TestUpRefusesServicesOnAnUnreadableSocket(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
+	work, _, _, boot, deps := upFixture(t)
 	u := withServices(t, &deps)
 	deps.Environ = []string{"PATH=/bin", "HERDR_SOCKET_PATH=/tmp/odd.sock"}
 	var out, errw bytes.Buffer
@@ -490,6 +490,27 @@ func TestUpRefusesServicesOnAnUnreadableSocket(t *testing.T) {
 	}
 	if _, err := os.Stat(u.paths.EnvFile("demo")); err == nil {
 		t.Fatal("an env file was written")
+	}
+	if len(*boot) != 0 {
+		t.Fatalf("a refused up must not bootstrap: %q", *boot)
+	}
+}
+
+func TestUpOutsideHerdrHintNamesASession(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	deps.Env = func(k string) string {
+		if k == "AGENTBUS_PROJECTS_DIR" {
+			return filepath.Join(filepath.Dir(work), "projects")
+		}
+		return ""
+	}
+	deps.Environ = []string{"PATH=/bin", "HERDR_SOCKET_PATH=/tmp/odd.sock"}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work, "--tabs"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "herdr --session demo)") {
+		t.Fatalf("the hint must name a session: %q", out.String())
 	}
 }
 

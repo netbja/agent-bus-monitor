@@ -140,7 +140,11 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		code = 1
 	}
 	if d.Env("HERDR_ENV") != "1" {
-		fmt.Fprintf(stdout, "provisioned %s. To open it, start herdr (herdr --session %s), then run: agentbus up %s\n", project, herdrSession(args, d.Environ), project)
+		sess := herdrSession(args, d.Environ)
+		if sess == "" {
+			sess = project // an unreadable socket path names none: the hint falls back to the project
+		}
+		fmt.Fprintf(stdout, "provisioned %s. To open it, start herdr (herdr --session %s), then run: agentbus up %s\n", project, sess, project)
 		return code
 	}
 	if id, err := openWorkspace(d, project); err != nil {
@@ -165,7 +169,8 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 // herdrSession is the session the project opens in, as bootstrap resolves
 // it: --session, else the caller's HERDR_SESSION, else the session named by
 // the caller's HERDR_SOCKET_PATH, else the project name. A socket path that
-// names no session gives "": the services must not guess.
+// names no session gives "": the services must not guess. Bootstrap does not
+// read the socket: it takes --session, HERDR_SESSION, then the project name.
 func herdrSession(args, environ []string) string {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == "--session" {

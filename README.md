@@ -28,7 +28,7 @@ broker, the client and the monitor all live here; nothing depends on any other p
 
 ```bash
 git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor
-./setup.sh install --install-herdr     # toolchain check, binaries, skills, herdr-plus, Redis
+./setup.sh install --install-herdr     # toolchain check, binaries, skills, herdr plugin, Redis
 herdr --session myproject              # then, inside herdr:
 agentbus up myproject ~/code/myproject --as <your-name>
 ```
@@ -119,10 +119,10 @@ Run it from a clone. It is idempotent, so re-running it is safe:
 ```bash
 ./setup.sh install                 # check the toolchain (Go from go.mod), build agentbus + busmon,
                                    # clone the external skills, link role skills, start Redis
-./setup.sh install --install-herdr # also install herdr (if missing) and the herdr-plus plugin
+./setup.sh install --install-herdr # also install herdr (if missing); the plugin is linked either way
 ./setup.sh install --dry-run       # list what is missing and what would change; changes nothing
 ./setup.sh update                  # git pull --ff-only, then install; prints vA -> vB
-./setup.sh status                  # versions, PATH shadowing, skills, herdr-plus, Redis
+./setup.sh status                  # versions, PATH shadowing, skills, herdr plugin, Redis
 ./setup.sh uninstall               # asks at every step (--yes: cautious defaults, --purge: Redis data too)
 ```
 
@@ -130,13 +130,14 @@ What `install` does:
 - **Binaries.** Both binaries are rebuilt on every run, into the repository (where the herdr tabs
   run them) and into `--bin-dir` (default `~/.local/bin`). They carry the release they were built
   from (`agentbus version`, `busmon --version`).
-- **herdr-plus.** It is registered with herdr's own plugin store:
-  `herdr plugin install cloudmanic/herdr-plus --ref <tag>`, or `herdr plugin link` for a local
-  checkout set with `HERDR_PLUS_PATH`. `install` then checks that its Projects action exists.
-  A new pin in a later release reinstalls the herdr-plus that setup installed; a linked checkout
-  is never replaced.
-- **The `Ctrl+B` `↑` binding.** It is added to herdr's `config.toml`, which is created if herdr
-  has never run. A running herdr reloads it at once (`herdr server reload-config`).
+- **The herdr plugin (v0.20).** This checkout is linked into herdr as the plugin
+  `netbja.agentbus` (`herdr plugin link`); nothing is downloaded and the plugin root is the
+  checkout, so `./setup.sh update` updates it. herdr-plus is no longer installed or needed. A
+  herdr-plus that an older setup installed is reported by `setup.sh status` and never removed.
+- **The `Ctrl+B` `↑` binding** (prefix+up) opens the plugin's **Projects** picker. It is added
+  to herdr's `config.toml`, which is created if herdr has never run; setup replaces only the
+  herdr-plus block it wrote itself, and never a binding it did not write. A running herdr
+  reloads it at once (`herdr server reload-config`).
 - **External role skills** (`mattpocock/skills`, pinned tag): cloned into
   `${XDG_DATA_HOME:-~/.local/share}/agentbus/skills/mattpocock`. A skill that is still missing
   only warns, in `agentbus up` and when an agent starts; the agent runs without it. A folder
@@ -152,7 +153,7 @@ just pulled.
 - the external skills, if setup cloned them and they have no local changes;
 - Redis: stop it (keep the data), remove it with its data, or leave it.
 
-herdr-plus is asked separately, because it is useful without agent-bus. The repository itself is
+The plugin link is unlinked on its own question, and only when setup made it. The repository itself is
 left in place. It has no `--dry-run`: run it without `--yes` and answer each question.
 
 ### Manual build
@@ -483,7 +484,7 @@ demand — both go through one shared launch recipe. It's shell tooling *around*
 `./setup.sh install --install-herdr` (above) does all of it:
 - the binaries;
 - the role skills, including the external collection;
-- herdr-plus, registered with herdr;
+- the herdr plugin `netbja.agentbus`, linked from this checkout;
 - the `Ctrl+B` `↑` binding for its Projects picker;
 - the broker.
 
@@ -509,11 +510,12 @@ agentbus up myproject /path/to/your/project --as <your-name>   # inside it
 - **On a re-run**, it focuses the open workspace instead of opening a second one.
 - **Outside herdr**, it only provisions, and tells you how to open the workspace.
 
-The Projects picker (`Ctrl+B` then `↑`) reopens any provisioned project later. The bare
+The Projects picker (`Ctrl+B` then `↑`) reopens any provisioned project later (see
+"The herdr plugin" below). The bare
 `scripts/bootstrap new myproject /path` still works, if you prefer to open the workspace from
 the picker.
 
-`bootstrap` alone **launches nothing** — it provisions (broker up, skills linked, **herdr-plus checked in
+`bootstrap` alone **launches nothing** — it provisions (broker up, skills linked, **herdr plugin checked in
 herdr**, template written); `agentbus up` does that and then opens the workspace. The 2nd argument is where the team works — every
 agent's cwd, and where `--index` builds the index; omit it to use `$PWD`. It is **not** the tooling
 repo (broker, `agent-launch`, `busmon` stay here). The linked session is `$HERDR_SESSION` (so
@@ -563,13 +565,35 @@ From there you drive the team as a human:
 Add `--index` (warm codegraph / code-index for the repo) or `--cron` (a daily sentinel review) to
 the `bootstrap new` line when you want them.
 
+### The herdr plugin (v0.20)
+
+`./setup.sh install` links this checkout into herdr as the plugin `netbja.agentbus` and binds
+`Ctrl+B` then `↑` (prefix+up) to its **Projects** picker. herdr-plus is not needed any more.
+
+- **Picker.** `busmon --pick` (the plugin runs it in a pane) lists the templates in
+  `~/.config/agentbus/projects`, each with the broker's state for it: `present`, `absent` or `?`
+  (broker unreachable). Type to filter (a substring of the name or the directory). Enter opens a
+  project the broker confirms (`agentbus up <p>`). The picker never provisions: for an `absent`
+  project, run `agentbus up <p> <path>` by hand.
+- **busmon action.** In herdr's action menu, **Agent Bus: busmon** opens busmon for the focused
+  workspace's project, or the picker when that workspace is not a project.
+- **Templates moved by hand, once.** They used to live in herdr-plus's directory; there is no
+  migration code and no fallback to the old directory. When you move to v0.20:
+
+  ```bash
+  mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/{ai-tradex-solana,hyperliquid}.toml ~/.config/agentbus/projects/
+  ```
+
+  (elsewhere, `herdr plugin config-dir cloudmanic.herdr-plus` gives the old directory; its
+  `projects/` holds them).
+
 ### Resume a project
 
 ```bash
 scripts/bootstrap myproject          # no verb -> recall: ensures the broker is up, reuses the template
 ```
 
-Re-open it the same way through the **Projects** picker. Mind the brique-1 scope: **recall restores
+Re-open it the same way through the **Projects** picker (`Ctrl+B` then `↑`). Mind the brique-1 scope: **recall restores
 the _workspace_ (tabs / layout) with _fresh_ agent sessions** — not the previous conversations. To
 resume a Claude Code conversation, use the role launcher so its permission rules and Agent Bus
 identity stay attached:
