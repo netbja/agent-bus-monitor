@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/cli"
 )
 
 func TestExpandArgs(t *testing.T) {
@@ -112,6 +114,44 @@ func TestHelpNeedsNoProjectOrBroker(t *testing.T) {
 		out, errOut, code := run(args...)
 		if code != 1 || out != "" || !strings.HasPrefix(errOut, "usage: agentbus [flags] <command>") {
 			t.Errorf("%q: code %d stdout %q stderr %q", args, code, out, errOut)
+		}
+	}
+}
+
+// --project and --host after the command are message words for a command
+// whose trailing words are text; elsewhere they are still read, as before.
+func TestGlobalArgs(t *testing.T) {
+	cases := []struct {
+		in            []string
+		host, project string
+		rest          []string
+	}{
+		{[]string{"--project", "demo", "agents"}, "", "demo", []string{"agents"}},
+		{[]string{"--host", "h1", "--project", "demo", "notify", "hi"}, "h1", "demo", []string{"notify", "hi"}},
+		// Back-compat: a command without free text still reads them anywhere.
+		{[]string{"agents", "--project", "demo"}, "", "demo", []string{"agents"}},
+		{[]string{"board", "--json", "--host", "h1", "--project", "demo"}, "h1", "demo", []string{"board", "--json"}},
+		// A message: the words stay, the project is not switched.
+		{[]string{"notify", "hi", "--project", "x"}, "", "", []string{"notify", "hi", "--project", "x"}},
+		{[]string{"--project", "demo", "report", "coder", "use", "--project", "x", "--host", "h"}, "", "demo", []string{"report", "coder", "use", "--project", "x", "--host", "h"}},
+		{[]string{"status", "coder", "idle", "--project", "x"}, "", "", []string{"status", "coder", "idle", "--project", "x"}},
+		{[]string{"--project", "demo"}, "", "demo", []string{}},
+		{nil, "", "", []string{}},
+	}
+	for _, c := range cases {
+		rest, host, project := globalArgs(c.in)
+		if host != c.host || project != c.project || !slices.Equal(rest, c.rest) {
+			t.Errorf("globalArgs(%q) = %q, %q, %q, want %q, %q, %q", c.in, rest, host, project, c.rest, c.host, c.project)
+		}
+	}
+}
+
+// Every command whose trailing words are a message is marked Text, so the
+// globals cannot be read out of its message.
+func TestMessageCommandsAreText(t *testing.T) {
+	for _, n := range []string{"status", "report", "notify", "cmd", "challenge", "reply", "verdict", "request", "pause", "resume", "answer", "health"} {
+		if c, ok := cli.Lookup(commands, n); !ok || !c.Text {
+			t.Errorf("%s: not marked Text", n)
 		}
 	}
 }

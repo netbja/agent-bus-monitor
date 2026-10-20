@@ -182,7 +182,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   trailing words are joined. Every command's usage, flags and examples are one table
   (`cmd/agentbus/commands.go`, types in `cli/`): `agentbus help [<cmd>]` and `<cmd> --help`
   render it above the project-required exit, and `expandArgs` rewrites the table's short flags
-  (`-p` project, `-H` host, per-command shorts) to the long forms the parsers read; internal
+  (`-p` project and `-H` host before the command only, the command's own shorts after it) to the
+  long forms the parsers read; `globalArgs` never reads `--project`/`--host` from the message of a
+  `Text` command (`notify hi --project x` stays in the current project); internal
   entry points (`plugin`, `statusline`, `service run`, the scripts' `roles` verbs) are never
   expanded. `TestEveryDispatchedCommandIsInTheTable` walks `main()`'s AST, so a new command
   without a table entry fails the suite, and `TestEveryFlagLiteralIsInTheTable` does the same

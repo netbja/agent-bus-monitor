@@ -30,6 +30,7 @@ type Command struct {
 	Examples  []string
 	NoProject bool // runs with no project and no broker
 	Internal  bool // an entry point for scripts, herdr or units: long flags only
+	Text      bool // its trailing words are a message: no global flag is read among them
 }
 
 // Expand returns args with each defined short flag (-x, globals and flags)

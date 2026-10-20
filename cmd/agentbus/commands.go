@@ -22,12 +22,12 @@ var (
 var commands = []cli.Command{
 	// --- publishing and reading
 	{
-		Name: "status", Usage: []string{"status <agent> <working|idle|blocked|waiting|done> [message...]"},
+		Name: "status", Text: true, Usage: []string{"status <agent> <working|idle|blocked|waiting|done> [message...]"},
 		Summary:  "declare your state; it is also your heartbeat",
 		Examples: []string{"agentbus -p demo status coder working \"task 3: parser\""},
 	},
 	{
-		Name: "report", Usage: []string{"report <agent> [--auto] [--to <agent>]... <message...>"},
+		Name: "report", Text: true, Usage: []string{"report <agent> [--auto] [--to <agent>]... <message...>"},
 		Summary: "publish a report (full text kept); --to also tells who waits for it",
 		Flags: []cli.Flag{
 			{Long: "auto", Short: 'a', Help: "mark it automatic, not a note"},
@@ -42,12 +42,12 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo reports", "agentbus -p demo reports 1792537337865-0"},
 	},
 	{
-		Name: "notify", Usage: []string{"notify <message...>"},
+		Name: "notify", Text: true, Usage: []string{"notify <message...>"},
 		Summary:  "post a notice for the record; wakes nobody",
 		Examples: []string{"agentbus -p demo notify \"broker restarted\""},
 	},
 	{
-		Name: "cmd", Usage: []string{"cmd [--ref <id>] [--no-wake] <target> <command...>"},
+		Name: "cmd", Text: true, Usage: []string{"cmd [--ref <id>] [--no-wake] <target> <command...>"},
 		Summary: "send a directive; prints its id (the thread root)",
 		Flags: []cli.Flag{
 			fRef,
@@ -79,19 +79,19 @@ var commands = []cli.Command{
 
 	// --- 4-eyes
 	{
-		Name: "challenge", Usage: []string{"challenge <target> [--ref <id>] <message...>"},
+		Name: "challenge", Text: true, Usage: []string{"challenge <target> [--ref <id>] <message...>"},
 		Summary:  "open a 4-eyes gate on an agent",
 		Flags:    []cli.Flag{fRef},
 		Examples: []string{"agentbus -p demo challenge coder \"PR 12 touches the money path\""},
 	},
 	{
-		Name: "reply", Usage: []string{"reply --ref <id> <target> <message...>"},
+		Name: "reply", Text: true, Usage: []string{"reply --ref <id> <target> <message...>"},
 		Summary:  "answer on a thread",
 		Flags:    []cli.Flag{fRef},
 		Examples: []string{"agentbus -p demo reply -r 1792537337865-0 master \"yes, on main\""},
 	},
 	{
-		Name: "verdict", Usage: []string{"verdict (--pr <n> | --subject <s>) [--ref <id>] <author> <approve|reject> [message...]"},
+		Name: "verdict", Text: true, Usage: []string{"verdict (--pr <n> | --subject <s>) [--ref <id>] <author> <approve|reject> [message...]"},
 		Summary: "record a 4-eyes verdict in the ledger (resolves a matching gate)",
 		Flags: []cli.Flag{
 			{Long: "pr", Short: 'P', Arg: "<n>", Help: "the pull request number"},
@@ -165,7 +165,7 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo board", "agentbus -p demo board claim parser -b coder/parser"},
 	},
 	{
-		Name: "request", Usage: []string{
+		Name: "request", Text: true, Usage: []string{
 			"request [--json]",
 			"request send <task> <target> [--ref <id>] [--ttl <dur>] <body...>",
 			"request accept <task> | request block <task> <reason...>",
@@ -193,12 +193,12 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo refresh -q"},
 	},
 	{
-		Name: "health", Usage: []string{"health [list | detail <id> | log [<after-id>] | note <id> <text...>]"},
+		Name: "health", Text: true, Usage: []string{"health [list | detail <id> | log [<after-id>] | note <id> <text...>]"},
 		Summary:  "the project's measured health and its notes",
 		Examples: []string{"agentbus -p demo health", "agentbus -p demo health detail services"},
 	},
 	{
-		Name: "pause", Usage: []string{"pause --for <dur> | --until <HH:MM> | --until-reset [--to <agent>] [reason...]", "pause --status"},
+		Name: "pause", Text: true, Usage: []string{"pause --for <dur> | --until <HH:MM> | --until-reset [--to <agent>] [reason...]", "pause --status"},
 		Summary: "nobody is woken until then",
 		Flags: []cli.Flag{
 			{Long: "for", Short: 'f', Arg: "<dur>", Help: "pause for a duration"},
@@ -210,7 +210,7 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo pause -f 2h \"release window\"", "agentbus -p demo pause -s"},
 	},
 	{
-		Name: "resume", Usage: []string{"resume [message...]"},
+		Name: "resume", Text: true, Usage: []string{"resume [message...]"},
 		Summary:  "end a pause now",
 		Examples: []string{"agentbus -p demo resume"},
 	},
@@ -233,7 +233,7 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo asks -o"},
 	},
 	{
-		Name: "answer", Usage: []string{"answer <ask-id> <question> (--choice <label> | --text <words...>) [--as <person>]"},
+		Name: "answer", Text: true, Usage: []string{"answer <ask-id> <question> (--choice <label> | --text <words...>) [--as <person>]"},
 		Summary: "answer one question of an ask",
 		Flags: []cli.Flag{
 			{Long: "choice", Short: 'c', Arg: "<label>", Help: "pick an offered choice"},

@@ -40,7 +40,9 @@ them before retrying anything.
 2. **Flags: `--long value`, or the short `-x value` that `agentbus help <cmd>` lists.**
    - ✅ `agentbus --project trading ...` = `agentbus -p trading ...`   ✅ `--ref abc123` = `-r abc123`
    - The global shorts `-p`/`-H` are read **only before the command**: after it, `-p` is a
-     message word (`notify fixed with mkdir -p build` stays as written).
+     message word (`notify fixed with mkdir -p build` stays as written). For a command whose
+     trailing words are a message (`status`, `report`, `notify`, `cmd`, `reply`, …), the long
+     `--project`/`--host` after the command are message words too: put them first.
    - ✅ `--ref=abc123` (split for a flag that takes a value)
    - ❌ `-project trading` (single dash with a long name — not a flag → "project required")
    - ❌ `-jr` / `-pdemo` (no bundled shorts, no attached values)

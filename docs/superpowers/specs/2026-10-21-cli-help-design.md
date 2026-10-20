@@ -58,6 +58,11 @@ project-required exit:
    dispatch, untouched. Global shorts are **not** expanded after the command (foureyes'
    review of `2477a0a`): there `-p` is a message word (`mkdir -p`, `ssh -p`, `git log -p`), and
    since `--project` is read anywhere, expanding it would silently write to another project.
+   For the same reason `globalArgs` reads `--project`/`--host` after the command only for a
+   command whose trailing words are not a message (`Command.Text` false): `agents --project
+   demo` still works, `notify hi --project x` writes "hi --project x" to the current project.
+   Nothing in the repository (units, templates, launcher, plugin) passes them after the
+   command.
 
 The bare `agentbus --project P` without a command prints the index instead of today's
 one-line list, still exit 1.

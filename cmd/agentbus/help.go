@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/cli"
@@ -42,6 +43,43 @@ func expandArgs(args []string) []string {
 		return append(append(out, name), rest...)
 	}
 	return append(append(out, name), cli.Expand(nil, c.Flags, rest)...)
+}
+
+// globalArgs takes --host and --project out of args: before the command,
+// and after it too unless the command's trailing words are a message (Text),
+// where "--project x" is text and must not switch the project.
+func globalArgs(args []string) (rest []string, host, project string) {
+	i := 0
+	for i < len(args) {
+		f, ok := globalFlag(args[i])
+		if !ok {
+			break
+		}
+		i++
+		if f.Arg != "" && !strings.Contains(args[i-1], "=") {
+			i++
+		}
+	}
+	i = min(i, len(args))
+	lead, tail := args[:i], slices.Clone(args[i:])
+	lead, host = extractFlag(lead, "--host")
+	lead, project = extractFlag(lead, "--project")
+	if c, ok := cli.Lookup(commands, first(tail)); !ok || !c.Text {
+		if host == "" {
+			tail, host = extractFlag(tail, "--host")
+		}
+		if project == "" {
+			tail, project = extractFlag(tail, "--project")
+		}
+	}
+	return append(slices.Clone(lead), tail...), host, project
+}
+
+func first(s []string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	return s[0]
 }
 
 // globalFlag reports whether a is a global flag: -p, --project or

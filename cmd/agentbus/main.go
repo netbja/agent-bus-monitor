@@ -52,8 +52,7 @@ func main() {
 	// Short flags become long ones (the table in commands.go), so every
 	// parser below sees only the long forms it always read.
 	args := expandArgs(os.Args[1:])
-	args, host := extractFlag(args, "--host")
-	args, project := extractFlag(args, "--project")
+	args, host, project := globalArgs(args)
 	if project == "" {
 		project = os.Getenv("AGENT_BUS_PROJECT")
 	}
