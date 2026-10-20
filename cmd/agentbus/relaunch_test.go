@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -134,8 +135,14 @@ func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
 		if !ok {
 			return nil, errors.New("no such pane")
 		}
+		// "bash" waits at its prompt; "bash @busy" is the same argv running a
+		// builtin (its terminal canonical). The pid encodes which.
+		pid := 100
+		if strings.HasSuffix(cmdline, " @busy") {
+			cmdline, pid = strings.TrimSuffix(cmdline, " @busy"), 200
+		}
 		argv, _ := json.Marshal(strings.Fields(cmdline))
-		return []byte(`{"result":{"process_info":{"foreground_processes":[{"name":"x","argv":` + string(argv) + `}]}}}`), nil
+		return []byte(`{"result":{"process_info":{"foreground_processes":[{"pid":` + strconv.Itoa(pid) + `,"argv":` + string(argv) + `}]}}}`), nil
 	case strings.HasPrefix(line, "tab create --workspace w4"):
 		return []byte(`{"result":{"root_pane":{"pane_id":"w4:p9"}}}`), nil
 	}
@@ -175,7 +182,7 @@ func TestRelaunchOpenRelaunchesOnlyWhatIsGone(t *testing.T) {
 	}
 	ps := func(int) (uint64, error) { return 0, os.ErrNotExist }
 	var out bytes.Buffer
-	err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", relaunchTemplate(), relaunchOptions{Resume: true, Create: true}, &out)
+	err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", relaunchTemplate(), relaunchOptions{Resume: true, Create: true, AtPrompt: fakePrompt}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +209,7 @@ func TestRelaunchOpenDryRunTypesNothing(t *testing.T) {
 		fg:    map[string]string{"w4:p3": "bash"},
 	}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), relaunchOptions{DryRun: true, Create: true}, &out); err != nil {
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), relaunchOptions{DryRun: true, Create: true, AtPrompt: fakePrompt}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 {
@@ -224,7 +231,7 @@ func TestRelaunchOpenLeavesALiveAgent(t *testing.T) {
 	ps := func(int) (uint64, error) { return 7, nil }
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fakePrompt}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: alive") {
@@ -238,7 +245,7 @@ func TestRelaunchOpenWithoutCreateLeavesMissingTabs(t *testing.T) {
 	h := &relaunchHerdr{}
 	tpl := upTemplate{Tabs: []upTab{{Name: "coder", Command: "agent-launch coder demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{}, &out); err != nil {
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{AtPrompt: fakePrompt}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "coder: missing") {
@@ -431,7 +438,7 @@ func TestRelaunchOpenNeverTypesIntoAShellRunningACommand(t *testing.T) {
 	}
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fakePrompt}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: skipped (busy)") {
@@ -448,10 +455,49 @@ func TestRelaunchOpenLeavesDuplicateLabels(t *testing.T) {
 	}
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fakePrompt}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: unknown (several tabs") {
+		t.Fatalf("calls %q out %s", got, out.String())
+	}
+}
+
+// fakePrompt is the kernel's answer in the fakes: pid 100 waits at its prompt.
+func fakePrompt(pid int, _ string) (bool, error) { return pid == 100, nil }
+
+// Codex's round-2 case: an interactive shell running a builtin (read) keeps
+// its argv; only the kernel's terminal mode tells it from a prompt.
+func TestRelaunchOpenNeverTypesIntoAShellRunningABuiltin(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"master","tab_id":"w4:t3"}`,
+		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+		fg:    map[string]string{"w4:p3": "sh -i @busy"},
+	}
+	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fakePrompt}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: skipped (busy)") {
+		t.Fatalf("calls %q out %s", got, out.String())
+	}
+}
+
+// The prompt check failing (no /proc, not Linux) is unknown, never a relaunch.
+func TestRelaunchOpenUnknownWhenThePromptCannotBeRead(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"master","tab_id":"w4:t3"}`,
+		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+		fg:    map[string]string{"w4:p3": "bash"},
+	}
+	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
+	fail := func(int, string) (bool, error) { return false, errors.New("no /proc") }
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, AtPrompt: fail}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: unknown") {
 		t.Fatalf("calls %q out %s", got, out.String())
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -152,7 +153,7 @@ var interactiveFlags = []string{"-l", "--login", "-i", "--interactive"}
 // (`bash x.sh`), a command (`bash -c 'read answer'`) or with any other
 // argument is running work, and so is a process herdr reports without argv.
 func idleShell(argv []string) bool {
-	if len(argv) == 0 || !slices.Contains(shells, strings.TrimPrefix(filepath.Base(argv[0]), "-")) {
+	if len(argv) == 0 || !slices.Contains(shells, shellName(argv[0])) {
 		return false
 	}
 	for _, a := range argv[1:] {
@@ -223,8 +224,9 @@ type paneRef struct {
 }
 
 // paneShell asks herdr for the pane's foreground processes: true only when
-// every one is an idle interactive shell (idleShell).
-func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, error) {
+// there is exactly one, an interactive shell by its argv (idleShell), and the
+// kernel says it waits at its prompt (atPrompt). An error means unknown.
+func paneShell(herdr func(args ...string) ([]byte, error), pane string, atPrompt func(pid int, argv0 string) (bool, error)) (bool, error) {
 	out, err := herdr("pane", "process-info", "--pane", pane)
 	if err != nil {
 		return false, err
@@ -233,7 +235,7 @@ func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, e
 		Result struct {
 			ProcessInfo struct {
 				Foreground []struct {
-					Name string   `json:"name"`
+					PID  int      `json:"pid"`
 					Argv []string `json:"argv"`
 				} `json:"foreground_processes"`
 			} `json:"process_info"`
@@ -246,17 +248,17 @@ func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, e
 	if len(fg) == 0 {
 		return false, errors.New("no foreground process reported")
 	}
-	for _, p := range fg {
-		if !idleShell(p.Argv) {
-			return false, nil
-		}
+	if len(fg) != 1 || !idleShell(fg[0].Argv) || fg[0].PID <= 0 {
+		return false, nil
 	}
-	return true, nil
+	return atPrompt(fg[0].PID, fg[0].Argv[0])
 }
 
 // relaunchOptions are up's flags for an open workspace.
 type relaunchOptions struct {
 	Resume, DryRun, Create bool
+	// AtPrompt says whether a shell waits at its prompt (shellAtPrompt; tests fake it).
+	AtPrompt func(pid int, argv0 string) (bool, error)
 }
 
 // relaunchOpen checks every tab of an open workspace and reruns the template
@@ -268,6 +270,10 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 	panes, err := workspacePanes(herdr, ws)
 	if err != nil {
 		return err
+	}
+	atPrompt := o.AtPrompt
+	if atPrompt == nil {
+		atPrompt = shellAtPrompt
 	}
 	tabs := slices.Clone(tpl.Tabs)
 	slices.SortStableFunc(tabs, func(a, b upTab) int {
@@ -307,7 +313,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 			facts.Agent = ref.Agent
 			facts.Known = true
 			if ref.Agent == "" && !(isAgent && sl == lifeAlive) {
-				shell, err := paneShell(herdr, ref.Pane)
+				shell, err := paneShell(herdr, ref.Pane, atPrompt)
 				facts.Known, facts.Shell = err == nil, shell
 			}
 		}
@@ -376,3 +382,10 @@ func createTab(herdr func(args ...string) ([]byte, error), ws, name string) (str
 	}
 	return tab.Result.RootPane.PaneID, nil
 }
+
+// shellName is a shell's name from its argv[0] (a login shell has a leading -).
+func shellName(argv0 string) string {
+	return strings.TrimPrefix(filepath.Base(argv0), "-")
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }

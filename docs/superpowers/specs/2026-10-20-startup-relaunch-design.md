@@ -64,8 +64,10 @@ each agent tab of the template and relaunches the dead ones, in their existing p
   dispatcher is up when the agents register.
 - The relaunch never closes a pane, never types anything but the template command, and never
   touches a pane of another workspace.
-- **Built:** "busy" is any foreground process other than an idle interactive shell, proven by its
-  argv (`herdr pane process-info`; `bash -c …` or a script is busy; after Codex's review);
+- **Built:** a pane is free only when its one foreground process is bash or zsh with no argument
+  but `-l`/`-i`, and its terminal is in non-canonical mode, which the line editor sets only at the
+  prompt (after Codex's two reviews: argv alone does not tell a prompt from a builtin `read`). Anything
+  else is busy, or unknown when it cannot be read (no /proc, not Linux);
   busmon and the other non-agent tabs are rerun the same way (shell → rerun, else `running`).
   `--dry-run` reads only: no bootstrap, no service, no focus. A per-project lock
   (`~/.cache/agentbus/up-<p>.lock`) serialises ups; it fails closed. Duplicate tab labels are `unknown`. The person's recorded name is the default

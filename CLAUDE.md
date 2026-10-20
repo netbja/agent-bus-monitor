@@ -346,8 +346,10 @@ It never touches Redis — see README "Deployment topology".
   `agentbus up <p>` on an open workspace and `agentbus plugin workspace-event` (herdr's
   `workspace.created`/`workspace.focused`, the only `[[events]]` the manifest test allows) rerun a
   template tab's command (`relaunch.go`: `decideRelaunch`, a pure table) only in a pane whose
-  every foreground process is an idle interactive shell by its argv (`idleShell`: a shell with only
-  `-l`/`-i` flags; `bash -c …` or a script is running work), and never under a duplicate tab label, for an agent that is not alive by its snapshot (`snapLife`: pid +
+  its one foreground process is bash or zsh with only `-l`/`-i` flags (`idleShell`) **and** the
+  kernel says it waits at its prompt (`shellAtPrompt`, `prompt_linux.go`: the terminal is non-canonical,
+  which readline and ZLE set only while reading a command line; a builtin `read` or a command leaves it
+  canonical; argv alone is not proof; elsewhere than Linux: unknown), and never under a duplicate tab label, for an agent that is not alive by its snapshot (`snapLife`: pid +
   `pid_start`, the dispatcher's rule; Linux only, elsewhere the pane decides). The hook creates no
   tab, never provisions (template + broker `present`, like the picker), and starts stopped services
   with `Manager.Start` only: it must never call `startServices`, whose `Install` rewrites a unit

@@ -48,6 +48,8 @@ type upDeps struct {
 	Agents    func(project string) (map[string]bus.AgentSnapshot, error)
 	ProcStart func(int) (uint64, error)
 	Lock      func(project string, wait bool) (unlock func(), err error)
+	// AtPrompt overrides shellAtPrompt (tests); nil is the kernel's answer.
+	AtPrompt func(pid int, argv0 string) (bool, error)
 }
 
 type upTab struct {
@@ -544,6 +546,7 @@ func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunchOptions,
 			snaps, ok = s, true
 		}
 	}
+	o.AtPrompt = d.AtPrompt
 	return relaunchOpen(d.Herdr, snaps, ok, d.ProcStart, project, ws, tpl, o, stdout)
 }
 
