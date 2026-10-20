@@ -48,6 +48,7 @@ func realPluginDeps() pluginDeps {
 type pluginContext struct {
 	WorkspaceID    string `json:"workspace_id"`
 	WorkspaceLabel string `json:"workspace_label"`
+	FocusedPaneID  string `json:"focused_pane_id"`
 }
 
 // readPluginContext tolerates a missing, malformed or extended value.
@@ -78,11 +79,14 @@ func runPlugin(args []string, d pluginDeps, stdout, stderr io.Writer) int {
 	return 2
 }
 
-// pluginOpen opens one of the plugin's panes in the captured workspace.
+// pluginOpen opens one of the plugin's panes where herdr wants it: the picker
+// is an overlay, which herdr puts over the active pane and refuses any target
+// for; busmon is zoomed, which herdr requires to name an existing pane
+// (--target-pane, the pane focused when the action fired).
 func pluginOpen(d pluginDeps, stderr io.Writer, entry string, c pluginContext, envs []string) int {
 	a := []string{"plugin", "pane", "open", "--plugin", pluginID, "--entrypoint", entry}
-	if c.WorkspaceID != "" {
-		a = append(a, "--workspace", c.WorkspaceID)
+	if entry == "busmon" && c.FocusedPaneID != "" {
+		a = append(a, "--target-pane", c.FocusedPaneID)
 	}
 	for _, e := range envs {
 		a = append(a, "--env", e)
