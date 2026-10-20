@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Provision (do NOT launch) a project's Agent Bus team. Opening the workspace is the human's
-# job via the herdr-plus fuzzy picker; this only writes the template + prepares the broker.
+# Provision (do NOT launch) a project's Agent Bus team. Opening the workspace is `agentbus up <p>`
+# or the Projects picker (prefix+up); this only writes the template + prepares the broker.
 # Usage:
 #   bootstrap [new|recall] <project> [<path>] [--session <name>] [--as <your-name>] [--index] [--cron] [--no-dispatch] [--no-missions] [--yes]
 #   bootstrap <project> ...           # no verb -> auto: recall if the template exists, else new
@@ -52,10 +52,8 @@ project_dir="${project_dir:-$PWD}"
 [[ -d "$project_dir" ]] || die "project path is not a directory: $project_dir"
 PROJECT_DIR="$(cd "$project_dir" && pwd)"
 
-# The herdr session the project opens in (herdr registers plugins PER SESSION). --session wins,
-# else the session bootstrap runs inside ($HERDR_SESSION), else the project name (the convention).
-SESSION="${session_flag:-${HERDR_SESSION:-$project}}"
-HERDR_PLUS_PATH="${HERDR_PLUS_PATH:-$HOME/Tools/herdr-plugins/herdr-plus}"
+# --session (session_flag) is only accepted: `agentbus up` passes its flags on and resolves the
+# session itself. Plugins are no business of bootstrap: setup.sh links agent-bus once, globally.
 
 PROJECTS_DIR="$("$AGENTBUS_BIN" roles projects-dir)" || die "cannot resolve the templates directory (agentbus roles projects-dir)"
 template="$PROJECTS_DIR/$project.toml"
@@ -107,49 +105,6 @@ install_cron() {
   echo "cron: installed daily-review for $project (07:00 daily)"
 }
 
-# `herdr plugin link` REGISTERS the plugin, it does not COMPILE it — and every entry point spawns
-# ./bin/herdr-plus. Build it here when it's missing, so a fresh machine doesn't discover the gap as
-# "Unable to spawn … bin/herdr-plus … does not exist" at the first pane-open. Prefers the plugin
-# manifest's own [[build]] script, falls back to the Makefile target. Best-effort: a failed build
-# only warns — linking an unbuilt plugin is no worse than not linking it.
-ensure_plugin_built() {
-  if [[ -x "$HERDR_PLUS_PATH/bin/herdr-plus" ]]; then return 0; fi
-  local how=""
-  if   [[ -f "$HERDR_PLUS_PATH/scripts/build.sh" ]]; then how="sh scripts/build.sh"
-  elif [[ -f "$HERDR_PLUS_PATH/Makefile"        ]]; then how="make build"
-  else warn "herdr-plus: no bin/herdr-plus and no build script at $HERDR_PLUS_PATH; the Projects picker will not open"; return 0
-  fi
-  echo "herdr-plus: binary missing — building ($how)"
-  if ! ( cd "$HERDR_PLUS_PATH" && $how ); then
-    warn "herdr-plus build failed ($how); build it by hand before using the Projects picker"
-    return 0
-  fi
-  if [[ -x "$HERDR_PLUS_PATH/bin/herdr-plus" ]]; then echo "herdr-plus: built"
-  else warn "herdr-plus: $how produced no bin/herdr-plus"; fi
-  return 0
-}
-
-# Register herdr-plus in the target session so the Projects picker works there — herdr registers
-# plugins per session, so a fresh project session starts without it. Best-effort: skip cleanly if
-# herdr or the plugin checkout is missing. Works whether the session is running (registers live) or
-# not (seeds its registry for the next `herdr --session <name>`).
-link_plugin() {
-  command -v herdr >/dev/null 2>&1 || { warn "herdr not on PATH; skipping herdr-plus link"; return 0; }
-  # setup.sh registers herdr-plus in herdr's global registry, which every session sees: done.
-  if HERDR_SESSION="$SESSION" herdr plugin list 2>/dev/null | grep -q "cloudmanic.herdr-plus"; then
-    echo "herdr-plus: registered (agentbus up $project opens the workspace; Ctrl+B then Up reopens it)"
-    return 0
-  fi
-  [[ -d "$HERDR_PLUS_PATH" ]] || { warn "herdr-plus is not registered with herdr: run $REPO/setup.sh install --install-herdr"; return 0; }
-  ensure_plugin_built
-  if HERDR_SESSION="$SESSION" herdr plugin link "$HERDR_PLUS_PATH" >/dev/null 2>&1; then
-    echo "herdr-plus: linked into session '$SESSION' (open the Projects picker there)"
-  else
-    # herdr only registers into a RUNNING session server; if '$SESSION' isn't up this is expected.
-    warn "herdr-plus not linked into '$SESSION' — is that session running? Start it ('herdr --session $SESSION') then re-run bootstrap from inside it."
-  fi
-}
-
 roles_validate || die "invalid role manifest"
 
 case "$verb" in
@@ -161,10 +116,9 @@ case "$verb" in
   recall)
     ensure_broker
     [[ -f "$template" ]] || warn "no template at $template (run 'bootstrap new $project')"
-    echo "recall: broker up; open '$project' via the herdr-plus picker (fresh sessions)"
+    echo "recall: broker up; open '$project' with agentbus up $project, or prefix+up (the Projects picker)"
     ;;
 esac
-link_plugin
 [[ "$do_index" == "1" ]] && index_preflight
 [[ "$do_cron"  == "1" ]] && install_cron
 echo "bootstrap: $verb $project done"

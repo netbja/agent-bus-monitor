@@ -2,7 +2,7 @@
 #
 # Agent Bus Monitor — setup: install, update, uninstall, status
 #
-#   ./setup.sh install   [options]   preflight, build agentbus + busmon, external skills, herdr-plus, Redis
+#   ./setup.sh install   [options]   preflight, build agentbus + busmon, the herdr plugin, external skills, Redis
 #   ./setup.sh update    [options]   git pull --ff-only, then install (prints vA -> vB and what changed)
 #   ./setup.sh uninstall [--yes] [--purge]   remove what install added, asking at every step
 #   ./setup.sh status                what is installed, where, and whether it runs
@@ -18,12 +18,8 @@ REPO_DIR="$SCRIPT_DIR"
 
 # Defaults
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
-# A local herdr-plus checkout to link (HERDR_PLUS_PATH, or the historical ~/Tools path if it exists);
-# otherwise --install-herdr installs it through herdr's own plugin store.
-HERDR_PLUS_DIR="${HERDR_PLUS_PATH:-$HOME/Tools/herdr-plugins/herdr-plus}"
-HERDR_PLUS_ID="cloudmanic.herdr-plus"
-HERDR_PLUS_GITHUB="cloudmanic/herdr-plus"
-HERDR_PLUS_REF="${HERDR_PLUS_REF:-v0.1.16}"
+# This checkout is the herdr plugin (herdr-plugin.toml at its root): setup links it under this id.
+PLUGIN_ID="netbja.agentbus"
 # External role skills (wayfinder, to-tickets, to-spec, tdd, ...), pinned.
 SKILLS_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/agentbus/skills/mattpocock"
 SKILLS_REPO="${SKILLS_REPO:-https://github.com/mattpocock/skills.git}"
@@ -87,9 +83,8 @@ Usage:
 Install / update options:
   --bin-dir <dir>   Install directory for binaries (default: \$HOME/.local/bin)
   --dry-run         Inspect the environment and show the actions, change nothing
-  --install-herdr   Download herdr (herdr.dev installer) if missing, and install the herdr-plus
-                    plugin through herdr (herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF)
-  --force           Rebuild a linked herdr-plus checkout even if its binary is present
+  --install-herdr   Download herdr (herdr.dev installer) if missing
+  --force           No effect since v0.20 (kept so older commands still run)
   --no-docker       Do not start the Redis broker container
   --no-skills       Do not fetch the external skills nor link role skills
   -h, --help        Show this help
@@ -100,11 +95,11 @@ Uninstall options:
 
 agentbus and busmon are rebuilt on every install, into the repository (where the herdr tabs run
 them) and into the bin dir, stamped with the release (agentbus version, busmon --version).
+The repository is then linked as the herdr plugin $PLUGIN_ID (herdr plugin link), and
+prefix+up (Ctrl+B then Up) bound to its Projects picker.
 
 Environment variables:
   BIN_DIR           Binary installation directory
-  HERDR_PLUS_PATH   A local herdr-plus checkout to link instead of installing it
-  HERDR_PLUS_REF    herdr-plus tag installed by --install-herdr (default: $HERDR_PLUS_REF)
   SKILLS_REF        mattpocock/skills tag cloned into $SKILLS_HOME (default: $SKILLS_REF)
   NO_COLOR          Disables colorized terminal output
 USAGE
@@ -162,8 +157,21 @@ version_ge() {
 # Shared helpers for status / uninstall / update
 # -----------------------------------------------------------------------------
 HERDR_CONFIG="${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
-KEYBIND_MARK="# herdr-plus Projects picker: prefix (ctrl+b) then Up"
+KEYBIND_MARK="# agentbus Projects picker: prefix (ctrl+b) then Up"
 KEYBIND_BLOCK="$(cat <<'EOF'
+
+# agentbus Projects picker: prefix (ctrl+b) then Up
+[[keys.command]]
+key = "prefix+up"
+type = "plugin_action"
+command = "netbja.agentbus.projects"
+description = "agent-bus: projects"
+EOF
+)"
+# The block setup wrote before v0.20, for herdr-plus: replaced only when it is still byte for byte
+# what setup wrote. Keyed on the whole block, never on the command string.
+OLD_KEYBIND_MARK="# herdr-plus Projects picker: prefix (ctrl+b) then Up"
+OLD_KEYBIND_BLOCK="$(cat <<'EOF'
 
 # herdr-plus Projects picker: prefix (ctrl+b) then Up
 [[keys.command]]
@@ -175,7 +183,9 @@ EOF
 )"
 # Only a clone setup made carries this marker; any other folder there is the user's.
 SKILLS_MARK="$SKILLS_HOME/.git/agentbus-setup"
-# The herdr-plus release setup installed through herdr, so a new pin reaches it.
+# The checkout setup linked as the herdr plugin: the only registration setup may unlink.
+PLUGIN_RECORD="${XDG_STATE_HOME:-$HOME/.local/state}/agentbus/plugin.path"
+# Written by setup before v0.20, when it installed herdr-plus; only read, to say it is not needed.
 HERDR_PLUS_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/agentbus/herdr-plus.ref"
 REDIS_CONTAINER="agent-bus-redis"
 
@@ -262,17 +272,106 @@ project_services() {
   done
 }
 
-herdr_plus_linked() { herdr plugin list 2>/dev/null | grep "$HERDR_PLUS_ID" | grep -q "local:"; }
-# True only for a herdr-plus setup installed from GitHub at another ref; a linked checkout is the user's.
-herdr_plus_pin_changed() { [ -f "$HERDR_PLUS_STATE" ] && [ "$(cat "$HERDR_PLUS_STATE")" != "$HERDR_PLUS_REF" ] && herdr_plus_registered && ! herdr_plus_linked; }
-herdr_plus_registered() { command -v herdr >/dev/null 2>&1 && herdr plugin list 2>/dev/null | grep -q "$HERDR_PLUS_ID"; }
+# plugin_rows: herdr's plugin registry, read from `herdr plugin list --json` (the plain listing
+# carries no version), one line per result.plugins[] entry: plugin_id, enabled, plugin_root and
+# version, tab-separated. Only each plugin's own fields count, never a nested object's. The last
+# line is "#plugins" when the listing was read; without it, herdr could not be asked (no herdr, an
+# error, an unexpected shape) and nothing may be concluded from the registry.
+plugin_rows() {
+  command -v herdr >/dev/null 2>&1 || return 0
+  herdr plugin list --json 2>/dev/null | awk '
+    { s = s $0 "\n" }
+    END {
+      n = length(s); d = 0; key = ""; seen = 0; split("", rec)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (c == "\"") {
+          str = ""
+          for (j = i + 1; j <= n; j++) {
+            ch = substr(s, j, 1)
+            if (ch == "\\") { j++; str = str substr(s, j, 1); continue }
+            if (ch == "\"") break
+            str = str ch
+          }
+          i = j
+          for (k = i + 1; k <= n && substr(s, k, 1) ~ /[ \t\r\n]/; k++) ;
+          if (substr(s, k, 1) == ":") { key = str; i = k; continue }
+          if (own()) rec[key] = str
+          continue
+        }
+        if (c == "{" || c == "[") {
+          d++; at[d] = key; kind[d] = c; key = ""
+          if (d == 3 && c == "[" && kind[1] == "{" && at[2] == "result" && kind[2] == "{" && at[3] == "plugins") seen = 1
+          continue
+        }
+        if (c == "}" || c == "]") {
+          if (own()) { print rec["plugin_id"] "\t" rec["enabled"] "\t" rec["plugin_root"] "\t" rec["version"]; split("", rec) }
+          d--; key = ""; continue
+        }
+        if (c == "," ) { key = ""; continue }
+        if (c ~ /[ \t\r\n:]/) continue
+        for (j = i; j <= n && substr(s, j, 1) !~ /[],} \t\r\n]/; j++) ;
+        if (own()) rec[key] = substr(s, i, j - i)
+        i = j - 1
+      }
+      if (seen) print "#plugins"
+    }
+    # True inside one entry of result.plugins[], at its own level (not in a nested object).
+    function own() { return d == 4 && kind[4] == "{" && kind[3] == "[" && at[3] == "plugins" && at[2] == "result" && kind[1] == "{" }'
+}
+
+# plugin_row ROWS: our plugin's line from plugin_rows, empty when it is not registered.
+plugin_row() { printf '%s\n' "$1" | awk -F '\t' -v id="$PLUGIN_ID" '$1 == id { print; exit }'; }
+# row_field ROW N: one field of a plugin_rows line (2 enabled, 3 plugin_root, 4 version).
+row_field() { printf '%s\n' "$1" | awk -F '\t' -v n="$2" '{ print $n }'; }
+
+# same_dir A B: the same directory, by name or, when both exist, once symlinks are resolved.
+same_dir() {
+  [ -n "$1" ] && [ -n "$2" ] || return 1
+  [ "$1" = "$2" ] && return 0
+  [ -d "$1" ] && [ -d "$2" ] && [ "$(CDPATH= cd -- "$1" && pwd -P)" = "$(CDPATH= cd -- "$2" && pwd -P)" ]
+}
+
+# The checkout setup recorded when it linked the plugin, or nothing.
+recorded_plugin_path() { [ -f "$PLUGIN_RECORD" ] && head -n 1 "$PLUGIN_RECORD" || true; }
+
+# keybind_swap OLD NEW FILE: FILE with every exact copy of the block OLD (its lines after the
+# leading blank one) replaced by NEW's lines, or, when NEW is empty, dropped together with the
+# blank line before it. Exit 3 when FILE holds no exact copy: a block the user edited is left
+# alone, since guessing where it ends could take their next section with it.
+keybind_swap() {
+  printf '%s\n' "$1" > "$TMP_DIR/keybind.old"
+  printf '%s\n' "$2" > "$TMP_DIR/keybind.new"
+  awk '
+    FILENAME == ARGV[1] { if (FNR > 1) want[++w] = $0; next }
+    FILENAME == ARGV[2] { if (FNR > 1) repl[++r] = $0; next }
+    { line[++n] = $0 }
+    END {
+      if (w == 0) exit 3
+      for (i = 1; i <= n; i++) {
+        ok = 1
+        for (k = 1; k <= w; k++) if (line[i + k - 1] != want[k]) { ok = 0; break }
+        if (ok) {
+          start[i] = 1; for (k = 0; k < w; k++) skip[i + k] = 1
+          if (r == 0 && i > 1 && line[i - 1] == "") skip[i - 1] = 1
+          found = 1; i += w - 1
+        }
+      }
+      for (i = 1; i <= n; i++) {
+        if (start[i]) for (k = 1; k <= r; k++) print repl[k]
+        if (!skip[i]) print line[i]
+      }
+      exit found ? 0 : 3
+    }' "$TMP_DIR/keybind.old" "$TMP_DIR/keybind.new" "$3"
+}
+
 # The action list comes from the running herdr server, the plugin list from disk: outside a
 # herdr session there may be no server to ask, which says nothing about the plugin.
-herdr_plus_action_state() {
+plugin_action_state() {
   local out
   command -v herdr >/dev/null 2>&1 || { echo missing; return; }
   out="$(herdr plugin action list 2>/dev/null | tr -d "\n")"
-  if printf '%s' "$out" | grep -q "\"action_id\":\"projects\"[^}]*\"plugin_id\":\"$HERDR_PLUS_ID\""; then echo ok
+  if printf '%s' "$out" | grep -q "\"action_id\":\"projects\"[^}]*\"plugin_id\":\"$PLUGIN_ID\""; then echo ok
   elif printf '%s' "$out" | grep -q '"server_not_running"'; then echo noserver
   else echo missing; fi
 }
@@ -317,18 +416,35 @@ do_status() {
   fi
   links="$(our_skill_links | wc -l | tr -d ' ')"
   log_info "role skill links: $links"
+  rows="$(plugin_rows)"
+  row="$(plugin_row "$rows")"
+  root="$(row_field "$row" 3)"
   if ! command -v herdr >/dev/null 2>&1; then
     log_info "herdr: not on PATH"
-  elif ! herdr_plus_registered; then
-    log_info "herdr-plus: not registered (./setup.sh install --install-herdr)"
+  elif ! printf '%s\n' "$rows" | grep -qx '#plugins'; then
+    log_warn "herdr plugin list --json could not be read: the $PLUGIN_ID registration is unknown"
+  elif [ -z "$row" ]; then
+    log_info "$PLUGIN_ID: not linked into herdr (./setup.sh install)"
   else
-    case "$(herdr_plus_action_state)" in
-      ok)       log_ok "herdr-plus: registered, Projects picker available (Ctrl+B then Up)" ;;
-      noserver) log_info "herdr-plus: registered; Projects picker not checked (no herdr server running here)" ;;
-      *)        log_warn "herdr-plus: registered but its projects action is missing (check: herdr plugin action list)" ;;
+    if ! same_dir "$root" "$REPO_DIR"; then
+      log_warn "$PLUGIN_ID: linked from $root, not from this checkout"
+    elif [ "$(row_field "$row" 2)" != "true" ]; then
+      log_warn "$PLUGIN_ID: linked from $root but disabled in herdr"
+    else
+      log_ok "$PLUGIN_ID: linked from $root (version $(row_field "$row" 4))"
+    fi
+    case "$(plugin_action_state)" in
+      ok)       log_ok "$PLUGIN_ID: Projects picker available (Ctrl+B then Up)" ;;
+      noserver) log_info "$PLUGIN_ID: Projects picker not checked (no herdr server running here)" ;;
+      *)        log_warn "$PLUGIN_ID: registered but its projects action is missing (check: herdr plugin action list)" ;;
     esac
   fi
-  if grep -qF "$KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then log_ok "herdr key binding: prefix+up -> projects"; else log_info "herdr key binding: not added"; fi
+  if [ -f "$HERDR_PLUS_STATE" ]; then
+    log_info "herdr-plus: installed by an older setup, no longer needed: herdr plugin uninstall cloudmanic.herdr-plus"
+  fi
+  if grep -qF "$KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then log_ok "herdr key binding: prefix+up -> $PLUGIN_ID.projects"
+  elif grep -qF "$OLD_KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then log_info "herdr key binding: still herdr-plus's (./setup.sh install moves it to $PLUGIN_ID)"
+  else log_info "herdr key binding: not added"; fi
   svcs="$(project_services)"
   if [ -n "$svcs" ]; then
     printf '%s\n' "$svcs" | while IFS= read -r line; do log_info "project service: $line"; done
@@ -379,25 +495,13 @@ do_uninstall() {
     fi
   fi
   if grep -qF "$KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then
-    if ask "remove the herdr key binding (prefix+up -> herdr-plus projects)?" y; then
+    if ask "remove the herdr key binding (prefix+up -> agent-bus projects)?" y; then
       backup="$HERDR_CONFIG.bak.$(date +%Y%m%d%H%M%S)"
       cp -p "$HERDR_CONFIG" "$backup"
-      # Drop the block install wrote, line for line, and the blank line before it. A block the
-      # user edited is left alone: guessing where it ends could take their next section with it.
-      if printf '%s\n' "$KEYBIND_BLOCK" | awk '
-          NR == FNR { if (FNR > 1) want[++w] = $0; next }
-          { line[++n] = $0 }
-          END {
-            for (i = 1; i <= n; i++) {
-              ok = 1
-              for (k = 1; k <= w; k++) if (line[i + k - 1] != want[k]) { ok = 0; break }
-              if (ok) { for (k = 0; k < w; k++) skip[i + k] = 1; if (i > 1 && line[i - 1] == "") skip[i - 1] = 1; found = 1; i += w - 1 }
-            }
-            for (i = 1; i <= n; i++) if (!skip[i]) print line[i]
-            exit found ? 0 : 3
-          }' - "$backup" > "$TMP_DIR/herdr-config.new"; then
+      # Drop the block install wrote, line for line, and the blank line before it.
+      if keybind_swap "$KEYBIND_BLOCK" "" "$backup" > "$TMP_DIR/herdr-config.new"; then
         cat "$TMP_DIR/herdr-config.new" > "$HERDR_CONFIG"
-        log_ok "removed the key binding (backup: $backup)"
+        log_ok "removed the key binding: prefix+up is now unbound (backup: $backup)"
         command -v herdr >/dev/null 2>&1 && herdr server reload-config >/dev/null 2>&1 || true
       else
         rm -f "$backup"
@@ -405,13 +509,25 @@ do_uninstall() {
       fi
     fi
   fi
-  if herdr_plus_registered; then
-    # herdr-plus is useful without agent-bus: kept unless asked.
-    if ask "uninstall the herdr-plus plugin too (useful without agent-bus)?" n; then
-      if herdr_plus_linked; then herdr plugin unlink "$HERDR_PLUS_ID" >/dev/null 2>&1 || true
-      else herdr plugin uninstall "$HERDR_PLUS_ID" --yes >/dev/null 2>&1 || herdr plugin uninstall "$HERDR_PLUS_ID" >/dev/null 2>&1 || true; fi
-      rm -f "$HERDR_PLUS_STATE"
-      log_ok "herdr-plus: uninstalled"
+  # The plugin registration: unlinked only when herdr still has it from the checkout setup recorded.
+  recorded="$(recorded_plugin_path)"
+  if [ -n "$recorded" ]; then
+    rows="$(plugin_rows)"
+    root="$(row_field "$(plugin_row "$rows")" 3)"
+    if ! printf '%s\n' "$rows" | grep -qx '#plugins'; then
+      log_warn "herdr plugin list --json could not be read: $PLUGIN_ID left as it is"
+    elif [ -z "$root" ]; then
+      rm -f "$PLUGIN_RECORD"
+    elif ! same_dir "$root" "$recorded"; then
+      log_info "$PLUGIN_ID is linked from $root, which setup did not link: kept"
+    elif ask "unlink the herdr plugin $PLUGIN_ID ($root)?" y; then
+      if herdr plugin unlink "$PLUGIN_ID" >"$TMP_DIR/herdr-unlink.log" 2>&1; then
+        rm -f "$PLUGIN_RECORD"
+        log_ok "herdr plugin $PLUGIN_ID: unlinked"
+      else
+        show_log "$TMP_DIR/herdr-unlink.log"
+        log_warn "herdr plugin unlink $PLUGIN_ID failed: left as it is"
+      fi
     fi
   fi
   if [ -f "$SKILLS_MARK" ]; then
@@ -563,9 +679,9 @@ if [ "$MISSING" -gt 0 ] && [ "$DRY_RUN" = "0" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# 2. herdr & herdr-plus Setup
+# 2. herdr Setup
 # -----------------------------------------------------------------------------
-log_step "2/5 Checking herdr workspace manager & herdr-plus plugin"
+log_step "2/5 Checking herdr workspace manager"
 
 # herdr binary check & opt-in installation
 if command -v herdr >/dev/null 2>&1; then
@@ -589,111 +705,10 @@ else
   fi
 fi
 
-# herdr-plus: registered with herdr (the Projects picker is a herdr plugin action). A local
-# checkout (HERDR_PLUS_PATH, or the historical ~/Tools path) is built and linked; otherwise
-# --install-herdr installs the pinned release through herdr's own plugin store.
-if ! command -v herdr >/dev/null 2>&1; then
-  :
-elif herdr_plus_pin_changed && [ "$DRY_RUN" = "1" ]; then
-  log_info "[dry-run] would reinstall herdr-plus $(cat "$HERDR_PLUS_STATE") -> $HERDR_PLUS_REF"
-elif herdr_plus_pin_changed; then
-  old_ref="$(cat "$HERDR_PLUS_STATE")"
-  herdr plugin uninstall "$HERDR_PLUS_ID" --yes >/dev/null 2>&1 || herdr plugin uninstall "$HERDR_PLUS_ID" >/dev/null 2>&1 || true
-  if herdr plugin install "$HERDR_PLUS_GITHUB" --ref "$HERDR_PLUS_REF" --yes >"$TMP_DIR/herdr-install-plugin.log" 2>&1; then
-    printf '%s\n' "$HERDR_PLUS_REF" > "$HERDR_PLUS_STATE"
-    log_ok "herdr-plus: $old_ref -> $HERDR_PLUS_REF through herdr"
-  else
-    show_log "$TMP_DIR/herdr-install-plugin.log"
-    if herdr plugin install "$HERDR_PLUS_GITHUB" --ref "$old_ref" --yes >/dev/null 2>&1 && herdr_plus_registered; then
-      log_warn "herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF failed; $old_ref reinstalled."
-    else
-      rm -f "$HERDR_PLUS_STATE"
-      log_warn "herdr-plus is NOT installed: $HERDR_PLUS_REF and the rollback to $old_ref both failed (re-run: herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF)."
-    fi
-  fi
-elif herdr_plus_registered && [ "$FORCE" = "0" ]; then
-  log_ok "herdr-plus: registered with herdr"
-elif [ -d "$HERDR_PLUS_DIR" ]; then
-  if [ -x "$HERDR_PLUS_DIR/bin/herdr-plus" ] && [ "$FORCE" = "0" ]; then
-    log_ok "herdr-plus checkout: built ($HERDR_PLUS_DIR)"
-  elif [ "$DRY_RUN" = "1" ]; then
-    log_info "[dry-run] would build herdr-plus in $HERDR_PLUS_DIR"
-  else
-    log_info "Building herdr-plus in $HERDR_PLUS_DIR..."
-    if [ -f "$HERDR_PLUS_DIR/scripts/build.sh" ]; then build="sh scripts/build.sh"; else build="make build"; fi
-    if ( cd "$HERDR_PLUS_DIR" && $build ) >"$TMP_DIR/herdr-plus-build.log" 2>&1 && [ -x "$HERDR_PLUS_DIR/bin/herdr-plus" ]; then
-      log_ok "herdr-plus: built"
-    else
-      show_log "$TMP_DIR/herdr-plus-build.log"
-      log_warn "herdr-plus build ($build) failed or produced no bin/herdr-plus."
-    fi
-  fi
-  if herdr_plus_registered; then
-    :
-  elif [ "$DRY_RUN" = "1" ]; then
-    log_info "[dry-run] would run: herdr plugin link $HERDR_PLUS_DIR"
-  elif herdr plugin link "$HERDR_PLUS_DIR" >"$TMP_DIR/herdr-link.log" 2>&1; then
-    log_ok "herdr-plus: linked into herdr ($HERDR_PLUS_DIR)"
-  else
-    show_log "$TMP_DIR/herdr-link.log"
-    log_warn "herdr plugin link $HERDR_PLUS_DIR failed."
-  fi
-elif [ "$INSTALL_HERDR" = "0" ]; then
-  log_warn "herdr-plus is not installed: re-run with --install-herdr (or: herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF)."
-elif [ "$DRY_RUN" = "1" ]; then
-  log_info "[dry-run] would run: herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF --yes"
-elif herdr plugin install "$HERDR_PLUS_GITHUB" --ref "$HERDR_PLUS_REF" --yes >"$TMP_DIR/herdr-install-plugin.log" 2>&1; then
-  mkdir -p "$(dirname "$HERDR_PLUS_STATE")" && printf '%s\n' "$HERDR_PLUS_REF" > "$HERDR_PLUS_STATE"
-  log_ok "herdr-plus: installed $HERDR_PLUS_REF through herdr"
-else
-  show_log "$TMP_DIR/herdr-install-plugin.log"
-  log_warn "herdr plugin install $HERDR_PLUS_GITHUB --ref $HERDR_PLUS_REF failed."
-fi
-# What Ctrl+B Up actually needs: the plugin's projects action, as herdr sees it.
-if command -v herdr >/dev/null 2>&1 && [ "$DRY_RUN" = "0" ] && herdr_plus_registered; then
-  case "$(herdr_plus_action_state)" in
-    ok)       log_ok "herdr-plus: Projects picker action available" ;;
-    noserver) log_info "herdr-plus: registered; Projects picker not checked (no herdr server running here, run ./setup.sh status inside herdr)" ;;
-    *)        log_warn "herdr-plus is registered but herdr lists no $HERDR_PLUS_ID.projects action (check: herdr plugin action list)." ;;
-  esac
-fi
-
-# Configure herdr-plus keybinding in ~/.config/herdr/config.toml idempotently
-HERDR_CONFIG="${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
-# herdr runs with a partial config.toml, so a machine where it never ran gets one holding the binding.
-if [ ! -f "$HERDR_CONFIG" ] && [ "$DRY_RUN" = "1" ]; then
-  log_info "[dry-run] would create $HERDR_CONFIG with the herdr-plus keybinding (prefix+up)"
-elif [ ! -f "$HERDR_CONFIG" ]; then
-  mkdir -p "$(dirname "$HERDR_CONFIG")"
-  printf '%s\n' "$KEYBIND_BLOCK" > "$HERDR_CONFIG"
-  log_ok "herdr config: created $HERDR_CONFIG with the Projects picker shortcut (prefix+up)"
-  KEYBIND_WRITTEN=1
-elif grep -q "cloudmanic.herdr-plus.projects" "$HERDR_CONFIG" 2>/dev/null; then
-  log_ok "herdr config: Projects picker keybinding already configured"
-elif grep -qF '"prefix+up"' "$HERDR_CONFIG" 2>/dev/null; then
-  log_warn "herdr config: prefix+up is already bound in $HERDR_CONFIG; bind cloudmanic.herdr-plus.projects to another key by hand."
-elif [ "$DRY_RUN" = "1" ]; then
-  log_info "[dry-run] would add herdr-plus keybinding (prefix+up) to $HERDR_CONFIG"
-else
-  backup="$HERDR_CONFIG.bak.$(date +%Y%m%d%H%M%S)"
-  cp -p "$HERDR_CONFIG" "$backup"
-  printf '%s\n' "$KEYBIND_BLOCK" >> "$HERDR_CONFIG"
-  log_ok "herdr config: added Projects picker shortcut (prefix+up) to $HERDR_CONFIG (backup: $backup)"
-  KEYBIND_WRITTEN=1
-fi
-# A herdr that is already running reads a new binding only when told to.
-if [ "${KEYBIND_WRITTEN:-0}" = "1" ] && command -v herdr >/dev/null 2>&1; then
-  if herdr server reload-config >/dev/null 2>&1; then
-    log_ok "herdr: running server reloaded its config (Ctrl+B then Up works now)"
-  else
-    log_info "herdr: the binding applies when herdr next starts (or run: herdr server reload-config)"
-  fi
-fi
-
 # -----------------------------------------------------------------------------
 # 3. Build & Install Agent Bus Binaries
 # -----------------------------------------------------------------------------
-log_step "3/5 Building and installing agentbus & busmon"
+log_step "3/5 Building and installing agentbus & busmon, linking the herdr plugin"
 
 REPO_REV="$(git -C "$REPO_DIR" describe --tags --always --dirty 2>/dev/null || echo 'unknown revision')"
 # The release stamped into both binaries (agentbus version, busmon --version, the update notice).
@@ -736,6 +751,114 @@ build_and_install_binary() {
 build_and_install_binary "agentbus" "./cmd/agentbus"
 build_and_install_binary "busmon"   "./cmd/busmon"
 install_role_script_links
+
+# The herdr plugin: this checkout (herdr-plugin.toml, ./agentbus, ./busmon) linked as
+# netbja.agentbus. Only a registration setup recorded is ever unlinked; one the person disabled,
+# or made from another checkout, is reported and left alone. Runs after the build, which exits on
+# failure, so a plugin is never linked without its binaries.
+PLUGIN_LINK_FAILED=0
+link_plugin() {
+  if [ "$DRY_RUN" = "1" ]; then
+    log_info "[dry-run] would run: herdr plugin link $REPO_DIR"
+  elif herdr plugin link "$REPO_DIR" >"$TMP_DIR/herdr-link.log" 2>&1; then
+    mkdir -p "$(dirname "$PLUGIN_RECORD")" && printf '%s\n' "$REPO_DIR" > "$PLUGIN_RECORD"
+    log_ok "herdr plugin $PLUGIN_ID: linked ($REPO_DIR)"
+  else
+    show_log "$TMP_DIR/herdr-link.log"
+    log_warn "herdr plugin link $REPO_DIR failed: the Projects picker is not available."
+    PLUGIN_LINK_FAILED=1
+  fi
+}
+if ! command -v herdr >/dev/null 2>&1; then
+  log_info "herdr plugin $PLUGIN_ID: not linked (herdr is not on PATH; re-run setup once it is)"
+else
+  rows="$(plugin_rows)"
+  row="$(plugin_row "$rows")"
+  root="$(row_field "$row" 3)"
+  recorded="$(recorded_plugin_path)"
+  if ! printf '%s\n' "$rows" | grep -qx '#plugins'; then
+    log_warn "herdr plugin list --json could not be read (herdr 0.9 or newer is needed): $PLUGIN_ID not linked."
+    PLUGIN_LINK_FAILED=1
+  elif [ -z "$row" ]; then
+    link_plugin
+  elif same_dir "$root" "$REPO_DIR"; then
+    if [ "$(row_field "$row" 2)" = "true" ]; then
+      log_ok "herdr plugin $PLUGIN_ID: linked ($root, version $(row_field "$row" 4))"
+    else
+      log_warn "herdr plugin $PLUGIN_ID is disabled in herdr: left as it is (the Projects picker needs it enabled)."
+    fi
+  elif [ -n "$recorded" ] && same_dir "$root" "$recorded"; then
+    # The checkout setup linked has moved here: follow it.
+    if [ "$DRY_RUN" = "1" ]; then
+      log_info "[dry-run] would run: herdr plugin unlink $PLUGIN_ID ($root), then herdr plugin link $REPO_DIR"
+    elif herdr plugin unlink "$PLUGIN_ID" >"$TMP_DIR/herdr-unlink.log" 2>&1; then
+      log_info "herdr plugin $PLUGIN_ID: unlinked from $root (setup's previous checkout)"
+      rm -f "$PLUGIN_RECORD"
+      link_plugin
+    else
+      show_log "$TMP_DIR/herdr-unlink.log"
+      log_warn "herdr plugin unlink $PLUGIN_ID failed: still linked from $root."
+      PLUGIN_LINK_FAILED=1
+    fi
+  else
+    log_warn "herdr plugin $PLUGIN_ID is linked from $root, not from this checkout: left as it is (herdr plugin unlink $PLUGIN_ID, then re-run setup, to use this one)."
+  fi
+  # What Ctrl+B Up actually needs: the plugin's projects action, as herdr sees it.
+  if [ "$DRY_RUN" = "0" ] && [ "$PLUGIN_LINK_FAILED" = "0" ]; then
+    case "$(plugin_action_state)" in
+      ok)       log_ok "herdr plugin $PLUGIN_ID: Projects picker action available" ;;
+      noserver) log_info "herdr plugin $PLUGIN_ID: Projects picker not checked (no herdr server running here, run ./setup.sh status inside herdr)" ;;
+      *)        log_warn "herdr lists no $PLUGIN_ID.projects action (check: herdr plugin action list)." ;;
+    esac
+  fi
+fi
+
+# The Projects picker key binding in ~/.config/herdr/config.toml, idempotently. Never written
+# when the link failed; setup's old herdr-plus block is replaced only when it is unedited.
+HERDR_CONFIG="${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
+if [ "$PLUGIN_LINK_FAILED" = "1" ]; then
+  log_info "herdr config: Projects picker key binding not written (the plugin is not linked)"
+# herdr runs with a partial config.toml, so a machine where it never ran gets one holding the binding.
+elif [ ! -f "$HERDR_CONFIG" ] && [ "$DRY_RUN" = "1" ]; then
+  log_info "[dry-run] would create $HERDR_CONFIG with the Projects picker key binding (prefix+up)"
+elif [ ! -f "$HERDR_CONFIG" ]; then
+  mkdir -p "$(dirname "$HERDR_CONFIG")"
+  printf '%s\n' "$KEYBIND_BLOCK" > "$HERDR_CONFIG"
+  log_ok "herdr config: created $HERDR_CONFIG with the Projects picker shortcut (prefix+up)"
+  KEYBIND_WRITTEN=1
+elif grep -qF "$KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then
+  log_ok "herdr config: Projects picker keybinding already configured"
+elif grep -qF "$OLD_KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then
+  if ! keybind_swap "$OLD_KEYBIND_BLOCK" "$KEYBIND_BLOCK" "$HERDR_CONFIG" > "$TMP_DIR/herdr-config.new"; then
+    log_warn "herdr config: the herdr-plus Projects picker block in $HERDR_CONFIG was edited: left as it is (bind $PLUGIN_ID.projects by hand)."
+  elif [ "$DRY_RUN" = "1" ]; then
+    log_info "[dry-run] would replace the herdr-plus Projects picker binding (prefix+up) in $HERDR_CONFIG with $PLUGIN_ID's"
+  else
+    backup="$HERDR_CONFIG.bak.$(date +%Y%m%d%H%M%S)"
+    cp -p "$HERDR_CONFIG" "$backup"
+    cat "$TMP_DIR/herdr-config.new" > "$HERDR_CONFIG"
+    log_ok "herdr config: the herdr-plus Projects picker binding (prefix+up) now opens $PLUGIN_ID's (backup: $backup)"
+    KEYBIND_WRITTEN=1
+  fi
+elif grep -q "[\"']prefix+up[\"']" "$HERDR_CONFIG" 2>/dev/null; then
+  log_warn "herdr config: prefix+up is already bound in $HERDR_CONFIG; bind $PLUGIN_ID.projects to another key by hand."
+elif [ "$DRY_RUN" = "1" ]; then
+  log_info "[dry-run] would add the Projects picker key binding (prefix+up) to $HERDR_CONFIG"
+else
+  backup="$HERDR_CONFIG.bak.$(date +%Y%m%d%H%M%S)"
+  cp -p "$HERDR_CONFIG" "$backup"
+  printf '%s\n' "$KEYBIND_BLOCK" >> "$HERDR_CONFIG"
+  log_ok "herdr config: added Projects picker shortcut (prefix+up) to $HERDR_CONFIG (backup: $backup)"
+  KEYBIND_WRITTEN=1
+fi
+# A herdr that is already running reads a new binding only when told to.
+if [ "${KEYBIND_WRITTEN:-0}" = "1" ] && command -v herdr >/dev/null 2>&1; then
+  if herdr server reload-config >/dev/null 2>&1; then
+    log_ok "herdr: running server reloaded its config (Ctrl+B then Up works now)"
+  else
+    log_info "herdr: the binding applies when herdr next starts (or run: herdr server reload-config)"
+  fi
+fi
 
 # A running project service keeps the binary it started with: say which, and how to move it on.
 if [ "$DRY_RUN" = "0" ]; then
