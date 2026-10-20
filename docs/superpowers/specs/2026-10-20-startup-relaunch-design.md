@@ -60,6 +60,9 @@ each agent tab of the template and relaunches the dead ones, in their existing p
   dispatcher is up when the agents register.
 - The relaunch never closes a pane, never types anything but the template command, and never
   touches a pane of another workspace.
+- This is not a second automated pane writer (decision 2026-10-10-event-driven-dispatch): it runs
+  only on the person's gesture (`agentbus up`, or the workspace-open event below, which the person
+  triggers), exactly like the first open already runs the template commands.
 
 ### Trigger when the workspace opens (only if herdr provides it)
 
