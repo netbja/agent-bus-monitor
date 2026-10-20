@@ -33,10 +33,13 @@ type upDeps struct {
 	// there is none; nil means none.
 	Services func() (service.Manager, string)
 	Paths    service.Paths
-	Exe      func() (string, error) // this agentbus, which the units run
-	Environ  []string               // the service environment is picked from it
-	Mark     func(project string, inst bus.ServicesInstall) error
-	Host     string
+	Exe      func() (string, error) // this agentbus: the units run it when Installed is absent
+	// Installed is the agentbus setup.sh installed (buildinfo.Bin), "" when
+	// unknown: when it exists the units run it, whoever runs up.
+	Installed string
+	Environ   []string // the service environment is picked from it
+	Mark      func(project string, inst bus.ServicesInstall) error
+	Host      string
 
 	// The relaunch of an open workspace (v0.21): the agents' snapshots, the
 	// process start time (nil off Linux: snapshots then decide nothing) and the
@@ -247,6 +250,13 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 	exe, err := d.Exe()
 	if err != nil {
 		return fmt.Errorf("%w: cannot find this agentbus: %v", errNotInstalled, err)
+	}
+	if d.Installed != "" {
+		if r, err := filepath.EvalSymlinks(d.Installed); err == nil {
+			if st, err := os.Stat(r); err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+				exe = r
+			}
+		}
 	}
 	if strings.Contains(exe, "go-build") || !filepath.IsAbs(exe) {
 		return fmt.Errorf("%w: a unit must run an installed agentbus, not %s (./setup.sh install, then run that one)", errNotInstalled, exe)
@@ -491,7 +501,8 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			}
 			return filepath.EvalSymlinks(exe)
 		},
-		Environ: os.Environ(),
+		Installed: buildinfo.Bin,
+		Environ:   os.Environ(),
 		Mark: func(project string, inst bus.ServicesInstall) error {
 			c, err := bus.Connect("")
 			if err != nil {

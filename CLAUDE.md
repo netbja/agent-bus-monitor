@@ -351,7 +351,9 @@ It never touches Redis — see README "Deployment topology".
   tab, never provisions (template + broker `present`, like the picker), and starts stopped services
   with `Manager.Start` only: it must never call `startServices`, whose `Install` rewrites a unit
   when the binary path differs (the plugin runs `./agentbus`, installs run `~/.local/bin`) and so
-  restarts a running dispatcher. `upLock` (`~/.cache/agentbus/up-<p>.lock`, flock + mtime)
+  restarts a running dispatcher. Since v0.21 the units always run `buildinfo.Bin` (setup's
+  `$BIN_DIR/agentbus`) when it exists, so that flip no longer happens; the hook still stays off
+  `Install`. `upLock` (`~/.cache/agentbus/up-<p>.lock`, flock + mtime)
   keeps the hook out of a running up and out of the minute after one, so up's own layout is never
   typed into twice. `agentbus projects` and `agentbus identity` sit above the project-required
   exit. `missions` without a Git repository publishes `waiting-git` and waits, never exits.

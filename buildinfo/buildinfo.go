@@ -14,6 +14,11 @@ var Version = "dev"
 // Repo is the checkout setup.sh built from (agentbus up finds scripts/bootstrap there).
 var Repo = ""
 
+// Bin is the agentbus setup.sh installs ($BIN_DIR/agentbus). The project services run
+// it whichever copy ran agentbus up (the plugin's ./agentbus, the repo's, $BIN_DIR's),
+// so one machine's units all name one binary.
+var Bin = ""
+
 // Newer reports whether tag a is a strictly newer release than b. Both are
 // vMAJOR.MINOR.PATCH, optionally followed by "-…" (git describe); anything
 // else, including "dev", is never newer and never older.

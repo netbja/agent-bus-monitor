@@ -713,7 +713,7 @@ log_step "3/5 Building and installing agentbus & busmon, linking the herdr plugi
 REPO_REV="$(git -C "$REPO_DIR" describe --tags --always --dirty 2>/dev/null || echo 'unknown revision')"
 # The release stamped into both binaries (agentbus version, busmon --version, the update notice).
 case "$REPO_REV" in v[0-9]*) BUILD_VERSION="$REPO_REV" ;; *) BUILD_VERSION="dev" ;; esac
-LDFLAGS="-X github.com/netbja/agent-bus-monitor/buildinfo.Version=$BUILD_VERSION -X 'github.com/netbja/agent-bus-monitor/buildinfo.Repo=$REPO_DIR'"
+LDFLAGS="-X github.com/netbja/agent-bus-monitor/buildinfo.Version=$BUILD_VERSION -X 'github.com/netbja/agent-bus-monitor/buildinfo.Repo=$REPO_DIR' -X 'github.com/netbja/agent-bus-monitor/buildinfo.Bin=$BIN_DIR/agentbus'"
 
 # install_file SRC DEST: copy next to DEST, then rename over it, so a running binary is replaced
 # atomically instead of being rewritten in place.
