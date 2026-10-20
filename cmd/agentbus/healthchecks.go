@@ -507,9 +507,10 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			if err != nil {
 				known = false
 			} else {
-				problem, readable := pluginProblem(plugin, buildinfo.Version)
+				root, rootErr := repoDir(os.Getenv)
+				problem, readable := pluginProblem(plugin, buildinfo.Version, root)
 				clear(plugin)
-				if !readable {
+				if rootErr != nil || !readable {
 					known = false
 				} else if problem {
 					problems++
@@ -726,40 +727,57 @@ func versionAtLeast(got, minimum string) bool {
 // pluginState reads `herdr plugin list --json` and reports whether the plugin
 // with id want is registered and at which version. ok is false when the JSON
 // cannot be read.
-func pluginState(listJSON []byte, want string) (registered bool, version string, ok bool) {
+func pluginState(listJSON []byte, want string) (registered bool, version, root string, ok bool) {
 	var list struct {
 		Result struct {
 			Plugins []struct {
-				PluginID string `json:"plugin_id"`
-				Version  string `json:"version"`
+				PluginID   string `json:"plugin_id"`
+				Version    string `json:"version"`
+				PluginRoot string `json:"plugin_root"`
 			} `json:"plugins"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(listJSON, &list); err != nil {
-		return false, "", false
+		return false, "", "", false
 	}
 	for _, p := range list.Result.Plugins {
 		if p.PluginID == want {
-			return true, p.Version, true
+			return true, p.Version, p.PluginRoot, true
 		}
 	}
-	return false, "", true
+	return false, "", "", true
 }
 
-// pluginProblem judges the registered plugin against the binary's version.
-// A dev build does not compare versions.
-func pluginProblem(listJSON []byte, binaryVersion string) (problem, readable bool) {
-	registered, version, ok := pluginState(listJSON, pluginID)
+// pluginProblem judges the registered plugin against the binary's version and
+// the expected checkout. A dev build does not compare versions; the root is
+// always compared.
+func pluginProblem(listJSON []byte, binaryVersion, wantRoot string) (problem, readable bool) {
+	registered, version, root, ok := pluginState(listJSON, pluginID)
 	if !ok {
 		return false, false
 	}
-	if !registered {
+	if !registered || !sameDir(root, wantRoot) {
 		return true, true
 	}
 	if binaryVersion == "dev" {
 		return false, true
 	}
-	return strings.TrimPrefix(version, "v") != strings.TrimPrefix(binaryVersion, "v"), true
+	return version == "" || strings.TrimPrefix(version, "v") != strings.TrimPrefix(binaryVersion, "v"), true
+}
+
+// sameDir compares two directories after Clean, and after EvalSymlinks when
+// both resolve.
+func sameDir(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if a == b {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 func readVersion(ctx context.Context, command string) (string, error) {

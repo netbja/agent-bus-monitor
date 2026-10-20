@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -26,9 +28,10 @@ func TestHealthCheckParsingHelpers(t *testing.T) {
 }
 
 func TestPluginStateFromJSON(t *testing.T) {
-	list := func(id, version string) []byte {
+	const root = "/srv/checkout"
+	list := func(id, version, root string) []byte {
 		return []byte(`{"id":"cli:plugin","result":{"plugins":[{"actions":[],"enabled":true,"plugin_id":"` + id +
-			`","plugin_root":"/x","source":{"kind":"local"},"version":"` + version + `"}]}}`)
+			`","plugin_root":"` + root + `","source":{"kind":"local"},"version":"` + version + `"}]}}`)
 	}
 	for _, tc := range []struct {
 		name            string
@@ -36,18 +39,33 @@ func TestPluginStateFromJSON(t *testing.T) {
 		binary          string
 		problem, readOK bool
 	}{
-		{"equal", list(pluginID, "0.20.0"), "v0.20.0", false, true},
-		{"older", list(pluginID, "0.19.0"), "v0.20.0", true, true},
-		{"absent", list("cloudmanic.herdr-plus", "0.1.16"), "v0.20.0", true, true},
+		{"equal", list(pluginID, "0.20.0", root), "v0.20.0", false, true},
+		{"older", list(pluginID, "0.19.0", root), "v0.20.0", true, true},
+		{"absent", list("cloudmanic.herdr-plus", "0.1.16", root), "v0.20.0", true, true},
 		{"garbage", []byte("not json"), "v0.20.0", false, false},
-		{"dev", list(pluginID, "0.19.0"), "dev", false, true},
+		{"dev", list(pluginID, "0.19.0", root), "dev", false, true},
+		{"other root", list(pluginID, "0.20.0", "/old/checkout"), "v0.20.0", true, true},
+		{"same root unclean", list(pluginID, "0.20.0", root+"/"), "v0.20.0", false, true},
+		{"dev other root", list(pluginID, "0.20.0", "/old/checkout"), "dev", true, true},
+		{"empty version", list(pluginID, "", root), "v0.20.0", true, true},
 	} {
-		problem, ok := pluginProblem(tc.json, tc.binary)
+		problem, ok := pluginProblem(tc.json, tc.binary, root)
 		if problem != tc.problem || ok != tc.readOK {
 			t.Errorf("%s: pluginProblem=(%v,%v) want (%v,%v)", tc.name, problem, ok, tc.problem, tc.readOK)
 		}
 	}
-	if reg, v, ok := pluginState(list(pluginID, "0.20.0"), pluginID); !reg || v != "0.20.0" || !ok {
-		t.Errorf("pluginState=(%v,%q,%v)", reg, v, ok)
+	if reg, v, r, ok := pluginState(list(pluginID, "0.20.0", root), pluginID); !reg || v != "0.20.0" || r != root || !ok {
+		t.Errorf("pluginState=(%v,%q,%q,%v)", reg, v, r, ok)
+	}
+}
+
+func TestSameDirFollowsSymlinks(t *testing.T) {
+	d := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(d, link); err != nil {
+		t.Skip(err)
+	}
+	if !sameDir(link, d) || sameDir(d, t.TempDir()) {
+		t.Error("sameDir symlink handling")
 	}
 }
