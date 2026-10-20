@@ -12,7 +12,7 @@ T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 # Keep Go's caches where they are: a throwaway HOME must not mean a cold build.
 export GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" GOPATH="$(go env GOPATH)"
-export AGENTBUS_SETUP_NO_MODELS=1 NO_COLOR=1 HOME="$T/home" XDG_CONFIG_HOME="$T/cfg" XDG_DATA_HOME="$T/data" XDG_STATE_HOME="$T/state"
+export AGENTBUS_SETUP_NO_MODELS=1 AGENTBUS_SETUP_NO_IDENTITY=1 NO_COLOR=1 HOME="$T/home" XDG_CONFIG_HOME="$T/cfg" XDG_DATA_HOME="$T/data" XDG_STATE_HOME="$T/state"
 mkdir -p "$HOME"
 PLUGIN_RECORD="$T/state/agentbus/plugin.path"
 

@@ -71,6 +71,12 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	args, tabs := extractBool(args, "--tabs")
 	args, resume := extractBool(args, "--resume")
 	args, dryRun := extractBool(args, "--dry-run")
+	// The person's name recorded at install is the default --as (v0.21).
+	if !slices.Contains(args, "--as") {
+		if as := settingsIdentity(d.Env); as != "" {
+			args = append(args, "--as", as)
+		}
+	}
 	if dryRun {
 		return upDryRun(d, project, resume, stdout, stderr)
 	}

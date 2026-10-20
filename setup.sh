@@ -1012,6 +1012,19 @@ if [ "$found_client" = "0" ]; then
   log_warn "No recognized agent CLI found on PATH (claude, codex, kimi, agy). Install at least one agent client."
 fi
 
+# The person's name on the bus (v0.21): asked once, only on a terminal, written to
+# busmon.toml [identity] as, the default --as of busmon and agentbus up. --yes, a dry run,
+# no terminal or AGENTBUS_SETUP_NO_IDENTITY=1 (the installer tests) skip it.
+if [ "$DRY_RUN" != "1" ] && [ "$ASSUME_YES" != "1" ] && [ "${AGENTBUS_SETUP_NO_IDENTITY:-0}" != "1" ] \
+  && [ -x "$BIN_DIR/agentbus" ] && ! "$BIN_DIR/agentbus" identity >/dev/null 2>&1 && ( : < /dev/tty ) 2>/dev/null; then
+  printf "    ? Your name on the bus (lowercase, e.g. bernard; Enter to skip): " > /dev/tty
+  read -r who < /dev/tty || who=""
+  if [ -n "$who" ]; then
+    if "$BIN_DIR/agentbus" identity set "$who"; then log_ok "busmon and agentbus up will know you as $who"
+    else log_warn "name not recorded; set it later with: agentbus identity set <name>"; fi
+  fi
+fi
+
 # The model table (v0.15.2): each client's own free catalogue, never a model call.
 # AGENTBUS_SETUP_NO_MODELS=1 skips it (the installer tests do).
 if [ "$DRY_RUN" = "1" ]; then

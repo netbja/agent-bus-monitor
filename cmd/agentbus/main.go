@@ -111,6 +111,10 @@ func main() {
 	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && args[1] == "doctor") {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}
+	// identity is the person's name in busmon.toml (v0.21): no project, no broker.
+	if len(args) >= 1 && args[0] == "identity" {
+		os.Exit(runIdentity(args[1:], os.Getenv, os.Stdout, os.Stderr))
+	}
 	// projects lists every known project (v0.21): templates, broker, services,
 	// agents. It answers "which project?", so it needs none, and works with Redis down.
 	if len(args) >= 1 && args[0] == "projects" {
