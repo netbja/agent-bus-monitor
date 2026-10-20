@@ -4,6 +4,16 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## Unreleased
+
+- Project templates now live in `~/.config/agentbus/projects` (`AGENTBUS_PROJECTS_DIR`, else
+  `$XDG_CONFIG_HOME/agentbus/projects`), resolved by `agentbus roles projects-dir`, which bootstrap
+  and `agentbus up` share. `HERDR_PLUS_PROJECTS_DIR` is no longer read. Move existing templates from
+  herdr-plus's `projects/` directory by hand, once.
+- `agentbus up` reads the herdr session from `HERDR_SOCKET_PATH` when `HERDR_SESSION` is unset, and
+  refuses to start services when neither names one (`--session` still wins). The herdr binary is
+  `HERDR_BIN_PATH`, then `HERDR_BIN`, then `herdr`.
+
 ## v0.19.0 — project health core
 
 - The dispatch service runs bounded, non-overlapping health checks under its lease. Results,

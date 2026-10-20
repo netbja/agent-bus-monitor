@@ -5,6 +5,8 @@ set -uo pipefail
 # Hermetic: a test run from inside a herdr pane must not reach the live herdr or broker
 # (agent-launch binds through agentbus when HERDR_ENV=1).
 unset HERDR_ENV HERDR_PANE_ID REDIS_URL
+# Templates go to a temp dir unless a test names one: bootstrap must never write the real ~/.config.
+[[ -n "${AGENTBUS_PROJECTS_DIR:-}" ]] || { AGENTBUS_PROJECTS_DIR="$(mktemp -d)/projects"; export AGENTBUS_PROJECTS_DIR; }
 # The scripts resolve roles through `agentbus roles`: build it once if run.sh did not.
 if [[ -z "${AGENTBUS_BIN:-}" ]]; then
   _ab_build="$(mktemp -d)"

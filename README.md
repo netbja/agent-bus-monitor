@@ -499,7 +499,7 @@ agentbus up myproject /path/to/your/project --as <your-name>   # inside it
 
 `agentbus up`:
 - **Provisions** the project, which is `scripts/bootstrap` underneath: broker up, skills linked,
-  herdr-plus template written. It accepts bootstrap's flags (`--no-dispatch`, `--no-missions`,
+  template written to `~/.config/agentbus/projects/<p>.toml` (`AGENTBUS_PROJECTS_DIR`). It accepts bootstrap's flags (`--no-dispatch`, `--no-missions`,
   `--index`, `--cron`, `--session`).
 - **Starts the project's services**: `dispatch` (wakes idle agents) and `missions` (the
   conductor). They run under your system's own service manager (systemd `--user` on Linux,

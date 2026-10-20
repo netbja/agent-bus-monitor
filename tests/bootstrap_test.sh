@@ -24,10 +24,10 @@ for s in agent-bus agent-bus-master agent-bus-sentinel agent-bus-security agent-
   mkdir -p "$tmp/reposkills/$s"; echo x > "$tmp/reposkills/$s/SKILL.md"; done
 
 proj="$tmp/projects"
-run() { PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$proj" "$B" "$@"; }
+run() { PATH="$stub:$PATH" AGENTBUS_PROJECTS_DIR="$proj" "$B" "$@"; }
 
 # invalid name rejected
-assert_exit 1 "rejects invalid project name" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new 1bad"
+assert_exit 1 "rejects invalid project name" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' new 1bad"
 
 # new writes a valid template; an explicit project path -> working_dir
 projdir="$(mkdir -p "$tmp/proj" && cd "$tmp/proj" && pwd)"
@@ -73,11 +73,11 @@ assert_contains "$body_nom" 'name = "dispatch"'                 "--no-missions k
 
 # no path -> working_dir defaults to $PWD
 projdir2="$(mkdir -p "$tmp/proj2" && cd "$tmp/proj2" && pwd)"
-( cd "$projdir2" && PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$proj" "$B" new demo2 >/dev/null )
+( cd "$projdir2" && PATH="$stub:$PATH" AGENTBUS_PROJECTS_DIR="$proj" "$B" new demo2 >/dev/null )
 assert_contains "$(cat "$proj/demo2.toml")" "working_dir = \"$projdir2\"" 'working_dir defaults to $PWD'
 
 # a non-directory path is rejected
-assert_exit 1 "rejects a non-directory path" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demo3 /no/such/dir"
+assert_exit 1 "rejects a non-directory path" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' new demo3 /no/such/dir"
 
 # brique 1.2: --session <name> -> herdr-plus linked into that session (herdr registers plugins per-session)
 : > "$stub/herdr.calls"
@@ -86,11 +86,11 @@ assert_contains "$(cat "$stub/herdr.calls")" "HERDR_SESSION=mysess plugin link $
 
 # no --session and not inside a herdr session -> link target defaults to the project name
 : > "$stub/herdr.calls"
-env -u HERDR_SESSION PATH="$stub:$PATH" HERDR_PLUS_PROJECTS_DIR="$proj" "$B" new demosess "$projdir" >/dev/null
+env -u HERDR_SESSION PATH="$stub:$PATH" AGENTBUS_PROJECTS_DIR="$proj" "$B" new demosess "$projdir" >/dev/null
 assert_contains "$(cat "$stub/herdr.calls")" "HERDR_SESSION=demosess plugin link" "link session defaults to the project name"
 
 # auto verb -> recall when template exists (no crash, broker still ensured)
-assert_exit 0 "auto recalls existing project" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' demo"
+assert_exit 0 "auto recalls existing project" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' demo"
 
 # --- herdr-plus build-if-missing -------------------------------------------------------------
 # `herdr plugin link` registers but does NOT compile; the picker spawns ./bin/herdr-plus. bootstrap
@@ -126,11 +126,11 @@ assert_eq "$(cat "$stub/make.calls")" ""                         "make unused wh
 rm -f "$hp/bin/herdr-plus" "$hp/Makefile" "$hp/scripts/build.sh"
 out="$(run new demonobuild "$projdir" 2>&1)"
 assert_contains "$out" "no bin/herdr-plus and no build script"   "warns when there is nothing to build"
-assert_exit 0 "bootstrap still succeeds without a build recipe" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demonobuild2 '$projdir'"
+assert_exit 0 "bootstrap still succeeds without a build recipe" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' new demonobuild2 '$projdir'"
 # busmon is the first tab (herdr-plus focuses it); --as puts the person's name on it
 first_tab="$(grep -m1 -A1 '^\[\[tabs\]\]' "$tpl" | tail -1)"
 assert_eq "$first_tab" 'name = "busmon"' "busmon is the first tab"
 run new demoas "$projdir" --as bernard >/dev/null
 assert_contains "$(cat "$proj/demoas.toml")" "busmon --project demoas --as bernard" "--as reaches the busmon tab"
-assert_exit 1 "an invalid --as is refused" -- bash -c "PATH='$stub:$PATH' HERDR_PLUS_PROJECTS_DIR='$proj' '$B' new demoas2 '$projdir' --as Bernard"
+assert_exit 1 "an invalid --as is refused" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' new demoas2 '$projdir' --as Bernard"
 finish
