@@ -111,6 +111,11 @@ func main() {
 	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && args[1] == "doctor") {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}
+	// projects lists every known project (v0.21): templates, broker, services,
+	// agents. It answers "which project?", so it needs none, and works with Redis down.
+	if len(args) >= 1 && args[0] == "projects" {
+		os.Exit(runProjects(args[1:], realProjectsDeps(), os.Stdout, os.Stderr))
+	}
 	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
 	if len(args) >= 1 && args[0] == "plugin" {
 		os.Exit(runPlugin(args[1:], realPluginDeps(), os.Stdout, os.Stderr))
