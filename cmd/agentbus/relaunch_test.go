@@ -63,7 +63,7 @@ func TestDecideRelaunch(t *testing.T) {
 		{"no snapshot, bare shell", true, lifeUnknown, true, shell, true, verdictRelaunch},
 		{"no snapshot, herdr sees an agent", true, lifeUnknown, true, withAgent, true, verdictAlive},
 		{"dead, another agent in its pane", true, lifeDead, true, withAgent, true, verdictBusy},
-		{"dead, the old pane runs something: a new pane", true, lifeDead, true, busy, true, verdictRelaunch},
+		{"dead, but something runs in its tab", true, lifeDead, true, busy, true, verdictBusy},
 		{"no snapshot, something runs: no proof", true, lifeUnknown, true, busy, true, verdictBusy},
 		{"pane unreadable", true, lifeDead, true, paneFacts{}, true, verdictUnknown},
 		{"no tab: created", true, lifeDead, false, paneFacts{}, true, verdictCreate},
@@ -118,6 +118,7 @@ func TestResumeCommand(t *testing.T) {
 // workspace w4 and records every call.
 type relaunchHerdr struct {
 	calls []string
+	made  map[string]bool   // pane ids this fake returned from a split or a tab create
 	tabs  string            // JSON tabs
 	panes string            // JSON panes
 	fg    map[string]string // pane -> foreground command line (split into argv)
@@ -139,8 +140,10 @@ func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
 		argv, _ := json.Marshal(strings.Fields(cmdline))
 		return []byte(`{"result":{"process_info":{"foreground_processes":[{"argv":` + string(argv) + `}]}}}`), nil
 	case strings.HasPrefix(line, "tab create --workspace w4"):
+		f.made_("w4:p9")
 		return []byte(`{"result":{"root_pane":{"pane_id":"w4:p9"}}}`), nil
 	case strings.HasPrefix(line, "pane split "):
+		f.made_(args[2] + "s")
 		return []byte(`{"result":{"pane":{"pane_id":"` + args[2] + `s"}}}`), nil
 	}
 	return []byte(`{"result":{}}`), nil
@@ -420,15 +423,21 @@ func TestRelaunchOpenLeavesDuplicateLabels(t *testing.T) {
 	}
 }
 
-// The invariant of every relaunch: text goes only into a pane up has just
-// created (a split, ending in s here, or a new tab's root, p9), never into a
-// pane that already existed.
+func (f *relaunchHerdr) made_(id string) {
+	if f.made == nil {
+		f.made = map[string]bool{}
+	}
+	f.made[id] = true
+}
+
+// The invariant of every relaunch: text goes only into a pane this fake has
+// just returned from a split or a tab create, never into one that existed.
 func (f *relaunchHerdr) typedIntoExisting() []string {
 	var bad []string
 	for _, c := range f.calls {
 		if p, ok := strings.CutPrefix(c, "pane run "); ok {
 			pane, _, _ := strings.Cut(p, " ")
-			if !strings.HasSuffix(pane, "s") && pane != "w4:p9" {
+			if !f.made[pane] {
 				bad = append(bad, c)
 			}
 		}
@@ -436,11 +445,17 @@ func (f *relaunchHerdr) typedIntoExisting() []string {
 	return bad
 }
 
-// Codex's rounds 2 and 3: the old pane of a dead agent may run a builtin read
-// (read -e, after stty -icanon...). Whatever it runs, it receives nothing: the
-// agent comes back in a new pane beside it.
+// Codex's rounds 2 to 4: the old pane of a dead agent never receives text.
+// A plain shell there means its command is gone: the agent comes back in a new
+// pane beside it. Anything else running there (a builtin read, an editor, an
+// agent herdr does not detect) makes the tab busy: nothing is done.
 func TestRelaunchOpenLeavesTheOldPaneOfADeadAgentAlone(t *testing.T) {
-	for _, fg := range []string{"bash", "/bin/bash -i", "bash -c read", "vim notes"} {
+	for fg, want := range map[string]string{
+		"bash":         "pane split w4:p3 --direction right,pane run w4:p3s agent-launch master demo",
+		"/bin/bash -i": "pane split w4:p3 --direction right,pane run w4:p3s agent-launch master demo",
+		"bash -c read": "",
+		"vim notes":    "",
+	} {
 		h := &relaunchHerdr{
 			tabs:  `{"label":"master","tab_id":"w4:t3"}`,
 			panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
@@ -454,10 +469,45 @@ func TestRelaunchOpenLeavesTheOldPaneOfADeadAgentAlone(t *testing.T) {
 			t.Fatal(err)
 		}
 		if bad := h.typedIntoExisting(); len(bad) != 0 {
-			t.Fatalf("%q: typed into the old pane: %q", fg, bad)
+			t.Fatalf("%q: typed into a pane up did not create: %q", fg, bad)
 		}
-		if got := strings.Join(h.ran(), ","); got != "pane split w4:p3 --direction right,pane run w4:p3s agent-launch master demo" {
-			t.Fatalf("%q: calls %q", fg, got)
+		if got := strings.Join(h.ran(), ","); got != want {
+			t.Fatalf("%q: calls %q, want %q", fg, got, want)
 		}
+	}
+}
+
+// Codex's round 4: a tab split by an earlier relaunch holds the old shell and
+// the new pane. With no snapshot and an agent herdr does not detect in the
+// second pane, a second up must not start another copy. Two ups in a row.
+func TestRelaunchOpenNeverDuplicatesAcrossSplitPanes(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"master","tab_id":"w4:t3"},{"label":"busmon","tab_id":"w4:t1"}`,
+		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"},{"pane_id":"w4:p1","tab_id":"w4:t1"}`,
+		fg:    map[string]string{"w4:p3": "bash", "w4:p1": "bash"},
+	}
+	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}, {Name: "busmon", Command: "busmon --project demo"}}}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(h.ran()); n != 4 { // split + run for master and for busmon
+		t.Fatalf("first up: %q", h.ran())
+	}
+	// The layout the first up left: each tab holds its old shell first, then
+	// the new pane running the command (herdr detects neither).
+	h.panes = `{"pane_id":"w4:p3","tab_id":"w4:t3"},{"pane_id":"w4:p3s","tab_id":"w4:t3"},` +
+		`{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p1s","tab_id":"w4:t1"}`
+	h.fg["w4:p3s"], h.fg["w4:p1s"] = "python3 worker.py", "busmon --project demo"
+	h.calls = nil
+	out.Reset()
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 {
+		t.Fatalf("second up started another copy: %q\n%s", got, out.String())
+	}
+	if !strings.Contains(out.String(), "master: skipped (busy)") || !strings.Contains(out.String(), "busmon: running") {
+		t.Fatalf("out = %s", out.String())
 	}
 }

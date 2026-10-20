@@ -347,10 +347,11 @@ It never touches Redis — see README "Deployment topology".
   an earlier `stty -icanon` even leave the terminal non-canonical (Codex's reviews, real PTYs).
   So `agentbus up <p>` on an open workspace (`relaunch.go`: `decideRelaunch`, a pure table) runs a
   dead agent's template command in a **new pane split from its tab** (`splitPane`), or in a new tab
-  when the tab is gone, and leaves the old pane as it is. An agent is dead by its snapshot
-  (`snapLife`: pid + `pid_start`, the dispatcher's rule; Linux only, elsewhere unknown); without a
-  snapshot only a tab whose one foreground process is a plain interactive shell (`idleShell`, argv
-  only: a classification, never a licence to type) counts as gone. Duplicate tab labels are
+  when the tab is gone, and leaves the old pane as it is. A tab's command counts as gone only when
+  no live snapshot says otherwise (`snapLife`: pid + `pid_start`, Linux only), herdr sees no agent in
+  any of its panes, and **every** pane of the tab is a plain interactive shell (`idleShell`, argv
+  only: a classification, never a licence to type); anything running in any pane (maybe the agent
+  relaunched before, under a name herdr does not detect) makes it `skipped (busy)`. Duplicate tab labels are
   `unknown`. The invariant test is `typedIntoExisting`. `upLock` serialises ups per project and
   fails closed. The workspace hook (`agentbus plugin workspace-event`, herdr's
   `workspace.created`/`workspace.focused`, the only `[[events]]` the manifest test allows) touches

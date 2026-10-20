@@ -78,7 +78,8 @@ const (
 // an existing pane: whether a shell waits at its prompt cannot be proven from
 // outside (a builtin read keeps its argv and can even keep a raw terminal), so
 // the command runs in a new pane split from the tab's, and the old pane is
-// left exactly as it is.
+// left exactly as it is. pane covers every pane of the tab: Shell only when
+// all of them are plain shells.
 func decideRelaunch(agent bool, snap life, hasPane bool, pane paneFacts, create bool) relaunchVerdict {
 	if agent && snap == lifeAlive {
 		return verdictAlive // alive, wherever its pane is
@@ -101,12 +102,11 @@ func decideRelaunch(agent bool, snap life, hasPane bool, pane paneFacts, create 
 		}
 		return verdictAlive
 	}
-	if agent && snap == lifeDead {
-		return verdictRelaunch // its process is gone: whatever the old pane runs is left alone
-	}
 	if !pane.Shell {
 		if agent {
-			return verdictBusy // no proof: maybe the agent under a name herdr does not detect
+			// Something runs in one of the tab's panes: maybe this agent, relaunched
+			// before and not registered yet, under a name herdr does not detect.
+			return verdictBusy
 		}
 		return verdictRunning
 	}
@@ -210,26 +210,30 @@ func workspacePanes(herdr func(args ...string) ([]byte, error), ws string) (map[
 			m[t.Label] = ref
 			continue
 		}
-		// A tab split by an earlier relaunch holds the old pane and the new one:
-		// the one herdr sees an agent in speaks for the tab, else the first.
+		// Every pane of the tab is kept: a tab split by an earlier relaunch holds
+		// the old pane and the new one, and the tab is judged on all of them.
+		ref := m[t.Label]
 		for _, p := range panes.Result.Panes {
 			if p.TabID != t.TabID {
 				continue
 			}
-			if ref, seen := m[t.Label]; !seen || ref.Agent == "" && p.Agent != "" {
-				m[t.Label] = paneRef{Pane: p.PaneID, Agent: p.Agent}
+			if ref.Pane == "" {
+				ref.Pane = p.PaneID // the first pane: a relaunch splits from it
 			}
+			if ref.Agent == "" {
+				ref.Agent = p.Agent // herdr sees an agent in one of them
+			}
+			ref.All = append(ref.All, p.PaneID)
 		}
-		if _, ok := m[t.Label]; !ok {
-			m[t.Label] = paneRef{} // a tab without a pane still claims its label
-		}
+		m[t.Label] = ref
 	}
 	return m, nil
 }
 
 type paneRef struct {
-	Pane, Agent string
-	Dup         bool // more than one tab carries this label
+	Pane, Agent string   // the first pane; the agent herdr sees in any pane of the tab
+	All         []string // every pane of the tab
+	Dup         bool     // more than one tab carries this label
 }
 
 // paneShell asks herdr for the pane's foreground processes: true when there is
@@ -315,8 +319,17 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 			facts.Agent = ref.Agent
 			facts.Known = true
 			if ref.Agent == "" && !(isAgent && sl == lifeAlive) {
-				shell, err := paneShell(herdr, ref.Pane)
-				facts.Known, facts.Shell = err == nil, shell
+				// The tab's command is gone only if every pane is a plain shell: a
+				// process in any of them may be the agent herdr does not detect.
+				facts.Shell = true
+				for _, p := range ref.All {
+					shell, err := paneShell(herdr, p)
+					if err != nil {
+						facts.Known = false
+						break
+					}
+					facts.Shell = facts.Shell && shell
+				}
 			}
 		}
 		v := decideRelaunch(isAgent, sl, hasPane, facts, o.Create)

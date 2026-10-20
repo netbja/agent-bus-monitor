@@ -15,6 +15,9 @@ leave the terminal non-canonical. So:
   gone) is relaunched in a new pane split from its tab (`herdr pane split --direction right --cwd
   <project dir>`), or in a new tab when the tab is gone; the old pane is left exactly as it is. The
   sections below that speak of "relaunching in its existing pane" are superseded on that point.
+- **A tab is judged on all its panes** (Codex's round 4): it is relaunched only when herdr sees no
+  agent in any pane and every pane is a plain shell; a process in any pane makes it busy, whatever
+  the snapshot says, so a relaunched agent herdr does not detect is never started twice.
 - **The workspace hook touches no pane.** It only starts the project's stopped services (no unit
   rewritten). It does not relaunch agents.
 - **After a reboot, agents come back through herdr's native session restore** (`pane report-agent
