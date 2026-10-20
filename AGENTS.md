@@ -26,6 +26,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 
 ## Decisions
 
+- [agent-bus as a herdr plugin: linked, Go, own templates, the picker never provisions (active)](docs/memory/decisions/2026-10-19-herdr-plugin.md)
 - [Project services: dispatch and missions under systemd/launchd, not tabs (active)](docs/memory/decisions/2026-10-14-project-services.md)
 - [Event-driven dispatch: the one automated pane writer (active)](docs/memory/decisions/2026-10-10-event-driven-dispatch.md)
 - [Provider-neutral roles and security review](docs/memory/decisions/2026-09-27-provider-neutral-security.md)

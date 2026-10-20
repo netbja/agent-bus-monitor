@@ -72,6 +72,8 @@ assert_contains "$out" "--profile alt" "agent-spawn passes the profile on"
 assert_contains "$out" "AGENT_LAUNCH_REQUIRE_BIND=1" "and swap mode"
 assert_exit 1 "an injected profile name is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder demo --profile 'alt;touch injected'"
 assert_exit 1 "swap mode outside a herdr pane fails" -- env -u HERDR_ENV AGENT_LAUNCH_REQUIRE_BIND=1 "$L" coder demo --profile alt
+out="$(cd "$root" && env -u HERDR_ENV AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo 2>&1)"
+assert_contains "$out" "agentbus up demo" "agent-spawn outside herdr points at agentbus up <project>"
 out="$("$AGENTBUS_BIN" roles fallbacks coder 2>&1)"
 assert_contains "$out" "fallback alt" "roles fallbacks lists the fallback"
 config claude-code
@@ -79,7 +81,7 @@ config claude-code
 # bootstrap writes a template whose tab command runs the launcher with the selected manifest
 printf '#!/bin/sh\nexit 0\n' > "$root/bin/docker"; printf '#!/bin/sh\nexit 0\n' > "$root/bin/herdr"; chmod +x "$root/bin/docker" "$root/bin/herdr"
 project="$root/project \"quoted\" \$literal 🧪"; mkdir -p "$project"
-out="$(AGENTBUS_PROJECTS_DIR="$root/templates" HERDR_PLUS_PATH="$root/absent-plugin" "$REPO/scripts/bootstrap" new demo "$project" 2>&1)"; rc=$?
+out="$(AGENTBUS_PROJECTS_DIR="$root/templates" "$REPO/scripts/bootstrap" new demo "$project" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "bootstrap with a hostile project path exits 0"
 tpl="$root/templates/demo.toml"
 assert_exit 0 "the template is valid TOML" -- "$AGENTBUS_BIN" roles check-toml "$tpl"

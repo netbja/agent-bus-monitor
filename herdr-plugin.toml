@@ -1,0 +1,28 @@
+id = "netbja.agentbus"
+name = "Agent Bus"
+version = "0.20.0"            # bumped by hand at tag time; the manifest test enforces it
+min_herdr_version = "0.9.0"   # the support floor this repo tests on (global registration: >= 0.7.3)
+description = "Agent Bus: open a project's team workspace, watch it in busmon."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "projects"
+title = "Agent Bus: Projects"
+command = ["./agentbus", "plugin", "projects"]
+
+[[panes]]
+id = "picker"
+title = "Agent Bus: Projects"
+placement = "overlay"
+command = ["./busmon", "--pick"]
+
+[[actions]]
+id = "busmon"
+title = "Agent Bus: busmon"
+command = ["./agentbus", "plugin", "busmon"]
+
+[[panes]]
+id = "busmon"
+title = "busmon"
+placement = "zoomed"
+command = ["./agentbus", "plugin", "busmon-pane"]

@@ -10,11 +10,11 @@ release exists.
   `$XDG_CONFIG_HOME/agentbus/projects`), resolved by `agentbus roles projects-dir`, which bootstrap
   and `agentbus up` share. `HERDR_PLUS_PROJECTS_DIR` is no longer read. Move existing templates from
   herdr-plus's `projects/` directory by hand, once.
-  On this machine, at install time:
+  v0.20 install step, by hand, once (after `./setup.sh install` has linked the herdr plugin):
   `mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/{ai-tradex-solana,hyperliquid}.toml ~/.config/agentbus/projects/`
   (elsewhere: `herdr plugin config-dir cloudmanic.herdr-plus` gives the directory, its `projects/` holds them).
-  Not to be installed or tagged on its own: until the herdr plugin lands, herdr-plus's picker
-  (`Ctrl+B` then `Up`) does not see the new directory, so the move by hand waits for that release.
+  The Projects picker (`Ctrl+B` then `Up`) is now the plugin's `busmon --pick`, which reads the new
+  directory; herdr-plus is no longer installed.
 - `agentbus up` reads the herdr session from `HERDR_SOCKET_PATH` when `HERDR_SESSION` is unset, and
   refuses to start services when neither names one (`--session` still wins). The herdr binary is
   `HERDR_BIN_PATH`, then `HERDR_BIN`, then `herdr`.

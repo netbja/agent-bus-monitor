@@ -317,9 +317,12 @@ It never touches Redis — see README "Deployment topology".
   finds `scripts/bootstrap` through `AGENTBUS_REPO`, then `buildinfo.Repo`, then the binary's
   directory. A copy of the repository uses the same compose project and container name as the live
   broker, so an unstubbed `uninstall --yes` in a test stops the production Redis.
-  `tests/installer_test.sh` puts fakes first on `PATH`; keep it that way. herdr-plus is registered
-  in herdr's **global** plugin registry (`herdr plugin install`), which every session sees;
-  bootstrap only links a checkout when `herdr plugin list` lacks it.
+  `tests/installer_test.sh` puts fakes first on `PATH`; keep it that way. Since v0.20 setup
+  links *this checkout* as the herdr plugin `netbja.agentbus` (`herdr plugin link`, the plugin
+  root is the checkout, no download, no `[[build]]`); herdr-plus is no longer installed, and a
+  herdr-plus an older setup installed is reported by `status`, never removed. setup owns only
+  what it wrote: it unlinks only the registration it recorded, and replaces only its own,
+  unedited key-binding block.
 - **Templates live in agent-bus's own directory (v0.20).** `rolecfg.ProjectsDir`:
   `AGENTBUS_PROJECTS_DIR`, else `$XDG_CONFIG_HOME/agentbus/projects`, else
   `~/.config/agentbus/projects`; bash reaches it through `agentbus roles projects-dir` (handled
@@ -329,6 +332,16 @@ It never touches Redis — see README "Deployment topology".
   writes the real `~/.config`. `up` takes the herdr session from `--session`, `HERDR_SESSION`, then
   `HERDR_SOCKET_PATH` (`…/sessions/<name>/herdr.sock`, or `…/herdr/herdr.sock` for `default`), and refuses services when a socket path
   names none.
+- **The herdr plugin (v0.20): `plugin` and `--pick` sit above the project-required exit.**
+  `agentbus plugin projects|busmon|busmon-pane` and `busmon --pick` need no project (they answer
+  "which project?"), so their blocks in `main()` stay above that exit, and `--pick` above
+  `--reset`/`--delete` too. The picker (`projlist/`: templates in the projects directory x the
+  broker's `bus.Projects`, state present/absent/`?`) writes nothing to Redis and **never
+  provisions**: it only runs `agentbus up <p>` for a project the broker confirms; an absent one is
+  `agentbus up <p> <path>` by hand. Calls to herdr go through `herdrBin`; the plugin's panes get
+  `HERDR_SESSION`/`HERDR_SOCKET_PATH`/`HERDR_BIN_PATH` from herdr and the cwd is the plugin root
+  (`./agentbus`, `./busmon`). Decision:
+  `docs/memory/decisions/2026-10-19-herdr-plugin.md`.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P

@@ -1,6 +1,6 @@
 # Guide Opérationnel : Agent Bus Monitor (`agent-bus`)
 
-Ce guide pratique est conçu en complément du `README.md`. Il fournit une marche à suivre pas à pas pour installer, configurer et utiliser `agent-bus-monitor`, le gestionnaire d'espaces de travail `herdr`, son plugin `herdr-plus`, ainsi que le pilotage quotidien d'équipes d'agents IA sur un projet neuf ou existant.
+Ce guide pratique est conçu en complément du `README.md`. Il fournit une marche à suivre pas à pas pour installer, configurer et utiliser `agent-bus-monitor`, le gestionnaire d'espaces de travail `herdr`, son plugin `netbja.agentbus`, ainsi que le pilotage quotidien d'équipes d'agents IA sur un projet neuf ou existant.
 
 ---
 
@@ -97,9 +97,9 @@ cd ~/agent-bus-monitor
 - compile `agentbus` et `busmon`, dans le dépôt et dans `~/.local/bin`, avec leur numéro de
   version ;
 - installe **herdr** s'il manque (`--install-herdr`) ;
-- enregistre **herdr-plus** auprès de herdr (`herdr plugin install cloudmanic/herdr-plus --ref <tag>`)
-  et vérifie que son action Projects existe ;
-- ajoute le raccourci `Ctrl+B` puis `↑`. Il crée le `config.toml` de herdr si herdr n'a jamais
+- lie ce dépôt dans herdr comme plugin **`netbja.agentbus`** (`herdr plugin link`) et vérifie que
+  son action Projects existe ; herdr-plus n'est plus installé ni nécessaire ;
+- ajoute le raccourci `Ctrl+B` puis `↑` (prefix+up) pour le sélecteur Projects du plugin. Il crée le `config.toml` de herdr si herdr n'a jamais
   tourné, et demande à un herdr déjà ouvert de le relire ;
 - clone les skills externes (`mattpocock/skills`, version épinglée) dans
   `~/.local/share/agentbus/skills/mattpocock` et lie les skills des rôles. S'il en manque un,
@@ -109,10 +109,26 @@ cd ~/agent-bus-monitor
 Vérifiez que `~/.local/bin` est dans votre `PATH` : `install` prévient s'il n'y est pas, ou si une
 autre copie passe devant.
 
+### Le sélecteur Projects et l'action busmon
+
+- **Sélecteur** (`Ctrl+B` puis `↑`, ou `busmon --pick`) : une ligne par modèle de
+  `~/.config/agentbus/projects`, avec l'état côté broker (`present`, `absent`, `?`). Tapez pour
+  filtrer (sous-chaîne du nom ou du répertoire). Entrée ouvre un projet que le broker confirme
+  (`agentbus up <p>`). Il ne provisionne jamais : pour un projet `absent`, lancez
+  `agentbus up <p> <chemin>` à la main.
+- **busmon** : dans le menu d'actions de herdr, **Agent Bus: busmon** ouvre busmon pour le projet
+  de l'espace de travail au premier plan, ou le sélecteur si cet espace n'est pas un projet.
+- **Passage à la v0.20** : les modèles vivaient dans le répertoire de herdr-plus. Il n'y a aucun
+  code de migration ; déplacez-les à la main, une seule fois :
+
+  ```bash
+  mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/{ai-tradex-solana,hyperliquid}.toml ~/.config/agentbus/projects/
+  ```
+
 ### Étape 3 : Vérifier, mettre à jour, désinstaller
 
 ```bash
-./setup.sh status       # versions, PATH, skills, herdr-plus, raccourci, Redis
+./setup.sh status       # versions, PATH, skills, plugin herdr, raccourci, Redis
 ./setup.sh update       # git pull --ff-only puis install ; affiche vA -> vB et les notes de version
 ./setup.sh uninstall    # demande à chaque étape ; --yes = choix prudents ; --purge = données Redis aussi
 ```
@@ -122,8 +138,8 @@ Quand une version plus récente existe, busmon l'indique discrètement dans son 
 désactive.
 
 `update` refuse un dépôt avec des changements non commités, puis lance le `setup.sh` qu'il vient
-de tirer. Une nouvelle version épinglée de herdr-plus réinstalle celui que setup a installé (un
-dossier local lié n'est jamais remplacé).
+de tirer. La racine du plugin est le dépôt, donc la mise à jour l'atteint aussi. Un herdr-plus installé
+par un ancien setup est signalé par `status` et jamais retiré.
 
 `uninstall` ne retire que ce que setup a installé. Il n'a pas de `--dry-run` : lancez-le sans
 `--yes` et répondez à chaque question. Il retire :
@@ -132,7 +148,7 @@ dossier local lié n'est jamais remplacé).
 - le raccourci, s'il est encore exactement le bloc écrit par setup ; un bloc modifié est gardé ;
 - les skills externes, si setup les a clonés et qu'ils n'ont pas de changements locaux.
 
-Il pose une question à part pour herdr-plus, qui reste utile sans agent-bus. Pour Redis, il
+Il ne délie le plugin herdr que si setup l'a lié, après avoir demandé. Pour Redis, il
 propose : l'arrêter en gardant les données (le choix par défaut), le supprimer avec ses données,
 ou ne rien toucher.
 
@@ -176,7 +192,7 @@ Votre projet est dans `~/code/myapp`.
    agentbus up myapp ~/code/myapp --as <votre-nom>
    ```
    Cette commande :
-   - démarre le broker Redis si besoin, lie les skills et écrit le modèle herdr-plus (c'est
+   - démarre le broker Redis si besoin, lie les skills et écrit le modèle du projet (c'est
      `scripts/bootstrap` en dessous ; ses options marchent aussi : `--no-dispatch`,
      `--no-missions`, `--index`, `--cron`) ;
    - démarre les **services** du projet avec le gestionnaire de services du système (systemd
@@ -226,7 +242,7 @@ Votre projet est dans `~/code/myapp`.
 ### Cas B2 : Passer une équipe d'avant la v0.12
 
 Une équipe dont dispatch et missions tournaient dans des onglets, ou montée à la main (ses propres
-noms d'onglets et d'agents, sans template herdr-plus) :
+noms d'onglets et d'agents, sans modèle de projet) :
 
 1. **Les services seuls, depuis un terminal hors de herdr.** Hors de herdr, `agentbus up`
    installe et démarre les services sans rien ouvrir : il n'ajoute jamais une seconde équipe à
