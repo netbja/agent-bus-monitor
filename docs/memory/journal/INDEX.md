@@ -1,5 +1,6 @@
 # Historical checkpoints
 
+- [2026-10-20: v0.21.0 released; roadmap handed to the team](2026-10-20-v021-handoff.md)
 - [2026-09-19: coordination reference and memory adoption](2026-09-19-coordination.md)
 
 A checkpoint states what was verified on a date, with sources. It is not a live
