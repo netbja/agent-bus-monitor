@@ -1,0 +1,318 @@
+package main
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/netbja/agent-bus-monitor/bus"
+)
+
+func TestSnapLife(t *testing.T) {
+	starts := map[int]uint64{10: 500}
+	ps := func(pid int) (uint64, error) {
+		if s, ok := starts[pid]; ok {
+			return s, nil
+		}
+		if pid == 13 {
+			return 0, errors.New("permission denied")
+		}
+		return 0, os.ErrNotExist
+	}
+	for _, c := range []struct {
+		name string
+		s    bus.AgentSnapshot
+		has  bool
+		ps   func(int) (uint64, error)
+		want life
+	}{
+		{"no snapshot", bus.AgentSnapshot{}, false, ps, lifeUnknown},
+		{"no pid", bus.AgentSnapshot{State: "idle"}, true, ps, lifeUnknown},
+		{"runs with its start", bus.AgentSnapshot{PID: 10, PIDStart: 500}, true, ps, lifeAlive},
+		{"pid reused", bus.AgentSnapshot{PID: 10, PIDStart: 499}, true, ps, lifeDead},
+		{"pid gone", bus.AgentSnapshot{PID: 11, PIDStart: 500}, true, ps, lifeDead},
+		{"unreadable", bus.AgentSnapshot{PID: 13, PIDStart: 500}, true, ps, lifeUnknown},
+		{"not on Linux", bus.AgentSnapshot{PID: 10, PIDStart: 500}, true, nil, lifeUnknown},
+	} {
+		if got := snapLife(c.s, c.has, c.ps); got != c.want {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
+	}
+}
+
+func TestDecideRelaunch(t *testing.T) {
+	shell := paneFacts{Known: true, Shell: true}
+	busy := paneFacts{Known: true}
+	withAgent := paneFacts{Known: true, Agent: "claude"}
+	for _, c := range []struct {
+		name    string
+		agent   bool
+		snap    life
+		hasPane bool
+		pane    paneFacts
+		create  bool
+		want    relaunchVerdict
+	}{
+		{"alive by its snapshot", true, lifeAlive, true, shell, true, verdictAlive},
+		{"alive elsewhere, no tab", true, lifeAlive, false, paneFacts{}, true, verdictAlive},
+		{"dead in a bare shell", true, lifeDead, true, shell, true, verdictRelaunch},
+		{"no snapshot, bare shell", true, lifeUnknown, true, shell, true, verdictRelaunch},
+		{"no snapshot, herdr sees an agent", true, lifeUnknown, true, withAgent, true, verdictAlive},
+		{"dead, another agent in its pane", true, lifeDead, true, withAgent, true, verdictBusy},
+		{"dead, the shell runs something", true, lifeDead, true, busy, true, verdictBusy},
+		{"pane unreadable", true, lifeDead, true, paneFacts{}, true, verdictUnknown},
+		{"no tab: created", true, lifeDead, false, paneFacts{}, true, verdictCreate},
+		{"no tab, not asked to create", true, lifeDead, false, paneFacts{}, false, verdictMissing},
+		{"busmon still runs", false, lifeUnknown, true, busy, true, verdictRunning},
+		{"busmon gone", false, lifeUnknown, true, shell, true, verdictRelaunch},
+	} {
+		if got := decideRelaunch(c.agent, c.snap, c.hasPane, c.pane, c.create); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestLaunchRole(t *testing.T) {
+	for cmd, want := range map[string]string{
+		"env ROLES_TOML=/r/roles.toml /r/scripts/agent-launch master demo": "master",
+		"agent-launch coder demo --profile x":                              "coder",
+		"agent-launch coder other":                                         "",
+		"/r/busmon --project demo":                                         "",
+		"agent-launch":                                                     "",
+		"agent-launch BAD demo":                                            "",
+	} {
+		got, ok := launchRole(cmd, "demo")
+		if got != want || ok != (want != "") {
+			t.Errorf("%q: %q %v, want %q", cmd, got, ok, want)
+		}
+	}
+}
+
+func TestResumeCommand(t *testing.T) {
+	cmd := "agent-launch master demo"
+	id := "93ff25bd-34d8-4077-bf6c-65e6cb135bbf"
+	if got := resumeCommand(cmd, bus.AgentSnapshot{Session: id, Client: "claude-code"}, true); got != cmd+" --resume "+id {
+		t.Fatalf("claude: %q", got)
+	}
+	for name, s := range map[string]bus.AgentSnapshot{
+		"no session":   {Client: "claude-code"},
+		"other client": {Session: id, Client: "codex"},
+		"odd id":       {Session: id + "; rm -rf ~", Client: "claude-code"},
+	} {
+		if got := resumeCommand(cmd, s, true); got != "" {
+			t.Errorf("%s: %q", name, got)
+		}
+	}
+	if got := resumeCommand(cmd, bus.AgentSnapshot{Session: id}, false); got != "" {
+		t.Errorf("no snapshot: %q", got)
+	}
+}
+
+// relaunchHerdr answers tab list, pane list and process-info for one open
+// workspace w4 and records every call.
+type relaunchHerdr struct {
+	calls []string
+	tabs  string            // JSON tabs
+	panes string            // JSON panes
+	fg    map[string]string // pane -> foreground name
+}
+
+func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
+	line := strings.Join(args, " ")
+	f.calls = append(f.calls, line)
+	switch {
+	case strings.HasPrefix(line, "tab list --workspace w4"):
+		return []byte(`{"result":{"tabs":[` + f.tabs + `]}}`), nil
+	case strings.HasPrefix(line, "pane list --workspace w4"):
+		return []byte(`{"result":{"panes":[` + f.panes + `]}}`), nil
+	case strings.HasPrefix(line, "pane process-info --pane "):
+		name, ok := f.fg[args[3]]
+		if !ok {
+			return nil, errors.New("no such pane")
+		}
+		return []byte(`{"result":{"process_info":{"foreground_processes":[{"name":"` + name + `","argv":["` + name + `"]}]}}}`), nil
+	case strings.HasPrefix(line, "tab create --workspace w4"):
+		return []byte(`{"result":{"root_pane":{"pane_id":"w4:p9"}}}`), nil
+	}
+	return []byte(`{"result":{}}`), nil
+}
+
+func (f *relaunchHerdr) ran() []string {
+	var out []string
+	for _, c := range f.calls {
+		if strings.HasPrefix(c, "pane run ") || strings.HasPrefix(c, "tab create ") {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func relaunchTemplate() upTemplate {
+	return upTemplate{Tabs: []upTab{
+		{Name: "busmon", Command: "/r/busmon --project demo"},
+		{Name: "coder", Command: "/r/scripts/agent-launch coder demo"},
+		{Name: "master", Command: "/r/scripts/agent-launch master demo"},
+		{Name: "foureyes", Command: "/r/scripts/agent-launch foureyes demo"},
+		{Name: "sentinel", Command: "/r/scripts/agent-launch sentinel demo"},
+	}}
+}
+
+func TestRelaunchOpenRelaunchesOnlyWhatIsGone(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs: `{"label":"busmon","tab_id":"w4:t1"},{"label":"coder","tab_id":"w4:t2"},{"label":"master","tab_id":"w4:t3"},{"label":"foureyes","tab_id":"w4:t4"}`,
+		panes: `{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p2","tab_id":"w4:t2"},{"pane_id":"w4:p3","tab_id":"w4:t3"},` +
+			`{"pane_id":"w4:p4","tab_id":"w4:t4","agent":"codex"}`,
+		fg: map[string]string{"w4:p1": "busmon", "w4:p2": "bash", "w4:p3": "-zsh"},
+	}
+	snaps := map[string]bus.AgentSnapshot{
+		"coder":  {PID: 20, PIDStart: 1, Session: "93ff25bd-34d8-4077-bf6c-65e6cb135bbf", Client: "claude-code"}, // dead
+		"master": {PID: 30, PIDStart: 7},                                                                         // dead, no session
+	}
+	ps := func(int) (uint64, error) { return 0, os.ErrNotExist }
+	var out bytes.Buffer
+	err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", relaunchTemplate(), relaunchOptions{Resume: true, Create: true}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"pane run w4:p3 /r/scripts/agent-launch master demo", // master first
+		"pane run w4:p2 /r/scripts/agent-launch coder demo --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf",
+		"tab create --workspace w4 --label sentinel --no-focus",
+		"pane run w4:p9 /r/scripts/agent-launch sentinel demo",
+	}
+	if got := h.ran(); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	for _, w := range []string{"master: relaunched (fresh", "busmon: running", "coder: relaunched (resumed)", "foureyes: alive", "sentinel: relaunched (new tab)"} {
+		if !strings.Contains(out.String(), w) {
+			t.Errorf("output lacks %q:\n%s", w, out.String())
+		}
+	}
+}
+
+func TestRelaunchOpenDryRunTypesNothing(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"master","tab_id":"w4:t3"}`,
+		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+		fg:    map[string]string{"w4:p3": "bash"},
+	}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), relaunchOptions{DryRun: true, Create: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 {
+		t.Fatalf("a dry run typed or created: %q", got)
+	}
+	if !strings.Contains(out.String(), "master: would relaunch") || !strings.Contains(out.String(), "coder: would relaunch (new tab)") {
+		t.Fatalf("out = %s", out.String())
+	}
+}
+
+// A live agent is never typed into, even when herdr does not detect it.
+func TestRelaunchOpenLeavesALiveAgent(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"master","tab_id":"w4:t3"}`,
+		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+		fg:    map[string]string{"w4:p3": "bash"},
+	}
+	snaps := map[string]bus.AgentSnapshot{"master": {PID: 30, PIDStart: 7}}
+	ps := func(int) (uint64, error) { return 7, nil }
+	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: alive") {
+		t.Fatalf("calls %q out %s", got, out.String())
+	}
+}
+
+// Without the create option (the workspace hook), a missing tab is reported,
+// never recreated: a retired role stays retired.
+func TestRelaunchOpenWithoutCreateLeavesMissingTabs(t *testing.T) {
+	h := &relaunchHerdr{}
+	tpl := upTemplate{Tabs: []upTab{{Name: "coder", Command: "agent-launch coder demo"}}}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "coder: missing") {
+		t.Fatalf("calls %q out %s", got, out.String())
+	}
+}
+
+func TestUpRelaunchesInAnOpenWorkspace(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	h := &relaunchHerdr{
+		tabs:  `{"label":"busmon","tab_id":"w4:t1"},{"label":"master","tab_id":"w4:t3"}`,
+		panes: `{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+		fg:    map[string]string{"w4:p1": "bash", "w4:p3": "bash"},
+	}
+	deps.Herdr = func(args ...string) ([]byte, error) {
+		if strings.Join(args, " ") == "workspace list" {
+			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
+		}
+		return h.run(args...)
+	}
+	locked := 0
+	deps.Lock = func(string, bool) (func(), bool) { locked++; return func() {}, true }
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	got := strings.Join(h.ran(), "\n")
+	if !strings.Contains(got, "pane run w4:p3 env ROLES_TOML=/r/roles.toml /r/scripts/agent-launch master demo") ||
+		!strings.Contains(got, "pane run w4:p1 /r/busmon --project demo") || locked != 1 {
+		t.Fatalf("calls:\n%s\nlocked %d out %s", got, locked, out.String())
+	}
+}
+
+func TestUpDryRunProvisionsNothing(t *testing.T) {
+	_, templates, _, boot, deps := upFixture(t)
+	if err := os.MkdirAll(templates, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "name = \"demo\"\n[[tabs]]\nname = \"master\"\ncommand = \"agent-launch master demo\"\n"
+	if err := os.WriteFile(templates+"/demo.toml", []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &relaunchHerdr{tabs: `{"label":"master","tab_id":"w4:t3"}`, panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`, fg: map[string]string{"w4:p3": "bash"}}
+	deps.Herdr = func(args ...string) ([]byte, error) {
+		if strings.Join(args, " ") == "workspace list" {
+			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
+		}
+		return h.run(args...)
+	}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", "--dry-run"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if len(*boot) != 0 || len(h.ran()) != 0 || strings.Contains(strings.Join(h.calls, " "), "workspace focus") {
+		t.Fatalf("boot %q calls %q", *boot, h.calls)
+	}
+	if !strings.Contains(out.String(), "master: would relaunch") {
+		t.Fatalf("out = %s", out.String())
+	}
+}
+
+func TestUpLockExcludesASecondUp(t *testing.T) {
+	lock := upLock(t.TempDir())
+	unlock, ok := lock("demo", true)
+	if !ok {
+		t.Fatal("first lock refused")
+	}
+	if _, ok := lock("demo", false); ok {
+		t.Fatal("a second up took the lock")
+	}
+	if _, ok := lock("other", false); !ok {
+		t.Fatal("another project is not locked")
+	}
+	unlock()
+	u2, ok := lock("demo", false)
+	if !ok {
+		t.Fatal("lock not released")
+	}
+	u2()
+}
