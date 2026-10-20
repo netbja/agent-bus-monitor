@@ -13,12 +13,13 @@ import (
 )
 
 type pluginRig struct {
-	calls []string
-	execs [][]string
-	env   map[string]string
-	d     pluginDeps
-	out   bytes.Buffer
-	errw  bytes.Buffer
+	calls  []string
+	execs  [][]string
+	env    map[string]string
+	d      pluginDeps
+	runErr error
+	out    bytes.Buffer
+	errw   bytes.Buffer
 }
 
 func newPluginRig(t *testing.T, ctx string) *pluginRig {
@@ -34,9 +35,9 @@ func newPluginRig(t *testing.T, ctx string) *pluginRig {
 			return nil, nil
 		},
 		Env: func(k string) string { return r.env[k] },
-		Exec: func(a string, argv []string) error {
+		Run: func(a string, argv []string) (int, error) {
 			r.execs = append(r.execs, append([]string{a}, argv...))
-			return errors.New("fake exec returned")
+			return 0, r.runErr
 		},
 		Stdin: strings.NewReader("\n"),
 	}
@@ -112,7 +113,7 @@ func TestPluginContextTolerated(t *testing.T) {
 	}
 }
 
-func TestPluginBusmonPaneExecsBusmon(t *testing.T) {
+func TestPluginBusmonPaneRunsBusmon(t *testing.T) {
 	r := newPluginRig(t, "")
 	r.env["AGENTBUS_PLUGIN_PROJECT"] = "demo"
 	r.env["AGENTBUS_PLUGIN_AS"] = "Bernard J"
@@ -151,8 +152,9 @@ func runOut(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
 }
 
-func TestPluginBusmonPaneWaitsWhenExecFails(t *testing.T) {
+func TestPluginBusmonPaneWaitsWhenStartFails(t *testing.T) {
 	r := newPluginRig(t, "")
+	r.runErr = errors.New("fake exec returned")
 	r.env["AGENTBUS_PLUGIN_PROJECT"] = "demo"
 	pr, pw := io.Pipe()
 	r.d.Stdin = pr
@@ -181,5 +183,62 @@ func TestPluginUnparsableTemplateCommandYieldsNoAs(t *testing.T) {
 	r.run("busmon")
 	if len(r.calls) != 1 || r.calls[0] != open+"busmon --workspace w2 --env AGENTBUS_PLUGIN_PROJECT=demo" {
 		t.Fatalf("calls %q", r.calls)
+	}
+}
+
+// busmon itself exiting non-zero (broker refused, bad --as) must leave the reason readable.
+func TestPluginBusmonPaneWaitsWhenBusmonExitsNonZero(t *testing.T) {
+	r := newPluginRig(t, "")
+	r.env["AGENTBUS_PLUGIN_PROJECT"] = "demo"
+	r.d.Run = func(a string, argv []string) (int, error) {
+		r.out.WriteString("Redis connection failed\n")
+		return 1, nil
+	}
+	pr, pw := io.Pipe()
+	r.d.Stdin = pr
+	done := make(chan int, 1)
+	go func() { done <- r.run("busmon-pane") }()
+	select {
+	case <-done:
+		t.Fatal("returned before a line was supplied")
+	case <-time.After(150 * time.Millisecond):
+	}
+	pw.Write([]byte("\n"))
+	select {
+	case code := <-done:
+		if code != 1 || !strings.Contains(r.out.String(), "busmon exited with 1") {
+			t.Fatalf("code %d out %q", code, r.out.String())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not return after the line")
+	}
+}
+
+func TestPluginBusmonPaneCleanExitDoesNotWait(t *testing.T) {
+	r := newPluginRig(t, "")
+	r.env["AGENTBUS_PLUGIN_PROJECT"] = "demo"
+	pr, _ := io.Pipe() // never written: a wait would hang
+	r.d.Stdin = pr
+	done := make(chan int, 1)
+	go func() { done <- r.run("busmon-pane") }()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("code %d", code)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("waited after a clean exit")
+	}
+}
+
+// realRun runs a real child: exit code propagated, stdout inherited.
+func TestRunChildPropagatesExitCode(t *testing.T) {
+	sh := filepath.Join(t.TempDir(), "fakebusmon")
+	os.WriteFile(sh, []byte("#!/bin/sh\nexit 3\n"), 0o755)
+	if code, err := runChild(sh, []string{sh}); err != nil || code != 3 {
+		t.Fatalf("code %d err %v", code, err)
+	}
+	if _, err := runChild(filepath.Join(t.TempDir(), "missing"), []string{"x"}); err == nil {
+		t.Fatal("expected a start error")
 	}
 }

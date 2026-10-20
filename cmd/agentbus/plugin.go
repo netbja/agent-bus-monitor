@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -21,11 +23,13 @@ import (
 const pluginID = "netbja.agentbus"
 
 // pluginDeps are the seams of `agentbus plugin`: herdr's CLI, the environment,
-// the process replacement of busmon-pane, and the pane's stdin.
+// the child process busmon-pane runs, and the pane's stdin.
 type pluginDeps struct {
 	Herdr func(args ...string) ([]byte, error)
 	Env   func(string) string
-	Exec  func(argv0 string, argv []string) error
+	// Run starts a program with the pane's stdio and returns its exit code; the
+	// error is for a program that could not be started at all.
+	Run   func(argv0 string, argv []string) (int, error)
 	Stdin io.Reader
 }
 
@@ -35,7 +39,7 @@ func realPluginDeps() pluginDeps {
 			return exec.Command(herdrBin(os.Getenv), args...).CombinedOutput()
 		},
 		Env:   os.Getenv,
-		Exec:  func(argv0 string, argv []string) error { return syscall.Exec(argv0, argv, os.Environ()) },
+		Run:   runChild,
 		Stdin: os.Stdin,
 	}
 }
@@ -167,8 +171,51 @@ func pluginBusmonPane(d pluginDeps, stdout, stderr io.Writer) int {
 	if as := d.Env("AGENTBUS_PLUGIN_AS"); as != "" {
 		argv = append(argv, "--as", as)
 	}
-	err = d.Exec(busmon, argv)
-	return pluginPaneFail(d, stdout, fmt.Sprintf("agentbus plugin: exec %s: %v", busmon, err))
+	code, err := d.Run(busmon, argv)
+	if err != nil {
+		return pluginPaneFail(d, stdout, fmt.Sprintf("agentbus plugin: start %s: %v", busmon, err))
+	}
+	if code != 0 {
+		return pluginPaneFail(d, stdout, fmt.Sprintf("busmon exited with %d", code))
+	}
+	return 0
+}
+
+// runChild runs argv with the inherited stdio, forwards SIGINT/SIGTERM/SIGHUP
+// to it and returns its exit code. A child killed by a signal reads as 128+n.
+func runChild(argv0 string, argv []string) (int, error) {
+	cmd := exec.Command(argv0, argv[1:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	sig := make(chan os.Signal, 4)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer signal.Stop(sig)
+	if err := cmd.Start(); err != nil {
+		return 0, err
+	}
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case s := <-sig:
+				_ = cmd.Process.Signal(s)
+			case <-done:
+				return
+			}
+		}
+	}()
+	err := cmd.Wait()
+	close(done)
+	if err == nil {
+		return 0, nil
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		if ws, ok := ee.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			return 128 + int(ws.Signal()), nil
+		}
+		return ee.ExitCode(), nil
+	}
+	return 0, err
 }
 
 // pluginPaneFail shows why the pane cannot start and keeps it open until a
