@@ -507,3 +507,18 @@ func TestHerdrBinOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestUpKeepsTheSocketThatNamedTheSession(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	sock := "/x/sessions/agent-bus/herdr.sock"
+	deps.Environ = []string{"PATH=/bin", "HERDR_SOCKET_PATH=" + sock}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	env, _ := service.LoadEnvFile(u.paths.EnvFile("demo"))
+	if env["HERDR_SESSION"] != "agent-bus" || env["HERDR_SOCKET_PATH"] != sock {
+		t.Fatalf("env = %v", env)
+	}
+}

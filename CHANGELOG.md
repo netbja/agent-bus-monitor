@@ -10,6 +10,8 @@ release exists.
   `$XDG_CONFIG_HOME/agentbus/projects`), resolved by `agentbus roles projects-dir`, which bootstrap
   and `agentbus up` share. `HERDR_PLUS_PROJECTS_DIR` is no longer read. Move existing templates from
   herdr-plus's `projects/` directory by hand, once.
+  Not to be installed or tagged on its own: until the herdr plugin lands, herdr-plus's picker
+  (`Ctrl+B` then `Up`) does not see the new directory, so the move by hand waits for that release.
 - `agentbus up` reads the herdr session from `HERDR_SOCKET_PATH` when `HERDR_SESSION` is unset, and
   refuses to start services when neither names one (`--session` still wins). The herdr binary is
   `HERDR_BIN_PATH`, then `HERDR_BIN`, then `herdr`.

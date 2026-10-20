@@ -220,7 +220,9 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 	}
 	env := service.CollectEnv(d.Environ)
 	if env["HERDR_SESSION"] != session { // another session's socket would reach the wrong server
-		delete(env, "HERDR_SOCKET_PATH")
+		if name, _ := sessionFromSocket(env["HERDR_SOCKET_PATH"]); name != session {
+			delete(env, "HERDR_SOCKET_PATH")
+		}
 	}
 	env["HERDR_SESSION"] = session
 	if escalate != "" {
