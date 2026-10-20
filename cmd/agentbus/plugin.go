@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -31,6 +33,10 @@ type pluginDeps struct {
 	// error is for a program that could not be started at all.
 	Run   func(argv0 string, argv []string) (int, error)
 	Stdin io.Reader
+	// The workspace event (v0.21): whether the broker knows a project, and up's
+	// hook for its open workspace.
+	Exists func(project string) projlist.State
+	Hook   func(project, ws string, stdout, stderr io.Writer) int
 }
 
 func realPluginDeps() pluginDeps {
@@ -41,6 +47,19 @@ func realPluginDeps() pluginDeps {
 		Env:   os.Getenv,
 		Run:   runChild,
 		Stdin: os.Stdin,
+		Exists: func(project string) projlist.State {
+			c, err := bus.Connect("")
+			if err != nil {
+				return projlist.Unknown
+			}
+			defer c.Close()
+			keys := func(ctx context.Context, p string) ([]string, error) { return bus.ProjectKeys(ctx, c, p) }
+			st, _ := projlist.Exists(context.Background(), keys, project, 2*time.Second)
+			return st
+		},
+		Hook: func(project, ws string, stdout, stderr io.Writer) int {
+			return upHook(realUpDeps(stdout, stderr), project, ws, stdout, stderr)
+		},
 	}
 }
 
@@ -64,7 +83,7 @@ func readPluginContext(env func(string) string) pluginContext {
 
 func runPlugin(args []string, d pluginDeps, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: agentbus plugin projects|busmon|busmon-pane")
+		fmt.Fprintln(stderr, "usage: agentbus plugin projects|busmon|busmon-pane|workspace-event")
 		return 2
 	}
 	switch args[0] {
@@ -74,6 +93,8 @@ func runPlugin(args []string, d pluginDeps, stdout, stderr io.Writer) int {
 		return pluginBusmon(d, stderr)
 	case "busmon-pane":
 		return pluginBusmonPane(d, stdout, stderr)
+	case "workspace-event":
+		return pluginWorkspaceEvent(d, stdout, stderr)
 	}
 	fmt.Fprintf(stderr, "agentbus plugin: unknown entry %q\n", args[0])
 	return 2
@@ -230,4 +251,65 @@ func pluginPaneFail(d pluginDeps, stdout io.Writer, reason string) int {
 		_, _ = bufio.NewReader(d.Stdin).ReadString('\n')
 	}
 	return 1
+}
+
+// pluginWorkspaceEvent runs on herdr's workspace.created and workspace.focused
+// events: for a workspace labelled with a known project whose template exists
+// and which the broker confirms, it runs up's hook, which starts
+// the stopped services and touches no pane. Like the picker it never provisions:
+// any other workspace is left alone, silently.
+func pluginWorkspaceEvent(d pluginDeps, stdout, stderr io.Writer) int {
+	var ev struct {
+		Data struct {
+			Workspace struct {
+				WorkspaceID string `json:"workspace_id"`
+				Label       string `json:"label"`
+			} `json:"workspace"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal([]byte(d.Env("HERDR_PLUGIN_EVENT_JSON")), &ev)
+	ws, label := ev.Data.Workspace.WorkspaceID, ev.Data.Workspace.Label
+	if ws == "" {
+		ws = d.Env("HERDR_WORKSPACE_ID")
+	}
+	if ws == "" {
+		return 0
+	}
+	if label == "" {
+		out, err := d.Herdr("workspace", "list")
+		if err != nil {
+			fmt.Fprintf(stderr, "agentbus plugin: herdr workspace list: %v\n", err)
+			return 1
+		}
+		var v struct {
+			Result struct {
+				Workspaces []struct {
+					Label       string `json:"label"`
+					WorkspaceID string `json:"workspace_id"`
+				} `json:"workspaces"`
+			} `json:"result"`
+		}
+		_ = json.Unmarshal(out, &v)
+		for _, w := range v.Result.Workspaces {
+			if w.WorkspaceID == ws {
+				label = w.Label
+			}
+		}
+	}
+	if !bus.ValidName(label) {
+		return 0
+	}
+	rows, _ := projlist.Templates(rolecfg.ProjectsDir(d.Env))
+	known := false
+	for _, r := range rows {
+		known = known || r.Name == label
+	}
+	if !known {
+		return 0
+	}
+	if st := d.Exists(label); st != projlist.Present {
+		fmt.Fprintf(stdout, "%s: broker %s; nothing started (agentbus up %s once the broker answers)\n", label, st, label)
+		return 0
+	}
+	return d.Hook(label, ws, stdout, stderr)
 }

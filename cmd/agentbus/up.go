@@ -12,11 +12,13 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -31,10 +33,20 @@ type upDeps struct {
 	// there is none; nil means none.
 	Services func() (service.Manager, string)
 	Paths    service.Paths
-	Exe      func() (string, error) // this agentbus, which the units run
-	Environ  []string               // the service environment is picked from it
-	Mark     func(project string, inst bus.ServicesInstall) error
-	Host     string
+	Exe      func() (string, error) // this agentbus: the units run it when Installed is absent
+	// Installed is the agentbus setup.sh installed (buildinfo.Bin), "" when
+	// unknown: when it exists the units run it, whoever runs up.
+	Installed string
+	Environ   []string // the service environment is picked from it
+	Mark      func(project string, inst bus.ServicesInstall) error
+	Host      string
+
+	// The relaunch of an open workspace (v0.21): the agents' snapshots, the
+	// process start time (nil off Linux: snapshots then decide nothing) and the
+	// per-project lock that keeps two ups from typing into one pane.
+	Agents    func(project string) (map[string]bus.AgentSnapshot, error)
+	ProcStart func(int) (uint64, error)
+	Lock      func(project string, wait bool) (unlock func(), err error)
 }
 
 type upTab struct {
@@ -55,11 +67,30 @@ type upTemplate struct {
 // to open it.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if len(args) == 0 || !bus.ValidName(args[0]) {
-		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--escalate-to <agent>] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
+		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
 		return 1
 	}
 	project := args[0]
 	args, tabs := extractBool(args, "--tabs")
+	args, resume := extractBool(args, "--resume")
+	args, dryRun := extractBool(args, "--dry-run")
+	// The person's name recorded at install is the default --as (v0.21).
+	if !slices.Contains(args, "--as") {
+		if as := settingsIdentity(d.Env); as != "" {
+			args = append(args, "--as", as)
+		}
+	}
+	if dryRun {
+		return upDryRun(d, project, resume, stdout, stderr)
+	}
+	if d.Lock != nil {
+		unlock, err := d.Lock(project, true)
+		if err != nil {
+			fmt.Fprintf(stderr, "agentbus up: %v; nothing done\n", err)
+			return 1
+		}
+		defer unlock()
+	}
 	args, escalate := extractFlag(args, "--escalate-to")
 	if escalate != "" && !bus.ValidName(escalate) {
 		fmt.Fprintf(stderr, "agentbus up: --escalate-to: invalid agent name %q\n", escalate)
@@ -151,7 +182,11 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
 		return 1
 	} else if id != "" {
-		fmt.Fprintf(stdout, "%s is already open: focused workspace %s\n", project, id)
+		fmt.Fprintf(stdout, "%s is already open: focused workspace %s; checking its tabs\n", project, id)
+		if err := relaunchUp(d, project, id, tpl, relaunchOptions{Resume: resume, Create: true}, stdout); err != nil {
+			fmt.Fprintf(stderr, "agentbus up: %v\n", err)
+			code = 1
+		}
 		return code
 	}
 	if len(tpl.Tabs) == 0 {
@@ -219,6 +254,13 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 	exe, err := d.Exe()
 	if err != nil {
 		return fmt.Errorf("%w: cannot find this agentbus: %v", errNotInstalled, err)
+	}
+	if d.Installed != "" {
+		if r, err := filepath.EvalSymlinks(d.Installed); err == nil {
+			if st, err := os.Stat(r); err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+				exe = r
+			}
+		}
 	}
 	if strings.Contains(exe, "go-build") || !filepath.IsAbs(exe) {
 		return fmt.Errorf("%w: a unit must run an installed agentbus, not %s (./setup.sh install, then run that one)", errNotInstalled, exe)
@@ -300,6 +342,18 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 // openWorkspace focuses an already open workspace labelled project and returns
 // its id, or "" when there is none.
 func openWorkspace(d upDeps, project string) (string, error) {
+	id, err := findWorkspace(d, project)
+	if err != nil || id == "" {
+		return id, err
+	}
+	if _, err := d.Herdr("workspace", "focus", id); err != nil {
+		return "", fmt.Errorf("herdr workspace focus: %w", err)
+	}
+	return id, nil
+}
+
+// findWorkspace is the id of the open workspace labelled project, or "".
+func findWorkspace(d upDeps, project string) (string, error) {
 	out, err := d.Herdr("workspace", "list")
 	if err != nil {
 		return "", fmt.Errorf("herdr workspace list: %w", err)
@@ -317,9 +371,6 @@ func openWorkspace(d upDeps, project string) (string, error) {
 	}
 	for _, w := range v.Result.Workspaces {
 		if w.Label == project {
-			if _, err := d.Herdr("workspace", "focus", w.WorkspaceID); err != nil {
-				return "", fmt.Errorf("herdr workspace focus: %w", err)
-			}
 			return w.WorkspaceID, nil
 		}
 	}
@@ -454,7 +505,8 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			}
 			return filepath.EvalSymlinks(exe)
 		},
-		Environ: os.Environ(),
+		Installed: buildinfo.Bin,
+		Environ:   os.Environ(),
 		Mark: func(project string, inst bus.ServicesInstall) error {
 			c, err := bus.Connect("")
 			if err != nil {
@@ -470,5 +522,158 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			return b.MarkServicesInstalled(ctx, inst)
 		},
 		Host: host,
+		Agents: func(project string) (map[string]bus.AgentSnapshot, error) {
+			return readAgents(project)
+		},
+		ProcStart: procStartFn(),
+		Lock:      upLock(upCacheDir(os.Getenv)),
 	}
+}
+
+// relaunchUp reads the agents' snapshots (without them, the panes decide) and
+// relaunches what is gone in the open workspace ws.
+func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunchOptions, stdout io.Writer) error {
+	var snaps map[string]bus.AgentSnapshot
+	ok := false
+	if d.Agents != nil {
+		s, err := d.Agents(project)
+		if err != nil {
+			fmt.Fprintf(stdout, "agents unreadable (%v): the panes decide\n", err)
+		} else {
+			snaps, ok = s, true
+		}
+	}
+	o.Dir = os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
+	return relaunchOpen(d.Herdr, snaps, ok, d.ProcStart, project, ws, tpl, o, stdout)
+}
+
+// upDryRun prints what up would do to an open workspace, and changes nothing:
+// no bootstrap, no service, no typing.
+func upDryRun(d upDeps, project string, resume bool, stdout, stderr io.Writer) int {
+	path := templatePath(d, project)
+	var tpl upTemplate
+	if _, err := toml.DecodeFile(path, &tpl); err != nil {
+		fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
+		return 1
+	}
+	if d.Env("HERDR_ENV") != "1" {
+		fmt.Fprintf(stdout, "dry run: outside herdr, up would provision %s and say how to open it\n", project)
+		return 0
+	}
+	id, err := findWorkspace(d, project)
+	if err != nil {
+		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
+		return 1
+	}
+	if id == "" {
+		fmt.Fprintf(stdout, "dry run: %s is not open; up would open it with %d tabs\n", project, len(tpl.Tabs))
+		return 0
+	}
+	tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab) // services mode; --tabs mode reruns them too
+	fmt.Fprintf(stdout, "dry run: %s is open (workspace %s); services are not checked\n", project, id)
+	if err := relaunchUp(d, project, id, tpl, relaunchOptions{Resume: resume, DryRun: true, Create: true}, stdout); err != nil {
+		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// errUpBusy: another up of the project holds the lock.
+var errUpBusy = errors.New("another agentbus up of this project is running")
+
+// upLock takes ~/.cache/agentbus/up-<project>.lock: one up per project at a
+// time, so two ups never split or fill one workspace together. wait=false
+// gives up with errUpBusy while another holds it. Any failure to establish
+// the lock is an error: up then touches no pane.
+func upLock(cacheDir string) func(project string, wait bool) (func(), error) {
+	return func(project string, wait bool) (func(), error) {
+		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+			return nil, fmt.Errorf("lock directory: %w", err)
+		}
+		f, err := os.OpenFile(filepath.Join(cacheDir, "up-"+project+".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+		if err != nil {
+			return nil, fmt.Errorf("lock file: %w", err)
+		}
+		how := syscall.LOCK_EX
+		if !wait {
+			how |= syscall.LOCK_NB
+		}
+		if err := syscall.Flock(int(f.Fd()), how); err != nil {
+			f.Close()
+			if errors.Is(err, syscall.EWOULDBLOCK) {
+				return nil, errUpBusy
+			}
+			return nil, fmt.Errorf("lock %s: %w", f.Name(), err)
+		}
+		return func() {
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			f.Close()
+		}, nil
+	}
+}
+
+// upCacheDir is ~/.cache/agentbus (or $XDG_CACHE_HOME/agentbus).
+func upCacheDir(env func(string) string) string {
+	if x := env("XDG_CACHE_HOME"); x != "" {
+		return filepath.Join(x, "agentbus")
+	}
+	return filepath.Join(env("HOME"), ".cache", "agentbus")
+}
+
+// procStartFn is the dispatcher's process identity, on Linux only: elsewhere
+// a snapshot proves nothing and the panes decide.
+func procStartFn() func(int) (uint64, error) {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+	return dispatch.ProcStart
+}
+
+// readAgents is the project's {p}:agents, bounded.
+func readAgents(project string) (map[string]bus.AgentSnapshot, error) {
+	c, err := bus.Connect("")
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
+	b, err := bus.Open(c, project)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return b.Agents(ctx)
+}
+
+// upHook is what herdr's workspace event runs for a known project's open
+// workspace: it starts the project's stopped services as they are installed.
+// No unit or environment is rewritten (a binary at another path would
+// otherwise reconfigure and restart a running service), and no pane is
+// touched: after a reboot herdr's native session restore relaunches the agents
+// in the shells it has just spawned, and `agentbus up` is the person's gesture
+// for an agent that died otherwise.
+func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
+	if d.Services == nil {
+		return 0
+	}
+	m, why := d.Services()
+	if m == nil {
+		fmt.Fprintf(stdout, "%s: no service manager (%s)\n", project, why)
+		return 0
+	}
+	code := 0
+	for _, k := range service.Kinds {
+		st, err := m.State(project, k)
+		if err != nil || !st.Installed || st.Active {
+			continue
+		}
+		_ = service.Budget{Path: d.Paths.BudgetFile(project, k)}.Reset()
+		if err := m.Start(project, k); err != nil {
+			fmt.Fprintf(stderr, "agentbus: %s: %s: start: %v\n", project, k, err)
+			code = 1
+			continue
+		}
+		fmt.Fprintf(stdout, "%s: %s started (it was stopped)\n", project, k)
+	}
+	return code
 }

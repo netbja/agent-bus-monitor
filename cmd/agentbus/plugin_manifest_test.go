@@ -19,6 +19,10 @@ type pluginManifest struct {
 		ID      string   `toml:"id"`
 		Command []string `toml:"command"`
 	} `toml:"panes"`
+	Events []struct {
+		On      string   `toml:"on"`
+		Command []string `toml:"command"`
+	} `toml:"events"`
 }
 
 func TestPluginManifest(t *testing.T) {
@@ -52,7 +56,18 @@ func TestPluginManifest(t *testing.T) {
 			t.Errorf("pane %q command %v", p.ID, p.Command)
 		}
 	}
-	for _, k := range []string{"build", "events"} {
+	// v0.21: the only events are the workspace hook, and they run only it.
+	hook := map[string]bool{"workspace.created": true, "workspace.focused": true}
+	for _, e := range m.Events {
+		if !hook[e.On] || strings.Join(e.Command, " ") != "./agentbus plugin workspace-event" {
+			t.Errorf("event %q command %v", e.On, e.Command)
+		}
+		delete(hook, e.On)
+	}
+	if len(hook) != 0 {
+		t.Errorf("missing workspace events %v", hook)
+	}
+	for _, k := range []string{"build"} {
 		if md.IsDefined(k) {
 			t.Errorf("manifest must not define %q", k)
 		}

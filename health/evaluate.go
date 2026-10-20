@@ -41,6 +41,7 @@ type ServiceEvidence struct {
 	Known, Installed, Active bool
 	RecentFailures           int
 	RecentError              bool
+	WaitingGit               bool // missions runs but waits for its directory to become a Git repository
 }
 
 func EvaluateServices(e ServiceEvidence) Outcome {
@@ -58,6 +59,9 @@ func EvaluateServices(e ServiceEvidence) Outcome {
 	}
 	if e.RecentFailures >= 4 || e.RecentError {
 		return Outcome{Warn, "service had a recent error or restart budget is low"}
+	}
+	if e.WaitingGit {
+		return Outcome{Warn, "missions waits for a Git repository in the project directory"}
 	}
 	return Outcome{OK, "installed services are active"}
 }

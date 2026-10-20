@@ -1,6 +1,6 @@
 id = "netbja.agentbus"
 name = "Agent Bus"
-version = "0.20.0"            # bumped by hand at tag time; the manifest test enforces it
+version = "0.21.0"            # bumped by hand at tag time; the manifest test enforces it
 min_herdr_version = "0.9.0"   # the support floor this repo tests on (global registration: >= 0.7.3)
 description = "Agent Bus: open a project's team workspace, watch it in busmon."
 platforms = ["linux", "macos"]
@@ -26,3 +26,14 @@ id = "busmon"
 title = "busmon"
 placement = "zoomed"
 command = ["./agentbus", "plugin", "busmon-pane"]
+
+# v0.21: opening a project's workspace (a session restored after a reboot, or
+# switching to it) starts its stopped services. It touches no pane.
+# Only for a workspace labelled with a known project the broker confirms.
+[[events]]
+on = "workspace.created"
+command = ["./agentbus", "plugin", "workspace-event"]
+
+[[events]]
+on = "workspace.focused"
+command = ["./agentbus", "plugin", "workspace-event"]

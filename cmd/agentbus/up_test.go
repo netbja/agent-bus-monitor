@@ -544,3 +544,32 @@ func TestUpKeepsTheSocketThatNamedTheSession(t *testing.T) {
 		t.Fatalf("env = %v", env)
 	}
 }
+
+// Whichever agentbus runs up (the plugin's ./agentbus, the repo's), the units
+// run the one setup.sh installed, so a machine's services name one binary.
+func TestUpUnitsRunTheInstalledBinary(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	bin := filepath.Join(t.TempDir(), "agentbus")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deps.Installed = bin
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if got := u.m.specs["demo/dispatch"].Exe; got != bin {
+		t.Fatalf("unit runs %q, want %q", got, bin)
+	}
+	// Gone (uninstalled): the running binary, as before.
+	if err := os.Remove(bin); err != nil {
+		t.Fatal(err)
+	}
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if got := u.m.specs["demo/dispatch"].Exe; got != u.exe {
+		t.Fatalf("unit runs %q, want %q", got, u.exe)
+	}
+}

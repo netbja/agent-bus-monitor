@@ -228,11 +228,40 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 		escalate = v
 	}
 	if kind == service.Missions {
-		if out, err := exec.Command("git", "-C", repo, "rev-parse", "--git-dir").CombinedOutput(); repo == "" || err != nil {
-			msg := fmt.Sprintf("invalid configuration: --repo %q is not a git repository (%s)", repo, strings.TrimSpace(string(out)))
+		if repo == "" {
+			msg := "invalid configuration: missions needs --repo"
 			logf("%s", msg)
 			publish("failed", "", msg)
 			return 0
+		}
+		// A project directory that is not a Git repository yet is not a broken
+		// configuration: wait for git init, publishing the state, and start then.
+		if !isGitRepo(repo) {
+			detail := fmt.Sprintf("no Git repository in %s: run git init there", repo)
+			logf("waiting: %s", detail)
+			// Waiting is not a start: withdraw this run's budget entry now, so
+			// neither the wait nor a kill during it counts; the conductor's run
+			// takes a new one below.
+			_ = budget.End(start)
+			start = time.Time{}
+			t := time.NewTicker(d.Heartbeat)
+			for !isGitRepo(repo) {
+				if !publish(gitWaitState, detail, "") {
+					t.Stop()
+					logf("project deleted: the services marker is gone; stopping")
+					return 0
+				}
+				select {
+				case <-ctx.Done():
+					t.Stop()
+					publish("stopped", "stopped by the service manager (agentbus down, service stop, or logout)", "")
+					return 0
+				case <-t.C:
+				}
+			}
+			t.Stop()
+			logf("%s is a Git repository now; starting", repo)
+			start = budget.Begin(d.Now())
 		}
 	}
 
@@ -412,4 +441,11 @@ func missionsActivity(ctx context.Context, b *bus.Bus) (state, detail string) {
 		return "idle", "waiting for missions (no active change)"
 	}
 	return "busy", "running " + strings.Join(busy, ", ")
+}
+
+// gitWaitState: missions waits for its directory to become a Git repository.
+const gitWaitState = "waiting-git"
+
+func isGitRepo(dir string) bool {
+	return exec.Command("git", "-C", dir, "rev-parse", "--git-dir").Run() == nil
 }

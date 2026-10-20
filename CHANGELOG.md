@@ -4,6 +4,21 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.21.0 — startup and relaunch
+
+- `agentbus up <p>` on an open workspace checks every template tab and relaunches a dead agent in a
+  new pane split beside its old one, or in a new tab; it never types into an existing pane, and a
+  tab with anything running in any pane is left alone. `--dry-run` prints the plan, `--resume`
+  resumes a Claude Code agent's recorded session through the launcher.
+- Opening a project's workspace (herdr's `workspace.created`/`workspace.focused`) starts its stopped
+  services; the hook touches no pane. After a reboot herdr's own session restore brings agents back.
+- `agentbus projects` lists every known project (templates, service units, the broker's own) with
+  broker, services and agents, even with Redis down.
+- missions waits for a Git repository (`missions waiting git`, health `warn`) instead of failing.
+- `./setup.sh install` asks your name once (`agentbus identity set <name>`, busmon.toml); `up` uses
+  it as `--as`.
+- Every project service runs the agentbus setup installed (`buildinfo.Bin`), whoever ran `up`.
+
 ## v0.20.0 — agent-bus as a herdr plugin
 
 - This checkout is the herdr plugin `netbja.agentbus`, linked by `./setup.sh install`; herdr-plus is

@@ -28,6 +28,8 @@ func TestServiceFact(t *testing.T) {
 		{"no record, nothing", bus.ServiceRecord{}, false, "", ""},
 		{"ready and fresh", bus.ServiceRecord{State: "ready", At: fresh}, true, "up", "ready"},
 		{"waiting for herdr", bus.ServiceRecord{State: "waiting-herdr", At: fresh}, true, "up", "waiting-herdr"},
+		{"missions waits for git", bus.ServiceRecord{State: "waiting-git", At: fresh}, true, "", "waiting-git"},
+		{"waiting for git gone stale", bus.ServiceRecord{State: "waiting-git", At: old}, true, "", "down"},
 		{"idle conductor", bus.ServiceRecord{State: "idle", At: fresh}, true, "up", "idle"},
 		{"a running state gone stale: the process died", bus.ServiceRecord{State: "ready", At: old}, true, "down", "down"},
 		{"stale record, a tab holds the lease", bus.ServiceRecord{State: "ready", At: old}, true, "up", "up"},
@@ -49,7 +51,7 @@ func TestServiceFact(t *testing.T) {
 
 func TestServiceSegWords(t *testing.T) {
 	for state, want := range map[string]string{
-		"up": "dispatch up", "down": "dispatch down", "ready": "dispatch ready", "waiting-herdr": "dispatch waiting herdr",
+		"up": "dispatch up", "down": "dispatch down", "ready": "dispatch ready", "waiting-herdr": "dispatch waiting herdr", "waiting-git": "dispatch waiting git",
 		"failed": "dispatch failed", "gave-up": "dispatch gave up", "stopped": "dispatch stopped", "starting": "dispatch starting",
 	} {
 		if got := lineText(serviceSeg("dispatch", "disp", state, false)); !strings.HasSuffix(got, want) {
@@ -64,6 +66,9 @@ func TestServiceSegWords(t *testing.T) {
 	}
 	if r := serviceSeg("dispatch", "disp", "waiting-herdr", false)[0].Role; r != RoleAttention {
 		t.Errorf("waiting role = %v", r)
+	}
+	if r := serviceSeg("missions", "miss", "waiting-git", false)[0].Role; r != RoleAttention {
+		t.Errorf("waiting git role = %v", r)
 	}
 }
 
