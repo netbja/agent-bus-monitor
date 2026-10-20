@@ -748,8 +748,10 @@ func pluginState(listJSON []byte, want string) (registered bool, version, root s
 	return false, "", "", true
 }
 
+var releaseVersion = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
+
 // pluginProblem judges the registered plugin against the binary's version and
-// the expected checkout. A dev build does not compare versions; the root is
+// the expected checkout. A dev build or an untagged describe does not compare versions; the root is
 // always compared.
 func pluginProblem(listJSON []byte, binaryVersion, wantRoot string) (problem, readable bool) {
 	registered, version, root, ok := pluginState(listJSON, pluginID)
@@ -759,7 +761,9 @@ func pluginProblem(listJSON []byte, binaryVersion, wantRoot string) (problem, re
 	if !registered || !sameDir(root, wantRoot) {
 		return true, true
 	}
-	if binaryVersion == "dev" {
+	// setup stamps the full `git describe`: only an exact vX.Y.Z is comparable;
+	// v0.20.0-3-gabc or v0.20.0-dirty (an untagged commit) is treated like dev.
+	if binaryVersion == "dev" || !releaseVersion.MatchString(binaryVersion) {
 		return false, true
 	}
 	return version == "" || strings.TrimPrefix(version, "v") != strings.TrimPrefix(binaryVersion, "v"), true

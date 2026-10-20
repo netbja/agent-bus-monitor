@@ -47,6 +47,9 @@ func TestPluginStateFromJSON(t *testing.T) {
 		{"other root", list(pluginID, "0.20.0", "/old/checkout"), "v0.20.0", true, true},
 		{"same root unclean", list(pluginID, "0.20.0", root+"/"), "v0.20.0", false, true},
 		{"dev other root", list(pluginID, "0.20.0", "/old/checkout"), "dev", true, true},
+		{"describe after tag", list(pluginID, "0.20.0", root), "v0.20.0-3-gabc1234", false, true},
+		{"describe dirty", list(pluginID, "0.20.0", root), "v0.20.0-dirty", false, true},
+		{"describe other root", list(pluginID, "0.20.0", "/old/checkout"), "v0.20.0-3-gabc1234", true, true},
 		{"empty version", list(pluginID, "", root), "v0.20.0", true, true},
 	} {
 		problem, ok := pluginProblem(tc.json, tc.binary, root)
