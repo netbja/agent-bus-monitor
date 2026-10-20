@@ -29,9 +29,8 @@ import (
 )
 
 const (
-	herdrMinimumVersion     = "0.1.0"
-	herdrPlusMinimumVersion = "0.1.16"
-	updateCacheMaxAge       = 24 * time.Hour
+	herdrMinimumVersion = "0.1.0"
+	updateCacheMaxAge   = 24 * time.Hour
 )
 
 type usageBaseline struct {
@@ -504,17 +503,15 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			} else if !versionAtLeast(version, herdrMinimumVersion) {
 				problems++
 			}
-			plugin, err := exec.CommandContext(ctx, "herdr", "plugin", "list").Output()
+			plugin, err := exec.CommandContext(ctx, herdrBin(os.Getenv), "plugin", "list", "--json").Output()
 			if err != nil {
 				known = false
 			} else {
-				present, pluginVersion, parsed := herdrPlusVersion(plugin)
+				problem, readable := pluginProblem(plugin, buildinfo.Version)
 				clear(plugin)
-				if !present {
-					problems++
-				} else if !parsed {
+				if !readable {
 					known = false
-				} else if !versionAtLeast(pluginVersion, herdrPlusMinimumVersion) {
+				} else if problem {
 					problems++
 				}
 			}
@@ -726,18 +723,43 @@ func versionAtLeast(got, minimum string) bool {
 	return true
 }
 
-func herdrPlusVersion(output []byte) (present bool, version string, parsed bool) {
-	for _, line := range strings.Split(string(output), "\n") {
-		if !strings.Contains(line, "cloudmanic.herdr-plus") {
-			continue
+// pluginState reads `herdr plugin list --json` and reports whether the plugin
+// with id want is registered and at which version. ok is false when the JSON
+// cannot be read.
+func pluginState(listJSON []byte, want string) (registered bool, version string, ok bool) {
+	var list struct {
+		Result struct {
+			Plugins []struct {
+				PluginID string `json:"plugin_id"`
+				Version  string `json:"version"`
+			} `json:"plugins"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(listJSON, &list); err != nil {
+		return false, "", false
+	}
+	for _, p := range list.Result.Plugins {
+		if p.PluginID == want {
+			return true, p.Version, true
 		}
-		present = true
-		if m := versionPattern.FindString(line); len(m) > 0 {
-			return true, string(m), true
-		}
-		return true, "", false
 	}
 	return false, "", true
+}
+
+// pluginProblem judges the registered plugin against the binary's version.
+// A dev build does not compare versions.
+func pluginProblem(listJSON []byte, binaryVersion string) (problem, readable bool) {
+	registered, version, ok := pluginState(listJSON, pluginID)
+	if !ok {
+		return false, false
+	}
+	if !registered {
+		return true, true
+	}
+	if binaryVersion == "dev" {
+		return false, true
+	}
+	return strings.TrimPrefix(version, "v") != strings.TrimPrefix(binaryVersion, "v"), true
 }
 
 func readVersion(ctx context.Context, command string) (string, error) {
