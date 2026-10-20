@@ -240,18 +240,80 @@ func TestServiceRunStopsWhenTheProjectIsDeleted(t *testing.T) {
 	}
 }
 
-func TestServiceRunMissionsRefusesABadRepoWithoutRestart(t *testing.T) {
+func TestServiceRunMissionsRefusesNoRepoWithoutRestart(t *testing.T) {
 	b, d := runFixture(t)
 	mark(t, b)
 	ran := false
 	d.RunMissions = func(context.Context, *bus.Bus, mission.RunConfig) error { ran = true; return nil }
 	var log bytes.Buffer
-	if code := serviceRun(context.Background(), b, service.Missions, []string{"--repo", t.TempDir()}, d, &log); code != 0 || ran {
+	if code := serviceRun(context.Background(), b, service.Missions, nil, d, &log); code != 0 || ran {
 		t.Fatalf("code = %d ran = %v", code, ran)
 	}
 	if r := record(t, b, service.Missions); r.State != "failed" || !strings.Contains(r.Error, "invalid configuration") {
 		t.Fatalf("record = %+v", r)
 	}
+}
+
+// A directory that is not a Git repository yet: missions waits, publishing
+// waiting-git, spends no restart, and starts the conductor after git init.
+func TestServiceRunMissionsWaitsForGitThenStarts(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	repo := t.TempDir()
+	started := make(chan string, 1)
+	d.RunMissions = func(ctx context.Context, _ *bus.Bus, cfg mission.RunConfig) error {
+		started <- cfg.Repo
+		<-ctx.Done()
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	var log bytes.Buffer
+	go func() { done <- serviceRun(ctx, b, service.Missions, []string{"--repo", repo}, d, &log) }()
+	r := waitState(t, b, service.Missions, gitWaitState)
+	if !strings.Contains(r.Detail, "git init") || r.Error != "" {
+		t.Fatalf("record = %+v", r)
+	}
+	select {
+	case <-started:
+		t.Fatal("the conductor started without a repository")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if out, err := exec.Command("git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	select {
+	case got := <-started:
+		if got != repo {
+			t.Fatalf("repo = %q", got)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the conductor never started after git init")
+	}
+	cancel()
+	if code := <-done; code != 0 {
+		t.Fatalf("code = %d", code)
+	}
+	if n, _ := (service.Budget{Path: d.Paths.BudgetFile(b.Project(), service.Missions)}).FailureCountChecked(time.Now()); n != 0 {
+		t.Fatalf("budget entries = %d", n)
+	}
+}
+
+// Stopped while it waits: a clean, final exit.
+func TestServiceRunMissionsStopsWhileWaitingForGit(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	d.RunMissions = func(context.Context, *bus.Bus, mission.RunConfig) error { t.Error("conductor started"); return nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	var log bytes.Buffer
+	go func() { done <- serviceRun(ctx, b, service.Missions, []string{"--repo", t.TempDir()}, d, &log) }()
+	waitState(t, b, service.Missions, gitWaitState)
+	cancel()
+	if code := <-done; code != 0 {
+		t.Fatalf("code = %d", code)
+	}
+	waitState(t, b, service.Missions, "stopped")
 }
 
 func TestServiceRunMissionsIdleThenStandby(t *testing.T) {

@@ -64,6 +64,8 @@ func TestEvaluatorsCoverBoundariesAndUnknownEvidence(t *testing.T) {
 			{"inactive", ServiceEvidence{Known: true, Installed: true}, Fail},
 			{"budget warning", ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 4}, Warn},
 			{"budget spent", ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 5}, Fail},
+			{"missions waits for git", ServiceEvidence{Known: true, Installed: true, Active: true, WaitingGit: true}, Warn},
+			{"inactive beats waiting", ServiceEvidence{Known: true, Installed: true, WaitingGit: true}, Fail},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				if got := EvaluateServices(tc.in).Status; got != tc.want {

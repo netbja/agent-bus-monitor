@@ -81,7 +81,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			if manager == nil {
 				return health.Unknown, "service manager unavailable", errors.New("service manager unavailable")
 			}
-			active, failures, recentError := true, 0, false
+			active, failures, recentError, waitingGit := true, 0, false, false
 			for _, kind := range inst.Kinds {
 				if !service.ValidKind(kind) {
 					return health.Unknown, "service registry contains an unsupported kind", errors.New("unsupported service kind")
@@ -99,9 +99,12 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 				if rec := records[kind]; rec.Error != "" && rec.At > 0 && redisNow.Sub(time.UnixMilli(rec.At)) <= time.Hour {
 					recentError = true // never retain or display the error text
 				}
+				if rec := records[kind]; rec.State == gitWaitState && rec.At > 0 && redisNow.Sub(time.UnixMilli(rec.At)) <= time.Minute {
+					waitingGit = true
+				}
 			}
 			out := health.EvaluateServices(health.ServiceEvidence{Known: true, Installed: true, Active: active,
-				RecentFailures: failures, RecentError: recentError})
+				RecentFailures: failures, RecentError: recentError, WaitingGit: waitingGit})
 			return out.Status, out.Detail, nil
 		}),
 		healthTask("agent-identity", func(ctx context.Context) (health.Status, string, error) {

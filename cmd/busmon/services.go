@@ -15,7 +15,7 @@ import (
 const serviceStale = 20 * time.Second
 
 // serviceRunning are the states a live process refreshes.
-var serviceRunning = map[string]bool{"starting": true, "ready": true, "waiting-herdr": true, "idle": true, "busy": true}
+var serviceRunning = map[string]bool{"starting": true, "ready": true, "waiting-herdr": true, "waiting-git": true, "idle": true, "busy": true}
 
 // serviceFact is what the header shows for one service kind. legacy is the
 // tab-mode fact ("up"/"down" from the lease, "" when nothing to show): it
@@ -64,6 +64,8 @@ func serviceSeg(word, short, state string, compact bool) Line {
 		glyph, role = GlyphIdle, RoleAttention
 	case "waiting-herdr":
 		glyph, role, text = GlyphBlocked, RoleAttention, "waiting herdr"
+	case "waiting-git":
+		glyph, role, text = GlyphBlocked, RoleAttention, "waiting git"
 	case "failed":
 		glyph, role = GlyphBlocked, RoleError
 	case "gave-up":
@@ -101,7 +103,7 @@ func servicesPanel(inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord,
 			continue
 		}
 		state := serviceFact(r, true, "", now)
-		role := map[string]string{"failed": "red", "gave-up": "red", "waiting-herdr": "yellow", "starting": "yellow", "down": "gray", "stopped": "gray"}[state]
+		role := map[string]string{"failed": "red", "gave-up": "red", "waiting-herdr": "yellow", "waiting-git": "yellow", "starting": "yellow", "down": "gray", "stopped": "gray"}[state]
 		if role == "" {
 			role = "green"
 		}

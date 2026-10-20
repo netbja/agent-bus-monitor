@@ -32,7 +32,7 @@ type Definition struct {
 // such as the canary, scanner and project-defined commands are deliberately
 // not registered here.
 var Catalogue = []Definition{
-	{ID: "services", Title: "Services", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Inspect the service log; restart only when its restart budget allows.", Order: 1},
+	{ID: "services", Title: "Services", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Inspect the service log; restart only when its restart budget allows. Missions waiting for Git: run git init in the project directory.", Order: 1},
 	{ID: "agent-identity", Title: "Agent identity", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Re-check agentbus agents and herdr; ask the person before acting on an identity conflict.", Order: 2},
 	{ID: "agent-launch", Title: "Agent launch and identity", Interval: 5 * time.Minute, Deadline: 5 * time.Second, Remediation: "Relaunch through agentbus with the configured role; do not edit a live pane.", Order: 3},
 	{ID: "model-drift", Title: "Model drift", Interval: 24 * time.Hour, Deadline: 30 * time.Second, Remediation: "Review the result with agentbus roles doctor before changing roles.toml.", Order: 4},
