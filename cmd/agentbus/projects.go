@@ -23,6 +23,8 @@ type projectsDeps struct {
 	Env func(string) string
 	// Keys lists a project's broker keys; nil when the broker cannot be dialled.
 	Keys projlist.KeysFunc
+	// Broker lists the broker's projects (bus.Projects); nil like Keys.
+	Broker func(ctx context.Context) ([]string, error)
 	// Agents reads a project's {p}:agents.
 	Agents    func(project string) (map[string]bus.AgentSnapshot, error)
 	ProcStart func(int) (uint64, error)
@@ -78,8 +80,21 @@ func runProjects(args []string, d projectsDeps, stdout, stderr io.Writer) int {
 				}
 			}
 		}
-		sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 	}
+	if d.Broker != nil { // a project only the broker knows (made on another machine) still shows
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		names, err := d.Broker(ctx)
+		cancel()
+		if err == nil {
+			for _, n := range names {
+				if !byName[n] && bus.ValidName(n) {
+					byName[n] = true
+					rows = append(rows, projlist.Row{Name: n})
+				}
+			}
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 	if d.Keys != nil {
 		rows = projlist.Annotate(context.Background(), rows, d.Keys, 2*time.Second)
 	}
@@ -209,6 +224,14 @@ func realProjectsDeps() projectsDeps {
 	// each probe with an error, which reads as ?.
 	if c, err := bus.Connect(""); err == nil {
 		d.Keys = func(ctx context.Context, p string) ([]string, error) { return bus.ProjectKeys(ctx, c, p) }
+		d.Broker = func(ctx context.Context) ([]string, error) {
+			sums, err := bus.Projects(ctx, c)
+			var names []string
+			for _, s := range sums {
+				names = append(names, s.Project)
+			}
+			return names, err
+		}
 	}
 	return d
 }

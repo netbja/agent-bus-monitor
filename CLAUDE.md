@@ -346,15 +346,16 @@ It never touches Redis — see README "Deployment topology".
   `agentbus up <p>` on an open workspace and `agentbus plugin workspace-event` (herdr's
   `workspace.created`/`workspace.focused`, the only `[[events]]` the manifest test allows) rerun a
   template tab's command (`relaunch.go`: `decideRelaunch`, a pure table) only in a pane whose
-  foreground is a bare shell, for an agent that is not alive by its snapshot (`snapLife`: pid +
+  every foreground process is an idle interactive shell by its argv (`idleShell`: a shell with only
+  `-l`/`-i` flags; `bash -c …` or a script is running work), and never under a duplicate tab label, for an agent that is not alive by its snapshot (`snapLife`: pid +
   `pid_start`, the dispatcher's rule; Linux only, elsewhere the pane decides). The hook creates no
   tab, never provisions (template + broker `present`, like the picker), and starts stopped services
   with `Manager.Start` only: it must never call `startServices`, whose `Install` rewrites a unit
   when the binary path differs (the plugin runs `./agentbus`, installs run `~/.local/bin`) and so
   restarts a running dispatcher. Since v0.21 the units always run `buildinfo.Bin` (setup's
   `$BIN_DIR/agentbus`) when it exists, so that flip no longer happens; the hook still stays off
-  `Install`. `upLock` (`~/.cache/agentbus/up-<p>.lock`, flock + mtime)
-  keeps the hook out of a running up and out of the minute after one, so up's own layout is never
+  `Install`. `upLock` (`~/.cache/agentbus/up-<p>.lock`: flock, with the last end time written in
+  the file under the lock, never the mtime; any failure to lock refuses, for up and hook) keeps the hook out of a running up and out of the minute after one, so up's own layout is never
   typed into twice. `agentbus projects` and `agentbus identity` sit above the project-required
   exit. `missions` without a Git repository publishes `waiting-git` and waits, never exits.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`

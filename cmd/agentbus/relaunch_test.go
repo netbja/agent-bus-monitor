@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -117,7 +118,7 @@ type relaunchHerdr struct {
 	calls []string
 	tabs  string            // JSON tabs
 	panes string            // JSON panes
-	fg    map[string]string // pane -> foreground name
+	fg    map[string]string // pane -> foreground command line (split into argv)
 }
 
 func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
@@ -129,11 +130,12 @@ func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
 	case strings.HasPrefix(line, "pane list --workspace w4"):
 		return []byte(`{"result":{"panes":[` + f.panes + `]}}`), nil
 	case strings.HasPrefix(line, "pane process-info --pane "):
-		name, ok := f.fg[args[3]]
+		cmdline, ok := f.fg[args[3]]
 		if !ok {
 			return nil, errors.New("no such pane")
 		}
-		return []byte(`{"result":{"process_info":{"foreground_processes":[{"name":"` + name + `","argv":["` + name + `"]}]}}}`), nil
+		argv, _ := json.Marshal(strings.Fields(cmdline))
+		return []byte(`{"result":{"process_info":{"foreground_processes":[{"name":"x","argv":` + string(argv) + `}]}}}`), nil
 	case strings.HasPrefix(line, "tab create --workspace w4"):
 		return []byte(`{"result":{"root_pane":{"pane_id":"w4:p9"}}}`), nil
 	}
@@ -258,7 +260,7 @@ func TestUpRelaunchesInAnOpenWorkspace(t *testing.T) {
 		return h.run(args...)
 	}
 	locked := 0
-	deps.Lock = func(string, bool) (func(), bool) { locked++; return func() {}, true }
+	deps.Lock = func(string, bool) (func(), error) { locked++; return func() {}, nil }
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
@@ -299,26 +301,67 @@ func TestUpDryRunProvisionsNothing(t *testing.T) {
 }
 
 func TestUpLockExcludesASecondUp(t *testing.T) {
-	lock := upLock(t.TempDir())
-	unlock, ok := lock("demo", true)
-	if !ok {
-		t.Fatal("first lock refused")
+	dir := t.TempDir()
+	lock := upLock(dir)
+	unlock, err := lock("demo", true)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := lock("demo", false); ok {
-		t.Fatal("a second up took the lock")
+	if _, err := lock("demo", false); !errors.Is(err, errUpBusy) {
+		t.Fatalf("a hook during an up: %v", err)
 	}
-	if _, ok := lock("other", false); !ok {
-		t.Fatal("another project is not locked")
+	if u, err := lock("other", false); err != nil {
+		t.Fatalf("another project is locked: %v", err)
+	} else {
+		u()
 	}
 	unlock()
-	if _, ok := lock("demo", false); ok {
-		t.Fatal("the hook ran right after an up ended")
+	if _, err := lock("demo", false); !errors.Is(err, errUpFresh) {
+		t.Fatalf("the hook right after an up ended: %v", err)
 	}
-	u2, ok := lock("demo", true)
-	if !ok {
-		t.Fatal("lock not released")
+	u2, err := lock("demo", true)
+	if err != nil {
+		t.Fatalf("an up after an up: %v", err)
 	}
 	u2()
+}
+
+// First use (an empty lock file, whoever created it) is not a recent up: only
+// an unlock writes the end time, and always under the lock.
+func TestUpLockFirstUseIsNotFresh(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/up-demo.lock", nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	u, err := upLock(dir)("demo", false)
+	if err != nil {
+		t.Fatalf("first use: %v", err)
+	}
+	u()
+}
+
+// No lock, no pane: an unwritable cache refuses both up and the hook.
+func TestUpLockFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	blocker := dir + "/file"
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lock := upLock(blocker + "/cache") // a file where the directory should be
+	for _, wait := range []bool{true, false} {
+		if _, err := lock("demo", wait); err == nil || errors.Is(err, errUpBusy) || errors.Is(err, errUpFresh) {
+			t.Errorf("wait=%v: %v", wait, err)
+		}
+	}
+	work, _, h, _, deps := upFixture(t)
+	deps.Lock = lock
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 || len(h.calls) != 0 {
+		t.Fatalf("up without its lock: code %d calls %q", code, h.calls)
+	}
+	if code := upHook(deps, "demo", "w4", &out, &errw); code != 1 || len(h.calls) != 0 {
+		t.Fatalf("hook without its lock: code %d calls %q", code, h.calls)
+	}
 }
 
 // The workspace hook starts a stopped service as installed (no Install, so a
@@ -360,9 +403,55 @@ func TestUpHookDoesNothingWhileAnUpRuns(t *testing.T) {
 	_, _, _, _, deps := upFixture(t)
 	h := &relaunchHerdr{}
 	deps.Herdr = h.run
-	deps.Lock = func(string, bool) (func(), bool) { return func() {}, false }
+	deps.Lock = func(string, bool) (func(), error) { return nil, errUpBusy }
 	var out, errw bytes.Buffer
 	if code := upHook(deps, "demo", "w4", &out, &errw); code != 0 || len(h.calls) != 0 {
 		t.Fatalf("code %d calls %q", code, h.calls)
+	}
+}
+
+func TestIdleShell(t *testing.T) {
+	for argv, want := range map[string]bool{
+		"bash": true, "-bash": true, "/bin/zsh -l": true, "fish --login": true, "bash -i": true,
+		"bash -c read": false, "bash script.sh": false, "sh -c x": false, "bash --rcfile x": false,
+		"vim": false, "": false, "python3": false,
+	} {
+		if got := idleShell(strings.Fields(argv)); got != want {
+			t.Errorf("%q: %v, want %v", argv, got, want)
+		}
+	}
+}
+
+// A shell running a command reads its input: never type a launch line into it.
+func TestRelaunchOpenNeverTypesIntoAShellRunningACommand(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"master","tab_id":"w4:t3"}`,
+		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+		fg:    map[string]string{"w4:p3": "bash -c read"},
+	}
+	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: skipped (busy)") {
+		t.Fatalf("calls %q out %s", got, out.String())
+	}
+}
+
+// Two tabs of one label: which holds the role is unknown, so neither is typed into.
+func TestRelaunchOpenLeavesDuplicateLabels(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"master","tab_id":"w4:t3"},{"label":"master","tab_id":"w4:t5"}`,
+		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"},{"pane_id":"w4:p5","tab_id":"w4:t5","agent":"claude"}`,
+		fg:    map[string]string{"w4:p3": "bash"},
+	}
+	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: unknown (several tabs") {
+		t.Fatalf("calls %q out %s", got, out.String())
 	}
 }

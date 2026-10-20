@@ -144,8 +144,23 @@ func resumeCommand(command string, s bus.AgentSnapshot, has bool) string {
 // shells are the foreground names of an idle pane.
 var shells = []string{"bash", "zsh", "fish", "sh", "dash", "ksh", "mksh", "tcsh", "csh", "nu"}
 
-func isShell(name string) bool {
-	return slices.Contains(shells, strings.TrimPrefix(filepath.Base(name), "-"))
+// interactiveFlags are the only arguments an idle interactive shell may carry.
+var interactiveFlags = []string{"-l", "--login", "-i", "--interactive"}
+
+// idleShell is affirmative evidence of a shell at its prompt: a shell started
+// with nothing but login or interactive flags. A shell running a script
+// (`bash x.sh`), a command (`bash -c 'read answer'`) or with any other
+// argument is running work, and so is a process herdr reports without argv.
+func idleShell(argv []string) bool {
+	if len(argv) == 0 || !slices.Contains(shells, strings.TrimPrefix(filepath.Base(argv[0]), "-")) {
+		return false
+	}
+	for _, a := range argv[1:] {
+		if !slices.Contains(interactiveFlags, a) {
+			return false
+		}
+	}
+	return true
 }
 
 // workspacePanes maps a workspace's tab labels to the first pane of each,
@@ -184,8 +199,10 @@ func workspacePanes(herdr func(args ...string) ([]byte, error), ws string) (map[
 	}
 	m := map[string]paneRef{}
 	for _, t := range tabs.Result.Tabs {
-		if _, dup := m[t.Label]; dup {
-			continue // two tabs of one label: the first one counts
+		if ref, dup := m[t.Label]; dup {
+			ref.Dup = true // two tabs of one label: which one holds the role is unknown
+			m[t.Label] = ref
+			continue
 		}
 		for _, p := range panes.Result.Panes {
 			if p.TabID == t.TabID {
@@ -193,14 +210,20 @@ func workspacePanes(herdr func(args ...string) ([]byte, error), ws string) (map[
 				break
 			}
 		}
+		if _, ok := m[t.Label]; !ok {
+			m[t.Label] = paneRef{} // a tab without a pane still claims its label
+		}
 	}
 	return m, nil
 }
 
-type paneRef struct{ Pane, Agent string }
+type paneRef struct {
+	Pane, Agent string
+	Dup         bool // more than one tab carries this label
+}
 
-// paneShell asks herdr for the pane's foreground processes: true when they
-// are all shells.
+// paneShell asks herdr for the pane's foreground processes: true only when
+// every one is an idle interactive shell (idleShell).
 func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, error) {
 	out, err := herdr("pane", "process-info", "--pane", pane)
 	if err != nil {
@@ -224,11 +247,7 @@ func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, e
 		return false, errors.New("no foreground process reported")
 	}
 	for _, p := range fg {
-		name := p.Name
-		if len(p.Argv) > 0 {
-			name = p.Argv[0]
-		}
-		if !isShell(name) {
+		if !idleShell(p.Argv) {
 			return false, nil
 		}
 	}
@@ -275,6 +294,14 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 			sl = snapLife(snap, has, procStart)
 		}
 		ref, hasPane := panes[t.Name]
+		if ref.Dup && !(isAgent && sl == lifeAlive) {
+			fmt.Fprintf(stdout, "%s: unknown (several tabs are named %s; close the extra one)\n", t.Name, t.Name)
+			continue
+		}
+		if hasPane && ref.Pane == "" && !(isAgent && sl == lifeAlive) {
+			fmt.Fprintf(stdout, "%s: unknown (herdr lists the tab but no pane in it)\n", t.Name)
+			continue
+		}
 		facts := paneFacts{}
 		if hasPane {
 			facts.Agent = ref.Agent

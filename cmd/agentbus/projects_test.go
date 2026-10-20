@@ -110,3 +110,31 @@ func TestProjectsNeedsNoProject(t *testing.T) {
 		t.Fatalf("projects block at %d, project-required exit at %d", at, exit)
 	}
 }
+
+// A project only the broker knows (made on another machine) is listed too.
+func TestProjectsListsBrokerOnlyProjects(t *testing.T) {
+	d, _ := projectsRig(t)
+	d.Broker = func(context.Context) ([]string, error) { return []string{"remote", "demo"}, nil }
+	base := d.Keys
+	d.Keys = func(ctx context.Context, p string) ([]string, error) {
+		if p == "remote" {
+			return []string{"remote:status"}, nil
+		}
+		return base(ctx, p)
+	}
+	var out, errw bytes.Buffer
+	if code := runProjects([]string{"--json"}, d, &out, &errw); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	var lines []projectLine
+	if err := json.Unmarshal(out.Bytes(), &lines); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, l := range lines {
+		names = append(names, l.Name+":"+l.Broker)
+	}
+	if strings.Join(names, ",") != "demo:present,orphan:absent,remote:present" {
+		t.Fatalf("rows = %q", names)
+	}
+}

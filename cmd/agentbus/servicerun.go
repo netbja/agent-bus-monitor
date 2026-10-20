@@ -239,6 +239,11 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 		if !isGitRepo(repo) {
 			detail := fmt.Sprintf("no Git repository in %s: run git init there", repo)
 			logf("waiting: %s", detail)
+			// Waiting is not a start: withdraw this run's budget entry now, so
+			// neither the wait nor a kill during it counts; the conductor's run
+			// takes a new one below.
+			_ = budget.End(start)
+			start = time.Time{}
 			t := time.NewTicker(d.Heartbeat)
 			for !isGitRepo(repo) {
 				if !publish(gitWaitState, detail, "") {
@@ -256,6 +261,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			}
 			t.Stop()
 			logf("%s is a Git repository now; starting", repo)
+			start = budget.Begin(d.Now())
 		}
 	}
 

@@ -35,7 +35,8 @@ project-required exit in `main()` (like `mem`, `limits`, `version`).
   from section 2's liveness rule; `?` without Redis).
 - Ends with the next step when something is down: `agentbus up <p>` to restart it.
 - `--json` for scripts. Exit 0 even when a source is unreachable (the line says `?`).
-- **Built:** agents are counted for the template's agent tabs by the snapshot rule only (`?` without
+- **Built:** the rows are templates, service units and the broker's own projects (`bus.Projects`).
+**Built:** agents are counted for the template's agent tabs by the snapshot rule only (`?` without
   a pid); the pane check needs herdr and the workspace open, so it stays in `up`.
 
 ## 2. `agentbus up <p>` relaunches dead agents
@@ -63,10 +64,11 @@ each agent tab of the template and relaunches the dead ones, in their existing p
   dispatcher is up when the agents register.
 - The relaunch never closes a pane, never types anything but the template command, and never
   touches a pane of another workspace.
-- **Built:** "busy" is any foreground process other than a shell (`herdr pane process-info`);
+- **Built:** "busy" is any foreground process other than an idle interactive shell, proven by its
+  argv (`herdr pane process-info`; `bash -c …` or a script is busy; after Codex's review);
   busmon and the other non-agent tabs are rerun the same way (shell → rerun, else `running`).
   `--dry-run` reads only: no bootstrap, no service, no focus. A per-project lock
-  (`~/.cache/agentbus/up-<p>.lock`) serialises ups. The person's recorded name is the default
+  (`~/.cache/agentbus/up-<p>.lock`) serialises ups; it fails closed. Duplicate tab labels are `unknown`. The person's recorded name is the default
   `--as`.
 - This is not a second automated pane writer (decision 2026-10-10-event-driven-dispatch): it runs
   only on the person's gesture (`agentbus up`, or the workspace-open event below, which the person
@@ -81,7 +83,7 @@ The manifest runs `./agentbus plugin workspace-event` on both. The hook differs 
 purpose: no bootstrap; stopped services are started with the manager's start only (no unit or
 environment rewrite: a binary at another path would otherwise reconfigure and restart a running
 dispatcher); no tab is created, so a retired role stays retired; it skips while an up holds the
-lock and for a minute after one ended (the lock file's mtime), so up's own `workspace create`
+lock and for a minute after one ended (the end time written in the lock file under the lock), so up's own `workspace create`
 event never types into panes up is filling. The original text follows.
 
 

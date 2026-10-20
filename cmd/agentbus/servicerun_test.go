@@ -274,6 +274,10 @@ func TestServiceRunMissionsWaitsForGitThenStarts(t *testing.T) {
 	if !strings.Contains(r.Detail, "git init") || r.Error != "" {
 		t.Fatalf("record = %+v", r)
 	}
+	budget := service.Budget{Path: d.Paths.BudgetFile(b.Project(), service.Missions)}
+	if n, _ := budget.FailureCountChecked(time.Now()); n != 0 {
+		t.Fatalf("waiting holds %d budget entries, want 0", n)
+	}
 	select {
 	case <-started:
 		t.Fatal("the conductor started without a repository")
@@ -286,6 +290,9 @@ func TestServiceRunMissionsWaitsForGitThenStarts(t *testing.T) {
 	case got := <-started:
 		if got != repo {
 			t.Fatalf("repo = %q", got)
+		}
+		if n, _ := budget.FailureCountChecked(time.Now()); n != 1 {
+			t.Fatalf("a running conductor holds %d budget entries, want 1 (a crash must count)", n)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("the conductor never started after git init")

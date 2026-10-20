@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -46,7 +47,7 @@ type upDeps struct {
 	// per-project lock that keeps two ups from typing into one pane.
 	Agents    func(project string) (map[string]bus.AgentSnapshot, error)
 	ProcStart func(int) (uint64, error)
-	Lock      func(project string, wait bool) (unlock func(), ok bool)
+	Lock      func(project string, wait bool) (unlock func(), err error)
 }
 
 type upTab struct {
@@ -84,7 +85,11 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		return upDryRun(d, project, resume, stdout, stderr)
 	}
 	if d.Lock != nil {
-		unlock, _ := d.Lock(project, true)
+		unlock, err := d.Lock(project, true)
+		if err != nil {
+			fmt.Fprintf(stderr, "agentbus up: %v; nothing done\n", err)
+			return 1
+		}
 		defer unlock()
 	}
 	args, escalate := extractFlag(args, "--escalate-to")
@@ -573,23 +578,28 @@ func upDryRun(d upDeps, project string, resume bool, stdout, stderr io.Writer) i
 	return 0
 }
 
+// errUpBusy: another up of the project holds the lock; errUpFresh: one ended
+// less than upFresh ago and its layout may still be settling.
+var (
+	errUpBusy  = errors.New("another agentbus up of this project is running")
+	errUpFresh = errors.New("an agentbus up of this project just ended")
+)
+
 // upLock takes ~/.cache/agentbus/up-<project>.lock: one up per project at a
-// time, so the workspace-open hook never types into a pane up is filling.
-// wait=false gives up at once when another holds it, or when an up ended
-// less than upFresh ago (the file's mtime, set at unlock).
-func upLock(cacheDir string) func(project string, wait bool) (func(), bool) {
-	return func(project string, wait bool) (func(), bool) {
+// time, so the workspace hook never types into a pane up is filling. The file
+// holds when the last up ended (Unix ms), read and written only under the
+// lock, so no first use or race can erase it. wait=false (the hook) gives up
+// with errUpBusy while another holds it and errUpFresh within upFresh of the
+// last end. Any failure to establish the lock is an error: the caller then
+// types into no pane.
+func upLock(cacheDir string) func(project string, wait bool) (func(), error) {
+	return func(project string, wait bool) (func(), error) {
 		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-			return func() {}, true // no lock to take is no reason to refuse the person's gesture
+			return nil, fmt.Errorf("lock directory: %w", err)
 		}
-		path := filepath.Join(cacheDir, "up-"+project+".lock")
-		_, statErr := os.Stat(path)
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+		f, err := os.OpenFile(filepath.Join(cacheDir, "up-"+project+".lock"), os.O_CREATE|os.O_RDWR, 0o600)
 		if err != nil {
-			return func() {}, true
-		}
-		if errors.Is(statErr, os.ErrNotExist) {
-			_ = os.Chtimes(path, time.Unix(0, 0), time.Unix(0, 0)) // new: no up has ended yet
+			return nil, fmt.Errorf("lock file: %w", err)
 		}
 		how := syscall.LOCK_EX
 		if !wait {
@@ -597,19 +607,30 @@ func upLock(cacheDir string) func(project string, wait bool) (func(), bool) {
 		}
 		if err := syscall.Flock(int(f.Fd()), how); err != nil {
 			f.Close()
-			return func() {}, false
+			if errors.Is(err, syscall.EWOULDBLOCK) {
+				return nil, errUpBusy
+			}
+			return nil, fmt.Errorf("lock %s: %w", f.Name(), err)
 		}
-		if st, err := f.Stat(); !wait && err == nil && time.Since(st.ModTime()) < upFresh {
+		release := func() {
 			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 			f.Close()
-			return func() {}, false // an up just ended: its layout is settling
+		}
+		if !wait {
+			buf := make([]byte, 32)
+			n, _ := f.ReadAt(buf, 0)
+			if ms, err := strconv.ParseInt(strings.TrimSpace(string(buf[:n])), 10, 64); err == nil && time.Since(time.UnixMilli(ms)) < upFresh {
+				release()
+				return nil, errUpFresh
+			}
 		}
 		return func() {
-			now := time.Now()
-			_ = os.Chtimes(f.Name(), now, now) // when the last up ended: the hook leaves a fresh layout alone
-			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-			f.Close()
-		}, true
+			// When this up ended, for the hook's settling window.
+			if err := f.Truncate(0); err == nil {
+				_, _ = f.WriteAt([]byte(strconv.FormatInt(time.Now().UnixMilli(), 10)), 0)
+			}
+			release()
+		}, nil
 	}
 }
 
@@ -658,10 +679,14 @@ const upFresh = time.Minute
 // does nothing while another up runs or just ran.
 func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 	if d.Lock != nil {
-		unlock, ok := d.Lock(project, false)
-		if !ok {
-			fmt.Fprintf(stdout, "%s: an agentbus up runs or just ran; nothing to do\n", project)
+		unlock, err := d.Lock(project, false)
+		if errors.Is(err, errUpBusy) || errors.Is(err, errUpFresh) {
+			fmt.Fprintf(stdout, "%s: %v; nothing to do\n", project, err)
 			return 0
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "agentbus: %s: %v; no pane touched\n", project, err)
+			return 1
 		}
 		defer unlock()
 	}
