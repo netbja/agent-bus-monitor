@@ -235,6 +235,7 @@ func TestUpRunnerReportsStderrTailAndTimeout(t *testing.T) {
 	if strings.Contains(err.Error(), "first line") || strings.Contains(err.Error(), "args:") {
 		t.Fatalf("err %v: only the stderr tail belongs on one status line", err)
 	}
+	t.Setenv("TMPDIR", t.TempDir())
 	start := time.Now()
 	err = upRunner(fake, 100*time.Millisecond)("slow")
 	if err == nil || !strings.Contains(err.Error(), "still running") {
@@ -508,5 +509,74 @@ func checkPick(t *testing.T, palette string) {
 				return
 			}
 		}
+	}
+}
+
+// A picker that stops waiting (timeout, esc, exit) leaves up to finish: no
+// pipe for it to die on, no tie to the picker's session, the log kept and
+// named.
+func TestUpRunnerOutlivesTheWait(t *testing.T) {
+	dir := t.TempDir()
+	tmp := filepath.Join(dir, "tmp")
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", tmp)
+	marker := filepath.Join(dir, "finished")
+	fake := filepath.Join(dir, "agentbus")
+	script := "#!/bin/sh\nsleep 0.3\necho still provisioning\necho late error >&2\ntouch " + marker + "\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The runner runs in a child that exits as soon as its wait runs out, as
+	// busmon does: whatever the runner held (pipes, session) goes with it.
+	cmd := exec.Command(os.Args[0], "-test.run=^TestUpRunnerHelper$")
+	cmd.Env = append(os.Environ(), "BUSMON_UP_HELPER="+fake)
+	out, err := cmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "left to finish") {
+		t.Fatalf("helper: %v\n%s", err, out)
+	}
+	logs, _ := filepath.Glob(filepath.Join(tmp, "agentbus-up-*.log"))
+	if len(logs) != 1 || !strings.Contains(string(out), logs[0]) {
+		t.Fatalf("the log %v is not named in %q", logs, out)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("up did not finish after the picker stopped waiting")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if b, _ := os.ReadFile(logs[0]); !strings.Contains(string(b), "late error") {
+		t.Fatalf("its stderr did not reach the log: %q", b)
+	}
+}
+
+func TestUpRunnerHelper(t *testing.T) {
+	fake := os.Getenv("BUSMON_UP_HELPER")
+	if fake == "" {
+		t.Skip("helper for TestUpRunnerOutlivesTheWait")
+	}
+	fmt.Println(upRunner(fake, 50*time.Millisecond)("demo"))
+	os.Exit(0)
+}
+
+// A finished up leaves no log behind.
+func TestUpRunnerRemovesItsLog(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMPDIR", dir)
+	fake := filepath.Join(t.TempDir(), "agentbus")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho boom >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := upRunner(fake, 5*time.Second)("demo"); err == nil || err.Error() != "boom" {
+		t.Fatalf("err %v", err)
+	}
+	if logs, _ := filepath.Glob(filepath.Join(dir, "agentbus-up-*.log")); len(logs) != 0 {
+		t.Fatalf("logs left: %v", logs)
 	}
 }

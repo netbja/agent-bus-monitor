@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -222,55 +223,58 @@ func agentbusBeside() string {
 }
 
 // upRunner runs `<bin> up <project>` with this process's environment. Its
-// output never reaches the screen the picker draws on: stdout is dropped and
-// the last line of stderr becomes the error. The wait is bounded; up itself
-// is never killed, so a provisioning is not cut off midway.
+// output never reaches the screen the picker draws on, and nothing ties it to
+// the picker's life: stdout is /dev/null, stderr a log file of its own (no
+// pipe a busmon goroutine copies, so no SIGPIPE once busmon exits), and it
+// runs in a session of its own (no hangup from the pane). The wait is
+// bounded; up is never killed, so a provisioning is not cut off midway. On
+// failure the last line of its stderr is the error; when the wait runs out,
+// the log is left in place and the error names it.
 func upRunner(bin string, wait time.Duration) func(project string) error {
 	return func(project string) error {
+		log, err := os.CreateTemp(os.TempDir(), "agentbus-up-*.log")
+		if err != nil {
+			return err
+		}
+		defer log.Close() // the child holds its own descriptor
 		cmd := exec.Command(bin, "up", project)
 		cmd.Env = os.Environ()
-		var stderr tailBuffer
-		cmd.Stdout, cmd.Stderr = io.Discard, &stderr
+		cmd.Stdout, cmd.Stderr = nil, log
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if err := cmd.Start(); err != nil {
+			os.Remove(log.Name())
 			return err
 		}
 		done := make(chan error, 1)
 		go func() { done <- cmd.Wait() }()
 		select {
 		case err := <-done:
+			defer os.Remove(log.Name())
 			if err == nil {
 				return nil
 			}
-			if tail := stderr.lastLine(); tail != "" {
+			if tail := lastLine(log.Name()); tail != "" {
 				return errors.New(strings.TrimPrefix(tail, "agentbus up: "))
 			}
 			return err
 		case <-time.After(wait):
-			return fmt.Errorf("still running after %s; left to finish, not killed", wait)
+			return fmt.Errorf("still running after %s; left to finish, not killed (its errors: %s)", wait, log.Name())
 		}
 	}
 }
 
-// tailBuffer keeps the last 4 KiB written to it.
-type tailBuffer struct {
-	mu  sync.Mutex
-	buf []byte
-}
-
-func (t *tailBuffer) Write(p []byte) (int, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.buf = append(t.buf, p...)
-	if over := len(t.buf) - 4096; over > 0 {
-		t.buf = t.buf[over:]
+// lastLine is the last non-empty line of the file's final 4 KiB.
+func lastLine(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
 	}
-	return len(p), nil
-}
-
-func (t *tailBuffer) lastLine() string {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	lines := strings.Split(strings.TrimSpace(string(t.buf)), "\n")
+	defer f.Close()
+	if fi, err := f.Stat(); err == nil && fi.Size() > 4096 {
+		f.Seek(-4096, io.SeekEnd)
+	}
+	b, _ := io.ReadAll(f)
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	return strings.TrimSpace(lines[len(lines)-1])
 }
 
