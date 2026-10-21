@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -109,6 +110,8 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		return errors.New("usage: agent-launch <role> <project> [--profile <profile> | --resume <session-id>]")
 	case "fallbacks":
 		return rolesFallbacks(m, rest, stdout)
+	case "reviewers":
+		return rolesReviewers(m, slices.Contains(rest, "--json"), stdout)
 	case "install":
 		if len(rest) == 1 && rest[0] == "--missing-ok" {
 			return rolecfg.InstallSkillsMissingOK(m, env, stdout, stderr)

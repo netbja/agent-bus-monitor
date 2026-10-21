@@ -322,9 +322,11 @@ func main() {
 		}
 		// 1. Durable ledger entry — always, including self-approvals (the
 		//    independence rule is enforced at read time, not here).
+		authorProv, selfProv := verdictProviders(ctx, b, author, self)
 		if _, err := b.AppendVerdict(ctx, bus.Verdict{
 			Subject: subject, Author: author, Reviewer: self,
 			Decision: decision, Message: rationale, Ref: ref,
+			AuthorProvider: authorProv, ReviewerProvider: selfProv,
 		}); err != nil {
 			die(err.Error())
 		}

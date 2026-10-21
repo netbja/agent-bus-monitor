@@ -120,6 +120,25 @@ A project can add specialist roles from `examples/roles.specialists.toml` (spec
 - sentinel's daily review lists popped roles idle for more than 2 h with no accepted task: retire
   them or ask the person.
 
+## A reviewer on another provider
+
+A review by the author's own model shares its blind spots. `agentbus roles reviewers` lists, from
+this machine's model table, the models of **other providers than coder's** that can review: a
+fresh frontier model can be foureyes, a workhorse model only a second reviewer. A model served
+through another provider but made by coder's own provider is never listed.
+
+- When it lists one and foureyes runs on coder's provider, **ask the person** (`agentbus ask`), once
+  per model: `as foureyes` / `as a second reviewer` / `no`. Never switch on your own.
+- What the switch costs, said in the ask: the new client gets only the repository's skills
+  (`agent-bus`, `agent-bus-*`; the user-installed ones such as `code-review` may be missing there);
+  a Codex agent cannot be resumed through the launcher and needs `agentbus bind` for the
+  dispatcher; the manifest must be schema 2 (profiles, `fallback_profiles`).
+- `agentbus verdicts` adds `(same provider)` beside an approve whose reviewer shares the author's
+  provider. It is a note, never a block.
+- **The money path reads both verdicts** (`agentbus verdicts --json --subject …`), never the roll-up
+  alone: with two reviewers, a later approve from one overrides an earlier reject from the other
+  in the roll-up.
+
 ## Resync — inject text into an agent's pane
 ```bash
 pane=$(agentbus pane claude1) || { echo "claude1 has no registered pane"; exit 1; }

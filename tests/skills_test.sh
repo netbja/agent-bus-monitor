@@ -26,6 +26,8 @@ assert_contains "$p" "## What remains for you"            "peer skill: the repor
 assert_contains "$m" "## What remains for you"            "master skill: the report shape"
 assert_contains "$m" "## Specialists"                     "master skill has a Specialists section"
 assert_contains "$m" "agentbus retire <role>"             "master retires a specialist after its work"
+assert_contains "$m" "agentbus roles reviewers"           "master offers a reviewer on another provider"
+assert_contains "$m" "reads both verdicts"                "money path reads both reviewers, not the roll-up"
 # the tee is gone: a prompt that still tells agents to publish usage is stale
 if grep -q 'agentbus usage "' "$REPO/skills/agent-bus-master/SKILL.md" "$s" 2>/dev/null; then
   _bad "a skill still documents the removed status-line usage tee"
