@@ -204,7 +204,7 @@ var (
 	}
 	composeBindings = []binding{
 		{Keys: "^S", Hint: "send", Act: ActSend, match: keyIs(tcell.KeyCtrlS)},
-		{Keys: "tab", Hint: "recipient", Act: ActComposeField, match: keyIs(tcell.KeyTab)},
+		{Keys: "tab", Hint: "recipient", Help: "recipient " + GlyphNone + " text; a text that is only @prefix becomes the recipient (completed, or its list opens)", Act: ActComposeField, match: keyIs(tcell.KeyTab)},
 		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(tcell.KeyCtrlT)},
 		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(tcell.KeyEscape)},
 	}

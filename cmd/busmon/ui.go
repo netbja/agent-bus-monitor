@@ -206,13 +206,7 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 		if u.composing != ModeInput {
 			return nil
 		}
-		u.st.mu.Lock()
-		names := make([]string, 0, len(u.st.agents))
-		for n := range u.st.agents {
-			names = append(names, n)
-		}
-		u.st.mu.Unlock()
-		return agentCompletions(currentText, names)
+		return recipientCompletions(currentText, u.completionNames())
 	})
 	u.input.SetDoneFunc(u.inputDone)
 

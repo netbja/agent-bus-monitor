@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -203,22 +202,4 @@ func parseDirected(text string) (target, body string, directed bool) {
 		return "", text, false
 	}
 	return agent, body, true
-}
-
-// agentCompletions returns "@<name> " entries for the @-prefixed first token of
-// currentText (no space yet) whose name matches the partial, sorted. Returns nil
-// once a space (the body) has started, or when currentText is not @-prefixed.
-func agentCompletions(currentText string, names []string) []string {
-	if !strings.HasPrefix(currentText, "@") || strings.ContainsRune(currentText, ' ') {
-		return nil
-	}
-	prefix := currentText[1:]
-	var out []string
-	for _, n := range names {
-		if strings.HasPrefix(n, prefix) {
-			out = append(out, "@"+n+" ")
-		}
-	}
-	sort.Strings(out)
-	return out
 }
