@@ -120,6 +120,30 @@ A project can add specialist roles from `examples/roles.specialists.toml` (spec
 - sentinel's daily review lists popped roles idle for more than 2 h with no accepted task: retire
   them or ask the person.
 
+## Draft a role
+
+A task no role covers (shipped or specialist): draft one. **A drafted role is inert: it is never
+added to the manifest, linked or popped without the person's yes.**
+
+```bash
+agentbus roles draft payments --task review the payment service and its reconciliation jobs
+```
+
+It prints JSON (the files, and the chosen skills with the words they share with the task) and
+writes the entry and the prompt under `.agent-bus/drafts/payments/`. The draft reuses only skills
+the launcher can resolve (`agent-bus` always, plus the three best matches) and is least
+privileged: a pop role, `approval = "person"`, `permission = "manual"`.
+
+1. **Ask the person** (`agentbus ask`): what it is for, its skills and why, its permissions; three
+   options `adopt`, `change` (they say what in a free answer; you redraft with `--force`), `discard`.
+2. Only on `adopt`: `agentbus roles adopt payments --ask <ask id>`. It refuses unless that ask has
+   the option `adopt` chosen by someone other than you, checks the manifest still loads, appends
+   the entry and copies the prompt to `roles/` (never over an existing one).
+3. Adopting does not pop it. Pop it later as any role with `approval = "person"`: Claude Code asks
+   the person in your pane first.
+
+The adopt check is a convenience, not a lock: never answer your own ask.
+
 ## A reviewer on another provider
 
 A review by the author's own model shares its blind spots. `agentbus roles reviewers` lists, from

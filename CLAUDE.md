@@ -332,6 +332,16 @@ It never touches Redis — see README "Deployment topology".
   never changes, which is what `bind` relies on. Outputs are kept byte-identical to the Python
   (dry runs, adapter spec JSON via `pyJSON`, template); `tests/roles_scripts_test.sh` covers the
   scripts end to end.
+  Specialist roles (spec `docs/superpowers/specs/2026-10-21-specialist-roles-design.md`):
+  `roles.toml` is schema 2 since then (profiles; `rolecfg/migration_test.go` keeps every launch
+  equal to the last schema-1 manifest, `rolecfg/testdata/roles.v1.toml`);
+  `examples/roles.specialists.toml` holds six pop roles with prompts in `roles/`. Verbs:
+  `roles reviewers` (models of other providers than coder's that can review; never the author's
+  own maker served elsewhere), `roles skill-users <skill>...` (whom to tell when skills change),
+  `roles draft <role> --task …` (an inert draft in `.agent-bus/drafts`, skills from the launcher's
+  roots, least privileged) and `roles adopt <role> --ask <id>` (needs the project's bus, like
+  `doctor`: only after an `adopt` answer not given by the asker; appends to the manifest after
+  checking it loads, never overwrites a prompt).
 - **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
   `update`, `uninstall`, `status`. It stamps `buildinfo.Version` (from
   `git describe` when it is a `v*` tag, else `dev`) and `buildinfo.Repo` via ldflags; `agentbus up`

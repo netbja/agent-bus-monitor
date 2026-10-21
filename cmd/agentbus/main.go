@@ -76,7 +76,8 @@ func main() {
 	if len(args) >= 1 && args[0] == "models" {
 		os.Exit(runModels(context.Background(), args[1:], models.RealEnv(), models.CachePath(), models.ConfigPath(), time.Now(), os.Stdout, os.Stderr))
 	}
-	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && args[1] == "doctor") {
+	// doctor and adopt need the project's bus: they go through the switch below.
+	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && (args[1] == "doctor" || args[1] == "adopt")) {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}
 	// identity is the person's name in busmon.toml (v0.21): no project, no broker.
@@ -454,7 +455,10 @@ func main() {
 	case "health":
 		os.Exit(runHealth(ctx, b, self, rest, os.Stdout, os.Stderr))
 
-	case "roles": // only doctor reaches here (it needs the project's bus)
+	case "roles": // only doctor and adopt reach here (they need the project's bus)
+		if rest[0] == "adopt" {
+			os.Exit(runAdopt(ctx, b, self, rest[1:], os.Environ(), os.Stdout, os.Stderr))
+		}
 		os.Exit(runDoctor(ctx, b, realDoctorDeps(os.Environ()), rest[1:], os.Stdout, os.Stderr))
 
 	case "retire":

@@ -110,6 +110,8 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		return errors.New("usage: agent-launch <role> <project> [--profile <profile> | --resume <session-id>]")
 	case "fallbacks":
 		return rolesFallbacks(m, rest, stdout)
+	case "draft":
+		return rolesDraft(m, rest, env, stdout)
 	case "skill-users":
 		if len(rest) == 0 {
 			return errors.New("usage: skill-users <skill>...")
