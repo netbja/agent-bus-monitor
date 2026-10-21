@@ -781,3 +781,23 @@ func pythonString(value interface{}) string {
 		return fmt.Sprint(value)
 	}
 }
+
+// RolesUsing is every role whose skills include one of skills, in manifest
+// order: the agents to tell when those skills change (a running agent keeps
+// the copy it loaded at boot until it invokes the skill again).
+func (m *Manifest) RolesUsing(skills []string) []string {
+	var out []string
+	for _, role := range m.roleOrder {
+		p, err := m.Resolve(role)
+		if err != nil {
+			continue
+		}
+		for _, s := range p.Skills {
+			if contains(skills, s) {
+				out = append(out, role)
+				break
+			}
+		}
+	}
+	return out
+}

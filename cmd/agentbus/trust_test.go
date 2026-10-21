@@ -120,8 +120,8 @@ skills = ["agent-bus"]
 		"env ROLES_TOML=" + manifest + " /r/scripts/agent-launch master demo":       "claude-code",
 		"env 'ROLES_TOML=" + manifest + "' '/r/scripts/agent-launch' foureyes demo": "codex",
 		"env ROLES_TOML=" + manifest + " /r/scripts/agent-launch ghost demo":        "",
-		"/r/busmon --project demo":                                                   "",
-		"env ROLES_TOML=/nowhere/roles.toml /r/scripts/agent-launch master demo":     "",
+		"/r/busmon --project demo": "",
+		"env ROLES_TOML=/nowhere/roles.toml /r/scripts/agent-launch master demo": "",
 	} {
 		if got := tabClient(cmd, env); got != want {
 			t.Errorf("tabClient(%q) = %q, want %q", cmd, got, want)

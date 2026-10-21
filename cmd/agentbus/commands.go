@@ -381,6 +381,7 @@ var commands = []cli.Command{
 			"roles doctor [--json] [--publish]   (needs --project)",
 			"roles fallbacks <role> [--json]",
 			"roles reviewers [--json]   (models of other providers than coder's that can review)",
+			"roles skill-users <skill>...   (the roles to tell when those skills change)",
 			"roles validate|exists|tier|field|launch|install|template|check-toml ...   (scripts)",
 		},
 		Summary: "the role manifest; doctor compares configured, launched and used models",

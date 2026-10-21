@@ -139,6 +139,21 @@ through another provider but made by coder's own provider is never listed.
   alone: with two reviewers, a later approve from one overrides an earlier reject from the other
   in the roll-up.
 
+## Skill updates
+
+Skills are symlinks to the repository, so a changed skill is on disk as soon as the checkout is
+updated, but **a running agent keeps the copy it loaded at boot** until it invokes the skill again.
+`./setup.sh update` prints `skills changed: …` and the command to run:
+
+```bash
+agentbus roles skill-users agent-bus agent-bus-sentinel     # the roles that use them
+agentbus cmd --no-wake sentinel "skill agent-bus-sentinel changed in v0.22.0: re-invoke it before your next task"
+```
+
+One `--no-wake` directive per running agent of those roles: nothing is urgent, it is read at the
+agent's next drain. A changed role prompt (`roles/<role>.md`) is read only at launch: propose the
+reload (`/exit`, then `agentbus up <p> --resume`) to the person instead.
+
 ## Resync — inject text into an agent's pane
 ```bash
 pane=$(agentbus pane claude1) || { echo "claude1 has no registered pane"; exit 1; }

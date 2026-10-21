@@ -62,3 +62,20 @@ func TestEveryRoleHasAPrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestRolesUsing(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.RolesUsing([]string{"agent-bus-sentinel"}); !slices.Equal(got, []string{"sentinel"}) {
+		t.Fatalf("agent-bus-sentinel: %v", got)
+	}
+	got := m.RolesUsing([]string{"tdd", "agent-bus-master"})
+	if !slices.Equal(got, []string{"master", "coder"}) {
+		t.Fatalf("tdd, agent-bus-master: %v", got)
+	}
+	if got := m.RolesUsing([]string{"nope"}); len(got) != 0 {
+		t.Fatalf("unknown skill: %v", got)
+	}
+}

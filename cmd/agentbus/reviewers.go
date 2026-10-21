@@ -97,4 +97,3 @@ func rolesReviewers(m *rolecfg.Manifest, asJSON bool, out io.Writer) error {
 	}
 	return nil
 }
-
