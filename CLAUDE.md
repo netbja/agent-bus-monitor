@@ -118,7 +118,7 @@ kinds per project:
 |---------------------|-------------------------------------------------|--------------------------|
 | `{p}:status`        | `agent state message`                           | busmon Agents+Activity   |
 | `{p}:report`        | `agent kind message` (kind: note/auto); optional `full` (retained only when it differs from the ≤500 preview) | busmon ACTIVITY + hermes |
-| `{p}:notify`        | `from message`                                  | busmon ACTIVITY          |
+| `{p}:notify`        | `from message`; optional `for=person` (a dispatcher notice only the person can act on: busmon marks it unread) | busmon ACTIVITY          |
 | `{p}:cmd`           | `from target type ref command`; optional `wake=no` (delivered, never wakes) | busmon ACTIVITY + agents + dispatch |
 
 Additional keys: `{p}:pilot` (Redis string, pilot lease → driver name + TTL), `{p}:gate:{agent}`

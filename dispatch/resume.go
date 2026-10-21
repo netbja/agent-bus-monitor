@@ -233,7 +233,7 @@ func (l *loop) longHold(ctx context.Context, p string, w quota.Window, now time.
 		msg := fmt.Sprintf("The project is paused until %s (%s, %s window, %s). To continue before, swap %s to "+
 			"another provider from a terminal: agentbus roles fallbacks %s, then agentbus --project %s swap %s --profile <fallback>.",
 			until, p, w.Name, wait, l.cfg.EscalateTo, l.cfg.EscalateTo, l.b.Project(), l.cfg.EscalateTo)
-		sent, err = l.b.FencedNotifyOnce(ctx, l.token, longHoldMark(p), episode, dispatchFrom, truncRunes(msg, bus.CmdMaxRunes))
+		sent, err = l.b.FencedNotifyOnceForPerson(ctx, l.token, longHoldMark(p), episode, dispatchFrom, truncRunes(msg, bus.CmdMaxRunes))
 	} else {
 		board, berr := l.b.Board(ctx)
 		if berr != nil {

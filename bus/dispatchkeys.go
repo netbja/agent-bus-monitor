@@ -279,6 +279,19 @@ func (b *Bus) FencedNotify(ctx context.Context, token, from, message string) (st
 	return b.fencedAdd(ctx, token, "notify", "from", from, "message", message)
 }
 
+// ForPerson is the notify field for's value on a dispatcher notice that only
+// the person can act on: busmon marks it unread (busmon UX spec, item 8).
+// Additive: a reader that does not know the field ignores it.
+const ForPerson = "person"
+
+// FencedNotifyForPerson is FencedNotify with for=person, as fenced.
+func (b *Bus) FencedNotifyForPerson(ctx context.Context, token, from, message string) (string, error) {
+	if err := ValidateText(message, CmdMaxRunes); err != nil {
+		return "", err
+	}
+	return b.fencedAdd(ctx, token, "notify", "from", from, "message", message, "for", ForPerson)
+}
+
 // fencedGroup: -1 not holder; 0 group already there; 1 created at the floor
 // (server TIME minus ARGV[3] ms, never below 0), MKSTREAM.
 var fencedGroup = redis.NewScript(`

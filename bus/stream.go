@@ -215,6 +215,7 @@ type Event struct {
 	Full         string // report: full retained text (empty unless it differs from the preview)
 	NoWake       bool   // cmd: field wake=no — delivered, but never worth waking the target
 	Human        bool   // cmd/notify: field human=yes — written by a person (busmon), not an agent
+	For          string // notify: field for — ForPerson marks a dispatcher notice meant for the person (additive)
 	Stale        bool   // set by drain only: entry older than the horizon
 	AgeS         int64  // set by drain only: entry age in seconds
 }
@@ -228,6 +229,7 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	e.ExpiresAt, _ = strconv.ParseInt(fields["expires_at"], 10, 64)
 	e.NoWake = fields["wake"] == "no"
 	e.Human = fields["human"] == "yes"
+	e.For = fields["for"]
 	switch kind {
 	case "status":
 		e.Agent, e.State, e.Message = fields["agent"], fields["state"], fields["message"]

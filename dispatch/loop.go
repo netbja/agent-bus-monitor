@@ -634,7 +634,9 @@ func (l *loop) escalate(ctx context.Context, s *step, d Decision) error {
 
 	body := fmt.Sprintf("%s: %s; %d waiting, oldest %s", s.agent, d.Reason, s.o.Size(), s.o.OldestID)
 	note := body
+	notify := l.b.FencedNotify
 	if why := l.recipientCannotAct(s.agent); why != "" {
+		notify = l.b.FencedNotifyForPerson // only the person can act: busmon marks it unread
 		// Nobody on the bus can act: the notify is for the person (busmon).
 		note = "⚠ " + body + " (" + why + ")"
 		if strings.HasPrefix(d.Reason, "agent blocked") && s.snap != nil && s.snap.Pane != "" {
@@ -643,7 +645,7 @@ func (l *loop) escalate(ctx context.Context, s *step, d Decision) error {
 	} else if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, l.cfg.EscalateTo, bus.CmdEscalation, body); err != nil {
 		return err
 	}
-	if _, err := l.b.FencedNotify(ctx, l.token, dispatchFrom, note); err != nil {
+	if _, err := notify(ctx, l.token, dispatchFrom, note); err != nil {
 		return err
 	}
 	r.Escalated = "true"
