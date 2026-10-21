@@ -22,12 +22,14 @@
 // filters, i or @ writes on the bus, r/F2 lists requests, ?/F1 shows every key,
 // q quits. Themes: inherited dark (default), light, and NO_COLOR.
 //
-// Project is required: -project or AGENT_BUS_PROJECT. -host overrides REDIS_HOST.
+// Project is required: -p/--project or AGENT_BUS_PROJECT. -H/--host overrides
+// REDIS_HOST. Flags: flags.go, one table for parsing and -h.
 package main
 
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -311,44 +313,28 @@ type shared struct {
 }
 
 func main() {
-	host := flag.String("host", "", "Redis host (overrides REDIS_HOST)")
-	projectFlag := flag.String("project", "", "project namespace (or AGENT_BUS_PROJECT)")
-	limitFlag := flag.Int("limit", 25, "ACTIVITY backfill: replay the last N lines on launch (0 = all history; or AGENT_BUS_BUSMON_LIMIT)")
-	resetFlag := flag.Bool("reset", false, "purge the project's streams before launching (asks to confirm)")
-	yesFlag := flag.Bool("yes", false, "skip the --reset confirmation prompt")
-	listFlag := flag.Bool("list", false, "list the projects on this bus and exit")
-	deleteFlag := flag.String("delete", "", "delete every key of a project (DEL, not --reset's XTRIM) and exit")
-	themeFlag := flag.String("theme", "", "colour theme: auto, dark or light (or AGENT_BUS_BUSMON_THEME; default auto)")
-	asFlag := flag.String("as", "", "your name on the bus, shown as a human (or AGENT_BUS_HUMAN; default \"pilot\")")
-	versionFlag := flag.Bool("version", false, "print the version and exit")
-	pickFlag := flag.Bool("pick", false, "choose a project template and open it with agentbus up (the herdr plugin's Projects picker)")
-	flag.Parse()
-	if *versionFlag {
+	opts, set, err := parseFlags(os.Args[1:], os.Stderr)
+	if errors.Is(err, flag.ErrHelp) {
+		return
+	}
+	if err != nil {
+		os.Exit(2)
+	}
+	if opts.version {
 		fmt.Println("busmon version " + buildinfo.Version)
 		return
 	}
-	limitSet, themeSet, asSet := false, false, false
-	flag.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case "limit":
-			limitSet = true
-		case "theme":
-			themeSet = true
-		case "as":
-			asSet = true
-		}
-	})
 	settings := loadBusmonSettings(busmonConfigPath(), settingsOverrides{
-		LimitSet: limitSet, LimitFlag: *limitFlag, LimitEnv: os.Getenv("AGENT_BUS_BUSMON_LIMIT"),
-		ThemeFlag: ifSet(themeSet, *themeFlag), ThemeEnv: os.Getenv("AGENT_BUS_BUSMON_THEME"),
-		AsFlag: ifSet(asSet, *asFlag), AsEnv: os.Getenv("AGENT_BUS_HUMAN"),
+		LimitSet: set["limit"], LimitFlag: opts.limit, LimitEnv: os.Getenv("AGENT_BUS_BUSMON_LIMIT"),
+		ThemeFlag: ifSet(set["theme"], opts.theme), ThemeEnv: os.Getenv("AGENT_BUS_BUSMON_THEME"),
+		AsFlag: ifSet(set["as"], opts.as), AsEnv: os.Getenv("AGENT_BUS_HUMAN"),
 	})
 	// --pick chooses the project, so like --list it must run before the
 	// project-required exit, and before --reset and --delete: a picker never
 	// purges or deletes, whatever else is on the line. It needs only the
 	// theme, so a bad --as (it writes nothing) cannot stop it.
-	if *pickFlag {
-		os.Exit(runPicker(*host, settings.Theme))
+	if opts.pick {
+		os.Exit(runPicker(opts.host, settings.Theme))
 	}
 	if err := settings.validateIdentity(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: --as: %v\n", err)
@@ -363,8 +349,8 @@ func main() {
 	// --list answers "which projects are on this bus?", so it MUST run before the
 	// project-required exit below — that error is the very thing it exists to
 	// resolve. It also wins over --reset: a read-only query never purges.
-	if *listFlag {
-		if err := listProjects(*host, os.Stdout, time.Now()); err != nil {
+	if opts.list {
+		if err := listProjects(opts.host, os.Stdout, time.Now()); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
@@ -374,15 +360,15 @@ func main() {
 	// --delete names its own target, so like --list it must not require --project.
 	// It also sits above --reset: purging a project's history on the way to
 	// deleting the project would be work done twice and a confirmation asked twice.
-	if *deleteFlag != "" {
-		if err := deleteProject(*host, *deleteFlag, *yesFlag, os.Stdin, time.Now(), localServices); err != nil {
+	if opts.delete != "" {
+		if err := deleteProject(opts.host, opts.delete, opts.yes, os.Stdin, time.Now(), localServices); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 
-	project := *projectFlag
+	project := opts.project
 	if project == "" {
 		project = os.Getenv("AGENT_BUS_PROJECT")
 	}
@@ -397,7 +383,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := bus.Connect(*host)
+	client, err := bus.Connect(opts.host)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: Redis connection failed: %v\n", err)
 		os.Exit(1)
@@ -412,8 +398,8 @@ func main() {
 	// --reset purges the project's streams before the TUI starts (terminal still
 	// in normal mode for the confirmation prompt). XTRIM clears history but keeps
 	// consumer groups + armed/pilot/gate leases.
-	if *resetFlag {
-		if !*yesFlag && !confirmReset(project, os.Stdin) {
+	if opts.reset {
+		if !opts.yes && !confirmReset(project, os.Stdin) {
 			fmt.Println("Cancelled.")
 			os.Exit(0)
 		}

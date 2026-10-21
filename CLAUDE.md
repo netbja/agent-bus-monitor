@@ -179,7 +179,17 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
   `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
-  trailing words are joined. `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
+  trailing words are joined. Every command's usage, flags and examples are one table
+  (`cmd/agentbus/commands.go`, types in `cli/`): `agentbus help [<cmd>]` and `<cmd> --help`
+  render it above the project-required exit, and `expandArgs` rewrites the table's short flags
+  (`-p` project and `-H` host before the command only, the command's own shorts after it) to the
+  long forms the parsers read; `globalArgs` never reads `--project`/`--host` from the message of a
+  `Text` command (`notify hi --project x` stays in the current project); internal
+  entry points (`plugin`, `statusline`, `service run`, the scripts' `roles` verbs) are never
+  expanded. `TestEveryDispatchedCommandIsInTheTable` walks `main()`'s AST, so a new command
+  without a table entry fails the suite, and `TestEveryFlagLiteralIsInTheTable` does the same
+  for a new `--flag`. busmon's flags are `cmd/busmon/flags.go` (`busmonFlags`, long + short,
+  `-h` rendered from it). `subscribe [--since <cursor>] <agent> [idle_secs]` is a one-shot
   XREADGROUP loop (consumer group = agent name) that emits **one JSON object** then **exits** — a
   `cmd` object (exit 0) on an addressed entry, or a `heartbeat` object (exit 64) after the idle
   window (positional `idle_secs`, default 240s). Caller persists the `id` field and passes it back

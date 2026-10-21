@@ -37,12 +37,21 @@ them before retrying anything.
 
 1. **Project is mandatory.** Every call needs `--project <p>` (or `export
    AGENT_BUS_PROJECT=<p>`). No default. Missing it → `error: project required`.
-2. **Flags use a DOUBLE dash and a SPACE — never `=`, never a single dash.**
-   - ✅ `agentbus --project trading ...`   ✅ `--ref abc123`   ✅ `--auto`   ✅ `--ttl 90s`
-   - ❌ `-project trading` (single dash — silently ignored → "project required")
-   - ❌ `--ref=abc123` (the `=` form is NOT parsed → "usage" error)
-   - (Exception: the `busmon` TUI uses Go flags and tolerates `-project` *or*
-     `--project`. `agentbus` does **not** — always use `--project`.)
+2. **Flags: `--long value`, or the short `-x value` that `agentbus help <cmd>` lists.**
+   - ✅ `agentbus --project trading ...` = `agentbus -p trading ...`   ✅ `--ref abc123` = `-r abc123`
+   - The global shorts `-p`/`-H` are read **only before the command**: after it, `-p` is a
+     message word (`notify fixed with mkdir -p build` stays as written). For a command whose
+     trailing words are a message (`status`, `report`, `notify`, `cmd`, `reply`, …), the long
+     `--project`/`--host` after the command are message words too: put them first.
+   - ✅ `--ref=abc123` (split for a flag that takes a value)
+   - ❌ `-project trading` (single dash with a long name — not a flag → "project required")
+   - ❌ `-jr` / `-pdemo` (no bundled shorts, no attached values)
+   - Shorts are per command: `-n` is `--no-wake` for `cmd`, `--now` for `swap`, the
+     count for `service logs`. A message word that is exactly one of the command's
+     shorts is read as that flag (as a word `--ref` already is). In scripts and skills,
+     prefer the long forms. `agentbus help` lists every command; `agentbus <cmd> --help`
+     (right after the command) shows its usage, flags and examples, with no project and
+     no broker. `busmon -h` does the same for busmon (`busmon -p <project>`).
 3. **Positional order is fixed.** `<agent>` and `<state>`/`<target>` come in the
    exact order shown. Trailing words are joined into the message, so the message
    always goes **last** and needs no quotes (quotes are fine too).
