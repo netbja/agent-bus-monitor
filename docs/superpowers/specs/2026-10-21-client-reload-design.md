@@ -47,7 +47,9 @@ entry point the launcher started has changed since**. That is what the design me
   proof, like `model` (`bus/ident.go`). Additive field; old snapshots have none.
 - **Version label** (display only, never a decision): Claude `versions/<v>`, Grok
   `grok-<v>-linux…`, npm `package.json` `version`. Missing parser → no label, the flag still works.
-- **Dispatcher** (the observe pass, which already inspects every verified pane every 15 s): for each
+- **Dispatcher** (the observe pass, which already inspects every verified pane every 15 s; it runs
+  only in the dispatch **service** — `Config.Observe` is 0 by default, so a foreground
+  `agentbus dispatch` and the existing tests observe nothing, and neither detect updates): for each
   verified agent with a `client_fp`, re-resolve `Path` at most once a minute (stat and readlink
   only), and mark the agent `client_update` when the fingerprint differs. With no `client_fp`,
   a client signature `update` (C) may set the same mark, flagged `banner`.
@@ -56,6 +58,8 @@ entry point the launcher started has changed since**. That is what the design me
   version, or the link reads `… (deleted)`, the agent is marked `client_update` with source
   `layout`. That covers every agent launched before this change (today's whole team) without a
   relaunch. Version order is the numeric dotted order; anything else in the directory is ignored.
+  It misfires on a deliberately pinned or downgraded install (a newer version left on disk): for a
+  proposal that only asks, that is acceptable, and `skip this version` silences it.
 - `/proc` is Linux only, like `snapLife`. On macOS the fingerprint (stat only) still works; the
   running label is omitted.
 
@@ -71,8 +75,9 @@ transcript, no configuration, no credential.
    `Client  2.1.305 running · 2.1.306 installed · reload when idle`, plus the reload command (below).
    Observed, never declared: the state column is untouched.
 3. **Health**: a new check `client-updates` (interval 5 min): `warn` when one or more agents run an
-   outdated client, detail `N agent(s): <client> <running>→<installed>`; `unknown` when no agent has
-   a fingerprint. Warn never wakes sentinel (v0.19 rule), so it does not on its own.
+   outdated client, detail `N agent(s): <client> <running>→<installed>`; `ok` when every verified
+   agent can be judged (fingerprint or layout fallback) and none is outdated; `unknown` when no
+   observation is fresh, or when some verified agent has neither a fingerprint nor a layout match. Warn never wakes sentinel (v0.19 rule), so it does not on its own.
 4. **One proposal per update episode.** An episode is `(client, installed fingerprint)`, across
    agents: one update of Claude Code is one episode, however many agents run it. When an episode
    starts, the dispatcher sends **sentinel** one directive, written with its once-mark in one fenced
@@ -85,7 +90,11 @@ Sentinel stays one-shot (skill `agent-bus-sentinel`, new section "Client update"
 
 1. Read `agentbus agents` and `agentbus health detail client-updates`.
 2. Sort the agents into **ready** (declared `idle`, not observed busy, no `accepted` board task, no
-   open challenge on either side, no open ask) and **later** (anything else). Master is always last.
+   open challenge on either side, no open ask, **not on a fallback profile**: no record in
+   `{p}:fallback`, `Bus.Fallbacks`) and **later** (anything else). Master is always last. A swapped
+   role is listed as `after agentbus swap <role> --back`: the reload path below relaunches the
+   template's command, which carries the role's own profile, so reloading a swapped role would
+   silently undo the swap.
 3. Send master **one** directive with the proposal (text below), and a health note
    (`agentbus health note client-updates …`).
 4. Do nothing else. It never closes a pane, never types into one, and never runs `swap` or
@@ -94,31 +103,55 @@ Sentinel stays one-shot (skill `agent-bus-sentinel`, new section "Client update"
 Master puts the decision to the person with `agentbus ask` (choices: `reload the ready ones now`,
 `later`, `skip this version`) and acts only on the answer, one agent at a time.
 
+### The reload path: `/exit`, then `agentbus up <p> --resume`
+
+No new mechanism. v0.21's relaunch already does the right thing once the client has exited:
+
+1. **The person** types `/exit` in the agent's pane (it is idle: that is why it is listed as ready).
+   The client exits and the pane returns to its shell.
+2. **The person, or master on the person's answer**, runs `agentbus up <p> --resume` from a
+   terminal, after `agentbus up <p> --resume --dry-run` shows `<role>: relaunch (resumed)` and
+   nothing else. `up` sees the tab's command gone (dead pid, every pane a plain shell), and runs the
+   tab's **template command** in a **new pane split from that tab**, with `--resume <session>`
+   appended (`resumeCommand`, `cmd/agentbus/relaunch.go`). The template command is
+   `env ROLES_TOML=<manifest> <scripts>/agent-launch <role> <p>` (`rolecfg/template.go`), so the
+   manifest is the project's own, and the launcher re-applies the role rules, the profile's model
+   and the identity (`bind`). No one types into an existing pane: the person types `/exit`, and `up`
+   runs the command in a pane it has just created, as v0.21 decided.
+
+Limits, stated in the proposal:
+
+- **Swapped roles** are not ready (above): the template carries no `--profile`, and `agent-launch`
+  takes `--profile` or `--resume`, not both.
+- **The session id is the one the agent last declared.** `AgentSnapshot.Session` is updated by the
+  agent's `status`; if it ran `/clear` and has not declared since, the reload resumes the earlier
+  conversation. The proposal shows the session's declaration age. Once v0.21.1 lands, the launcher's
+  reported resume command follows `/clear` and can replace this source.
+- **Clients without launcher resume** (Codex today): `up --resume` relaunches them fresh, and the
+  proposal says the conversation is not kept.
+
 ### The proposal text (sentinel → master, master → person)
 
 ```
 Claude Code 2.1.306 is installed; 4 agents still run 2.1.305.
 Ready to reload now (idle, no work in flight): coder, foureyes, sentinel.
-Later (busy or holding work): none. Master last.
-Reload keeps the conversation, the role rules and the identity:
-  in the agent's pane, when it is idle: /exit, then
-  agent-launch coder agent-bus-monitor --resume <session-id>
+Later: none. Master last. Swapped roles: none.
+Reload keeps the conversation (as last declared), the role rules and the identity:
+  1. in the agent's pane: /exit
+  2. agentbus up agent-bus-monitor --resume --dry-run   (expect: <role> relaunch (resumed))
+  3. agentbus up agent-bus-monitor --resume
 Reload now, later, or skip this version?
 ```
-
-`<session-id>` is the agent's own `AgentSnapshot.Session`, which `status` captures. For a client
-whose launcher has no resume (Codex today), the line becomes `agentbus retire <role>` then
-`agent-spawn <role> <project>` and says that the conversation is not kept.
 
 ## The rules
 
 - **Propose only.** No process of ours restarts a client, exits it, or types `/restart`.
 - **Never into a busy pane.** An agent observed busy, declared `working`, holding an `accepted`
   task, under an open challenge or with an open ask is listed as *later*, never *ready*.
-- **Only the existing safe paths:** the person, or master on the person's answer, types `/exit` and
-  `agent-launch <role> <p> --resume <id>` into an idle pane (Claude), or runs `agentbus retire`
-  then `agent-spawn` (no resume). `agentbus swap` is refused for the same profile by design and is
-  not a reload path.
+- **Only the existing safe path:** `/exit` typed by the person, then `agentbus up <p> --resume`,
+  which runs the template command in a new pane. Nothing of ours types into an existing pane.
+  `agentbus swap` is refused for the same profile by design and is not a reload path; `retire` is
+  not needed, since `/exit` already ends the client.
 - **Once per update episode.** Proposals are keyed by client and installed fingerprint, not by
   agent or time; a person's `skip this version` is recorded as a health note and nothing is
   proposed again for that fingerprint.
@@ -144,6 +177,8 @@ whose launcher has no resume (Codex today), the line becomes `agentbus retire <r
   an unverified `status` never erases it (`mergeSnapshot` rule).
 - Dispatcher (test broker): observe pass with a fake runtime and a temp client tree → `update` in
   `{p}:observed`; re-resolution throttled to once a minute; paused project → nothing.
+- Sentinel sorting (pure function): idle / working / accepted task / open challenge / open ask /
+  fallback record / master → ready or later, master last.
 - Episode: two agents on the same new fingerprint → one directive to sentinel; dispatcher restart →
   none; a second update → a second directive.
 - Health `client-updates`: ok / warn with count / unknown without fingerprints.
@@ -160,6 +195,14 @@ whose launcher has no resume (Codex today), the line becomes `agentbus retire <r
    its own pane, never in a team pane): note `/proc/<pid>/cmdline`, the environment's
    `AGENT_BUS_AGENT`, and the conversation before and after `/restart`; record whether the pid
    changes. The result decides whether the proposal may name `/restart`.
+
+## Review
+
+foureyes on `b36d08c`: detection, propose-only, once per episode and the test plan confirmed;
+changes requested on the reload path (missing `ROLES_TOML` and `--profile`, and typing into an
+existing pane), now `/exit` + `agentbus up --resume` with swapped roles excluded. Also addressed:
+the session-age limit, the layout fallback's misfire, the health `unknown` rule, and the observe
+pass running only in the service. Open questions 1–3 were answered as proposed.
 
 ## Open questions for review
 
