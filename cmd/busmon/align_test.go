@@ -63,9 +63,19 @@ type alignCase struct {
 func alignCases() []alignCase {
 	feed := func(h *harness) {
 		for i := 0; i < 40; i++ {
+			// Some entries are for the person (the harness writes as bernard):
+			// a cmd to bernard and a notice for=person every 8, so the feed
+			// holds unread and superseded marks of both kinds.
+			target, forWho := "a02", ""
+			switch i % 8 {
+			case 3:
+				target = "bernard"
+			case 2:
+				forWho = bus.ForPerson
+			}
 			h.feed(bus.Event{ID: fmt.Sprintf("17916494%05d-0", i), Kind: []string{"status", "report", "notify", "cmd"}[i%4],
-				Agent: "a00", From: "a01" + strings.Repeat("y", 30), Target: "a02", Type: "directive", State: "working",
-				Message: hostileText, Full: hostileText + hostileText, Ref: []string{"", hostileText}[i%2]})
+				Agent: "a00", From: "a01" + strings.Repeat("y", 30), Target: target, Type: "directive", State: "working",
+				Message: hostileText, Full: hostileText + hostileText, Ref: []string{"", hostileText}[i%2], For: forWho})
 		}
 	}
 	return []alignCase{

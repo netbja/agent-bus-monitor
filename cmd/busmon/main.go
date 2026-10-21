@@ -451,6 +451,12 @@ func main() {
 	} else {
 		u.cache = cache
 	}
+	if u.cache != nil { // the person's read marks; nothing older than the last visit is marked
+		for _, id := range u.cache.Read {
+			u.unread.read[id] = true
+		}
+		u.unread.floor = u.cache.LastVisit
+	}
 	if u.cache != nil && u.cache.LastVisit > 0 {
 		u.priorVisit = time.UnixMilli(u.cache.LastVisit)
 	}

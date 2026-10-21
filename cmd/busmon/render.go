@@ -90,6 +90,7 @@ type feedLine struct {
 	ev   bus.Event
 	at   time.Time
 	to   []string // a fan-out (@all): every target of the same directive, shown as one line
+	mark mark     // unread mark for the person, set by the fill (unread.go)
 }
 
 // health is what the monitor knows about its OWN link to the broker. It is

@@ -22,6 +22,7 @@ type headerData struct {
 	note     string            // non-fatal local settings note
 	waiting  string            // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
 	asks     int               // agents in state waiting: decisions a person owes
+	unread   int               // Activity entries for the person not opened yet (unread.go)
 	pause    *bus.PauseRecord  // the project pause, nil when not paused
 	holds    map[string]int64  // provider → quota hold reset
 	pace     map[string]string // provider → "~25m"
@@ -80,6 +81,9 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	if d.pause != nil {
 		add(pauseSeg(d.pause, d.now), 1, 0)
+	}
+	if d.unread > 0 {
+		add(Line{{Text: fmt.Sprintf("%s %d unread", GlyphDotFull, d.unread), Role: RoleAttention}}, 3, 0)
 	}
 	if d.asks > 0 {
 		add(Line{{Text: fmt.Sprintf("%s %d waiting for you", GlyphHuman, d.asks), Role: RoleAttention}}, 2, 0)

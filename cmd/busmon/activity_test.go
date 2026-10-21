@@ -92,7 +92,7 @@ func TestActivityRowSanitises(t *testing.T) {
 	if !strings.Contains(row, "[red]x[-]") {
 		t.Fatalf("tag look-alike must stay literal text in a Line: %q", row)
 	}
-	if !strings.HasPrefix(row, "18:23") {
+	if !strings.HasPrefix(row, "  18:23") { // the unread column (two cells) comes first
 		t.Fatalf("row starts %q", row[:10])
 	}
 }

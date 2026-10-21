@@ -47,6 +47,7 @@ type recapInput struct {
 	Pause       *bus.PauseRecord
 	Holds       map[string]int64
 	Human       string
+	Unread      []bus.Event // entries for the person not opened yet (unread.go), oldest first
 	Errors      map[string]error
 }
 
@@ -63,6 +64,11 @@ func buildRecap(in recapInput) recapModel {
 	}
 	sort.Strings(names)
 	section("Expected from you")
+	for _, e := range in.Unread { // the unread marks first (busmon UX item 8)
+		add(recapRow{Key: "unread:" + e.ID, Section: "Expected from you",
+			Title:  sender(e) + " " + GlyphNone + " unread " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(eventTimestamp(e.ID)))),
+			Detail: e.Message})
+	}
 	for _, a := range openAsks(in.Asks) {
 		for _, q := range a.Questions {
 			if q.Answer == nil {

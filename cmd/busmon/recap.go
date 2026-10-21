@@ -70,13 +70,14 @@ func (u *ui) requestRecap(auto bool) {
 	}
 	u.recapLoading = true
 	since, human := u.priorVisit, u.self
-	if auto { // already on the event loop (key or tick): no queued update
+	unread := u.unreadEvents() // the UI goroutine's state, read before the async read
+	if auto {                  // already on the event loop (key or tick): no queued update
 		u.flash, u.flashErr = "building project recap"+GlyphEllipsis, false
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(u.ctx, 7*time.Second)
 		defer cancel()
-		model := readRecap(ctx, r, u.st, since, human)
+		model := readRecap(ctx, r, u.st, since, human, unread)
 		u.app.QueueUpdateDraw(func() {
 			u.recap, u.recapLoading, u.recapPending = model, false, true
 			u.recapCursor = firstRecapSelection(model.Rows)
@@ -85,9 +86,9 @@ func (u *ui) requestRecap(auto bool) {
 	}()
 }
 
-func readRecap(ctx context.Context, r recapReader, st *shared, since time.Time, human string) recapModel {
+func readRecap(ctx context.Context, r recapReader, st *shared, since time.Time, human string, unread []bus.Event) recapModel {
 	now := time.Now()
-	input := recapInput{Now: now, Since: since, Human: human,
+	input := recapInput{Now: now, Since: since, Human: human, Unread: unread,
 		Errors: map[string]error{}}
 	st.mu.Lock()
 	input.Agents = copyAgentStates(st.agents)
