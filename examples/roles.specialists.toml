@@ -1,0 +1,50 @@
+# Specialist roles (spec docs/superpowers/specs/2026-10-21-specialist-roles-design.md, part A).
+# Append the ones a project needs to its roles.toml; master pops them on demand
+# (agent-spawn) and retires them once their work is done and reviewed. An unused
+# role costs nothing but lengthens master's pops rules, so add a role when it is
+# first needed. Schema 1 (as this repository's roles.toml); in a schema 2
+# manifest, move model and permission into a profile. Each role's prompt is
+# roles/<role>.md.
+#
+# approval = "person": master's agent-spawn of the role is an ask in its pane,
+# for the roles that may touch a live system. permission = "manual": the person
+# sees each command. Conveniences, not locks.
+
+[roles.support]
+model = "sonnet"
+permission = "acceptEdits"
+tier = "pop"
+skills = ["agent-bus", "diagnosing-bugs", "implement"]
+
+[roles.dba]
+model = "opus"
+permission = "manual"
+tier = "pop"
+approval = "person"
+skills = ["agent-bus", "diagnosing-bugs", "codebase-design"]
+
+[roles.web-design]
+model = "opus"
+permission = "acceptEdits"
+tier = "pop"
+skills = ["agent-bus", "implement", "tdd"]
+
+[roles.backend]
+model = "opus"
+permission = "bypassPermissions"
+tier = "pop"
+skills = ["agent-bus", "tdd", "implement", "codebase-design"]
+
+[roles.os-expert]
+model = "sonnet"
+permission = "manual"
+tier = "pop"
+approval = "person"
+skills = ["agent-bus", "diagnosing-bugs"]
+
+[roles.cicd]
+model = "sonnet"
+permission = "acceptEdits"
+tier = "pop"
+approval = "person"
+skills = ["agent-bus", "diagnosing-bugs", "tdd"]

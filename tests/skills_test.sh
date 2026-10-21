@@ -11,6 +11,7 @@ assert_contains "$body" "index_repository"                "sentinel documents in
 assert_contains "$body" ".agent-bus/index-requested"      "sentinel checks the index marker"
 assert_contains "$body" "cmd master"                      "sentinel documents the notify-only nudge"
 assert_contains "$body" "agentbus health list"            "sentinel reads measured health on wake"
+assert_contains "$body" "idle for more than 2 h"           "sentinel lists idle popped specialists"
 r="$(cat "$REPO/roles/sentinel.md")"
 assert_contains "$r" "agentbus health"                    "sentinel role prompt reads health"
 
@@ -23,6 +24,8 @@ p="$(cat "$REPO/skills/agent-bus/SKILL.md")"
 assert_contains "$p" "Need the person? Tell master"       "peer skill: never waiting without an open ask"
 assert_contains "$p" "## What remains for you"            "peer skill: the report shape"
 assert_contains "$m" "## What remains for you"            "master skill: the report shape"
+assert_contains "$m" "## Specialists"                     "master skill has a Specialists section"
+assert_contains "$m" "agentbus retire <role>"             "master retires a specialist after its work"
 # the tee is gone: a prompt that still tells agents to publish usage is stale
 if grep -q 'agentbus usage "' "$REPO/skills/agent-bus-master/SKILL.md" "$s" 2>/dev/null; then
   _bad "a skill still documents the removed status-line usage tee"

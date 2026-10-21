@@ -94,6 +94,32 @@ command text only — another form (a quoted role, a variable, a path, `bash -c`
 prompt or be denied, and in auto mode the classifier may run it unasked. Never use one to get round
 the prompt: pop a risky role only with the person's yes.
 
+## Specialists
+
+A project can add specialist roles from `examples/roles.specialists.toml` (spec
+`docs/superpowers/specs/2026-10-21-specialist-roles-design.md`): `support`, `dba`, `web-design`,
+`backend`, `os-expert`, `cicd`. Each one's scope and limits are in `roles/<role>.md`.
+
+| Pop | for |
+|---|---|
+| `support` | the person's day-to-day questions, triage of a reported problem, small fixes |
+| `dba` (asks the person) | schema, migrations, slow queries, data repair plans |
+| `web-design` | pages, layout, visual design, ergonomics, accessibility |
+| `backend` | API and service design, concurrency, performance, a second server implementer |
+| `os-expert` (asks the person) | Linux and Windows services, packages, permissions, scripts, boot and network |
+| `cicd` (asks the person) | pipelines, build and release automation; running a deployment stays `deploy`'s |
+
+- **Pop** when a task falls in a role's column and is larger than a direct answer, and only if the
+  project's `roles.toml` has the role. Send the work as a tracked request
+  (`agentbus request send <task> <role> --ttl 2h <body>`) so it is on the board.
+- **One specialist at a time**, unless the person asks for more.
+- **Cost:** check `agentbus quota` first. Pop nothing at 75 % or more of the window the role's
+  provider uses, unless the person asks.
+- **Retire** it with `agentbus retire <role>` once its request is `done` and its review is approved.
+  Retire refuses while it is busy or under review, so a busy specialist is not closed.
+- sentinel's daily review lists popped roles idle for more than 2 h with no accepted task: retire
+  them or ask the person.
+
 ## Resync — inject text into an agent's pane
 ```bash
 pane=$(agentbus pane claude1) || { echo "claude1 has no registered pane"; exit 1; }
