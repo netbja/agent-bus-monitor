@@ -262,6 +262,37 @@ must stay identical, which `tests/roles_scripts_test.sh` already checks byte for
 
 ---
 
+## Review notes (foureyes, `ea5ffac`: approved)
+
+Settled at review, to be honoured by the implementation; none changes the design above.
+
+1. **The trust reader never exposes the file.** `~/.claude.json` can hold account data and, for
+   API-key users, `primaryApiKey`. The reader parses in memory, returns only the bool, and never
+   logs, caches or echoes content, including in its errors. A parse error (Claude rewriting the
+   file) counts as "not trusted, keep polling".
+2. **Worktree keying is documented, not yet observed here.** The absent worktree entries are
+   consistent with Claude Code's documentation, not proof. Live check: start Claude Code in a fresh
+   worktree of a trusted repository and see no dialog. If it is wrong, the gate times out, which
+   fails safe.
+3. **`upLock` is held for the whole gate** (up to 10 min), so a second `agentbus up <p>` is refused
+   meanwhile; the waiting message says so.
+4. **Two reviewers and the roll-up.** With `foureyes` and `foureyes2`, the roll-up reads APPROVED
+   when the latest independent approve is newer than any reject, so a later approve from one
+   reviewer overrides an earlier reject from the other. That is accepted as the soft rule; master's
+   money-path rule reads **both** verdicts (`agentbus verdicts --json`), not the roll-up.
+5. **Which skills a reviewer on another client gets.** Only the repository's own skills
+   (`agent-bus`, `agent-bus-*`) ship with it. `implement`, `tdd`, `codebase-design`,
+   `diagnosing-bugs` and `code-review` are user-installed under `~/.claude/skills`. On another
+   machine, or for a Codex reviewer, they are missing and the launch only warns, so a Codex
+   `foureyes` gets `agent-bus` and whatever is installed in its own client's skill directory. The
+   switch's ask says which.
+6. **The costs of a Codex `foureyes`:** it cannot be resumed through the launcher (refused for
+   non-Claude clients), and it needs `bind` for the dispatcher to verify its pane (its commands run
+   in Codex's shared app-server). Both are stated in the person's ask.
+
+Open questions 1–3 were answered as proposed (the first Claude agent; the provider rule in the skill
+only, with point 4; `examples/roles.specialists.toml`).
+
 ## Open questions for review
 
 1. B: gate on the first Claude agent, or on master specifically? (Proposal: the template's first
