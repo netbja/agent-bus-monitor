@@ -46,7 +46,9 @@ asks.
 - **busmon hint (B)**: in `agents.go`'s flags, an agent declared `idle` whose status message
   contains the person's name as a whole word, case-insensitive, gets the flag `for you`
   (`RoleAttention`). busmon already knows the name: `humanIdentity`
-  (`--as`/`AGENT_BUS_HUMAN`/`busmon.toml`, `human.go`). No bell, no fade, no count in the header:
+  (`--as`/`AGENT_BUS_HUMAN`/`busmon.toml`, `human.go`). **The hint is off while the identity is
+  the default `pilot`** (`defaultHuman`, `human.go`): `pilot` is a bus word (the pilot lease,
+  "piloted by"), so matching it would misfire for anyone who has not set a name. No bell, no fade, no count in the header:
   those stay `waiting`'s, so a hint can never ring. The agent detail adds a muted line under the
   status message: `It names you but declared idle: no question is open.`
 
@@ -69,13 +71,15 @@ Completion exists, but the two inputs differ and the compose text has none:
 
 ### Recommendation
 
-1. **One candidate list:** `u.agentNames()` plus `all`, in both inputs. `agentCompletions` and
+1. **One candidate list:** `u.agentNames()` plus `all`, in both inputs. While `a` (show all) is
+   on, the list also offers the dormant agents the panel then shows, so writing to one stays easy;
+   `@all` still reaches only the visible ones, as today. `agentCompletions` and
    `recipientCompletions` become one function: `@` + prefix → `@<name> ` (space included, like the
    line today), `all` listed first. `@` alone lists everyone.
 2. **The same keys everywhere:** tview's list opens as you type; `Tab` or `Enter` takes the
    highlighted entry, `Esc` closes the list and keeps the text. In the line, `Enter` with the list
-   open completes and does **not** send (`keys.go`, ModeInput table: completion before
-   `inputDone`).
+   open completes and does **not** send: the completion is taken before `inputDone`
+   (`ui.go`) runs, and `keys.go`'s ModeInput table documents the key.
 3. **Compose text:** when the text area's first word is `@<prefix>` and the cursor is in it, `Tab`
    completes it in place (unique prefix) or moves the focus to `to:` with the prefix typed there,
    whose list then offers the choices. On send, a leading `@name` in the text with an empty `to:` is
@@ -146,20 +150,30 @@ Completion exists, but the two inputs differ and the compose text has none:
 An Activity entry is **for the person** when it is one of:
 
 1. an `ask` (`target=people`; the ask's own panel stays the place to answer it);
-2. a `cmd` whose target is `people` or the person's identity name (an agent that writes to
-   `bernard` directly);
+2. a `cmd` whose target is the person's identity name (an agent that writes to `bernard`
+   directly; `people` is only the ask target, kind 1), and never while the identity is the default
+   `pilot`;
 3. the newest report of an agent at the moment it declared `waiting` (the text the overlay shows as
    `What <agent> needs from you`), or declared `idle` with the `for you` hint (item 5);
-4. a `notify` from `dispatch` that the dispatcher sends for the person only
-   (`loop.recipientCannotAct` in `dispatch/loop.go`; the long-hold notice for master's own
-   provider, `dispatch/resume.go`).
+4. a `notify` marked **`for=person`**. Today a notify entry carries only `from` and `message`,
+   and the dispatcher writes three kinds from `dispatch`: the escalation for the person when the
+   target cannot act (`loop.recipientCannotAct`, `dispatch/loop.go`), the long-hold notice for
+   master's own provider (`dispatch/resume.go`), and the trim-gap notice (`dispatch/loop.go`),
+   which is not for the person. Text matching cannot tell them apart, so the first two fenced
+   writes gain an additive field `for=person` (and `bus.Event` a `For` field read by
+   `ParseEntry`). **This is a protocol addition** on the `notify` stream: additive by key, so
+   old readers ignore it and the versioned `subscribe` contract is untouched (notify entries are
+   never delivered by `subscribe`). Older notifies have no field and are never marked.
 
 Reports and directives between agents are not for the person, whoever reads them.
 
 ### The mark and its states
 
-A one-cell column before the time, in wide and medium tiers only (narrow folds the mark into the
-time column's first cell):
+A one-cell column before the time, in every tier; it takes its cell from the message, which
+already takes the rest of the row (`colsFor`, `activity.go`). `GlyphDotFull` and `GlyphDotEmpty` are aliases of `GlyphWorking` and
+`GlyphIdle` (`theme.go`): in the Agents panel they mean working and idle. In Activity they sit in
+their own column, which has no other use, so they cannot be read as a state. (Folding the mark
+into the time's first digit in the narrow tier was rejected: `●5:04` hides whether it is 05 or 15.)
 
 | State | Glyph | Role | When |
 |---|---|---|---|
@@ -169,6 +183,8 @@ time column's first cell):
 
 - **Opened** means the person opened that line's detail (Enter or a click on the selected line),
   or answered it: an ask answered, or a reply in its thread. Scrolling past it is not reading.
+- Read state is saved on the event loop when a line is opened or answered (`busmonCache.save`,
+  as the recap saves `last_visit`), never from `Draw`, which does no I/O.
 - Read state is stored in the same local cache, as `read: {<project>: [<entry id>…]}`, capped at
   the ids still in the retained window (older ids are dropped on save, as expired snoozes are).
   Nothing is written to Redis: reading is the person's, not the bus's, and two busmons of one
@@ -182,7 +198,7 @@ time column's first cell):
 
 | | Option | Verdict |
 |---|---|---|
-| A | Local read state in busmon's cache | **Yes**: no protocol change, survives restarts |
+| A | Local read state in busmon's cache | **Yes**: nothing about reading goes on the bus, survives restarts (the only bus addition is kind 4's `for=person` field) |
 | B | Read receipts on the bus (`{p}:read`) | No: a second person, or busmon on a laptop, would mark the other's reading; and it is a new shared key for a personal fact |
 | C | Only a filter "for me" without marks | Part of the v0.22 roadmap; the marks make the filter cheap to add later (the same predicate) |
 
@@ -194,11 +210,11 @@ All unit tests, no broker unless stated. busmon's existing suites stay the gate:
 `TestAlignmentSuite` (every size × palette × hostile fixture) and `TestNoStrayNonASCIILiterals`.
 
 - **5:** `forYouHint(state, message, person)` table: idle + name as a word → true; `bernardo`,
-  name inside a URL or a path → false; `waiting`/`working` → false; empty person name → false. The
+  name inside a URL or a path → false; `waiting`/`working` → false; identity `pilot` (the default) → false whatever the message. The
   detail line appears only with the flag. Alignment fixtures gain an agent with the flag in every
   tier. A skills test (`tests/skills_test.sh`) asserts the master skill's ask rule.
 - **6:** one completion function: `@` → `@all ` first then sorted names; `@ma` → `@master `;
-  yourself, a dormant agent and an unregistered one never offered; a text with a space → none.
+  yourself and an unregistered agent never offered; a dormant one offered only with `a` on; a text with a space → none.
   `keys.go`: in ModeInput, Enter with the list open completes and does not call `inputDone` (a
   `ui` test with a simulated screen, as the existing input tests do). Compose: `@ma` + Tab in the
   text completes; send with `@master hi` in the text and an empty `to:` → recipient `master`,
@@ -206,12 +222,22 @@ All unit tests, no broker unless stated. busmon's existing suites stay the gate:
 - **7:** `agentbus report` with 301 characters and no newline → the stderr note and exit 0; with a
   newline or ≤300 → no note. The skills test asserts the shape's three parts in both skills.
 - **8:** `forPerson(event, person, waitingAt)` table for the four kinds, and the negatives
-  (agent→agent directive, report not tied to a wait, notify from an agent). `markState`: unread →
+  (agent→agent directive, report not tied to a wait, notify from an agent, the dispatcher's
+  trim-gap notify, a notify without `for`). On the test broker: the two dispatcher writes carry
+  `for=person` and the trim-gap one does not; `ParseEntry` reads the field. `markState`: unread →
   superseded on a newer entry from the same sender, on an answer, on a closed ask; → read when
   opened; a newer entry from **another** sender does not supersede. The cache round-trip keeps only
   retained ids and stays `0600`. Alignment fixtures gain unread and superseded rows in every tier
   and palette (the 16-colour and no-colour palettes must still tell the two apart: the glyph
   differs, not only the colour).
+
+## Review
+
+foureyes on `597f61f`: citations confirmed. Changes requested: kind 4 could not tell the dispatcher's
+notices apart (now an explicit additive `for=person` field, stated as a protocol addition), and the
+hint misfired on the default identity `pilot` (now off for it). Also addressed: where read state is
+saved, the dot glyphs' aliases, dormant agents in completion with `a`, kind 2 limited to the
+person's name, and `inputDone`'s file. Open questions 1–3 were answered as proposed.
 
 ## Open questions for review
 
