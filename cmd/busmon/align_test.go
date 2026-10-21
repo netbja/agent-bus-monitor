@@ -33,7 +33,7 @@ func hostileShared(now time.Time, down bool) *shared {
 		}
 		a := &agentState{state: states[i%len(states)], message: hostileText, stateAt: now.Add(-time.Duration(i) * time.Minute),
 			queueKnown: i%3 != 0, waiting: int64(i % 4), queueFailed: i%7 == 0, gated: i % 2, armed: i%2 == 0,
-			stale: i % 3, ctxRaw: []string{"608k", "", "25%", "1.2M"}[i%4]}
+			stale: i % 3, ctxRaw: []string{"608k", "", "25%", "1.2M"}[i%4], forYou: i%len(states) == 1}
 		switch i % 5 {
 		case 1:
 			a.wake = &bus.WakeRecord{State: "deferred"}

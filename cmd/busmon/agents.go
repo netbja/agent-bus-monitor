@@ -116,6 +116,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	if promptWaiting(a) {
 		add("prompt", RoleAttention, 1, 0)
 	}
+	if a.forYou {
+		add("for you", RoleAttention, 2, 0)
+	}
 	if a.swapping {
 		add("swapping", RoleDispatch, 1, 1)
 	}

@@ -192,6 +192,10 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
   nothing to do (the team paused, the next step is the person's to start). One open ask at a time.
 - `waiting` means a person must decide **now**: busmon fades it and rings for it. Declare it only
   while one of your asks is open. Waiting for a future instruction, or for a date, is `idle`.
+- Delivered and the next step is the person's (a review, a go, a merge, a test)? That is a
+  decision: open an ask with the options (`go`, `changes`, `later`), which declares you `waiting`.
+  Declare `idle` only when nothing is expected of the person. An idle status that names the
+  person ("awaiting bernard") only earns a muted `for you` hint in busmon: nothing rings.
 - Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
   answer it in busmon: prefer the ask.
 

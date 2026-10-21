@@ -982,7 +982,8 @@ func (u *ui) ingest(e bus.Event) {
 	// A report proves the process is alive; it never refreshes the declared
 	// state or the message beside it.
 	if e.Kind == "status" {
-		a.state, a.message, a.stateAt = e.State, e.Message, et
+		declare(a, e.State, e.Message, u.st.person)
+		a.stateAt = et
 	}
 	a.lastSeen = et
 }
