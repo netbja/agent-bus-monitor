@@ -59,7 +59,7 @@ func newComposer(u *ui) *composer {
 	th.StyleInput(c.to)
 	c.to.SetPlaceholder("@agent, @all, or empty for a broadcast")
 	c.to.SetAutocompleteFunc(func(text string) []string {
-		out := recipientCompletions(text, u.completionNames())
+		out := toCompletions(text, u.completionNames())
 		c.toList = len(out) > 0 // tview opens its list on a non-empty result
 		return out
 	})
@@ -85,6 +85,20 @@ func recipientCompletions(text string, names []string) []string {
 		}
 	}
 	return out
+}
+
+// toCompletions is the to: field's completion: the field holds only a
+// recipient, so a bare prefix ("ma") completes too (the line needs the "@":
+// there plain text is a message). An empty field opens no list: Tab there
+// moves to the text, and an open list would take the Tab instead.
+func toCompletions(text string, names []string) []string {
+	if text == "" {
+		return nil
+	}
+	if !strings.HasPrefix(text, "@") {
+		text = "@" + text
+	}
+	return recipientCompletions(text, names)
 }
 
 // runes is the bus's own count (ValidateText).
