@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,6 +48,16 @@ type upDeps struct {
 	Agents    func(project string) (map[string]bus.AgentSnapshot, error)
 	ProcStart func(int) (uint64, error)
 	Lock      func(project string, wait bool) (unlock func(), err error)
+
+	// The trust gate (specialist roles spec, part B; trust.go). TabClient is
+	// the client a tab's command launches ("" for none); Trusted reads that
+	// client's trust of the project folder. Nil Trusted: no gate.
+	TabClient    func(command string) string
+	Trusted      func(client, dir string) bool
+	Sleep        func(time.Duration)
+	TrustPoll    time.Duration
+	TrustTimeout time.Duration
+	Out          io.Writer // the gate's messages (runUp's stdout)
 }
 
 type upTab struct {
@@ -192,6 +203,9 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if len(tpl.Tabs) == 0 {
 		fmt.Fprintf(stderr, "agentbus up: %s has no tabs\n", path)
 		return 1
+	}
+	if d.Out == nil {
+		d.Out = stdout
 	}
 	if err := layout(d, project, tpl); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
@@ -403,7 +417,9 @@ func layout(d upDeps, project string, tpl upTemplate) error {
 		return fmt.Errorf("herdr workspace create: unexpected reply %s", strings.TrimSpace(string(out)))
 	}
 	ws, panes := created.Result.Workspace.WorkspaceID, []string{created.Result.RootPane.PaneID}
-	if err := fill(d, ws, created.Result.Tab.TabID, panes, tpl); err != nil {
+	if err := fill(d, ws, created.Result.Tab.TabID, panes, tpl); errors.Is(err, errTrustPending) {
+		return err // the started agents stay; up again starts the others
+	} else if err != nil {
 		// A half-made workspace would be focused by the next "agentbus up" as if it were open.
 		if _, cerr := d.Herdr("workspace", "close", ws); cerr != nil {
 			return fmt.Errorf("%w (and closing the half-made workspace %s failed: %v; close it by hand)", err, ws, cerr)
@@ -435,15 +451,22 @@ func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
 		}
 		panes = append(panes, tab.Result.RootPane.PaneID)
 	}
-	for i, t := range tpl.Tabs {
-		if strings.TrimSpace(t.Command) == "" {
-			continue
+	run := func(idx []int) error {
+		for _, i := range idx {
+			if _, err := d.Herdr("pane", "run", panes[i], tpl.Tabs[i].Command); err != nil {
+				return fmt.Errorf("herdr pane run (%s): %w", tpl.Tabs[i].Name, err)
+			}
 		}
-		if _, err := d.Herdr("pane", "run", panes[i], t.Command); err != nil {
-			return fmt.Errorf("herdr pane run (%s): %w", t.Name, err)
-		}
+		return nil
 	}
-	return nil
+	dir := os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
+	now, later, gates := trustPlan(tpl.Tabs, d.TabClient, func(client string) bool {
+		return d.Trusted == nil || d.Trusted(client, dir)
+	})
+	if err := run(now); err != nil || len(later) == 0 {
+		return err
+	}
+	return d.waitTrust(tpl, dir, gates, func() error { return run(later) })
 }
 
 // templatePath is where bootstrap writes the project's template
@@ -527,6 +550,10 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 		},
 		ProcStart: procStartFn(),
 		Lock:      upLock(upCacheDir(os.Getenv)),
+		TabClient: func(cmd string) string { return tabClient(cmd, os.Getenv) },
+		Trusted:   clientTrusted(os.Getenv),
+		Sleep:     time.Sleep,
+		Out:       stdout,
 	}
 }
 
@@ -567,6 +594,14 @@ func upDryRun(d upDeps, project string, resume bool, stdout, stderr io.Writer) i
 	}
 	if id == "" {
 		fmt.Fprintf(stdout, "dry run: %s is not open; up would open it with %d tabs\n", project, len(tpl.Tabs))
+		dir := os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
+		_, _, gates := trustPlan(tpl.Tabs, d.TabClient, func(client string) bool {
+			return d.Trusted == nil || d.Trusted(client, dir)
+		})
+		key, _ := trustKey(dir)
+		for _, c := range slices.Sorted(maps.Keys(gates)) {
+			fmt.Fprintf(stdout, "dry run: trust: %s not yet accepted for %s; %s first, the others after\n", clientLabel(c), key, gates[c])
+		}
 		return 0
 	}
 	tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab) // services mode; --tabs mode reruns them too

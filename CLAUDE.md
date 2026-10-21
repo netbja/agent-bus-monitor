@@ -384,6 +384,14 @@ It never touches Redis — see README "Deployment topology".
   `claude --resume`, which bypasses agent-launch). Units always run `buildinfo.Bin` (setup's
   `$BIN_DIR/agentbus`) when it exists. `agentbus projects` and `agentbus identity` sit above the
   project-required exit. `missions` without a Git repository publishes `waiting-git` and waits.
+  **Trust gate** (`trust.go`, specialist roles spec part B): when `up` opens a workspace whose
+  folder a client (Claude Code, Codex) does not trust yet, it starts the first agent of that client
+  alone, says to answer the client's own dialog in its pane, polls the trust (2 s, 10 min) and only
+  then starts that client's other agents; a timeout starts nothing more and keeps the workspace
+  (`errTrustPending`). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
+  as Claude Code documents (`trustKey`: git root, a worktree's main checkout, else the folder) and
+  return a bool, never file content (`~/.claude.json` can hold an API key). agentbus never writes
+  those files. Nil `upDeps.Trusted` = no gate.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P
