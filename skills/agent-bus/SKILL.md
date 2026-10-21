@@ -133,6 +133,21 @@ busmon renders reports as Markdown: a `## heading` per part, `-` lists for items
 paragraphs, `code` for ids and commits. Never one block of 1 500 characters. A decision for the
 human is not a paragraph in a report: master asks it with `agentbus ask`.
 
+Use this shape (busmon's agent detail opens on it, and `agentbus report` notes a long report
+written as one block):
+
+```markdown
+<one line: what happened>
+
+## Done
+- <item>, with `ids` and commits in code
+
+## What remains for you
+- <the reader's next step, or "nothing">
+```
+
+When what remains is a decision, it is an ask; the report then says `see the open question`.
+
 ## A report wakes nobody: tell whoever waits
 
 `agentbus report` writes to the activity feed; nobody is woken by it, and nobody is obliged to

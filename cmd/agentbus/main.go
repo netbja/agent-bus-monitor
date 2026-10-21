@@ -202,6 +202,9 @@ func main() {
 			kind = bus.ReportAuto
 		}
 		msg := strings.Join(rest[1:], " ")
+		if note := reportShapeNote(msg); note != "" {
+			fmt.Fprintln(os.Stderr, note)
+		}
 		id, err := b.Report(ctx, rest[0], kind, msg)
 		if err != nil {
 			die(err.Error())

@@ -21,6 +21,8 @@ assert_contains "$m" "agentbus budget"                    "master skill reads th
 assert_contains "$m" "Delivered and the next step is the person's" "master skill: your turn for the person is an ask"
 p="$(cat "$REPO/skills/agent-bus/SKILL.md")"
 assert_contains "$p" "Need the person? Tell master"       "peer skill: never waiting without an open ask"
+assert_contains "$p" "## What remains for you"            "peer skill: the report shape"
+assert_contains "$m" "## What remains for you"            "master skill: the report shape"
 # the tee is gone: a prompt that still tells agents to publish usage is stale
 if grep -q 'agentbus usage "' "$REPO/skills/agent-bus-master/SKILL.md" "$s" 2>/dev/null; then
   _bad "a skill still documents the removed status-line usage tee"

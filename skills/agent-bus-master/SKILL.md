@@ -155,6 +155,23 @@ Then:
 Never swap without the person's yes, and never swap yourself: when **your own** provider is out
 for long, the dispatcher tells the person in busmon how to swap you from a terminal.
 
+## Write reports people can read
+
+busmon renders reports as Markdown, and the person reads yours most. Use this shape (busmon's
+agent detail opens on it, and `agentbus report` notes a long report written as one block):
+
+```markdown
+<one line: what happened>
+
+## Done
+- <item>, with `ids` and commits in code
+
+## What remains for you
+- <the reader's next step, or "nothing">
+```
+
+When what remains is a decision, it is an ask; the report then says `see the open question`.
+
 ## When you need the human's decision: `agentbus ask`
 
 A decision only the human can take (a GO, a merge, a date, a choice between options) is an
