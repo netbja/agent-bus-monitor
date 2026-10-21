@@ -118,7 +118,7 @@ kinds per project:
 |---------------------|-------------------------------------------------|--------------------------|
 | `{p}:status`        | `agent state message`                           | busmon Agents+Activity   |
 | `{p}:report`        | `agent kind message` (kind: note/auto); optional `full` (retained only when it differs from the ≤500 preview) | busmon ACTIVITY + hermes |
-| `{p}:notify`        | `from message`                                  | busmon ACTIVITY          |
+| `{p}:notify`        | `from message`; optional `for=person` (a dispatcher notice only the person can act on: busmon marks it unread) | busmon ACTIVITY          |
 | `{p}:cmd`           | `from target type ref command`; optional `wake=no` (delivered, never wakes) | busmon ACTIVITY + agents + dispatch |
 
 Additional keys: `{p}:pilot` (Redis string, pilot lease → driver name + TTL), `{p}:gate:{agent}`
@@ -273,6 +273,17 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (`Bus.HumanClose`). The Requests count covers only threads younger than `bus.DefaultHorizon`.
   Activity auto-scroll (v0.12.3): selecting, clicking or opening a line keeps it live; only `f`
   (`ListView.Pause`) and a wheel-up leave it.
+  Attention marks (spec `docs/superpowers/specs/2026-10-21-busmon-ux-design.md`): an idle agent whose
+  status message names the person (`forYouHint`, `foryou.go`; never for the default `pilot`) gets
+  the flag `for you`: a hint, it never relabels, rings or counts. Activity entries for the person
+  (an ask, a cmd to the person's name, a notify with `for=person`, an agent's newest report while it
+  waits for the person) carry a mark column before the time (`unread.go`: ● unread, ○ superseded by a
+  newer one from the same sender, an answer or a closed ask); opening the line reads it, saved in the
+  local cache (`read`, only ids still retained), never on the bus; nothing older than `last_visit`
+  is marked; the header counts `● N unread`, `u` jumps to the next, `R` lists them first. The line
+  and the compose window share one `@` completion (`recipientCompletions`, `completionNames`: the
+  @all targets, plus dormant agents while `a` is on); in the compose window Tab on a text that is
+  only `@prefix` makes it the recipient, but the text is never read as a recipient at send time.
 
 ### How the bus is actually consumed (lives outside this repo)
 

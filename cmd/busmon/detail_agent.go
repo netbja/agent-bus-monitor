@@ -49,6 +49,9 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		sb.WriteString(tg(RoleMuted, "no status message") + "\n")
 	} else {
 		sb.WriteString(renderMarkdown(a.message, mdWidth) + "\n")
+		if a.forYou {
+			sb.WriteString(tg(RoleMuted, "It names you but declared idle: no question is open.") + "\n")
+		}
 	}
 	sb.WriteString("\n")
 	// What the agent last wrote at length: for an agent waiting for a person,

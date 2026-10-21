@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -36,6 +37,7 @@ type composer struct {
 	area   *tview.TextArea
 	to     *tview.InputField
 	onTo   bool // the recipient field has the focus
+	toList bool // the recipient field's completion list is open
 	limit  int
 	title  string
 	askID  string // composeAnswer: the ask and question answered
@@ -57,7 +59,9 @@ func newComposer(u *ui) *composer {
 	th.StyleInput(c.to)
 	c.to.SetPlaceholder("@agent, @all, or empty for a broadcast")
 	c.to.SetAutocompleteFunc(func(text string) []string {
-		return recipientCompletions(text, u.agentNames())
+		out := toCompletions(text, u.completionNames())
+		c.toList = len(out) > 0 // tview opens its list on a non-empty result
+		return out
 	})
 	c.to.SetDoneFunc(func(tcell.Key) { c.focusText() })
 	c.SetBorder(true)
@@ -66,17 +70,35 @@ func newComposer(u *ui) *composer {
 	return c
 }
 
-// recipientCompletions: "@name" for every agent (and all) starting with the
-// typed prefix.
+// recipientCompletions is the one completion of the line and the compose
+// window: "@<name> " for all, then every name in order, starting with what
+// follows the "@". Nothing once a space is typed (the body has started).
 func recipientCompletions(text string, names []string) []string {
-	prefix := strings.TrimPrefix(strings.TrimSpace(text), "@")
+	if !strings.HasPrefix(text, "@") || strings.ContainsAny(text, " \t\n") {
+		return nil
+	}
+	sorted := slices.Sorted(slices.Values(names))
 	var out []string
-	for _, n := range append([]string{"all"}, names...) {
-		if strings.HasPrefix(n, prefix) && "@"+n != strings.TrimSpace(text) {
-			out = append(out, "@"+n)
+	for _, n := range append([]string{"all"}, sorted...) {
+		if strings.HasPrefix(n, text[1:]) {
+			out = append(out, "@"+n+" ")
 		}
 	}
 	return out
+}
+
+// toCompletions is the to: field's completion: the field holds only a
+// recipient, so a bare prefix ("ma") completes too (the line needs the "@":
+// there plain text is a message). An empty field opens no list: Tab there
+// moves to the text, and an open list would take the Tab instead.
+func toCompletions(text string, names []string) []string {
+	if text == "" {
+		return nil
+	}
+	if !strings.HasPrefix(text, "@") {
+		text = "@" + text
+	}
+	return recipientCompletions(text, names)
 }
 
 // runes is the bus's own count (ValidateText).
@@ -129,6 +151,29 @@ func normalizeCompose(s string) string {
 // recipient is the recipient field read: "" (a broadcast), "all", or a name.
 func (c *composer) recipient() string {
 	return strings.TrimPrefix(strings.TrimSpace(c.to.GetText()), "@")
+}
+
+// prefixToRecipient: a text that is only "@prefix" becomes the recipient on
+// Tab, completed when one name matches (the focus stays on the text), else
+// typed in to: with its list open. The text itself is never read as a
+// recipient when sending (ui.send takes recipient and body as fields).
+func (c *composer) prefixToRecipient() bool {
+	t := c.area.GetText()
+	cands := recipientCompletions(t, c.u.completionNames())
+	if len(cands) == 0 {
+		return false
+	}
+	c.area.SetText("", false)
+	if len(cands) == 1 {
+		c.to.SetText(strings.TrimSpace(cands[0]))
+		c.focusText()
+		return true
+	}
+	c.to.SetText(t)
+	c.onTo = true
+	c.u.app.SetFocus(c.to)
+	c.to.Autocomplete()
+	return true
 }
 
 func (c *composer) focusText() {
@@ -405,6 +450,15 @@ func (u *ui) composeKey(ev *tcell.EventKey) *tcell.EventKey {
 	c := u.comp
 	act := lookup(ModeCompose, u.focus, u.tier(), ev)
 	u.flash, u.flashErr = "", false
+	// The recipient's completion list is open: Tab and Enter take an entry,
+	// Esc closes the list; none of them leaves the field or the window.
+	if c.onTo && c.toList {
+		switch ev.Key() {
+		case tcell.KeyTab, tcell.KeyEnter, tcell.KeyEscape:
+			c.toList = false
+			return ev
+		}
+	}
 	// A warning (open question, broadcast) holds while the recipient and the
 	// text are unchanged: send compares them, so moving the cursor or the
 	// field keeps it, and an edit ends it.
@@ -414,6 +468,9 @@ func (u *ui) composeKey(ev *tcell.EventKey) *tcell.EventKey {
 	case ActSend:
 		u.composeSend()
 	case ActComposeField:
+		if c.kind == composeMessage && !c.onTo && c.prefixToRecipient() {
+			break
+		}
 		if c.kind == composeMessage {
 			if c.onTo {
 				c.focusText()

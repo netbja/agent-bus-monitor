@@ -53,6 +53,7 @@ const (
 	ActShowAll
 	ActConfirm
 	ActFollow
+	ActNextUnread
 	ActAsk
 	ActAskNext
 	ActAskPrev
@@ -167,6 +168,7 @@ var (
 		{Keys: "enter", Hint: "detail", Alt: "v", Act: ActOpen, match: either(keyIs(tcell.KeyEnter), runeIs('v'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "f", Hint: "auto-scroll", Act: ActFollow, match: runeIs('f')},
+		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
 		{Keys: "! w", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(tcell.KeyF4), runeIs('!', 'w'))},
 		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(tcell.KeyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
@@ -204,7 +206,7 @@ var (
 	}
 	composeBindings = []binding{
 		{Keys: "^S", Hint: "send", Act: ActSend, match: keyIs(tcell.KeyCtrlS)},
-		{Keys: "tab", Hint: "recipient", Act: ActComposeField, match: keyIs(tcell.KeyTab)},
+		{Keys: "tab", Hint: "recipient", Help: "recipient " + GlyphNone + " text; a text that is only @prefix becomes the recipient (completed, or its list opens)", Act: ActComposeField, match: keyIs(tcell.KeyTab)},
 		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(tcell.KeyCtrlT)},
 		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(tcell.KeyEscape)},
 	}

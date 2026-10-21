@@ -12,6 +12,7 @@ type busmonCache struct {
 	Project   string           `json:"project"`
 	LastVisit int64            `json:"last_visit,omitempty"`
 	Snoozes   map[string]int64 `json:"snoozes,omitempty"`
+	Read      []string         `json:"read,omitempty"` // entries for the person that they opened (unread.go)
 }
 
 func busmonCachePath(project string) string {

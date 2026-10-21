@@ -103,7 +103,7 @@ func activityHeader(tier Tier, width int) Line {
 		return nil
 	}
 	c := colsFor(tier)
-	l := Line{col("time", c.time, RoleDim), col("from", c.from, RoleDim), col("to", c.to, RoleDim),
+	l := Line{{Text: "  ", Role: RoleDim}, col("time", c.time, RoleDim), col("from", c.from, RoleDim), col("to", c.to, RoleDim),
 		col("type", c.typ, RoleDim), {Text: "message", Role: RoleDim}}
 	return FitLine(l, width)
 }
@@ -147,7 +147,7 @@ func activityRow(fl feedLine, tier Tier, width int) Line {
 		look.To = "@all (" + strconv.Itoa(len(fl.to)) + ")"
 	}
 	c := colsFor(tier)
-	l := Line{col(fl.at.Format("15:04"), c.time, RoleMuted), col(Preview(look.From), c.from, RoleText)}
+	l := Line{markCell(fl.mark), col(fl.at.Format("15:04"), c.time, RoleMuted), col(Preview(look.From), c.from, RoleText)}
 	msg := Preview(look.Text)
 	if tier == TierNarrow {
 		if look.To != "" {
@@ -162,6 +162,19 @@ func activityRow(fl feedLine, tier Tier, width int) Line {
 	}
 	l = append(l, col(look.Type, c.typ, look.Role), Seg{Text: msg, Role: RoleText})
 	return FitLine(l, width)
+}
+
+// markCell is the unread column, before the time in every tier: the mark and
+// its gap (busmon UX item 8). The dots are the working/idle glyphs, read in
+// their own column; the glyph differs, so the no-colour palettes tell them apart.
+func markCell(m mark) Seg {
+	switch m {
+	case markUnread:
+		return Seg{Text: GlyphDotFull + " ", Role: RoleAttention}
+	case markSuperseded:
+		return Seg{Text: GlyphDotEmpty + " ", Role: RoleMuted}
+	}
+	return Seg{Text: "  ", Role: RoleMuted}
 }
 
 // pauseCursor counts what arrived while Activity was paused: events admitted

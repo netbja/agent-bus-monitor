@@ -408,6 +408,9 @@ func TestRunQuotaLongHoldAsksOnce(t *testing.T) {
 				if !strings.Contains(msg, "swap master --profile <fallback>") {
 					t.Errorf("long-pause notify %q", msg)
 				}
+				if m.Values["for"] != bus.ForPerson {
+					t.Errorf("long-pause notify lacks for=person: %v", m.Values)
+				}
 				notes++
 			}
 		}

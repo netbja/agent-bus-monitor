@@ -33,7 +33,7 @@ func hostileShared(now time.Time, down bool) *shared {
 		}
 		a := &agentState{state: states[i%len(states)], message: hostileText, stateAt: now.Add(-time.Duration(i) * time.Minute),
 			queueKnown: i%3 != 0, waiting: int64(i % 4), queueFailed: i%7 == 0, gated: i % 2, armed: i%2 == 0,
-			stale: i % 3, ctxRaw: []string{"608k", "", "25%", "1.2M"}[i%4]}
+			stale: i % 3, ctxRaw: []string{"608k", "", "25%", "1.2M"}[i%4], forYou: i%len(states) == 1}
 		switch i % 5 {
 		case 1:
 			a.wake = &bus.WakeRecord{State: "deferred"}
@@ -63,9 +63,19 @@ type alignCase struct {
 func alignCases() []alignCase {
 	feed := func(h *harness) {
 		for i := 0; i < 40; i++ {
+			// Some entries are for the person (the harness writes as bernard):
+			// a cmd to bernard and a notice for=person every 8, so the feed
+			// holds unread and superseded marks of both kinds.
+			target, forWho := "a02", ""
+			switch i % 8 {
+			case 3:
+				target = "bernard"
+			case 2:
+				forWho = bus.ForPerson
+			}
 			h.feed(bus.Event{ID: fmt.Sprintf("17916494%05d-0", i), Kind: []string{"status", "report", "notify", "cmd"}[i%4],
-				Agent: "a00", From: "a01" + strings.Repeat("y", 30), Target: "a02", Type: "directive", State: "working",
-				Message: hostileText, Full: hostileText + hostileText, Ref: []string{"", hostileText}[i%2]})
+				Agent: "a00", From: "a01" + strings.Repeat("y", 30), Target: target, Type: "directive", State: "working",
+				Message: hostileText, Full: hostileText + hostileText, Ref: []string{"", hostileText}[i%2], For: forWho})
 		}
 	}
 	return []alignCase{

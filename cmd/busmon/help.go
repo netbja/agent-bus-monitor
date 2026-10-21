@@ -112,9 +112,9 @@ func helpTitle() string { return "Help" }
 // and its footer hint or, failing that, its help text. A binding with neither
 // is folded into another row (j under the arrows, 2-4 under "1 2 3 (4)").
 func helpRow(b binding) (keys, desc string, ok bool) {
-	desc = b.Hint
+	desc = b.Help // the help's own words when a binding has them; the footer keeps the short hint
 	if desc == "" {
-		desc = b.Help
+		desc = b.Hint
 	}
 	if desc == "" {
 		return "", "", false

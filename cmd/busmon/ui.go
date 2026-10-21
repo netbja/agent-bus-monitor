@@ -57,6 +57,8 @@ type ui struct {
 	project, self  string
 	settings       busmonSettings
 	cache          *busmonCache
+	unread         unreadState // the person's unread marks (unread.go); UI goroutine only
+	unreadN        int         // unread entries at the last fill, for the header
 	cachePath      string
 	reminders      []attentionItem
 	reminderIndex  int
@@ -153,6 +155,7 @@ func (u *ui) onTick() {
 	case u.scr != nil:
 		_ = u.scr.Beep()
 	}
+	u.classifyWaits()
 	u.maybeAutoRecap()
 	u.maybeOpenRecap()
 	u.maybeReminder()
@@ -206,13 +209,7 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 		if u.composing != ModeInput {
 			return nil
 		}
-		u.st.mu.Lock()
-		names := make([]string, 0, len(u.st.agents))
-		for n := range u.st.agents {
-			names = append(names, n)
-		}
-		u.st.mu.Unlock()
-		return agentCompletions(currentText, names)
+		return recipientCompletions(currentText, u.completionNames())
 	})
 	u.input.SetDoneFunc(u.inputDone)
 
@@ -225,6 +222,7 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 	u.modal = &modalView{Box: tview.NewBox(), u: u}
 	u.comp = newComposer(u)
 	u.askDrafts = map[string]string{}
+	u.unread = newUnreadState()
 	u.pages = tview.NewPages().
 		AddPage("main", u.screen, true, true).
 		AddPage("overlay", u.modal, true, false).
@@ -444,6 +442,13 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 			agent = u.lists[PanelAgents].Selected()
 		}
 		u.openAskPanel(agent)
+	case ActNextUnread:
+		if u.focus != PanelActivity {
+			u.setFocusPanel(PanelActivity)
+		}
+		if !u.nextUnread() {
+			u.flash = "nothing unread"
+		}
 	case ActFollow:
 		if act := u.lists[PanelActivity]; act.Live() {
 			act.Pause()
@@ -935,6 +940,7 @@ func (u *ui) openHealthOverlay() {
 
 func (u *ui) openFeedLine(id string) {
 	if i := u.feedIndex(id); i >= 0 && !u.feed[i].sep {
+		u.markRead(u.feed[i].ev.ID)
 		u.openMessage(u.feed[i].ev, u.feed[i].at)
 	}
 }
@@ -982,7 +988,8 @@ func (u *ui) ingest(e bus.Event) {
 	// A report proves the process is alive; it never refreshes the declared
 	// state or the message beside it.
 	if e.Kind == "status" {
-		a.state, a.message, a.stateAt = e.State, e.Message, et
+		declare(a, e.State, e.Message, u.st.person)
+		a.stateAt = et
 	}
 	a.lastSeen = et
 }
@@ -1005,6 +1012,9 @@ func (u *ui) appendEvent(e bus.Event) {
 		fl.to = append(fl.to, e.Target)
 		fl.text = plainLine(fl.ev, fl.at) + " (+" + strconv.Itoa(len(fl.to)-1) + " more)"
 		return
+	}
+	if personEntry(e, u.self) {
+		u.unread.forPerson[e.ID] = true
 	}
 	u.seq++
 	fl := feedLine{id: strconv.Itoa(u.seq), seq: u.seq, text: plainLine(e, et), ev: e, at: et}
@@ -1122,6 +1132,7 @@ func (s *screenView) Draw(screen tcell.Screen) {
 	hd := headerData{project: u.project, health: u.st.health, guardian: summarizeGuardian(u.st.guardianHealth, guardNow), dispatch: u.st.dispatch, missions: u.st.missions, pilot: u.st.pilot, self: u.self, update: u.st.update, note: u.st.configNote,
 		waiting: waitingText(mineReqs, mineThreads, now), asks: waitingQuestions(u.st.agents), pause: u.st.pause, holds: u.st.holds, pace: u.st.pace.last, budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
+	hd.unread = u.unreadN
 	u.st.mu.Unlock()
 
 	lines := headerLines(hd, w, l.Tier)
@@ -1239,6 +1250,11 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 	agents.SetFrame(Line{{Text: "Agents", Role: RoleText}}, Line{{Text: label, Role: RoleMuted}})
 
 	act := u.lists[PanelActivity]
+	marks := u.unread.marks(u.feed, currentAsks)
+	for i := range u.feed {
+		u.feed[i].mark = marks[u.feed[i].ev.ID]
+	}
+	u.unreadN = unreadCount(marks)
 	var feedItems []ListItem
 	admitted, events := admittedEvents(u.feed, u.filter)
 	shown := len(admitted)

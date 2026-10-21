@@ -360,8 +360,12 @@ func TestRunGapNotifiedOnce(t *testing.T) {
 		return ok && w.GapNotified
 	})
 	time.Sleep(200 * time.Millisecond)
-	if n := len(notifies(t, r, b, "gapper")); n != 1 {
+	ns := notifies(t, r, b, "gapper")
+	if n := len(ns); n != 1 {
 		t.Fatalf("gap notifies = %d, want 1", n)
+	}
+	if _, ok := ns[0].Values["for"]; ok {
+		t.Fatalf("the trim-gap notice is marked for the person: %v", ns[0].Values)
 	}
 }
 
@@ -675,6 +679,9 @@ func TestRunBlockedSelfEscalationReArmsWhenTheTabIsBack(t *testing.T) {
 	}
 	if msg, _ := ns[0].Values["message"].(string); !strings.Contains(msg, "pane p-master") || !strings.Contains(msg, "answer it there") {
 		t.Fatalf("notify = %q, want the tab named", msg)
+	}
+	if ns[0].Values["for"] != bus.ForPerson {
+		t.Fatalf("a notice nobody else can act on lacks for=person: %v", ns[0].Values)
 	}
 	if n := len(rt.Prompts()); n != 0 {
 		t.Fatalf("prompted a blocked pane: %d", n)

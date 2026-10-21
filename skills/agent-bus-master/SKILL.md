@@ -155,6 +155,23 @@ Then:
 Never swap without the person's yes, and never swap yourself: when **your own** provider is out
 for long, the dispatcher tells the person in busmon how to swap you from a terminal.
 
+## Write reports people can read
+
+busmon renders reports as Markdown, and the person reads yours most. Use this shape (busmon's
+agent detail opens on it, and `agentbus report` notes a long report written as one block):
+
+```markdown
+<one line: what happened>
+
+## Done
+- <item>, with `ids` and commits in code
+
+## What remains for you
+- <the reader's next step, or "nothing">
+```
+
+When what remains is a decision, it is an ask; the report then says `see the open question`.
+
 ## When you need the human's decision: `agentbus ask`
 
 A decision only the human can take (a GO, a merge, a date, a choice between options) is an
@@ -192,6 +209,10 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
   nothing to do (the team paused, the next step is the person's to start). One open ask at a time.
 - `waiting` means a person must decide **now**: busmon fades it and rings for it. Declare it only
   while one of your asks is open. Waiting for a future instruction, or for a date, is `idle`.
+- Delivered and the next step is the person's (a review, a go, a merge, a test)? That is a
+  decision: open an ask with the options (`go`, `changes`, `later`), which declares you `waiting`.
+  Declare `idle` only when nothing is expected of the person. An idle status that names the
+  person ("awaiting bernard") only earns a muted `for you` hint in busmon: nothing rings.
 - Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
   answer it in busmon: prefer the ask.
 

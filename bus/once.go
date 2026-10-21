@@ -69,6 +69,14 @@ func (b *Bus) FencedCmdOnce(ctx context.Context, token, mark, episode, from, tar
 	return b.fencedEntryOnce(ctx, token, "cmd", mark, episode, target, fields...)
 }
 
+// FencedNotifyOnceForPerson is FencedNotifyOnce with for=person, as fenced.
+func (b *Bus) FencedNotifyOnceForPerson(ctx context.Context, token, mark, episode, from, message string) (bool, error) {
+	if err := ValidateText(message, CmdMaxRunes); err != nil {
+		return false, err
+	}
+	return b.fencedEntryOnce(ctx, token, "notify", mark, episode, "", "from", from, "message", message, "for", ForPerson)
+}
+
 // FencedNotifyOnce is FencedCmdOnce for the notify stream.
 func (b *Bus) FencedNotifyOnce(ctx context.Context, token, mark, episode, from, message string) (bool, error) {
 	if err := ValidateText(message, CmdMaxRunes); err != nil {

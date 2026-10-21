@@ -133,6 +133,21 @@ busmon renders reports as Markdown: a `## heading` per part, `-` lists for items
 paragraphs, `code` for ids and commits. Never one block of 1 500 characters. A decision for the
 human is not a paragraph in a report: master asks it with `agentbus ask`.
 
+Use this shape (busmon's agent detail opens on it, and `agentbus report` notes a long report
+written as one block):
+
+```markdown
+<one line: what happened>
+
+## Done
+- <item>, with `ids` and commits in code
+
+## What remains for you
+- <the reader's next step, or "nothing">
+```
+
+When what remains is a decision, it is an ask; the report then says `see the open question`.
+
 ## A report wakes nobody: tell whoever waits
 
 `agentbus report` writes to the activity feed; nobody is woken by it, and nobody is obliged to
@@ -160,7 +175,8 @@ reads it). busmon shows the state you DECLARED plus how old that declaration is 
 it never relabels your silence, so a stale `working` stays on screen as your own claim
 until you correct it. While armed and waiting you are **`idle`, never `blocked`**. `waiting` means
 "a person must decide": busmon fades the word in and out and rings the human once. Use it only for the human
-(usually master does); waiting for a peer is `idle`.
+(usually master does); waiting for a peer is `idle`. Need the person? Tell master, who asks them;
+never declare `waiting` yourself without an open ask.
 
 ## Gating risky actions (the 4-eyes money-path)
 `blocked` is reserved for an **open 4-eyes gate**. Before proceeding or marking done:

@@ -248,6 +248,7 @@ type agentState struct {
 	message    string
 	stateAt    time.Time       // when the state above was declared
 	answeredAt time.Time       // qualifying human reply after a waiting declaration; display-only
+	forYou     bool            // idle, and the message names the person (forYouHint): a hint, never a state
 	lastSeen   time.Time       // last activity of any kind on the bus
 	gated      int             // open 4-eyes challenges (flag "gate N")
 	armed      bool            // a live subscribe lease exists (flag "armed")
@@ -286,6 +287,7 @@ type agentState struct {
 // small enough that finer locking would only buy bugs.
 type shared struct {
 	mu             sync.Mutex
+	person         string // busmon's identity, for the "for you" hint; constant
 	agents         map[string]*agentState
 	pilot          string                        // pilot-lease driver, "" = autonomous
 	update         string                        // a newer release tag found by checkForUpdate, "" = none
@@ -433,6 +435,7 @@ func main() {
 	// first tick: an unknown budget stays blank rather than implying 0% used.
 	// The monitor's link starts healthy because bus.Connect just pinged it.
 	st := &shared{
+		person:     self,
 		agents:     map[string]*agentState{},
 		budgets:    map[string]bus.BudgetSnapshot{},
 		board:      map[string]bus.BoardEntry{},
@@ -447,6 +450,12 @@ func main() {
 		u.cache = cache
 	} else {
 		u.cache = cache
+	}
+	if u.cache != nil { // the person's read marks; nothing older than the last visit is marked
+		for _, id := range u.cache.Read {
+			u.unread.read[id] = true
+		}
+		u.unread.floor = u.cache.LastVisit
 	}
 	if u.cache != nil && u.cache.LastVisit > 0 {
 		u.priorVisit = time.UnixMilli(u.cache.LastVisit)
