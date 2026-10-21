@@ -80,11 +80,13 @@ Completion exists, but the two inputs differ and the compose text has none:
    highlighted entry, `Esc` closes the list and keeps the text. In the line, `Enter` with the list
    open completes and does **not** send: the completion is taken before `inputDone`
    (`ui.go`) runs, and `keys.go`'s ModeInput table documents the key.
-3. **Compose text:** when the text area's first word is `@<prefix>` and the cursor is in it, `Tab`
-   completes it in place (unique prefix) or moves the focus to `to:` with the prefix typed there,
-   whose list then offers the choices. On send, a leading `@name` in the text with an empty `to:` is
-   treated as the recipient, as the line does (`splitRecipient`), so the window and the line agree
-   on what `@ma hello` means.
+3. **Compose text:** when the text is only `@<prefix>`, `Tab` makes it the recipient: completed
+   into `to:` when one name matches (the focus stays on the text), else typed in `to:`, whose list
+   then offers the choices. **The text is never read as a recipient when sending**: `ui.send` takes
+   recipient and body as fields, and `TestComposeNeverRebuildsTheRecipient` keeps that invariant
+   (amended at implementation, `feat/busmon-ux`). The `to:` field also completes a bare prefix
+   (`ma`), since it holds only a recipient; an empty `to:` opens no list, so Tab there still moves
+   to the text.
 4. The footer and help (`keys.go` drives both) gain `Tab complete @name`.
 
 ---
@@ -181,9 +183,11 @@ into the time's first digit in the narrow tier was rejected: `●5:04` hides whe
 | superseded | `GlyphDotEmpty` (○) | `RoleMuted` | not opened, but a newer entry for the person from the **same** sender arrived after it, or the wait it belonged to was answered (`waitingAnswerAt`), or the ask was closed |
 | read | none | — | opened |
 
-- **Opened** means the person opened that line's detail (Enter or a click on the selected line),
-  or answered it: an ask answered, or a reply in its thread. Scrolling past it is not reading.
-- Read state is saved on the event loop when a line is opened or answered (`busmonCache.save`,
+- **Opened** means the person opened that line's detail (Enter or a click on the selected line).
+  Scrolling past it is not reading. An answer (an ask answered, a reply in its thread) makes the
+  entry **superseded** (○), as the table says, not read: only opening clears the mark (amended at
+  implementation).
+- Read state is saved on the event loop when a line is opened (`busmonCache.save`,
   as the recap saves `last_visit`), never from `Draw`, which does no I/O.
 - Read state is stored in the same local cache, as `read: {<project>: [<entry id>…]}`, capped at
   the ids still in the retained window (older ids are dropped on save, as expired snoozes are).
