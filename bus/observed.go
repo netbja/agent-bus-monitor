@@ -34,6 +34,23 @@ type Observation struct {
 	// is never written to Redis; repeats support the health runaway warning.
 	ScreenHash    string `json:"screen_hash,omitempty"`
 	ScreenRepeats int    `json:"screen_repeats,omitempty"`
+	// Update (client reload spec, additive): the client installed now is not
+	// the one this process runs. ClientJudged: the dispatcher could tell
+	// (a launch fingerprint or the Claude Code layout), whatever the answer.
+	Update       *ClientUpdate `json:"update,omitempty"`
+	ClientJudged bool          `json:"client_judged,omitempty"`
+}
+
+// ClientUpdate is an installed client newer than the running one. Labels are
+// for display and may be empty; Hash identifies the installed version (the
+// update episode); Since is the Redis TIME of its first observation.
+type ClientUpdate struct {
+	Client    string `json:"client,omitempty"`
+	Running   string `json:"running,omitempty"`
+	Installed string `json:"installed,omitempty"`
+	Hash      string `json:"hash"`
+	Source    string `json:"source"` // fingerprint or layout
+	Since     int64  `json:"since,omitempty"`
 }
 
 // Fresh reports whether the observation is younger than ObservedTTL at

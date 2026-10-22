@@ -43,6 +43,12 @@ type Config struct {
 	// Observe, when positive, is how often every verified pane is inspected
 	// and published to {p}:observed (ObserveEvery in the services; 0 = off).
 	Observe time.Duration
+	// ClientProbe tells whether the client an agent runs has been updated on
+	// disk (clientupdate.go; nil = the real probe: metadata only, never the
+	// client run). known=false: it cannot tell.
+	ClientProbe func(bus.AgentSnapshot) (*bus.ClientUpdate, bool)
+	// ClientProbeEvery is the probe's throttle per agent (0 = one minute).
+	ClientProbeEvery time.Duration
 	// Health runs deterministic checks in a separate bounded goroutine. Nil
 	// Checks leaves the scheduler disabled for callers that do not configure it.
 	Health HealthConfig
@@ -286,6 +292,7 @@ type loop struct {
 	observedAt time.Time                    // last observePass (local clock: a throttle, never persisted)
 	snaps      map[string]bus.AgentSnapshot // this pass's snapshots
 	obs        map[string]Observation       // the last observation written
+	probes     map[string]probeResult       // the last client probe per agent (a once-a-minute throttle)
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
