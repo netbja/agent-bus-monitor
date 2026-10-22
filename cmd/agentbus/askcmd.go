@@ -13,7 +13,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-const askUsage = "usage: ask <agent> [--file questions.json | < questions.json] [--replace <id>] | ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"
+const askUsage = "usage: ask <agent> [--file questions.json | < questions.json] [--replace <id>] [--task <plan-task>] | ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"
 
 // askFile is what an agent writes: a title and its questions. Any other field
 // (an id, a state, an answer) is ignored: only Answer stores an answer.
@@ -29,6 +29,7 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, out
 	args, withdraw := extractFlag(args, "--withdraw")
 	args, question := extractFlag(args, "--question")
 	args, note := extractFlag(args, "--note")
+	args, task := extractFlag(args, "--task")
 	if len(args) != 1 || !bus.ValidName(args[0]) || (question != "" && withdraw == "") {
 		fmt.Fprintln(errw, askUsage)
 		return 2
@@ -69,7 +70,7 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, out
 		fmt.Fprintf(errw, "ask: reading the questions: %v\n", err)
 		return 1
 	}
-	def := bus.AskDef{From: agent, Title: in.Title, Questions: in.Questions}
+	def := bus.AskDef{From: agent, Title: in.Title, Task: task, Questions: in.Questions}
 	id, state, err := b.Ask(ctx, def, replaces)
 	if err != nil {
 		fmt.Fprintf(errw, "ask: %v\n", err)

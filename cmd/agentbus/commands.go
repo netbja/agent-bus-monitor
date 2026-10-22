@@ -215,11 +215,12 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo resume"},
 	},
 	{
-		Name: "ask", Usage: []string{"ask <agent> [--file <questions.json> | < questions.json] [--replace <id>]", "ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"},
+		Name: "ask", Usage: []string{"ask <agent> [--file <questions.json> | < questions.json] [--replace <id>] [--task <plan-task>]", "ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"},
 		Summary: "put structured questions to a person",
 		Flags: []cli.Flag{
 			{Long: "file", Short: 'F', Arg: "<file>", Help: "the questions (JSON); default stdin"},
 			{Long: "replace", Short: 'r', Arg: "<id>", Help: "replace an open ask"},
+			{Long: "task", Short: 't', Arg: "<plan-task>", Help: "the plan task this ask is about (busmon's Plan view)"},
 			{Long: "withdraw", Short: 'w', Arg: "<id>", Help: "withdraw an ask, or one question of it"},
 			{Long: "question", Short: 'Q', Arg: "<qid>", Help: "the question to withdraw"},
 			{Long: "note", Short: 'N', Arg: "<text>", Help: "why it is withdrawn"},

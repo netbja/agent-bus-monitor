@@ -46,3 +46,22 @@ func TestAskCLIRoundTrip(t *testing.T) {
 		t.Fatal("an ask with no question was accepted")
 	}
 }
+
+func TestAskCLITask(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.AsksKey(b.Project())) })
+	t.Setenv("HERDR_ENV", "")
+	in := `{"title":"Merge roles?","questions":[{"id":"go","header":"Merge","question":"Merge?","options":[{"label":"yes"},{"label":"no"}]}]}`
+	var out, errw bytes.Buffer
+	if code := runAsk(ctx, b, []string{"master", "--task", "roles"}, strings.NewReader(in), &out, &errw); code != 0 {
+		t.Fatalf("ask: %d %s", code, errw.String())
+	}
+	asks, _ := b.Asks(ctx)
+	if len(asks) != 1 || asks[0].Task != "roles" {
+		t.Fatalf("task not stored: %+v", asks)
+	}
+	if code := runAsk(ctx, b, []string{"master", "--task", "Bad Task", "--replace", asks[0].ID}, strings.NewReader(in), &out, &errw); code == 0 {
+		t.Fatal("an invalid task was accepted")
+	}
+}
