@@ -44,6 +44,7 @@ var Catalogue = []Definition{
 	{ID: "redis-password", Title: "Redis exposure and password", Interval: 5 * time.Minute, Deadline: 5 * time.Second, Remediation: "Restrict Redis to loopback; the default password is replaced by ./setup.sh rotate-redis-password (v0.19.1).", Order: 10},
 	{ID: "service-env", Title: "Service environment permissions", Interval: 5 * time.Minute, Deadline: 5 * time.Second, Remediation: "Recreate the environment file with agentbus up and verify its permissions without printing it.", Order: 11},
 	{ID: "installed-versions", Title: "Installed versions", Interval: 24 * time.Hour, Deadline: 30 * time.Second, Remediation: "Review the documented update path and upgrade only to a known-good version.", Order: 12},
+	{ID: "client-updates", Title: "Client updates", Interval: 5 * time.Minute, Deadline: 5 * time.Second, Remediation: "Propose a reload to the person through master (agent-bus-sentinel skill, Client update); never restart a client or type into a pane.", Order: 14},
 	{ID: "herdr-probe", Title: "herdr command probe", Interval: 5 * time.Minute, Deadline: 5 * time.Second, Remediation: "Check herdr status; restart it only through its documented service command.", Order: 13},
 }
 

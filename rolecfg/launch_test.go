@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/netbja/agent-bus-monitor/clientfp"
 	"io"
 	"os"
 	"path/filepath"
@@ -667,5 +668,26 @@ func TestShellSplitRejectsUnbalancedQuote(t *testing.T) {
 		if got, err := ShellSplit(s); err == nil {
 			t.Fatalf("ShellSplit(%q) = %q, want an error", s, got)
 		}
+	}
+}
+
+// The launcher fingerprints the client it resolved and passes it on as
+// AGENT_BUS_CLIENT_FP (client reload spec), for bind and the agent's status.
+func TestLaunchExportsTheClientFingerprint(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("claude-code", "", "", "")
+	if _, e, err := f.launch(m, "coder"); err != nil {
+		t.Fatal(err, e)
+	}
+	v, ok := envOf(f.execEnv, "AGENT_BUS_CLIENT_FP")
+	if !ok {
+		t.Fatal("no AGENT_BUS_CLIENT_FP")
+	}
+	fp, err := clientfp.Decode(v)
+	if err != nil || fp.Path != f.execed[0] && filepath.Base(fp.Path) != "claude" {
+		t.Fatalf("fingerprint %+v (%v), exec %v", fp, err, f.execed)
+	}
+	if changed, known := fp.Changed(); changed || !known {
+		t.Fatalf("a fresh fingerprint reads changed=%v known=%v", changed, known)
 	}
 }

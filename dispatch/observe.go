@@ -82,6 +82,15 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 		if p, ok := prev[a]; ok && p.State == o.State && p.PID == o.PID && p.Since != 0 {
 			o.Since = p.Since
 		}
+		if u, known := l.probeClient(a, snap); known {
+			o.ClientJudged, o.Update = true, u
+			if u != nil {
+				u.Since = now.UnixMilli()
+				if p, ok := prev[a]; ok && p.PID == o.PID && p.Update != nil && p.Update.Hash == u.Hash && p.Update.Since != 0 {
+					u.Since = p.Update.Since
+				}
+			}
+		}
 		if o.ScreenHash != "" {
 			o.ScreenRepeats = 1
 			if p, ok := prev[a]; ok && p.PID == o.PID && p.ScreenHash == o.ScreenHash {
@@ -95,7 +104,10 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 	// the partial snapshot and a slow broker cannot hold the pass.
 	wctx, wcancel := context.WithTimeout(ctx, observeWrite)
 	defer wcancel()
-	return l.b.FencedPutObserved(wctx, l.token, obs)
+	if err := l.b.FencedPutObserved(wctx, l.token, obs); err != nil {
+		return err
+	}
+	return l.proposeReloads(wctx, snaps, obs)
 }
 
 // Observation is bus.Observation, named here for the loop.

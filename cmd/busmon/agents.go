@@ -66,6 +66,13 @@ const observedFresh = 60 * time.Second
 
 // busyUndeclared reports whether the dispatcher saw the agent at work while it
 // does not declare working: shown beside the declared state, never instead.
+// clientOutdated: a fresh observation says a newer client is installed than
+// the one this agent's process runs (client reload spec). Observed, never
+// declared: the state is untouched.
+func clientOutdated(a *agentState, now time.Time) bool {
+	return a.clientUpdate != nil && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
+}
+
 func busyUndeclared(a *agentState, now time.Time) bool {
 	return a.obsBusy && a.state != "working" && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
 }
@@ -130,6 +137,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	}
 	if busyUndeclared(a, time.Now()) {
 		add("busy", RoleOK, 3, 2)
+	}
+	if clientOutdated(a, time.Now()) {
+		add("update", RoleAttention, 5, 0)
 	}
 	if a.gated > 0 {
 		add(fmt.Sprintf("gate %d", a.gated), RoleError, 3, 1)

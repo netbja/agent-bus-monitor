@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/netbja/agent-bus-monitor/bus"
 	"os"
 	"path/filepath"
 	"testing"
@@ -70,5 +71,30 @@ func TestSameDirFollowsSymlinks(t *testing.T) {
 	}
 	if !sameDir(link, d) || sameDir(d, t.TempDir()) {
 		t.Error("sameDir symlink handling")
+	}
+}
+
+func TestClientEvidence(t *testing.T) {
+	now := int64(1_000_000)
+	snaps := map[string]bus.AgentSnapshot{"a": {Pane: "p1", PID: 1}, "b": {Pane: "p2", PID: 2}, "unbound": {}}
+	obs := map[string]bus.Observation{
+		"a": {At: now - 1000, PID: 1, ClientJudged: true, Update: &bus.ClientUpdate{Client: "claude-code", Running: "1", Installed: "2"}},
+		"b": {At: now - 1000, PID: 99, ClientJudged: true}, // another process: not fresh for b
+	}
+	ev := clientEvidence(snaps, obs, now)
+	if len(ev) != 2 {
+		t.Fatalf("evidence %+v", ev)
+	}
+	for _, e := range ev {
+		switch e.Agent {
+		case "a":
+			if !e.Fresh || !e.Outdated || e.Running != "1" {
+				t.Fatalf("a %+v", e)
+			}
+		case "b":
+			if e.Fresh {
+				t.Fatalf("b read fresh from another process: %+v", e)
+			}
+		}
 	}
 }

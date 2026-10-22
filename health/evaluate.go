@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -262,4 +263,55 @@ func EvaluateHerdrProbe(available, parseable bool, consecutiveFailures int) Outc
 		return Outcome{Warn, "herdr command probe failed once; retrying"}
 	}
 	return Outcome{OK, "herdr command probe succeeded"}
+}
+
+// ClientEvidence is one verified agent's client, as the dispatcher last
+// observed it (client reload spec): Fresh, the observation is recent;
+// Judged, the dispatcher could tell (a launch fingerprint or the Claude Code
+// layout); Outdated, a newer client is installed.
+type ClientEvidence struct {
+	Agent                      string
+	Fresh, Judged, Outdated    bool
+	Client, Running, Installed string
+}
+
+// EvaluateClientUpdates: warn when an agent runs an outdated client, ok when
+// every freshly observed agent was judged and none is, unknown when nothing
+// is fresh or an agent cannot be judged. Warn wakes nobody (v0.19).
+func EvaluateClientUpdates(ev []ClientEvidence) Outcome {
+	var fresh, unjudged []string
+	byVersion := map[string]int{}
+	var keys []string
+	for _, e := range ev {
+		if !e.Fresh {
+			continue
+		}
+		fresh = append(fresh, e.Agent)
+		switch {
+		case !e.Judged:
+			unjudged = append(unjudged, e.Agent)
+		case e.Outdated:
+			k := e.Client + " " + e.Running + "→" + e.Installed
+			if byVersion[k] == 0 {
+				keys = append(keys, k)
+			}
+			byVersion[k]++
+		}
+	}
+	if len(fresh) == 0 {
+		return Outcome{Unknown, "no fresh pane observation (the dispatch service observes)"}
+	}
+	if len(keys) > 0 {
+		sort.Strings(keys)
+		var parts []string
+		for _, k := range keys {
+			parts = append(parts, fmt.Sprintf("%d agent(s): %s", byVersion[k], k))
+		}
+		return Outcome{Warn, strings.Join(parts, "; ")}
+	}
+	if len(unjudged) > 0 {
+		sort.Strings(unjudged)
+		return Outcome{Unknown, "cannot tell the client version of: " + strings.Join(unjudged, ", ")}
+	}
+	return Outcome{OK, "every observed agent runs its installed client"}
 }
