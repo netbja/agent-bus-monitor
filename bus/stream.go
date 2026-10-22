@@ -84,6 +84,10 @@ type AgentSnapshot struct {
 	// process was started with. It belongs to the identity: only a verified
 	// proof (bind, a verified newer status) sets or clears it.
 	Model string `json:"model,omitempty"`
+	// ClientFP is the launched client's fingerprint (clientfp, JSON), set
+	// only with a proof like Model: what the dispatcher compares with the
+	// client installed now (client reload spec).
+	ClientFP string `json:"client_fp,omitempty"`
 }
 
 // clientProviders is the fallback when the launcher set no provider: the
@@ -112,6 +116,7 @@ type AgentIdent struct {
 	Client   string // AGENT_BUS_CLIENT
 	Provider string // AGENT_BUS_PROVIDER
 	Model    string // AGENT_BUS_MODEL (v0.15.1)
+	ClientFP string // AGENT_BUS_CLIENT_FP (client reload spec)
 }
 
 // Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
@@ -304,7 +309,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
-		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model}
+		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP}
 	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.
