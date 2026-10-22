@@ -91,10 +91,22 @@ func realClientProbe(s bus.AgentSnapshot) (*bus.ClientUpdate, bool) {
 	return &bus.ClientUpdate{Client: "claude-code", Running: running, Installed: installed, Hash: "layout-" + installed, Source: "layout"}, true
 }
 
+// updateEpisode is what one update of a client is: its installed version's
+// label, the same whichever source judged the agent (a launch fingerprint,
+// the Claude Code layout, another resolved path); the hash only when no
+// label is known.
+func updateEpisode(u *bus.ClientUpdate) string {
+	if u.Installed != "" {
+		return "v" + u.Installed
+	}
+	return u.Hash
+}
+
 // proposeReloads sends sentinel (else the escalation target) one directive
-// per update episode, with its once-mark in the same fenced script: the mark
-// update:<client> holds the installed version's hash, so a restarted
-// dispatcher, another pass or another agent on the same update sends nothing.
+// per update episode, with its once-mark in the same fenced script. The mark
+// is per episode (update:<client>:<episode>, value "sent"), so two episodes
+// never overwrite each other's mark: a restarted dispatcher, another pass,
+// another agent or another source on the same update sends nothing.
 func (l *loop) proposeReloads(ctx context.Context, snaps map[string]bus.AgentSnapshot, obs map[string]Observation) error {
 	byEpisode := map[[2]string][]string{}
 	labels := map[[2]string]*bus.ClientUpdate{}
@@ -102,8 +114,8 @@ func (l *loop) proposeReloads(ctx context.Context, snaps map[string]bus.AgentSna
 		if o.Update == nil {
 			continue
 		}
-		k := [2]string{o.Update.Client, o.Update.Hash}
-		byEpisode[k] = append(byEpisode[k], a)
+		k := [2]string{o.Update.Client, updateEpisode(o.Update)}
+		byEpisode[k] = append(byEpisode[k], a+" ("+orUnknown(o.Update.Running)+")") // each agent's own version
 		labels[k] = o.Update
 	}
 	target := l.cfg.EscalateTo
@@ -120,9 +132,9 @@ func (l *loop) proposeReloads(ctx context.Context, snaps map[string]bus.AgentSna
 		if client == "" {
 			client = "the client"
 		}
-		msg := fmt.Sprintf("client update: %s %s installed; still running %s: %s. Propose a reload (agent-bus-sentinel skill, Client update): propose only, never restart or type.",
-			client, orUnknown(u.Installed), orUnknown(u.Running), strings.Join(agents, ", "))
-		if _, err := l.b.FencedCmdOnce(ctx, l.token, "update:"+k[0], k[1], dispatchFrom, target, bus.CmdDirective, truncRunes(msg, bus.CmdMaxRunes), false); err != nil {
+		msg := fmt.Sprintf("client update: %s %s installed; still on an older one: %s. Propose a reload (agent-bus-sentinel skill, Client update): propose only, never restart or type.",
+			client, orUnknown(u.Installed), strings.Join(agents, ", "))
+		if _, err := l.b.FencedCmdOnce(ctx, l.token, "update:"+k[0]+":"+k[1], "sent", dispatchFrom, target, bus.CmdDirective, truncRunes(msg, bus.CmdMaxRunes), false); err != nil {
 			return err
 		}
 	}

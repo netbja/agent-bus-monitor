@@ -118,3 +118,53 @@ func TestRealClientProbeFingerprint(t *testing.T) {
 		t.Fatalf("codex without a fingerprint: %+v %v", u, known)
 	}
 }
+
+// A mixed team at rollout: one agent judged by its launch fingerprint, one by
+// the Claude Code layout, a third through another path (another fingerprint
+// hash), all on the same installed version: one update, one directive, over
+// many passes.
+func TestClientUpdateMixedSourcesOneDirective(t *testing.T) {
+	b, r := dialRun(t)
+	register(t, b, "dev", "p1")
+	register(t, b, "doc", "p2")
+	register(t, b, "ops", "p3")
+	register(t, b, "sentinel", "p4")
+	cfg := fastConfig()
+	cfg.Observe = 30 * time.Millisecond
+	cfg.ClientProbeEvery = 10 * time.Millisecond
+	cfg.ClientProbe = func(s bus.AgentSnapshot) (*bus.ClientUpdate, bool) {
+		switch s.Pane {
+		case "p1":
+			return &bus.ClientUpdate{Client: "claude-code", Running: "2.1.305", Installed: "2.1.306", Hash: "fp-aaa", Source: "fingerprint"}, true
+		case "p2":
+			return &bus.ClientUpdate{Client: "claude-code", Running: "2.1.305", Installed: "2.1.306", Hash: "layout-2.1.306", Source: "layout"}, true
+		case "p3":
+			return &bus.ClientUpdate{Client: "claude-code", Running: "2.1.304", Installed: "2.1.306", Hash: "fp-bbb", Source: "fingerprint"}, true
+		}
+		return nil, true
+	}
+	start(t, b, newFakeRT(alwaysReady), cfg)
+	count := func() int {
+		n := 0
+		for _, m := range entries(t, r, b, "cmd") {
+			if cmd, _ := m.Values["command"].(string); m.Values["from"] == "dispatch" && strings.HasPrefix(cmd, "client update:") {
+				n++
+			}
+		}
+		return n
+	}
+	waitFor(t, 3*time.Second, "the directive", func() bool { return count() >= 1 })
+	time.Sleep(500 * time.Millisecond) // well over ten passes
+	if n := count(); n != 1 {
+		t.Fatalf("%d directives for one update", n)
+	}
+	for _, m := range entries(t, r, b, "cmd") {
+		if cmd, _ := m.Values["command"].(string); strings.HasPrefix(cmd, "client update:") {
+			for _, want := range []string{"2.1.306 installed", "dev (2.1.305)", "doc (2.1.305)", "ops (2.1.304)"} {
+				if !strings.Contains(cmd, want) {
+					t.Fatalf("directive lacks %q: %q", want, cmd)
+				}
+			}
+		}
+	}
+}
