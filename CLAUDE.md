@@ -99,6 +99,19 @@ lease, inbox, tick). Its Redis primitives are in `bus/conductorkeys.go`: the `{p
 (`PX 15000`, renewed every 5s) and fenced writes on `{p}:change:{c}`, `{p}:missions:{c}`, the board,
 gates and cmd. Spec: `specs/2026-10-11-missions-design.md`.
 
+**`plan/`** (v0.22) is the batch's plan as the person reads it: `docs/plans/<name>.json` (strict,
+`Parse`), published at a commit by `agentbus plan load` into `{p}:plan` (the file kept opaque:
+cjson would rewrite `[]`) plus master's facts in `{p}:plan:facts` (`bus/plan.go`: PR, done, note,
+Redis `TIME`; one script each, a task not in the plan refused); neither key is in `projectKinds`,
+and a load is refused for a project with no such key. `Derive` (`derive.go`) is pure: a board
+request `done` is *delivered*, so **in review**; done needs a recorded `plan done` (shown as a
+dated claim) or `merge:false` + delivered + approved; the review is `bus.RollUp` over the task's
+subject (default its board task) plus `pr:<n>`; asks match only by `AskDef.Task`; a never-read
+input reads `?`. busmon reads the plan every `requestPoll` tick through the optional
+`planReader` (the ledger incrementally, `VerdictsAfter` from the last seen id), derives in
+`pollOnce`, and shows the header item, the `P` overlay and a recap section. Spec:
+`docs/superpowers/specs/2026-10-22-plan-view-design.md`.
+
 `bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
 function taking a raw client**, not a `*Bus` method, because it answers the question you have
 *before* you know a project name. `Open` already demands a valid project, so a method there would be
@@ -178,7 +191,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`plan`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
   trailing words are joined. Every command's usage, flags and examples are one table
   (`cmd/agentbus/commands.go`, types in `cli/`): `agentbus help [<cmd>]` and `<cmd> --help`
   render it above the project-required exit, and `expandArgs` rewrites the table's short flags

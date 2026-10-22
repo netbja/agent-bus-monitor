@@ -188,6 +188,17 @@ agentbus shutdown --force                               # override the guard (yo
 # shutdown entries carry wake=no (the dispatcher never wakes a peer to tell it to stop) and
 # expires_at = send time + 10m: a later session drains a stale one as an `expired` error
 
+# ── PLAN: the batch's plan, as busmon's Plan view (P) shows it (master writes it) ──
+agentbus plan load docs/plans/v0.22.json@<commit>       # publish a committed plan file (strict JSON); replaces the active plan
+agentbus plan link roles --pr 102                        # record a task's PR (its review then also reads pr:102)
+agentbus plan done roles                                 # the person merged it (or did their step): shown as "merged (recorded 2h ago)"
+agentbus plan note roles rebased on main                 # a one-line note on the task
+agentbus plan show [--json]                              # tasks by DERIVED state; exit 1 when a read failed ('?' tasks)
+agentbus ask master --task roles -F q.json               # an ask about a plan task names it by field (never by its words)
+# States are derived, never typed: board request done = delivered = IN REVIEW (not done);
+# approved and unrecorded = WAITING FOR YOU (the merge is the person's); done needs `plan done`
+# (or "merge": false + delivered + approved). Reviews are read on the board task's subject + pr:<n>.
+
 # ── WAKE DISPATCHER: wakes UNARMED agents through herdr when a cmd waits ──────
 agentbus dispatch                                       # foreground, one per project (a 2nd exits 0); JSON decision log on stderr
 agentbus dispatch --escalate-after 10m --escalate-to master --horizon 24h   # the defaults, spelled out
@@ -446,6 +457,11 @@ agentbus verdict --pr 25 --ref k3f9q claude2 approve verified
   - `y` or `Enter` copies the selected line to the **clipboard** (OSC52 — works
     even over an SSH tunnel). `Esc` clears the selection and returns to live tail.
   - Mouse wheel scrolls; the title shows `[live]` or a pause indicator.
+- **PLAN** — `P` opens the batch's plan (published by `agentbus plan load`): its tasks grouped
+  by derived state (waiting for you, blocked, in review, in progress, upcoming, `?`, done), `Enter`
+  opens a task (board, request, verdicts per subject, ask, recorded facts) or expands done. The
+  header shows `plan v0.22 3/9` (`?` after the count when a read failed and values are kept; `♙ N`
+  when tasks wait for the person); the recap (`R`) adds a Plan section.
 - **INPUT** — type a message, `Enter` publishes it on `{project}:notify`; type `@` for agent
   autocomplete and an `@<agent> <text>` line sends a **directed cmd** to that agent.
   `Esc`/`Ctrl-C` (or `q` while the feed is focused) quits.
