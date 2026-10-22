@@ -231,6 +231,22 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			out := health.EvaluateModelDrift(verdicts, true)
 			return out.Status, out.Detail, nil
 		}),
+		healthTask("client-updates", func(ctx context.Context) (health.Status, string, error) {
+			now, err := b.ServerTime(ctx)
+			if err != nil {
+				return health.Unknown, "server time unavailable", err
+			}
+			snaps, err := b.Agents(ctx)
+			if err != nil {
+				return health.Unknown, "agent snapshots unavailable", err
+			}
+			observed, err := b.Observed(ctx)
+			if err != nil {
+				return health.Unknown, "pane observations unavailable", err
+			}
+			out := health.EvaluateClientUpdates(clientEvidence(snaps, observed, now.UnixMilli()))
+			return out.Status, out.Detail, nil
+		}),
 		healthTask("runaway", func(ctx context.Context) (health.Status, string, error) {
 			now, err := b.ServerTime(ctx)
 			if err != nil {
@@ -857,4 +873,22 @@ func infoMode(info os.FileInfo) os.FileMode {
 		return 0
 	}
 	return info.Mode()
+}
+
+// clientEvidence is every verified agent's client as last observed (client
+// reload spec): a reading for another process than the agent's is not fresh.
+func clientEvidence(snaps map[string]bus.AgentSnapshot, obs map[string]bus.Observation, nowMs int64) []health.ClientEvidence {
+	var ev []health.ClientEvidence
+	for a, s := range snaps {
+		if s.Pane == "" || s.PID == 0 {
+			continue
+		}
+		o, ok := obs[a]
+		e := health.ClientEvidence{Agent: a, Fresh: ok && o.Fresh(nowMs) && o.PID == s.PID, Judged: o.ClientJudged}
+		if o.Update != nil {
+			e.Outdated, e.Client, e.Running, e.Installed = true, o.Update.Client, o.Update.Running, o.Update.Installed
+		}
+		ev = append(ev, e)
+	}
+	return ev
 }
