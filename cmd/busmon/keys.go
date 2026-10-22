@@ -64,6 +64,7 @@ const (
 	ActRecap        // open the deterministic project recap
 	ActHealth       // open project health details
 	ActPickType     // the picker: a typed character or backspace edits the filter
+	ActPlan         // open the batch's plan
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -180,6 +181,7 @@ var (
 		{Keys: "F2", Hint: "requests", Alt: "r", Act: ActRequests, match: either(keyIs(tcell.KeyF2), runeIs('r'))},
 		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(tcell.KeyF3), runeIs('s'))},
 		{Keys: "R", Help: "where was I? open the project recap", Act: ActRecap, match: runeIs('R')},
+		{Keys: "P", Help: "the batch's plan: its tasks by state (enter opens one, or expands done)", Act: ActPlan, match: runeIs('P')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(tcell.KeyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}

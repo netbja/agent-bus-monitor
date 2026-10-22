@@ -42,6 +42,8 @@ const (
 	ovHealth
 	ovHelp
 	ovAsk
+	ovPlan     // the batch's plan (P)
+	ovPlanTask // one task of the plan; Esc returns to the plan
 )
 
 var panelOrder = []PanelID{PanelAgents, PanelActivity, PanelBoard, PanelRequests}
@@ -91,7 +93,10 @@ type ui struct {
 	ov            overlayKind
 	ovPlain       string
 	ovThreadPlain string
-	ovAgent       string // the agent an ovAgent overlay shows
+	ovAgent       string     // the agent an ovAgent overlay shows
+	planSel       int        // the Plan overlay's selected item
+	planExpanded  bool       // the done group is listed task by task
+	planItems     []planItem // the Plan overlay's selectable lines, as last rendered
 	flash         string
 	flashErr      bool // the flash reports a failure (RoleError)
 	agentsTouched bool // the operator moved in Agents: stop following the top row
@@ -366,6 +371,9 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	}
 	switch m {
 	case ModeOverlay:
+		if u.planKey(act, ev) {
+			return nil
+		}
 		switch act {
 		case ActClose:
 			u.closeOverlay()
@@ -490,6 +498,8 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		u.openHealthOverlay()
 	case ActRecap:
 		u.requestRecap(false)
+	case ActPlan:
+		u.openPlanOverlay()
 	case ActEscape:
 		u.escape()
 	}
@@ -1133,6 +1143,9 @@ func (s *screenView) Draw(screen tcell.Screen) {
 		waiting: waitingText(mineReqs, mineThreads, now), asks: waitingQuestions(u.st.agents), pause: u.st.pause, holds: u.st.holds, pace: u.st.pace.last, budgets: u.st.budgets, now: now}
 	u.fillPanels(l, now)
 	hd.unread = u.unreadN
+	if sum, ok := u.st.plan.summary(now); ok {
+		hd.plan = &sum
+	}
 	u.st.mu.Unlock()
 
 	lines := headerLines(hd, w, l.Tier)

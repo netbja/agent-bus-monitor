@@ -179,3 +179,24 @@ func TestHeaderMissionsStates(t *testing.T) {
 		t.Fatalf("absent missions still drawn: %q", without)
 	}
 }
+
+func TestHeaderPlanItem(t *testing.T) {
+	d := fullHeader()
+	if strings.Contains(joined(headerLines(d, 200, TierWide)), "plan ") {
+		t.Fatal("a plan item with no plan loaded")
+	}
+	d.plan = &planSummary{name: "v0.22", done: 3, total: 9, person: 1}
+	got := joined(headerLines(d, 200, TierWide))
+	if !strings.Contains(got, "plan v0.22 3/9 "+GlyphHuman+" 1") {
+		t.Fatalf("header %q", got)
+	}
+	for w := 1; w <= 200; w++ {
+		for _, tier := range []Tier{TierWide, TierMedium, TierNarrow} {
+			for _, l := range headerLines(d, w, tier) {
+				if l.Width() != w {
+					t.Fatalf("tier %d width %d: %d cells", tier, w, l.Width())
+				}
+			}
+		}
+	}
+}
