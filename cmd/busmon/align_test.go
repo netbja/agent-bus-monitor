@@ -187,7 +187,7 @@ func TestAlignmentSuite(t *testing.T) {
 						checkFrame(t, h.sim, name+" overlay", Rect{x, y, w, hh}, true)
 					}
 					if h.u.comp.open {
-						checkFrame(t, h.sim, name+" compose", composeRect(sz[0], sz[1], l.Header.H), false)
+						checkFrame(t, h.sim, name+" compose", composeRect(sz[0], sz[1], l.Header.H), true) // the window scrolls (fix/compose-scrollbar)
 					}
 					first := strings.SplitN(screen, "\n", 2)[0]
 					if !strings.Contains(first, " bus") || !strings.Contains(first, " disp") {
