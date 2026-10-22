@@ -7,8 +7,15 @@ set -uo pipefail
 unset HERDR_ENV HERDR_PANE_ID REDIS_URL
 # Templates go to a temp dir unless a test names one: bootstrap must never write the real ~/.config.
 [[ -n "${AGENTBUS_PROJECTS_DIR:-}" ]] || { AGENTBUS_PROJECTS_DIR="$(mktemp -d)/projects"; export AGENTBUS_PROJECTS_DIR; }
-# The scripts resolve roles through `agentbus roles`: build it once if run.sh did not.
-if [[ -z "${AGENTBUS_BIN:-}" ]]; then
+# Test this checkout, never what the calling shell carries: an agent's session exports the launcher's
+# identity, ROLES_TOML (the live manifest) and AGENTBUS_BIN (the installed binary), and a suite that
+# honoured them stayed green on a broken branch (tests/hermetic_test.sh).
+unset ROLES_TOML AGENT_BUS_PROJECT AGENT_BUS_AGENT AGENT_BUS_CLIENT AGENT_BUS_PROVIDER AGENT_BUS_MODEL \
+  AGENT_BUS_MODEL_TIER AGENT_BUS_PROFILE AGENT_BUS_REASONING AGENT_BUS_CLIENT_FP
+# The scripts resolve roles through `agentbus roles`: run.sh's build of this checkout, else our own.
+if [[ -n "${AGENTBUS_TEST_BIN:-}" ]]; then
+  export AGENTBUS_BIN="$AGENTBUS_TEST_BIN"
+else
   _ab_build="$(mktemp -d)"
   ( cd "$(dirname "${BASH_SOURCE[0]}")/.." && go build -o "$_ab_build/agentbus" ./cmd/agentbus ) || { echo "lib.sh: cannot build agentbus" >&2; exit 1; }
   export AGENTBUS_BIN="$_ab_build/agentbus"

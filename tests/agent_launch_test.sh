@@ -24,8 +24,14 @@ assert_exit 1 "invalid project fails"  -- env AGENT_LAUNCH_DRYRUN=1 "$L" master 
 # A stray ANTHROPIC_API_KEY would silently bill every agent to pay-as-you-go instead of the
 # subscription, with nothing on screen to say so.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+# Like a real claude, it lists its launch flags on --help: the launcher's preflight reads them
+# before a schema-2 role starts (#102 made every shipped role schema 2).
 cat > "$tmp/claude" <<'CSTUB'
 #!/usr/bin/env bash
+if [[ "${1:-}" == --help ]]; then
+  echo "--model --append-system-prompt --name --resume --effort --fallback-model --permission-mode --settings"
+  exit 0
+fi
 echo "KEY=${ANTHROPIC_API_KEY:-<unset>} BASE=${ANTHROPIC_BASE_URL:-<unset>} TOKEN=${ANTHROPIC_AUTH_TOKEN:-<unset>}"
 CSTUB
 chmod +x "$tmp/claude"
