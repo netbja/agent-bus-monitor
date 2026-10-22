@@ -357,3 +357,20 @@ func TestPlanOverlayEscapesOnce(t *testing.T) {
 		t.Fatalf("hostile text is shown as written, escaped once:\n%s", scr)
 	}
 }
+
+func TestPlanRowsFromKeptValuesAreMarked(t *testing.T) {
+	f := newPlanFake(true)
+	st := newPlanShared()
+	pollOnce(context.Background(), f, st, 1)
+	_, plain, _ := planOverlay(st.plan, -1, true, time.Now(), 120)
+	if strings.Contains(plain, " ?\n") {
+		t.Fatalf("a fresh read marks nothing:\n%s", plain)
+	}
+	st.plan.failed["missions"] = true // the missions read failed, values kept
+	_, plain, _ = planOverlay(st.plan, -1, true, time.Now(), 120)
+	for _, l := range strings.Split(plain, "\n") {
+		if strings.Contains(l, "deploy") != strings.HasSuffix(l, " ?") {
+			t.Errorf("only the mission task is marked: %q", l)
+		}
+	}
+}

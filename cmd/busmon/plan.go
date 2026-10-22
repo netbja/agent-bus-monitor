@@ -162,6 +162,19 @@ func (p *planState) fold(r planReads, board map[string]bus.BoardEntry, boardErr 
 	p.partial = p.failed["plan"] || p.failed["facts"] || p.failed["verdicts"] || p.failed["board"] || p.failed["asks"] || p.failed["missions"]
 }
 
+// kept reports a row derived from a value kept after a failed read: the
+// inputs it depends on (missions for a mission task, else board, facts,
+// verdicts and asks) or the plan itself. A never-read input is plan.Unknown.
+func (p planState) kept(r plan.Row) bool {
+	if r.State == plan.Unknown || p.failed["plan"] {
+		return r.State != plan.Unknown && p.failed["plan"]
+	}
+	if r.Task.Mission != "" {
+		return p.failed["missions"]
+	}
+	return p.failed["board"] || p.failed["facts"] || p.failed["verdicts"] || p.failed["asks"]
+}
+
 func setRead(p *planState, name string, err error, keep func()) {
 	p.failed[name] = err != nil
 	if err == nil {
@@ -297,20 +310,26 @@ func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) 
 			rowTitle := clip(Preview(r.Task.Title), titleW)
 			text := "  " + pad(Preview(r.Task.ID), idw) + rowTitle
 			tagged := planMark(idx == sel) + tg(role, glyph) + " " + tg(RoleText, pad(Preview(r.Task.ID), idw)) + tview.Escape(rowTitle)
+			kept := ""
+			if p.kept(r) {
+				kept = " ?" // derived from a value kept after a failed read
+			}
 			if narrow {
 				emit(tagged, text)
 				sub := "    " + owner
 				if details != "" {
 					sub += "  " + details
 				}
-				emit(tg(RoleMuted, clip(sub, width)), sub)
+				sub = clip(sub, max(0, width-len(kept)))
+				emit(tg(RoleMuted, sub+kept), sub+kept)
 				continue
 			}
 			tail := "  " + owner
 			if details != "" {
 				tail += "  " + details
 			}
-			emit(tagged+tg(RoleMuted, clip(tail, max(0, width-idw-4-len([]rune(rowTitle))))), text+tail)
+			tail = clip(tail, max(0, width-idw-4-len([]rune(rowTitle))-len(kept)))
+			emit(tagged+tg(RoleMuted, tail+kept), text+tail+kept)
 		}
 	}
 	return b.String(), pl.String(), items
