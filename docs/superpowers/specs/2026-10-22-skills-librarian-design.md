@@ -1,6 +1,6 @@
 # A skills librarian: inventory, search and reviewed updates — design
 
-Status: draft for review (coder, 2026-10-22). Task `skills-librarian-spec`, branch
+Status: draft for review (coder, 2026-10-22), revision 2 after foureyes' review of `61bd627`. Task `skills-librarian-spec`, branch
 `docs/skills-librarian-spec` from `origin/main` `61031f7`. Spec only; no code in this change.
 
 ## The question
@@ -58,9 +58,9 @@ records no commit, so a moved tag would be installed silently.
 | Tool | Exists? | Provenance, what it runs | Verdict |
 |---|---|---|---|
 | `gh skill install/update --all` | **Yes**, in gh 2.102.0 (installed), marked *preview* ("subject to change without notice"); GitHub changelog 2026-04-16 | GitHub's own CLI. `install` copies a repository's `skills/*/SKILL.md` folders into each agent's directory and **writes tracking metadata into the SKILL.md frontmatter**. `update` compares tree SHAs and re-downloads; **`--all` updates without prompting**. `--pin <tag\|sha>` exists; `preview` renders a skill at a ref without installing it | Useful read-only: `gh skill preview <repo> <skill>@<sha>` and `gh skill list --json`. Not as our installer: it edits files, `update --all` adopts without review, the preview status gives no stable interface, and an update into one of our symlinked skill folders would write through the link into this checkout |
-| `agent-skills-updater` | **Not found** under that name. The nearest is `skill-updater` (oimiragieo/agent-studio), a *skill* that rewrites other skills from web research | An agent rewriting prompts from fetched content | **Rejected**: self-modifying prompts from the web are the risk this spec guards against |
-| `skillmd` / `skillmds` registry | **Not found** as a product. SKILL.md is the format (agentskills.io specification, which `gh skill` follows); several unrelated registries use it (skills.sh, TanStack's npm index, Google Cloud's) | Varies; none verified as what was meant | **Rejected** until a named, maintained registry is given |
-| `agent-skills-cli` | **Not found** under that name. Near names: `agentskills-cli` (a .NET tool on NuGet), `vercel-labs/skills` (npm `skills`, run with `npx`), `@tech-leads-club/agent-skills` | Third-party package managers; `npx` runs the package's current code at each call | **Rejected**: a second package manager adds a supply chain without adding review |
+| `agent-skills-updater` | **Not found** under that name (not on npm). The nearest is `skill-updater` (oimiragieo/agent-studio), a *skill* that rewrites other skills from web research | An agent rewriting prompts from fetched content | **Rejected**: self-modifying prompts from the web are the risk this spec guards against |
+| `skillmd` / `skillmds` registry | **Yes, on npm** (`npm view`, 2026-10-22):<br>- `skillmds` 1.3.3, from skillmd.com: an MCP server (`skillmds`) plus a `skillmd` CLI to lint, scan, search, install and publish skills. github.com/skillmds/skillmd, a single maintainer (bloodyhill), modified 2026-09-19.<br>- A separate `skillmd` 0.1.3, by another single maintainer (parkerbrown), with an empty description: apparently a placeholder.<br>SKILL.md itself is the format (agentskills.io specification, which `gh skill` follows) | A third-party registry plus an installer, run through npm; an MCP server would put the registry's content into agents' context | **Rejected**: an unvetted registry is the source of the untrusted updates this spec guards against; a single-maintainer package adds a supply chain |
+| `agent-skills-cli` | **Yes, on npm**: 1.2.0, github.com/Karanjot786/agent-skills-cli, a single maintainer, modified 2026-10-11. It installs binaries `skills` and `agent-skills`, the first clashing with vercel-labs' npm `skills` CLI. Near names: `agentskills-cli` (.NET, NuGet), `@tech-leads-club/agent-skills` | A third-party package manager; `npx` runs the package's current code at each call | **Rejected**: a second package manager adds a supply chain without adding review, and its `skills` binary shadows another tool's |
 | `skills-update` GitHub Action | **Not found**. Only community workflows calling scripts | — | **Rejected** |
 | `mattpocock/skills` | **Yes**: MIT, about 300k stars, latest release `v1.3.1` (2026-10-04), already our pinned external collection | Markdown skills; some ship scripts | **Kept**, pinned by commit (below) |
 
@@ -92,7 +92,19 @@ records no commit, so a moved tag would be installed silently.
 | `repo` | this repository's `skills/`, reviewed here | yes |
 | `pinned` | an external collection at a commit recorded in the lock file (below) | yes |
 | `plugin` | a Claude Code plugin's skill, at the plugin's recorded SHA | yes for Claude Code roles, by its plugin name; read-only for us |
-| `local` | anything else found in a client directory (unknown provenance) | **no**, unless the person adopts it into `repo` or `pinned` through a reviewed change |
+| `local` | anything else found in a client directory (unknown provenance) | not listed in `roles.toml`, not suggested by master, unless the person adopts it into `repo` or `pinned` through a reviewed change |
+
+**The tiers are advisory, not isolation.** Claude Code loads every skill in `~/.claude/skills`
+into every session; this very session lists `gsd-*` and `cate-theme`. A tier governs what
+`roles.toml` lists, what `check` verifies and what master suggests, **not what an agent can
+invoke**. Real isolation would need each role to see only its own skills:
+
+- a per-role skills directory that the client is pointed at, if the client supports one; or
+- a separate client configuration directory per role (Claude Code's `CLAUDE_CONFIG_DIR`, which
+  also separates settings, sessions and credentials, so it needs its own login and its own
+  transcript paths for the quota and usage readers).
+
+That is open question 4, not part of this design.
 
 ## Options
 
@@ -122,7 +134,9 @@ records no commit, so a moved tag would be installed silently.
 
 - **`setup.sh` installs the `commit`, not the tag.** It fetches the commit, checks it out, and
   fails loudly when the tag in `ref` no longer points at it: a moved tag is a finding, never an
-  update. `SKILLS_REF` stays an override for a person testing another ref; it prints that the lock
+  update. Fetching a bare commit relies on the server accepting a SHA in `want` (GitHub does, for
+  reachable commits). If a server refuses, setup fetches the tag and checks that it resolves to
+  the locked commit, failing the same way. `SKILLS_REF` stays an override for a person testing another ref; it prints that the lock
   is bypassed.
 - **Per-skill tree SHAs pin the content the roles use.** Only the skills named in `roles.toml` are
   listed. A local edit, or a different checkout, is visible to `skills check`.
@@ -132,7 +146,7 @@ records no commit, so a moved tag would be installed silently.
 | Command | Does | Network |
 |---|---|---|
 | `agentbus skills list [--json] [--tier t]` | The inventory: name, tier, source, version/commit, date, content hash, roles, linked into | none |
-| `agentbus skills search <words…> [--trusted]` | Ranked by shared words with name and description (the `DraftSkills` scorer), tier shown; `--trusted` hides `local` | none |
+| `agentbus skills search <words…> [--trusted]` | Ranked by shared words with name and description (the `DraftSkills` scorer), tier shown; `--trusted` keeps `repo` and `pinned` only (a plugin's SHA changes outside our review) | none |
 | `agentbus skills check` | Every role skill resolves, matches its lock tree SHA, and is linked where its role's client looks; exit 1 on drift | none |
 | `agentbus skills outdated` | Newer tags of each locked source (`git ls-remote --tags`; no checkout, no code run) | read-only |
 | `agentbus skills diff <source> --to <ref>` | Fetches the ref into a temporary bare repository, prints the diff of the locked skills plus any new skill, and **flags** new or changed executable files, scripts, hooks, `allowed-tools`/frontmatter permission changes and network-fetch instructions. It writes nothing outside the temporary directory | read-only fetch |
@@ -158,7 +172,9 @@ records no commit, so a moved tag would be installed silently.
 
 ### Master's pop-time lookup (agent-bus-master skill, "Specialists" and "Draft a role")
 
-- Before `agent-spawn <role>`, run `agentbus skills search <task words> --trusted`.
+- Before `agent-spawn <role>`, run `agentbus skills search <task words> --trusted`. It offers repo
+  and pinned skills only; a plugin skill is suggested only while `skills check` shows no drift of
+  its SHA.
 - When a trusted skill outside the role fits the task clearly better, say so in the request to the
   role ("use the `<skill>` skill"). Only for Claude Code roles, and only when it is already
   installed for that client. Do not edit the manifest at pop time.
@@ -172,8 +188,9 @@ records no commit, so a moved tag would be installed silently.
   review's weight: a pinned commit, a reviewed diff, the person's merge.
 - No command here runs anything from a skill. The only network use is `ls-remote` and a fetch into
   a temporary bare repository.
-- **A moved tag fails** the install. Content drift fails `skills check`. The `local` tier is never
-  usable by a role.
+- **A moved tag fails** the install. Content drift fails `skills check`. The `local` tier is kept out
+  of roles and suggestions; this is advisory, since Claude Code still loads it (see "The tiers are
+  advisory").
 - Our symlinked skills are never handed to a tool that writes into skill folders: `gh skill` is
   documented in the master skill as read-only (`preview`, `list`).
 
@@ -186,7 +203,7 @@ records no commit, so a moved tag would be installed silently.
   committed skill.
 - **`check`:** a drifted file, a missing link, and a skill whose lock SHA differs each exit 1 with
   the skill named.
-- **`search`:** ranking equals `DraftSkills` on the same inputs; `--trusted` hides `local`.
+- **`search`:** ranking equals `DraftSkills` on the same inputs; `--trusted` keeps only `repo` and `pinned`.
 - **`outdated` and `diff`** against a local bare fixture repository (no internet in tests):
   - new tags are listed;
   - the diff flags a new script, an exec bit, a changed `allowed-tools` and a new `curl …| sh` line;
@@ -207,3 +224,17 @@ records no commit, so a moved tag would be installed silently.
    plugin SHA change for a skill a role uses, as a finding for review.
 3. **The 74 `local` skills on this host:** list them as `local`, and leave them where they are.
    The person decides one by one whether any deserves adoption.
+4. **Real per-role isolation of skills** (a per-role skills directory, or `CLAUDE_CONFIG_DIR` per
+   role with its login and transcript-path consequences): needed if a `local` skill must truly be
+   out of an agent's reach. Proposal: not now; the advisory tiers plus review cover what a role is
+   *told* to use.
+
+Agreed in review: 1 (one lock), 2 (a plugin SHA change is a finding) and 3 (list and leave).
+
+Changes from revision 1 (foureyes, review of `61bd627`):
+
+- **Tool rows corrected:** `agent-skills-cli` (npm 1.2.0) and `skillmds`/`skillmd` (npm) do exist.
+  They are still rejected, on their stated grounds.
+- **Tiers stated as advisory**, with what real isolation would need.
+- **Pop-time suggestions** are limited to repo and pinned skills, plus plugins without SHA drift.
+- **The bare-commit fetch** dependency is stated, with a fallback.
