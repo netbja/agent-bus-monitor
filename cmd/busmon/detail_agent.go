@@ -110,6 +110,17 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	default:
 		row("Observed", text("not running a turn "+GlyphNone+" "+ago(a.obsAt)))
 	}
+	if clientOutdated(a, now) { // client reload spec: propose only
+		u := a.clientUpdate
+		ver := func(v string) string {
+			if v == "" {
+				return "?"
+			}
+			return v
+		}
+		rowWrap("Client", RoleAttention, ver(u.Running)+" running "+GlyphNone+" "+ver(u.Installed)+" installed "+GlyphNone+" reload when idle")
+		rowWrap("", RoleMuted, "in its pane: /exit, then agentbus up <project> --resume (the dry run first)")
+	}
 	if f := a.fallback; f != nil {
 		since := "?"
 		if f.Since > 0 {
