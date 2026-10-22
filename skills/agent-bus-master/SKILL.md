@@ -136,9 +136,12 @@ privileged: a pop role, `approval = "person"`, `permission = "manual"`.
 
 1. **Ask the person** (`agentbus ask`): what it is for, its skills and why, its permissions; three
    options `adopt`, `change` (they say what in a free answer; you redraft with `--force`), `discard`.
-2. Only on `adopt`: `agentbus roles adopt payments --ask <ask id>`. It refuses unless that ask has
-   the option `adopt` chosen by someone other than you, checks the manifest still loads, appends
-   the entry and copies the prompt to `roles/` (never over an existing one).
+   **The question's `id` is the draft's `question_id`** (from its JSON): it binds the answer to this
+   role and this exact draft. A redraft has a new id, so it needs a new ask.
+2. Only on `adopt`: `agentbus roles adopt payments --ask <ask id>`. It refuses unless that question
+   has the option `adopt` chosen by someone other than you and the draft's files are unchanged since
+   the ask, checks that the entry defines only `[roles.payments]` and that the manifest still loads,
+   appends the entry and copies the prompt to `roles/` (never over an existing one).
 3. Adopting does not pop it. Pop it later as any role with `approval = "person"`: Claude Code asks
    the person in your pane first.
 
