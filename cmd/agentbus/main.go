@@ -467,6 +467,10 @@ func main() {
 	case "swaps":
 		os.Exit(runSwaps(ctx, b, rest, os.Stdout, os.Stderr))
 
+	case "plan":
+		wd, _ := os.Getwd()
+		os.Exit(runPlan(ctx, b, wd, rest, os.Stdout, os.Stderr))
+
 	case "pause", "resume":
 		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv}
 		if cmd == "pause" {

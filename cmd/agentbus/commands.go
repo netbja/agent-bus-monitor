@@ -304,6 +304,19 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo retire architect"},
 	},
 	{
+		Name: "plan", Text: true, Usage: []string{
+			"plan [show] [--json]",
+			"plan load <path>@<commit>",
+			"plan link <task> --pr <n> | plan done <task> | plan note <task> <text...> | plan clear",
+		},
+		Summary: "the batch's plan, as busmon's Plan view (P) shows it",
+		Flags: []cli.Flag{
+			fJSON,
+			{Long: "pr", Arg: "<n>", Help: "link: the task's pull request"},
+		},
+		Examples: []string{"agentbus -p demo plan load docs/plans/v0.22.json@HEAD", "agentbus -p demo plan link roles --pr 102", "agentbus -p demo plan done roles"},
+	},
+	{
 		Name: "swaps", Usage: []string{"swaps [--role <role>] [--json]"},
 		Summary:  "the swap ledger",
 		Flags:    []cli.Flag{{Long: "role", Short: 'R', Arg: "<role>", Help: "only this role"}, fJSON},
