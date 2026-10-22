@@ -365,3 +365,55 @@ func TestLineToWindowWithAltEnter(t *testing.T) {
 		t.Fatalf("Alt+Enter: mode %v to %q text %q sent %v", h.u.mode(), h.u.comp.recipient(), h.u.comp.area.GetText(), h.sentNow())
 	}
 }
+
+// A long line with no newline wraps over many rows: typing it must keep the
+// cursor, and so the end of the text, in view. The offset reset for a text
+// that fits once counted hard lines only, and pinned such a text at its top.
+func TestComposeKeepsTheCursorInViewOnAWrappedLine(t *testing.T) {
+	h := newHarness(t, demoShared(time.Now()))
+	h.draw(160, 45)
+	h.u.lists[PanelAgents].Select("coder")
+	h.key(runeKey('I'))
+	h.draw(160, 45)
+	h.typeText(strings.Repeat("word ", 300) + "TAILMARK")
+	if screen := h.draw(160, 45); !strings.Contains(screen, "TAILMARK") {
+		t.Fatalf("the typed end of a wrapped line is not shown:\n%s", screen)
+	}
+	// The same after a paste and after a resize.
+	h.key(ctrl(tcell.KeyCtrlU))
+	h.paste(" " + strings.Repeat("more ", 300) + "PASTEEND")
+	if screen := h.draw(160, 45); !strings.Contains(screen, "PASTEEND") {
+		t.Fatalf("the end of a pasted wrapped line is not shown:\n%s", screen)
+	}
+	if screen := h.draw(100, 30); !strings.Contains(screen, "PASTEEND") {
+		t.Fatalf("after a resize the cursor left the view:\n%s", screen)
+	}
+}
+
+// The window shows a scrollbar on its right border once its text overflows,
+// like the panels (DrawFrame); a text that fits leaves the border plain.
+func TestComposeScrollbar(t *testing.T) {
+	h := newHarness(t, demoShared(time.Now()))
+	h.draw(160, 45)
+	h.u.lists[PanelAgents].Select("coder")
+	h.key(runeKey('I'))
+	h.typeText("short")
+	h.draw(160, 45)
+	right := func() string {
+		r := composeRect(160, 45, h.u.layout.Header.H)
+		cells, cw, _ := h.sim.GetContents()
+		var sb strings.Builder
+		for y := r.Y + 1; y < r.Y+r.H-1; y++ {
+			sb.WriteString(string(cells[y*cw+r.X+r.W-1].Runes))
+		}
+		return sb.String()
+	}
+	if got := right(); strings.Contains(got, glyphThumb) || strings.Contains(got, GlyphDown) {
+		t.Fatalf("a scrollbar on a text that fits: %q", got)
+	}
+	h.typeText(strings.Repeat(" word", 400))
+	h.draw(160, 45)
+	if got := right(); !strings.Contains(got, glyphThumb) || !strings.HasSuffix(got, GlyphDown) {
+		t.Fatalf("no scrollbar on an overflowing text: %q", got)
+	}
+}
