@@ -54,6 +54,7 @@ type planReads struct {
 	facts    map[string]bus.PlanFact
 	factsErr error
 	verdicts []bus.Verdict
+	caughtUp bool // the last page was short: the cursor reached the ledger's end
 	vErr     error
 	missions map[string]mission.State
 	mErr     error
@@ -83,6 +84,7 @@ func readPlan(ctx context.Context, b busReader, cursor string, f plan.File, know
 			r.verdicts = append(r.verdicts, v)
 		}
 		if len(page) < planLedgerPage {
+			r.caughtUp = true
 			break
 		}
 		cursor = page[len(page)-1].ID
@@ -146,7 +148,7 @@ func (p *planState) fold(r planReads, board map[string]bus.BoardEntry, boardErr 
 				p.ledger[v.Subject] = append(p.ledger[v.Subject], v)
 				p.cursor = v.ID
 			}
-			if r.vErr == nil || len(r.verdicts) > 0 {
+			if r.caughtUp { // a review read mid catch-up could miss its verdict: '?' until then
 				p.in.VerdictsOK = true
 			}
 			setRead(p, "missions", r.mErr, func() { p.in.Missions, p.in.MissionsOK = r.missions, r.missions != nil })

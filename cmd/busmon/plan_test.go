@@ -374,3 +374,24 @@ func TestPlanRowsFromKeptValuesAreMarked(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanVerdictsUnknownUntilTheLedgerCaughtUp(t *testing.T) {
+	f := newPlanFake(true)
+	for i := 0; i < planLedgerPage*planLedgerPages+10; i++ { // more than one tick reads
+		f.ledger = append(f.ledger, bus.Verdict{ID: fmt.Sprintf("%d-0", i+1), Subject: "other", Author: "a", Reviewer: "b", Decision: "approve"})
+	}
+	f.ledger = append(f.ledger, bus.Verdict{ID: "999999-0", Subject: "t", Author: "coder", Reviewer: "foureyes", Decision: "approve"})
+	st := newPlanShared()
+	pollOnce(context.Background(), f, st, 1)
+	for _, r := range st.plan.rows {
+		if r.Task.ID == "roles" && r.State != plan.Unknown {
+			t.Fatalf("mid catch-up the review is not known yet: %+v", r)
+		}
+	}
+	pollOnce(context.Background(), f, st, 6)
+	for _, r := range st.plan.rows {
+		if r.Task.ID == "roles" && r.State != plan.Waiting {
+			t.Fatalf("caught up: approved, waiting for the person: %+v", r)
+		}
+	}
+}
