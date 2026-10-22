@@ -44,7 +44,10 @@ On the daily directive, review `agentbus health list` and `agentbus health log`,
 [`docs/memory/INDEX.md`](../../docs/memory/INDEX.md) and the project's `STATUS` file if present. Mention only requests that remain
 requested, blocked, or past deadline; do not chase them. List the popped roles (tier `pop` in
 `roles.toml`) idle for more than 2 h with no accepted task, in one `agentbus cmd master` line, so
-master retires them or asks the person; never retire one yourself. Nudge master about context only when its
+master retires them or asks the person; never retire one yourself. Run `agentbus plan show --json`:
+when it says `"stale": true` (loaded over 7 days ago), tell master in one `agentbus cmd master` line
+that the plan needs a new `agentbus plan load`; never edit or load it yourself (no plan loaded:
+say nothing). Nudge master about context only when its
 usage record supports it; check `agentbus usage` and, at the configured context threshold, send a
 short `agentbus cmd master` hand-off reminder. Do not refresh usage or inspect account budgets.
 If something material was verified, send a one-line `agentbus report` and write a checkpoint only

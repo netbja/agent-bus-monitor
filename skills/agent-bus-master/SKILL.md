@@ -261,6 +261,27 @@ agent detail opens on it, and `agentbus report` notes a long report written as o
 
 When what remains is a decision, it is an ask; the report then says `see the open question`.
 
+## The plan
+
+The person cannot see the plan in your conversation; busmon shows it (`P`, the header's
+`plan v0.22 3/9`, the recap) once it is published. Spec:
+`docs/superpowers/specs/2026-10-22-plan-view-design.md`.
+
+- When a batch is agreed with the person, write `docs/plans/<name>.json` in a worktree on
+  `plan/<name>` and commit it, then `agentbus plan load docs/plans/<name>.json@<commit>`. One task
+  per line: `id`, `title`, `owner` (an agent, or `person` for the person's own steps), `board`
+  (the board task it follows: also its review subject), `after`, and `"merge": false` for a task
+  that ends without a merge of its own (a spec, a review), or `mission: "<change>/<id>"`.
+- States are derived, never typed: delivered (`request done`) reads **in review**; an approved
+  merge task reads **waiting for you** until you record the merge. Keep the facts true:
+  `agentbus plan link <task> --pr <n>` when you open its PR, `agentbus plan done <task>` when the
+  person says they merged it (or did their own step), `agentbus plan note <task> <text>` for a
+  one-line note. A recorded done shows as `merged (recorded 2h ago)`: a claim with its age.
+- A question to the person about a task names it: `agentbus ask master --task <plan-task> …`.
+  The plan matches asks by that field only, never by the words.
+- A task added or dropped is a new commit and a new `plan load`; facts of the tasks kept stay.
+- The plan replaces the "status of the batch" paragraphs in reports: the person reads it.
+
 ## When you need the human's decision: `agentbus ask`
 
 A decision only the human can take (a GO, a merge, a date, a choice between options) is an

@@ -33,6 +33,11 @@ assert_contains "$m" "question_id"                        "the ask's question is
 assert_contains "$m" "its text names the"                 "and its text names the role and the id"
 assert_contains "$m" "## Skill updates"                   "master tells agents when their skills change"
 assert_contains "$m" "reads both verdicts"                "money path reads both reviewers, not the roll-up"
+assert_contains "$m" "## The plan"                        "master keeps the batch's plan"
+assert_contains "$m" "agentbus plan load"                 "master publishes the plan at a commit"
+assert_contains "$m" "agentbus plan done"                 "master records the person's merge"
+assert_contains "$m" "--task <plan-task>"                 "master's asks about a plan task name it by field"
+assert_contains "$body" "agentbus plan show --json"       "sentinel's daily review checks the plan"
 # the tee is gone: a prompt that still tells agents to publish usage is stale
 if grep -q 'agentbus usage "' "$REPO/skills/agent-bus-master/SKILL.md" "$s" 2>/dev/null; then
   _bad "a skill still documents the removed status-line usage tee"
