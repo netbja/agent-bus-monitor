@@ -30,6 +30,7 @@ assert_contains "$m" "agentbus roles reviewers"           "master offers a revie
 assert_contains "$m" "## Draft a role"                    "master drafts a role for a task no role covers"
 assert_contains "$m" "agentbus roles adopt"               "and adopts it only through the person's ask"
 assert_contains "$m" "question_id"                        "the ask's question is the draft's own id"
+assert_contains "$m" "its text names the"                 "and its text names the role and the id"
 assert_contains "$m" "## Skill updates"                   "master tells agents when their skills change"
 assert_contains "$m" "reads both verdicts"                "money path reads both reviewers, not the roll-up"
 # the tee is gone: a prompt that still tells agents to publish usage is stale

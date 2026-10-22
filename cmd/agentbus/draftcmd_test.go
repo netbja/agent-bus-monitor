@@ -114,16 +114,16 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 		return res.QID
 	}
 	qid := draft("writer")
-	askQ := func(q string) string {
+	askText := func(q, text string) string {
 		id, _, err := b.Ask(ctx, bus.AskDef{From: "master", Title: "Adopt the drafted role?", Questions: []bus.AskQuestion{{
-			ID: q, Header: "Role", Question: "Adopt it?",
+			ID: q, Header: "Role", Question: text,
 			Options: []bus.AskOption{{Label: "adopt"}, {Label: "change"}, {Label: "discard"}}}}}, "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		return id
 	}
-	ask := func() string { return askQ(qid) }
+	ask := func() string { return askText(qid, "Adopt the drafted role writer ("+qid+")?") }
 	adoptRole := func(role, id string) int {
 		return runAdopt(ctx, b, "master", []string{role, "--ask", id, "--from", out}, env, &stdout, &errw)
 	}
@@ -170,6 +170,17 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 	if _, _, err := b.Answer(ctx, yes, qid, "bernard", "adopt", ""); err != nil {
 		t.Fatal(err)
 	}
+	// The person must see what they approve: a question that does not name
+	// the role and the draft's id is not enough, even with the right id.
+	vague := askText(qid, "Adopt it?")
+	if _, _, err := b.Answer(ctx, vague, qid, "bernard", "adopt", ""); err != nil {
+		t.Fatal(err)
+	}
+	if adopt(vague) == 0 {
+		t.Fatal("adopted on a question that names neither the role nor the draft")
+	}
+	unchanged("vague question")
+
 	// The answer is bound to the role and to the draft it was asked about.
 	draft("reader")
 	if adoptRole("reader", yes) == 0 {

@@ -86,11 +86,14 @@ func draftEntryOnly(snippet, role string) error {
 	return nil
 }
 
-// adoptApproved: the ask's question qid (the draft's own id) is answered
-// with the option "adopt", not withdrawn, by someone other than the asker.
-func adoptApproved(a bus.Ask, qid string) bool {
+// adoptApproved: the ask's question qid (the draft's own id) names the role
+// and that id in its text, so the person saw what they approve, and it is
+// answered with the option "adopt", not withdrawn, by someone other than the
+// asker.
+func adoptApproved(a bus.Ask, role, qid string) bool {
 	for _, q := range a.Questions {
-		if q.ID == qid && q.Answer != nil && !q.Answer.Withdrawn && strings.EqualFold(q.Answer.Choice, "adopt") && q.Answer.By != a.From {
+		named := strings.Contains(q.Question, role) && strings.Contains(q.Question, qid)
+		if q.ID == qid && named && q.Answer != nil && !q.Answer.Withdrawn && strings.EqualFold(q.Answer.Choice, "adopt") && q.Answer.By != a.From {
 			return true
 		}
 	}
@@ -138,8 +141,8 @@ func runAdopt(ctx context.Context, b *bus.Bus, self string, args, env []string, 
 	switch {
 	case ask == nil:
 		return fail("no ask %s", askID)
-	case !adoptApproved(*ask, qid):
-		return fail("ask %s has no 'adopt' answer from the person to question %s (this draft of %s): nothing adopted; a draft changed since the ask needs a new ask", askID, qid, role)
+	case !adoptApproved(*ask, role, qid):
+		return fail("ask %s has no 'adopt' answer from the person to question %s naming %s and %s (this draft): nothing adopted; a draft changed since the ask needs a new ask", askID, qid, role, qid)
 	}
 	if err := draftEntryOnly(string(snippet), role); err != nil {
 		return fail("%v", err)
