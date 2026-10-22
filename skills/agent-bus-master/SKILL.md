@@ -109,6 +109,95 @@ proposal's text as context. Then:
 - **later / skip this version**: nothing more. The dispatcher proposes once per installed version,
   so a skipped version is not proposed again; the next update is.
 
+## Specialists
+
+A project can add specialist roles from `examples/roles.specialists.toml` (spec
+`docs/superpowers/specs/2026-10-21-specialist-roles-design.md`): `support`, `dba`, `web-design`,
+`backend`, `os-expert`, `cicd`. Each one's scope and limits are in `roles/<role>.md`.
+
+| Pop | for |
+|---|---|
+| `support` | the person's day-to-day questions, triage of a reported problem, small fixes |
+| `dba` (asks the person) | schema, migrations, slow queries, data repair plans |
+| `web-design` | pages, layout, visual design, ergonomics, accessibility |
+| `backend` | API and service design, concurrency, performance, a second server implementer |
+| `os-expert` (asks the person) | Linux and Windows services, packages, permissions, scripts, boot and network |
+| `cicd` (asks the person) | pipelines, build and release automation; running a deployment stays `deploy`'s |
+
+- **Pop** when a task falls in a role's column and is larger than a direct answer, and only if the
+  project's `roles.toml` has the role. Send the work as a tracked request
+  (`agentbus request send <task> <role> --ttl 2h <body>`) so it is on the board.
+- **One specialist at a time**, unless the person asks for more.
+- **Cost:** check `agentbus quota` first. Pop nothing at 75 % or more of the window the role's
+  provider uses, unless the person asks.
+- **Retire** it with `agentbus retire <role>` once its request is `done` and its review is approved.
+  Retire refuses while it is busy or under review, so a busy specialist is not closed.
+- sentinel's daily review lists popped roles idle for more than 2 h with no accepted task: retire
+  them or ask the person.
+
+## Draft a role
+
+A task no role covers (shipped or specialist): draft one. **A drafted role is inert: it is never
+added to the manifest, linked or popped without the person's yes.**
+
+```bash
+agentbus roles draft payments --task review the payment service and its reconciliation jobs
+```
+
+It prints JSON (the files, and the chosen skills with the words they share with the task) and
+writes the entry and the prompt under `.agent-bus/drafts/payments/`. The draft reuses only skills
+the launcher can resolve (`agent-bus` always, plus the three best matches) and is least
+privileged: a pop role, `approval = "person"`, `permission = "manual"`.
+
+1. **Ask the person** (`agentbus ask`): what it is for, its skills and why, its permissions; three
+   options `adopt`, `change` (they say what in a free answer; you redraft with `--force`), `discard`.
+   **The question's `id` is the draft's `question_id`** (from its JSON), and **its text names the
+   role and that id** (`Adopt the drafted role payments (adopt-1a2b…)?`), so the person sees what
+   they approve: it binds the answer to this role and this exact draft. A redraft has a new id, so
+   it needs a new ask.
+2. Only on `adopt`: `agentbus roles adopt payments --ask <ask id>`. It refuses unless that question
+   has the option `adopt` chosen by someone other than you and the draft's files are unchanged since
+   the ask, checks that the entry defines only `[roles.payments]` and that the manifest still loads,
+   appends the entry and copies the prompt to `roles/` (never over an existing one).
+3. Adopting does not pop it. Pop it later as any role with `approval = "person"`: Claude Code asks
+   the person in your pane first.
+
+The adopt check is a convenience, not a lock: never answer your own ask.
+
+## A reviewer on another provider
+
+A review by the author's own model shares its blind spots. `agentbus roles reviewers` lists, from
+this machine's model table, the models of **other providers than coder's** that can review: a
+fresh frontier model can be foureyes, a workhorse model only a second reviewer. A model served
+through another provider but made by coder's own provider is never listed.
+
+- When it lists one and foureyes runs on coder's provider, **ask the person** (`agentbus ask`), once
+  per model: `as foureyes` / `as a second reviewer` / `no`. Never switch on your own.
+- What the switch costs, said in the ask: the new client gets only the repository's skills
+  (`agent-bus`, `agent-bus-*`; the user-installed ones such as `code-review` may be missing there);
+  a Codex agent cannot be resumed through the launcher and needs `agentbus bind` for the
+  dispatcher; the manifest must be schema 2 (profiles, `fallback_profiles`).
+- `agentbus verdicts` adds `(same provider)` beside an approve whose reviewer shares the author's
+  provider. It is a note, never a block.
+- **The money path reads both verdicts** (`agentbus verdicts --json --subject …`), never the roll-up
+  alone: with two reviewers, a later approve from one overrides an earlier reject from the other
+  in the roll-up.
+
+## Skill updates
+
+Skills are symlinks to the repository, so a changed skill is on disk as soon as the checkout is
+updated, but **a running agent keeps the copy it loaded at boot** until it invokes the skill again.
+`./setup.sh update` prints `skills changed: …` and the command to run:
+
+```bash
+agentbus roles skill-users agent-bus agent-bus-sentinel     # the roles that use them
+agentbus cmd --no-wake sentinel "skill agent-bus-sentinel changed in v0.22.0: re-invoke it before your next task"
+```
+
+One `--no-wake` directive per running agent of those roles: nothing is urgent, it is read at the
+agent's next drain. A changed role prompt (`roles/<role>.md`) is read only at launch: propose the
+reload (`/exit`, then `agentbus up <p> --resume`) to the person instead.
+
 ## Resync — inject text into an agent's pane
 ```bash
 pane=$(agentbus pane claude1) || { echo "claude1 has no registered pane"; exit 1; }

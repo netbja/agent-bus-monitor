@@ -332,6 +332,16 @@ It never touches Redis — see README "Deployment topology".
   never changes, which is what `bind` relies on. Outputs are kept byte-identical to the Python
   (dry runs, adapter spec JSON via `pyJSON`, template); `tests/roles_scripts_test.sh` covers the
   scripts end to end.
+  Specialist roles (spec `docs/superpowers/specs/2026-10-21-specialist-roles-design.md`):
+  `roles.toml` is schema 2 since then (profiles; `rolecfg/migration_test.go` keeps every launch
+  equal to the last schema-1 manifest, `rolecfg/testdata/roles.v1.toml`);
+  `examples/roles.specialists.toml` holds six pop roles with prompts in `roles/`. Verbs:
+  `roles reviewers` (models of other providers than coder's that can review; never the author's
+  own maker served elsewhere), `roles skill-users <skill>...` (whom to tell when skills change),
+  `roles draft <role> --task …` (an inert draft in `.agent-bus/drafts`, skills from the launcher's
+  roots, least privileged) and `roles adopt <role> --ask <id>` (needs the project's bus, like
+  `doctor`: only after an `adopt` answer not given by the asker; appends to the manifest after
+  checking it loads, never overwrites a prompt).
 - **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
   `update`, `uninstall`, `status`. It stamps `buildinfo.Version` (from
   `git describe` when it is a `v*` tag, else `dev`) and `buildinfo.Repo` via ldflags; `agentbus up`
@@ -384,6 +394,14 @@ It never touches Redis — see README "Deployment topology".
   `claude --resume`, which bypasses agent-launch). Units always run `buildinfo.Bin` (setup's
   `$BIN_DIR/agentbus`) when it exists. `agentbus projects` and `agentbus identity` sit above the
   project-required exit. `missions` without a Git repository publishes `waiting-git` and waits.
+  **Trust gate** (`trust.go`, specialist roles spec part B): when `up` opens a workspace whose
+  folder a client (Claude Code, Codex) does not trust yet, it starts the first agent of that client
+  alone, says to answer the client's own dialog in its pane, polls the trust (2 s, 10 min) and only
+  then starts that client's other agents; a timeout starts nothing more and keeps the workspace
+  (`errTrustPending`). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
+  as Claude Code documents (`trustKey`: git root, a worktree's main checkout, else the folder) and
+  return a bool, never file content (`~/.claude.json` can hold an API key). agentbus never writes
+  those files. Nil `upDeps.Trusted` = no gate.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P

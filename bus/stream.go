@@ -134,6 +134,11 @@ type Verdict struct {
 	TextComplete string `json:"text_complete,omitempty"`
 	Ref          string `json:"ref,omitempty"`
 	TS           int64  `json:"ts"`
+	// AuthorProvider and ReviewerProvider (additive): the providers the two
+	// agents ran on when the verdict was written, empty when unknown. Read
+	// only to say "same provider"; the roll-up ignores them.
+	AuthorProvider   string `json:"author_provider,omitempty"`
+	ReviewerProvider string `json:"reviewer_provider,omitempty"`
 }
 
 // UsageKey is the per-project hash of latest agent usage snapshots ({agent} →
@@ -422,6 +427,7 @@ func (b *Bus) AppendVerdict(ctx context.Context, v Verdict) (string, error) {
 			"subject": v.Subject, "author": v.Author, "reviewer": v.Reviewer,
 			"decision": v.Decision, "message": SanitizeReportMessage(v.Message), "ref": v.Ref,
 			"full": v.Message, "text_complete": "yes",
+			"author_provider": v.AuthorProvider, "reviewer_provider": v.ReviewerProvider,
 		},
 	}).Result()
 }
@@ -445,6 +451,7 @@ func (b *Bus) Verdicts(ctx context.Context, subject string) ([]Verdict, error) {
 			ID: m.ID, Subject: f["subject"], Author: f["author"],
 			Reviewer: f["reviewer"], Decision: f["decision"],
 			Message: f["message"], Full: f["full"], TextComplete: f["text_complete"], Ref: f["ref"], TS: ms,
+			AuthorProvider: f["author_provider"], ReviewerProvider: f["reviewer_provider"],
 		})
 	}
 	return out, nil
