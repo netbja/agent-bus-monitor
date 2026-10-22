@@ -38,6 +38,12 @@ func TestUpdateFlagAndDetail(t *testing.T) {
 	}
 }
 
+func TestHelpExplainsTheUpdateFlag(t *testing.T) {
+	if !strings.Contains(helpText(), "a newer client is installed than this agent runs") {
+		t.Fatal("the legend does not explain update")
+	}
+}
+
 // Only a reading of the agent's own process counts.
 func TestPollKeepsTheUpdateOfTheAgentsProcess(t *testing.T) {
 	u := &bus.ClientUpdate{Client: "claude-code", Running: "1", Installed: "2", Hash: "h"}

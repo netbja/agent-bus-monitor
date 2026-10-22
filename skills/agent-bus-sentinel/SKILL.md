@@ -38,6 +38,39 @@ pane. Escalate anything outside the allow-list to master with a concise `agentbu
 ask the person when a decision or credential change is needed. Do not act on a stale or unrelated
 directive.
 
+## Client update
+
+The dispatcher wakes you once per update of a client (a directive starting `client update:`): a
+newer Claude Code, Codex or Grok is installed than some agents run. **You propose; you never
+restart a client, type into a pane, or run `swap` or `retire`.**
+
+1. Read `agentbus agents`, `agentbus health detail client-updates` and `agentbus board`.
+2. Sort the agents the directive names:
+   - **ready**: declared `idle`, not observed busy, no `accepted` board task, no open challenge on
+     either side (`agentbus gate <agent>`), no open ask, not on a fallback profile
+     (`agentbus swaps` shows no current fallback);
+   - **later**: anything else. A swapped role is `after agentbus swap <role> --back`, since the
+     reload relaunches its own profile. **master is always last.**
+3. Send master **one** directive with this proposal, then
+   `agentbus health note client-updates "<one line>"`:
+
+```
+<Client> <installed> is installed; <N> agents still run <running>.
+Ready to reload now (idle, no work in flight): <agents>.
+Later: <agents or none>. Master last. Swapped roles: <none or role (after swap --back)>.
+Reload keeps the conversation (as last declared), the role rules and the identity:
+  1. in the agent's pane: /exit
+  2. agentbus up <project> --resume --dry-run
+     expect only: <tab>: would relaunch (new pane; the old one is left as it is) (resumed)
+  3. agentbus up <project> --resume
+Reload now, later, or skip this version?
+```
+
+The dry run must list the tabs of the agents being reloaded **and nothing else**: `up --resume`
+relaunches every dead agent of the project. A `(fresh: no Claude Code session to resume)` line
+means that agent's conversation is not kept: say so. master asks the person (`agentbus ask`) and
+acts only on the answer, one agent at a time.
+
 ## Daily review
 
 On the daily directive, review `agentbus health list` and `agentbus health log`, then read

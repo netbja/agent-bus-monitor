@@ -594,7 +594,15 @@ It never touches Redis — see README "Deployment topology".
   failing `identityOK` is not observed. `{p}:observed` is not in `projectKinds` and
   `HasKeysBesidesDispatch` ignores it, so a write racing `busmon --delete` never revives a project. busmon reads it with the dispatcher facts and adds the flag `busy` (and an `Observed`
   detail row) when the pane runs a turn but the agent does not declare `working`. Never let it
-  rewrite or replace the declared state. v0.15: an observation carries `since` (first reading of
+  rewrite or replace the declared state. Client updates (spec
+  `docs/superpowers/specs/2026-10-21-client-reload-design.md`): the launcher fingerprints the client
+  it resolved (`clientfp`, `AGENT_BUS_CLIENT_FP`, kept in the verified identity as `client_fp`); the
+  observe pass re-checks it at most once a minute (or reads the Claude Code `versions/` layout for
+  agents without one) and adds `update` and `client_judged` to `{p}:observed`; sentinel gets one
+  directive per update episode (`FencedCmdOnce`, mark `update:<client>`, episode the installed
+  hash); health `client-updates` warns; busmon flags `update`. Metadata only: the dispatcher never
+  runs a client, and nothing restarts one: the person reloads (`/exit`, `agentbus up <p> --resume`).
+  v0.15: an observation carries `since` (first reading of
   that state by the same pid, carried forward) and a failed inspection keeps the previous reading
   (`Observation.Fresh`, 120 s); a pane seen `blocked` (its client's own menu or permission prompt)
   reads `waiting` with the flag `prompt` (`promptWaiting`), one bell per `since`, unless the agent

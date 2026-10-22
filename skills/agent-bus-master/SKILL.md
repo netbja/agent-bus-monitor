@@ -94,6 +94,21 @@ command text only — another form (a quoted role, a variable, a path, `bash -c`
 prompt or be denied, and in auto mode the classifier may run it unasked. Never use one to get round
 the prompt: pop a risky role only with the person's yes.
 
+## Client update
+
+sentinel sends you one proposal per update of a client (the dispatcher saw a newer Claude Code,
+Codex or Grok installed than some agents run; busmon flags them `update`). Put it to the person
+with `agentbus ask`: `reload the ready ones now` / `later` / `skip this version`, with the
+proposal's text as context. Then:
+
+- **now**: one agent at a time, master last. The person types `/exit` in the agent's pane (never
+  you: nothing of ours types into an existing pane). Then run `agentbus up <project> --resume
+  --dry-run`; it must show only that agent's tab, `would relaunch (new pane; the old one is left
+  as it is) (resumed)`. Then run `agentbus up <project> --resume`. The new launch records a new
+  fingerprint, and the flag clears at the next observation.
+- **later / skip this version**: nothing more. The dispatcher proposes once per installed version,
+  so a skipped version is not proposed again; the next update is.
+
 ## Resync — inject text into an agent's pane
 ```bash
 pane=$(agentbus pane claude1) || { echo "claude1 has no registered pane"; exit 1; }
