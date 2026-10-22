@@ -148,6 +148,8 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		r.State = InReview
 	case onBoard && (e.State == "accepted" || e.State == "working"):
 		r.State = InProgress
+	case t.Owner != Person && reviewed: // a verdict and no board entry: reviewed, so in review
+		r.State = InReview
 	default:
 		r.State = Upcoming
 	}

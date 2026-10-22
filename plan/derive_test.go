@@ -218,3 +218,12 @@ func TestDeriveMissingDataIsNeverDone(t *testing.T) {
 		}
 	}
 }
+
+func TestDeriveAReviewedTaskIsInReview(t *testing.T) {
+	f := File{Plan: "p", Tasks: []Task{task("a")}}
+	in := ok()
+	in.Verdicts["a-impl"] = []bus.Verdict{verdict("5-0", "a-impl", "reject")}
+	if r := derive1(t, f, in, "a"); r.State != InReview || r.Verdict != ChangesAsked {
+		t.Fatalf("a task with a verdict and no board entry: %+v", r)
+	}
+}
