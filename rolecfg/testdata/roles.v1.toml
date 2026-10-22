@@ -1,0 +1,78 @@
+# The single role manifest. Add a role by adding a [roles.<name>] table — no code change.
+# <name> must match ValidName: ^[a-z][a-z0-9_-]{0,31}$ (lowercase, letter-first, <=32).
+# model: Claude Code's aliases (opus, sonnet, haiku) follow the latest model of each family, so a
+# renamed model never breaks a launch. Write an exact id (claude-opus-5-5) only to pin a version;
+# `agentbus roles doctor` shows what each agent really runs.
+# pops = true: the role pops others; its session gets one Claude Code allow rule per role
+# (`Bash(agent-spawn <role> *)`), or an ask rule for a role with approval = "person".
+# approval = "person": that rule is an ask, so Claude Code asks the person in the popping agent's
+# pane before it runs `agent-spawn <role>`. A convenience, not a lock. v0.17.
+# Shared Claude Code denies apply to every role, including bypassPermissions. Defence in depth,
+# not a boundary: processes an agent starts (tests, dotenv, and similar tools) can still read env.
+
+[tool_rules]
+deny = [
+  "Read(**/.env)", "Read(**/.env.local)", "Read(**/.env.production)", "Read(**/.env.development)",
+  "Read(**/.env.test)", "Read(**/.env.staging)", "Read(**/.env.preview)",
+  "Read(**/.env.production.local)", "Read(**/.env.development.local)", "Read(**/.env.test.local)",
+  "Read(**/.env.staging.local)", "Read(**/.env.preview.local)",
+  "Read(**/*.pem)", "Read(**/*.key)", "Read(**/id_rsa*)", "Read(**/id_ed25519*)",
+  "Read(~/.ssh/**)", "Read(**/*keypair*.json)", "Read(**/wallet*.json)",
+  "Edit(**/.env)", "Edit(**/.env.local)", "Edit(**/.env.production)", "Edit(**/.env.development)",
+  "Edit(**/.env.test)", "Edit(**/.env.staging)", "Edit(**/.env.preview)",
+  "Edit(**/.env.production.local)", "Edit(**/.env.development.local)", "Edit(**/.env.test.local)",
+  "Edit(**/.env.staging.local)", "Edit(**/.env.preview.local)",
+  "Edit(**/*.pem)", "Edit(**/*.key)", "Edit(**/id_rsa*)", "Edit(**/id_ed25519*)",
+  "Edit(~/.ssh/**)", "Edit(**/*keypair*.json)", "Edit(**/wallet*.json)",
+]
+
+[roles.master]
+model = "sonnet"
+permission = "acceptEdits"
+tier = "boot"
+pops = true
+skills = ["agent-bus-master", "wayfinder", "to-tickets"]
+
+[roles.coder]
+model = "opus"
+permission = "bypassPermissions"
+tier = "boot"
+skills = ["agent-bus", "tdd", "implement"]
+
+[roles.foureyes]
+model = "opus"
+permission = "bypassPermissions"
+tier = "boot"
+skills = ["agent-bus", "code-review", "diagnosing-bugs"]
+
+[roles.sentinel]
+model = "haiku"
+permission = "bypassPermissions"
+tier = "boot"
+skills = ["agent-bus", "agent-bus-sentinel"]
+
+[roles.architect]
+model = "opus"
+fallback = "claude-opus-5"
+permission = "bypassPermissions"
+tier = "pop"
+skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
+
+[roles.deploy]
+model = "sonnet"
+permission = "bypassPermissions"
+tier = "pop"
+approval = "person"
+skills = ["agent-bus", "diagnosing-bugs"]
+
+[roles.security]
+model = "opus"
+permission = "manual"
+tier = "pop"
+skills = ["agent-bus", "agent-bus-security"]
+
+[roles.docs]
+model = "sonnet"
+permission = "acceptEdits"
+tier = "pop"
+skills = ["agent-bus", "agent-bus-docs"]

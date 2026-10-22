@@ -293,6 +293,77 @@ Settled at review, to be honoured by the implementation; none changes the design
 Open questions 1–3 were answered as proposed (the first Claude agent; the provider rule in the skill
 only, with point 4; `examples/roles.specialists.toml`).
 
+## Addendum E (Bernard, 2026-10-21): master drafts a role on demand
+
+A task that no role covers: master drafts a specialist from the task's description, reusing the
+skills that best match it, and proposes it to the person. **A drafted role is inert: it is never
+added to the manifest, linked or popped without the person's yes.**
+
+### `agentbus roles draft <role> --task <words...> [--out <dir>]`
+
+No project, no broker (the `roles` block above the project-required exit).
+
+- Refuses an invalid name (`ValidName`) or a role the manifest already has.
+- Candidate skills are those the launcher can resolve: the roots of `skillRoots` (the repository's
+  `skills/`, then the external engineering collection). Each skill's `name` and `description` are
+  read from its `SKILL.md` front matter; nothing else is read.
+- Score: the number of distinct words (four letters or more, minus a short stop-word list) shared by
+  the task and the description. The draft keeps `agent-bus` always, plus the three best skills with a
+  score of 1 or more (ties by name). No match is a valid draft with `agent-bus` only.
+- It writes two files under `<out>/<role>/` (default `<out>` = `.agent-bus/drafts` in the current
+  directory, as `bootstrap` keeps its markers in `.agent-bus/`):
+  - `roles.toml`: the entry in the manifest's own schema: schema 1 `model = "sonnet"`,
+    `permission = "manual"`, `tier = "pop"`, `approval = "person"`, `skills`; schema 2
+    `profile = <defaults.profile>`, `tier`, `approval`, `skills`. Least privilege by default: the
+    person widens it when they adopt it, never the draft.
+  - `<role>.md`: the prompt in `roles/architect.md`'s shape (boot steps; **Scope** = the task text;
+    **Never**: decisions go to master, who asks the person; nothing on a live system without an ask;
+    **Hand-back**).
+- It prints one JSON object (role, files, skills with score and the shared words) that master puts
+  in its ask.
+- It refuses to overwrite an existing draft directory unless `--force`.
+
+### The person decides: `agentbus ask`, then `roles adopt`
+
+- master asks with the draft's summary and three options: `adopt`, `change` (the person says what in
+  a free answer; master redrafts), `discard`.
+- `agentbus --project <p> roles adopt <role> --ask <id> [--from <dir>]` runs **only when** the ask
+  `<id>` has a question whose answer is the option `adopt`, not withdrawn, answered by someone other
+  than the asking agent. Then it checks that the manifest with the entry appended still loads, appends
+  the entry to `ROLES_TOML`, and copies the prompt to `ROLES_DIR` (default `<repo>/roles`), refusing to
+  overwrite an existing prompt. Skills already resolve, since the draft picked only resolvable ones.
+- Adopting does not pop it: popping is master's usual step. The drafted role has
+  `approval = "person"`, so Claude Code asks the person in master's pane first.
+- **A convenience, not a lock.** The adopt check reads the bus; a process with bus access can write an
+  answer. Its value is that master's normal path cannot skip the person's answer.
+
+### Tests (E)
+
+- `draftSkills(task, skills)`: scores, ties, `agent-bus` always first, at most 3 more, stop words.
+- `roles draft`: refuses an existing role, an invalid name, an existing draft without `--force`; the
+  two files for a schema-1 and a schema-2 manifest; the JSON; the snippet loads when appended (it is
+  valid TOML for that manifest).
+- `roles adopt` against the test broker: no ask, an open ask, `discard`, a withdrawn answer, an answer
+  by the asking agent → refused, nothing written; `adopt` → manifest and prompt written, the manifest
+  loads, an existing prompt is never overwritten.
+- Master skill: a "Draft a role" section naming `roles draft`, the ask and `roles adopt`.
+
+## Implementation review (foureyes, `60e1151`)
+
+- **Blocking, fixed:** an `adopt` answer was bound to neither the role nor the draft. `roles draft`
+  now prints a `question_id`, `adopt-` and 16 hex digits of the SHA-256 of the role, the entry and the
+  prompt; master's ask uses it as its question's id, and `roles adopt` recomputes it from the files:
+  another role, or a draft edited after the answer, finds no answer. An entry that defines anything
+  but `[roles.<role>]` (another role, a profile, a top-level key) is refused.
+- For the release notes (non-blocking):
+  - Schema 2 changes more than the argv: the launch checks that each skill resolves (a warning on
+    stderr names a missing one) and, for non-Claude clients, lists the skill paths in the prompt.
+  - Agents running when it is installed keep `AGENT_BUS_PROFILE=legacy` until relaunched, so
+    `swap --back` is not refused for them until then.
+  - `up` on a workspace that is already open (the v0.21 relaunch) is not gated: running it again
+    before the trust is accepted starts every relaunched agent, each showing the dialog.
+  - Fixed with it: `trustKey` reads a relative `gitdir` (`git worktree add --relative-paths`).
+
 ## Open questions for review
 
 1. B: gate on the first Claude agent, or on master specifically? (Proposal: the template's first

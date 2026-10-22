@@ -574,6 +574,14 @@ do_update() {
     for tag in $(git -C "$REPO_DIR" tag --merged HEAD --no-merged "$from_rev" --sort=v:refname 2>/dev/null); do
       if [ -f "$REPO_DIR/docs/releases/$tag.md" ]; then log_info "$tag: docs/releases/$tag.md"; fi
     done
+    # A running agent keeps the skills it loaded at boot: say which changed and how master finds
+    # the agents to tell (agent-bus-master skill, "Skill updates").
+    changed="$(git -C "$REPO_DIR" diff --name-only "$from_rev" HEAD -- skills/ 2>/dev/null | cut -d/ -f2 | sort -u | tr '\n' ' ')"
+    changed="${changed% }"
+    if [ -n "$changed" ]; then
+      log_info "skills changed: $changed"
+      log_info "agents to tell: agentbus roles skill-users $changed (then a wake=no directive to re-invoke them)"
+    fi
   fi
   # The pull may have changed this very script (pins, steps): install with the new one, not with
   # the copy already in memory.

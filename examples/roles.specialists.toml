@@ -1,0 +1,61 @@
+# Specialist roles (spec docs/superpowers/specs/2026-10-21-specialist-roles-design.md, part A).
+# Append the ones a project needs to its roles.toml; master pops them on demand
+# (agent-spawn) and retires them once their work is done and reviewed. An unused
+# role costs nothing but lengthens master's pops rules, so add a role when it is
+# first needed. Each role's prompt is roles/<role>.md.
+#
+# Schema 2, for a manifest like this repository's roles.toml: the roles use its
+# profiles (claude-opus, claude-opus-manual, claude-sonnet-edits) and the two
+# below. In a schema 1 manifest, write the profile's model and permission on the
+# role instead (model = "opus", permission = "manual", ...).
+#
+# approval = "person": master's agent-spawn of the role is an ask in its pane,
+# for the roles that may touch a live system. permission = "manual": the person
+# sees each command. Conveniences, not locks.
+
+[profiles.claude-opus-edits]
+client = "claude-code"
+provider = "anthropic"
+model = "opus"
+[profiles.claude-opus-edits.options]
+permission = "acceptEdits"
+
+[profiles.claude-sonnet-manual]
+client = "claude-code"
+provider = "anthropic"
+model = "sonnet"
+[profiles.claude-sonnet-manual.options]
+permission = "manual"
+
+[roles.support]
+profile = "claude-sonnet-edits"
+tier = "pop"
+skills = ["agent-bus", "diagnosing-bugs", "implement"]
+
+[roles.dba]
+profile = "claude-opus-manual"
+tier = "pop"
+approval = "person"
+skills = ["agent-bus", "diagnosing-bugs", "codebase-design"]
+
+[roles.web-design]
+profile = "claude-opus-edits"
+tier = "pop"
+skills = ["agent-bus", "implement", "tdd"]
+
+[roles.backend]
+profile = "claude-opus"
+tier = "pop"
+skills = ["agent-bus", "tdd", "implement", "codebase-design"]
+
+[roles.os-expert]
+profile = "claude-sonnet-manual"
+tier = "pop"
+approval = "person"
+skills = ["agent-bus", "diagnosing-bugs"]
+
+[roles.cicd]
+profile = "claude-sonnet-edits"
+tier = "pop"
+approval = "person"
+skills = ["agent-bus", "diagnosing-bugs", "tdd"]

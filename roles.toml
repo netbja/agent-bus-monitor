@@ -1,5 +1,7 @@
-# The single role manifest. Add a role by adding a [roles.<name>] table — no code change.
+# The single role manifest (schema 2: execution settings live in [profiles.*], roles name one).
+# Add a role by adding a [roles.<name>] table — no code change.
 # <name> must match ValidName: ^[a-z][a-z0-9_-]{0,31}$ (lowercase, letter-first, <=32).
+# Specialist roles to add on demand: examples/roles.specialists.toml.
 # model: Claude Code's aliases (opus, sonnet, haiku) follow the latest model of each family, so a
 # renamed model never breaks a launch. Write an exact id (claude-opus-5-5) only to pin a version;
 # `agentbus roles doctor` shows what each agent really runs.
@@ -9,6 +11,56 @@
 # pane before it runs `agent-spawn <role>`. A convenience, not a lock. v0.17.
 # Shared Claude Code denies apply to every role, including bypassPermissions. Defence in depth,
 # not a boundary: processes an agent starts (tests, dotenv, and similar tools) can still read env.
+
+schema_version = 2
+
+[defaults]
+profile = "claude-opus"
+
+# One profile per model and permission the roles use. The launch is the one
+# schema 1 gave (rolecfg/migration_test.go checks every role).
+[profiles.claude-opus]
+client = "claude-code"
+provider = "anthropic"
+model = "opus"
+[profiles.claude-opus.options]
+permission = "bypassPermissions"
+
+[profiles.claude-opus-fallback]
+client = "claude-code"
+provider = "anthropic"
+model = "opus"
+[profiles.claude-opus-fallback.options]
+permission = "bypassPermissions"
+fallback = "claude-opus-5"
+
+[profiles.claude-opus-manual]
+client = "claude-code"
+provider = "anthropic"
+model = "opus"
+[profiles.claude-opus-manual.options]
+permission = "manual"
+
+[profiles.claude-sonnet]
+client = "claude-code"
+provider = "anthropic"
+model = "sonnet"
+[profiles.claude-sonnet.options]
+permission = "bypassPermissions"
+
+[profiles.claude-sonnet-edits]
+client = "claude-code"
+provider = "anthropic"
+model = "sonnet"
+[profiles.claude-sonnet-edits.options]
+permission = "acceptEdits"
+
+[profiles.claude-haiku]
+client = "claude-code"
+provider = "anthropic"
+model = "haiku"
+[profiles.claude-haiku.options]
+permission = "bypassPermissions"
 
 [tool_rules]
 deny = [
@@ -27,52 +79,43 @@ deny = [
 ]
 
 [roles.master]
-model = "sonnet"
-permission = "acceptEdits"
+profile = "claude-sonnet-edits"
 tier = "boot"
 pops = true
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 
 [roles.coder]
-model = "opus"
-permission = "bypassPermissions"
+profile = "claude-opus"
 tier = "boot"
 skills = ["agent-bus", "tdd", "implement"]
 
 [roles.foureyes]
-model = "opus"
-permission = "bypassPermissions"
+profile = "claude-opus"
 tier = "boot"
 skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 
 [roles.sentinel]
-model = "haiku"
-permission = "bypassPermissions"
+profile = "claude-haiku"
 tier = "boot"
 skills = ["agent-bus", "agent-bus-sentinel"]
 
 [roles.architect]
-model = "opus"
-fallback = "claude-opus-5"
-permission = "bypassPermissions"
+profile = "claude-opus-fallback"
 tier = "pop"
 skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
 
 [roles.deploy]
-model = "sonnet"
-permission = "bypassPermissions"
+profile = "claude-sonnet"
 tier = "pop"
 approval = "person"
 skills = ["agent-bus", "diagnosing-bugs"]
 
 [roles.security]
-model = "opus"
-permission = "manual"
+profile = "claude-opus-manual"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-security"]
 
 [roles.docs]
-model = "sonnet"
-permission = "acceptEdits"
+profile = "claude-sonnet-edits"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-docs"]

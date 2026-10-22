@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -81,6 +82,9 @@ func verdictsReport(subject string, vs []bus.Verdict, now time.Time) (string, in
 		case deciderIdx >= 0 && i < deciderIdx:
 			sb.WriteString("  (superseded)")
 		}
+		if v.Reviewer != v.Author && v.AuthorProvider != "" && v.AuthorProvider == v.ReviewerProvider {
+			sb.WriteString("  (same provider)") // a soft note: it never changes the state
+		}
 		sb.WriteByte('\n')
 	}
 	return sb.String(), exitForState(state)
@@ -127,4 +131,19 @@ func verdictText(v bus.Verdict) string {
 		return "[truncated at publication] " + body
 	}
 	return body
+}
+
+// verdictProviders reads the author's and the reviewer's providers from
+// their snapshots; a failed read or an unknown agent gives "" (the ledger
+// then records nothing: the fields are additive and never block a verdict).
+func verdictProviders(ctx context.Context, b *bus.Bus, author, reviewer string) (string, string) {
+	m, err := b.Agents(ctx)
+	if err != nil {
+		return "", ""
+	}
+	prov := func(name string) string {
+		s := m[name]
+		return bus.ProviderFor(s.Client, s.Provider)
+	}
+	return prov(author), prov(reviewer)
 }

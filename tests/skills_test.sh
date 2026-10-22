@@ -11,6 +11,7 @@ assert_contains "$body" "index_repository"                "sentinel documents in
 assert_contains "$body" ".agent-bus/index-requested"      "sentinel checks the index marker"
 assert_contains "$body" "cmd master"                      "sentinel documents the notify-only nudge"
 assert_contains "$body" "agentbus health list"            "sentinel reads measured health on wake"
+assert_contains "$body" "idle for more than 2 h"           "sentinel lists idle popped specialists"
 r="$(cat "$REPO/roles/sentinel.md")"
 assert_contains "$r" "agentbus health"                    "sentinel role prompt reads health"
 
@@ -23,6 +24,15 @@ p="$(cat "$REPO/skills/agent-bus/SKILL.md")"
 assert_contains "$p" "Need the person? Tell master"       "peer skill: never waiting without an open ask"
 assert_contains "$p" "## What remains for you"            "peer skill: the report shape"
 assert_contains "$m" "## What remains for you"            "master skill: the report shape"
+assert_contains "$m" "## Specialists"                     "master skill has a Specialists section"
+assert_contains "$m" "agentbus retire <role>"             "master retires a specialist after its work"
+assert_contains "$m" "agentbus roles reviewers"           "master offers a reviewer on another provider"
+assert_contains "$m" "## Draft a role"                    "master drafts a role for a task no role covers"
+assert_contains "$m" "agentbus roles adopt"               "and adopts it only through the person's ask"
+assert_contains "$m" "question_id"                        "the ask's question is the draft's own id"
+assert_contains "$m" "its text names the"                 "and its text names the role and the id"
+assert_contains "$m" "## Skill updates"                   "master tells agents when their skills change"
+assert_contains "$m" "reads both verdicts"                "money path reads both reviewers, not the roll-up"
 # the tee is gone: a prompt that still tells agents to publish usage is stale
 if grep -q 'agentbus usage "' "$REPO/skills/agent-bus-master/SKILL.md" "$s" 2>/dev/null; then
   _bad "a skill still documents the removed status-line usage tee"

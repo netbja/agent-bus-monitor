@@ -333,11 +333,13 @@ assert_contains "$up_out" "git pull --ff-only failed" "and says why"
 
 # update fast-forwards to a newer release and reinstalls it
 git clone -q --bare "$T/repo" "$T/upstream.git" && git -C "$T/repo" remote add origin "$T/upstream.git" && git -C "$T/repo" fetch -q origin && git -C "$T/repo" branch -q -u origin/$(git -C "$T/repo" rev-parse --abbrev-ref HEAD)
-git clone -q "$T/upstream.git" "$T/dev" && echo more >> "$T/dev/CHANGELOG.md" && sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/setup.sh" && grep -q "pulled installer" "$T/dev/setup.sh" && git -C "$T/dev" add -A && git -C "$T/dev" -c user.email=t@t -c user.name=t commit -qm next && git -C "$T/dev" tag v9.9.10 && git -C "$T/dev" push -q origin HEAD --tags
+git clone -q "$T/upstream.git" "$T/dev" && echo more >> "$T/dev/CHANGELOG.md" && echo "- one more rule" >> "$T/dev/skills/agent-bus-sentinel/SKILL.md" && sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/setup.sh" && grep -q "pulled installer" "$T/dev/setup.sh" && git -C "$T/dev" add -A && git -C "$T/dev" -c user.email=t@t -c user.name=t commit -qm next && git -C "$T/dev" tag v9.9.10 && git -C "$T/dev" push -q origin HEAD --tags
 up_out="$("$SETUP" update --bin-dir "$T/bin" --no-docker --no-skills 2>&1)"; rc=$?
 [[ "$rc" == 0 ]] || printf "%s\n" "$up_out" | tail -15 | sed "s/^/    /"
 assert_eq "$rc" "0" "update exits 0"
 assert_contains "$up_out" "updated v9.9.9 -> v9.9.10" "update reports vA -> vB"
+assert_contains "$up_out" "skills changed: agent-bus-sentinel" "update names the skills that changed"
+assert_contains "$up_out" "agentbus roles skill-users agent-bus-sentinel" "and how master finds the agents to tell"
 assert_contains "$("$T/bin/agentbus" version)" "agentbus version v9.9.10" "and installs the new release"
 assert_contains "$up_out" "the pulled installer is the one running" "update runs the installer it pulled, not the one in memory"
 # Go older than go.mod, with no automatic toolchain switch: refused
