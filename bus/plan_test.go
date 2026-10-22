@@ -19,11 +19,11 @@ func TestPlanLoadIsRefusedForAnUnknownProject(t *testing.T) {
 	if _, err := b.Status(ctx, "master", "idle", "x", AgentIdent{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.LoadPlan(ctx, "docs/plans/v.json", "abc", []byte(`{"plan":"v"}`), []string{"a", "b"}); err != nil {
+	if err := b.LoadPlan(ctx, "docs/plans/v.json", "abc", []byte(`{"plan":"v","tasks":[{"after":[]}]}`), []string{"a", "b"}); err != nil {
 		t.Fatal(err)
 	}
 	rec, ok, err := b.Plan(ctx)
-	if err != nil || !ok || rec.Commit != "abc" || rec.Path != "docs/plans/v.json" || rec.LoadedAt == 0 || string(rec.File) != `{"plan":"v"}` {
+	if err != nil || !ok || rec.Commit != "abc" || rec.Path != "docs/plans/v.json" || rec.LoadedAt == 0 || rec.File != `{"plan":"v","tasks":[{"after":[]}]}` {
 		t.Fatalf("plan %+v %v %v", rec, ok, err)
 	}
 }

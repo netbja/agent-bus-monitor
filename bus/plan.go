@@ -24,7 +24,7 @@ type PlanRecord struct {
 	Commit   string          `json:"commit"`
 	LoadedAt int64           `json:"loaded_at"` // Unix ms, Redis TIME
 	Tasks    []string        `json:"tasks"`     // the task ids, for the fact scripts
-	File     json.RawMessage `json:"file"`
+	File     string          `json:"file"` // the file's bytes, opaque: cjson would rewrite [] as {}
 }
 
 // PlanFact is what master recorded about one task. Times are Unix ms from
@@ -54,7 +54,7 @@ func (b *Bus) LoadPlan(ctx context.Context, path, commit string, file []byte, ta
 	if !known {
 		return fmt.Errorf("%w: %s", ErrNoProject, b.project)
 	}
-	rec, _ := json.Marshal(PlanRecord{Path: path, Commit: commit, Tasks: tasks, File: json.RawMessage(file)})
+	rec, _ := json.Marshal(PlanRecord{Path: path, Commit: commit, Tasks: tasks, File: string(file)})
 	return planLoad.Run(ctx, b.r, []string{PlanKey(b.project), PlanFactsKey(b.project)}, string(rec)).Err()
 }
 
