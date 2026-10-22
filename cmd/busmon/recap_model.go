@@ -48,6 +48,7 @@ type recapInput struct {
 	Holds       map[string]int64
 	Human       string
 	Unread      []bus.Event // entries for the person not opened yet (unread.go), oldest first
+	Plan        *planState  // the loaded plan (nil: none); its rows were derived in pollOnce
 	Errors      map[string]error
 }
 
@@ -109,12 +110,14 @@ func buildRecap(in recapInput) recapModel {
 				Kind: "agent", Agent: n, Selectable: true})
 		}
 	}
+	planRecapExpected(in, add)
 	if err := in.Errors["Open asks"]; err != nil {
 		add(recapRow{Section: "Expected from you", Title: "Open asks unavailable", Detail: Preview(err.Error())})
 	}
 	if err := in.Errors["Agent snapshot"]; err != nil {
 		add(recapRow{Section: "Expected from you", Title: "Agent status unavailable", Detail: Preview(err.Error())})
 	}
+	planRecapSection(in, add, section)
 	section("Agents")
 	for _, n := range names {
 		a := in.Agents[n]

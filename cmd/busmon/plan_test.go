@@ -297,3 +297,63 @@ func TestHostilePlanHasEveryState(t *testing.T) {
 		}
 	}
 }
+
+func recapTitles(m recapModel, section string) []string {
+	var out []string
+	for _, r := range m.Rows {
+		if r.Section == section && r.Title != section {
+			out = append(out, r.Title+" | "+r.Detail)
+		}
+	}
+	return out
+}
+
+func TestRecapPlanSection(t *testing.T) {
+	now := time.Now()
+	since := now.Add(-2 * time.Hour)
+	p := hostilePlan(now)
+	// Facts newer than the last visit prove a change; older ones do not.
+	for i := range p.rows {
+		p.rows[i].LastFact = 0
+	}
+	p.rows[2].LastFact = now.Add(-time.Hour).UnixMilli()      // in review, changed since
+	p.rows[3].LastFact = now.Add(-50 * time.Hour).UnixMilli() // in progress, before the visit
+	m := buildRecap(recapInput{Now: now, Since: since, Plan: &p, Errors: map[string]error{}})
+	planRows := strings.Join(recapTitles(m, "Plan"), "\n")
+	if !strings.Contains(planRows, p.rows[2].Task.ID) || strings.Contains(planRows, p.rows[3].Task.ID) {
+		t.Fatalf("only a change proven by a fact after the visit is listed:\n%s", planRows)
+	}
+	if !strings.Contains(planRows, "2/8?") {
+		t.Fatalf("the plan line with its count and the kept-value mark:\n%s", planRows)
+	}
+	expected := strings.Join(recapTitles(m, "Expected from you"), "\n")
+	if !strings.Contains(expected, p.rows[0].Task.ID) {
+		t.Fatalf("a plan task waiting for the person is expected from them:\n%s", expected)
+	}
+
+	// No previous visit: no transition is guessed.
+	m = buildRecap(recapInput{Now: now, Plan: &p, Errors: map[string]error{}})
+	if rows := recapTitles(m, "Plan"); len(rows) != 2 || !strings.Contains(rows[1], "no previous visit") {
+		t.Fatalf("no visit: %v", rows)
+	}
+	// No plan: no section.
+	m = buildRecap(recapInput{Now: now, Since: since, Errors: map[string]error{}})
+	for _, r := range m.Rows {
+		if r.Section == "Plan" {
+			t.Fatal("a Plan section with no plan loaded")
+		}
+	}
+}
+
+func TestPlanOverlayEscapesOnce(t *testing.T) {
+	p := hostilePlan(time.Now())
+	st := newPlanShared()
+	st.plan = p
+	h := newHarness(t, st)
+	h.draw(160, 50)
+	h.key(runeKey('P'))
+	scr := h.draw(160, 50)
+	if !strings.Contains(scr, "Ti[red]tle") || strings.Contains(scr, "[red[]") || !strings.Contains(scr, "goal [x]") {
+		t.Fatalf("hostile text is shown as written, escaped once:\n%s", scr)
+	}
+}

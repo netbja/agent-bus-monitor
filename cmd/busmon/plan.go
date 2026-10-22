@@ -250,7 +250,7 @@ func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) 
 	}
 	age := plan.Age(p.rec.LoadedAt, now)
 	head := fmt.Sprintf("%s %s %s %s loaded %s ago (%s)", p.file.Plan, GlyphNone, p.file.Goal, GlyphNone, age, short7(p.rec.Commit))
-	headTag := tg(RoleText, tview.Escape(Preview(p.file.Plan))) + " " + tg(RoleMuted, tview.Escape(GlyphNone+" "+Preview(p.file.Goal)+" "+GlyphNone+" loaded "+age+" ago ("+short7(p.rec.Commit)+")"))
+	headTag := tg(RoleText, Preview(p.file.Plan)) + " " + tg(RoleMuted, GlyphNone+" "+Preview(p.file.Goal)+" "+GlyphNone+" loaded "+age+" ago ("+short7(p.rec.Commit)+")")
 	if now.Sub(time.UnixMilli(p.rec.LoadedAt)) > plan.StaleAfter {
 		headTag += " " + tg(RoleMuted, "stale "+GlyphNone+" master: agentbus plan load")
 		head += " stale"
@@ -296,21 +296,21 @@ func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) 
 			}
 			rowTitle := clip(Preview(r.Task.Title), titleW)
 			text := "  " + pad(Preview(r.Task.ID), idw) + rowTitle
-			tagged := planMark(idx == sel) + tg(role, glyph) + " " + tg(RoleText, tview.Escape(pad(Preview(r.Task.ID), idw))) + tview.Escape(rowTitle)
+			tagged := planMark(idx == sel) + tg(role, glyph) + " " + tg(RoleText, pad(Preview(r.Task.ID), idw)) + tview.Escape(rowTitle)
 			if narrow {
 				emit(tagged, text)
 				sub := "    " + owner
 				if details != "" {
 					sub += "  " + details
 				}
-				emit(tg(RoleMuted, tview.Escape(clip(sub, width))), sub)
+				emit(tg(RoleMuted, clip(sub, width)), sub)
 				continue
 			}
 			tail := "  " + owner
 			if details != "" {
 				tail += "  " + details
 			}
-			emit(tagged+tg(RoleMuted, tview.Escape(clip(tail, max(0, width-idw-4-len([]rune(rowTitle)))))), text+tail)
+			emit(tagged+tg(RoleMuted, clip(tail, max(0, width-idw-4-len([]rune(rowTitle))))), text+tail)
 		}
 	}
 	return b.String(), pl.String(), items
@@ -521,4 +521,59 @@ func (u *ui) planKey(act Action, ev *tcell.EventKey) bool {
 		}
 	}
 	return false
+}
+
+// planRecapExpected adds the plan's tasks waiting for the person to
+// "Expected from you"; one waiting on an open ask the recap already lists
+// is not listed twice.
+func planRecapExpected(in recapInput, add func(recapRow)) {
+	if in.Plan == nil || !in.Plan.loaded {
+		return
+	}
+	listed := map[string]bool{}
+	for _, a := range openAsks(in.Asks) {
+		listed[a.ID] = true
+	}
+	for _, r := range in.Plan.rows {
+		if r.State != plan.Waiting || (r.Ask != "" && listed[r.Ask]) {
+			continue
+		}
+		add(recapRow{Key: "plan:" + r.Task.ID, Section: "Expected from you", Title: "plan " + r.Task.ID + " " + GlyphNone + " " + plan.Label(r.State),
+			Detail: Preview(r.Task.Title) + " " + GlyphNone + " " + planRowDetails(r, in.Now)})
+	}
+}
+
+// planRecapSection is the recap's "Plan" section: the plan line, then the
+// tasks whose newest fact is after the last visit, with their state now. A
+// change is listed only when a retained fact proves it; the earlier state is
+// not stored, so it is never guessed.
+func planRecapSection(in recapInput, add func(recapRow), section func(string)) {
+	if in.Plan == nil || !in.Plan.loaded {
+		return
+	}
+	p := *in.Plan
+	section("Plan")
+	sum, _ := p.summary(in.Now)
+	add(recapRow{Section: "Plan", Title: planSeg(sum, in.Now).text(), Detail: Preview(p.file.Goal)})
+	if in.Since.IsZero() {
+		add(recapRow{Section: "Plan", Title: "no previous visit recorded; changes cannot be shown"})
+		return
+	}
+	n := 0
+	for _, r := range p.rows {
+		if r.LastFact <= in.Since.UnixMilli() {
+			continue
+		}
+		state := plan.Label(r.State)
+		if r.State == plan.Done {
+			state = plan.DoneLabel(r, in.Now)
+		}
+		add(recapRow{Key: "planchg:" + r.Task.ID, Section: "Plan",
+			Title:  r.Task.ID + " " + GlyphArrowR + " " + state + " " + GlyphNone + " " + plan.Age(r.LastFact, in.Now) + " ago",
+			Detail: Preview(r.Task.Title)})
+		n++
+	}
+	if n == 0 {
+		add(recapRow{Section: "Plan", Title: "no task changed since your last visit"})
+	}
 }
