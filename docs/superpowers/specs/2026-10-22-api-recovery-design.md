@@ -1,6 +1,6 @@
 # Recovering from API errors without the person — design
 
-Status: draft for review (coder, 2026-10-22). Task `api-recovery-spec`, branch
+Status: draft for review (coder, 2026-10-22), revision 2 after foureyes' review of `b4cb92e`. Task `api-recovery-spec`, branch
 `docs/api-recovery-spec` from `origin/main` `61031f7`. Spec only; no code in this change.
 
 ## The incident
@@ -116,29 +116,47 @@ error lines are captured as fixtures before any class is added for them.
 - **claude-code:** `CLAUDE_CODE_RETRY_WATCHDOG=1` and `CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS=3600000`
   (one hour per request on 429/529), unless the environment or the profile already sets them.
   Every agent is an unattended session in the documentation's sense.
-- **codex:** `-c model_providers.<provider>.request_max_retries=<cap>` and the matching
-  `stream_max_retries`, for the profile's provider. The values are set to the code's caps,
-  verified at implementation.
+- **codex:** raise `request_max_retries` and `stream_max_retries` for the profile's provider.
+  **Unverified:** whether `-c model_providers.openai.request_max_retries=N` patches the *built-in*
+  provider or defines a partial new one (no `base_url`, no `name`). The implementation verifies it
+  first, against codex's own config code and a dry run showing the effective provider. If it is not
+  honoured as an override, Codex keeps its defaults: no partial provider is written, and no copy of
+  the user's config. The dispatcher layer below covers it either way. The caps are read from the
+  code at that time.
 - A profile option `client_retries = false` turns this off (for a person who wants failures to
   surface at once).
 - A long client retry keeps the pane `working`: section 3 keeps that from escalating as a stall.
 
 ### 2. Classify the error, never keep its text
 
-`Signature` gains `APIErrors []ErrSig` (`Class`, `Re`), matched on stripped text in the **turn
-tail**: at most 8 non-empty lines directly above the current input region (`inputRegion`'s start).
+A class has an **evidence level**, and only the strong one may act beyond its own agent.
+
+- **`transcript` (strong; Claude Code, when the snapshot has a `Session`).** The newest entry of
+  the agent's own transcript with `isApiErrorMessage: true`, newer than the wake record's `At`,
+  gives the class from its `error` field: `rate_limit` → `limit`, `authentication_failed` →
+  `auth`. Values seen at the next timeout or 5xx are added from the fixture. Only `type`,
+  `timestamp`, `isApiErrorMessage`, `error` and `apiErrorStatus` are read, as in `servedAt`; no
+  credential file is opened. The client writes this entry itself: an agent cannot forge it by
+  printing a string.
+- **`screen` (weak).** The turn tail can be the agent's own output: a printed fixture, a test log,
+  a report quoting an incident. So:
+  - For Claude Code, a screen class **never counts by itself**. Without a transcript entry to
+    match, it reads as today: no class.
+  - For a client without a transcript reader, a screen class may change only **that agent's own
+    backoff** (section 3). It never opens a provider outage on its own (section 4).
+  - Screen regexes are **anchored to the client's own error rendering**, never to bare words: the
+    marker and ANSI colour the client prints its errors with (for Claude Code, the turn's result
+    prefix and its error colour), read from the captured fixtures. The same words in plain agent
+    output do not match.
+
+`Signature` gains `APIErrors []ErrSig` (`Class`, `Re`), matched on the raw (ANSI) **turn tail**:
+at most 8 non-empty lines directly above the current input region (`inputRegion`'s start).
 
 - **The turn tail only.** An error further up the scrollback, above a later turn, is never read.
   A new turn pushes its own output into the tail.
-- **One class, no text.** `Inspection` gains `APIError string`, the class only, and
-  `APIRetrying bool`, the client's own retry label while it waits. The screen text is still never
-  retained or published.
-- **A transcript class wins over the screen class** (claude, when the snapshot has a `Session`).
-  The newest entry of the agent's own transcript with `isApiErrorMessage: true` and newer than the
-  record's `At` gives the class from its `error` field: `rate_limit` → `limit`,
-  `authentication_failed` → `auth`. Values seen at the next timeout or 5xx are added from the
-  fixture. Only `type`, `timestamp`, `isApiErrorMessage`, `error` and `apiErrorStatus` are read,
-  as in `servedAt`; no credential file is opened.
+- **One class, no text.** `Inspection` gains `APIError string` (the class only),
+  `APIEvidence` (`transcript` or `screen`) and `APIRetrying bool` (the client's own retry label
+  while it waits, anchored the same way). The screen text is still never retained or published.
 
 | Class | Claude Code wording (documented) | Meaning |
 |---|---|---|
@@ -154,18 +172,23 @@ the documented wording as their starting point; Codex's classes are added from i
 
 ### 3. Decide: an API error is not a try
 
-New rows, between rule 3 and rule 4, evaluated on an inspection. The loop now inspects before
-`Decide` when the record shows a prompt was made (`state` `prompted`/`unobserved`, `Tries > 0`):
-one herdr inspection per such agent per pass. The record gains `api_tries`, `api_class` and
-`api_at`.
+New rows, between rule 3 and rule 4, evaluated on an inspection. The record gains `api_tries`,
+`api_class`, `api_evidence` and `api_at`.
+
+**The cost is bounded.** The loop inspects before `Decide` only for an agent that is owed
+something, whose record shows a prompt was made (`state` `prompted`/`unobserved`, `Tries > 0`),
+and only once `SinceWake ≥ Retry`, i.e. when rule 5 would let a prompt through anyway. That is at
+most one extra inspection per such agent per `Retry` (60 s). One inspection is 4 herdr calls
+(agent get, process-info, two reads 200 ms apart), each bounded by `herdrCallTimeout` (3 s). An
+observation from the observe pass younger than 15 s, with the same pid, stands in for it.
 
 | Rule | When | Action |
 |---|---|---|
 | 3a | `APIRetrying`, or herdr `working` with the client's retry label | defer `api retrying (client)`; no escalation by rule 8's 4×T. After `APIStall` (3 h, the watchdog's own horizon) the normal rule 8 applies |
-| 3b | `APIError` transient, pane verified, `api_tries < APIMaxTries` (6) | prompt with the **same wake line** once `SinceWake ≥ backoff(api_tries)`: 1, 2, 4, 8, 16, 30 min, about an hour in total. Before that, defer `api <class>, backing off`. `Tries` is **not** incremented; `api_tries` is |
-| 3c | `APIError` transient and `api_tries ≥ APIMaxTries` | escalate once, `EscCause = "api <class>"`, and open the provider outage (section 4) |
+| 3b | `APIError` transient (claude: `transcript` evidence; others: `screen`), pane verified, `api_tries < APIMaxTries` (6) | prompt with the **same wake line** once `SinceWake ≥ backoff(api_tries)`: 1, 2, 4, 8, 16, 30 min, about an hour in total. Before that, defer `api <class>, backing off`. `Tries` is **not** incremented; `api_tries` is |
+| 3c | `APIError` transient and `api_tries ≥ APIMaxTries` | escalate once, `EscCause = "api <class>"`; record it as a candidate for the provider outage, which opens only on the evidence of section 4 |
 | 3d | `APIError` = `limit` | defer `usage limit`, no try counted, no escalation: the quota reader holds the provider (`dispatch/quota.go`). If no hold appears within T, escalate `api limit` as today |
-| 3e | `APIError` = `auth` | escalate at once, as a `notify` for the person naming the pane (`run /login there`); no retry |
+| 3e | `APIError` = `auth` | escalate at once, as a `notify` for the person naming the pane (`run /login there`); no retry. A screen-only `auth` misread costs one notify, nothing else |
 
 - **Every prompt keeps the present guards.** Ready, unfocused, pid-verified (`identityOK`), the
   reservation (`ReserveWake`), the swap intent and the pause. Rule 3b only changes *when* and
@@ -177,8 +200,17 @@ one herdr inspection per such agent per pass. The record gains `api_tries`, `api
 
 ### 4. A provider outage: one episode, no hammering
 
-When an agent reaches rule 3c, the dispatcher opens an outage for its provider. It is a fenced
-record in `{p}:quota` under `apidown:<provider>`: class, since (Redis `TIME`), episode.
+An outage holds back every agent of a provider, so it opens only on evidence an agent's own output
+cannot fake. An agent at rule 3c opens one when either:
+
+- its class has `transcript` evidence; or
+- a **second** agent of the same provider reached rule 3b or 3c with its own class within the
+  last 15 min (two panes printing the same quote at the same time is not a case this guards
+  against).
+
+A single screen-only class affects that agent alone: its backoff, its escalation at the cap. The
+outage is a fenced record in `{p}:quota` under `apidown:<provider>`: class, evidence, since
+(Redis `TIME`) and episode.
 
 - **While it is open, nobody hammers the provider.**
   - No agent of that provider is prompted, except one **probe**: the oldest owed agent, at most
@@ -198,7 +230,8 @@ record in `{p}:quota` under `apidown:<provider>`: class, since (Redis `TIME`), e
   On close, the escalated agents are re-armed (rule 3), and the target gets one `wake=no` notice,
   as quota releases do (`resumed:` marks, once per episode).
 - **Health check `api-errors`** (`health/`):
-  - `warn` while an agent shows a transient class or an outage is open;
+  - `warn` while an agent shows a transient class, while a client has been retrying for more than
+    T (`APIRetrying`, rule 3a: a 3-hour silent retry is visible here), or while an outage is open;
   - `ok` otherwise;
   - `unknown` when no observation is fresh.
 
@@ -210,7 +243,7 @@ record in `{p}:quota` under `apidown:<provider>`: class, since (Redis `TIME`), e
 
 | | Quota hold (`dispatch/quota.go`) | API outage (this spec) |
 |---|---|---|
-| Evidence | a window ≥ threshold, or `quotaLimits.status=rejected` with a reset | a transient class on screen or in the transcript (timeout, 5xx, 529, connection) |
+| Evidence | a window ≥ threshold, or `quotaLimits.status=rejected` with a reset | a transient class (timeout, 5xx, 529, connection) with transcript evidence, or from two agents of the provider (section 4) |
 | Ends | the window reads under threshold, is renewed, or its reset passes; or the API answered since (v0.14.6) | the provider answered since `since`; a successful probe; progress |
 | Prompts meanwhile | none | one probe per 15 min |
 | A 429 throttle | only when it carries the quota headers or a reset (a limit) | `Server is temporarily limiting requests` reads `overloaded` (transient) |
@@ -227,6 +260,8 @@ version and the date:
   `claude-api-connection.txt`, `claude-limit.txt`, `claude-auth.txt`;
 - `claude-retrying.txt`: the watchdog's retry label during a turn;
 - `claude-old-error-new-turn.txt`: an error above a later successful turn;
+- `claude-quoted-error.txt`: the same words as normal agent output (a printed fixture, a report)
+  just above the prompt;
 - `codex-stream-error.txt`, `codex-request-error.txt`.
 
 Until a class has a captured fixture, it is not shipped: no signature is written from the
@@ -238,6 +273,10 @@ runs `herdr pane read <pane> --source recent --lines 40` there at the next occur
 - **Signatures:** each fixture gives its class. An empty or typed input box with no error gives
   none. An error above a later turn gives none. A modal still vetoes `Ready`. Classification
   never changes `Ready`/`Busy`.
+- **Misreads:** the error words inside normal agent output (`claude-quoted-error.txt`, a printed
+  fixture, a test log) give no class. A Claude screen class with no matching transcript entry
+  counts no API try. One agent's screen-only class (a client without a transcript) changes only
+  its own backoff and opens no outage; a second agent's class within 15 min does open one.
 - **Transcript class:** fixture JSONL with `isApiErrorMessage` entries. A class only from entries
   newer than `At`; other fields never read (a field filled with a secret-like value never reaches
   the output).
@@ -250,7 +289,8 @@ runs `herdr pane read <pane> --source recent --lines 40` there at the next occur
   schedule, never escalated, and the record ends cleared by progress. The same with the error
   persisting: exactly one notify for the person (master is the target), no directive, `api_tries`
   stops at the cap, and nothing is typed after it except one probe per 15 min.
-- **Outage:** two agents on one provider, both erroring. One episode, one message, no prompt to
+- **Outage:** a transcript-evidenced class at the cap opens it alone. Two agents on one provider,
+  both erroring. One episode, one message, no prompt to
   the second while it is open. It closes on a served-since reading, re-arms both, and sends one
   `wake=no` notice. A second outage is a new episode.
 - **Safety invariants kept:**
@@ -261,9 +301,13 @@ runs `herdr pane read <pane> --source recent --lines 40` there at the next occur
   - every write is fenced (a lost lease writes nothing).
 - **Launcher:** the claude env defaults are set only when absent; `client_retries = false` drops
   them; codex gets the `-c` overrides for the profile's provider; dry-run output shows them.
-- **busmon:** the `api down <provider>` header item; the health row.
+- **busmon:** the `api down <provider>` header item; the health row, including a long `APIRetrying`.
+- **Inspection cost:** the fake herdr counts calls. No extra inspection inside the retry window,
+  and none for an agent owed nothing; a fresh observation stands in for one.
 
 ## Open questions for review
+
+Agreed in review: 1 (Config plus flags through the env file), 2 (no) and 3 (keep).
 
 1. **The probe cadence and cap** (6 retries up to 30 min apart, then one probe per 15 min while
    the outage stays open). Proposal: as stated, as `Config` fields with `agentbus dispatch` flags
@@ -276,3 +320,14 @@ runs `herdr pane read <pane> --source recent --lines 40` there at the next occur
    client.** The quota hold already stops prompts meanwhile, so this is harmless, but the
    resume directive then arrives to an agent that resumed by itself. Proposal: keep it; the
    directive is idempotent.
+
+Changes from revision 1 (foureyes, review of `b4cb92e`):
+
+- **Evidence levels.** For Claude Code, a transcript entry is required to count an API try and
+  to open an outage. A screen-only class changes only its own agent's backoff, unless a second
+  agent of the provider shows a class too.
+- **Anchored regexes.** Screen regexes are anchored to the client's own error rendering, with
+  tests where the words appear in normal output.
+- **Health warn** now covers a long client retry (`APIRetrying`).
+- **Codex's built-in provider override** is marked unverified, with a fallback.
+- **Inspection cost** is stated and throttled to the retry window.
