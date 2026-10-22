@@ -452,6 +452,28 @@ func (b *Bus) Verdicts(ctx context.Context, subject string) ([]Verdict, error) {
 	return out, nil
 }
 
+// VerdictsAfter returns at most count ledger entries newer than the id
+// after ("" = from the start), oldest first: an incremental read, so a poller
+// never re-reads entries (and their full texts) it already holds.
+func (b *Bus) VerdictsAfter(ctx context.Context, after string, count int64) ([]Verdict, error) {
+	start := "-"
+	if after != "" {
+		start = "(" + after
+	}
+	msgs, err := b.r.XRangeN(ctx, VerdictsKey(b.project), start, "+", count).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Verdict, 0, len(msgs))
+	for _, m := range msgs {
+		f := toStringMap(m.Values)
+		ms, _ := splitID(m.ID)
+		out = append(out, Verdict{ID: m.ID, Subject: f["subject"], Author: f["author"], Reviewer: f["reviewer"],
+			Decision: f["decision"], Message: f["message"], Ref: f["ref"], TS: ms})
+	}
+	return out, nil
+}
+
 // Thread returns every {project}:cmd entry belonging to thread threadID,
 // oldest→newest (XRANGE is ascending). An entry belongs iff its ref == threadID,
 // or its id == threadID (the root), or threadID is a bare <ms> (all digits) and

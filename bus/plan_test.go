@@ -108,3 +108,28 @@ func TestPlanFacts(t *testing.T) {
 		t.Fatalf("facts after clear: %+v", facts)
 	}
 }
+
+func TestVerdictsAfterReadsIncrementally(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	var ids []string
+	for i, s := range []string{"a", "b", "c"} {
+		id, err := b.AppendVerdict(ctx, Verdict{Subject: s, Author: "coder", Reviewer: "foureyes", Decision: "approve", Message: string(rune('x' + i))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	first, err := b.VerdictsAfter(ctx, "", 2)
+	if err != nil || len(first) != 2 || first[0].ID != ids[0] || first[1].Subject != "b" {
+		t.Fatalf("first page %+v %v", first, err)
+	}
+	rest, err := b.VerdictsAfter(ctx, first[1].ID, 2)
+	if err != nil || len(rest) != 1 || rest[0].ID != ids[2] {
+		t.Fatalf("after %s: %+v %v", first[1].ID, rest, err)
+	}
+	none, err := b.VerdictsAfter(ctx, ids[2], 2)
+	if err != nil || len(none) != 0 {
+		t.Fatalf("nothing new: %+v %v", none, err)
+	}
+}
