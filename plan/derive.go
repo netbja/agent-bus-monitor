@@ -34,15 +34,8 @@ const (
 	ChangesAsked = "changes asked"
 )
 
-// Fact is what master recorded about a task in {p}:plan:facts. Times are
-// Unix ms from Redis TIME.
-type Fact struct {
-	PR     int    `json:"pr,omitempty"`
-	Done   int64  `json:"done,omitempty"`
-	Note   string `json:"note,omitempty"`
-	At     int64  `json:"at,omitempty"` // the newest of these facts
-	Linked int64  `json:"linked,omitempty"`
-}
+// Fact is what master recorded about a task in {p}:plan:facts.
+type Fact = bus.PlanFact
 
 // Inputs are the facts Derive reads, as already read. Each *OK says whether
 // that read has ever succeeded; a kept older value is still OK.
