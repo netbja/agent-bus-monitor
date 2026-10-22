@@ -20,11 +20,11 @@ func PlanFactsKey(project string) string { return project + ":plan:facts" }
 
 // PlanRecord is {p}:plan.
 type PlanRecord struct {
-	Path     string          `json:"path"`
-	Commit   string          `json:"commit"`
-	LoadedAt int64           `json:"loaded_at"` // Unix ms, Redis TIME
-	Tasks    []string        `json:"tasks"`     // the task ids, for the fact scripts
-	File     string          `json:"file"` // the file's bytes, opaque: cjson would rewrite [] as {}
+	Path     string   `json:"path"`
+	Commit   string   `json:"commit"`
+	LoadedAt int64    `json:"loaded_at"` // Unix ms, Redis TIME
+	Tasks    []string `json:"tasks"`     // the task ids, for the fact scripts
+	File     string   `json:"file"`      // the file's bytes, opaque: cjson would rewrite [] as {}
 }
 
 // PlanFact is what master recorded about one task. Times are Unix ms from
