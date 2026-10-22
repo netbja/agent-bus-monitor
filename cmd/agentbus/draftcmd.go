@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/BurntSushi/toml"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -50,14 +54,43 @@ func rolesDraft(m *rolecfg.Manifest, rest, env []string, stdout io.Writer) error
 		Role   string                `json:"role"`
 		Files  []string              `json:"files"`
 		Skills []rolecfg.ScoredSkill `json:"skills"`
-	}{role, files, skills})
+		QID    string                `json:"question_id"` // the id master's ask must give its question
+	}{role, files, skills, draftQuestionID(role, []byte(snippet), []byte(prompt))})
 }
 
-// adoptApproved: the ask has a question answered with the option "adopt",
-// not withdrawn, by someone other than the agent that asked.
-func adoptApproved(a bus.Ask) bool {
+// draftQuestionID binds the person's answer to one role and one draft: the id
+// of the ask's question is "adopt-" and 16 hex digits of the SHA-256 of the
+// role, the entry and the prompt. adopt recomputes it from the files, so an
+// answer adopts that exact draft of that role, nothing edited since.
+func draftQuestionID(role string, snippet, prompt []byte) string {
+	h := sha256.New()
+	h.Write([]byte(role))
+	h.Write([]byte{0})
+	h.Write(snippet)
+	h.Write([]byte{0})
+	h.Write(prompt)
+	return "adopt-" + hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// draftEntryOnly accepts an entry that defines [roles.<role>] and nothing
+// else: no other role, no profile, no top-level key.
+func draftEntryOnly(snippet, role string) error {
+	var doc map[string]interface{}
+	if _, err := toml.Decode(snippet, &doc); err != nil {
+		return fmt.Errorf("the draft's entry is not valid TOML: %w", err)
+	}
+	roles, ok := doc["roles"].(map[string]interface{})
+	if len(doc) != 1 || !ok || len(roles) != 1 || roles[role] == nil {
+		return fmt.Errorf("the draft's entry must define [roles.%s] and nothing else", role)
+	}
+	return nil
+}
+
+// adoptApproved: the ask's question qid (the draft's own id) is answered
+// with the option "adopt", not withdrawn, by someone other than the asker.
+func adoptApproved(a bus.Ask, qid string) bool {
 	for _, q := range a.Questions {
-		if q.Answer != nil && !q.Answer.Withdrawn && strings.EqualFold(q.Answer.Choice, "adopt") && q.Answer.By != a.From {
+		if q.ID == qid && q.Answer != nil && !q.Answer.Withdrawn && strings.EqualFold(q.Answer.Choice, "adopt") && q.Answer.By != a.From {
 			return true
 		}
 	}
@@ -93,12 +126,6 @@ func runAdopt(ctx context.Context, b *bus.Bus, self string, args, env []string, 
 			ask = &asks[i]
 		}
 	}
-	switch {
-	case ask == nil:
-		return fail("no ask %s", askID)
-	case !adoptApproved(*ask):
-		return fail("ask %s has no 'adopt' answer from the person: nothing adopted", askID)
-	}
 	snippet, err := os.ReadFile(filepath.Join(from, role, "roles.toml"))
 	if err != nil {
 		return fail("no draft of %s in %s: %v", role, from, err)
@@ -106,6 +133,16 @@ func runAdopt(ctx context.Context, b *bus.Bus, self string, args, env []string, 
 	prompt, err := os.ReadFile(filepath.Join(from, role, role+".md"))
 	if err != nil {
 		return fail("no prompt for %s in %s: %v", role, from, err)
+	}
+	qid := draftQuestionID(role, snippet, prompt)
+	switch {
+	case ask == nil:
+		return fail("no ask %s", askID)
+	case !adoptApproved(*ask, qid):
+		return fail("ask %s has no 'adopt' answer from the person to question %s (this draft of %s): nothing adopted; a draft changed since the ask needs a new ask", askID, qid, role)
+	}
+	if err := draftEntryOnly(string(snippet), role); err != nil {
+		return fail("%v", err)
 	}
 	path, err := manifestPath(env)
 	if err != nil {
@@ -155,13 +192,13 @@ func runAdopt(ctx context.Context, b *bus.Bus, self string, args, env []string, 
 		return fail("%v", err)
 	}
 	fmt.Fprintf(stdout, "adopted %s (ask %s, answered by %s): %s and %s; pop it when needed (approval = person)\n",
-		role, askID, adoptedBy(*ask), path, target)
+		role, askID, adoptedBy(*ask, qid), path, target)
 	return 0
 }
 
-func adoptedBy(a bus.Ask) string {
+func adoptedBy(a bus.Ask, qid string) string {
 	for _, q := range a.Questions {
-		if q.Answer != nil && strings.EqualFold(q.Answer.Choice, "adopt") {
+		if q.ID == qid && q.Answer != nil && strings.EqualFold(q.Answer.Choice, "adopt") {
 			return q.Answer.By
 		}
 	}

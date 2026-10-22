@@ -36,6 +36,9 @@ func trustKey(dir string) (key string, inRepo bool) {
 		case err == nil && st.Mode().IsRegular():
 			b, err := os.ReadFile(filepath.Join(d, ".git"))
 			gitdir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
+			if gitdir != "" && !filepath.IsAbs(gitdir) { // git worktree add --relative-paths
+				gitdir = filepath.Join(d, gitdir)
+			}
 			if main, _, ok := strings.Cut(filepath.ToSlash(gitdir), "/.git/worktrees/"); err == nil && ok {
 				return filepath.FromSlash(main), true
 			}

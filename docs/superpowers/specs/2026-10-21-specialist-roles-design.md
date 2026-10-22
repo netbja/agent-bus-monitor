@@ -348,6 +348,22 @@ No project, no broker (the `roles` block above the project-required exit).
   loads, an existing prompt is never overwritten.
 - Master skill: a "Draft a role" section naming `roles draft`, the ask and `roles adopt`.
 
+## Implementation review (foureyes, `60e1151`)
+
+- **Blocking, fixed:** an `adopt` answer was bound to neither the role nor the draft. `roles draft`
+  now prints a `question_id`, `adopt-` and 16 hex digits of the SHA-256 of the role, the entry and the
+  prompt; master's ask uses it as its question's id, and `roles adopt` recomputes it from the files:
+  another role, or a draft edited after the answer, finds no answer. An entry that defines anything
+  but `[roles.<role>]` (another role, a profile, a top-level key) is refused.
+- For the release notes (non-blocking):
+  - Schema 2 changes more than the argv: the launch checks that each skill resolves (a warning on
+    stderr names a missing one) and, for non-Claude clients, lists the skill paths in the prompt.
+  - Agents running when it is installed keep `AGENT_BUS_PROFILE=legacy` until relaunched, so
+    `swap --back` is not refused for them until then.
+  - `up` on a workspace that is already open (the v0.21 relaunch) is not gated: running it again
+    before the trust is accepted starts every relaunched agent, each showing the dialog.
+  - Fixed with it: `trustKey` reads a relative `gitdir` (`git worktree add --relative-paths`).
+
 ## Open questions for review
 
 1. B: gate on the first Claude agent, or on master specifically? (Proposal: the template's first

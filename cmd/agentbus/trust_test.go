@@ -32,11 +32,13 @@ func TestTrustKey(t *testing.T) {
 	sub := mkdir(t, repo, "cmd", "x")
 	wt := mkdir(t, root, "repo-wt")
 	write(t, filepath.Join(wt, ".git"), "gitdir: "+filepath.Join(repo, ".git", "worktrees", "wt")+"\n")
+	rel := mkdir(t, root, "repo-rel") // git worktree add --relative-paths
+	write(t, filepath.Join(rel, ".git"), "gitdir: ../repo/.git/worktrees/rel\n")
 	plain := mkdir(t, root, "plain", "deep")
 	cases := map[string]struct {
 		key    string
 		inRepo bool
-	}{repo: {repo, true}, sub: {repo, true}, wt: {repo, true}, plain: {plain, false}}
+	}{repo: {repo, true}, sub: {repo, true}, wt: {repo, true}, rel: {repo, true}, plain: {plain, false}}
 	for dir, want := range cases {
 		key, inRepo := trustKey(dir)
 		if key != want.key || inRepo != want.inRepo {

@@ -51,9 +51,13 @@ func TestRolesDraft(t *testing.T) {
 		Role   string                `json:"role"`
 		Files  []string              `json:"files"`
 		Skills []rolecfg.ScoredSkill `json:"skills"`
+		QID    string                `json:"question_id"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
 		t.Fatalf("output %q: %v", stdout.String(), err)
+	}
+	if !strings.HasPrefix(res.QID, "adopt-") || len(res.QID) != len("adopt-")+16 {
+		t.Fatalf("question id %q", res.QID)
 	}
 	if res.Role != "writer" || len(res.Skills) < 2 || res.Skills[0].Name != "agent-bus" || res.Skills[1].Name != "agent-bus-docs" {
 		t.Fatalf("draft %+v", res)
@@ -95,21 +99,35 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 
 	env, manifest, rolesDir, out := draftEnv(t)
 	var stdout, errw bytes.Buffer
-	if code := runRoles([]string{"draft", "writer", "--task", "documentation", "--out", out}, env, &stdout, &errw); code != 0 {
-		t.Fatalf("draft: %s", errw.String())
+	draft := func(role string) string { // the question id the draft binds
+		t.Helper()
+		stdout.Reset()
+		if code := runRoles([]string{"draft", role, "--task", "documentation", "--out", out, "--force"}, env, &stdout, &errw); code != 0 {
+			t.Fatalf("draft %s: %s", role, errw.String())
+		}
+		var res struct {
+			QID string `json:"question_id"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatal(err)
+		}
+		return res.QID
 	}
-	ask := func() string {
-		id, _, err := b.Ask(ctx, bus.AskDef{From: "master", Title: "Adopt the drafted role writer?", Questions: []bus.AskQuestion{{
-			ID: "adopt", Header: "Role writer", Question: "Adopt it?",
+	qid := draft("writer")
+	askQ := func(q string) string {
+		id, _, err := b.Ask(ctx, bus.AskDef{From: "master", Title: "Adopt the drafted role?", Questions: []bus.AskQuestion{{
+			ID: q, Header: "Role", Question: "Adopt it?",
 			Options: []bus.AskOption{{Label: "adopt"}, {Label: "change"}, {Label: "discard"}}}}}, "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		return id
 	}
-	adopt := func(id string) int {
-		return runAdopt(ctx, b, "master", []string{"writer", "--ask", id, "--from", out}, env, &stdout, &errw)
+	ask := func() string { return askQ(qid) }
+	adoptRole := func(role, id string) int {
+		return runAdopt(ctx, b, "master", []string{role, "--ask", id, "--from", out}, env, &stdout, &errw)
 	}
+	adopt := func(id string) int { return adoptRole("writer", id) }
 	unchanged := func(label string) {
 		t.Helper()
 		body, _ := os.ReadFile(manifest)
@@ -131,7 +149,7 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 		t.Fatal("adopted with an open ask")
 	}
 	unchanged("open ask")
-	if _, _, err := b.Answer(ctx, open, "adopt", "bernard", "discard", ""); err != nil {
+	if _, _, err := b.Answer(ctx, open, qid, "bernard", "discard", ""); err != nil {
 		t.Fatal(err)
 	}
 	if adopt(open) == 0 {
@@ -140,7 +158,7 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 	unchanged("discard")
 
 	self := ask()
-	if _, _, err := b.Answer(ctx, self, "adopt", "master", "adopt", ""); err != nil {
+	if _, _, err := b.Answer(ctx, self, qid, "master", "adopt", ""); err != nil {
 		t.Fatal(err)
 	}
 	if adopt(self) == 0 {
@@ -149,9 +167,27 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 	unchanged("self answer")
 
 	yes := ask()
-	if _, _, err := b.Answer(ctx, yes, "adopt", "bernard", "adopt", ""); err != nil {
+	if _, _, err := b.Answer(ctx, yes, qid, "bernard", "adopt", ""); err != nil {
 		t.Fatal(err)
 	}
+	// The answer is bound to the role and to the draft it was asked about.
+	draft("reader")
+	if adoptRole("reader", yes) == 0 {
+		t.Fatal("adopted another role on writer's answer")
+	}
+	snipPath := filepath.Join(out, "writer", "roles.toml")
+	orig, _ := os.ReadFile(snipPath)
+	if err := os.WriteFile(snipPath, []byte(strings.Replace(string(orig), "tier = \"pop\"", "tier = \"pop\"\npops = true", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if adopt(yes) == 0 {
+		t.Fatal("adopted a draft edited after the answer")
+	}
+	if err := os.WriteFile(snipPath, orig, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unchanged("edited draft")
+
 	// An existing prompt is never overwritten, and nothing is written then.
 	if err := os.WriteFile(filepath.Join(rolesDir, "writer.md"), []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
@@ -179,5 +215,22 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 	}
 	if adopt(yes) == 0 {
 		t.Fatal("adopted twice")
+	}
+}
+
+// A draft whose entry defines anything but [roles.<role>] is refused, even
+// with a matching answer.
+func TestAdoptRefusesAnExtraTable(t *testing.T) {
+	for _, snippet := range []string{
+		"[roles.writer]\ntier = \"pop\"\nskills = [\"agent-bus\"]\n[roles.other]\ntier = \"pop\"\nskills = [\"agent-bus\"]\n",
+		"[profiles.evil]\nclient = \"claude-code\"\n[roles.writer]\ntier = \"pop\"\nskills = [\"agent-bus\"]\n",
+		"pops = true\n[roles.writer]\ntier = \"pop\"\n",
+	} {
+		if err := draftEntryOnly(snippet, "writer"); err == nil {
+			t.Errorf("accepted:\n%s", snippet)
+		}
+	}
+	if err := draftEntryOnly("# a comment\n[roles.writer]\nprofile = \"x\"\ntier = \"pop\"\napproval = \"person\"\nskills = [\"agent-bus\"]\n", "writer"); err != nil {
+		t.Fatalf("refused a plain entry: %v", err)
 	}
 }
