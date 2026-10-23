@@ -17,15 +17,23 @@ import (
 
 // fakeWriter records sends; Thread blocks until release is closed (when set).
 type fakeWriter struct {
-	mu       sync.Mutex
-	sent     []string
-	threads  int
-	release  chan struct{}
-	fail     error           // returned by Cmd and Notify when set
-	left     int             // questions left after an Answer
-	answerID string          // the ask id Answer reports (default: the one given)
-	asks     []bus.Ask       // what Asks returns
-	failFor  map[string]bool // HumanCmd fails for these targets
+	mu        sync.Mutex
+	sent      []string
+	threads   int
+	release   chan struct{}
+	fail      error           // returned by Cmd and Notify when set
+	left      int             // questions left after an Answer
+	answerID  string          // the ask id Answer reports (default: the one given)
+	asks      []bus.Ask       // what Asks returns
+	failFor   map[string]bool // HumanCmd fails for these targets
+	resumeErr error           // returned by Resume when set
+}
+
+func (f *fakeWriter) Resume(_ context.Context, by, message string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "resume "+by)
+	return f.resumeErr == nil, f.resumeErr
 }
 
 func (f *fakeWriter) HumanCmd(_ context.Context, from, target, command string) (string, error) {
@@ -414,6 +422,7 @@ type fakeReader struct {
 	fallbacks map[string]bus.FallbackRecord
 	verdicts  map[string]bus.ModelVerdict
 	asks      []bus.Ask
+	pauseErr  error // returned by Pause when set
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -679,6 +688,9 @@ func TestPollMissionsState(t *testing.T) {
 
 func (f *fakeReader) Pause(context.Context) (*bus.PauseRecord, error) {
 	f.n("Pause")
+	if f.pauseErr != nil {
+		return nil, f.pauseErr
+	}
 	return f.pause, nil
 }
 

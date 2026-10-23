@@ -297,7 +297,17 @@ func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
 			u.openAnswerComposer(a, q, "")
 			return nil
 		} else {
-			u.sendAnswer(a, q, q.Options[p.opt].Label, "")
+			label := q.Options[p.opt].Label
+			send := func() {
+				u.sendAnswer(a, q, label, "")
+				if u.ov == ovAsk {
+					u.renderAsk()
+				}
+			}
+			if u.pauseGate("answer|"+a.ID+"|"+q.ID+"|"+label, send) {
+				return nil
+			}
+			u.sendAnswer(a, q, label, "")
 		}
 	}
 	if u.ov == ovAsk {

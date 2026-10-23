@@ -24,6 +24,7 @@ type busWriter interface {
 	Asks(ctx context.Context) ([]bus.Ask, error)
 	ForgetAgent(ctx context.Context, agent string) (bool, error)
 	Thread(ctx context.Context, threadID string) ([]bus.Event, error)
+	Resume(ctx context.Context, by, message string) (bool, error)
 }
 
 type overlayKind int
@@ -78,6 +79,8 @@ type ui struct {
 	overlay   *tview.TextView
 	input     *tview.InputField
 	comp      *composer         // the compose window (v0.16)
+	pp        *pausePopup       // asks before a waking send while the project is paused
+	pauseAck  string            // the send the person chose to make despite the pause
 	askDrafts map[string]string // "<ask>|<question>" -> a free answer being written
 	lists     [4]*ListView
 
@@ -221,12 +224,14 @@ func newUI(app *tview.Application, st *shared, ctx context.Context, w busWriter,
 	u.screen = &screenView{Box: tview.NewBox(), u: u}
 	u.modal = &modalView{Box: tview.NewBox(), u: u}
 	u.comp = newComposer(u)
+	u.pp = newPausePopup(u)
 	u.askDrafts = map[string]string{}
 	u.unread = newUnreadState()
 	u.pages = tview.NewPages().
 		AddPage("main", u.screen, true, true).
 		AddPage("overlay", u.modal, true, false).
-		AddPage("compose", u.comp, true, false)
+		AddPage("compose", u.comp, true, false).
+		AddPage("pause", u.pp, true, false)
 	app.EnablePaste(true)
 
 	app.SetBeforeDrawFunc(func(s tcell.Screen) bool {
@@ -312,6 +317,9 @@ func (u *ui) setFocusPanel(p PanelID) {
 // mode's table and performs the action. A key it does not consume goes on to
 // the focused primitive (text for the input field, scrolling for an overlay).
 func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
+	if u.pp.open {
+		return u.pauseKey(ev)
+	}
 	m := u.mode()
 	if m == ModeOverlay && u.ov == ovReminder {
 		return u.reminderKey(ev)
@@ -591,6 +599,9 @@ func (u *ui) inputDone(key tcell.Key) {
 			return
 		}
 		tgt, body, directed := parseDirected(text)
+		if directed && u.pauseGate(draftKey(tgt, body), func() { u.inputDone(tcell.KeyEnter) }) {
+			return
+		}
 		if res := u.send(tgt, body, directed, false); res == sendSent || res == sendPartial {
 			u.input.SetText("")
 			u.msgDraft = ""
@@ -702,6 +713,9 @@ func (u *ui) send(tgt, body string, directed, window bool) sendResult {
 		// keep the draft: the operator retries once the bus is back
 		u.flash = "send failed: " + Preview(err.Error())
 		return sendFailed
+	}
+	if directed {
+		u.flash += u.pauseNote()
 	}
 	return sendSent
 }

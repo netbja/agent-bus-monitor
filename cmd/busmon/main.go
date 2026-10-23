@@ -297,6 +297,7 @@ type shared struct {
 	missions       string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
 	svcInst        *bus.ServicesInstall          // the {p}:services marker (nil: no services)
 	pause          *bus.PauseRecord              // the project pause (nil: not paused)
+	pauseFailed    bool                          // the last pause read failed: pause holds the kept value
 	holds          map[string]int64              // provider → reset (Unix s) of its quota hold
 	asks           []bus.Ask                     // agents' questions for people
 	pace           paceTracker                   // per provider window: rate of use, display only
