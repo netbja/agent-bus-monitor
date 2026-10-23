@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/clientfp"
 	"github.com/netbja/agent-bus-monitor/models"
 	"io"
 	"math"
@@ -563,6 +564,18 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 		}
 		e.set(target, v)
 	}
+	// The client is resolved before the bind, so its fingerprint reaches the
+	// bind and the agent's own status (client reload spec): what the
+	// dispatcher later compares with the client installed then.
+	path, err := lookPath(cmd[0], e.or("PATH", ""))
+	if err != nil {
+		return err
+	}
+	if fp, err := clientfp.Take(path); err == nil {
+		e.set("AGENT_BUS_CLIENT_FP", fp.Encode())
+	} else {
+		e.del("AGENT_BUS_CLIENT_FP") // never another launch's
+	}
 	if bind != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		c := exec.CommandContext(ctx, bind[0], bind[1:]...)
@@ -576,10 +589,6 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 			fmt.Fprintf(cfg.Stderr, "warning: agentbus bind failed; the dispatcher will not wake %s until it is bound (agentbus --project %s bind %s --pane %s)\n",
 				role, project, role, pane)
 		}
-	}
-	path, err := lookPath(cmd[0], e.or("PATH", ""))
-	if err != nil {
-		return err
 	}
 	return cfg.Exec(path, cmd, e.list())
 }

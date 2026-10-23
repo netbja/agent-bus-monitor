@@ -327,26 +327,39 @@ func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
 	}
 	DrawLine(s, x+2, y, titleW, title, false)
 	DrawLine(s, x+w-2-labelW, y, labelW, label, false)
-	if f.Scroll.Total <= f.Scroll.Visible || f.Scroll.Total <= 0 {
+	DrawScrollbar(s, x+w-1, y, h, f.Scroll, style)
+}
+
+// DrawScrollbar draws a scrollbar on the right border column x of a frame
+// whose top border is at y and whose height is h: arrows on its first and
+// last inner rows, the thumb between. Nothing when everything is visible.
+func DrawScrollbar(s tcell.Screen, x, y, h int, sc ScrollState, style tcell.Style) {
+	if sc.Total <= sc.Visible || sc.Total <= 0 {
 		return
+	}
+	sw, sh := s.Size()
+	put := func(px, py int, g string) {
+		if px >= 0 && px < sw && py >= 0 && py < sh {
+			s.SetContent(px, py, []rune(g)[0], nil, style)
+		}
 	}
 	inner := h - 2
 	if inner < 2 {
 		return
 	} // Preserve corners; need distinct arrow cells.
-	put(x+w-1, y+1, GlyphBlocked)
-	put(x+w-1, y+h-2, GlyphDown)
+	put(x, y+1, GlyphBlocked)
+	put(x, y+h-2, GlyphDown)
 	track := inner - 2
 	if track <= 0 {
 		return
 	}
-	visible := max(0, f.Scroll.Visible)
-	thumb := max(1, min(track, track*visible/f.Scroll.Total))
-	maxTop := max(1, f.Scroll.Total-visible)
-	top := min(max(0, f.Scroll.Top), maxTop)
+	visible := max(0, sc.Visible)
+	thumb := max(1, min(track, track*visible/sc.Total))
+	maxTop := max(1, sc.Total-visible)
+	top := min(max(0, sc.Top), maxTop)
 	start := (track - thumb) * top / maxTop
 	for i := 0; i < thumb; i++ {
-		put(x+w-1, y+2+start+i, glyphThumb)
+		put(x, y+2+start+i, glyphThumb)
 	}
 }
 

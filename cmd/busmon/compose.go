@@ -280,11 +280,26 @@ func (c *composer) Draw(screen tcell.Screen) {
 	}
 	c.area.SetRect(x, y+1, w, h-2)
 	// A text that fits starts at its top: an offset left from a smaller
-	// size (or from keys typed before the first draw) would hide it.
-	if row, _ := c.area.GetOffset(); row > 0 && strings.Count(c.area.GetText(), "\n")+1 <= h-2 {
-		c.area.SetOffset(0, 0)
+	// size (or from keys typed before the first draw) would hide it. The
+	// cursor's row counts wrapped rows: a long line with no newline is many
+	// rows, and pinning it at its top hid the cursor and what was typed.
+	if row, _ := c.area.GetOffset(); row > 0 {
+		if _, _, cur, _ := c.area.GetCursor(); cur < h-2 && wrappedRows(c.area.GetText(), w) <= h-2 {
+			c.area.SetOffset(0, 0)
+		}
 	}
 	c.area.Draw(screen)
+	// The scrollbar on the window's right border, like the panels': the
+	// total is an estimate (wrappedRows), never below what the offset and the
+	// cursor prove.
+	off, _ := c.area.GetOffset()
+	_, _, cur, _ := c.area.GetCursor()
+	bx, by, bw, bh := c.GetRect()
+	DrawScrollbar(screen, bx+bw-1, by, bh, ScrollState{
+		Total:   max(wrappedRows(c.area.GetText(), w), off+h-2, cur+1),
+		Top:     off,
+		Visible: h - 2,
+	}, th.FrameBorder(panelHue[PanelActivity], true))
 	counter := fmt.Sprintf("%d / %d", runes(c.area.GetText()), c.limit)
 	crole := RoleMuted
 	if runes(c.area.GetText()) >= c.limit {
@@ -554,4 +569,17 @@ func splitRecipient(line string) (to, body string) {
 		return "", line
 	}
 	return "@" + name, strings.TrimSpace(rest)
+}
+
+// wrappedRows estimates how many rows text takes at width when word-wrapped
+// (tview keeps the TextArea's own count private): the scrollbar's total.
+func wrappedRows(text string, width int) int {
+	if width <= 0 {
+		return 0
+	}
+	n := 0
+	for _, line := range strings.Split(text, "\n") {
+		n += max(1, len(tview.WordWrap(line, width)))
+	}
+	return n
 }

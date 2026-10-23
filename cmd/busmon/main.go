@@ -259,26 +259,27 @@ type agentState struct {
 	gap        bool            // entries may have been trimmed unread (detail only)
 	wake       *bus.WakeRecord // the dispatcher's wake record, nil when none
 
-	pid         int                 // AgentSnapshot.PID (0 = not recorded)
-	pidStart    uint64              // AgentSnapshot.PIDStart
-	queueKnown  bool                // an Obligation read has succeeded at least once
-	queueFailed bool                // the latest attempted Obligation read failed (or the broker is down)
-	queueAt     time.Time           // time of the last successful Obligation read
-	ctxRaw      string              // UsageSnapshot.Ctx exactly as read
-	registered  bool                // listed in {p}:agents (the conductor only reports: not an @all target)
-	provider    string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
-	held        bool                // its provider is held by the dispatcher (quota)
-	openAsk     int                 // unanswered questions of its open ask
-	askID       string              // that ask's id
-	paused      bool                // the project is paused ({p}:pause holds a record)
-	obsBusy     bool                // the dispatcher saw its pane running a turn ({p}:observed)
-	obsState    string              // herdr's status of the pane at that inspection
-	obsAt       time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
-	obsSince    time.Time           // first reading of that state (an episode, v0.15)
-	obsPrompt   bool                // its pane was seen blocked, fresh: its client asks something
-	swapping    bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
-	fallback    *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
-	model       *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
+	pid          int                 // AgentSnapshot.PID (0 = not recorded)
+	pidStart     uint64              // AgentSnapshot.PIDStart
+	queueKnown   bool                // an Obligation read has succeeded at least once
+	queueFailed  bool                // the latest attempted Obligation read failed (or the broker is down)
+	queueAt      time.Time           // time of the last successful Obligation read
+	ctxRaw       string              // UsageSnapshot.Ctx exactly as read
+	registered   bool                // listed in {p}:agents (the conductor only reports: not an @all target)
+	provider     string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
+	held         bool                // its provider is held by the dispatcher (quota)
+	openAsk      int                 // unanswered questions of its open ask
+	askID        string              // that ask's id
+	paused       bool                // the project is paused ({p}:pause holds a record)
+	obsBusy      bool                // the dispatcher saw its pane running a turn ({p}:observed)
+	obsState     string              // herdr's status of the pane at that inspection
+	obsAt        time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
+	clientUpdate *bus.ClientUpdate   // a newer client installed than this process runs ({p}:observed update)
+	obsSince     time.Time           // first reading of that state (an episode, v0.15)
+	obsPrompt    bool                // its pane was seen blocked, fresh: its client asks something
+	swapping     bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
+	fallback     *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
+	model        *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.

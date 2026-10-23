@@ -57,6 +57,7 @@ func helpText() string {
 	row("waking", "the dispatcher reserved a wake and is typing the line.")
 	row("woken", "the nonce was echoed on the agent's screen - not proof it read or accepted anything.")
 	row("busy", "the dispatcher saw the pane running a turn while the agent does not declare working (observed, not declared).")
+	row("update", "a newer client is installed than this agent runs: sentinel proposes a reload (/exit, then agentbus up --resume).")
 	row("pilot", "holds the pilot lease (the master).")
 	row("armed", "a receiver lease is live: something subscribes for this agent. A lease, not a state.")
 	row("stale N", "N addressed entries older than the 24h horizon; they wake no one.")

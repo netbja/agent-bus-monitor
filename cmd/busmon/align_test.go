@@ -34,6 +34,9 @@ func hostileShared(now time.Time, down bool) *shared {
 		a := &agentState{state: states[i%len(states)], message: hostileText, stateAt: now.Add(-time.Duration(i) * time.Minute),
 			queueKnown: i%3 != 0, waiting: int64(i % 4), queueFailed: i%7 == 0, gated: i % 2, armed: i%2 == 0,
 			stale: i % 3, ctxRaw: []string{"608k", "", "25%", "1.2M"}[i%4], forYou: i%len(states) == 1}
+		if i%4 == 1 { // client reload spec: an outdated client, observed now
+			a.obsAt, a.clientUpdate = now, &bus.ClientUpdate{Client: "claude-code", Running: hostileText, Installed: hostileText, Hash: "h"}
+		}
 		switch i % 5 {
 		case 1:
 			a.wake = &bus.WakeRecord{State: "deferred"}
@@ -199,7 +202,7 @@ func TestAlignmentSuite(t *testing.T) {
 						checkFrame(t, h.sim, name+" overlay", Rect{x, y, w, hh}, true)
 					}
 					if h.u.comp.open {
-						checkFrame(t, h.sim, name+" compose", composeRect(sz[0], sz[1], l.Header.H), false)
+						checkFrame(t, h.sim, name+" compose", composeRect(sz[0], sz[1], l.Header.H), true) // the window scrolls (fix/compose-scrollbar)
 					}
 					first := strings.SplitN(screen, "\n", 2)[0]
 					if !strings.Contains(first, " bus") || !strings.Contains(first, " disp") {

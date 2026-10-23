@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +14,7 @@ func TestGuardianSummaryNeverCallsUnknownHealthy(t *testing.T) {
 	if got := summarizeGuardian(nil, now); got.Unhealthy != got.Total || got.Worst != guardian.Unknown {
 		t.Fatalf("empty records summarized as %+v", got)
 	}
-	if got := guardianSeg(summarizeGuardian(nil, now)).text(); got != "?13" { // unknown only: "?", not a problem count
+	if got := guardianSeg(summarizeGuardian(nil, now)).text(); got != "?"+strconv.Itoa(len(guardian.Definitions())) { // unknown only: "?", not a problem count
 		t.Fatalf("unknown health pill=%q", got)
 	}
 	rows := map[string]guardian.Record{}

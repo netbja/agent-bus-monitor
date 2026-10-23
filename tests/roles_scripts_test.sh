@@ -85,7 +85,9 @@ out="$(AGENTBUS_PROJECTS_DIR="$root/templates" "$REPO/scripts/bootstrap" new dem
 assert_eq "$rc" "0" "bootstrap with a hostile project path exits 0"
 tpl="$root/templates/demo.toml"
 assert_exit 0 "the template is valid TOML" -- "$AGENTBUS_BIN" roles check-toml "$tpl"
-cmd="$(sed -n 's/^command = "\(.*agent-launch.*\)"$/\1/p' "$tpl" | head -1 | sed 's/\\"/"/g; s/\\\\/\\/g')"
+# An agent tab is `env ROLES_TOML=… …/agent-launch`; match the env form, not any line naming agent-launch
+# (a checkout path may contain the word, as .worktrees/fix-agent-launch-test does).
+cmd="$(sed -n 's/^command = "\(env .*agent-launch.*\)"$/\1/p' "$tpl" | head -1 | sed 's/\\"/"/g; s/\\\\/\\/g')"
 assert_contains "$cmd" "$(printf '%s' "ROLES_TOML=$manifest" | sed "s/'/'\"'\"'/g")" "the tab command carries the manifest"
 out="$(cd "$project" && bash -c "$cmd" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "the generated tab command runs"

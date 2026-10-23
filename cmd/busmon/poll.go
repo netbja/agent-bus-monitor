@@ -344,6 +344,10 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			// Only the agent's current process: a reading carried for an older
 			// one (a replaced agent) is not its prompt.
 			a.obsPrompt = ok && o.State == "blocked" && o.PID != 0 && o.PID == a.pid
+			a.clientUpdate = nil // client reload spec: only for the agent's current process
+			if ok && o.Update != nil && o.PID != 0 && o.PID == a.pid {
+				a.clientUpdate = o.Update
+			}
 		}
 		if wi, ok := wakes[n]; ok {
 			if wi.obOK {
