@@ -184,3 +184,20 @@ func TestPollMarksAFailedPauseRead(t *testing.T) {
 		t.Fatalf("a failed read keeps the last value and marks it: failed %v pause %v", st.pauseFailed, st.pause)
 	}
 }
+
+// "Send anyway" acknowledges that one send only: the same text sent again
+// later asks again.
+func TestPausePopupAcknowledgesOneSendOnly(t *testing.T) {
+	h := newHarness(t, pausedShared(time.Now()))
+	h.draw(160, 45)
+	typeLine(h, "@coder hello")
+	h.key(runeKey('s'))
+	if len(h.sentNow()) != 1 {
+		t.Fatalf("first send: %v", h.sentNow())
+	}
+	h.typeText("@coder hello")
+	h.key(key(tcell.KeyEnter))
+	if !h.u.pp.open || len(h.sentNow()) != 1 {
+		t.Fatalf("the same text again asks again: popup %v sent %v", h.u.pp.open, h.sentNow())
+	}
+}

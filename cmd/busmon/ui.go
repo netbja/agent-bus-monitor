@@ -699,6 +699,7 @@ func (u *ui) send(tgt, body string, directed, window bool) sendResult {
 			u.flash = fmt.Sprintf("sent to %d of %d agents; failed: %s (%s)", len(targets)-len(failed), len(targets),
 				strings.Join(failed, ", "), Preview(lastErr.Error()))
 			u.flashErr = true
+			u.pauseAck = "" // some were served: the acknowledgement is spent
 			return sendPartial
 		}
 	case directed:
@@ -717,6 +718,7 @@ func (u *ui) send(tgt, body string, directed, window bool) sendResult {
 	if directed {
 		u.flash += u.pauseNote()
 	}
+	u.pauseAck = "" // the acknowledgement was for this one send
 	return sendSent
 }
 

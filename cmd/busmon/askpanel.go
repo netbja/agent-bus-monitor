@@ -323,6 +323,9 @@ func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) 
 	ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
 	defer cancel()
 	id, left, err := u.w.Answer(ctx, a.ID, q.ID, u.self, choice, text)
+	if err == nil {
+		u.pauseAck = "" // the acknowledgement was for this one send
+	}
 	if err != nil { // say why, and show the ask as it is now (answered elsewhere, replaced)
 		u.flash, u.flashErr = "answer not sent: "+Preview(err.Error()), true
 		u.reloadAsks()
