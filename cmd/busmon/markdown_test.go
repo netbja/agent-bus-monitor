@@ -15,8 +15,8 @@ func TestMarkdownBlocks(t *testing.T) {
 	got := plainMD(renderMarkdown(src, 40))
 	want := []string{
 		"Decision",
-		"The act is approved at 4d5d51b and the",
-		"window opens on Monday.",
+		"The act is approved at 4d5d51b",
+		"and the window opens on Monday.",
 		"",
 		GlyphNone + " first item that is long enough to wrap",
 		"  onto a second line here",
@@ -105,5 +105,20 @@ func TestActivityEntryHangsAndCaps(t *testing.T) {
 	}
 	if !strings.HasSuffix(lines[2], GlyphEllipsis) {
 		t.Errorf("a cut entry must end with an ellipsis: %q", lines[2])
+	}
+}
+
+// A line break is kept as typed, as GitHub shows a comment: a message is not
+// a hard-wrapped document, and "Status:\nline one\nline two" is three lines.
+func TestMarkdownKeepsLineBreaks(t *testing.T) {
+	got := plainMD(renderMarkdown("Status:\nline one\nline two\n\n1) first\n2) second", 80))
+	want := []string{"Status:", "line one", "line two", "", "1. first", "2. second"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// A long line still wraps at the width, under itself.
+	long := plainMD(renderMarkdown(strings.Repeat("word ", 30)+"\nnext", 40))
+	if len(long) < 4 || long[len(long)-1] != "next" {
+		t.Fatalf("a long line does not wrap, or swallowed the next one: %q", long)
 	}
 }
