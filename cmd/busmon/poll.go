@@ -213,6 +213,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	if guardNowOK {
 		st.guardianNow = guardNow
 	}
+	st.pauseFailed = pauseErr != nil
 	if pauseErr == nil {
 		st.pause = pause
 	}

@@ -102,6 +102,13 @@ func alignCases() []alignCase {
 		{"tab 4", func(h *harness) { feed(h); h.key(runeKey('4')) }},
 		{"help", func(h *harness) { h.key(key(tcell.KeyF1)) }},
 		{"requests overlay", func(h *harness) { h.key(key(tcell.KeyF2)) }},
+		{"pause popup", func(h *harness) {
+			h.u.st.pause = &bus.PauseRecord{Until: time.Now().Add(26 * time.Hour).UnixMilli(), Reason: "quota reset", By: "a01" + strings.Repeat("y", 29), Notify: "a00"}
+			h.key(runeKey('i'))
+			h.typeText("@a00 x")
+			h.key(key(tcell.KeyEnter))
+			h.key(key(tcell.KeyRight))
+		}},
 		{"plan overlay", func(h *harness) {
 			h.u.st.plan = hostilePlan(time.Now())
 			h.key(runeKey('P'))
@@ -200,6 +207,12 @@ func TestAlignmentSuite(t *testing.T) {
 					if h.u.ov != ovNone {
 						x, y, w, hh := h.u.overlay.GetRect()
 						checkFrame(t, h.sim, name+" overlay", Rect{x, y, w, hh}, true)
+					}
+					if h.u.pp.open {
+						r := pauseRect(sz[0], sz[1], l.Header.H)
+						if r.W >= 20 && r.H >= 3 {
+							checkFrame(t, h.sim, name+" pause popup", r, false)
+						}
 					}
 					if h.u.comp.open {
 						checkFrame(t, h.sim, name+" compose", composeRect(sz[0], sz[1], l.Header.H), true) // the window scrolls (fix/compose-scrollbar)

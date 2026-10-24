@@ -529,6 +529,9 @@ func (u *ui) composeSend() {
 			u.flash, u.flashErr = "this question is no longer open", true
 			return
 		}
+		if u.pauseGate("answer|"+c.askID+"|"+c.qid+"|"+body, u.composeSend) {
+			return
+		}
 		for _, q := range a.Questions {
 			if q.ID == c.qid {
 				if u.sendAnswer(a, q, "", body) {
@@ -542,6 +545,9 @@ func (u *ui) composeSend() {
 		return
 	}
 	tgt := c.recipient()
+	if tgt != "" && body != "" && u.pauseGate(draftKey(tgt, body), u.composeSend) {
+		return
+	}
 	if res := u.send(tgt, body, tgt != "", true); res == sendSent || res == sendPartial {
 		c.msgTo, c.msgBody = "", ""
 		c.to.SetText("")
