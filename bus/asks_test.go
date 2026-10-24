@@ -243,3 +243,28 @@ func TestWithdrawOneQuestionLeavesATrace(t *testing.T) {
 		t.Fatalf("trace %+v", last)
 	}
 }
+
+func TestAskTaskIsValidatedAndRoundTrips(t *testing.T) {
+	def := AskDef{From: "master", Title: "t", Task: "roles", Questions: []AskQuestion{q("t", "Date", "A", "B")}}
+	if err := ValidateAskDef(def); err != nil {
+		t.Fatal(err)
+	}
+	bad := def
+	bad.Task = "Roles plan"
+	if ValidateAskDef(bad) == nil {
+		t.Fatal("an invalid task name was accepted")
+	}
+	b := dialTest(t)
+	cleanAsks(t, b)
+	id, _, err := b.Ask(context.Background(), def, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asks, err := b.Asks(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(asks) != 1 || asks[0].ID != id || asks[0].Task != "roles" {
+		t.Fatalf("got %+v", asks)
+	}
+}

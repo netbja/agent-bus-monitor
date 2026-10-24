@@ -314,6 +314,7 @@ type shared struct {
 	cmdOldest      time.Time   // oldest event in the retained sample; zero when none
 	cmdHistoryOK   bool        // last bounded cmd read succeeded
 	lastPollAt     time.Time   // last fully successful snapshot tick
+	plan           planState   // the batch's plan (P), derived in pollOnce
 }
 
 func main() {

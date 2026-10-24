@@ -63,6 +63,7 @@ type AskQuestion struct {
 type AskDef struct {
 	From      string        `json:"from"`
 	Title     string        `json:"title"`
+	Task      string        `json:"task,omitempty"` // the plan task it is about (v0.22); never matched in text
 	Questions []AskQuestion `json:"questions"`
 }
 
@@ -99,6 +100,7 @@ type Ask struct {
 	ID         string             `json:"id"`
 	From       string             `json:"from"`
 	Title      string             `json:"title"`
+	Task       string             `json:"task,omitempty"`
 	State      string             `json:"state"`
 	ReplacedBy string             `json:"replaced_by,omitempty"`
 	CreatedAt  int64              `json:"created_at"`
@@ -138,6 +140,9 @@ func ValidateAskDef(d AskDef) error {
 	}
 	if err := textField("title", d.Title, askMaxTitle, true); err != nil {
 		return err
+	}
+	if d.Task != "" && !ValidName(d.Task) {
+		return fmt.Errorf("task %q must match %s", d.Task, nameRE.String())
 	}
 	if len(d.Questions) == 0 || len(d.Questions) > AskMaxQuestions {
 		return fmt.Errorf("an ask has 1 to %d questions, not %d", AskMaxQuestions, len(d.Questions))
@@ -526,7 +531,7 @@ func (b *Bus) Asks(ctx context.Context) ([]Ask, error) {
 			continue
 		}
 		ms, _ := splitID(f)
-		a := Ask{ID: f, From: d.From, Title: d.Title, State: all[f+"|s"], ReplacedBy: all[f+"|r"], CreatedAt: ms}
+		a := Ask{ID: f, From: d.From, Title: d.Title, Task: d.Task, State: all[f+"|s"], ReplacedBy: all[f+"|r"], CreatedAt: ms}
 		for _, q := range d.Questions {
 			qs := AskQuestionState{AskQuestion: q}
 			if raw, ok := all[f+"|a|"+q.ID]; ok {

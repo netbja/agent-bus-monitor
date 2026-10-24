@@ -27,6 +27,7 @@ type headerData struct {
 	holds    map[string]int64  // provider → quota hold reset
 	pace     map[string]string // provider → "~25m"
 	budgets  map[string]bus.BudgetSnapshot
+	plan     *planSummary // the batch's plan (P); nil when none is loaded
 	now      time.Time
 }
 
@@ -98,6 +99,9 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	if d.waiting != "" {
 		add(Line{{Text: Preview(d.waiting), Role: RoleAttention}}, 5, second)
+	}
+	if d.plan != nil {
+		add(planSeg(*d.plan, d.now), 5, second)
 	}
 	names := make([]string, 0, len(d.budgets))
 	for n := range d.budgets {
