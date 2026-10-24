@@ -250,6 +250,14 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 		if t.ID == id {
 			rootHere = true
 		}
+		// The opened entry's own text is above; another entry's text that does
+		// not fit its line follows it as written, and leaves the line.
+		if body := threadBody(t); body != "" && t.ID != e.ID {
+			head := t
+			head.Message, head.Full = "", ""
+			sb.WriteString(threadLine(head, now, false) + "\n" + body)
+			continue
+		}
 		sb.WriteString(threadLine(t, now, t.ID == e.ID) + "\n")
 	}
 	// Only a stream-id thread names an entry that could be missing. A subject
@@ -267,6 +275,20 @@ const threadPrefix = 2 + 8 + 1 + 9 + 1 + 16 + 1
 
 // threadLine is one transcript row: time, type, sender→target, text. The entry
 // the operator opened is marked so it can be found in its own thread.
+// threadBody is a thread entry's text as written (Markdown, its paragraphs and
+// lists), indented under its line; nothing when it fits on that line already.
+func threadBody(e bus.Event) string {
+	body := messageBody(e)
+	if !strings.Contains(strings.TrimSpace(body), "\n") && runeLen(body) <= mdWidth-threadPrefix-1 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, l := range strings.Split(renderMarkdown(body, max(20, mdWidth-4)), "\n") {
+		sb.WriteString("    " + l + "\n")
+	}
+	return sb.String()
+}
+
 func threadLine(e bus.Event, now time.Time, self bool) string {
 	marker := "  "
 	if self {

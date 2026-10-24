@@ -280,3 +280,22 @@ func TestThreadLineFitsTheOverlay(t *testing.T) {
 		}
 	}
 }
+
+// A directive's replies are read in its thread: each one shows its body as
+// written (paragraphs, list), not one truncated line.
+func TestThreadShowsEachReplyAsWritten(t *testing.T) {
+	root := bus.Event{ID: "1-0", Kind: "cmd", Type: "directive", From: "master", Target: "coder", Message: "Task x: do it"}
+	body := "Done, at abc1234.\n\nWhat changed:\n- the parser keeps blank lines\n- a test covers it\n\nNothing remains for you."
+	reply := bus.Event{ID: "2-0", Kind: "cmd", Type: "reply", From: "coder", Target: "master", Ref: "1-0", Message: body}
+	got := tagRE.ReplaceAllString(detailText(root, time.Now(), time.Now(), threadState{ID: "1-0", Loaded: true, Entries: []bus.Event{root, reply}}), "")
+	thread := got[strings.Index(got, "── thread ──"):]
+	for _, want := range []string{"reply", "coder→master", "    Done, at abc1234.", "    What changed:", "    " + GlyphNone + " the parser keeps blank lines", "    " + GlyphNone + " a test covers it", "    Nothing remains for you."} {
+		if !strings.Contains(thread, want) {
+			t.Fatalf("thread lacks %q:\n%s", want, thread)
+		}
+	}
+	// A reply shown as written is not also flattened onto its line.
+	if strings.Count(thread, "Done, at abc1234") != 1 {
+		t.Fatalf("the reply's text is shown twice:\n%s", thread)
+	}
+}

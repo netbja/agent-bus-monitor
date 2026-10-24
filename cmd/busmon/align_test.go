@@ -92,10 +92,26 @@ func alignCases() []alignCase {
 		{"agent detail", func(h *harness) { feed(h); h.key(key(tcell.KeyEnter)) }},
 		{"message detail", func(h *harness) {
 			feed(h)
+			h.draw(h.u.width, h.u.height) // the feed's rows exist only once drawn: Up selects nothing before
 			h.key(key(tcell.KeyTab))
 			h.key(key(tcell.KeyUp))
 			h.u.detailThread = threadState{Loaded: true}
 			h.key(key(tcell.KeyEnter))
+		}},
+		{"message thread", func(h *harness) {
+			feed(h)
+			h.draw(h.u.width, h.u.height)
+			h.key(key(tcell.KeyTab))
+			h.key(key(tcell.KeyUp))
+			md := "Done.\n\n## " + hostileText + "\n- " + hostileText + "\n  - " + hostileText + "\n1. " + hostileText + "\n> " + hostileText + "\n```\n" + hostileText + "\n```"
+			var entries []bus.Event
+			for i := 0; i < 6; i++ {
+				entries = append(entries, bus.Event{ID: fmt.Sprintf("17916494%05d-1", i), Kind: "cmd", Type: "reply", From: "a01", Target: "a00", Ref: "x", Message: md})
+			}
+			h.key(key(tcell.KeyEnter))
+			// As the thread read's callback does once it is back.
+			h.u.detailThread = threadState{ID: threadID(h.u.detailEvent), Loaded: true, Entries: entries}
+			h.u.overlay.SetText(detailText(h.u.detailEvent, time.Now(), time.Now(), h.u.detailThread))
 		}},
 		{"tab 2", func(h *harness) { feed(h); h.key(runeKey('2')) }},
 		{"tab 3", func(h *harness) { feed(h); h.key(runeKey('3')) }},
