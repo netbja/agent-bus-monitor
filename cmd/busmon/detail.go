@@ -273,8 +273,6 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 // type and sender→target with their separators (clip adds one cell, its ellipsis).
 const threadPrefix = 2 + 8 + 1 + 9 + 1 + 16 + 1
 
-// threadLine is one transcript row: time, type, sender→target, text. The entry
-// the operator opened is marked so it can be found in its own thread.
 // threadBody is a thread entry's text as written (Markdown, its paragraphs and
 // lists), indented under its line; nothing when it fits on that line already.
 func threadBody(e bus.Event) string {
@@ -289,6 +287,8 @@ func threadBody(e bus.Event) string {
 	return sb.String()
 }
 
+// threadLine is one transcript row: time, type, sender→target, text. The entry
+// the operator opened is marked so it can be found in its own thread.
 func threadLine(e bus.Event, now time.Time, self bool) string {
 	marker := "  "
 	if self {
