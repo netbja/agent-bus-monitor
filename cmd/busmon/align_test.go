@@ -102,6 +102,21 @@ func alignCases() []alignCase {
 		{"tab 4", func(h *harness) { feed(h); h.key(runeKey('4')) }},
 		{"help", func(h *harness) { h.key(key(tcell.KeyF1)) }},
 		{"requests overlay", func(h *harness) { h.key(key(tcell.KeyF2)) }},
+		{"plan overlay", func(h *harness) {
+			h.u.st.plan = hostilePlan(time.Now())
+			h.key(runeKey('P'))
+		}},
+		{"plan expanded", func(h *harness) {
+			h.u.st.plan = hostilePlan(time.Now())
+			h.key(runeKey('P'))
+			h.key(key(tcell.KeyEnd))
+			h.key(key(tcell.KeyEnter))
+		}},
+		{"plan task", func(h *harness) {
+			h.u.st.plan = hostilePlan(time.Now())
+			h.key(runeKey('P'))
+			h.key(key(tcell.KeyEnter))
+		}},
 		{"composing", func(h *harness) { feed(h); h.key(runeKey('i')); h.typeText(hostileText[:12]) }},
 		{"compose window", func(h *harness) {
 			feed(h)

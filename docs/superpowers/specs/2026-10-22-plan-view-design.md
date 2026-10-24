@@ -240,3 +240,22 @@ Changes from revision 1 (foureyes, review of `d67ba1b`): done needs a recorded m
 `pr:<n>`; asks name a task by a structured `task` field; gates are not read; failed reads show `?`;
 reads and cadence placed in `pollOnce`, `Derive` pure; `merged` shown as a recorded claim; the plan
 keys stay out of `projectKinds`; `plan merged` became `plan done` (it also closes `person` tasks).
+
+## Implementation notes (plan-view-impl)
+
+Where the implementation departs from the text above, and why:
+
+- **`merge: false` needs an approval.** The "no verdict at all and no `review` set" case cannot be
+  told apart from an unreviewed task, since the review subject defaults to the board task: a
+  delivered `merge: false` task is done only once approved, or when master runs `plan done`.
+- **A task with a verdict and no board entry reads in review** (after the in-progress rule), so a
+  task reviewed outside a tracked request (a fix with its own subject) is not `upcoming`.
+- **The recap lists `<task> → <state now>`, without the earlier state.** busmon does not store
+  plan states between visits, so "from" cannot be proven; the change itself is listed only when
+  a fact (board, request, verdict, ask or a recorded fact) is newer than the last visit.
+- **A mission task has no `board` and is not the person's**; the plan name may hold dots
+  (`v0.22`: `^[a-z0-9][a-z0-9._-]{0,31}$`), task ids and owners follow `ValidName`.
+- **The verdict ledger is read incrementally** (foureyes' note): `VerdictsAfter` from the last
+  seen id, at most 4 pages of 500 per tick; busmon keeps only the roll-up fields.
+- **`?` per row** follows the inputs a row depends on: board, facts, verdicts and asks for a
+  board task, missions for a mission task.

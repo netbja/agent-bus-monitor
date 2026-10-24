@@ -176,6 +176,15 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 
 	pause, pauseErr := b.Pause(pollCtx)
 	asks, asksErr := b.Asks(pollCtx)
+	// The plan's own keys, ledger and missions follow the requests' cadence;
+	// its rows are derived every tick from the board and asks just read.
+	var planR planReads
+	if tick%requestPoll == 1 {
+		st.mu.Lock()
+		cursor, pf, known := st.plan.cursor, st.plan.file, st.plan.loaded
+		st.mu.Unlock()
+		planR = readPlan(pollCtx, b, cursor, pf, known)
+	}
 	var guardRecords map[string]guardian.Record
 	var guardNotes map[string]guardian.Note
 	var guardNow time.Time
@@ -249,6 +258,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	if boardErr == nil {
 		st.board = boardSnap
 	}
+	st.plan.fold(planR, boardSnap, boardErr, asks, asksErr)
 	if haveReqs {
 		st.requests = reqs
 	}

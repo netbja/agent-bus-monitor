@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 const recapHistoryLimit = 1000
@@ -94,6 +95,11 @@ func readRecap(ctx context.Context, r recapReader, st *shared, since time.Time, 
 	input.Agents = copyAgentStates(st.agents)
 	input.Board = copyBoard(st.board)
 	input.Asks = append([]bus.Ask(nil), st.asks...)
+	if st.plan.loaded {
+		p := st.plan
+		p.rows = append([]plan.Row(nil), st.plan.rows...)
+		input.Plan = &p
+	}
 	input.Services = copyServices(st.svcRecs)
 	input.Pause = st.pause
 	input.Holds = copyHolds(st.holds)

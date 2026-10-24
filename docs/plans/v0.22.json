@@ -1,0 +1,15 @@
+{
+  "plan": "v0.22",
+  "goal": "agentbus help, busmon UX, specialist roles, client reload, the Plan view",
+  "tasks": [
+    {"id": "cli-help", "title": "agentbus help and short flags from one table (PR 96)", "owner": "coder", "board": "cli-help"},
+    {"id": "busmon-ux", "title": "busmon: for-you hint, @ completion, report shape, unread marks (PR 101)", "owner": "coder", "board": "busmon-ux-impl"},
+    {"id": "roles", "title": "Specialist roles, trust gate, other-provider reviewers (PR 102)", "owner": "coder", "board": "roles-impl"},
+    {"id": "reload", "title": "Sentinel proposes a client reload after an update (PR 103)", "owner": "coder", "board": "reload-impl"},
+    {"id": "launch-test", "title": "agent_launch_test on schema 2; hermetic bash suites (PR 105)", "owner": "coder", "review": "fix-agent-launch-test"},
+    {"id": "plan-spec", "title": "Plan view spec (PR 104)", "owner": "coder", "board": "plan-view-spec"},
+    {"id": "plan-view", "title": "Plan view: plan file, agentbus plan, busmon P", "owner": "coder", "board": "plan-view-impl", "after": ["plan-spec"]},
+    {"id": "release", "title": "Tag v0.22.0, release notes, install", "owner": "person",
+     "after": ["cli-help", "busmon-ux", "roles", "reload", "launch-test", "plan-spec", "plan-view"]}
+  ]
+}
