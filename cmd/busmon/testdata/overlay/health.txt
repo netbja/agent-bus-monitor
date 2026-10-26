@@ -1,0 +1,69 @@
+Services  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Inspect the service log; restart only when its restart budget allows. Missions waiting for Git: run git init in the project directory.
+
+Agent identity  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Re-check agentbus agents and herdr; ask the person before acting on an identity conflict.
+
+Agent launch and identity  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Relaunch through agentbus with the configured role; do not edit a live pane.
+
+Model drift  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Review the result with agentbus roles doctor before changing roles.toml.
+
+Runaway work  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Inspect the pane read-only and ask master or the person; never interrupt for this warning.
+
+Cmd delivery  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Inspect the named consumer group; recover delivery only through its normal consumer.
+
+Cmd targets  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Correct the target through the normal sender; do not replay or delete entries automatically.
+
+Quota freshness  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Check provider connectivity; leave hold and release decisions to dispatch.
+
+Tracked secret-like files  fail
+  since: 2026-10-26T18:00:00Z
+  detail: tracked private-key path: [candidate]
+  remediation: Remove the path from version control and rotate any credential that may have been committed.
+
+Redis exposure and password  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Restrict Redis to loopback; the default password is replaced by ./setup.sh rotate-redis-password (v0.19.1).
+
+Service environment permissions  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Recreate the environment file with agentbus up and verify its permissions without printing it.
+
+Installed versions  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Review the documented update path and upgrade only to a known-good version.
+
+herdr command probe  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Check herdr status; restart it only through its documented service command.
+
+Client updates  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: Propose a reload to the person through master (agent-bus-sentinel skill, Client update); never restart a client or type into a pane.

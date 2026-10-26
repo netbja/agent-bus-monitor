@@ -1,0 +1,7 @@
+── tracked requests (0 waiting of 0) ──
+   no tracked request on the board. One is created by `agentbus request send`;
+   an ordinary cmd directive is not one and cannot record acceptance.
+
+── cmd threads with no answer in the retained history (0) ──
+   untracked: the protocol records no acceptance for these, and an answer
+   that has been trimmed from the stream looks the same as one that never came.

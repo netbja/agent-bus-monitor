@@ -1,0 +1,21 @@
+Status message
+needs review of PR #46
+second line with tab
+
+Declared        blocked · 6m ago (18:24:00)
+Last seen       1m ago (any status or report)
+Observed        pane not observed (no dispatch service, or no verified pane)
+Pane            w3:p1 · pid 41822 (start 99)
+Receiver lease  armed - a subscriber holds a lease (not a state)
+Queue           2 waiting · 1 stale · measured 3s ago
+                lag 40: entries of the SHARED cmd stream this agent's group has not read - not a
+                work queue
+Wake            woken - nonce echoed on the agent's screen; not read or accepted · tries 2 · escalating · pane focused
+Gap             entries may have been trimmed before this agent read them - possible, not proven
+Gate            1 open 4-eyes challenge(s): wait for a verdict
+Context         608k tokens (raw "608k ctx")
+Pilot           holds the pilot lease (master)
+Board           pr-46-review blocked · fix/pr-46
+
+Recent activity (in the retained window)
+none in the retained window

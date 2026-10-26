@@ -1,0 +1,17 @@
+master → coder  2026-10-26 17:59:00 (1m ago)
+
+review [red]lot 1[-] please
+
+text    the single text field this stream stores
+        completeness not marked on this entry — published before the marker existed
+
+kind    cmd · directive
+from    master
+to      coder
+when    2026-10-26 17:59:00  (1m ago)
+id      1792999991000-0
+thread  1792999980000-0  (reply in thread)  [2 retained entries]
+
+── thread ──
+  07:33:00 directive bernard→master   start lot 1
+▶ 07:33:11 directive master→coder     review [red]lot 1[-] please

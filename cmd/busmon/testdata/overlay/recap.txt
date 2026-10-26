@@ -1,0 +1,36 @@
+── Expected from you ──
+  coder asks · Review
+    Approve this?
+  coder waiting · 30m
+    review [red]this[-]
+  coder → people · 10s
+    Need a decision
+
+── Agents ──
+  coder · waiting · 30m
+    review [red]this[-]
+  master · working · 5m
+    coordinating
+
+── Board ──
+  first · open
+    owner master · main
+
+── Since your last visit ──
+  Since 2027-01-15 07:00
+  Change completed · master
+    change integrated
+  APPROVE · pr:7
+    foureyes reviewed coder: 
+  dispatch service failure
+    exited
+  cmd history before 2027-01-15 07:59 is not retained
+  report has no retained entries; earlier history cannot be verified
+  swap has no retained entries; earlier history cannot be verified
+  verdict history before 2027-01-15 07:59 is not retained
+  pause history is limited to the current record and retained resume directives
+  service history is limited to each service's latest state
+
+── Ask master ──
+  Ask master for a summary
+    no request in retained history

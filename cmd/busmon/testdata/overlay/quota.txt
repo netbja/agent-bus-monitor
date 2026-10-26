@@ -1,0 +1,4 @@
+
+Quota
+Account  codex: 5h 6% (resets Mon 19:00 (in 1h00)) held · 7d 76% (resets Thu 18:00 (in 72h00)) (shared by every agent using this provider)
+held by the dispatcher until 19:00: not woken

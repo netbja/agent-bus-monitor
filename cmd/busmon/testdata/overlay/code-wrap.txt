@@ -1,0 +1,9 @@
+Done
+· adapter in d0a72be
+
+  func veryLongFunctionName(argumentOne string, argumentTwo…
+      return "", nil
+  }
+
+What remains for you
+· nothing
