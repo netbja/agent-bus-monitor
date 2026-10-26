@@ -1289,16 +1289,7 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 	if !u.agentsTouched && len(names) > 0 {
 		agents.First() // the top (most urgent) agent, until the operator moves
 	}
-	label := fmt.Sprintf("%d agents %s %d working %s %d blocked", len(names), GlyphNone, working, GlyphNone, blocked)
-	if hidden > 0 {
-		label += fmt.Sprintf(" %s %d dormant (a shows)", GlyphNone, hidden)
-	} else if u.showAll {
-		label += fmt.Sprintf(" %s all (a hides dormant)", GlyphNone)
-	}
-	if sc := agents.Scroll(); sc.Total > sc.Visible && sc.Visible > 0 {
-		label += fmt.Sprintf(" %s %d-%d of %d", GlyphNone, sc.Top+1, min(sc.Total, sc.Top+sc.Visible), sc.Total)
-	}
-	agents.SetFrame(Line{{Text: "Agents", Role: RoleText}}, Line{{Text: label, Role: RoleMuted}})
+	agents.SetFrame(Line{{Text: "Agents", Role: RoleText}}, Line{{Text: agentsLabel(len(names), working, blocked, hidden, u.showAll, agents.Scroll()), Role: RoleMuted}})
 
 	act := u.lists[PanelActivity]
 	marks := u.unread.marks(u.feed, currentAsks)
@@ -1330,6 +1321,21 @@ func (u *ui) fillPanels(l Layout, now time.Time) {
 	reqs := u.lists[PanelRequests]
 	reqs.SetItems(requestItems(st.requests, st.threads, now, rowW(PanelRequests)))
 	reqs.SetFrame(Line{{Text: "Requests", Role: RoleText}}, requestsLabel(st.requests, st.threads, u.self, openQuestionCount(st.asks)))
+}
+
+// agentsLabel is the Agents frame's label: counts, the dormant hint and the
+// scroll position.
+func agentsLabel(shown, working, blocked, hidden int, showAll bool, sc ScrollState) string {
+	label := fmt.Sprintf("%d agents %s %d working %s %d blocked", shown, GlyphNone, working, GlyphNone, blocked)
+	if hidden > 0 {
+		label += fmt.Sprintf(" %s %d dormant (a shows)", GlyphNone, hidden)
+	} else if showAll {
+		label += fmt.Sprintf(" %s all (a hides dormant)", GlyphNone)
+	}
+	if sc.Total > sc.Visible && sc.Visible > 0 {
+		label += fmt.Sprintf(" %s %d-%d of %d", GlyphNone, sc.Top+1, min(sc.Total, sc.Top+sc.Visible), sc.Total)
+	}
+	return label
 }
 
 // MouseHandler routes clicks and the wheel to the panel under the pointer,

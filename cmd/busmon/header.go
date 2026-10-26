@@ -22,6 +22,7 @@ type headerData struct {
 	note     string            // non-fatal local settings note
 	waiting  string            // waitingText: "3 waiting · oldest 42m", "" when nothing waits
 	asks     int               // agents in state waiting: decisions a person owes
+	forYou   int               // the shell's for-you badge: decisions(forYou), shown instead of asks
 	unread   int               // Activity entries for the person not opened yet (unread.go)
 	pause    *bus.PauseRecord  // the project pause, nil when not paused
 	holds    map[string]int64  // provider → quota hold reset
@@ -49,11 +50,17 @@ const minProject = 6
 // columns; then the project (≥ 6 cells or dropped), pilot, waiting, budgets
 // (the rightmost provider dropped first) and the clock.
 func headerLines(d headerData, width int, tier Tier) []Line {
-	compact := width < 80
 	rows := 2
 	if tier == TierWide {
 		rows = 1
 	}
+	return headerRows(d, width, tier, rows)
+}
+
+// headerRows lays the header out on rows lines (1 or 2): the shell's header
+// is two lines at every tier (busmon Charm spec, "The screen").
+func headerRows(d headerData, width int, tier Tier, rows int) []Line {
+	compact := width < 80
 	second := 0 // row of the secondary elements
 	if rows == 2 {
 		second = 1
@@ -88,6 +95,9 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 	}
 	if d.asks > 0 {
 		add(Line{{Text: fmt.Sprintf("%s %d waiting for you", GlyphHuman, d.asks), Role: RoleAttention}}, 2, 0)
+	}
+	if d.forYou > 0 {
+		add(Line{{Text: fmt.Sprintf("%s %d for you", GlyphHuman, d.forYou), Role: RoleAttention}}, 2, 0)
 	}
 	if d.self != "" {
 		add(Line{{Text: Preview(humanLabel(d.self, d.pilot)), Role: RoleText}}, 4, second)
