@@ -169,8 +169,9 @@ Same zones. For you and Agents share the top row 2:3; the tabbed panel takes wha
 ```
 
 For you shows at most 4 rows (then `+N more`, which focuses it); unread lines rank last and may be
-below the fold, which is why the `unread` badge stays in the header. Agents goes two-up as the
-medium tier does today. Under 80 columns the narrow tier keeps today's behaviour (one panel at a time,
+below the fold, which is why the `unread` badge stays in the header. Agents keeps today's medium
+rows, one agent per row (the sketch's two-up is not what the medium tier does today; as built in
+b1, two-up only on Bernard's or ui-kimi's request). Under 80 columns the narrow tier keeps today's behaviour (one panel at a time,
 digit tabs, input only while composing), with For you as the first panel.
 
 ### For you (decision 2)
