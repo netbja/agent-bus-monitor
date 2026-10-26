@@ -22,8 +22,10 @@ EOF
   chmod +x "$root/bin/$c"
 done
 manifest="$root/roles.toml"
-config() { # <client> [extra roles toml]
-  printf 'schema_version = 2\n[defaults]\nprofile = "main"\n[profiles.main]\nclient = "%s"\nprovider = "test-provider"\nmodel = "test-model"\n[roles.coder]\ntier = "boot"\nskills = ["test-skill"]\n%s\n' "$1" "${2:-}" > "$manifest"
+config() { # <client> [extra roles toml]; a Claude profile must name its mode
+  local perm=""
+  [[ "$1" == claude-code ]] && perm='options = { permission = "manual" }\n'
+  printf 'schema_version = 2\n[defaults]\nprofile = "main"\n[profiles.main]\nclient = "%s"\nprovider = "test-provider"\nmodel = "test-model"\n'"$perm"'[roles.coder]\ntier = "boot"\nskills = ["test-skill"]\n%s\n' "$1" "${2:-}" > "$manifest"
 }
 export ROLES_TOML="$manifest" ROLES_DIR="$root" REPO_SKILLS="$root/skills" POCOCK_SKILLS_ROOT="$root/pocock" \
   AGENT_LAUNCH_CACHE="$root/cache" SKILLS_DEST="$root/installed" PATH="$root/bin:$PATH"

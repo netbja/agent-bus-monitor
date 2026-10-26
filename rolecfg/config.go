@@ -164,6 +164,9 @@ func Load(path string) (*Manifest, error) {
 				return nil, err
 			}
 			perm, _ := info["permission"].(string)
+			if perm == "" || perm == "default" {
+				return nil, claudePermissionMissing("role " + role)
+			}
 			if err := checkAskPermission(role, rules, "claude-code", perm); err != nil {
 				return nil, err
 			}
@@ -456,6 +459,13 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		if err := checkKeys(optionMap, set("permission", "fallback"), "Claude options"); err != nil {
 			return Profile{}, err
 		}
+		if v, _ := optionMap["permission"].(string); v == "" || v == "default" {
+			who := "profile " + profileName
+			if legacy {
+				who = "role " + role
+			}
+			return Profile{}, claudePermissionMissing(who)
+		}
 		if v, exists := optionMap["permission"]; exists && v != "default" && v != "acceptEdits" && v != "auto" && v != "bypassPermissions" && v != "manual" && v != "dontAsk" && v != "plan" {
 			return Profile{}, fmt.Errorf("unsupported Claude permission")
 		}
@@ -739,6 +749,13 @@ func appendMissingSorted(order *[]string, table map[string]interface{}) {
 	}
 	sort.Strings(missing)
 	*order = append(*order, missing...)
+}
+
+// claudePermissionMissing refuses a Claude Code launch that would leave its
+// mode to defaultMode in ~/.claude/settings.json (claude has no "default"
+// mode to pass): the manifest names the mode it wants.
+func claudePermissionMissing(who string) error {
+	return fmt.Errorf("%s: Claude Code needs an explicit permission, one of acceptEdits, auto, bypassPermissions, manual, dontAsk, plan (none or \"default\" would let defaultMode in ~/.claude/settings.json decide)", who)
 }
 
 func isBuiltin(client string) bool {

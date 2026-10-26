@@ -25,8 +25,8 @@ func newResumeFixture(t *testing.T) *resumeFixture {
 	t.Helper()
 	dir := t.TempDir()
 	manifest := filepath.Join(dir, "roles.toml")
-	body := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\n" +
-		"[profiles.alt]\nclient = \"claude-code\"\nprovider = \"other\"\nmodel = \"m2\"\n" +
+	body := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\noptions = { permission = \"manual\" }\n" +
+		"[profiles.alt]\nclient = \"claude-code\"\nprovider = \"other\"\nmodel = \"m2\"\noptions = { permission = \"manual\" }\n" +
 		"[roles.coder]\ntier = \"boot\"\nfallback_profiles = [\"alt\"]\n"
 	if err := os.WriteFile(manifest, []byte(body), 0o644); err != nil {
 		t.Fatal(err)

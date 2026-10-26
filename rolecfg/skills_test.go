@@ -93,7 +93,7 @@ func TestInstallSkillsRefusesRegularFileBeforeWriting(t *testing.T) {
 
 func TestInstallSkillsUsesProviderSpecificDefaults(t *testing.T) {
 	m := writeSkillsManifest(t,
-		"[profiles.claude]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"test\"\n"+
+		"[profiles.claude]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"test\"\noptions = { permission = \"manual\" }\n"+
 			"[profiles.codex]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"test\"\n",
 		"[roles.claude]\nprofile = \"claude\"\ntier = \"boot\"\nskills = [\"review\"]\n"+
 			"[roles.codex]\nprofile = \"codex\"\ntier = \"pop\"\nskills = [\"review\"]\n")
