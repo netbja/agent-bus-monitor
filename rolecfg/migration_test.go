@@ -23,7 +23,8 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 	if v2.SchemaVersion != 2 {
 		t.Fatalf("roles.toml schema %d", v2.SchemaVersion)
 	}
-	if !reflect.DeepEqual(v1.roleOrder, v2.roleOrder) {
+	// Roles added since schema 1 come after its own, which keep their order.
+	if len(v2.roleOrder) < len(v1.roleOrder) || !reflect.DeepEqual(v1.roleOrder, v2.roleOrder[:len(v1.roleOrder)]) {
 		t.Fatalf("roles %v, were %v", v2.roleOrder, v1.roleOrder)
 	}
 	env := []string{"AGENT_LAUNCH_DRYRUN=1", "AGENTBUS_REPO=" + repoPath(t, "."), "HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"}
@@ -40,14 +41,31 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		}
 		return strings.ReplaceAll(strings.Join(keep, "\n"), repoPath(t, "roles.toml"), "<manifest>")
 	}
-	for _, role := range v1.roleOrder {
-		if a, b := dry(v1, role), dry(v2, role); a != b {
-			t.Errorf("%s launches differently:\nschema 1: %s\nschema 2: %s", role, a, b)
-		}
-	}
+	// master pops every role: one more allow rule per role added since, nothing else.
 	r1, _ := v1.LaunchRules("master")
 	r2, _ := v2.LaunchRules("master")
-	if !reflect.DeepEqual(r1, r2) {
-		t.Fatalf("master's rules %+v, were %+v", r2, r1)
+	want := r1
+	want.Allow = append([]string{}, r1.Allow...)
+	for _, role := range v2.roleOrder[len(v1.roleOrder):] {
+		want.Allow = append(want.Allow, "Bash(agent-spawn "+role+" *)")
+	}
+	if !reflect.DeepEqual(want, r2) {
+		t.Fatalf("master's rules %+v, want %+v", r2, want)
+	}
+	settings := func(r ToolRules) string {
+		s, err := settingsJSON(r, resumeHookCommand(newEnv(env)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ShellJoin([]string{s})
+	}
+	for _, role := range v1.roleOrder {
+		a, b := dry(v1, role), dry(v2, role)
+		if role == "master" {
+			a = strings.Replace(a, settings(r1), settings(r2), 1)
+		}
+		if a != b {
+			t.Errorf("%s launches differently:\nschema 1: %s\nschema 2: %s", role, a, b)
+		}
 	}
 }
