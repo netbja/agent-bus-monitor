@@ -30,11 +30,16 @@ decided but not built: nothing here describes running code yet.
 - **Isolation between projects is a contract:**
   - every goroutine goes through one recovering helper;
   - every external call carries a deadline;
-  - a watchdog gives up the lease of a runner that has finished no pass in 2 min, then replaces
-    it;
-  - no Redis client, herdr runtime, log or budget is shared;
-  - no `os.Getenv` below the runner: per-project settings come from the project's env file as
-    explicit configuration.
+  - a watchdog over both the reconcile and the health loop gives up the lease of a runner that
+    stops making progress, then replaces it;
+  - no Redis client, herdr runtime, log or budget is shared. Each project's decision log goes to
+    its own file, never the process's stderr;
+  - every project setting comes from the project's env file through one lookup, following an
+    inventory of the environment reads (broker, herdr, escalation, quota policy, health inputs,
+    project directory). Only host-scoped keys may come from the process environment.
+- **Legacy units never step aside on their own.** Until `up`/`migrate` removes it, a per-project
+  dispatch unit contends through the lease. Stepping aside because a host dispatcher is merely
+  installed would fail open.
 
   *Why:* goroutines share one process, so isolation can only be cooperative.
 - **A deleted project stays deleted, enforced atomically.** The lease is acquired only while the

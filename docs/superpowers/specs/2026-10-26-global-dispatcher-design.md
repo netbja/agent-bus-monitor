@@ -89,10 +89,11 @@ watchdog that gives up the lease of a runner that stops completing passes.
   - *Memory and CPU are shared.* A project with a runaway agent list can slow the others.
     Mitigation: per-pass budgets (the observe pass already has one), and the watchdog's stuck
     signal shows up in health.
-  - *Hidden `os.Getenv` reads.* The per-project settings live in each project's env file and are
-    no longer loaded into the process environment. Every environment read below the runner must
-    become explicit configuration. A test must fail on any `os.Getenv` in `dispatch/` or in what
-    it calls through the runner, outside an allowlist.
+  - *Hidden environment reads.* The per-project settings live in each project's env file and are
+    no longer loaded into the process environment. `dispatch/` itself reads none. The reads are in
+    the code that builds a dispatcher (`cmd/agentbus`: service run, quota, health, dispatch
+    supervision) and in `bus.Connect` and the stream caps. Each one is classified under "Per-project
+    configuration", and a scoped static test guards the classification.
 
 ### B. One supervisor process that forks a worker process per project
 
@@ -235,13 +236,45 @@ Each project's env file (`services/<p>.env`, 0600, unchanged format) is parsed i
   them as fields and sets the child's environment per call. Today it inherits the process
   environment, which would hand every project the first project's session;
 - `AGENT_BUS_ESCALATE_TO`, and the `AGENT_BUS_QUOTA_*` policy knobs (warn, hold, max age, long
-  hold, off).
+  hold, off);
+- the project directory, `AGENTBUS_PROJECT_DIR`, a new key that `up` writes (today it is only the
+  dispatch unit's `WorkingDirectory` and the missions unit's `--repo`). One process has one
+  working directory, so no check may use `os.Getwd()` to mean "the project".
+
+`ProjectConfig` exposes one lookup, `Getenv(key)`: the project file first, then the host
+environment. Every builder that today takes `getenv func(string) string` (`serviceQuota`,
+`runawayThresholdsFromEnv`, `bus.LegacyPasswordInUse`, `herdrBin`, `repoDir`) receives that
+lookup, never `os.Getenv`.
+
+**Inventory of environment reads on the dispatch path** (base `f803a72`), with how each is served:
+
+| Where | Reads | Scope under the host dispatcher |
+|---|---|---|
+| `bus.Connect` (`bus/bus.go`) | `REDIS_URL`, `REDIS_HOST`/`PORT`/`PASSWORD` | **project**: a `bus.ConnectWith(lookup)` variant; `Connect` stays for the CLI |
+| service run (`servicecmd.go`) | `REDIS_URL` (validation), `HERDR_BIN`, the `AGENT_BUS_QUOTA_*` knobs via `serviceQuota(os.Getenv, …)` | **project** |
+| service run (`servicerun.go`) | `AGENT_BUS_ESCALATE_TO` | **project** |
+| quota knobs (`quotacmd.go` `serviceQuota`) | `AGENT_BUS_QUOTA`, `_WARN`, `_HOLD`, `_MAX_AGE`, `_LONG_HOLD` | **project** (policy). The readers' configuration is host-wide (below) |
+| health (`healthchecks.go`) `redis-password` | `REDIS_HOST`, `REDIS_PASSWORD_FILE`, `LegacyPasswordInUse(os.Getenv)` | **project** (per broker) |
+| health `installed-versions` | `herdrBin(os.Getenv)`, `repoDir(os.Getenv)`, `manifestPath(os.Environ())`, `skillsMatch(os.Environ())` | **project** for herdr bin and manifest (a project's `AGENTBUS_ROLES_TOML`). **Host** for the agentbus repo (`AGENTBUS_REPO`) |
+| health `tracked-secrets` | `os.Getwd()` | **project**: `AGENTBUS_PROJECT_DIR` |
+| health `runaway` | `runawayThresholdsFromEnv(os.Getenv)` | **project** |
+| health builder (`realHealthConfig`), `dispatchcmd.go` | `service.Detect`/`ManagerBin`/`PathsFrom(os.Getenv)`: `AGENTBUS_SERVICE_MANAGER`, `XDG_*`, `HOME` | **host** |
+| stream caps (`bus/bus.go`) | `AGENT_BUS_REPORT_MAX`, `AGENT_BUS_VERDICT_MAX`, `AGENT_BUS_REPORT_FULL_MAX` | **host**: read from the process. A project env file that sets one gets a warning in its log: per-project caps are not supported under the host dispatcher |
+| quota readers (`quota/config.go`, `quota/claude.go`) | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` | **host**: the shared collector |
+| health `herdr-probe` | the runtime | **project**: the project's own session-bound runtime |
 
 The host env file (`services/host.env`, same rules) holds what belongs to the process: `PATH`,
-`LANG`, `XDG_*`, and the default broker for `service status`. An invalid project env file
-disables that project with the state `failed` and reason `invalid configuration`, and is never
-retried until the file changes. An invalid host env file is the process's own invalid
-configuration: exit 0.
+`LANG`, `XDG_*`, `HOME`-derived paths, the stream caps, the quota readers' locations, and the
+default broker for `service status`. An invalid project env file disables that project with the
+state `failed` and reason `invalid configuration`, and is never retried until the file changes. An
+invalid host env file is the process's own invalid configuration: exit 0.
+
+**Logs are per project, never the process's stderr.** `dispatch.Config.Log` defaults to
+`os.Stderr` when nil (`filled`), which in one process would merge every project's decision log. In
+host mode, the runner always sets `Log` (and the health loop's writer) to that project's log
+through its own `lastError` wrapper. A nil `Log` reaching a runner is a construction error, not a
+default. The process's stderr carries only host-level lines (scan, collector, process start and
+stop), each prefixed `host:`.
 
 ### Discovery, enrolment and deletion
 
@@ -294,15 +327,22 @@ Every rule below needs a test that would fail if it were broken:
    (blocking reads have their explicit `BLOCK`). Herdr calls use `herdrCallTimeout`. The observe
    pass keeps its 5 s budget. The quota collector keeps a per-reader timeout and runs outside every
    runner.
-3. **Watchdog.** Each runner records when it last completed a reconcile pass. No completed pass for
-   2 min (24 ticks) while the lease is held means: stop renewing, cancel the run, count a failure,
-   publish `failed` / `stuck: no pass completed in 2m`, and start a fresh runner (new token) after
-   backoff. The old goroutines are abandoned. Fencing guarantees they write nothing; the residual
-   is at most one extra wake line.
+3. **Watchdog, over both loops.** Each runner records two progress marks: the last completed
+   reconcile pass, and the last completed health pass (or skip). Health runs in its own goroutine,
+   and a hung check would otherwise leave the project `ready` with its health frozen. Either mark
+   older than its limit while the lease is held is a stuck verdict: 2 min (24 ticks) for reconcile,
+   and the health tick plus twice its `PassBudget` for health. On a stuck verdict the runner stops
+   renewing, cancels the run, counts a failure, publishes `failed` / `stuck: <loop> made no
+   progress in <d>`, and starts a fresh runner (new token) after backoff. The old goroutines are
+   abandoned. Fencing guarantees they write nothing; the residual is at most one extra wake line.
+   The renewal goroutine needs no mark, because a renewal that stops lets the lease lapse, which
+   the run already treats as lease lost. The cmd tail needs none either: it only shortens waits.
 4. **Separate clients and sessions.** No Redis client, herdr runtime, log writer or budget is
    shared between projects.
-5. **No process environment below the runner.** Configuration flows through `ProjectConfig`,
-   checked by a test (see Testing).
+5. **No process environment for a project setting.** Project settings flow through
+   `ProjectConfig.Getenv`, following the inventory above, checked by a scoped test (see Testing).
+6. **No shared writer.** Each project's decision log, health log and crash output go to its own
+   files (see "Logs are per project").
 
 ### Quotas and pause
 
@@ -324,6 +364,19 @@ Every rule below needs a test that would fail if it were broken:
 - Per-project health loops stay inside each runner (`{p}:health*`, fenced per project). The
   `services` check reads the dispatch record that the runner publishes, and treats `stuck` and
   `gave-up` as `fail`.
+- Every check's inputs come from that project's `ProjectConfig`, per the inventory. The checks
+  affected:
+  - `redis-password`: the project's broker host, password file and legacy-password test;
+  - `installed-versions`: the project's herdr binary and roles manifest; the agentbus repository
+    is host-wide;
+  - `tracked-secrets`: `AGENTBUS_PROJECT_DIR`, not the process's working directory;
+  - `runaway`: the project's thresholds;
+  - `herdr-probe`: the project's session-bound runtime;
+  - `service-env`: the project's env file mode, as today.
+
+  A project whose `AGENTBUS_PROJECT_DIR` is missing (an env file written before this change)
+  reads `tracked-secrets` as `unknown` with "project directory not recorded; run agentbus up
+  <p>", never as the host dispatcher's working directory.
 - Host-wide chores run once in the host dispatcher. Today that is the model table refresh, which
   keeps its host-local lock because a legacy unit may still run it during migration. Usage
   refresh stays per project, because it publishes per project.
@@ -387,10 +440,15 @@ The hand-over is lease-safe because both sides already respect `{p}:dispatch`:
    (CAS), and the runner takes over at its next 5 s standby poll. If the old process is killed
    instead, the lease lapses in at most 15 s. Two dispatchers never hold the lease at once, so
    nothing is double-woken.
-3. A project not migrated keeps its legacy unit. The legacy `service run dispatch` gains one rule:
-   if the host dispatcher unit is installed and `p` is enrolled, exit 0 with `migrated: served by
-   the host dispatcher`. A legacy unit restarted under the new binary therefore steps aside rather
-   than contending.
+3. A project not migrated keeps its legacy unit, which behaves exactly as today. **No step-aside
+   rule:** a legacy `service run dispatch` never exits because a host dispatcher exists. Being
+   *installed* says nothing about being *running*: the host dispatcher may be stopped, may have
+   given up, or may have disabled `p`. A legacy unit that stepped aside on that evidence would
+   leave `p` unserved (fail-open). Contention is already safe: both sides respect `{p}:dispatch`,
+   the loser waits in `standby`, and either one takes over when the other goes away. The only way
+   a legacy unit stops is `up`/`migrate` removing it (step 2), after the host dispatcher's runner
+   is in `standby` for `p`. If the host dispatcher is not active, `migrate` refuses that project
+   and leaves its legacy unit in place.
 4. `agentbus service migrate` performs 1–2 for every enrolled project and prints a table (project,
    before, after). `setup.sh update` prints a hint to run it and never migrates on its own: setup
    owns only what it wrote, and the units are `up`'s.
@@ -434,10 +492,27 @@ Cases (each is an acceptance criterion):
 - **Standby hand-over.** A token placed in `{p}:dispatch` by a fake legacy holder puts the runner in
   `standby`. Releasing it lets the runner acquire within one standby poll, and at no instant do two
   tokens act.
-- **No process environment.** A static test (in the style of
-  `TestEveryDispatchedCommandIsInTheTable`) fails on any `os.Getenv`/`os.LookupEnv` in `dispatch/`,
-  or in the runner, outside an explicit allowlist. A second static test fails on a bare `go`
-  statement in `dispatch/` or the runner that does not go through `safeGo`.
+- **No process environment for project settings.** A static AST test, in the style of
+  `TestEveryDispatchedCommandIsInTheTable`. Its scope is the files that build a runner's
+  dispatcher, not `dispatch/` (which has no reads to find): the host dispatcher's own files, plus
+  the builder functions `serviceQuota`, `realHealthConfig`/`realHealthChecks` and the runner's
+  connect path. In that scope, any `os.Getenv`, `os.LookupEnv`, `os.Environ` or `os.Getwd` call,
+  and any `os.Getenv` passed as a value, fails unless it is listed in an allowlist that names the
+  host-scoped keys of the inventory. A behaviour test backs it: two projects whose env files differ
+  in broker host, herdr bin, escalation target, quota hold, runaway threshold and project directory.
+  Each project's health checks and decisions see only its own values, while the process
+  environment holds a third, distinct value for each key.
+- **Goroutines.** A second static test fails on a bare `go` statement in `dispatch/` or the host
+  dispatcher's files that does not go through `safeGo`.
+- **Per-project logs.** Two runners each log a decision. Each line lands in its own project's log
+  file, and none in the process's stderr. A runner built with a nil `Log` fails construction.
+- **Health watchdog.** A health check that blocks past its context with the reconcile loop healthy
+  yields the stuck verdict `health`, one failure counted, a fresh runner, and other projects
+  unaffected.
+- **Legacy contention, fail-closed.** With the host dispatcher unit installed but not running, a
+  legacy `service run dispatch` acquires the lease and serves. With the host dispatcher running,
+  the legacy unit holds the lease and the runner waits in `standby`; nobody exits. `migrate` with
+  the host dispatcher inactive refuses and leaves the legacy unit.
 - **Exit codes.** `service run-host`: invalid host env → 0; manager stop → 0; nothing enrolled for
   the idle window → 0; unreadable services directory → 1. Prior art:
   `cmd/agentbus/servicerun_test.go`.
