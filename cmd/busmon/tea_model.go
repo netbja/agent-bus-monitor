@@ -41,6 +41,8 @@ type uiState struct {
 	showAll       bool    // dormant agents listed (a)
 	agentsTouched bool    // the person moved in Agents: stop following the top row
 	filter        feedFilter
+	editing       bool   // the filter line has the keyboard (/)
+	edit          string // its text
 	pause         pauseCursor
 	flash         string
 	flashErr      bool
@@ -121,6 +123,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		m.tick++
 		return m, m.pollCmd(m.tick + 1)
+	case tea.KeyPressMsg:
+		return m.key(msg)
+	case tea.MouseClickMsg:
+		return m.click(msg.Mouse())
+	case tea.MouseWheelMsg:
+		return m.wheel(msg.Mouse())
 	case tailMsg:
 		for _, e := range msg.events {
 			if m.cfg.st != nil {
@@ -159,7 +167,7 @@ func (m *Model) counts() shellCounts {
 	for _, it := range m.forYou {
 		w = max(w, forYouNatural(it))
 	}
-	return shellCounts{ForYou: len(m.forYou), Agents: len(names), ForYouWidth: w + listGutter + 2}
+	return shellCounts{ForYou: len(m.forYou), Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.editing}
 }
 
 // refresh recomputes the marks, the For you list, the layout and every list's

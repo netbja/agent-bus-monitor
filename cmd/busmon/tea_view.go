@@ -38,9 +38,13 @@ func (m Model) grid() *grid {
 		lst.draw(g)
 	}
 	if l.Input.H > 0 {
-		drawLine(g, l.Input.X, l.Input.Y, l.Input.W, Line{{Text: GlyphPrompt + " ", Role: RoleAccent}}, false)
+		input := Line{{Text: GlyphPrompt + " ", Role: RoleAccent}}
+		if m.ui.editing {
+			input = Line{{Text: "filter" + GlyphPrompt + " ", Role: RoleAccent}, {Text: Preview(m.ui.edit), Role: RoleText}}
+		}
+		drawLine(g, l.Input.X, l.Input.Y, l.Input.W, input, false)
 	}
-	footer := footerHints(ModePanel, m.ui.focus, l.Tier, m.width)
+	footer := footerHints(m.mode(), m.ui.focus, l.Tier, m.width)
 	if m.ui.flash != "" {
 		role := RoleOK
 		if m.ui.flashErr {
