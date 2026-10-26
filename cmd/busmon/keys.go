@@ -12,6 +12,7 @@ const (
 	ModeAsk     // the ask panel: answering an agent's questions
 	ModeCompose // the compose window (v0.16): a message or a free answer, several lines
 	ModePick    // busmon --pick (v0.20): the Projects picker, its own screen
+	ModeShell   // the step-b shell's panels (busmon Charm spec): ModePanel's table with the shell's tabs
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -61,6 +62,7 @@ const (
 	ActHealth       // open project health details
 	ActPickType     // the picker: a typed character or backspace edits the filter
 	ActPlan         // open the batch's plan
+	ActTab5         // the shell's narrow tier: the fifth view
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -181,6 +183,17 @@ var (
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}
+	// shellTabs: in the shell, 1-3 pick the tabbed panel's tab at every
+	// width; the narrow tier's five views take 1-5 (For you first).
+	shellTabs = []binding{
+		{Keys: "1-3", Hint: "tabs", Act: ActTab1, Tiers: []Tier{TierWide, TierMedium}, match: runeIs('1')},
+		{Keys: "1-5", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
+		{Keys: "2", Act: ActTab2, match: runeIs('2')},
+		{Keys: "3", Act: ActTab3, match: runeIs('3')},
+		{Keys: "4", Act: ActTab4, Tiers: []Tier{TierNarrow}, match: runeIs('4')},
+		{Keys: "5", Act: ActTab5, Tiers: []Tier{TierNarrow}, match: runeIs('5')},
+	}
+	shellBindings = shellPanelBindings()
 	inputBindings = []binding{
 		{Keys: "^O", Hint: "several lines", Alt: "alt-enter", Act: ActComposeOpen, match: either(keyIs(keyCtrlO), altEnter)},
 		{Keys: "enter", Hint: "send", Act: ActSend, match: keyIs(keyEnter)},
@@ -233,6 +246,26 @@ var (
 	}
 )
 
+// shellPanelBindings is the panel table for the shell: the same rows, in the
+// same order, with its tabs in place of tview's, and the last-row key in For
+// you as in the other lists.
+func shellPanelBindings() []binding {
+	var out []binding
+	for _, b := range panelBindings {
+		switch b.Act {
+		case ActTab1, ActTab2, ActTab3, ActTab4:
+			if b.Keys == "1-3" {
+				out = append(out, shellTabs...)
+			}
+			continue
+		case ActLast:
+			b.Panels = append(append([]PanelID{}, b.Panels...), PanelForYou)
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
 // bindings is the key table of a mode, Ctrl-C (quit everywhere) last.
 func bindings(m Mode) []binding {
 	var bs []binding
@@ -251,6 +284,8 @@ func bindings(m Mode) []binding {
 		bs = composeBindings
 	case ModePick:
 		bs = pickBindings
+	case ModeShell:
+		bs = shellBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }
