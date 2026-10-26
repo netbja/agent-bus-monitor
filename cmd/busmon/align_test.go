@@ -189,8 +189,8 @@ func checkFrameAt(t *testing.T, at func(x, y int) string, name string, r Rect, s
 }
 
 func TestAlignmentSuite(t *testing.T) {
-	saved := th
-	defer func() { th = saved }()
+	saved, width := th, mdWidth // relayouts set the overlay width: leave it as found
+	defer func() { th, mdWidth = saved, width }()
 	for _, palette := range []string{"dark", "light", "16", "none"} {
 		var err error
 		name, colors := palette, 1<<24
