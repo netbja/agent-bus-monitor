@@ -12,6 +12,10 @@ confidence: inferred
 
 ## Finding/decision
 
+> **Revised for dispatch, 2026-10-26:** dispatch moves to one dispatcher per host; see
+> [host dispatcher](2026-10-26-host-dispatcher.md). "One unit per project and kind" below still
+> holds for the missions conductor, and for dispatch until that change is built and migrated.
+
 Since v0.12, `agentbus dispatch` and the missions conductor run as **user services** of the
 operating system's own manager: systemd `--user` on Linux, launchd on macOS. They no longer run
 as herdr tabs. This revises the point "a herdr pane, not systemd" of the

@@ -1,6 +1,8 @@
 # One host dispatcher instead of one per project — design
 
-Status: draft (architect, 2026-10-26). Task `global-dispatch-spec`, from master. No code.
+Status: **decided: A** (Bernard, 2026-10-26, ask answer `1793035843860-0`). Author: architect.
+Task `global-dispatch-spec`, from master. No code. Decision note:
+[2026-10-26-host-dispatcher](../../memory/decisions/2026-10-26-host-dispatcher.md).
 
 Revises part of [project services](../../memory/decisions/2026-10-14-project-services.md)
 ("one unit per project and kind"). Everything else in that decision stands, along with the
@@ -32,7 +34,7 @@ code stays contained.
 
 ## Solution
 
-**Recommended: option A below.** One `agentbus-dispatch` user service per host, the **host
+**Decided: option A below.** One `agentbus-dispatch` user service per host, the **host
 dispatcher**. It runs one **project runner** per **enrolled project**: today's `dispatch.Run`,
 unchanged, with its own `{p}:dispatch` lease and token, its own Redis client, its own herdr session,
 its own log file and its own restart budget. The project runners share one thing, the quota
@@ -60,7 +62,7 @@ shows the same `dispatch up/down`, the same services overlay and the same F3 log
 
 ## Options
 
-### A. One process, one goroutine supervisor per project (recommended)
+### A. One process, one goroutine supervisor per project (decided)
 
 Described in full under Implementation Decisions. In short: the host dispatcher scans enrolled
 projects every 5 s and starts or stops a project runner for each. Every runner is today's loop,
@@ -110,8 +112,8 @@ one plist per project.
 
 - **Gains.** The smallest change, and process isolation is kept.
 - **Risks.** It only removes unit files on Linux. N processes and N quota readings remain, and a
-  binary update still needs N restarts. Choose it only if the goal turns out to be fewer files in
-  `~/.config/systemd/user`.
+  binary update still needs N restarts. **Closed:** the goal is fewer processes and one quota
+  reading, not just fewer files (Bernard chose A, answer `1793035843860-0`).
 
 ### The conductor: stays per project (all options)
 
@@ -457,22 +459,19 @@ Prior art: `dispatch/loop_test.go` (crash hooks, fenced writes), `cmd/agentbus/s
   (`PX 15000`, renew 5 s).
 - Starting at login (still never).
 - Cross-host coordination beyond what the per-project lease already gives.
-- Template units (option C), unless the person chooses C instead.
+- Template units (option C, closed by the decision).
 
 ## Further Notes
 
-- **Open question for the person:** is the goal fewer processes and one quota reading (A), or only
-  fewer unit files (C)? The recommendation assumes the former. If it is only files, C is a
-  one-day change and keeps process isolation.
+- **Decided, 2026-10-26:** the goal is fewer processes and one quota reading, so A, not C
+  (Bernard's answer `1793035843860-0` to master's ask). No question remains open in this spec.
 - **Residual risks accepted under A:** a goroutine stuck in a call that ignores its context leaks
   until restart. A late-returning stuck prompt can type one extra wake line. Memory pressure from
   one project is felt by all. The watchdog and health make each of these visible; none can corrupt
   state, because every write is fenced per project.
-- **Decision note:** if A is accepted, record it in `docs/memory/decisions/` as a revision of
-  `2026-10-14-project-services`: "one dispatcher per host, one conductor per project", with the
-  isolation contract above as its reason. Mark the old note's "one unit per project and kind" as
-  superseded for dispatch only.
-- **Order of work, if accepted:** (1) explicit configuration (`ProjectConfig`, herdr runtime with
+- **Decision note:** [2026-10-26-host-dispatcher](../../memory/decisions/2026-10-26-host-dispatcher.md)
+  revises `2026-10-14-project-services` for dispatch only; the conductor stays one unit per project.
+- **Order of work:** (1) explicit configuration (`ProjectConfig`, herdr runtime with
   session fields, `bus.Connect` with explicit values) plus the no-env static test. This is a
   behaviour-preserving refactor that helps even without the rest. (2) `safeGo` plus the static
   test. (3) The guarded acquire script. (4) The quota collector as an injected source. (5) `Serve`
