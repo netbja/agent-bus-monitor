@@ -16,9 +16,9 @@ On boot, once:
    `agentbus board`. The board keeps each request's metadata, not its text: read the body
    with `agentbus thread <thread>`, using the `thread` field the request records. Accept a
    tracked request before you start: `agentbus request accept <task>`.
-4. Arm **only if something is coming**: a question you asked, an answer you await. `agentbus
-   subscribe ui-grok` as a background task when your client supports it; otherwise say so to master,
-   who wakes you. Nothing to wait for? Do not arm — report your state and stop.
+4. Arm **only if something is coming**: a question you asked, an answer you await.
+   `agentbus subscribe ui-grok` as a background task when your client supports it; otherwise say so
+   to master, who wakes you. Nothing to wait for? Do not arm — report your state and stop.
 
 ## Read first
 
