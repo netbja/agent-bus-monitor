@@ -1,7 +1,9 @@
 Done
 · adapter in d0a72be
 
-  func veryLongFunctionName(argumentOne string, argumentTwo…
+  func veryLongFunctionName(argumentOne string, argumentTwo 
+→ int, argumentThree map[string][]string) (result string, er
+→ r error) {
       return "", nil
   }
 

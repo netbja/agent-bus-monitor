@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/rivo/uniseg"
 )
 
 // Markdown readable in a terminal (v0.14, spec §7): long texts — reports,
@@ -101,7 +103,7 @@ func renderMarkdown(src string, width int) []Line {
 			continue
 		}
 		if inCode {
-			out = append(out, Line{S(RoleMuted, strings.TrimRight("  "+Fit(strings.TrimRight(ln, " \t"), width-2), " "))})
+			out = append(out, codeLines(strings.TrimRight(ln, " \t"), width)...)
 			continue
 		}
 		trimmed := strings.TrimSpace(ln)
@@ -287,4 +289,41 @@ func wrapSpans(spans []mdSpan, width int, first, hang string) []Line {
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+// codeLines is one line of a code block at width: indented two cells, wrapped
+// at the width by grapheme cluster when longer, each continuation marked in the
+// gutter, never cut (a cut line of code reads as different code).
+func codeLines(code string, width int) []Line {
+	if code == "" {
+		return []Line{nil} // an empty line of code: no gutter either
+	}
+	inner := max(1, width-2)
+	var out []Line
+	gutter := "  "
+	for {
+		head := cellPrefix(code, inner) // spaces at a wrap point are code: kept
+		out = append(out, Line{S(RoleMuted, gutter+head)})
+		code = code[len(head):]
+		if code == "" {
+			return out
+		}
+		gutter = GlyphArrowR + " "
+	}
+}
+
+// cellPrefix is the longest prefix of s, whole grapheme clusters, at most w
+// cells wide; at least one cluster, so a cluster wider than w still advances.
+func cellPrefix(s string, w int) string {
+	used, end := 0, 0
+	g := uniseg.NewGraphemes(s)
+	for g.Next() {
+		cw := g.Width()
+		if used+cw > w && end > 0 {
+			break
+		}
+		_, end = g.Positions()
+		used += cw
+	}
+	return s[:end]
 }

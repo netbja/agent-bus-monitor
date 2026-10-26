@@ -122,3 +122,61 @@ func TestMarkdownKeepsLineBreaks(t *testing.T) {
 		t.Fatalf("a long line does not wrap, or swallowed the next one: %q", long)
 	}
 }
+
+// A fenced code line longer than the width wraps under its gutter, marked as
+// continued, and is never cut (busmon Charm spec, step a: the one visible
+// change of the step).
+func TestMarkdownWrapsCodeNeverCuts(t *testing.T) {
+	code := "func veryLongFunctionName(argumentOne string, argumentTwo int) (result 日本語の結果, err error) {"
+	got := renderMarkdown("```go\n"+code+"\n```", 30)
+	if len(got) < 3 {
+		t.Fatalf("not wrapped: %q", plainOf(got))
+	}
+	var joined strings.Builder
+	for i, l := range got {
+		text := l.text()
+		if w := Width(text); w > 30 {
+			t.Errorf("line %d is %d cells: %q", i, w, text)
+		}
+		if strings.Contains(text, GlyphEllipsis) {
+			t.Errorf("line %d is cut: %q", i, text)
+		}
+		gutter := "  "
+		if i > 0 {
+			gutter = GlyphArrowR + " "
+		}
+		if !strings.HasPrefix(text, gutter) {
+			t.Errorf("line %d gutter: %q", i, text)
+		}
+		joined.WriteString(strings.TrimPrefix(text, gutter))
+	}
+	if joined.String() != code {
+		t.Fatalf("the code changed:\n%q\n%q", joined.String(), code)
+	}
+	for _, l := range got {
+		for _, s := range l {
+			if s.Role != RoleMuted {
+				t.Fatalf("code is muted, its mark too: %+v", l)
+			}
+		}
+	}
+	// Spaces that fall on a wrap point are code too, and an empty line stays empty.
+	spaced := "abcdefgh    ijklmnop"
+	var back strings.Builder
+	for i, l := range renderMarkdown("```\n"+spaced+"\n\nx\n```", 12) {
+		if i == 2 {
+			if l.text() != "" {
+				t.Fatalf("empty code line: %q", l.text())
+			}
+			break
+		}
+		back.WriteString(strings.TrimPrefix(strings.TrimPrefix(l.text(), "  "), GlyphArrowR+" "))
+	}
+	if back.String() != spaced {
+		t.Fatalf("spaces at the wrap point lost: %q", back.String())
+	}
+	// A short code line keeps its indentation and is not marked.
+	if got := plainOf(renderMarkdown("```\n    x := 1\n```", 30)); got != "      x := 1" {
+		t.Fatalf("short line: %q", got)
+	}
+}

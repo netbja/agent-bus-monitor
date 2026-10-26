@@ -5,7 +5,8 @@ Lot 1 delivered
 Done
 · adapter in d0a72be
 
-  func veryLongFunctionName(argumentOne string, argumentTwo int, argumentThree map[string][]str…
+  func veryLongFunctionName(argumentOne string, argumentTwo int, argumentThree map[string][]stri
+→ ng) (result string, err error) {
       return "", nil
   }
 
