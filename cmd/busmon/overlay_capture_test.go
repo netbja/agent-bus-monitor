@@ -63,6 +63,9 @@ func overlayCaptures(t *testing.T) map[string]string {
 	local := time.Local // bodies print local clock times: pin the zone so a capture is the same anywhere
 	time.Local = time.UTC
 	t.Cleanup(func() { time.Local = local })
+	width := mdWidth // the overlay text width is a global a relayout sets: the captures are at its default
+	mdWidth = 96
+	t.Cleanup(func() { mdWidth = width })
 	ev := func(id, kind, typ, from, target, msg, full string) bus.Event {
 		return bus.Event{ID: id, Kind: kind, Type: typ, From: from, Agent: from, Target: target, Message: msg, Full: full}
 	}

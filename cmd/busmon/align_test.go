@@ -152,10 +152,15 @@ func alignCases() []alignCase {
 // checkFrame asserts one frame's geometry on the simulation screen.
 func checkFrame(t *testing.T, sim tcell.SimulationScreen, name string, r Rect, scrollable bool) {
 	t.Helper()
+	checkFrameAt(t, func(x, y int) string { s, _, _ := sim.Get(x, y); return s }, name, r, scrollable)
+}
+
+// checkFrameAt asserts one frame's geometry on any grid of cells.
+func checkFrameAt(t *testing.T, at func(x, y int) string, name string, r Rect, scrollable bool) {
+	t.Helper()
 	if r.W < 2 || r.H < 2 {
 		return
 	}
-	at := func(x, y int) string { s, _, _ := sim.Get(x, y); return s }
 	x1, y1 := r.X+r.W-1, r.Y+r.H-1
 	for _, c := range []struct {
 		x, y int
@@ -184,8 +189,8 @@ func checkFrame(t *testing.T, sim tcell.SimulationScreen, name string, r Rect, s
 }
 
 func TestAlignmentSuite(t *testing.T) {
-	saved := th
-	defer func() { th = saved }()
+	saved, width := th, mdWidth // relayouts set the overlay width: leave it as found
+	defer func() { th, mdWidth = saved, width }()
 	for _, palette := range []string{"dark", "light", "16", "none"} {
 		var err error
 		name, colors := palette, 1<<24

@@ -133,10 +133,16 @@ var todayFunc = time.Now
 
 // activityRow renders one feed line, event or day separator, in exactly width cells.
 func activityRow(fl feedLine, tier Tier, width int) Line {
+	return activityRowAt(fl, tier, width, todayFunc())
+}
+
+// activityRowAt is activityRow with "(today)" judged at today: the shell's
+// model time, so its rows never read the clock.
+func activityRowAt(fl feedLine, tier Tier, width int, today time.Time) Line {
 	if fl.sep {
 		head := strings.Repeat(glyphHorizontal, 2) + " " + fl.at.Format("Mon 2006-01-02") + " "
 		l := Line{{Text: head, Role: RoleMuted}}
-		if y, m, d := fl.at.Date(); y == todayFunc().Year() && m == todayFunc().Month() && d == todayFunc().Day() {
+		if y, m, d := fl.at.Date(); y == today.Year() && m == today.Month() && d == today.Day() {
 			l = append(l, Seg{Text: "- ", Role: RoleMuted}, Seg{Text: "(today)", Role: RoleOK, Bold: true}, Seg{Text: " ", Role: RoleMuted})
 		}
 		rest := max(0, width-l.Width())

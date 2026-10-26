@@ -107,16 +107,26 @@ func unreadCount(m map[string]mark) int {
 // the agent detail shows as "What <agent> needs from you".
 func (u *ui) classifyWaits() {
 	u.st.mu.Lock()
+	waiting := waitingNames(u.st.agents)
+	u.st.mu.Unlock()
+	u.activityFeed.classifyWaits(waiting)
+}
+
+// waitingNames are the agents that wait for the person or carry the hint.
+func waitingNames(agents map[string]*agentState) []string {
 	var waiting []string
-	for name, a := range u.st.agents {
+	for name, a := range agents {
 		if waitsForPerson(a) || a.forYou {
 			waiting = append(waiting, name)
 		}
 	}
-	u.st.mu.Unlock()
+	return waiting
+}
+
+func (f *activityFeed) classifyWaits(waiting []string) {
 	for _, name := range waiting {
-		if id := lastReportID(name, u.feed); id != "" {
-			u.unread.forPerson[id] = true
+		if id := lastReportID(name, f.feed); id != "" {
+			f.unread.forPerson[id] = true
 		}
 	}
 }
