@@ -39,7 +39,7 @@ type launchFixture struct {
 	execEnv                     []string
 }
 
-const fakeHelp = "--settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan --resume"
+const fakeHelp = "--rules --settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan --resume"
 
 func newLaunchFixture(t *testing.T) *launchFixture {
 	t.Helper()
@@ -50,7 +50,7 @@ func newLaunchFixture(t *testing.T) *launchFixture {
 	must(t, os.WriteFile(filepath.Join(f.skills, "test-skill", "SKILL.md"), []byte("# Test skill\n"), 0o644))
 	must(t, os.WriteFile(filepath.Join(root, "coder.md"), []byte("ROLE INSTRUCTIONS: review $(touch MUST_NOT_EXIST) `literal`\n"), 0o644))
 	must(t, os.MkdirAll(f.bin, 0o755))
-	for _, c := range []string{"claude", "codex", "kimi"} {
+	for _, c := range []string{"claude", "codex", "kimi", "grok"} {
 		f.fake(c, "#!/bin/sh\n[ \"$1\" = --help ] && echo '"+fakeHelp+"'\nexit 0\n")
 	}
 	f.env = []string{
