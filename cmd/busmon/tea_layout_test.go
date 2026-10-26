@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // Every zone of the shell's layout lies on the screen, no two overlap, and
 // every row of the screen belongs to a zone.
@@ -75,5 +78,19 @@ func TestShellLayoutTiers(t *testing.T) {
 	// Narrow: one view at a time, For you first; an unknown view falls back to it.
 	if l := shellLayoutFor(60, 20, c, PanelID(99), PanelActivity); l.Active != PanelForYou || l.ForYou.H == 0 {
 		t.Errorf("narrow default view: %+v", l)
+	}
+}
+
+// For you is sized by its rows without their ages: an age that grows ("9m"
+// to "10m") never moves the split with Agents.
+func TestShellForYouWidthIgnoresAges(t *testing.T) {
+	pinLocal(t)
+	m := fixtureShell(t, 140, 40)
+	m.forYou = []attentionItem{{Rank: rankWait, Key: "wait:x:1", Agent: "x", Text: "short", At: shellNow.Add(-9 * time.Minute)}}
+	at9 := m.counts().ForYouWidth
+	m.now = shellNow.Add(time.Minute) // the same item, now 10m old
+	m.forYou[0].At = shellNow.Add(-9 * time.Minute)
+	if at10 := m.counts().ForYouWidth; at10 != at9 {
+		t.Fatalf("width %d at 9m, %d at 10m", at9, at10)
 	}
 }

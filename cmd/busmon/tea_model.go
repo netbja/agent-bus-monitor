@@ -157,7 +157,7 @@ func (m *Model) counts() shellCounts {
 	names, _ := visibleAgents(m.snap.agents, m.snap.pilot, m.ui.showAll, m.now)
 	w := 0
 	for _, it := range m.forYou {
-		w = max(w, forYouNatural(it, m.now))
+		w = max(w, forYouNatural(it))
 	}
 	return shellCounts{ForYou: len(m.forYou), Agents: len(names), ForYouWidth: w + listGutter + 2}
 }
