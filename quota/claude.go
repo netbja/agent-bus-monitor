@@ -85,10 +85,14 @@ type claudeStore struct {
 }
 
 // MergeWindows applies one statusline reading to the stored windows (spec
-// §5.1): an older reset never replaces; a later one does; the same reset with
-// a different percent replaces, up or down; the same reset and percent keeps
-// the stored observation time; a window absent from the reading stays.
-func MergeWindows(stored map[string]storedWindow, in []Window, now time.Time) (map[string]storedWindow, bool) {
+// §5.1). sourceAt is when the reading was true: the session's last API
+// answer, not the render (see StatuslineSourceAt). An older reset never
+// replaces; a later one does; the same reset with a different percent
+// replaces, up or down, only when its source is newer than the stored one —
+// an idle session keeps rendering the number of its last answer and must not
+// overwrite a later one; the same reset and percent keeps the stored
+// observation time; a window absent from the reading stays.
+func MergeWindows(stored map[string]storedWindow, in []Window, sourceAt time.Time) (map[string]storedWindow, bool) {
 	out := make(map[string]storedWindow, len(stored)+len(in))
 	for k, v := range stored {
 		out[k] = v
@@ -97,12 +101,40 @@ func MergeWindows(stored map[string]storedWindow, in []Window, now time.Time) (m
 	for _, w := range in {
 		old, ok := out[w.Name]
 		switch {
-		case !ok, w.ResetsAt > old.ResetsAt, w.ResetsAt == old.ResetsAt && w.UsedPct != old.UsedPct:
-			out[w.Name] = storedWindow{Window: w, ObservedAt: now.UnixMilli()}
+		case !ok, w.ResetsAt > old.ResetsAt,
+			w.ResetsAt == old.ResetsAt && w.UsedPct != old.UsedPct && sourceAt.UnixMilli() > old.ObservedAt:
+			out[w.Name] = storedWindow{Window: w, ObservedAt: sourceAt.UnixMilli()}
 			changed = true
 		}
 	}
 	return out, changed
+}
+
+// StatuslineSourceAt dates a statusline stdin: Claude Code renders the
+// windows of the session's last API answer, so the reading was true at that
+// answer — the newest real answer in the session's transcript, else the
+// transcript's mtime, else now (no transcript named or readable).
+func StatuslineSourceAt(stdin []byte, now time.Time) time.Time {
+	var in struct {
+		TranscriptPath string `json:"transcript_path"`
+	}
+	if json.Unmarshal(stdin, &in) != nil || in.TranscriptPath == "" {
+		return now
+	}
+	st, err := os.Stat(in.TranscriptPath)
+	if err != nil || !st.Mode().IsRegular() {
+		return now
+	}
+	var served int64
+	for _, line := range tailLines(in.TranscriptPath, 256<<10) {
+		if at := servedAt(line); at > served {
+			served = at
+		}
+	}
+	if served > 0 {
+		return time.UnixMilli(served)
+	}
+	return st.ModTime()
 }
 
 // ClaudeCachePath is the statusline file: $XDG_CACHE_HOME/agentbus or
@@ -118,18 +150,20 @@ func CacheDir() string {
 	return filepath.Join(home, ".cache", "agentbus")
 }
 
-// RecordStatusline merges one statusline stdin into the file, under a lock.
+// RecordStatusline merges one statusline stdin into the file, under a lock,
+// dated by StatuslineSourceAt.
 func RecordStatusline(path string, stdin []byte, now time.Time) error {
 	ws, err := ParseStatusline(stdin)
 	if err != nil || len(ws) == 0 {
 		return err
 	}
+	sourceAt := StatuslineSourceAt(stdin, now) // read outside the lock
 	return withLock(path, func() error {
 		var st claudeStore
 		if b, err := os.ReadFile(path); err == nil {
 			_ = json.Unmarshal(b, &st)
 		}
-		merged, changed := MergeWindows(st.Windows, ws, now)
+		merged, changed := MergeWindows(st.Windows, ws, sourceAt)
 		if !changed {
 			return nil
 		}

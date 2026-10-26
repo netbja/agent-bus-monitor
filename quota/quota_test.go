@@ -328,3 +328,67 @@ func TestClaudeBackstopIsBoundToItsConfigDir(t *testing.T) {
 		t.Fatalf("another config dir's answer voided the hit: %+v", r)
 	}
 }
+
+// slSession is a statusline stdin from one session, with its transcript.
+func slSession(transcript string, sevenD float64, reset7 int64) []byte {
+	b, _ := json.Marshal(map[string]any{"transcript_path": transcript,
+		"rate_limits": map[string]any{"seven_day": map[string]any{"used_percentage": sevenD, "resets_at": reset7}}})
+	return b
+}
+
+// An idle session keeps rendering the number it got from its last answer. It
+// must not overwrite a reading another session got from a later answer: the
+// file used to flip between the two at every render, re-pausing the project.
+func TestStatuslineIdleSessionNeverOverwritesANewerReading(t *testing.T) {
+	dir := t.TempDir()
+	cache := filepath.Join(dir, "quota-claude.json")
+	reset7 := t0.Add(72 * time.Hour).Unix()
+	transcript := func(name, at string) string {
+		p := filepath.Join(dir, name+".jsonl")
+		os.WriteFile(p, []byte(`{"type":"user","timestamp":"2026-10-15T23:59:00Z"}`+"\n"+
+			`{"type":"assistant","timestamp":"`+at+`","message":{"model":"claude-opus-5-5","content":"secret"}}`+"\n"), 0o600)
+		return p
+	}
+	idle := transcript("idle", "2026-10-15T20:00:00Z")     // last answered at 20:00: saw 95 %
+	active := transcript("active", "2026-10-15T21:50:00Z") // answered at 21:50: sees 0 %
+	seven := func() storedWindow {
+		var st claudeStore
+		b, _ := os.ReadFile(cache)
+		json.Unmarshal(b, &st)
+		return st.Windows["7d"]
+	}
+	if err := RecordStatusline(cache, slSession(active, 0, reset7), t0); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 3; i++ { // the idle session renders again and again
+		RecordStatusline(cache, slSession(idle, 95, reset7), t0.Add(time.Duration(i)*10*time.Second))
+		if w := seven(); w.UsedPct != 0 || w.ObservedAt != time.Date(2026, 10, 15, 21, 50, 0, 0, time.UTC).UnixMilli() {
+			t.Fatalf("render %d of the idle session overwrote the newer reading: %+v", i, w)
+		}
+	}
+	// A later answer in the idle session is newer evidence: it replaces.
+	transcript("idle", "2026-10-15T21:58:00Z")
+	RecordStatusline(cache, slSession(idle, 96, reset7), t0.Add(time.Minute))
+	if w := seven(); w.UsedPct != 96 || w.ObservedAt != time.Date(2026, 10, 15, 21, 58, 0, 0, time.UTC).UnixMilli() {
+		t.Fatalf("a newer answer did not replace: %+v", w)
+	}
+}
+
+// Without a transcript answer the reading is dated by the transcript's
+// mtime, and without a transcript at all by the render time.
+func TestStatuslineSourceTime(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "s.jsonl")
+	os.WriteFile(p, []byte(`{"type":"user","timestamp":"2026-10-15T21:00:00Z"}`+"\n"), 0o600)
+	mtime := t0.Add(-time.Hour)
+	os.Chtimes(p, mtime, mtime)
+	if got := StatuslineSourceAt(slSession(p, 1, 1), t0); !got.Equal(mtime) {
+		t.Fatalf("no answer: %v, want the mtime %v", got, mtime)
+	}
+	if got := StatuslineSourceAt(slSession(filepath.Join(dir, "gone.jsonl"), 1, 1), t0); !got.Equal(t0) {
+		t.Fatalf("missing transcript: %v, want now", got)
+	}
+	if got := StatuslineSourceAt(slInput(1, 1, 1, 1), t0); !got.Equal(t0) {
+		t.Fatalf("no transcript_path: %v, want now", got)
+	}
+}
