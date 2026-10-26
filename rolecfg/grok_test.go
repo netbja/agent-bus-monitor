@@ -23,10 +23,14 @@ func TestLaunchGrok(t *testing.T) {
 	if v, _ := envOf(f.execEnv, "AGENT_BUS_CLIENT"); v != "grok" {
 		t.Fatalf("AGENT_BUS_CLIENT=%q", v)
 	}
-	m = f.config("grok", "", "", "")
-	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")
-	if err != nil || !strings.Contains(out, "grok --model test-model --rules '<role prompt and skill paths>'\n") {
-		t.Fatalf("dry run = %q %v", out, err)
+	// default is passed too: grok's own config (permission_mode = "always-approve" in
+	// ~/.grok/config.toml) must never decide for a profile that says default.
+	for _, opts := range []string{"", "[profiles.main.options]\npermission = \"default\""} {
+		m = f.config("grok", "", "", opts)
+		out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")
+		if err != nil || !strings.Contains(out, "grok --model test-model --permission-mode default --rules '<role prompt and skill paths>'\n") {
+			t.Fatalf("dry run (%q) = %q %v", opts, out, err)
+		}
 	}
 }
 
@@ -79,11 +83,14 @@ func TestGrokElevatedResumeAndRules(t *testing.T) {
 	}
 }
 
-// A grok whose --help lacks --rules is refused before anything is written.
+// A grok whose --help lacks --rules or --permission-mode is refused before
+// anything is written: a default profile passes --permission-mode too.
 func TestPreflightGrok(t *testing.T) {
 	f := newLaunchFixture(t)
-	f.fake("grok", "#!/bin/sh\necho '"+strings.Replace(fakeHelp, "--rules ", "", 1)+"'\n")
-	if _, _, err := f.launch(f.config("grok", "", "", ""), "coder"); err == nil || err.Error() != "grok lacks required launch flags; inspect its version/help" {
-		t.Fatalf("grok without --rules: %v", err)
+	for _, flag := range []string{"--rules ", "--permission-mode "} {
+		f.fake("grok", "#!/bin/sh\necho '"+strings.Replace(fakeHelp, flag, "", 1)+"'\n")
+		if _, _, err := f.launch(f.config("grok", "", "", ""), "coder"); err == nil || err.Error() != "grok lacks required launch flags; inspect its version/help" {
+			t.Fatalf("grok without %s: %v", flag, err)
+		}
 	}
 }

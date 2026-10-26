@@ -335,10 +335,13 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 		}
 		return cmd, nil
 	case "grok":
-		cmd := []string{"grok", "--model", model}
-		if perm := opts["permission"]; perm != "" && perm != "default" {
-			cmd = append(cmd, "--permission-mode", perm)
+		// Always explicit, default included: grok otherwise takes the mode of the
+		// user's ~/.grok/config.toml (permission_mode = "always-approve" is common).
+		perm := opts["permission"]
+		if perm == "" {
+			perm = "default"
 		}
+		cmd := []string{"grok", "--model", model, "--permission-mode", perm}
 		// --rules appends to grok's system prompt, like Claude's --append-system-prompt.
 		if dry {
 			return append(cmd, "--rules", "<role prompt and skill paths>"), nil
@@ -382,7 +385,7 @@ func preflight(p Profile, rules ToolRules, resume bool, e *envMap) error {
 		"claude-code": {"--model", "--append-system-prompt", "--name"},
 		"codex":       {"--model", "--config", "--sandbox", "--ask-for-approval"},
 		"kimi-cli":    {"--model", "--agent-file"},
-		"grok":        {"--model", "--rules"},
+		"grok":        {"--model", "--rules", "--permission-mode"},
 	}[p.Client]
 	perm := p.Options["permission"]
 	if p.Client == "claude-code" {
@@ -402,9 +405,6 @@ func preflight(p Profile, rules ToolRules, resume bool, e *envMap) error {
 	}
 	if p.Client == "kimi-cli" && perm != "" && perm != "default" {
 		needed = append(needed, "--"+perm)
-	}
-	if p.Client == "grok" && perm != "" && perm != "default" {
-		needed = append(needed, "--permission-mode")
 	}
 	for _, flag := range needed {
 		if !strings.Contains(string(out), flag) {

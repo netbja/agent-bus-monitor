@@ -82,7 +82,9 @@ Optional native permissions live in `profiles.<name>.options`:
 - Codex: `sandbox` (default `read-only`), `approval` (default `on-request`).
 - Kimi: `permission` (`default`, `yolo`, `auto`, `plan`); default omits the flag.
 - Grok: `permission` (`default`, `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`, `plan`,
-  passed as `--permission-mode`); default omits the flag. `--sandbox` and `--always-approve` are
+  passed as `--permission-mode`, **always**, `default` included: grok otherwise takes the mode of
+  the user's `~/.grok/config.toml`, where `permission_mode = "always-approve"` is common and would
+  silently replace the profile's `default`. `--sandbox` and `--always-approve` are
   not exposed, and `tool_rules` are not applied (Claude Code only). Resume is refused, as for the
   other non-Claude clients.
 
