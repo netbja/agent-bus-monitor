@@ -20,7 +20,7 @@ type headerData struct {
 	self     string            // the person busmon writes as (humanLabel); "" = not shown
 	update   string            // a newer release tag ("" = none): the last, lowest-priority item
 	note     string            // non-fatal local settings note
-	waiting  string            // waitingLine: "3 waiting · oldest 42m", "" when nothing waits
+	waiting  string            // waitingText: "3 waiting · oldest 42m", "" when nothing waits
 	asks     int               // agents in state waiting: decisions a person owes
 	unread   int               // Activity entries for the person not opened yet (unread.go)
 	pause    *bus.PauseRecord  // the project pause, nil when not paused
