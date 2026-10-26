@@ -929,7 +929,7 @@ func pyFloat(f float64) string {
 
 // elevated names the builtin options that take a client out of its safe
 // defaults ("" when none): Claude without permission prompts, Codex with full
-// disk access or no approvals, Kimi in yolo mode, Grok without permission prompts.
+// disk access or no approvals, Kimi in yolo or auto mode, Grok without permission prompts.
 func elevated(p Profile, rules ToolRules) string {
 	var parts []string
 	switch p.Client {
@@ -947,9 +947,9 @@ func elevated(p Profile, rules ToolRules) string {
 		if p.Options["approval"] == "never" {
 			parts = append(parts, "approval=never")
 		}
-	case "kimi-cli":
-		if p.Options["permission"] == "yolo" {
-			parts = append(parts, "permission=yolo")
+	case "kimi-cli": // --yolo asks only for risky actions; --auto ("Never Ask") never asks
+		if perm := p.Options["permission"]; perm == "yolo" || perm == "auto" {
+			parts = append(parts, "permission="+perm)
 		}
 	case "grok":
 		if perm := p.Options["permission"]; perm == "bypassPermissions" || perm == "dontAsk" {

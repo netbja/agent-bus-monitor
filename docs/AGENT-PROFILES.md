@@ -99,7 +99,7 @@ or the profile names it as an `env_refs` target. Native base URL/token variables
 available. `env_refs` cannot set the dynamic-linker, shell, interpreter or git hook
 variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG*`, `PYTHON*`, editors and pagers, …)
 nor `HERDR_*`. A profile with elevated options (`bypassPermissions`, `dontAsk`, `danger-full-access`,
-`approval = "never"`, `yolo`) is announced on stderr before the client starts. Optional profile
+`approval = "never"`, Kimi's `yolo` and `auto`) is announced on stderr before the client starts. Optional profile
 `env_refs` maps target environment variable names to existing source variable names
 without storing their values in the manifest:
 
