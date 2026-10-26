@@ -266,16 +266,33 @@ receives `Environ()`. None receives `os.Getenv` or `os.Environ()`.
 | service run (`servicerun.go`) | `AGENT_BUS_ESCALATE_TO` | **project** |
 | quota knobs (`quotacmd.go` `serviceQuota`) | `AGENT_BUS_QUOTA`, `_WARN`, `_HOLD`, `_MAX_AGE`, `_LONG_HOLD` | **project** (policy). The readers' configuration is host-wide (below) |
 | health (`healthchecks.go`) `redis-password` | `REDIS_HOST`, `REDIS_PASSWORD_FILE`, `LegacyPasswordInUse(os.Getenv)` | **project** (per broker) |
-| health `installed-versions` | `herdrBin(os.Getenv)`, `repoDir(os.Getenv)`, `manifestPath(os.Environ())`, `skillsMatch(os.Environ())` | **project** for herdr bin and manifest (a project's `AGENTBUS_ROLES_TOML`). **Host** for the agentbus repo (`AGENTBUS_REPO`) |
+| health `installed-versions` | `herdrBin(os.Getenv)`, `repoDir(os.Getenv)`, `manifestPath(os.Environ())`, `skillsMatch(os.Environ())` | **project** for herdr bin and manifest (`ROLES_TOML`, see the manifest note below). **Host** for the agentbus repo (`AGENTBUS_REPO`) |
 | health `tracked-secrets` | `os.Getwd()` | **project**: `AGENTBUS_PROJECT_DIR` |
 | health `runaway` | `runawayThresholdsFromEnv(os.Getenv)` | **project** |
-| health `agent-launch` (`healthchecks.go`, `manifestPath(os.Environ())`) | `AGENTBUS_ROLES_TOML` and the manifest lookup it drives | **project**: the project's roles manifest, via `Environ()` |
+| health `agent-launch` (`healthchecks.go`, `manifestPath(os.Environ())`) | `ROLES_TOML`, else `AGENTBUS_REPO`/the binary's directory (`roles.go` `manifestPath`) | **project** `ROLES_TOML`, via `Environ()`; its built-in default is today's host resolution |
 | health `model-drift` (`healthchecks.go`, `realDoctorDeps(os.Environ())`) | the manifest path as above | **project**, via `Environ()` |
 | `realDoctorDeps` (`doctor.go`) | `os.Getenv("CLAUDE_CONFIG_DIR")` (transcript root) | **host**, like the quota readers. It is read inside `realDoctorDeps`, so the function moves into the static test's scope and takes the value from its caller |
 | health builder (`realHealthConfig`), `dispatchcmd.go` | `service.Detect`/`ManagerBin`/`PathsFrom(os.Getenv)`: `AGENTBUS_SERVICE_MANAGER`, `XDG_*`, `HOME` | **host** |
 | stream caps (`bus/bus.go`) | `AGENT_BUS_REPORT_MAX`, `AGENT_BUS_VERDICT_MAX`, `AGENT_BUS_REPORT_FULL_MAX` | **host**: read from the process. A project env file that sets one gets a warning in its log: per-project caps are not supported under the host dispatcher |
 | quota readers (`quota/config.go`, `quota/claude.go`) | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` | **host**: the shared collector. A project env file that sets one is **ignored with a warning** in that project's log (the collector reads one set of sources for the host), never refused: refusing would disable dispatch for a setting that changes nothing in that project's policy |
 | health `herdr-probe` | the runtime | **project**: the project's own session-bound runtime |
+
+**The roles manifest.** `manifestPath` reads `ROLES_TOML`, else `<AGENTBUS_REPO or the binary's
+directory>/roles.toml`. No `services/<p>.env` carries `ROLES_TOML` today (they hold `HERDR_*`,
+`LANG`, `PATH`), so the dispatcher's manifest is resolved host-wide today. Under the host
+dispatcher, `ROLES_TOML` is project-scoped: `up` adds it to the keys it records (`CollectEnv`) when
+its own environment sets it. When it is unset, the built-in default is exactly today's resolution
+(`AGENTBUS_REPO`, host-scoped, else the binary's directory), so a project without it behaves as it
+does now. The two-project manifest test therefore has one project with `ROLES_TOML` set and one
+without, resolving to the host default.
+
+**`PATH`, `LANG` and other process keys in project files.** Today's env files carry `PATH` and
+`LANG`, and the missions unit still loads them from the same file: the conductor needs the
+project's `PATH` to run its tests. They stay in the project file for that reason. The host
+dispatcher treats them as host-only: it never reads them from a project file, without a warning,
+because every existing file has them and they are still meaningful to the conductor. The warning
+is kept for host-scoped keys that only the dispatcher would have read (stream caps, quota reader
+locations).
 
 The host env file (`services/host.env`, same rules) holds what belongs to the process: `PATH`,
 `LANG`, `XDG_*`, `HOME`-derived paths, the stream caps, the quota readers' locations, and the
