@@ -67,6 +67,7 @@ func (f *launchFixture) fake(name, body string) {
 
 func (f *launchFixture) config(client, extra, roles, options string) *Manifest {
 	f.t.Helper()
+	options = claudePermission(client, options)
 	body := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"" + client +
 		"\"\nprovider = \"test-provider\"\nmodel = \"test-model\"\n" + extra + "\n" + options +
 		"\n[roles.coder]\ntier = \"boot\"\nskills = [\"test-skill\"]\n" + roles + "\n"
@@ -704,4 +705,17 @@ func TestLaunchExportsTheClientFingerprint(t *testing.T) {
 	if changed, known := fp.Changed(); changed || !known {
 		t.Fatalf("a fresh fingerprint reads changed=%v known=%v", changed, known)
 	}
+}
+
+// claudePermission names a mode for a Claude profile that does not (a
+// manifest must: claudePermissionMissing). manual is the mode that adds the
+// least: it asks for everything.
+func claudePermission(client, options string) string {
+	if client != "claude-code" || strings.Contains(options, "permission") {
+		return options
+	}
+	if options == "" {
+		options = "[profiles.main.options]"
+	}
+	return options + "\npermission = \"manual\""
 }

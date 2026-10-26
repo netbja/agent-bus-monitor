@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -64,7 +65,7 @@ tier = "boot"
 }
 
 func TestRolesByTierPreservesInlineTableOrder(t *testing.T) {
-	path := writeConfig(t, `roles = { zed = { model = "z", tier = "boot" }, alpha = { model = "a", tier = "pop" } }
+	path := writeConfig(t, `roles = { zed = { model = "z", tier = "boot", permission = "manual" }, alpha = { model = "a", tier = "pop", permission = "manual" } }
 `)
 	m, err := Load(path)
 	if err != nil {
@@ -233,13 +234,9 @@ func TestResolveLegacyRoleRequiresPermission(t *testing.T) {
 model = "opus"
 tier = "boot"
 `)
-	m, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = m.Resolve("x")
-	if err == nil || err.Error() != "claude-code option permission must be a non-empty string without control characters" {
-		t.Fatalf("Resolve legacy role without permission error = %v", err)
+	// Refused at load since a Claude role must name its mode (claudePermissionMissing).
+	if _, err := Load(path); err == nil || !strings.HasPrefix(err.Error(), "role x: Claude Code needs an explicit permission") {
+		t.Fatalf("Load legacy role without permission error = %v", err)
 	}
 }
 
@@ -326,13 +323,13 @@ func TestLoadRefusals(t *testing.T) {
 		{"unsupported Claude option", base("client=\"claude-code\"\nprovider=\"anthropic\"\nmodel=\"m\"\n[profiles.p.options]\nsandbox=\"read-only\"\n", "", ""), "unknown fields in Claude options: sandbox"},
 		{"Claude permission", base("client=\"claude-code\"\nprovider=\"anthropic\"\nmodel=\"m\"\n[profiles.p.options]\npermission=\"yolo\"\n", "", ""), "unsupported Claude permission"},
 		{"Claude fallback type", base("client=\"claude-code\"\nprovider=\"anthropic\"\nmodel=\"m\"\n[profiles.p.options]\nfallback=1\n", "", ""), "claude-code option fallback must be a non-empty string without control characters"},
-		{"Claude fallback valid type", base("client=\"claude-code\"\nprovider=\"anthropic\"\nmodel=\"m\"\nreasoning=\"standard\"\nreasoning_levels=[\"standard\"]\n[profiles.p.options]\nfallback=\"sonnet\"\n", "", ""), "unsupported Claude reasoning level"},
+		{"Claude fallback valid type", base("client=\"claude-code\"\nprovider=\"anthropic\"\nmodel=\"m\"\nreasoning=\"standard\"\nreasoning_levels=[\"standard\"]\n[profiles.p.options]\nfallback=\"sonnet\"\npermission=\"manual\"\n", "", ""), "unsupported Claude reasoning level"},
 		{"Codex sandbox", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\n[profiles.p.options]\nsandbox=\"full\"\n", "", ""), "unsupported Codex sandbox"},
 		{"Codex approval", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\n[profiles.p.options]\napproval=\"ask\"\n", "", ""), "unsupported Codex approval"},
 		{"Codex reasoning", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\nreasoning=\"standard\"\nreasoning_levels=[\"standard\"]\n", "", ""), "unsupported Codex reasoning level"},
 		{"Kimi unknown option", base("client=\"kimi-cli\"\nprovider=\"moonshot\"\nmodel=\"alias\"\n[profiles.p.options]\nsandbox=\"read-only\"\n", "", ""), "unknown fields in Kimi options: sandbox"},
 		{"Kimi permission", base("client=\"kimi-cli\"\nprovider=\"moonshot\"\nmodel=\"alias\"\n[profiles.p.options]\npermission=\"bypass\"\n", "", ""), "unsupported Kimi permission"},
-		{"unsupported reasoning level", base("client=\"claude-code\"\nprovider=\"anthropic\"\nmodel=\"m\"\nreasoning=\"minimal\"\nreasoning_levels=[\"minimal\"]\n", "", ""), "unsupported Claude reasoning level"},
+		{"unsupported reasoning level", base("client=\"claude-code\"\nprovider=\"anthropic\"\nmodel=\"m\"\nreasoning=\"minimal\"\nreasoning_levels=[\"minimal\"]\n[profiles.p.options]\npermission=\"manual\"\n", "", ""), "unsupported Claude reasoning level"},
 		{"Kimi cannot override reasoning", base("client=\"kimi-cli\"\nprovider=\"moonshot\"\nmodel=\"alias\"\nreasoning=\"low\"\nreasoning_levels=[\"low\"]\n", "", ""), "kimi-cli adapter has no verified reasoning override; omit reasoning and configure the native model alias"},
 		{"invalid env ref", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\nenv_refs={bad=\"TEAM\"}\n", "", ""), "env_refs must map environment variable names to source variable names"},
 		{"forbidden env ref", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\nenv_refs={PATH=\"TEAM\"}\n", "", ""), "env_refs cannot override launcher identity or process controls"},
@@ -370,10 +367,10 @@ func TestFallbackProfiles(t *testing.T) {
 	head := "schema_version = 2\n[defaults]\nprofile = \"main\"\n" +
 		"[profiles.main]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m\"\n" +
 		"[profiles.twin]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m2\"\n" +
-		"[profiles.opus]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\n" +
+		"[profiles.opus]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\noptions = { permission = \"manual\" }\n" +
 		"[profiles.k]\nclient = \"kimi-cli\"\nprovider = \"moonshot\"\nmodel = \"alias\"\n" +
-		"[profiles.g]\nclient = \"claude-code\"\nprovider = \"other\"\nmodel = \"x\"\n" +
-		"[profiles.h]\nclient = \"claude-code\"\nprovider = \"third\"\nmodel = \"y\"\n"
+		"[profiles.g]\nclient = \"claude-code\"\nprovider = \"other\"\nmodel = \"x\"\noptions = { permission = \"manual\" }\n" +
+		"[profiles.h]\nclient = \"claude-code\"\nprovider = \"third\"\nmodel = \"y\"\noptions = { permission = \"manual\" }\n"
 	role := func(fb string) string {
 		return head + "[roles.foureyes]\ntier = \"pop\"\nskills = [\"s\"]\nfallback_profiles = " + fb + "\n"
 	}

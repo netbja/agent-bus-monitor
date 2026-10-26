@@ -78,7 +78,12 @@ model through a different client is a separate configuration.**
 
 Optional native permissions live in `profiles.<name>.options`:
 
-- Claude: `permission` (`default` omits the flag), optional `fallback` model.
+- Claude: `permission` is **required**, one of `acceptEdits`, `auto`, `bypassPermissions`,
+  `manual`, `dontAsk`, `plan`, passed as `--permission-mode`; optional `fallback` model. A Claude
+  profile without one, or with `default`, is refused when the manifest loads: claude has no
+  `default` mode to pass, so it would fall back to `permissions.defaultMode` in the user's
+  `~/.claude/settings.json`, which would then decide silently (it can be `auto`). `manual` asks
+  for everything. A schema 1 role names it on the role.
 - Codex: `sandbox` (default `read-only`), `approval` (default `on-request`).
 - Kimi: `permission` (`default`, `yolo`, `auto`, `plan`); default omits the flag.
 - Grok: `permission` (`default`, `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`, `plan`,

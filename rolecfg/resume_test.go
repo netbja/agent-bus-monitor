@@ -87,8 +87,8 @@ func TestResumeHookQuotesItsPaths(t *testing.T) {
 
 func TestLaunchProfileAndResumeTogether(t *testing.T) {
 	f := newLaunchFixture(t)
-	body := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"claude-code\"\nprovider = \"p\"\nmodel = \"m\"\n" +
-		"[profiles.alt]\nclient = \"claude-code\"\nprovider = \"q\"\nmodel = \"alt-model\"\n[roles.coder]\ntier = \"boot\"\nskills = [\"test-skill\"]\n"
+	body := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"claude-code\"\nprovider = \"p\"\nmodel = \"m\"\noptions = { permission = \"manual\" }\n" +
+		"[profiles.alt]\nclient = \"claude-code\"\nprovider = \"q\"\nmodel = \"alt-model\"\noptions = { permission = \"manual\" }\n[roles.coder]\ntier = \"boot\"\nskills = [\"test-skill\"]\n"
 	must(t, os.WriteFile(f.manifest, []byte(body), 0o644))
 	m, err := Load(f.manifest)
 	must(t, err)

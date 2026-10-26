@@ -103,6 +103,7 @@ func TestTabClient(t *testing.T) {
 client = "claude-code"
 provider = "anthropic"
 model = "sonnet"
+options = { permission = "manual" }
 [profiles.review]
 client = "codex"
 provider = "openai"
