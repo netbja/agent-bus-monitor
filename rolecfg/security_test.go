@@ -51,6 +51,8 @@ func TestElevatedPermissionsAreAnnounced(t *testing.T) {
 		{"claude-code", "[profiles.main.options]\npermission = \"bypassPermissions\"", "permission=bypassPermissions"},
 		{"codex", "[profiles.main.options]\nsandbox = \"danger-full-access\"\napproval = \"never\"", "sandbox=danger-full-access approval=never"},
 		{"kimi-cli", "[profiles.main.options]\npermission = \"yolo\"", "permission=yolo"},
+		// kimi --help: --auto is "Never Ask mode", more permissive than --yolo.
+		{"kimi-cli", "[profiles.main.options]\npermission = \"auto\"", "permission=auto"},
 	} {
 		m := f.config(c.client, "", "", c.options)
 		_, errOut, err := f.launch(m, "coder")
@@ -61,6 +63,10 @@ func TestElevatedPermissionsAreAnnounced(t *testing.T) {
 	m := f.config("codex", "", "", "")
 	if _, errOut, _ := f.launch(m, "coder"); strings.Contains(errOut, "elevated") {
 		t.Fatalf("default sandbox announced as elevated: %q", errOut)
+	}
+	m = f.config("kimi-cli", "", "", "[profiles.main.options]\npermission = \"plan\"")
+	if _, errOut, _ := f.launch(m, "coder"); strings.Contains(errOut, "elevated") {
+		t.Fatalf("kimi plan announced as elevated: %q", errOut)
 	}
 }
 

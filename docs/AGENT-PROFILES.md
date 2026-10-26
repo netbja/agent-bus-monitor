@@ -82,7 +82,9 @@ Optional native permissions live in `profiles.<name>.options`:
 - Codex: `sandbox` (default `read-only`), `approval` (default `on-request`).
 - Kimi: `permission` (`default`, `yolo`, `auto`, `plan`); default omits the flag.
 - Grok: `permission` (`default`, `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`, `plan`,
-  passed as `--permission-mode`); default omits the flag. `--sandbox` and `--always-approve` are
+  passed as `--permission-mode`, **always**, `default` included: grok otherwise takes the mode of
+  the user's `~/.grok/config.toml`, where `permission_mode = "always-approve"` is common and would
+  silently replace the profile's `default`. `--sandbox` and `--always-approve` are
   not exposed, and `tool_rules` are not applied (Claude Code only). Resume is refused, as for the
   other non-Claude clients.
 
@@ -97,7 +99,7 @@ or the profile names it as an `env_refs` target. Native base URL/token variables
 available. `env_refs` cannot set the dynamic-linker, shell, interpreter or git hook
 variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG*`, `PYTHON*`, editors and pagers, …)
 nor `HERDR_*`. A profile with elevated options (`bypassPermissions`, `dontAsk`, `danger-full-access`,
-`approval = "never"`, `yolo`) is announced on stderr before the client starts. Optional profile
+`approval = "never"`, Kimi's `yolo` and `auto`) is announced on stderr before the client starts. Optional profile
 `env_refs` maps target environment variable names to existing source variable names
 without storing their values in the manifest:
 
