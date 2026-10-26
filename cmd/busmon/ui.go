@@ -60,8 +60,7 @@ type ui struct {
 	project, self  string
 	settings       busmonSettings
 	cache          *busmonCache
-	unread         unreadState // the person's unread marks (unread.go); UI goroutine only
-	unreadN        int         // unread entries at the last fill, for the header
+	unreadN        int // unread entries at the last fill, for the header
 	cachePath      string
 	reminders      []attentionItem
 	reminderIndex  int
@@ -111,9 +110,7 @@ type ui struct {
 	bell          func()            // rings the terminal bell; nil = the screen's Beep
 	animate       atomic.Bool       // an agent is waiting: the fade ticker redraws ~10 times a second
 
-	feed         []feedLine
-	seq          int
-	lastDay      string
+	activityFeed // the Activity lines and the person's unread marks; UI goroutine only
 	filter       feedFilter
 	pause        pauseCursor
 	detailGen    int
@@ -1010,39 +1007,53 @@ func (u *ui) openMessage(e bus.Event, at time.Time) {
 
 // ingest folds one stream event into the shared model. It runs on the tail
 // goroutine; appendEvent (UI goroutine) adds it to the feed.
-func (u *ui) ingest(e bus.Event) {
+func (u *ui) ingest(e bus.Event) { ingestEvent(u.st, e) }
+
+// ingestEvent folds a tailed status or report into the agents' states.
+func ingestEvent(st *shared, e bus.Event) {
 	if e.Kind != "status" && e.Kind != "report" {
 		return
 	}
 	et := entryTime(e.ID)
-	u.st.mu.Lock()
-	defer u.st.mu.Unlock()
-	a := u.st.agents[e.Agent]
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	a := st.agents[e.Agent]
 	if a == nil {
 		a = &agentState{}
-		u.st.agents[e.Agent] = a
+		st.agents[e.Agent] = a
 	}
 	// A report proves the process is alive; it never refreshes the declared
 	// state or the message beside it.
 	if e.Kind == "status" {
-		declare(a, e.State, e.Message, u.st.person)
+		declare(a, e.State, e.Message, st.person)
 		a.stateAt = et
 	}
 	a.lastSeen = et
 }
 
-// appendEvent adds one event to the feed (with a day separator on a date
+func (u *ui) appendEvent(e bus.Event) { u.activityFeed.add(e, u.self) }
+
+// activityFeed is the Activity panel's lines, shared by the tview screen and
+// the Elm shell: the tail's events, day separators and the unread marks.
+type activityFeed struct {
+	feed    []feedLine
+	seq     int
+	lastDay string
+	unread  unreadState // the person's unread marks (unread.go)
+}
+
+// add appends one event to the feed (with a day separator on a date
 // change), keeping the last feedCap lines.
-func (u *ui) appendEvent(e bus.Event) {
+func (f *activityFeed) add(e bus.Event, self string) {
 	et := entryTime(e.ID)
-	if day := et.Format("2006-01-02"); day != u.lastDay {
-		u.lastDay = day
-		u.seq++
+	if day := et.Format("2006-01-02"); day != f.lastDay {
+		f.lastDay = day
+		f.seq++
 		_, plain := daySeparator(et)
-		u.feed = append(u.feed, feedLine{id: strconv.Itoa(u.seq), seq: u.seq, sep: true, text: plain, at: et})
+		f.feed = append(f.feed, feedLine{id: strconv.Itoa(f.seq), seq: f.seq, sep: true, text: plain, at: et})
 	}
-	if last := len(u.feed) - 1; last >= 0 && sameFanOut(u.feed[last], e, et) {
-		fl := &u.feed[last]
+	if last := len(f.feed) - 1; last >= 0 && sameFanOut(f.feed[last], e, et) {
+		fl := &f.feed[last]
 		if len(fl.to) == 0 {
 			fl.to = []string{fl.ev.Target}
 		}
@@ -1050,14 +1061,14 @@ func (u *ui) appendEvent(e bus.Event) {
 		fl.text = plainLine(fl.ev, fl.at) + " (+" + strconv.Itoa(len(fl.to)-1) + " more)"
 		return
 	}
-	if personEntry(e, u.self) {
-		u.unread.forPerson[e.ID] = true
+	if personEntry(e, self) {
+		f.unread.forPerson[e.ID] = true
 	}
-	u.seq++
-	fl := feedLine{id: strconv.Itoa(u.seq), seq: u.seq, text: plainLine(e, et), ev: e, at: et}
-	u.feed = append(u.feed, fl)
-	if len(u.feed) > feedCap {
-		u.feed = u.feed[len(u.feed)-feedCap:]
+	f.seq++
+	fl := feedLine{id: strconv.Itoa(f.seq), seq: f.seq, text: plainLine(e, et), ev: e, at: et}
+	f.feed = append(f.feed, fl)
+	if len(f.feed) > feedCap {
+		f.feed = f.feed[len(f.feed)-feedCap:]
 	}
 }
 
