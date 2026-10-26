@@ -86,24 +86,28 @@ type claudeStore struct {
 
 // MergeWindows applies one statusline reading to the stored windows (spec
 // §5.1). sourceAt is when the reading was true: the session's last API
-// answer, not the render (see StatuslineSourceAt). An older reset never
-// replaces; a later one does; the same reset with a different percent
-// replaces, up or down, only when its source is newer than the stored one —
-// an idle session keeps rendering the number of its last answer and must not
-// overwrite a later one; the same reset and percent keeps the stored
-// observation time; a window absent from the reading stays.
-func MergeWindows(stored map[string]storedWindow, in []Window, sourceAt time.Time) (map[string]storedWindow, bool) {
+// answer, not the render (see StatuslineSourceAt); zero = undated, stamped
+// now. An older reset never replaces; a later one does; the same reset with
+// a different percent replaces, up or down, only from a dated source newer
+// than the stored one — an idle session keeps rendering the number of its
+// last answer and must not overwrite a later one; the same reset and percent
+// keeps the stored observation time; a window absent from the reading stays.
+func MergeWindows(stored map[string]storedWindow, in []Window, sourceAt, now time.Time) (map[string]storedWindow, bool) {
 	out := make(map[string]storedWindow, len(stored)+len(in))
 	for k, v := range stored {
 		out[k] = v
+	}
+	at := sourceAt
+	if at.IsZero() {
+		at = now
 	}
 	changed := false
 	for _, w := range in {
 		old, ok := out[w.Name]
 		switch {
 		case !ok, w.ResetsAt > old.ResetsAt,
-			w.ResetsAt == old.ResetsAt && w.UsedPct != old.UsedPct && sourceAt.UnixMilli() > old.ObservedAt:
-			out[w.Name] = storedWindow{Window: w, ObservedAt: sourceAt.UnixMilli()}
+			w.ResetsAt == old.ResetsAt && w.UsedPct != old.UsedPct && !sourceAt.IsZero() && sourceAt.UnixMilli() > old.ObservedAt:
+			out[w.Name] = storedWindow{Window: w, ObservedAt: at.UnixMilli()}
 			changed = true
 		}
 	}
@@ -112,18 +116,19 @@ func MergeWindows(stored map[string]storedWindow, in []Window, sourceAt time.Tim
 
 // StatuslineSourceAt dates a statusline stdin: Claude Code renders the
 // windows of the session's last API answer, so the reading was true at that
-// answer — the newest real answer in the session's transcript, else the
-// transcript's mtime, else now (no transcript named or readable).
-func StatuslineSourceAt(stdin []byte, now time.Time) time.Time {
+// answer — the newest real answer in the tail of the session's transcript.
+// Zero when there is none (no transcript named or readable, no answer in the
+// tail, a fresh transcript after /clear): the reading is undated, and an
+// undated reading never wins a same-reset change.
+func StatuslineSourceAt(stdin []byte) time.Time {
 	var in struct {
 		TranscriptPath string `json:"transcript_path"`
 	}
 	if json.Unmarshal(stdin, &in) != nil || in.TranscriptPath == "" {
-		return now
+		return time.Time{}
 	}
-	st, err := os.Stat(in.TranscriptPath)
-	if err != nil || !st.Mode().IsRegular() {
-		return now
+	if st, err := os.Stat(in.TranscriptPath); err != nil || !st.Mode().IsRegular() {
+		return time.Time{}
 	}
 	var served int64
 	for _, line := range tailLines(in.TranscriptPath, 256<<10) {
@@ -131,10 +136,10 @@ func StatuslineSourceAt(stdin []byte, now time.Time) time.Time {
 			served = at
 		}
 	}
-	if served > 0 {
-		return time.UnixMilli(served)
+	if served == 0 {
+		return time.Time{}
 	}
-	return st.ModTime()
+	return time.UnixMilli(served)
 }
 
 // ClaudeCachePath is the statusline file: $XDG_CACHE_HOME/agentbus or
@@ -157,13 +162,13 @@ func RecordStatusline(path string, stdin []byte, now time.Time) error {
 	if err != nil || len(ws) == 0 {
 		return err
 	}
-	sourceAt := StatuslineSourceAt(stdin, now) // read outside the lock
+	sourceAt := StatuslineSourceAt(stdin) // read outside the lock
 	return withLock(path, func() error {
 		var st claudeStore
 		if b, err := os.ReadFile(path); err == nil {
 			_ = json.Unmarshal(b, &st)
 		}
-		merged, changed := MergeWindows(st.Windows, ws, sourceAt)
+		merged, changed := MergeWindows(st.Windows, ws, sourceAt, now)
 		if !changed {
 			return nil
 		}

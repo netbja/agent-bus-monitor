@@ -45,22 +45,22 @@ func TestParseStatuslineKeepsOnlyKnownWindows(t *testing.T) {
 
 func TestMergeRule(t *testing.T) {
 	r := int64(1792110570)
-	st, _ := MergeWindows(nil, []Window{{Name: "5h", UsedPct: 40, ResetsAt: r}, {Name: "7d", UsedPct: 10, ResetsAt: r + 100}}, t0)
+	st, _ := MergeWindows(nil, []Window{{Name: "5h", UsedPct: 40, ResetsAt: r}, {Name: "7d", UsedPct: 10, ResetsAt: r + 100}}, t0, t0)
 	later := t0.Add(time.Minute)
-	if out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 40, ResetsAt: r}}, later); ch || out["5h"].ObservedAt != t0.UnixMilli() {
+	if out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 40, ResetsAt: r}}, later, later); ch || out["5h"].ObservedAt != t0.UnixMilli() {
 		t.Fatal("same value: must keep the observation time")
 	}
-	if out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 90, ResetsAt: r - 1}}, later); ch || out["5h"].UsedPct != 40 {
+	if out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 90, ResetsAt: r - 1}}, later, later); ch || out["5h"].UsedPct != 40 {
 		t.Fatal("an older reset replaced")
 	}
-	out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 12, ResetsAt: r}}, later)
+	out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 12, ResetsAt: r}}, later, later)
 	if !ch || out["5h"].UsedPct != 12 || out["5h"].ObservedAt != later.UnixMilli() {
 		t.Fatal("same reset, lower percent must replace (a correction)")
 	}
 	if out["7d"].UsedPct != 10 {
 		t.Fatal("a window absent from the reading was dropped")
 	}
-	if out, _ := MergeWindows(st, []Window{{Name: "5h", UsedPct: 3, ResetsAt: r + 18000}}, later); out["5h"].UsedPct != 3 {
+	if out, _ := MergeWindows(st, []Window{{Name: "5h", UsedPct: 3, ResetsAt: r + 18000}}, later, later); out["5h"].UsedPct != 3 {
 		t.Fatal("a later reset must replace")
 	}
 }
@@ -374,21 +374,60 @@ func TestStatuslineIdleSessionNeverOverwritesANewerReading(t *testing.T) {
 	}
 }
 
-// Without a transcript answer the reading is dated by the transcript's
-// mtime, and without a transcript at all by the render time.
+// A reading with no answer to date it is undated: it fills a missing window
+// or a later reset, never a same-reset change — else an idle render with an
+// unreadable transcript flips the file again.
+func TestStatuslineUndatedReadingNeverWinsASameResetChange(t *testing.T) {
+	dir := t.TempDir()
+	cache := filepath.Join(dir, "quota-claude.json")
+	reset7 := t0.Add(72 * time.Hour).Unix()
+	active := filepath.Join(dir, "active.jsonl")
+	os.WriteFile(active, []byte(`{"type":"assistant","timestamp":"2026-10-15T21:50:00Z","message":{"model":"claude-opus-5-5"}}`+"\n"), 0o600)
+	noAnswer := filepath.Join(dir, "cleared.jsonl") // a fresh transcript after /clear
+	os.WriteFile(noAnswer, []byte(`{"type":"user","timestamp":"2026-10-15T21:59:00Z"}`+"\n"), 0o600)
+	seven := func() storedWindow {
+		var st claudeStore
+		b, _ := os.ReadFile(cache)
+		json.Unmarshal(b, &st)
+		return st.Windows["7d"]
+	}
+	RecordStatusline(cache, slSession(active, 0, reset7), t0)
+	var seen []float64
+	for i, stdin := range [][]byte{
+		slSession(filepath.Join(dir, "gone.jsonl"), 95, reset7), slSession(active, 0, reset7),
+		slSession(noAnswer, 95, reset7), slSession(active, 0, reset7),
+		slInput(95, 95, t0.Add(time.Hour).Unix(), reset7), slSession(active, 0, reset7),
+	} {
+		RecordStatusline(cache, stdin, t0.Add(time.Duration(i+1)*10*time.Second))
+		seen = append(seen, seven().UsedPct)
+	}
+	for _, pct := range seen {
+		if pct != 0 {
+			t.Fatalf("an undated render won a same-reset change: %v", seen)
+		}
+	}
+	// An undated reading still fills a missing window and a later reset.
+	RecordStatusline(cache, slSession(noAnswer, 7, reset7+3600), t0.Add(time.Minute))
+	if w := seven(); w.UsedPct != 7 || w.ObservedAt != t0.Add(time.Minute).UnixMilli() {
+		t.Fatalf("an undated later reset did not replace: %+v", w)
+	}
+}
+
 func TestStatuslineSourceTime(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "s.jsonl")
-	os.WriteFile(p, []byte(`{"type":"user","timestamp":"2026-10-15T21:00:00Z"}`+"\n"), 0o600)
-	mtime := t0.Add(-time.Hour)
-	os.Chtimes(p, mtime, mtime)
-	if got := StatuslineSourceAt(slSession(p, 1, 1), t0); !got.Equal(mtime) {
-		t.Fatalf("no answer: %v, want the mtime %v", got, mtime)
+	os.WriteFile(p, []byte(`{"type":"user","timestamp":"2026-10-15T21:00:00Z"}`+"\n"+
+		`{"type":"assistant","timestamp":"2026-10-15T21:10:00Z","isApiErrorMessage":true,"message":{"model":"<synthetic>"}}`+"\n"+
+		`{"type":"assistant","timestamp":"2026-10-15T21:05:00Z","message":{"model":"claude-opus-5-5"}}`+"\n"), 0o600)
+	if got := StatuslineSourceAt(slSession(p, 1, 1)); !got.Equal(time.Date(2026, 10, 15, 21, 5, 0, 0, time.UTC)) {
+		t.Fatalf("dated by %v, want the last real answer", got)
 	}
-	if got := StatuslineSourceAt(slSession(filepath.Join(dir, "gone.jsonl"), 1, 1), t0); !got.Equal(t0) {
-		t.Fatalf("missing transcript: %v, want now", got)
-	}
-	if got := StatuslineSourceAt(slInput(1, 1, 1, 1), t0); !got.Equal(t0) {
-		t.Fatalf("no transcript_path: %v, want now", got)
+	empty := filepath.Join(dir, "e.jsonl")
+	os.WriteFile(empty, []byte(`{"type":"user","timestamp":"2026-10-15T21:00:00Z"}`+"\n"), 0o600)
+	for name, stdin := range map[string][]byte{"no answer": slSession(empty, 1, 1),
+		"missing transcript": slSession(filepath.Join(dir, "gone.jsonl"), 1, 1), "no transcript_path": slInput(1, 1, 1, 1)} {
+		if got := StatuslineSourceAt(stdin); !got.IsZero() {
+			t.Fatalf("%s: dated %v, want undated", name, got)
+		}
 	}
 }
