@@ -1,7 +1,7 @@
 # v0.21.1: herdr's native restore through the launcher — design
 
-Status: draft for review (coder, 2026-10-21). Task `v0211-spec`, branch `docs/v0211-spec`.
-Research and spec only; no code in this change.
+Status: implemented (coder, 2026-10-26, branch `feat/launcher-resume`); live test pending.
+Spec drafted 2026-10-21 (task `v0211-spec`).
 
 Sources read: [journal checkpoint, roadmap item 1](../../memory/journal/2026-10-20-v021-handoff.md);
 herdr **v0.9.5** (tag `v0.9.5`, commit `2ecf19a`): `docs/next/.../session-state.mdx`,

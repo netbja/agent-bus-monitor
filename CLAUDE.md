@@ -402,9 +402,14 @@ It never touches Redis — see README "Deployment topology".
   no pane: it only starts stopped services with `Manager.Start`, never `startServices`/`Install`,
   and never provisions (template + broker `present`). After a reboot, agents are herdr's native
   session restore's job (`pane report-agent … -- <resume argv>`, which runs in a shell herdr has
-  just spawned); making the launcher report its own resume command is the next step (open: the
-  Claude Code integration `herdr:claude` already holds those panes and reports a raw
-  `claude --resume`, which bypasses agent-launch). Units always run `buildinfo.Bin` (setup's
+  just spawned). Since v0.21.1 every Claude Code launch carries, in its `--settings`, a
+  `SessionStart` hook (`agentbus roles report-resume <agent-launch>`, `cmd/agentbus/reportresume.go`)
+  that reports `env ROLES_TOML=… agent-launch <role> <p> [--profile <p>] --resume <id>` with
+  `herdr pane report-agent-session --source agentbus --agent claude` from a detached sender (retried
+  15 s while herdr answers `resume_not_accepted`, logged to `<state>/resume.log`): no state report, no
+  authority, so `herdr:claude`'s raw `claude --resume` stays the fallback when herdr refuses. The hook
+  never prints on stdout and always exits 0 (spec
+  `docs/superpowers/specs/2026-10-21-launcher-resume-design.md`). Units always run `buildinfo.Bin` (setup's
   `$BIN_DIR/agentbus`) when it exists. `agentbus projects` and `agentbus identity` sit above the
   project-required exit. `missions` without a Git repository publishes `waiting-git` and waits.
   **Trust gate** (`trust.go`, specialist roles spec part B): when `up` opens a workspace whose
@@ -449,8 +454,9 @@ It never touches Redis — see README "Deployment topology".
   processes an agent starts (tests, dotenv, and similar tools) can still read environment files.
   `setup.sh install/update` also links `agent-launch` and `agent-spawn` into `BIN_DIR`; those links
   resolve back to this repository's scripts, and uninstall removes only links to these exact files.
-  Resume Claude Code with `agent-launch <role> <project> --resume <session-id>` to retain role
-  settings and identity; never use `claude --resume` by hand. Other clients currently refuse resume.
+  Resume Claude Code with `agent-launch <role> <project> [--profile <p>] --resume <session-id>` to
+  retain role settings and identity; never use `claude --resume` by hand. Every Claude launch passes
+  `--settings` (the resume hook, plus tool rules when there are any). Other clients currently refuse resume.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
