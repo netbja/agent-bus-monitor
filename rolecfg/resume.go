@@ -41,7 +41,7 @@ func ResumeArgv(launcher, manifest, role, project, profile, sessionID string) ([
 		return nil, errors.New("invalid role or project name")
 	case profile != "" && !namePattern.MatchString(profile):
 		return nil, errors.New("invalid profile name")
-	case sessionID == "" || strings.TrimSpace(sessionID) != sessionID:
+	case !sessionIDPattern.MatchString(sessionID):
 		return nil, errors.New("invalid session id")
 	}
 	argv := []string{"env", "ROLES_TOML=" + manifest, launcher, role, project}

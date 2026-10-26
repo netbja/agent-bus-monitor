@@ -15,6 +15,9 @@ import (
 var (
 	namePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 	envPattern  = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+	// sessionIDPattern is a session id the launcher passes to --resume: never
+	// dash-led (a flag), never a path, bounded.
+	sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 )
 
 // forbiddenEnvRefs are the targets env_refs may never set: the launcher's identity

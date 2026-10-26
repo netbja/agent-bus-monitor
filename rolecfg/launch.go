@@ -460,8 +460,8 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 	if profile != "" && !namePattern.MatchString(profile) {
 		return errors.New("invalid profile name")
 	}
-	if strings.TrimSpace(resumeID) != resumeID {
-		return errors.New("resume session id must not have surrounding whitespace")
+	if resumeID != "" && !sessionIDPattern.MatchString(resumeID) {
+		return errors.New("invalid resume session id")
 	}
 	p, err := m.ResolveWith(role, profile)
 	if err != nil {

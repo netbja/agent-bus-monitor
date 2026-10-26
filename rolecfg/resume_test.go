@@ -26,6 +26,9 @@ func TestResumeArgv(t *testing.T) {
 		"relative":       {"scripts/agent-launch", "/r/roles.toml", "coder", "demo", "", "s"},
 		"over 8 KiB":     {"/r/" + strings.Repeat("a", 8<<10) + "/agent-launch", "/r/roles.toml", "coder", "demo", "", "s"},
 		"session spaces": {"/r/scripts/agent-launch", "/r/roles.toml", "coder", "demo", "", " s"},
+		"session flag":   {"/r/scripts/agent-launch", "/r/roles.toml", "coder", "demo", "", "--dangerously-skip-permissions"},
+		"session slash":  {"/r/scripts/agent-launch", "/r/roles.toml", "coder", "demo", "", "../x"},
+		"session long":   {"/r/scripts/agent-launch", "/r/roles.toml", "coder", "demo", "", strings.Repeat("a", 129)},
 	} {
 		if argv, err := ResumeArgv(c[0], c[1], c[2], c[3], c[4], c[5]); err == nil {
 			t.Errorf("%s: accepted %q", name, argv)
@@ -107,4 +110,21 @@ func indexOf(xs []string, s string) int {
 		}
 	}
 	return -1
+}
+
+// A session id is never read as a flag: a manual resume and herdr's stored
+// command share the launcher's check.
+func TestLaunchResumeRefusesAFlagForASessionID(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("claude-code", "", "", "")
+	for _, id := range []string{"--dangerously-skip-permissions", "-x", "a b", "a/b", strings.Repeat("a", 129)} {
+		if _, _, err := f.launchWithResume(m, "coder", id); err == nil {
+			t.Errorf("session id %q accepted: %q", id, f.execed)
+		}
+	}
+	for _, id := range []string{"5f0c2a1e-8d3b-4c1a-9e2f-0123456789ab", "a", "s.1_x-2"} {
+		if _, e, err := f.launchWithResume(m, "coder", id); err != nil {
+			t.Errorf("session id %q refused: %v %s", id, err, e)
+		}
+	}
 }
