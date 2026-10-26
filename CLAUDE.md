@@ -267,8 +267,13 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   layout and refills rows from the `shared` model but never changes focus and never does I/O —
   a size change runs `relayout` via `go app.QueueUpdateDraw` (calling `SetFocus` from a draw would
   deadlock tview). tview delivers keys to the **root**, so `screenView`/`modalView` relay them to
-  the focused child. Rows are `Line` values (role-tagged segments), measured in cells; only overlay
-  bodies use colour tags, through `tag()`/`tg()`, which resolve to theme roles. No literal outside
+  the focused child. Rows and overlay bodies are `Line` values (role-tagged segments), measured in
+  cells (`Width`; `Preview`/`DetailText` make every cluster measure the same under uniseg, lipgloss's
+  grapheme width and wcwidth: `agreeWidths`); overlay bodies are built with `body` (`body.go`) and
+  reach the overlay `TextView` through `linesToTview` → `Theme.segTag`, the one place a tview tag is
+  written and the one escaper (`TestOnlyThemeWritesTviewTags`; busmon Charm spec step a,
+  `testdata/overlay/` captures). The key tables match an engine-neutral `Key` (`key.go`, `keyOf`
+  for tcell). No literal outside
   the glyph set (`TestNoStrayNonASCIILiterals`); `TestAlignmentSuite` draws every size × palette ×
   hostile fixture and checks every frame's corners and borders. Each panel has its colour
   (`panelHue`, v0.14.5: Agents accent, Activity ok, Board dispatch, Requests attention): its frame
