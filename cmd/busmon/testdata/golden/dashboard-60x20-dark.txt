@@ -1,0 +1,20 @@
+ ● bus  ● disp  ● miss  paused · resumes in 1h52 (lunch)    
+ ♙ Bernard [human]  pilot master  claude 5h 62%             
+ 1 For you  2 Agents  3 Activity  4 Board  5 Requests       
+╭─ For you ───────────────────────── 4 for you · 2 unread ─╮
+│  ? ask    master    review lot 1? (2 questions)        4m│
+│  ♙ wait   foureyes  need a decision on the width rule  6m│
+│  ♙ wait   sentinel  pane prompt                        1m│
+│  ▲ gate   coder     reviews look at b1                   │
+│  ● unread dispatch  project paused until 16:56         8m│
+│  ● unread master    review lot 1?                      4m│
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰──────────────────────────────────────────────────────────╯
+ tab focus   F5 health   1-4 view   ↑↓ j k select   y copy  

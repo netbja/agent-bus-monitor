@@ -1,0 +1,24 @@
+ ● bus ok  ● dispatch up  ● missions up  paused · resumes in 1h52 (lunch)       
+ ♙ Bernard [human]  pilot master  claude 5h 62% │ 7d 41%                        
+╭─ For you ───────────────────────────────────────────── 4 for you · 2 unread ─╮
+│  ? ask    master    review lot 1? (2 questions)                            4m▲
+│  ♙ wait   foureyes  need a decision on the width rule                      6m┃
+│  ♙ wait   sentinel  pane prompt                                            1m┃
+│  ▲ gate   coder     reviews look at b1                                       │
+│  ● unread dispatch  project paused until 16:56                             8m▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-3 of …─╮
+│▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule ▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ♙ sentinel  waiting  30m  —   prompt      health ok                         ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity  2 Board  3 Requests   auto-scroll on ─ 7 events · filter: non…─╮
+│    time  from     to       type      message                                 ▲
+│    14:51 coder             report    Lot 1 delivered (+197)                  │
+│  ○ 14:52 master   → berna… directive please look at the plan                 │
+│  ● 14:56 dispatch          notify    project paused until 16:56              ┃
+│  ● 15:00 master            ask       asks · review lot 1? (2 question(s), 2 …┃
+│    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+›                                                                               
+ tab focus   F5 health   1-3 view   ↑↓ j k select   enter detail   y copy       
