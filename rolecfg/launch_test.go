@@ -153,7 +153,7 @@ func TestLaunchCommandLines(t *testing.T) {
 	if _, e, err := f.launch(m, "coder"); err != nil {
 		t.Fatal(err, e)
 	}
-	want := []string{"claude", "--model", "test-model", "--fallback-model", "fb-model", "--permission-mode", "bypassPermissions", "--effort", "xhigh", "--name", "demo:coder", "--append-system-prompt"}
+	want := []string{"claude", "--model", "test-model", "--fallback-model", "fb-model", "--permission-mode", "bypassPermissions", "--settings", hookSettings(f), "--effort", "xhigh", "--name", "demo:coder", "--append-system-prompt"}
 	if got := f.execed[1 : len(f.execed)-1]; strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("claude argv = %q", got)
 	}
@@ -174,7 +174,9 @@ func TestLaunchCommandLines(t *testing.T) {
 	}
 }
 
-func TestLaunchWithoutSharedToolRulesKeepsTheOldCommandLine(t *testing.T) {
+// Without [tool_rules] the command line is the old one plus the resume hook
+// (v0.21.1): --settings carries no permissions.
+func TestLaunchWithoutSharedToolRulesCarriesOnlyTheHook(t *testing.T) {
 	f := newLaunchFixture(t)
 	m := f.config("claude-code", "", "", "[profiles.main.options]\npermission = \"bypassPermissions\"")
 	rules, err := m.LaunchRules("coder")
@@ -184,7 +186,7 @@ func TestLaunchWithoutSharedToolRulesKeepsTheOldCommandLine(t *testing.T) {
 	if _, _, err := f.launch(m, "coder"); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"claude", "--model", "test-model", "--permission-mode", "bypassPermissions", "--name", "demo:coder", "--append-system-prompt"}
+	want := []string{"claude", "--model", "test-model", "--permission-mode", "bypassPermissions", "--settings", hookSettings(f), "--name", "demo:coder", "--append-system-prompt"}
 	if strings.Join(f.execed[1:len(f.execed)-1], "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("launch argv changed without [tool_rules]: got %q want %q", f.execed, want)
 	}
@@ -214,6 +216,13 @@ func TestLaunchResumeKeepsRoleSettingsAndRejectsOtherClients(t *testing.T) {
 	if _, _, err := f.launchWithResume(codex, "coder", "session-123"); err == nil || !strings.Contains(err.Error(), "only for Claude Code") {
 		t.Fatalf("Codex resume error = %v", err)
 	}
+}
+
+// hookSettings is the --settings of a Claude launch without tool rules.
+func hookSettings(f *launchFixture) string {
+	s, err := settingsJSON(ToolRules{}, resumeHookCommand(newEnv(f.env)))
+	must(f.t, err)
+	return s
 }
 
 func mustRead(t *testing.T, path string) []byte {
@@ -604,27 +613,32 @@ func TestLaunchSettingsFlag(t *testing.T) {
 	if _, e, err := f.launch(m, "coder"); err != nil {
 		t.Fatal(err, e)
 	}
-	want := []string{"claude", "--model", "test-model", "--permission-mode", "acceptEdits", "--settings", popsSettings, "--name", "demo:coder", "--append-system-prompt"}
+	settings := strings.TrimSuffix(popsSettings, "}") + ", " + strings.TrimPrefix(hookSettings(f), "{")
+	want := []string{"claude", "--model", "test-model", "--permission-mode", "acceptEdits", "--settings", settings, "--name", "demo:coder", "--append-system-prompt"}
 	if got := f.execed[1 : len(f.execed)-1]; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("claude argv = %q", got)
 	}
 	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")
 	must(t, err)
-	if !strings.Contains(out, "--settings "+ShellJoin([]string{popsSettings})+" --name") {
+	if !strings.Contains(out, "--settings "+ShellJoin([]string{settings})+" --name") {
 		t.Fatalf("dry run = %q", out)
 	}
 }
 
-func TestPreflightNeedsSettingsOnlyWithRules(t *testing.T) {
+// Every Claude Code launch passes --settings (the resume hook, v0.21.1), so a
+// claude without it is refused with or without rules; Codex never needs it.
+func TestPreflightNeedsSettingsForClaude(t *testing.T) {
 	f := newLaunchFixture(t)
 	f.fake("claude", "#!/bin/sh\necho '"+strings.Replace(fakeHelp, "--settings ", "", 1)+"'\n")
-	m := f.config("claude-code", "", "", "")
-	if _, e, err := f.launch(m, "coder"); err != nil {
-		t.Fatalf("no rules: %v %s", err, e)
+	f.fake("codex", "#!/bin/sh\necho '"+strings.Replace(fakeHelp, "--settings ", "", 1)+"'\n")
+	for _, roles := range []string{"", popsRoles} {
+		m := f.config("claude-code", "", roles, "")
+		if _, _, err := f.launch(m, "coder"); err == nil || err.Error() != "claude lacks required launch flags; inspect its version/help" {
+			t.Fatalf("claude without --settings (rules %q): %v", roles, err)
+		}
 	}
-	m = f.config("claude-code", "", popsRoles, "")
-	if _, _, err := f.launch(m, "coder"); err == nil || err.Error() != "claude lacks required launch flags; inspect its version/help" {
-		t.Fatalf("rules without --settings: %v", err)
+	if _, e, err := f.launch(f.config("codex", "", "", ""), "coder"); err != nil {
+		t.Fatalf("codex: %v %s", err, e)
 	}
 }
 
