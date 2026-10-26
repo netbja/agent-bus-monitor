@@ -1,8 +1,8 @@
 # busmon on bubbletea v2 + lipgloss v2 — design
 
-Status: draft for review (coder, 2026-10-26). Task `busmon-charm-spec`, branch
-`docs/busmon-charm-spec` from `origin/main`. Spec only; no code in this change. Reviewers: foureyes,
-ui-grok, ui-kimi.
+Status: draft for review (coder, 2026-10-26), revision 2 after foureyes' review of `b2d2071`.
+Task `busmon-charm-spec`, branch `docs/busmon-charm-spec` from `origin/main`. Spec only; no code in
+this change. Reviewers: foureyes, ui-grok, ui-kimi.
 
 Decided by Bernard (ask `1793039192455-0`): move busmon from tview to bubbletea v2 + lipgloss v2, in
 three shippable steps, with the screen changes below. Inputs: ui-grok's report `1793038893110-0`,
@@ -22,8 +22,8 @@ busmon has the facts a person needs and shows them badly (both advisors, indepen
   instead of wrapping it (`markdown.go`).
 - **Overlay content is welded to tview.** `renderMarkdown` and every overlay body (`detail.go`,
   `detail_agent.go`, `tracking.go`, `recap.go`, `plan.go`, `quota.go`, `services.go`, `askpanel.go`,
-  `help.go`, `reminder.go`, `health_view.go`) emit tview colour tags through `tag()`/`tg()` (177
-  uses at `origin/main`). They resolve to theme roles, but only tview can draw them.
+  `help.go`, `reminder.go`, `health_view.go`) emit tview colour tags through `tag()`/`tg()` (154
+  calls at `origin/main`). They resolve to theme roles, but only tview can draw them.
 - **tview fights the model.** Keys reach the root and are relayed; `Draw` must never `SetFocus`;
   the compose `TextArea` counts bytes while bus caps count runes; the fade ticker redraws the whole
   application ten times a second while anyone waits (`main.go`, `fadeFrame`).
@@ -71,8 +71,8 @@ As Crush v0.98.2, Charm's own shipping TUI, pins them (`/data/AI-Docs/crush/go.m
 Not taken: `glamour` (it styles outside `theme.go` roles and the glyph set; our reports are a
 constrained markdown that `markdown.go` already handles), `bubbles` widgets except `textarea` for
 the compose window (step b decides it by a test of the rune cap, see "Compose"). Go stays 1.26,
-which their `go 1.26` floor accepts. tview, tcell and uniseg leave `go.mod` in step c only if no
-other package imports them (`cmd/agentbus` does not).
+which their `go 1.26` floor accepts. tview and tcell leave `go.mod` in step c (no other package
+imports them); uniseg stays, it is `cellWidth`.
 
 ## Width: one method, enforced
 
@@ -180,6 +180,9 @@ One list, built in a pure function `forYou(snapshot, now) []attentionItem` besid
 | 3 | unread for you | `unread.go` | `* unread <sender> <preview>` |
 
 Within a rank, oldest first: the same order the Agents panel applies inside its attention groups.
+The `for you` flag (`forYouHint`, `foryou.go`: an idle agent whose status message names the person)
+is **not** a rank of this list: it stays a flag on the agent's row, as today, and never counts,
+rings or reminds, so the header count keeps its meaning (things that wait on the person).
 An item leaves the list when its fact goes (the ask closes, the agent declares another state, the
 gate resolves, the line is read). The header count is the list's length; the reminder (5 minutes)
 and the bell read the same list, so the three can never disagree. Enter on a row does what its
@@ -216,14 +219,35 @@ otherwise it is our own small text area over `Line`.
 
 ### Signals (decision 6)
 
-All kept, all driven by the snapshot and the tick, none by a draw:
+All kept, all driven by the snapshot and the tick, none by a draw. This is the inventory step c's
+PR ticks off, one test each.
 
-- **Waiting fade:** a `fadeMsg` every `fadeFrame` (100 ms) while at least one item is waiting and
-  the palette has true colour, the same `fadeLevel`; nothing is scheduled otherwise.
-- **Bell:** once per new waiting declaration and once per new ask id, in `Update` after a poll
-  message (today `ui.onTick`), written with `tea.Raw("\a")` or the equivalent print command.
-- **Recap auto-open** after `AutoAfter` (8 h) since the last visit, as a reader page.
-- **Reminder** after `PopupAfter` (5 min), snoozable, waiting until no draft or dialog is open.
+Signals:
+
+| Signal | Today | After |
+|---|---|---|
+| Waiting fade | `fadeLevel`, `fadeFrame` 100 ms, only while one waits, true colour only, off with `fade = false` (`busmon.toml`, `settings.Fade`) | a `fadeMsg` on the same conditions; nothing scheduled otherwise |
+| Bell, waiting | once per new waiting declaration (`ui.onTick`) | same, in `Update` after a `pollMsg` |
+| Bell, ask | once per new ask id | same |
+| Bell, observed prompt | once per `since` of a pane seen at its client's prompt (key `"prompt:"+obsSince`) | same key, same rule |
+| Bell switch | `bell = false` silences all three (`settings.Bell`) | same |
+| Recap auto-open | after `AutoAfter` (8 h) since the last visit | same, as a reader page |
+| Reminder | after `PopupAfter` (5 min), snoozable, waits for no draft or dialog | same, a dialog; its source is `forYou` from step c |
+
+The bell is written with `tea.Raw("\a")`.
+
+Flags and header items that survive unchanged (word, role, condition), each checked in a golden:
+
+- Agent row flags (`agents.go`): `busy`, `prompt`, `update`, `drift` / `gone` / `newer` /
+  `unknown model` (the `model≠` family from `{p}:doctor` and the model table), `swapping`,
+  `fallback <profile>`, `held` / `quota`, `gate N`, `for you`, the wake states `pending`,
+  `deferred`, `escalating`, `escalated`; the state look (`paused`, `quota`) that never covers
+  `blocked`, `waiting` or `done`; dormant agents hidden unless `a`.
+- Header: the person's identity (`human` / `pilot`), project, bus, dispatch up/down, missions,
+  the health pill, the plan item, the project pause, held or fallback per provider, the unread
+  count, the waiting count (now the For you count), one gauge per provider, the update notice
+  (`↑ vX.Y.Z`, never on a `dev` build), the clock.
+- Activity marks (`unread.go`): unread, superseded, `(+N)` for a longer retained text.
 
 ## Architecture (step b's shell)
 
@@ -283,9 +307,16 @@ Files: `markdown.go`, `render.go`, `detail.go`, `detail_agent.go`, `tracking.go`
 `plan.go`, `quota.go`, `services.go`, `health_view.go`, `help.go`, `askpanel.go`, `reminder.go`,
 `keys.go`, `cells.go`, `theme.go` (no more `Tag`), and their tests.
 
+Escaping: today each call site escapes agent text itself (`tview.Escape` in `detail.go`,
+`services.go`, `plan.go`, `tracking.go`, and `Theme.Tag` in `theme.go`). After this step no builder escapes anything:
+`linesToTview` escapes every segment's text, once, and is the only place that writes a tview tag.
+
 Tests: every overlay's text compared before and after (a test that renders each body with the old
 tagged path, captured once into `testdata/overlay/*.txt` before the change, and the new `[]Line`
-path through `linesToTview`, must be equal after tag stripping); `TestNoStrayNonASCIILiterals`,
+path through `linesToTview`, must be equal after tag stripping); a hostile fixture whose agent text
+holds literal `[red]`, `[::b]`, `["x"]` and `[-]` goes through every body builder and
+`linesToTview` and is drawn literally on a tview `SimulationScreen` (comparing after tag stripping
+would not catch a lost escape); `TestNoStrayNonASCIILiterals`,
 `TestAlignmentSuite` unchanged and green; a test that no file outside `theme.go` mentions a tview
 colour tag.
 
@@ -296,26 +327,36 @@ What the person sees: nothing changes, except code blocks in overlays now wrap i
 Scope: the `Model`, `Update`, `View` and commands above, the new screen (For you, tabbed panel,
 inline expansion, reader, dialogs), mouse handling, all in `cmd/busmon` files prefixed `tea_`
 (`tea_model.go`, `tea_update.go`, `tea_view.go`, `tea_reader.go`, `tea_mouse.go`, ...). `main.go`
-still starts tview; nothing runs the shell but the tests. `forYou` replaces `attentionItems` as the
-reminder's source in both loops (it is a pure function of the snapshot).
+still starts tview; nothing runs the shell but the tests. `forYou` is written and tested here, used only by
+the shell; the live tview reminder keeps `attentionItems` until step c, so this step changes
+nothing the person sees.
 
 Tests:
 - **Goldens of `View()`** on a fixed `snapshot` (a provider on hold, a fallback agent, an agent
   waiting with an open ask, one waiting without, a pending gate, two unread lines, a report with a
-  fenced code block longer than the width, a paused project): 80x24 and 140x40, dark and light,
-  each in four states (dashboard, a row expanded, the reader open, the compose window open), under
-  both renderer width methods. Stored in `testdata/golden/`, compared byte for byte, rewritten only
-  with `-update`.
-- **Alignment suite** at 80x24, 120x30 and 140x40 x every palette x the hostile fixtures: every
-  frame's corners and borders, as `align_test.go` checks today, on the cell grid the View produces.
+  fenced code block longer than the width, a paused project, and one agent carrying each surviving
+  flag): 60x20 (narrow tier), 80x24 and 140x40, dark and light, each in four states (dashboard, a
+  row expanded, the reader open, the compose window open), under both renderer width methods.
+  Stored in `testdata/golden/`, compared byte for byte, rewritten only with `-update`.
+- **Alignment suite** at 60x20, 80x24, 120x30 and 140x40 x every palette x the hostile fixtures:
+  every frame's corners and borders, as `align_test.go` checks today, on the cell grid the View
+  produces.
 - **Purity:** View called twice on the same model returns the same string; a test model whose
   `busReader` panics on any call renders every state (View does no I/O).
 - **Fade cost:** after a `fadeMsg`, the markdown renderer is not called (a counter in the cache);
   only the waiting words' cells differ between two consecutive frames.
-- **Update drives everything:** key and mouse scenarios as table tests (focus cycle, tabs, expand,
-  reader push and pop, ask answer, `u` to next unread, `y` copy command emitted, send result).
-- **Signals:** a poll message with a new waiting declaration emits one bell; the same declaration
-  twice emits one; the reminder appears after `PopupAfter` and not while compose is open.
+- **Update drives everything:** key scenarios as table tests (focus cycle, tabs, expand, reader push
+  and pop, ask answer, `u` to next unread, `y` copy command emitted, send result).
+- **Mouse:** one `Update` scenario per row of the mouse-parity table below: the wheel scrolls 3
+  rows in each zone (For you, Agents, each tab of the tabbed panel, the reader); a click selects, a
+  click on the selected row expands, a click on the expanded row opens the reader; a click on the
+  scrollbar column pages towards it; a click on a tab label or a frame title focuses; each pause
+  popup button presses; in compose, clicks on the recipient and on the text move the focus and a
+  click outside closes it; a wheel or a click on Agents stops pinning its selection.
+- **Signals:** one test per row of the signal inventory: a new waiting declaration, a new ask id
+  and a new observed-prompt `since` each emit one bell, the same fact twice emits one, `bell =
+  false` emits none; `fade = false` and a 16-colour palette schedule no `fadeMsg`; the reminder
+  appears after `PopupAfter` and not while compose is open; the recap opens after `AutoAfter`.
 
 What the person sees: nothing; the binary still runs tview.
 
@@ -326,13 +367,17 @@ poll goroutines feed it; `--pick` becomes a small bubbletea model of its own (to
 tview); the tview files (`ui.go`, `listview.go`, `compose.go`'s tview parts, `pausepopup.go`'s
 widget, `linesToTview`) are removed; tview, and tcell if unused, leave `go.mod`.
 
+Scope also: the live reminder switches from `attentionItems` to `forYou` (it now includes pending
+gates and unread lines for the person), and `attentionItems` is removed.
+
 Tests: the step-b suites now cover the binary; `screen_test.go`, `capture_test.go` and
 `ui_test.go` scenarios that drove tview are ported to model scenarios or removed when a step-b test
 covers the same behaviour (the PR lists each one and its replacement); the picker's tests run on
 its model.
 
-What the person sees: the new screen. Same flags, same keys for the same actions (plus `1`-`3` for
-the tabs at every width and Enter twice for the reader), same settings file, same cache.
+What the person sees: the new screen, and a reminder that also lists pending gates and unread lines
+for them. Same flags, same keys for the same actions (plus `1`-`3` for the tabs at every width and
+Enter twice for the reader), same settings file, same cache.
 
 ## Mouse parity
 
@@ -366,9 +411,11 @@ is left open).
 
 ## Open questions for review
 
-1. For you at 80 columns: 4 rows and `+N more`, or all rows with Agents pushed down?
-2. The inline expansion's height cap: half the panel, or a fixed 10 rows?
-3. Should an ask's options be clickable in step b (ui-grok's question 7), or keyboard only?
-4. `bubbles/textarea` for compose, decided by the rune-cap test, or our own text area from the
-   start?
-5. The reader replaces the lower zone; should it also hide Agents at 80 columns to gain rows?
+Each with the answer the spec currently takes (foureyes agreed with all five in its review of
+`b2d2071`); ui-grok and ui-kimi may still argue them.
+
+1. For you at 80 columns: 4 rows and `+N more` (taken), or all rows with Agents pushed down?
+2. The inline expansion's height cap: half the panel (taken), or a fixed 10 rows?
+3. An ask's options: keyboard only in step b (taken), clickable later (ui-grok's question 7)?
+4. Compose: `bubbles/textarea` if the rune-cap test passes, else our own (taken).
+5. The reader keeps Agents visible at 80 columns (taken), rather than hiding it for rows.
