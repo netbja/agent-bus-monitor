@@ -1,6 +1,7 @@
 # busmon on bubbletea v2 + lipgloss v2 — design
 
-Status: draft for review (coder, 2026-10-26), revision 2 after foureyes' review of `b2d2071`.
+Status: draft for review (coder, 2026-10-26), revision 3 after foureyes' review of `b2d2071` and
+ui-grok's review of `b2d2071` (its point on step b's reminder was already met by revision 2).
 Task `busmon-charm-spec`, branch `docs/busmon-charm-spec` from `origin/main`. Spec only; no code in
 this change. Reviewers: foureyes, ui-grok, ui-kimi.
 
@@ -129,8 +130,9 @@ Sketches use plain ASCII; the real frames use the glyph set.
  tab panel  j/k move  enter open  ! answer  u unread  I compose  1-3 tabs  R recap  ? help  q 
 ```
 
-- **Header, two lines at every tier.** Line 1: project, bus, dispatch, missions, pause flag, the
-  `for you` count, the unread count, the clock. Line 2: one gauge per provider (session and weekly
+- **Header, two lines at every tier.** Line 1: project, bus, dispatch, missions, the `for you`
+  badge (decisions waiting on the person: asks, waiting agents, gates) and the separate `unread`
+  badge (see "For you"), the clock. Line 2: one gauge per provider (session and weekly
   windows, coloured by burn pace as today, `budgetRole`), hold or fallback, the project pause. A
   gauge is never dropped for the clock; at 80 columns the bars shrink to the percentage
   (`quotaSeg`'s existing narrow form).
@@ -163,14 +165,15 @@ Same zones. For you and Agents share the top row 2:3; the tabbed panel takes wha
  > _                                       enter open  ? help  q
 ```
 
-For you shows at most 4 rows (then `+N more`, which focuses it); Agents goes two-up as the medium
-tier does today. Under 80 columns the narrow tier keeps today's behaviour (one panel at a time,
+For you shows at most 4 rows (then `+N more`, which focuses it); unread lines rank last and may be
+below the fold, which is why the `unread` badge stays in the header. Agents goes two-up as the
+medium tier does today. Under 80 columns the narrow tier keeps today's behaviour (one panel at a time,
 digit tabs, input only while composing), with For you as the first panel.
 
 ### For you (decision 2)
 
 One list, built in a pure function `forYou(snapshot, now) []attentionItem` beside today's
-`attentionItems` (`reminder.go`), which it replaces as the reminder's source:
+`attentionItems` (`reminder.go`); each item carries its rank:
 
 | Rank | Kind | Source today | Row |
 |---|---|---|---|
@@ -179,13 +182,28 @@ One list, built in a pure function `forYou(snapshot, now) []attentionItem` besid
 | 2 | pending verdict (an open 4-eyes gate) | challenges read every tick | `G gate <reviewer> reviews <subject>` |
 | 3 | unread for you | `unread.go` | `* unread <sender> <preview>` |
 
-Within a rank, oldest first: the same order the Agents panel applies inside its attention groups.
+Within a rank, oldest first. This is not exactly the Agents panel's sort, which orders its
+attention groups and then names (`sortedAgentNames`): the ranks follow the same principle (what
+waits on the person comes first, waiting before idle), and the tie-break is age, because the
+person handles the oldest first (open question 6).
 The `for you` flag (`forYouHint`, `foryou.go`: an idle agent whose status message names the person)
 is **not** a rank of this list: it stays a flag on the agent's row, as today, and never counts,
 rings or reminds, so the header count keeps its meaning (things that wait on the person).
 An item leaves the list when its fact goes (the ask closes, the agent declares another state, the
-gate resolves, the line is read). The header count is the list's length; the reminder (5 minutes)
-and the bell read the same list, so the three can never disagree. Enter on a row does what its
+gate resolves, the line is read).
+
+The list is the union; every other surface is a named subset of it, computed from the same items so
+they can never disagree, each with its own test:
+
+| Surface | Subset |
+|---|---|
+| For you panel | all items, ranks 0-3 |
+| header `for you` badge | `decisions(items)`: ranks 0-2 (asks, waiting agents, gates) |
+| header `unread` badge | rank 3 |
+| reminder (5 minutes) | `decisions(items)`: never unread lines |
+| bell | unchanged from today (signal inventory below): a new waiting declaration, a new ask id, a new observed-prompt `since`; never a gate or an unread line |
+
+Enter on a row does what its
 kind needs: an ask opens the ask in the reader (answering is the reader's ask mode, keys `1`-`9`,
 `o` for a free answer in the compose window); a waiting agent opens its detail; a gate opens the
 challenge thread; an unread line expands it and marks it read.
@@ -232,7 +250,7 @@ Signals:
 | Bell, observed prompt | once per `since` of a pane seen at its client's prompt (key `"prompt:"+obsSince`) | same key, same rule |
 | Bell switch | `bell = false` silences all three (`settings.Bell`) | same |
 | Recap auto-open | after `AutoAfter` (8 h) since the last visit | same, as a reader page |
-| Reminder | after `PopupAfter` (5 min), snoozable, waits for no draft or dialog | same, a dialog; its source is `forYou` from step c |
+| Reminder | after `PopupAfter` (5 min), snoozable, waits for no draft or dialog | same, a dialog; its source is `decisions(forYou)` from step c |
 
 The bell is written with `tea.Raw("\a")`.
 
@@ -311,9 +329,13 @@ Escaping: today each call site escapes agent text itself (`tview.Escape` in `det
 `services.go`, `plan.go`, `tracking.go`, and `Theme.Tag` in `theme.go`). After this step no builder escapes anything:
 `linesToTview` escapes every segment's text, once, and is the only place that writes a tview tag.
 
-Tests: every overlay's text compared before and after (a test that renders each body with the old
-tagged path, captured once into `testdata/overlay/*.txt` before the change, and the new `[]Line`
-path through `linesToTview`, must be equal after tag stripping); a hostile fixture whose agent text
+Tests: every overlay's text compared before and after. The first commit of the PR, before any
+rewrite, only adds the capture: each body rendered by the old tagged path on `origin/main`'s code,
+tags stripped, into `testdata/overlay/*.txt`. The rewrite must then reproduce every capture
+exactly, except the one named fixture with a fenced code block longer than the width
+(`overlay/code-wrap.txt`): its expected text changes in a separate commit, the step's one visible
+change (`markdown.go` today cuts a code line with `Fit` and an ellipsis), so the reviewer sees the
+delta on its own; a hostile fixture whose agent text
 holds literal `[red]`, `[::b]`, `["x"]` and `[-]` goes through every body builder and
 `linesToTview` and is drawn literally on a tview `SimulationScreen` (comparing after tag stripping
 would not catch a lost escape); `TestNoStrayNonASCIILiterals`,
@@ -353,6 +375,14 @@ Tests:
   scrollbar column pages towards it; a click on a tab label or a frame title focuses; each pause
   popup button presses; in compose, clicks on the recipient and on the text move the focus and a
   click outside closes it; a wheel or a click on Agents stops pinning its selection.
+- **Behaviours tview gives today that the shell must keep** (from CLAUDE.md's busmon rules), one
+  scenario each: Activity's tail mode (a new event follows the bottom), `f` pauses it, a wheel-up
+  leaves it, and selecting, clicking or opening a line keeps it live; keyed selection (the selected
+  row stays selected by its key when a poll reorders or inserts rows); `a` shows and hides dormant
+  agents (and `@all` follows it); `/` filters the focused list and Esc clears it; the subsets of the
+  For you table (badge, unread badge, reminder) each counted on one fixture.
+- **The picker:** `--pick`'s screen is a model of its own written in this step (goldens at 80x24 and
+  140x40, its key scenarios), wired in step c.
 - **Signals:** one test per row of the signal inventory: a new waiting declaration, a new ask id
   and a new observed-prompt `since` each emit one bell, the same fact twice emits one, `bell =
   false` emits none; `fade = false` and a 16-colour palette schedule no `fadeMsg`; the reminder
@@ -363,20 +393,20 @@ What the person sees: nothing; the binary still runs tview.
 ### Step c: the swap (one release)
 
 Scope: `main.go` starts `tea.NewProgram(model, ...)` instead of the tview application; the tail and
-poll goroutines feed it; `--pick` becomes a small bubbletea model of its own (today `pick.go`,
+poll goroutines feed it; `--pick` runs the picker model written in step b (today `pick.go`,
 tview); the tview files (`ui.go`, `listview.go`, `compose.go`'s tview parts, `pausepopup.go`'s
 widget, `linesToTview`) are removed; tview, and tcell if unused, leave `go.mod`.
 
-Scope also: the live reminder switches from `attentionItems` to `forYou` (it now includes pending
-gates and unread lines for the person), and `attentionItems` is removed.
+Scope also: the live reminder switches from `attentionItems` to `decisions(forYou)` (it now
+includes pending gates, one row per ask instead of per question, never unread lines), and
+`attentionItems` is removed.
 
 Tests: the step-b suites now cover the binary; `screen_test.go`, `capture_test.go` and
 `ui_test.go` scenarios that drove tview are ported to model scenarios or removed when a step-b test
 covers the same behaviour (the PR lists each one and its replacement); the picker's tests run on
 its model.
 
-What the person sees: the new screen, and a reminder that also lists pending gates and unread lines
-for them. Same flags, same keys for the same actions (plus `1`-`3` for the tabs at every width and
+What the person sees: the new screen, and a reminder that also lists pending gates. Same flags, same keys for the same actions (plus `1`-`3` for the tabs at every width and
 Enter twice for the reader), same settings file, same cache.
 
 ## Mouse parity
@@ -411,11 +441,13 @@ is left open).
 
 ## Open questions for review
 
-Each with the answer the spec currently takes (foureyes agreed with all five in its review of
-`b2d2071`); ui-grok and ui-kimi may still argue them.
+Each with the answer the spec currently takes (foureyes agreed with 1-5 in its review of
+`b2d2071`, ui-grok with 3 and 4 and left the rest to Bernard); ui-kimi may still argue them.
 
 1. For you at 80 columns: 4 rows and `+N more` (taken), or all rows with Agents pushed down?
 2. The inline expansion's height cap: half the panel (taken), or a fixed 10 rows?
 3. An ask's options: keyboard only in step b (taken), clickable later (ui-grok's question 7)?
 4. Compose: `bubbles/textarea` if the rune-cap test passes, else our own (taken).
 5. The reader keeps Agents visible at 80 columns (taken), rather than hiding it for rows.
+6. For you's tie-break: oldest first within a rank (taken), rather than the Agents panel's name
+   order; Bernard asked for "the same sort as Agents".
