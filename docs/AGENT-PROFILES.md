@@ -69,6 +69,7 @@ to use defaults. There is no cross-provider fallback.
 | `claude-code` | `--model`; provider routing remains native environment/auth configuration | Appended system prompt | `--effort`, only supported declared levels |
 | `codex` | `--model` and `model_provider` configuration | Additive initial role prompt, preserving existing developer instructions | `model_reasoning_effort`, only supported declared levels |
 | `kimi-cli` | `--model` selects an already configured native model alias and its provider | Generated `--agent-file` Markdown wrapping the base prompt | No verified override in the tested CLI; leave absent |
+| `grok` | `--model` (ids from `grok models`, provider `xai`) | `--rules`, appended to Grok Build's system prompt | `--reasoning-effort` exists but its `--help` lists no levels; leave absent |
 
 For Codex, `provider` is the native provider ID already configured in Codex. For
 Claude and Kimi, it labels the selected native configuration; changing this label
@@ -80,6 +81,10 @@ Optional native permissions live in `profiles.<name>.options`:
 - Claude: `permission` (`default` omits the flag), optional `fallback` model.
 - Codex: `sandbox` (default `read-only`), `approval` (default `on-request`).
 - Kimi: `permission` (`default`, `yolo`, `auto`, `plan`); default omits the flag.
+- Grok: `permission` (`default`, `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`, `plan`,
+  passed as `--permission-mode`); default omits the flag. `--sandbox` and `--always-approve` are
+  not exposed, and `tool_rules` are not applied (Claude Code only). Resume is refused, as for the
+  other non-Claude clients.
 
 These names are not portable equivalents. No generic permission bypass is added.
 Review-only instructions are not an operating-system sandbox: native permissions
@@ -91,7 +96,7 @@ and a role prompt could tell the model to read it) unless `AGENT_LAUNCH_KEEP_API
 or the profile names it as an `env_refs` target. Native base URL/token variables remain
 available. `env_refs` cannot set the dynamic-linker, shell, interpreter or git hook
 variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG*`, `PYTHON*`, editors and pagers, …)
-nor `HERDR_*`. A profile with elevated options (`bypassPermissions`, `danger-full-access`,
+nor `HERDR_*`. A profile with elevated options (`bypassPermissions`, `dontAsk`, `danger-full-access`,
 `approval = "never"`, `yolo`) is announced on stderr before the client starts. Optional profile
 `env_refs` maps target environment variable names to existing source variable names
 without storing their values in the manifest:

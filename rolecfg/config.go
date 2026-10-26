@@ -490,6 +490,16 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		if reasoning != "" {
 			return Profile{}, fmt.Errorf("kimi-cli adapter has no verified reasoning override; omit reasoning and configure the native model alias")
 		}
+	} else if client == "grok" { // Grok Build: the values its --help lists (grok 1.0.67)
+		if err := checkKeys(optionMap, set("permission"), "Grok options"); err != nil {
+			return Profile{}, err
+		}
+		if v, exists := optionMap["permission"]; exists && v != "default" && v != "acceptEdits" && v != "auto" && v != "dontAsk" && v != "bypassPermissions" && v != "plan" {
+			return Profile{}, fmt.Errorf("unsupported Grok permission")
+		}
+		if reasoning != "" {
+			return Profile{}, fmt.Errorf("grok adapter has no verified reasoning levels (--help lists none); omit reasoning")
+		}
 	} else {
 		adapters, exists := m.rawAdapters()
 		if !exists || adapters[client] == nil {
@@ -732,7 +742,7 @@ func appendMissingSorted(order *[]string, table map[string]interface{}) {
 }
 
 func isBuiltin(client string) bool {
-	return client == "claude-code" || client == "codex" || client == "kimi-cli"
+	return client == "claude-code" || client == "codex" || client == "kimi-cli" || client == "grok"
 }
 
 func contains(values []string, sought string) bool {

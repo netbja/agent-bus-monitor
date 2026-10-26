@@ -21,7 +21,7 @@ import (
 )
 
 // builtinBinary is the executable each builtin client runs.
-var builtinBinary = map[string]string{"claude-code": "claude", "codex": "codex", "kimi-cli": "kimi"}
+var builtinBinary = map[string]string{"claude-code": "claude", "codex": "codex", "kimi-cli": "kimi", "grok": "grok"}
 
 // repoRoot is the agent-bus-monitor checkout that holds the default skills
 // and role prompts (Python's REPO): AGENTBUS_REPO, set by the scripts, else
@@ -334,6 +334,16 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 			cmd = append(cmd, "--"+perm)
 		}
 		return cmd, nil
+	case "grok":
+		cmd := []string{"grok", "--model", model}
+		if perm := opts["permission"]; perm != "" && perm != "default" {
+			cmd = append(cmd, "--permission-mode", perm)
+		}
+		// --rules appends to grok's system prompt, like Claude's --append-system-prompt.
+		if dry {
+			return append(cmd, "--rules", "<role prompt and skill paths>"), nil
+		}
+		return append(cmd, "--rules", prompt), nil
 	}
 	file := "<resolved launch.json>"
 	if !dry {
@@ -372,6 +382,7 @@ func preflight(p Profile, rules ToolRules, resume bool, e *envMap) error {
 		"claude-code": {"--model", "--append-system-prompt", "--name"},
 		"codex":       {"--model", "--config", "--sandbox", "--ask-for-approval"},
 		"kimi-cli":    {"--model", "--agent-file"},
+		"grok":        {"--model", "--rules"},
 	}[p.Client]
 	perm := p.Options["permission"]
 	if p.Client == "claude-code" {
@@ -391,6 +402,9 @@ func preflight(p Profile, rules ToolRules, resume bool, e *envMap) error {
 	}
 	if p.Client == "kimi-cli" && perm != "" && perm != "default" {
 		needed = append(needed, "--"+perm)
+	}
+	if p.Client == "grok" && perm != "" && perm != "default" {
+		needed = append(needed, "--permission-mode")
 	}
 	for _, flag := range needed {
 		if !strings.Contains(string(out), flag) {
@@ -915,7 +929,7 @@ func pyFloat(f float64) string {
 
 // elevated names the builtin options that take a client out of its safe
 // defaults ("" when none): Claude without permission prompts, Codex with full
-// disk access or no approvals, Kimi in yolo mode.
+// disk access or no approvals, Kimi in yolo mode, Grok without permission prompts.
 func elevated(p Profile, rules ToolRules) string {
 	var parts []string
 	switch p.Client {
@@ -936,6 +950,10 @@ func elevated(p Profile, rules ToolRules) string {
 	case "kimi-cli":
 		if p.Options["permission"] == "yolo" {
 			parts = append(parts, "permission=yolo")
+		}
+	case "grok":
+		if perm := p.Options["permission"]; perm == "bypassPermissions" || perm == "dontAsk" {
+			parts = append(parts, "permission="+perm)
 		}
 	}
 	return strings.Join(parts, " ")
