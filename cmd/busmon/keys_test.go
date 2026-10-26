@@ -68,12 +68,12 @@ func TestLookupMatrix(t *testing.T) {
 		{"unbound x", ModePanel, PanelActivity, TierWide, runeKey('x'), ActNone},
 	}
 	for _, c := range cases {
-		if got := lookup(c.m, c.p, c.t, c.ev); got != c.want {
+		if got := lookup(c.m, c.p, c.t, keyOf(c.ev)); got != c.want {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
 	}
 	for _, m := range []Mode{ModePanel, ModeInput, ModeFilter, ModeOverlay} {
-		if got := lookup(m, PanelAgents, TierWide, ctrlC); got != ActQuit {
+		if got := lookup(m, PanelAgents, TierWide, keyOf(ctrlC)); got != ActQuit {
 			t.Errorf("Ctrl-C in mode %v: %v", m, got)
 		}
 	}

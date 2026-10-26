@@ -459,7 +459,7 @@ func (p *picker) start() {
 // handleKey is the picker's key table (ModePick). Any key ends a status
 // line; while an open runs only esc and ^C act (up is left to finish).
 func (p *picker) handleKey(ev *tcell.EventKey) *tcell.EventKey {
-	act := lookup(ModePick, PanelAgents, TierWide, ev)
+	act := lookup(ModePick, PanelAgents, TierWide, keyOf(ev))
 	if p.m.busyText() != "" {
 		if act == ActQuit || act == ActClose {
 			p.close()

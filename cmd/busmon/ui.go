@@ -356,7 +356,7 @@ func (u *ui) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	if m == ModeCompose {
 		return u.composeKey(ev)
 	}
-	act := lookup(m, u.focus, u.tier(), ev)
+	act := lookup(m, u.focus, u.tier(), keyOf(ev))
 	if act == ActQuit {
 		u.app.Stop()
 		return nil

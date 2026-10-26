@@ -265,7 +265,7 @@ func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
 		p.q = 0
 	}
 	q := a.Questions[p.q]
-	act := lookup(ModeAsk, u.focus, u.tier(), ev)
+	act := lookup(ModeAsk, u.focus, u.tier(), keyOf(ev))
 	switch act {
 	case ActQuit:
 		u.app.Stop()
