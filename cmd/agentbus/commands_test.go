@@ -115,6 +115,7 @@ var foreignFlags = []string{
 	"--cwd", "--direction", "--entrypoint", "--env", "--filter", "--focus", "--format",
 	"--git-dir", "--interactive", "--label", "--login", "--name", "--no-focus", "--plugin",
 	"--settings", "--target-pane", "--version", "--workspace", "--model",
+	"--source", "--agent", "--seq", // herdr pane report-agent-session
 }
 
 // Every flag an agentbus command reads (a "--x" literal in a non-test file of

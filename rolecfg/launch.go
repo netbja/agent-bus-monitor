@@ -289,13 +289,11 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 		if perm := opts["permission"]; perm != "" && perm != "default" {
 			cmd = append(cmd, "--permission-mode", perm)
 		}
-		if !rules.Empty() {
-			settings, err := settingsJSON(rules)
-			if err != nil {
-				return nil, err
-			}
-			cmd = append(cmd, "--settings", settings)
+		settings, err := settingsJSON(rules, resumeHookCommand(newEnv(env)))
+		if err != nil {
+			return nil, err
 		}
+		cmd = append(cmd, "--settings", settings)
 		if p.Reasoning != "" {
 			cmd = append(cmd, "--effort", p.Reasoning)
 		}
@@ -389,9 +387,7 @@ func preflight(p Profile, rules ToolRules, resume bool, e *envMap) error {
 		if perm != "" && perm != "default" {
 			needed = append(needed, "--permission-mode")
 		}
-		if !rules.Empty() {
-			needed = append(needed, "--settings")
-		}
+		needed = append(needed, "--settings") // the resume hook, and the tool rules
 	}
 	if p.Client == "kimi-cli" && perm != "" && perm != "default" {
 		needed = append(needed, "--"+perm)
@@ -606,21 +602,33 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-// settingsJSON is the --settings value carrying a role's tool rules:
-// {"permissions": {"allow": [...], "ask": [...], "deny": [...]}}, empty lists
-// left out, in Python's json.dumps form like every other generated JSON here.
-func settingsJSON(r ToolRules) (string, error) {
-	perms := newOrdered()
-	for _, l := range []struct {
-		key  string
-		list []string
-	}{{"allow", r.Allow}, {"ask", r.Ask}, {"deny", r.Deny}} {
-		if len(l.list) > 0 {
-			perms.set(l.key, l.list)
-		}
-	}
+// settingsJSON is the --settings value of a Claude Code launch: a role's
+// tool rules, {"permissions": {"allow": [...], "ask": [...], "deny": [...]}}
+// with empty lists left out (no permissions without rules), then the
+// SessionStart hook that reports the resume command (resume.go), in
+// Python's json.dumps form like every other generated JSON here.
+func settingsJSON(r ToolRules, hook string) (string, error) {
 	root := newOrdered()
-	root.set("permissions", perms)
+	if !r.Empty() {
+		perms := newOrdered()
+		for _, l := range []struct {
+			key  string
+			list []string
+		}{{"allow", r.Allow}, {"ask", r.Ask}, {"deny", r.Deny}} {
+			if len(l.list) > 0 {
+				perms.set(l.key, l.list)
+			}
+		}
+		root.set("permissions", perms)
+	}
+	command := newOrdered()
+	command.set("type", "command")
+	command.set("command", hook)
+	matcher := newOrdered()
+	matcher.set("hooks", []interface{}{command})
+	hooks := newOrdered()
+	hooks.set("SessionStart", []interface{}{matcher})
+	root.set("hooks", hooks)
 	return pyJSON(root)
 }
 

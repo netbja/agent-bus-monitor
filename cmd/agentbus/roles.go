@@ -81,6 +81,14 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, rolecfg.ProjectsDir(func(k string) string { v, _ := lookupEnv(env, k); return v }))
 		return nil
 	}
+	switch action { // Claude's SessionStart hook and its sender: silent, never failing
+	case "report-resume":
+		reportResume(rest, env, os.Stdin, stdout, stderr, spawnDetached)
+		return nil
+	case "report-resume-send":
+		reportResumeSend(rest, defaultSenderDeps())
+		return nil
+	}
 	if action == "check-toml" {
 		if len(rest) != 1 {
 			return errors.New("usage: check-toml <file>")
@@ -106,8 +114,13 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 			return rolecfg.LaunchProfile(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
 		case len(rest) == 4 && rest[2] == "--resume":
 			return rolecfg.LaunchResume(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
+		case len(rest) == 6 && rest[2] == "--profile" && rest[4] == "--resume": // a swapped role resumed by herdr
+			if rest[5] == "" {
+				return errors.New("resume session id is required")
+			}
+			return rolecfg.LaunchProfileResume(m, rest[0], rest[1], rest[3], rest[5], env, stdout, stderr, syscall.Exec)
 		}
-		return errors.New("usage: agent-launch <role> <project> [--profile <profile> | --resume <session-id>]")
+		return errors.New("usage: agent-launch <role> <project> [--profile <profile>] [--resume <session-id>]")
 	case "fallbacks":
 		return rolesFallbacks(m, rest, stdout)
 	case "draft":
