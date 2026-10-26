@@ -260,7 +260,7 @@ lookup, never `os.Getenv`.
 | health `runaway` | `runawayThresholdsFromEnv(os.Getenv)` | **project** |
 | health builder (`realHealthConfig`), `dispatchcmd.go` | `service.Detect`/`ManagerBin`/`PathsFrom(os.Getenv)`: `AGENTBUS_SERVICE_MANAGER`, `XDG_*`, `HOME` | **host** |
 | stream caps (`bus/bus.go`) | `AGENT_BUS_REPORT_MAX`, `AGENT_BUS_VERDICT_MAX`, `AGENT_BUS_REPORT_FULL_MAX` | **host**: read from the process. A project env file that sets one gets a warning in its log: per-project caps are not supported under the host dispatcher |
-| quota readers (`quota/config.go`, `quota/claude.go`) | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` | **host**: the shared collector |
+| quota readers (`quota/config.go`, `quota/claude.go`) | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` | **host**: the shared collector. A project env file that sets one is **ignored with a warning** in that project's log (the collector reads one set of sources for the host), never refused: refusing would disable dispatch for a setting that changes nothing in that project's policy |
 | health `herdr-probe` | the runtime | **project**: the project's own session-bound runtime |
 
 The host env file (`services/host.env`, same rules) holds what belongs to the process: `PATH`,
