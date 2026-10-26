@@ -241,10 +241,21 @@ Each project's env file (`services/<p>.env`, 0600, unchanged format) is parsed i
   dispatch unit's `WorkingDirectory` and the missions unit's `--repo`). One process has one
   working directory, so no check may use `os.Getwd()` to mean "the project".
 
-`ProjectConfig` exposes one lookup, `Getenv(key)`: the project file first, then the host
-environment. Every builder that today takes `getenv func(string) string` (`serviceQuota`,
-`runawayThresholdsFromEnv`, `bus.LegacyPasswordInUse`, `herdrBin`, `repoDir`) receives that
-lookup, never `os.Getenv`.
+`ProjectConfig` exposes one lookup, `Getenv(key)`, and its slice form `Environ()`. The rule depends
+on the key's scope in the inventory:
+
+- a **project-scoped** key comes from the project file, or else its built-in default (the default
+  the reader already applies when the variable is unset, e.g. `localhost`/`6380` for the broker,
+  `master` for escalation). It **never falls back to the host environment**: otherwise
+  `host.env` would silently become every project's default, which is the leak the contract forbids;
+- a **host-scoped** key comes from the process environment (loaded from `host.env`), and a
+  project file that sets it is ignored with a warning (see the rows below);
+- any other key reads empty.
+
+Every builder that today takes `getenv func(string) string` (`serviceQuota`,
+`runawayThresholdsFromEnv`, `bus.LegacyPasswordInUse`, `herdrBin`, `repoDir`) receives `Getenv`.
+Every builder that takes an environment slice (`manifestPath`, `skillsMatch`, `realDoctorDeps`)
+receives `Environ()`. None receives `os.Getenv` or `os.Environ()`.
 
 **Inventory of environment reads on the dispatch path** (base `f803a72`), with how each is served:
 
@@ -258,6 +269,9 @@ lookup, never `os.Getenv`.
 | health `installed-versions` | `herdrBin(os.Getenv)`, `repoDir(os.Getenv)`, `manifestPath(os.Environ())`, `skillsMatch(os.Environ())` | **project** for herdr bin and manifest (a project's `AGENTBUS_ROLES_TOML`). **Host** for the agentbus repo (`AGENTBUS_REPO`) |
 | health `tracked-secrets` | `os.Getwd()` | **project**: `AGENTBUS_PROJECT_DIR` |
 | health `runaway` | `runawayThresholdsFromEnv(os.Getenv)` | **project** |
+| health `agent-launch` (`healthchecks.go`, `manifestPath(os.Environ())`) | `AGENTBUS_ROLES_TOML` and the manifest lookup it drives | **project**: the project's roles manifest, via `Environ()` |
+| health `model-drift` (`healthchecks.go`, `realDoctorDeps(os.Environ())`) | the manifest path as above | **project**, via `Environ()` |
+| `realDoctorDeps` (`doctor.go`) | `os.Getenv("CLAUDE_CONFIG_DIR")` (transcript root) | **host**, like the quota readers. It is read inside `realDoctorDeps`, so the function moves into the static test's scope and takes the value from its caller |
 | health builder (`realHealthConfig`), `dispatchcmd.go` | `service.Detect`/`ManagerBin`/`PathsFrom(os.Getenv)`: `AGENTBUS_SERVICE_MANAGER`, `XDG_*`, `HOME` | **host** |
 | stream caps (`bus/bus.go`) | `AGENT_BUS_REPORT_MAX`, `AGENT_BUS_VERDICT_MAX`, `AGENT_BUS_REPORT_FULL_MAX` | **host**: read from the process. A project env file that sets one gets a warning in its log: per-project caps are not supported under the host dispatcher |
 | quota readers (`quota/config.go`, `quota/claude.go`) | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` | **host**: the shared collector. A project env file that sets one is **ignored with a warning** in that project's log (the collector reads one set of sources for the host), never refused: refusing would disable dispatch for a setting that changes nothing in that project's policy |
@@ -495,13 +509,15 @@ Cases (each is an acceptance criterion):
 - **No process environment for project settings.** A static AST test, in the style of
   `TestEveryDispatchedCommandIsInTheTable`. Its scope is the files that build a runner's
   dispatcher, not `dispatch/` (which has no reads to find): the host dispatcher's own files, plus
-  the builder functions `serviceQuota`, `realHealthConfig`/`realHealthChecks` and the runner's
-  connect path. In that scope, any `os.Getenv`, `os.LookupEnv`, `os.Environ` or `os.Getwd` call,
-  and any `os.Getenv` passed as a value, fails unless it is listed in an allowlist that names the
-  host-scoped keys of the inventory. A behaviour test backs it: two projects whose env files differ
-  in broker host, herdr bin, escalation target, quota hold, runaway threshold and project directory.
-  Each project's health checks and decisions see only its own values, while the process
-  environment holds a third, distinct value for each key.
+  the builder functions `serviceQuota`, `realHealthConfig`/`realHealthChecks`, `realDoctorDeps` and
+  the runner's connect path. In that scope, any `os.Getenv`, `os.LookupEnv`, `os.Environ` or
+  `os.Getwd` call, and any `os.Getenv` passed as a value, fails unless it is listed in an allowlist
+  that names the host-scoped keys of the inventory. A behaviour test backs it: two projects whose
+  env files differ in broker host, herdr bin, escalation target, quota hold, runaway threshold,
+  roles manifest and project directory. Each project's health checks (`agent-launch` and
+  `model-drift` included) and decisions see only its own values, while the process environment
+  holds a third, distinct value for each key. A third project whose file leaves those keys unset
+  sees the built-in defaults, never the process environment's values.
 - **Goroutines.** A second static test fails on a bare `go` statement in `dispatch/` or the host
   dispatcher's files that does not go through `safeGo`.
 - **Per-project logs.** Two runners each log a decision. Each line lands in its own project's log
