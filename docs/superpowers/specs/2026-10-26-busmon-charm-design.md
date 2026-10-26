@@ -147,7 +147,11 @@ Sketches use plain ASCII; the real frames use the glyph set.
 
 ### 120 x 30 (wide tier, smallest)
 
-Same zones. For you and Agents share the top row 2:3; the tabbed panel takes what is left
+Same zones. For you and Agents share the top row: For you takes its content's width, at least 36
+and at most 56 columns or 2/5 of the screen; Agents takes the rest (as built in b1, after review: a
+2:3 split left Agents' message column no room). Beside For you, an Agents row narrower than 110
+cells shows the updated age without its bar, and under 75 the queue and flags take their medium
+widths, so the message keeps room; the tabbed panel takes what is left
 (at least 8 rows). The header stays two lines.
 
 ### 80 x 24 (medium tier)

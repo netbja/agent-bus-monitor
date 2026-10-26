@@ -155,7 +155,11 @@ func (m *Model) applySnapshot(s snapshot, at time.Time) {
 // counts is what the layout needs from the content.
 func (m *Model) counts() shellCounts {
 	names, _ := visibleAgents(m.snap.agents, m.snap.pilot, m.ui.showAll, m.now)
-	return shellCounts{ForYou: len(m.forYou), Agents: len(names)}
+	w := 0
+	for _, it := range m.forYou {
+		w = max(w, forYouNatural(it, m.now))
+	}
+	return shellCounts{ForYou: len(m.forYou), Agents: len(names), ForYouWidth: w + listGutter + 2}
 }
 
 // refresh recomputes the marks, the For you list, the layout and every list's

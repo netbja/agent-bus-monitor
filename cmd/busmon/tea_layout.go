@@ -13,6 +13,7 @@ var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard
 // shellCounts is what the shell's layout needs to know about the content.
 type shellCounts struct {
 	ForYou, Agents int
+	ForYouWidth    int  // the For you frame's natural width: its widest row, gutter and borders
 	Composing      bool // narrow shows the input row only while composing
 }
 
@@ -33,6 +34,8 @@ const (
 	forYouMediumRows  = 4 // items shown at the medium tier, then "+N more" (Bernard's decision 1)
 	minShellLowerMed  = 6
 	shellHeaderHeight = 2
+	forYouMinWidth    = 36 // its title and label, "N for you · M unread"
+	forYouMaxWidth    = 56 // wide: For you takes its content, capped, Agents the rest (b1 review)
 )
 
 // forYouRowsFor is the number of For you rows: its items, at least one (the
@@ -76,7 +79,7 @@ func shellWide(w, h int, c shellCounts, tab PanelID) (shellLayout, bool) {
 	if avail-topH < minShellLower {
 		return shellLayout{}, false
 	}
-	fw := w * 2 / 5 // For you and Agents share the top row 2:3
+	fw := clamp(c.ForYouWidth, forYouMinWidth, min(forYouMaxWidth, w*2/5)) // at most 2:3
 	y := shellHeaderHeight
 	return shellLayout{
 		Tier:       TierWide,

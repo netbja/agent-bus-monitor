@@ -6,7 +6,7 @@ import "testing"
 // every row of the screen belongs to a zone.
 func TestShellLayoutTiles(t *testing.T) {
 	for _, size := range [][2]int{{60, 20}, {80, 24}, {120, 30}, {140, 40}, {30, 6}, {79, 24}, {119, 30}, {120, 14}, {200, 60}} {
-		for _, c := range []shellCounts{{0, 0, false}, {3, 6, false}, {9, 30, false}, {2, 4, true}} {
+		for _, c := range []shellCounts{{ForYou: 0, Agents: 0}, {ForYou: 3, Agents: 6, ForYouWidth: 40}, {ForYou: 9, Agents: 30, ForYouWidth: 90}, {ForYou: 2, Agents: 4, Composing: true}} {
 			for _, view := range narrowPanels {
 				l := shellLayoutFor(size[0], size[1], c, view, PanelBoard)
 				if l.Tier == TierTooSmall {
@@ -55,10 +55,15 @@ func TestShellLayoutTiers(t *testing.T) {
 			t.Errorf("%dx%d: header %d lines, want 2", tc.w, tc.h, l.Header.H)
 		}
 	}
-	// Wide: For you and Agents share the top row 2:3; the tabbed panel keeps 8 rows.
-	l := shellLayoutFor(120, 30, c, PanelForYou, PanelBoard)
-	if l.ForYou.Y != l.Agents.Y || l.ForYou.H != l.Agents.H || l.ForYou.W != 48 || l.Lower.H < minShellLower || l.Active != PanelBoard {
-		t.Errorf("wide 120x30: %+v", l)
+	// Wide: For you takes its content width, capped, Agents the rest; the
+	// tabbed panel keeps 8 rows.
+	for _, tc := range []struct{ content, want int }{{20, forYouMinWidth}, {44, 44}, {90, forYouMaxWidth}} {
+		c.ForYouWidth = tc.content
+		l := shellLayoutFor(140, 30, c, PanelForYou, PanelBoard)
+		if l.ForYou.Y != l.Agents.Y || l.ForYou.H != l.Agents.H || l.ForYou.W != tc.want || l.Agents.W != 140-tc.want ||
+			l.Lower.H < minShellLower || l.Active != PanelBoard {
+			t.Errorf("wide 140x30, content %d: %+v", tc.content, l)
+		}
 	}
 	// Medium: For you shows 4 items, then "+N more".
 	if l := shellLayoutFor(80, 24, shellCounts{ForYou: 9, Agents: 2}, PanelForYou, PanelActivity); l.ForYouRows != 5 {

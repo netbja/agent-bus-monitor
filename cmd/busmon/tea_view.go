@@ -212,26 +212,36 @@ var forYouKinds = map[int]struct {
 // forYouRow is one For you item in exactly width cells: its mark and kind,
 // the agent, the text, and its age on the right.
 func forYouRow(it attentionItem, width int, now time.Time) Line {
+	head, text, age := forYouParts(it, now)
+	l := append(head, FitLine(text, max(0, width-head.Width()-age.Width()))...)
+	return FitLine(append(l, age...), width)
+}
+
+// forYouNatural is a row's width uncut: what the wide tier sizes For you by.
+func forYouNatural(it attentionItem, now time.Time) int {
+	head, text, age := forYouParts(it, now)
+	return head.Width() + text.Width() + age.Width()
+}
+
+func forYouParts(it attentionItem, now time.Time) (head, text, age Line) {
 	k := forYouKinds[it.Rank]
 	if it.Unread { // an ask whose line is unread: the row carries the mark
 		k.glyph, k.role = GlyphDotFull, forYouKinds[rankUnread].role
 	}
-	text := Preview(it.Text)
+	t := Preview(it.Text)
 	switch it.Rank {
 	case rankAsk:
 		if it.Count > 1 {
-			text += fmt.Sprintf(" (%d questions)", it.Count)
+			t += fmt.Sprintf(" (%d questions)", it.Count)
 		}
 	case rankGate:
 		if it.By != "" {
-			text = "by " + Preview(it.By) + "  " + text
+			t = "by " + Preview(it.By) + "  " + t
 		}
 	}
-	age := Line{}
 	if !it.At.IsZero() {
 		age = Line{{Text: " " + humanAge(now.Sub(it.At)), Role: RoleMuted}}
 	}
-	l := Line{col(k.glyph, 2, k.role), col(k.word, 7, k.role), col(Preview(it.Agent), 10, RoleText)}
-	l = append(l, FitLine(Line{{Text: text, Role: RoleText}}, max(0, width-l.Width()-age.Width()))...)
-	return FitLine(append(l, age...), width)
+	head = Line{col(k.glyph, 2, k.role), col(k.word, 7, k.role), col(Preview(it.Agent), 10, RoleText)}
+	return head, Line{{Text: t, Role: RoleText}}, age
 }

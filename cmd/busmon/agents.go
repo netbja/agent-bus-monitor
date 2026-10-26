@@ -342,6 +342,25 @@ func agentColsFor(tier Tier) agentCols {
 	return agentCols{glyph: 2, name: 10, state: 9, updated: 5, queue: 4} // narrow: the flag joins the message
 }
 
+// wideBarRow is the narrowest wide row that keeps the freshness bar: below
+// it (the shell's Agents beside For you) the updated column is the age alone,
+// so the message keeps room.
+const wideBarRow = 110
+
+// agentColsFit is agentColsFor for a row of width cells, and the tier the
+// updated cell is drawn for (the bar only on a wide, wide-enough row).
+func agentColsFit(tier Tier, width int) (agentCols, Tier) {
+	c := agentColsFor(tier)
+	if tier == TierWide && width < wideBarRow {
+		c.updated = 8              // "updated" and its gap
+		if width < wideBarRow-35 { // narrower still: the queue and flags take their medium widths
+			c.queue, c.flags = 6, 12
+		}
+		return c, TierMedium
+	}
+	return c, tier
+}
+
 // cell fits a multi-segment value to a column of n cells with one trailing space.
 func cell(segs []Seg, n int) Line {
 	if n <= 0 {
@@ -355,7 +374,7 @@ func agentHeader(tier Tier, width int) Line {
 	if tier != TierWide {
 		return nil
 	}
-	c := agentColsFor(tier)
+	c, _ := agentColsFit(tier, width)
 	l := Line{col("", c.glyph, RoleDim), col("agent", c.name, RoleDim), col("state", c.state, RoleDim),
 		col("updated", c.updated, RoleDim), col("queue", c.queue, RoleDim), col("ctx", c.ctx, RoleDim),
 		col("flags", c.flags, RoleDim), {Text: "message", Role: RoleDim}}
@@ -364,14 +383,14 @@ func agentHeader(tier Tier, width int) Line {
 
 // agentRow is one agent in exactly width cells (the list adds its gutter).
 func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now time.Time) Line {
-	c := agentColsFor(tier)
+	c, barTier := agentColsFit(tier, width)
 	glyph, word, role, _ := stateLook(a)
 	w := col(word, c.state, role)
 	if waitsForPerson(a) {
 		w.Fade = fadeLevel(now) // only the word fades; the glyph and the header stay still
 	}
 	l := Line{col(glyph, c.glyph, role), col(Preview(name), c.name, RoleText), w}
-	l = append(l, cell(updatedCell(a, tier, now), c.updated)...)
+	l = append(l, cell(updatedCell(a, barTier, now), c.updated)...)
 	l = append(l, cell([]Seg{queueCell(a, tier)}, c.queue)...)
 	if c.ctx > 0 {
 		ctx := Seg{Text: GlyphDash, Role: RoleMuted}

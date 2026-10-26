@@ -98,3 +98,35 @@ func TestShellGoldensCarryEverySurvivingFlag(t *testing.T) {
 		}
 	}
 }
+
+// At the wide tier Agents beside For you keeps room for the message: its
+// column header shows "message", and every row has text under it, not a lone
+// ellipsis.
+func TestShellWideAgentsKeepTheMessage(t *testing.T) {
+	pinLocal(t)
+	for _, size := range [][2]int{{120, 30}, {140, 40}} {
+		m := fixtureShell(t, size[0], size[1])
+		g := m.grid()
+		r := m.layout.Agents
+		row := func(y int) []string {
+			var cells []string
+			for x := r.X + 1; x < r.X+r.W-1; x++ {
+				if c := g.at(x, y); !c.cont {
+					cells = append(cells, c.text)
+				}
+			}
+			return cells
+		}
+		head := row(r.Y + 1)
+		at := strings.Index(strings.Join(head, ""), "message")
+		if at < 0 {
+			t.Fatalf("%v: Agents header lacks the message column: %q", size, strings.Join(head, ""))
+		}
+		for y := r.Y + 2; y < r.Y+r.H-1; y++ {
+			msg := strings.TrimSpace(strings.Join(row(y)[at:], ""))
+			if len([]rune(msg)) < 3 {
+				t.Errorf("%v: Agents row %d has no room for its message: %q", size, y, strings.Join(row(y), ""))
+			}
+		}
+	}
+}
