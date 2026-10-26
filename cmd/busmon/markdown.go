@@ -8,8 +8,8 @@ import (
 
 // Markdown readable in a terminal (v0.14, spec §7): long texts — reports,
 // status messages, question context, message bodies — rendered for an overlay
-// body at a given width: headings, lists with a hanging indent, re-wrapped
-// paragraphs, quotes, code spans and verbatim code blocks. The output is
+// body at a given width: headings, lists with a hanging indent, lines kept as
+// typed and wrapped at the width, quotes, code spans and verbatim code blocks. The output is
 // colour-tagged through tg(), like every overlay body; it only moves
 // whitespace and drops the Markdown markers themselves.
 
@@ -144,7 +144,10 @@ func renderMarkdown(src string, width int) string {
 			}
 			out = append(out, wrapSpans(spans, width, gutter, gutter)...)
 		default:
+			// A line break is kept as typed (as GitHub shows a comment): a
+			// message is not a hard-wrapped document. Each line wraps alone.
 			para = append(para, trimmed)
+			flush()
 		}
 	}
 	flush()
