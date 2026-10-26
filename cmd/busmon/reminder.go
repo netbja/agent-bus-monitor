@@ -20,6 +20,8 @@ type attentionItem struct {
 	Rank     int    // the For you rank (rankAsk … rankUnread); the shell's list only
 	Count    int    // an ask's open questions
 	EventID  string // an unread line's entry
+	By       string // a gate's challenger (the gated agent is Agent)
+	Unread   bool   // an ask whose Activity line is unread: folded into its row
 }
 
 func attentionItems(agents map[string]*agentState, asks []bus.Ask) []attentionItem {

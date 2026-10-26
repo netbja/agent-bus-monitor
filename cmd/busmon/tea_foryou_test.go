@@ -49,6 +49,7 @@ func forYouFixture() (snapshot, []feedLine) {
 		{id: "3", ev: ev("1792999050000-0", "master", "about the plan"), at: at(48), mark: markUnread},
 		{id: "4", ev: ev("1792999200000-0", "master", "not for you"), at: at(55)},
 		{id: "5", sep: true, at: at(56), mark: markUnread},
+		{id: "6", ev: bus.Event{ID: "200-0", Kind: "cmd", Type: bus.CmdAsk, From: "master", Target: "people"}, at: at(20), mark: markUnread},
 	}
 	return s, feed
 }
@@ -83,8 +84,12 @@ func TestForYouRanksAndOrders(t *testing.T) {
 	if got[1].Count != 2 || got[1].Text != "review lot 1?" {
 		t.Errorf("ask row: %+v", got[1])
 	}
-	if got[6].Text != "look at PR 9" {
-		t.Errorf("gate row text: %q", got[6].Text)
+	if g := got[6]; g.Agent != "foureyes" || g.By != "master" || g.Text != "look at PR 9" {
+		t.Errorf("gate row: %+v", g)
+	}
+	// The unread line of an open ask is folded into the ask's row: listed once.
+	if !got[1].Unread || got[0].Unread {
+		t.Errorf("ask rows' unread marks: %v %v", got[0].Unread, got[1].Unread)
 	}
 }
 
@@ -100,8 +105,8 @@ func TestForYouSubsets(t *testing.T) {
 			t.Errorf("a decision is an unread line: %+v", it)
 		}
 	}
-	if n := unreadItems(items); n != 2 {
-		t.Errorf("unread badge = %d, want 2", n)
+	if n := unreadItems(items); n != 3 { // two lines and the folded ask line: the Activity marks
+		t.Errorf("unread badge = %d, want 3", n)
 	}
 	// The reminder's source is decisions: never an unread line.
 	rem := dueAttention(decisions(items), &busmonCache{Snoozes: map[string]int64{}}, time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC), 5*time.Minute)

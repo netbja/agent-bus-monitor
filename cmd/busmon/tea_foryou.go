@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // For you (busmon Charm spec, decision 2): one list of what waits on the
@@ -42,17 +44,30 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("prompt:%s:%d", name, since.UnixMilli()),
 				Agent: name, Text: "pane prompt", At: since})
 		}
+		// A gate holds Agent until a verdict; its challenger opened it. Who
+		// reviews whom depends on who challenged (master gates a reviewer, a
+		// reviewer gates an author), so the row names both, neutrally.
 		for ref, meta := range a.gates {
-			_, summary, _ := strings.Cut(meta, "|")
+			by, summary, _ := strings.Cut(meta, "|")
 			if summary == "" {
 				summary = ref
 			}
-			out = append(out, attentionItem{Rank: rankGate, Key: "gate:" + name + ":" + ref, Agent: name, Text: summary,
+			out = append(out, attentionItem{Rank: rankGate, Key: "gate:" + name + ":" + ref, Agent: name, By: by, Text: summary,
 				At: eventTimestamp(ref)})
+		}
+	}
+	asks := map[string]int{} // an open ask's row, by ask id (the id of its Activity line)
+	for i, it := range out {
+		if it.Rank == rankAsk {
+			asks[it.AskID] = i
 		}
 	}
 	for _, fl := range feed {
 		if fl.sep || fl.mark != markUnread {
+			continue
+		}
+		if i, ok := asks[fl.ev.ID]; ok && fl.ev.Type == bus.CmdAsk {
+			out[i].Unread = true // listed once: the ask's row carries the mark
 			continue
 		}
 		out = append(out, attentionItem{Rank: rankUnread, Key: "unread:" + fl.ev.ID, Agent: sender(fl.ev),
@@ -87,11 +102,12 @@ func decisions(items []attentionItem) []attentionItem {
 	return out
 }
 
-// unreadItems is the header's unread badge: the unread lines of the list.
+// unreadItems is the header's unread badge: the unread lines of the list,
+// an ask's folded line included, so it equals the Activity marks.
 func unreadItems(items []attentionItem) int {
 	n := 0
 	for _, it := range items {
-		if it.Rank == rankUnread {
+		if it.Rank == rankUnread || it.Unread {
 			n++
 		}
 	}

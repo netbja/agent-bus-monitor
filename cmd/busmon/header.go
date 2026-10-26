@@ -23,6 +23,7 @@ type headerData struct {
 	waiting  string            // waitingText: "3 waiting · oldest 42m", "" when nothing waits
 	asks     int               // agents in state waiting: decisions a person owes
 	forYou   int               // the shell's for-you badge: decisions(forYou), shown instead of asks
+	shell    bool              // the shell's header: badges first (compact under 120 columns), the pause on row 2
 	unread   int               // Activity entries for the person not opened yet (unread.go)
 	pause    *bus.PauseRecord  // the project pause, nil when not paused
 	holds    map[string]int64  // provider → quota hold reset
@@ -88,16 +89,30 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 		add(Line{{Text: "(" + Preview(d.health.err) + ")", Role: RoleMuted}}, 9, second)
 	}
 	if d.pause != nil {
-		add(pauseSeg(d.pause, d.now), 1, 0)
+		row := 0
+		if d.shell {
+			row = second
+		}
+		add(pauseSeg(d.pause, d.now), 1, row)
 	}
-	if d.unread > 0 {
+	if d.shell { // the badges are what the person acts on: admitted before anything they could lose to
+		word := func(full string) string {
+			if width < wideMinWidth {
+				return ""
+			}
+			return " " + full
+		}
+		if d.forYou > 0 {
+			add(Line{{Text: fmt.Sprintf("%s %d%s", GlyphHuman, d.forYou, word("for you")), Role: RoleAttention}}, 0, 0)
+		}
+		if d.unread > 0 {
+			add(Line{{Text: fmt.Sprintf("%s %d%s", GlyphDotFull, d.unread, word("unread")), Role: RoleAttention}}, 0, 0)
+		}
+	} else if d.unread > 0 {
 		add(Line{{Text: fmt.Sprintf("%s %d unread", GlyphDotFull, d.unread), Role: RoleAttention}}, 3, 0)
 	}
 	if d.asks > 0 {
 		add(Line{{Text: fmt.Sprintf("%s %d waiting for you", GlyphHuman, d.asks), Role: RoleAttention}}, 2, 0)
-	}
-	if d.forYou > 0 {
-		add(Line{{Text: fmt.Sprintf("%s %d for you", GlyphHuman, d.forYou), Role: RoleAttention}}, 2, 0)
 	}
 	if d.self != "" {
 		add(Line{{Text: Preview(humanLabel(d.self, d.pilot)), Role: RoleText}}, 4, second)
@@ -113,6 +128,10 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	if d.plan != nil {
 		add(planSeg(*d.plan, d.now), 5, second)
 	}
+	gaugePrio := 6
+	if d.shell { // the shell's second line is the gauges' (spec: never dropped for the identity)
+		gaugePrio = 2
+	}
 	names := make([]string, 0, len(d.budgets))
 	for n := range d.budgets {
 		names = append(names, n)
@@ -121,12 +140,12 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	for i, n := range names {
 		b := d.budgets[n]
 		if len(b.Windows) == 0 && !b.Unknown && !b.Unlimited {
-			add(budgetSeg(n, b, tier), 6+i, second) // a legacy snapshot (no dispatcher): the old gauge
+			add(budgetSeg(n, b, tier), gaugePrio+i, second) // a legacy snapshot (no dispatcher): the old gauge
 			continue
 		}
 		until, isHeld := held(d.holds, n, d.now)
 		if l := quotaSeg(n, b, until, isHeld, d.pace, d.now, tier); l != nil {
-			add(l, 6+i, second) // the rightmost provider has the lowest priority
+			add(l, gaugePrio+i, second) // the rightmost provider has the lowest priority
 		}
 	}
 	if d.update != "" { // a newer release: the first item to go when space is short

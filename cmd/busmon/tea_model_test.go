@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,18 +98,41 @@ func TestShellTailFoldsEvents(t *testing.T) {
 func TestShellForYouMediumShowsFourThenMore(t *testing.T) {
 	pinLocal(t)
 	m := fixtureShell(t, 80, 24)
-	if n := len(m.forYou); n != 6 {
-		t.Fatalf("fixture has %d items, want 6", n)
+	if n := len(m.forYou); n != 5 {
+		t.Fatalf("fixture has %d items, want 5", n)
 	}
 	m.ui.focus = PanelAgents
 	m.refresh()
 	items := m.lists.forYou.items
-	if len(items) != 5 || items[4].Line.text() != "+2 more" {
+	if len(items) != 5 || items[4].Line.text() != "+1 more" {
 		t.Fatalf("unfocused rows: %d, last %q", len(items), items[len(items)-1].Line.text())
 	}
 	m.ui.focus = PanelForYou
 	m.refresh()
-	if n := len(m.lists.forYou.items); n != 6 {
-		t.Fatalf("focused rows: %d, want 6", n)
+	if n := len(m.lists.forYou.items); n != 5 {
+		t.Fatalf("focused rows: %d, want 5", n)
+	}
+}
+
+// Both header badges stay on the first row at every tier, paused or not
+// (busmon Charm spec: "which is why the unread badge stays in the header").
+func TestShellHeaderKeepsBothBadges(t *testing.T) {
+	pinLocal(t)
+	for _, size := range goldenSizes {
+		for _, paused := range []bool{true, false} {
+			m := fixtureShell(t, size[0], size[1])
+			if !paused {
+				m.snap.pause = nil
+				m.refresh()
+			}
+			row := m.grid().rowText(0)
+			forYou, unread := GlyphHuman+" 4", GlyphDotFull+" 2"
+			if !strings.Contains(row, forYou) || !strings.Contains(row, unread) {
+				t.Errorf("%v paused=%v: header row 0 lacks a badge: %q", size, paused, row)
+			}
+			if paused && !strings.Contains(m.grid().plain(), "resumes in") {
+				t.Errorf("%v: the pause left the header", size)
+			}
+		}
 	}
 }

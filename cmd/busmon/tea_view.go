@@ -61,7 +61,7 @@ func (m Model) headerData() headerData {
 		missions: s.missions, pilot: s.pilot, self: m.cfg.self, update: s.update, note: s.configNote,
 		waiting: waitingText(mineReqs, mineThreads, m.now), forYou: len(decisions(m.forYou)),
 		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets,
-		plan: s.plan, now: m.now}
+		plan: s.plan, now: m.now, shell: true}
 }
 
 // tabBar is "1 Activity  2 Board  3 Requests" with the active tab
@@ -213,6 +213,9 @@ var forYouKinds = map[int]struct {
 // the agent, the text, and its age on the right.
 func forYouRow(it attentionItem, width int, now time.Time) Line {
 	k := forYouKinds[it.Rank]
+	if it.Unread { // an ask whose line is unread: the row carries the mark
+		k.glyph, k.role = GlyphDotFull, forYouKinds[rankUnread].role
+	}
 	text := Preview(it.Text)
 	switch it.Rank {
 	case rankAsk:
@@ -220,7 +223,9 @@ func forYouRow(it attentionItem, width int, now time.Time) Line {
 			text += fmt.Sprintf(" (%d questions)", it.Count)
 		}
 	case rankGate:
-		text = "reviews " + text
+		if it.By != "" {
+			text = "by " + Preview(it.By) + "  " + text
+		}
 	}
 	age := Line{}
 	if !it.At.IsZero() {
