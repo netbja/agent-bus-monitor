@@ -220,42 +220,76 @@ func FitLine(l Line, w int) Line {
 	return appendSegment(out, strings.Repeat(" ", w-used), last)
 }
 
+// cellStyle is how one cell is drawn, independent of the terminal library
+// (busmon Charm spec, step b): a role and its modifiers, or a frame line in a
+// panel's hue. tcellStyle (tview) and the shell's lipStyle resolve it from the
+// theme; the drawing geometry below is shared by both.
+type cellStyle struct {
+	Role     Role
+	Bold     bool
+	Reverse  bool
+	Fade     int
+	Pill     bool
+	Selected bool
+	Border   bool // a frame line: Theme.FrameBorder(Role, Focused)
+	Focused  bool
+}
+
+// borderCell is the style of a frame line in hue, focused or not.
+func borderCell(hue Role, focused bool) cellStyle {
+	return cellStyle{Role: hue, Border: true, Focused: focused}
+}
+
+// cellSink is a grid of cells: a tcell screen, or the shell's grid.
+type cellSink interface {
+	Size() (w, h int)
+	// Put writes one grapheme cluster at (x, y); "" is the continuation cell
+	// of the wide cluster to its left.
+	Put(x, y int, cluster string, st cellStyle)
+}
+
+// tcellSink draws on a tcell screen.
+type tcellSink struct{ s tcell.Screen }
+
+func (t tcellSink) Size() (int, int) { return t.s.Size() }
+
+func (t tcellSink) Put(x, y int, cluster string, st cellStyle) {
+	style := th.tcellStyle(st)
+	if cluster == "" {
+		t.s.SetContent(x, y, ' ', nil, style)
+		return
+	}
+	runes := []rune(cluster)
+	t.s.SetContent(x, y, runes[0], runes[1:], style)
+}
+
 // DrawLine consumes normalized single-line text; it never parses tview tags.
 // Wide clusters are written whole, including their continuation cells, and
 // clipping to the physical screen never leaves half a cluster at an edge.
 func DrawLine(s tcell.Screen, x, y, w int, l Line, selected bool) {
+	drawLine(tcellSink{s}, x, y, w, l, selected)
+}
+
+func drawLine(s cellSink, x, y, w int, l Line, selected bool) {
 	sw, sh := s.Size()
 	if w <= 0 || y < 0 || y >= sh {
 		return
 	}
 	pos := x
 	lineClusters(FitLine(l, w), func(text string, width int, seg Seg) bool {
-		style := th.Style(seg.Role)
-		if selected {
-			style = th.Selected(seg.Role)
-		}
-		if seg.Fade > 0 {
-			style = style.Foreground(th.Faded(seg.Role, seg.Fade))
-		}
-		if seg.Bold {
-			style = style.Bold(true)
-		}
-		if seg.Reverse {
-			style = style.Reverse(true)
-		}
-		if seg.Pill { // replaces the style whole: a pill has no fade; NO_COLOR keeps its reverse in th.Pill
-			style = th.Pill(seg.Role)
-		}
+		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Selected: selected}
 		// Match tview's continuation-cell write order.
 		if width > 0 {
-			runes := []rune(text)
 			whole := pos >= 0 && pos+width <= sw
 			for off := width - 1; off >= 0; off-- {
 				if cx := pos + off; cx >= 0 && cx < sw {
-					if off == 0 && whole {
-						s.SetContent(cx, y, runes[0], runes[1:], style)
-					} else {
-						s.SetContent(cx, y, ' ', nil, style)
+					switch {
+					case off == 0 && whole:
+						s.Put(cx, y, text, st)
+					case whole:
+						s.Put(cx, y, "", st)
+					default:
+						s.Put(cx, y, " ", st)
 					}
 				}
 			}
@@ -328,7 +362,9 @@ func frameTitle(t Line, hue Role, focused bool) Line {
 
 // DrawFrame draws only the perimeter and top labels; callers own the interior.
 // A rectangle smaller than 2x2 has no room for four corners and draws nothing.
-func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
+func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) { drawFrame(tcellSink{s}, x, y, w, h, f) }
+
+func drawFrame(s cellSink, x, y, w, h int, f Frame) {
 	if w < 2 || h < 2 {
 		return
 	}
@@ -337,10 +373,10 @@ func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
 	if hue == RoleText {
 		hue = RoleAccent
 	}
-	style := th.FrameBorder(hue, f.Focused)
+	style := borderCell(hue, f.Focused)
 	put := func(px, py int, g string) {
 		if px >= 0 && px < sw && py >= 0 && py < sh {
-			s.SetContent(px, py, []rune(g)[0], nil, style)
+			s.Put(px, py, g, style)
 		}
 	}
 	for dx := 1; dx < w-1; dx++ {
@@ -372,22 +408,26 @@ func DrawFrame(s tcell.Screen, x, y, w, h int, f Frame) {
 			title[i].Bold = title[i].Role != RoleMuted // inactive tabs stay plain
 		}
 	}
-	DrawLine(s, x+2, y, titleW, title, false)
-	DrawLine(s, x+w-2-labelW, y, labelW, label, false)
-	DrawScrollbar(s, x+w-1, y, h, f.Scroll, style)
+	drawLine(s, x+2, y, titleW, title, false)
+	drawLine(s, x+w-2-labelW, y, labelW, label, false)
+	drawScrollbar(s, x+w-1, y, h, f.Scroll, style)
 }
 
 // DrawScrollbar draws a scrollbar on the right border column x of a frame
 // whose top border is at y and whose height is h: arrows on its first and
 // last inner rows, the thumb between. Nothing when everything is visible.
-func DrawScrollbar(s tcell.Screen, x, y, h int, sc ScrollState, style tcell.Style) {
+func DrawScrollbar(s tcell.Screen, x, y, h int, sc ScrollState, style cellStyle) {
+	drawScrollbar(tcellSink{s}, x, y, h, sc, style)
+}
+
+func drawScrollbar(s cellSink, x, y, h int, sc ScrollState, style cellStyle) {
 	if sc.Total <= sc.Visible || sc.Total <= 0 {
 		return
 	}
 	sw, sh := s.Size()
 	put := func(px, py int, g string) {
 		if px >= 0 && px < sw && py >= 0 && py < sh {
-			s.SetContent(px, py, []rune(g)[0], nil, style)
+			s.Put(px, py, g, style)
 		}
 	}
 	inner := h - 2

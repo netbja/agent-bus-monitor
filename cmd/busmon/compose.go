@@ -299,7 +299,7 @@ func (c *composer) Draw(screen tcell.Screen) {
 		Total:   max(wrappedRows(c.area.GetText(), w), off+h-2, cur+1),
 		Top:     off,
 		Visible: h - 2,
-	}, th.FrameBorder(panelHue[PanelActivity], true))
+	}, borderCell(panelHue[PanelActivity], true))
 	counter := fmt.Sprintf("%d / %d", runes(c.area.GetText()), c.limit)
 	crole := RoleMuted
 	if runes(c.area.GetText()) >= c.limit {

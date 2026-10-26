@@ -155,6 +155,30 @@ func (t *Theme) Pill(r Role) tcell.Style {
 	return t.Style(r).Reverse(true).Bold(true)
 }
 
+// tcellStyle is a cell's style on a tcell screen.
+func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
+	if c.Border {
+		return t.FrameBorder(c.Role, c.Focused)
+	}
+	style := t.Style(c.Role)
+	if c.Selected {
+		style = t.Selected(c.Role)
+	}
+	if c.Fade > 0 {
+		style = style.Foreground(t.Faded(c.Role, c.Fade))
+	}
+	if c.Bold {
+		style = style.Bold(true)
+	}
+	if c.Reverse {
+		style = style.Reverse(true)
+	}
+	if c.Pill { // replaces the style whole: a pill has no fade; NO_COLOR keeps its reverse in Pill
+		style = t.Pill(c.Role)
+	}
+	return style
+}
+
 func (t *Theme) Border(focused bool) tcell.Style {
 	if focused {
 		s := t.Style(RoleAccent)
