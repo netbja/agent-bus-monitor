@@ -1,7 +1,7 @@
 # busmon on bubbletea v2 + lipgloss v2 — design
 
-Status: draft for review (coder, 2026-10-26), revision 3 after foureyes' review of `b2d2071` and
-ui-grok's review of `b2d2071` (its point on step b's reminder was already met by revision 2).
+Status: approved by foureyes, ui-grok and ui-kimi (revision 3, `22fefeb`), PR #120; revision 4
+records Bernard's answers to the open questions (ask `1793040436425-0`).
 Task `busmon-charm-spec`, branch `docs/busmon-charm-spec` from `origin/main`. Spec only; no code in
 this change. Reviewers: foureyes, ui-grok, ui-kimi.
 
@@ -185,7 +185,7 @@ One list, built in a pure function `forYou(snapshot, now) []attentionItem` besid
 Within a rank, oldest first. This is not exactly the Agents panel's sort, which orders its
 attention groups and then names (`sortedAgentNames`): the ranks follow the same principle (what
 waits on the person comes first, waiting before idle), and the tie-break is age, because the
-person handles the oldest first (open question 6).
+person handles the oldest first (Bernard's decision 6 below).
 The `for you` flag (`forYouHint`, `foryou.go`: an idle agent whose status message names the person)
 is **not** a rank of this list: it stays a flag on the agent's row, as today, and never counts,
 rings or reminds, so the header count keeps its meaning (things that wait on the person).
@@ -204,8 +204,9 @@ they can never disagree, each with its own test:
 | bell | unchanged from today (signal inventory below): a new waiting declaration, a new ask id, a new observed-prompt `since`; never a gate or an unread line |
 
 Enter on a row does what its
-kind needs: an ask opens the ask in the reader (answering is the reader's ask mode, keys `1`-`9`,
-`o` for a free answer in the compose window); a waiting agent opens its detail; a gate opens the
+kind needs: an ask opens the ask in the reader (answering is the reader's ask mode: keys `1`-`9`
+or a click on an option answer it, `o` or a click on "Other" opens the compose window for a free
+answer); a waiting agent opens its detail; a gate opens the
 challenge thread; an unread line expands it and marks it read.
 
 ### Reading (decision 3)
@@ -374,7 +375,10 @@ Tests:
   click on the selected row expands, a click on the expanded row opens the reader; a click on the
   scrollbar column pages towards it; a click on a tab label or a frame title focuses; each pause
   popup button presses; in compose, clicks on the recipient and on the text move the focus and a
-  click outside closes it; a wheel or a click on Agents stops pinning its selection.
+  click outside closes it; a wheel or a click on Agents stops pinning its selection; in the
+  reader's ask mode a click on an option sends the same answer as its key (the same `reply`, once,
+  and the next open question is shown), a click on "Other" opens the compose window prefilled for
+  a free answer, and a click on an option of a question already answered does nothing.
 - **Behaviours tview gives today that the shell must keep** (from CLAUDE.md's busmon rules), one
   scenario each: Activity's tail mode (a new event follows the bottom), `f` pauses it, a wheel-up
   leaves it, and selecting, clicking or opening a line keeps it live; keyed selection (the selected
@@ -424,9 +428,7 @@ Everything the mouse does today keeps working, on the new geometry:
 | Click on a pause popup button presses it | Same |
 | Compose: click on the recipient or the text, click outside closes | Same |
 | Wheel or click on Agents stops pinning the selection to the top (`agentsTouched`) | Same |
-
-Click-to-answer on an ask's options is not in this change (keyboard first; ui-grok's question 7
-is left open).
+| (new) An ask's options are keys only (`askpanel.go`) | A click on an option answers the question, as its key does; a click on "Other" opens the compose window for a free answer (Bernard's decision 3) |
 
 ## Risks
 
@@ -441,15 +443,14 @@ is left open).
 - **A big step c.** It is one release by decision; the step-b goldens and scenarios are what make
   it safe, so step c may not start until they cover every overlay and mode.
 
-## Open questions for review
+## Decisions on the open questions
 
-Each with the answer the spec currently takes (foureyes agreed with 1-5 in its review of
-`b2d2071`, ui-grok with 3 and 4 and left the rest to Bernard); ui-kimi may still argue them.
+Bernard answered the open questions of revision 3 (ask `1793040436425-0`):
 
-1. For you at 80 columns: 4 rows and `+N more` (taken), or all rows with Agents pushed down?
-2. The inline expansion's height cap: half the panel (taken), or a fixed 10 rows?
-3. An ask's options: keyboard only in step b (taken), clickable later (ui-grok's question 7)?
-4. Compose: `bubbles/textarea` if the rune-cap test passes, else our own (taken).
-5. The reader keeps Agents visible at 80 columns (taken), rather than hiding it for rows.
-6. For you's tie-break: oldest first within a rank (taken), rather than the Agents panel's name
-   order; Bernard asked for "the same sort as Agents".
+1. For you at 80 columns shows 4 rows and `+N more`.
+2. The inline expansion is capped at half the panel's height.
+3. An ask's options are clickable from the start: keyboard and mouse in step b (the mouse-parity
+   table and the step-b mouse scenarios include clicking an option and "Other").
+4. Compose uses `bubbles/textarea` if the rune-cap test passes, else our own text area.
+5. The reader keeps Agents visible at 80 columns.
+6. For you sorts oldest first within a rank.
