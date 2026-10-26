@@ -246,18 +246,19 @@ const (
 type agentState struct {
 	state      string
 	message    string
-	stateAt    time.Time       // when the state above was declared
-	answeredAt time.Time       // qualifying human reply after a waiting declaration; display-only
-	forYou     bool            // idle, and the message names the person (forYouHint): a hint, never a state
-	lastSeen   time.Time       // last activity of any kind on the bus
-	gated      int             // open 4-eyes challenges (flag "gate N")
-	armed      bool            // a live subscribe lease exists (flag "armed")
-	lag        int64           // unconsumed {p}:cmd entries of the agent's group (detail only)
-	pane       string          // HERDR_PANE_ID from the agents hash (detail only)
-	waiting    int64           // wake-relevant messages (pending + unread): the queue column
-	stale      int             // addressed entries older than the dispatch horizon (flag "stale N")
-	gap        bool            // entries may have been trimmed unread (detail only)
-	wake       *bus.WakeRecord // the dispatcher's wake record, nil when none
+	stateAt    time.Time         // when the state above was declared
+	answeredAt time.Time         // qualifying human reply after a waiting declaration; display-only
+	forYou     bool              // idle, and the message names the person (forYouHint): a hint, never a state
+	lastSeen   time.Time         // last activity of any kind on the bus
+	gated      int               // open 4-eyes challenges (flag "gate N")
+	gates      map[string]string // those challenges, ref → "<challenger>|<summary>" (replaced whole, never mutated)
+	armed      bool              // a live subscribe lease exists (flag "armed")
+	lag        int64             // unconsumed {p}:cmd entries of the agent's group (detail only)
+	pane       string            // HERDR_PANE_ID from the agents hash (detail only)
+	waiting    int64             // wake-relevant messages (pending + unread): the queue column
+	stale      int               // addressed entries older than the dispatch horizon (flag "stale N")
+	gap        bool              // entries may have been trimmed unread (detail only)
+	wake       *bus.WakeRecord   // the dispatcher's wake record, nil when none
 
 	pid          int                 // AgentSnapshot.PID (0 = not recorded)
 	pidStart     uint64              // AgentSnapshot.PIDStart
@@ -280,6 +281,7 @@ type agentState struct {
 	swapping     bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
 	fallback     *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
 	model        *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
+	judgedAt     time.Time           // the shell's snapshot time (clock); zero in tview's state
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.

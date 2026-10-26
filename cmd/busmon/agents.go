@@ -91,7 +91,7 @@ func modelDrift(a *agentState) bool {
 // and has no open ask. Only a person can answer it, in that tab: it reads as
 // waiting, beside the declared state, never instead of it.
 func promptWaiting(a *agentState) bool {
-	return a.obsPrompt && obsFresh(a, time.Now()) && a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
+	return a.obsPrompt && obsFresh(a, a.clock()) && a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
 }
 
 // obsFresh: the last observation is younger than its TTL. It is checked when
@@ -99,6 +99,16 @@ func promptWaiting(a *agentState) bool {
 // once the reading it holds is too old.
 func obsFresh(a *agentState, now time.Time) bool {
 	return !a.obsAt.IsZero() && now.Sub(a.obsAt) < time.Duration(bus.ObservedTTL)*time.Millisecond
+}
+
+// clock is the time an observation's freshness is judged at: the shell's
+// snapshot time (judgedAt), so its View never reads the clock; the live time
+// for tview, which never sets it.
+func (a *agentState) clock() time.Time {
+	if !a.judgedAt.IsZero() {
+		return a.judgedAt
+	}
+	return time.Now()
 }
 
 // waitsForPerson: a declared wait, an open ask or a prompt in its tab.
@@ -135,10 +145,10 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	if modelDrift(a) {
 		add("model"+GlyphNotEqual, RoleAttention, 4, 0)
 	}
-	if busyUndeclared(a, time.Now()) {
+	if busyUndeclared(a, a.clock()) {
 		add("busy", RoleOK, 3, 2)
 	}
-	if clientOutdated(a, time.Now()) {
+	if clientOutdated(a, a.clock()) {
 		add("update", RoleAttention, 5, 0)
 	}
 	if a.gated > 0 {

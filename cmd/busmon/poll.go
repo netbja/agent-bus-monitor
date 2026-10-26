@@ -167,10 +167,10 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			wakes[n] = wi
 		}
 	}
-	gates := make(map[string]int, len(names))
+	gates := make(map[string]map[string]string, len(names))
 	for _, n := range names {
 		if m, err := b.OpenChallenges(pollCtx, n); err == nil {
-			gates[n] = len(m)
+			gates[n] = m
 		}
 	}
 
@@ -313,8 +313,8 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		if usageErr == nil {
 			a.ctxRaw = usageSnaps[n].Ctx
 		}
-		if c, ok := gates[n]; ok {
-			a.gated = c
+		if m, ok := gates[n]; ok {
+			a.gated, a.gates = len(m), m
 		}
 		if swapsErr == nil {
 			a.swapping = swaps[n]

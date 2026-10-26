@@ -17,6 +17,9 @@ type attentionItem struct {
 	At       time.Time
 	AskID    string
 	Question string
+	Rank     int    // the For you rank (rankAsk … rankUnread); the shell's list only
+	Count    int    // an ask's open questions
+	EventID  string // an unread line's entry
 }
 
 func attentionItems(agents map[string]*agentState, asks []bus.Ask) []attentionItem {
