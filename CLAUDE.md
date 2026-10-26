@@ -273,7 +273,12 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   reach the overlay `TextView` through `linesToTview` → `Theme.segTag`, the one place a tview tag is
   written and the one escaper (`TestOnlyThemeWritesTviewTags`; busmon Charm spec step a,
   `testdata/overlay/` captures). The key tables match an engine-neutral `Key` (`key.go`, `keyOf`
-  for tcell). No literal outside
+  for tcell, `keyOfTea` for bubbletea). The step-b Elm shell (`tea_*.go`, busmon Charm spec; not
+  wired, main.go still runs tview) draws with the same geometry: `drawLine`/`drawFrame` write a
+  `cellSink` (tview's `tcellSink`, the shell's `grid`), lists are `listState` (ListView without its
+  widget), `pollOnce` runs in a command and View reads only the model (`snapshot`, `judgedAt`,
+  `m.now`); `forYou` ranks asks, waits, gates and unread lines, and `decisions` is its badge and
+  reminder subset. Goldens in `testdata/golden/` (`go test -run TestShellGoldens -update`). No literal outside
   the glyph set (`TestNoStrayNonASCIILiterals`); `TestAlignmentSuite` draws every size × palette ×
   hostile fixture and checks every frame's corners and borders. Each panel has its colour
   (`panelHue`, v0.14.5: Agents accent, Activity ok, Board dispatch, Requests attention): its frame
