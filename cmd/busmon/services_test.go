@@ -85,24 +85,24 @@ func TestServicesPanelShowsStateErrorAndLocalLog(t *testing.T) {
 	body := servicesPanel(inst, recs, "here", now, 100)
 	for _, want := range []string{"systemd", "dispatch", "failed", "restarting", "broker went away", "pid 7", log,
 		"service: failed: broker went away", "missions", "idle", "waiting for missions", "on elsewhere", "agentbus --project"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("panel lacks %q:\n%s", want, body)
+		if !strings.Contains(plainOf(body), want) {
+			t.Fatalf("panel lacks %q:\n%s", want, plainOf(body))
 		}
 	}
-	if strings.Contains(body, "/far/missions.log\n   old") {
+	if strings.Contains(plainOf(body), "/far/missions.log\n   old") {
 		t.Fatal("a remote log was read")
 	}
 	sb := servicesPanel(inst, map[string]bus.ServiceRecord{"dispatch": {State: "standby", Detail: "another instance holds the lease", At: now.UnixMilli(), Host: "elsewhere"}}, "here", now, 100)
-	if strings.Contains(sb, "process is gone") || !strings.Contains(sb, "standby") {
-		t.Fatalf("a live standby shown as gone:\n%s", sb)
+	if strings.Contains(plainOf(sb), "process is gone") || !strings.Contains(plainOf(sb), "standby") {
+		t.Fatalf("a live standby shown as gone:\n%s", plainOf(sb))
 	}
 	os.WriteFile(filepath.Join(dir, "dispatch.crash.log"), []byte("panic: boom\n"), 0o600)
-	if crash := servicesPanel(inst, recs, "here", now, 100); !strings.Contains(crash, "panic: boom") {
-		t.Fatalf("the crash file is not shown:\n%s", crash)
+	if crash := servicesPanel(inst, recs, "here", now, 100); !strings.Contains(plainOf(crash), "panic: boom") {
+		t.Fatalf("the crash file is not shown:\n%s", plainOf(crash))
 	}
 	none := servicesPanel(nil, nil, "here", now, 100)
-	if !strings.Contains(none, "herdr tabs") {
-		t.Fatalf("no-services panel = %q", none)
+	if !strings.Contains(plainOf(none), "herdr tabs") {
+		t.Fatalf("no-services panel = %q", plainOf(none))
 	}
 }
 

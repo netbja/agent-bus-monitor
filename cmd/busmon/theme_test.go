@@ -111,11 +111,14 @@ func TestStyleRoles(t *testing.T) {
 	if fg != tcell.ColorDefault || bg != tcell.ColorDefault {
 		t.Fatal(fg, bg)
 	}
-	if got := dark.Tag(RoleOK, "[x]"); got != "[#7ee2a8][x[][-]" {
+	if got := dark.segTag(S(RoleOK, "[x]")); got != "[#7ee2a8][x[][-]" {
 		t.Fatal(got)
 	}
-	if got := none.Tag(RoleOK, "[x]"); got != "[x[]" {
+	if got := none.segTag(S(RoleOK, "[x]")); got != "[x[]" {
 		t.Fatal(got)
+	}
+	if got := none.segTag(Seg{Text: "b", Role: RoleOK, Bold: true}); got != "[::b]b[::-]" {
+		t.Fatal(got) // bold stays without colours, as the markdown's [::b] did
 	}
 	for thm, want := range map[*Theme]string{dark: "#22324A", light: "#DDF4FF"} {
 		if _, bg, _ := thm.Selected(RoleText).Decompose(); bg != tcell.GetColor(want) {
@@ -123,7 +126,7 @@ func TestStyleRoles(t *testing.T) {
 		}
 	}
 	c16, _ := ResolveTheme("dark", "", "", false, 16)
-	if got := c16.Tag(RoleText, "x"); got != "x" {
+	if got := c16.segTag(S(RoleText, "x")); got != "x" {
 		t.Fatal(got)
 	}
 	for _, colors := range []int{16, 1 << 24} {

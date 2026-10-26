@@ -87,7 +87,7 @@ func TestComposeTabMovesAPrefixToTheRecipient(t *testing.T) {
 }
 
 func TestHelpExplainsComposeTab(t *testing.T) {
-	if !strings.Contains(helpText(), "a text that is only @prefix becomes the recipient") {
+	if !strings.Contains(plainOf(helpText()), "a text that is only @prefix becomes the recipient") {
 		t.Fatal("help does not explain Tab in the compose window")
 	}
 }

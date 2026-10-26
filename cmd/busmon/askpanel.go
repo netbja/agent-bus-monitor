@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -77,7 +76,7 @@ func (u *ui) openAskPanel(agent string) {
 	}
 	q := max(firstOpenQuestion(*target, 0), 0)
 	u.ask = askPanel{id: target.ID, q: q, opt: recommendedIndex(target.Questions[q].AskQuestion)}
-	u.showOverlay(ovAsk, askTitle(*target), "", "", "")
+	u.showOverlay(ovAsk, askTitle(*target), nil, "", "")
 	u.renderAsk()
 }
 
@@ -120,7 +119,7 @@ func (u *ui) renderAsk() {
 	if u.ask.q >= len(a.Questions) {
 		u.ask.q = 0
 	}
-	u.overlay.SetText(askPanelBody(a, u.ask, max(30, overlayInnerWidth(u.width))))
+	u.overlay.SetText(linesToTview(askPanelBody(a, u.ask, max(30, overlayInnerWidth(u.width)))))
 	q := a.Questions[u.ask.q]
 	plain := q.Question
 	if q.Context != "" {
@@ -175,10 +174,10 @@ func (u *ui) reloadAsks() {
 
 // askPanelBody is the panel's text: the tab strip, the question, its context
 // (Markdown), then its options (or its recorded answer). Pure, for tests.
-func askPanelBody(a bus.Ask, p askPanel, width int) string {
-	var sb strings.Builder
+func askPanelBody(a bus.Ask, p askPanel, width int) []Line {
+	var b body
 	// Tab strip, fit to the width: ✓ answered, ● current, ○ open.
-	var tabs []string
+	var tabs []Line
 	for i, q := range a.Questions {
 		g := GlyphIdle
 		switch {
@@ -187,32 +186,36 @@ func askPanelBody(a bus.Ask, p askPanel, width int) string {
 		case q.Answer != nil:
 			g = GlyphDone
 		}
-		label := g + " " + Preview(q.Header)
+		role := RoleMuted
 		if i == p.q {
-			label = tg(RoleAccent, label)
-		} else {
-			label = tg(RoleMuted, label)
+			role = RoleAccent
 		}
-		tabs = append(tabs, label)
+		tabs = append(tabs, Line{S(role, g+" "+Preview(q.Header))})
 	}
-	strip := strings.Join(tabs, "   ")
-	if Width(tagRE2.ReplaceAllString(strip, "")) > width { // too wide: the current tab and its position
-		strip = tabs[p.q] + tg(RoleMuted, fmt.Sprintf("   (%d/%d, %s%s for the others)", p.q+1, len(a.Questions), GlyphArrowL, GlyphArrowR))
+	var strip Line
+	for i, t := range tabs {
+		if i > 0 {
+			strip = append(strip, S(RoleText, "   "))
+		}
+		strip = append(strip, t...)
 	}
-	sb.WriteString(strip + "\n\n")
+	if strip.Width() > width { // too wide: the current tab and its position
+		strip = append(append(Line{}, tabs[p.q]...), S(RoleMuted, fmt.Sprintf("   (%d/%d, %s%s for the others)", p.q+1, len(a.Questions), GlyphArrowL, GlyphArrowR)))
+	}
+	b.segs(strip...).text("\n\n")
 	if p.q < 0 || p.q >= len(a.Questions) {
-		return sb.String()
+		return b.Lines()
 	}
 	q := a.Questions[p.q]
-	sb.WriteString(wrapPlain(q.Question, width, RoleText, true) + "\n")
+	b.join(wrapPlain(q.Question, width, RoleText, true)).text("\n")
 	if strings.TrimSpace(q.Context) != "" {
-		sb.WriteString(renderMarkdown(q.Context, width) + "\n")
+		b.join(renderMarkdown(q.Context, width)).text("\n")
 	}
-	sb.WriteString("\n")
+	b.text("\n")
 	if q.Answer != nil {
-		sb.WriteString(tg(RoleOK, GlyphDone+" answered: "+Preview(q.Answer.Value())) +
-			tg(RoleMuted, fmt.Sprintf(" (by %s)", Preview(q.Answer.By))) + "\n")
-		return sb.String()
+		b.seg(RoleOK, GlyphDone+" answered: "+Preview(q.Answer.Value())).
+			seg(RoleMuted, fmt.Sprintf(" (by %s)", Preview(q.Answer.By))).text("\n")
+		return b.Lines()
 	}
 	for i, o := range q.Options {
 		mark := "  "
@@ -224,9 +227,9 @@ func askPanelBody(a bus.Ask, p askPanel, width int) string {
 		if o.Recommended {
 			line += " (recommended)"
 		}
-		sb.WriteString(wrapPlain(line, width, role, false) + "\n")
+		b.join(wrapPlain(line, width, role, false)).text("\n")
 		if o.Description != "" {
-			sb.WriteString(wrapIndented(o.Description, width, "      ") + "\n")
+			b.join(wrapIndented(o.Description, width, "      ")).text("\n")
 		}
 	}
 	other := len(q.Options)
@@ -234,18 +237,18 @@ func askPanelBody(a bus.Ask, p askPanel, width int) string {
 	if p.opt == other {
 		mark, role = GlyphSelect+" ", RoleAccent
 	}
-	sb.WriteString(wrapPlain(fmt.Sprintf("%s%d. Other... (type your answer)", mark, other+1), width, role, false) + "\n")
-	sb.WriteString("\n" + tg(RoleMuted, GlyphUp+GlyphDownArrow+" or 1-9 choose · Enter answer · "+GlyphArrowL+GlyphArrowR+" question · Esc close") + "\n")
-	return sb.String()
+	b.join(wrapPlain(fmt.Sprintf("%s%d. Other... (type your answer)", mark, other+1), width, role, false)).text("\n")
+	b.text("\n").seg(RoleMuted, GlyphUp+GlyphDownArrow+" or 1-9 choose · Enter answer · "+GlyphArrowL+GlyphArrowR+" question · Esc close").text("\n")
+	return b.Lines()
 }
 
 // wrapPlain wraps text (no Markdown) to width in one role.
-func wrapPlain(s string, width int, role Role, bold bool) string {
-	return strings.Join(wrapSpans([]mdSpan{{text: DetailText(s), role: role, bold: bold}}, width, "", ""), "\n")
+func wrapPlain(s string, width int, role Role, bold bool) []Line {
+	return wrapSpans([]mdSpan{{text: DetailText(s), role: role, bold: bold}}, width, "", "")
 }
 
-func wrapIndented(s string, width int, indent string) string {
-	return strings.Join(wrapSpans([]mdSpan{{text: DetailText(s), role: RoleMuted}}, width, indent, indent), "\n")
+func wrapIndented(s string, width int, indent string) []Line {
+	return wrapSpans([]mdSpan{{text: DetailText(s), role: RoleMuted}}, width, indent, indent)
 }
 
 // askKey is the panel's key handler (ModeAsk).
@@ -262,7 +265,7 @@ func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
 		p.q = 0
 	}
 	q := a.Questions[p.q]
-	act := lookup(ModeAsk, u.focus, u.tier(), ev)
+	act := lookup(ModeAsk, u.focus, u.tier(), keyOf(ev))
 	switch act {
 	case ActQuit:
 		u.app.Stop()
@@ -375,22 +378,19 @@ func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) 
 }
 
 // askSummary leads an agent's detail when it has an open ask.
-func askSummary(a bus.Ask) string {
-	var sb strings.Builder
-	sb.WriteString(tg(RoleAccent, fmt.Sprintf("Questions for you %s %s", GlyphNone, Preview(a.Title))) + "\n")
+func askSummary(a bus.Ask) []Line {
+	var b body
+	b.seg(RoleAccent, fmt.Sprintf("Questions for you %s %s", GlyphNone, Preview(a.Title))).text("\n")
 	for _, q := range a.Questions {
 		if q.Answer != nil {
-			sb.WriteString(tg(RoleMuted, fmt.Sprintf("  %s %s: %s", GlyphDone, Preview(q.Header), Preview(q.Answer.Value()))) + "\n")
+			b.seg(RoleMuted, fmt.Sprintf("  %s %s: %s", GlyphDone, Preview(q.Header), Preview(q.Answer.Value()))).text("\n")
 		} else {
-			sb.WriteString(tg(RoleAttention, fmt.Sprintf("  %s %s", GlyphIdle, Preview(q.Header))) + tg(RoleText, " "+Preview(q.Question)) + "\n")
+			b.seg(RoleAttention, fmt.Sprintf("  %s %s", GlyphIdle, Preview(q.Header))).seg(RoleText, " "+Preview(q.Question)).text("\n")
 		}
 	}
-	sb.WriteString(tg(RoleAttention, "  enter") + tg(RoleMuted, " (or ! or w) to answer") + "\n\n")
-	return sb.String()
+	b.seg(RoleAttention, "  enter").seg(RoleMuted, " (or ! or w) to answer").text("\n\n")
+	return b.Lines()
 }
-
-// tagRE2 strips colour tags, to measure a tagged line.
-var tagRE2 = regexp.MustCompile(`\[[a-zA-Z0-9#:,\-]*\]`)
 
 // openAskPrefilled opens agent's ask on its first open question, with text as
 // a free answer being typed: nothing is sent before the panel's own submit.

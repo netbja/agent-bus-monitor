@@ -13,10 +13,10 @@ import (
 // feed when an event falls on a different day than the one before it. The
 // feed shows times only, so without this marker a multi-day history reads as
 // one shuffled morning. Returns the colored display line and the tag-free
-// text (for the clipboard), like handle's line/plain pair.
-func daySeparator(t time.Time) (line, plain string) {
+// text (for the clipboard).
+func daySeparator(t time.Time) (line Line, plain string) {
 	d := t.Format("Mon 2006-01-02")
-	return tag("gray", "── "+d+" ──"), "── " + d + " ──"
+	return Line{S(RoleMuted, "── "+d+" ──")}, "── " + d + " ──"
 }
 
 // reportMarker returns a compact " (+N)" breadcrumb (N = full rune length) when a
@@ -43,11 +43,9 @@ func stateColor(state string) string {
 	return "white"
 }
 
-// tag colours text for an overlay (TextView) body. The colour names are the
-// v0.8 vocabulary; they resolve to theme roles, so the light theme and
-// NO_COLOR apply to every overlay too.
-func tag(color, text string) string { return th.Tag(colorRole(color), text) }
-
+// colorRole maps the v0.8 colour names some facts still carry (a fidelity's
+// tone, stateColor, nextAction) to theme roles, so the light theme and
+// NO_COLOR apply to them too.
 func colorRole(color string) Role {
 	switch color {
 	case "gray", "grey", "silver":

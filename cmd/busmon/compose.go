@@ -463,7 +463,7 @@ func (u *ui) hideComposer() {
 // composeKey is the window's key handler (ModeCompose).
 func (u *ui) composeKey(ev *tcell.EventKey) *tcell.EventKey {
 	c := u.comp
-	act := lookup(ModeCompose, u.focus, u.tier(), ev)
+	act := lookup(ModeCompose, u.focus, u.tier(), keyOf(ev))
 	u.flash, u.flashErr = "", false
 	// The recipient's completion list is open: Tab and Enter take an entry,
 	// Esc closes the list; none of them leaves the field or the window.

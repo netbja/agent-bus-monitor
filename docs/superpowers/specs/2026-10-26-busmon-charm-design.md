@@ -73,7 +73,7 @@ Not taken: `glamour` (it styles outside `theme.go` roles and the glyph set; our 
 constrained markdown that `markdown.go` already handles), `bubbles` widgets except `textarea` for
 the compose window (step b decides it by a test of the rune cap, see "Compose"). Go stays 1.26,
 which their `go 1.26` floor accepts. tview and tcell leave `go.mod` in step c (no other package
-imports them); uniseg stays, it is `cellWidth`.
+imports them); uniseg stays, it is the measure (`Width`).
 
 ## Width: one method, enforced
 
@@ -90,12 +90,15 @@ So on a terminal without mode 2027, a cluster on which `GraphemeWidth` and `WcWi
 sequence, a variation selector, some flags) would be measured one way and placed another, and a
 frame border would move. The rule:
 
-- **One measuring function**, `cellWidth` in `cells.go`, used by `Fit`, `FitLine`, frames, the
-  layout and every lipgloss `Width` we pass. It stays uniseg.
+- **One measuring function**, `Width` in `cells.go` (named `cellWidth` in revision 3; step a kept
+  the existing name), used by `Fit`, `FitLine`, frames, the layout and every lipgloss `Width` we
+  pass. It stays uniseg.
 - **Everything printed agrees under all three methods.** The sanitisers that already clean agent
-  text (`Preview`, `Detail` in `cells.go`) replace any grapheme cluster on which uniseg,
-  `ansi.StringWidth` and `ansi.StringWidthWc` disagree by the glyph set's replacement character
-  (one cell, ASCII `?` in the `none` palette). The glyph set itself is checked the same way.
+  text (`Preview`, `DetailText` in `cells.go`, through `agreeWidths`) rewrite any grapheme cluster
+  on which uniseg, `ansi.StringWidth` and `ansi.StringWidthWc` disagree: it keeps its first rune
+  when the three agree on that rune (`❤️` reads `❤`, `👩‍💻` reads `👩`, `1️⃣` reads `1`), and becomes
+  `?` otherwise. This applies to dashboard rows (`Preview`) as well as overlays. The glyph set
+  itself is checked the same way.
 - **Tests:** `TestWidthMethodsAgree` runs every hostile fixture of the alignment suite through the
   sanitisers and asserts the three widths are equal for every line; `TestGlyphSetIsOneCell` asserts
   each glyph is 1 under all three. The goldens are rendered twice, once per renderer width method,
@@ -343,7 +346,10 @@ would not catch a lost escape); `TestNoStrayNonASCIILiterals`,
 `TestAlignmentSuite` unchanged and green; a test that no file outside `theme.go` mentions a tview
 colour tag.
 
-What the person sees: nothing changes, except code blocks in overlays now wrap instead of being cut.
+What the person sees: two changes, each in its own commit with its captures. Code blocks in
+overlays wrap instead of being cut (the named delta, `overlay/code-wrap.txt`); and a cluster the
+width methods disagree on is rewritten by the width rule, in rows and overlays alike
+(`overlay/plan.txt`). As built: `feat/busmon-charm-a`, approved by foureyes at `fdab0d2`.
 
 ### Step b: the Elm shell, beside tview, not wired
 

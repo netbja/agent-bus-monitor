@@ -45,25 +45,25 @@ func TestAgentDetailFieldsAndAbsent(t *testing.T) {
 		"Pilot", "holds the pilot lease",
 		"in the retained window",
 	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("agent detail lacks %q:\n%s", want, body)
+		if !strings.Contains(plainOf(body), want) {
+			t.Errorf("agent detail lacks %q:\n%s", want, plainOf(body))
 		}
 	}
-	if strings.Contains(body, "other") {
-		t.Errorf("a task owned by someone else is listed:\n%s", body)
+	if strings.Contains(plainOf(body), "other") {
+		t.Errorf("a task owned by someone else is listed:\n%s", plainOf(body))
 	}
 
 	_, empty := agentDetail("ghost", &agentState{}, false, nil, nil, detNow)
 	for _, want := range []string{"no status message", "never declared", "not recorded", "not armed",
 		"not measured yet", "no wake record", "Gate", "none", "not reported", "none in the retained window"} {
-		if !strings.Contains(empty, want) {
-			t.Errorf("empty agent detail lacks %q:\n%s", want, empty)
+		if !strings.Contains(plainOf(empty), want) {
+			t.Errorf("empty agent detail lacks %q:\n%s", want, plainOf(empty))
 		}
 	}
 	failed := &agentState{queueKnown: true, queueFailed: true, waiting: 3, queueAt: detNow.Add(-20 * time.Second), ctxRaw: "25%"}
 	_, fb := agentDetail("x", failed, false, nil, nil, detNow)
-	if !strings.Contains(fb, "read failed") || !strings.Contains(fb, "20s ago") || !strings.Contains(fb, "not a token count: 25%") {
-		t.Errorf("failed queue / bad ctx:\n%s", fb)
+	if !strings.Contains(plainOf(fb), "read failed") || !strings.Contains(plainOf(fb), "20s ago") || !strings.Contains(plainOf(fb), "not a token count: 25%") {
+		t.Errorf("failed queue / bad ctx:\n%s", plainOf(fb))
 	}
 }
 
@@ -77,12 +77,12 @@ func TestAgentDetailRecentFromWindow(t *testing.T) {
 		feedLine{id: "y", at: detNow, ev: bus.Event{Kind: "report", Agent: "kimi", Message: "not grok"}},
 		feedLine{id: "s", sep: true, at: detNow})
 	_, body := agentDetail("grok", richAgent(), false, nil, feed, detNow)
-	if strings.Contains(body, "report 3") || !strings.Contains(body, "report 4") || !strings.Contains(body, "to grok") || strings.Contains(body, "not grok") {
-		t.Fatalf("recent lines must be the last 5 involving grok:\n%s", body)
+	if strings.Contains(plainOf(body), "report 3") || !strings.Contains(plainOf(body), "report 4") || !strings.Contains(plainOf(body), "to grok") || strings.Contains(plainOf(body), "not grok") {
+		t.Fatalf("recent lines must be the last 5 involving grok:\n%s", plainOf(body))
 	}
 	for i := 0; i < 8; i++ {
-		if got, want := strings.Contains(body, fmt.Sprintf("report %d", i)), i >= 4; got != want {
-			t.Fatalf("report %d shown=%v, want %v:\n%s", i, got, want, body)
+		if got, want := strings.Contains(plainOf(body), fmt.Sprintf("report %d", i)), i >= 4; got != want {
+			t.Fatalf("report %d shown=%v, want %v:\n%s", i, got, want, plainOf(body))
 		}
 	}
 }
@@ -97,8 +97,8 @@ func TestAgentDetailPlainIsRaw(t *testing.T) {
 func TestAgentDetailEscapesTags(t *testing.T) {
 	a := &agentState{state: "idle", message: "[red]x[-] \x1b[31m\u202e"}
 	_, body := agentDetail("a[b]", a, false, nil, nil, detNow)
-	if !strings.Contains(body, "[red[]x[-[]") || strings.ContainsAny(body, "\x1b\u202e") {
-		t.Fatalf("message not escaped/sanitised:\n%q", body)
+	if !strings.Contains(drawnText(body), "[red]x[-]") || strings.ContainsAny(plainOf(body), "\x1b\u202e") {
+		t.Fatalf("message not escaped/sanitised:\n%q", drawnText(body))
 	}
 }
 
@@ -106,22 +106,22 @@ func TestTaskAndRequestDetail(t *testing.T) {
 	e := bus.BoardEntry{Owner: "codex", State: "working", Branch: "v0.9/t1", Updated: detNow.Add(-2 * time.Minute).Unix()}
 	title, body, plain := taskDetail(e, "ui-theme", detNow)
 	for _, want := range []string{"ui-theme", "codex", "working", "v0.9/t1", "2m ago"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("task detail lacks %q:\n%s", want, body)
+		if !strings.Contains(plainOf(body), want) {
+			t.Errorf("task detail lacks %q:\n%s", want, plainOf(body))
 		}
 	}
 	if !strings.Contains(title, "ui-theme") || plain != "ui-theme codex working v0.9/t1" {
 		t.Errorf("task title %q plain %q", title, plain)
 	}
 	_, nb, np := taskDetail(bus.BoardEntry{Owner: "x", State: "done"}, "t", detNow)
-	if !strings.Contains(nb, GlyphDash) || np != "t x done "+GlyphDash {
-		t.Errorf("task without branch: %q / %q", nb, np)
+	if !strings.Contains(plainOf(nb), GlyphDash) || np != "t x done "+GlyphDash {
+		t.Errorf("task without branch: %q / %q", plainOf(nb), np)
 	}
 	r := request{Task: "t-blocked", Tracked: true, From: "master", Target: "kimi", State: "blocked",
 		BlockedReason: "need API key", Created: detNow.Add(-5 * time.Minute), Updated: detNow}
 	rt, rb, rp := requestDetail(r, detNow)
-	if !strings.Contains(rt, "t-blocked") || !strings.Contains(rb, "need API key") || !strings.Contains(rb, "no deadline set") {
-		t.Errorf("request detail %q:\n%s", rt, rb)
+	if !strings.Contains(rt, "t-blocked") || !strings.Contains(plainOf(rb), "need API key") || !strings.Contains(plainOf(rb), "no deadline set") {
+		t.Errorf("request detail %q:\n%s", rt, plainOf(rb))
 	}
 	if !strings.Contains(rp, "t-blocked") || !strings.Contains(rp, "need API key") || strings.Contains(rp, "[") {
 		t.Errorf("request plain %q", rp)
@@ -132,11 +132,11 @@ func TestMessageDetailOrder(t *testing.T) {
 	e := bus.Event{ID: "1791649424805-0", Kind: "cmd", Type: "directive", From: "master", Target: "codex",
 		Message: "BODYTEXT", TextComplete: "yes"}
 	got := detailText(e, detNow, detNow, threadState{Loaded: true})
-	body, from, id := strings.Index(got, "BODYTEXT"), strings.Index(got, "from"), strings.Index(got, "1791649424805-0")
+	body, from, id := strings.Index(plainOf(got), "BODYTEXT"), strings.Index(plainOf(got), "from"), strings.Index(plainOf(got), "1791649424805-0")
 	if body < 0 || from < 0 || id < 0 || !(body < from && from < id) {
-		t.Fatalf("order body %d < from %d < id %d violated:\n%s", body, from, id, got)
+		t.Fatalf("order body %d < from %d < id %d violated:\n%s", body, from, id, plainOf(got))
 	}
-	if strings.Index(got, "complete") > from {
-		t.Fatalf("fidelity must sit with the body, before the metadata:\n%s", got)
+	if strings.Index(plainOf(got), "complete") > from {
+		t.Fatalf("fidelity must sit with the body, before the metadata:\n%s", plainOf(got))
 	}
 }

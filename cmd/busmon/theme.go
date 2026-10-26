@@ -166,12 +166,18 @@ func (t *Theme) Border(focused bool) tcell.Style {
 	return t.Style(RoleLine)
 }
 
-func (t *Theme) Tag(r Role, s string) string {
-	s = tview.Escape(s)
-	if t.palette == PaletteNone || t.tags[themeRole(r)] == "-" {
-		return s
+// segTag is one segment as tview tagged text, its text escaped: the colour of
+// its role (none with the none palette), bold when the segment is. Only
+// linesToTview calls it: the one place a tview tag is written.
+func (t *Theme) segTag(s Seg) string {
+	text := tview.Escape(s.Text)
+	if t.palette != PaletteNone && t.tags[themeRole(s.Role)] != "-" {
+		text = "[" + t.tags[themeRole(s.Role)] + "]" + text + "[-]"
 	}
-	return "[" + t.tags[themeRole(r)] + "]" + s + "[-]"
+	if s.Bold {
+		text = "[::b]" + text + "[::-]"
+	}
+	return text
 }
 
 func (t *Theme) StyleInput(f *tview.InputField) {
@@ -195,8 +201,6 @@ func (t *Theme) StyleTextView(v *tview.TextView) {
 var th *Theme
 
 func init() { th, _ = ResolveTheme("dark", "", "", false, 1<<24) }
-
-func tg(r Role, s string) string { return th.Tag(r, s) }
 
 const (
 	GlyphWorking   = "●"

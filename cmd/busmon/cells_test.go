@@ -79,7 +79,7 @@ func TestFitLineWideClusterAtEdge(t *testing.T) {
 }
 
 func TestPreview(t *testing.T) {
-	for s, want := range map[string]string{"a\tb\nc\r": "a b c ", "\x1b[31mred": "[31mred", "\u202eabc": "abc", "x\u200dy": "x\u200dy", "é": "é", "\x7f": "", "\u0085": "", "❤️": "❤️", "[red]": "[red]"} {
+	for s, want := range map[string]string{"a\tb\nc\r": "a b c ", "\x1b[31mred": "[31mred", "\u202eabc": "abc", "x\u200dy": "x\u200dy", "é": "é", "\x7f": "", "\u0085": "", "❤️": "❤" /* one width under every method: agreeWidths */, "[red]": "[red]"} {
 		if got := Preview(s); got != want {
 			t.Errorf("Preview(%q)=%q want %q", s, got, want)
 		}
@@ -90,7 +90,7 @@ func TestPreview(t *testing.T) {
 }
 
 func TestDetailText(t *testing.T) {
-	for s, want := range map[string]string{"a\nb": "a\nb", "a\tb": "a   b", "ab\tc": "ab  c", "日\tx": "日  x", "é\tx": "é   x", "👩‍💻\tx": "👩‍💻  x", "abcd\tx": "abcd    x", "ab\n\tx": "ab\n    x", "\u202eabc": "abc", "a\rb": "a b"} {
+	for s, want := range map[string]string{"a\nb": "a\nb", "a\tb": "a   b", "ab\tc": "ab  c", "日\tx": "日  x", "é\tx": "é   x", "👩‍💻\tx": "👩  x" /* the ZWJ sequence keeps its first rune */, "abcd\tx": "abcd    x", "ab\n\tx": "ab\n    x", "\u202eabc": "abc", "a\rb": "a b"} {
 		if got := DetailText(s); got != want {
 			t.Errorf("DetailText(%q)=%q want %q", s, got, want)
 		}

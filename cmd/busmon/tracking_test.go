@@ -59,16 +59,16 @@ func TestAvailabilityIsRenderedFromTheTypedReader(t *testing.T) {
 	e := requestedEntry()
 	e.Request.Availability = "missing"
 	block := requestBlock(boardRequests(map[string]bus.BoardEntry{"task-20": e})[0], now)
-	if !strings.Contains(block, "cause unknown") {
-		t.Errorf("a missing body must name no cause:\n%s", block)
+	if !strings.Contains(plainOf(block), "cause unknown") {
+		t.Errorf("a missing body must name no cause:\n%s", plainOf(block))
 	}
-	if strings.Contains(block, "trimmed") || strings.Contains(block, "aged out") {
-		t.Errorf("a missing body must not be blamed on trimming:\n%s", block)
+	if strings.Contains(plainOf(block), "trimmed") || strings.Contains(plainOf(block), "aged out") {
+		t.Errorf("a missing body must not be blamed on trimming:\n%s", plainOf(block))
 	}
 	e.Request.Availability = ""
 	block = requestBlock(boardRequests(map[string]bus.BoardEntry{"task-20": e})[0], now)
-	if !strings.Contains(block, "availability unknown") {
-		t.Errorf("an underived availability must read as unknown:\n%s", block)
+	if !strings.Contains(plainOf(block), "availability unknown") {
+		t.Errorf("an underived availability must read as unknown:\n%s", plainOf(block))
 	}
 }
 
@@ -164,17 +164,17 @@ func TestRequestsSortByWhatNeedsAttention(t *testing.T) {
 	}
 }
 
-func TestWaitingLineCountsOnlyUnfinishedWork(t *testing.T) {
+func TestWaitingTextCountsOnlyUnfinishedWork(t *testing.T) {
 	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 	reqs := []request{
 		{State: "requested", Created: now.Add(-42 * time.Minute), Tracked: true},
 		{State: "done", Created: now.Add(-3 * time.Hour), Tracked: true},
 	}
-	got := waitingLine(reqs, nil, now)
+	got := waitingText(reqs, nil, now)
 	if !strings.Contains(got, "1 request waiting") || !strings.Contains(got, "42m") {
-		t.Errorf("waitingLine = %q, want one request waiting for 42m", got)
+		t.Errorf("waitingText = %q, want one request waiting for 42m", got)
 	}
-	if waitingLine([]request{{State: "done"}}, nil, now) != "" {
+	if waitingText([]request{{State: "done"}}, nil, now) != "" {
 		t.Error("nothing waiting must render nothing at all")
 	}
 }
@@ -211,8 +211,8 @@ func TestRequestsPanelSeparatesTrackedFromUntracked(t *testing.T) {
 		"records no acceptance",
 		"look at the flake",
 	} {
-		if !strings.Contains(panel, want) {
-			t.Errorf("panel missing %q:\n%s", want, panel)
+		if !strings.Contains(plainOf(panel), want) {
+			t.Errorf("panel missing %q:\n%s", want, plainOf(panel))
 		}
 	}
 }
@@ -221,8 +221,8 @@ func TestRequestsPanelSeparatesTrackedFromUntracked(t *testing.T) {
 // empty follow-up view needs to know a cmd directive is not a tracked request.
 func TestRequestsPanelExplainsAnEmptyBoard(t *testing.T) {
 	panel := requestsPanel(nil, nil, time.Now(), 80)
-	if !strings.Contains(panel, "agentbus request send") {
-		t.Errorf("the empty view should say how a tracked request is created:\n%s", panel)
+	if !strings.Contains(plainOf(panel), "agentbus request send") {
+		t.Errorf("the empty view should say how a tracked request is created:\n%s", plainOf(panel))
 	}
 }
 

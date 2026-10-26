@@ -19,11 +19,11 @@ func TestEntryTime(t *testing.T) {
 
 func TestDaySeparator(t *testing.T) {
 	line, plain := daySeparator(time.Date(2026, 8, 4, 23, 59, 59, 0, time.UTC))
-	if !strings.Contains(line, "2026-08-04") || !strings.Contains(line, "Tue") {
-		t.Fatalf("line = %q, want the date and weekday", line)
+	if !strings.Contains(line.text(), "2026-08-04") || !strings.Contains(line.text(), "Tue") {
+		t.Fatalf("line = %q, want the date and weekday", line.text())
 	}
-	if !strings.HasPrefix(line, th.Tag(RoleMuted, "")[:9]) {
-		t.Fatalf("line = %q, want it muted", line)
+	if len(line) != 1 || line[0].Role != RoleMuted {
+		t.Fatalf("line = %+v, want it muted", line)
 	}
 	if strings.Contains(plain, "[") || !strings.Contains(plain, "2026-08-04") {
 		t.Fatalf("plain = %q, want the date without color tags", plain)

@@ -1,9 +1,5 @@
 package main
 
-import (
-	"github.com/gdamore/tcell/v2"
-)
-
 // Mode is who owns the keyboard. Capture order (spec §6): overlay, then the
 // text modes, then the focused panel.
 type Mode int
@@ -78,7 +74,7 @@ type binding struct {
 	Act    Action
 	Panels []PanelID // nil = every panel
 	Tiers  []Tier    // nil = every tier
-	match  func(*tcell.EventKey) bool
+	match  func(Key) bool
 }
 
 func (b binding) applies(p PanelID, t Tier) bool {
@@ -109,10 +105,10 @@ func inTiers(ts []Tier, t Tier) bool {
 	return false
 }
 
-func keyIs(ks ...tcell.Key) func(*tcell.EventKey) bool {
-	return func(ev *tcell.EventKey) bool {
+func keyIs(ks ...KeyCode) func(Key) bool {
+	return func(ev Key) bool {
 		for _, k := range ks {
-			if ev.Key() == k {
+			if ev.Code == k {
 				return true
 			}
 		}
@@ -120,13 +116,13 @@ func keyIs(ks ...tcell.Key) func(*tcell.EventKey) bool {
 	}
 }
 
-func runeIs(rs ...rune) func(*tcell.EventKey) bool {
-	return func(ev *tcell.EventKey) bool {
-		if ev.Key() != tcell.KeyRune {
+func runeIs(rs ...rune) func(Key) bool {
+	return func(ev Key) bool {
+		if ev.Code != keyRune {
 			return false
 		}
 		for _, r := range rs {
-			if ev.Rune() == r {
+			if ev.Rune == r {
 				return true
 			}
 		}
@@ -134,8 +130,8 @@ func runeIs(rs ...rune) func(*tcell.EventKey) bool {
 	}
 }
 
-func either(fs ...func(*tcell.EventKey) bool) func(*tcell.EventKey) bool {
-	return func(ev *tcell.EventKey) bool {
+func either(fs ...func(Key) bool) func(Key) bool {
+	return func(ev Key) bool {
 		for _, f := range fs {
 			if f(ev) {
 				return true
@@ -146,94 +142,94 @@ func either(fs ...func(*tcell.EventKey) bool) func(*tcell.EventKey) bool {
 }
 
 var (
-	quitBinding   = binding{Keys: "^C", Help: "quit (everywhere)", Act: ActQuit, match: keyIs(tcell.KeyCtrlC)}
+	quitBinding   = binding{Keys: "^C", Help: "quit (everywhere)", Act: ActQuit, match: keyIs(keyCtrlC)}
 	notActivity   = []PanelID{PanelAgents, PanelBoard, PanelRequests}
 	activityOnly  = []PanelID{PanelActivity}
 	arrows        = GlyphUp + GlyphDownArrow
 	panelBindings = []binding{
-		{Keys: "tab", Hint: "focus", Act: ActNextPanel, match: keyIs(tcell.KeyTab)},
-		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(tcell.KeyBacktab)},
-		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(tcell.KeyF5)},
+		{Keys: "tab", Hint: "focus", Act: ActNextPanel, match: keyIs(keyTab)},
+		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(keyBacktab)},
+		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "1-3", Hint: "view", Act: ActTab1, Tiers: []Tier{TierMedium}, match: runeIs('1')},
 		{Keys: "1-4", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
 		{Keys: "2", Act: ActTab2, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('2')},
 		{Keys: "3", Act: ActTab3, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('3')},
 		{Keys: "4", Act: ActTab4, Tiers: []Tier{TierNarrow}, match: runeIs('4')},
-		{Keys: arrows + " j k", Hint: "select", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
-		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},
-		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
-		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(tcell.KeyPgDn)},
-		{Keys: "home g", Help: "first row", Act: ActFirst, match: either(keyIs(tcell.KeyHome), runeIs('g'))},
-		{Keys: "end G", Hint: "live", Act: ActLive, Panels: activityOnly, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
-		{Keys: "end G", Help: "last row", Act: ActLast, Panels: notActivity, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
-		{Keys: "enter", Hint: "detail", Alt: "v", Act: ActOpen, match: either(keyIs(tcell.KeyEnter), runeIs('v'))},
+		{Keys: arrows + " j k", Hint: "select", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
+		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
+		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(keyPgUp)},
+		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(keyPgDn)},
+		{Keys: "home g", Help: "first row", Act: ActFirst, match: either(keyIs(keyHome), runeIs('g'))},
+		{Keys: "end G", Hint: "live", Act: ActLive, Panels: activityOnly, match: either(keyIs(keyEnd), runeIs('G'))},
+		{Keys: "end G", Help: "last row", Act: ActLast, Panels: notActivity, match: either(keyIs(keyEnd), runeIs('G'))},
+		{Keys: "enter", Hint: "detail", Alt: "v", Act: ActOpen, match: either(keyIs(keyEnter), runeIs('v'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "f", Hint: "auto-scroll", Act: ActFollow, match: runeIs('f')},
 		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
-		{Keys: "! w", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(tcell.KeyF4), runeIs('!', 'w'))},
-		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(tcell.KeyDelete))},
+		{Keys: "! w", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!', 'w'))},
+		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(keyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
 		{Keys: "i", Hint: "write", Alt: ":", Act: ActCompose, match: runeIs('i', ':')},
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},
 		{Keys: "I", Help: "write in the compose window (several lines, Ctrl+S sends)", Act: ActComposeOpen, match: runeIs('I')},
-		{Keys: "esc", Hint: "back", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
-		{Keys: "F2", Hint: "requests", Alt: "r", Act: ActRequests, match: either(keyIs(tcell.KeyF2), runeIs('r'))},
-		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(tcell.KeyF3), runeIs('s'))},
+		{Keys: "esc", Hint: "back", Act: ActEscape, match: keyIs(keyEscape)},
+		{Keys: "F2", Hint: "requests", Alt: "r", Act: ActRequests, match: either(keyIs(keyF2), runeIs('r'))},
+		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(keyF3), runeIs('s'))},
 		{Keys: "R", Help: "where was I? open the project recap", Act: ActRecap, match: runeIs('R')},
 		{Keys: "P", Help: "the batch's plan: its tasks by state (enter opens one, or expands done)", Act: ActPlan, match: runeIs('P')},
-		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(tcell.KeyF1), runeIs('?'))},
+		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}
 	inputBindings = []binding{
-		{Keys: "^O", Hint: "several lines", Alt: "alt-enter", Act: ActComposeOpen, match: either(keyIs(tcell.KeyCtrlO), altEnter)},
-		{Keys: "enter", Hint: "send", Act: ActSend, match: keyIs(tcell.KeyEnter)},
-		{Keys: "tab", Hint: "complete @agent", Act: ActNone, match: keyIs(tcell.KeyTab)},
-		{Keys: "esc", Hint: "back (draft kept)", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
+		{Keys: "^O", Hint: "several lines", Alt: "alt-enter", Act: ActComposeOpen, match: either(keyIs(keyCtrlO), altEnter)},
+		{Keys: "enter", Hint: "send", Act: ActSend, match: keyIs(keyEnter)},
+		{Keys: "tab", Hint: "complete @agent", Act: ActNone, match: keyIs(keyTab)},
+		{Keys: "esc", Hint: "back (draft kept)", Act: ActEscape, match: keyIs(keyEscape)},
 	}
 	filterBindings = []binding{
-		{Keys: "enter", Hint: "apply", Act: ActSend, match: keyIs(tcell.KeyEnter)},
-		{Keys: "esc", Hint: "cancel", Act: ActEscape, match: keyIs(tcell.KeyEscape)},
+		{Keys: "enter", Hint: "apply", Act: ActSend, match: keyIs(keyEnter)},
+		{Keys: "esc", Hint: "cancel", Act: ActEscape, match: keyIs(keyEscape)},
 	}
 	askBindings = []binding{
-		{Keys: arrows + " j k", Hint: "choose", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
-		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},
+		{Keys: arrows + " j k", Hint: "choose", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
+		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
 		{Keys: "1-9", Help: "choose an option by its number", Act: ActAskPick, match: runeIs('1', '2', '3', '4', '5', '6', '7', '8', '9')},
-		{Keys: "enter", Hint: "answer", Act: ActSend, match: keyIs(tcell.KeyEnter)},
-		{Keys: GlyphArrowL + GlyphArrowR + " tab", Hint: "question", Act: ActAskNext, match: either(keyIs(tcell.KeyRight), keyIs(tcell.KeyTab))},
-		{Keys: GlyphArrowL, Act: ActAskPrev, match: either(keyIs(tcell.KeyLeft), keyIs(tcell.KeyBacktab))},
+		{Keys: "enter", Hint: "answer", Act: ActSend, match: keyIs(keyEnter)},
+		{Keys: GlyphArrowL + GlyphArrowR + " tab", Hint: "question", Act: ActAskNext, match: either(keyIs(keyRight), keyIs(keyTab))},
+		{Keys: GlyphArrowL, Act: ActAskPrev, match: either(keyIs(keyLeft), keyIs(keyBacktab))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "?", Help: "help", Act: ActHelp, match: runeIs('?')},
-		{Keys: "esc", Hint: "close", Act: ActClose, match: keyIs(tcell.KeyEscape)},
+		{Keys: "esc", Hint: "close", Act: ActClose, match: keyIs(keyEscape)},
 	}
 	composeBindings = []binding{
-		{Keys: "^S", Hint: "send", Act: ActSend, match: keyIs(tcell.KeyCtrlS)},
-		{Keys: "tab", Hint: "recipient", Help: "recipient " + GlyphNone + " text; a text that is only @prefix becomes the recipient (completed, or its list opens)", Act: ActComposeField, match: keyIs(tcell.KeyTab)},
-		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(tcell.KeyCtrlT)},
-		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(tcell.KeyEscape)},
+		{Keys: "^S", Hint: "send", Act: ActSend, match: keyIs(keyCtrlS)},
+		{Keys: "tab", Hint: "recipient", Help: "recipient " + GlyphNone + " text; a text that is only @prefix becomes the recipient (completed, or its list opens)", Act: ActComposeField, match: keyIs(keyTab)},
+		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(keyCtrlT)},
+		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(keyEscape)},
 	}
 	pickBindings = []binding{
-		{Keys: "type", Hint: "to filter", Act: ActPickType, match: keyIs(tcell.KeyRune, tcell.KeyBackspace, tcell.KeyBackspace2)},
-		{Keys: arrows, Hint: "select", Act: ActUp, match: keyIs(tcell.KeyUp)},
-		{Keys: GlyphDownArrow, Act: ActDown, match: keyIs(tcell.KeyDown)},
-		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
-		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(tcell.KeyPgDn)},
-		{Keys: "enter", Hint: "open", Act: ActOpen, match: keyIs(tcell.KeyEnter)},
-		{Keys: "esc", Hint: "close", Act: ActClose, match: keyIs(tcell.KeyEscape)},
+		{Keys: "type", Hint: "to filter", Act: ActPickType, match: keyIs(keyRune, keyBackspace, keyBackspace)},
+		{Keys: arrows, Hint: "select", Act: ActUp, match: keyIs(keyUp)},
+		{Keys: GlyphDownArrow, Act: ActDown, match: keyIs(keyDown)},
+		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(keyPgUp)},
+		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(keyPgDn)},
+		{Keys: "enter", Hint: "open", Act: ActOpen, match: keyIs(keyEnter)},
+		{Keys: "esc", Hint: "close", Act: ActClose, match: keyIs(keyEscape)},
 	}
 	overlayBindings = []binding{
-		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(tcell.KeyF5)},
+		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "i I", Help: "in an agent's detail: reply to that agent in the compose window", Act: ActComposeOpen, match: runeIs('i', 'I')},
-		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(tcell.KeyUp), runeIs('k'))},
-		{Keys: "j", Act: ActDown, match: either(keyIs(tcell.KeyDown), runeIs('j'))},
-		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(tcell.KeyPgUp)},
-		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(tcell.KeyPgDn)},
-		{Keys: "home g", Help: "first row", Act: ActFirst, match: either(keyIs(tcell.KeyHome), runeIs('g'))},
-		{Keys: "end G", Help: "last row", Act: ActLast, match: either(keyIs(tcell.KeyEnd), runeIs('G'))},
+		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
+		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
+		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(keyPgUp)},
+		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(keyPgDn)},
+		{Keys: "home g", Help: "first row", Act: ActFirst, match: either(keyIs(keyHome), runeIs('g'))},
+		{Keys: "end G", Help: "last row", Act: ActLast, match: either(keyIs(keyEnd), runeIs('G'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "Y", Hint: "copy thread", Act: ActCopyThread, match: runeIs('Y')},
-		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(tcell.KeyEnter), keyIs(tcell.KeyF4), runeIs('!', 'w'))},
-		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(tcell.KeyEscape), runeIs('q'))},
+		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
+		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
 )
 
@@ -261,7 +257,7 @@ func bindings(m Mode) []binding {
 
 // lookup returns the action bound to ev; ActNone when unbound — in the text
 // modes that means the field gets the key (printable keys, digits, q, Tab).
-func lookup(m Mode, p PanelID, t Tier, ev *tcell.EventKey) Action {
+func lookup(m Mode, p PanelID, t Tier, ev Key) Action {
 	for _, b := range bindings(m) {
 		if b.applies(p, t) && b.match(ev) {
 			return b.Act
@@ -292,6 +288,4 @@ func footerHints(m Mode, p PanelID, t Tier, width int) Line {
 
 // altEnter is Alt+Enter (most terminals send it as Esc then Enter, which
 // tcell reports as Enter with the Alt modifier).
-func altEnter(ev *tcell.EventKey) bool {
-	return ev.Key() == tcell.KeyEnter && ev.Modifiers()&tcell.ModAlt != 0
-}
+func altEnter(k Key) bool { return k.Code == keyEnter && k.Alt }

@@ -1,0 +1,152 @@
+KEYS
+  panels
+  tab                  focus
+  shift-tab            focus the previous panel
+  F5                   health
+  1-3                  view
+  1-4                  view
+  ↑↓ j k               select
+  pgup                 page up
+  pgdn                 page down
+  home g               first row
+  end G                live
+  end G                last row
+  enter v              detail
+  y                    copy
+  f                    auto-scroll
+  u                    Activity: the next unread message for you (●), wrapping
+  ! w F4               answer
+  d del                remove
+  a                    show or hide the agents silent for more than a day
+  /                    filter
+  i :                  write
+  I                    write in the compose window (several lines, Ctrl+S sends)
+  esc                  back
+  F2 r                 requests
+  F3 s                 services
+  R                    where was I? open the project recap
+  P                    the batch's plan: its tasks by state (enter opens one, or expands done)
+  F1 ?                 help
+  q                    quit
+  ^C                   quit (everywhere)
+  writing a message
+  ^O alt-enter         several lines
+  enter                send
+  tab                  complete @agent
+  esc                  back (draft kept)
+  ^C                   quit (everywhere)
+  editing the filter
+  enter                apply
+  esc                  cancel
+  ^C                   quit (everywhere)
+  an open detail
+  F5                   health
+  i I                  in an agent's detail: reply to that agent in the compose window
+  ↑↓ j k               scroll
+  pgup                 page up
+  pgdn                 page down
+  home g               first row
+  end G                last row
+  y                    copy
+  Y                    copy thread
+  enter ! w            answer the agent's open questions
+  esc q                close
+  ^C                   quit (everywhere)
+  answering questions
+  ↑↓ j k               choose
+  1-9                  choose an option by its number
+  enter                answer
+  ←→ tab               question
+  y                    copy
+  ?                    help
+  esc                  close
+  ^C                   quit (everywhere)
+  the compose window
+  ^S                   send
+  tab                  recipient · text; a text that is only @prefix becomes the recipient (completed, or its list opens)
+  ^T                   after the open-question hint: answer in its question panel
+  esc                  close (draft kept)
+  ^C                   quit (everywhere)
+  the project picker (--pick)
+  type                 to filter
+  ↑↓                   select
+  pgup                 page up
+  pgdn                 page down
+  enter                open
+  esc                  close
+  ^C                   quit (everywhere)
+  1 2 3 (4)            medium and narrow screens: switch the visible panel
+  click / wheel        click selects, click on the selected row opens it; the wheel scrolls
+                       a click outside an open detail closes it, like esc
+  i : @                write: @agent text wakes that agent, @all text every agent; plain text is a broadcast nobody reads (Enter twice)
+  ↑ vX.Y.Z             header: a newer release exists - run ./setup.sh update (checked once a day; AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
+
+STATES
+  ● working            the state the agent DECLARED the last time it published a status.
+  ○ idle               Silence never changes it: an agent that said working and went quiet
+  ▲ blocked            still reads working. Any other recorded value is shown as written.
+  ✓ done               
+  · no state declared  seen on the bus (a report, a lease) but it never published a state.
+  updated              bar and age of that declaration: the bar empties over 10 minutes.
+                       It measures freshness, not liveness - the bus has no heartbeat.
+  ctx                  the agent's own context, in raw tokens. Never a percentage.
+  sort                 attention first: escalated, gated or blocked; then queued or being woken;
+                       then working, idle, other states, done, no state declared. Names inside each.
+
+  flags
+  prompt               its own client asks something in its tab (a limit menu, a permission): it reads waiting; answer it in that tab.
+  swapping             agentbus swap is replacing it by its role on another profile: the dispatcher leaves its pane alone.
+  escalated            the dispatcher could not wake this agent and told the escalation target.
+  escalating           that escalation is being published.
+  gate N               N open 4-eyes challenges gate this agent: it must wait for a verdict.
+  deferred             a wake is due but the pane was not ready (busy, focused, typed input).
+  unobserved           a wake line was typed but its nonce was never seen on screen.
+  waking               the dispatcher reserved a wake and is typing the line.
+  woken                the nonce was echoed on the agent's screen - not proof it read or accepted anything.
+  busy                 the dispatcher saw the pane running a turn while the agent does not declare working (observed, not declared).
+  update               a newer client is installed than this agent runs: sentinel proposes a reload (/exit, then agentbus up --resume).
+  pilot                holds the pilot lease (the master).
+  armed                a receiver lease is live: something subscribes for this agent. A lease, not a state.
+  stale N              N addressed entries older than the 24h horizon; they wake no one.
+  wake:<value>         a wake state this busmon does not know, shown as stored.
+
+  activity types
+  status               a state declaration (state - message).
+  report  auto         an agent's report; auto = written by a hook. (+N): more text retained.
+  notify               a broadcast note; nobody reads it and nothing wakes for it.
+  request              a directive carrying a tracked request (agentbus request send).
+  directive  reply     a cmd to an agent, and its answer.
+  challenge  verdict   4-eyes: a review request and its decision.
+  escalation           the dispatcher could not wake an agent.
+  blocked              a request target reports it cannot proceed.
+  complete             the conductor integrated every mission of a change revision.
+  board                task, owner, state and age; working, requested, accepted, blocked, done.
+
+DELIVERY
+  ● bus ok             busmon's OWN link to Redis. ▲ bus down Ns: busmon is blind,
+                       the agents may be fine; values on screen are the last ones read.
+  F5 health            measured project checks; unknown counts as unhealthy, and remediation is guidance only.
+  ● dispatch up        a dispatcher holds the lease: unarmed agents are woken in their panes.
+  ○ dispatch down      none runs: nothing wakes an unarmed agent. ? dispatch: not measured yet.
+  ● missions up        a missions conductor runs; down: a change is loaded but no conductor runs (its work is stalled).
+  used                 account windows consumed per provider (session / week), shared by every agent.
+  queue                messages that would wake this agent: addressed, not wake=no, within the horizon.
+                       · = measured zero, — = not measured yet, N? = last read failed.
+  lag (detail)         entries in the SHARED cmd stream this agent's group has not read: not a work queue.
+  gap (detail)         entries may have been trimmed before this agent read them - possible, not proven.
+
+  requests
+  requested            published and recorded; nobody has accepted it.
+  accepted             the target explicitly accepted it.
+  written to output    the bytes reached a subscriber's output - not proof the agent read them.
+  queued               no delivery attempt is recorded - not proof none happened.
+  no deadline set      the request carries no expiry; busmon never invents one.
+  body not retained    the request text reads back empty; trimmed, deleted and never-existed look alike.
+  untracked threads    cmd threads with no answer in the retained history; never shown as accepted.
+
+  message text
+  full text retained   the whole text is stored and shown.
+  truncated at publish MARKED as cut when published; the rest was never stored. A trailing … proves nothing.
+  one-line preview     nothing beyond the preview is stored for this entry.
+  completeness not ma… published before the marker existed; busmon cannot promise it is whole.
+  not retained         the entry reads back empty; the cause is unknown.

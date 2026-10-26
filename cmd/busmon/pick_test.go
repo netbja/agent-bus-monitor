@@ -358,7 +358,7 @@ func TestPickLookup(t *testing.T) {
 		{key(tcell.KeyEscape), ActClose}, {runeKey('q'), ActPickType}, {runeKey('j'), ActPickType},
 		{key(tcell.KeyBackspace2), ActPickType}, {tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModCtrl), ActQuit},
 	} {
-		if got := lookup(ModePick, PanelAgents, TierWide, c.ev); got != c.want {
+		if got := lookup(ModePick, PanelAgents, TierWide, keyOf(c.ev)); got != c.want {
 			t.Errorf("%v: %v, want %v", c.ev.Name(), got, c.want)
 		}
 	}

@@ -1,0 +1,10 @@
+── tracked requests (1 waiting of 1) ──
+task-20 → foureyes requested  asked 403d ago
+   no acceptance recorded from foureyes
+   no deadline set · queued — no delivery attempt recorded · body still on the bus
+
+── cmd threads with no answer in the retained history (1) ──
+   untracked: the protocol records no acceptance for these, and an answer
+   that has been trimmed from the stream looks the same as one that never came.
+directive hermes → coder  asked 20752d ago · thread 200-0
+   look at the flake

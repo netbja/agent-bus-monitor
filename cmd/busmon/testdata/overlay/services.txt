@@ -1,0 +1,14 @@
+—— systemd services on here, set up 20752d ago ——
+
+dispatch  failed  last update 5s ago, pid 7 on here
+   restarting
+   last error: broker went away
+   log: /nowhere/dispatch.log
+   no log at /nowhere/dispatch.log
+
+missions  idle  last update 0s ago, pid 0 on elsewhere
+   waiting for missions
+   log: /far/missions.log
+   the log is on elsewhere: agentbus --project <p> service logs missions there
+
+agentbus down <p> stops them; agentbus --project <p> service status|logs|restart

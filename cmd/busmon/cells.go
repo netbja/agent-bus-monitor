@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -27,7 +28,7 @@ func removedControl(r rune) bool {
 // Preview normalizes display text only. Keep the original for copying/filtering.
 // Style tags are deliberately not interpreted or escaped at this stage.
 func Preview(s string) string {
-	return strings.Map(func(r rune) rune {
+	return agreeWidths(strings.Map(func(r rune) rune {
 		if r == '\t' || r == '\r' || r == '\n' {
 			return ' '
 		}
@@ -35,7 +36,7 @@ func Preview(s string) string {
 			return -1
 		}
 		return r
-	}, s)
+	}, s))
 }
 
 // DetailText preserves line structure and graphemes. Tab stops count cells of
@@ -53,6 +54,7 @@ func DetailText(s string) string {
 		}
 		return r
 	}, s)
+	s = agreeWidths(s)
 	var out strings.Builder
 	for i, line := range strings.Split(s, "\n") {
 		if i > 0 {
@@ -72,7 +74,52 @@ func DetailText(s string) string {
 	return out.String()
 }
 
+// Width is busmon's one measure of text in cells (the spec's cellWidth):
+// uniseg grapheme clusters, used by Fit, FitLine, frames and the layout.
 func Width(s string) int { return uniseg.StringWidth(s) }
+
+// widthReplacement stands for a cluster no width method agrees on.
+const widthReplacement = "?"
+
+// agreeWidths makes text measure the same under every method that will
+// place it (busmon Charm spec, "Width: one method, enforced"): busmon's own
+// (uniseg), lipgloss's (grapheme clusters) and bubbletea's renderer on a
+// terminal without Unicode mode 2027 (wcwidth). A cluster they disagree on
+// (an emoji with a variation selector, a ZWJ sequence, a skin tone) keeps its
+// first rune when they agree on that, and is replaced otherwise; anything
+// else is left as written.
+func agreeWidths(s string) string {
+	ascii := true
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			ascii = false
+			break
+		}
+	}
+	if ascii {
+		return s
+	}
+	var out strings.Builder
+	g := uniseg.NewGraphemes(s)
+	for g.Next() {
+		c := g.Str()
+		if widthsAgree(c) {
+			out.WriteString(c)
+			continue
+		}
+		if r := g.Runes(); len(r) > 1 && widthsAgree(string(r[0])) && Width(string(r[0])) > 0 {
+			out.WriteRune(r[0])
+			continue
+		}
+		out.WriteString(widthReplacement)
+	}
+	return out.String()
+}
+
+func widthsAgree(c string) bool {
+	u := uniseg.StringWidth(c)
+	return ansi.StringWidth(c) == u && ansi.StringWidthWc(c) == u
+}
 
 func Truncate(s string, w int) string {
 	if w <= 0 {

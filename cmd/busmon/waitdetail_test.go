@@ -16,8 +16,8 @@ func TestWaitingAgentDetailShowsWhatItNeeds(t *testing.T) {
 		{ev: bus.Event{Kind: "report", Agent: "coder", Message: "not master's"}, at: now.Add(-30 * time.Minute)},
 		{ev: bus.Event{Kind: "report", Agent: "master", Message: "preview", Full: "Decision needed:\n1. opening date T\n2. budget cap"}, at: now.Add(-2 * time.Minute)},
 	}
-	_, body := agentDetail("master", a, true, nil, feed, now)
-	body = tagRE.ReplaceAllString(body, "")
+	_, lines := agentDetail("master", a, true, nil, feed, now)
+	body := plainOf(lines)
 	status := strings.Index(body, "Status message")
 	need := strings.Index(body, "What master needs from you")
 	if status < 0 || need < status || !strings.Contains(body, "1. opening date T") || !strings.Contains(body, "Answer: i (reply to @master)") {
@@ -29,8 +29,8 @@ func TestWaitingAgentDetailShowsWhatItNeeds(t *testing.T) {
 		t.Fatalf("the wrong report was shown:\n%s", section)
 	}
 	a.state = "working"
-	if _, body = agentDetail("master", a, true, nil, feed, now); !strings.Contains(tagRE.ReplaceAllString(body, ""), "Last report") || strings.Contains(body, "Answer:") {
-		t.Fatalf("a working agent's detail:\n%s", body)
+	if _, lines = agentDetail("master", a, true, nil, feed, now); !strings.Contains(plainOf(lines), "Last report") || strings.Contains(plainOf(lines), "Answer:") {
+		t.Fatalf("a working agent's detail:\n%s", plainOf(lines))
 	}
 }
 

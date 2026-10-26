@@ -178,8 +178,8 @@ func TestPlanOverlayGroupsInOrder(t *testing.T) {
 	if !strings.Contains(plain, "merged (recorded 2h ago)") || !strings.Contains(plain, "#102") {
 		t.Fatalf("expanded done:\n%s", plain)
 	}
-	if !strings.Contains(body, GlyphHuman) || !strings.Contains(plain, "abcdef0") {
-		t.Fatalf("glyphs and commit:\n%s", body)
+	if !strings.Contains(plainOf(body), GlyphHuman) || !strings.Contains(plain, "abcdef0") {
+		t.Fatalf("glyphs and commit:\n%s", plainOf(body))
 	}
 }
 

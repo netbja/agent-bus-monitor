@@ -71,11 +71,11 @@ func TestForYouDetailLine(t *testing.T) {
 	now := time.Now()
 	a := &agentState{state: "idle", message: "awaiting bernard", stateAt: now, forYou: true}
 	_, body := agentDetail("master", a, false, nil, nil, now)
-	if !strings.Contains(body, "It names you but declared idle: no question is open.") {
-		t.Fatalf("detail:\n%s", body)
+	if !strings.Contains(plainOf(body), "It names you but declared idle: no question is open.") {
+		t.Fatalf("detail:\n%s", plainOf(body))
 	}
 	a.forYou = false
-	if _, body := agentDetail("master", a, false, nil, nil, now); strings.Contains(body, "It names you") {
+	if _, body := agentDetail("master", a, false, nil, nil, now); strings.Contains(plainOf(body), "It names you") {
 		t.Fatal("detail line without the hint")
 	}
 }

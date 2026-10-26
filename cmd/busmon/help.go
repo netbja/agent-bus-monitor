@@ -1,28 +1,26 @@
 package main
 
-import (
-	"fmt"
-	"strings"
-)
+import ()
 
 // helpText is the legend (F1): KEYS generated from the key tables, then every
 // state, flag, type and counter on the screen, in words. The panels stay
 // compact precisely because this exists.
-func helpText() string {
-	var sb strings.Builder
-	head := func(s string) { sb.WriteString(tg(RoleAccent, s) + "\n") }
-	row := func(k, v string) { fmt.Fprintf(&sb, "  %s %s\n", tg(RoleText, Fit(k, 20)), v) }
-	more := func(v string) { fmt.Fprintf(&sb, "  %s %s\n", Fit("", 20), v) }
-	blank := func() { sb.WriteString("\n") }
+func helpText() []Line {
+	var b body
+	head := func(s string) { b.seg(RoleAccent, s).text("\n") }
+	row := func(k, v string) { b.text("  ").text(Fit(k, 20)).text(" " + v + "\n") }
+	more := func(v string) { b.text("  " + Fit("", 20) + " " + v + "\n") }
+	blank := func() { b.text("\n") }
+	sub := func(s string) { b.text("  ").seg(RoleMuted, s).text("\n") }
 
 	head("KEYS")
 	for _, sec := range []struct {
 		name string
 		m    Mode
 	}{{"panels", ModePanel}, {"writing a message", ModeInput}, {"editing the filter", ModeFilter}, {"an open detail", ModeOverlay}, {"answering questions", ModeAsk}, {"the compose window", ModeCompose}, {"the project picker (--pick)", ModePick}} {
-		sb.WriteString("  " + tg(RoleMuted, sec.name) + "\n")
-		for _, b := range bindings(sec.m) {
-			if k, d, ok := helpRow(b); ok {
+		sub(sec.name)
+		for _, bd := range bindings(sec.m) {
+			if k, d, ok := helpRow(bd); ok {
 				row(k, d)
 			}
 		}
@@ -46,7 +44,7 @@ func helpText() string {
 	row("sort", "attention first: escalated, gated or blocked; then queued or being woken;")
 	more("then working, idle, other states, done, no state declared. Names inside each.")
 	blank()
-	sb.WriteString("  " + tg(RoleMuted, "flags") + "\n")
+	sub("flags")
 	row("prompt", "its own client asks something in its tab (a limit menu, a permission): it reads waiting; answer it in that tab.")
 	row("swapping", "agentbus swap is replacing it by its role on another profile: the dispatcher leaves its pane alone.")
 	row("escalated", "the dispatcher could not wake this agent and told the escalation target.")
@@ -63,7 +61,7 @@ func helpText() string {
 	row("stale N", "N addressed entries older than the 24h horizon; they wake no one.")
 	row("wake:<value>", "a wake state this busmon does not know, shown as stored.")
 	blank()
-	sb.WriteString("  " + tg(RoleMuted, "activity types") + "\n")
+	sub("activity types")
 	row("status", "a state declaration (state - message).")
 	row("report  auto", "an agent's report; auto = written by a hook. (+N): more text retained.")
 	row("notify", "a broadcast note; nobody reads it and nothing wakes for it.")
@@ -89,7 +87,7 @@ func helpText() string {
 	row("lag (detail)", "entries in the SHARED cmd stream this agent's group has not read: not a work queue.")
 	row("gap (detail)", "entries may have been trimmed before this agent read them - possible, not proven.")
 	blank()
-	sb.WriteString("  " + tg(RoleMuted, "requests") + "\n")
+	sub("requests")
 	row("requested", "published and recorded; nobody has accepted it.")
 	row("accepted", "the target explicitly accepted it.")
 	row("written to output", "the bytes reached a subscriber's output - not proof the agent read them.")
@@ -98,13 +96,13 @@ func helpText() string {
 	row("body not retained", "the request text reads back empty; trimmed, deleted and never-existed look alike.")
 	row("untracked threads", "cmd threads with no answer in the retained history; never shown as accepted.")
 	blank()
-	sb.WriteString("  " + tg(RoleMuted, "message text") + "\n")
+	sub("message text")
 	row("full text retained", "the whole text is stored and shown.")
 	row("truncated at publish", "MARKED as cut when published; the rest was never stored. A trailing "+GlyphEllipsis+" proves nothing.")
 	row("one-line preview", "nothing beyond the preview is stored for this entry.")
 	row("completeness not marked", "published before the marker existed; busmon cannot promise it is whole.")
 	row("not retained", "the entry reads back empty; the cause is unknown.")
-	return sb.String()
+	return b.Lines()
 }
 
 func helpTitle() string { return "Help" }

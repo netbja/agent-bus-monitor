@@ -68,12 +68,12 @@ func TestLookupMatrix(t *testing.T) {
 		{"unbound x", ModePanel, PanelActivity, TierWide, runeKey('x'), ActNone},
 	}
 	for _, c := range cases {
-		if got := lookup(c.m, c.p, c.t, c.ev); got != c.want {
+		if got := lookup(c.m, c.p, c.t, keyOf(c.ev)); got != c.want {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
 	}
 	for _, m := range []Mode{ModePanel, ModeInput, ModeFilter, ModeOverlay} {
-		if got := lookup(m, PanelAgents, TierWide, ctrlC); got != ActQuit {
+		if got := lookup(m, PanelAgents, TierWide, keyOf(ctrlC)); got != ActQuit {
 			t.Errorf("Ctrl-C in mode %v: %v", m, got)
 		}
 	}
@@ -131,24 +131,24 @@ func TestHelpCoversVocabulary(t *testing.T) {
 		"no deadline", "body not retained", "truncated at publish",
 	}
 	for _, w := range words {
-		if !strings.Contains(help, w) {
+		if !strings.Contains(plainOf(help), w) {
 			t.Errorf("help lacks %q", w)
 		}
 	}
 	for _, m := range []Mode{ModePanel, ModeInput, ModeFilter, ModeOverlay} {
 		for _, b := range bindings(m) {
-			if b.Hint != "" && !strings.Contains(help, b.Keys) {
+			if b.Hint != "" && !strings.Contains(plainOf(help), b.Keys) {
 				t.Errorf("help lacks key %q", b.Keys)
 			}
 		}
 	}
 	for _, sec := range []string{"KEYS", "STATES", "DELIVERY"} {
-		if !strings.Contains(help, sec) {
+		if !strings.Contains(plainOf(help), sec) {
 			t.Errorf("help lacks section %s", sec)
 		}
 	}
 	for _, old := range []string{"⏰", "⌛", "✉", "⚠", "✂", "👂", "🔒", "⬢", "⧉"} {
-		if strings.Contains(help, old) {
+		if strings.Contains(plainOf(help), old) {
 			t.Errorf("help still uses retired glyph %q", old)
 		}
 	}
@@ -168,13 +168,13 @@ func TestHelpListsEveryBinding(t *testing.T) {
 				}
 				continue
 			}
-			if !strings.Contains(help, Fit(k, 20)+" "+d) && !strings.Contains(help, k) {
+			if !strings.Contains(plainOf(help), Fit(k, 20)+" "+d) && !strings.Contains(plainOf(help), k) {
 				t.Errorf("help lacks %q", k)
 			}
 		}
 	}
 	for _, alt := range []string{"enter v", "F1 ?", "F2 r", "i :", "shift-tab", "pgup", "pgdn", "home g", "^C"} {
-		if !strings.Contains(help, alt) {
+		if !strings.Contains(plainOf(help), alt) {
 			t.Errorf("help lacks %q", alt)
 		}
 	}

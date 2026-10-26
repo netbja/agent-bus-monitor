@@ -1,0 +1,5 @@
+> old · <age>
+    old
+
+  new · <age>
+    new [red]one[-]

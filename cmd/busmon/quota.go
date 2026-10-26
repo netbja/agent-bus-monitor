@@ -265,29 +265,29 @@ func windowAged(w bus.BudgetWindow, b bus.BudgetSnapshot, now time.Time) bool {
 
 // quotaDetail is the account-scope quota row in an agent's detail. Windows
 // are shared by every agent using this provider's account.
-func quotaDetail(provider string, b bus.BudgetSnapshot, has bool, holdUntil time.Time, isHeld bool, now time.Time) string {
-	var sb strings.Builder
-	sb.WriteString("\n" + tg(RoleAccent, "Quota") + "\n")
+func quotaDetail(provider string, b bus.BudgetSnapshot, has bool, holdUntil time.Time, isHeld bool, now time.Time) []Line {
+	var bd body
+	bd.text("\n").seg(RoleAccent, "Quota").text("\n")
 	if provider == "" {
-		sb.WriteString(tg(RoleMuted, "Account  provider not recorded (launched before v0.13): never held") + "\n")
-		return sb.String()
+		bd.seg(RoleMuted, "Account  provider not recorded (launched before v0.13): never held").text("\n")
+		return bd.Lines()
 	}
 	label := Preview(providerLabel(provider))
 	switch {
 	case !has:
-		sb.WriteString(tg(RoleMuted, "Account  "+label+": no reading published (agentbus quota)") + "\n")
-		return sb.String()
+		bd.seg(RoleMuted, "Account  "+label+": no reading published (agentbus quota)").text("\n")
+		return bd.Lines()
 	case b.Unlimited:
-		sb.WriteString(tg(RoleMuted, "Account  "+label+": unlimited (shared by every agent using this provider)") + "\n")
-		return sb.String()
+		bd.seg(RoleMuted, "Account  "+label+": unlimited (shared by every agent using this provider)").text("\n")
+		return bd.Lines()
 	case b.Unknown || len(b.Windows) == 0:
 		if isHeld {
-			sb.WriteString(tg(RoleMuted, "Account  "+label+": reading unknown now (shared by every agent using this provider)") + "\n")
-			sb.WriteString(tg(RoleAttention, "still held by the dispatcher until "+holdUntil.Local().Format("15:04")+" (the reset it recorded): not woken") + "\n")
+			bd.seg(RoleMuted, "Account  "+label+": reading unknown now (shared by every agent using this provider)").text("\n")
+			bd.seg(RoleAttention, "still held by the dispatcher until "+holdUntil.Local().Format("15:04")+" (the reset it recorded): not woken").text("\n")
 		} else {
-			sb.WriteString(tg(RoleMuted, "Account  "+label+": unknown - never holds (shared by every agent using this provider)") + "\n")
+			bd.seg(RoleMuted, "Account  "+label+": unknown - never holds (shared by every agent using this provider)").text("\n")
 		}
-		return sb.String()
+		return bd.Lines()
 	}
 	windows := append([]bus.BudgetWindow(nil), b.Windows...)
 	sort.SliceStable(windows, func(i, j int) bool {
@@ -317,16 +317,16 @@ func quotaDetail(provider string, b bus.BudgetSnapshot, has bool, holdUntil time
 		parts = append(parts, part)
 	}
 	account := "Account  " + label + ": " + strings.Join(parts, " "+GlyphNone+" ") + " (shared by every agent using this provider)"
-	sb.WriteString(tg(RoleText, account) + "\n")
+	bd.seg(RoleText, account).text("\n")
 	if b.Source != "" {
-		sb.WriteString(tg(RoleMuted, "source: "+Preview(b.Source)) + "\n")
+		bd.seg(RoleMuted, "source: "+Preview(b.Source)).text("\n")
 	}
 	if isHeld && !matchedHold {
-		sb.WriteString(tg(RoleAttention, "held by the dispatcher until "+holdUntil.Local().Format("15:04")+": not woken") + "\n")
+		bd.seg(RoleAttention, "held by the dispatcher until "+holdUntil.Local().Format("15:04")+": not woken").text("\n")
 	} else if isHeld {
-		sb.WriteString(tg(RoleAttention, "held by the dispatcher until "+holdUntil.Local().Format("15:04")+": not woken") + "\n")
+		bd.seg(RoleAttention, "held by the dispatcher until "+holdUntil.Local().Format("15:04")+": not woken").text("\n")
 	}
-	return sb.String()
+	return bd.Lines()
 }
 
 // freshWindows: the windows observed within quotaMaxAge.

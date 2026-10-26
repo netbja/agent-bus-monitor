@@ -1,0 +1,2 @@
+This sends a message to master and uses its tokens.
+y confirm · n or Esc cancel

@@ -158,9 +158,6 @@ func TestWaitingCountMatchesWaitingLine(t *testing.T) {
 	if got, line := waitingCount(reqs, threads), waitingText(reqs, threads, boardNow); line != "3 requests waiting · oldest 5m" || got != 3 {
 		t.Fatalf("waitingCount %d vs waitingText %q", got, line)
 	}
-	if waitingLine(reqs, threads, boardNow) != tag("yellow", waitingText(reqs, threads, boardNow)) {
-		t.Fatal("waitingLine must stay the tagged form of waitingText")
-	}
 	if waitingCount(nil, nil) != 0 {
 		t.Fatal("empty count")
 	}

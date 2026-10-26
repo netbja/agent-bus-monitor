@@ -250,7 +250,7 @@ func (u *ui) maybeOpenRecap() {
 		return
 	}
 	u.recapPending = false
-	u.showOverlay(ovRecap, "", "", "", "")
+	u.showOverlay(ovRecap, "", nil, "", "")
 	u.renderRecap()
 }
 
@@ -308,52 +308,52 @@ func (u *ui) activateRecapRow() {
 	case "verdict":
 		if r.Verdict != nil {
 			v := r.Verdict
-			u.showOverlay(ovMessage, "Verdict "+GlyphNone+" "+v.Subject,
-				tg(RoleAttention, strings.ToUpper(v.Decision))+"\n"+tg(RoleMuted, v.Reviewer+" reviewed "+v.Author)+"\n\n"+tg(RoleText, Preview(v.Message)), "", "")
+			var b body
+			b.seg(RoleAttention, strings.ToUpper(v.Decision)).text("\n").seg(RoleMuted, v.Reviewer+" reviewed "+v.Author).text("\n\n").text(Preview(v.Message))
+			u.showOverlay(ovMessage, "Verdict "+GlyphNone+" "+v.Subject, b.Lines(), "", "")
 		}
 	case "swap":
 		if r.Swap != nil {
-			u.showOverlay(ovMessage, "Swap "+GlyphNone+" "+r.Swap.Role, tg(RoleText, Preview(swapDescription(*r.Swap))), "", "")
+			u.showOverlay(ovMessage, "Swap "+GlyphNone+" "+r.Swap.Role, []Line{{S(RoleText, Preview(swapDescription(*r.Swap)))}}, "", "")
 		}
 	case "services":
 		u.openServicesOverlay()
 	case "pause":
-		u.showOverlay(ovMessage, "Project pause", tg(RoleText, Preview(r.Detail)), "", "")
+		u.showOverlay(ovMessage, "Project pause", []Line{{S(RoleText, Preview(r.Detail))}}, "", "")
 	}
 }
 
 func (u *ui) renderRecap() {
-	var b strings.Builder
+	var b body
 	lastSection := ""
 	cursorLine := 0
 	for i, row := range u.recap.Rows {
 		if row.Section != lastSection {
-			if b.Len() > 0 {
-				b.WriteByte('\n')
+			if len(b.Lines()) > 0 {
+				b.text("\n")
 			}
-			b.WriteString(tg(RoleAccent, glyphHorizontal+glyphHorizontal+" "+row.Section+" "+glyphHorizontal+glyphHorizontal))
-			b.WriteByte('\n')
+			b.seg(RoleAccent, glyphHorizontal+glyphHorizontal+" "+row.Section+" "+glyphHorizontal+glyphHorizontal).text("\n")
 			lastSection = row.Section
 		}
 		if row.Key == "" && row.Title == row.Section {
 			continue
 		}
-		mark := "  "
+		mark := S(RoleText, "  ")
 		if i == u.recapCursor && row.Selectable {
-			cursorLine = strings.Count(b.String(), "\n")
-			mark = tg(RoleAccent, "> ")
+			cursorLine = b.at()
+			mark = S(RoleAccent, "> ")
 		}
 		role := RoleText
 		if !row.Selectable {
 			role = RoleMuted
 		}
-		b.WriteString(mark + tg(role, Preview(row.Title)) + "\n")
+		b.segs(mark).seg(role, Preview(row.Title)).text("\n")
 		if row.Detail != "" {
-			b.WriteString("    " + tg(RoleMuted, Preview(row.Detail)) + "\n")
+			b.text("    ").seg(RoleMuted, Preview(row.Detail)).text("\n")
 		}
 	}
-	u.overlay.SetTitle(" " + tg(RoleText, "Where was I?") + "  " + tg(RoleMuted, GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter open "+GlyphNone+" Esc close") + " ")
-	u.overlay.SetText(strings.TrimRight(b.String(), "\n"))
+	u.overlay.SetTitle(overlayTitle("Where was I?", GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter open "+GlyphNone+" Esc close"))
+	u.overlay.SetText(linesToTview(trimEnd(b.Lines())))
 	u.overlay.ScrollTo(max(0, cursorLine-3), 0) // keep the selected row in view
 }
 
@@ -361,10 +361,11 @@ func (u *ui) openSummaryConfirmation() {
 	if u.recap.SummaryDisabled != "" {
 		return
 	}
-	u.showOverlay(ovSummaryConfirm, "", "", "", "")
-	u.overlay.SetTitle(" " + tg(RoleAttention, "Send summary request?") + " ")
-	u.overlay.SetText(tg(RoleText, "This sends a message to "+u.recap.Target+" and uses its tokens.\n") +
-		tg(RoleMuted, "y confirm "+GlyphNone+" n or Esc cancel"))
+	u.showOverlay(ovSummaryConfirm, "", nil, "", "")
+	u.overlay.SetTitle(lineToTview(Line{S(RoleText, " "), S(RoleAttention, "Send summary request?"), S(RoleText, " ")}))
+	var b body
+	b.text("This sends a message to "+u.recap.Target+" and uses its tokens.\n").seg(RoleMuted, "y confirm "+GlyphNone+" n or Esc cancel")
+	u.overlay.SetText(linesToTview(b.Lines()))
 }
 
 func (u *ui) summaryConfirmKey(ev *tcell.EventKey) *tcell.EventKey {

@@ -119,8 +119,8 @@ func TestPausedProjectShowsInTheStateColumn(t *testing.T) {
 		}
 	}
 	_, body := agentDetail("master", st.agents["master"], false, nil, nil, time.Now())
-	if !strings.Contains(body, "working") || !strings.Contains(body, "shown as paused") || !strings.Contains(body, "the project is paused") {
-		t.Errorf("detail lost the declared state or the reason:\n%s", body)
+	if !strings.Contains(plainOf(body), "working") || !strings.Contains(plainOf(body), "shown as paused") || !strings.Contains(plainOf(body), "the project is paused") {
+		t.Errorf("detail lost the declared state or the reason:\n%s", plainOf(body))
 	}
 	f.pause = nil
 	pollOnce(context.Background(), f, st, 1)
@@ -137,12 +137,12 @@ func TestAgentDetailNamesItsQuota(t *testing.T) {
 	}}
 	got := quotaDetail("openai", b, true, now.Add(time.Hour), true, now)
 	for _, want := range []string{"Quota", "Account  codex: 5h 96%", "resets ", "shared by every agent", "source: codex app-server", "held by the dispatcher"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("missing %q in:\n%s", want, got)
+		if !strings.Contains(plainOf(got), want) {
+			t.Fatalf("missing %q in:\n%s", want, plainOf(got))
 		}
 	}
-	if got := quotaDetail("", b, false, time.Time{}, false, now); !strings.Contains(got, "never held") {
-		t.Fatalf("no provider: %s", got)
+	if got := quotaDetail("", b, false, time.Time{}, false, now); !strings.Contains(plainOf(got), "never held") {
+		t.Fatalf("no provider: %s", plainOf(got))
 	}
 }
 
@@ -184,8 +184,8 @@ func TestHeaderPrefersFreshWindowsAndShowsAStickyHold(t *testing.T) {
 	if got := quotaSeg("openai", unknown, now.Add(time.Hour), true, nil, now, TierNarrow).text(); !strings.Contains(got, "codex ? held") {
 		t.Fatalf("sticky hold header %q", got)
 	}
-	if got := quotaDetail("openai", unknown, true, now.Add(time.Hour), true, now); !strings.Contains(got, "still held by the dispatcher") || strings.Contains(got, "never holds") {
-		t.Fatalf("sticky hold detail:\n%s", got)
+	if got := quotaDetail("openai", unknown, true, now.Add(time.Hour), true, now); !strings.Contains(plainOf(got), "still held by the dispatcher") || strings.Contains(plainOf(got), "never holds") {
+		t.Fatalf("sticky hold detail:\n%s", plainOf(got))
 	}
 }
 
@@ -204,8 +204,8 @@ func TestPromptThroughThePoll(t *testing.T) {
 		t.Fatalf("master shows %q, want waiting", word)
 	}
 	_, body := agentDetail("master", st.agents["master"], false, nil, nil, time.Now())
-	if !strings.Contains(body, "shown as waiting") || !strings.Contains(body, "pane w2:p2") || !strings.Contains(body, "Answer it there") {
-		t.Errorf("detail:\n%s", body)
+	if !strings.Contains(plainOf(body), "shown as waiting") || !strings.Contains(plainOf(body), "pane w2:p2") || !strings.Contains(plainOf(body), "Answer it there") {
+		t.Errorf("detail:\n%s", plainOf(body))
 	}
 	f.observed = map[string]bus.Observation{"master": {State: "blocked", At: now, Since: now, PID: 999}}
 	pollOnce(context.Background(), f, st, 1)

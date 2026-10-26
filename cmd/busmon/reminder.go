@@ -122,27 +122,23 @@ func (u *ui) openReminder(items []attentionItem) {
 		u.st.configNote = joinNote(u.st.configNote, "reminder snooze not saved")
 		u.st.mu.Unlock()
 	}
-	u.showOverlay(ovReminder, "", "", "", "")
+	u.showOverlay(ovReminder, "", nil, "", "")
 	u.renderReminder()
 }
 
 func (u *ui) renderReminder() {
-	var b strings.Builder
+	var b body
 	for i, item := range u.reminders {
-		marker := "  "
+		marker := S(RoleText, "  ")
 		if i == u.reminderIndex {
-			marker = tg(RoleAccent, "> ")
+			marker = S(RoleAccent, "> ")
 		}
-		b.WriteString(marker)
-		b.WriteString(tg(RoleAttention, Preview(item.Agent)+" "+GlyphNone+" "+humanAge(max(0, time.Since(item.At)))))
-		b.WriteByte('\n')
-		b.WriteString("    ")
-		b.WriteString(tg(RoleText, Preview(item.Text)))
-		b.WriteString("\n\n")
+		b.segs(marker).seg(RoleAttention, Preview(item.Agent)+" "+GlyphNone+" "+humanAge(max(0, time.Since(item.At)))).text("\n")
+		b.text("    ").seg(RoleText, Preview(item.Text)).text("\n\n")
 	}
-	u.overlay.SetTitle(" " + tg(RoleText, fmt.Sprintf("Waiting for you %s %d", GlyphNone, len(u.reminders))) +
-		"  " + tg(RoleMuted, GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter answer "+GlyphNone+" i message "+GlyphNone+" Esc later") + " ")
-	u.overlay.SetText(strings.TrimRight(b.String(), "\n"))
+	u.overlay.SetTitle(overlayTitle(fmt.Sprintf("Waiting for you %s %d", GlyphNone, len(u.reminders)),
+		GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter answer "+GlyphNone+" i message "+GlyphNone+" Esc later"))
+	u.overlay.SetText(linesToTview(trimEnd(b.Lines())))
 	u.overlay.ScrollToBeginning()
 }
 
