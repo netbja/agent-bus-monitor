@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	guardian "github.com/netbja/agent-bus-monitor/health"
@@ -61,8 +60,8 @@ func guardianSeg(s guardianSummary) Line {
 	return Line{{Text: label, Role: role}}
 }
 
-func healthOverlayText(records map[string]guardian.Record, notes map[string]guardian.Note, now time.Time) string {
-	var b strings.Builder
+func healthOverlayText(records map[string]guardian.Record, notes map[string]guardian.Note, now time.Time) []Line {
+	var b body
 	for _, d := range guardian.Definitions() {
 		rec, ok := records[d.ID]
 		status, since, detail := guardian.Unknown, "never measured", "no current measurement"
@@ -78,14 +77,18 @@ func healthOverlayText(records map[string]guardian.Record, notes map[string]guar
 				detail = "last measurement is stale or invalid: " + detail
 			}
 		}
-		fmt.Fprintf(&b, "%s\n", tg(RoleAccent, d.Title+"  "+string(status)))
-		fmt.Fprintf(&b, "  since: %s\n  detail: %s\n  remediation: %s\n", tg(RoleText, since), tg(RoleText, detail), tg(RoleMuted, d.Remediation))
+		b.seg(RoleAccent, d.Title+"  "+string(status)).text("\n")
+		b.text("  since: ").text(since).text("\n  detail: ").text(detail).text("\n  remediation: ").seg(RoleMuted, d.Remediation).text("\n")
 		if note, ok := notes[d.ID]; ok {
-			fmt.Fprintf(&b, "  sentinel note (%s): %s\n", tg(RoleMuted, note.Author), tg(RoleText, note.Text))
+			b.text("  sentinel note (").seg(RoleMuted, note.Author).text("): ").text(note.Text).text("\n")
 		}
-		b.WriteByte('\n')
+		b.text("\n")
 	}
-	return strings.TrimSuffix(b.String(), "\n")
+	lines := b.Lines()
+	if n := len(lines); n > 0 && len(lines[n-1]) == 0 { // the last blank line goes, as the tagged text's trailing "\n" did
+		lines = lines[:n-1]
+	}
+	return lines
 }
 
 func healthRecapRows(rows []guardian.Transition) []recapRow {

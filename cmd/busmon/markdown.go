@@ -10,8 +10,8 @@ import (
 // status messages, question context, message bodies — rendered for an overlay
 // body at a given width: headings, lists with a hanging indent, lines kept as
 // typed and wrapped at the width, quotes, code spans and verbatim code blocks. The output is
-// colour-tagged through tg(), like every overlay body; it only moves
-// whitespace and drops the Markdown markers themselves.
+// Lines, like every overlay body; it only moves whitespace and drops the
+// Markdown markers themselves.
 
 // mdWidth is the overlay text width, kept by relayout (overlay bodies are
 // built outside a draw, from the last known terminal size).
@@ -75,14 +75,14 @@ func shouting(s string) bool {
 	return letters >= 6 && upper*10 >= letters*8
 }
 
-// renderMarkdown turns src into tagged lines no wider than width cells.
-func renderMarkdown(src string, width int) string {
+// renderMarkdown turns src into lines no wider than width cells.
+func renderMarkdown(src string, width int) []Line {
 	width = max(width, 20)
 	src = structureFlat(DetailText(src))
-	var out []string
+	var out []Line
 	blank := func() {
-		if len(out) > 0 && out[len(out)-1] != "" {
-			out = append(out, "")
+		if len(out) > 0 && out[len(out)-1].text() != "" {
+			out = append(out, nil)
 		}
 	}
 	var para []string
@@ -101,7 +101,7 @@ func renderMarkdown(src string, width int) string {
 			continue
 		}
 		if inCode {
-			out = append(out, tg(RoleMuted, strings.TrimRight("  "+Fit(strings.TrimRight(ln, " \t"), width-2), " ")))
+			out = append(out, Line{S(RoleMuted, strings.TrimRight("  "+Fit(strings.TrimRight(ln, " \t"), width-2), " "))})
 			continue
 		}
 		trimmed := strings.TrimSpace(ln)
@@ -151,10 +151,10 @@ func renderMarkdown(src string, width int) string {
 		}
 	}
 	flush()
-	for len(out) > 0 && out[len(out)-1] == "" {
+	for len(out) > 0 && out[len(out)-1].text() == "" {
 		out = out[:len(out)-1]
 	}
-	return strings.Join(out, "\n")
+	return out
 }
 
 // inlineSpans splits **bold**, __bold__, *em*, _em_ and `code`; the markers go.
@@ -209,8 +209,8 @@ func indexRune(rs []rune, r rune, from int) int {
 
 // wrapSpans word-wraps spans to width: the first line starts with first, the
 // following ones with hang (a hanging indent). Words longer than a line are
-// cut. Consecutive words of one style share one colour tag.
-func wrapSpans(spans []mdSpan, width int, first, hang string) []string {
+// cut. Consecutive words of one style share one segment.
+func wrapSpans(spans []mdSpan, width int, first, hang string) []Line {
 	type word struct {
 		text string
 		role Role
@@ -222,27 +222,27 @@ func wrapSpans(spans []mdSpan, width int, first, hang string) []string {
 			words = append(words, word{p, sp.role, sp.bold})
 		}
 	}
-	var lines []string
-	var line strings.Builder // finished runs of the current line
-	var run strings.Builder  // the run being built, in runRole/runBold
+	var lines []Line
+	var line Line           // finished runs of the current line
+	var run strings.Builder // the run being built, in runRole/runBold
 	runRole, runBold := RoleText, false
 	used, empty := 0, true
 	flushRun := func() {
 		if run.Len() > 0 {
-			line.WriteString(styled(run.String(), runRole, runBold))
+			line = append(line, Seg{Text: run.String(), Role: runRole, Bold: runBold})
 			run.Reset()
 		}
 	}
 	start := func(prefix string) {
-		line.Reset()
+		line = nil
 		if prefix != "" {
-			line.WriteString(tg(RoleMuted, prefix))
+			line = append(line, S(RoleMuted, prefix))
 		}
 		used, empty = Width(prefix), true
 	}
 	push := func() {
 		flushRun()
-		lines = append(lines, line.String())
+		lines = append(lines, line)
 		start(hang)
 	}
 	add := func(text string, role Role, bold bool, space bool) {
@@ -284,15 +284,7 @@ func wrapSpans(spans []mdSpan, width int, first, hang string) []string {
 	}
 	if !empty {
 		flushRun()
-		lines = append(lines, line.String())
+		lines = append(lines, line)
 	}
 	return lines
-}
-
-func styled(s string, r Role, bold bool) string {
-	t := tg(r, s)
-	if bold {
-		return "[::b]" + t + "[::-]"
-	}
-	return t
 }

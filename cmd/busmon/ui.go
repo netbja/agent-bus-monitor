@@ -858,7 +858,12 @@ func (u *ui) findThread(key string) (openThread, bool) {
 	return openThread{}, false
 }
 
-func (u *ui) showOverlay(kind overlayKind, title, body, plain, threadPlain string) {
+// overlayTitle is an overlay's frame title: its name, then the keys that work in it.
+func overlayTitle(title, hints string) string {
+	return lineToTview(Line{S(RoleText, " "), S(RoleText, title), S(RoleText, "  "), S(RoleMuted, hints), S(RoleText, " ")})
+}
+
+func (u *ui) showOverlay(kind overlayKind, title string, body []Line, plain, threadPlain string) {
 	u.ov, u.ovPlain, u.ovThreadPlain = kind, plain, threadPlain
 	hints := "esc close"
 	if plain != "" {
@@ -867,8 +872,8 @@ func (u *ui) showOverlay(kind overlayKind, title, body, plain, threadPlain strin
 	if threadPlain != "" {
 		hints = "Y copy thread " + GlyphNone + " " + hints
 	}
-	u.overlay.SetTitle(" " + tg(RoleText, title) + "  " + tg(RoleMuted, hints) + " ")
-	u.overlay.SetText(body)
+	u.overlay.SetTitle(overlayTitle(title, hints))
+	u.overlay.SetText(linesToTview(body))
 	u.overlay.ScrollToBeginning()
 	u.pages.ShowPage("overlay")
 	u.app.SetFocus(u.overlay)
@@ -895,15 +900,21 @@ func (u *ui) openAgent(name string) {
 		return
 	}
 	now := time.Now()
-	title, body := agentDetail(name, a, name == u.st.pilot, u.st.board, u.feed, now)
+	title, detail := agentDetail(name, a, name == u.st.pilot, u.st.board, u.feed, now)
 	snap, has := u.st.budgets[a.provider]
 	until, isHeld := held(u.st.holds, a.provider, now)
-	body += quotaDetail(a.provider, snap, has, until, isHeld, now)
+	var asks [][]Line // each open ask's summary leads, the newest listed first
 	for _, ask := range openAsks(u.st.asks) {
 		if ask.From == name {
-			body = askSummary(ask) + body
+			asks = append([][]Line{askSummary(ask)}, asks...)
 		}
 	}
+	var b body
+	for _, s := range asks {
+		b.join(s)
+	}
+	b.join(detail).join(quotaDetail(a.provider, snap, has, until, isHeld, now))
+	body := b.Lines()
 	plain := agentDetailPlain(a)
 	u.st.mu.Unlock()
 	u.showOverlay(ovAgent, title, body, plain, "")
@@ -988,7 +999,7 @@ func (u *ui) openMessage(e bus.Event, at time.Time) {
 					return // the operator opened something else meanwhile
 				}
 				u.detailThread = threadState{ID: threadID(e), Entries: entries, Loaded: true, Err: err}
-				u.overlay.SetText(detailText(e, at, time.Now(), u.detailThread))
+				u.overlay.SetText(linesToTview(detailText(e, at, time.Now(), u.detailThread)))
 				u.ovThreadPlain = threadPlain(e, u.detailThread)
 			})
 		}()

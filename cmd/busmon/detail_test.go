@@ -90,15 +90,15 @@ func TestThreadSectionDoesNotInventAMissingRootForASubjectRef(t *testing.T) {
 	e := bus.Event{ID: "900-0", Kind: "cmd", Type: bus.CmdChallenge, Ref: "pr-42",
 		From: "foureyes", Target: "coder", Message: "explain the diff"}
 	th := threadState{ID: "pr-42", Loaded: true, Entries: []bus.Event{e}}
-	if got := threadSection(e, th, time.Unix(0, 0)); strings.Contains(got, "not retained") {
-		t.Errorf("a subject ref has no root entry to lose:\n%s", got)
+	if got := threadSection(e, th, time.Unix(0, 0)); strings.Contains(plainOf(got), "not retained") {
+		t.Errorf("a subject ref has no root entry to lose:\n%s", plainOf(got))
 	}
 	// A real stream id that is absent is still reported.
 	reply := bus.Event{ID: "900-0", Kind: "cmd", Type: bus.CmdReply, Ref: "1758141663000-0",
 		From: "coder", Target: "hermes", Message: "done"}
 	th = threadState{ID: "1758141663000-0", Loaded: true, Entries: []bus.Event{reply}}
-	if got := threadSection(reply, th, time.Unix(0, 0)); !strings.Contains(got, "not retained") {
-		t.Errorf("an absent stream-id root must still be reported:\n%s", got)
+	if got := threadSection(reply, th, time.Unix(0, 0)); !strings.Contains(plainOf(got), "not retained") {
+		t.Errorf("an absent stream-id root must still be reported:\n%s", plainOf(got))
 	}
 }
 
@@ -139,8 +139,8 @@ func TestDetailTextCarriesAuthorRecipientDateAndID(t *testing.T) {
 		"reply in thread",     // position in the thread
 		"rebase onto main",    // the body
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("detail is missing %q:\n%s", want, got)
+		if !strings.Contains(plainOf(got), want) {
+			t.Errorf("detail is missing %q:\n%s", want, plainOf(got))
 		}
 	}
 }
@@ -153,11 +153,11 @@ func TestDetailTextKeepsNewlinesAndUnicode(t *testing.T) {
 		Full:    "résumé:\n  1. relire le contrat ✅\n  2. écrire les tests\n\t3. 日本語もOK",
 	}
 	got := detailText(e, time.Unix(0, 0), time.Unix(60, 0), threadState{})
-	if !strings.Contains(tagRE.ReplaceAllString(got, ""), "1. relire le contrat ✅\n") {
-		t.Errorf("newlines must survive into the detail view:\n%s", got)
+	if !strings.Contains(tagRE.ReplaceAllString(plainOf(got), ""), "1. relire le contrat ✅\n") {
+		t.Errorf("newlines must survive into the detail view:\n%s", plainOf(got))
 	}
-	if !strings.Contains(got, "日本語もOK") {
-		t.Errorf("unicode must survive into the detail view:\n%s", got)
+	if !strings.Contains(plainOf(got), "日本語もOK") {
+		t.Errorf("unicode must survive into the detail view:\n%s", plainOf(got))
 	}
 }
 
@@ -180,11 +180,11 @@ func TestDetailThreadSaysNoneForStreamsWithoutThreads(t *testing.T) {
 			t.Errorf("%s: threadID = %q, want none", kind, id)
 		}
 		got := detailText(e, time.Unix(0, 0), time.Unix(0, 0), threadState{})
-		if !strings.Contains(got, "no thread id") {
-			t.Errorf("%s: detail should say the stream carries no thread id:\n%s", kind, got)
+		if !strings.Contains(plainOf(got), "no thread id") {
+			t.Errorf("%s: detail should say the stream carries no thread id:\n%s", kind, plainOf(got))
 		}
-		if strings.Contains(got, "── thread ──") {
-			t.Errorf("%s: detail should not render a thread section:\n%s", kind, got)
+		if strings.Contains(plainOf(got), "── thread ──") {
+			t.Errorf("%s: detail should not render a thread section:\n%s", kind, plainOf(got))
 		}
 	}
 }
@@ -202,8 +202,8 @@ func TestHumanMessageReplyIsVisibleOnActivityAndInThread(t *testing.T) {
 	}
 	thread := threadSection(reply, threadState{ID: root.ID, Loaded: true, Entries: []bus.Event{root, reply}}, time.Unix(1758141664, 0))
 	for _, want := range []string{"bernard→master", "master→bernard", "what is the project status?", "all tests pass"} {
-		if !strings.Contains(thread, want) {
-			t.Errorf("thread missing %q:\n%s", want, thread)
+		if !strings.Contains(plainOf(thread), want) {
+			t.Errorf("thread missing %q:\n%s", want, plainOf(thread))
 		}
 	}
 }
@@ -226,8 +226,8 @@ func TestThreadSectionFlagsAMissingRoot(t *testing.T) {
 	reply := bus.Event{ID: "900-0", Kind: "cmd", Type: bus.CmdReply, Ref: "100-0", From: "coder", Target: "hermes", Message: "done"}
 	th := threadState{ID: "100-0", Loaded: true, Entries: []bus.Event{reply}}
 	got := threadSection(reply, th, now)
-	if !strings.Contains(got, "100-0") || !strings.Contains(got, "not retained") {
-		t.Errorf("a missing thread root must be called out:\n%s", got)
+	if !strings.Contains(plainOf(got), "100-0") || !strings.Contains(plainOf(got), "not retained") {
+		t.Errorf("a missing thread root must be called out:\n%s", plainOf(got))
 	}
 }
 
@@ -236,12 +236,12 @@ func TestThreadSectionFlagsAMissingRoot(t *testing.T) {
 func TestThreadSectionDistinguishesLoadingFromEmpty(t *testing.T) {
 	e := bus.Event{ID: "5-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder"}
 	loading := threadSection(e, threadState{ID: "5-0"}, time.Unix(0, 0))
-	if !strings.Contains(loading, "reading") {
-		t.Errorf("an unloaded thread must read as loading:\n%s", loading)
+	if !strings.Contains(plainOf(loading), "reading") {
+		t.Errorf("an unloaded thread must read as loading:\n%s", plainOf(loading))
 	}
 	empty := threadSection(e, threadState{ID: "5-0", Loaded: true}, time.Unix(0, 0))
-	if !strings.Contains(empty, "no entry of this thread is in the retained cmd stream") {
-		t.Errorf("an empty loaded thread must say the entries are gone:\n%s", empty)
+	if !strings.Contains(plainOf(empty), "no entry of this thread is in the retained cmd stream") {
+		t.Errorf("an empty loaded thread must say the entries are gone:\n%s", plainOf(empty))
 	}
 }
 
@@ -273,7 +273,7 @@ func TestThreadLineFitsTheOverlay(t *testing.T) {
 	wide.Message = strings.Repeat("\u4e2d", 60)
 	for _, w := range []int{30, 45, 58, 59, 96} {
 		mdWidth = w
-		for _, l := range strings.Split(tagRE.ReplaceAllString(threadLine(e, time.Now(), true)+"\n"+threadLine(wide, time.Now(), false), ""), "\n") {
+		for _, l := range strings.Split(plainOf(append(threadLine(e, time.Now(), true), threadLine(wide, time.Now(), false)...)), "\n") {
 			if Width(l) > w {
 				t.Errorf("width %d: row is %d cells: %q", w, Width(l), l)
 			}
@@ -287,7 +287,7 @@ func TestThreadShowsEachReplyAsWritten(t *testing.T) {
 	root := bus.Event{ID: "1-0", Kind: "cmd", Type: "directive", From: "master", Target: "coder", Message: "Task x: do it"}
 	body := "Done, at abc1234.\n\nWhat changed:\n- the parser keeps blank lines\n- a test covers it\n\nNothing remains for you."
 	reply := bus.Event{ID: "2-0", Kind: "cmd", Type: "reply", From: "coder", Target: "master", Ref: "1-0", Message: body}
-	got := tagRE.ReplaceAllString(detailText(root, time.Now(), time.Now(), threadState{ID: "1-0", Loaded: true, Entries: []bus.Event{root, reply}}), "")
+	got := tagRE.ReplaceAllString(plainOf(detailText(root, time.Now(), time.Now(), threadState{ID: "1-0", Loaded: true, Entries: []bus.Event{root, reply}})), "")
 	thread := got[strings.Index(got, "── thread ──"):]
 	for _, want := range []string{"reply", "coder→master", "    Done, at abc1234.", "    What changed:", "    " + GlyphNone + " the parser keeps blank lines", "    " + GlyphNone + " a test covers it", "    Nothing remains for you."} {
 		if !strings.Contains(thread, want) {

@@ -65,7 +65,7 @@ func TestReminderWaitsForComposeDraftAndOtherModal(t *testing.T) {
 		t.Fatal("reminder covered the compose window")
 	}
 	h.u.comp.open = false
-	h.u.showOverlay(ovHelp, "Help", "help", "", "")
+	h.u.showOverlay(ovHelp, "Help", []Line{{S(RoleText, "help")}}, "", "")
 	h.u.maybeReminder()
 	if h.u.ov != ovHelp {
 		t.Fatal("reminder covered another modal")

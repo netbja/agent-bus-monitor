@@ -7,7 +7,6 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/service"
-	"github.com/rivo/tview"
 )
 
 // serviceStale: a running service publishes its state every 5 s; past this
@@ -82,63 +81,63 @@ func serviceSeg(word, short, state string, compact bool) Line {
 
 // servicesPanel is the Services overlay: per kind the state, its age, detail,
 // last error, host and log, and the log's tail when it is on this machine.
-func servicesPanel(inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord, host string, now time.Time, width int) string {
-	var sb strings.Builder
+func servicesPanel(inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord, host string, now time.Time, width int) []Line {
+	var b body
 	rule := strings.Repeat(GlyphDash, 2)
 	if inst == nil && len(recs) == 0 {
-		sb.WriteString(tag("gray", rule+" no project services recorded "+rule) + "\n")
-		sb.WriteString(tag("gray", "   This project runs dispatch and missions as herdr tabs, or not at all. With a\n"+
+		b.seg(RoleMuted, rule+" no project services recorded "+rule).text("\n")
+		b.seg(RoleMuted, "   This project runs dispatch and missions as herdr tabs, or not at all. With a\n"+
 			"   service manager (systemd --user, launchd), agentbus up starts them as user\n"+
-			"   services that outlive the workspace.") + "\n")
-		return sb.String()
+			"   services that outlive the workspace.").text("\n")
+		return b.Lines()
 	}
 	if inst != nil {
-		fmt.Fprintf(&sb, "%s\n", tag("gray", fmt.Sprintf("%s %s services on %s, set up %s ago %s", rule, Preview(inst.Manager), Preview(inst.Host),
-			humanAge(now.Sub(time.UnixMilli(inst.At))), rule)))
+		b.seg(RoleMuted, fmt.Sprintf("%s %s services on %s, set up %s ago %s", rule, Preview(inst.Manager), Preview(inst.Host),
+			humanAge(now.Sub(time.UnixMilli(inst.At))), rule)).text("\n")
 	}
 	for _, k := range service.Kinds {
 		r, ok := recs[k]
 		if !ok {
-			fmt.Fprintf(&sb, "\n%s %s\n", tag("aqua", pad(k, 9)), tag("gray", "no state published (not started since agentbus up)"))
+			b.text("\n").seg(RoleAccent, pad(k, 9)).text(" ").seg(RoleMuted, "no state published (not started since agentbus up)").text("\n")
 			continue
 		}
 		state := serviceFact(r, true, "", now)
-		role := map[string]string{"failed": "red", "gave-up": "red", "waiting-herdr": "yellow", "waiting-git": "yellow", "starting": "yellow", "down": "gray", "stopped": "gray"}[state]
-		if role == "" {
-			role = "green"
+		role := map[string]Role{"failed": RoleError, "gave-up": RoleError, "waiting-herdr": RoleAttention, "waiting-git": RoleAttention, "starting": RoleAttention, "down": RoleMuted, "stopped": RoleMuted}[state]
+		if role == RoleText {
+			role = RoleOK
 		}
-		fmt.Fprintf(&sb, "\n%s %s  %s\n", tag("aqua", pad(k, 9)), tag(role, Preview(state)),
-			tag("gray", fmt.Sprintf("last update %s ago, pid %d on %s", humanAge(now.Sub(time.UnixMilli(r.At))), r.PID, Preview(r.Host))))
+		b.text("\n").seg(RoleAccent, pad(k, 9)).text(" ").seg(role, Preview(state)).text("  ").
+			seg(RoleMuted, fmt.Sprintf("last update %s ago, pid %d on %s", humanAge(now.Sub(time.UnixMilli(r.At))), r.PID, Preview(r.Host))).text("\n")
 		if state == "down" {
-			fmt.Fprintf(&sb, "   %s\n", tag("gray", "its process is gone; last said: "+Preview(r.State)))
+			b.text("   ").seg(RoleMuted, "its process is gone; last said: "+Preview(r.State)).text("\n")
 		}
 		if r.Detail != "" {
-			fmt.Fprintf(&sb, "   %s\n", tview.Escape(clip(Preview(r.Detail), width-4)))
+			b.text("   " + clip(Preview(r.Detail), width-4) + "\n")
 		}
 		if r.Error != "" {
-			fmt.Fprintf(&sb, "   %s %s\n", tag("red", "last error:"), tview.Escape(clip(Preview(r.Error), width-16)))
+			b.text("   ").seg(RoleError, "last error:").text(" " + clip(Preview(r.Error), width-16) + "\n")
 		}
-		fmt.Fprintf(&sb, "   %s %s\n", tag("gray", "log:"), tview.Escape(Preview(r.Log)))
+		b.text("   ").seg(RoleMuted, "log:").text(" " + Preview(r.Log) + "\n")
 		if r.Host != host || r.Log == "" {
-			fmt.Fprintf(&sb, "   %s\n", tag("gray", "the log is on "+Preview(r.Host)+": agentbus --project <p> service logs "+k+" there"))
+			b.text("   ").seg(RoleMuted, "the log is on "+Preview(r.Host)+": agentbus --project <p> service logs "+k+" there").text("\n")
 			continue
 		}
 		lines, err := service.TailLog(r.Log, 12)
 		if err != nil {
-			fmt.Fprintf(&sb, "   %s\n", tag("gray", Preview(err.Error())))
+			b.text("   ").seg(RoleMuted, Preview(err.Error())).text("\n")
 		}
 		for _, l := range lines {
-			fmt.Fprintf(&sb, "   %s\n", tag("gray", tview.Escape(clip(Preview(l), width-4))))
+			b.text("   ").seg(RoleMuted, clip(Preview(l), width-4)).text("\n")
 		}
 		// A panic, or what was printed before the log opened.
 		crashFile := strings.TrimSuffix(r.Log, ".log") + ".crash.log"
 		if crash, err := service.TailLog(crashFile, 6); err == nil && len(crash) > 0 {
-			fmt.Fprintf(&sb, "   %s %s\n", tag("red", "crash output:"), tview.Escape(Preview(crashFile)))
+			b.text("   ").seg(RoleError, "crash output:").text(" " + Preview(crashFile) + "\n")
 			for _, l := range crash {
-				fmt.Fprintf(&sb, "   %s\n", tview.Escape(clip(Preview(l), width-4)))
+				b.text("   " + clip(Preview(l), width-4) + "\n")
 			}
 		}
 	}
-	sb.WriteString("\n" + tag("gray", "agentbus down <p> stops them; agentbus --project <p> service status|logs|restart") + "\n")
-	return sb.String()
+	b.text("\n").seg(RoleMuted, "agentbus down <p> stops them; agentbus --project <p> service status|logs|restart").text("\n")
+	return b.Lines()
 }

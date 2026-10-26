@@ -11,7 +11,6 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/plan"
-	"github.com/rivo/tview"
 )
 
 // planReader is what the plan view reads (spec
@@ -255,26 +254,25 @@ type planItem struct {
 // tasks grouped by state in plan.Order, done collapsed to a count unless
 // expanded. sel is the selected item (-1: none). width is the inner width;
 // below 80 the owner, PR and verdict fold under the title.
-func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) (body, plain string, items []planItem) {
-	var b, pl strings.Builder
-	line := 0
-	emit := func(tagged, text string) {
-		b.WriteString(tagged + "\n")
+func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) (lines []Line, plain string, items []planItem) {
+	var pl strings.Builder
+	emit := func(l Line, text string) {
+		lines = append(lines, l)
 		pl.WriteString(text + "\n")
-		line++
 	}
+	sp := S(RoleText, " ")
 	age := plan.Age(p.rec.LoadedAt, now)
 	head := fmt.Sprintf("%s %s %s %s loaded %s ago (%s)", p.file.Plan, GlyphNone, p.file.Goal, GlyphNone, age, short7(p.rec.Commit))
-	headTag := tg(RoleText, Preview(p.file.Plan)) + " " + tg(RoleMuted, GlyphNone+" "+Preview(p.file.Goal)+" "+GlyphNone+" loaded "+age+" ago ("+short7(p.rec.Commit)+")")
+	headLine := Line{S(RoleText, Preview(p.file.Plan)), sp, S(RoleMuted, GlyphNone+" "+Preview(p.file.Goal)+" "+GlyphNone+" loaded "+age+" ago ("+short7(p.rec.Commit)+")")}
 	if now.Sub(time.UnixMilli(p.rec.LoadedAt)) > plan.StaleAfter {
-		headTag += " " + tg(RoleMuted, "stale "+GlyphNone+" master: agentbus plan load")
+		headLine = append(headLine, sp, S(RoleMuted, "stale "+GlyphNone+" master: agentbus plan load"))
 		head += " stale"
 	}
 	if p.partial {
-		headTag += " " + tg(RoleMuted, "? a read failed: values kept")
+		headLine = append(headLine, sp, S(RoleMuted, "? a read failed: values kept"))
 		head += " ?"
 	}
-	emit(headTag, head)
+	emit(headLine, head)
 	narrow := width < 80
 	for _, s := range plan.Order {
 		var group []plan.Row
@@ -287,18 +285,18 @@ func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) 
 			continue
 		}
 		glyph, role := planLook(s)
-		emit("", "")
+		emit(nil, "")
 		title := fmt.Sprintf("%s (%d)", plan.Label(s), len(group))
 		if s == plan.Done && !expanded {
 			idx := len(items)
-			items = append(items, planItem{toggle: true, line: line})
-			emit(planMark(idx == sel)+tg(role, glyph+" "+title)+" "+tg(RoleMuted, "enter expands"), title)
+			items = append(items, planItem{toggle: true, line: len(lines)})
+			emit(append(planMark(idx == sel), S(role, glyph+" "+title), sp, S(RoleMuted, "enter expands")), title)
 			continue
 		}
-		emit(tg(role, glyph+" "+title), title)
+		emit(Line{S(role, glyph+" "+title)}, title)
 		for _, r := range group {
 			idx := len(items)
-			items = append(items, planItem{task: r.Task.ID, line: line})
+			items = append(items, planItem{task: r.Task.ID, line: len(lines)})
 			details := planRowDetails(r, now)
 			owner := r.Task.Owner
 			if owner == plan.Person {
@@ -311,19 +309,19 @@ func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) 
 			}
 			rowTitle := clip(Preview(r.Task.Title), titleW)
 			text := "  " + pad(Preview(r.Task.ID), idw) + rowTitle
-			tagged := planMark(idx == sel) + tg(role, glyph) + " " + tg(RoleText, pad(Preview(r.Task.ID), idw)) + tview.Escape(rowTitle)
+			row := append(planMark(idx == sel), S(role, glyph), sp, S(RoleText, pad(Preview(r.Task.ID), idw)), S(RoleText, rowTitle))
 			kept := ""
 			if p.kept(r) {
 				kept = " ?" // derived from a value kept after a failed read
 			}
 			if narrow {
-				emit(tagged, text)
+				emit(row, text)
 				sub := "    " + owner
 				if details != "" {
 					sub += "  " + details
 				}
 				sub = clip(sub, max(0, width-len(kept)))
-				emit(tg(RoleMuted, sub+kept), sub+kept)
+				emit(Line{S(RoleMuted, sub+kept)}, sub+kept)
 				continue
 			}
 			tail := "  " + owner
@@ -331,17 +329,17 @@ func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) 
 				tail += "  " + details
 			}
 			tail = clip(tail, max(0, width-idw-4-len([]rune(rowTitle))-len(kept)))
-			emit(tagged+tg(RoleMuted, tail+kept), text+tail+kept)
+			emit(append(row, S(RoleMuted, tail+kept)), text+tail+kept)
 		}
 	}
-	return b.String(), pl.String(), items
+	return append(lines, nil), pl.String(), items // the tagged text ended with "\n": an empty last line
 }
 
-func planMark(selected bool) string {
+func planMark(selected bool) Line {
 	if selected {
-		return tg(RoleAccent, GlyphSelect) + " "
+		return Line{S(RoleAccent, GlyphSelect), S(RoleText, " ")}
 	}
-	return "  "
+	return Line{S(RoleText, "  ")}
 }
 
 // planRowDetails: PR, verdict, the done label, why blocked, what it waits on,
@@ -380,7 +378,7 @@ func planRowDetails(r plan.Row, now time.Time) string {
 
 // planTaskDetail is the detail of one task: its row, its board entry and
 // request, its verdicts per subject, its ask and the recorded facts.
-func planTaskDetail(p planState, id string, now time.Time) (title, body, plain string) {
+func planTaskDetail(p planState, id string, now time.Time) (title string, body []Line, plain string) {
 	var r plan.Row
 	for _, x := range p.rows {
 		if x.Task.ID == id {
@@ -439,7 +437,13 @@ func planTaskDetail(p planState, id string, now time.Time) (title, body, plain s
 		add("last fact", plan.Age(r.LastFact, now)+" ago")
 	}
 	plain = strings.Join(lines, "\n")
-	return "Plan " + GlyphNone + " " + id, tview.Escape(plain), plain
+	for _, l := range lines {
+		body = append(body, Line{S(RoleText, l)})
+	}
+	if len(body) == 0 {
+		body = []Line{nil}
+	}
+	return "Plan " + GlyphNone + " " + id, body, plain
 }
 
 func short7(s string) string {
@@ -478,13 +482,13 @@ func (u *ui) renderPlan() {
 	u.planItems = items
 	title := "Plan " + GlyphNone + " " + strings.TrimPrefix(planSeg(sum, now).text(), "plan ")
 	u.showOverlay(ovPlan, title, body, plain, "")
-	u.overlay.SetTitle(" " + tg(RoleText, title) + "  " + tg(RoleMuted, "enter open "+GlyphNone+" y copy "+GlyphNone+" esc close") + " ")
+	u.overlay.SetTitle(overlayTitle(title, "enter open "+GlyphNone+" y copy "+GlyphNone+" esc close"))
 	if u.planSel < len(items) {
 		u.overlay.ScrollTo(max(0, items[u.planSel].line-3), 0)
 	}
 }
 
-func (u *ui) planRedraw(now time.Time) (string, string, []planItem) {
+func (u *ui) planRedraw(now time.Time) ([]Line, string, []planItem) {
 	u.st.mu.Lock()
 	defer u.st.mu.Unlock()
 	return planOverlay(u.st.plan, u.planSel, u.planExpanded, now, max(20, overlayInnerWidth(u.width)))

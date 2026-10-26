@@ -37,11 +37,11 @@ func TestHealthOverlayShowsGuidanceAndEscapesText(t *testing.T) {
 	now := time.Unix(10_000_000, 0)
 	body := healthOverlayText(map[string]guardian.Record{"tracked-secrets": {ID: "tracked-secrets", Status: guardian.Fail, Detail: "tracked private-key path: [candidate]", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}},
 		map[string]guardian.Note{"tracked-secrets": {ID: "tracked-secrets", Author: "sentinel", Text: "removed from tracking"}}, now)
-	if !strings.Contains(body, "Tracked secret-like files") || !strings.Contains(body, "remediation:") || !strings.Contains(body, "removed from tracking") {
-		t.Fatalf("health overlay missing fields: %q", body)
+	if !strings.Contains(plainOf(body), "Tracked secret-like files") || !strings.Contains(plainOf(body), "remediation:") || !strings.Contains(plainOf(body), "removed from tracking") {
+		t.Fatalf("health overlay missing fields: %q", plainOf(body))
 	}
-	if strings.Contains(body, "[candidate]") {
-		t.Fatalf("health detail injected a tview tag: %q", body)
+	if !strings.Contains(drawnText(body), "[candidate]") {
+		t.Fatalf("health detail injected a tview tag: %q", drawnText(body))
 	}
 }
 

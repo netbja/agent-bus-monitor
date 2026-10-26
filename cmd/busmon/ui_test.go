@@ -654,11 +654,11 @@ func TestDetailRefIsSanitised(t *testing.T) {
 	hostile.Ref = "[red]pr-42\ntext  complete"
 	clean := detailText(base, now, now, threadState{Loaded: true})
 	got := detailText(hostile, now, now, threadState{Loaded: true})
-	if strings.Count(got, "\n") != strings.Count(clean, "\n") {
-		t.Fatalf("a ref newline added rows:\n%s", got)
+	if strings.Count(plainOf(got), "\n") != strings.Count(plainOf(clean), "\n") {
+		t.Fatalf("a ref newline added rows:\n%s", plainOf(got))
 	}
-	if !strings.Contains(got, "[red[]pr-42") {
-		t.Fatalf("ref tag not escaped:\n%s", got)
+	if !strings.Contains(drawnText(got), "[red]pr-42") {
+		t.Fatalf("ref tag not escaped:\n%s", drawnText(got))
 	}
 }
 

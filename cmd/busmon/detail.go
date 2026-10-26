@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rivo/tview"
-
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -150,10 +148,10 @@ func threadID(e bus.Event) string {
 
 // detailThread renders the thread row: the id, whether this entry is the root
 // or a reply, and how much of the thread survives in the stream.
-func detailThread(e bus.Event, th threadState) string {
+func detailThread(e bus.Event, th threadState) Line {
 	id := threadID(e)
 	if id == "" {
-		return tag("gray", "— (this stream carries no thread id)")
+		return Line{S(RoleMuted, "— (this stream carries no thread id)")}
 	}
 	// A ref is whatever the sender chose to correlate on — `agentbus challenge`
 	// refs are subjects like "pr-42", not stream ids — so "root" is only a
@@ -165,18 +163,18 @@ func detailThread(e bus.Event, th threadState) string {
 	case looksLikeStreamID(id):
 		pos = "reply in thread"
 	}
-	out := tview.Escape(Preview(id)) + "  " + tag("gray", "("+pos+")")
+	out := Line{S(RoleText, Preview(id)), S(RoleText, "  "), S(RoleMuted, "("+pos+")")}
 	switch {
 	case th.Err != nil:
-		out += "  " + tag("red", "[thread unreadable: "+Preview(th.Err.Error())+"]")
+		out = append(out, S(RoleText, "  "), S(RoleError, "[thread unreadable: "+Preview(th.Err.Error())+"]"))
 	case !th.Loaded:
-		out += "  " + tag("gray", "[reading…]")
+		out = append(out, S(RoleText, "  "), S(RoleMuted, "[reading…]"))
 	default:
 		word := "entries"
 		if len(th.Entries) == 1 {
 			word = "entry"
 		}
-		out += "  " + tag("gray", fmt.Sprintf("[%d retained %s]", len(th.Entries), word))
+		out = append(out, S(RoleText, "  "), S(RoleMuted, fmt.Sprintf("[%d retained %s]", len(th.Entries), word)))
 	}
 	return out
 }
@@ -184,9 +182,9 @@ func detailThread(e bus.Event, th threadState) string {
 // detailText renders the whole overlay: a metadata block, the full body, and —
 // for a cmd — the thread transcript. Everything it claims is read from the
 // entry; nothing is inferred from silence.
-func detailText(e bus.Event, at, now time.Time, th threadState) string {
-	var sb strings.Builder
-	row := func(k, v string) { fmt.Fprintf(&sb, "%s  %s\n", tag("gray", pad(k, 6)), v) }
+func detailText(e bus.Event, at, now time.Time, th threadState) []Line {
+	var b body
+	row := func(k string, v ...Seg) { b.seg(RoleMuted, pad(k, 6)).text("  ").segs(v...).text("\n") }
 
 	// One attribution line, then the body with what can honestly be said about
 	// its completeness right under it; the technical block follows.
@@ -194,56 +192,55 @@ func detailText(e bus.Event, at, now time.Time, th threadState) string {
 	if e.Target != "" {
 		who += " → " + e.Target
 	}
-	fmt.Fprintf(&sb, "%s  %s\n\n", tview.Escape(Preview(who)),
-		tag("gray", at.Format("2006-01-02 15:04:05")+" ("+humanAge(now.Sub(at))+" ago)"))
-	if body := messageBody(e); body != "" {
-		sb.WriteString(renderMarkdown(body, mdWidth))
+	b.text(Preview(who)).text("  ").
+		seg(RoleMuted, at.Format("2006-01-02 15:04:05")+" ("+humanAge(now.Sub(at))+" ago)").text("\n\n")
+	if text := messageBody(e); text != "" {
+		b.join(renderMarkdown(text, mdWidth))
 	} else {
-		sb.WriteString(tag("gray", "(no text)"))
+		b.seg(RoleMuted, "(no text)")
 	}
-	sb.WriteString("\n\n")
+	b.text("\n\n")
 	f := eventFidelity(e)
-	row("text", tag(f.Tone, f.Label))
+	row("text", S(colorRole(f.Tone), f.Label))
 	if f.Caveat != "" {
-		row("", tag("gray", f.Caveat))
+		row("", S(RoleMuted, f.Caveat))
 	}
 	if e.Kind == "status" && e.State != "" {
-		row("state", tag(stateColor(e.State), Preview(e.State))+"  "+tag("gray", "(as declared by the agent)"))
+		row("state", S(colorRole(stateColor(e.State)), Preview(e.State)), S(RoleText, "  "), S(RoleMuted, "(as declared by the agent)"))
 	}
-	sb.WriteString("\n")
-	row("kind", tview.Escape(Preview(detailKind(e))))
-	row("from", tview.Escape(Preview(detailFrom(e))))
-	row("to", tview.Escape(Preview(detailTo(e))))
-	row("when", fmt.Sprintf("%s  %s", at.Format("2006-01-02 15:04:05"),
-		tag("gray", "("+humanAge(now.Sub(at))+" ago)")))
-	row("id", tview.Escape(Preview(e.ID)))
-	row("thread", detailThread(e, th))
+	b.text("\n")
+	row("kind", S(RoleText, Preview(detailKind(e))))
+	row("from", S(RoleText, Preview(detailFrom(e))))
+	row("to", S(RoleText, Preview(detailTo(e))))
+	row("when", S(RoleText, at.Format("2006-01-02 15:04:05")+"  "), S(RoleMuted, "("+humanAge(now.Sub(at))+" ago)"))
+	row("id", S(RoleText, Preview(e.ID)))
+	row("thread", detailThread(e, th)...)
 
 	if threadID(e) != "" {
-		sb.WriteString("\n" + threadSection(e, th, now))
+		b.text("\n").join(threadSection(e, th, now))
 	}
-	return sb.String()
+	return b.Lines()
 }
 
 // threadSection lists the thread's retained entries oldest→newest. A root that
 // is no longer in the stream is called out rather than hidden: "the rest of this
 // exchange is gone" is the fact the operator needs when reconstructing a
 // request, and an absent root is not an answered one.
-func threadSection(e bus.Event, th threadState, now time.Time) string {
+func threadSection(e bus.Event, th threadState, now time.Time) []Line {
 	id := threadID(e)
-	var sb strings.Builder
-	sb.WriteString(tag("gray", "── thread ──") + "\n")
+	var b body
+	b.seg(RoleMuted, "── thread ──").text("\n")
 	switch {
 	case th.Err != nil:
-		sb.WriteString(tag("red", "thread could not be read: "+Preview(th.Err.Error())) + "\n")
-		return sb.String()
+		b.seg(RoleError, "thread could not be read: "+Preview(th.Err.Error())).text("\n")
+		return b.Lines()
 	case !th.Loaded:
-		sb.WriteString(tag("gray", "reading the thread…") + "\n")
-		return sb.String()
+		b.seg(RoleMuted, "reading the thread…").text("\n")
+		return b.Lines()
 	case len(th.Entries) == 0:
-		sb.WriteString(tag("yellow", "no entry of this thread is in the retained cmd stream") + "\n")
-		sb.WriteString(tag("gray", missingFidelity().Label) + "\n")
-		return sb.String()
+		b.seg(RoleAttention, "no entry of this thread is in the retained cmd stream").text("\n")
+		b.seg(RoleMuted, missingFidelity().Label).text("\n")
+		return b.Lines()
 	}
 	rootHere := false
 	for _, t := range th.Entries {
@@ -252,21 +249,21 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 		}
 		// The opened entry's own text is above; another entry's text that does
 		// not fit its line follows it as written, and leaves the line.
-		if body := threadBody(t); body != "" && t.ID != e.ID {
+		if text := threadBody(t); text != nil && t.ID != e.ID {
 			head := t
 			head.Message, head.Full = "", ""
-			sb.WriteString(threadLine(head, now, false) + "\n" + body)
+			b.join(threadLine(head, now, false)).text("\n").join(text)
 			continue
 		}
-		sb.WriteString(threadLine(t, now, t.ID == e.ID) + "\n")
+		b.join(threadLine(t, now, t.ID == e.ID)).text("\n")
 	}
 	// Only a stream-id thread names an entry that could be missing. A subject
 	// ref ("pr-42") has no root entry to lose, and reporting one as absent
 	// would invent a gap in an exchange that is whole.
 	if !rootHere && looksLikeStreamID(id) {
-		sb.WriteString(tag("yellow", "the thread root "+Preview(id)+" is "+missingFidelity().Label) + "\n")
+		b.seg(RoleAttention, "the thread root "+Preview(id)+" is "+missingFidelity().Label).text("\n")
 	}
-	return sb.String()
+	return b.Lines()
 }
 
 // threadPrefix is the width of a transcript row before its text: marker, time,
@@ -274,25 +271,31 @@ func threadSection(e bus.Event, th threadState, now time.Time) string {
 const threadPrefix = 2 + 8 + 1 + 9 + 1 + 16 + 1
 
 // threadBody is a thread entry's text as written (Markdown, its paragraphs and
-// lists), indented under its line; nothing when it fits on that line already.
-func threadBody(e bus.Event) string {
-	body := messageBody(e)
-	if !strings.Contains(strings.TrimSpace(body), "\n") && runeLen(body) <= mdWidth-threadPrefix-1 {
-		return ""
+// lists), indented under its line, ending with an empty line; nil when it fits
+// on that line already.
+func threadBody(e bus.Event) []Line {
+	text := messageBody(e)
+	if !strings.Contains(strings.TrimSpace(text), "\n") && runeLen(text) <= mdWidth-threadPrefix-1 {
+		return nil
 	}
-	var sb strings.Builder
-	for _, l := range strings.Split(renderMarkdown(body, max(20, mdWidth-4)), "\n") {
-		sb.WriteString("    " + l + "\n")
+	md := renderMarkdown(text, max(20, mdWidth-4))
+	if len(md) == 0 {
+		md = []Line{nil}
 	}
-	return sb.String()
+	var b body
+	for _, l := range md {
+		b.text("    ").segs(l...).text("\n")
+	}
+	return b.Lines()
 }
 
 // threadLine is one transcript row: time, type, sender→target, text. The entry
-// the operator opened is marked so it can be found in its own thread.
-func threadLine(e bus.Event, now time.Time, self bool) string {
-	marker := "  "
+// the operator opened is marked so it can be found in its own thread. Too
+// narrow, it takes two lines.
+func threadLine(e bus.Event, now time.Time, self bool) []Line {
+	marker := S(RoleText, "  ")
 	if self {
-		marker = tag("aqua", GlyphSelect+" ")
+		marker = S(RoleAccent, GlyphSelect+" ")
 	}
 	at := entryTime(e.ID)
 	typ := Preview(e.Type)
@@ -301,13 +304,13 @@ func threadLine(e bus.Event, now time.Time, self bool) string {
 	}
 	who := Preview(e.From) + "→" + Preview(e.Target)
 	text := oneLine(Preview(e.Message))
-	stamp := marker + tag("gray", at.Format("15:04:05")) + " " + tag("fuchsia", Fit(typ, 9))
+	stamp := Line{marker, S(RoleMuted, at.Format("15:04:05")), S(RoleText, " "), S(RoleDispatch, Fit(typ, 9))}
 	if avail := mdWidth - threadPrefix - 1; avail >= 20 {
-		return stamp + " " + tag("gray", Fit(who, 16)) + " " + tview.Escape(Truncate(text, avail+1))
+		return []Line{append(stamp, S(RoleText, " "), S(RoleMuted, Fit(who, 16)), S(RoleText, " "+Truncate(text, avail+1)))}
 	}
 	// Too narrow for the text beside its metadata (20 cells): who and the text
 	// go on their own indented line, still inside the width.
-	return stamp + "\n    " + tview.Escape(Truncate(who+"  "+text, max(1, mdWidth-4)))
+	return []Line{stamp, {S(RoleText, "    "+Truncate(who+"  "+text, max(1, mdWidth-4)))}}
 }
 
 // oneLine flattens a body for a transcript row; the full text stays one Enter

@@ -23,7 +23,7 @@ func demoAsk() bus.Ask {
 }
 
 func TestAskPanelBody(t *testing.T) {
-	got := tagRE.ReplaceAllString(askPanelBody(demoAsk(), askPanel{q: 1, opt: 0}, 70), "")
+	got := tagRE.ReplaceAllString(plainOf(askPanelBody(demoAsk(), askPanel{q: 1, opt: 0}, 70)), "")
 	for _, want := range []string{GlyphDone + " Amendment", GlyphWorking + " Date T", GlyphIdle + " Code",
 		"When should it open?", "Why", GlyphNone + " act approved", GlyphSelect + " 1. Mon 10:00 (recommended)",
 		"before the DCA slice", "2. Wed 10:00", "3. Other... (type your answer)"} {
@@ -31,11 +31,11 @@ func TestAskPanelBody(t *testing.T) {
 			t.Fatalf("missing %q in:\n%s", want, got)
 		}
 	}
-	answered := tagRE.ReplaceAllString(askPanelBody(demoAsk(), askPanel{q: 0}, 70), "")
+	answered := tagRE.ReplaceAllString(plainOf(askPanelBody(demoAsk(), askPanel{q: 0}, 70)), "")
 	if !strings.Contains(answered, "answered: Yes") || strings.Contains(answered, "Other...") {
 		t.Fatalf("an answered question must show its answer only:\n%s", answered)
 	}
-	narrow := tagRE.ReplaceAllString(askPanelBody(demoAsk(), askPanel{q: 2}, 30), "")
+	narrow := tagRE.ReplaceAllString(plainOf(askPanelBody(demoAsk(), askPanel{q: 2}, 30)), "")
 	if !strings.Contains(narrow, "(3/3") {
 		t.Fatalf("narrow tab strip:\n%s", narrow)
 	}

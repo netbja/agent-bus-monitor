@@ -46,10 +46,10 @@ func draw(t *testing.T, p tview.Primitive, w, h int) string {
 }
 
 // textPane is the widget busmon uses for every overlay, built the same way.
-func textPane(content string) *tview.TextView {
+func textPane(content []Line) *tview.TextView {
 	v := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
 	v.SetScrollable(true).SetBorder(true)
-	v.SetText(content)
+	v.SetText(linesToTview(content))
 	return v
 }
 

@@ -111,7 +111,7 @@ func alignCases() []alignCase {
 			h.key(key(tcell.KeyEnter))
 			// As the thread read's callback does once it is back.
 			h.u.detailThread = threadState{ID: threadID(h.u.detailEvent), Loaded: true, Entries: entries}
-			h.u.overlay.SetText(detailText(h.u.detailEvent, time.Now(), time.Now(), h.u.detailThread))
+			h.u.overlay.SetText(linesToTview(detailText(h.u.detailEvent, time.Now(), time.Now(), h.u.detailThread)))
 		}},
 		{"tab 2", func(h *harness) { feed(h); h.key(runeKey('2')) }},
 		{"tab 3", func(h *harness) { feed(h); h.key(runeKey('3')) }},

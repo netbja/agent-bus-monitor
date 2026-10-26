@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rivo/tview"
-
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -194,24 +192,21 @@ func deadlineWords(r request, now time.Time) (text, tone string) {
 // wraps, and clipping them cost exactly the wrong words — the caveat sits at the
 // end of the longest sentence, so "reads back empty, cause unknown" truncated to
 // "reads back empty,…" turned a careful statement into a bare claim.
-func requestBlock(r request, now time.Time) string {
+func requestBlock(r request, now time.Time) []Line {
 	// Every field below is free text from the bus: one line, no controls.
 	r.Task, r.Target, r.Owner, r.State = Preview(r.Task), Preview(r.Target), Preview(r.Owner), Preview(r.State)
 	r.BlockedReason = Preview(r.BlockedReason)
-	var sb strings.Builder
-	head := fmt.Sprintf("%s %s %s %s",
-		tag("white", clip(r.Task, 24)),
-		tag("gray", "→"),
-		tag("aqua", clip(target(r), 14)),
-		tag(stateColor(boardStateColorKey(r.State)), r.State))
+	var b body
+	b.text(clip(r.Task, 24)).text(" ").seg(RoleMuted, "→").text(" ").seg(RoleAccent, clip(target(r), 14)).text(" ").
+		seg(colorRole(stateColor(boardStateColorKey(r.State))), r.State)
 	age := "updated " + humanAge(now.Sub(r.Updated)) + " ago"
 	if r.Tracked && !r.Created.IsZero() {
 		age = "asked " + humanAge(now.Sub(r.Created)) + " ago"
 	}
-	fmt.Fprintf(&sb, "%s  %s\n", head, tag("gray", age))
+	b.text("  ").seg(RoleMuted, age).text("\n")
 
 	next, tone := nextAction(r, now)
-	fmt.Fprintf(&sb, "   %s\n", tag(tone, next))
+	b.text("   ").seg(colorRole(tone), next).text("\n")
 
 	facts := []string{}
 	if d, _ := deadlineWords(r, now); d != "" {
@@ -227,8 +222,8 @@ func requestBlock(r request, now time.Time) string {
 	if av := availabilityWords(r.Availability); av != "" {
 		facts = append(facts, av)
 	}
-	fmt.Fprintf(&sb, "   %s\n", tag("gray", strings.Join(facts, " · ")))
-	return sb.String()
+	b.text("   ").seg(RoleMuted, strings.Join(facts, " · ")).text("\n")
+	return b.Lines()
 }
 
 // availabilityWords describes whether the request body can still be read back.
@@ -356,8 +351,8 @@ func recentThreads(threads []openThread, since time.Time) []openThread {
 // requestsPanel renders the whole follow-up view: tracked requests first, then
 // the untracked cmd threads, each section labelled with what it can and cannot
 // tell the reader.
-func requestsPanel(reqs []request, threads []openThread, now time.Time, width int) string {
-	var sb strings.Builder
+func requestsPanel(reqs []request, threads []openThread, now time.Time, width int) []Line {
+	var b body
 	// Only tracked requests belong here. An ordinary board task records no
 	// acceptance and no response, so listing it as a request would invent a
 	// pending ask out of a line of ownership bookkeeping; the BOARD pane is
@@ -369,39 +364,28 @@ func requestsPanel(reqs []request, threads []openThread, now time.Time, width in
 			waiting++
 		}
 	}
-	sb.WriteString(tag("gray", fmt.Sprintf("── tracked requests (%d waiting of %d) ──", waiting, len(tracked))) + "\n")
+	b.seg(RoleMuted, fmt.Sprintf("── tracked requests (%d waiting of %d) ──", waiting, len(tracked))).text("\n")
 	if len(tracked) == 0 {
-		sb.WriteString(tag("gray", "   no tracked request on the board. One is created by `agentbus request send`;\n"+
-			"   an ordinary cmd directive is not one and cannot record acceptance.") + "\n")
+		b.seg(RoleMuted, "   no tracked request on the board. One is created by `agentbus request send`;\n"+
+			"   an ordinary cmd directive is not one and cannot record acceptance.").text("\n")
 	}
 	for _, r := range tracked {
-		sb.WriteString(requestBlock(r, now))
+		b.join(requestBlock(r, now))
 	}
-	sb.WriteString("\n" + tag("gray", fmt.Sprintf("── cmd threads with no answer in the retained history (%d) ──", len(threads))) + "\n")
-	sb.WriteString(tag("gray", "   untracked: the protocol records no acceptance for these, and an answer\n"+
-		"   that has been trimmed from the stream looks the same as one that never came.") + "\n")
+	b.text("\n").seg(RoleMuted, fmt.Sprintf("── cmd threads with no answer in the retained history (%d) ──", len(threads))).text("\n")
+	b.seg(RoleMuted, "   untracked: the protocol records no acceptance for these, and an answer\n"+
+		"   that has been trimmed from the stream looks the same as one that never came.").text("\n")
 	for _, t := range threads {
 		t.Type, t.From, t.Target, t.ID, t.Message = Preview(t.Type), Preview(t.From), Preview(t.Target), Preview(t.ID), Preview(t.Message)
-		fmt.Fprintf(&sb, "%s %s %s %s  %s\n   %s\n",
-			tag("fuchsia", pad(t.Type, 9)),
-			tview.Escape(t.From), tag("gray", "→"), tag("aqua", t.Target),
-			tag("gray", "asked "+humanAge(now.Sub(t.At))+" ago · thread "+t.ID),
-			tview.Escape(clip(t.Message, width-4)))
+		b.seg(RoleDispatch, pad(t.Type, 9)).text(" "+t.From+" ").seg(RoleMuted, "→").text(" ").seg(RoleAccent, t.Target).text("  ").
+			seg(RoleMuted, "asked "+humanAge(now.Sub(t.At))+" ago · thread "+t.ID).text("\n   " + clip(t.Message, width-4) + "\n")
 	}
-	return sb.String()
+	return b.Lines()
 }
 
-// waitingLine is the status-bar summary: how many requests are waiting on
-// someone and how long the oldest has waited. Empty when nothing waits, so the
-// bar stays quiet when there is nothing to chase.
-func waitingLine(reqs []request, threads []openThread, now time.Time) string {
-	if s := waitingText(reqs, threads, now); s != "" {
-		return tag("yellow", s)
-	}
-	return ""
-}
-
-// waitingText is waitingLine without colour, for the v0.9 header.
+// waitingText is the status-bar summary, for the v0.9 header: how many
+// requests are waiting on someone and how long the oldest has waited. Empty
+// when nothing waits, so the bar stays quiet when there is nothing to chase.
 func waitingText(reqs []request, threads []openThread, now time.Time) string {
 	waiting, oldest := 0, time.Duration(0)
 	consider := func(t time.Time) {
@@ -435,9 +419,4 @@ func waitingText(reqs []request, threads []openThread, now time.Time) string {
 		word = "request"
 	}
 	return fmt.Sprintf("%d %s waiting · oldest %s", waiting, word, humanAge(oldest))
-}
-
-// requestsTitle names the overlay and its keys, like the message detail.
-func requestsTitle(waiting int) string {
-	return fmt.Sprintf(" REQUESTS · %d waiting  [gray][↑↓/jk scroll · Esc back][-] ", waiting)
 }

@@ -12,7 +12,7 @@ func plainMD(s string) []string { return strings.Split(tagRE.ReplaceAllString(s,
 
 func TestMarkdownBlocks(t *testing.T) {
 	src := "## Decision\nThe act is **approved** at `4d5d51b`\nand the window opens on Monday.\n\n- first item that is long enough to wrap onto a second line here\n  - nested\n1. one\n> a quote\n```\ncode   kept  as is\n```\nend"
-	got := plainMD(renderMarkdown(src, 40))
+	got := plainMD(plainOf(renderMarkdown(src, 40)))
 	want := []string{
 		"Decision",
 		"The act is approved at 4d5d51b",
@@ -38,13 +38,13 @@ func TestMarkdownBlocks(t *testing.T) {
 
 func TestMarkdownLosesNoWord(t *testing.T) {
 	src := "SYNTHESE ACTE DCA n4 + DECISION BERNARD. Etat verifie: acte n4 (docs seul) approuve par foureyes a 4d5d51b; DECISION 1 - date cible T: ma proposition lundi 2026-10-19 vers 10:00 UTC. supercalifragilisticexpialidocious-and-even-longer-word-here"
-	got := strings.Join(plainMD(renderMarkdown(src, 30)), " ")
+	got := strings.Join(plainMD(plainOf(renderMarkdown(src, 30))), " ")
 	for _, w := range strings.Fields(src) {
 		if !strings.Contains(strings.ReplaceAll(got, " ", ""), strings.ReplaceAll(w, " ", "")) {
 			t.Fatalf("word %q lost:\n%s", w, got)
 		}
 	}
-	for _, l := range plainMD(renderMarkdown(src, 30)) {
+	for _, l := range plainMD(plainOf(renderMarkdown(src, 30))) {
 		if Width(l) > 30 {
 			t.Fatalf("line over width: %q", l)
 		}
@@ -53,8 +53,8 @@ func TestMarkdownLosesNoWord(t *testing.T) {
 
 func TestMarkdownSanitises(t *testing.T) {
 	got := renderMarkdown("hello \x1b[31mred\x1b[0m [yellow]tag", 40)
-	if strings.Contains(got, "\x1b") || !strings.Contains(got, "[yellow[]tag") || !strings.Contains(got, "red") {
-		t.Fatalf("escape kept or text lost: %q", got)
+	if strings.Contains(plainOf(got), "\x1b") || !strings.Contains(drawnText(got), "[yellow]tag") || !strings.Contains(plainOf(got), "red") {
+		t.Fatalf("escape kept or text lost: %q", plainOf(got))
 	}
 }
 
@@ -81,7 +81,7 @@ func TestStructureFlatSplitsLabelsAndChoices(t *testing.T) {
 	if structureFlat(one) != one {
 		t.Errorf("a single enumerated item became a list")
 	}
-	plain := strings.Join(plainMD(renderMarkdown(src, 60)), "\n")
+	plain := strings.Join(plainMD(plainOf(renderMarkdown(src, 60))), "\n")
 	for _, w := range strings.Fields(strings.NewReplacer("**", "").Replace(src)) {
 		if !strings.Contains(plain, strings.TrimSuffix(w, ".")) {
 			t.Errorf("rendering lost %q", w)
@@ -90,7 +90,7 @@ func TestStructureFlatSplitsLabelsAndChoices(t *testing.T) {
 }
 
 func TestActivityEntryHangsAndCaps(t *testing.T) {
-	got := strings.Join(plainMD(activityEntry("23:33", "reply", RoleText, "foureyes -> master", strings.Repeat("blocker ", 60), 60)), "\n")
+	got := strings.Join(plainMD(plainOf(activityEntry("23:33", "reply", RoleText, "foureyes -> master", strings.Repeat("blocker ", 60), 60))), "\n")
 	lines := strings.Split(got, "\n")
 	if len(lines) != recentLines {
 		t.Fatalf("want %d lines, got %d:\n%s", recentLines, len(lines), got)
@@ -111,13 +111,13 @@ func TestActivityEntryHangsAndCaps(t *testing.T) {
 // A line break is kept as typed, as GitHub shows a comment: a message is not
 // a hard-wrapped document, and "Status:\nline one\nline two" is three lines.
 func TestMarkdownKeepsLineBreaks(t *testing.T) {
-	got := plainMD(renderMarkdown("Status:\nline one\nline two\n\n1) first\n2) second", 80))
+	got := plainMD(plainOf(renderMarkdown("Status:\nline one\nline two\n\n1) first\n2) second", 80)))
 	want := []string{"Status:", "line one", "line two", "", "1. first", "2. second"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	// A long line still wraps at the width, under itself.
-	long := plainMD(renderMarkdown(strings.Repeat("word ", 30)+"\nnext", 40))
+	long := plainMD(plainOf(renderMarkdown(strings.Repeat("word ", 30)+"\nnext", 40)))
 	if len(long) < 4 || long[len(long)-1] != "next" {
 		t.Fatalf("a long line does not wrap, or swallowed the next one: %q", long)
 	}

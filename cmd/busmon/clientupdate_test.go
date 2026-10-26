@@ -25,8 +25,8 @@ func TestUpdateFlagAndDetail(t *testing.T) {
 	}
 	_, body := agentDetail("coder", a, false, nil, nil, now)
 	for _, want := range []string{"2.1.305 running", "2.1.306 installed", "reload when idle", "/exit", "agentbus up <project> --resume"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("detail lacks %q:\n%s", want, body)
+		if !strings.Contains(plainOf(body), want) {
+			t.Fatalf("detail lacks %q:\n%s", want, plainOf(body))
 		}
 	}
 	// A stale reading says nothing.
@@ -39,7 +39,7 @@ func TestUpdateFlagAndDetail(t *testing.T) {
 }
 
 func TestHelpExplainsTheUpdateFlag(t *testing.T) {
-	if !strings.Contains(helpText(), "a newer client is installed than this agent runs") {
+	if !strings.Contains(plainOf(helpText()), "a newer client is installed than this agent runs") {
 		t.Fatal("the legend does not explain update")
 	}
 }
