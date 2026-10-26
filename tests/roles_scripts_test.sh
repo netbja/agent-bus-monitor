@@ -14,7 +14,7 @@ printf 'ROLE INSTRUCTIONS: review $(touch MUST_NOT_EXIST) `literal`\n' > "$root/
 for c in claude codex kimi; do
   cat > "$root/bin/$c" <<'EOF'
 #!/usr/bin/env bash
-if [[ "$1" == --help ]]; then echo '--model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan'; exit 0; fi
+if [[ "$1" == --help ]]; then echo '--settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan'; exit 0; fi
 echo "ARGS $*"
 env | grep -E '^(AGENT_BUS_[A-Z_]+|ROLES_TOML|ANTHROPIC_API_KEY)=' | sort
 exit "${FAKE_EXIT:-0}"
@@ -137,4 +137,23 @@ assert_contains "$out" "--settings" "a popping role launches with --settings"
 assert_contains "$out" '"allow": ["Bash(agent-spawn architect *)"]' "an ordinary role is allowed"
 assert_contains "$out" '"ask": ["Bash(agent-spawn deploy *)"]' "an approval role is asked"
 assert_contains "$out" '"deny": ["Read(**/.env)", "Edit(**/.env)"]' "shared rules reach the dry-run launch"
+
+# v0.21.1: every Claude launch carries the SessionStart hook that reports its resume command
+config claude-code
+out="$(AGENT_LAUNCH_DRYRUN=1 "$L" coder demo 2>&1)"
+assert_contains "$out" "report-resume $REPO/scripts/agent-launch" "a Claude launch carries the resume hook"
+# The hook returns at once and prints nothing; a detached sender reports to a fake herdr.
+printf '#!/usr/bin/env bash\nsleep 2\necho "$*" > "%s/herdr.calls"\necho %s\n' "$T" "'{\"result\":{}}'" > "$T/herdr"
+chmod +x "$T/herdr"
+start=$(date +%s%N)
+hook_out="$(echo '{"session_id":"5f0c-11","hook_event_name":"SessionStart","source":"startup"}' | HERDR_ENV=1 HERDR_PANE_ID=w1:p2 \
+  HERDR_BIN_PATH="$T/herdr" AGENT_BUS_AGENT=coder AGENT_BUS_PROJECT=demo XDG_STATE_HOME="$T/state" "$AGENTBUS_BIN" roles report-resume "$L")"
+elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+assert_eq "$hook_out" "" "the hook prints nothing on stdout"
+assert_eq "$([[ $elapsed -lt 1500 ]] && echo fast || echo "slow ${elapsed}ms")" "fast" "the hook returns before herdr answers"
+for _ in $(seq 50); do [[ -s "$T/state/agentbus/demo/resume.log" ]] && break; sleep 0.2; done
+calls="$(cat "$T/herdr.calls" 2>/dev/null)"
+assert_contains "$calls" "pane report-agent-session w1:p2 --source agentbus --agent claude --seq" "the sender reports to herdr"
+assert_contains "$calls" "-- env ROLES_TOML=$manifest $L coder demo --resume 5f0c-11" "with the launcher's resume command"
+assert_contains "$(cat "$T/state/agentbus/demo/resume.log" 2>/dev/null)" "accepted" "and logs the outcome"
 finish
