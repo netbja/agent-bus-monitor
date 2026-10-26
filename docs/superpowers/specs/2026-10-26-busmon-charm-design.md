@@ -406,7 +406,9 @@ Tests: the step-b suites now cover the binary; `screen_test.go`, `capture_test.g
 covers the same behaviour (the PR lists each one and its replacement); the picker's tests run on
 its model.
 
-What the person sees: the new screen, and a reminder that also lists pending gates. Same flags, same keys for the same actions (plus `1`-`3` for the tabs at every width and
+What the person sees: the new screen, a reminder that also lists pending gates, and a header badge
+that counts differently: today's waiting count (`waitingQuestions`) counts open questions, the new
+`for you` badge counts asks, waiting agents and gates (one per ask, not per question). Same flags, same keys for the same actions (plus `1`-`3` for the tabs at every width and
 Enter twice for the reader), same settings file, same cache.
 
 ## Mouse parity
