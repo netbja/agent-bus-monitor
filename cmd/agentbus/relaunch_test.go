@@ -732,3 +732,27 @@ func TestUpClosesTheOldPaneOfAProvenRelaunch(t *testing.T) {
 		t.Fatalf("typed into an existing pane: %q", bad)
 	}
 }
+
+// The proof needs a new process: the dead agent's own identity, even read
+// alive again in the new pane (a pid reused with the same start, or a stale
+// read), proves nothing, and the old pane stays.
+func TestRelaunchOpenNeedsANewProcessAsProof(t *testing.T) {
+	h, snaps, tpl := deadMaster()
+	calls := 0
+	ps := func(pid int) (uint64, error) {
+		calls++
+		if calls == 1 { // the relaunch's own judgement: dead
+			return 0, os.ErrNotExist
+		}
+		return 7, nil
+	}
+	sleeps := 0
+	o := relaunchOptions{Create: true, Prove: proofAfter(0, bus.AgentSnapshot{PID: 30, PIDStart: 7, Pane: "w4:p3s"}, &sleeps)}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, o, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.closes(); len(got) != 0 || !strings.Contains(out.String(), "no proof of the new agent") {
+		t.Fatalf("closed %q\n%s", got, out.String())
+	}
+}
