@@ -1,0 +1,24 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙ 4  ● 2   15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Bernard [human]  claude 5h 62% │ 7d 41%    
+╭─ For you ───────────────────────────────────────────── 4 for you · 2 unread ─╮
+│  ● ask    master    review lot 1? (2 questions)                            4m│
+│  ♙ wait   foureyes  need a decision on the width rule                      6m│
+│  ♙ wait   sentinel  pane prompt                                            1m│
+│  ▲ gate   coder     by foureyes  look at b1                                  │
+│  +1 more                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-3 of …─╮
+│▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule ▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ♙ sentinel  waiting  30m  —   prompt      health ok                         ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Message · report · note ──────────────── Y copy thread · y copy · esc back ─╮
+│ coder  2026-10-26 14:51:05 (13m ago)                                         ▲
+│                                                                              ┃
+│ Lot 1 delivered                                                              │
+│                                                                              │
+│ Done                                                                         │
+│ · adapter in d0a72be ; tests green                                           │
+│   func veryLongFunctionNameForTheGolden(argumentOne string, argumentTwo int, ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+ F5 health   ↑↓ j k scroll   y copy   Y copy thread   esc q close               

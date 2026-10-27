@@ -25,10 +25,15 @@ type tickMsg time.Time
 // tailMsg is a batch of events from the tail goroutine (Program.Send).
 type tailMsg struct{ events []bus.Event }
 
+// fadeMsg is a fade frame: only the waiting words change (busmon Charm spec,
+// "Caching"). Step b4 schedules it; it moves the clock and bumps no data.
+type fadeMsg time.Time
+
 // shellConfig is what the shell is started with.
 type shellConfig struct {
 	ctx           context.Context
 	reader        busReader
+	w             busWriter // the thread reads and the answers
 	st            *shared
 	project, self string
 }
@@ -46,6 +51,10 @@ type uiState struct {
 	pause         pauseCursor
 	flash         string
 	flashErr      bool
+	expanded      string            // the row expanded in place (its list key), "" none
+	expandIn      PanelID           // the list it is in: Activity or For you
+	compose       *composeIntent    // the compose window opened (step b4 draws it)
+	askDrafts     map[string]string // free answers being written, by ask|question
 }
 
 // shellLists are the shell's lists. They live behind a pointer: the Model is
@@ -86,12 +95,15 @@ type Model struct {
 	tick   int
 	gen    int // data generation: bumped by pollMsg and tailMsg only
 	paint  *painter
+	rd     *reader    // the reader's pages
+	cache  *viewCache // rendered markdown
 }
 
 // newShell is the shell before its first poll and size.
 func newShell(cfg shellConfig) Model {
 	m := Model{cfg: cfg, feed: &activityFeed{unread: newUnreadState()}, lists: &shellLists{}, paint: newPainter(th),
-		ui: uiState{focus: PanelForYou, tab: PanelActivity, view: PanelForYou}}
+		ui: uiState{focus: PanelForYou, tab: PanelActivity, view: PanelForYou, askDrafts: map[string]string{}},
+		rd: newReader(), cache: newViewCache()}
 	m.lists.activity.SetTail(true)
 	for _, p := range narrowPanels {
 		m.lists.of(p).SetHue(panelHue[p])
@@ -123,6 +135,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		m.tick++
 		return m, m.pollCmd(m.tick + 1)
+	case fadeMsg:
+		m.now = time.Time(msg)
+		m.refresh()
+		return m, nil
+	case threadMsg:
+		m.gotThread(msg)
+		return m, nil
+	case servicesMsg:
+		return m, m.push(page{kind: ovServices, title: "Services", body: msg.body, fixed: true})
+	case answerMsg:
+		m.gotAnswer(msg)
+		return m, nil
 	case tea.KeyPressMsg:
 		return m.key(msg)
 	case tea.MouseClickMsg:
@@ -157,6 +181,7 @@ func (m *Model) applySnapshot(s snapshot, at time.Time) {
 		currentAsks[a.ID] = a
 	}
 	m.feed.classifyWaits(waitingNames(s.agents))
+	m.forgetAnswers()
 	m.refresh()
 }
 
@@ -173,6 +198,7 @@ func (m *Model) counts() shellCounts {
 // refresh recomputes the marks, the For you list, the layout and every list's
 // rows from the model. Update calls it after every change; View only draws.
 func (m *Model) refresh() {
+	m.keepExpansion()
 	marks := m.feed.unread.marks(m.feed.feed, currentAsks)
 	for i := range m.feed.feed {
 		m.feed.feed[i].mark = marks[m.feed.feed[i].ev.ID]
@@ -183,4 +209,10 @@ func (m *Model) refresh() {
 	}
 	m.layout = shellLayoutFor(m.width, m.height, m.counts(), m.ui.view, m.ui.tab)
 	m.fillLists()
+	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes
+		m.rd.pages = m.rd.pages[:len(m.rd.pages)-1]
+		if p := m.rd.top(); p != nil {
+			p.dirty = true
+		}
+	}
 }

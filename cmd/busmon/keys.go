@@ -9,10 +9,11 @@ const (
 	ModeInput
 	ModeFilter
 	ModeOverlay
-	ModeAsk     // the ask panel: answering an agent's questions
-	ModeCompose // the compose window (v0.16): a message or a free answer, several lines
-	ModePick    // busmon --pick (v0.20): the Projects picker, its own screen
-	ModeShell   // the step-b shell's panels (busmon Charm spec): ModePanel's table with the shell's tabs
+	ModeAsk      // the ask panel: answering an agent's questions
+	ModeCompose  // the compose window (v0.16): a message or a free answer, several lines
+	ModePick     // busmon --pick (v0.20): the Projects picker, its own screen
+	ModeShell    // the step-b shell's panels (busmon Charm spec): ModePanel's table with the shell's tabs
+	ModeShellAsk // the shell's reader on an ask: ModeAsk's table, where a digit answers
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -63,6 +64,7 @@ const (
 	ActPickType     // the picker: a typed character or backspace edits the filter
 	ActPlan         // open the batch's plan
 	ActTab5         // the shell's narrow tier: the fifth view
+	ActAskOther     // the shell's ask: a free answer ("Other") in the compose window
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -194,7 +196,10 @@ var (
 		{Keys: "5", Act: ActTab5, Tiers: []Tier{TierNarrow}, match: runeIs('5')},
 	}
 	shellBindings = shellPanelBindings()
-	inputBindings = []binding{
+	// shellAskBindings: in the shell's reader a digit answers with that option,
+	// as a click on it does (busmon Charm spec, "For you"), and o is "Other".
+	shellAskBindings = shellAskTable()
+	inputBindings    = []binding{
 		{Keys: "^O", Hint: "several lines", Alt: "alt-enter", Act: ActComposeOpen, match: either(keyIs(keyCtrlO), altEnter)},
 		{Keys: "enter", Hint: "send", Act: ActSend, match: keyIs(keyEnter)},
 		{Keys: "tab", Hint: "complete @agent", Act: ActNone, match: keyIs(keyTab)},
@@ -266,6 +271,20 @@ func shellPanelBindings() []binding {
 	return out
 }
 
+// shellAskTable is askBindings with the digits answering and o for "Other".
+func shellAskTable() []binding {
+	var out []binding
+	for _, b := range askBindings {
+		if b.Act == ActAskPick {
+			b.Help = "answer with the option of that number"
+			out = append(out, b, binding{Keys: "o", Help: "Other: a free answer in the compose window", Act: ActAskOther, match: runeIs('o')})
+			continue
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
 // bindings is the key table of a mode, Ctrl-C (quit everywhere) last.
 func bindings(m Mode) []binding {
 	var bs []binding
@@ -286,6 +305,8 @@ func bindings(m Mode) []binding {
 		bs = pickBindings
 	case ModeShell:
 		bs = shellBindings
+	case ModeShellAsk:
+		bs = shellAskBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }

@@ -355,11 +355,10 @@ func TestShellClickSelectsOpensAndPages(t *testing.T) {
 	if m.ui.focus != PanelBoard || m.lists.board.Selected() != m.lists.board.items[1].Key {
 		t.Fatalf("click: focus %d, selected %q", m.ui.focus, m.lists.board.Selected())
 	}
-	opened := ""
-	m.lists.board.SetOnOpen(func(k string) { opened = k })
-	if m = clickAt(t, m, r.X+5, iy+1); opened != m.lists.board.Selected() {
-		t.Fatalf("a click on the selected row opened %q", opened)
+	if m = clickAt(t, m, r.X+5, iy+1); !m.rd.open() || m.rd.top().kind != ovTask || m.rd.top().key != m.lists.board.Selected() {
+		t.Fatalf("a click on the selected row did not open its task: %+v", m.rd.pages)
 	}
+	m = keys(t, m, kEsc)
 	_, _, _, ih := m.lists.board.inner()
 	if m = clickAt(t, m, r.X+r.W-1, iy+ih-2); m.lists.board.top == 0 {
 		t.Fatal("a click low on the scrollbar did not page down")

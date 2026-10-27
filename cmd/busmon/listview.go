@@ -445,6 +445,16 @@ func (l *listState) click(mx, my int) {
 	}
 }
 
+// itemAt is the index of the row under (mx, my), off the scrollbar column.
+func (l *listState) itemAt(mx, my int) (int, bool) {
+	_, iy, _, ih := l.inner()
+	if my < iy || my >= iy+ih || mx <= l.rect.X || mx >= l.rect.X+l.rect.W-1 {
+		return 0, false
+	}
+	i := l.top + (my - iy)
+	return i, i < len(l.items)
+}
+
 // pageTowards scrolls one page up or down depending on whether row (relative
 // to the first data row) is above or below the thumb.
 func (l *listState) pageTowards(row int) {

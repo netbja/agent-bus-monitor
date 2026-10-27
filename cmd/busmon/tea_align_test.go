@@ -92,3 +92,60 @@ func TestShellAlignmentSuite(t *testing.T) {
 		}
 	}
 }
+
+// Reading keeps the frames straight too: a hostile line expanded in place,
+// then open in the reader, at every size and palette.
+func TestShellAlignmentReading(t *testing.T) {
+	pinLocal(t)
+	for _, pal := range []struct {
+		name    string
+		noColor bool
+		colors  int
+	}{{"dark", false, 1 << 24}, {"light", false, 1 << 24}, {"dark", false, 16}, {"dark", true, 1 << 24}} {
+		withPalette(t, pal.name, pal.noColor, pal.colors)
+		for _, sz := range shellAlignSizes {
+			m := hostileShell(t, sz[0], sz[1], false)
+			if m.layout.Tier == TierTooSmall {
+				continue
+			}
+			m.paint = newPainter(th)
+			m.focusPanel(PanelActivity)
+			m.refresh()
+			m = keys(t, m, kUp, kUp, kEnter) // a line with a text, expanded
+			for _, state := range []string{"expanded", "reader"} {
+				if state == "reader" {
+					m = keys(t, m, kEnter)
+				}
+				name := fmt.Sprintf("%s-%d/%dx%d/%s", pal.name, pal.colors, sz[0], sz[1], state)
+				if (state == "expanded") != (m.ui.expanded != "" && !m.rd.open()) {
+					t.Fatalf("%s: expanded %q, reader %v", name, m.ui.expanded, m.rd.open())
+				}
+				g := m.grid()
+				at := func(x, y int) string { return g.at(x, y).text }
+				for _, p := range m.layout.Visible {
+					if m.rd.open() && (p == m.layout.Active || m.layout.Tier == TierNarrow) {
+						continue
+					}
+					checkFrameAt(t, at, name+" panel "+fmt.Sprint(p), m.layout.rect(p), true)
+				}
+				if m.rd.open() {
+					checkFrameAt(t, at, name+" reader", m.readerRect(), true)
+				}
+				plain := g.plain()
+				if strings.ContainsAny(plain, "\x1b\t\u202e") {
+					t.Errorf("%s: control characters reached the screen", name)
+				}
+				content := m.View().Content
+				for _, method := range []ansi.Method{ansi.WcWidth, ansi.GraphemeWidth} {
+					if got := placed(content, sz[0], sz[1], method); got != plain {
+						t.Errorf("%s: width method %v places it otherwise:\n%s\nwant:\n%s", name, method, got, plain)
+					}
+				}
+				if t.Failed() {
+					t.Logf("%s:\n%s", name, plain)
+					return
+				}
+			}
+		}
+	}
+}

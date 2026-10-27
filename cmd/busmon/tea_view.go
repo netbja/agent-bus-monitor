@@ -33,11 +33,17 @@ func (m Model) grid() *grid {
 	if l.Tabs.H > 0 {
 		drawLine(g, 0, l.Tabs.Y, m.width, tabBar(narrowPanels, l.Active, m.width), false)
 	}
+	reading := m.rd.open()
 	for _, p := range l.Visible {
+		if reading && (p == l.Active || l.Tier == TierNarrow) {
+			continue // the reader has the lower zone (narrow: the view)
+		}
 		lst := *m.lists.of(p) // drawn from a copy: View leaves the model as it found it
 		lst.draw(g)
 	}
-	if l.Input.H > 0 {
+	if reading {
+		m.drawReader(g)
+	} else if l.Input.H > 0 {
 		input := Line{{Text: GlyphPrompt + " ", Role: RoleAccent}}
 		if m.ui.editing {
 			input = Line{{Text: "filter" + GlyphPrompt + " ", Role: RoleAccent}, {Text: Preview(m.ui.edit), Role: RoleText}}
@@ -125,7 +131,7 @@ func (m *Model) fillLists() {
 	if len(rows) == 0 {
 		rows = []ListItem{{Line: Line{{Text: "nothing waits for you", Role: RoleMuted}}}}
 	}
-	fy.SetItems(rows)
+	fy.SetItems(m.withExpansion(PanelForYou, rows, rowW(l.ForYou)))
 	n := len(decisions(m.forYou))
 	fy.SetFrame(Line{{Text: "For you", Role: RoleText}},
 		Line{{Text: fmt.Sprintf("%d for you %s %d unread", n, GlyphNone, unreadItems(m.forYou)), Role: RoleMuted}})
@@ -167,7 +173,7 @@ func (m *Model) fillLists() {
 		}
 	}
 	act.SetHeader(activityHeader(l.Tier, lower))
-	act.SetItems(feedItems)
+	act.SetItems(m.withExpansion(PanelActivity, feedItems, lower))
 	m.ui.pause.Recount(admitted)
 	at, al := activityFrame(&m.ui.pause, len(admitted), events, m.ui.filter)
 	act.SetFrame(m.lowerTitle(PanelActivity, at), al)
@@ -185,6 +191,7 @@ func (m *Model) fillLists() {
 
 	for _, p := range narrowPanels {
 		m.lists.of(p).viewport()
+		m.showExpansion(p)
 	}
 }
 

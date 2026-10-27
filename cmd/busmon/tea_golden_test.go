@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -52,29 +53,75 @@ func checkGolden(t *testing.T, name, got string) {
 	}
 }
 
-// The dashboard's View, at each size, dark and light: the text (.txt) and the
-// styled content (.ansi), the same under both renderer width methods.
-func TestShellGoldens(t *testing.T) {
-	pinLocal(t)
-	for _, pal := range []string{"dark", "light"} {
-		for _, size := range goldenSizes {
-			t.Run(fmt.Sprintf("%s-%dx%d", pal, size[0], size[1]), func(t *testing.T) {
-				withPalette(t, pal, false, 1<<24)
-				m := fixtureShell(t, size[0], size[1])
-				m.paint = newPainter(th)
-				content := m.View().Content
-				plain := m.grid().plain()
-				for _, method := range []ansi.Method{ansi.WcWidth, ansi.GraphemeWidth} {
-					if got := placed(content, size[0], size[1], method); got != plain {
-						t.Fatalf("width method %v places the View otherwise:\n%s\nwant:\n%s", method, got, plain)
-					}
-				}
-				base := fmt.Sprintf("dashboard-%dx%d-%s", size[0], size[1], pal)
-				checkGolden(t, base+".txt", plain+"\n")
-				checkGolden(t, base+".ansi", content+"\n")
-			})
+// goldenStates are the screens the goldens draw (busmon Charm spec, step b
+// tests): the dashboard, the report with a long code block expanded in
+// Activity, and that report in the reader. Compose comes with step b4.
+var goldenStates = []string{"dashboard", "expanded", "reader"}
+
+// reportID is the fixture's report, whose fenced code is longer than any width.
+var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
+
+// inState is the fixture shell brought to a golden state by keys.
+func inState(t testing.TB, m Model, state string) Model {
+	t.Helper()
+	if state == "dashboard" {
+		return m
+	}
+	tab := rune('1') // Activity, the tabbed panel's first tab
+	if m.layout.Tier == TierNarrow {
+		tab = '3' // the narrow tier's Activity view
+	}
+	m = keys(t, m, tab)
+	m.lists.activity.Select(feedKey(t, m, reportID))
+	m = keys(t, m, kEnter)
+	if state == "reader" {
+		m = keys(t, m, kEnter)
+	}
+	return m
+}
+
+// feedKey is the Activity list key of the entry id.
+func feedKey(t testing.TB, m Model, id string) string {
+	t.Helper()
+	for _, fl := range m.feed.feed {
+		if fl.ev.ID == id && !fl.sep {
+			return fl.id
 		}
 	}
+	t.Fatalf("no feed line for %s", id)
+	return ""
+}
+
+// The shell's View in each golden state, at each size, dark and light: the
+// text (.txt) and the styled content (.ansi), the same under both renderer
+// width methods.
+func TestShellGoldens(t *testing.T) {
+	pinLocal(t)
+	for _, state := range goldenStates {
+		for _, pal := range []string{"dark", "light"} {
+			for _, size := range goldenSizes {
+				t.Run(fmt.Sprintf("%s-%s-%dx%d", state, pal, size[0], size[1]), func(t *testing.T) {
+					shellGolden(t, state, pal, size)
+				})
+			}
+		}
+	}
+}
+
+func shellGolden(t *testing.T, state, pal string, size [2]int) {
+	withPalette(t, pal, false, 1<<24)
+	m := inState(t, fixtureShell(t, size[0], size[1]), state)
+	m.paint = newPainter(th)
+	content := m.View().Content
+	plain := m.grid().plain()
+	for _, method := range []ansi.Method{ansi.WcWidth, ansi.GraphemeWidth} {
+		if got := placed(content, size[0], size[1], method); got != plain {
+			t.Fatalf("width method %v places the View otherwise:\n%s\nwant:\n%s", method, got, plain)
+		}
+	}
+	base := fmt.Sprintf("%s-%dx%d-%s", state, size[0], size[1], pal)
+	checkGolden(t, base+".txt", plain+"\n")
+	checkGolden(t, base+".ansi", content+"\n")
 }
 
 // Every surviving agent flag, state look and header item is on a golden
