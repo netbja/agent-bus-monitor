@@ -192,7 +192,7 @@ func (m *Model) fillLists() {
 	act.SetFrame(m.lowerTitle(PanelActivity, at), al)
 
 	bd := &m.lists.board
-	bd.SetHeader(boardHeader(lower))
+	bd.SetHeader(boardHeader(s.board, lower))
 	bd.SetItems(boardItems(s.board, now, lower))
 	bt, bl := boardFrame(s.board)
 	bd.SetFrame(m.lowerTitle(PanelBoard, bt), bl)

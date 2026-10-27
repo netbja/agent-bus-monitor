@@ -8,18 +8,26 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// Board columns: the task takes what owner, state and age leave.
+// Board columns: owner, state and age are fixed; the task fits its longest
+// name plus a gap, never more than what the others leave (A2: on a wide
+// screen a full-width task column pushed them to the far right).
 const (
 	boardOwnerW = 10
 	boardStateW = 11
 	boardAgeW   = 5
 )
 
-func boardTaskW(width int) int { return max(1, width-boardOwnerW-boardStateW-boardAgeW) }
+func boardTaskW(m map[string]bus.BoardEntry, width int) int {
+	need := Width("task")
+	for t := range m {
+		need = max(need, Width(Preview(t)))
+	}
+	return max(1, min(need+2, width-boardOwnerW-boardStateW-boardAgeW))
+}
 
 // boardHeader is the Board column header, exactly width cells.
-func boardHeader(width int) Line {
-	return FitLine(Line{col("task", boardTaskW(width), RoleDim), col("owner", boardOwnerW, RoleDim),
+func boardHeader(m map[string]bus.BoardEntry, width int) Line {
+	return FitLine(Line{col("task", boardTaskW(m, width), RoleDim), col("owner", boardOwnerW, RoleDim),
 		col("state", boardStateW, RoleDim), {Text: "age", Role: RoleDim}}, width)
 }
 
@@ -57,9 +65,10 @@ func boardItems(m map[string]bus.BoardEntry, now time.Time, width int) []ListIte
 		return tasks[i] < tasks[j]
 	})
 	out := make([]ListItem, 0, len(tasks))
+	taskW := boardTaskW(m, width)
 	for _, t := range tasks {
 		e := m[t]
-		l := Line{col(Preview(t), boardTaskW(width), RoleText), col(Preview(e.Owner), boardOwnerW, RoleMuted),
+		l := Line{col(Preview(t), taskW, RoleText), col(Preview(e.Owner), boardOwnerW, RoleMuted),
 			col(Preview(e.State), boardStateW, boardStateRole(e.State)),
 			{Text: humanAge(now.Sub(time.Unix(e.Updated, 0))), Role: RoleMuted}}
 		out = append(out, ListItem{Key: t, Line: FitLine(l, width), Selectable: true})

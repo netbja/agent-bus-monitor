@@ -24,7 +24,7 @@ func boardFixture() map[string]bus.BoardEntry {
 func TestBoardItemsWidthAndRoles(t *testing.T) {
 	m := boardFixture()
 	for w := 1; w <= 120; w++ {
-		if h := boardHeader(w); h.Width() != w {
+		if h := boardHeader(m, w); h.Width() != w {
 			t.Fatalf("header width %d at %d", h.Width(), w)
 		}
 		for _, it := range boardItems(m, boardNow, w) {
@@ -160,5 +160,38 @@ func TestWaitingCountMatchesWaitingLine(t *testing.T) {
 	}
 	if waitingCount(nil, nil) != 0 {
 		t.Fatal("empty count")
+	}
+}
+
+// The task column fits its longest task plus a gap (A2): on a wide screen
+// owner and state follow the tasks instead of sitting at the far right.
+func TestBoardTaskColumnFitsContent(t *testing.T) {
+	m := map[string]bus.BoardEntry{
+		"kimi-quota":        {Owner: "coder", State: "accepted", Updated: boardNow.Unix()},
+		"grok-permission-x": {Owner: "architect", State: "done", Updated: boardNow.Unix()},
+	}
+	want := Width("grok-permission-x") + 2
+	if got := boardTaskW(m, 200); got != want {
+		t.Fatalf("task column %d at 200, want %d", got, want)
+	}
+	h := boardHeader(m, 200).text()
+	if i := strings.Index(h, "owner"); i != want {
+		t.Fatalf("owner at %d in %q, want %d", i, h, want)
+	}
+	for _, it := range boardItems(m, boardNow, 200) {
+		if i := strings.Index(it.Line.text(), it.Line.text()[want:want+1]); it.Line.Width() != 200 || i < 0 {
+			t.Fatalf("row %q", it.Line.text())
+		}
+		if !strings.HasPrefix(it.Line.text()[want:], m[it.Key].Owner) {
+			t.Fatalf("owner not after the task column: %q", it.Line.text())
+		}
+	}
+	// A narrow width still gives the task what the others leave.
+	if got := boardTaskW(m, 30); got != 30-boardOwnerW-boardStateW-boardAgeW {
+		t.Fatalf("task column %d at 30", got)
+	}
+	// An empty board keeps the header word.
+	if got := boardTaskW(nil, 200); got != Width("task")+2 {
+		t.Fatalf("empty board task column %d", got)
 	}
 }
