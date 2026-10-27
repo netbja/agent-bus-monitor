@@ -27,6 +27,9 @@ Spec §10 records what each state means.
 | `<client>-old-typed-empty.txt` (same clients) | DERIVED — last 12 lines of `<client>-typed.txt` above the last 28 lines of `<client>-empty.txt`; must read ready (only the current box counts) |
 | `claude-trust.txt` | REAL — 2026-10-27, Claude Code in a fresh untrusted folder, throwaway probe tab (herdr 0.9.5, `--ansi`); herdr reported `blocked` (`../herdr/agent-get-claude-trust.json`, the real reply) |
 | `codex-hooks.txt` | REAL, plain text — the tail of reviewer-codex's pane (w2:pE) stuck on Codex's hooks review, read by master with `herdr pane read` on 2026-10-27 ~20:49; no ANSI (the Dialog match strips escapes anyway) |
+| `claude-trust-then-ready.txt` | DERIVED — `claude-trust.txt` above the last 28 lines of `claude-empty.txt`: the dialog accepted (or quoted) above a ready prompt; must read ready, never blocked |
+| `codex-hooks-accepted.txt` | DERIVED — `codex-hooks.txt` above the last 28 lines of `codex-empty.txt`; must read ready |
+| `codex-hooks-accepted-close.txt` | DERIVED — `codex-hooks.txt` right above the last 6 lines of `codex-empty.txt` (the ready input box): the dialog words inside the bottom window, yet the pane is ready; pins the not-ready guard |
 | `old-prompt.txt` | DERIVED — `kimi-empty.txt` plus an earlier `[agentbus#abc123]` wake line in the transcript, for the nonce test |
 
 `../herdr/*.json` are real replies (`agent get`, `pane get`, `pane process-info`,

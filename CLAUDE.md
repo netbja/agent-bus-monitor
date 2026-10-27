@@ -504,7 +504,8 @@ It never touches Redis — see README "Deployment topology".
   (default 30, `0` = no wait; `swap` passes 0, it proves the agent itself) for the first status
   (`agentbus agents wait <agent> --since <ms> --timeout <d>`, read-only) and otherwise names the
   pane. A dialog herdr does not report (Codex's hooks review) is read from the screen: a
-  `Signature.Dialog` match makes the inspection `blocked`, never ready (`screens/codex-hooks.txt`,
+  `Signature.Dialog` match, in the last 14 non-blank lines and only when the client is not ready,
+  makes the inspection `blocked`, never ready (`screens/codex-hooks.txt`,
   `claude-trust.txt`); only patterns pinned by a real screen.
   `setup.sh install/update` also links `agent-launch` and `agent-spawn` into `BIN_DIR`; those links
   resolve back to this repository's scripts, and uninstall removes only links to these exact files.

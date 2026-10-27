@@ -166,9 +166,25 @@ func (s Signature) match(screen string) (ready, busy bool) {
 	return ready, busy
 }
 
-// dialog reports the client's own pre-session dialog on the screen.
+// dialogLines is how far up from the bottom a dialog may start: the words of
+// a dialog higher up (accepted, or quoted in a review) are not the dialog.
+const dialogLines = 14
+
+// dialog reports the client's own pre-session dialog at the bottom of the
+// screen: a Dialog pattern matched on the last dialogLines non-blank lines of
+// the stripped screen.
 func (s Signature) dialog(screen string) bool {
-	return anyMatch(s.Dialog, ansiEscape.ReplaceAllString(strings.ReplaceAll(screen, "\r", ""), ""))
+	plain := ansiEscape.ReplaceAllString(strings.ReplaceAll(screen, "\r", ""), "")
+	var lines []string
+	for _, l := range strings.Split(plain, "\n") {
+		if strings.TrimSpace(l) != "" {
+			lines = append(lines, l)
+		}
+	}
+	if len(lines) > dialogLines {
+		lines = lines[len(lines)-dialogLines:]
+	}
+	return anyMatch(s.Dialog, strings.Join(lines, "\n"))
 }
 
 // Herdr drives panes through the herdr CLI. Bin "" means "herdr" on PATH.
@@ -434,7 +450,9 @@ func (h Herdr) Inspect(ctx context.Context, pane string) Inspection {
 	r2, b2 := sig.match(second)
 	in.Busy = b1 || b2
 	in.Ready = first == second && r1 && r2
-	if sig.dialog(second) { // A10: its own dialog waits on the person, whatever herdr says
+	// A10: its own dialog waits on the person, whatever herdr says; only when
+	// the client is not ready, so its words in view above a prompt never count.
+	if !r1 && !r2 && sig.dialog(second) {
 		in.State, in.Ready = "blocked", false
 	}
 	if first == second {
