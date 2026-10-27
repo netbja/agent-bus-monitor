@@ -442,3 +442,54 @@ func TestShellFadeCost(t *testing.T) {
 		t.Fatal("a poll did not rebuild the page")
 	}
 }
+
+// The expanded row and its first text line are on screen at every size, in
+// auto-scroll too (opening a line keeps Activity live): the tail never
+// pushes an open expansion off the top, even when new lines arrive.
+func TestShellExpansionStaysInView(t *testing.T) {
+	pinLocal(t)
+	for _, size := range goldenSizes {
+		m := inState(t, fixtureShell(t, size[0], size[1]), "expanded")
+		check := func(when string) {
+			t.Helper()
+			plain := m.grid().plain()
+			if !strings.Contains(plain, "Lot 1 delivered (+197)") || !strings.Contains(plain, "│    Lot 1 delivered ") {
+				t.Fatalf("%v %s: the expanded row or its text is off screen:\n%s", size, when, plain)
+			}
+		}
+		if !m.lists.activity.Live() {
+			t.Fatalf("%v: opening the line left auto-scroll", size)
+		}
+		check("after Enter")
+		var more []bus.Event
+		for i := 0; i < 30; i++ {
+			more = append(more, bus.Event{ID: fmt.Sprintf("17930300%05d-0", i), Kind: "status", Agent: "coder", State: "working", Message: "tick"})
+		}
+		m = step(t, m, tailMsg{events: more})
+		check("after 30 new lines")
+		if m = keys(t, m, kEsc); m.ui.expanded != "" {
+			t.Fatal("Esc did not collapse")
+		}
+		if lst := m.lists.activity; lst.top != max(0, len(lst.items)-lst.rows()) {
+			t.Fatalf("%v: after the collapse the tail is not at the bottom (top %d)", size, lst.top)
+		}
+	}
+}
+
+// A message page keeps its thread when another page is pushed over it
+// before the read returns: the read lands in its page, which shows it once
+// the page above is closed.
+func TestShellThreadLandsUnderAPushedPage(t *testing.T) {
+	pinLocal(t)
+	fw := &fakeWriter{}
+	m := unpaused(t, 140, 40, fw)
+	i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Rank == rankGate })
+	m.lists.forYou.Select(m.forYou[i].Key)
+	m, cmd := pressCmd(t, m, kEnter)
+	m = keys(t, m, tea.Key{Code: tea.KeyF5}) // health over the message, before the read returns
+	m = step(t, m, cmd())
+	if m = keys(t, m, kEsc); m.rd.top().kind != ovMessage || !m.rd.top().thread.Loaded ||
+		!strings.Contains(m.rd.top().threadPlain, "THREADROOT") {
+		t.Fatalf("the message page lost its thread: %+v", m.rd.top().thread)
+	}
+}

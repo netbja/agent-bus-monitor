@@ -93,22 +93,19 @@ func (m *Model) withExpansion(p PanelID, items []ListItem, width int) []ListItem
 	return slices.Concat(items[:i+1], ext, items[i+1:])
 }
 
-// showExpansion scrolls list p so the expanded row and its text are in view
-// (the row first, when both do not fit).
-func (m *Model) showExpansion(p PanelID) {
-	lst := m.lists.of(p)
-	if m.ui.expanded == "" || m.ui.expandIn != p || lst.Live() {
-		return
-	}
-	i := lst.index(m.ui.expanded)
-	if i < 0 {
-		return
-	}
-	end := i
-	for end+1 < len(lst.items) && isExpandKey(lst.items[end+1].Key) {
-		end++
-	}
-	if rows := lst.rows(); rows > 0 && end >= lst.top+rows {
-		lst.top = min(i, end-rows+1)
+// keepInView sets each list's kept rows: the expanded row's text, which
+// its viewport keeps in view with the row, in auto-scroll too.
+func (m *Model) keepInView() {
+	for _, p := range narrowPanels {
+		lst := m.lists.of(p)
+		lst.keep = 0
+		if m.ui.expanded == "" || m.ui.expandIn != p {
+			continue
+		}
+		if i := lst.index(m.ui.expanded); i >= 0 {
+			for j := i + 1; j < len(lst.items) && isExpandKey(lst.items[j].Key); j++ {
+				lst.keep++
+			}
+		}
 	}
 }

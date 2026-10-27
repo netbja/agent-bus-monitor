@@ -54,6 +54,7 @@ type listState struct {
 	anchor       string // keyed item the anchored viewport is pinned to; "" = follow
 	anchorOff    int    // rows between that item and the top row
 	tail, live   bool
+	keep         int // rows after the selection kept in view with it (the shell's expansion), in every mode
 	onChange     func(key string, live bool)
 	onOpen       func(key string)
 }
@@ -316,6 +317,14 @@ func (l *listState) viewport() {
 				l.top = i - rows + 1
 			}
 		}
+	}
+	// An expanded selection and its text stay in view, the row first when
+	// both do not fit: the tail does not push them off the top.
+	if i := l.index(l.sel); l.keep > 0 && i >= 0 && rows > 0 {
+		if end := i + l.keep; end >= l.top+rows {
+			l.top = min(i, end-rows+1)
+		}
+		l.top = min(l.top, i)
 	}
 	l.top = clamp(l.top, 0, maxTop)
 }

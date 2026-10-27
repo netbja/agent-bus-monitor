@@ -14,11 +14,11 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity  2 Board  3 Requests   auto-scroll on ─ 7 events · filter: non…─╮
 │    time  from     to       type      message                                 ▲
-│    ... enter for more                                                        │
-│  ○ 14:52 master   → berna… directive please look at the plan                 │
-│  ● 14:56 dispatch          notify    project paused until 16:56              │
-│  ● 15:00 master            ask       asks · review lot 1? (2 question(s), 2 …┃
-│    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
+│▶   14:51 coder             report    Lot 1 delivered (+197)                  │
+│    Lot 1 delivered                                                           ┃
+│                                                                              │
+│    Done                                                                      │
+│    ... enter for more                                                        ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
  tab focus   F5 health   1-3 tabs   ↑↓ j k select   end G live   enter detail   

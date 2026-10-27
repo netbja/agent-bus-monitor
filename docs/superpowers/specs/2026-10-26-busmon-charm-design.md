@@ -223,6 +223,8 @@ challenge thread; an unread line expands it and marks it read.
   expands it in place: the row stays, the rendered markdown follows it, indented, at the panel's
   inner width, up to half the panel's height (then `... enter for more`). The list keeps scrolling
   around it. One row is expanded at a time; moving the selection collapses it. Esc collapses.
+  The line is read when its expansion closes or the reader opens on it, so a For you unread
+  line stays listed while it is open (step b3). In auto-scroll the open expansion stays in view.
 - **The reader.** A second Enter (or Enter on an item that is not a message: an agent, a task, a
   request) replaces the lower zone (the tabbed panel and the input) with a full-width reader: the
   header, For you and Agents stay visible. No column cap: the text width is the zone's inner width.

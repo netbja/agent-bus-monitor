@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 // page is one reader page.
 type page struct {
 	kind        overlayKind
+	serial      int    // its identity on the stack: a thread read finds its page by it
 	key         string // its subject: an event id, an agent, a task, a request key, an ask id
 	title       string
 	body        []Line
@@ -52,10 +54,10 @@ type pageStamp struct {
 
 // reader is the page stack, behind a pointer like the lists.
 type reader struct {
-	pages     []page
-	threadGen int                      // a thread read for a page since replaced is dropped
-	answered  map[string]bus.AskAnswer // answers sent from here the poll has not brought yet (ask|question)
-	sending   map[string]bool          // ask|question being sent: a second pick sends nothing
+	pages    []page
+	serial   int                      // the last page's serial
+	answered map[string]bus.AskAnswer // answers sent from here the poll has not brought yet (ask|question)
+	sending  map[string]bool          // ask|question being sent: a second pick sends nothing
 }
 
 func newReader() *reader {
@@ -71,9 +73,10 @@ func (r *reader) top() *page {
 	return &r.pages[len(r.pages)-1]
 }
 
-// threadMsg is a message page's thread, read by threadCmd.
+// threadMsg is a message page's thread, read by threadCmd for the page of
+// that serial.
 type threadMsg struct {
-	gen     int
+	serial  int
 	id      string
 	entries []bus.Event
 	err     error
@@ -120,10 +123,12 @@ func (m *Model) push(p page) tea.Cmd {
 	if p.kind == ovMessage {
 		m.markRead(p.ev.ID) // opening a line reads it
 	}
+	m.rd.serial++
+	p.serial = m.rd.serial
 	m.rd.pages = append(m.rd.pages, p)
 	m.refresh()
 	if p.kind == ovMessage && p.thread.ID != "" && !p.thread.Loaded {
-		return m.threadCmd(p.thread.ID)
+		return m.threadCmd(p.serial, p.thread.ID)
 	}
 	return nil
 }
@@ -132,7 +137,6 @@ func (m *Model) push(p page) tea.Cmd {
 func (m *Model) pop() {
 	if n := len(m.rd.pages); n > 0 {
 		m.rd.pages = m.rd.pages[:n-1]
-		m.rd.threadGen++
 		if p := m.rd.top(); p != nil {
 			p.dirty = true // built for another width or generation maybe: rebuild
 		}
@@ -143,12 +147,11 @@ func (m *Model) pop() {
 // closeReader leaves every page.
 func (m *Model) closeReader() {
 	m.rd.pages = nil
-	m.rd.threadGen++
 	m.refresh()
 }
 
-func (m *Model) threadCmd(id string) tea.Cmd {
-	w, ctx, gen := m.cfg.w, m.cfg.ctx, m.rd.threadGen
+func (m *Model) threadCmd(serial int, id string) tea.Cmd {
+	w, ctx := m.cfg.w, m.cfg.ctx
 	if w == nil {
 		return nil
 	}
@@ -159,16 +162,18 @@ func (m *Model) threadCmd(id string) tea.Cmd {
 		c, cancel := context.WithTimeout(ctx, pollBudget)
 		defer cancel()
 		entries, err := w.Thread(c, id)
-		return threadMsg{gen: gen, id: id, entries: entries, err: err}
+		return threadMsg{serial: serial, id: id, entries: entries, err: err}
 	}
 }
 
-// gotThread puts a thread read in its page, unless the page has gone.
+// gotThread puts a thread read in its page, wherever it is on the stack
+// (another page may have been pushed over it), unless the page has gone.
 func (m *Model) gotThread(msg threadMsg) {
-	p := m.rd.top()
-	if p == nil || msg.gen != m.rd.threadGen || p.kind != ovMessage || p.thread.ID != msg.id {
+	i := slices.IndexFunc(m.rd.pages, func(p page) bool { return p.serial == msg.serial })
+	if i < 0 || m.rd.pages[i].kind != ovMessage || m.rd.pages[i].thread.ID != msg.id {
 		return
 	}
+	p := &m.rd.pages[i]
 	p.thread = threadState{ID: msg.id, Entries: msg.entries, Loaded: true, Err: msg.err}
 	p.dirty = true
 	m.refresh()

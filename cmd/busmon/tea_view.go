@@ -189,9 +189,9 @@ func (m *Model) fillLists() {
 	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: "Requests", Role: RoleText}}),
 		requestsLabel(s.requests, s.threads, m.cfg.self, openQuestionCount(s.asks)))
 
+	m.keepInView()
 	for _, p := range narrowPanels {
 		m.lists.of(p).viewport()
-		m.showExpansion(p)
 	}
 }
 
