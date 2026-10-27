@@ -38,9 +38,13 @@ func (m Model) grid() *grid {
 		lst.draw(g)
 	}
 	if l.Input.H > 0 {
-		drawLine(g, l.Input.X, l.Input.Y, l.Input.W, Line{{Text: GlyphPrompt + " ", Role: RoleAccent}}, false)
+		input := Line{{Text: GlyphPrompt + " ", Role: RoleAccent}}
+		if m.ui.editing {
+			input = Line{{Text: "filter" + GlyphPrompt + " ", Role: RoleAccent}, {Text: Preview(m.ui.edit), Role: RoleText}}
+		}
+		drawLine(g, l.Input.X, l.Input.Y, l.Input.W, input, false)
 	}
-	footer := footerHints(ModePanel, m.ui.focus, l.Tier, m.width)
+	footer := footerHints(m.mode(), m.ui.focus, l.Tier, m.width)
 	if m.ui.flash != "" {
 		role := RoleOK
 		if m.ui.flashErr {
@@ -217,10 +221,20 @@ func forYouRow(it attentionItem, width int, now time.Time) Line {
 	return FitLine(append(l, age...), width)
 }
 
+// forYouAgeCells is the room an age takes in a row: a space and up to four
+// cells ("59m", "23h", "12d").
+const forYouAgeCells = 5
+
 // forYouNatural is a row's width uncut: what the wide tier sizes For you by.
-func forYouNatural(it attentionItem, now time.Time) int {
-	head, text, age := forYouParts(it, now)
-	return head.Width() + text.Width() + age.Width()
+// The age counts as its fixed room, never its text, so the split does not
+// move when "9m" becomes "10m" (b1 review, foureyes).
+func forYouNatural(it attentionItem) int {
+	head, text, _ := forYouParts(it, time.Time{})
+	w := head.Width() + text.Width()
+	if !it.At.IsZero() {
+		w += forYouAgeCells
+	}
+	return w
 }
 
 func forYouParts(it attentionItem, now time.Time) (head, text, age Line) {

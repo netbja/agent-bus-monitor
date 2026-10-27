@@ -61,12 +61,18 @@ func (u *ui) completionNames() []string { return u.names(u.showAll) }
 func (u *ui) names(showAll bool) []string {
 	u.st.mu.Lock()
 	defer u.st.mu.Unlock()
-	// @all reaches the agents the panel shows: a dormant one (a team that was
-	// replaced, say) is not sent directives it will never read.
-	visible, _ := visibleAgents(u.st.agents, u.st.pilot, showAll, time.Now())
+	return agentNamesOf(u.st.agents, u.st.pilot, u.self, showAll, time.Now())
+}
+
+// agentNamesOf are the registered agents the panel shows, the person
+// excepted: with showAll false the @all targets. @all reaches the agents the
+// panel shows: a dormant one (a team that was replaced, say) is not sent
+// directives it will never read.
+func agentNamesOf(agents map[string]*agentState, pilot, self string, showAll bool, now time.Time) []string {
+	visible, _ := visibleAgents(agents, pilot, showAll, now)
 	names := make([]string, 0, len(visible))
 	for _, n := range visible {
-		if n != u.self && u.st.agents[n].registered {
+		if n != self && agents[n].registered {
 			names = append(names, n)
 		}
 	}

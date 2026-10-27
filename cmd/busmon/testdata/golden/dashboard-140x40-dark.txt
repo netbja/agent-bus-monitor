@@ -37,4 +37,4 @@
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                           
- tab focus   F5 health   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! w answer   / filter   i write   esc back   F2 requests   
+ tab focus   F5 health   1-3 tabs   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! w answer   / filter   i write   esc back      

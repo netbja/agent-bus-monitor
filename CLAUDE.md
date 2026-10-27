@@ -278,7 +278,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `cellSink` (tview's `tcellSink`, the shell's `grid`), lists are `listState` (ListView without its
   widget), `pollOnce` runs in a command and View reads only the model (`snapshot`, `judgedAt`,
   `m.now`); `forYou` ranks asks, waits, gates and unread lines, and `decisions` is its badge and
-  reminder subset. Goldens in `testdata/golden/` (`go test -run TestShellGoldens -update`). No literal outside
+  reminder subset; its keys are `ModeShell` (tview's panel table with the shell's tabs) and its clicks hit-test `shellLayout` (`tea_update.go`). Goldens in `testdata/golden/` (`go test -run TestShellGoldens -update`). No literal outside
   the glyph set (`TestNoStrayNonASCIILiterals`); `TestAlignmentSuite` draws every size × palette ×
   hostile fixture and checks every frame's corners and borders. Each panel has its colour
   (`panelHue`, v0.14.5: Agents accent, Activity ok, Board dispatch, Requests attention): its frame
