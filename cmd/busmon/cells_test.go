@@ -134,3 +134,22 @@ func TestFrameTitleHueAndPill(t *testing.T) {
 		t.Errorf("focused Activity title = %+v", got)
 	}
 }
+
+// The padding after a line never inherits a reversed (cursor) cell: the
+// compose window's cursor at the end of a row lit the whole row (A1).
+func TestFitLinePaddingIsNotReversed(t *testing.T) {
+	l := Line{{Text: "essai", Role: RoleText}, {Text: " ", Role: RoleText, Reverse: true}}
+	got := FitLine(l, 12)
+	if got.Width() != 12 {
+		t.Fatalf("width %d", got.Width())
+	}
+	reversed := 0
+	for _, s := range got {
+		if s.Reverse {
+			reversed += Line{s}.Width()
+		}
+	}
+	if reversed != 1 {
+		t.Fatalf("%d reversed cells, want only the cursor: %+v", reversed, got)
+	}
+}

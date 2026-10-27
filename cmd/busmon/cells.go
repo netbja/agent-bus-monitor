@@ -216,6 +216,9 @@ func FitLine(l Line, w int) Line {
 		out = appendSegment(out, GlyphEllipsis, last)
 		used++
 	}
+	// The padding keeps the last cell's colour but never its reverse: a
+	// cursor cell at a row's end would light the rest of the row (A1).
+	last.Reverse = false
 	return appendSegment(out, strings.Repeat(" ", w-used), last)
 }
 
