@@ -13,8 +13,13 @@ import (
 // verdictGates closes the gates a verdict by reviewer answers (foryou-gates):
 // on the reviewer's own gate, the one named by ref and those opened for
 // subject; then, for a ref still open elsewhere, the classic author's gate.
-// It returns what to tell the reviewer.
+// It returns what to tell the reviewer. A self-verdict closes nothing by any
+// path: the author's-gate fallback would otherwise delete the reviewer's own
+// gate, the conductor's mission gates included.
 func verdictGates(ctx context.Context, b *bus.Bus, author, reviewer, subject, ref string) []string {
+	if author == reviewer {
+		return []string{"notice: a self-verdict closes no gate (recorded, not counted)"}
+	}
 	var lines []string
 	closed, err := b.CloseReviewGates(ctx, reviewer, author, subject, ref)
 	if err != nil {

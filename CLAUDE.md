@@ -231,8 +231,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (`--pr N`/`--subject S`), always appends to the `{p}:verdicts` ledger, publishes a live
   `CmdVerdict`, then closes gates best-effort (`verdictGates`, foryou-gates): on the *reviewer's own*
   gate, the one named by `--ref` and every one opened for that subject (`Bus.CloseReviewGates`; never
-  on a self-verdict, never a conductor's mission gate, which the conductor closes itself), else the
-  author's gate named by `--ref` (it no longer errors when no challenge is open — `verdictGateNotice`).
+  a conductor's mission gate, which the conductor closes itself), else the author's gate named by
+  `--ref`; a self-verdict closes no gate by either path (it no longer errors when no challenge is open — `verdictGateNotice`).
   `challenge --subject S` stores the subject in the gate's meta (`challenger|[subject S] text`,
   `bus.FormatGateMeta`/`ParseGateMeta`; no subject = the old `challenger|text`). `gate close <agent>
   <ref>` or a sweep (`--subject S`, `--mine`, `--by N`, `--dry-run`) closes stale gates without a

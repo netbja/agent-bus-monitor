@@ -26,7 +26,8 @@ closed. None of them was for him.
   the reviewer, but `verdict --ref` only closed the *author's* gate. Reviewers rarely passed the
   `--ref` anyway, and the gate's meta (`challenger|text`) held no subject to match.
 - **The verdict now closes the reviewer's own gates.** Those are the one named by `--ref` and
-  every one whose stored subject is the verdict's subject. A self-verdict closes nothing. A
+  every one whose stored subject is the verdict's subject. A self-verdict closes nothing, by
+  this path or by the older author's-gate one (reviewer-codex found that bypass in review). A
   conductor's mission gate is left to the conductor, which closes it after reading the ledger.
   Nobody else's verdict closes a gate on an agent. The subject is stored at challenge time
   (`challenge --subject S`) as `challenger|[subject S] text`. That is additive: old readers see a

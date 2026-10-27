@@ -151,3 +151,20 @@ func TestVerdictClosesTheReviewersGates(t *testing.T) {
 		t.Fatalf("mission lines = %q", lines)
 	}
 }
+
+// A self-verdict closes no gate by any path: not the reviewer's own gates by
+// subject or ref, not through the author's-gate fallback (the author is the
+// reviewer), and not a conductor's mission gate.
+func TestSelfVerdictClosesNoGate(t *testing.T) {
+	b := openGatesFixture(t)
+	ctx := context.Background()
+	for _, ref := range []string{"1793000000001-0", "1793000000002-0", "1793000000005-0"} {
+		lines := verdictGates(ctx, b, "foureyes", "foureyes", "roles-impl", ref)
+		if len(lines) != 1 || !strings.Contains(lines[0], "self-verdict") {
+			t.Fatalf("ref %s: lines = %q", ref, lines)
+		}
+	}
+	if open, _ := b.OpenChallenges(ctx, "foureyes"); len(open) != 3 {
+		t.Fatalf("a self-verdict closed gates: %v", open)
+	}
+}
