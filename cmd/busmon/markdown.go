@@ -3,6 +3,7 @@ package main
 import (
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"unicode"
 
 	"github.com/rivo/uniseg"
@@ -77,8 +78,13 @@ func shouting(s string) bool {
 	return letters >= 6 && upper*10 >= letters*8
 }
 
+// markdownRenders counts renderMarkdown calls: the shell's fade test proves a
+// fade frame renders no markdown (busmon Charm spec, "Caching").
+var markdownRenders atomic.Int64
+
 // renderMarkdown turns src into lines no wider than width cells.
 func renderMarkdown(src string, width int) []Line {
+	markdownRenders.Add(1)
 	width = max(width, 20)
 	src = structureFlat(DetailText(src))
 	var out []Line

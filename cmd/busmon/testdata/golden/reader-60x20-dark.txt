@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙ 4  ● 2         
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ 1 For you  2 Agents  3 Activity  4 Board  5 Requests       
+╭─ Message · report · note ─ Y copy thread · y copy · esc…─╮
+│ coder  2026-10-26 14:51:05 (13m ago)                     ▲
+│                                                          ┃
+│ Lot 1 delivered                                          ┃
+│                                                          ┃
+│ Done                                                     ┃
+│ · adapter in d0a72be ; tests green                       ┃
+│   func veryLongFunctionNameForTheGolden(argumentOne stri ┃
+│ → ng, argumentTwo int, argumentThree []string) (result s ┃
+│ → tring, err error) {                                    ┃
+│                                                          │
+│ text    retained text, 197 chars                         │
+│         completeness not marked on this entry — publish… │
+│                                                          │
+│ kind    report · note                                    ▼
+╰──────────────────────────────────────────────────────────╯
+ F5 health   ↑↓ j k scroll   y copy   Y copy thread         

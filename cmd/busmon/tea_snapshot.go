@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	guardian "github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // snapshot is the shell's copy of shared, taken under shared.mu by the poll
@@ -26,6 +28,12 @@ type snapshot struct {
 	requests                          []request
 	threads                           []openThread
 	plan                              *planSummary
+	planState                         planState // the plan itself, for its reader page
+	guardianHealth                    map[string]guardian.Record
+	guardianNotes                     map[string]guardian.Note
+	guardianNow                       time.Time
+	svcInst                           *bus.ServicesInstall
+	svcRecs                           map[string]bus.ServiceRecord
 }
 
 // takeSnapshot copies st at now.
@@ -43,6 +51,8 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 		agents:   make(map[string]*agentState, len(st.agents)),
 		budgets:  st.budgets, holds: st.holds, pace: maps.Clone(st.pace.last), pause: st.pause,
 		asks: st.asks, board: st.board, requests: st.requests, threads: st.threads,
+		guardianHealth: st.guardianHealth, guardianNotes: st.guardianNotes, guardianNow: guardNow,
+		svcInst: st.svcInst, svcRecs: st.svcRecs,
 	}
 	for n, a := range st.agents {
 		c := *a
@@ -52,5 +62,13 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 	if sum, ok := st.plan.summary(now); ok {
 		s.plan = &sum
 	}
+	// What the plan's pages read (planOverlay, planTaskDetail). The poller
+	// appends to its ledger in place and may replace the rest: the maps are
+	// copied (a ledger slice is only appended to, so its first len entries
+	// never change); rows is a new slice per Derive.
+	p := st.plan
+	s.planState = planState{loaded: p.loaded, rec: p.rec, file: p.file, rows: p.rows, partial: p.partial,
+		in:     plan.Inputs{Board: maps.Clone(p.in.Board), Facts: maps.Clone(p.in.Facts)},
+		ledger: maps.Clone(p.ledger)}
 	return s
 }

@@ -54,6 +54,7 @@ type listState struct {
 	anchor       string // keyed item the anchored viewport is pinned to; "" = follow
 	anchorOff    int    // rows between that item and the top row
 	tail, live   bool
+	keep         int // rows after the selection kept in view with it (the shell's expansion), in every mode
 	onChange     func(key string, live bool)
 	onOpen       func(key string)
 }
@@ -301,8 +302,11 @@ func (l *listState) rows() int { _, _, _, h := l.inner(); return h }
 func (l *listState) viewport() {
 	rows, n := l.rows(), len(l.items)
 	maxTop := max(0, n-rows)
+	// A wheel over a kept expansion anchors the list, in auto-scroll too:
+	// the wheel wins until the next key.
+	wheeled := l.keep > 0 && l.anchor != ""
 	switch {
-	case l.Live():
+	case l.Live() && !wheeled:
 		l.top = maxTop
 	case l.anchor != "":
 		if i := l.index(l.anchor); i >= 0 {
@@ -316,6 +320,15 @@ func (l *listState) viewport() {
 				l.top = i - rows + 1
 			}
 		}
+	}
+	// An expanded selection and its text stay in view, the row first when
+	// both do not fit: the tail does not push them off the top. A wheel
+	// scrolls away from them.
+	if i := l.index(l.sel); l.keep > 0 && !wheeled && i >= 0 && rows > 0 {
+		if end := i + l.keep; end >= l.top+rows {
+			l.top = min(i, end-rows+1)
+		}
+		l.top = min(l.top, i)
 	}
 	l.top = clamp(l.top, 0, maxTop)
 }
@@ -443,6 +456,16 @@ func (l *listState) click(mx, my int) {
 		l.setSel(i)
 		l.anchor = "" // the clicked row is visible: follow from here
 	}
+}
+
+// itemAt is the index of the row under (mx, my), off the scrollbar column.
+func (l *listState) itemAt(mx, my int) (int, bool) {
+	_, iy, _, ih := l.inner()
+	if my < iy || my >= iy+ih || mx <= l.rect.X || mx >= l.rect.X+l.rect.W-1 {
+		return 0, false
+	}
+	i := l.top + (my - iy)
+	return i, i < len(l.items)
 }
 
 // pageTowards scrolls one page up or down depending on whether row (relative

@@ -20,13 +20,21 @@ type panicReader struct{ busReader }
 func TestShellViewIsPure(t *testing.T) {
 	pinLocal(t)
 	for _, size := range goldenSizes {
+		for _, state := range goldenStates {
+			m := inState(t, fixtureShell(t, size[0], size[1]), state)
+			m.cfg.reader = panicReader{}
+			m.cfg.st = nil
+			builds, renders := m.cache.builds, markdownRenders.Load()
+			if a, b := m.View().Content, m.View().Content; a != b {
+				t.Fatalf("%v %s: two Views of one model differ", size, state)
+			}
+			if m.cache.builds != builds || markdownRenders.Load() != renders {
+				t.Fatalf("%v %s: View built a page or rendered markdown", size, state)
+			}
+		}
 		m := fixtureShell(t, size[0], size[1])
 		m.cfg.reader = panicReader{}
 		m.cfg.st = nil
-		a, b := m.View().Content, m.View().Content
-		if a != b {
-			t.Fatalf("%v: two Views of one model differ", size)
-		}
 		// Update on every message the dashboard takes, then View: no read.
 		m = step(t, m, tea.WindowSizeMsg{Width: size[0] - 1, Height: size[1]})
 		m = step(t, m, tailMsg{events: []bus.Event{{ID: "1793000000000-0", Kind: "notify", From: "x", Message: "y"}}})

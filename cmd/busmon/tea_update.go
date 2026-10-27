@@ -1,7 +1,12 @@
 package main
 
 import (
+	"slices"
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // Navigation and the lists' mouse (busmon Charm spec, step b2): keys go
@@ -10,8 +15,13 @@ import (
 
 // mode is who owns the keyboard in the shell.
 func (m *Model) mode() Mode {
-	if m.ui.editing {
+	switch {
+	case m.ui.editing:
 		return ModeFilter
+	case m.rd.open() && m.rd.top().kind == ovAsk:
+		return ModeShellAsk
+	case m.rd.open():
+		return ModeOverlay
 	}
 	return ModeShell
 }
@@ -32,8 +42,13 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.refresh()
 		return m, nil
 	}
+	if m.rd.open() {
+		cmd := m.readerKey(act, k)
+		return m, cmd
+	}
 	l := m.lists.of(m.ui.focus)
-	if m.ui.focus == PanelAgents && act != ActNone {
+	var cmd tea.Cmd
+	if m.ui.focus == PanelAgents && movesSelection(act) {
 		m.ui.agentsTouched = true
 	}
 	switch act {
@@ -58,7 +73,25 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case ActLive:
 		m.lists.activity.Resume()
 	case ActOpen:
-		l.Open() // the inline expansion and the reader come with step b3
+		cmd = m.open(m.ui.focus)
+	case ActCopy:
+		cmd = m.copySelected()
+	case ActRequests:
+		cmd = m.push(page{kind: ovRequests})
+	case ActServices:
+		cmd = m.servicesCmd()
+	case ActHealth:
+		cmd = m.push(page{kind: ovHealth})
+	case ActHelp:
+		cmd = m.push(page{kind: ovHelp})
+	case ActPlan:
+		cmd = m.pushPlan()
+	case ActAsk:
+		agent := ""
+		if sel := m.lists.agents.Selected(); m.ui.focus == PanelAgents && m.snap.agents[sel] != nil && m.snap.agents[sel].openAsk > 0 {
+			agent = sel
+		}
+		cmd = m.pushAskOf(agent)
 	case ActFollow:
 		if act := &m.lists.activity; act.Live() {
 			act.Pause()
@@ -83,7 +116,132 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	}
 	m.syncPause()
 	m.refresh()
-	return m, nil
+	return m, cmd
+}
+
+// open is Enter (or a click on the selected row) in list p: an Activity line,
+// or a For you unread line, expands in place, then opens in the reader; an
+// agent, a task, a request, an ask, a wait or a gate opens its page.
+func (m *Model) open(p PanelID) tea.Cmd {
+	key := m.lists.of(p).Selected()
+	if key == "" {
+		return nil
+	}
+	s := m.snap
+	switch p {
+	case PanelActivity:
+		fl, ok := m.feedLine(key)
+		if !ok {
+			return nil
+		}
+		if m.ui.expanded == key && m.ui.expandIn == p {
+			return m.pushMessage(fl.ev, fl.at)
+		}
+		m.expand(p, key)
+	case PanelForYou:
+		i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Key == key })
+		if i < 0 {
+			return nil
+		}
+		it := m.forYou[i]
+		switch it.Rank {
+		case rankAsk:
+			return m.pushAsk(it.AskID)
+		case rankWait:
+			return m.pushAgent(it.Agent)
+		case rankGate: // the challenge thread: its ref is the root
+			ref := strings.TrimPrefix(key, "gate:"+it.Agent+":")
+			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
+		case rankUnread:
+			if m.ui.expanded == key && m.ui.expandIn == p {
+				if fl, ok := m.expandedLine(); ok {
+					return m.pushMessage(fl.ev, fl.at)
+				}
+				return nil
+			}
+			m.expand(p, key)
+		}
+	case PanelAgents:
+		return m.pushAgent(key)
+	case PanelBoard:
+		if _, ok := s.board[key]; ok {
+			return m.push(page{kind: ovTask, key: key})
+		}
+	case PanelRequests:
+		if strings.HasPrefix(key, "req:") {
+			return m.push(page{kind: ovRequest, key: key})
+		}
+		id := strings.TrimPrefix(key, "thr:")
+		for _, t := range s.threads {
+			if t.ID == id {
+				return m.pushMessage(bus.Event{ID: t.ID, Kind: "cmd", Type: t.Type, From: t.From, Target: t.Target, Message: t.Message}, t.At)
+			}
+		}
+	}
+	return nil
+}
+
+// feedLine is the Activity line of a list key.
+func (m *Model) feedLine(key string) (feedLine, bool) {
+	for _, fl := range m.feed.feed {
+		if fl.id == key && !fl.sep {
+			return fl, true
+		}
+	}
+	return feedLine{}, false
+}
+
+// copySelected is y in a panel: the selected row's text.
+func (m *Model) copySelected() tea.Cmd {
+	key := m.lists.of(m.ui.focus).Selected()
+	if key == "" {
+		return nil
+	}
+	s := m.snap
+	switch m.ui.focus {
+	case PanelAgents:
+		if a := s.agents[key]; a != nil {
+			return m.copy(agentDetailPlain(a), "status message")
+		}
+	case PanelActivity:
+		if fl, ok := m.feedLine(key); ok {
+			return m.copy(fl.text, "line")
+		}
+	case PanelForYou:
+		for _, it := range m.forYou {
+			if it.Key == key {
+				return m.copy(CopyText(it.Text), "text")
+			}
+		}
+	case PanelBoard:
+		if e, ok := s.board[key]; ok {
+			_, _, plain := taskDetail(e, key, m.now)
+			return m.copy(plain, "task")
+		}
+	case PanelRequests:
+		for _, r := range s.requests {
+			if "req:"+r.Task == key {
+				_, _, plain := requestDetail(r, m.now)
+				return m.copy(plain, "request")
+			}
+		}
+		for _, t := range s.threads {
+			if "thr:"+t.ID == key {
+				return m.copy(t.Message, "message")
+			}
+		}
+	}
+	return nil
+}
+
+// movesSelection is a key that moves a list's selection: in Agents it stops
+// the selection following the top row; a Tab passing through does not.
+func movesSelection(act Action) bool {
+	switch act {
+	case ActUp, ActDown, ActPageUp, ActPageDown, ActFirst, ActLast:
+		return true
+	}
+	return false
 }
 
 // editFilter is the filter line: Enter applies, Esc cancels, Backspace and
@@ -150,6 +308,8 @@ func (m *Model) switchTab(n int) {
 func (m *Model) escape() {
 	act := &m.lists.activity
 	switch l := m.lists.of(m.ui.focus); {
+	case m.ui.expanded != "":
+		m.collapse()
 	case l.Selected() != "":
 		l.ClearSelection()
 	case !act.Live():
@@ -203,16 +363,20 @@ func (m *Model) nextUnread() bool {
 // wheel scrolls the list under the pointer three rows, as ListView does; it
 // does not move the focus.
 func (m Model) wheel(ms tea.Mouse) (Model, tea.Cmd) {
-	p, ok := m.panelAt(ms.X, ms.Y)
-	if !ok {
-		return m, nil
-	}
 	delta := 3
 	switch ms.Button {
 	case tea.MouseWheelUp:
 		delta = -3
 	case tea.MouseWheelDown:
 	default:
+		return m, nil
+	}
+	if m.rd.open() && m.readerRect().contains(ms.X, ms.Y) {
+		m.readerWheel(delta < 0)
+		return m, nil
+	}
+	p, ok := m.panelAt(ms.X, ms.Y)
+	if !ok {
 		return m, nil
 	}
 	if p == PanelAgents {
@@ -230,6 +394,12 @@ func (m Model) wheel(ms tea.Mouse) (Model, tea.Cmd) {
 func (m Model) click(ms tea.Mouse) (Model, tea.Cmd) {
 	if ms.Button != tea.MouseLeft {
 		return m, nil
+	}
+	if m.rd.open() {
+		if m.readerRect().contains(ms.X, ms.Y) {
+			return m, m.readerClick(ms.X, ms.Y)
+		}
+		m.closeReader() // a click on For you, Agents or a tab leaves the reader
 	}
 	l := m.layout
 	if l.Tabs.H > 0 && ms.Y == l.Tabs.Y {
@@ -261,10 +431,18 @@ func (m Model) click(ms tea.Mouse) (Model, tea.Cmd) {
 		m.focusPanel(p)
 		m.refresh() // the click lands on the geometry the focus gives
 	}
-	m.lists.of(p).click(ms.X, ms.Y)
+	lst := m.lists.of(p)
+	var cmd tea.Cmd
+	// A click on the selected row opens it as Enter does (expands, then the
+	// reader); one on an expanded row's text opens the reader.
+	if i, ok := lst.itemAt(ms.X, ms.Y); ok && (isExpandKey(lst.items[i].Key) || lst.items[i].Key == lst.sel) {
+		cmd = m.open(p)
+	} else {
+		lst.click(ms.X, ms.Y)
+	}
 	m.syncPause()
 	m.refresh()
-	return m, nil
+	return m, cmd
 }
 
 // panelAt is the visible panel whose frame holds (x, y).

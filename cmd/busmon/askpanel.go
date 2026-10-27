@@ -175,6 +175,18 @@ func (u *ui) reloadAsks() {
 // askPanelBody is the panel's text: the tab strip, the question, its context
 // (Markdown), then its options (or its recorded answer). Pure, for tests.
 func askPanelBody(a bus.Ask, p askPanel, width int) []Line {
+	lines, _ := askPanelLayout(a, p, width)
+	return lines
+}
+
+// lineSpan is body lines [from, to).
+type lineSpan struct{ from, to int }
+
+// askPanelLayout is askPanelBody with each option's lines, "Other" last:
+// what the shell's reader hit-tests a click against. No spans when the
+// question is answered (its options are not shown).
+func askPanelLayout(a bus.Ask, p askPanel, width int) ([]Line, []lineSpan) {
+	var spans []lineSpan
 	var b body
 	// Tab strip, fit to the width: ✓ answered, ● current, ○ open.
 	var tabs []Line
@@ -204,7 +216,7 @@ func askPanelBody(a bus.Ask, p askPanel, width int) []Line {
 	}
 	b.segs(strip...).text("\n\n")
 	if p.q < 0 || p.q >= len(a.Questions) {
-		return b.Lines()
+		return b.Lines(), nil
 	}
 	q := a.Questions[p.q]
 	b.join(wrapPlain(q.Question, width, RoleText, true)).text("\n")
@@ -215,9 +227,10 @@ func askPanelBody(a bus.Ask, p askPanel, width int) []Line {
 	if q.Answer != nil {
 		b.seg(RoleOK, GlyphDone+" answered: "+Preview(q.Answer.Value())).
 			seg(RoleMuted, fmt.Sprintf(" (by %s)", Preview(q.Answer.By))).text("\n")
-		return b.Lines()
+		return b.Lines(), nil
 	}
 	for i, o := range q.Options {
+		from := b.at()
 		mark := "  "
 		role := RoleText
 		if i == p.opt {
@@ -231,15 +244,18 @@ func askPanelBody(a bus.Ask, p askPanel, width int) []Line {
 		if o.Description != "" {
 			b.join(wrapIndented(o.Description, width, "      ")).text("\n")
 		}
+		spans = append(spans, lineSpan{from, b.at()})
 	}
 	other := len(q.Options)
 	mark, role := "  ", RoleText
 	if p.opt == other {
 		mark, role = GlyphSelect+" ", RoleAccent
 	}
+	from := b.at()
 	b.join(wrapPlain(fmt.Sprintf("%s%d. Other... (type your answer)", mark, other+1), width, role, false)).text("\n")
+	spans = append(spans, lineSpan{from, b.at()})
 	b.text("\n").seg(RoleMuted, GlyphUp+GlyphDownArrow+" or 1-9 choose · Enter answer · "+GlyphArrowL+GlyphArrowR+" question · Esc close").text("\n")
-	return b.Lines()
+	return b.Lines(), spans
 }
 
 // wrapPlain wraps text (no Markdown) to width in one role.
