@@ -52,9 +52,11 @@ before the first message). Verified in Claude Code 2.1.311's own statusLine docu
   tick; a failed read keeps the last value) and shows the percent beside the raw tokens in the
   wide row's ctx cell (`88k 85%`, attention colour at the threshold) and a `Fill` row in the agent
   page; an absent or aged fill (`ContextFill.Known`: a session and at most `bus.ContextMaxAge`,
-  30 min, old when published) shows no percent and reads unknown, never 0. busmon takes the
-  threshold from its own `AGENT_BUS_CONTEXT_ALERT` (default 80), read once at start; the services
-  read it from the project's env file, so a value set only there colours at 80 in busmon. The
+  30 min, old when published) shows no percent and reads unknown, never 0. Each fill carries the
+  dispatcher's threshold (`ContextFill.Alert`, 0 = off), so busmon colours by the dispatcher's
+  value even when it is set only in the project's service env file; busmon's own
+  `AGENT_BUS_CONTEXT_ALERT` (default 80, read once at start) serves only a fill from a
+  dispatcher that did not publish one (foureyes' review of ca3). The
   health check `context` warns when a known fill is at or above the threshold, is ok below,
   unknown when none is known, and ok with the alert off.
 
@@ -78,7 +80,8 @@ the other clients read unknown until their own client gives one.
   `TestContextAlertOncePerEpisode`, `TestContextAlertSkipsUnknownAgedAndOff`,
   `TestContextAlertWaitsForThePause`, `TestServiceContextAlert`; ca3: `TestContextFillKnownAndThreshold`,
   `TestEvaluateContext`, `TestContextEvidence`, `TestPollReadsTheContextFill`,
-  `TestAgentRowShowsTheContextFill`, `TestAgentDetailShowsTheContextFill`, the shell goldens.
+  `TestAgentRowShowsTheContextFill`, `TestAgentDetailShowsTheContextFill`, the shell goldens
+  (their threshold pinned in the fixture, never the shell's).
 
 ## Limits / what would invalidate it
 

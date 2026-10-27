@@ -45,12 +45,25 @@ func (f ContextFill) Known() bool {
 	return f.Session != "" && f.At-f.ObservedAt <= ContextMaxAge.Milliseconds()
 }
 
+// AlertAt is the threshold the fill is judged against: the published one,
+// else fallback (a dispatcher that did not publish it).
+func (f ContextFill) AlertAt(fallback float64) float64 {
+	if f.Alert != nil {
+		return *f.Alert
+	}
+	return fallback
+}
+
 // ContextFill is one agent's last context fill.
 type ContextFill struct {
 	Pct        float64 `json:"pct"`         // 0-100, as the client computed it
 	ObservedAt int64   `json:"observed_at"` // Unix ms, when the client's status line gave it
 	Session    string  `json:"session"`     // the session it belongs to (a new session is a new episode)
 	At         int64   `json:"at"`          // Unix ms, Redis TIME of the publication
+	// Alert is the dispatcher's alert threshold for this fill (0 = off), so
+	// a reader shows the dispatcher's and not its own; nil from a dispatcher
+	// before it was published.
+	Alert *float64 `json:"alert,omitempty"`
 }
 
 // contextReplace: 0 not the holder, else 1; the hash becomes exactly the

@@ -10,6 +10,10 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
+// fixtureAlert is the threshold the fixture's dispatcher published, so the
+// goldens never follow the shell's AGENT_BUS_CONTEXT_ALERT.
+var fixtureAlert = 80.0
+
 // shellNow is the fixed time of the shell's fixture and goldens.
 var shellNow = time.Date(2026, 10, 26, 15, 4, 5, 0, time.UTC)
 
@@ -46,10 +50,10 @@ func shellFixture(now time.Time) snapshot {
 		agents: map[string]*agentState{
 			"master": {state: "waiting", message: "see my ask", stateAt: ago(12 * time.Minute), lastSeen: ago(time.Minute),
 				openAsk: 2, askID: fmt.Sprintf("%d-0", ms(4*time.Minute)), registered: true, armed: true, ctxRaw: "41000", paused: true,
-				ctxFill: &bus.ContextFill{Pct: 21, Session: "s-master", ObservedAt: ms(time.Minute), At: ms(0)}},
+				ctxFill: &bus.ContextFill{Pct: 21, Session: "s-master", ObservedAt: ms(time.Minute), At: ms(0), Alert: &fixtureAlert}},
 			"coder": {state: "working", message: "busmon-charm-b: b1 shell", stateAt: ago(2 * time.Minute), lastSeen: ago(time.Minute),
 				registered: true, paused: true, ctxRaw: "88000", gated: 1,
-				ctxFill: &bus.ContextFill{Pct: 85, Session: "s-coder", ObservedAt: ms(2 * time.Minute), At: ms(0)}, gates: map[string]string{"pr-122": "foureyes|look at b1"},
+				ctxFill: &bus.ContextFill{Pct: 85, Session: "s-coder", ObservedAt: ms(2 * time.Minute), At: ms(0), Alert: &fixtureAlert}, gates: map[string]string{"pr-122": "foureyes|look at b1"},
 				wake: &bus.WakeRecord{State: "deferred"}},
 			"foureyes": {state: "waiting", message: "need a decision on the width rule", stateAt: ago(6 * time.Minute), lastSeen: ago(6 * time.Minute),
 				registered: true, wake: &bus.WakeRecord{Escalated: "true"}},

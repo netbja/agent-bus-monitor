@@ -39,7 +39,7 @@ func TestContextPassPublishesVerifiedSessionsOnly(t *testing.T) {
 		// proved one is read, never the named one (foureyes' probe).
 		"docs": {PID: 13, Session: "s-forged", IdentSession: "s-nofile2"},
 	}
-	l := &loop{b: b, token: "ctx-holder", cfg: Config{Log: io.Discard, Context: ContextConfig{Read: read, Every: time.Minute}}}
+	l := &loop{b: b, token: "ctx-holder", cfg: Config{Log: io.Discard, Context: ContextConfig{Read: read, Every: time.Minute, Alert: 70}}}
 	if err := l.contextPass(ctx, snaps); err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +49,11 @@ func TestContextPassPublishesVerifiedSessionsOnly(t *testing.T) {
 	}
 	if len(fills) != 2 || fills["docs"].Session != "s-nofile2" || fills["docs"].Pct != 50 || fills["coder"].Pct != 84 || fills["coder"].ObservedAt != 111 || fills["coder"].Session != "s-coder" || fills["coder"].At == 0 {
 		t.Fatalf("published %+v", fills)
+	}
+	// Each fill carries the threshold it is judged against, so busmon shows
+	// the dispatcher's, not its own.
+	if a := fills["coder"].Alert; a == nil || *a != 70 {
+		t.Fatalf("published alert %v", a)
 	}
 	for _, s := range asked {
 		if s == "s-forged" {

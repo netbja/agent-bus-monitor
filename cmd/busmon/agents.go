@@ -370,16 +370,17 @@ func cell(segs []Seg, n int) Line {
 	return append(FitLine(segs, n-1), Seg{Text: " "})
 }
 
-// ctxAlert is the fill the dispatcher alerts at (AGENT_BUS_CONTEXT_ALERT,
-// read once at start; 0 = off: no fill is coloured).
+// ctxAlert is the threshold for a fill whose dispatcher did not publish its
+// own (AGENT_BUS_CONTEXT_ALERT, read once at start; 0 = off).
 var ctxAlert = bus.ContextAlert(os.Getenv)
 
-// knownFill is the agent's context fill when published and not aged.
-func knownFill(a *agentState) (float64, bool) {
+// knownFill is the agent's context fill when published and not aged, and
+// the threshold it is judged against (0 = the alert is off).
+func knownFill(a *agentState) (pct, alert float64, ok bool) {
 	if a.ctxFill == nil || !a.ctxFill.Known() {
-		return 0, false
+		return 0, 0, false
 	}
-	return a.ctxFill.Pct, true
+	return a.ctxFill.Pct, a.ctxFill.AlertAt(ctxAlert), true
 }
 
 // ctxCell is the ctx column: the raw tokens and, when known, the fill in
@@ -390,9 +391,9 @@ func ctxCell(a *agentState) []Seg {
 	if n, ok := parseCtx(a.ctxRaw); ok {
 		segs = append(segs, Seg{Text: formatTokens(n), Role: RoleText})
 	}
-	if pct, ok := knownFill(a); ok {
+	if pct, alert, ok := knownFill(a); ok {
 		role := RoleText
-		if ctxAlert > 0 && pct >= ctxAlert {
+		if alert > 0 && pct >= alert {
 			role = RoleAttention
 		}
 		if len(segs) > 0 {

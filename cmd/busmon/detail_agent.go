@@ -202,10 +202,10 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	default:
 		row("Context", S(RoleMuted, "not a token count: "+Preview(a.ctxRaw)))
 	}
-	if pct, ok := knownFill(a); ok {
+	if pct, alert, ok := knownFill(a); ok {
 		fill := fmt.Sprintf("%.0f%% of the context window, observed %s ago", pct, humanAge(now.Sub(time.UnixMilli(a.ctxFill.ObservedAt))))
-		if ctxAlert > 0 && pct >= ctxAlert {
-			row("Fill", S(RoleAttention, fill+fmt.Sprintf(" - at or above the %.0f%% alert: told to hand off", ctxAlert)))
+		if alert > 0 && pct >= alert {
+			row("Fill", S(RoleAttention, fill+fmt.Sprintf(" - at or above the %.0f%% alert: told to hand off", alert)))
 		} else {
 			row("Fill", text(fill))
 		}

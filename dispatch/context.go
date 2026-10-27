@@ -37,12 +37,13 @@ func (l *loop) contextPass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 		return err
 	}
 	fills := map[string]bus.ContextFill{}
+	alert := c.Alert
 	for name, s := range snaps {
 		if s.PID == 0 || s.IdentSession == "" {
 			continue // unverified, or no session proved with its process
 		}
 		if r, ok := c.Read(s.IdentSession); ok {
-			fills[name] = bus.ContextFill{Pct: r.Pct, ObservedAt: r.ObservedAt, Session: s.IdentSession, At: now.UnixMilli()}
+			fills[name] = bus.ContextFill{Pct: r.Pct, ObservedAt: r.ObservedAt, Session: s.IdentSession, At: now.UnixMilli(), Alert: &alert}
 		}
 	}
 	if err := l.b.FencedPutContext(ctx, l.token, fills); err != nil {

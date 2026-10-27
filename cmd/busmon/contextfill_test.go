@@ -10,6 +10,16 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
+// pinAlert sets busmon's own threshold for one test, whatever the shell exports.
+func pinAlert(t *testing.T, v float64) {
+	t.Helper()
+	old := ctxAlert
+	ctxAlert = v
+	t.Cleanup(func() { ctxAlert = old })
+}
+
+func withAlert(f *bus.ContextFill, v float64) *bus.ContextFill { f.Alert = &v; return f }
+
 func freshFill(pct float64) *bus.ContextFill {
 	at := time.Now().UnixMilli()
 	return &bus.ContextFill{Pct: pct, Session: "s1", ObservedAt: at - 60_000, At: at}
@@ -48,6 +58,7 @@ func TestPollReadsTheContextFill(t *testing.T) {
 // The wide row shows the percent beside the raw tokens, in the attention
 // colour at the alert threshold; an unknown or aged fill shows no percent.
 func TestAgentRowShowsTheContextFill(t *testing.T) {
+	pinAlert(t, 80)
 	now := time.Now()
 	aged := freshFill(95)
 	aged.ObservedAt = aged.At - bus.ContextMaxAge.Milliseconds() - 1
@@ -63,6 +74,10 @@ func TestAgentRowShowsTheContextFill(t *testing.T) {
 		{aged, "180k", "180k", RoleText},
 		{nil, "180k", "180k", RoleText},
 		{nil, "", GlyphDash, RoleMuted},
+		// The dispatcher's published threshold wins over busmon's own.
+		{withAlert(freshFill(85), 90), "180k", "180k 85%", RoleText},
+		{withAlert(freshFill(72), 70), "180k", "180k 72%", RoleAttention},
+		{withAlert(freshFill(99), 0), "180k", "180k 99%", RoleText}, // the alert is off
 	} {
 		a := &agentState{state: "idle", stateAt: now, ctxRaw: c.raw, ctxFill: c.fill}
 		cell := ctxCell(a)
@@ -78,6 +93,7 @@ func TestAgentRowShowsTheContextFill(t *testing.T) {
 
 // The agent page states the fill, or that it is unknown, never 0.
 func TestAgentDetailShowsTheContextFill(t *testing.T) {
+	pinAlert(t, 80)
 	now := time.Now()
 	body := func(a *agentState) string {
 		_, lines := agentDetail("coder", a, false, nil, nil, now)
@@ -89,6 +105,9 @@ func TestAgentDetailShowsTheContextFill(t *testing.T) {
 	}
 	if got := body(&agentState{state: "idle", stateAt: now, ctxFill: freshFill(85)}); !strings.Contains(got, "85% of the context window") || !strings.Contains(got, "at or above the 80% alert") {
 		t.Errorf("known fill:\n%s", got)
+	}
+	if got := body(&agentState{state: "idle", stateAt: now, ctxFill: withAlert(freshFill(72), 70)}); !strings.Contains(got, "at or above the 70% alert") {
+		t.Errorf("the dispatcher's threshold:\n%s", got)
 	}
 	if got := body(&agentState{state: "idle", stateAt: now}); !strings.Contains(got, "Fill") || !strings.Contains(got, "unknown") || strings.Contains(got, "0%") {
 		t.Errorf("unknown fill:\n%s", got)
