@@ -46,9 +46,13 @@ const (
 type Signature struct {
 	Ready, Busy []*regexp.Regexp
 	Modal       []*regexp.Regexp
-	ANSI        bool
-	Prompt      *regexp.Regexp
-	RuleAbove   bool
+	// Dialog (A10): the client's own pre-session dialog (trust, hooks review),
+	// matched on the stripped screen. It reads blocked even when herdr does not
+	// say so, and is never ready. Only patterns pinned by a real screen.
+	Dialog    []*regexp.Regexp
+	ANSI      bool
+	Prompt    *regexp.Regexp
+	RuleAbove bool
 }
 
 var res = regexp.MustCompile
@@ -67,12 +71,14 @@ var Signatures = map[string]Signature{
 		ANSI:      true,
 		Prompt:    res(`^❯`),
 		RuleAbove: true,
+		Dialog:    []*regexp.Regexp{res(`(?s)Accessing workspace:.*Yes, I trust this folder`)}, // screens/claude-trust.txt
 	},
 	// `›` followed only by styling and spaces, then the dim placeholder.
 	// Transcript-scroll mode (footer `enter/esc latest`) does not submit on Enter.
 	"codex": {
 		Ready:  []*regexp.Regexp{res(`(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m`)},
 		Modal:  []*regexp.Regexp{res(`enter/esc latest`)},
+		Dialog: []*regexp.Regexp{res(`(?s)Hooks need review.*Trust all and continue`)}, // screens/codex-hooks.txt
 		ANSI:   true,
 		Prompt: res(`^›`),
 	},
@@ -158,6 +164,11 @@ func (s Signature) match(screen string) (ready, busy bool) {
 	}
 	ready = anyMatch(s.Ready, region) && !anyMatch(s.Modal, plain)
 	return ready, busy
+}
+
+// dialog reports the client's own pre-session dialog on the screen.
+func (s Signature) dialog(screen string) bool {
+	return anyMatch(s.Dialog, ansiEscape.ReplaceAllString(strings.ReplaceAll(screen, "\r", ""), ""))
 }
 
 // Herdr drives panes through the herdr CLI. Bin "" means "herdr" on PATH.
@@ -423,6 +434,9 @@ func (h Herdr) Inspect(ctx context.Context, pane string) Inspection {
 	r2, b2 := sig.match(second)
 	in.Busy = b1 || b2
 	in.Ready = first == second && r1 && r2
+	if sig.dialog(second) { // A10: its own dialog waits on the person, whatever herdr says
+		in.State, in.Ready = "blocked", false
+	}
 	if first == second {
 		sum := sha256.Sum256([]byte(first))
 		in.ScreenHash = hex.EncodeToString(sum[:12])

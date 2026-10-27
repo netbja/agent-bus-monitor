@@ -293,3 +293,42 @@ func TestParseAgentGetTrustDialogIsBlocked(t *testing.T) {
 		t.Fatal("the trust screen fixture lost its dialog")
 	}
 }
+
+// A10: a client's own pre-session dialog reads blocked even when herdr does
+// not say so (Codex's hooks review, read by master in a stuck pane), and is
+// never ready: a wake line typed into it would answer the dialog. Claude
+// Code's trust check (herdr already reports it blocked) matches too. No other
+// fixture matches.
+func TestDialogSignatures(t *testing.T) {
+	for _, c := range []struct{ client, screen string }{{"codex", "codex-hooks"}, {"claude", "claude-trust"}} {
+		if !Signatures[c.client].dialog(readFixture(t, "screens/"+c.screen+".txt")) {
+			t.Errorf("%s: %s not seen as a dialog", c.client, c.screen)
+		}
+	}
+	entries, err := os.ReadDir("testdata/screens")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		name := strings.TrimSuffix(e.Name(), ".txt")
+		if name == "codex-hooks" || name == "claude-trust" || name == "README.md" {
+			continue
+		}
+		client := strings.SplitN(name, "-", 2)[0]
+		if sig, ok := Signatures[client]; ok && sig.dialog(readFixture(t, "screens/"+e.Name())) {
+			t.Errorf("%s reads as a dialog", e.Name())
+		}
+	}
+}
+
+func TestInspectCodexHooksDialogIsBlocked(t *testing.T) {
+	h, _ := fakeHerdr(t, map[string]string{
+		"agent-get.json":    "=" + `{"result":{"agent":{"agent":"codex","agent_status":"idle","focused":false,"pane_id":"w2:pE","terminal_id":"t"},"type":"agent_info"}}`,
+		"process-info.json": "=" + `{"result":{"process_info":{"foreground_processes":[{"pid":` + strconv.Itoa(os.Getpid()) + `}]}}}`,
+		"screen.txt":        "screens/codex-hooks.txt",
+	})
+	in := h.Inspect(context.Background(), "w2:pE")
+	if in.Err != nil || in.State != "blocked" || in.Ready {
+		t.Fatalf("Inspect = %+v, want blocked and not ready", in)
+	}
+}

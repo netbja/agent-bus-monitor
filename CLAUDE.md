@@ -503,8 +503,9 @@ It never touches Redis — see README "Deployment topology".
   gets busmon's `prompt` flag and the prompt-notify ring; `agent-spawn` waits `AGENT_SPAWN_WAIT` s
   (default 30, `0` = no wait; `swap` passes 0, it proves the agent itself) for the first status
   (`agentbus agents wait <agent> --since <ms> --timeout <d>`, read-only) and otherwise names the
-  pane. No dialog pattern is guessed: one herdr does not report (Codex's hooks review, not
-  reproduced) needs a captured screen first.
+  pane. A dialog herdr does not report (Codex's hooks review) is read from the screen: a
+  `Signature.Dialog` match makes the inspection `blocked`, never ready (`screens/codex-hooks.txt`,
+  `claude-trust.txt`); only patterns pinned by a real screen.
   `setup.sh install/update` also links `agent-launch` and `agent-spawn` into `BIN_DIR`; those links
   resolve back to this repository's scripts, and uninstall removes only links to these exact files.
   Resume Claude Code with `agent-launch <role> <project> [--profile <p>] --resume <session-id>` to
