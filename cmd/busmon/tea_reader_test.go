@@ -177,8 +177,17 @@ func TestExpandIndent(t *testing.T) {
 			t.Errorf("tier %v: the message starts at %d, the indent says %d", tier, at, want)
 		}
 	}
-	if got := expandIndent(PanelForYou, TierWide); got != forYouTextCol {
-		t.Errorf("For you indent %d, want %d", got, forYouTextCol)
+	// For you: the indent is where a real row's text starts, whatever its kind.
+	for _, it := range []attentionItem{
+		{Rank: rankUnread, Key: "unread:1-0", Agent: "master", Text: "TEXT", At: time.Unix(0, 0)},
+		{Rank: rankAsk, Key: "ask:1-0", Agent: "a-very-long-agent-name", Text: "TEXT"},
+	} {
+		head, _, _ := forYouParts(it, time.Unix(60, 0))
+		txt := forYouRow(it, 200, time.Unix(60, 0)).text()
+		at := Width(txt[:strings.Index(txt, "TEXT")]) // in cells: the kind glyph is several bytes
+		if got := expandIndent(PanelForYou, TierWide); got != head.Width() || at != got {
+			t.Errorf("For you indent %d; the row's text starts at cell %d (head %d)", got, at, head.Width())
+		}
 	}
 	if got := expansionIndent(forYouTextCol, forYouTextCol+minExpandText+1); got != 0 {
 		t.Errorf("a narrow panel keeps indent %d", got)
