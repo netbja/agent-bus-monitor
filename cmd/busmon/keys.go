@@ -71,6 +71,8 @@ const (
 	ActPlan         // open the batch's plan
 	ActTab5         // the shell's narrow tier: the fifth view
 	ActTab6         // the shell's narrow tier: the sixth view (Plan)
+	ActNextItem     // reader: the next item of the list the page came from (A5)
+	ActPrevItem     // reader: the previous one
 	ActAskOther     // the shell's ask: a free answer ("Other") in the compose window
 )
 
@@ -254,6 +256,8 @@ var (
 		{Keys: "end G", Help: "last row", Act: ActLast, match: either(keyIs(keyEnd), runeIs('G'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "Y", Hint: "copy thread", Act: ActCopyThread, match: runeIs('Y')},
+		{Keys: "n p " + GlyphArrowL + GlyphArrowR, Hint: "next/prev", Help: "the next or previous item of the list the page was opened from", Act: ActNextItem, match: either(runeIs('n'), keyIs(keyRight))},
+		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}

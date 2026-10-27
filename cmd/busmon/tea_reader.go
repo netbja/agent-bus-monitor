@@ -45,6 +45,9 @@ type page struct {
 	expanded bool       // ovPlan: the done group is open
 	items    []planItem // ovPlan
 
+	from     PanelID // the list the page was opened from (A5: n/p move in it)
+	fromList bool
+
 	recap     recapModel // ovRecap
 	recapLine int        // ovRecap: the body line of the cursor's row
 }
@@ -527,6 +530,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.copy(p.plain, "text")
 	case ActCopyThread:
 		return m.copy(p.threadPlain, "thread")
+	case ActNextItem, ActPrevItem:
+		return m.readerStep(p, act == ActNextItem)
 	case ActHealth:
 		return m.push(page{kind: ovHealth})
 	case ActComposeOpen: // in an agent's page: write to that agent
@@ -732,4 +737,71 @@ func (m Model) drawReader(g *grid) {
 		}
 		drawLine(g, r.X+2, r.Y+1+i, r.W-4, l, false)
 	}
+}
+
+// readerStep is n/p (and right/left) on a page opened from a list (A5): it
+// moves that list's selection by one item and shows the item now selected in
+// place of the page, without going back; at either end it stays and says so.
+func (m *Model) readerStep(p *page, next bool) tea.Cmd {
+	if !p.fromList {
+		return nil
+	}
+	from := p.from
+	l := m.lists.of(from)
+	before, delta := l.Selected(), -1
+	if next {
+		delta = 1
+	}
+	l.Move(delta)
+	if l.Selected() == before {
+		m.ui.flash, m.ui.flashErr = "no previous item", false
+		if next {
+			m.ui.flash = "no next item"
+		}
+		return nil
+	}
+	m.pop()
+	return m.openTracked(from, true)
+}
+
+// openTracked opens list p's selected item and records on the page it
+// pushed which list it came from. direct opens an Activity or unread line
+// straight in the reader (n/p) instead of expanding it first.
+func (m *Model) openTracked(p PanelID, direct bool) tea.Cmd {
+	depth := len(m.rd.pages)
+	var cmd tea.Cmd
+	if direct {
+		cmd = m.openDirect(p)
+	} else {
+		cmd = m.open(p)
+	}
+	if top := m.rd.top(); len(m.rd.pages) > depth && top != nil && !top.fromList {
+		top.from, top.fromList = p, true
+	}
+	return cmd
+}
+
+// openDirect is open without the in-place expansion step.
+func (m *Model) openDirect(p PanelID) tea.Cmd {
+	key := m.lists.of(p).Selected()
+	switch p {
+	case PanelActivity:
+		if fl, ok := m.feedLine(key); ok {
+			return m.pushMessage(fl.ev, fl.at)
+		}
+		return nil
+	case PanelForYou:
+		if id, ok := strings.CutPrefix(key, "unread:"); ok {
+			if fl, ok := m.feedLine(id); ok {
+				return m.pushMessage(fl.ev, fl.at)
+			}
+			for _, fl := range m.feed.feed {
+				if fl.ev.ID == id {
+					return m.pushMessage(fl.ev, fl.at)
+				}
+			}
+			return nil
+		}
+	}
+	return m.open(p)
 }

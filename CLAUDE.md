@@ -299,7 +299,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   its badge and reminder subset; its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`), then opens it in the reader, a stack of pages over the lower zone, one
-  per overlay, Esc back (`tea_reader.go`: bodies built on the update path with a stamp, an ask's
+  per overlay, Esc back; on a page opened from Activity or For you, `n`/`p` (→/←) show the list's next or
+  previous item in its place (A5, `readerStep`, `openTracked`) (`tea_reader.go`: bodies built on the update path with a stamp, an ask's
   options answered by digit or click, `ModeShellAsk`), and markdown is cached by id, width and
   palette (`tea_cache.go`), so a `fadeMsg` renders none. The input line (`tea_input.go`) and the
   compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells)
