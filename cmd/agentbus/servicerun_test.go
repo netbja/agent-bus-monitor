@@ -32,6 +32,24 @@ func runFixture(t *testing.T) (*bus.Bus, serviceRunDeps) {
 	return b, d
 }
 
+// runUntilCleanup runs serviceRun in the background until the test ends,
+// then stops it and waits for it to return. Its clean exit still writes the
+// restart budget under the test's temp dir (budget.End); a test that returned
+// without waiting raced that write against the dir's removal ("directory not
+// empty"). Cleanups run last-in first-out, so this one ends before the
+// fixture's temp dir is removed.
+func runUntilCleanup(t *testing.T, b *bus.Bus, kind string, args []string, d serviceRunDeps) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		var log bytes.Buffer
+		serviceRun(ctx, b, kind, args, d, &log)
+	}()
+	t.Cleanup(func() { cancel(); <-done })
+}
+
 func mark(t *testing.T, b *bus.Bus) {
 	t.Helper()
 	if err := b.MarkServicesInstalled(context.Background(), bus.ServicesInstall{Kinds: service.Kinds, Manager: "systemd", Host: "h1"}); err != nil {
@@ -147,9 +165,7 @@ func TestServiceRunDispatchLeavesReadyWhenTheLeaseIsLost(t *testing.T) {
 		<-ctx.Done()
 		return 0
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { var log bytes.Buffer; serviceRun(ctx, b, service.Dispatch, nil, d, &log) }()
+	runUntilCleanup(t, b, service.Dispatch, nil, d)
 	waitState(t, b, service.Dispatch, "ready")
 	close(lose)
 	if r := waitState(t, b, service.Dispatch, "starting"); !strings.Contains(r.Detail, "lease") {
@@ -172,9 +188,7 @@ func TestServiceRunMissionsPublishesTheConductorsLastIncident(t *testing.T) {
 		<-ctx.Done()
 		return nil
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { var log bytes.Buffer; serviceRun(ctx, b, service.Missions, []string{"--repo", repo}, d, &log) }()
+	runUntilCleanup(t, b, service.Missions, []string{"--repo", repo}, d)
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if r := record(t, b, service.Missions); r.State == "idle" && strings.Contains(r.Error, "conflict in a.go") {
@@ -429,9 +443,7 @@ func TestServiceRunAProbeInFlightCannotRestoreReady(t *testing.T) {
 		<-ctx.Done()
 		return 0
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { var log bytes.Buffer; serviceRun(ctx, b, service.Dispatch, nil, d, &log) }()
+	runUntilCleanup(t, b, service.Dispatch, nil, d)
 	waitState(t, b, service.Dispatch, "ready")
 	blocking.Store(true)
 	<-entered   // the heartbeat is probing with the lease held
