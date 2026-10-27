@@ -1,0 +1,24 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙ 4  ● 2   15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Bernard [human]  claude 5h 62% │ 7d 41%    
+╭─ For you ───────────────────────────────────────────── 4 for you · 2 unread ─╮
+│  ● ask    master    review lot 1? (2 questions)                            4m│
+│ ╭─ Compose ────────────────────────────────────────────────────────────────╮m│
+│ │ to: @coder                                                   · directive │m│
+│ │ Review lot 1 please: the reader, the ask mode and the cache.             │ │
+│ │ Thanks                                                                   │m│
+╰─│                                                                          │─╯
+╭─│                                                                          │─╮
+│▶│                                                                          │ ▲
+│ │                                                                          │ ┃
+│ │                                                                          │ ▼
+╰─│                                                                          │─╯
+╭─│                                                                          │─╮
+│ │                                                                          │ ▲
+│ │                                                                          │ │
+│ │                                                                          │ │
+│ │ ^S send   tab recipient   esc close (draft kept)              67 / 65536 │ ┃
+│ ╰──────────────────────────────────────────────────────────────────────────╯…┃
+│    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+›                                                                               
+ ^S send   tab recipient   esc close (draft kept)                               

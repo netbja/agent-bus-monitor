@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙ 4  ● 2         
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+╭─ Compose ────────────────────────────────────────────────╮
+│ to: @coder                                   · directive │
+│ Review lot 1 please: the reader, the ask mode and the    │
+│ cache.                                                   │
+│ Thanks                                                   │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│ ^S send   tab recipient   esc close (draft k… 67 / 65536 │
+╰──────────────────────────────────────────────────────────╯

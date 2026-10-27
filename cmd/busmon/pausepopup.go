@@ -152,27 +152,34 @@ func (pp *pausePopup) Draw(screen tcell.Screen) {
 	}
 	sx, sy, sw, sh := pp.GetRect()
 	r := pauseRect(sw, sh, pp.u.layout.Header.H)
+	r.X, r.Y = sx+r.X, sy+r.Y
+	pp.btns = drawPausePopup(tcellSink{screen}, r, pp.rec, pp.sel, time.Now())
+}
+
+// drawPausePopup draws the popup in r on any cell sink (tview's screen, the
+// shell's grid) and returns where each button went (zero: not drawn).
+func drawPausePopup(screen cellSink, r Rect, rec bus.PauseRecord, sel int, now time.Time) (btns [3]Rect) {
 	if r.W < 20 || r.H < 3 {
-		return
+		return btns
 	}
-	x, y := sx+r.X, sy+r.Y
+	x, y := r.X, r.Y
 	for dy := 0; dy < r.H; dy++ { // the popup covers what is under it
-		DrawLine(screen, x, y+dy, r.W, nil, false)
+		drawLine(screen, x, y+dy, r.W, nil, false)
 	}
-	DrawFrame(screen, x, y, r.W, r.H, Frame{Title: Line{{Text: "Project paused", Role: RoleText}}, Focused: true, Hue: RoleAttention})
+	drawFrame(screen, x, y, r.W, r.H, Frame{Title: Line{{Text: "Project paused", Role: RoleText}}, Focused: true, Hue: RoleAttention})
 	iw := r.W - 4
-	until := pp.rec.UntilTime().Local().Format("15:04")
-	if pp.rec.UntilTime().Sub(time.Now()) > 20*time.Hour {
-		until = pp.rec.UntilTime().Local().Format("Jan 2 15:04")
+	until := rec.UntilTime().Local().Format("15:04")
+	if rec.UntilTime().Sub(now) > 20*time.Hour {
+		until = rec.UntilTime().Local().Format("Jan 2 15:04")
 	}
 	why := ""
 	switch {
-	case pp.rec.Reason != "" && pp.rec.By != "":
-		why = fmt.Sprintf(" (%s, by %s)", pp.rec.Reason, pp.rec.By)
-	case pp.rec.Reason != "":
-		why = " (" + pp.rec.Reason + ")"
-	case pp.rec.By != "":
-		why = " (by " + pp.rec.By + ")"
+	case rec.Reason != "" && rec.By != "":
+		why = fmt.Sprintf(" (%s, by %s)", rec.Reason, rec.By)
+	case rec.Reason != "":
+		why = " (" + rec.Reason + ")"
+	case rec.By != "":
+		why = " (by " + rec.By + ")"
 	}
 	// The inner rows, the most needed kept first: buttons, then the message,
 	// the hints and the note as room allows (a small screen drops the rest).
@@ -194,23 +201,23 @@ func (pp *pausePopup) Draw(screen tcell.Screen) {
 		btnRow = 1
 	}
 	for i, l := range rows {
-		DrawLine(screen, x+2, y+1+i, iw, l, false)
+		drawLine(screen, x+2, y+1+i, iw, l, false)
 	}
 	bx, by := x+2, y+1+btnRow
 	for i, label := range pauseButtons {
-		seg := Seg{Text: " " + label + " ", Role: RoleAccent, Pill: i == pp.sel}
+		seg := Seg{Text: " " + label + " ", Role: RoleAccent, Pill: i == sel}
 		if i == 2 {
 			seg.Role = RoleMuted
 		}
 		w := Line{seg}.Width()
 		if bx+w > x+r.W-2 {
-			pp.btns[i] = Rect{}
 			continue
 		}
-		DrawLine(screen, bx, by, w, Line{seg}, false)
-		pp.btns[i] = Rect{bx, by, w, 1}
+		drawLine(screen, bx, by, w, Line{seg}, false)
+		btns[i] = Rect{bx, by, w, 1}
 		bx += w + 2
 	}
+	return btns
 }
 
 func (pp *pausePopup) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {

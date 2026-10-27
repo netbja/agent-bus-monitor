@@ -23,6 +23,7 @@ type snapshot struct {
 	holds                             map[string]int64
 	pace                              map[string]string
 	pause                             *bus.PauseRecord
+	pauseFailed                       bool // the last pause read failed: pause is the kept value
 	asks                              []bus.Ask
 	board                             map[string]bus.BoardEntry
 	requests                          []request
@@ -49,7 +50,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 		dispatch: st.dispatch, missions: st.missions, health: st.health,
 		guardian: summarizeGuardian(st.guardianHealth, guardNow),
 		agents:   make(map[string]*agentState, len(st.agents)),
-		budgets:  st.budgets, holds: st.holds, pace: maps.Clone(st.pace.last), pause: st.pause,
+		budgets:  st.budgets, holds: st.holds, pace: maps.Clone(st.pace.last), pause: st.pause, pauseFailed: st.pauseFailed,
 		asks: st.asks, board: st.board, requests: st.requests, threads: st.threads,
 		guardianHealth: st.guardianHealth, guardianNotes: st.guardianNotes, guardianNow: guardNow,
 		svcInst: st.svcInst, svcRecs: st.svcRecs,

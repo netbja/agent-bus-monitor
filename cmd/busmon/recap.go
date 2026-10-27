@@ -324,10 +324,18 @@ func (u *ui) activateRecapRow() {
 }
 
 func (u *ui) renderRecap() {
+	lines, cursorLine := recapBody(u.recap.Rows, u.recapCursor)
+	u.overlay.SetTitle(overlayTitle("Where was I?", GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter open "+GlyphNone+" Esc close"))
+	u.overlay.SetText(linesToTview(lines))
+	u.overlay.ScrollTo(max(0, cursorLine-3), 0) // keep the selected row in view
+}
+
+// recapBody is the recap's text with the cursor on row cursor, and the line
+// that row is on (tview's overlay and the shell's reader page draw it).
+func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {
 	var b body
 	lastSection := ""
-	cursorLine := 0
-	for i, row := range u.recap.Rows {
+	for i, row := range rows {
 		if row.Section != lastSection {
 			if len(b.Lines()) > 0 {
 				b.text("\n")
@@ -339,7 +347,7 @@ func (u *ui) renderRecap() {
 			continue
 		}
 		mark := S(RoleText, "  ")
-		if i == u.recapCursor && row.Selectable {
+		if i == cursor && row.Selectable {
 			cursorLine = b.at()
 			mark = S(RoleAccent, "> ")
 		}
@@ -352,9 +360,7 @@ func (u *ui) renderRecap() {
 			b.text("    ").seg(RoleMuted, Preview(row.Detail)).text("\n")
 		}
 	}
-	u.overlay.SetTitle(overlayTitle("Where was I?", GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter open "+GlyphNone+" Esc close"))
-	u.overlay.SetText(linesToTview(trimEnd(b.Lines())))
-	u.overlay.ScrollTo(max(0, cursorLine-3), 0) // keep the selected row in view
+	return trimEnd(b.Lines()), cursorLine
 }
 
 func (u *ui) openSummaryConfirmation() {
