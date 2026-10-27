@@ -242,6 +242,17 @@ func TestPromptNotifyDropsTheMarkOfAnAgentNoLongerObserved(t *testing.T) {
 	if marks, _ := b.QuotaMarks(ctx); marks[promptMark("coder")] != "10:1000" {
 		t.Fatalf("no mark: %v", marks)
 	}
+	// Still observed and still blocked: the sweep keeps its mark, so no pass
+	// rings the same episode again.
+	for _, at := range []int64{75_000, 90_000} {
+		l.observeAt("coder", bus.Observation{State: "blocked", PID: 10, Since: 1000, At: at})
+		if err := l.promptNotices(ctx, coderSnap); err != nil {
+			t.Fatal(err)
+		}
+		if marks, _ := b.QuotaMarks(ctx); marks[promptMark("coder")] != "10:1000" || len(desk.Sent()) != 1 {
+			t.Fatalf("at %d: marks %v, rang %q", at, marks, desk.Sent())
+		}
+	}
 	delete(l.obs, "coder")
 	l.observeAt("other", bus.Observation{State: "idle", PID: 3, Since: 1, At: 60_000})
 	if err := l.promptNotices(ctx, coderSnap); err != nil {
