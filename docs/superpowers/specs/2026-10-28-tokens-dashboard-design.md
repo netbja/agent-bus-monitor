@@ -55,14 +55,20 @@ Ask `1793108028807-0` (2026-10-27), relayed by master (`1793135892379-0`):
   8 days, capped at 512 fields (oldest `last` dropped first). Sessions before the record started
   stay **unattributed**, and say so; the record is never back-filled from `cwd` or directory names,
   which prove nothing.
-- **Not attributed is a row, not a hole.** Tokens of sessions no project's record names are summed
-  once per provider under **"not attributed"**, never assigned by transcript directory (a directory
-  name proves nothing either). In the panel it follows the open project's agents; in the CLI it
-  follows the projects; the person sees how much of the window nobody claims.
+- **"Not attributed" is a cross-project fact, so no project's dispatcher computes it.** It means
+  the tokens of sessions no project's record names; one project's dispatcher knows only its own
+  record, and N dispatchers scanning every transcript would each count the others' sessions (N
+  copies). Until the host dispatcher exists (decided, not built: `2026-10-26-host-dispatcher.md`),
+  its only owner is **the person's own command**: `agentbus tokens --unattributed` reads every
+  project's `{p}:sessions`, scans the host's transcripts itself (read-only, the same dedup, a
+  budget of 1 GiB, `partial` beyond), and prints the remainder per provider, never assigned by
+  transcript directory. busmon shows no such row; the `U` page says `not attributed: agentbus
+  tokens --unattributed` in its footer. When the host dispatcher lands, it writes one host-wide
+  total and both readers subtract the projects' attributed sums.
 - **Codex** (follow-up): Codex agents have no proved session today (no `CLAUDE_CODE_SESSION_ID`;
   the shared app-server's environment is not theirs). Until the launcher records the rollout id it
-  started (`AGENT_BUS_CODEX_SESSION`, bound like the pid), Codex tokens are counted per provider
-  under "not attributed", and a Codex agent's row reads `?` with the reason.
+  started (`AGENT_BUS_CODEX_SESSION`, bound like the pid), Codex tokens belong to no project: they appear
+  only in `agentbus tokens --unattributed`, and a Codex agent's row reads `?` with the reason.
 - **No credential is opened**: transcripts and session logs only, read as the same user, as the
   quota readers already do.
 
@@ -71,15 +77,24 @@ Ask `1793108028807-0` (2026-10-27), relayed by master (`1793135892379-0`):
 | Key | Content | Writer, cadence | Size |
 |---|---|---|---|
 | `{p}:sessions` | session → agent, provider, client, first, last | dispatch, every pass that sees a proved session | ≤ 512 fields, 8 days |
-| `{p}:tokens` | `<day>\|<agent>\|<provider>` → `{in, write, read, out, n}` (day in the host's local date; `in` = input, `write` = cache creation, `read` = cache read, `n` = requests), plus `<day>\|-\|<provider>` for not attributed | dispatch, every 5 min, **replaced whole** from a fresh scan | 8 days × (agents + 1) × providers: ≈ 100 fields |
+| `{p}:tokens` | `<day>\|<agent>\|<provider>` → `{in, write, read, out, n}` (day in the host's local date; `in` = input, `write` = cache creation, `read` = cache read, `n` = requests) | dispatch, every 5 min, **replaced whole** from the in-memory sums (below) | 8 days × agents × providers: ≈ 100 fields |
 | `{p}:quota:hist` | stream: `provider window pct at` | dispatch, when a window's reading changes or every 15 min | `MAXLEN ~ 2000` (3 providers × 2 windows × 24 h at 5 min fits) |
 
-- **Stateless recompute, no cursors.** Each 5-minute pass scans the files of the sessions in
-  `{p}:sessions` (plus their `subagents/`) whose mtime is within 8 days, deduplicates by
-  `(message.id, requestId)`, sums by local day, and replaces `{p}:tokens` in one fenced script. A
-  restart loses nothing; a crash mid-scan writes nothing. Bounds: at most 64 files and 256 MiB read
-  per pass, newest first; a pass over budget writes what it read with `partial: true` and busmon
-  shows `~` before the numbers.
+- **Incremental in memory, stateless across restarts.** Measured: transcripts modified within 8
+  days weigh 269 MB for this project alone and 592 MB on the host, one file 84 MB; re-reading them
+  every 5 minutes is out. The dispatch service keeps an **in-memory** map `(path, size, mtime) →
+  (offset, per-day sums, the ids of the request still open at the offset)`. Transcripts are
+  append-only, so each 5-minute pass reads only the bytes appended since the offset, up to the last
+  complete line. A file that shrank, or changed identity (inode), is rescanned from 0. Nothing of
+  this is persisted: after a restart the first passes rescan from 0, bounded per pass (64 files,
+  128 MiB, newest first) and resuming from their offsets on the next pass, and `{p}:tokens`
+  carries `partial: true` (busmon shows `~` before the numbers) until every file has been read
+  once. Only the session files of `{p}:sessions` (plus their `subagents/`) whose mtime is within 8
+  days are read. Each pass replaces `{p}:tokens` whole, from the in-memory sums, in one fenced
+  script; a crash between passes writes nothing.
+- **Paths are built only from valid ids.** Each session id from `{p}:sessions` passes
+  `sessionIDPattern` before it is joined into a transcript path (the record is fenced, but the
+  join does not trust it); a non-matching id is skipped and logged.
 - **Codex**: per rollout file, the delta of `total_token_usage` between its first and last
   `token_count` of each day (cumulative counters survive a missed event).
 - **Not in `projectKinds`**, and ignored by `HasKeysBesidesDispatch`: none of these keys discovers
@@ -97,12 +112,12 @@ A reader page over the lower zone, like `P`, three sections:
    **24-hour sparkline** of the window's percent from `{p}:quota:hist` (one cell per hour, the
    hour's last sample), the reset or the hold.
 2. **Projects side by side**: every project `bus.Projects` lists, the open one first, then by
-   today's tokens. Columns: today in (input + cache writes), today out, cache reads (wide only), a
+   today's tokens. Columns: today in (input + cache writes), today out (at 80 columns one `in+out` column), cache reads (wide only), a
    **7-day bar chart** (one cell per day, scaled to the largest day of all projects shown, so bars
    compare across rows), the 7-day total, and the project's share of today's tokens per provider (a
    bar at ≥160 columns). Projects without agents fold into one line.
-3. **The open project by agent, today**: agent, provider, in, out, and the reason for `?`. The
-   `not attributed` line follows. Enter on an agent opens its 7-day chart and its sessions.
+3. **The open project by agent, today**: agent, provider, in, out, and the reason for `?`. A footer names
+   `agentbus tokens --unattributed` for what no project claims. Enter on an agent opens its 7-day chart and its sessions.
 
 **Sparklines** need the eight lower blocks; the closed glyph set has `▇` and `█`. The six others,
 `▁▂▃▄▅▆` (U+2581–2586), join the set: single-cell, the same Unicode block as `▇`/`█`, checked by
@@ -140,7 +155,6 @@ agent-bus-monitor       5.1M       1.4M        884M  ▅▄▃▅ ▇█      23
 hyperliquid                0          0           0  ▁▁            0.5M
 ai-tradex-solana           0          0           0                   0
 busdev ks polymarket   no agents, no data
-not attributed          2.9M       873k           -                   -   (anthropic; sessions no agent proved)
 
 tokens = input + cache writes (IN) and output (OUT); cache reads apart; no cost, by rule.
 $ agentbus tokens --project agent-bus-monitor --by agent
@@ -151,7 +165,13 @@ coder           anthropic      345k        83k
 reviewer-codex  openai            ?          ?  Codex session not proved
 ui-kimi         moonshot          ?          ?  Kimi logs give no token counts
 sentinel        anthropic         0          0
-not attributed  anthropic      2.9M       873k  sessions no agent proves
+```
+
+The remainder nobody claims is the person's own scan:
+
+```
+$ agentbus tokens --unattributed
+not attributed today   anthropic 2.9M in · 873k out   openai ?   (sessions no project's record names; host scan, read-only)
 ```
 
 `--json` prints the same facts with `partial`, `observed_at` (the scan's Redis time) and the reason
@@ -185,7 +205,8 @@ in shape (no history exists yet; each ends at today's reading); every other numb
 │     reviewer-codex   openai          ? in       ? out   Codex session not proved (follow-up)                                                                                               │
 │     ui-kimi          moonshot        ? in       ? out   Kimi logs give no token counts                                                                                                     │
 │     sentinel         anthropic       0 in       0 out                                                                                                                                      │
-│     not attributed   anthropic    2.9M in    873k out   sessions before the session record, or never proved                                                                                │
+│                                                                                                                                                                                            │
+│ not attributed (sessions no project proves): agentbus tokens --unattributed                                                                                                                │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -212,7 +233,8 @@ in shape (no history exists yet; each ends at today's reading); every other numb
 │     reviewer-codex   openai          ? in      ? out  Codex session not proved (follow-up)                           │
 │     ui-kimi          moonshot        ? in      ? out  Kimi logs give no token counts                                 │
 │     sentinel         anthropic       0 in      0 out                                                                 │
-│     not attributed   anthropic    2.9M in   873k out  sessions before the session record, or never proved            │
+│                                                                                                                      │
+│ not attributed (sessions no project proves): agentbus tokens --unattributed                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -226,7 +248,7 @@ in shape (no history exists yet; each ends at today's reading); every other numb
 │  moonshot  7d ▇▇▇▇▇▇ 100% ████████████ held                                  │
 │                                                                              │
 │ projects, open one first (in + cache writes + out)                           │
-│  project            today  7 days   7d                                       │
+│  project           in+out  7 days   7d                                       │
 │  agent-bus-mon… ●    6.5M  ▅▄▃▅ ▇█  23.6M                                    │
 │  hyperliquid           0  ▁▁        0.5M                                     │
 │  ai-tradex-solana      0            0                                        │
@@ -239,7 +261,8 @@ in shape (no history exists yet; each ends at today's reading); every other numb
 │    reviewer-codex     ?/?     not proved                                     │
 │    ui-kimi            ?/?     no counts in logs                              │
 │    sentinel           0/0                                                    │
-│    not attributed  2.9M/873k  unproved sessions                              │
+│                                                                              │
+│ not attributed (sessions no project proves): agentbus tokens --unattributed  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -252,8 +275,14 @@ With a disposable broker (`AGENTBUS_TEST_REDIS_URL`) and fixture files only, nev
   count for their session; a line without usage or of another type counts nothing; a malformed
   line is skipped; local-day bucketing around midnight; the 64-file / 256 MiB budget sets
   `partial`.
+- **incremental scan**: appended bytes only (a fixture file grown between passes counts each
+  request once); a half-written last line waits for the next pass; a shrunk or replaced file is
+  rescanned; the first pass after a restart is bounded and resumes, `partial` until complete; an
+  id failing `sessionIDPattern` builds no path.
+- **unattributed**: `agentbus tokens --unattributed` subtracts every project's records, counts a
+  session once whatever directory holds it, and no dispatcher writes such a total.
 - **attribution**: only `IdentSession` enters `{p}:sessions` (a status naming another session
-  without a proof does not); a session no record names is "not attributed"; nothing is attributed
+  without a proof does not); a session no record names is in no project's sums; nothing is attributed
   from `cwd` or the directory name; pruning at 8 days and the 512 cap.
 - **Codex**: the daily delta of cumulative totals, a missing event in between, and the account
   identifiers never appear in any output or key (asserted on the fixture's values).
@@ -274,8 +303,8 @@ With a disposable broker (`AGENTBUS_TEST_REDIS_URL`) and fixture files only, nev
 
 ## Open questions for review
 
-1. Count cache reads in the headline total, or keep them apart (proposed: apart; they dominate by
-   two orders of magnitude and their weight against a window is not stated by any source)?
-2. The sparkline's 24 h at one cell per hour, or 48 half-hour cells at ≥160 columns?
-3. "Not attributed" shown once below the projects (proposed), or split by transcript directory
-   with a clear "unproved" label?
+1. Cache reads stay apart (foureyes agrees): they dominate by two orders of magnitude and no source
+   states their weight against a window.
+2. 24 one-hour cells (foureyes: fine).
+3. Settled by review: "not attributed" belongs to the person's `agentbus tokens --unattributed`
+   until the host dispatcher exists; busmon shows no such row.
