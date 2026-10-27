@@ -682,7 +682,12 @@ It never touches Redis — see README "Deployment topology".
   that state by the same pid, carried forward) and a failed inspection keeps the previous reading
   (`Observation.Fresh`, 120 s); a pane seen `blocked` (its client's own menu or permission prompt)
   reads `waiting` with the flag `prompt` (`promptWaiting`), one bell per `since`, unless the agent
-  declares blocked/waiting or has an open ask. An escalation caused by the pane's state (rules
+  declares blocked/waiting or has an open ask. The dispatcher also rings the desktop once per such episode
+  (`dispatch/promptnotify.go`, decision `docs/memory/decisions/2026-10-27-prompt-notify.md`): after
+  `AGENT_BUS_PROMPT_GRACE` s (default 30, `0` = off) of the same pid and `since`, with the same
+  suppressions plus a pause or a swap, through the context alert's `notify-send` runner (missing =
+  a logged note); its only write is the fenced mark `prompt:<agent>` (= `pid:since`) in `{p}:quota`,
+  deleted when the pane is no longer blocked. No bus entry, nothing typed. An escalation caused by the pane's state (rules
   7-8, `Decision.Cause` → wake `esc_cause`, or read from the reason of an older record) is
   re-armed once the pane is ready: the loop inspects such a record before `Decide`, tries clear
   and `at` stays. When the escalation target cannot act (it is the agent, its provider is held,

@@ -59,3 +59,35 @@ func TestServiceContextAlert(t *testing.T) {
 		t.Fatal("a missing notify-send must be skipped")
 	}
 }
+
+// The service's prompt notification: AGENT_BUS_PROMPT_GRACE seconds (default
+// 30, 0 = off, an invalid value keeps the default), through the same fake
+// notify-send runner; none when notify-send is missing.
+func TestServicePrompt(t *testing.T) {
+	var ran [][]string
+	run := func(_ context.Context, bin string, args ...string) error {
+		ran = append(ran, append([]string{bin}, args...))
+		return nil
+	}
+	found := func(string) (string, error) { return "/usr/bin/notify-send", nil }
+	missing := func(string) (string, error) { return "", exec.ErrNotFound }
+	for env, want := range map[string]time.Duration{"": 30 * time.Second, "0": 0, "90": 90 * time.Second, "abc": 30 * time.Second, "-5": 30 * time.Second, "99999": 30 * time.Second} {
+		cfg := servicePrompt(func(k string) string {
+			if k == "AGENT_BUS_PROMPT_GRACE" {
+				return env
+			}
+			return ""
+		}, found, run)
+		if cfg.Grace != want {
+			t.Fatalf("%q: grace %v, want %v", env, cfg.Grace, want)
+		}
+	}
+	cfg := servicePrompt(func(string) string { return "" }, found, run)
+	if err := cfg.Notify(context.Background(), "agentbus p", "p: coder waits on a prompt in its pane (w2:pA)"); err != nil || len(ran) != 1 ||
+		strings.Join(ran[0], " ") != "/usr/bin/notify-send -a agentbus agentbus p p: coder waits on a prompt in its pane (w2:pA)" {
+		t.Fatalf("ran %q, %v", ran, err)
+	}
+	if cfg := servicePrompt(func(string) string { return "" }, missing, run); cfg.Notify != nil {
+		t.Fatal("a missing notify-send must be skipped")
+	}
+}

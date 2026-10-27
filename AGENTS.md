@@ -29,6 +29,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 - [agent-bus is developed as an agent-bus project: worktrees, installed release, 4-eyes on the bus (active)](docs/memory/decisions/2026-10-20-dogfood-team.md)
 - [agent-bus as a herdr plugin: linked, Go, own templates, the picker never provisions (active)](docs/memory/decisions/2026-10-19-herdr-plugin.md)
 - [One dispatcher per host, conductor stays per project; decided, not built (active)](docs/memory/decisions/2026-10-26-host-dispatcher.md)
+- [A pane blocked on its client's prompt rings the desktop once per episode (active)](docs/memory/decisions/2026-10-27-prompt-notify.md)
 - [Relaunch closes the old pane once the new agent is proven (active)](docs/memory/decisions/2026-10-27-relaunch-close.md)
 - [Context fill as a percentage: from Claude Code's statusLine, published per agent (active)](docs/memory/decisions/2026-10-27-context-fill.md)
 - [Project services: dispatch and missions under systemd/launchd, not tabs (active)](docs/memory/decisions/2026-10-14-project-services.md)
