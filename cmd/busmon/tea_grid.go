@@ -9,8 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// The shell's View paints onto a grid of cells with the same geometry tview
-// draws with (drawLine, drawFrame), then turns each row into styled spans
+// The shell's View paints onto a grid of cells (drawLine, drawFrame), then turns each row into styled spans
 // (busmon Charm spec, step b). lipgloss styles spans; it never lays boxes out,
 // so a frame cannot wrap by one cell.
 
@@ -139,8 +138,8 @@ func (p *painter) paint(l Line) string {
 }
 
 // lipStyle is a cell's style for the shell: the same resolution as
-// tcellStyle, through the same palette (busmon Charm spec's Theme.Style(Role)
-// lipgloss.Style; Theme.Style stays tcell's until step c removes tview).
+// tcellStyle, through the same palette: the theme keeps its colours as tcell
+// values, the one use of tcell left.
 func (t *Theme) lipStyle(c cellStyle) lipgloss.Style {
 	return lipFrom(t.tcellStyle(c))
 }

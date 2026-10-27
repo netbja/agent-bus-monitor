@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 type Role int
@@ -32,7 +31,7 @@ const (
 	PaletteNone
 )
 
-// Theme is immutable after resolution. It never changes tview's global styles.
+// Theme is immutable after resolution.
 type Theme struct {
 	palette   Palette
 	colors    [10]tcell.Color
@@ -190,38 +189,6 @@ func (t *Theme) Border(focused bool) tcell.Style {
 	return t.Style(RoleLine)
 }
 
-// segTag is one segment as tview tagged text, its text escaped: the colour of
-// its role (none with the none palette), bold when the segment is. Only
-// linesToTview calls it: the one place a tview tag is written.
-func (t *Theme) segTag(s Seg) string {
-	text := tview.Escape(s.Text)
-	if t.palette != PaletteNone && t.tags[themeRole(s.Role)] != "-" {
-		text = "[" + t.tags[themeRole(s.Role)] + "]" + text + "[-]"
-	}
-	if s.Bold {
-		text = "[::b]" + text + "[::-]"
-	}
-	return text
-}
-
-func (t *Theme) StyleInput(f *tview.InputField) {
-	f.SetBackgroundColor(tcell.ColorDefault)
-	f.SetBorderStyle(t.Border(false))
-	f.SetTitleColor(t.colors[RoleText])
-	f.SetFieldStyle(t.Style(RoleText))
-	f.SetLabelStyle(t.Style(RoleAccent))
-	f.SetPlaceholderStyle(t.Style(RoleMuted))
-	f.SetAutocompleteStyles(tcell.ColorDefault, t.Style(RoleText), t.Selected(RoleText))
-	f.SetAutocompleteUseTags(false)
-}
-
-func (t *Theme) StyleTextView(v *tview.TextView) {
-	v.SetBackgroundColor(tcell.ColorDefault)
-	v.SetTextStyle(t.Style(RoleText))
-	v.SetBorderStyle(t.Border(false))
-	v.SetTitleColor(t.colors[RoleText])
-}
-
 var th *Theme
 
 func init() { th, _ = ResolveTheme("dark", "", "", false, 1<<24) }
@@ -244,12 +211,11 @@ const (
 	GlyphBarEmpty  = "░"
 	GlyphGauge     = "▇"
 	// The updated column's freshness gauge: the same two dots as working/idle.
-	GlyphDotFull  = GlyphWorking
-	GlyphDotEmpty = GlyphIdle
-	GlyphPrompt   = "›"
-	GlyphHuman    = "♙" // a person on the bus (busmon), never an agent
-	GlyphNotEqual = "≠" // model≠: the running model is not the configured one
-	// Border glyphs are kept here too; Task 10 owns tview.Borders.
+	GlyphDotFull     = GlyphWorking
+	GlyphDotEmpty    = GlyphIdle
+	GlyphPrompt      = "›"
+	GlyphHuman       = "♙" // a person on the bus (busmon), never an agent
+	GlyphNotEqual    = "≠" // model≠: the running model is not the configured one
 	glyphVertical    = "│"
 	glyphThumb       = "┃"
 	glyphHorizontal  = "─"

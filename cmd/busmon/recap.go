@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/plan"
@@ -29,62 +27,6 @@ type recapReader interface {
 
 type healthTransitionReader interface {
 	HealthTransitions(context.Context, string, int64) ([]guardian.Transition, string, error)
-}
-
-func (u *ui) maybeAutoRecap() {
-	if u.recapAutoDone {
-		return
-	}
-	u.st.mu.Lock()
-	ready := !u.st.lastPollAt.IsZero()
-	u.st.mu.Unlock()
-	if !ready {
-		return
-	}
-	u.recapAutoDone = true
-	now := time.Now()
-	auto := !u.priorVisit.IsZero() && u.settings.AutoAfter > 0 && now.Sub(u.priorVisit) >= u.settings.AutoAfter
-	if u.cache != nil {
-		u.cache.LastVisit = now.UnixMilli()
-		if err := u.cache.save(u.cachePath); err != nil {
-			u.st.mu.Lock()
-			u.st.configNote = joinNote(u.st.configNote, "last visit not saved")
-			u.st.mu.Unlock()
-		}
-	}
-	if auto {
-		u.requestRecap(true)
-	}
-}
-
-func (u *ui) requestRecap(auto bool) {
-	if u.recapLoading {
-		return
-	}
-	r, ok := u.w.(recapReader)
-	if !ok {
-		u.recap = buildRecap(recapInput{Now: time.Now(), Since: u.priorVisit, Human: u.self,
-			Errors: map[string]error{"Bus": fmt.Errorf("recap reader unavailable")}})
-		u.recapPending = true
-		u.maybeOpenRecap()
-		return
-	}
-	u.recapLoading = true
-	since, human := u.priorVisit, u.self
-	unread := u.unreadEvents() // the UI goroutine's state, read before the async read
-	if auto {                  // already on the event loop (key or tick): no queued update
-		u.flash, u.flashErr = "building project recap"+GlyphEllipsis, false
-	}
-	go func() {
-		ctx, cancel := context.WithTimeout(u.ctx, 7*time.Second)
-		defer cancel()
-		model := readRecap(ctx, r, u.st, since, human, unread)
-		u.app.QueueUpdateDraw(func() {
-			u.recap, u.recapLoading, u.recapPending = model, false, true
-			u.recapCursor = firstRecapSelection(model.Rows)
-			u.maybeOpenRecap()
-		})
-	}()
 }
 
 func readRecap(ctx context.Context, r recapReader, st *shared, since time.Time, human string, unread []bus.Event) recapModel {
@@ -240,98 +182,8 @@ func firstRecapSelection(rows []recapRow) int {
 	return 0
 }
 
-func (u *ui) uiBusyForModal() bool {
-	return u.comp.open || u.ov != ovNone || u.composing != ModePanel || strings.TrimSpace(u.msgDraft) != "" ||
-		strings.TrimSpace(u.input.GetText()) != "" || u.askChoose != nil
-}
-
-func (u *ui) maybeOpenRecap() {
-	if !u.recapPending || u.uiBusyForModal() {
-		return
-	}
-	u.recapPending = false
-	u.showOverlay(ovRecap, "", nil, "", "")
-	u.renderRecap()
-}
-
-func (u *ui) recapKey(ev *tcell.EventKey) *tcell.EventKey {
-	switch {
-	case ev.Key() == tcell.KeyEscape:
-		u.closeOverlay()
-	case ev.Key() == tcell.KeyUp || ev.Key() == tcell.KeyBacktab || ev.Key() == tcell.KeyRune && ev.Rune() == 'k':
-		u.moveRecap(-1)
-	case ev.Key() == tcell.KeyDown || ev.Key() == tcell.KeyTab || ev.Key() == tcell.KeyRune && ev.Rune() == 'j':
-		u.moveRecap(1)
-	case ev.Key() == tcell.KeyEnter:
-		u.activateRecapRow()
-	}
-	return nil
-}
-
-func (u *ui) moveRecap(step int) {
-	if len(u.recap.Rows) == 0 {
-		return
-	}
-	i := u.recapCursor
-	for n := 0; n < len(u.recap.Rows); n++ {
-		i = (i + step + len(u.recap.Rows)) % len(u.recap.Rows)
-		if u.recap.Rows[i].Selectable {
-			u.recapCursor = i
-			u.renderRecap()
-			return
-		}
-	}
-}
-
-func (u *ui) activateRecapRow() {
-	if u.recapCursor < 0 || u.recapCursor >= len(u.recap.Rows) {
-		return
-	}
-	r := u.recap.Rows[u.recapCursor]
-	if !r.Selectable {
-		return
-	}
-	if r.Kind == "summary" {
-		u.openSummaryConfirmation()
-		return
-	}
-	u.closeOverlayQuiet()
-	switch r.Kind {
-	case "ask":
-		u.openAskPanel(r.Agent)
-	case "agent":
-		u.openAgent(r.Agent)
-	case "board":
-		u.openTask(r.Task)
-	case "thread":
-		u.openMessage(r.Event, eventTimestamp(r.Event.ID))
-	case "verdict":
-		if r.Verdict != nil {
-			v := r.Verdict
-			var b body
-			b.seg(RoleAttention, strings.ToUpper(v.Decision)).text("\n").seg(RoleMuted, v.Reviewer+" reviewed "+v.Author).text("\n\n").text(Preview(v.Message))
-			u.showOverlay(ovMessage, "Verdict "+GlyphNone+" "+v.Subject, b.Lines(), "", "")
-		}
-	case "swap":
-		if r.Swap != nil {
-			u.showOverlay(ovMessage, "Swap "+GlyphNone+" "+r.Swap.Role, []Line{{S(RoleText, Preview(swapDescription(*r.Swap)))}}, "", "")
-		}
-	case "services":
-		u.openServicesOverlay()
-	case "pause":
-		u.showOverlay(ovMessage, "Project pause", []Line{{S(RoleText, Preview(r.Detail))}}, "", "")
-	}
-}
-
-func (u *ui) renderRecap() {
-	lines, cursorLine := recapBody(u.recap.Rows, u.recapCursor)
-	u.overlay.SetTitle(overlayTitle("Where was I?", GlyphUp+GlyphDownArrow+" select "+GlyphNone+" Enter open "+GlyphNone+" Esc close"))
-	u.overlay.SetText(linesToTview(lines))
-	u.overlay.ScrollTo(max(0, cursorLine-3), 0) // keep the selected row in view
-}
-
 // recapBody is the recap's text with the cursor on row cursor, and the line
-// that row is on (tview's overlay and the shell's reader page draw it).
+// that row is on (its reader page draws it).
 func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {
 	var b body
 	lastSection := ""
@@ -361,46 +213,4 @@ func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {
 		}
 	}
 	return trimEnd(b.Lines()), cursorLine
-}
-
-func (u *ui) openSummaryConfirmation() {
-	if u.recap.SummaryDisabled != "" {
-		return
-	}
-	u.showOverlay(ovSummaryConfirm, "", nil, "", "")
-	u.overlay.SetTitle(lineToTview(Line{S(RoleText, " "), S(RoleAttention, "Send summary request?"), S(RoleText, " ")}))
-	var b body
-	b.text("This sends a message to "+u.recap.Target+" and uses its tokens.\n").seg(RoleMuted, "y confirm "+GlyphNone+" n or Esc cancel")
-	u.overlay.SetText(linesToTview(b.Lines()))
-}
-
-func (u *ui) summaryConfirmKey(ev *tcell.EventKey) *tcell.EventKey {
-	switch {
-	case ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyRune && (ev.Rune() == 'n' || ev.Rune() == 'N'):
-		u.closeOverlayQuiet()
-		u.recapPending = true
-		u.maybeOpenRecap()
-	case ev.Key() == tcell.KeyRune && (ev.Rune() == 'y' || ev.Rune() == 'Y'):
-		u.sendRecapSummary()
-	}
-	return nil
-}
-
-func (u *ui) sendRecapSummary() {
-	if u.recap.SummaryDisabled != "" {
-		return
-	}
-	u.closeOverlayQuiet()
-	since := "the most recent available history"
-	if !u.priorVisit.IsZero() {
-		since = u.priorVisit.Local().Format(time.RFC3339)
-	}
-	body := "Summarise where the project stands for me: what was done since " + since +
-		", what is in progress, what you expect from me. Answer on the bus with agentbus reply."
-	result := u.send(u.recap.Target, body, true, false)
-	if result != sendSent {
-		u.recapPending = true
-		u.maybeOpenRecap()
-		return
-	}
 }

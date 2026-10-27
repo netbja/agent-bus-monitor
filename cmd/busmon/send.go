@@ -9,8 +9,8 @@ import (
 )
 
 // The one send path of the line and of the compose window (v0.16 §7), in
-// three parts so that tview (ui.send, all at once) and the step-b shell (the
-// calls in a command, busmon Charm spec "Input") apply the same rules:
+// three parts, so that the bus calls run in a command (busmon Charm spec,
+// "Input"):
 // planSend decides from the text and the state (the open-question hint, the
 // broadcast warning, an unknown recipient, @all's targets), exec makes the
 // bus calls, outcome reads their errors into a result and a flash.

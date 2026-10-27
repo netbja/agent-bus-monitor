@@ -495,7 +495,9 @@ func (m *Model) gotAnswer(msg answerMsg) {
 		m.pop()
 		return
 	}
-	if msg.id != "" {
+	// The answer landed on a replacement: follow it once the snapshot holds it
+	// (until then pageAsk follows replaced_by, and the page stays open).
+	if _, known := findAsk(m.snap.asks, msg.id); msg.id != "" && known {
 		p.ask.id, p.key = msg.id, msg.id
 	}
 	if a, ok := m.pageAsk(p); ok {

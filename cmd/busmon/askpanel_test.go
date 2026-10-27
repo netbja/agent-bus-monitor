@@ -1,12 +1,9 @@
 package main
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/gdamore/tcell/v2"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -48,48 +45,6 @@ func askShared(now time.Time) *shared {
 	return st
 }
 
-func TestAskPanelSendsEachAnswerAtOnce(t *testing.T) {
-	h := newHarness(t, askShared(time.Now()))
-	h.draw(160, 45)
-	if waitingQuestions(h.u.st.agents) != 2 {
-		t.Fatalf("header count %d, want the 2 open questions", waitingQuestions(h.u.st.agents))
-	}
-	h.key(runeKey('!'))
-	if h.u.ov != ovAsk || h.u.ask.q != 1 || h.u.ask.opt != 0 {
-		t.Fatalf("panel: ov %v cursor %+v (want the first open question, recommended option)", h.u.ov, h.u.ask)
-	}
-	h.w.left = 1
-	h.key(runeKey('2'))
-	h.key(key(tcell.KeyEnter))
-	if got := strings.Join(h.w.sent, "|"); got != "answer 100-0 date Wed 10:00" {
-		t.Fatalf("sent %q", got)
-	}
-	if h.u.ov != ovAsk || h.u.ask.q != 2 {
-		t.Fatalf("after the answer: ov %v q %d (want the next open question)", h.u.ov, h.u.ask.q)
-	}
-	h.key(runeKey('?'))
-	if h.u.ov != ovHelp {
-		t.Fatal("? must open the help from the ask panel")
-	}
-	h.key(key(tcell.KeyEscape))
-	h.key(runeKey('!'))
-	h.u.ask.q = 2
-	h.w.left = 0
-	h.key(runeKey('3')) // Other...
-	h.key(key(tcell.KeyEnter))
-	if h.u.mode() != ModeCompose || h.u.comp.kind != composeAnswer {
-		t.Fatal("Other did not open the compose window for an answer")
-	}
-	h.typeText("ship dev")
-	h.key(key(tcell.KeyCtrlS))
-	if got := h.w.sent[len(h.w.sent)-1]; got != "answer 100-0 sha ship dev" {
-		t.Fatalf("free text sent %q", got)
-	}
-	if h.u.ov != ovNone {
-		t.Fatal("the last answer must close the panel")
-	}
-}
-
 func TestAskRowFadesWhateverTheAgentDeclared(t *testing.T) {
 	now := time.Now()
 	st := askShared(now)
@@ -110,54 +65,6 @@ func TestRequestsLabelAddsQuestionsOnce(t *testing.T) {
 	}
 }
 
-func TestAskPanelStaysOnARefusal(t *testing.T) {
-	h := newHarness(t, askShared(time.Now()))
-	h.draw(160, 45)
-	h.key(runeKey('!'))
-	h.w.fail = errors.New("ask refused: this question is already answered")
-	h.w.asks = []bus.Ask{demoAsk()}
-	h.key(key(tcell.KeyEnter))
-	if h.u.ov != ovAsk || !strings.Contains(h.u.flash, "already answered") {
-		t.Fatalf("panel %v flash %q: a refusal must keep the panel and say why", h.u.ov, h.u.flash)
-	}
-}
-
-func TestAskPanelFollowsAReplacement(t *testing.T) {
-	now := time.Now()
-	st := askShared(now)
-	old := demoAsk()
-	h := newHarness(t, st)
-	h.draw(160, 45)
-	h.key(runeKey('!'))
-	repl := demoAsk()
-	repl.ID = "200-0"
-	repl.Questions[1].Answer = &bus.AskAnswer{Choice: "Mon 10:00", By: "bernard"}
-	old.State, old.ReplacedBy = "replaced", "200-0"
-	h.w.asks = []bus.Ask{old, repl}
-	h.w.answerID, h.w.left = "200-0", 1
-	h.key(key(tcell.KeyEnter))
-	if h.u.ov != ovAsk || h.u.ask.id != "200-0" || h.u.ask.q != 2 {
-		t.Fatalf("panel %v on %s q %d: must follow the replacement to its open question", h.u.ov, h.u.ask.id, h.u.ask.q)
-	}
-}
-
-func TestBellRingsOncePerAskNotOnItsCompletion(t *testing.T) {
-	now := time.Now()
-	h := newHarness(t, demoShared(now))
-	rings := 0
-	h.u.bell = func() { rings++ }
-	h.u.st.agents["master"] = &agentState{state: "waiting", stateAt: now}
-	h.u.onTick() // a plain waiting declaration
-	h.u.st.agents["master"].askID, h.u.st.agents["master"].openAsk = "100-0", 2
-	h.u.onTick() // the ask
-	h.u.onTick()
-	h.u.st.agents["master"].askID, h.u.st.agents["master"].openAsk = "", 0
-	h.u.onTick() // answered: the same waiting declaration again
-	if rings != 2 {
-		t.Fatalf("rings %d, want 2 (the waiting, the ask; not the completion)", rings)
-	}
-}
-
 func TestActivityAskRowReadsTheHash(t *testing.T) {
 	currentAsks = map[string]bus.Ask{"100-0": demoAsk()}
 	t.Cleanup(func() { currentAsks = map[string]bus.Ask{} })
@@ -170,18 +77,5 @@ func TestActivityAskRowReadsTheHash(t *testing.T) {
 func TestCopiesAreSanitised(t *testing.T) {
 	if got := agentDetailPlain(&agentState{message: "ok\x1b[31m‮evil"}); strings.ContainsAny(got, "\x1b‮") {
 		t.Fatalf("copy kept a control: %q", got)
-	}
-}
-
-func TestYCopiesTheQuestion(t *testing.T) {
-	h := newHarness(t, askShared(time.Now()))
-	h.draw(160, 45)
-	h.key(runeKey('!'))
-	if !strings.Contains(h.u.ovPlain, "When should it open?") || !strings.Contains(h.u.ovPlain, "1. Mon 10:00") {
-		t.Fatalf("copy buffer %q", h.u.ovPlain)
-	}
-	h.key(runeKey('y'))
-	if h.u.ov != ovAsk || !strings.Contains(h.u.flash, "question copied") {
-		t.Fatalf("y: panel %v flash %q", h.u.ov, h.u.flash)
 	}
 }

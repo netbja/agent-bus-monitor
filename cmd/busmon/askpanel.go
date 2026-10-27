@@ -1,13 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
-	"time"
-
-	"github.com/gdamore/tcell/v2"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -58,36 +54,6 @@ func firstOpenQuestion(a bus.Ask, from int) int {
 	return -1
 }
 
-// openAskPanel opens the ask of agent (or, with "", the oldest open ask).
-func (u *ui) openAskPanel(agent string) {
-	u.st.mu.Lock()
-	asks := openAsks(u.st.asks)
-	u.st.mu.Unlock()
-	var target *bus.Ask
-	for i := range asks {
-		if agent == "" || asks[i].From == agent {
-			target = &asks[i]
-			break
-		}
-	}
-	if target == nil {
-		u.flash, u.flashErr = "no open question", false
-		return
-	}
-	q := max(firstOpenQuestion(*target, 0), 0)
-	u.ask = askPanel{id: target.ID, q: q, opt: recommendedIndex(target.Questions[q].AskQuestion)}
-	u.showOverlay(ovAsk, askTitle(*target), nil, "", "")
-	u.renderAsk()
-}
-
-// agentHasAsk reports whether the agent has an open ask.
-func (u *ui) agentHasAsk(agent string) bool {
-	u.st.mu.Lock()
-	defer u.st.mu.Unlock()
-	a := u.st.agents[agent]
-	return a != nil && a.openAsk > 0
-}
-
 func askTitle(a bus.Ask) string {
 	return fmt.Sprintf("%s %s asks %s %s", GlyphHuman, Preview(a.From), GlyphNone, Preview(a.Title))
 }
@@ -99,77 +65,6 @@ func recommendedIndex(q bus.AskQuestion) int {
 		}
 	}
 	return 0
-}
-
-// renderAsk redraws the panel body from the shared asks, following a
-// replacement to the open version (a reload when it is not known yet).
-func (u *ui) renderAsk() {
-	a, ok := u.currentAsk()
-	if !ok {
-		u.reloadAsks()
-		if a, ok = u.currentAsk(); !ok {
-			u.closeOverlay()
-			return
-		}
-	}
-	if a.Open() == 0 && a.State != "open" {
-		u.closeOverlay()
-		return
-	}
-	if u.ask.q >= len(a.Questions) {
-		u.ask.q = 0
-	}
-	u.overlay.SetText(linesToTview(askPanelBody(a, u.ask, max(30, overlayInnerWidth(u.width)))))
-	q := a.Questions[u.ask.q]
-	plain := q.Question
-	if q.Context != "" {
-		plain += "\n\n" + q.Context
-	}
-	for i, o := range q.Options {
-		plain += fmt.Sprintf("\n%d. %s", i+1, o.Label)
-		if o.Description != "" {
-			plain += " - " + o.Description
-		}
-	}
-	u.ovPlain = CopyText(plain)
-}
-
-// currentAsk is the panel's ask, following replaced_by to the open version.
-func (u *ui) currentAsk() (bus.Ask, bool) {
-	u.st.mu.Lock()
-	defer u.st.mu.Unlock()
-	id := u.ask.id
-	for hops := 0; hops < 8; hops++ {
-		a, ok := findAsk(u.st.asks, id)
-		if !ok {
-			return bus.Ask{}, false
-		}
-		if a.State == "replaced" && a.ReplacedBy != "" {
-			id = a.ReplacedBy
-			continue
-		}
-		if id != u.ask.id {
-			u.ask.id = id
-			u.ask.q = max(firstOpenQuestion(a, 0), 0)
-			u.ask.opt = recommendedIndex(a.Questions[u.ask.q].AskQuestion)
-		}
-		return a, true
-	}
-	return bus.Ask{}, false
-}
-
-// reloadAsks reads the asks now (after a refusal, or to find a replacement
-// the poll has not brought yet).
-func (u *ui) reloadAsks() {
-	ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
-	defer cancel()
-	asks, err := u.w.Asks(ctx)
-	if err != nil {
-		return
-	}
-	u.st.mu.Lock()
-	u.st.asks = asks
-	u.st.mu.Unlock()
 }
 
 // askPanelBody is the panel's text: the tab strip, the question, its context
@@ -267,132 +162,6 @@ func wrapIndented(s string, width int, indent string) []Line {
 	return wrapSpans([]mdSpan{{text: DetailText(s), role: RoleMuted}}, width, indent, indent)
 }
 
-// askKey is the panel's key handler (ModeAsk).
-func (u *ui) askKey(ev *tcell.EventKey) *tcell.EventKey {
-	u.st.mu.Lock()
-	a, ok := findAsk(u.st.asks, u.ask.id)
-	u.st.mu.Unlock()
-	if !ok {
-		u.closeOverlay()
-		return nil
-	}
-	p := &u.ask
-	if p.q >= len(a.Questions) {
-		p.q = 0
-	}
-	q := a.Questions[p.q]
-	act := lookup(ModeAsk, u.focus, u.tier(), keyOf(ev))
-	switch act {
-	case ActQuit:
-		u.app.Stop()
-	case ActClose:
-		u.closeOverlay()
-		return nil
-	case ActHelp:
-		u.showOverlay(ovHelp, "Help", helpText(), "", "")
-		return nil
-	case ActCopy:
-		u.copyText(u.ovPlain, "question")
-	case ActUp:
-		p.opt = max(p.opt-1, 0)
-	case ActDown:
-		p.opt = min(p.opt+1, len(q.Options))
-	case ActAskNext, ActAskPrev:
-		step := 1
-		if act == ActAskPrev {
-			step = len(a.Questions) - 1
-		}
-		p.q = (p.q + step) % len(a.Questions)
-		p.opt = recommendedIndex(a.Questions[p.q].AskQuestion)
-	case ActAskPick:
-		if n := int(ev.Rune() - '1'); n >= 0 && n <= len(q.Options) {
-			p.opt = n
-		}
-	case ActSend:
-		if q.Answer != nil {
-			break
-		}
-		if p.opt == len(q.Options) {
-			u.openAnswerComposer(a, q, "")
-			return nil
-		} else {
-			label := q.Options[p.opt].Label
-			send := func() {
-				u.sendAnswer(a, q, label, "")
-				if u.ov == ovAsk {
-					u.renderAsk()
-				}
-			}
-			if u.pauseGate("answer|"+a.ID+"|"+q.ID+"|"+label, send) {
-				return nil
-			}
-			u.sendAnswer(a, q, label, "")
-		}
-	}
-	if u.ov == ovAsk {
-		u.renderAsk()
-	}
-	return nil
-}
-
-// sendAnswer sends one answer now, records it locally, and moves on to the
-// next open question; the last one closes the panel. It reports whether the
-// answer was accepted: a failure keeps the caller's text (v0.16 §6).
-func (u *ui) sendAnswer(a bus.Ask, q bus.AskQuestionState, choice, text string) bool {
-	ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
-	defer cancel()
-	id, left, err := u.w.Answer(ctx, a.ID, q.ID, u.self, choice, text)
-	if err == nil {
-		u.pauseAck = "" // the acknowledgement was for this one send
-	}
-	if err != nil { // say why, and show the ask as it is now (answered elsewhere, replaced)
-		u.flash, u.flashErr = "answer not sent: "+Preview(err.Error()), true
-		u.reloadAsks()
-		return false
-	}
-	value := choice
-	if value == "" {
-		value = text
-	}
-	u.st.mu.Lock()
-	for i := range u.st.asks {
-		if u.st.asks[i].ID != id {
-			continue
-		}
-		for j := range u.st.asks[i].Questions {
-			if u.st.asks[i].Questions[j].ID == q.ID {
-				if choice != "" {
-					u.st.asks[i].Questions[j].Answer = &bus.AskAnswer{Choice: choice, By: u.self, At: time.Now().UnixMilli()}
-				} else {
-					u.st.asks[i].Questions[j].Answer = &bus.AskAnswer{Text: text, By: u.self, At: time.Now().UnixMilli()}
-				}
-			}
-		}
-		if left == 0 {
-			u.st.asks[i].State = "answered"
-		}
-	}
-	updated, known := findAsk(u.st.asks, id)
-	u.st.mu.Unlock()
-	if !known { // answered on a replacement the poll has not brought yet
-		u.reloadAsks()
-		u.st.mu.Lock()
-		updated, _ = findAsk(u.st.asks, id)
-		u.st.mu.Unlock()
-	}
-	u.flash, u.flashErr = fmt.Sprintf("%s %s: %s sent to %s", GlyphDone, Preview(q.Header), Preview(value), Preview(a.From)), false
-	if left == 0 {
-		u.closeOverlay()
-		return true
-	}
-	u.ask.id = id
-	if n := firstOpenQuestion(updated, u.ask.q+1); n >= 0 {
-		u.ask.q = n
-		u.ask.opt = recommendedIndex(updated.Questions[n].AskQuestion)
-	}
-	return true
-}
-
 // askSummary leads an agent's detail when it has an open ask.
 func askSummary(a bus.Ask) []Line {
 	var b body
@@ -406,18 +175,6 @@ func askSummary(a bus.Ask) []Line {
 	}
 	b.seg(RoleAttention, "  enter").seg(RoleMuted, " (or ! or w) to answer").text("\n\n")
 	return b.Lines()
-}
-
-// openAskPrefilled opens agent's ask on its first open question, with text as
-// a free answer being typed: nothing is sent before the panel's own submit.
-func (u *ui) openAskPrefilled(agent, text string) {
-	u.openAskPanel(agent)
-	if u.ov != ovAsk || text == "" {
-		return
-	}
-	if a, ok := u.currentAsk(); ok && u.ask.q < len(a.Questions) && a.Questions[u.ask.q].Answer == nil {
-		u.openAnswerComposer(a, a.Questions[u.ask.q], text)
-	}
 }
 
 // askChoice is the pending pick between several recipients' questions.

@@ -1,12 +1,9 @@
 package main
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 func TestForYouHint(t *testing.T) {
@@ -45,25 +42,6 @@ func TestForYouFlagOnlyHints(t *testing.T) {
 	}
 	if _, word, _, _ := stateLook(a); word != "idle" {
 		t.Fatalf("declared state relabelled %q", word)
-	}
-}
-
-func TestPollAndTailSetTheHint(t *testing.T) {
-	f := &fakeReader{calls: map[string]int{}, snaps: map[string]bus.AgentSnapshot{
-		"master": {State: "idle", Message: "lot 1 delivered; awaiting bernard", TS: 1},
-		"coder":  {State: "idle", Message: "done", TS: 1}}}
-	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{},
-		health: health{ok: true}, person: "bernard"}
-	pollOnce(context.Background(), f, st, 1)
-	if !st.agents["master"].forYou || st.agents["coder"].forYou {
-		t.Fatalf("poll: master %v coder %v", st.agents["master"].forYou, st.agents["coder"].forYou)
-	}
-
-	h := newHarness(t, st)
-	h.u.ingest(bus.Event{ID: "2-0", Kind: "status", Agent: "master", State: "working", Message: "on it"})
-	h.u.ingest(bus.Event{ID: "3-0", Kind: "status", Agent: "coder", State: "idle", Message: "handed to Bernard"})
-	if st.agents["master"].forYou || !st.agents["coder"].forYou {
-		t.Fatalf("tail: master %v coder %v", st.agents["master"].forYou, st.agents["coder"].forYou)
 	}
 }
 

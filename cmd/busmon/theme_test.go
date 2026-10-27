@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/gdamore/tcell/v2"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -8,9 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 func TestGlyphsAreSingleCell(t *testing.T) {
@@ -111,23 +109,10 @@ func TestStyleRoles(t *testing.T) {
 	if fg != tcell.ColorDefault || bg != tcell.ColorDefault {
 		t.Fatal(fg, bg)
 	}
-	if got := dark.segTag(S(RoleOK, "[x]")); got != "[#7ee2a8][x[][-]" {
-		t.Fatal(got)
-	}
-	if got := none.segTag(S(RoleOK, "[x]")); got != "[x[]" {
-		t.Fatal(got)
-	}
-	if got := none.segTag(Seg{Text: "b", Role: RoleOK, Bold: true}); got != "[::b]b[::-]" {
-		t.Fatal(got) // bold stays without colours, as the markdown's [::b] did
-	}
 	for thm, want := range map[*Theme]string{dark: "#22324A", light: "#DDF4FF"} {
 		if _, bg, _ := thm.Selected(RoleText).Decompose(); bg != tcell.GetColor(want) {
 			t.Fatal("selection background", bg, want)
 		}
-	}
-	c16, _ := ResolveTheme("dark", "", "", false, 16)
-	if got := c16.segTag(S(RoleText, "x")); got != "x" {
-		t.Fatal(got)
 	}
 	for _, colors := range []int{16, 1 << 24} {
 		for _, n := range []bool{false, true} {
@@ -145,55 +130,5 @@ func TestStyleRoles(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-func TestStyleInputAutocomplete(t *testing.T) {
-	for _, name := range []string{"light", "dark"} {
-		for _, noColor := range []bool{false, true} {
-			thm, _ := ResolveTheme(name, "", "", noColor, 1<<24)
-			f := tview.NewInputField().SetLabel("> ")
-			thm.StyleInput(f)
-			if f.GetFieldStyle() != thm.Style(RoleText) || f.GetLabelStyle() != thm.Style(RoleAccent) || f.GetPlaceholderStyle() != thm.Style(RoleMuted) {
-				t.Fatal("input styles not applied")
-			}
-			f.SetAutocompleteFunc(func(string) []string { return []string{"alpha", "beta"} })
-			f.SetText("a")
-			f.Autocomplete()
-			f.SetRect(0, 0, 20, 1)
-			f.Focus(func(tview.Primitive) {})
-			s := cellScreen(t, 20, 5)
-			f.Draw(s)
-			// Inspect actual rendered menu cells, not a getter duplicating the setter.
-			foundMain, foundSelected := false, false
-			for y := 1; y < 5; y++ {
-				for x := 0; x < 20; x++ {
-					r, _, sty, _ := s.GetContent(x, y)
-					if r == 'a' && sty == thm.Selected(RoleText) {
-						foundSelected = true
-					}
-					if r == 'b' && sty == thm.Style(RoleText) {
-						foundMain = true
-					}
-				}
-			}
-			if !foundMain || !foundSelected {
-				t.Fatalf("%s noColor=%v: menu main=%v selected=%v", name, noColor, foundMain, foundSelected)
-			}
-		}
-	}
-}
-
-func TestStyleTextView(t *testing.T) {
-	thm, _ := ResolveTheme("light", "", "", false, 1<<24)
-	v := tview.NewTextView()
-	thm.StyleTextView(v)
-	v.SetText("text")
-	v.SetRect(0, 0, 8, 2)
-	s := cellScreen(t, 8, 2)
-	v.Draw(s)
-	_, _, sty, _ := s.GetContent(0, 0)
-	if sty != thm.Style(RoleText) || v.GetBackgroundColor() != tcell.ColorDefault {
-		t.Fatal(sty)
 	}
 }

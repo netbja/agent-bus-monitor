@@ -121,14 +121,15 @@ func TestPollShowsServiceStatesAndTheOverlayOpens(t *testing.T) {
 	if st.dispatch != "waiting-herdr" || st.missions != "idle" {
 		t.Fatalf("dispatch %q missions %q", st.dispatch, st.missions)
 	}
-	h := newHarness(t, st)
-	top := strings.SplitN(h.draw(160, 45), "\n", 2)[0]
+	m := shellOf(t, st, 160, 45, nil)
+	top := strings.SplitN(m.grid().plain(), "\n", 2)[0]
 	if !strings.Contains(top, "dispatch waiting herdr") || !strings.Contains(top, "missions idle") {
 		t.Fatalf("header = %q", top)
 	}
-	h.key(runeKey('s'))
-	if screen := h.draw(160, 45); !strings.Contains(screen, "Services") || !strings.Contains(screen, "herdr: no server") {
-		t.Fatalf("services overlay not shown:\n%s", screen)
+	m, cmd := pressCmd(t, m, 's') // the logs are read in a command, then the page opens
+	m = run(t, m, cmd)
+	if screen := m.grid().plain(); !strings.Contains(screen, "Services") || !strings.Contains(screen, "herdr: no server") {
+		t.Fatalf("services page not shown:\n%s", screen)
 	}
 }
 

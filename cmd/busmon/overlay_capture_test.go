@@ -4,12 +4,9 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/rivo/tview"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
@@ -29,7 +26,7 @@ var updateOverlays = flag.Bool("update-overlays", false, "rewrite testdata/overl
 func plainOf(v any) string {
 	switch b := v.(type) {
 	case string:
-		return tview.NewTextView().SetDynamicColors(true).SetText(b).GetText(true)
+		return b
 	case []Line:
 		var sb strings.Builder
 		for i, l := range b {
@@ -47,10 +44,6 @@ func plainOf(v any) string {
 
 // capNow is the fixed clock of every capture whose builder takes now.
 var capNow = time.Date(2026, 10, 26, 18, 0, 0, 0, time.UTC)
-
-// volatile ages, for the two captures built through the ui, which read the
-// wall clock themselves (the reminder's ages).
-var volatileAge = regexp.MustCompile(`\b\d+[smhd]\b`)
 
 func longCode() string {
 	return "## Done\n- adapter in `d0a72be`\n\n```go\n" +
@@ -127,26 +120,12 @@ func overlayCaptures(t *testing.T) map[string]string {
 		"code-wrap":         plainOf(renderMarkdown(longCode(), 60)),
 	}
 
-	// Bodies built inside the ui: the reminder, the recap and the summary confirmation.
-	h := newHarness(t, demoShared(capNow))
-	h.u.cachePath = filepath.Join(t.TempDir(), "cache.json")
-	h.u.cache = &busmonCache{Project: "demo", Snoozes: map[string]int64{}}
-	h.u.openReminder([]attentionItem{
-		{Key: "wait:new:2", Agent: "new", Text: "new [red]one[-]", At: time.Now().Add(-6 * time.Minute)},
-		{Key: "wait:old:1", Agent: "old", Text: "old", At: time.Now().Add(-10 * time.Minute)},
-	})
-	out["reminder"] = volatileAge.ReplaceAllString(h.u.overlay.GetText(true), "<age>")
-	h.u.closeOverlay()
-
-	h = newHarness(t, demoShared(capNow))
-	h.u.recap = buildRecap(recapCaptureInput())
-	h.u.recapPending = true
-	h.u.maybeOpenRecap()
-	out["recap"] = h.u.overlay.GetText(true)
-	h.u.closeOverlay()
-	h.u.recap = recapModel{Target: "master"}
-	h.u.openSummaryConfirmation()
-	out["summary-confirm"] = h.u.overlay.GetText(true)
+	// The recap's body, as its reader page draws it (recapBody). The
+	// reminder and the summary confirmation are the shell's dialogs now
+	// (TestShellReminder, TestShellRecapSummaryConfirmation).
+	recap := buildRecap(recapCaptureInput())
+	lines, _ := recapBody(recap.Rows, 0) // no cursor drawn: the capture is the content
+	out["recap"] = plainOf(lines)
 	return out
 }
 

@@ -10,8 +10,7 @@ import (
 
 // For you (busmon Charm spec, decision 2): one list of what waits on the
 // person, ranked, oldest first within a rank. Every other surface is a named
-// subset of it (decisions, unreadItems), so they can never disagree. The live
-// tview reminder keeps attentionItems until step c.
+// subset of it (decisions, unreadItems), so they can never disagree.
 
 const (
 	rankAsk    = iota // an open ask, one row per ask

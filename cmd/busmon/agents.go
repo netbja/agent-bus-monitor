@@ -103,7 +103,7 @@ func obsFresh(a *agentState, now time.Time) bool {
 
 // clock is the time an observation's freshness is judged at: the shell's
 // snapshot time (judgedAt), so its View never reads the clock; the live time
-// for tview, which never sets it.
+// for a state no snapshot stamped (pollOnce's own reads).
 func (a *agentState) clock() time.Time {
 	if !a.judgedAt.IsZero() {
 		return a.judgedAt

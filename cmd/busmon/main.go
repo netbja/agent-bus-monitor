@@ -40,8 +40,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -281,12 +281,12 @@ type agentState struct {
 	swapping     bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
 	fallback     *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
 	model        *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
-	judgedAt     time.Time           // the shell's snapshot time (clock); zero in tview's state
+	judgedAt     time.Time           // the shell's snapshot time (clock); zero in shared's own state
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.
 // One mutex covers all of it: the writers are two background goroutines, the
-// readers are the render functions on the tview loop, and the whole snapshot is
+// reader is the shell's poll command (takeSnapshot, under the lock), and the whole snapshot is
 // small enough that finer locking would only buy bugs.
 type shared struct {
 	mu             sync.Mutex
@@ -418,27 +418,17 @@ func main() {
 		fmt.Printf("Purged: %d entries removed.\n", removed)
 	}
 
-	themeVal := settings.Theme
-	// tview initialises the screen it is given (exactly once); the colour
-	// depth is read from that same screen before anything is drawn.
-	scr, err := tcell.NewScreen()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: terminal: %v\n", err)
-		os.Exit(1)
-	}
-	app := tview.NewApplication().SetScreen(scr)
 	_, noColor := os.LookupEnv("NO_COLOR")
-	t, err := ResolveTheme(themeVal, "", os.Getenv("COLORFGBG"), noColor, scr.Colors())
+	t, err := ResolveTheme(settings.Theme, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
 	if err != nil {
-		scr.Fini()
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
 	th = t
 
-	// Everything the background goroutines publish to the UI. Empty until the
-	// first tick: an unknown budget stays blank rather than implying 0% used.
-	// The monitor's link starts healthy because bus.Connect just pinged it.
+	// Everything the background goroutines publish to the shell. Empty until
+	// the first tick: an unknown budget stays blank rather than implying 0%
+	// used. The monitor's link starts healthy because bus.Connect just pinged it.
 	st := &shared{
 		person:     self,
 		agents:     map[string]*agentState{},
@@ -447,42 +437,32 @@ func main() {
 		health:     health{ok: true, since: time.Now()},
 		configNote: settings.Note,
 	}
-	u := newUI(app, st, ctx, b, project, self)
-	u.settings = settings
-	u.cachePath = busmonCachePath(project)
-	if cache, cacheErr := loadBusmonCache(u.cachePath, project); cacheErr != nil {
+	cachePath := busmonCachePath(project)
+	cache, cacheErr := loadBusmonCache(cachePath, project)
+	if cacheErr != nil {
 		st.configNote = joinNote(st.configNote, "local busmon cache unavailable")
-		u.cache = cache
-	} else {
-		u.cache = cache
 	}
-	if u.cache != nil { // the person's read marks; nothing older than the last visit is marked
-		for _, id := range u.cache.Read {
-			u.unread.read[id] = true
-		}
-		u.unread.floor = u.cache.LastVisit
-	}
-	if u.cache != nil && u.cache.LastVisit > 0 {
-		u.priorVisit = time.UnixMilli(u.cache.LastVisit)
+	var prior time.Time
+	if cache != nil && cache.LastVisit > 0 {
+		prior = time.UnixMilli(cache.LastVisit)
 	}
 	go checkForUpdate(ctx, st) // at most once a day; silent offline (AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
 
-	cursors := map[string]string{}
-	handle := func(e bus.Event) {
-		cursors[bus.StreamKey(project, e.Kind)] = e.ID
-		u.ingest(e)
-		app.QueueUpdateDraw(func() { u.appendEvent(e) })
-	}
+	// The Elm shell (busmon Charm spec): Update drives everything, View draws
+	// the model; the poll runs in its commands, the tail is fed in below.
+	shell := newShell(shellConfig{ctx: ctx, reader: b, w: b, st: st, project: project, self: self,
+		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior})
+	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up
 	// front (fatal on error, while the terminal is still ours) and resume the
 	// live tail from the per-stream cursors Recent returns — no replay, no "$"
 	// gap. limit <= 0 keeps the original behavior: replay all retained history.
+	cursors := map[string]string{}
 	var backfill []bus.Event
 	if limit > 0 {
 		recent, cur, err := b.Recent(ctx, streamKinds, limit)
 		if err != nil {
-			scr.Fini()
 			fmt.Fprintf(os.Stderr, "error: backfill failed: %v\n", err)
 			os.Exit(1)
 		}
@@ -491,9 +471,13 @@ func main() {
 			cursors[k] = v
 		}
 	}
+	handle := func(e bus.Event) {
+		cursors[bus.StreamKey(project, e.Kind)] = e.ID
+		prog.Send(tailMsg{events: []bus.Event{e}}) // ingested in Update (ingestEvent)
+	}
 	go func() {
-		for _, e := range backfill {
-			handle(e)
+		if len(backfill) > 0 {
+			prog.Send(tailMsg{events: backfill})
 		}
 		replayAll := limit <= 0 // no --limit: replay everything once…
 		for {
@@ -517,40 +501,22 @@ func main() {
 		}
 	}()
 
-	// The poller: one pollOnce per second, then a redraw so ages and flags
-	// move with no new traffic.
-	go func() {
-		tick := 0
-		for range time.Tick(time.Second) {
-			tick++
-			pollOnce(ctx, b, st, tick)
-			app.QueueUpdateDraw(u.onTick)
-		}
-	}()
-
-	// The fade of a waiting agent's state: redraws only while one waits.
-	go func() {
-		for range time.Tick(fadeFrame) {
-			if u.animate.Load() {
-				app.QueueUpdateDraw(func() {})
-			}
-		}
-	}()
-
-	if err := app.SetRoot(u.pages, true).EnableMouse(true).SetFocus(u.lists[PanelAgents]).Run(); err != nil {
+	if _, err := prog.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// setRoundedBorders makes tview's own frames (the overlay TextView) match the
-// rounded frames busmon draws itself. It is the only global tview state set.
-func setRoundedBorders() {
-	r := func(s string) rune { return []rune(s)[0] }
-	tview.Borders.TopLeft, tview.Borders.TopRight = r(glyphTopLeft), r(glyphTopRight)
-	tview.Borders.BottomLeft, tview.Borders.BottomRight = r(glyphBottomLeft), r(glyphBottomRight)
-	tview.Borders.Horizontal, tview.Borders.Vertical = r(glyphHorizontal), r(glyphVertical)
-	tview.Borders.TopLeftFocus, tview.Borders.TopRightFocus = r(glyphTopLeft), r(glyphTopRight)
-	tview.Borders.BottomLeftFocus, tview.Borders.BottomRightFocus = r(glyphBottomLeft), r(glyphBottomRight)
-	tview.Borders.HorizontalFocus, tview.Borders.VerticalFocus = r(glyphHorizontal), r(glyphVertical)
+// terminalColors is the terminal's colour depth for ResolveTheme: true colour,
+// 256, 16, or none (not a terminal, or NO_COLOR-like environments).
+func terminalColors() int {
+	switch colorprofile.Detect(os.Stdout, os.Environ()) {
+	case colorprofile.TrueColor:
+		return 1 << 24
+	case colorprofile.ANSI256:
+		return 256
+	case colorprofile.ANSI:
+		return 16
+	}
+	return 0
 }

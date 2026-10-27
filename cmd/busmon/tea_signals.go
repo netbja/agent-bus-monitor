@@ -30,6 +30,7 @@ type signalState struct {
 	recapPending  bool // built, opens once the person is not busy
 	recapAutoDone bool // the first poll's automatic check is done
 	cache         *busmonCache
+	readDirty     bool // a read mark waits for the cache's save
 }
 
 func newSignals(c *busmonCache) *signalState {
@@ -39,7 +40,7 @@ func newSignals(c *busmonCache) *signalState {
 // recapMsg is a recap built by recapCmd.
 type recapMsg struct{ model recapModel }
 
-// ring decides the bell after a poll, as tview's onTick does: one ring per
+// ring decides the bell after a poll, as busmon always has: one ring per
 // new ask id (its waiting declaration covered), per new waiting declaration
 // without an ask, per observed-prompt episode (its since).
 func (m *Model) ring() bool {
@@ -108,7 +109,12 @@ func (m *Model) afterUpdate() tea.Cmd {
 		return nil
 	}
 	m.maybeOpenRecap()
-	return m.maybeReminder()
+	var save tea.Cmd
+	if m.sig.readDirty {
+		m.sig.readDirty = false
+		save = m.saveCache("local busmon cache not saved")
+	}
+	return tea.Batch(save, m.maybeReminder())
 }
 
 // autoRecap, once, at the first poll: it records this visit and builds the

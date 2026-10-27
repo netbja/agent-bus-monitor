@@ -49,21 +49,6 @@ func humanLabel(self, pilot string) string {
 	return GlyphHuman + " " + displayName(self) + " [" + role + "]"
 }
 
-// agentNames lists the project's known agents (sorted), the operator
-// excluded: the targets of @all.
-func (u *ui) agentNames() []string { return u.names(false) }
-
-// completionNames are the names the inputs complete: the @all targets, plus
-// the dormant agents while a (show all) lists them, so writing to one stays
-// easy (busmon UX item 6).
-func (u *ui) completionNames() []string { return u.names(u.showAll) }
-
-func (u *ui) names(showAll bool) []string {
-	u.st.mu.Lock()
-	defer u.st.mu.Unlock()
-	return agentNamesOf(u.st.agents, u.st.pilot, u.self, showAll, time.Now())
-}
-
 // agentNamesOf are the registered agents the panel shows, the person
 // excepted: with showAll false the @all targets. @all reaches the agents the
 // panel shows: a dormant one (a team that was replaced, say) is not sent

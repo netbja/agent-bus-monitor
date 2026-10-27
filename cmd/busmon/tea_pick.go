@@ -13,7 +13,7 @@ import (
 )
 
 // The picker as a model of its own (busmon Charm spec, step b: "The
-// picker"; wired by step c, until then --pick runs pick.go's tview screen).
+// picker"; --pick runs it since step c).
 // Same behaviour as pick.go: the templates with their broker state, a filter,
 // and an open that checks the project afresh and runs `agentbus up` only for
 // one the broker confirms. It writes nothing to Redis and never provisions.
@@ -90,10 +90,9 @@ func (m *pickShell) spin() tea.Cmd {
 
 // snapshot is the drawing's input, from the model (no lock: one goroutine).
 func (m *pickShell) snapshot() pickSnapshot {
-	pm := pickModel{dir: m.dir, rows: m.rows, filter: m.filter, status: m.status, statusErr: m.statusErr, busy: m.busy,
-		checking: m.checking, connErr: m.connErr}
+	pm := pickModel{rows: m.rows, filter: m.filter, checking: m.checking, connErr: m.connErr}
 	return pickSnapshot{dir: m.dir, filter: m.filter, status: m.status, busy: m.busy, statusErr: m.statusErr,
-		checking: m.checking, down: pm.brokerDownLocked(), all: m.rows, vis: pm.visibleLocked()}
+		checking: m.checking, down: pm.brokerDown(), all: m.rows, vis: pm.visible()}
 }
 
 // refresh fills the list from the model: the update path, never View.
@@ -182,7 +181,7 @@ func (m *pickShell) key(k Key) tea.Cmd {
 	return nil
 }
 
-// click selects a row; a click on the selected row opens it (ListView's
+// click selects a row; a click on the selected row opens it (listState's
 // rule); nothing while an open runs.
 func (m *pickShell) click(ms tea.Mouse) tea.Cmd {
 	if ms.Button != tea.MouseLeft || m.busy != "" {
@@ -198,7 +197,7 @@ func (m *pickShell) click(ms tea.Mouse) tea.Cmd {
 // selected is the selected row, else the first visible one.
 func (m *pickShell) selected() (projlist.Row, bool) {
 	pm := pickModel{rows: m.rows, filter: m.filter, sel: m.list.Selected()}
-	return pm.selectedLocked()
+	return pm.selected()
 }
 
 // start opens the selected project: a fresh existence check first, in a

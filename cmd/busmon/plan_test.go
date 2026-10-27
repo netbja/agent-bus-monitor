@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
@@ -183,62 +182,6 @@ func TestPlanOverlayGroupsInOrder(t *testing.T) {
 	}
 }
 
-func TestPlanOverlayKeys(t *testing.T) {
-	f := newPlanFake(true)
-	f.ledger = []bus.Verdict{{ID: "6-0", Subject: "reload-impl", Author: "coder", Reviewer: "foureyes", Decision: "reject"}}
-	f.facts = map[string]bus.PlanFact{"roles": {Done: time.Now().Add(-time.Hour).UnixMilli()}}
-	st := newPlanShared()
-	pollOnce(context.Background(), f, st, 1)
-	h := newHarness(t, st)
-	h.draw(140, 40)
-	h.key(runeKey('P'))
-	if h.u.ov != ovPlan {
-		t.Fatalf("P did not open the plan: %v", h.u.ov)
-	}
-	scr := h.draw(140, 40)
-	if !strings.Contains(scr, "Plan") || !strings.Contains(scr, "Client reload") {
-		t.Fatalf("plan overlay:\n%s", scr)
-	}
-	// The first item is selected; j moves to the next, Enter opens its detail.
-	first := h.u.planItems[h.u.planSel].task
-	h.key(runeKey('j'))
-	second := h.u.planItems[h.u.planSel].task
-	if first == second || second == "" {
-		t.Fatalf("j did not move: %q %q", first, second)
-	}
-	h.key(key(tcell.KeyEnter))
-	if h.u.ov != ovPlanTask || !strings.Contains(h.u.ovPlain, "state") {
-		t.Fatalf("enter did not open the task: %v %q", h.u.ov, h.u.ovPlain)
-	}
-	h.key(key(tcell.KeyEscape))
-	if h.u.ov != ovPlan || h.u.planItems[h.u.planSel].task != second {
-		t.Fatalf("esc from a task returns to the plan, selection kept: %v", h.u.ov)
-	}
-	// The done group expands on Enter.
-	for i, it := range h.u.planItems {
-		if it.toggle {
-			h.u.planSel = i
-		}
-	}
-	h.key(key(tcell.KeyEnter))
-	if !h.u.planExpanded || !strings.Contains(h.u.ovPlain, "merged (recorded") {
-		t.Fatalf("enter on done did not expand: %q", h.u.ovPlain)
-	}
-	h.key(runeKey('y'))
-	h.key(key(tcell.KeyEscape))
-	if h.u.ov != ovNone {
-		t.Fatalf("esc did not close: %v", h.u.ov)
-	}
-	// With no plan, P says so and opens nothing.
-	st2 := newPlanShared()
-	h2 := newHarness(t, st2)
-	h2.draw(140, 40)
-	h2.key(runeKey('P'))
-	if h2.u.ov != ovNone || !strings.Contains(h2.u.flash, "no plan") {
-		t.Fatalf("P with no plan: %v %q", h2.u.ov, h2.u.flash)
-	}
-}
-
 // hostilePlan is a plan with a task in every state, hostile titles and notes
 // at the length limits, for the alignment suite.
 func hostilePlan(now time.Time) planState {
@@ -342,19 +285,6 @@ func TestRecapPlanSection(t *testing.T) {
 		if r.Section == "Plan" {
 			t.Fatal("a Plan section with no plan loaded")
 		}
-	}
-}
-
-func TestPlanOverlayEscapesOnce(t *testing.T) {
-	p := hostilePlan(time.Now())
-	st := newPlanShared()
-	st.plan = p
-	h := newHarness(t, st)
-	h.draw(160, 50)
-	h.key(runeKey('P'))
-	scr := h.draw(160, 50)
-	if !strings.Contains(scr, "Ti[red]tle") || strings.Contains(scr, "[red[]") || !strings.Contains(scr, "goal [x]") {
-		t.Fatalf("hostile text is shown as written, escaped once:\n%s", scr)
 	}
 }
 

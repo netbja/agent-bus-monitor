@@ -252,7 +252,7 @@ var (
 )
 
 // shellPanelBindings is the panel table for the shell: the same rows, in the
-// same order, with its tabs in place of tview's, and the last-row key in For
+// same order, with the shell's tabs in place of the panel table's, and the last-row key in For
 // you as in the other lists.
 func shellPanelBindings() []binding {
 	var out []binding
@@ -343,5 +343,5 @@ func footerHints(m Mode, p PanelID, t Tier, width int) Line {
 }
 
 // altEnter is Alt+Enter (most terminals send it as Esc then Enter, which
-// tcell reports as Enter with the Alt modifier).
+// bubbletea reports as Enter with the Alt modifier).
 func altEnter(k Key) bool { return k.Code == keyEnter && k.Alt }

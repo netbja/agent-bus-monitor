@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/plan"
@@ -451,101 +450,6 @@ func short7(s string) string {
 		return s[:7]
 	}
 	return s
-}
-
-// openPlanOverlay opens the Plan overlay on its first item.
-func (u *ui) openPlanOverlay() {
-	u.st.mu.Lock()
-	loaded := u.st.plan.loaded
-	u.st.mu.Unlock()
-	if !loaded {
-		u.flash = "no plan loaded (master: agentbus plan load <path>@<commit>)"
-		return
-	}
-	u.planSel, u.planExpanded = 0, false
-	u.renderPlan()
-}
-
-// renderPlan (re)draws the Plan overlay from the shared model, with the
-// selected item visible. It reads nothing from the broker.
-func (u *ui) renderPlan() {
-	now := time.Now()
-	u.st.mu.Lock()
-	p := u.st.plan
-	sum, _ := p.summary(now)
-	body, plain, items := planOverlay(p, u.planSel, u.planExpanded, now, max(20, overlayInnerWidth(u.width)))
-	u.st.mu.Unlock()
-	if u.planSel >= len(items) {
-		u.planSel = max(0, len(items)-1)
-		body, plain, items = u.planRedraw(now)
-	}
-	u.planItems = items
-	title := "Plan " + GlyphNone + " " + strings.TrimPrefix(planSeg(sum, now).text(), "plan ")
-	u.showOverlay(ovPlan, title, body, plain, "")
-	u.overlay.SetTitle(overlayTitle(title, "enter open "+GlyphNone+" y copy "+GlyphNone+" esc close"))
-	if u.planSel < len(items) {
-		u.overlay.ScrollTo(max(0, items[u.planSel].line-3), 0)
-	}
-}
-
-func (u *ui) planRedraw(now time.Time) ([]Line, string, []planItem) {
-	u.st.mu.Lock()
-	defer u.st.mu.Unlock()
-	return planOverlay(u.st.plan, u.planSel, u.planExpanded, now, max(20, overlayInnerWidth(u.width)))
-}
-
-// planKey handles the keys that mean something else in the Plan overlays:
-// moving the selection, Enter on a task or on the done group, Esc from a
-// task back to the plan. It reports whether it consumed the key.
-func (u *ui) planKey(act Action, ev *tcell.EventKey) bool {
-	switch u.ov {
-	case ovPlanTask:
-		if act == ActClose {
-			u.renderPlan()
-			return true
-		}
-	case ovPlan:
-		n := len(u.planItems)
-		switch act {
-		case ActUp, ActDown, ActPageUp, ActPageDown, ActFirst, ActLast:
-			if n == 0 {
-				return true
-			}
-			switch act {
-			case ActUp:
-				u.planSel--
-			case ActDown:
-				u.planSel++
-			case ActPageUp:
-				u.planSel -= 10
-			case ActPageDown:
-				u.planSel += 10
-			case ActFirst:
-				u.planSel = 0
-			case ActLast:
-				u.planSel = n - 1
-			}
-			u.planSel = min(max(u.planSel, 0), n-1)
-			u.renderPlan()
-			return true
-		case ActAsk:
-			if ev.Key() != tcell.KeyEnter || u.planSel >= n {
-				return false // ! and w still open the question panel
-			}
-			it := u.planItems[u.planSel]
-			if it.toggle {
-				u.planExpanded = true
-				u.renderPlan()
-				return true
-			}
-			u.st.mu.Lock()
-			title, body, plain := planTaskDetail(u.st.plan, it.task, time.Now())
-			u.st.mu.Unlock()
-			u.showOverlay(ovPlanTask, title, body, plain, "")
-			return true
-		}
-	}
-	return false
 }
 
 // planRecapExpected adds the plan's tasks waiting for the person to

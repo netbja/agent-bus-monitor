@@ -10,8 +10,7 @@ import (
 )
 
 // The Elm shell (busmon Charm spec, step b): one Model, Update drives every
-// change, View paints the model and does nothing else. Not wired: main.go
-// still runs the tview screen until step c; only the tests run this.
+// change, View paints the model and does nothing else. main.go runs it (step c).
 
 // pollMsg is one tick's snapshot, taken by pollCmd at `at`.
 type pollMsg struct {
@@ -123,6 +122,12 @@ func newShell(cfg shellConfig) Model {
 	m := Model{cfg: cfg, feed: &activityFeed{unread: newUnreadState()}, lists: &shellLists{}, paint: newPainter(th),
 		ui: uiState{focus: PanelForYou, tab: PanelActivity, view: PanelForYou, askDrafts: map[string]string{}},
 		rd: newReader(), cache: newViewCache(), sig: newSignals(cfg.cache)}
+	if c := cfg.cache; c != nil { // the person's read marks; nothing older than the last visit is marked
+		for _, id := range c.Read {
+			m.feed.unread.read[id] = true
+		}
+		m.feed.unread.floor = c.LastVisit
+	}
 	m.lists.activity.SetTail(true)
 	for _, p := range narrowPanels {
 		m.lists.of(p).SetHue(panelHue[p])

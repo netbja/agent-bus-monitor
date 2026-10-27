@@ -74,8 +74,8 @@ func clip(s string, n int) string {
 	return strings.TrimSpace(string(r[:n])) + "…"
 }
 
-// feedLine is one ACTIVITY entry: its TextView region id, the coloured line and
-// the plain (tag-free) one for the clipboard, and the event itself. Keeping the
+// feedLine is one ACTIVITY entry: its list key, the plain line for the
+// clipboard, and the event itself. Keeping the
 // event — rather than only the string that was printed — is what lets a
 // selected line be opened in full, filtered on, or traced to its thread.
 // A day separator has a zero Event (Kind ""), which is how it is told apart.
@@ -103,8 +103,7 @@ type health struct {
 
 // projectTable renders `busmon --list`: one row per project on the broker, in
 // the order given (bus.Projects already sorts newest first). Plain text with no
-// tview colour tags — this goes to stdout, not the TUI, where a "[green]" would
-// print literally. Empty input renders "" so the caller can say "nothing here"
+// colour — this goes to stdout, not the TUI. Empty input renders "" so the caller can say "nothing here"
 // on stderr and leave stdout clean for `| wc -l`.
 func projectTable(list []bus.ProjectSummary, now time.Time) string {
 	if len(list) == 0 {

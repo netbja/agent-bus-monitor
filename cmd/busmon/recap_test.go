@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -86,29 +85,6 @@ func TestBuildRecapLabelsReadFailuresAndDisablesUnsafeSummary(t *testing.T) {
 	}
 	if m.Rows[len(m.Rows)-1].Selectable {
 		t.Fatal("disabled summary row selectable")
-	}
-}
-
-func TestSummaryRequestNeedsExplicitConfirmationAndUsesSend(t *testing.T) {
-	h := newHarness(t, &shared{agents: map[string]*agentState{"master": {registered: true}}})
-	h.u.cache = &busmonCache{Project: "demo", Snoozes: map[string]int64{}}
-	h.u.cachePath = t.TempDir() + "/cache.json"
-	h.u.priorVisit = time.Now().Add(-2 * time.Hour)
-	h.u.recap = recapModel{Target: "master"}
-	h.u.openSummaryConfirmation()
-	if len(h.sentNow()) != 0 {
-		t.Fatal("opening confirmation sent a bus message")
-	}
-	h.u.handleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
-	if len(h.sentNow()) != 0 {
-		t.Fatal("Enter sent without confirmation")
-	}
-	h.u.handleKey(tcell.NewEventKey(tcell.KeyRune, 'y', tcell.ModNone))
-	if got := h.sentNow(); len(got) != 1 || !strings.Contains(got[0], "cmd master Summarise where the project stands") {
-		t.Fatalf("confirmed summary send = %v", got)
-	}
-	if len(h.sentNow()) != 1 {
-		t.Fatalf("confirmed summary did not send exactly once: %v", h.sentNow())
 	}
 }
 
