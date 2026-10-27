@@ -68,7 +68,7 @@ func runQuota(args []string, out, errw io.Writer) int {
 }
 
 // runStatusline is Claude Code's statusLine: it records the rate-limit
-// windows from stdin, then prints a status line (the --then command's, or a
+// windows and the session's context fill from stdin, then prints a status line (the --then command's, or a
 // short one). It never fails the status line.
 func runStatusline(args []string, stdin io.Reader, out io.Writer) int {
 	args, printInstall := extractBool(args, "--print-install")
@@ -82,6 +82,7 @@ func runStatusline(args []string, stdin io.Reader, out io.Writer) int {
 	}
 	if len(raw) <= quota.StatuslineMax {
 		_ = quota.RecordStatusline(quota.ClaudeCachePath(), raw, time.Now())
+		_ = quota.RecordContext(quota.ContextDir(), raw, time.Now()) // the session's context fill (context-alert)
 	}
 	if then != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

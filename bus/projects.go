@@ -232,7 +232,7 @@ func (b *Bus) HasKeysBesidesDispatch(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	for _, k := range keys {
-		if k != DispatchKey(b.project) && k != ObservedKey(b.project) &&
+		if k != DispatchKey(b.project) && k != ObservedKey(b.project) && k != ContextKey(b.project) &&
 			k != HealthKey(b.project) && k != HealthLogKey(b.project) &&
 			k != HealthNotesKey(b.project) && k != HealthDailyKey(b.project) {
 			return true, nil

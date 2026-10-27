@@ -177,9 +177,14 @@ it silently never fired.
   `AgentSnapshot.Session` from the environment, exactly as it captures `HERDR_PANE_ID` — see
   `bus.AgentIdent`. The agent never types it, so it cannot drift. A peer with no session id (a
   non-Claude-Code agent) is skipped with a note, never invented.
-- **Deliberately not reported:** context *percentage* (needs a per-model window table that rots
-  every model release) and cost (needs a price table that rots the same way; on a subscription the
-  figure is fiction). Raw context tokens are what is actually known.
+- **Context fill as a percentage comes from the client, never from a table** (decision
+  `docs/memory/decisions/2026-10-27-context-fill.md`): Claude Code's statusLine stdin carries
+  `context_window.used_percentage`; `agentbus statusline` records it per session in
+  `~/.cache/agentbus/context/<session>.json` (pruned after 24 h), and the dispatcher publishes it
+  each minute to `{p}:context` (agent → pct, observed_at, session; fenced, replaced whole,
+  `PEXPIRE` 120 s, not in `projectKinds`), reading only a verified snapshot's session. No reading =
+  unknown, never 0. **Deliberately not reported:** cost (needs a price table that rots every
+  release; on a subscription the figure is fiction). Raw context tokens stay in `{p}:usage`.
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
   cron wake where a hard exit loses the whole caretaker pass.
 

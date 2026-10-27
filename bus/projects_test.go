@@ -311,6 +311,25 @@ func TestHasKeysBesidesDispatch(t *testing.T) {
 	if _, ok := projectFromKey(ObservedKey(b.project)); ok {
 		t.Fatalf("%s names a project", ObservedKey(b.project))
 	}
+	// Nor does its published context fill (context-alert).
+	if err := b.FencedPutContext(ctx, "tok", map[string]ContextFill{"dev": {Pct: 81, ObservedAt: 1, Session: "s", At: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	if fills, err := b.Context(ctx); err != nil || fills["dev"].Pct != 81 {
+		t.Fatalf("context read %v %v", fills, err)
+	}
+	if ttl, _ := b.r.PTTL(ctx, ContextKey(b.project)).Result(); ttl <= 0 || ttl > time.Duration(ContextTTL)*time.Millisecond {
+		t.Fatalf("context ttl %v", ttl)
+	}
+	if ok, err := b.HasKeysBesidesDispatch(ctx); err != nil || ok {
+		t.Fatalf("lease + context = %v %v, want false nil", ok, err)
+	}
+	if _, ok := projectFromKey(ContextKey(b.project)); ok {
+		t.Fatalf("%s names a project", ContextKey(b.project))
+	}
+	if err := b.FencedPutContext(ctx, "not-the-holder", map[string]ContextFill{"dev": {Pct: 1}}); err != ErrNotHolder {
+		t.Fatalf("a non-holder wrote: %v", err)
+	}
 	if _, err := b.Notify(ctx, "me", "hi"); err != nil {
 		t.Fatal(err)
 	}
