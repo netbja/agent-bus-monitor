@@ -5,7 +5,7 @@
     {"id":"codex-reviewer","title":"reviewer-codex, a read-only Codex 4-eyes reviewer (PR 137)","owner":"coder","board":"codex-reviewer"},
     {"id":"foryou-gates","title":"B: For you shows only the person's gates; verdicts close their gate; gate close (PR 138)","owner":"coder","board":"foryou-gates"},
     {"id":"gate-cleanup","title":"Close the 81 stale gates (master 57, coder 24)","owner":"master","after":["foryou-gates"]},
-    {"id":"a-look","title":"A1/A4/A6/A7: compose cursor, tab style, health label and gate glyph, F-keys in order","owner":"coder","review":"a-look","after":["foryou-gates"]},
+    {"id":"a-look","title":"A1/A4/A6/A7: compose cursor, tab style, health label and gate glyph, F-keys in order","owner":"coder","review":"busmon-a-look","after":["foryou-gates"]},
     {"id":"a-board","title":"A2: Board columns sized to content","owner":"coder","review":"a-board","after":["a-look"]},
     {"id":"a-plan-tab","title":"A11: a 4th tab Plan in the lower panel (beside Activity, Board, Requests)","owner":"coder","review":"a-plan-tab","after":["a-board"]},
     {"id":"a-nav","title":"A3/A5: auto-scroll back on at the bottom; n/p and left/right in the reader","owner":"coder","review":"a-nav","after":["a-plan-tab"]},
