@@ -109,11 +109,9 @@ func tabBar(tabs []PanelID, active PanelID, width int) Line {
 	short = total > width
 	var l Line
 	for i, p := range tabs {
-		role := RoleMuted
-		if p == active {
-			role = panelHue[p]
-		}
-		l = append(l, Seg{Text: label(i, p, short), Role: role, Bold: p == active, Reverse: p == active && th.Palette() == PaletteNone})
+		// Every tab in its panel's colour (A4: a muted one vanished beside the
+		// focused pill); the active one is bold, and the frame pills it.
+		l = append(l, Seg{Text: label(i, p, short), Role: panelHue[p], Bold: p == active, Reverse: p == active && th.Palette() == PaletteNone})
 	}
 	return l
 }

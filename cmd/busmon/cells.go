@@ -291,7 +291,7 @@ type Frame struct {
 // frameTitle pads the title with one space each side and colours its name in
 // the panel's hue: plain when the frame is not focused, a pill when it is. A
 // name is a plain-text segment or a bold one (the active tab); inactive tabs
-// (muted) and coloured status words keep their own look. The pill takes the
+// (their panel's colour, not bold) and coloured status words keep their own look. The pill takes the
 // spaces around the name from its neighbours, so the width never changes
 // (tab click spans are computed from it).
 func frameTitle(t Line, hue Role, focused bool) Line {
