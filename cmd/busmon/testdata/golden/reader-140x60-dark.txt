@@ -4,7 +4,7 @@
 │  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    │
 │  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…│
 │  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask │
-│  ▲ gate   coder     by bernard  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  │
+│  ◆ gate   coder     by bernard  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  │
 │  ● unread dispatch  project paused until 16:56     8m││  ✓ architect done      40m     —        —         escalating · busy   spec merged│
 │                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…│
 │                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…│
@@ -57,4 +57,4 @@
 │                                                                                                                                          │
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- F5 health   ↑↓ j k scroll   y copy   Y copy thread   esc q close                                                                           
+ ↑↓ j k scroll   y copy   Y copy thread   esc q close   F5 health                                                                           

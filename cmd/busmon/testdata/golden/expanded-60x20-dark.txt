@@ -17,4 +17,4 @@
 │  ● 15:00 master   ask       asks · review lot 1? (2 ques…┃
 │    15:02 coder    status    working · busmon-charm-b: b1…▼
 ╰──────────────────────────────────────────────────────────╯
- tab focus   F5 health   1-5 view   ↑↓ j k select   y copy  
+ tab focus   1-5 view   end G live   F1 help   F5 health    

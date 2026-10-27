@@ -394,3 +394,28 @@ func TestShellClickTabsAndTitles(t *testing.T) {
 		x += Width(s.Text)
 	}
 }
+
+// An inactive tab is drawn in its panel's colour, never muted, so it reads
+// beside the focused tab's pill (A4); the active tab stays the only bold one,
+// and the frame title still pills only the active tab.
+func TestInactiveTabsAreVisible(t *testing.T) {
+	l := tabBar(lowerTabs, PanelBoard, 200)
+	for i, s := range l {
+		p := lowerTabs[i]
+		if s.Role == RoleMuted {
+			t.Errorf("tab %d is muted", i+1)
+		}
+		if s.Role != panelHue[p] || s.Bold != (p == PanelBoard) {
+			t.Errorf("tab %d = %+v, want role %v bold %v", i+1, s, panelHue[p], p == PanelBoard)
+		}
+	}
+	pills := 0
+	for _, s := range frameTitle(l, panelHue[PanelBoard], true) {
+		if s.Pill {
+			pills++
+		}
+	}
+	if pills != 1 {
+		t.Errorf("%d pills in the focused title, want 1", pills)
+	}
+}

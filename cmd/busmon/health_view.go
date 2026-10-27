@@ -39,12 +39,16 @@ func summarizeGuardian(records map[string]guardian.Record, now time.Time) guardi
 	return s
 }
 
-func guardianSeg(s guardianSummary) Line {
+func guardianSeg(s guardianSummary, compact bool) Line {
+	name := "health " // a bare "!4" read as noise (A6); the compact header keeps the short form
+	if compact {
+		name = ""
+	}
 	if s.Total == 0 {
-		return Line{{Text: GlyphNone, Role: RoleMuted}}
+		return Line{{Text: name + GlyphNone, Role: RoleMuted}}
 	}
 	if s.Unhealthy == 0 {
-		return Line{{Text: GlyphDone, Role: RoleOK}}
+		return Line{{Text: name + GlyphDone, Role: RoleOK}}
 	}
 	role := RoleMuted
 	switch s.Worst {
@@ -57,7 +61,7 @@ func guardianSeg(s guardianSummary) Line {
 	if s.Problems == 0 { // only unknown: not measured yet or unreadable, never shown as healthy
 		label = fmt.Sprintf("?%d", s.Unhealthy)
 	}
-	return Line{{Text: label, Role: role}}
+	return Line{{Text: name + label, Role: role}}
 }
 
 func healthOverlayText(records map[string]guardian.Record, notes map[string]guardian.Note, now time.Time) []Line {
