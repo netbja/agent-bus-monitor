@@ -644,89 +644,34 @@ const (
 // draftKey identifies a held message: the recipient and the body.
 func draftKey(tgt, body string) string { return tgt + "\x00" + body }
 
-// send is the one send path of the line and of the compose window: the
-// open-question hint, the broadcast warning, the @all fan-out and its partial
-// failures. The window passes its fields as they are (never rebuilt into an
-// "@name body" line); the line adapts its text with parseDirected.
+// send is the one send path of the line and of the compose window (send.go):
+// the open-question hint, the broadcast warning, the @all fan-out and its
+// partial failures. The window passes its fields as they are (never rebuilt
+// into an "@name body" line); the line adapts its text with parseDirected.
 func (u *ui) send(tgt, body string, directed, window bool) sendResult {
-	body = normalizeCompose(body)
-	if body == "" {
-		u.flash, u.flashErr = "nothing to send", true
-		return sendRefused
+	in := sendInput{tgt: tgt, body: body, directed: directed, window: window, known: u.knownAgent(tgt),
+		holders: u.askHolders(tgt, directed), askDraft: u.askDraft, broadcastDraft: u.broadcastDraft}
+	if directed && tgt == "all" {
+		in.targets = u.agentNames()
 	}
-	if directed && tgt != "all" && (!bus.ValidName(tgt) || window && !u.knownAgent(tgt)) {
-		u.flash, u.flashErr = "unknown recipient: "+Preview(tgt), true
-		return sendRefused
+	p := planSend(in)
+	u.askDraft, u.broadcastDraft = p.askDraft, p.broadcastDraft
+	if p.result != sendSent {
+		u.flash, u.flashErr = p.flash, p.flashErr
+		return p.result
 	}
-	again, answer := "Enter", "Tab"
-	if window {
-		again, answer = "Ctrl+S", "Ctrl+T"
-	}
-	// v0.15.1 §11.5: a recipient with an open question gets one hint on the
-	// first send; sending again sends, Tab (Ctrl+T in the window) answers in
-	// its panel.
-	if holders := u.askHolders(tgt, directed); len(holders) > 0 && u.askDraft != draftKey(tgt, body) {
-		u.askDraft = draftKey(tgt, body)
-		u.flash, u.flashErr = fmt.Sprintf("%s has an open question. %s: send as a message %s %s: answer in its question panel %s Esc: back to editing",
-			strings.Join(holders, ", "), again, GlyphNone, answer, GlyphNone), false
-		return sendHeld
-	}
-	u.askDraft = ""
-	if !directed && u.broadcastDraft != body {
-		// Nobody reads a notify and nothing wakes for it: say so once.
-		u.broadcastDraft = body
-		u.flash, u.flashErr = "nobody reads a broadcast: start with @agent or @all; "+again+" again to broadcast", true
-		return sendHeld
-	}
-	u.broadcastDraft = ""
 	ctx, cancel := context.WithTimeout(u.ctx, pollBudget)
 	defer cancel()
-	var err error
-	switch {
-	case directed && tgt == "all":
-		targets := u.agentNames()
-		if len(targets) == 0 {
-			u.flash, u.flashErr = "no agent to send to", true
-			return sendRefused
-		}
-		// Every agent is tried. If some were served, the draft is cleared:
-		// a retry of @all would send them the directive twice.
-		var failed []string
-		var lastErr error
-		for _, a := range targets {
-			if _, e := u.w.HumanCmd(ctx, u.self, a, body); e != nil {
-				failed, lastErr = append(failed, a), e
-			}
-		}
-		u.flash = fmt.Sprintf("directive sent to %d agents", len(targets))
-		switch {
-		case len(failed) == len(targets):
-			err = lastErr // nothing sent: keep the draft, a retry is safe
-		case len(failed) > 0:
-			u.flash = fmt.Sprintf("sent to %d of %d agents; failed: %s (%s)", len(targets)-len(failed), len(targets),
-				strings.Join(failed, ", "), Preview(lastErr.Error()))
-			u.flashErr = true
-			u.pauseAck = "" // some were served: the acknowledgement is spent
-			return sendPartial
-		}
-	case directed:
-		_, err = u.w.HumanCmd(ctx, u.self, tgt, body)
-		u.flash = "directive sent to " + tgt
-	default:
-		_, err = u.w.HumanNotify(ctx, u.self, body)
-		u.flash = "broadcast sent"
-	}
-	u.flashErr = err != nil
-	if err != nil {
-		// keep the draft: the operator retries once the bus is back
-		u.flash = "send failed: " + Preview(err.Error())
-		return sendFailed
-	}
+	note := ""
 	if directed {
-		u.flash += u.pauseNote()
+		note = u.pauseNote()
 	}
-	u.pauseAck = "" // the acknowledgement was for this one send
-	return sendSent
+	res, flash, isErr := p.outcome(p.exec(ctx, u.w, u.self), note)
+	u.flash, u.flashErr = flash, isErr
+	if res != sendFailed {
+		u.pauseAck = "" // the acknowledgement was for this one send (spent when some were served)
+	}
+	return res
 }
 
 // answerInPanel opens the question panel of the recipient holding an open
