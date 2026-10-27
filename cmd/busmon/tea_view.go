@@ -227,7 +227,7 @@ var forYouKinds = map[int]struct {
 }{
 	rankAsk:    {"?", "ask", RoleAttention},
 	rankWait:   {GlyphHuman, "wait", RoleAttention},
-	rankGate:   {GlyphBlocked, "gate", RoleDispatch},
+	rankGate:   {GlyphGate, "gate", RoleDispatch},
 	rankUnread: {GlyphDotFull, "unread", RoleAccent},
 }
 

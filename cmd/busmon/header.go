@@ -79,7 +79,7 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	add(Line{{Text: Preview(d.project), Role: RoleText, Bold: true}}, 3, 0).trunc = true
 	add(healthSeg(d.health, d.now, compact), 1, 0)
 	if d.guardian.Total > 0 {
-		add(guardianSeg(d.guardian), 1, 0)
+		add(guardianSeg(d.guardian, compact), 1, 0)
 	}
 	add(dispatchSeg(d.dispatch, compact), 2, 0)
 	if d.missions != "" {

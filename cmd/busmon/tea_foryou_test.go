@@ -162,3 +162,11 @@ func TestForYouIgnoresAgentToAgentGates(t *testing.T) {
 		t.Fatalf("a pilot gate listed: %+v", items)
 	}
 }
+
+// A gate row has its own glyph: ▲ reads "blocked" (A6).
+func TestForYouGateGlyphIsNotBlocked(t *testing.T) {
+	g := forYouKinds[rankGate].glyph
+	if g == GlyphBlocked || g != GlyphGate {
+		t.Fatalf("gate glyph %q", g)
+	}
+}

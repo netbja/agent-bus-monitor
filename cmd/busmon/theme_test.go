@@ -12,7 +12,7 @@ import (
 )
 
 func TestGlyphsAreSingleCell(t *testing.T) {
-	if len(UIGlyphs) != 26 {
+	if len(UIGlyphs) != 27 {
 		t.Fatal(len(UIGlyphs))
 	}
 	seen := map[string]bool{}
