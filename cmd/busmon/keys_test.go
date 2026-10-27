@@ -134,14 +134,34 @@ func TestFooterGroupsFKeys(t *testing.T) {
 	}
 }
 
-// A narrow footer drops ordinary keys before the F-key group, F1 first kept.
+// A narrow footer drops ordinary keys before F1 help and F5 health.
 func TestNarrowFooterKeepsHelp(t *testing.T) {
 	l := footerHints(ModeShell, PanelActivity, TierWide, 40)
 	text := ""
 	for _, s := range l {
 		text += s.Text
 	}
-	if !strings.Contains(text, "F1 help") || !strings.HasPrefix(text, " tab focus") || l.Width() != 40 {
+	if !strings.Contains(text, "F1 help") || !strings.Contains(text, "F5 health") || !strings.HasPrefix(text, " tab focus") || l.Width() != 40 {
 		t.Fatalf("footer at 40 = %q", text)
+	}
+	// At 140 F1 and F5 are both kept, in order, after the ordinary keys.
+	l = footerHints(ModeShell, PanelActivity, TierWide, 140)
+	text = ""
+	for _, s := range l {
+		text += s.Text
+	}
+	if i, j := strings.Index(text, "F1 help"), strings.Index(text, "F5 health"); i < 0 || j < i || !strings.HasSuffix(strings.TrimRight(text, " "), "F5 health") {
+		t.Fatalf("footer at 140 = %q", text)
+	}
+}
+
+// An overlay's footer (no F1 there) keeps its close key before F5.
+func TestOverlayFooterKeepsClose(t *testing.T) {
+	text := ""
+	for _, s := range footerHints(ModeOverlay, PanelActivity, TierWide, 60) {
+		text += s.Text
+	}
+	if !strings.Contains(text, "esc q close") {
+		t.Fatalf("overlay footer at 60 = %q", text)
 	}
 }

@@ -347,11 +347,19 @@ func footerHints(m Mode, p PanelID, t Tier, width int) Line {
 	pair := func(b binding) Line {
 		return Line{{Text: "   "}, {Text: b.Keys, Role: RoleAccent, Bold: true}, {Text: " " + b.Hint, Role: RoleMuted}}
 	}
-	// Room is kept for F1 help, so a narrow footer never loses help; the
-	// ordinary keys fill what is left, then the other F-keys if they fit.
-	reserve := 0
+	// Where the footer offers F1 help (the main screen), room is kept for it
+	// and for F5 health (the header's health pill points to it), so a narrow
+	// footer drops ordinary keys first; the other F-keys fill what is left.
+	// A mode without F1 (an overlay) keeps its own keys, close among them.
+	kept := func(b binding) bool { return false }
 	if len(fkeys) > 0 && fkeyNumber(fkeys[0].Keys) == 1 {
-		reserve = pair(fkeys[0]).Width()
+		kept = func(b binding) bool { n := fkeyNumber(b.Keys); return n == 1 || n == 5 }
+	}
+	reserve := 0
+	for _, b := range fkeys {
+		if kept(b) {
+			reserve += pair(b).Width()
+		}
 	}
 	l := Line{{Text: " "}}
 	for _, b := range shown {
@@ -359,9 +367,17 @@ func footerHints(m Mode, p PanelID, t Tier, width int) Line {
 			l = append(l, p...)
 		}
 	}
+	room := width - l.Width() - reserve // what the other F-keys may take
 	var group Line
 	for _, b := range fkeys {
-		if p := pair(b); l.Width()+group.Width()+p.Width() <= width {
+		p := pair(b)
+		if !kept(b) {
+			if p.Width() > room {
+				continue
+			}
+			room -= p.Width()
+		}
+		if l.Width()+group.Width()+p.Width() <= width {
 			group = append(group, p...)
 		}
 	}

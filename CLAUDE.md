@@ -280,7 +280,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   follow keys, tail mode for Activity), `agents.go` (attention sort, flags, ctx-token parser),
   `activity.go` (event → row, pause cursor), `board.go`, `header.go`, `detail.go` +
   `detail_agent.go` (page bodies), `keys.go` (one key table per mode drives the handler, the footer
-  (its F-keys grouped last, ascending, room kept for F1 help) and the help; `key.go`'s engine-neutral `Key`, `keyOfTea` its adapter), `poll.go` (`pollOnce`
+  (its F-keys grouped last, ascending; on the main screen room is kept for F1 help and F5 health) and the help; `key.go`'s engine-neutral `Key`, `keyOfTea` its adapter), `poll.go` (`pollOnce`
   behind the `busReader` interface: the 1 s tick and its read inventory), `types.go` (`busWriter`,
   the page kinds, the Activity feed), `main.go` (flags, CLI paths, the tail goroutine feeding the
   program).

@@ -17,4 +17,4 @@
 │                                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯
- tab focus   1-5 view   ↑↓ j k select   y copy   F1 help    
+ tab focus   1-5 view   y copy   F1 help   F5 health        
