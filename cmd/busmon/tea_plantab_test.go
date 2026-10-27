@@ -105,3 +105,33 @@ func TestNarrowTabBarShortensOnlyWhatItMust(t *testing.T) {
 		t.Errorf("wide bar %q", bar)
 	}
 }
+
+// Review (reviewer-codex): y copies the selected task's page text and End/G
+// selects the last task, as on the Board; the done toggle copies nothing.
+// Review (foureyes): the overlay's two-cell mark column is not drawn.
+func TestPlanTabCopyAndEnd(t *testing.T) {
+	pinLocal(t)
+	a := plan.Task{ID: "a-board", Title: "Board columns", Owner: "coder"}
+	b := plan.Task{ID: "a-nav", Title: "reader navigation", Owner: "coder"}
+	st := &shared{agents: map[string]*agentState{}, person: "bernard"}
+	st.plan = planState{loaded: true, file: plan.File{Plan: "v0.23", Goal: "group A", Tasks: []plan.Task{a, b}},
+		rows: []plan.Row{{Task: a, State: plan.InProgress}, {Task: b, State: plan.InProgress}},
+		in:   plan.Inputs{Board: map[string]bus.BoardEntry{}}}
+	m := newShell(shellConfig{project: "demo", self: "bernard", st: st})
+	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
+	m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
+	m = keys(t, m, '4')
+	m = keys(t, m, kEnd)
+	if got := m.lists.of(PanelPlan).Selected(); got != "task:a-nav" {
+		t.Fatalf("End selected %q, want the last task", got)
+	}
+	m = keys(t, m, 'y')
+	if !strings.Contains(m.ui.flash, "task copied") {
+		t.Fatalf("y on a task: flash %q", m.ui.flash)
+	}
+	for _, it := range planTabItems(st.plan, false, shellNow, 120) {
+		if it.Selectable && strings.HasPrefix(it.Line.text(), "  ") {
+			t.Fatalf("plan row keeps the overlay's mark column: %q", it.Line.text())
+		}
+	}
+}

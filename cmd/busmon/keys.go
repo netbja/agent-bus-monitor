@@ -154,7 +154,7 @@ func either(fs ...func(Key) bool) func(Key) bool {
 
 var (
 	quitBinding   = binding{Keys: "^C", Help: "quit (everywhere)", Act: ActQuit, match: keyIs(keyCtrlC)}
-	notActivity   = []PanelID{PanelAgents, PanelBoard, PanelRequests}
+	notActivity   = []PanelID{PanelAgents, PanelBoard, PanelRequests, PanelPlan}
 	activityOnly  = []PanelID{PanelActivity}
 	arrows        = GlyphUp + GlyphDownArrow
 	panelBindings = []binding{

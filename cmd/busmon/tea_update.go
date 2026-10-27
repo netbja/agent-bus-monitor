@@ -291,6 +291,11 @@ func (m *Model) copySelected() tea.Cmd {
 			_, _, plain := taskDetail(e, key, m.now)
 			return m.copy(plain, "task")
 		}
+	case PanelPlan: // a task's page text; the done toggle copies nothing
+		if task, ok := strings.CutPrefix(key, "task:"); ok {
+			_, _, plain := planTaskDetail(s.planState, task, m.now)
+			return m.copy(plain, "task")
+		}
 	case PanelRequests:
 		for _, r := range s.requests {
 			if "req:"+r.Task == key {
