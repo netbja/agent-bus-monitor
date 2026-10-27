@@ -105,3 +105,43 @@ func TestHelpListsEveryBinding(t *testing.T) {
 		}
 	}
 }
+
+// The footer groups the F-keys, in ascending order, after the other keys
+// (A7): F5, F2, F3 and F1 were scattered among them.
+func TestFooterGroupsFKeys(t *testing.T) {
+	l := footerHints(ModeShell, PanelActivity, TierWide, 1000)
+	var keys []string
+	for _, s := range l {
+		if s.Role == RoleAccent && s.Bold {
+			keys = append(keys, s.Text)
+		}
+	}
+	first := -1
+	var fs []string
+	for i, k := range keys {
+		if strings.HasPrefix(k, "F") && len(k) == 2 {
+			if first < 0 {
+				first = i
+			}
+			fs = append(fs, k)
+		}
+	}
+	if strings.Join(fs, " ") != "F1 F2 F3 F5" {
+		t.Fatalf("F-keys %v in footer %v", fs, keys)
+	}
+	if first+len(fs) != len(keys) || strings.Join(keys[first:], " ") != "F1 F2 F3 F5" {
+		t.Fatalf("F-keys not grouped at the end: %v", keys)
+	}
+}
+
+// A narrow footer drops ordinary keys before the F-key group, F1 first kept.
+func TestNarrowFooterKeepsHelp(t *testing.T) {
+	l := footerHints(ModeShell, PanelActivity, TierWide, 40)
+	text := ""
+	for _, s := range l {
+		text += s.Text
+	}
+	if !strings.Contains(text, "F1 help") || !strings.HasPrefix(text, " tab focus") || l.Width() != 40 {
+		t.Fatalf("footer at 40 = %q", text)
+	}
+}

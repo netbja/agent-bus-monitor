@@ -1,5 +1,11 @@
 package main
 
+import (
+	"sort"
+	"strconv"
+	"strings"
+)
+
 // Mode is who owns the keyboard. Capture order (spec §6): overlay, then the
 // text modes, then the focused panel.
 type Mode int
@@ -322,24 +328,59 @@ func lookup(m Mode, p PanelID, t Tier, ev Key) Action {
 	return ActNone
 }
 
-// footerHints renders the advertised bindings of the mode, in table order, as
-// whole "keys hint" pairs; a pair that does not fit is left out, never cut.
+// footerHints renders the advertised bindings of the mode, in table order
+// with the function keys grouped last in ascending order (A7), as whole
+// "keys hint" pairs; a pair that does not fit is left out, never cut.
 func footerHints(m Mode, p PanelID, t Tier, width int) Line {
-	l := Line{{Text: " "}}
+	var shown, fkeys []binding
 	for _, b := range bindings(m) {
 		if b.Hint == "" || !b.applies(p, t) {
 			continue
 		}
-		pair := Line{{Text: b.Keys, Role: RoleAccent, Bold: true}, {Text: " " + b.Hint, Role: RoleMuted}}
-		if len(l) > 1 {
-			pair = append(Line{{Text: "   "}}, pair...)
+		if fkey(b.Keys) {
+			fkeys = append(fkeys, b)
+		} else {
+			shown = append(shown, b)
 		}
-		if l.Width()+pair.Width() > width {
-			continue
+	}
+	sort.SliceStable(fkeys, func(i, j int) bool { return fkeyNumber(fkeys[i].Keys) < fkeyNumber(fkeys[j].Keys) })
+	pair := func(b binding) Line {
+		return Line{{Text: "   "}, {Text: b.Keys, Role: RoleAccent, Bold: true}, {Text: " " + b.Hint, Role: RoleMuted}}
+	}
+	// Room is kept for F1 help, so a narrow footer never loses help; the
+	// ordinary keys fill what is left, then the other F-keys if they fit.
+	reserve := 0
+	if len(fkeys) > 0 && fkeyNumber(fkeys[0].Keys) == 1 {
+		reserve = pair(fkeys[0]).Width()
+	}
+	l := Line{{Text: " "}}
+	for _, b := range shown {
+		if p := pair(b); l.Width()+p.Width()+reserve <= width {
+			l = append(l, p...)
 		}
-		l = append(l, pair...)
+	}
+	var group Line
+	for _, b := range fkeys {
+		if p := pair(b); l.Width()+group.Width()+p.Width() <= width {
+			group = append(group, p...)
+		}
+	}
+	l = append(l, group...)
+	if len(l) > 1 && l[1].Text == "   " {
+		l = append(Line{{Text: " "}}, l[2:]...) // no gap before the first pair
 	}
 	return FitLine(l, width)
+}
+
+// fkey reports a binding named by a function key alone ("F1".."F12").
+func fkey(keys string) bool { return fkeyNumber(keys) > 0 }
+
+// fkeyNumber is n for "Fn", else 0.
+func fkeyNumber(keys string) int {
+	if n, err := strconv.Atoi(strings.TrimPrefix(keys, "F")); err == nil && strings.HasPrefix(keys, "F") && n > 0 {
+		return n
+	}
+	return 0
 }
 
 // altEnter is Alt+Enter (most terminals send it as Esc then Enter, which
