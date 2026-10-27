@@ -1,9 +1,14 @@
 package main
 
 import (
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // A5: once a line is open in the reader, n (or right) opens the next item of
@@ -61,5 +66,49 @@ func TestReaderNextPrevious(t *testing.T) {
 	m = keys(t, m, 'n')
 	if top := m.rd.top(); top == nil || top.kind != ovHelp {
 		t.Fatalf("n on help: %+v", top)
+	}
+}
+
+// Review (reviewer-codex): in For you, opening an unread line marks it read
+// and its row leaves the list; n must still go to the line after the one
+// shown, and p back to it, not follow the list's shifted selection.
+func TestReaderNextInForYouUnread(t *testing.T) {
+	pinLocal(t)
+	m := fixtureShell(t, 140, 40)
+	// Two more lines for the person, from other senders (a newer line from
+	// the same sender would supersede the older one).
+	at := func(d time.Duration) string { return fmt.Sprintf("%d-0", shellNow.Add(-d).UnixMilli()) }
+	m = step(t, m, tailMsg{events: []bus.Event{
+		{ID: at(90 * time.Second), Kind: "cmd", Type: bus.CmdDirective, From: "architect", Target: "bernard", Message: "spec question"},
+		{ID: at(60 * time.Second), Kind: "cmd", Type: bus.CmdDirective, From: "sentinel", Target: "bernard", Message: "health note"},
+	}})
+	m.focusPanel(PanelForYou)
+	m.refresh()
+	var unread []string
+	for _, it := range m.forYou {
+		if it.Rank == rankUnread {
+			unread = append(unread, it.Key)
+		}
+	}
+	if len(unread) < 3 {
+		t.Fatalf("fixture has %d unread For you lines, want 3+", len(unread))
+	}
+	evOf := func(key string) string { return strings.TrimPrefix(key, "unread:") }
+	m.lists.of(PanelForYou).Select(unread[0])
+	m = keys(t, m, kEnter, kEnter)
+	if p := m.rd.top(); p == nil || p.ev.ID != evOf(unread[0]) {
+		t.Fatalf("opened %+v, want %s", p, unread[0])
+	}
+	m = keys(t, m, 'n')
+	if p := m.rd.top(); p == nil || p.ev.ID != evOf(unread[1]) {
+		t.Fatalf("n after the first unread: %+v (flash %q), want %s", p, m.ui.flash, unread[1])
+	}
+	m = keys(t, m, 'n')
+	if p := m.rd.top(); p == nil || p.ev.ID != evOf(unread[2]) {
+		t.Fatalf("n again: %+v (flash %q), want %s (none skipped)", p, m.ui.flash, unread[2])
+	}
+	m = keys(t, m, 'p', 'p')
+	if p := m.rd.top(); p == nil || p.ev.ID != evOf(unread[0]) {
+		t.Fatalf("p p back: %+v (flash %q), want %s", p, m.ui.flash, unread[0])
 	}
 }
