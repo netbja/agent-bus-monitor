@@ -14,11 +14,11 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity  2 Board  3 Requests  4 Plan   auto-scroll on ─ 7 events · fil…─╮
 │    time  from     to       type      message                                 ▲
-│▶   14:51 coder             report    Lot 1 delivered (+197)                  │
-│    Lot 1 delivered                                                           ┃
-│                                                                              │
-│    Done                                                                      │
-│    ... enter for more                                                        ▼
+│▼   14:51 coder             report    Lot 1 delivered (+197)                  │
+│                                      │ Lot 1 delivered                       ┃
+│                                      │                                       │
+│                                      │ Done                                  │
+│                                      ↵ full text · 5 more lines              ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
  tab focus   1-4 tabs   ↑↓ j k select   end G live   F1 help   F5 health        

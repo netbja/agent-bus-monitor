@@ -8,6 +8,7 @@ type ListItem struct {
 	Key        string
 	Line       Line
 	Selectable bool
+	Expanded   bool // its text is open below it: the gutter shows ▼, not ▶
 }
 
 // listGutter is the column every row reserves on its left for the selection
@@ -324,7 +325,10 @@ func (l *listState) draw(screen cellSink) {
 		}
 		selected := it.Key != "" && it.Key == l.sel
 		var mark Line
-		if selected {
+		switch {
+		case it.Expanded:
+			mark = Line{{Text: GlyphDown, Role: RoleAccent}}
+		case selected:
 			mark = Line{{Text: GlyphSelect, Role: RoleAccent}}
 		}
 		drawLine(screen, ix, iy+r, gutter, mark, selected)

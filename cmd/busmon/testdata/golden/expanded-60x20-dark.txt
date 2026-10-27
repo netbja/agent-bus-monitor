@@ -2,16 +2,16 @@
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
  1 For you  2 Agents  3 Act  4 Board  5 Requests  6 Plan    
 ╭─ Activity  auto-scroll on ───── 7 events · filter: none ─╮
-│    14:24 archite… status    done · spec merged           ▲
-│    14:50 ♙ Berna… directive → coder review lot 1         │
-│▶   14:51 coder    report    Lot 1 delivered (+197)       ┃
-│    Lot 1 delivered                                       ┃
-│                                                          ┃
-│    Done                                                  ┃
-│    · adapter in d0a72be ; tests green                    ┃
-│      func veryLongFunctionNameForTheGolden(argumentOne st┃
-│    → ring, argumentTwo int, argumentThree []string) (resu┃
-│    → lt string, err error) {                             ┃
+│    14:50 ♙ Berna… directive → coder review lot 1         ▲
+│▼   14:51 coder    report    Lot 1 delivered (+197)       │
+│                             │ Lot 1 delivered            │
+│                             │                            ┃
+│                             │ Done                       ┃
+│                             │ · adapter in d0a72be ;     ┃
+│                             │   tests green              ┃
+│                             │   func veryLongFunctionName┃
+│                             │ → ForTheGolden(argumentOne ┃
+│                             ↵ full text · 4 more lines   ┃
 │  ○ 14:52 master   directive → bernard please look at the…┃
 │  ● 14:56 dispatch notify    project paused until 16:56   ┃
 │  ● 15:00 master   ask       asks · review lot 1? (2 ques…┃
