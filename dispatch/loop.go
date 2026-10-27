@@ -40,6 +40,9 @@ type Config struct {
 	// Quota, when its Read is set, collects provider readings and holds the
 	// agents of a provider near its limit (v0.13).
 	Quota QuotaConfig
+	// Context publishes each verified agent's context fill to {p}:context
+	// (context-alert); a nil Read turns it off.
+	Context ContextConfig
 	// Observe, when positive, is how often every verified pane is inspected
 	// and published to {p}:observed (ObserveEvery in the services; 0 = off).
 	Observe time.Duration
@@ -287,7 +290,8 @@ type loop struct {
 	logMu sync.Mutex
 	last  map[string]string // agent → last logged decision, so a steady state logs once
 
-	quota quotaState
+	quota     quotaState
+	contextAt time.Time // the last context publication (contextPass)
 
 	observedAt time.Time                    // last observePass (local clock: a throttle, never persisted)
 	snaps      map[string]bus.AgentSnapshot // this pass's snapshots
@@ -312,6 +316,12 @@ func (l *loop) reconcile(ctx context.Context) error {
 			return err
 		}
 		l.logError("", "quota", err)
+	}
+	if err := l.contextPass(ctx, snaps); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "context", err)
 	}
 	if paused, err := l.paused(ctx); err != nil || paused {
 		return err

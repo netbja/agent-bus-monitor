@@ -35,6 +35,14 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 		if at != 0 && (next.ClientFP != "" || next.PID != out.PID || next.PIDStart != out.PIDStart) {
 			out.ClientFP = next.ClientFP
 		}
+		// The session proved with this process (another process proves its
+		// own, even none); nothing unproved keeps one.
+		switch {
+		case at == 0:
+			out.IdentSession = ""
+		case next.Session != "" || next.PID != out.PID || next.PIDStart != out.PIDStart:
+			out.IdentSession = next.Session
+		}
 		out.Pane, out.PID, out.PIDStart, out.Terminal, out.IdentTS = next.Pane, next.PID, next.PIDStart, next.Terminal, at
 	}
 	if next.Client != "" {
