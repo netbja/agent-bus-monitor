@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -18,15 +19,25 @@ import (
 // decision 4). The cap is enforced in Update, in runes, never mid-rune.
 
 // textArea is the window's text and cursor, in runes; top is the first
-// visual row shown, kept by Update so View only reads it.
+// visual row shown. Its rows are wrapped once per change, in one pass, by
+// prepare on the update path; View reads them (rowsAt).
 type textArea struct {
 	text  []rune
 	cur   int
 	top   int
 	limit int
+
+	rev    int   // bumped by every change of text
+	cached []row // the rows of revision cachedRev at width cachedW
+	cachedRev, cachedW int
 }
 
+// wrapCalls counts the wraps: a key wraps the text once (the cost test).
+var wrapCalls int
+
 func (t *textArea) value() string { return string(t.text) }
+
+func (t *textArea) changed() { t.rev++ }
 
 // insert puts s at the cursor, cut to what the limit leaves; it reports the
 // runes dropped. s is made displayable first: the measure is one method.
@@ -36,22 +47,96 @@ func (t *textArea) insert(s string) (dropped int) {
 	if room := t.limit - len(t.text); len(rs) > room {
 		dropped, rs = len(rs)-max(room, 0), rs[:max(room, 0)]
 	}
+	if len(rs) == 0 {
+		return dropped
+	}
 	t.text = append(t.text[:t.cur:t.cur], append(rs, t.text[t.cur:]...)...)
 	t.cur += len(rs)
+	t.changed()
 	return dropped
 }
 
 func (t *textArea) set(s string) {
 	t.text, t.cur, t.top = nil, 0, 0
+	t.changed()
 	t.insert(s)
 }
 
-// clusters are the rune offsets where each grapheme cluster starts, and the
-// text's end: the cursor moves and deletes by cluster.
-func (t *textArea) clusters() []int {
-	out := []int{0}
-	g := uniseg.NewGraphemes(string(t.text))
-	n := 0
+// row is one visual row of the text: runes [from, to), wrapped after its
+// last space when it has one, else at the width.
+type row struct{ from, to int }
+
+// wrap is the text's rows at width, in one grapheme pass.
+func wrap(text []rune, width int) []row {
+	wrapCalls++
+	width = max(1, width)
+	var out []row
+	from, pos, w := 0, 0, 0
+	space, afterSpace := -1, 0 // the rune after the row's last space, and the width since
+	g := uniseg.NewGraphemes(string(text))
+	for g.Next() {
+		rs := g.Runes()
+		if len(rs) == 1 && rs[0] == '\n' {
+			out = append(out, row{from, pos})
+			pos++
+			from, w, space, afterSpace = pos, 0, -1, 0
+			continue
+		}
+		cw := g.Width()
+		if w+cw > width && pos > from {
+			if space > from {
+				out = append(out, row{from, space})
+				from, w = space, afterSpace
+			} else {
+				out = append(out, row{from, pos})
+				from, w = pos, 0
+			}
+			space, afterSpace = -1, w
+		}
+		w += cw
+		afterSpace += cw
+		pos += len(rs)
+		if len(rs) == 1 && rs[0] == ' ' {
+			space, afterSpace = pos, 0
+		}
+	}
+	return append(out, row{from, pos})
+}
+
+// prepare wraps the text at width when it changed (the update path).
+func (t *textArea) prepare(width int) []row {
+	if t.cached == nil || t.cachedRev != t.rev || t.cachedW != width {
+		t.cached, t.cachedRev, t.cachedW = wrap(t.text, width), t.rev, width
+	}
+	return t.cached
+}
+
+// rowsAt is the rows at width without storing them: View's read.
+func (t *textArea) rowsAt(width int) []row {
+	if t.cached != nil && t.cachedRev == t.rev && t.cachedW == width {
+		return t.cached
+	}
+	return wrap(t.text, width)
+}
+
+// rowOf is the index of the row holding the cursor.
+func rowOf(rs []row, cur int) int {
+	i := sort.Search(len(rs), func(i int) bool { return rs[i].from > cur }) - 1
+	return clamp(i, 0, len(rs)-1)
+}
+
+// cursorAt is the cursor's visual row and its cell column.
+func (t *textArea) cursorAt(rs []row) (int, int) {
+	i := rowOf(rs, t.cur)
+	return i, Width(string(t.text[rs[i].from:t.cur]))
+}
+
+// clusterStarts are the rune offsets where the clusters of runes [from, to)
+// start, and to.
+func (t *textArea) clusterStarts(from, to int) []int {
+	out := []int{from}
+	n := from
+	g := uniseg.NewGraphemes(string(t.text[from:to]))
 	for g.Next() {
 		n += len(g.Runes())
 		out = append(out, n)
@@ -59,125 +144,81 @@ func (t *textArea) clusters() []int {
 	return out
 }
 
-func (t *textArea) left() {
-	cs := t.clusters()
-	for i := len(cs) - 1; i >= 0; i-- {
-		if cs[i] < t.cur {
-			t.cur = cs[i]
+// left and right move by cluster, scanning the cursor's row only.
+func (t *textArea) left(rs []row) {
+	if t.cur == 0 {
+		return
+	}
+	r := rs[rowOf(rs, t.cur)]
+	if t.cur == r.from { // the end of the row above (its newline or last cluster)
+		r = rs[rowOf(rs, t.cur-1)]
+		if t.cur-1 >= r.to {
+			t.cur--
 			return
 		}
 	}
+	cs := t.clusterStarts(r.from, min(t.cur, r.to))
+	t.cur = cs[max(0, len(cs)-2)]
 }
 
-func (t *textArea) right() {
-	for _, c := range t.clusters() {
-		if c > t.cur {
-			t.cur = c
-			return
-		}
+func (t *textArea) right(rs []row) {
+	if t.cur >= len(t.text) {
+		return
 	}
+	r := rs[rowOf(rs, t.cur)]
+	if t.cur >= r.to { // a newline
+		t.cur++
+		return
+	}
+	t.cur = t.clusterStarts(t.cur, r.to)[1]
 }
 
-func (t *textArea) backspace() {
+func (t *textArea) backspace(rs []row) {
 	end := t.cur
-	t.left()
-	t.text = append(t.text[:t.cur:t.cur], t.text[end:]...)
+	t.left(rs)
+	if t.cur < end {
+		t.text = append(t.text[:t.cur:t.cur], t.text[end:]...)
+		t.changed()
+	}
 }
 
-func (t *textArea) del() {
+func (t *textArea) del(rs []row) {
 	start := t.cur
-	t.right()
-	t.text = append(t.text[:start:start], t.text[t.cur:]...)
+	t.right(rs)
+	if t.cur > start {
+		t.text = append(t.text[:start:start], t.text[t.cur:]...)
+		t.changed()
+	}
 	t.cur = start
 }
 
-// row is one visual row of the text: runes [from, to), wrapped at a space
-// when the row has one, else at the width.
-type row struct{ from, to int }
-
-func (t *textArea) rows(width int) []row {
-	width = max(1, width)
-	var out []row
-	from := 0
-	for from <= len(t.text) {
-		nl := from
-		for nl < len(t.text) && t.text[nl] != '\n' {
-			nl++
-		}
-		line := from
-		for {
-			end, w, space := line, 0, -1
-			g := uniseg.NewGraphemes(string(t.text[line:nl]))
-			for g.Next() {
-				cw := g.Width()
-				if w+cw > width && end > line {
-					break
-				}
-				if r := g.Runes(); len(r) == 1 && r[0] == ' ' {
-					space = end + 1
-				}
-				w += cw
-				end += len(g.Runes())
-			}
-			if end < nl && space > line { // wrap after the last space
-				end = space
-			}
-			out = append(out, row{line, end})
-			if end >= nl {
-				break
-			}
-			line = end
-		}
-		from = nl + 1
-	}
-	return out
-}
-
-// cursorAt is the cursor's visual row and its cell column.
-func (t *textArea) cursorAt(width int) (int, int) {
-	rs := t.rows(width)
-	for i, r := range rs {
-		next := len(t.text) + 1
-		if i+1 < len(rs) {
-			next = rs[i+1].from
-		}
-		if t.cur >= r.from && (t.cur < next || i == len(rs)-1) && t.cur <= r.to {
-			return i, Width(string(t.text[r.from:t.cur]))
-		}
-	}
-	return max(0, len(rs)-1), 0
-}
-
-// vertical moves the cursor a row up or down, to the nearest column.
-func (t *textArea) vertical(width, delta int) {
-	rs := t.rows(width)
-	i, col := t.cursorAt(width)
-	j := clamp(i+delta, 0, len(rs)-1)
-	if j == i {
-		return
-	}
-	r := rs[j]
-	t.cur = r.from
-	w := 0
+// colIn is the rune offset of cell column col in row r.
+func (t *textArea) colIn(r row, col int) int {
+	cur, w := r.from, 0
 	g := uniseg.NewGraphemes(string(t.text[r.from:r.to]))
 	for g.Next() {
 		if w+g.Width() > col {
 			break
 		}
 		w += g.Width()
-		t.cur += len(g.Runes())
+		cur += len(g.Runes())
+	}
+	return cur
+}
+
+// vertical moves the cursor a row up or down, to the nearest column.
+func (t *textArea) vertical(rs []row, delta int) {
+	i, col := t.cursorAt(rs)
+	if j := clamp(i+delta, 0, len(rs)-1); j != i {
+		t.cur = t.colIn(rs[j], col)
 	}
 }
 
 // home and end are the current visual row's ends.
-func (t *textArea) home(width int) {
-	i, _ := t.cursorAt(width)
-	t.cur = t.rows(width)[i].from
-}
+func (t *textArea) home(rs []row) { t.cur = rs[rowOf(rs, t.cur)].from }
 
-func (t *textArea) end(width int) {
-	i, _ := t.cursorAt(width)
-	r := t.rows(width)[i]
+func (t *textArea) end(rs []row) {
+	r := rs[rowOf(rs, t.cur)]
 	t.cur = r.to
 	if r.to > r.from && r.to < len(t.text) && t.text[r.to-1] == ' ' && t.text[r.to] != '\n' {
 		t.cur = r.to - 1 // a wrapped row ends before its space
@@ -186,31 +227,21 @@ func (t *textArea) end(width int) {
 
 // keepCursor scrolls so the cursor's row is among the height rows shown.
 func (t *textArea) keepCursor(width, height int) {
-	i, _ := t.cursorAt(width)
+	rs := t.prepare(width)
+	i, _ := t.cursorAt(rs)
 	switch {
 	case i < t.top:
 		t.top = i
 	case height > 0 && i >= t.top+height:
 		t.top = i - height + 1
 	}
-	t.top = clamp(t.top, 0, max(0, len(t.rows(width))-height))
+	t.top = clamp(t.top, 0, max(0, len(rs)-height))
 }
 
 // clickAt puts the cursor at the cell (col, row) of the shown rows.
 func (t *textArea) clickAt(width, col, rowIdx int) {
-	rs := t.rows(width)
-	j := clamp(t.top+rowIdx, 0, len(rs)-1)
-	r := rs[j]
-	t.cur = r.from
-	w := 0
-	g := uniseg.NewGraphemes(string(t.text[r.from:r.to]))
-	for g.Next() {
-		if w+g.Width() > col {
-			break
-		}
-		w += g.Width()
-		t.cur += len(g.Runes())
-	}
+	rs := t.prepare(width)
+	t.cur = t.colIn(rs[clamp(t.top+rowIdx, 0, len(rs)-1)], col)
 }
 
 // lines are the height rows shown from top, the cursor cell reversed when
@@ -227,24 +258,19 @@ func (t *textArea) lines(width, height int, focused bool, placeholder string) []
 		}
 		return out
 	}
-	rs := t.rows(width)
-	ci, _ := t.cursorAt(width)
+	rs := t.rowsAt(width)
+	ci, _ := t.cursorAt(rs)
 	for i := 0; i < height && t.top+i < len(rs); i++ {
 		r := rs[t.top+i]
-		s := string(t.text[r.from:r.to])
 		if !focused || t.top+i != ci {
-			out[i] = Line{{Text: s, Role: RoleText}}
+			out[i] = Line{{Text: string(t.text[r.from:r.to]), Role: RoleText}}
 			continue
 		}
 		// The cursor's cluster reversed (a space past the row's end).
-		before := string(t.text[r.from:t.cur])
-		rest := string(t.text[t.cur:r.to])
+		before, rest := string(t.text[r.from:t.cur]), string(t.text[t.cur:r.to])
 		at, size := " ", 0
 		if rest != "" {
 			at, size = firstCluster(rest)
-			if at == "\n" {
-				at = " "
-			}
 		}
 		out[i] = Line{{Text: before, Role: RoleText}, {Text: at, Role: RoleText, Reverse: true}, {Text: rest[size:], Role: RoleText}}
 	}
@@ -437,6 +463,7 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 		m.closeCompose()
 		return nil
 	}
+	rs := field.prepare(width) // the rows the cursor moves on: wrapped once per change
 	switch {
 	case k.Code == keyEnter && field == &c.to: // the recipient is done: to the text
 		c.onTo = false
@@ -450,22 +477,22 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 		}
 		c.pick = 0
 	case k.Code == keyBackspace:
-		field.backspace()
+		field.backspace(rs)
 		c.pick = 0
 	case k.Code == keyDelete:
-		field.del()
+		field.del(rs)
 	case k.Code == keyLeft:
-		field.left()
+		field.left(rs)
 	case k.Code == keyRight:
-		field.right()
+		field.right(rs)
 	case k.Code == keyUp:
-		field.vertical(width, -1)
+		field.vertical(rs, -1)
 	case k.Code == keyDown:
-		field.vertical(width, 1)
+		field.vertical(rs, 1)
 	case k.Code == keyHome:
-		field.home(width)
+		field.home(rs)
 	case k.Code == keyEnd:
-		field.end(width)
+		field.end(rs)
 	}
 	m.layoutCompose()
 	return nil
@@ -587,7 +614,7 @@ func (m Model) drawCompose(g *grid) {
 	if c.kind == composeAnswer {
 		title = "Answer " + GlyphNone + " " + Preview(c.agent)
 	}
-	rows := c.area.rows(tr.W)
+	rows := c.area.rowsAt(tr.W)
 	drawFrame(g, f.X, f.Y, f.W, f.H, Frame{Title: Line{{Text: title, Role: RoleText}}, Focused: true, Hue: panelHue[PanelActivity],
 		Scroll: ScrollState{Total: len(rows), Top: c.area.top, Visible: tr.H}})
 	iw := f.W - 4

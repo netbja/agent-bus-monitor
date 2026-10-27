@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -138,15 +139,15 @@ func TestShellComposeAnswers(t *testing.T) {
 func TestShellComposeTextArea(t *testing.T) {
 	ta := textArea{limit: 100}
 	ta.insert("one two three four")
-	if rs := ta.rows(9); len(rs) != 3 || string(ta.text[rs[1].from:rs[1].to]) != "three " {
+	if rs := ta.prepare(9); len(rs) != 3 || string(ta.text[rs[1].from:rs[1].to]) != "three " {
 		var got []string
 		for _, r := range rs {
 			got = append(got, string(ta.text[r.from:r.to]))
 		}
 		t.Fatalf("rows at 9: %q", got)
 	}
-	ta.vertical(9, -1)
-	if r, _ := ta.cursorAt(9); r != 1 {
+	ta.vertical(ta.prepare(9), -1)
+	if r, _ := ta.cursorAt(ta.prepare(9)); r != 1 {
 		t.Fatalf("up: row %d", r)
 	}
 	ta.keepCursor(9, 1)
@@ -154,9 +155,47 @@ func TestShellComposeTextArea(t *testing.T) {
 		t.Fatalf("keepCursor: top %d", ta.top)
 	}
 	ta.set("a日b")
-	ta.left()
-	ta.backspace()
+	ta.left(ta.prepare(9))
+	ta.backspace(ta.prepare(9))
 	if ta.value() != "ab" || ta.cur != 1 {
 		t.Fatalf("backspace by cluster: %q at %d", ta.value(), ta.cur)
+	}
+	// Across a newline: left from a row's start lands on the newline,
+	// backspace there joins the lines.
+	ta.set("ab\ncd")
+	ta.cur = 3
+	ta.backspace(ta.prepare(9))
+	if ta.value() != "abcd" || ta.cur != 2 {
+		t.Fatalf("backspace over a newline: %q at %d", ta.value(), ta.cur)
+	}
+	// The one-pass wrap agrees with the old per-row wrap on a mixed text.
+	ta.set("日本語のテキスト and some words, 😀 emoji\n\nlast")
+	var got []string
+	for _, r := range ta.prepare(7) {
+		got = append(got, string(ta.text[r.from:r.to]))
+	}
+	want := []string{"日本語", "のテキ", "スト ", "and ", "some ", "words, ", "😀 ", "emoji", "", "last"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("rows at 7: %q, want %q", got, want)
+	}
+}
+
+// A key in a full window stays cheap: the text is wrapped once per change,
+// in one pass, on the update path, and View reads the rows (foureyes'
+// measure was 0.6 s a key at the cap, quadratic in the text).
+func TestShellComposeKeyCost(t *testing.T) {
+	pinLocal(t)
+	m := keys(t, shellWith(t, 140, 40, shellConfig{}, false), 'I', kTab)
+	m = step(t, m, tea.PasteMsg{Content: strings.Repeat("word ", bus.CmdMaxRunes/5)})
+	m = keys(t, m, tea.Key{Code: tea.KeyHome}, kUp, kUp)
+	calls := wrapCalls
+	start := time.Now()
+	m = keys(t, m, kBackspce)
+	_ = m.View()
+	if d := time.Since(start); d > 150*time.Millisecond {
+		t.Errorf("one key and its frame at the cap took %v", d)
+	}
+	if n := wrapCalls - calls; n != 1 {
+		t.Errorf("one key wrapped the text %d times, want once", n)
 	}
 }
