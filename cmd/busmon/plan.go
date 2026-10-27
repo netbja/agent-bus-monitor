@@ -506,3 +506,30 @@ func planRecapSection(in recapInput, add func(recapRow), section func(string)) {
 		add(recapRow{Section: "Plan", Title: "no task changed since your last visit"})
 	}
 }
+
+// planTabItems is the Plan tab (A11): planOverlay's lines as a list, the
+// tasks and the done group's toggle selectable (the list draws the
+// selection, so the overlay's own mark column is dropped).
+func planTabItems(p planState, expanded bool, now time.Time, width int) []ListItem {
+	if !p.loaded {
+		return []ListItem{{Line: FitLine(Line{{Text: "no plan loaded (master: agentbus plan load <path>@<commit>)", Role: RoleMuted}}, width)}}
+	}
+	lines, _, items := planOverlay(p, -1, expanded, now, width)
+	keys := make(map[int]string, len(items))
+	for _, it := range items {
+		if it.toggle {
+			keys[it.line] = "toggle"
+		} else {
+			keys[it.line] = "task:" + it.task
+		}
+	}
+	out := make([]ListItem, 0, len(lines))
+	for i, l := range lines {
+		key, ok := keys[i]
+		if ok && len(l) > 0 && l[0].Text == "  " {
+			l = l[1:]
+		}
+		out = append(out, ListItem{Key: key, Line: FitLine(l, width), Selectable: ok})
+	}
+	return out
+}

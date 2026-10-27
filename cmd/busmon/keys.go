@@ -70,6 +70,7 @@ const (
 	ActPickType     // the picker: a typed character or backspace edits the filter
 	ActPlan         // open the batch's plan
 	ActTab5         // the shell's narrow tier: the fifth view
+	ActTab6         // the shell's narrow tier: the sixth view (Plan)
 	ActAskOther     // the shell's ask: a free answer ("Other") in the compose window
 )
 
@@ -194,12 +195,13 @@ var (
 	// shellTabs: in the shell, 1-3 pick the tabbed panel's tab at every
 	// width; the narrow tier's five views take 1-5 (For you first).
 	shellTabs = []binding{
-		{Keys: "1-3", Hint: "tabs", Act: ActTab1, Tiers: []Tier{TierWide, TierMedium}, match: runeIs('1')},
-		{Keys: "1-5", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
+		{Keys: "1-4", Hint: "tabs", Act: ActTab1, Tiers: []Tier{TierWide, TierMedium}, match: runeIs('1')},
+		{Keys: "1-6", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
 		{Keys: "2", Act: ActTab2, match: runeIs('2')},
 		{Keys: "3", Act: ActTab3, match: runeIs('3')},
-		{Keys: "4", Act: ActTab4, Tiers: []Tier{TierNarrow}, match: runeIs('4')},
+		{Keys: "4", Act: ActTab4, match: runeIs('4')},
 		{Keys: "5", Act: ActTab5, Tiers: []Tier{TierNarrow}, match: runeIs('5')},
+		{Keys: "6", Act: ActTab6, Tiers: []Tier{TierNarrow}, match: runeIs('6')},
 	}
 	shellBindings = shellPanelBindings()
 	// shellAskBindings: in the shell's reader a digit answers with that option,

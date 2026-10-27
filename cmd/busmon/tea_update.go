@@ -98,6 +98,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		m.switchTab(int(act - ActTab1))
 	case ActTab5:
 		m.switchTab(4)
+	case ActTab6:
+		m.switchTab(5)
 	case ActUp:
 		l.Move(-1)
 	case ActDown:
@@ -228,6 +230,15 @@ func (m *Model) open(p PanelID) tea.Cmd {
 	case PanelBoard:
 		if _, ok := s.board[key]; ok {
 			return m.push(page{kind: ovTask, key: key})
+		}
+	case PanelPlan:
+		if key == "toggle" {
+			m.ui.planExpanded = true
+			m.refresh()
+			return nil
+		}
+		if task, ok := strings.CutPrefix(key, "task:"); ok {
+			return m.push(page{kind: ovPlanTask, key: task})
 		}
 	case PanelRequests:
 		if strings.HasPrefix(key, "req:") {
