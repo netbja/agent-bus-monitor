@@ -303,6 +303,7 @@ type shared struct {
 	pauseFailed    bool                          // the last pause read failed: pause holds the kept value
 	holds          map[string]int64              // provider → reset (Unix s) of its quota hold
 	asks           []bus.Ask                     // agents' questions for people
+	personGates    map[string]string             // gates on the person (ref → meta), when the person is no agent
 	pace           paceTracker                   // per provider window: rate of use, display only
 	svcRecs        map[string]bus.ServiceRecord  // each service's last state
 	board          map[string]bus.BoardEntry

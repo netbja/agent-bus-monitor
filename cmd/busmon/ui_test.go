@@ -147,7 +147,8 @@ type fakeReader struct {
 	asks       []bus.Ask
 	pauseErr   error // returned by Pause when set
 	contexts   map[string]bus.ContextFill
-	contextErr error // returned by Context when set
+	contextErr error                        // returned by Context when set
+	gates      map[string]map[string]string // OpenChallenges by gated name, when set
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -205,9 +206,33 @@ func (f *fakeReader) Wake(context.Context, string) (bus.WakeRecord, bool, error)
 	f.n("Wake")
 	return bus.WakeRecord{}, false, nil
 }
-func (f *fakeReader) OpenChallenges(context.Context, string) (map[string]string, error) {
+func (f *fakeReader) OpenChallenges(_ context.Context, agent string) (map[string]string, error) {
 	f.n("OpenChallenges")
-	return nil, nil
+	return f.gates[agent], nil
+}
+
+// The person's own gate is read when the person is no agent, and kept as the
+// snapshot's personGates; the default identity "pilot" is never read.
+func TestPollReadsThePersonsGate(t *testing.T) {
+	f := &fakeReader{calls: map[string]int{}, gates: map[string]map[string]string{
+		"bernard": {"1793000000001-0": "master|sign off"}, "coder": {"1793000000002-0": "master|review"}}}
+	st := &shared{person: "bernard", agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}}
+	pollOnce(context.Background(), f, st, 1) // the agents arrive
+	pollOnce(context.Background(), f, st, 2)
+	if len(st.personGates) != 1 || st.personGates["1793000000001-0"] == "" {
+		t.Fatalf("personGates = %v", st.personGates)
+	}
+	items := forYou(takeSnapshot(st, time.Now()), nil)
+	if len(items) != 1 || items[0].Agent != "bernard" || items[0].By != "master" {
+		t.Fatalf("for you = %+v", items)
+	}
+	pilot := &shared{person: defaultHuman, agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}}
+	f.gates[defaultHuman] = map[string]string{"x": "master|y"}
+	pollOnce(context.Background(), f, pilot, 1)
+	pollOnce(context.Background(), f, pilot, 2)
+	if len(pilot.personGates) != 0 {
+		t.Fatalf("the default identity's gate was read: %v", pilot.personGates)
+	}
 }
 
 func TestBrokerDownKeepsValues(t *testing.T) {

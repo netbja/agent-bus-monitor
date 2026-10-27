@@ -314,8 +314,8 @@ func TestShellWheelScrollsEveryZone(t *testing.T) {
 			m := hostileShell(t, 120, 30, false)
 			m = keys(t, m, rune('1'+slices.Index(lowerTabs, tab)))
 			m.ui.focus = PanelAgents
-			for n, a := range m.snap.agents { // gates and threads enough to scroll For you and Requests
-				a.gates = map[string]string{"g1-" + n: "x|y", "g2-" + n: "x|y"}
+			for n, a := range m.snap.agents { // gates (the person's) and threads enough to scroll For you and Requests
+				a.gates = map[string]string{"g1-" + n: m.snap.person + "|y", "g2-" + n: m.snap.person + "|y"} // gates the person opened
 			}
 			for i := 0; i < 30; i++ {
 				m.snap.threads = append(m.snap.threads, openThread{ID: fmt.Sprintf("%d-0", i+2), Type: "directive", From: "a00", Target: "a02", Message: "t", At: shellNow})

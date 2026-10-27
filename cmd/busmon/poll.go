@@ -122,6 +122,8 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	for n := range st.agents {
 		names = append(names, n)
 	}
+	_, personIsAgent := st.agents[st.person]
+	person := st.person
 	st.mu.Unlock()
 	type wakeInfo struct {
 		ob     bus.Obligation
@@ -177,6 +179,16 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			gates[n] = m
 		}
 	}
+	// A gate can hold the person too (foryou-gates); an agent's own row
+	// carries it when the person is also an agent name.
+	var personGates map[string]string
+	personGatesOK := false
+	if person != "" && person != defaultHuman && !personIsAgent {
+		personGates, personGatesOK = func() (map[string]string, bool) {
+			m, err := b.OpenChallenges(pollCtx, person)
+			return m, err == nil
+		}()
+	}
 
 	pause, pauseErr := b.Pause(pollCtx)
 	asks, asksErr := b.Asks(pollCtx)
@@ -220,6 +232,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	st.pauseFailed = pauseErr != nil
 	if pauseErr == nil {
 		st.pause = pause
+	}
+	if personGatesOK {
+		st.personGates = personGates
 	}
 	if asksErr == nil {
 		st.asks = asks
