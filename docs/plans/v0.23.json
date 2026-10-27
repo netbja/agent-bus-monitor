@@ -1,0 +1,23 @@
+{
+  "plan": "v0.23",
+  "goal": "Bernard's busmon test: For you, small fixes, Requests, tokens dashboard, onboarding, Go installer",
+  "tasks": [
+    {"id":"codex-reviewer","title":"reviewer-codex, a read-only Codex 4-eyes reviewer (PR 137)","owner":"coder","board":"codex-reviewer"},
+    {"id":"foryou-gates","title":"B: For you shows only the person's gates; verdicts close their gate; gate close (PR 138)","owner":"coder","board":"foryou-gates"},
+    {"id":"gate-cleanup","title":"Close the 81 stale gates (master 57, coder 24)","owner":"master","after":["foryou-gates"]},
+    {"id":"a-look","title":"A1/A4/A6/A7: compose cursor, tab style, health label and gate glyph, F-keys in order","owner":"coder","review":"busmon-a-look","after":["foryou-gates"]},
+    {"id":"a-board","title":"A2: Board columns sized to content","owner":"coder","review":"busmon-a-board","after":["a-look"]},
+    {"id":"a-plan-tab","title":"A11: a 4th tab Plan in the lower panel (beside Activity, Board, Requests)","owner":"coder","review":"busmon-a-plan-tab","after":["a-board"]},
+    {"id":"a-nav","title":"A3/A5: auto-scroll back on at the bottom; n/p and left/right in the reader","owner":"coder","review":"busmon-a-nav","after":["a-plan-tab"]},
+    {"id":"a-identity","title":"A8: no write as default hermes in a herdr pane; desktop notice on identity mismatch","owner":"coder","review":"busmon-a-identity","after":["a-nav"]},
+    {"id":"a-health","title":"A9: health ignores dead consumer groups; agents forget destroys the group","owner":"coder","review":"busmon-a-health","after":["a-identity"]},
+    {"id":"a-pending-pane","title":"A10: proposal: show a new pane waiting on the person (trust/hooks dialog)","owner":"coder","review":"busmon-a-pending-pane","after":["a-health"]},
+    {"id":"requests-view","title":"C: Requests view by thread, readable columns (mock-up first)","owner":"coder","review":"requests-view","after":["a-pending-pane"]},
+    {"id":"tokens-spec","title":"D: spec, tokens and quotas dashboard (panel U, agentbus tokens), animations","owner":"coder","review":"tokens-spec","after":["requests-view"]},
+    {"id":"tokens","title":"D: tokens and quotas dashboard","owner":"coder","review":"tokens","after":["tokens-spec"]},
+    {"id":"onboarding","title":"E: busmon first-run onboarding","owner":"coder","review":"onboarding","after":["tokens"]},
+    {"id":"installer-spec","title":"F: spec, installer in Go (agentbus setup)","owner":"coder","review":"installer-spec","after":["onboarding"]},
+    {"id":"installer","title":"F: installer in Go","owner":"coder","review":"installer","after":["installer-spec"]},
+    {"id":"release","title":"Tag v0.23.0, release notes, install","owner":"person","after":["a-look","a-board","a-nav","a-identity","a-health","requests-view","tokens","onboarding","installer","a-plan-tab"]}
+  ]
+}
