@@ -235,7 +235,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   second dispatcher for the same project exits 0; one whose lease lapsed re-acquires while the
   project still has keys, and exits 0 once it is deleted); `dispatch --status` prints `dispatch up`
   (exit 0) or `dispatch down` (exit 1).
-- **`busmon`** — `tview`/`tcell` TUI, btop-style since v0.9 (spec
+- **`busmon`** — a bubbletea v2 + lipgloss v2 TUI since the busmon Charm spec's step c (spec
+  `docs/superpowers/specs/2026-10-26-busmon-charm-design.md`; btop-style since v0.9,
   `specs/2026-10-10-busmon-ui-redesign-design.md`). On launch it backfills only
   the **last `--limit` Activity lines** (default 25, or `AGENT_BUS_BUSMON_LIMIT`; `--limit 0` = all
   history) via `Bus.Recent`, then live-tails from the per-stream cursors `Recent` returns through
@@ -252,35 +253,47 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   reads one and nothing wakes for it.
 
   Files: `theme.go` (colour roles, palettes dark/light/16/none, the closed single-cell glyph set —
-  the only place colours and glyphs are named), `cells.go` (preview/detail sanitising, grapheme
-  width, `Fit`/`FitLine`, `DrawLine`, `DrawFrame` with the scrollbar), `layout.go`
-  (`computeLayout`: pure geometry, three tiers wide ≥120 / medium 80–119 / narrow), `listview.go`
-  (the one selectable scrolling list: Agents, Activity, Board and Requests are all instances;
-  selection and wheel anchor follow keys, tail mode for Activity), `agents.go` (attention sort,
-  flags, ctx-token parser), `activity.go` (event → row, pause cursor), `board.go`, `header.go`,
-  `detail.go` + `detail_agent.go` (overlays), `compose.go` (v0.16: the compose window, a `tview.TextArea` with a rune limit of its own — `SetMaxLength` counts bytes — used for a message and for a free answer; `ui.send` is the one send path of the line and the window, which passes recipient and body as fields, never an `@name body` line), `keys.go` (one key table per mode drives the handler,
-  the footer and the help), `poll.go` (`pollOnce` behind the `busReader` interface: the 1 s tick and
-  its read inventory), `ui.go` (stable primitives, `screenView`, the modal layer), `main.go` (flags,
-  CLI paths, tail and poll goroutines).
+  the only place colours and glyphs are named; its colours are tcell values, tcell's one remaining
+  use), `cells.go` (preview/detail sanitising, grapheme width, `Fit`/`FitLine`, `drawLine`,
+  `drawFrame` with the scrollbar, on a `cellSink`), `tea_grid.go` (the `grid` sink and the lipgloss
+  painter), `layout.go` + `tea_layout.go` (pure geometry: `shellLayoutFor`, three tiers wide ≥120 /
+  medium 80–119 / narrow), `listview.go` (`listState`, the one selectable scrolling list: For you,
+  Agents, Activity, Board, Requests and the picker are all instances; selection and wheel anchor
+  follow keys, tail mode for Activity), `agents.go` (attention sort, flags, ctx-token parser),
+  `activity.go` (event → row, pause cursor), `board.go`, `header.go`, `detail.go` +
+  `detail_agent.go` (page bodies), `keys.go` (one key table per mode drives the handler, the footer
+  and the help; `key.go`'s engine-neutral `Key`, `keyOfTea` its adapter), `poll.go` (`pollOnce`
+  behind the `busReader` interface: the 1 s tick and its read inventory), `types.go` (`busWriter`,
+  the page kinds, the Activity feed), `main.go` (flags, CLI paths, the tail goroutine feeding the
+  program).
 
-  **Rules that keep it straight:** every primitive is created once; `screenView.Draw` recomputes the
-  layout and refills rows from the `shared` model but never changes focus and never does I/O —
-  a size change runs `relayout` via `go app.QueueUpdateDraw` (calling `SetFocus` from a draw would
-  deadlock tview). tview delivers keys to the **root**, so `screenView`/`modalView` relay them to
-  the focused child. Rows and overlay bodies are `Line` values (role-tagged segments), measured in
-  cells (`Width`; `Preview`/`DetailText` make every cluster measure the same under uniseg, lipgloss's
-  grapheme width and wcwidth: `agreeWidths`); overlay bodies are built with `body` (`body.go`) and
-  reach the overlay `TextView` through `linesToTview` → `Theme.segTag`, the one place a tview tag is
-  written and the one escaper (`TestOnlyThemeWritesTviewTags`; busmon Charm spec step a,
-  `testdata/overlay/` captures). The key tables match an engine-neutral `Key` (`key.go`, `keyOf`
-  for tcell, `keyOfTea` for bubbletea). The step-b Elm shell (`tea_*.go`, busmon Charm spec; not
-  wired, main.go still runs tview) draws with the same geometry: `drawLine`/`drawFrame` write a
-  `cellSink` (tview's `tcellSink`, the shell's `grid`), lists are `listState` (ListView without its
-  widget), `pollOnce` runs in a command and View reads only the model (`snapshot`, `judgedAt`,
-  `m.now`); `forYou` ranks asks, waits, gates and unread lines, and `decisions` is its badge and
-  reminder subset; its keys are `ModeShell` (tview's panel table with the shell's tabs) and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line in place (`tea_expand.go`), then opens it in the reader, a stack of pages over the lower zone, one per overlay, Esc back (`tea_reader.go`: bodies built on the update path with a stamp, an ask's options answered by digit or click, `ModeShellAsk`), and markdown is cached by id, width and palette (`tea_cache.go`), so a `fadeMsg` renders none. Writing (step b4): the input line (`tea_input.go`) and the compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells) send through `send.go` (`planSend` decides, `exec` makes the bus calls in a command, `outcome` reads them; tview's `ui.send` runs the same three); the pause popup (`drawPausePopup`, shared with tview), the reminder, the recap summary's confirmation and d/y are in `tea_dialogs.go`; bells, the fade's `fadeMsg` schedule, the reminder and the recap's auto-open in `tea_signals.go`, after each poll or update, never in View. The picker (step b5, `tea_pick.go`, `pickShell`) is a model of its own over pick.go's rules and drawing (`pickFill` on the update path, `drawPick` on any sink, shared with tview's `pickView`); its existence checks and `agentbus up` run in commands; `--pick` still runs tview's until step c. Goldens in `testdata/golden/` (`go test -run TestShellGoldens -update`). No literal outside
-  the glyph set (`TestNoStrayNonASCIILiterals`); `TestAlignmentSuite` draws every size × palette ×
-  hostile fixture and checks every frame's corners and borders. Each panel has its colour
+  **The Elm shell (`tea_*.go`) is the screen.** One `Model`; `Update` drives every change, `View`
+  paints the model and does nothing else: no clock, no bus, no file (`snapshot`, `judgedAt`,
+  `m.now`). `pollOnce` runs in a command rescheduled by `tea.Tick(1s)` and returns a `pollMsg`
+  (`takeSnapshot` copies `shared` under its lock; the poller replaces maps whole, and the plan's
+  ledger is copied); the tail goroutine `Program.Send`s `tailMsg`; every send, answer, thread read,
+  removal, resume, recap read and cache write is a command. Rows and page bodies are `Line` values
+  (role-tagged segments, never markup), measured in cells (`Width`; `Preview`/`DetailText` make
+  every cluster measure the same under uniseg, lipgloss's grapheme width and wcwidth:
+  `agreeWidths`); `drawLine`/`drawFrame` write the `grid`, lipgloss only styles spans, so a frame
+  never wraps by one cell. `forYou` ranks asks, waits, gates and unread lines, and `decisions` is
+  its badge and reminder subset; its keys are `ModeShell` (the panel table with the shell's tabs)
+  and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
+  in place (`tea_expand.go`), then opens it in the reader, a stack of pages over the lower zone, one
+  per overlay, Esc back (`tea_reader.go`: bodies built on the update path with a stamp, an ask's
+  options answered by digit or click, `ModeShellAsk`), and markdown is cached by id, width and
+  palette (`tea_cache.go`), so a `fadeMsg` renders none. The input line (`tea_input.go`) and the
+  compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells)
+  send through `send.go` (`planSend` decides, `exec` makes the bus calls in a command, `outcome`
+  reads them; recipient and body are fields, never an `@name body` line); the pause popup
+  (`drawPausePopup`), the reminder, the recap summary's confirmation and d/y are in
+  `tea_dialogs.go`; bells (`tea.Raw`), the fade's `fadeMsg` schedule, the reminder and the recap's
+  auto-open in `tea_signals.go`, after each poll or update. `--pick` runs `pickShell`
+  (`tea_pick.go`) over `pick.go`'s rules and drawing (`pickFill`, `drawPick`, `upRunner`,
+  `dialBroker`). Goldens in `testdata/golden/` (`go test -run TestShellGoldens -update`), overlay
+  body captures in `testdata/overlay/`. No literal outside the glyph set
+  (`TestNoStrayNonASCIILiterals`); `TestShellAlignmentSuite` (with `TestShellAlignmentReading` and
+  `TestPickShellAlignment`) draws every size × palette × hostile fixture and checks every frame's corners and borders. Each panel has its colour
   (`panelHue`, v0.14.5: Agents accent, Activity ok, Board dispatch, Requests attention): its frame
   is that colour when focused and faded towards the background when not (`Theme.FrameBorder`), and
   its title's name is a pill when focused (`frameTitle`, `Seg.Pill`, `Theme.Pill`) without changing
@@ -295,7 +308,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   or declared within 10 min) or closes an untracked thread with a `human=yes`, `wake=no` reply
   (`Bus.HumanClose`). The Requests count covers only threads younger than `bus.DefaultHorizon`.
   Activity auto-scroll (v0.12.3): selecting, clicking or opening a line keeps it live; only `f`
-  (`ListView.Pause`) and a wheel-up leave it.
+  (`listState.Pause`) and a wheel-up leave it.
   Attention marks (spec `docs/superpowers/specs/2026-10-21-busmon-ux-design.md`): an idle agent whose
   status message names the person (`forYouHint`, `foryou.go`; never for the default `pilot`) gets
   the flag `for you`: a hint, it never relabels, rings or counts. Activity entries for the person
@@ -484,7 +497,7 @@ It never touches Redis — see README "Deployment topology".
 - **`ValidStates`** (`working`, `idle`, `blocked`, `waiting`, `done`) is still a hardcoded map in
   `bus.go`. Adding a state means editing that map. `waiting` (v0.12.3) means a *person* must decide:
   busmon sorts it first with ♙, fades the word `waiting` in and out (3 s, `fadeLevel`, ~10 redraws a second only while one waits; true colour only), counts it in the header and rings the bell once per new
-  declaration (`ui.onTick`, on the event loop after the poll, never in a draw).
+  declaration (`tea_signals.go`, after the poll, never in View).
 - **Connection resolution order** (matches the legacy `agent_bus.py`): `REDIS_URL` wins if set;
   otherwise `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` (defaults `localhost`/`6380`/`AgentBus2025!`).
   A non-empty `--host` overrides `REDIS_HOST` only. Note the **non-standard port 6380** (compose
@@ -498,7 +511,7 @@ It never touches Redis — see README "Deployment topology".
   attention items. Due reminders wait until drafts and other modals clear, then group oldest-first
   and snooze locally. `R` opens a recap built from current snapshots and retained events; capped
   history boundaries and failed reads are labelled instead of treated as empty. The optional
-  summary directive requires an explicit `y` confirmation and uses the normal `ui.send` path.
+  summary directive requires an explicit `y` confirmation and uses the normal send path (`send.go`).
   Global settings are in `~/.config/agentbus/busmon.toml` (or `$XDG_CONFIG_HOME/agentbus/`), and
   local last-visit/snooze data is atomically cached under `~/.cache/agentbus/` with mode `0600`.
 - **Project health (v0.19)** — the dispatcher's separate bounded health loop writes
@@ -630,7 +643,7 @@ It never touches Redis — see README "Deployment topology".
   open ask per agent; each answer is a `reply` (ref = ask id, `human=yes`) that wakes the agent. Client
   JSON never carries answers. v0.15.1: `ask <agent> --withdraw <id> --question <qid> --note …` closes one
   question (`AskAnswer.Withdrawn`), the ask ends with the last one; a directive typed to an agent with an
-  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). busmon: `askpanel.go` (ModeAsk, `!`/`w`/F4, Enter in the agent detail), counts and fade follow open
+  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). busmon: the reader's ask page (`tea_reader.go`, `ModeShellAsk`, `!`/`w`/F4, Enter on a For you ask or in the agent's page; `askpanel.go`'s bodies), counts and fade follow open
   questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,
   overlay bodies only; rows stay on `Preview`).
 - **Observed is not declared (v0.14.3).** The services' dispatcher inspects every verified pane
