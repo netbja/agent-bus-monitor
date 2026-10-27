@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/rivo/uniseg"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -197,5 +198,44 @@ func TestShellComposeKeyCost(t *testing.T) {
 	}
 	if n := wrapCalls - calls; n != 1 {
 		t.Errorf("one key wrapped the text %d times, want once", n)
+	}
+}
+
+// Every row of wrap fits its width (a single cluster wider than the width
+// excepted: it takes a row of its own), and the rows cover the text in order.
+func TestShellWrapRowsFit(t *testing.T) {
+	alphabet := []string{"a", "b", " ", "日", "😀", "é", "\n", "本", " "}
+	check := func(text []rune, width int) {
+		t.Helper()
+		pos := 0
+		for _, r := range wrap(text, width) {
+			if r.from < pos || r.to < r.from {
+				t.Fatalf("%q at %d: rows out of order: %v", string(text), width, wrap(text, width))
+			}
+			for pos < r.from { // only newlines between rows
+				if text[pos] != '\n' {
+					t.Fatalf("%q at %d: rune %d lost", string(text), width, pos)
+				}
+				pos++
+			}
+			s := string(text[r.from:r.to])
+			if w := Width(s); w > width && uniseg.GraphemeClusterCount(s) > 1 {
+				t.Fatalf("%q at %d: row %q is %d cells", string(text), width, s, w)
+			}
+			pos = r.to
+		}
+		if pos != len(text) {
+			t.Fatalf("%q at %d: the rows end at %d of %d", string(text), width, pos, len(text))
+		}
+	}
+	check([]rune(" bcd日"), 4) // foureyes' case: a wide cluster right after a break at a space
+	seed := uint32(1)
+	for n := 0; n < 3000; n++ {
+		var b strings.Builder
+		for i := 0; i < 1+n%23; i++ {
+			seed = seed*1664525 + 1013904223
+			b.WriteString(alphabet[seed>>24%uint32(len(alphabet))])
+		}
+		check([]rune(b.String()), 1+n%10)
 	}
 }

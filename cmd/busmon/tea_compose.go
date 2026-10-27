@@ -92,6 +92,10 @@ func wrap(text []rune, width int) []row {
 				from, w = pos, 0
 			}
 			space, afterSpace = -1, w
+			if w+cw > width && pos > from { // what followed the space still leaves no room
+				out = append(out, row{from, pos})
+				from, w, afterSpace = pos, 0, 0
+			}
 		}
 		w += cw
 		afterSpace += cw
