@@ -7,7 +7,7 @@ release exists.
 ## v0.22.0 — busmon on bubbletea, the context alert, specialist roles
 
 - busmon runs on bubbletea v2 + lipgloss v2 (tview is gone). Its look changed: code in overlays
-  wraps, `1`-`3` pick tabs, Enter expands a line then opens the reader, the mouse scrolls, selects
+  wraps, digits pick tabs, Enter expands a line then opens the reader, the mouse scrolls, selects
   and focuses; keys, flags and `busmon.toml` are unchanged.
 - Context fill per agent from Claude Code's status line (`{p}:context`); at 80 %
   (`AGENT_BUS_CONTEXT_ALERT`) one hand-off directive, a notice and a desktop notification per
