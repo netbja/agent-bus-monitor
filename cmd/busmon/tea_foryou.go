@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -43,17 +42,10 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("prompt:%s:%d", name, since.UnixMilli()),
 				Agent: name, Text: "pane prompt", At: since})
 		}
-		// A gate holds Agent until a verdict; its challenger opened it. Who
-		// reviews whom depends on who challenged (master gates a reviewer, a
-		// reviewer gates an author), so the row names both, neutrally.
-		for ref, meta := range a.gates {
-			by, summary, _ := strings.Cut(meta, "|")
-			if summary == "" {
-				summary = ref
-			}
-			out = append(out, attentionItem{Rank: rankGate, Key: "gate:" + name + ":" + ref, Agent: name, By: by, Text: summary,
-				At: eventTimestamp(ref)})
-		}
+		out = append(out, personGateItems(s.person, name, a.gates)...)
+	}
+	if _, isAgent := s.agents[s.person]; !isAgent {
+		out = append(out, personGateItems(s.person, s.person, s.personGates)...)
 	}
 	asks := map[string]int{} // an open ask's row, by ask id (the id of its Activity line)
 	for i, it := range out {
@@ -85,6 +77,32 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 		}
 		return a.Key < b.Key
 	})
+	return out
+}
+
+// personGateItems are the rows of the gates on gated that concern the person
+// (foryou-gates): a gate the person opened (they asked for that review) or
+// one holding the person. A review between agents is theirs to finish, never
+// a row: master's challenges to reviewers stay off the list and the badge.
+// The default identity is no person, so it never matches. Who reviews whom
+// depends on who challenged, so the row names both, neutrally.
+func personGateItems(person, gated string, gates map[string]string) []attentionItem {
+	if person == "" || person == defaultHuman {
+		return nil
+	}
+	var out []attentionItem
+	for ref, meta := range gates {
+		g := bus.ParseGateMeta(meta)
+		if g.Challenger != person && gated != person {
+			continue
+		}
+		summary := g.Text
+		if summary == "" {
+			summary = ref
+		}
+		out = append(out, attentionItem{Rank: rankGate, Key: "gate:" + gated + ":" + ref, Agent: gated, By: g.Challenger,
+			Text: summary, At: eventTimestamp(ref)})
+	}
 	return out
 }
 

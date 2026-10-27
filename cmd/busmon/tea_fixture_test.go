@@ -53,7 +53,7 @@ func shellFixture(now time.Time) snapshot {
 				ctxFill: &bus.ContextFill{Pct: 21, Session: "s-master", ObservedAt: ms(time.Minute), At: ms(0), Alert: &fixtureAlert}},
 			"coder": {state: "working", message: "busmon-charm-b: b1 shell", stateAt: ago(2 * time.Minute), lastSeen: ago(time.Minute),
 				registered: true, paused: true, ctxRaw: "88000", gated: 1,
-				ctxFill: &bus.ContextFill{Pct: 85, Session: "s-coder", ObservedAt: ms(2 * time.Minute), At: ms(0), Alert: &fixtureAlert}, gates: map[string]string{"pr-122": "foureyes|look at b1"},
+				ctxFill: &bus.ContextFill{Pct: 85, Session: "s-coder", ObservedAt: ms(2 * time.Minute), At: ms(0), Alert: &fixtureAlert}, gates: map[string]string{"pr-122": "bernard|look at b1"},
 				wake: &bus.WakeRecord{State: "deferred"}},
 			"foureyes": {state: "waiting", message: "need a decision on the width rule", stateAt: ago(6 * time.Minute), lastSeen: ago(6 * time.Minute),
 				registered: true, wake: &bus.WakeRecord{Escalated: "true"}},
