@@ -25,8 +25,13 @@ closed. None of them was for him.
 - **Why gates leaked.** The team challenges the *reviewer* (`challenge foureyes …`), which gates
   the reviewer, but `verdict --ref` only closed the *author's* gate. Reviewers rarely passed the
   `--ref` anyway, and the gate's meta (`challenger|text`) held no subject to match.
-- **The verdict now closes the reviewer's own gates.** Those are the one named by `--ref` and
-  every one whose stored subject is the verdict's subject. A self-verdict closes nothing, by
+- **The verdict now closes the reviewer's own gates.** With `--ref`: the gate it names, plus the
+  gates of the same subject opened *before* it. Without `--ref`: every gate whose stored subject
+  is the verdict's subject. The first rule came the same day (task gate-subject-close): foureyes
+  answered an older commit by subject and the sweep also closed the gate of a newer delta of that
+  subject it had not read yet (`dmfwxrbb3o04`). "Before" is read from the challenges' own `:cmd`
+  entries: a gate whose challenge has left the capped stream is older than any retained one; a
+  `--ref` with no retained challenge closes only its own gate. A self-verdict closes nothing, by
   this path or by the older author's-gate one (reviewer-codex found that bypass in review). A
   conductor's mission gate is left to the conductor, which closes it after reading the ledger.
   Nobody else's verdict closes a gate on an agent. The subject is stored at challenge time
@@ -47,13 +52,15 @@ conductor.
 
 ## Evidence
 
-- Master's directive `1793128927917-0` (task foryou-gates).
+- Master's directive `1793128927917-0` (task foryou-gates); directive `1793134518927-0` (task
+  gate-subject-close, the live case `dmfwxrbb3o04`).
 - Related: the [shared-memory decision](2026-09-19-shared-memory.md) (the verdict ledger is the
   audit, Redis holds operational state such as gates).
 - Code: `bus/gates.go` (`ParseGateMeta`, `FormatGateMeta`, `CloseReviewGates`, `CloseGate`,
   `AllGates`), `cmd/agentbus/gatecmd.go` (`verdictGates`, `runGateClose`),
   `cmd/busmon/tea_foryou.go` (`personGateItems`), `cmd/busmon/poll.go` (`personGates`).
-- Tests: `TestCloseReviewGates`, `TestCloseGate`, `TestGateMetaRoundTrip`,
+- Tests: `TestCloseReviewGates`, `TestCloseReviewGatesWithRefSparesNewerDeltas`,
+  `TestVerdictWithRefSparesANewerDelta`, `TestCloseGate`, `TestGateMetaRoundTrip`,
   `TestVerdictClosesTheReviewersGates`, `TestGateClose*`, `TestForYouIgnoresAgentToAgentGates`,
   `TestPollReadsThePersonsGate`.
 
@@ -61,6 +68,8 @@ conductor.
 
 - A gate opened without `--subject` and answered without its `--ref` still stays open until its
   challenger closes it.
+- A verdict by subject without `--ref` still sweeps every gate of that subject, a newer delta's
+  included: the reviewer protects an unread delta only by passing the challenge's `--ref`.
 - The CLI cannot prove who runs it: like `answer --as`, `gate close --as` trusts the caller.
 - An agent literally named `close` can still be listed (`gate close` is the subcommand), but not
   through `gate <agent>`.

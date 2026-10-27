@@ -134,9 +134,15 @@ func TestGateCloseAsPerson(t *testing.T) {
 func TestVerdictClosesTheReviewersGates(t *testing.T) {
 	b := openGatesFixture(t)
 	ctx := context.Background()
+	// The fixture's gates have no challenge on the cmd stream: a verdict
+	// naming a ref closes that gate alone, the subject sweeps without one.
 	lines := verdictGates(ctx, b, "coder", "foureyes", "roles-impl", "1793000000002-0")
-	if len(lines) != 1 || lines[0] != "closed gate(s) on foureyes: 1793000000001-0 1793000000002-0" {
+	if len(lines) != 1 || lines[0] != "closed gate(s) on foureyes: 1793000000002-0" {
 		t.Fatalf("lines = %q", lines)
+	}
+	lines = verdictGates(ctx, b, "coder", "foureyes", "roles-impl", "")
+	if len(lines) != 1 || lines[0] != "closed gate(s) on foureyes: 1793000000001-0" {
+		t.Fatalf("subject lines = %q", lines)
 	}
 	open, _ := b.OpenChallenges(ctx, "foureyes")
 	if len(open) != 1 || open["1793000000005-0"] == "" {
@@ -149,6 +155,34 @@ func TestVerdictClosesTheReviewersGates(t *testing.T) {
 	lines = verdictGates(ctx, b, "coder", "foureyes", "m", "1793000000005-0")
 	if len(lines) != 1 || !strings.Contains(lines[0], "the conductor closes it") {
 		t.Fatalf("mission lines = %q", lines)
+	}
+}
+
+// The live case (gate-subject-close, dmfwxrbb3o04): master challenged
+// foureyes twice on one subject, the second time for a newer delta. A verdict
+// on the first, with its ref, leaves the delta's gate open.
+func TestVerdictWithRefSparesANewerDelta(t *testing.T) {
+	b, _ := dialMain(t)
+	ctx := context.Background()
+	for _, ref := range []string{"older", "delta"} {
+		if err := b.OpenChallenge(ctx, "foureyes", ref, bus.FormatGateMeta("master", "gsc", "review "+ref)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.Cmd(ctx, "master", "foureyes", bus.CmdChallenge, ref, "review "+ref); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lines := verdictGates(ctx, b, "coder", "foureyes", "gsc", "older")
+	if len(lines) != 1 || lines[0] != "closed gate(s) on foureyes: older" {
+		t.Fatalf("lines = %q", lines)
+	}
+	if open, _ := b.OpenChallenges(ctx, "foureyes"); len(open) != 1 || open["delta"] == "" {
+		t.Fatalf("foureyes keeps %v, want the delta's gate", open)
+	}
+	// The delta's own verdict closes it.
+	lines = verdictGates(ctx, b, "coder", "foureyes", "gsc", "delta")
+	if len(lines) != 1 || lines[0] != "closed gate(s) on foureyes: delta" {
+		t.Fatalf("delta lines = %q", lines)
 	}
 }
 
