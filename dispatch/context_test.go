@@ -31,10 +31,13 @@ func TestContextPassPublishesVerifiedSessionsOnly(t *testing.T) {
 		return r, ok
 	}
 	snaps := map[string]bus.AgentSnapshot{
-		"coder":    {PID: 10, Session: "s-coder"}, // verified, with a reading
-		"forger":   {Session: "s-forged"},         // unverified: never read
-		"master":   {PID: 11},                     // verified, no session
-		"sentinel": {PID: 12, Session: "s-none"},  // verified, no reading
+		"coder":    {PID: 10, Session: "s-coder", IdentSession: "s-coder"}, // verified, with a reading
+		"forger":   {Session: "s-forged"},                                  // unverified: never read
+		"master":   {PID: 11},                                              // verified, no session
+		"sentinel": {PID: 12, Session: "s-none", IdentSession: "s-none"},   // verified, no reading
+		// Verified, then an unverified status named another session: the
+		// proved one is read, never the named one (foureyes' probe).
+		"docs": {PID: 13, Session: "s-forged", IdentSession: "s-nofile2"},
 	}
 	l := &loop{b: b, token: "ctx-holder", cfg: Config{Log: io.Discard, Context: ContextConfig{Read: read, Every: time.Minute}}}
 	if err := l.contextPass(ctx, snaps); err != nil {
@@ -44,7 +47,7 @@ func TestContextPassPublishesVerifiedSessionsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fills) != 1 || fills["coder"].Pct != 84 || fills["coder"].ObservedAt != 111 || fills["coder"].Session != "s-coder" || fills["coder"].At == 0 {
+	if len(fills) != 2 || fills["docs"].Session != "s-nofile2" || fills["docs"].Pct != 50 || fills["coder"].Pct != 84 || fills["coder"].ObservedAt != 111 || fills["coder"].Session != "s-coder" || fills["coder"].At == 0 {
 		t.Fatalf("published %+v", fills)
 	}
 	for _, s := range asked {

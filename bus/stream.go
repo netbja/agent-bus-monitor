@@ -76,6 +76,11 @@ type AgentSnapshot struct {
 	// IdentTS (ms, Redis time) is when the identity was last proved: by a
 	// verified status (its stream id) or a bind. Only a newer proof replaces it.
 	IdentTS int64 `json:"ident_ts,omitempty"`
+	// IdentSession (context-alert) is the session recorded with the last
+	// proof: set only when the identity is proved (a status with a pid, or a
+	// bind), so an unverified status naming another session never moves it.
+	// The dispatcher reads the context fill of this session only.
+	IdentSession string `json:"ident_session,omitempty"`
 	// Client and Provider (v0.13) come from the launcher's AGENT_BUS_CLIENT /
 	// AGENT_BUS_PROVIDER: which AI runs the agent, and whose quota it draws on.
 	Client   string `json:"client,omitempty"`

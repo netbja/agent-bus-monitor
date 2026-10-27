@@ -182,7 +182,8 @@ it silently never fired.
   `context_window.used_percentage`; `agentbus statusline` records it per session in
   `~/.cache/agentbus/context/<session>.json` (pruned after 24 h), and the dispatcher publishes it
   each minute to `{p}:context` (agent → pct, observed_at, session; fenced, replaced whole,
-  `PEXPIRE` 120 s, not in `projectKinds`), reading only a verified snapshot's session. No reading =
+  `PEXPIRE` 120 s, not in `projectKinds`), reading only `IdentSession`, the session recorded with
+  the identity proof (an unverified status never moves it). No reading =
   unknown, never 0. **Deliberately not reported:** cost (needs a price table that rots every
   release; on a subscription the figure is fiction). Raw context tokens stay in `{p}:usage`.
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's

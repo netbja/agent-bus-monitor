@@ -27,8 +27,12 @@ before the first message). Verified in Claude Code 2.1.311's own statusLine docu
 - **Published by the dispatcher, fenced.** Each minute it replaces `{p}:context` (agent → pct,
   observed_at, session, `at` from Redis `TIME`). It is `PEXPIRE` 120 s like `{p}:observed`, not
   in `projectKinds`, and ignored by `HasKeysBesidesDispatch`.
-- **Only a verified snapshot's session is read.** The snapshot needs a pid proved by `status` or
-  `bind`. A snapshot anyone could write never points the dispatcher at another session's file.
+- **Only the session proved with the agent's process is read.** `AgentSnapshot.IdentSession` is
+  set only with an identity proof (a status with a pid, or a bind); an unverified status that names
+  another session changes `Session`, never `IdentSession` (foureyes' review of ca1). A snapshot
+  anyone could write never points the dispatcher at another session's file.
+- **Published during a pause too, on purpose.** Unlike the observe pass, the context pass only
+  reads local files and replaces its own key; a paused project still shows its agents' fill.
 - **Still not reported:** cost. Raw context tokens stay in `{p}:usage`.
 
 What follows (alert at a threshold, busmon display, health check) is the context-alert change's
@@ -49,6 +53,7 @@ the other clients read unknown until their own client gives one.
   % of context used (0-100), null if no messages yet`.
 - Code: `quota/context.go`, `bus/context.go`, `dispatch/context.go`; tests
   `TestRecordContext`, `TestRecordContextPrunes`, `TestContextPassPublishesVerifiedSessionsOnly`,
+  `TestIdentSessionFollowsTheProofOnly`,
   `TestHasKeysBesidesDispatch`.
 
 ## Limits / what would invalidate it

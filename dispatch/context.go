@@ -10,9 +10,9 @@ import (
 
 // The context pass (context-alert, ca1) publishes each agent's context fill
 // to {p}:context: the reading agentbus statusline recorded for the agent's
-// own session. Only a verified snapshot's session is read (a pid proved by
-// status or bind): a snapshot anyone could write never points the
-// dispatcher at another session's file.
+// own session. Only the session proved with the agent's process is read
+// (IdentSession, set with a pid proof by status or bind): a status that only
+// names a session never points the dispatcher at another session's file.
 
 // ContextConfig is the context pass's policy; a nil Read turns it off.
 type ContextConfig struct {
@@ -32,11 +32,11 @@ func (l *loop) contextPass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 	}
 	fills := map[string]bus.ContextFill{}
 	for name, s := range snaps {
-		if s.PID == 0 || s.Session == "" {
-			continue // unverified, or no session to read
+		if s.PID == 0 || s.IdentSession == "" {
+			continue // unverified, or no session proved with its process
 		}
-		if r, ok := c.Read(s.Session); ok {
-			fills[name] = bus.ContextFill{Pct: r.Pct, ObservedAt: r.ObservedAt, Session: s.Session, At: now.UnixMilli()}
+		if r, ok := c.Read(s.IdentSession); ok {
+			fills[name] = bus.ContextFill{Pct: r.Pct, ObservedAt: r.ObservedAt, Session: s.IdentSession, At: now.UnixMilli()}
 		}
 	}
 	if err := l.b.FencedPutContext(ctx, l.token, fills); err != nil {
