@@ -30,6 +30,9 @@ and the subject. Then:
 - Look for what breaks: wrong behaviour, a missing case, a test that would pass with the bug,
   docs that say something the code does not do. Try a mutation of the rule a test claims to pin
   when you doubt it.
+- Your sandbox is read-only: a review worktree, a test broker, a test run and each `agentbus`
+  call ask the person first. Ask once per step, saying what it is for, and do without a step
+  the review does not need.
 - Run tests only in a worktree of your own (`git worktree add .worktrees/review-<task> <sha>`),
   removed when you are done, and only against a disposable broker you started yourself
   (`AGENTBUS_TEST_REDIS_URL`, see `docs/testing-redis.md`). Never point a test at the project's
@@ -37,13 +40,13 @@ and the subject. Then:
 - Record the verdict on the subject you were given, then answer on the thread:
 
   ```bash
-  agentbus verdict --subject <s> <author> approve|reject "<what you checked, what you found>"
+  agentbus verdict --subject <s> --ref <challenge id> <author> approve|reject "<what you checked, what you found>"
   agentbus reply --ref <challenge or directive id> master "<s>: APPROVE|CHANGES — <why>"
   ```
 
   A reject names each finding with a concrete failure (inputs, what happens, what should) and the
-  fix you suggest. An approve says what you checked and how. Your own verdict on the subject
-  closes the challenge opened on you.
+  fix you suggest. An approve says what you checked and how. Pass the challenge's id as `--ref`
+  so your verdict names the challenge it answers.
 
 ## Never
 

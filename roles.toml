@@ -78,14 +78,16 @@ model = "kimi-code/k3"
 # A second 4-eyes reviewer from another maker (reviewer-codex): the model table's openai frontier
 # model on 2026-10-27, pinned so `roles field` and the shipped-manifest tests see it
 # (`agentbus roles doctor` reports `newer` once the table states a successor).
-# workspace-write lets it run tests in its own review worktree; network stays closed by the
-# sandbox, so every bus call and any push asks the person (approval on-request).
+# read-only: nothing in the checkout (nor coder's worktrees) is writable by the sandbox, which
+# is what holds "never write", not the prompt. A review worktree, a test broker, a go test
+# (GOCACHE is outside the writable roots anyway) and every bus call ask the person once each
+# (approval on-request); so would any push. Same as examples/roles.mixed.toml [profiles.review].
 [profiles.codex-review]
 client = "codex"
 provider = "openai"
 model = "gpt-6-astra"
 [profiles.codex-review.options]
-sandbox = "workspace-write"
+sandbox = "read-only"
 approval = "on-request"
 
 [tool_rules]
