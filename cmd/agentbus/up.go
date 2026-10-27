@@ -466,7 +466,11 @@ func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
 	if err := run(now); err != nil || len(later) == 0 {
 		return err
 	}
-	return d.waitTrust(tpl, dir, gates, func() error { return run(later) })
+	paneOf := map[string]string{} // A10: the gate names the pane to answer in
+	for i, t := range tpl.Tabs {
+		paneOf[t.Name] = panes[i]
+	}
+	return d.waitTrust(tpl, dir, gates, paneOf, func() error { return run(later) })
 }
 
 // templatePath is where bootstrap writes the project's template

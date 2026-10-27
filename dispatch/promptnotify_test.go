@@ -284,3 +284,19 @@ func TestPromptNotifyJudgesEachObservationOnce(t *testing.T) {
 		t.Fatalf("one observation rang %d times: %q", len(s), s)
 	}
 }
+
+// A10: a just-launched agent is bound (pid, pane) before its client shows a
+// pre-session dialog, and has declared no state yet; its blocked pane rings
+// like any prompt, so a pop stuck on a trust or hooks dialog is not silent.
+func TestPromptNotifyBeforeTheFirstStatus(t *testing.T) {
+	b, _ := dialRun(t)
+	desk := &fakeDesktop{}
+	l := promptLoop(t, b, "first-status-holder", desk, 1000, 1000+31_000)
+	bound := map[string]bus.AgentSnapshot{"coder": {PID: 10, Pane: "w2:pA"}} // bind only: no state
+	if err := l.promptNotices(context.Background(), bound); err != nil {
+		t.Fatal(err)
+	}
+	if s := desk.Sent(); len(s) != 1 {
+		t.Fatalf("a bound agent with no status yet did not ring: %q", s)
+	}
+}

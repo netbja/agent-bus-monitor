@@ -487,6 +487,9 @@ func main() {
 		os.Exit(runResume(ctx, d, self, rest, os.Stdout, os.Stderr))
 
 	case "agents":
+		if len(rest) > 0 && rest[0] == "wait" {
+			os.Exit(runAgentsWait(ctx, b.Agents, time.Sleep, rest[1:], os.Stdout, os.Stderr))
+		}
 		if len(rest) > 0 && rest[0] == "forget" {
 			os.Exit(runAgentsForget(ctx, forgetDeps{Agents: b.Agents, Armed: func(ctx context.Context, a string) (bool, error) {
 				m, err := b.ArmedAgents(ctx)

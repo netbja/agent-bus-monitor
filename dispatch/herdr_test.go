@@ -280,3 +280,16 @@ func TestParseProcessInfoProcs(t *testing.T) {
 		t.Fatal("a herdr error must not parse as an empty list")
 	}
 }
+
+// A10: a client's own pre-session dialog (Claude Code's trust check, captured
+// live in a probe pane: screens/claude-trust.txt) is reported by herdr as
+// blocked, so the observe pass reads it as a prompt like any other menu.
+func TestParseAgentGetTrustDialogIsBlocked(t *testing.T) {
+	a, err := parseAgentGet([]byte(readFixture(t, "herdr/agent-get-claude-trust.json")))
+	if err != nil || a.Agent != "claude" || a.Status != "blocked" {
+		t.Fatalf("trust dialog: %+v %v", a, err)
+	}
+	if s := readFixture(t, "screens/claude-trust.txt"); !strings.Contains(s, "Yes, I trust this folder") {
+		t.Fatal("the trust screen fixture lost its dialog")
+	}
+}

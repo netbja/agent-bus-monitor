@@ -461,7 +461,7 @@ It never touches Redis — see README "Deployment topology".
   folder a client (Claude Code, Codex) does not trust yet, it starts the first agent of that client
   alone, says to answer the client's own dialog in its pane, polls the trust (2 s, 10 min) and only
   then starts that client's other agents; a timeout starts nothing more and keeps the workspace
-  (`errTrustPending`). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
+  (`errTrustPending`); its message names the pane to answer in (A10). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
   as Claude Code documents (`trustKey`: git root, a worktree's main checkout, else the folder) and
   return a bool, never file content (`~/.claude.json` can hold an API key). agentbus never writes
   those files. Nil `upDeps.Trusted` = no gate.
@@ -497,6 +497,14 @@ It never touches Redis — see README "Deployment topology".
   merged into every role before its own rules; the shipped Claude Code Read/Edit denies cover
   common secret-file names even with `bypassPermissions`. This is defense in depth, not a boundary:
   processes an agent starts (tests, dotenv, and similar tools) can still read environment files.
+  A pop's client can stop on its own pre-session dialog (trust, hooks review) before it declares a
+  status (A10): `agent-launch` binds the pane first, so the observe pass already inspects it, and a
+  dialog herdr reports as `blocked` (Claude Code's trust check, `testdata/screens/claude-trust.txt`)
+  gets busmon's `prompt` flag and the prompt-notify ring; `agent-spawn` waits `AGENT_SPAWN_WAIT` s
+  (default 30, `0` = no wait; `swap` passes 0, it proves the agent itself) for the first status
+  (`agentbus agents wait <agent> --since <ms> --timeout <d>`, read-only) and otherwise names the
+  pane. No dialog pattern is guessed: one herdr does not report (Codex's hooks review, not
+  reproduced) needs a captured screen first.
   `setup.sh install/update` also links `agent-launch` and `agent-spawn` into `BIN_DIR`; those links
   resolve back to this repository's scripts, and uninstall removes only links to these exact files.
   Resume Claude Code with `agent-launch <role> <project> [--profile <p>] --resume <session-id>` to

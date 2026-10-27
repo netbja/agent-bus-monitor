@@ -6,6 +6,8 @@
 #   --profile launches the role on another profile of ROLES_TOML (agentbus swap, v0.15).
 #   AGENT_LAUNCH_REQUIRE_BIND=1 is passed on: the launch fails if it cannot bind its pane.
 #   AGENT_SPAWN_DRYRUN=1 -> print the herdr command instead of running it (test seam).
+#   AGENT_SPAWN_WAIT=<s> -> seconds to wait for the agent's first status (default 30, 0 = none);
+#   without one it names the pane, where the client may wait on a dialog (A10).
 set -euo pipefail
 
 SOURCE="${BASH_SOURCE[0]}"
@@ -51,8 +53,20 @@ if [[ "${AGENT_SPAWN_DRYRUN:-0}" == "1" ]]; then
 fi
 
 # Open a NEW TAB in the current workspace (not a split), grab its root pane, run the leaf there.
+wait_s="${AGENT_SPAWN_WAIT:-30}"
+[[ "$wait_s" =~ ^[0-9]+$ ]] || die "AGENT_SPAWN_WAIT must be a number of seconds"
+since=$(( $(date +%s) * 1000 ))
 tab_json="$(herdr tab create --label "$role" --cwd "$PWD" --no-focus)"
 pane="$(printf '%s' "$tab_json" | tr -d '\n' | sed -n 's/.*"root_pane":[[:space:]]*{[^}]*"pane_id":[[:space:]]*"\([^"]*\)".*/\1/p')"
 [[ -n "$pane" ]] || die "could not resolve the new tab's pane id from herdr: $tab_json"
 herdr pane run "$pane" "$launch"
 echo "agent-spawn: $role launched in a new tab (pane $pane)"
+# A10: wait for the agent's first status (AGENT_SPAWN_WAIT seconds, 0 = no wait). A client
+# stuck on its own dialog (trust, hooks review) never reports: say which pane to answer it in.
+if [[ "$wait_s" != "0" ]]; then
+  if "$AGENTBUS_BIN" --project "$project" agents wait "$role" --since "$since" --timeout "${wait_s}s" >/dev/null 2>&1; then
+    echo "agent-spawn: $role reported"
+  else
+    echo "agent-spawn: $role has not reported within ${wait_s}s: its client may be waiting on a dialog in pane $pane; answer it in that pane" >&2
+  fi
+fi
