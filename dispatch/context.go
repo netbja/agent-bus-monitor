@@ -18,6 +18,12 @@ import (
 type ContextConfig struct {
 	Read  func(session string) (quota.ContextReading, bool)
 	Every time.Duration // how often the readings are published
+	// Alert is the fill, in percent, at which an agent is told to hand off
+	// (context-alert ca2; 0 = off). MaxAge is the oldest reading that acts.
+	Alert  float64
+	MaxAge time.Duration
+	// Notify shows a desktop notification (nil = none).
+	Notify func(ctx context.Context, title, body string) error
 }
 
 // contextPass publishes the fills when due; a lost lease is ErrNotHolder.
@@ -43,5 +49,6 @@ func (l *loop) contextPass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 		return err
 	}
 	l.contextAt = time.Now()
+	l.ctxFills, l.ctxFresh = fills, true
 	return nil
 }

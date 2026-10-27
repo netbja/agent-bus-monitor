@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"runtime/debug"
@@ -15,7 +16,6 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/mission"
-	"github.com/netbja/agent-bus-monitor/quota"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -421,8 +421,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg := dispatchBaseConfig()
 			cfg.Log, cfg.OnLease = log, onLease
 			cfg.Quota = serviceQuota(os.Getenv, log)
-			cfg.Context = dispatch.ContextConfig{Every: time.Minute, // each verified agent's context fill (context-alert)
-				Read: func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) }}
+			cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
 			cfg.Observe = dispatch.ObserveEvery
 			cfg.Health = realHealthConfig(b, h, paths)
 			if escalateTo != "" {

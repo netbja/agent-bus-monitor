@@ -184,7 +184,12 @@ it silently never fired.
   each minute to `{p}:context` (agent → pct, observed_at, session; fenced, replaced whole,
   `PEXPIRE` 120 s, not in `projectKinds`), reading only `IdentSession`, the session recorded with
   the identity proof (an unverified status never moves it). No reading =
-  unknown, never 0. **Deliberately not reported:** cost (needs a price table that rots every
+  unknown, never 0. At `AGENT_BUS_CONTEXT_ALERT` % (default 80, `0` = off; `dispatch/contextalert.go`)
+  the agent gets one directive to commit WIP and hand off, the escalation target one `wake=no`
+  notice, and the desktop one `notify-send` when it is on PATH: once per agent and session
+  (`FencedCmdOnce`, marks `context:<agent>`/`context-notice:<agent>` in `{p}:quota`, deleted by a
+  fresh reading below the threshold), never during a pause, never on an unknown or aged (>30 min)
+  fill. **Deliberately not reported:** cost (needs a price table that rots every
   release; on a subscription the figure is fiction). Raw context tokens stay in `{p}:usage`.
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
   cron wake where a hard exit loses the whole caretaker pass.

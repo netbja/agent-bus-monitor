@@ -216,3 +216,31 @@ func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfi
 	}
 	return q
 }
+
+// serviceContext is the dispatch service's context pass (context-alert): each
+// verified agent's fill published every minute, and the alert threshold from
+// AGENT_BUS_CONTEXT_ALERT (percent, default 80, 0 = off). The desktop
+// notification goes through notify-send when it is on PATH, else nowhere.
+func serviceContext(getenv func(string) string, lookPath func(string) (string, error),
+	run func(ctx context.Context, bin string, args ...string) error) dispatch.ContextConfig {
+	c := dispatch.ContextConfig{Every: time.Minute, Alert: 80, MaxAge: 30 * time.Minute,
+		Read: func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) }}
+	if v := getenv("AGENT_BUS_CONTEXT_ALERT"); v != "" {
+		if n, err := strconv.ParseFloat(v, 64); err == nil && n >= 0 && n <= 100 {
+			c.Alert = n
+		}
+	}
+	if bin, err := lookPath("notify-send"); err == nil {
+		c.Notify = func(ctx context.Context, title, body string) error {
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			return run(ctx, bin, "-a", "agentbus", title, body)
+		}
+	}
+	return c
+}
+
+// runQuiet runs a command and discards its output.
+func runQuiet(ctx context.Context, bin string, args ...string) error {
+	return exec.CommandContext(ctx, bin, args...).Run()
+}
