@@ -394,7 +394,10 @@ Tests:
   scenario each: Activity's tail mode (a new event follows the bottom), `f` pauses it, a wheel-up
   leaves it, and selecting, clicking or opening a line keeps it live; keyed selection (the selected
   row stays selected by its key when a poll reorders or inserts rows); `a` shows and hides dormant
-  agents (and `@all` follows it); `/` filters the focused list and Esc clears it; the subsets of the
+  agents (and `@all` follows it); `/` filters Activity, whatever the focus (tview's filter is
+  Activity's: the shell keeps that rule, the deviation reviewed in step b2), and Esc clears it; a wheel
+  or a click on Agents, or a movement key there, stops pinning its selection, a Tab passing through
+  does not; the subsets of the
   For you table (badge, unread badge, reminder) each counted on one fixture.
 - **The picker:** `--pick`'s screen is a model of its own written in this step (goldens at 80x24 and
   140x40, its key scenarios), wired in step c.

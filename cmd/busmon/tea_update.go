@@ -33,7 +33,7 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	l := m.lists.of(m.ui.focus)
-	if m.ui.focus == PanelAgents && act != ActNone {
+	if m.ui.focus == PanelAgents && movesSelection(act) {
 		m.ui.agentsTouched = true
 	}
 	switch act {
@@ -84,6 +84,16 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	m.syncPause()
 	m.refresh()
 	return m, nil
+}
+
+// movesSelection is a key that moves a list's selection: in Agents it stops
+// the selection following the top row; a Tab passing through does not.
+func movesSelection(act Action) bool {
+	switch act {
+	case ActUp, ActDown, ActPageUp, ActPageDown, ActFirst, ActLast:
+		return true
+	}
+	return false
 }
 
 // editFilter is the filter line: Enter applies, Esc cancels, Backspace and

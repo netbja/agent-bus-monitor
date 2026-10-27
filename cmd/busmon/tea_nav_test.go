@@ -158,6 +158,20 @@ func TestShellAgentsPinning(t *testing.T) {
 	}
 }
 
+// A Tab or a tab digit that only passes through Agents leaves the pinning:
+// only a movement, a wheel or a click there is the person's choice.
+func TestShellAgentsPinningIgnoresPassingKeys(t *testing.T) {
+	pinLocal(t)
+	m := fixtureShell(t, 140, 60)
+	m = keys(t, m, kTab, kTab, kBacktab, '2', kBacktab, 'a', 'a')
+	if m.ui.focus != PanelAgents {
+		t.Fatalf("focus %d, want Agents", m.ui.focus)
+	}
+	if m.ui.agentsTouched {
+		t.Fatal("passing through Agents marked it touched")
+	}
+}
+
 // Activity follows the bottom; selecting keeps it live; f pauses it and new
 // lines are counted, not shown; a wheel-up leaves it; End resumes.
 func TestShellActivityTail(t *testing.T) {
