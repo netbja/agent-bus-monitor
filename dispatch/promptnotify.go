@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -62,22 +63,34 @@ func (l *loop) promptNotices(ctx context.Context, snaps map[string]bus.AgentSnap
 	if grace <= 0 {
 		return nil
 	}
+	marks, err := l.b.QuotaMarks(ctx)
+	if err != nil {
+		return err
+	}
+	// An agent gone from the observation (forgotten, its identity lost) ends
+	// its episode too: its mark would otherwise stay forever.
+	var gone []string
+	for k := range marks {
+		if a, ok := strings.CutPrefix(k, "prompt:"); ok {
+			if _, seen := l.obs[a]; !seen {
+				gone = append(gone, k)
+			}
+		}
+	}
+	if len(gone) > 0 {
+		sort.Strings(gone)
+		if err := l.b.FencedQuotaDel(ctx, l.token, gone...); err != nil {
+			return err
+		}
+	}
 	names := make([]string, 0, len(l.obs))
 	for a := range l.obs {
 		names = append(names, a)
 	}
 	sort.Strings(names)
-	var marks map[string]string
 	var asking map[string]bool
 	for _, a := range names {
 		o, s := l.obs[a], snaps[a]
-		if marks == nil {
-			m, err := l.b.QuotaMarks(ctx)
-			if err != nil {
-				return err
-			}
-			marks = m
-		}
 		mark := promptMark(a)
 		if o.State != "blocked" || o.PID == 0 || o.PID != s.PID {
 			if _, ok := marks[mark]; ok {

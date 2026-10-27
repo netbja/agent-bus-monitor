@@ -225,3 +225,51 @@ func TestPromptNotifyRunnerFailure(t *testing.T) {
 		t.Fatalf("no note for a missing runner: %q", logs.String())
 	}
 }
+
+// An agent that leaves the observation while blocked (forgotten, its
+// identity lost) loses its mark at the next pass; the marks of others stay.
+func TestPromptNotifyDropsTheMarkOfAnAgentNoLongerObserved(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	desk := &fakeDesktop{}
+	l := promptLoop(t, b, "gone-holder", desk, 1000, 60_000)
+	if err := b.FencedQuotaSet(ctx, "gone-holder", "hold:anthropic", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.promptNotices(ctx, coderSnap); err != nil {
+		t.Fatal(err)
+	}
+	if marks, _ := b.QuotaMarks(ctx); marks[promptMark("coder")] != "10:1000" {
+		t.Fatalf("no mark: %v", marks)
+	}
+	delete(l.obs, "coder")
+	l.observeAt("other", bus.Observation{State: "idle", PID: 3, Since: 1, At: 60_000})
+	if err := l.promptNotices(ctx, coderSnap); err != nil {
+		t.Fatal(err)
+	}
+	marks, _ := b.QuotaMarks(ctx)
+	if _, ok := marks[promptMark("coder")]; ok || marks["hold:anthropic"] != "x" {
+		t.Fatalf("marks after coder left the observation: %v", marks)
+	}
+}
+
+// Each observation is judged once: until the next pass, nothing is read
+// again, so a mark deleted in between does not ring the same episode twice.
+func TestPromptNotifyJudgesEachObservationOnce(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	desk := &fakeDesktop{}
+	l := promptLoop(t, b, "once-holder", desk, 1000, 60_000)
+	if err := l.promptNotices(ctx, coderSnap); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.FencedQuotaDel(ctx, "once-holder", promptMark("coder")); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.promptNotices(ctx, coderSnap); err != nil { // the same pass's observation
+		t.Fatal(err)
+	}
+	if s := desk.Sent(); len(s) != 1 {
+		t.Fatalf("one observation rang %d times: %q", len(s), s)
+	}
+}

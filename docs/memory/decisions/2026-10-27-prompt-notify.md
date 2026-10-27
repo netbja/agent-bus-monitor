@@ -25,7 +25,8 @@ but only to someone who is looking at busmon.
   first blocked reading by that pid). The mark `prompt:<agent>` in `{p}:quota` holds `pid:since`.
   It is set by a fenced write before the notification, so a dispatcher without the lease rings
   nothing and an episode rings at most once. It is deleted when the pane is no longer blocked by
-  that pid; a new `since` is a new episode.
+  that pid, or when the agent leaves the observation (forgotten, identity lost); a new `since` is a
+  new episode.
 - **A grace: 30 s by default.** `AGENT_BUS_PROMPT_GRACE` sets it in seconds (`0` = off). A prompt
   is first seen up to one observe pass (15 s) after it opens, so it rings 30-45 s later. A
   permission answered by someone at the screen does not ring; one left alone rings well before
@@ -51,7 +52,9 @@ dispatcher's host: under SSH or with no notification daemon, it is a logged note
 - Code: `dispatch/promptnotify.go` (`promptNotices`, `PromptGrace`), `dispatch/loop.go` (called
   after the observe pass), `cmd/agentbus/quotacmd.go` (`servicePrompt`, `desktopNotify`). Tests:
   `TestPromptNotifyOncePerEpisode`, `TestPromptNotifyGrace`, `TestPromptNotifySuppressions`,
-  `TestPromptNotifyWaitsForThePause`, `TestPromptNotifyRunnerFailure`, `TestServicePrompt`.
+  `TestPromptNotifyWaitsForThePause`, `TestPromptNotifyRunnerFailure`,
+  `TestPromptNotifyDropsTheMarkOfAnAgentNoLongerObserved`, `TestPromptNotifyJudgesEachObservationOnce`,
+  `TestServicePrompt`.
 
 ## Limits / what would invalidate it
 

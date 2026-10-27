@@ -687,7 +687,7 @@ It never touches Redis — see README "Deployment topology".
   `AGENT_BUS_PROMPT_GRACE` s (default 30, `0` = off) of the same pid and `since`, with the same
   suppressions plus a pause or a swap, through the context alert's `notify-send` runner (missing =
   a logged note); its only write is the fenced mark `prompt:<agent>` (= `pid:since`) in `{p}:quota`,
-  deleted when the pane is no longer blocked. No bus entry, nothing typed. An escalation caused by the pane's state (rules
+  deleted when the pane is no longer blocked or the agent leaves the observation. No bus entry, nothing typed. An escalation caused by the pane's state (rules
   7-8, `Decision.Cause` → wake `esc_cause`, or read from the reason of an older record) is
   re-armed once the pane is ready: the loop inspects such a record before `Decide`, tries clear
   and `at` stays. When the escalation target cannot act (it is the agent, its provider is held,
