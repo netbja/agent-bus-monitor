@@ -82,7 +82,11 @@ types `/clear` into its pane **only when all of these hold**, in this order (che
    would only be woken into a held quota).
 4. No open ask by the agent (`open:<agent>` in `{p}:asks`), no open gate **on** it
    (`{p}:gate:<agent>`) and none it opened on another agent (`Bus.ReviewsOf`): a reviewer mid-review
-   or an author waiting for a verdict holds context worth keeping until that closes.
+   or an author waiting for a verdict holds context worth keeping until that closes. Only gates
+   younger than `bus.DefaultHorizon` (24 h) count: stale gates pile up (58 on foureyes one morning)
+   and would hold a hand-off forever. When a hand-off waits on a gate, the escalation target gets
+   one `wake=no` notice per record (`FencedCmdOnce`, mark `clear-wait:<agent>` = session) naming
+   the gate, so it can be closed (`agentbus gate close`) or answered.
 5. Declared `idle` (the last status is `idle` and newer than the record's `at`), not `armed`,
    and no wake in progress (`{p}:wake:<agent>` not `prompting`).
 6. The pane passes `identityOK` (pid + start time of the verified identity among the pane's
@@ -98,11 +102,21 @@ types `/clear` into its pane **only when all of these hold**, in this order (che
 - **Re-inspect, then type.** Immediately before typing, `Inspect` again (ready, unfocused,
   identity). Then a new `Runtime.Clear(ctx, pane)` types exactly `/clear` and Enter through herdr
   (`agent prompt <pane> /clear`). `Clear` is the only method besides `Prompt` that writes to a pane;
-  its text is a constant, never a parameter.
+  its text is a constant, never a parameter. The reservation records the newest entry ids of
+  `{p}:status` and `{p}:report` written by the agent at that moment.
 - **Prove.** Within 30 s, the agent's verified identity shows the **same pid** with a **new
-  `IdentSession`** (Part D: the `SessionStart` hook records it). Only then the dispatcher deletes
-  the hand-off record and writes, fenced, a directive to the agent: `resume from your hand-off:
-  agentbus reports <report-id>` (its `ref` the report id). That directive is an ordinary
+  `IdentSession`** (Part D: the `SessionStart` hook records it), **and** the agent wrote no status
+  or report after the ids the reservation recorded. If it did, a turn ran between the last inspect
+  and the clear (see Races): its work is gone from the conversation and the hand-off does not
+  cover it, so the dispatcher does not resume from it. It deletes the record and sends the agent
+  a directive `your context was cleared after a turn your hand-off does not cover: read agentbus
+  reports <report-id>, check your last status and reports, then publish a fresh hand-off if work
+  is in flight`, plus one `wake=no` notice to the escalation target.
+  Otherwise the dispatcher deletes the hand-off record and writes, fenced, a directive to the
+  agent: `context cleared: re-run your boot steps (load your role's skills, read the memory
+  index), then read your hand-off: agentbus reports <report-id>` (its `ref` the report id). The
+  role prompt survives `/clear` (`--append-system-prompt` is argv), but the skills loaded at boot
+  and the habits they teach (drain first) do not, hence the boot steps. That directive is an ordinary
   obligation, so the **ordinary wake** follows on the next pass, with the fixed wake line. Nothing
   else is typed.
 - **No proof.** The record is kept, the mark stays (no retry for that session), the wake record
@@ -145,7 +159,14 @@ typing anything into any pane:
    180000`, and its `{p}:swaps` ledger `begin` in the same script). Reusing the swap intent is
    deliberate: the dispatcher already neither prompts, escalates, resumes nor (Part B) clears an
    agent under it, and `OpenChallenge`/`request` already refuse new work on it. After the intent,
-   `openWork` is read again, and an in-flight wake is waited for (10 s), as in swap.
+   `openWork` is read again, and an in-flight wake is waited for (10 s), as in swap. What reads
+   the kind:
+   - busmon flags `reloading`, not `swapping`;
+   - `Bus.Interrupted` closes a dead caller's `begin` as an interrupted reload (`failed`, kind
+     reload);
+   - `swap --back`, the `back:<p>:<role>` notices and `{p}:fallback` ignore reload entries, and a
+     reload never writes or deletes the fallback record;
+   - `agentbus swaps` lists them with their kind.
 3. **Stop**: re-read the snapshot and `ProcStart`; if pid and start still match, `SIGTERM` the
    pid. Wait up to 15 s (`PIDGone`) for it to exit. No `SIGKILL`: a client that ignores SIGTERM
    is a failure (below), never forced.
@@ -189,11 +210,15 @@ closes it as interrupted (`Bus.Interrupted`), as today.
 |---|---|---|
 | sentinel | any role but itself | on a client-update episode for that agent's client (`{p}:observed` `update` true for it), or a health `fail` it is told to remediate |
 | master | sentinel | any time sentinel is idle (who reloads sentinel, decided) |
-| sentinel | master | last of an update episode, only when master is idle and has no open ask |
+| sentinel | master | last of an update episode, only when master is idle, has no open ask, no `accepted` board task it owns, and no pilot lease is held by another driver (`{p}:pilot`) |
 | a person | anyone | with an explicit `--as <person>` (never an inherited `AGENT_BUS_HUMAN`) |
 
 The CLI enforces the table from `AGENT_BUS_AGENT` and the bus facts; like `gate close --as`, it
-cannot prove who runs it. The launcher's tool rules allow exactly `agentbus reload *` for sentinel
+cannot prove who runs it. The identity guard (busmon-a-identity, `af19f2e`) refuses every
+unlisted write from a herdr pane without `AGENT_BUS_AGENT` before argv is parsed; `reload` with an
+explicit `--as <person>` is added to its list, exactly as `answer --as` is, so a person may reload
+from their own shell pane. `handoff` is not listed: only an agent (which has `AGENT_BUS_AGENT`)
+declares one. The launcher's tool rules allow exactly `agentbus reload *` for sentinel
 and `agentbus reload sentinel` for master (`[roles.*.tool_rules]`), nothing broader.
 
 ### The person's yes
@@ -215,10 +240,16 @@ after a clear the dispatcher would keep reading the old session's fill until the
 
 The launcher's `SessionStart` hook already runs on every session start, `clear` included
 (`agentbus roles report-resume`, `cmd/agentbus/reportresume.go`), with `session_id` and `source`
-on its stdin. It gains a second, detached step: `Bus.ProveSession(agent, pid, pid_start, session)`
-— one WATCH/MULTI through `putSnapshot`, which replaces `IdentSession` only when pid and start
-equal the stored verified identity, the hook's own process descends from that pid
-(`AncestorAmong`), and the session id passes `sessionIDPattern`. The hook still never prints on
+on its stdin. It gains a second step, split across the detach:
+
+- **In the foreground**, before it detaches (it detaches with `Setsid` and `Process.Release`,
+  `reportresume.go`, after which the sender is reparented to init or a subreaper and an ancestry
+  check would fail or race), the hook proves its ancestry: the stored verified pid and its start
+  time found among its own ancestors (`AncestorAmong`, `ProcStart`). No proof, no write.
+- **The detached sender** receives the proved pid and start and the session id, and calls
+  `Bus.ProveSession(agent, pid, pid_start, session)`: one WATCH/MULTI through `putSnapshot` that
+  replaces `IdentSession` only when pid and start still equal the stored verified identity and the
+  session id passes `sessionIDPattern`. The hook still never prints on
 stdout and always exits 0; a failed write is logged to `<state>/resume.log`. A subagent's start
 (`agent_id` set) proves nothing, as today.
 
@@ -244,7 +275,7 @@ stdout and always exits 0; a failed write is logged to `<state>/resume.log`. A s
 
 | Race | Outcome |
 |---|---|
-| A turn starts between the last inspect and `/clear` | the re-inspect right before typing catches most; a client typing `/clear` into a running turn queues it in Claude Code's input. Residual, same as a wake line; the 30 s proof fails if the clear did not happen, and nothing retries |
+| A turn starts between the last inspect and `/clear` (a background task's notification, a scheduled wakeup) | the re-inspect right before typing catches most. Otherwise Claude Code queues `/clear` and runs it **after** that turn: the clear succeeds and the turn's work leaves the conversation without a hand-off. The proof detects it by any status or report written after the reservation, and the agent is told to rebuild from its reports instead of resuming from the stale hand-off (Part B). A turn that wrote nothing on the bus is the residual: its work survives only in Git and files |
 | The person focuses the pane | unfocused is checked in the re-inspect; a focus after it may see `/clear` typed: the person sees it, as with a wake line |
 | A message arrives for the agent after its hand-off | it stays in the cmd queue (unacked) and survives the clear; the agent drains it after the resume directive |
 | The agent declares `working` after its hand-off | the record is void: no clear |
@@ -274,8 +305,13 @@ the user's herdr or Redis.
   changes nothing; the caller table; SIGTERM only after a fresh pid+start match; no SIGKILL on
   timeout; relaunch filtered to the role; `--fresh` without a session; each failure row writes a
   `failed` ledger entry and prints its recovery; `--dry-run` writes nothing.
-- **hook**: `report-resume` on `source: clear` calls `ProveSession` detached and still exits 0
-  with nothing on stdout.
+- **hook**: `report-resume` on `source: clear` proves the ancestry in the foreground (a fake
+  process tree with and without the client among its ancestors), passes pid/start to the sender,
+  which writes only while they equal the stored identity; it still exits 0 with nothing on stdout.
+- **identity guard**: `reload <role> --as <person>` from a pane without `AGENT_BUS_AGENT` passes
+  the guard; `reload <role>` without `--as` there is refused; `handoff` there is refused.
+- **proof after a queued clear**: a status or report written after the reservation turns the
+  resume directive into the rebuild directive, plus the notice.
 - **Live checks before default-on** (this machine, read-only first): Claude Code's `/clear` keeps
   the pid, argv and environment and fires `SessionStart` with `source: clear` and a new
   `session_id`; typing `/clear` with the slash menu open submits `/clear` (not another command);
@@ -295,11 +331,12 @@ Each step is its own PR with its own 4-eyes review; the decision note
 `docs/memory/decisions/2026-10-28-agent-lifecycle.md` is written with step 3, when the exception
 to "types only the wake line" becomes real, and CLAUDE.md's dispatcher paragraph names it.
 
-## Open questions for review
+## Open questions for Bernard
 
-1. Should a hand-off with an open gate on the agent wait (proposed), or clear anyway since the
-   hand-off is meant to carry the review state?
-2. Is reusing `{p}:swap:<role>` with `kind=reload` acceptable, or should reload get its own intent
-   key that every reader of the swap intent must then also check?
-3. Sentinel reloading master: keep it (proposed, last and only when idle), or leave master to the
-   person?
+foureyes' first review settled the proposals below; they stay open for the person.
+
+1. A hand-off with an open gate on the agent **waits** (gates younger than 24 h only, one notice
+   per wait), rather than clearing anyway.
+2. Reload **reuses** `{p}:swap:<role>` with `kind=reload`; its readers are listed in Part C.
+3. Sentinel **reloads master** last, only when master is idle, has no open ask, no accepted task,
+   and no other driver holds the pilot lease.
