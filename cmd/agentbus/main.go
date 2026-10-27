@@ -268,8 +268,14 @@ func main() {
 
 	case "challenge":
 		rest, ref := extractFlag(rest, "--ref")
+		rest, subject := extractFlag(rest, "--subject")
 		if len(rest) < 2 {
-			die("usage: challenge <target> [--ref R] <message>")
+			die("usage: challenge <target> [--ref R] [--subject S] <message>")
+		}
+		if subject != "" {
+			if err := bus.ValidGateSubject(subject); err != nil {
+				die(err.Error())
+			}
 		}
 		if ref == "" {
 			ref = genRef()
@@ -281,7 +287,7 @@ func main() {
 		// Open the gate first — it's the authoritative blocking record. If the
 		// cmd publish then fails, the target stays correctly gated rather than
 		// seeing a phantom challenge event with no matching gate.
-		if err := b.OpenChallenge(ctx, target, ref, self+"|"+msg); err != nil {
+		if err := b.OpenChallenge(ctx, target, ref, bus.FormatGateMeta(self, subject, msg)); err != nil {
 			die(err.Error())
 		}
 		if _, err := b.Cmd(ctx, self, target, bus.CmdChallenge, ref, msg); err != nil {
@@ -335,13 +341,12 @@ func main() {
 		if _, err := b.Cmd(ctx, self, author, bus.CmdVerdict, ref, cmdMsg); err != nil {
 			die(err.Error())
 		}
-		// 3. Bonus gate resolution: best-effort, only when --ref names an open
-		//    challenge. A missing/stale ref is a notice, not a fatal error — that
-		//    is what lets a cmd-requested review (no challenge) still be recorded.
-		if ref != "" {
-			if msg := verdictGateNotice(ctx, b, author, self, ref); msg != "" {
-				fmt.Fprintln(os.Stderr, msg)
-			}
+		// 3. Gate resolution, best-effort: the gates opened on this reviewer for
+		//    the subject or the ref, else the author's gate named by --ref. A
+		//    missing/stale ref is a notice, not a fatal error — that is what lets
+		//    a cmd-requested review (no challenge) still be recorded.
+		for _, msg := range verdictGates(ctx, b, author, self, subject, ref) {
+			fmt.Fprintln(os.Stderr, msg)
 		}
 		fmt.Printf("verdict recorded: %s %s on %s\n", decision, subject, author)
 
@@ -424,8 +429,11 @@ func main() {
 		}
 
 	case "gate":
+		if len(rest) >= 1 && rest[0] == "close" {
+			os.Exit(runGateClose(ctx, b, self, rest[1:], os.Stdout, os.Stderr))
+		}
 		if len(rest) < 1 {
-			die("usage: gate <agent>")
+			die("usage: gate <agent> | gate close …")
 		}
 		m, err := b.OpenChallenges(ctx, rest[0])
 		if err != nil {

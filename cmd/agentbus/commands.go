@@ -79,10 +79,12 @@ var commands = []cli.Command{
 
 	// --- 4-eyes
 	{
-		Name: "challenge", Text: true, Usage: []string{"challenge <target> [--ref <id>] <message...>"},
-		Summary:  "open a 4-eyes gate on an agent",
-		Flags:    []cli.Flag{fRef},
-		Examples: []string{"agentbus -p demo challenge coder \"PR 12 touches the money path\""},
+		Name: "challenge", Text: true, Usage: []string{"challenge <target> [--ref <id>] [--subject <s>] <message...>"},
+		Summary: "open a 4-eyes gate on an agent (the gated agent's verdict on --subject closes it)",
+		Flags: []cli.Flag{fRef,
+			{Long: "subject", Short: 's', Arg: "<s>", Help: "the verdict subject the review is for (no spaces)"}},
+		Examples: []string{"agentbus -p demo challenge coder \"PR 12 touches the money path\"",
+			"agentbus -p demo challenge foureyes -s roles-impl \"review roles-impl at 27233fb\""},
 	},
 	{
 		Name: "reply", Text: true, Usage: []string{"reply --ref <id> <target> <message...>"},
@@ -111,9 +113,19 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo verdicts -P 12", "agentbus -p demo verdicts"},
 	},
 	{
-		Name: "gate", Usage: []string{"gate <agent>"},
-		Summary:  "list an agent's open challenges (exit 1 if gated)",
-		Examples: []string{"agentbus -p demo gate coder"},
+		Name: "gate", Usage: []string{"gate <agent>", "gate close <agent> <ref> --note <text> [--as <person>]",
+			"gate close (--subject <s> | --mine | --by <name>) [--dry-run] [--note <text>] [--as <person>]"},
+		Summary: "list an agent's open challenges, or close stale ones without a verdict (its challenger or a person)",
+		Flags: []cli.Flag{
+			{Long: "note", Short: 'N', Arg: "<text>", Help: "why it closes (the audit trace; required unless --dry-run)"},
+			{Long: "subject", Short: 's', Arg: "<s>", Help: "every gate opened for this subject"},
+			{Long: "mine", Short: 'm', Help: "every gate you opened"},
+			{Long: "by", Short: 'b', Arg: "<name>", Help: "every gate opened by name"},
+			{Long: "dry-run", Short: 'n', Help: "list what would close, write nothing"},
+			{Long: "as", Short: 'a', Arg: "<person>", Help: "close as a person (any gate; never implied by the environment)"},
+		},
+		Examples: []string{"agentbus -p demo gate coder", "agentbus -p demo gate close --mine -n",
+			"agentbus -p demo gate close foureyes 1793128514117-0 -N \"merged as #135\""},
 	},
 
 	// --- team state
