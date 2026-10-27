@@ -605,7 +605,8 @@ services are gone. Switching to the workspace (or `agentbus up <p>` in it) bring
   `relaunched (new pane)`, `relaunched (new tab)`, `skipped (busy)`, `unknown`. An agent is alive
   when its recorded pid still runs with the recorded start time; without a record, herdr's detected
   agent decides. Nothing is typed into an existing pane: a dead agent comes back in a new pane
-  split beside its old one, which is left as it is.
+  split beside its old one. Once the new agent has bound in its new pane, the old pane is closed if
+  it is still a plain shell; otherwise it is left as it is, and the output says why.
   `--dry-run` prints the plan and changes nothing; `--resume` resumes a Claude Code agent's
   recorded session through the launcher (other clients start fresh).
 - **`agentbus projects`** lists every known project with its broker state, services and agents,

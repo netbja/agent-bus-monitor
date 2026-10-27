@@ -34,7 +34,7 @@ missing=""
 for role in $(ROLES_TOML="$REPO/roles.toml" "$AB" roles tier boot) $(ROLES_TOML="$REPO/roles.toml" "$AB" roles tier pop); do
   [[ -n "$(ROLES_TOML="$REPO/roles.toml" "$AB" roles field "$role" model 2>/dev/null)" ]] || missing+=" $role"
 done
-roles_defined=$(grep -cE '^\[roles\.' "$REPO/roles.toml" 2>/dev/null || echo 0)
+roles_defined=$(grep -cE '^\[roles\.[^].]+\]$' "$REPO/roles.toml" 2>/dev/null || echo 0)
 assert_eq "${missing:-none}" "none" "every role in roles.toml resolves to a model"
 assert_eq "$( (ROLES_TOML="$REPO/roles.toml" "$AB" roles tier boot; ROLES_TOML="$REPO/roles.toml" "$AB" roles tier pop) | wc -l | tr -d ' ')" "$roles_defined" "the check saw every role"
 

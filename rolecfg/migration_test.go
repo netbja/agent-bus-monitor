@@ -41,7 +41,8 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		}
 		return strings.ReplaceAll(strings.Join(keep, "\n"), repoPath(t, "roles.toml"), "<manifest>")
 	}
-	// master pops every role: one more allow rule per role added since, nothing else.
+	// master pops every role: one more allow rule per role added since, plus its
+	// own relaunch rules (masterUpRules), nothing else.
 	r1, _ := v1.LaunchRules("master")
 	r2, _ := v2.LaunchRules("master")
 	want := r1
@@ -49,6 +50,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 	for _, role := range v2.roleOrder[len(v1.roleOrder):] {
 		want.Allow = append(want.Allow, "Bash(agent-spawn "+role+" *)")
 	}
+	want.Allow = append(want.Allow, masterUpRules...)
 	if !reflect.DeepEqual(want, r2) {
 		t.Fatalf("master's rules %+v, want %+v", r2, want)
 	}

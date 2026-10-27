@@ -426,7 +426,11 @@ It never touches Redis — see README "Deployment topology".
   an earlier `stty -icanon` even leave the terminal non-canonical (Codex's reviews, real PTYs).
   So `agentbus up <p>` on an open workspace (`relaunch.go`: `decideRelaunch`, a pure table) runs a
   dead agent's template command in a **new pane split from its tab** (`splitPane`), or in a new tab
-  when the tab is gone, and leaves the old pane as it is. A tab's command counts as gone only when
+  when the tab is gone. Once the relaunched agent is proven (its verified identity a new live
+  pid bound in the new pane, read for up to 60 s), it closes the exact old pane the dead agent's
+  snapshot recorded, if a re-read right before shows it still a plain shell; anything else leaves it
+  and says why (`closeOldPanes`, decision `docs/memory/decisions/2026-10-27-relaunch-close.md`;
+  master may run `agentbus up agent-bus-monitor --resume` without a prompt, `roles.toml`). A tab's command counts as gone only when
   no live snapshot says otherwise (`snapLife`: pid + `pid_start`, Linux only), herdr sees no agent in
   any of its panes, and **every** pane of the tab is a plain interactive shell (`idleShell`, argv
   only: a classification, never a licence to type); anything running in any pane (maybe the agent

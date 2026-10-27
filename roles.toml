@@ -96,6 +96,10 @@ profile = "claude-sonnet-edits"
 tier = "boot"
 pops = true
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]
+# Bernard, 2026-10-27: master relaunches this project's dead agents without a prompt.
+# Exact commands only: no other project, no other flag, no wildcard.
+[roles.master.tool_rules]
+allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)"]
 
 [roles.coder]
 profile = "claude-opus"
