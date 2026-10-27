@@ -179,8 +179,8 @@ func TestBoardTaskColumnFitsContent(t *testing.T) {
 		t.Fatalf("owner at %d in %q, want %d", i, h, want)
 	}
 	for _, it := range boardItems(m, boardNow, 200) {
-		if i := strings.Index(it.Line.text(), it.Line.text()[want:want+1]); it.Line.Width() != 200 || i < 0 {
-			t.Fatalf("row %q", it.Line.text())
+		if it.Line.Width() != 200 {
+			t.Fatalf("row %q width %d", it.Line.text(), it.Line.Width())
 		}
 		if !strings.HasPrefix(it.Line.text()[want:], m[it.Key].Owner) {
 			t.Fatalf("owner not after the task column: %q", it.Line.text())
