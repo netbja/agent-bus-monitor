@@ -327,7 +327,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   or declared within 10 min) or closes an untracked thread with a `human=yes`, `wake=no` reply
   (`Bus.HumanClose`). The Requests count covers only threads younger than `bus.DefaultHorizon`.
   Activity auto-scroll (v0.12.3): selecting, clicking or opening a line keeps it live; only `f`
-  (`listState.Pause`) and a wheel-up leave it.
+  (`listState.Pause`) and a wheel-up leave it, and (A3) moving the selection down onto the newest
+  line or wheeling back to the bottom resumes it (`f`/End still do).
   Attention marks (spec `docs/superpowers/specs/2026-10-21-busmon-ux-design.md`): an idle agent whose
   status message names the person (`forYouHint`, `foryou.go`; never for the default `pilot`) gets
   the flag `for you`: a hint, it never relabels, rings or counts. Activity entries for the person
