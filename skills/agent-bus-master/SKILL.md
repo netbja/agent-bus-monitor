@@ -555,7 +555,15 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    though new reports keep arriving.
 5. **Route review over `cmd`, not the formal `challenge`/`verdict` gate** — reserve that mechanism
    for an actual blocking risk (money-path, prod migration), not routine per-task review; plain
-   cmd→report round-trips are cheaper and sufficient.
+   cmd→report round-trips are cheaper and sufficient. When you do open one on a reviewer, name the
+   subject the verdict will use: `agentbus challenge foureyes --subject <s> "review <s> at <sha>"`.
+   The reviewer's own `verdict --subject <s>` (or one naming the challenge's `--ref`) closes it; a
+   verdict by anyone else never does. A challenge opened without `--subject` and answered without
+   its `--ref` stays open: close it without a verdict, never with one of yours (it would count as an
+   approve), by `agentbus gate close <reviewer> <ref> --note "<why>"`, or in bulk
+   `agentbus gate close --mine --dry-run` then again with `--note`. Only the challenger, or a person
+   with `--as <name>`, may close a gate; each close leaves a `wake=no` reply on its thread. busmon's
+   For you lists only gates the person opened or that hold the person, never your reviews.
 6. **Independently verify what you can** (`git log`, `gh run list`, a real command) rather than
    trusting self-reports alone — cheap, and catches a report that's technically true but incomplete.
 7. **Plan-level sign-off before declaring the whole thing done** — one final review against the

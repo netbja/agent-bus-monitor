@@ -229,9 +229,15 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   with more via ` (+N)`) and `reports <id>` prints one report's full retained text.
   `listen`/busmon still render the preview. `verdict` is subject-first
   (`--pr N`/`--subject S`), always appends to the `{p}:verdicts` ledger, publishes a live
-  `CmdVerdict`, and resolves a matching `--ref` gate only as a best-effort bonus (it no longer
-  errors when no challenge is open; a `--ref` open on the *reviewer*, a mission review the conductor
-  closes itself, is left alone and not reported as missing — `verdictGateNotice`). `verdicts [--pr N|--subject S]` prints the roll-up 4-eyes
+  `CmdVerdict`, then closes gates best-effort (`verdictGates`, foryou-gates): on the *reviewer's own*
+  gate, the one named by `--ref` and every one opened for that subject (`Bus.CloseReviewGates`; never
+  on a self-verdict, never a conductor's mission gate, which the conductor closes itself), else the
+  author's gate named by `--ref` (it no longer errors when no challenge is open — `verdictGateNotice`).
+  `challenge --subject S` stores the subject in the gate's meta (`challenger|[subject S] text`,
+  `bus.FormatGateMeta`/`ParseGateMeta`; no subject = the old `challenger|text`). `gate close <agent>
+  <ref>` or a sweep (`--subject S`, `--mine`, `--by N`, `--dry-run`) closes stale gates without a
+  verdict (`Bus.CloseGate`: compare-and-delete plus a `wake=no` reply on the gate's thread in one
+  script; never a ledger entry): only the challenger, or a person by an explicit `--as`. `verdicts [--pr N|--subject S]` prints the roll-up 4-eyes
   state (`APPROVED`/`REJECTED`/`PENDING`) with exit codes 0/3/2; no-arg lists recent verdicts
   across all subjects. `cmd [--ref T] <target> <command>` now prints its entry id (the thread
   root) and accepts `--ref` to continue an existing thread; `thread <T>` reads the `:cmd` stream
@@ -288,7 +294,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (role-tagged segments, never markup), measured in cells (`Width`; `Preview`/`DetailText` make
   every cluster measure the same under uniseg, lipgloss's grapheme width and wcwidth:
   `agreeWidths`); `drawLine`/`drawFrame` write the `grid`, lipgloss only styles spans, so a frame
-  never wraps by one cell. `forYou` ranks asks, waits, gates and unread lines, and `decisions` is
+  never wraps by one cell. `forYou` ranks asks, waits, the person's gates and unread lines, and `decisions` is
   its badge and reminder subset; its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`), then opens it in the reader, a stack of pages over the lower zone, one
@@ -569,7 +575,11 @@ It never touches Redis — see README "Deployment topology".
   `{p}:verdicts` unconditionally (self-approvals included — the roll-up ignores them, but the record
   stays). The roll-up rule: APPROVED iff the latest independent approve (reviewer ≠ author) is newer
   than any reject. Don't gate "was this approved?" on the `{p}:gate:{agent}` hash — that only holds
-  *open* challenges; query `agentbus verdicts` instead.
+  *open* challenges; query `agentbus verdicts` instead. And never close a stale gate with a verdict
+  of your own (it counts as an approve): `agentbus gate close` leaves a trace that is not a verdict.
+  busmon's For you lists a gate only when it concerns the person (`personGateItems`: the person
+  opened it, or it holds the person, read as `personGates` when the person is no agent); a review
+  between agents never counts in the `for you` badge.
 - **A plain `subscribe` acknowledges older entries unseen; `--drain` does not.** With no
   `--since`, `subscribe` floors at the server's "now", so everything that waited for an unarmed
   agent is ACKed without output. That is why a woken agent must run `subscribe --drain` — keep the

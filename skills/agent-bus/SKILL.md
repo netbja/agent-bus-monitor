@@ -186,6 +186,10 @@ agentbus gate <self>      # lists open challenges; NON-ZERO exit = you are gated
 To review a peer's risky change: `agentbus challenge <target> <why>` opens a gate; they
 `reply --ref <R>`; a **second, independent** agent resolves it with `verdict … approve|reject`
 (a self-approval never counts). Query the recorded state with `agentbus verdicts`.
+To ask a reviewer for a verdict, challenge it with the subject: `agentbus challenge foureyes
+--subject <s> "<what to review>"`; its `verdict --subject <s>` closes that gate. As the gated
+reviewer, answer on the subject you were given (or pass the challenge's `--ref`). A gate you opened
+that is no longer needed: `agentbus gate close <agent> <ref> --note "<why>"` (never a verdict).
 
 ## Shared working tree — one checkout, several agents
 The team usually shares ONE physical checkout. Read-only git (`log`, `diff`, `show`,
