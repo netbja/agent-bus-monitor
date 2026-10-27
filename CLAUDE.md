@@ -189,7 +189,8 @@ it silently never fired.
   notice, and the desktop one `notify-send` when it is on PATH: once per agent and session
   (`FencedCmdOnce`, marks `context:<agent>`/`context-notice:<agent>` in `{p}:quota`, deleted by a
   fresh reading below the threshold), never during a pause, never on an unknown or aged (>30 min)
-  fill. **Deliberately not reported:** cost (needs a price table that rots every
+  fill. busmon shows the fill in the ctx cell and the agent page; health `context` warns at the
+  threshold. **Deliberately not reported:** cost (needs a price table that rots every
   release; on a subscription the figure is fiction). Raw context tokens stay in `{p}:usage`.
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
   cron wake where a hard exit loses the whole caretaker pass.
@@ -312,7 +313,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (pilot, armed, lag, agents, usage, budgets, board, challenges) and every 5th tick the dispatcher
   facts (`DispatchAlive`, `Obligation`, `Wake`); a failed read keeps the last value (queue shows
   `N?`). The usage scopes stay apart: account budget (used %) in the header, an agent's own context
-  (raw tokens) in its row. The declared state is never overwritten by silence or by a report.
+  (raw tokens, plus its fill % from `{p}:context` when known: `88k 85%`) in its row. The declared state is never overwritten by silence or by a report.
   Since v0.12.1 an agent silent for over a day (`dormantAfter`), not armed, not the pilot and owed
   nothing is **hidden** from the panel and from `@all` (`a` shows it), never relabelled; `d`/`Delete`
   then `y` forgets an agent (`Bus.ForgetAgent`, `agentbus agents forget`, refused while it listens

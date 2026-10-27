@@ -266,6 +266,7 @@ type agentState struct {
 	queueFailed  bool                // the latest attempted Obligation read failed (or the broker is down)
 	queueAt      time.Time           // time of the last successful Obligation read
 	ctxRaw       string              // UsageSnapshot.Ctx exactly as read
+	ctxFill      *bus.ContextFill    // {p}:context, nil when not published (unknown)
 	registered   bool                // listed in {p}:agents (the conductor only reports: not an @all target)
 	provider     string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
 	held         bool                // its provider is held by the dispatcher (quota)

@@ -3,6 +3,8 @@ package bus
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -19,6 +21,29 @@ func ContextKey(project string) string { return project + ":context" }
 
 // ContextTTL bounds how long a published fill outlives its dispatcher.
 const ContextTTL int64 = 120000 // ms
+
+// ContextAlertDefault is the fill, in percent, at which an agent is told to
+// hand off (context-alert ca2), unless AGENT_BUS_CONTEXT_ALERT says otherwise.
+const ContextAlertDefault = 80.0
+
+// ContextMaxAge is the oldest reading that counts: older, the fill is aged
+// and reads unknown (no alert, no display, no health verdict).
+const ContextMaxAge = 30 * time.Minute
+
+// ContextAlert reads AGENT_BUS_CONTEXT_ALERT: a percent in 0-100 (0 = off);
+// empty or invalid keeps ContextAlertDefault.
+func ContextAlert(getenv func(string) string) float64 {
+	if n, err := strconv.ParseFloat(getenv("AGENT_BUS_CONTEXT_ALERT"), 64); err == nil && n >= 0 && n <= 100 {
+		return n
+	}
+	return ContextAlertDefault
+}
+
+// Known: the fill names its session and was at most ContextMaxAge old when
+// it was published.
+func (f ContextFill) Known() bool {
+	return f.Session != "" && f.At-f.ObservedAt <= ContextMaxAge.Milliseconds()
+}
 
 // ContextFill is one agent's last context fill.
 type ContextFill struct {

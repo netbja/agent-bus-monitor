@@ -247,6 +247,14 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			out := health.EvaluateClientUpdates(clientEvidence(snaps, observed, now.UnixMilli()))
 			return out.Status, out.Detail, nil
 		}),
+		healthTask("context", func(ctx context.Context) (health.Status, string, error) {
+			fills, err := b.Context(ctx)
+			if err != nil {
+				return health.Unknown, "context fills unavailable", err
+			}
+			out := health.EvaluateContext(contextEvidence(fills), bus.ContextAlert(os.Getenv))
+			return out.Status, out.Detail, nil
+		}),
 		healthTask("runaway", func(ctx context.Context) (health.Status, string, error) {
 			now, err := b.ServerTime(ctx)
 			if err != nil {
@@ -889,6 +897,16 @@ func clientEvidence(snaps map[string]bus.AgentSnapshot, obs map[string]bus.Obser
 			e.Outdated, e.Client, e.Running, e.Installed = true, o.Update.Client, o.Update.Running, o.Update.Installed
 		}
 		ev = append(ev, e)
+	}
+	return ev
+}
+
+// contextEvidence is the context check's evidence: one entry per published
+// fill, known only when it is not aged.
+func contextEvidence(fills map[string]bus.ContextFill) []health.ContextEvidence {
+	ev := make([]health.ContextEvidence, 0, len(fills))
+	for a, f := range fills {
+		ev = append(ev, health.ContextEvidence{Agent: a, Pct: f.Pct, Known: f.Known()})
 	}
 	return ev
 }

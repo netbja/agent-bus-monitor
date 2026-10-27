@@ -14,6 +14,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/quota"
 )
@@ -223,13 +224,8 @@ func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfi
 // notification goes through notify-send when it is on PATH, else nowhere.
 func serviceContext(getenv func(string) string, lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) dispatch.ContextConfig {
-	c := dispatch.ContextConfig{Every: time.Minute, Alert: 80, MaxAge: 30 * time.Minute,
+	c := dispatch.ContextConfig{Every: time.Minute, Alert: bus.ContextAlert(getenv), MaxAge: bus.ContextMaxAge,
 		Read: func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) }}
-	if v := getenv("AGENT_BUS_CONTEXT_ALERT"); v != "" {
-		if n, err := strconv.ParseFloat(v, 64); err == nil && n >= 0 && n <= 100 {
-			c.Alert = n
-		}
-	}
 	if bin, err := lookPath("notify-send"); err == nil {
 		c.Notify = func(ctx context.Context, title, body string) error {
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

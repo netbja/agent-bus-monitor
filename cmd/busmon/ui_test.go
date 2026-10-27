@@ -133,19 +133,21 @@ type fakeReader struct {
 	calls map[string]int
 	fail  bool
 
-	conductor bool     // ConductorAlive
-	changes   []string // ChangeNames
-	svcInst   *bus.ServicesInstall
-	svcRecs   map[string]bus.ServiceRecord
-	snaps     map[string]bus.AgentSnapshot // Agents, when set
-	pause     *bus.PauseRecord
-	marks     map[string]string
-	observed  map[string]bus.Observation
-	swaps     map[string]bool
-	fallbacks map[string]bus.FallbackRecord
-	verdicts  map[string]bus.ModelVerdict
-	asks      []bus.Ask
-	pauseErr  error // returned by Pause when set
+	conductor  bool     // ConductorAlive
+	changes    []string // ChangeNames
+	svcInst    *bus.ServicesInstall
+	svcRecs    map[string]bus.ServiceRecord
+	snaps      map[string]bus.AgentSnapshot // Agents, when set
+	pause      *bus.PauseRecord
+	marks      map[string]string
+	observed   map[string]bus.Observation
+	swaps      map[string]bool
+	fallbacks  map[string]bus.FallbackRecord
+	verdicts   map[string]bus.ModelVerdict
+	asks       []bus.Ask
+	pauseErr   error // returned by Pause when set
+	contexts   map[string]bus.ContextFill
+	contextErr error // returned by Context when set
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -274,6 +276,10 @@ func (f *fakeReader) Pause(context.Context) (*bus.PauseRecord, error) {
 	return f.pause, nil
 }
 
+func (f *fakeReader) Context(context.Context) (map[string]bus.ContextFill, error) {
+	f.n("Context")
+	return f.contexts, f.contextErr
+}
 func (f *fakeReader) Observed(context.Context) (map[string]bus.Observation, error) {
 	f.n("Observed")
 	return f.observed, nil

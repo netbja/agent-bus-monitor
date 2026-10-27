@@ -14,6 +14,7 @@ Wake            woken - nonce echoed on the agent's screen; not read or accepted
 Gap             entries may have been trimmed before this agent read them - possible, not proven
 Gate            1 open 4-eyes challenge(s): wait for a verdict
 Context         608k tokens (raw "608k ctx")
+Fill            unknown (no fresh reading from its client)
 Pilot           holds the pilot lease (master)
 Board           pr-46-review blocked · fix/pr-46
 

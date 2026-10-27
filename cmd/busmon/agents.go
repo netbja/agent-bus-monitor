@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -335,7 +336,7 @@ type agentCols struct{ glyph, name, state, updated, queue, ctx, flags int }
 func agentColsFor(tier Tier) agentCols {
 	switch tier {
 	case TierWide:
-		return agentCols{glyph: 2, name: 10, state: 10, updated: 20, queue: 9, ctx: 8, flags: 20}
+		return agentCols{glyph: 2, name: 10, state: 10, updated: 20, queue: 9, ctx: 10, flags: 20}
 	case TierMedium:
 		return agentCols{glyph: 2, name: 10, state: 9, updated: 5, queue: 4, flags: 12}
 	}
@@ -369,6 +370,42 @@ func cell(segs []Seg, n int) Line {
 	return append(FitLine(segs, n-1), Seg{Text: " "})
 }
 
+// ctxAlert is the fill the dispatcher alerts at (AGENT_BUS_CONTEXT_ALERT,
+// read once at start; 0 = off: no fill is coloured).
+var ctxAlert = bus.ContextAlert(os.Getenv)
+
+// knownFill is the agent's context fill when published and not aged.
+func knownFill(a *agentState) (float64, bool) {
+	if a.ctxFill == nil || !a.ctxFill.Known() {
+		return 0, false
+	}
+	return a.ctxFill.Pct, true
+}
+
+// ctxCell is the ctx column: the raw tokens and, when known, the fill in
+// percent, coloured for attention at the alert threshold. Unknown is no
+// percent, never 0.
+func ctxCell(a *agentState) []Seg {
+	var segs []Seg
+	if n, ok := parseCtx(a.ctxRaw); ok {
+		segs = append(segs, Seg{Text: formatTokens(n), Role: RoleText})
+	}
+	if pct, ok := knownFill(a); ok {
+		role := RoleText
+		if ctxAlert > 0 && pct >= ctxAlert {
+			role = RoleAttention
+		}
+		if len(segs) > 0 {
+			segs = append(segs, Seg{Text: " "})
+		}
+		segs = append(segs, Seg{Text: fmt.Sprintf("%.0f%%", pct), Role: role})
+	}
+	if len(segs) == 0 {
+		return []Seg{{Text: GlyphDash, Role: RoleMuted}}
+	}
+	return segs
+}
+
 // agentHeader is the column header row, wide only.
 func agentHeader(tier Tier, width int) Line {
 	if tier != TierWide {
@@ -393,11 +430,7 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 	l = append(l, cell(updatedCell(a, barTier, now), c.updated)...)
 	l = append(l, cell([]Seg{queueCell(a, tier)}, c.queue)...)
 	if c.ctx > 0 {
-		ctx := Seg{Text: GlyphDash, Role: RoleMuted}
-		if n, ok := parseCtx(a.ctxRaw); ok {
-			ctx = Seg{Text: formatTokens(n), Role: RoleText}
-		}
-		l = append(l, cell([]Seg{ctx}, c.ctx)...)
+		l = append(l, cell(ctxCell(a), c.ctx)...)
 	}
 	keep := 1
 	if tier == TierWide {

@@ -48,12 +48,20 @@ before the first message). Verified in Claude Code 2.1.311's own statusLine docu
   publishes the fill, and the episode waits for the end of the pause. The desktop notification
   follows only a directive actually written, so a restarted dispatcher does not repeat it.
 
-What follows (busmon display, health check) is the context-alert change's ca3.
+- **Shown and checked (ca3).** busmon reads `{p}:context` with the dispatcher facts (every 5th
+  tick; a failed read keeps the last value) and shows the percent beside the raw tokens in the
+  wide row's ctx cell (`88k 85%`, attention colour at the threshold) and a `Fill` row in the agent
+  page; an absent or aged fill (`ContextFill.Known`: a session and at most `bus.ContextMaxAge`,
+  30 min, old when published) shows no percent and reads unknown, never 0. busmon takes the
+  threshold from its own `AGENT_BUS_CONTEXT_ALERT` (default 80), read once at start; the services
+  read it from the project's env file, so a value set only there colours at 80 in busmon. The
+  health check `context` warns when a known fill is at or above the threshold, is ok below,
+  unknown when none is known, and ok with the alert off.
 
 ## When it applies
 
 To any reader or writer of an agent's context fill: the status line, the dispatcher's context
-pass and alert, and the busmon and health readers that come in ca3. Only Claude Code agents have a fill;
+pass and alert, busmon's ctx cell and agent page, and the `context` health check. Only Claude Code agents have a fill;
 the other clients read unknown until their own client gives one.
 
 ## Evidence
@@ -68,7 +76,9 @@ the other clients read unknown until their own client gives one.
   `TestIdentSessionFollowsTheProofOnly`,
   `TestHasKeysBesidesDispatch`; the alert (ca2): `dispatch/contextalert.go`,
   `TestContextAlertOncePerEpisode`, `TestContextAlertSkipsUnknownAgedAndOff`,
-  `TestContextAlertWaitsForThePause`, `TestServiceContextAlert`.
+  `TestContextAlertWaitsForThePause`, `TestServiceContextAlert`; ca3: `TestContextFillKnownAndThreshold`,
+  `TestEvaluateContext`, `TestContextEvidence`, `TestPollReadsTheContextFill`,
+  `TestAgentRowShowsTheContextFill`, `TestAgentDetailShowsTheContextFill`, the shell goldens.
 
 ## Limits / what would invalidate it
 
