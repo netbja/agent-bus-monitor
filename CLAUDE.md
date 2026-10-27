@@ -544,7 +544,9 @@ It never touches Redis — see README "Deployment topology".
   Sentinel may restart an identified failed project service once within its budget, or refresh the
   local model table; everything else is escalated. Usage refresh is at most every 15 minutes with
   a fenced writer; model refresh is daily under a host-local lock. busmon shows the health pill, F5
-  details and retained transitions in its R recap. Runaway is warning-only. Scanner, canary, key
+  details and retained transitions in its R recap. Runaway is warning-only. `cmd-delivery` judges only the consumer groups of agents registered in
+  `{p}:agents` (A9, `deliveryEvidence`: a dead group's lag tripped `fail` for nobody; `agents forget`
+  destroys a forgotten agent's group). Scanner, canary, key
   inventory, project-defined checks and password rotation belong to later releases; health is not
   a security boundary.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
