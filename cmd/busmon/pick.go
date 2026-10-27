@@ -528,33 +528,23 @@ func (m *pickModel) snapshot() pickSnapshot {
 
 func (v *pickView) Draw(screen tcell.Screen) {
 	x0, y0, w, h := v.GetRect()
-	if w < minWidth || h < minHeight {
-		msg := fmt.Sprintf("terminal too small (%dx%d)", w, h)
-		for y := 0; y < h; y++ {
-			DrawLine(screen, x0, y0+y, w, nil, false)
-		}
-		DrawLine(screen, x0, y0+h/2, w, Line{{Text: strings.Repeat(" ", max(0, (w-Width(msg))/2)) + msg, Role: RoleAttention}}, false)
-		return
-	}
 	s := v.p.m.snapshot()
-	now := time.Now()
-	spin := spinner(now)
-
-	DrawLine(screen, x0, y0, w, pickHeader(s, spin, w), false)
-
-	filter := Line{{Text: " / ", Role: RoleAccent, Bold: true}, {Text: Preview(s.filter), Role: RoleText}}
-	if s.filter == "" {
-		filter = append(filter, Seg{Text: "type to filter by name or directory", Role: RoleDim})
+	l := v.p.list
+	if w >= minWidth && h >= minHeight {
+		pickFill(&l.listState, s, x0, y0, w, h)
+		l.Box.SetRect(x0, y0+2, w, h-3)
 	}
-	DrawLine(screen, x0, y0+1, w, filter, false)
-	if s.busy == "" {
-		screen.ShowCursor(x0+min(w-1, 3+Width(Preview(s.filter))), y0+1)
+	if cx, cy, ok := drawPick(tcellSink{screen}, x0, y0, w, h, s, &l.listState, time.Now()); ok {
+		screen.ShowCursor(cx, cy)
 	} else {
 		screen.HideCursor()
 	}
+}
 
-	l := v.p.list
-	l.SetRect(x0, y0+2, w, h-3)
+// pickFill gives the picker's list its place, header, frame and rows from s
+// (tview's Draw, the shell's update path).
+func pickFill(l *listState, s pickSnapshot, x0, y0, w, h int) {
+	l.rect, l.focused = Rect{x0, y0 + 2, w, h - 3}, true // the picker's one list always has the keys
 	iw := max(0, w-2-listGutter)
 	header, items := pickItems(s, iw)
 	l.SetHeader(header)
@@ -567,7 +557,29 @@ func (v *pickView) Draw(screen tcell.Screen) {
 	if l.Selected() == "" {
 		l.First()
 	}
-	l.Draw(screen)
+}
+
+// drawPick draws the picker in w x h at (x0, y0) on any cell sink: header,
+// filter line, the list (filled by pickFill) and the footer. It returns
+// where the filter's cursor goes, ok false while an open runs.
+func drawPick(screen cellSink, x0, y0, w, h int, s pickSnapshot, l *listState, now time.Time) (cx, cy int, ok bool) {
+	if w < minWidth || h < minHeight {
+		msg := fmt.Sprintf("terminal too small (%dx%d)", w, h)
+		for y := 0; y < h; y++ {
+			drawLine(screen, x0, y0+y, w, nil, false)
+		}
+		drawLine(screen, x0, y0+h/2, w, Line{{Text: strings.Repeat(" ", max(0, (w-Width(msg))/2)) + msg, Role: RoleAttention}}, false)
+		return 0, 0, false
+	}
+	spin := spinner(now)
+	drawLine(screen, x0, y0, w, pickHeader(s, spin, w), false)
+
+	filter := Line{{Text: " / ", Role: RoleAccent, Bold: true}, {Text: Preview(s.filter), Role: RoleText}}
+	if s.filter == "" {
+		filter = append(filter, Seg{Text: "type to filter by name or directory", Role: RoleDim})
+	}
+	drawLine(screen, x0, y0+1, w, filter, false)
+	l.draw(screen)
 
 	var footer Line
 	switch {
@@ -582,7 +594,8 @@ func (v *pickView) Draw(screen tcell.Screen) {
 	default:
 		footer = footerHints(ModePick, PanelAgents, TierWide, w)
 	}
-	DrawLine(screen, x0, y0+h-1, w, footer, false)
+	drawLine(screen, x0, y0+h-1, w, footer, false)
+	return x0 + min(w-1, 3+Width(Preview(s.filter))), y0 + 1, s.busy == ""
 }
 
 // spinner is three dots, one lit, moving with the clock.
