@@ -30,7 +30,9 @@ closed. None of them was for him.
   is the verdict's subject. The first rule came the same day (task gate-subject-close): foureyes
   answered an older commit by subject and the sweep also closed the gate of a newer delta of that
   subject it had not read yet (`dmfwxrbb3o04`). "Before" is read from the challenges' own `:cmd`
-  entries: a gate whose challenge has left the capped stream is older than any retained one; a
+  entries: the anchor is the first challenge of `--ref`, a gate is dated by its *last* challenge
+  (a re-challenge under the same ref overwrites the gate with a newer delta), a gate whose
+  challenge has left the capped stream is older than any retained one; a
   `--ref` with no retained challenge closes only its own gate. A self-verdict closes nothing, by
   this path or by the older author's-gate one (reviewer-codex found that bypass in review). A
   conductor's mission gate is left to the conductor, which closes it after reading the ledger.
@@ -60,6 +62,7 @@ conductor.
   `AllGates`), `cmd/agentbus/gatecmd.go` (`verdictGates`, `runGateClose`),
   `cmd/busmon/tea_foryou.go` (`personGateItems`), `cmd/busmon/poll.go` (`personGates`).
 - Tests: `TestCloseReviewGates`, `TestCloseReviewGatesWithRefSparesNewerDeltas`,
+  `TestCloseReviewGatesDatesAReopenedGateByItsLastChallenge`,
   `TestVerdictWithRefSparesANewerDelta`, `TestCloseGate`, `TestGateMetaRoundTrip`,
   `TestVerdictClosesTheReviewersGates`, `TestGateClose*`, `TestForYouIgnoresAgentToAgentGates`,
   `TestPollReadsThePersonsGate`.

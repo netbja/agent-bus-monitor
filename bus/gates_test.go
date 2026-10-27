@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -138,6 +139,32 @@ func TestCloseReviewGatesWithRefSparesNewerDeltas(t *testing.T) {
 	m, _ := b.OpenChallenges(ctx, "foureyes")
 	if len(m) != 2 || m["delta"] == "" || m["other"] == "" {
 		t.Fatalf("foureyes keeps %v, want delta and other", m)
+	}
+}
+
+// A gate re-opened under the same ref (a re-challenge on its thread
+// overwrites the gate) holds the newer delta: it is dated by its last
+// challenge, so a verdict anchored between the two leaves it open (foureyes'
+// probe on PR #144).
+func TestCloseReviewGatesDatesAReopenedGateByItsLastChallenge(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	p := b.Project()
+	t.Cleanup(func() { b.r.Del(ctx, GateKey(p, "foureyes"), StreamKey(p, "cmd")) })
+	for i, ref := range []string{"old", "cur", "old"} {
+		if err := b.OpenChallenge(ctx, "foureyes", ref, FormatGateMeta("master", "s", fmt.Sprintf("v%d", i+1))); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.Cmd(ctx, "master", "foureyes", CmdChallenge, ref, fmt.Sprintf("v%d", i+1)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	closed, err := b.CloseReviewGates(ctx, "foureyes", "coder", "s", "cur")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(closed) != 1 || closed[0] != "cur" {
+		t.Fatalf("closed = %v, want [cur]: the re-opened old gate holds the unread v3", closed)
 	}
 }
 

@@ -152,8 +152,9 @@ func (b *Bus) CloseReviewGates(ctx context.Context, reviewer, author, subject, r
 }
 
 // challengesOpened reads the cmd stream once: opened maps each ref of a
-// challenge to reviewer to its first entry id, and anchor is the id of the
-// first challenge carrying ref (to any target, so an author's gate anchors
+// challenge to reviewer to its LAST entry id (a re-challenge under the same
+// ref overwrites the gate, so the gate holds that newer content), and anchor
+// is the id of the first challenge carrying ref (to any target, so an author's gate anchors
 // too), "" when none is retained.
 func (b *Bus) challengesOpened(ctx context.Context, reviewer, ref string) (map[string]string, string, error) {
 	key := StreamKey(b.project, "cmd")
@@ -171,7 +172,7 @@ func (b *Bus) challengesOpened(ctx context.Context, reviewer, ref string) (map[s
 		if e.Ref == ref && anchor == "" {
 			anchor = e.ID
 		}
-		if _, seen := opened[e.Ref]; !seen && e.Target == reviewer {
+		if e.Target == reviewer {
 			opened[e.Ref] = e.ID
 		}
 	}
