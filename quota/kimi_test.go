@@ -50,9 +50,8 @@ func readKimi(t *testing.T, root string) Reading {
 }
 
 // A usage-limit hit is that window at 100 %. Kimi gives no reset time, so
-// the reset is the honest upper bound: the window exhausted at the first hit
-// of the episode ends at most its length after it. The newest hit is when the
-// limit was last seen to hold.
+// the reset is the honest upper bound: the window the newest hit fell in
+// started at or before it, so it ends at most its length after it.
 func TestKimiLimitHit(t *testing.T) {
 	root := t.TempDir()
 	kimiSession(t, root, "wd_a_1", "session_1", t0, kimiAt(time.Hour, kimiServed),
@@ -64,7 +63,7 @@ func TestKimiLimitHit(t *testing.T) {
 	}
 	w := r.Windows[0]
 	if w.Name != "5h" || w.UsedPct != 100 || w.Minutes != 300 ||
-		w.ResetsAt != t0.Add(-40*time.Minute+5*time.Hour).Unix() || w.ObservedAt != t0.Add(-10*time.Minute).UnixMilli() {
+		w.ResetsAt != t0.Add(-10*time.Minute+5*time.Hour).Unix() || w.ObservedAt != t0.Add(-10*time.Minute).UnixMilli() {
 		t.Fatalf("window %+v", w)
 	}
 	if r.AvailableAt != t0.Add(-time.Hour).UnixMilli() || r.ObservedAt != w.ObservedAt {
@@ -97,7 +96,7 @@ func TestKimiHitVoidedByALaterAnswer(t *testing.T) {
 	if !r.Unknown || len(r.Windows) != 0 || r.AvailableAt != t0.Add(-5*time.Minute).UnixMilli() {
 		t.Fatalf("reading %+v", r)
 	}
-	// A new hit after that answer opens a new episode: its bound starts there.
+	// A new hit after that answer holds again, bounded from itself.
 	kimiSession(t, root, "wd_a_1", "session_3", t0, kimiAt(2*time.Minute, kimi5h))
 	r = readKimi(t, root)
 	if len(r.Windows) != 1 || r.Windows[0].ResetsAt != t0.Add(-2*time.Minute+5*time.Hour).Unix() {
@@ -142,6 +141,11 @@ func TestKimiReadsOnlyRecentSessionLogs(t *testing.T) {
 	os.WriteFile(filepath.Join(sess, "logs", "other.log"), []byte(kimiAt(time.Minute, kimi5h)+"\n"), 0o600)
 	os.WriteFile(filepath.Join(root, "config.toml"), []byte(kimiAt(time.Minute, kimi5h)+"\n"), 0o600)
 	kimiSession(t, root, "wd_b_2", "session_old", t0.Add(-8*24*time.Hour), kimiAt(time.Minute, kimiWeekly))
+	// A kimi-code.log that is a symlink (to any file) is not followed.
+	target := filepath.Join(t.TempDir(), "elsewhere.log")
+	os.WriteFile(target, []byte(kimiAt(time.Minute, kimi5h)+"\n"), 0o600)
+	os.MkdirAll(filepath.Join(root, "wd_d_4", "session_link", "logs"), 0o700)
+	os.Symlink(target, filepath.Join(root, "wd_d_4", "session_link", "logs", "kimi-code.log"))
 	if r := readKimi(t, root); !r.Unknown || len(r.Windows) != 0 {
 		t.Fatalf("read a file it must not: %+v", r)
 	}
@@ -167,5 +171,17 @@ func TestKimiBuiltin(t *testing.T) {
 	rs := Readers(map[string]ProviderConfig{"moonshot": {Kind: "kimi"}}, fixed)
 	if len(rs) != 1 || rs[0].Provider() != "moonshot" {
 		t.Fatalf("readers %v", rs)
+	}
+}
+
+// ui-kimi's review: hits more than a window apart with no answer between
+// (the account spent elsewhere: another host) never read clear. A hit one
+// minute old holds, bounded from itself, whatever the first hit was.
+func TestKimiRecentHitNeverReadsClear(t *testing.T) {
+	root := t.TempDir()
+	kimiSession(t, root, "wd_a_1", "session_1", t0, kimiAt(6*time.Hour, kimi5h), kimiAt(time.Minute, kimi5h))
+	r := readKimi(t, root)
+	if r.Unknown || len(r.Windows) != 1 || r.Windows[0].ResetsAt != t0.Add(-time.Minute+5*time.Hour).Unix() {
+		t.Fatalf("a recent hit read %+v", r)
 	}
 }

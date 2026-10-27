@@ -275,9 +275,11 @@ agent names, no project template):
   - **Codex** and **Grok** work out of the box when their CLI is installed.
   - **Kimi Code** and **agy** (Antigravity) too, from their own logs. They only show a hit, never a
     percentage: a Kimi `5-hour` or `weekly` limit holds its agents until the next answer Kimi
-    gets, or at the latest the window's length after the first hit, since Kimi states no reset
+    gets, or at the latest the window's length after the last hit, since Kimi states no reset
     (a `billing cycle` limit states no length and is never held). An agy `Individual quota
-    reached … Resets in …` holds until the reset it states.
+    reached … Resets in …` holds until the reset it states; nothing ends it earlier, and the quota
+    may be one model's, so if it holds agents that could still work, turn it off with
+    `[providers.google] kind = "off"` in `quota.toml`.
   - **Any other AI**: describe its source in `~/.config/agentbus/quota.toml` — a file and its fields
     (`kind = "json"` or `"jsonl-last"`), or a script that prints the reading as JSON
     (`kind = "command"`), or `kind = "unlimited"` for a local model. Thresholds:

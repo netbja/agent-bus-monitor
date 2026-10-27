@@ -44,7 +44,8 @@ func TestAgyQuotaHit(t *testing.T) {
 	agyLog(t, dir, t0.Add(-time.Hour), t0,
 		agyLine("I", t0.Add(-time.Hour), "http_helpers.go:315] URL: https://example.invalid/v1internal:streamGenerateContent"),
 		agyLine("E", hit.Add(-time.Second), agyHit),
-		agyLine("E", hit, strings.Replace(agyHit, "66h41m18s", "66h41m17s", 1)))
+		agyLine("E", hit, strings.Replace(agyHit, "66h41m18s", "66h41m17s", 1)),
+		agyLine("E", t0.Add(time.Minute), strings.Replace(agyHit, "66h41m18s", "1h", 1))) // stamped after now (a skewed clock): ignored
 	r := readAgy(t, dir, t0)
 	if r.Unknown || r.Provider != "google" || len(r.Windows) != 1 {
 		t.Fatalf("reading %+v", r)

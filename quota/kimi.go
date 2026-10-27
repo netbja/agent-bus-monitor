@@ -21,10 +21,9 @@ import (
 // config.toml, credentials, device_id or anything else under ~/.kimi-code.
 //
 // Kimi gives no reset time. The reset is an upper bound derived from the
-// window's length: the window exhausted at the episode's first hit (the
-// first after the last answer) ends at most 5 h (or 7 days) after it. A
-// billing-cycle limit has no stated length, so it is reported unknown, never
-// held.
+// window's length: the window the newest hit fell in started at or before
+// it, so it ends at most 5 h (or 7 days) after that hit. A billing-cycle
+// limit has no stated length, so it is reported unknown, never held.
 type KimiReader struct {
 	Root string // ~/.kimi-code/sessions
 	Now  func() time.Time
@@ -87,16 +86,15 @@ func (k KimiReader) Read(ctx context.Context) (Reading, error) {
 			}
 		}
 	}
-	// Per window, the hits after the last answer: the first bounds the reset,
-	// the newest is when the limit was last seen to hold.
-	first, last := map[string]time.Time{}, map[string]time.Time{}
+	// Per window, the newest hit after the last answer: the limit was last
+	// seen to hold then, and the window it fell in started at or before it,
+	// so it ends at most the window's length later. An older hit bounds
+	// nothing: the account may have spent the next window elsewhere.
+	last := map[string]time.Time{}
 	minutes := map[string]int{}
 	for _, h := range hits {
 		if h.at.UnixMilli() <= served {
 			continue // served since: the limit no longer stops it
-		}
-		if f, ok := first[h.name]; !ok || h.at.Before(f) {
-			first[h.name] = h.at
 		}
 		if l, ok := last[h.name]; !ok || h.at.After(l) {
 			last[h.name] = h.at
@@ -104,13 +102,13 @@ func (k KimiReader) Read(ctx context.Context) (Reading, error) {
 		minutes[h.name] = h.minutes
 	}
 	r := Reading{Provider: "moonshot", Source: "kimi-log", CollectedAt: now.UnixMilli(), AvailableAt: served}
-	names := make([]string, 0, len(first))
-	for n := range first {
+	names := make([]string, 0, len(last))
+	for n := range last {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		reset := first[n].Add(time.Duration(minutes[n]) * time.Minute)
+		reset := last[n].Add(time.Duration(minutes[n]) * time.Minute)
 		if !reset.After(now) {
 			continue // its window has ended
 		}
@@ -141,7 +139,7 @@ func kimiLogs(root string, now time.Time) []string {
 	}
 	var recent []f
 	for _, p := range files {
-		st, err := os.Stat(p)
+		st, err := os.Lstat(p) // a symlinked log is not followed
 		if err != nil || !st.Mode().IsRegular() || now.Sub(st.ModTime()) > 7*24*time.Hour {
 			continue
 		}
