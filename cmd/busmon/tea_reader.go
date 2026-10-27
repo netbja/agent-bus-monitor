@@ -780,6 +780,7 @@ func (m *Model) readerStep(p *page, next bool) tea.Cmd {
 		return nil
 	}
 	m.pop()
+	depth := len(m.rd.pages)
 	var cmd tea.Cmd
 	if id, ok := strings.CutPrefix(target, "unread:"); ok && !present[target] {
 		cmd = m.openFeedLine(id) // read since: no row left to select
@@ -787,7 +788,10 @@ func (m *Model) readerStep(p *page, next bool) tea.Cmd {
 		l.Select(target)
 		cmd = m.openDirect(from)
 	}
-	if top := m.rd.top(); top != nil {
+	// Only the page this step pushed is tagged (foureyes): an item that no
+	// longer opens (an event trimmed from the feed) leaves the page below as
+	// it was.
+	if top := m.rd.top(); len(m.rd.pages) > depth && top != nil {
 		top.from, top.fromList, top.fromKey, top.fromKeys = from, true, target, keys
 	}
 	return cmd

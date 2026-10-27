@@ -112,3 +112,21 @@ func TestReaderNextInForYouUnread(t *testing.T) {
 		t.Fatalf("p p back: %+v (flash %q), want %s", p, m.ui.flash, unread[0])
 	}
 }
+
+// Review (foureyes): when the next item no longer opens (its event trimmed
+// from the feed), the step tags no other page with the walk.
+func TestReaderStepTagsOnlyItsOwnPage(t *testing.T) {
+	pinLocal(t)
+	m := fixtureShell(t, 140, 40)
+	m = keys(t, m, '?') // a page not from a list, below
+	help := m.rd.top()
+	if help == nil || help.kind != ovHelp {
+		t.Fatalf("help: %+v", help)
+	}
+	walk := page{kind: ovMessage, from: PanelForYou, fromList: true, fromKey: "unread:a", fromKeys: []string{"unread:a", "unread:gone"}}
+	m.push(walk)
+	m.readerStep(m.rd.top(), true) // unread:gone has no feed line: nothing opens
+	if top := m.rd.top(); top == nil || top.kind != ovHelp || top.fromList {
+		t.Fatalf("the help page was tagged or replaced: %+v", top)
+	}
+}
