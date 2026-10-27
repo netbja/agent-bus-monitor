@@ -218,3 +218,32 @@ func TestContextAlertWaitsForThePause(t *testing.T) {
 		t.Fatalf("after the pause: %q, %q", got, desk.Sent())
 	}
 }
+
+// An agent being swapped is skipped in silence: no directive, no notice, no
+// desktop notification and no error logged; its successor starts a new session.
+func TestContextAlertSkipsASwap(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "swap-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if err := r.Set(ctx, bus.SwapKey(b.Project(), "coder"), "intent", time.Minute).Err(); err != nil {
+		t.Fatal(err)
+	}
+	read := func(s string) (quota.ContextReading, bool) {
+		return quota.ContextReading{Pct: 91, ObservedAt: time.Now().UnixMilli(), Session: s}, true
+	}
+	desk := &fakeDesktop{}
+	logs := &syncBuf{}
+	l := alertLoop(b, "swap-holder", read, desk)
+	l.cfg.Log = logs
+	if err := l.contextPass(ctx, map[string]bus.AgentSnapshot{"coder": {PID: 10, IdentSession: "s1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.contextAlerts(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := contextCmds(t, r, b); len(got) != 0 || len(desk.Sent()) != 0 || strings.Contains(logs.String(), "error") {
+		t.Fatalf("a swap was alerted: %q, %q, log %q", got, desk.Sent(), logs.String())
+	}
+}
