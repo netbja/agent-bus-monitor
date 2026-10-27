@@ -26,35 +26,53 @@ type tickMsg time.Time
 type tailMsg struct{ events []bus.Event }
 
 // fadeMsg is a fade frame: only the waiting words change (busmon Charm spec,
-// "Caching"). Step b4 schedules it; it moves the clock and bumps no data.
+// "Caching"). It moves the clock and bumps no data; scheduleFade sends it
+// only while an agent waits.
 type fadeMsg time.Time
 
 // shellConfig is what the shell is started with.
 type shellConfig struct {
 	ctx           context.Context
 	reader        busReader
-	w             busWriter // the thread reads and the answers
+	w             busWriter // sends, answers, thread reads, removals, resume
 	st            *shared
 	project, self string
+	settings      busmonSettings // bell, fade, reminder and recap timings (busmon.toml)
+	cache         *busmonCache   // the local cache: snoozes, last visit
+	cachePath     string         // where it is saved ("" never saves)
+	priorVisit    time.Time      // the last visit before this one (the recap's since)
 }
 
 // uiState is the person's place on the screen.
 type uiState struct {
-	focus         PanelID
-	tab           PanelID // the tabbed panel's tab
-	view          PanelID // the narrow tier's view
-	showAll       bool    // dormant agents listed (a)
-	agentsTouched bool    // the person moved in Agents: stop following the top row
-	filter        feedFilter
-	editing       bool   // the filter line has the keyboard (/)
-	edit          string // its text
-	pause         pauseCursor
-	flash         string
-	flashErr      bool
-	expanded      string            // the row expanded in place (its list key), "" none
-	expandIn      PanelID           // the list it is in: Activity or For you
-	compose       *composeIntent    // the compose window opened (step b4 draws it)
-	askDrafts     map[string]string // free answers being written, by ask|question
+	focus          PanelID
+	tab            PanelID // the tabbed panel's tab
+	view           PanelID // the narrow tier's view
+	showAll        bool    // dormant agents listed (a)
+	agentsTouched  bool    // the person moved in Agents: stop following the top row
+	filter         feedFilter
+	line           lineKind // what the input line edits (tea_input.go)
+	edit           string   // its text
+	pick           int      // the highlighted "@" completion
+	msgDraft       string   // the message line's draft, kept by Esc
+	pause          pauseCursor
+	flash          string
+	flashErr       bool
+	expanded       string            // the row expanded in place (its list key), "" none
+	expandIn       PanelID           // the list it is in: Activity or For you
+	compose        *composeState     // the compose window, when open (tea_compose.go)
+	msgCompose     composeDraft      // the window's message draft while it is closed
+	askDrafts      map[string]string // free answers being written, by ask|question
+	askDraft       string            // a directive held once: its recipient has an open ask
+	broadcastDraft string            // a broadcast warned about once: the next send sends it
+	askChoose      *askChoice        // several recipients hold questions: the next digit picks one
+	sending        bool              // a send is in flight
+	pauseAck       string            // the send the person chose to make despite the pause
+	pausePopup     *pauseDialog      // the pause popup, when open
+	confirm        *pendingRemoval   // a d waiting for its y
+	reminder       *reminderDialog   // the reminder, when open
+	summary        bool              // the recap's summary confirmation is open
+	summarySent    bool              // the summary request is in flight: its success closes the recap
 }
 
 // shellLists are the shell's lists. They live behind a pointer: the Model is
@@ -95,15 +113,16 @@ type Model struct {
 	tick   int
 	gen    int // data generation: bumped by pollMsg and tailMsg only
 	paint  *painter
-	rd     *reader    // the reader's pages
-	cache  *viewCache // rendered markdown
+	rd     *reader      // the reader's pages
+	cache  *viewCache   // rendered markdown
+	sig    *signalState // bells, fade, recap, reminder (tea_signals.go)
 }
 
 // newShell is the shell before its first poll and size.
 func newShell(cfg shellConfig) Model {
 	m := Model{cfg: cfg, feed: &activityFeed{unread: newUnreadState()}, lists: &shellLists{}, paint: newPainter(th),
 		ui: uiState{focus: PanelForYou, tab: PanelActivity, view: PanelForYou, askDrafts: map[string]string{}},
-		rd: newReader(), cache: newViewCache()}
+		rd: newReader(), cache: newViewCache(), sig: newSignals(cfg.cache)}
 	m.lists.activity.SetTail(true)
 	for _, p := range narrowPanels {
 		m.lists.of(p).SetHue(panelHue[p])
@@ -124,35 +143,65 @@ func (m Model) pollCmd(tick int) tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmd := m.update(msg)
+	return m, tea.Batch(cmd, m.afterUpdate())
+}
+
+func (m *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.refresh()
-		return m, nil
+		m.layoutCompose()
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
-		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+		return tea.Batch(tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) }), m.afterPoll())
 	case tickMsg:
 		m.tick++
-		return m, m.pollCmd(m.tick + 1)
+		return m.pollCmd(m.tick + 1)
 	case fadeMsg:
+		m.sig.fading = false
 		m.now = time.Time(msg)
 		m.refresh()
-		return m, nil
+		return m.scheduleFade()
 	case threadMsg:
 		m.gotThread(msg)
-		return m, nil
 	case servicesMsg:
-		return m, m.push(page{kind: ovServices, title: "Services", body: msg.body, fixed: true})
+		return m.push(page{kind: ovServices, title: "Services", body: msg.body, fixed: true})
 	case answerMsg:
 		m.gotAnswer(msg)
-		return m, nil
+	case sendResultMsg:
+		m.gotSend(msg)
+		m.refresh()
+	case resumeMsg:
+		cmd := m.gotResume(msg)
+		m.refresh()
+		return cmd
+	case removeMsg:
+		m.gotRemove(msg)
+		m.refresh()
+	case recapMsg:
+		m.gotRecap(msg)
+	case cacheSavedMsg:
+		if msg.err != nil && m.cfg.st != nil {
+			m.cfg.st.mu.Lock()
+			m.cfg.st.configNote = joinNote(m.cfg.st.configNote, msg.note)
+			m.cfg.st.mu.Unlock()
+		}
 	case tea.KeyPressMsg:
 		return m.key(msg)
+	case tea.PasteMsg:
+		switch {
+		case m.ui.compose != nil:
+			m.pasteCompose(msg.Content)
+		case m.ui.line != lineNone:
+			m.pasteLine(msg.Content)
+		}
+		m.refresh()
 	case tea.MouseClickMsg:
 		return m.click(msg.Mouse())
 	case tea.MouseWheelMsg:
-		return m.wheel(msg.Mouse())
+		m.wheel(msg.Mouse())
 	case tailMsg:
 		for _, e := range msg.events {
 			if m.cfg.st != nil {
@@ -165,9 +214,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.gen++
 		m.refresh()
-		return m, nil
 	}
-	return m, nil
+	return nil
 }
 
 // applySnapshot takes a poll's snapshot as the model's data.
@@ -192,7 +240,7 @@ func (m *Model) counts() shellCounts {
 	for _, it := range m.forYou {
 		w = max(w, forYouNatural(it))
 	}
-	return shellCounts{ForYou: len(m.forYou), Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.editing}
+	return shellCounts{ForYou: len(m.forYou), Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.line != lineNone}
 }
 
 // refresh recomputes the marks, the For you list, the layout and every list's

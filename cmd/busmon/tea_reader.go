@@ -41,9 +41,12 @@ type page struct {
 	ask   askPanel   // ovAsk: the question and option under the cursor
 	spans []lineSpan // ovAsk: each option's lines, "Other" last; nil once answered
 
-	sel      int        // ovPlan: the selected item
+	sel      int        // ovPlan: the selected item; ovRecap: the cursor's row
 	expanded bool       // ovPlan: the done group is open
 	items    []planItem // ovPlan
+
+	recap     recapModel // ovRecap
+	recapLine int        // ovRecap: the body line of the cursor's row
 }
 
 // pageStamp is what a body was built for.
@@ -317,6 +320,8 @@ func (m *Model) buildPage() bool {
 		}
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
+	case ovRecap:
+		p.body, p.recapLine = recapBody(p.recap.Rows, p.sel)
 	case ovAsk:
 		a, ok := m.pageAsk(p)
 		if !ok || (a.Open() == 0 && a.State != "open") {
@@ -429,15 +434,11 @@ func (m *Model) answer(n int) tea.Cmd {
 	}
 	p.ask.opt, p.dirty = n, true
 	if n == len(q.Options) {
-		m.openAnswerCompose(a, q)
+		m.openAnswerCompose(a, q, "")
 		m.refresh()
 		return nil
 	}
-	if m.paused() {
-		// tview asks through the pause popup; the shell's dialogs come with
-		// step b4, so until then a paused project's answer is not sent.
-		m.ui.flash, m.ui.flashErr = "project paused: answer not sent", true
-		m.refresh()
+	if m.pauseGate("answer|"+a.ID+"|"+q.ID+"|"+q.Options[n].Label, pauseRetry{kind: retryAnswer, opt: n}) {
 		return nil
 	}
 	if m.cfg.w == nil {
@@ -446,12 +447,6 @@ func (m *Model) answer(n int) tea.Cmd {
 	m.rd.sending[key] = true
 	m.refresh()
 	return m.answerCmd(a, q, q.Options[n].Label, "")
-}
-
-// paused: the project's pause is running (a failed read is not a pause).
-func (m *Model) paused() bool {
-	p := m.snap.pause
-	return p != nil && m.now.Before(p.UntilTime())
 }
 
 func (m *Model) answerCmd(a bus.Ask, q bus.AskQuestionState, choice, text string) tea.Cmd {
@@ -487,6 +482,10 @@ func (m *Model) gotAnswer(msg answerMsg) {
 		value = msg.text
 	}
 	m.ui.flash, m.ui.flashErr = fmt.Sprintf("%s %s: %s sent to %s", GlyphDone, Preview(msg.header), Preview(value), Preview(msg.ask.From)), false
+	m.ui.pauseAck = "" // the acknowledgement was for this one answer
+	if c := m.ui.compose; c != nil && c.kind == composeAnswer && c.qid == msg.qid && (c.askID == msg.ask.ID || c.askID == msg.id) {
+		m.sentCompose()
+	}
 	p := m.rd.top()
 	if p == nil || p.kind != ovAsk || (p.ask.id != msg.ask.ID && p.ask.id != msg.id) {
 		m.refresh()
@@ -508,26 +507,14 @@ func (m *Model) gotAnswer(msg answerMsg) {
 	m.refresh()
 }
 
-// composeIntent is the compose window the shell would open: a free answer
-// to an ask's question, prefilled with its draft. The window itself (its
-// text area, its send) is step b4's; b3 records what opens it.
-type composeIntent struct {
-	kind         composeKind
-	to           string // the agent answered
-	askID, qid   string
-	header, text string
-}
-
-func (m *Model) openAnswerCompose(a bus.Ask, q bus.AskQuestionState) {
-	m.ui.compose = &composeIntent{kind: composeAnswer, to: a.From, askID: a.ID, qid: q.ID, header: q.Header,
-		text: m.ui.askDrafts[a.ID+"|"+q.ID]}
-}
-
 // readerKey is a key while the reader is open.
 func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 	p := m.rd.top()
-	if p.kind == ovAsk {
+	switch p.kind {
+	case ovAsk:
 		return m.askKey(act, k)
+	case ovRecap:
+		return m.recapKey(k)
 	}
 	rows := m.readerRows()
 	switch act {
@@ -540,6 +527,13 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.copy(p.threadPlain, "thread")
 	case ActHealth:
 		return m.push(page{kind: ovHealth})
+	case ActComposeOpen: // in an agent's page: write to that agent
+		if p.kind == ovAgent {
+			agent := p.key
+			m.closeReader()
+			m.openMessageCompose("", agent)
+		}
+		return nil
 	case ActAsk:
 		switch {
 		case p.kind == ovPlan && k.Code == keyEnter:

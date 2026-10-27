@@ -13,11 +13,17 @@ import (
 // through keys.go's tables (ModeShell, ModeFilter), the lists keep
 // listState's rules, and every change ends in refresh.
 
-// mode is who owns the keyboard in the shell.
+// mode is who owns the keyboard in the shell: the compose window, the input
+// line, the reader (its ask mode), else the panels. The dialogs take their
+// keys before any table (key).
 func (m *Model) mode() Mode {
 	switch {
-	case m.ui.editing:
+	case m.ui.compose != nil:
+		return ModeCompose
+	case m.ui.line == lineFilter:
 		return ModeFilter
+	case m.ui.line == lineMessage:
+		return ModeInput
 	case m.rd.open() && m.rd.top().kind == ovAsk:
 		return ModeShellAsk
 	case m.rd.open():
@@ -26,26 +32,60 @@ func (m *Model) mode() Mode {
 	return ModeShell
 }
 
-// key performs a key press.
-func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+// key performs a key press. Ctrl-C quits everywhere; an open dialog, a
+// pending choice or removal takes the key first.
+func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	k := keyOfTea(msg)
+	if k.Code == keyCtrlC {
+		return tea.Quit
+	}
+	var cmd tea.Cmd
+	switch {
+	case m.ui.pausePopup != nil:
+		cmd = m.pauseKey(k)
+	case m.ui.summary:
+		cmd = m.summaryKey(k)
+		if !m.ui.summary && !m.ui.sending {
+			m.ui.summarySent = false
+		}
+	case m.ui.reminder != nil:
+		cmd = m.reminderKey(k)
+	case m.ui.askChoose != nil:
+		cmd = m.chooseKey(k)
+	case m.ui.confirm != nil:
+		cmd = m.confirmKey(k)
+	default:
+		cmd = m.modeKey(k)
+	}
+	m.syncPause()
+	m.refresh()
+	return cmd
+}
+
+// modeKey is a key for whoever owns the keyboard (mode).
+func (m *Model) modeKey(k Key) tea.Cmd {
 	mode := m.mode()
 	act := lookup(mode, m.ui.focus, m.layout.Tier, k)
 	if act == ActQuit {
-		return m, tea.Quit
+		return tea.Quit
 	}
-	if act != ActNone {
+	if act != ActNone || mode == ModeCompose || mode == ModeInput {
 		m.ui.flash, m.ui.flashErr = "", false
 	}
-	if mode == ModeFilter {
-		m.editFilter(act, k)
-		m.refresh()
-		return m, nil
+	switch mode {
+	case ModeCompose:
+		return m.composeKey(act, k)
+	case ModeInput, ModeFilter:
+		return m.lineKey(act, k)
 	}
 	if m.rd.open() {
-		cmd := m.readerKey(act, k)
-		return m, cmd
+		return m.readerKey(act, k)
 	}
+	return m.panelKey(act)
+}
+
+// panelKey is a key on the panels (ModeShell).
+func (m *Model) panelKey(act Action) tea.Cmd {
 	l := m.lists.of(m.ui.focus)
 	var cmd tea.Cmd
 	if m.ui.focus == PanelAgents && movesSelection(act) {
@@ -109,14 +149,36 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case ActShowAll:
 		m.ui.showAll = !m.ui.showAll
 	case ActFilter:
-		m.ui.editing, m.ui.edit = true, m.ui.filter.raw
-		m.focusPanel(PanelActivity)
+		if m.ui.line == lineMessage {
+			m.leaveLine(true)
+		}
+		m.openLine(lineFilter, m.ui.filter.raw)
+	case ActCompose:
+		if m.composeHasDraft() { // a window draft is never flattened into the line
+			m.openMessageCompose("", "")
+		} else {
+			m.openLine(lineMessage, m.ui.msgDraft)
+		}
+	case ActComposeAt:
+		m.openLine(lineMessage, "@")
+	case ActComposeOpen:
+		to := ""
+		if m.ui.focus == PanelAgents {
+			to = m.lists.agents.Selected()
+		}
+		line := ""
+		if !m.composeHasDraft() {
+			line, m.ui.msgDraft = strings.TrimSpace(m.ui.msgDraft), ""
+		}
+		m.openMessageCompose(line, to)
+	case ActDelete:
+		m.askRemove()
+	case ActRecap:
+		cmd = m.requestRecap(false)
 	case ActEscape:
 		m.escape()
 	}
-	m.syncPause()
-	m.refresh()
-	return m, cmd
+	return cmd
 }
 
 // open is Enter (or a click on the selected row) in list p: an Activity line,
@@ -250,10 +312,10 @@ func (m *Model) editFilter(act Action, k Key) {
 	switch {
 	case act == ActSend:
 		m.ui.filter = parseFilter(m.ui.edit)
-		m.ui.editing = false
+		m.leaveLine(false)
 		m.focusPanel(PanelActivity)
 	case act == ActEscape:
-		m.ui.editing = false
+		m.leaveLine(false)
 	case k.Code == keyBackspace:
 		if r := []rune(m.ui.edit); len(r) > 0 {
 			m.ui.edit = string(r[:len(r)-1])
@@ -362,22 +424,25 @@ func (m *Model) nextUnread() bool {
 
 // wheel scrolls the list under the pointer three rows, as ListView does; it
 // does not move the focus.
-func (m Model) wheel(ms tea.Mouse) (Model, tea.Cmd) {
+func (m *Model) wheel(ms tea.Mouse) {
 	delta := 3
 	switch ms.Button {
 	case tea.MouseWheelUp:
 		delta = -3
 	case tea.MouseWheelDown:
 	default:
-		return m, nil
+		return
+	}
+	if m.ui.compose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary {
+		return // a window or a dialog is over the screen
 	}
 	if m.rd.open() && m.readerRect().contains(ms.X, ms.Y) {
 		m.readerWheel(delta < 0)
-		return m, nil
+		return
 	}
 	p, ok := m.panelAt(ms.X, ms.Y)
 	if !ok {
-		return m, nil
+		return
 	}
 	if p == PanelAgents {
 		m.ui.agentsTouched = true
@@ -385,19 +450,29 @@ func (m Model) wheel(ms tea.Mouse) (Model, tea.Cmd) {
 	m.lists.of(p).ScrollBy(delta)
 	m.syncPause()
 	m.refresh()
-	return m, nil
+	return
 }
 
 // click: a tab label switches the tab, a frame's title row focuses its
 // panel, a row is selected (opened when already selected) and the scrollbar
 // column pages towards the click, as ListView does.
-func (m Model) click(ms tea.Mouse) (Model, tea.Cmd) {
+func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	if ms.Button != tea.MouseLeft {
-		return m, nil
+		return nil
+	}
+	switch {
+	case m.ui.pausePopup != nil: // modal: a click is the popup's
+		return m.pauseClick(ms.X, ms.Y)
+	case m.ui.reminder != nil || m.ui.summary:
+		return nil
+	case m.ui.compose != nil:
+		m.composeClick(ms.X, ms.Y)
+		m.refresh()
+		return nil
 	}
 	if m.rd.open() {
 		if m.readerRect().contains(ms.X, ms.Y) {
-			return m, m.readerClick(ms.X, ms.Y)
+			return m.readerClick(ms.X, ms.Y)
 		}
 		m.closeReader() // a click on For you, Agents or a tab leaves the reader
 	}
@@ -407,11 +482,11 @@ func (m Model) click(ms tea.Mouse) (Model, tea.Cmd) {
 			m.focusPanel(p)
 			m.refresh()
 		}
-		return m, nil
+		return nil
 	}
 	p, ok := m.panelAt(ms.X, ms.Y)
 	if !ok {
-		return m, nil
+		return nil
 	}
 	if p == PanelAgents {
 		m.ui.agentsTouched = true
@@ -425,7 +500,7 @@ func (m Model) click(ms tea.Mouse) (Model, tea.Cmd) {
 		}
 		m.focusPanel(p)
 		m.refresh()
-		return m, nil
+		return nil
 	}
 	if m.ui.focus != p {
 		m.focusPanel(p)
@@ -442,7 +517,7 @@ func (m Model) click(ms tea.Mouse) (Model, tea.Cmd) {
 	}
 	m.syncPause()
 	m.refresh()
-	return m, cmd
+	return cmd
 }
 
 // panelAt is the visible panel whose frame holds (x, y).

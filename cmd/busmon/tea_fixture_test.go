@@ -118,3 +118,47 @@ func pinLocal(t testing.TB) {
 	time.Local = time.UTC
 	t.Cleanup(func() { time.Local = local })
 }
+
+// shellWith is the fixture shell built on cfg (its writer, settings, cache,
+// prior visit), with the project pause on or off.
+func shellWith(t testing.TB, w, h int, cfg shellConfig, paused bool) Model {
+	t.Helper()
+	cfg.project, cfg.self = "agent-bus-monitor", "bernard"
+	m := newShell(cfg)
+	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
+	m = step(t, m, tailMsg{events: shellEvents(shellNow)})
+	snap := shellFixture(shellNow)
+	if !paused {
+		snap.pause = nil
+	}
+	for _, a := range snap.agents {
+		a.judgedAt = shellNow
+	}
+	return step(t, m, pollMsg{snap: snap, at: shellNow})
+}
+
+// run executes a command and feeds its message back, as the program would;
+// a batch runs each of its commands that return at once (never a tick).
+func run(t testing.TB, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	if cmd == nil {
+		return m
+	}
+	msg := cmd()
+	if b, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range b {
+			m = run(t, m, c)
+		}
+		return m
+	}
+	return step(t, m, msg)
+}
+
+// typeText types s, one key per rune.
+func typeText(t testing.TB, m Model, s string) Model {
+	t.Helper()
+	for _, r := range s {
+		m = keys(t, m, r)
+	}
+	return m
+}

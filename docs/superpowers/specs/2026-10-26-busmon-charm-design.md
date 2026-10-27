@@ -245,6 +245,9 @@ Both call `ui.send(recipient, body, directed, window)`; neither builds an `@name
 compose window's text area enforces the rune cap in `Update` (not a byte cap): step b keeps
 `bubbles/textarea` only if a test shows it can hold the cap without truncating a multibyte rune;
 otherwise it is our own small text area over `Line`.
+Step b4 ran that test: bubbles v2.2.1's `textarea` counts `CharLimit` in cells (`Length` sums
+`uniseg.StringWidth`), so with a cap of 10 runes, `日` typed ten times stops at 5. The compose window
+is our own text area (`tea_compose.go`), capped in runes, and `bubbles` is not taken.
 
 ### Signals (decision 6)
 

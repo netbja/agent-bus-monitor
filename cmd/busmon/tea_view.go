@@ -44,11 +44,10 @@ func (m Model) grid() *grid {
 	if reading {
 		m.drawReader(g)
 	} else if l.Input.H > 0 {
-		input := Line{{Text: GlyphPrompt + " ", Role: RoleAccent}}
-		if m.ui.editing {
-			input = Line{{Text: "filter" + GlyphPrompt + " ", Role: RoleAccent}, {Text: Preview(m.ui.edit), Role: RoleText}}
+		drawLine(g, l.Input.X, l.Input.Y, l.Input.W, m.inputRow(l.Input.W), false)
+		if row := m.completionRow(l.Input.W); row != nil && l.Input.Y > 0 { // over the row above
+			drawLine(g, l.Input.X, l.Input.Y-1, l.Input.W, row, false)
 		}
-		drawLine(g, l.Input.X, l.Input.Y, l.Input.W, input, false)
 	}
 	footer := footerHints(m.mode(), m.ui.focus, l.Tier, m.width)
 	if m.ui.flash != "" {
@@ -59,6 +58,20 @@ func (m Model) grid() *grid {
 		footer = FitLine(Line{{Text: " " + m.ui.flash, Role: role}}, m.width)
 	}
 	drawLine(g, 0, l.Footer.Y, m.width, footer, false)
+	// The window and the dialogs over everything, footer included, as
+	// tview's pages; the pause popup on top.
+	if m.ui.compose != nil {
+		m.drawCompose(g)
+	}
+	switch {
+	case m.ui.reminder != nil:
+		m.drawReminder(g)
+	case m.ui.summary:
+		m.drawSummary(g)
+	}
+	if d := m.ui.pausePopup; d != nil { // above everything, as tview's top page
+		drawPausePopup(g, m.pauseDialogRect(), d.rec, d.sel, m.now)
+	}
 	return g
 }
 

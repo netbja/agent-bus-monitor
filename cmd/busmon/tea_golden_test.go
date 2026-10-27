@@ -55,8 +55,8 @@ func checkGolden(t *testing.T, name, got string) {
 
 // goldenStates are the screens the goldens draw (busmon Charm spec, step b
 // tests): the dashboard, the report with a long code block expanded in
-// Activity, and that report in the reader. Compose comes with step b4.
-var goldenStates = []string{"dashboard", "expanded", "reader"}
+// Activity, that report in the reader, and the compose window open.
+var goldenStates = []string{"dashboard", "expanded", "reader", "compose"}
 
 // reportID is the fixture's report, whose fenced code is longer than any width.
 var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
@@ -64,8 +64,13 @@ var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
 // inState is the fixture shell brought to a golden state by keys.
 func inState(t testing.TB, m Model, state string) Model {
 	t.Helper()
-	if state == "dashboard" {
+	switch state {
+	case "dashboard":
 		return m
+	case "compose": // a directive to coder, two lines written
+		m = typeText(t, keys(t, m, 'I'), "@cod")
+		m = typeText(t, keys(t, m, kTab), "Review lot 1 please: the reader, the ask mode and the cache.")
+		return typeText(t, keys(t, m, kEnter), "Thanks")
 	}
 	tab := rune('1') // Activity, the tabbed panel's first tab
 	if m.layout.Tier == TierNarrow {

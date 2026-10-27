@@ -275,7 +275,7 @@ func TestShellCopy(t *testing.T) {
 
 // The reader's ask mode: a digit answers with that option, once (a second
 // press while it is sent does nothing), then the next open question shows;
-// the last answer closes the page. A paused project's answer is not sent.
+// the last answer closes the page. A paused project's answer asks first.
 func TestShellAskAnswersByKey(t *testing.T) {
 	pinLocal(t)
 	fw := &fakeWriter{left: 1}
@@ -308,8 +308,8 @@ func TestShellAskAnswersByKey(t *testing.T) {
 	paused := fixtureShell(t, 140, 40)
 	paused.cfg.w = fw
 	paused = keys(t, paused, '!')
-	if _, cmd := pressCmd(t, paused, '1'); cmd != nil || len(fw.sent) != 2 {
-		t.Fatal("an answer was sent while the project is paused")
+	if paused, cmd := pressCmd(t, paused, '1'); cmd != nil || len(fw.sent) != 2 || paused.ui.pausePopup == nil {
+		t.Fatal("an answer while the project is paused did not ask through the pause popup")
 	}
 }
 
@@ -369,8 +369,11 @@ func TestShellAskAnswersByClick(t *testing.T) {
 	x, y = optionAt(t, m, 2)
 	m, cmd = clickCmd(t, m, x, y)
 	c := m.ui.compose
-	if cmd != nil || c == nil || c.kind != composeAnswer || c.askID != id || c.qid != "tag" || c.to != "master" || c.text != "a draft" {
+	if cmd != nil || c == nil || c.kind != composeAnswer || c.askID != id || c.qid != "tag" || c.agent != "master" || c.area.value() != "a draft" {
 		t.Fatalf("Other: cmd %v, compose %+v", cmd != nil, c)
+	}
+	if m = keys(t, m, kEsc); m.ui.compose != nil || !m.rd.open() || m.ui.askDrafts[id+"|tag"] != "a draft" {
+		t.Fatal("Esc did not close the window back to the ask, its draft kept")
 	}
 	if m = keys(t, m, kEsc); m.rd.open() {
 		t.Fatal("Esc did not close the ask")

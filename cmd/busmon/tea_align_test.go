@@ -93,8 +93,9 @@ func TestShellAlignmentSuite(t *testing.T) {
 	}
 }
 
-// Reading keeps the frames straight too: a hostile line expanded in place,
-// then open in the reader, at every size and palette.
+// Reading and writing keep the frames straight too: a hostile line expanded
+// in place, then open in the reader, then hostile text pasted in the compose
+// window, at every size and palette.
 func TestShellAlignmentReading(t *testing.T) {
 	pinLocal(t)
 	for _, pal := range []struct {
@@ -112,24 +113,32 @@ func TestShellAlignmentReading(t *testing.T) {
 			m.focusPanel(PanelActivity)
 			m.refresh()
 			m = keys(t, m, kUp, kUp, kEnter) // a line with a text, expanded
-			for _, state := range []string{"expanded", "reader"} {
-				if state == "reader" {
+			for _, state := range []string{"expanded", "reader", "compose"} {
+				switch state {
+				case "reader":
 					m = keys(t, m, kEnter)
+				case "compose":
+					m = keys(t, m, kEsc)
+					m = step(t, keys(t, m, 'I', kTab), tea.PasteMsg{Content: hostileText + "\n" + hostileText})
 				}
 				name := fmt.Sprintf("%s-%d/%dx%d/%s", pal.name, pal.colors, sz[0], sz[1], state)
-				if (state == "expanded") != (m.ui.expanded != "" && !m.rd.open()) {
+				if state != "compose" && (state == "expanded") != (m.ui.expanded != "" && !m.rd.open()) {
 					t.Fatalf("%s: expanded %q, reader %v", name, m.ui.expanded, m.rd.open())
 				}
 				g := m.grid()
 				at := func(x, y int) string { return g.at(x, y).text }
 				for _, p := range m.layout.Visible {
-					if m.rd.open() && (p == m.layout.Active || m.layout.Tier == TierNarrow) {
-						continue
+					if m.ui.compose != nil || m.rd.open() && (p == m.layout.Active || m.layout.Tier == TierNarrow) {
+						continue // under the window or the reader
 					}
 					checkFrameAt(t, at, name+" panel "+fmt.Sprint(p), m.layout.rect(p), true)
 				}
-				if m.rd.open() {
+				if m.rd.open() && m.ui.compose == nil {
 					checkFrameAt(t, at, name+" reader", m.readerRect(), true)
+				}
+				if m.ui.compose != nil {
+					f, _ := m.composeRects()
+					checkFrameAt(t, at, name+" compose", f, true)
 				}
 				plain := g.plain()
 				if strings.ContainsAny(plain, "\x1b\t\u202e") {
