@@ -4,6 +4,35 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.22.0 — busmon on bubbletea, the context alert, specialist roles
+
+- busmon runs on bubbletea v2 + lipgloss v2 (tview is gone). Its look changed: code in overlays
+  wraps, `1`-`3` pick tabs, Enter expands a line then opens the reader, the mouse scrolls, selects
+  and focuses; keys, flags and `busmon.toml` are unchanged.
+- Context fill per agent from Claude Code's status line (`{p}:context`); at 80 %
+  (`AGENT_BUS_CONTEXT_ALERT`) one hand-off directive, a notice and a desktop notification per
+  session; busmon's ctx cell shows `88k 85%`; health check `context`.
+- A pane stuck on its client's prompt rings the desktop once per episode
+  (`AGENT_BUS_PROMPT_GRACE`, default 30 s).
+- `agentbus up` closes a relaunched agent's old pane once the new one is proven, if it is still a
+  plain shell.
+- Built-in quota readers from logs: Kimi Code (`moonshot`) and agy (`google`). The Claude quota no
+  longer flaps from an idle session's stale status line.
+- The Plan view: `agentbus plan`, derived task states, busmon's `P` overlay and header item.
+- Specialist roles (schema 2 profiles), the trust gate in `up`, `roles reviewers`, `roles
+  draft`/`adopt`; a grok adapter and the read-only `ui-grok`/`ui-kimi` advisors.
+- A profile's permission wins over the client's config; a Claude Code profile without an explicit
+  permission (or with `"default"`) is refused at load.
+- Claude Code launches report the launcher's resume argv to herdr's session restore.
+- Sentinel proposes a client reload after an update; health `client-updates`, busmon flag `update`.
+- `agentbus help` and GNU short flags from one table, for both binaries.
+- busmon: `for you` hint, one `@` completion, unread marks, a pause popup on send, compose cursor
+  and scrollbar fix, messages keep their line breaks.
+- Restart each project's dispatch service after `./setup.sh update`; relaunch agents for the
+  launcher changes.
+
+[Notes](docs/releases/v0.22.0.md)
+
 ## v0.21.0 — startup and relaunch
 
 - `agentbus up <p>` on an open workspace checks every template tab and relaunches a dead agent in a
