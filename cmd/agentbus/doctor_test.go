@@ -23,10 +23,12 @@ profile = "main"
 client = "claude-code"
 provider = "anthropic"
 model = "claude-opus-5-5"
+options = { permission = "manual" }
 [profiles.alias]
 client = "claude-code"
 provider = "anthropic"
 model = "opus"
+options = { permission = "manual" }
 [roles.coder]
 tier = "boot"
 [roles.foureyes]

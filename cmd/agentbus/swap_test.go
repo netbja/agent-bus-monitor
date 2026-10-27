@@ -27,6 +27,7 @@ model = "codex-model"
 client = "claude-code"
 provider = "anthropic"
 model = "opus"
+options = { permission = "manual" }
 [profiles.k]
 client = "kimi-cli"
 provider = "moonshot"
