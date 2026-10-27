@@ -273,6 +273,11 @@ agent names, no project template):
     7d 54%`): no other tool is needed, ccstatusline can be removed. To keep another status line, add
     `--then '<its command>'`.
   - **Codex** and **Grok** work out of the box when their CLI is installed.
+  - **Kimi Code** and **agy** (Antigravity) too, from their own logs. They only show a hit, never a
+    percentage: a Kimi `5-hour` or `weekly` limit holds its agents until the next answer Kimi
+    gets, or at the latest the window's length after the first hit, since Kimi states no reset
+    (a `billing cycle` limit states no length and is never held). An agy `Individual quota
+    reached … Resets in …` holds until the reset it states.
   - **Any other AI**: describe its source in `~/.config/agentbus/quota.toml` — a file and its fields
     (`kind = "json"` or `"jsonl-last"`), or a script that prints the reading as JSON
     (`kind = "command"`), or `kind = "unlimited"` for a local model. Thresholds:

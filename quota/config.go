@@ -14,10 +14,13 @@ import (
 )
 
 // Config is ~/.config/agentbus/quota.toml (spec §5): built-in readers are on
-// when their CLI is found; the file adds providers or overrides them.
+// when their CLI is found; the file adds providers or overrides them. The
+// log-backed ones (kimi: moonshot, Kimi Code's session logs; agy: google,
+// Antigravity's CLI logs) only see a limit hit, never a percentage, and take
+// no option; `kind = "off"` turns one off.
 //
 //	[providers.xai]
-//	kind = "jsonl-last"            # json | jsonl-last | command | unlimited | claude | codex | off
+//	kind = "jsonl-last"            # json | jsonl-last | command | unlimited | claude | codex | kimi | agy | off
 //	path = "~/.grok/logs/unified.jsonl"
 //	match = { msg = "billing: fetched credits config" }
 //	observed_at = "ts"
@@ -52,7 +55,7 @@ func ConfigPath() string {
 }
 
 // Builtins is the default configuration: Claude Code through the statusline
-// file, Codex, Kimi Code's session logs, and Grok's billing line — each when its CLI is on PATH, or (for
+// file, Codex, Kimi Code's session logs, agy's CLI logs, and Grok's billing line — each when its CLI is on PATH, or (for
 // the file readers) when its local source exists.
 func Builtins(lookPath func(string) (string, error)) map[string]ProviderConfig {
 	out := map[string]ProviderConfig{}
@@ -65,6 +68,9 @@ func Builtins(lookPath func(string) (string, error)) map[string]ProviderConfig {
 	home, _ := os.UserHomeDir()
 	if _, err := lookPath("kimi"); err == nil || exists(filepath.Join(home, ".kimi-code", "sessions")) {
 		out["moonshot"] = ProviderConfig{Kind: "kimi"}
+	}
+	if _, err := lookPath("agy"); err == nil || exists(filepath.Join(home, ".gemini", "antigravity-cli", "log")) {
+		out["google"] = ProviderConfig{Kind: "agy"}
 	}
 	if _, err := lookPath("grok"); err == nil || exists(filepath.Join(home, ".grok", "logs", "unified.jsonl")) {
 		out["xai"] = ProviderConfig{Kind: "jsonl-last", Path: "~/.grok/logs/unified.jsonl",
@@ -130,6 +136,8 @@ func Readers(cfg map[string]ProviderConfig, now func() time.Time) []Reader {
 			r = CodexReader{Bin: bin, Home: codexHome, Now: now}
 		case "kimi":
 			r = KimiReader{Root: filepath.Join(home, ".kimi-code", "sessions"), Now: now}
+		case "agy":
+			r = AgyReader{Dir: filepath.Join(home, ".gemini", "antigravity-cli", "log"), Now: now}
 		case "json", "jsonl-last":
 			r = FileReader{Name: name, Kind: p.Kind, Path: expand(p.Path), Match: p.Match, ObservedAt: p.ObservedAt, Windows: p.Windows, Now: now}
 		case "command":
