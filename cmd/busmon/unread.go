@@ -1,8 +1,6 @@
 package main
 
 import (
-	"slices"
-
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -102,16 +100,6 @@ func unreadCount(m map[string]mark) int {
 	return n
 }
 
-// classifyWaits marks the newest report of every agent that waits for the
-// person (or carries the "for you" hint) as for the person: it is the text
-// the agent detail shows as "What <agent> needs from you".
-func (u *ui) classifyWaits() {
-	u.st.mu.Lock()
-	waiting := waitingNames(u.st.agents)
-	u.st.mu.Unlock()
-	u.activityFeed.classifyWaits(waiting)
-}
-
 // waitingNames are the agents that wait for the person or carry the hint.
 func waitingNames(agents map[string]*agentState) []string {
 	var waiting []string
@@ -139,69 +127,4 @@ func lastReportID(name string, feed []feedLine) string {
 		}
 	}
 	return ""
-}
-
-// markRead records that the person opened an entry, and saves the cache with
-// only the ids still in the retained window (the file cannot grow).
-func (u *ui) markRead(id string) {
-	if !u.unread.forPerson[id] || u.unread.read[id] {
-		return
-	}
-	u.unread.read[id] = true
-	if u.cache == nil {
-		return
-	}
-	retained := map[string]bool{}
-	for _, fl := range u.feed {
-		if !fl.sep {
-			retained[fl.ev.ID] = true
-		}
-	}
-	var keep []string
-	for _, r := range append(slices.Clone(u.cache.Read), id) {
-		if retained[r] && !slices.Contains(keep, r) {
-			keep = append(keep, r)
-		}
-	}
-	slices.Sort(keep)
-	u.cache.Read = keep
-	if err := u.cache.save(u.cachePath); err != nil {
-		u.flash, u.flashErr = "local busmon cache not saved", true
-	}
-}
-
-// unreadEvents are the entries marked unread at the last fill, oldest first.
-func (u *ui) unreadEvents() []bus.Event {
-	var out []bus.Event
-	for _, fl := range u.feed {
-		if fl.mark == markUnread {
-			out = append(out, fl.ev)
-		}
-	}
-	return out
-}
-
-// nextUnread selects the next unread Activity line after the selection,
-// wrapping; false when none.
-func (u *ui) nextUnread() bool {
-	l := u.lists[PanelActivity]
-	cur := u.feedIndex(l.Selected())
-	var first = -1
-	for i, fl := range u.feed {
-		if fl.mark != markUnread {
-			continue
-		}
-		if first < 0 {
-			first = i
-		}
-		if i > cur {
-			l.Select(fl.id)
-			return true
-		}
-	}
-	if first >= 0 {
-		l.Select(u.feed[first].id)
-		return true
-	}
-	return false
 }

@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
-
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -58,103 +56,6 @@ func hostileShared(now time.Time, down bool) *shared {
 	return st
 }
 
-type alignCase struct {
-	name  string
-	setup func(h *harness)
-}
-
-func alignCases() []alignCase {
-	feed := func(h *harness) {
-		for i := 0; i < 40; i++ {
-			// Some entries are for the person (the harness writes as bernard):
-			// a cmd to bernard and a notice for=person every 8, so the feed
-			// holds unread and superseded marks of both kinds.
-			target, forWho := "a02", ""
-			switch i % 8 {
-			case 3:
-				target = "bernard"
-			case 2:
-				forWho = bus.ForPerson
-			}
-			h.feed(bus.Event{ID: fmt.Sprintf("17916494%05d-0", i), Kind: []string{"status", "report", "notify", "cmd"}[i%4],
-				Agent: "a00", From: "a01" + strings.Repeat("y", 30), Target: target, Type: "directive", State: "working",
-				Message: hostileText, Full: hostileText + hostileText, Ref: []string{"", hostileText}[i%2], For: forWho})
-		}
-	}
-	return []alignCase{
-		{"main", feed},
-		{"filter+selection", func(h *harness) {
-			feed(h)
-			h.u.filter = parseFilter("tab")
-			h.key(key(tcell.KeyTab))
-			h.key(key(tcell.KeyUp))
-		}},
-		{"agent detail", func(h *harness) { feed(h); h.key(key(tcell.KeyEnter)) }},
-		{"message detail", func(h *harness) {
-			feed(h)
-			h.draw(h.u.width, h.u.height) // the feed's rows exist only once drawn: Up selects nothing before
-			h.key(key(tcell.KeyTab))
-			h.key(key(tcell.KeyUp))
-			h.u.detailThread = threadState{Loaded: true}
-			h.key(key(tcell.KeyEnter))
-		}},
-		{"message thread", func(h *harness) {
-			feed(h)
-			h.draw(h.u.width, h.u.height)
-			h.key(key(tcell.KeyTab))
-			h.key(key(tcell.KeyUp))
-			md := "Done.\n\n## " + hostileText + "\n- " + hostileText + "\n  - " + hostileText + "\n1. " + hostileText + "\n> " + hostileText + "\n```\n" + hostileText + "\n```"
-			var entries []bus.Event
-			for i := 0; i < 6; i++ {
-				entries = append(entries, bus.Event{ID: fmt.Sprintf("17916494%05d-1", i), Kind: "cmd", Type: "reply", From: "a01", Target: "a00", Ref: "x", Message: md})
-			}
-			h.key(key(tcell.KeyEnter))
-			// As the thread read's callback does once it is back.
-			h.u.detailThread = threadState{ID: threadID(h.u.detailEvent), Loaded: true, Entries: entries}
-			h.u.overlay.SetText(linesToTview(detailText(h.u.detailEvent, time.Now(), time.Now(), h.u.detailThread)))
-		}},
-		{"tab 2", func(h *harness) { feed(h); h.key(runeKey('2')) }},
-		{"tab 3", func(h *harness) { feed(h); h.key(runeKey('3')) }},
-		{"tab 4", func(h *harness) { feed(h); h.key(runeKey('4')) }},
-		{"help", func(h *harness) { h.key(key(tcell.KeyF1)) }},
-		{"requests overlay", func(h *harness) { h.key(key(tcell.KeyF2)) }},
-		{"pause popup", func(h *harness) {
-			h.u.st.pause = &bus.PauseRecord{Until: time.Now().Add(26 * time.Hour).UnixMilli(), Reason: "quota reset", By: "a01" + strings.Repeat("y", 29), Notify: "a00"}
-			h.key(runeKey('i'))
-			h.typeText("@a00 x")
-			h.key(key(tcell.KeyEnter))
-			h.key(key(tcell.KeyRight))
-		}},
-		{"plan overlay", func(h *harness) {
-			h.u.st.plan = hostilePlan(time.Now())
-			h.key(runeKey('P'))
-		}},
-		{"plan expanded", func(h *harness) {
-			h.u.st.plan = hostilePlan(time.Now())
-			h.key(runeKey('P'))
-			h.key(key(tcell.KeyEnd))
-			h.key(key(tcell.KeyEnter))
-		}},
-		{"plan task", func(h *harness) {
-			h.u.st.plan = hostilePlan(time.Now())
-			h.key(runeKey('P'))
-			h.key(key(tcell.KeyEnter))
-		}},
-		{"composing", func(h *harness) { feed(h); h.key(runeKey('i')); h.typeText(hostileText[:12]) }},
-		{"compose window", func(h *harness) {
-			feed(h)
-			h.key(runeKey('I'))
-			h.u.comp.area.SetText(hostileText+"\n"+hostileText, true)
-		}},
-	}
-}
-
-// checkFrame asserts one frame's geometry on the simulation screen.
-func checkFrame(t *testing.T, sim tcell.SimulationScreen, name string, r Rect, scrollable bool) {
-	t.Helper()
-	checkFrameAt(t, func(x, y int) string { s, _, _ := sim.Get(x, y); return s }, name, r, scrollable)
-}
-
 // checkFrameAt asserts one frame's geometry on any grid of cells.
 func checkFrameAt(t *testing.T, at func(x, y int) string, name string, r Rect, scrollable bool) {
 	t.Helper()
@@ -184,82 +85,6 @@ func checkFrameAt(t *testing.T, at func(x, y int) string, name string, r Rect, s
 		if got := at(x, y1); got != glyphHorizontal {
 			t.Errorf("%s: bottom border (%d,%d) = %q", name, x, y1, got)
 			break
-		}
-	}
-}
-
-func TestAlignmentSuite(t *testing.T) {
-	saved, width := th, mdWidth // relayouts set the overlay width: leave it as found
-	defer func() { th, mdWidth = saved, width }()
-	for _, palette := range []string{"dark", "light", "16", "none"} {
-		var err error
-		name, colors := palette, 1<<24
-		switch palette {
-		case "16":
-			name, colors = "dark", 16
-		case "none":
-			name = "dark"
-		}
-		th, err = ResolveTheme(name, "", "", palette == "none", colors)
-		if err != nil {
-			t.Fatal(err)
-		}
-		checkPick(t, palette) // the --pick picker: its own screen, same frames and rules
-		if t.Failed() {
-			return
-		}
-		for _, down := range []bool{false, true} {
-			for _, c := range alignCases() {
-				for _, sz := range alignSizes {
-					name := fmt.Sprintf("%s/%s/down=%v/%dx%d", palette, c.name, down, sz[0], sz[1])
-					h := newHarness(t, hostileShared(time.Now(), down))
-					h.draw(sz[0], sz[1])
-					c.setup(h)
-					screen := h.draw(sz[0], sz[1])
-					l := h.u.layout
-					if l.Tier == TierTooSmall {
-						continue
-					}
-					if c.name == "main" || c.name == "filter+selection" || c.name == "composing" {
-						for _, p := range l.Visible {
-							checkFrame(t, h.sim, fmt.Sprintf("%s panel %d", name, p), l.panelRect(p), true)
-						}
-					}
-					if h.u.ov != ovNone {
-						x, y, w, hh := h.u.overlay.GetRect()
-						checkFrame(t, h.sim, name+" overlay", Rect{x, y, w, hh}, true)
-					}
-					if h.u.pp.open {
-						r := pauseRect(sz[0], sz[1], l.Header.H)
-						if r.W >= 20 && r.H >= 3 {
-							checkFrame(t, h.sim, name+" pause popup", r, false)
-						}
-					}
-					if h.u.comp.open {
-						checkFrame(t, h.sim, name+" compose", composeRect(sz[0], sz[1], l.Header.H), true) // the window scrolls (fix/compose-scrollbar)
-					}
-					first := strings.SplitN(screen, "\n", 2)[0]
-					if !strings.Contains(first, " bus") || !strings.Contains(first, " disp") {
-						t.Errorf("%s: header lacks health or dispatch: %q", name, first)
-					}
-					// No primitive writes outside the screen (a plain
-					// SimulationScreen drops such writes silently).
-					rec := newRecScreen(t, sz[0], sz[1], Rect{0, 0, sz[0], sz[1]})
-					h.u.scr = rec
-					h.u.pages.Draw(rec)
-					h.u.scr = h.sim
-					for _, b := range rec.bad {
-						t.Errorf("%s: write off screen %s", name, b)
-					}
-					if strings.ContainsAny(screen, "\x1b\t\u202e") {
-						t.Errorf("%s: control characters reached the screen", name)
-					}
-					if t.Failed() {
-						t.Logf("%s:\n%s", name, screen)
-						return
-					}
-				}
-			}
 		}
 	}
 }

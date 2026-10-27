@@ -51,12 +51,30 @@ func (m *Model) collapse() {
 	m.ui.expanded = ""
 }
 
-// markRead reads an entry for the person (the local cache's write comes with
-// step c, when the shell owns it).
+// markRead records that the person opened an entry. The local cache keeps
+// only the ids still in the retained window (the file cannot grow); its save
+// runs in a command after the update (afterUpdate).
 func (m *Model) markRead(id string) {
-	if m.feed.unread.forPerson[id] {
-		m.feed.unread.read[id] = true
+	if !m.feed.unread.forPerson[id] || m.feed.unread.read[id] {
+		return
 	}
+	m.feed.unread.read[id] = true
+	retained := map[string]bool{}
+	for _, fl := range m.feed.feed {
+		if !fl.sep {
+			retained[fl.ev.ID] = true
+		}
+	}
+	c := m.cache_()
+	var keep []string
+	for _, r := range append(slices.Clone(c.Read), id) {
+		if retained[r] && !slices.Contains(keep, r) {
+			keep = append(keep, r)
+		}
+	}
+	slices.Sort(keep)
+	c.Read = keep
+	m.sig.readDirty = true
 }
 
 // keepExpansion collapses the expansion once its row is not selected.

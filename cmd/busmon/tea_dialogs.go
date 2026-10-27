@@ -14,7 +14,7 @@ import (
 
 // The shell's small dialogs (busmon Charm spec, "Reading": they stay dialogs
 // over the screen): the pause popup before a waking send, the reminder, the
-// recap summary's confirmation. The removal (d then y) keeps tview's form: a
+// recap summary's confirmation. The removal (d then y) keeps its form: a
 // question in the flash, the next key answers it.
 
 // retryKind is the send a pause dialog replays once the person chooses.

@@ -6,8 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// The bubbletea adapter of the key tables' Key (busmon Charm spec, step b):
-// the same tables match it as they match keyOf's tcell keys.
+// The bubbletea adapter of the key tables' Key (busmon Charm spec, step b).
 
 var teaKeys = map[rune]KeyCode{
 	tea.KeyEnter: keyEnter, tea.KeyEscape: keyEscape, tea.KeyTab: keyTab, tea.KeyBackspace: keyBackspace,

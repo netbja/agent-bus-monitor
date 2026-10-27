@@ -11,6 +11,7 @@ package main
 // here, and a check that fails is never read as absence.
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"context"
 	"errors"
 	"fmt"
@@ -19,12 +20,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 	"github.com/rivo/uniseg"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -38,69 +36,20 @@ const (
 	pickSpin    = 120 * time.Millisecond // spinner frame
 )
 
-// pickModel is the picker's state: the rows, the filter, the selection and
-// the status line. The open runs off the event loop, so every field is read
-// and written under mu.
+// pickModel is what the picker's rules read (pickShell, tea_pick.go, holds
+// the state): the rows, the filter and the selection, and whether the startup
+// check has answered.
 type pickModel struct {
-	mu        sync.Mutex
-	dir       string         // the projects directory the rows come from
-	rows      []projlist.Row // every template, sorted by name
-	filter    string         // what was typed: a case-insensitive substring
-	sel       string         // the selected project's name ("" = the first visible)
-	status    string         // the status line ("" = the key hints)
-	statusErr bool           // the status is an error
-	busy      string         // what an open is doing ("" = idle): shown with a spinner
-	checking  bool           // the startup check has not answered yet
-	connErr   error          // the broker connection failed at startup
-	timeout   time.Duration  // the bound of one existence check
-}
-
-func newPickModel(dir string, rows []projlist.Row, listErr error) *pickModel {
-	m := &pickModel{dir: dir, rows: rows, timeout: pickTimeout, checking: true}
-	if listErr != nil {
-		m.status, m.statusErr = "cannot read "+dir+": "+listErr.Error(), true
-	}
-	return m
-}
-
-// setStatus replaces the status line; it stays until the next key. An error
-// is drawn in the error colour, anything else (a reason given by whoever
-// opened the picker) as plain text.
-func (m *pickModel) setStatus(text string, isErr bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.status, m.statusErr = text, isErr
-}
-
-func (m *pickModel) statusLine() (string, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.status, m.statusErr
-}
-
-func (m *pickModel) busyText() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.busy
-}
-
-// setAnnotated installs the rows of the startup check and the connection's
-// error, if it failed.
-func (m *pickModel) setAnnotated(rows []projlist.Row, connErr error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.rows, m.connErr, m.checking = rows, connErr, false
+	rows     []projlist.Row // every template, sorted by name
+	filter   string         // what was typed: a case-insensitive substring
+	sel      string         // the selected project's name ("" = the first visible)
+	checking bool           // the startup check has not answered yet
+	connErr  error          // the broker connection failed at startup
 }
 
 // brokerDown: the startup check answered for no row. Annotate keeps the
 // errors to itself, so this is "every row unknown", or a failed connection.
 func (m *pickModel) brokerDown() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.brokerDownLocked()
-}
-
-func (m *pickModel) brokerDownLocked() bool {
 	if m.checking {
 		return false
 	}
@@ -115,22 +64,9 @@ func (m *pickModel) brokerDownLocked() bool {
 	return len(m.rows) > 0
 }
 
-// animating: something is in flight, so the spinner needs frames.
-func (m *pickModel) animating() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.busy != "" || m.checking
-}
-
 // visible is the rows the filter keeps: a case-insensitive substring of the
 // name or of the working directory. Deliberately not fuzzy.
 func (m *pickModel) visible() []projlist.Row {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.visibleLocked()
-}
-
-func (m *pickModel) visibleLocked() []projlist.Row {
 	f := strings.ToLower(m.filter)
 	var out []projlist.Row
 	for _, r := range m.rows {
@@ -141,8 +77,9 @@ func (m *pickModel) visibleLocked() []projlist.Row {
 	return out
 }
 
-func (m *pickModel) selectedLocked() (projlist.Row, bool) {
-	vis := m.visibleLocked()
+// selected is the selected row, else the first visible one.
+func (m *pickModel) selected() (projlist.Row, bool) {
+	vis := m.visible()
 	for _, r := range vis {
 		if r.Name == m.sel {
 			return r, true
@@ -152,57 +89,6 @@ func (m *pickModel) selectedLocked() (projlist.Row, bool) {
 		return vis[0], true
 	}
 	return projlist.Row{}, false
-}
-
-func (m *pickModel) setBusy(s string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.busy = s
-}
-
-// open checks the selected project afresh, bounded by the timeout, and runs
-// up only when the broker holds its keys. It reports whether the picker should
-// close: true only after a successful run. A refusal or a failure is left on
-// the status line. It blocks: the picker calls it off the event loop.
-func (m *pickModel) open(ctx context.Context, keys projlist.KeysFunc, run func(project string) error) (closePicker bool) {
-	defer m.setBusy("")
-	m.mu.Lock()
-	row, ok := m.selectedLocked()
-	timeout := m.timeout
-	m.mu.Unlock()
-	if !ok {
-		return false
-	}
-	m.setBusy("checking " + row.Name + " on the broker")
-	state, err := projlist.Exists(ctx, keys, row.Name, timeout)
-	m.mu.Lock()
-	for i := range m.rows {
-		if m.rows[i].Name == row.Name {
-			m.rows[i].Broker = state // the fresh fact replaces the startup one
-		}
-	}
-	m.mu.Unlock()
-	switch state {
-	case projlist.Absent:
-		path := row.WorkingDir
-		if path == "" {
-			path = "<path>"
-		}
-		m.setStatus(fmt.Sprintf("%s has no keys on the broker (deleted?). To re-create it: agentbus up %s %s", row.Name, row.Name, path), true)
-		return false
-	case projlist.Unknown:
-		if errors.Is(err, context.DeadlineExceeded) {
-			err = fmt.Errorf("no answer within %s (%w)", timeout, err)
-		}
-		m.setStatus(fmt.Sprintf("cannot check %s on the broker: %v", row.Name, err), true)
-		return false
-	}
-	m.setBusy("agentbus up " + row.Name)
-	if err := run(row.Name); err != nil {
-		m.setStatus(fmt.Sprintf("agentbus up %s: %v", row.Name, err), true)
-		return false
-	}
-	return true
 }
 
 // agentbusBeside is the agentbus installed next to this busmon (symlinks
@@ -338,178 +224,32 @@ func (c *brokerConn) shutdown() {
 // ordering of main without a terminal).
 var runPicker = pickMain
 
-// pickMain runs the picker full screen and returns the exit code.
+// pickMain runs the picker full screen (pickShell, tea_pick.go) and returns
+// the exit code.
 func pickMain(host, theme string) int {
 	dir := rolecfg.ProjectsDir(os.Getenv)
 	rows, listErr := projlist.Templates(dir)
-	m := newPickModel(dir, rows, listErr)
-	if reason := os.Getenv("AGENTBUS_PLUGIN_REASON"); reason != "" {
-		m.setStatus(reason, false)
-	}
-	conn := dialBroker(host)
-	defer conn.shutdown()
-
-	scr, err := tcell.NewScreen()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: terminal: %v\n", err)
-		return 1
-	}
-	app := tview.NewApplication().SetScreen(scr)
 	_, noColor := os.LookupEnv("NO_COLOR")
-	t, err := ResolveTheme(theme, "", os.Getenv("COLORFGBG"), noColor, scr.Colors())
+	t, err := ResolveTheme(theme, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
 	if err != nil {
-		scr.Fini()
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 2
 	}
 	th = t
-
+	conn := dialBroker(host)
+	defer conn.shutdown()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	p := newPicker(app, m, conn.keys, upRunner(agentbusBeside(), pickUpWait))
-	p.ctx = ctx
-	go func() {
-		annotated := projlist.Annotate(ctx, rows, conn.keys, pickTimeout)
-		m.setAnnotated(annotated, conn.failed())
-		app.QueueUpdateDraw(func() {})
-	}()
-	go func() { // spinner frames, only while something is in flight
-		tick := time.NewTicker(pickSpin)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-tick.C:
-				if m.animating() {
-					app.QueueUpdateDraw(func() {})
-				}
-			}
-		}
-	}()
-	if err := app.EnableMouse(true).Run(); err != nil {
+	m := newPickShell(ctx, dir, rows, listErr, conn.keys, upRunner(agentbusBeside(), pickUpWait))
+	m.connFailed = conn.failed
+	if reason := os.Getenv("AGENTBUS_PLUGIN_REASON"); reason != "" {
+		m.status, m.statusErr = reason, false // why the plugin opened the picker, until the first key
+	}
+	if _, err := tea.NewProgram(m, tea.WithContext(ctx)).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
 	return 0
-}
-
-// picker is the picker's screen: one ListView inside pickView, the key
-// capture, and the open started off the event loop.
-type picker struct {
-	app  *tview.Application
-	m    *pickModel
-	keys projlist.KeysFunc
-	run  func(project string) error
-	ctx  context.Context
-	list *ListView
-	view *pickView
-
-	quit   func() // stops the application (tests: a no-op)
-	closed bool
-	sync   bool // tests: open on the caller's goroutine
-}
-
-func newPicker(app *tview.Application, m *pickModel, keys projlist.KeysFunc, run func(string) error) *picker {
-	p := &picker{app: app, m: m, keys: keys, run: run, ctx: context.Background(), list: NewListView(), quit: app.Stop}
-	p.view = &pickView{Box: tview.NewBox(), p: p}
-	p.list.SetHue(RoleAccent)
-	p.list.SetOnChange(func(key string, _ bool) {
-		m.mu.Lock()
-		m.sel = key
-		m.mu.Unlock()
-	})
-	p.list.SetOnOpen(func(string) { p.start() }) // a click on the selected row
-	app.SetRoot(p.view, true).SetFocus(p.list)
-	app.SetInputCapture(p.handleKey)
-	return p
-}
-
-func (p *picker) close() {
-	p.closed = true
-	p.quit()
-}
-
-// start opens the selected project unless an open is already running.
-func (p *picker) start() {
-	p.m.mu.Lock()
-	_, ok := p.m.selectedLocked()
-	if p.m.busy != "" || !ok {
-		p.m.mu.Unlock()
-		return
-	}
-	p.m.busy = "checking" // claimed here, on the event loop: a second Enter finds it
-	p.m.mu.Unlock()
-	if p.sync {
-		if p.m.open(p.ctx, p.keys, p.run) {
-			p.close()
-		}
-		return
-	}
-	go func() {
-		done := p.m.open(p.ctx, p.keys, p.run)
-		p.app.QueueUpdateDraw(func() {
-			if done {
-				p.close()
-			}
-		})
-	}()
-}
-
-// handleKey is the picker's key table (ModePick). Any key ends a status
-// line; while an open runs only esc and ^C act (up is left to finish).
-func (p *picker) handleKey(ev *tcell.EventKey) *tcell.EventKey {
-	act := lookup(ModePick, PanelAgents, TierWide, keyOf(ev))
-	if p.m.busyText() != "" {
-		if act == ActQuit || act == ActClose {
-			p.close()
-		}
-		return nil
-	}
-	p.m.setStatus("", false)
-	switch act {
-	case ActQuit, ActClose:
-		p.close()
-	case ActUp:
-		p.list.Move(-1)
-	case ActDown:
-		p.list.Move(1)
-	case ActPageUp:
-		p.list.Move(-max(1, p.list.rows()))
-	case ActPageDown:
-		p.list.Move(max(1, p.list.rows()))
-	case ActOpen:
-		p.start()
-	case ActPickType:
-		p.m.mu.Lock()
-		if ev.Key() == tcell.KeyRune {
-			p.m.filter += string(ev.Rune())
-		} else if r := []rune(p.m.filter); len(r) > 0 {
-			p.m.filter = string(r[:len(r)-1])
-		}
-		p.m.mu.Unlock()
-	}
-	return nil
-}
-
-// pickView is the picker's root: header, filter line, the list frame and the
-// footer. Draw refills the list from the model; it never changes focus and
-// never does I/O.
-type pickView struct {
-	*tview.Box
-	p *picker
-}
-
-func (v *pickView) Focus(delegate func(p tview.Primitive)) { delegate(v.p.list) }
-func (v *pickView) HasFocus() bool                         { return v.p.list.HasFocus() }
-
-func (v *pickView) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (bool, tview.Primitive) {
-	return v.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (bool, tview.Primitive) {
-		if v.p.m.busyText() != "" {
-			return true, nil
-		}
-		return v.p.list.MouseHandler()(action, event, setFocus)
-	})
 }
 
 // pickSnapshot is what one Draw reads from the model, under its lock once.
@@ -519,30 +259,8 @@ type pickSnapshot struct {
 	all, vis                  []projlist.Row
 }
 
-func (m *pickModel) snapshot() pickSnapshot {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return pickSnapshot{dir: m.dir, filter: m.filter, status: m.status, busy: m.busy, statusErr: m.statusErr,
-		checking: m.checking, down: m.brokerDownLocked(), all: m.rows, vis: m.visibleLocked()}
-}
-
-func (v *pickView) Draw(screen tcell.Screen) {
-	x0, y0, w, h := v.GetRect()
-	s := v.p.m.snapshot()
-	l := v.p.list
-	if w >= minWidth && h >= minHeight {
-		pickFill(&l.listState, s, x0, y0, w, h)
-		l.Box.SetRect(x0, y0+2, w, h-3)
-	}
-	if cx, cy, ok := drawPick(tcellSink{screen}, x0, y0, w, h, s, &l.listState, time.Now()); ok {
-		screen.ShowCursor(cx, cy)
-	} else {
-		screen.HideCursor()
-	}
-}
-
 // pickFill gives the picker's list its place, header, frame and rows from s
-// (tview's Draw, the shell's update path).
+// (on the update path).
 func pickFill(l *listState, s pickSnapshot, x0, y0, w, h int) {
 	l.rect, l.focused = Rect{x0, y0 + 2, w, h - 3}, true // the picker's one list always has the keys
 	iw := max(0, w-2-listGutter)

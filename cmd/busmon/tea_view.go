@@ -17,7 +17,7 @@ func (m Model) View() tea.View {
 	return v
 }
 
-// grid paints the screen onto cells with tview's geometry.
+// grid paints the screen onto cells with the layout's geometry.
 func (m Model) grid() *grid {
 	g := newGrid(m.width, m.height)
 	l := m.layout
@@ -58,8 +58,8 @@ func (m Model) grid() *grid {
 		footer = FitLine(Line{{Text: " " + m.ui.flash, Role: role}}, m.width)
 	}
 	drawLine(g, 0, l.Footer.Y, m.width, footer, false)
-	// The window and the dialogs over everything, footer included, as
-	// tview's pages; the pause popup on top.
+	// The window and the dialogs over everything, footer included; the
+	// pause popup on top.
 	if m.ui.compose != nil {
 		m.drawCompose(g)
 	}
@@ -69,7 +69,7 @@ func (m Model) grid() *grid {
 	case m.ui.summary:
 		m.drawSummary(g)
 	}
-	if d := m.ui.pausePopup; d != nil { // above everything, as tview's top page
+	if d := m.ui.pausePopup; d != nil {
 		drawPausePopup(g, m.pauseDialogRect(), d.rec, d.sel, m.now)
 	}
 	return g
@@ -88,7 +88,7 @@ func (m Model) headerData() headerData {
 }
 
 // tabBar is "1 Activity  2 Board  3 Requests" with the active tab
-// highlighted, as tview's tabsLine draws it; names shorten when they do not
+// highlighted; names shorten when they do not
 // fit width.
 func tabBar(tabs []PanelID, active PanelID, width int) Line {
 	label := func(i int, p PanelID, short bool) string {

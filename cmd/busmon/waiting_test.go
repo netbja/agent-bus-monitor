@@ -80,30 +80,6 @@ func TestFadedColourRunsFromTheLineColourToTheRole(t *testing.T) {
 	}
 }
 
-func TestHeaderSaysWhoWaitsForYouAndTheBellRingsOncePerDeclaration(t *testing.T) {
-	now := time.Now()
-	h := newHarness(t, waitingShared(now))
-	if top := strings.SplitN(h.draw(160, 45), "\n", 2)[0]; !strings.Contains(top, GlyphHuman+" 1 waiting for you") {
-		t.Fatalf("header %q", top)
-	}
-	rings := 0
-	h.u.bell = func() { rings++ }
-	h.u.onTick()
-	h.u.onTick()
-	if rings != 1 {
-		t.Fatalf("rang %d times for one declaration", rings)
-	}
-	h.u.st.agents["master"].stateAt = now // a new question
-	h.u.onTick()
-	h.u.st.agents["master"].state = "working"
-	h.u.onTick()
-	h.u.st.agents["master"].state = "waiting"
-	h.u.onTick()
-	if rings != 3 {
-		t.Fatalf("rings %d, want one per new waiting declaration (3)", rings)
-	}
-}
-
 func TestWaitingAnswerRequiresLaterHumanEntryAddressedToTheAgentOrItsThread(t *testing.T) {
 	declared := time.UnixMilli(1_800_000_000_000)
 	rootID := "1800000000001-0"

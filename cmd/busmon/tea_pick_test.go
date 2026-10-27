@@ -131,18 +131,6 @@ func TestPickShellGoldens(t *testing.T) {
 	}
 }
 
-// The picker draws as tview's does: the same rows from the same drawPick.
-func TestPickShellDrawsAsTview(t *testing.T) {
-	pinLocal(t)
-	m := pickShellAt(t, 100, 20, pickFixture(), &pickRecorder{})
-	pm := newPickModel("/home/bernard/.config/agentbus/projects", nil, nil)
-	pm.setAnnotated(pickFixture(), nil)
-	h := newPickHarness(t, pm, brokerKeys())
-	if got, want := strings.TrimRight(m.plain(), "\n "), strings.TrimRight(h.draw(100, 20), "\n "); got != want {
-		t.Fatalf("the shell's picker:\n%s\ntview's:\n%s", got, want)
-	}
-}
-
 // Keys: typing filters by name or directory (a substring), Backspace widens
 // it again; the arrows move; any key ends a status line; Esc and ^C close (q
 // is a letter of the filter, as in tview's picker).

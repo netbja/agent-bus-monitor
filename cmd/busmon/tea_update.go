@@ -366,7 +366,7 @@ func (m *Model) switchTab(n int) {
 }
 
 // escape clears the focused selection, then Activity's pause, then the
-// filter, as tview's escape does. Esc never quits.
+// filter, as busmon's Esc always has. Esc never quits.
 func (m *Model) escape() {
 	act := &m.lists.activity
 	switch l := m.lists.of(m.ui.focus); {
@@ -381,8 +381,8 @@ func (m *Model) escape() {
 	}
 }
 
-// syncPause keeps Activity's pause cursor with its list, as tview's
-// onChange does: leaving live starts counting new lines, live stops it.
+// syncPause keeps Activity's pause cursor with its list, as the list's
+// onChange did: leaving live starts counting new lines, live stops it.
 func (m *Model) syncPause() {
 	switch act := &m.lists.activity; {
 	case act.Live():
@@ -422,7 +422,7 @@ func (m *Model) nextUnread() bool {
 	return false
 }
 
-// wheel scrolls the list under the pointer three rows, as ListView does; it
+// wheel scrolls the list under the pointer three rows (listState.ScrollBy); it
 // does not move the focus.
 func (m *Model) wheel(ms tea.Mouse) {
 	delta := 3
@@ -455,7 +455,7 @@ func (m *Model) wheel(ms tea.Mouse) {
 
 // click: a tab label switches the tab, a frame's title row focuses its
 // panel, a row is selected (opened when already selected) and the scrollbar
-// column pages towards the click, as ListView does.
+// column pages towards the click (listState.click).
 func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	if ms.Button != tea.MouseLeft {
 		return nil

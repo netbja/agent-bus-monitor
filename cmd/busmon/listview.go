@@ -1,11 +1,6 @@
 package main
 
-import (
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
-)
-
-// ListItem is one row of a ListView. Key identifies it across refreshes (the
+// ListItem is one row of a list. Key identifies it across refreshes (the
 // selection and the wheel anchor follow keys, never indexes); a non-selectable
 // item (a day separator, a section header, a continuation line) is drawn but
 // skipped by every movement.
@@ -19,28 +14,10 @@ type ListItem struct {
 // marker, so builders can lay a row out in a fixed width (panel width − 4).
 const listGutter = 2
 
-// ListView is busmon's one selectable, scrolling list: the Agents table, the
-// Activity feed, the Board and the Requests panel are all instances. It draws
-// its own frame (DrawFrame), so the frame, the title, the label and the
-// scrollbar have one authority and can never fight over a cell.
-//
-// The viewport has three modes, decided in this order:
-//   - tail: in tail mode and live, the last rows are shown (Activity following
-//     the feed). Selecting a line (keys, click) keeps live: only Pause (f) and
-//     a wheel-up leave it.
-//   - anchored: after a wheel or scrollbar scroll, the item at the top stays at
-//     the top across re-sorts, until the next keyboard move.
-//   - follow: otherwise the viewport scrolls just enough to keep the selection
-//     visible.
-type ListView struct {
-	*tview.Box
-	listState
-}
-
-// listState is a list without its widget: everything ListView does but the
-// tview plumbing, so the step-b shell keeps the same selection, tail and
-// anchor rules (busmon Charm spec, step b). rect and focused are the frame's
-// place and focus, set by the owner before drawing or a click.
+// listState is busmon's one selectable, scrolling list (For you, Agents,
+// Activity, Board, Requests and the picker): keyed selection, tail mode, the
+// wheel's anchor, clicks and the scrollbar track. rect and focused are the
+// frame's place and focus, set by the owner before drawing or a click.
 type listState struct {
 	rect         Rect
 	focused      bool
@@ -57,17 +34,6 @@ type listState struct {
 	keep         int // rows after the selection kept in view with it (the shell's expansion), in every mode
 	onChange     func(key string, live bool)
 	onOpen       func(key string)
-}
-
-// NewListView returns an empty list with no frame title.
-func NewListView() *ListView {
-	return &ListView{Box: tview.NewBox()}
-}
-
-// SetRect places the widget and its list.
-func (l *ListView) SetRect(x, y, w, h int) {
-	l.Box.SetRect(x, y, w, h)
-	l.rect = Rect{x, y, w, h}
 }
 
 func (l *listState) SetHeader(h Line) { l.header = h }
@@ -333,13 +299,6 @@ func (l *listState) viewport() {
 	l.top = clamp(l.top, 0, maxTop)
 }
 
-// Draw draws the frame, the header and the visible rows inside GetRect().
-func (l *ListView) Draw(screen tcell.Screen) {
-	x, y, w, h := l.GetRect()
-	l.rect, l.focused = Rect{x, y, w, h}, l.HasFocus()
-	l.draw(tcellSink{screen})
-}
-
 // draw draws the frame, the header and the visible rows inside rect.
 func (l *listState) draw(screen cellSink) {
 	x, y, w, h := l.rect.X, l.rect.Y, l.rect.W, l.rect.H
@@ -371,67 +330,6 @@ func (l *listState) draw(screen cellSink) {
 		drawLine(screen, ix, iy+r, gutter, mark, selected)
 		drawLine(screen, ix+gutter, iy+r, iw-gutter, it.Line, selected)
 	}
-}
-
-// InputHandler handles the movement keys itself so the list works on its own;
-// busmon's key table calls the same methods.
-func (l *ListView) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-	return l.WrapInputHandler(func(ev *tcell.EventKey, _ func(p tview.Primitive)) {
-		switch ev.Key() {
-		case tcell.KeyUp:
-			l.Move(-1)
-		case tcell.KeyDown:
-			l.Move(1)
-		case tcell.KeyPgUp:
-			l.Move(-max(1, l.rows()))
-		case tcell.KeyPgDn:
-			l.Move(max(1, l.rows()))
-		case tcell.KeyHome:
-			l.First()
-		case tcell.KeyEnd:
-			l.Last()
-		case tcell.KeyEnter:
-			l.Open()
-		case tcell.KeyRune:
-			switch ev.Rune() {
-			case 'k':
-				l.Move(-1)
-			case 'j':
-				l.Move(1)
-			case 'g':
-				l.First()
-			case 'G':
-				l.Last()
-			case 'v':
-				l.Open()
-			}
-		}
-	})
-}
-
-// MouseHandler: a click focuses the list and selects the row under it (a
-// click on the selected row opens it); the wheel scrolls the viewport only; a
-// click on the scrollbar track pages towards the click.
-func (l *ListView) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
-	return l.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (bool, tview.Primitive) {
-		mx, my := event.Position()
-		if !l.InRect(mx, my) {
-			return false, nil
-		}
-		switch action {
-		case tview.MouseScrollUp:
-			l.ScrollBy(-3)
-			return true, nil
-		case tview.MouseScrollDown:
-			l.ScrollBy(3)
-			return true, nil
-		case tview.MouseLeftClick:
-			setFocus(l)
-			l.click(mx, my)
-			return true, nil
-		}
-		return false, nil
-	})
 }
 
 // click selects the row under (mx, my) or opens it when it is the selected

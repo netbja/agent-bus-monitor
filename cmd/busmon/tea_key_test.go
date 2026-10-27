@@ -4,37 +4,39 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/gdamore/tcell/v2"
 )
 
-// A bubbletea key and its tcell twin are the same Key, so the key tables
-// answer both alike.
-func TestKeyOfTeaMatchesKeyOf(t *testing.T) {
+// A bubbletea key is the Key the tables match: the values tcell's adapter
+// gave before step c, so every table answers as it did.
+func TestKeyOfTea(t *testing.T) {
 	for _, c := range []struct {
 		tea  tea.Key
-		tcel *tcell.EventKey
+		want Key
 	}{
-		{tea.Key{Code: 'j', Text: "j"}, tcell.NewEventKey(tcell.KeyRune, 'j', 0)},
-		{tea.Key{Code: 'r', Text: "R", Mod: tea.ModShift, ShiftedCode: 'R'}, tcell.NewEventKey(tcell.KeyRune, 'R', tcell.ModShift)},
-		{tea.Key{Code: '!', Text: "!"}, tcell.NewEventKey(tcell.KeyRune, '!', 0)},
-		{tea.Key{Code: 'x', Mod: tea.ModAlt}, tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModAlt)},
-		{tea.Key{Code: tea.KeyEnter}, tcell.NewEventKey(tcell.KeyEnter, 0, 0)},
-		{tea.Key{Code: tea.KeyEscape}, tcell.NewEventKey(tcell.KeyEscape, 0, 0)},
-		{tea.Key{Code: tea.KeyTab}, tcell.NewEventKey(tcell.KeyTab, 0, 0)},
-		{tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}, tcell.NewEventKey(tcell.KeyBacktab, 0, 0)},
-		{tea.Key{Code: tea.KeyBackspace}, tcell.NewEventKey(tcell.KeyBackspace2, 0, 0)},
-		{tea.Key{Code: tea.KeyDelete}, tcell.NewEventKey(tcell.KeyDelete, 0, 0)},
-		{tea.Key{Code: tea.KeyUp}, tcell.NewEventKey(tcell.KeyUp, 0, 0)},
-		{tea.Key{Code: tea.KeyPgDown}, tcell.NewEventKey(tcell.KeyPgDn, 0, 0)},
-		{tea.Key{Code: tea.KeyHome}, tcell.NewEventKey(tcell.KeyHome, 0, 0)},
-		{tea.Key{Code: tea.KeyF5}, tcell.NewEventKey(tcell.KeyF5, 0, 0)},
-		{tea.Key{Code: 'c', Mod: tea.ModCtrl}, tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModCtrl)},
-		{tea.Key{Code: 'o', Mod: tea.ModCtrl}, tcell.NewEventKey(tcell.KeyCtrlO, 0, tcell.ModCtrl)},
-		{tea.Key{Code: 'z', Mod: tea.ModCtrl}, tcell.NewEventKey(tcell.KeyCtrlZ, 0, tcell.ModCtrl)},
-		{tea.Key{Code: tea.KeyF12}, tcell.NewEventKey(tcell.KeyF12, 0, 0)},
+		{tea.Key{Code: 'j', Text: "j"}, Key{Code: keyRune, Rune: 'j'}},
+		{tea.Key{Code: 'r', Text: "R", Mod: tea.ModShift, ShiftedCode: 'R'}, Key{Code: keyRune, Rune: 'R'}},
+		{tea.Key{Code: '!', Text: "!"}, Key{Code: keyRune, Rune: '!'}},
+		{tea.Key{Code: 'x', Mod: tea.ModAlt}, Key{Code: keyRune, Rune: 'x', Alt: true}},
+		{tea.Key{Code: tea.KeyEnter}, Key{Code: keyEnter}},
+		{tea.Key{Code: tea.KeyEnter, Mod: tea.ModAlt}, Key{Code: keyEnter, Alt: true}},
+		{tea.Key{Code: tea.KeyEscape}, Key{Code: keyEscape}},
+		{tea.Key{Code: tea.KeyTab}, Key{Code: keyTab}},
+		{tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}, Key{Code: keyBacktab}},
+		{tea.Key{Code: tea.KeyBackspace}, Key{Code: keyBackspace}},
+		{tea.Key{Code: tea.KeyDelete}, Key{Code: keyDelete}},
+		{tea.Key{Code: tea.KeyUp}, Key{Code: keyUp}},
+		{tea.Key{Code: tea.KeyPgDown}, Key{Code: keyPgDn}},
+		{tea.Key{Code: tea.KeyHome}, Key{Code: keyHome}},
+		{tea.Key{Code: tea.KeyF5}, Key{Code: keyF5}},
+		{tea.Key{Code: 'c', Mod: tea.ModCtrl}, Key{Code: keyCtrlC}},
+		{tea.Key{Code: 'o', Mod: tea.ModCtrl}, Key{Code: keyCtrlO}},
+		{tea.Key{Code: 's', Mod: tea.ModCtrl}, Key{Code: keyCtrlS}},
+		{tea.Key{Code: 't', Mod: tea.ModCtrl}, Key{Code: keyCtrlT}},
+		{tea.Key{Code: 'z', Mod: tea.ModCtrl}, Key{}},
+		{tea.Key{Code: tea.KeyF12}, Key{}},
 	} {
-		if got, want := keyOfTea(tea.KeyPressMsg(c.tea)), keyOf(c.tcel); got != want {
-			t.Errorf("%v: tea %+v, tcell %+v", c.tea, got, want)
+		if got := keyOfTea(tea.KeyPressMsg(c.tea)); got != c.want {
+			t.Errorf("%v: %+v, want %+v", c.tea, got, c.want)
 		}
 	}
 }

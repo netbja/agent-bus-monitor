@@ -4,10 +4,9 @@ import (
 	"strings"
 )
 
-// Overlay bodies are Lines (busmon Charm spec, step a): role-tagged segments,
-// the same model the panels draw, never tview colour tags. The builders do not
-// escape anything; linesToTview, the one place a tview tag is written, escapes
-// every segment's text once, for the overlay TextView that still shows them.
+// Reader page bodies are Lines (busmon Charm spec, step a): role-tagged
+// segments, the same model the panels draw. Nothing is markup, so nothing is
+// escaped: a "[red]" in a message is drawn as written.
 
 // body builds an overlay body. A segment's text may hold "\n": each one starts
 // a new line, so a body ending in "\n" ends with an empty line, as the tagged
@@ -87,28 +86,6 @@ func linesPlain(ls []Line) string {
 			sb.WriteByte('\n')
 		}
 		sb.WriteString(l.text())
-	}
-	return sb.String()
-}
-
-// linesToTview is the one adapter from Lines to the overlay TextView's tagged
-// text: every segment's text is escaped, then coloured by its role (no colour
-// with the none palette) and made bold when the segment is.
-func linesToTview(ls []Line) string {
-	var sb strings.Builder
-	for i, l := range ls {
-		if i > 0 {
-			sb.WriteByte('\n')
-		}
-		sb.WriteString(lineToTview(l))
-	}
-	return sb.String()
-}
-
-func lineToTview(l Line) string {
-	var sb strings.Builder
-	for _, s := range l {
-		sb.WriteString(th.segTag(s))
 	}
 	return sb.String()
 }
