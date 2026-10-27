@@ -985,3 +985,23 @@ func TestShellReminderWaitsForADraftAndAPage(t *testing.T) {
 }
 
 func errorf(s string) error { return errors.New(s) }
+
+// An answer that lands on a replacement before the poll brings it keeps the
+// ask page open; the next poll moves the page to the replacement (foureyes'
+// review of step c: the order TestShellAskFollowsAReplacement does not take).
+func TestShellAskStaysOpenUntilTheReplacementArrives(t *testing.T) {
+	st := askShared(time.Now())
+	m := keys(t, shellOf(t, st, 160, 45, &fakeWriter{answerID: "200-0", left: 1}), '!')
+	m, cmd := pressCmd(t, m, kEnter)
+	if m = run(t, m, cmd); m.rd.top() == nil || m.rd.top().kind != ovAsk {
+		t.Fatal("the page closed when the answer landed before the poll")
+	}
+	old, repl := demoAsk(), demoAsk()
+	repl.ID = "200-0"
+	old.State, old.ReplacedBy = "replaced", "200-0"
+	st.asks = []bus.Ask{old, repl}
+	m = step(t, m, pollMsg{snap: takeSnapshot(st, time.Now()), at: time.Now()})
+	if p := m.rd.top(); p == nil || p.kind != ovAsk || p.ask.id != "200-0" {
+		t.Fatalf("after the poll the page is %+v, want the replacement 200-0", m.rd.top())
+	}
+}
