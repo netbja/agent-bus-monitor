@@ -72,9 +72,10 @@ instead of "39 between agents". At 80 columns the labels shorten to `wait 22 · 
   end with `agentbus gate close` (its trace is a `wake=no` reply, not a verdict) or with a verdict
   under another ref or subject, which sits on the reviewer's own thread. The fact is the gate: a
   challenge is in section 4 while `{p}:gate:<target>` still holds its ref (busmon reads the gates
-  every tick). The thread rule (no verdict on the thread) applies only to a challenge whose gate
-  was never opened (none recorded under its ref at any read). A challenge whose gate is closed is
-  folded as answered. Today: coder sent reviewer-codex 13 challenges in 24 h; 4 gates were closed
+  every tick). **A challenge is owed iff its gate is open now**: `agentbus challenge` opens the gate
+  before it publishes, so there is no thread fallback (one would need memory busmon does not keep
+  across restarts, and a challenge whose gate closed earlier would reappear). A challenge whose
+  gate is closed is folded as answered. Today: coder sent reviewer-codex 13 challenges in 24 h; 4 gates were closed
   by verdicts or merges, 9 remain, and those are the row's N.
 - **Kinds** (shown in the KIND column at ≥110 columns): `request` (tracked, from the board),
   `challenge`, `directive`, `reports` (report notices), `notices` (`from = dispatch`, or a cmd with
@@ -233,7 +234,7 @@ Pure functions over fixtures built from today's shapes, plus the shell goldens:
 - the title counts: each number equals the sum of its sections' N on every fixture (`0 · 22 · 21`
   on today's: 1 + 9 + 11 between agents); notices and folded threads never counted.
 - review ownership from the gate: a challenge closed by `gate close`, or answered by a verdict under
-  another ref, leaves section 4; one with no gate ever recorded falls back to the thread rule.
+  another ref, leaves section 4, after a restart too (no state kept between reads).
 - goldens at 190, 120 and 80 columns from the same fixture as the mock-ups; `TestShellAlignmentSuite`
   over the new rows (hostile texts, wide clusters).
 - Enter on each row kind opens the page in the table; `d`/`y` on a group closes each thread once.
