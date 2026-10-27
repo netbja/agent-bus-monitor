@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // press sends one key press: a rune, or a named key.
@@ -73,10 +74,10 @@ func TestShellFocusCycle(t *testing.T) {
 	if m = keys(t, m, kBacktab); m.ui.focus != PanelForYou {
 		t.Fatalf("shift-tab: focus %d", m.ui.focus)
 	}
-	// Narrow: Tab walks the five views, the view follows the focus.
+	// Narrow: Tab walks the six views, the view follows the focus.
 	n := fixtureShell(t, 60, 20)
 	got = nil
-	for i := 0; i < 6; i++ {
+	for i := 0; i <= len(narrowPanels); i++ {
 		got = append(got, n.layout.Active)
 		n = keys(t, n, kTab)
 	}
@@ -97,7 +98,7 @@ func TestShellTabs(t *testing.T) {
 		}
 		// The focus can leave the tabbed panel; its tab stays.
 		m = keys(t, m, kTab)
-		if m.ui.focus != PanelForYou || m.layout.Active != PanelRequests {
+		if m.ui.focus != PanelForYou || m.layout.Active != lowerTabs[len(lowerTabs)-1] {
 			t.Fatalf("%v: after tab: focus %d, active %d", size, m.ui.focus, m.layout.Active)
 		}
 	}
@@ -317,6 +318,14 @@ func TestShellWheelScrollsEveryZone(t *testing.T) {
 			for n, a := range m.snap.agents { // gates (the person's) and threads enough to scroll For you and Requests
 				a.gates = map[string]string{"g1-" + n: m.snap.person + "|y", "g2-" + n: m.snap.person + "|y"} // gates the person opened
 			}
+			// and a plan long enough to scroll the Plan tab
+			ps := planState{loaded: true, file: plan.File{Plan: "p", Goal: "g"}}
+			for i := 0; i < 30; i++ {
+				task := plan.Task{ID: fmt.Sprintf("t%02d", i), Title: "task", Owner: "coder"}
+				ps.file.Tasks = append(ps.file.Tasks, task)
+				ps.rows = append(ps.rows, plan.Row{Task: task, State: plan.InProgress})
+			}
+			m.snap.planState = ps
 			for i := 0; i < 30; i++ {
 				m.snap.threads = append(m.snap.threads, openThread{ID: fmt.Sprintf("%d-0", i+2), Type: "directive", From: "a00", Target: "a02", Message: "t", At: shellNow})
 			}

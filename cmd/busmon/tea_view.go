@@ -91,27 +91,41 @@ func (m Model) headerData() headerData {
 // highlighted; names shorten when they do not
 // fit width.
 func tabBar(tabs []PanelID, active PanelID, width int) Line {
-	label := func(i int, p PanelID, short bool) string {
-		name := panelNames[p]
-		if p == PanelForYou {
-			name = "For you"
-		}
-		if short {
-			name = map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req"}[p]
-		}
-		return fmt.Sprintf(" %d %s ", i+1, name)
-	}
-	short := false
-	total := 0
+	short := map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req", PanelPlan: "Pln"}
+	names := make([]string, len(tabs))
 	for i, p := range tabs {
-		total += Width(label(i, p, false))
+		names[i] = panelNames[p]
+		if p == PanelForYou {
+			names[i] = "For you"
+		}
 	}
-	short = total > width
+	label := func(i int) string { return fmt.Sprintf(" %d %s ", i+1, names[i]) }
+	total := func() int {
+		n := 0
+		for i := range tabs {
+			n += Width(label(i))
+		}
+		return n
+	}
+	// Too wide: shorten the longest name first, one at a time, until the
+	// bar fits (A11's sixth view must not shorten every label).
+	for total() > width {
+		longest := -1
+		for i, p := range tabs {
+			if names[i] != short[p] && (longest < 0 || Width(names[i]) > Width(names[longest])) {
+				longest = i
+			}
+		}
+		if longest < 0 {
+			break
+		}
+		names[longest] = short[tabs[longest]]
+	}
 	var l Line
 	for i, p := range tabs {
 		// Every tab in its panel's colour (A4: a muted one vanished beside the
 		// focused pill); the active one is bold, and the frame pills it.
-		l = append(l, Seg{Text: label(i, p, short), Role: panelHue[p], Bold: p == active, Reverse: p == active && th.Palette() == PaletteNone})
+		l = append(l, Seg{Text: label(i), Role: panelHue[p], Bold: p == active, Reverse: p == active && th.Palette() == PaletteNone})
 	}
 	return l
 }
@@ -194,6 +208,15 @@ func (m *Model) fillLists() {
 	bd.SetItems(boardItems(s.board, now, lower))
 	bt, bl := boardFrame(s.board)
 	bd.SetFrame(m.lowerTitle(PanelBoard, bt), bl)
+
+	pl := &m.lists.plan
+	pl.SetItems(planTabItems(s.planState, m.ui.planExpanded, now, lower))
+	pt := Line{{Text: "Plan", Role: RoleText}}
+	var plabel Line
+	if s.plan != nil {
+		plabel = Line{{Text: strings.TrimPrefix(planSeg(*s.plan, now).text(), "plan "), Role: RoleMuted}}
+	}
+	pl.SetFrame(m.lowerTitle(PanelPlan, pt), plabel)
 
 	rq := &m.lists.requests
 	rq.SetItems(requestItems(s.requests, s.threads, now, lower))

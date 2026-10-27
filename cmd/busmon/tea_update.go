@@ -98,6 +98,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		m.switchTab(int(act - ActTab1))
 	case ActTab5:
 		m.switchTab(4)
+	case ActTab6:
+		m.switchTab(5)
 	case ActUp:
 		l.Move(-1)
 	case ActDown:
@@ -229,6 +231,15 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		if _, ok := s.board[key]; ok {
 			return m.push(page{kind: ovTask, key: key})
 		}
+	case PanelPlan:
+		if key == "toggle" {
+			m.ui.planExpanded = true
+			m.refresh()
+			return nil
+		}
+		if task, ok := strings.CutPrefix(key, "task:"); ok {
+			return m.push(page{kind: ovPlanTask, key: task})
+		}
 	case PanelRequests:
 		if strings.HasPrefix(key, "req:") {
 			return m.push(page{kind: ovRequest, key: key})
@@ -278,6 +289,11 @@ func (m *Model) copySelected() tea.Cmd {
 	case PanelBoard:
 		if e, ok := s.board[key]; ok {
 			_, _, plain := taskDetail(e, key, m.now)
+			return m.copy(plain, "task")
+		}
+	case PanelPlan: // a task's page text; the done toggle copies nothing
+		if task, ok := strings.CutPrefix(key, "task:"); ok {
+			_, _, plain := planTaskDetail(s.planState, task, m.now)
 			return m.copy(plain, "task")
 		}
 	case PanelRequests:

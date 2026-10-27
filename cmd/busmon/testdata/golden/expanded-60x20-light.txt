@@ -1,6 +1,6 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙ 4  ● 2         
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
- 1 For you  2 Agents  3 Activity  4 Board  5 Requests       
+ 1 For you  2 Agents  3 Act  4 Board  5 Requests  6 Plan    
 ╭─ Activity  auto-scroll on ───── 7 events · filter: none ─╮
 │    14:24 archite… status    done · spec merged           ▲
 │    14:50 ♙ Berna… directive → coder review lot 1         │
@@ -17,4 +17,4 @@
 │  ● 15:00 master   ask       asks · review lot 1? (2 ques…┃
 │    15:02 coder    status    working · busmon-charm-b: b1…▼
 ╰──────────────────────────────────────────────────────────╯
- tab focus   1-5 view   end G live   F1 help   F5 health    
+ tab focus   1-6 view   end G live   F1 help   F5 health    

@@ -4,11 +4,11 @@ package main
 // For you and Agents on top, Activity/Board/Requests as one tabbed panel,
 // the input line and the footer. Pure geometry, like computeLayout.
 
-// lowerTabs are the tabbed panel's tabs, in key order (1, 2, 3).
-var lowerTabs = []PanelID{PanelActivity, PanelBoard, PanelRequests}
+// lowerTabs are the tabbed panel's tabs, in key order (1, 2, 3, 4).
+var lowerTabs = []PanelID{PanelActivity, PanelBoard, PanelRequests, PanelPlan}
 
 // narrowPanels are the narrow tier's views, in Tab and digit order.
-var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard, PanelRequests}
+var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard, PanelRequests, PanelPlan}
 
 // shellCounts is what the shell's layout needs to know about the content.
 type shellCounts struct {
@@ -69,7 +69,9 @@ func shellLayoutFor(w, h int, c shellCounts, view, tab PanelID) shellLayout {
 	return shellNarrow(w, h, c, view)
 }
 
-func isLowerTab(p PanelID) bool { return p == PanelActivity || p == PanelBoard || p == PanelRequests }
+func isLowerTab(p PanelID) bool {
+	return p == PanelActivity || p == PanelBoard || p == PanelRequests || p == PanelPlan
+}
 
 func shellWide(w, h int, c shellCounts, tab PanelID) (shellLayout, bool) {
 	const fixed, borders = shellHeaderHeight + 2, 3 // header + input + footer; frame + column header

@@ -59,6 +59,7 @@ type uiState struct {
 	flashErr       bool
 	expanded       string            // the row expanded in place (its list key), "" none
 	expandIn       PanelID           // the list it is in: Activity or For you
+	planExpanded   bool              // the Plan tab shows its done tasks (A11)
 	compose        *composeState     // the compose window, when open (tea_compose.go)
 	msgCompose     composeDraft      // the window's message draft while it is closed
 	askDrafts      map[string]string // free answers being written, by ask|question
@@ -77,7 +78,7 @@ type uiState struct {
 // shellLists are the shell's lists. They live behind a pointer: the Model is
 // copied by value through Update, the lists' selection rules are listState's.
 type shellLists struct {
-	forYou, agents, activity, board, requests listState
+	forYou, agents, activity, board, requests, plan listState
 }
 
 func (ls *shellLists) of(p PanelID) *listState {
@@ -92,6 +93,8 @@ func (ls *shellLists) of(p PanelID) *listState {
 		return &ls.board
 	case PanelRequests:
 		return &ls.requests
+	case PanelPlan:
+		return &ls.plan
 	}
 	return nil
 }

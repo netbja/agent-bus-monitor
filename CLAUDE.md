@@ -109,7 +109,8 @@ dated claim) or `merge:false` + delivered + approved; the review is `bus.RollUp`
 subject (default its board task) plus `pr:<n>`; asks match only by `AskDef.Task`; a never-read
 input reads `?`. busmon reads the plan every `requestPoll` tick through the optional
 `planReader` (the ledger incrementally, `VerdictsAfter` from the last seen id), derives in
-`pollOnce`, and shows the header item, the `P` overlay and a recap section. Spec:
+`pollOnce`, and shows the header item, the `P` overlay, a recap section and the lower panel's fourth tab, Plan (A11: `planTabItems`, key 4, the
+narrow tier's sixth view; Enter opens a task or expands done). Spec:
 `docs/superpowers/specs/2026-10-22-plan-view-design.md`.
 
 `bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
