@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // pressCmd is one key press with the command it returns.
@@ -518,5 +519,47 @@ func TestShellWheelScrollsAroundAnExpansion(t *testing.T) {
 	}
 	if m.ui.expanded == "" {
 		t.Fatal("the wheel collapsed the expansion")
+	}
+}
+
+// The plan's task page, built from the snapshot, shows the task's board
+// entry and its verdicts, and the snapshot keeps them when the poller
+// appends to its ledger in place afterwards.
+func TestShellPlanTaskPage(t *testing.T) {
+	pinLocal(t)
+	task := plan.Task{ID: "b3", Title: "reader", Owner: "coder", Board: "busmon-charm-b"}
+	st := &shared{agents: map[string]*agentState{}, person: "bernard"}
+	st.plan = planState{loaded: true, file: plan.File{Plan: "charm", Goal: "swap", Tasks: []plan.Task{task}},
+		rows:   []plan.Row{{Task: task, State: plan.InReview}},
+		in:     plan.Inputs{Board: map[string]bus.BoardEntry{"busmon-charm-b": {Owner: "coder", State: "accepted", Branch: "feat/b3"}}},
+		ledger: map[string][]bus.Verdict{"busmon-charm-b": {{Subject: "busmon-charm-b", Reviewer: "foureyes", Decision: "approve"}}}}
+	m := newShell(shellConfig{project: "demo", self: "bernard", st: st})
+	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
+	m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
+	// The poller's next fold appends in place: the snapshot must not see it.
+	st.plan.ledger["busmon-charm-b"] = append(st.plan.ledger["busmon-charm-b"], bus.Verdict{Reviewer: "ui-kimi", Decision: "reject"})
+	st.plan.in.Board["busmon-charm-b"] = bus.BoardEntry{State: "done"}
+	m = keys(t, m, 'P')
+	if p := m.rd.top(); p == nil || p.kind != ovPlan {
+		t.Fatalf("P: %+v", p)
+	}
+	m = keys(t, m, kEnter)
+	p := m.rd.top()
+	if p == nil || p.kind != ovPlanTask || p.key != "b3" {
+		t.Fatalf("Enter on the task: %+v", p)
+	}
+	body := linesPlain(p.body)
+	for _, want := range []string{"busmon-charm-b: accepted (feat/b3)", "busmon-charm-b: foureyes approve"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("no %q on the task page:\n%s", want, body)
+		}
+	}
+	for _, not := range []string{"not on the board", plan.NoVerdict, "ui-kimi", ": done"} {
+		if strings.Contains(body, not) {
+			t.Errorf("%q on the task page:\n%s", not, body)
+		}
+	}
+	if m = keys(t, m, kEsc); m.rd.top() == nil || m.rd.top().kind != ovPlan {
+		t.Fatal("Esc did not return to the plan")
 	}
 }
