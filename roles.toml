@@ -75,6 +75,19 @@ client = "kimi-cli"
 provider = "moonshot"
 model = "kimi-code/k3"
 
+# A second 4-eyes reviewer from another maker (reviewer-codex): the model table's openai frontier
+# model on 2026-10-27, pinned so `roles field` and the shipped-manifest tests see it
+# (`agentbus roles doctor` reports `newer` once the table states a successor).
+# workspace-write lets it run tests in its own review worktree; network stays closed by the
+# sandbox, so every bus call and any push asks the person (approval on-request).
+[profiles.codex-review]
+client = "codex"
+provider = "openai"
+model = "gpt-6-astra"
+[profiles.codex-review.options]
+sandbox = "workspace-write"
+approval = "on-request"
+
 [tool_rules]
 deny = [
   "Read(**/.env)", "Read(**/.env.local)", "Read(**/.env.production)", "Read(**/.env.development)",
@@ -146,5 +159,12 @@ skills = ["agent-bus"]
 
 [roles.ui-kimi]
 profile = "kimi"
+tier = "pop"
+skills = ["agent-bus"]
+
+# A second independent reviewer from another maker, popped when another 4-eyes is needed.
+# Never codes; read-only on the repository.
+[roles.reviewer-codex]
+profile = "codex-review"
 tier = "pop"
 skills = ["agent-bus"]
