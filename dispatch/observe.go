@@ -107,6 +107,7 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 	if err := l.b.FencedPutObserved(wctx, l.token, obs); err != nil {
 		return err
 	}
+	l.obsFresh = true
 	return l.proposeReloads(wctx, snaps, obs)
 }
 

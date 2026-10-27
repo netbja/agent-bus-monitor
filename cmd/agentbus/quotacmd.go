@@ -224,16 +224,31 @@ func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfi
 // notification goes through notify-send when it is on PATH, else nowhere.
 func serviceContext(getenv func(string) string, lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) dispatch.ContextConfig {
-	c := dispatch.ContextConfig{Every: time.Minute, Alert: bus.ContextAlert(getenv), MaxAge: bus.ContextMaxAge,
-		Read: func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) }}
-	if bin, err := lookPath("notify-send"); err == nil {
-		c.Notify = func(ctx context.Context, title, body string) error {
-			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-			return run(ctx, bin, "-a", "agentbus", title, body)
-		}
+	return dispatch.ContextConfig{Every: time.Minute, Alert: bus.ContextAlert(getenv), MaxAge: bus.ContextMaxAge,
+		Read:   func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) },
+		Notify: desktopNotify(lookPath, run)}
+}
+
+// servicePrompt is the dispatch service's prompt notification (prompt-notify):
+// AGENT_BUS_PROMPT_GRACE seconds (default 30, 0 = off), through the same
+// notify-send runner as the context alert.
+func servicePrompt(getenv func(string) string, lookPath func(string) (string, error),
+	run func(ctx context.Context, bin string, args ...string) error) dispatch.PromptConfig {
+	return dispatch.PromptConfig{Grace: dispatch.PromptGrace(getenv), Notify: desktopNotify(lookPath, run)}
+}
+
+// desktopNotify runs notify-send, bounded to 5 s; nil when it is not on PATH.
+func desktopNotify(lookPath func(string) (string, error),
+	run func(ctx context.Context, bin string, args ...string) error) func(ctx context.Context, title, body string) error {
+	bin, err := lookPath("notify-send")
+	if err != nil {
+		return nil
 	}
-	return c
+	return func(ctx context.Context, title, body string) error {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		return run(ctx, bin, "-a", "agentbus", title, body)
+	}
 }
 
 // runQuiet runs a command and discards its output.

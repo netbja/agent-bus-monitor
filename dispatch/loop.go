@@ -46,6 +46,9 @@ type Config struct {
 	// Observe, when positive, is how often every verified pane is inspected
 	// and published to {p}:observed (ObserveEvery in the services; 0 = off).
 	Observe time.Duration
+	// Prompt rings the desktop once per episode of a pane shown blocked on its
+	// client's own prompt (prompt-notify; a zero Grace turns it off).
+	Prompt PromptConfig
 	// ClientProbe tells whether the client an agent runs has been updated on
 	// disk (clientupdate.go; nil = the real probe: metadata only, never the
 	// client run). known=false: it cannot tell.
@@ -298,6 +301,7 @@ type loop struct {
 	observedAt time.Time                    // last observePass (local clock: a throttle, never persisted)
 	snaps      map[string]bus.AgentSnapshot // this pass's snapshots
 	obs        map[string]Observation       // the last observation written
+	obsFresh   bool                         // not yet judged by promptNotices
 	probes     map[string]probeResult       // the last client probe per agent (a once-a-minute throttle)
 }
 
@@ -341,6 +345,12 @@ func (l *loop) reconcile(ctx context.Context) error {
 			return err
 		}
 		l.logError("", "observe", err)
+	}
+	if err := l.promptNotices(ctx, snaps); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "prompt notify", err)
 	}
 	groups, err := l.b.GroupNames(ctx)
 	if err != nil {

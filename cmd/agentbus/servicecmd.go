@@ -423,6 +423,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg.Quota = serviceQuota(os.Getenv, log)
 			cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
 			cfg.Observe = dispatch.ObserveEvery
+			cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, runQuiet) // a pane blocked on its client's prompt (prompt-notify)
 			cfg.Health = realHealthConfig(b, h, paths)
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
