@@ -35,13 +35,25 @@ before the first message). Verified in Claude Code 2.1.311's own statusLine docu
   reads local files and replaces its own key; a paused project still shows its agents' fill.
 - **Still not reported:** cost. Raw context tokens stay in `{p}:usage`.
 
-What follows (alert at a threshold, busmon display, health check) is the context-alert change's
-ca2 and ca3; this note covers the data.
+- **The alert (ca2): once per episode, never during a pause.** At `AGENT_BUS_CONTEXT_ALERT` %
+  (default 80, `0` = off) the dispatcher sends the agent a directive (`context N%: at your next
+  stopping point commit WIP and reply to <escalation target> with a hand-off`), the escalation
+  target a `wake=no` notice (none when the target is the agent itself), and a desktop notification
+  through `notify-send` when it is on PATH (nothing otherwise; no new dependency). Each entry is
+  written with its `{p}:quota` mark in one fenced script (`FencedCmdOnce`, marks
+  `context:<agent>` and `context-notice:<agent>`, value the proved session): one alert per agent
+  and session, a new session is a new episode, and a fresh reading below the threshold deletes the
+  marks, so the next rise alerts again. A reading older than 30 min (aged) or missing (unknown)
+  neither alerts nor ends an episode. The alert runs after the pause check: a paused project still
+  publishes the fill, and the episode waits for the end of the pause. The desktop notification
+  follows only a directive actually written, so a restarted dispatcher does not repeat it.
+
+What follows (busmon display, health check) is the context-alert change's ca3.
 
 ## When it applies
 
 To any reader or writer of an agent's context fill: the status line, the dispatcher's context
-pass, and the busmon and health readers that come in ca3. Only Claude Code agents have a fill;
+pass and alert, and the busmon and health readers that come in ca3. Only Claude Code agents have a fill;
 the other clients read unknown until their own client gives one.
 
 ## Evidence
@@ -54,7 +66,9 @@ the other clients read unknown until their own client gives one.
 - Code: `quota/context.go`, `bus/context.go`, `dispatch/context.go`; tests
   `TestRecordContext`, `TestRecordContextPrunes`, `TestContextPassPublishesVerifiedSessionsOnly`,
   `TestIdentSessionFollowsTheProofOnly`,
-  `TestHasKeysBesidesDispatch`.
+  `TestHasKeysBesidesDispatch`; the alert (ca2): `dispatch/contextalert.go`,
+  `TestContextAlertOncePerEpisode`, `TestContextAlertSkipsUnknownAgedAndOff`,
+  `TestContextAlertWaitsForThePause`, `TestServiceContextAlert`.
 
 ## Limits / what would invalidate it
 

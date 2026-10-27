@@ -291,7 +291,9 @@ type loop struct {
 	last  map[string]string // agent → last logged decision, so a steady state logs once
 
 	quota     quotaState
-	contextAt time.Time // the last context publication (contextPass)
+	contextAt time.Time                  // the last context publication (contextPass)
+	ctxFills  map[string]bus.ContextFill // that publication
+	ctxFresh  bool                       // not yet judged by contextAlerts
 
 	observedAt time.Time                    // last observePass (local clock: a throttle, never persisted)
 	snaps      map[string]bus.AgentSnapshot // this pass's snapshots
@@ -325,6 +327,13 @@ func (l *loop) reconcile(ctx context.Context) error {
 	}
 	if paused, err := l.paused(ctx); err != nil || paused {
 		return err
+	}
+	// A paused project alerts nobody: the fills wait, still published.
+	if err := l.contextAlerts(ctx); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "context alert", err)
 	}
 	// Observation only reads panes; a paused project skips it (and its cost).
 	if err := l.observePass(ctx, snaps); err != nil {
