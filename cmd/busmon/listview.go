@@ -302,8 +302,11 @@ func (l *listState) rows() int { _, _, _, h := l.inner(); return h }
 func (l *listState) viewport() {
 	rows, n := l.rows(), len(l.items)
 	maxTop := max(0, n-rows)
+	// A wheel over a kept expansion anchors the list, in auto-scroll too:
+	// the wheel wins until the next key.
+	wheeled := l.keep > 0 && l.anchor != ""
 	switch {
-	case l.Live():
+	case l.Live() && !wheeled:
 		l.top = maxTop
 	case l.anchor != "":
 		if i := l.index(l.anchor); i >= 0 {
@@ -319,8 +322,9 @@ func (l *listState) viewport() {
 		}
 	}
 	// An expanded selection and its text stay in view, the row first when
-	// both do not fit: the tail does not push them off the top.
-	if i := l.index(l.sel); l.keep > 0 && i >= 0 && rows > 0 {
+	// both do not fit: the tail does not push them off the top. A wheel
+	// scrolls away from them.
+	if i := l.index(l.sel); l.keep > 0 && !wheeled && i >= 0 && rows > 0 {
 		if end := i + l.keep; end >= l.top+rows {
 			l.top = min(i, end-rows+1)
 		}

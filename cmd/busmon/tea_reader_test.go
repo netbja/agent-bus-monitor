@@ -493,3 +493,30 @@ func TestShellThreadLandsUnderAPushedPage(t *testing.T) {
 		t.Fatalf("the message page lost its thread: %+v", m.rd.top().thread)
 	}
 }
+
+// The list keeps scrolling around an expansion: the wheel moves Activity
+// three rows each way while a row is expanded (the wheel wins over keeping
+// the expansion in view, until the next key).
+func TestShellWheelScrollsAroundAnExpansion(t *testing.T) {
+	pinLocal(t)
+	m := inState(t, fixtureShell(t, 80, 24), "expanded")
+	lst := &m.lists.activity
+	x, y := lst.rect.X+5, lst.rect.Y+lst.rect.H/2
+	maxTop := len(lst.items) - lst.rows()
+	start := lst.top
+	if maxTop-start < 3 || start < 3 {
+		t.Fatalf("no room to wheel: top %d of %d", start, maxTop)
+	}
+	if m = wheelAt(t, m, x, y, false); m.lists.activity.top != start+3 {
+		t.Fatalf("wheel down: top %d, want %d", m.lists.activity.top, start+3)
+	}
+	if m = wheelAt(t, m, x, y, true); m.lists.activity.top != start {
+		t.Fatalf("wheel up: top %d, want %d", m.lists.activity.top, start)
+	}
+	if m = wheelAt(t, m, x, y, true); m.lists.activity.top != start-3 {
+		t.Fatalf("wheel up again: top %d, want %d", m.lists.activity.top, start-3)
+	}
+	if m.ui.expanded == "" {
+		t.Fatal("the wheel collapsed the expansion")
+	}
+}
