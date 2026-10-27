@@ -285,6 +285,14 @@ noms d'onglets et d'agents, sans modèle de projet) :
     n'est nécessaire, ccstatusline peut être désinstallé. Pour garder une autre ligne d'état, ajoutez
     `--then '<sa commande>'`.
   - **Codex** et **Grok** fonctionnent d'office quand leur CLI est installée.
+  - **Kimi Code** et **agy** (Antigravity) aussi, depuis leurs propres journaux. Ils ne montrent
+    qu'une limite atteinte, jamais un pourcentage : une limite Kimi `5-hour` ou `weekly` retient ses
+    agents jusqu'à la prochaine réponse que Kimi obtient, ou au plus tard la durée de la fenêtre
+    après la dernière atteinte, car Kimi n'annonce pas de réinitialisation (une limite `billing
+    cycle` n'annonce pas de durée et n'est jamais retenue). Un `Individual quota reached … Resets in
+    …` d'agy retient jusqu'à la réinitialisation qu'il annonce ; rien ne l'arrête plus tôt, et le
+    quota peut être celui d'un seul modèle : s'il retient des agents qui pourraient encore
+    travailler, désactivez-le avec `[providers.google] kind = "off"` dans `quota.toml`.
   - **Toute autre IA** : décrivez sa source dans `~/.config/agentbus/quota.toml` — un fichier et ses
     champs (`kind = "json"` ou `"jsonl-last"`), ou un script qui imprime le relevé en JSON
     (`kind = "command"`), ou `kind = "unlimited"` pour un modèle local. Seuils :

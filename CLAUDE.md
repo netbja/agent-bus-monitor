@@ -592,7 +592,14 @@ It never touches Redis — see README "Deployment topology".
   transcript backstop for a live rejection), Codex via `codex app-server` `account/rateLimits/read`
   (session logs as fallback), declarative file readers (Grok's billing log line is one, built in),
   an external command, unlimited; configured in `~/.config/agentbus/quota.toml`. No reader opens a
-  credential. The dispatch service (`serviceQuota` → `dispatch.QuotaConfig`) collects every minute,
+  credential. Log backstops (kimi-quota, `quota/kimi.go`, `quota/agy.go`): Kimi Code (`moonshot`)
+  from `~/.kimi-code/sessions/*/*/logs/kimi-code.log` only (8 newest, 7 days, 256 KiB tail): a
+  `5-hour`/`weekly` usage-limit hit is that window at 100 %, voided by any later `llm response`
+  (`AvailableAt`); Kimi states no reset, so it is the honest upper bound newest hit (after the last answer)
+  + the window's length, and a `billing cycle` hit (no length) stays unknown. agy (`google`) from
+  `~/.gemini/antigravity-cli/log/cli-<date>_<time>.log` (glog, year from the name): `RESOURCE_EXHAUSTED
+  (code 429) … Resets in <d>` holds until that stated reset; agy logs no proof of an answer, so
+  nothing voids it earlier, and the quota may be per model: `kind = "off"` is the escape. The dispatch service (`serviceQuota` → `dispatch.QuotaConfig`) collects every minute,
   publishes `{p}:budget` (`windows` etc., additive) and acts in `dispatch/quota.go`: warn once per
   window and reset, hold a provider's agents (`{p}:quota` marks; no prompt, no escalation), pause
   for the coordinator's provider (`FencedQuotaPause`, never replacing another pause). Agents carry
