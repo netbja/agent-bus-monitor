@@ -156,7 +156,8 @@ func TestQueueCellStates(t *testing.T) {
 func hostileAgent(now time.Time) *agentState {
 	return &agentState{state: "blocked", message: "日本語👩‍💻\tneeds\nreview\x1b[31m [red]x[-]",
 		stateAt: now.Add(-6 * time.Minute), queueKnown: true, waiting: 12, ctxRaw: "608k ctx",
-		gated: 1, armed: true, wake: &bus.WakeRecord{State: "deferred"}}
+		ctxFill: &bus.ContextFill{Pct: 99.6, Session: "s", ObservedAt: now.UnixMilli(), At: now.UnixMilli()},
+		gated:   1, armed: true, wake: &bus.WakeRecord{State: "deferred"}}
 }
 
 func TestAgentRowWidth(t *testing.T) {

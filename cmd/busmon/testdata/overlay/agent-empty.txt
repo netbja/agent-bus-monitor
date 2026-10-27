@@ -12,6 +12,7 @@ Queue           not measured yet
 Wake            no wake record
 Gate            none
 Context         not reported
+Fill            unknown (no fresh reading from its client)
 Board           none
 
 Recent activity (in the retained window)

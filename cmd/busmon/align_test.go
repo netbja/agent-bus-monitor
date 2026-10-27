@@ -32,6 +32,9 @@ func hostileShared(now time.Time, down bool) *shared {
 		a := &agentState{state: states[i%len(states)], message: hostileText, stateAt: now.Add(-time.Duration(i) * time.Minute),
 			queueKnown: i%3 != 0, waiting: int64(i % 4), queueFailed: i%7 == 0, gated: i % 2, armed: i%2 == 0,
 			stale: i % 3, ctxRaw: []string{"608k", "", "25%", "1.2M"}[i%4], forYou: i%len(states) == 1}
+		if i%3 == 1 { // context-alert: the widest fill cell, tokens and 100%
+			a.ctxFill = &bus.ContextFill{Pct: 100, Session: "s", ObservedAt: now.UnixMilli(), At: now.UnixMilli()}
+		}
 		if i%4 == 1 { // client reload spec: an outdated client, observed now
 			a.obsAt, a.clientUpdate = now, &bus.ClientUpdate{Client: "claude-code", Running: hostileText, Installed: hostileText, Hash: "h"}
 		}

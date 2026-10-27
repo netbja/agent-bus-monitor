@@ -315,3 +315,52 @@ func EvaluateClientUpdates(ev []ClientEvidence) Outcome {
 	}
 	return Outcome{OK, "every observed agent runs its installed client"}
 }
+
+// ContextEvidence is one verified agent's context fill as the dispatcher last
+// published it (context-alert): Known, a reading that is neither missing nor
+// aged.
+type ContextEvidence struct {
+	Agent string
+	Pct   float64
+	Known bool
+}
+
+// EvaluateContext: warn when a known fill is at or above threshold (the
+// dispatcher has told those agents to hand off), ok when every known fill is
+// below it, unknown when none is known. threshold 0 (the alert off) is ok.
+func EvaluateContext(ev []ContextEvidence, threshold float64) Outcome {
+	if threshold <= 0 {
+		return Outcome{OK, "context alert off (AGENT_BUS_CONTEXT_ALERT=0)"}
+	}
+	known := 0
+	var high []ContextEvidence
+	for _, e := range ev {
+		if !e.Known {
+			continue
+		}
+		known++
+		if e.Pct >= threshold {
+			high = append(high, e)
+		}
+	}
+	if known == 0 {
+		return Outcome{Unknown, "no context fill read (Claude Code agents, through the dispatch service)"}
+	}
+	if len(high) == 0 {
+		return Outcome{OK, fmt.Sprintf("%d agent(s) below %.0f%%", known, threshold)}
+	}
+	sort.Slice(high, func(i, j int) bool { return high[i].Agent < high[j].Agent })
+	parts := make([]string, 0, len(high))
+	for _, e := range high {
+		parts = append(parts, fmt.Sprintf("%s %.0f%%", e.Agent, e.Pct))
+	}
+	return Outcome{Warn, truncateDetail(fmt.Sprintf("at or above %.0f%%: %s", threshold, strings.Join(parts, ", ")))}
+}
+
+// truncateDetail keeps a detail within SafeText's bound.
+func truncateDetail(s string) string {
+	if r := []rune(s); len(r) > 300 {
+		return string(r[:297]) + "..."
+	}
+	return s
+}

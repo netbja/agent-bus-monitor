@@ -36,6 +36,7 @@ type busReader interface {
 	Pause(ctx context.Context) (*bus.PauseRecord, error)
 	QuotaMarks(ctx context.Context) (map[string]string, error)
 	Observed(ctx context.Context) (map[string]bus.Observation, error)
+	Context(ctx context.Context) (map[string]bus.ContextFill, error)
 	Swaps(ctx context.Context) (map[string]bool, error)
 	Fallbacks(ctx context.Context) (map[string]bus.FallbackRecord, error)
 	ModelVerdicts(ctx context.Context) (map[string]bus.ModelVerdict, error)
@@ -141,6 +142,8 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	marksErr := errNotPolled
 	var observed map[string]bus.Observation
 	observedErr := errNotPolled
+	var fills map[string]bus.ContextFill
+	fillsErr := errNotPolled
 	var swaps map[string]bool
 	swapsErr := errNotPolled
 	var fallbacks map[string]bus.FallbackRecord
@@ -150,6 +153,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	if wakePollDue(tick) {
 		marks, marksErr = b.QuotaMarks(pollCtx)
 		observed, observedErr = b.Observed(pollCtx)
+		fills, fillsErr = b.Context(pollCtx)
 		swaps, swapsErr = b.Swaps(pollCtx)
 		fallbacks, fallbacksErr = b.Fallbacks(pollCtx)
 		verdicts, verdictsErr = b.ModelVerdicts(pollCtx)
@@ -329,6 +333,12 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			a.model = nil
 			if v, ok := verdicts[n]; ok {
 				a.model = &v
+			}
+		}
+		if fillsErr == nil { // a failed read keeps the last fill
+			a.ctxFill = nil
+			if f, ok := fills[n]; ok {
+				a.ctxFill = &f
 			}
 		}
 		if observedErr == nil {

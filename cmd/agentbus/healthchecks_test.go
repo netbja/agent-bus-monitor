@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/health"
 	"os"
 	"path/filepath"
 	"testing"
@@ -96,5 +97,20 @@ func TestClientEvidence(t *testing.T) {
 				t.Fatalf("b read fresh from another process: %+v", e)
 			}
 		}
+	}
+}
+
+// The context check's evidence: every published fill, known only when it is
+// not aged; the verdict follows the threshold.
+func TestContextEvidence(t *testing.T) {
+	at := int64(10_000_000)
+	fills := map[string]bus.ContextFill{
+		"coder":  {Pct: 86, Session: "s1", ObservedAt: at, At: at},
+		"master": {Pct: 95, Session: "s2", ObservedAt: at - bus.ContextMaxAge.Milliseconds() - 1, At: at}, // aged
+	}
+	ev := contextEvidence(fills)
+	out := health.EvaluateContext(ev, 80)
+	if len(ev) != 2 || out.Status != health.Warn || out.Detail != "at or above 80%: coder 86%" {
+		t.Fatalf("evidence %+v, outcome %+v", ev, out)
 	}
 }
