@@ -130,18 +130,23 @@ func runGateClose(ctx context.Context, b *bus.Bus, self string, args []string, o
 		if r.g.Challenger == bus.ConductorAgent && sweep {
 			continue // a mission review is the conductor's: never swept
 		}
+		// The refusal comes before the dry run, so a preview promises only
+		// what the real run would close.
+		if !person && r.g.Challenger != closer {
+			refused++
+			switch {
+			case !sweep:
+				fmt.Fprintf(errw, "gate close: %s %s was opened by %s; only its challenger or a person (--as) closes it\n", r.agent, r.ref, r.g.Challenger)
+			case dry:
+				fmt.Fprintf(out, "would skip %s %s: opened by %s\n", r.agent, r.ref, r.g.Challenger)
+			default:
+				fmt.Fprintf(out, "skipped %s %s: opened by %s\n", r.agent, r.ref, r.g.Challenger)
+			}
+			continue
+		}
 		if dry {
 			fmt.Fprintf(out, "would close %s %s (opened by %s): %s\n", r.agent, r.ref, label, preview(strings.Join(strings.Fields(r.g.Text), " ")))
 			n++
-			continue
-		}
-		if !person && r.g.Challenger != closer {
-			refused++
-			if sweep {
-				fmt.Fprintf(out, "skipped %s %s: opened by %s\n", r.agent, r.ref, r.g.Challenger)
-			} else {
-				fmt.Fprintf(errw, "gate close: %s %s was opened by %s; only its challenger or a person (--as) closes it\n", r.agent, r.ref, r.g.Challenger)
-			}
 			continue
 		}
 		ok, err := b.CloseGate(ctx, r.agent, r.ref, r.meta, closer, note, person)

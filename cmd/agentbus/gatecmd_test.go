@@ -112,10 +112,20 @@ func TestGateCloseAsPerson(t *testing.T) {
 	if len(all["foureyes"]) != 3 {
 		t.Fatalf("closed someone else's gate: %v", all)
 	}
-	// --by lists another challenger's gates in a dry run.
+	// A dry run promises only what the real run would do: another
+	// challenger's gates are "would skip", and only a person would close them.
 	code, out, _ = runGate(b2, "coder", "--by", "master", "--dry-run")
-	if code != 0 || !strings.Contains(out, "3 gate(s) would close") {
-		t.Fatalf("--by dry run: %d %q", code, out)
+	if code != 1 || !strings.Contains(out, "would skip foureyes 1793000000001-0: opened by master") ||
+		!strings.HasSuffix(out, "0 gate(s) would close; dry run, nothing written\n") {
+		t.Fatalf("--by dry run as an agent: %d %q", code, out)
+	}
+	code, out, _ = runGate(b2, "coder", "--by", "master", "--dry-run", "--as", "bernard")
+	if code != 0 || !strings.HasSuffix(out, "3 gate(s) would close; dry run, nothing written\n") {
+		t.Fatalf("--by dry run as a person: %d %q", code, out)
+	}
+	code, _, errOut = runGate(b2, "coder", "foureyes", "1793000000001-0", "--dry-run")
+	if code != 1 || !strings.Contains(errOut, "opened by master") {
+		t.Fatalf("one gate dry run as an agent: %d %q", code, errOut)
 	}
 }
 
