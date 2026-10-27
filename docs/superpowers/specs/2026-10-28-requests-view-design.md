@@ -31,7 +31,8 @@ each on two rows. It is hard to read for four reasons, all visible in today's da
 
 Today's numbers (agent-bus-monitor, cmd stream read at `1793135354534`, read-only): 68 threads
 started in the last 24 h with no reply or verdict on their thread, 77 answered; 1 tracked request
-waiting. Of the 68: bernard → master 22 directives, coder → reviewer-codex 13 challenges,
+waiting. Gates read at this revision: 10 open on reviewer-codex, 9 of them opened before the snapshot (the
+10th is this spec's own challenge). Of the 68: bernard → master 22 directives, coder → reviewer-codex 13 challenges,
 coder → master 10 report notices, dispatch → sentinel 6 and dispatch → master 5 notices,
 sentinel → master 6, master → sentinel 2, master → foureyes 1, master → coder 1, coder → ui-kimi 1,
 dispatch → coder 1.
@@ -45,16 +46,19 @@ dispatch → coder 1.
 2. **You wait on**: what you (the person, `humanIdentity`) sent with no reply on its thread,
    grouped by recipient.
 3. **Tracked requests** between agents still waiting (the board's facts: accepted, blocked, deadline).
-4. **Reviews without a verdict**: challenges whose thread holds no verdict, grouped by reviewer,
-   listing their subjects.
+4. **Reviews still gated**: challenges whose gate is still open, grouped by reviewer, listing
+   their subjects (rule below).
 5. **Directives between agents** with no reply on their thread, grouped by sender → target.
 6. **Notices**, folded: report notices and the dispatcher's informational directives (`from =
    dispatch`). Nobody owes an answer; they are listed only so nothing is hidden.
 7. **Answered or older than 24 h**, folded to one count (`o` shows them).
 
-The title counts what the first two sections and the between-agents sections hold: `N for you ·
-you wait on M · K between agents`. Notices and folded threads never count (today: 0 · 22 · 21
-instead of "39 between agents").
+The title counts exactly the rows' N: `N for you` is the sum of section 1, `you wait on M` the sum
+of section 2, `K between agents` the sum of sections 3, 4 and 5. Notices and folded threads never
+count. A test pins it: on any fixture, each title number equals the sum of its sections' N. Today:
+`0 for you · you wait on 22 · 21 between agents` (1 request + 9 gated reviews + 11 directives),
+instead of "39 between agents". At 80 columns the labels shorten to `wait 22 · agents 21` (and
+`you 3 · …` when something is owed by the person), never bare numbers.
 
 ## Rules
 
@@ -64,6 +68,14 @@ instead of "39 between agents").
   the newest thread's text and, for reviews, the subjects (`[subject S]` from the gate meta, else
   the first word of the challenge) joined by ` · `. Enter on a group expands it in place into its
   threads; Enter on a thread opens it (below).
+- **A review is owed while its gate is open.** A challenge's thread is not the fact: a review can
+  end with `agentbus gate close` (its trace is a `wake=no` reply, not a verdict) or with a verdict
+  under another ref or subject, which sits on the reviewer's own thread. The fact is the gate: a
+  challenge is in section 4 while `{p}:gate:<target>` still holds its ref (busmon reads the gates
+  every tick). The thread rule (no verdict on the thread) applies only to a challenge whose gate
+  was never opened (none recorded under its ref at any read). A challenge whose gate is closed is
+  folded as answered. Today: coder sent reviewer-codex 13 challenges in 24 h; 4 gates were closed
+  by verdicts or merges, 9 remain, and those are the row's N.
 - **Kinds** (shown in the KIND column at ≥110 columns): `request` (tracked, from the board),
   `challenge`, `directive`, `reports` (report notices), `notices` (`from = dispatch`, or a cmd with
   `wake=no`). A report notice is recognised by the exact prefix `reportNotice` writes, and only that.
@@ -81,7 +93,10 @@ instead of "39 between agents").
   unread, ○ read; `▸` only marks the selection, as in every list).
 - **Folding.** Threads older than `bus.DefaultHorizon` (24 h) and answered threads are one line at
   the bottom (as the count already ignores them, `recentThreads`). Notices are one row per sender →
-  target. `+ N older` rows collapse a group longer than 3 in "you wait on". `o` toggles the folded
+  target. In **"you wait on"** the person's own messages are listed one per row, newest first, up to 2,
+  then one `+ N older` row that Enter expands: the person recognises their own words, so they are
+  not merged into one group text. Every other section shows one row per group (newest text, or
+  the subjects for a review), as above. `o` toggles the folded
   section open, `Enter` on a folded row expands it.
 - **Tracked requests first among the agents' sections**: they are the only ones with recorded
   acceptance; their facts row (`accepted · 1.1h · no deadline`) moves into the STATE and AGE
@@ -116,18 +131,19 @@ medium, narrow (no KIND, shorter title).
 ┌─ 1 Activity  2 Board  [3 Requests]  4 Plan ─────────────────────────────────────────────────────────────────────────────────────────────── 0 for you · you wait on 22 · 21 between agents ─┐
 │   FROM → TO                  KIND      STATE       SUBJECT / FIRST LINE                                                                                                         N      AGE │
 │ owed by you  ·  0                                                                                                                                                                          │
-│ you wait on master  ·  22 directives, read, no reply on their thread  (oldest 2.0h)                                                                                                        │
+│ you wait on master  ·  22, read, no reply on their thread  (oldest 2.0h)                                                                                                                   │
 │ ▸ bernard → master           directive read        à noter dans les features, le systeme de déploiement de texte dans activity n'est pas très "jolie"                           1      now │
 │ ▸ bernard → master           directive read        Pour moi c'est off jusqu'a demain, je te laisse avancé tant que possible.                                                    1       6m │
 │   bernard → master           directive read        + 20 older  (Enter expands)                                                                                                 20     2.0h │
 │ tracked requests  ·  1 waiting                                                                                                                                                             │
 │ ▸ master → coder             request   accepted    busmon-group-a                                                                                                               1     1.1h │
-│ reviews without a verdict  ·  1 reviewer                                                                                                                                                   │
-│ ▸ coder → reviewer-codex     challenge held quota  lifecycle-spec · gate-subject-close · a-pending-pane · a-health · a-identity · a-nav · a-plan-tab · a-look                  13     1.0h │
-│ directives between agents, no reply on the thread  ·  4 pairs                                                                                                                              │
+│ reviews still gated  ·  1 reviewer, 9 open gates                                                                                                                                           │
+│ ▸ coder → reviewer-codex     challenge held quota  lifecycle-spec · gate-subject-close · a-pending-pane ×3 · a-identity · a-health · a-nav ×2                                   9     1.0h │
+│ directives between agents, no reply on the thread  ·  11 in 5 pairs                                                                                                                        │
 │ ▸ master → sentinel          directive read        Reload of Claude Code 2.1.311 happens now (Bernard's go): coder, foureyes, you, master last.                                 2      14h │
 │ ▸ coder → ui-kimi            directive unread      busmon-charm-b4: your finding (the wrap cost per key, and per fade frame) is fixed on feat/busmon-charm-b4                   1      12h │
 │ ▸ master → foureyes          directive read        Bernard reloads Claude Code 2.1.311 now: he will /exit your pane and master relaunches with agentbus up                      1      12h │
+│ ▸ master → coder             directive read        Fresh session after Bernard's /clear. You are coder on project agent-bus-monitor. Re-boot: read docs/memory/INDEX.md         1      11h │
 │ ▸ sentinel → master          directive read        Claude Code 2.1.312 is installed; 4 agents still run 2.1.311: coder, foureyes, master, sentinel.                             6      48m │
 │ notices  ·  folded, nobody owes an answer  (Enter lists them)                                                                                                                              │
 │ · coder → master             reports               gate-subject-close PR #144: foureyes APPROVED 3fc10f7; reviewer-codex pending                                               10      now │
@@ -144,18 +160,19 @@ medium, narrow (no KIND, shorter title).
 ┌─ 1 Activity  2 Board  [3 Requests]  4 Plan ───────────────────────── 0 for you · you wait on 22 · 21 between agents ─┐
 │   FROM→TO                KIND      SUBJECT / FIRST LINE                                                       N  AGE │
 │ owed by you  ·  0                                                                                                    │
-│ you wait on master  ·  22 directives, read, no reply on their thread  (oldest 2.0h)                                  │
+│ you wait on master  ·  22, read, no reply on their thread  (oldest 2.0h)                                             │
 │ ▸ bernard→master         directive à noter dans les features, le systeme de déploiement de texte dans acti…   1  now │
 │ ▸ bernard→master         directive Pour moi c'est off jusqu'a demain, je te laisse avancé tant que possibl…   1   6m │
 │   bernard→master         directive + 20 older  (Enter expands)                                               20 2.0h │
 │ tracked requests  ·  1 waiting                                                                                       │
 │ ▸ master→coder           request   busmon-group-a                                                             1 1.1h │
-│ reviews without a verdict  ·  1 reviewer                                                                             │
-│ ▸ coder→reviewer-codex   challenge lifecycle-spec · gate-subject-close · a-pending-pane · a-health · a-ide…  13 1.0h │
-│ directives between agents, no reply on the thread  ·  4 pairs                                                        │
+│ reviews still gated  ·  1 reviewer, 9 open gates                                                                     │
+│ ▸ coder→reviewer-codex   challenge lifecycle-spec · gate-subject-close · a-pending-pane ×3 · a-identity · …   9 1.0h │
+│ directives between agents, no reply on the thread  ·  11 in 5 pairs                                                  │
 │ ▸ master→sentinel        directive Reload of Claude Code 2.1.311 happens now (Bernard's go): coder, fourey…   2  14h │
 │ ▸ coder→ui-kimi          directive busmon-charm-b4: your finding (the wrap cost per key, and per fade fram…   1  12h │
 │ ▸ master→foureyes        directive Bernard reloads Claude Code 2.1.311 now: he will /exit your pane and ma…   1  12h │
+│ ▸ master→coder           directive Fresh session after Bernard's /clear. You are coder on project agent-bu…   1  11h │
 │ ▸ sentinel→master        directive Claude Code 2.1.312 is installed; 4 agents still run 2.1.311: coder, fo…   6  48m │
 │ notices  ·  folded, nobody owes an answer  (Enter lists them)                                                        │
 │ · coder→master           reports   gate-subject-close PR #144: foureyes APPROVED 3fc10f7; reviewer-codex p…  10  now │
@@ -169,21 +186,22 @@ medium, narrow (no KIND, shorter title).
 ### 80 columns
 
 ```
-┌─ 1 Act 2 Brd [3 Req] 4 Plan ─────────────────────────────────────── 22 · 21 ─┐
+┌─ 1 Act 2 Brd [3 Req] 4 Plan ─────────────────────────── wait 22 · agents 21 ─┐
 │   FROM→TO           SUBJECT                                           N  AGE │
 │ owed by you  ·  0                                                            │
-│ you wait on master  ·  22 directives, read, no reply on their thread  (oldes…│
+│ you wait on master  ·  22, read, no reply on their thread  (oldest 2.0h)     │
 │ ▸ bernard→master    à noter dans les features, le systeme de déplo…   1  now │
 │ ▸ bernard→master    Pour moi c'est off jusqu'a demain, je te laiss…   1   6m │
 │   bernard→master    + 20 older  (Enter expands)                      20 2.0h │
 │ tracked requests  ·  1 waiting                                               │
 │ ▸ master→coder      busmon-group-a                                    1 1.1h │
-│ reviews without a verdict  ·  1 reviewer                                     │
-│ ▸ coder→reviewer-c… lifecycle-spec · gate-subject-close · a-pendin…  13 1.0h │
-│ directives between agents, no reply on the thread  ·  4 pairs                │
+│ reviews still gated  ·  1 reviewer, 9 open gates                             │
+│ ▸ coder→reviewer-c… lifecycle-spec · gate-subject-close · a-pendin…   9 1.0h │
+│ directives between agents, no reply on the thread  ·  11 in 5 pairs          │
 │ ▸ master→sentinel   Reload of Claude Code 2.1.311 happens now (Ber…   2  14h │
 │ ▸ coder→ui-kimi     busmon-charm-b4: your finding (the wrap cost p…   1  12h │
 │ ▸ master→foureyes   Bernard reloads Claude Code 2.1.311 now: he wi…   1  12h │
+│ ▸ master→coder      Fresh session after Bernard's /clear. You are …   1  11h │
 │ ▸ sentinel→master   Claude Code 2.1.312 is installed; 4 agents sti…   6  48m │
 │ notices  ·  folded, nobody owes an answer  (Enter lists them)                │
 │ · coder→master      gate-subject-close PR #144: foureyes APPROVED …  10  now │
@@ -212,7 +230,10 @@ Pure functions over fixtures built from today's shapes, plus the shell goldens:
   prefix only, `dispatch` and `wake=no` as notices); groups by section, sender, target, kind; counts
   and oldest age; 24 h and answered folding; order rules.
 - `reportSubject`: strips exactly `reportNotice`'s prefix and nothing that merely resembles it.
-- the title counts (`0 · 22 · 21` on today's fixture; notices never counted).
+- the title counts: each number equals the sum of its sections' N on every fixture (`0 · 22 · 21`
+  on today's: 1 + 9 + 11 between agents); notices and folded threads never counted.
+- review ownership from the gate: a challenge closed by `gate close`, or answered by a verdict under
+  another ref, leaves section 4; one with no gate ever recorded falls back to the thread rule.
 - goldens at 190, 120 and 80 columns from the same fixture as the mock-ups; `TestShellAlignmentSuite`
   over the new rows (hostile texts, wide clusters).
 - Enter on each row kind opens the page in the table; `d`/`y` on a group closes each thread once.
