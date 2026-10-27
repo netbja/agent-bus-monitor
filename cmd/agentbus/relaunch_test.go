@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -122,6 +123,8 @@ type relaunchHerdr struct {
 	tabs  string            // JSON tabs
 	panes string            // JSON panes
 	fg    map[string]string // pane -> foreground command line (split into argv)
+
+	closeErr error // what pane close answers
 }
 
 func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
@@ -142,6 +145,8 @@ func (f *relaunchHerdr) run(args ...string) ([]byte, error) {
 	case strings.HasPrefix(line, "tab create --workspace w4"):
 		f.made_("w4:p9")
 		return []byte(`{"result":{"root_pane":{"pane_id":"w4:p9"}}}`), nil
+	case strings.HasPrefix(line, "pane close "):
+		return []byte(`{"result":{}}`), f.closeErr
 	case strings.HasPrefix(line, "pane split "):
 		f.made_(args[2] + "s")
 		return []byte(`{"result":{"pane":{"pane_id":"` + args[2] + `s"}}}`), nil
@@ -509,5 +514,245 @@ func TestRelaunchOpenNeverDuplicatesAcrossSplitPanes(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "master: skipped (busy)") || !strings.Contains(out.String(), "busmon: running") {
 		t.Fatalf("out = %s", out.String())
+	}
+}
+
+// closes are the panes this fake was asked to close.
+func (f *relaunchHerdr) closes() []string {
+	var out []string
+	for _, c := range f.calls {
+		if p, ok := strings.CutPrefix(c, "pane close "); ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// deadMaster is a master tab whose agent died in pane w4:p3, a plain shell.
+func deadMaster() (*relaunchHerdr, map[string]bus.AgentSnapshot, upTemplate) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"master","tab_id":"w4:t3"},{"label":"busmon","tab_id":"w4:t1"}`,
+		panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"},{"pane_id":"w4:p1","tab_id":"w4:t1"}`,
+		fg:    map[string]string{"w4:p3": "bash", "w4:p1": "bash"},
+	}
+	snaps := map[string]bus.AgentSnapshot{"master": {PID: 30, PIDStart: 7, Pane: "w4:p3"}}
+	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}, {Name: "busmon", Command: "busmon --project demo"}}}
+	return h, snaps, tpl
+}
+
+// procs: pid 30 is gone, pid 31 runs since 9.
+func procs(pid int) (uint64, error) {
+	if pid == 31 {
+		return 9, nil
+	}
+	return 0, os.ErrNotExist
+}
+
+// proofAfter answers the old snapshot n times, then the relaunched one.
+func proofAfter(n int, next bus.AgentSnapshot, sleeps *int) *relaunchProof {
+	reads := 0
+	return &relaunchProof{
+		Agents: func() (map[string]bus.AgentSnapshot, error) {
+			reads++
+			if reads <= n {
+				return map[string]bus.AgentSnapshot{"master": {PID: 30, PIDStart: 7, Pane: "w4:p3"}}, nil
+			}
+			return map[string]bus.AgentSnapshot{"master": next}, nil
+		},
+		Sleep: func(time.Duration) { *sleeps++ },
+		Tries: 5,
+	}
+}
+
+// Bernard's decision (2026-10-27): once the relaunched agent is proven in its
+// new pane, the old pane it replaced is closed, if it is still a plain shell
+// when re-read. Nothing is typed into it, and no other pane is closed.
+func TestRelaunchOpenClosesTheOldPaneOnceTheNewOneIsProven(t *testing.T) {
+	h, snaps, tpl := deadMaster()
+	sleeps := 0
+	o := relaunchOptions{Create: true, Prove: proofAfter(2, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.closes(); len(got) != 1 || got[0] != "w4:p3" {
+		t.Fatalf("closed %q, want only w4:p3\n%s", got, out.String())
+	}
+	if bad := h.typedIntoExisting(); len(bad) != 0 {
+		t.Fatalf("typed into an existing pane: %q", bad)
+	}
+	// The old pane is re-read after the launch, right before the close.
+	run, recheck, closed := -1, -1, -1
+	for i, c := range h.calls {
+		switch {
+		case strings.HasPrefix(c, "pane run w4:p3s"):
+			run = i
+		case c == "pane process-info --pane w4:p3":
+			recheck = i
+		case c == "pane close w4:p3":
+			closed = i
+		}
+	}
+	if !(run < recheck && recheck < closed) {
+		t.Fatalf("run %d, recheck %d, close %d:\n%s", run, recheck, closed, strings.Join(h.calls, "\n"))
+	}
+	if sleeps != 2 {
+		t.Errorf("slept %d times, want 2 (proof on the third read)", sleeps)
+	}
+	for _, w := range []string{"master: relaunched (new pane; the old one w4:p3 closes once the new one is proven)", "master: old pane w4:p3 closed", "busmon: relaunched (new pane; the old one is left as it is)"} {
+		if !strings.Contains(out.String(), w) {
+			t.Errorf("output lacks %q:\n%s", w, out.String())
+		}
+	}
+}
+
+// Anything short of a proven agent and a plain shell re-read before the close
+// leaves the old pane as it is, and says why.
+func TestRelaunchOpenLeavesTheOldPaneWithoutProof(t *testing.T) {
+	proven := bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}
+	for name, c := range map[string]struct {
+		next  bus.AgentSnapshot
+		snap  bus.AgentSnapshot
+		later string // the old pane's foreground once the agent is proven ("" = gone)
+		want  string
+	}{
+		"no proof":            {next: bus.AgentSnapshot{PID: 30, PIDStart: 7, Pane: "w4:p3"}, later: "bash", want: "master: old pane w4:p3 left as it is (no proof of the new agent in pane w4:p3s after 5 s)"},
+		"bound elsewhere":     {next: bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p8"}, later: "bash", want: "no proof of the new agent"},
+		"new pid not alive":   {next: bus.AgentSnapshot{PID: 32, PIDStart: 9, Pane: "w4:p3s"}, later: "bash", want: "no proof of the new agent"},
+		"busy at the recheck": {next: proven, later: "vim notes", want: "master: old pane w4:p3 left as it is (no longer a plain shell)"},
+		"gone at the recheck": {next: proven, later: "", want: "master: old pane w4:p3 left as it is (unreadable:"},
+		"not its pane":        {next: proven, snap: bus.AgentSnapshot{PID: 30, PIDStart: 7, Pane: "w9:p1"}, later: "bash", want: "master: relaunched (new pane; the old one is left as it is)"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, snaps, tpl := deadMaster()
+			if c.snap.Pane != "" {
+				snaps["master"] = c.snap
+			}
+			sleeps := 0
+			p := proofAfter(0, c.next, &sleeps)
+			read := p.Agents
+			p.Agents = func() (map[string]bus.AgentSnapshot, error) {
+				if c.later == "" {
+					delete(h.fg, "w4:p3")
+				} else {
+					h.fg["w4:p3"] = c.later
+				}
+				return read()
+			}
+			var out bytes.Buffer
+			if err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, relaunchOptions{Create: true, Prove: p}, &out); err != nil {
+				t.Fatal(err)
+			}
+			if got := h.closes(); len(got) != 0 {
+				t.Fatalf("closed %q", got)
+			}
+			if !strings.Contains(out.String(), c.want) {
+				t.Fatalf("output lacks %q:\n%s", c.want, out.String())
+			}
+		})
+	}
+}
+
+func TestRelaunchOpenDryRunSaysWhatItWouldClose(t *testing.T) {
+	h, snaps, tpl := deadMaster()
+	sleeps := 0
+	o := relaunchOptions{DryRun: true, Create: true, Prove: proofAfter(0, bus.AgentSnapshot{}, &sleeps)}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ran(); len(got) != 0 || len(h.closes()) != 0 {
+		t.Fatalf("a dry run acted: %q", h.calls)
+	}
+	if want := "master: would relaunch (new pane; would close the old one w4:p3 once the new one is proven)"; !strings.Contains(out.String(), want) {
+		t.Fatalf("output lacks %q:\n%s", want, out.String())
+	}
+}
+
+func TestRelaunchOpenReportsAFailedClose(t *testing.T) {
+	h, snaps, tpl := deadMaster()
+	h.closeErr = errors.New("pane busy")
+	sleeps := 0
+	o := relaunchOptions{Create: true, Prove: proofAfter(0, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
+	var out bytes.Buffer
+	err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out)
+	if err == nil || !strings.Contains(out.String(), "master: old pane w4:p3 not closed: ") {
+		t.Fatalf("err %v out %s", err, out.String())
+	}
+}
+
+// A tab of two plain shells: only the one the agent's snapshot recorded is
+// closed, never the tab's first pane by default, never the other one.
+func TestRelaunchOpenClosesOnlyTheRecordedPane(t *testing.T) {
+	h, snaps, tpl := deadMaster()
+	h.panes = `{"pane_id":"w4:p3","tab_id":"w4:t3"},{"pane_id":"w4:p7","tab_id":"w4:t3"},{"pane_id":"w4:p1","tab_id":"w4:t1"}`
+	h.fg["w4:p7"] = "zsh"
+	snaps["master"] = bus.AgentSnapshot{PID: 30, PIDStart: 7, Pane: "w4:p7"}
+	sleeps := 0
+	o := relaunchOptions{Create: true, Prove: proofAfter(1, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.closes(); len(got) != 1 || got[0] != "w4:p7" {
+		t.Fatalf("closed %q, want only w4:p7\n%s", got, out.String())
+	}
+}
+
+// up wires the proof: its own snapshot reads prove the relaunched master
+// before the old pane is closed.
+func TestUpClosesTheOldPaneOfAProvenRelaunch(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	h, _, _ := deadMaster()
+	deps.Herdr = func(args ...string) ([]byte, error) {
+		if strings.Join(args, " ") == "workspace list" {
+			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
+		}
+		return h.run(args...)
+	}
+	reads := 0
+	deps.Agents = func(string) (map[string]bus.AgentSnapshot, error) {
+		reads++
+		if reads == 1 {
+			return map[string]bus.AgentSnapshot{"master": {PID: 30, PIDStart: 7, Pane: "w4:p3"}}, nil
+		}
+		return map[string]bus.AgentSnapshot{"master": {PID: 31, PIDStart: 9, Pane: "w4:p3s"}}, nil
+	}
+	deps.ProcStart = procs
+	deps.Sleep = func(time.Duration) {}
+	deps.Lock = func(string, bool) (func(), error) { return func() {}, nil }
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if got := h.closes(); len(got) != 1 || got[0] != "w4:p3" || !strings.Contains(out.String(), "master: old pane w4:p3 closed") {
+		t.Fatalf("closed %q\n%s", got, out.String())
+	}
+	if bad := h.typedIntoExisting(); len(bad) != 0 {
+		t.Fatalf("typed into an existing pane: %q", bad)
+	}
+}
+
+// The proof needs a new process: the dead agent's own identity, even read
+// alive again in the new pane (a pid reused with the same start, or a stale
+// read), proves nothing, and the old pane stays.
+func TestRelaunchOpenNeedsANewProcessAsProof(t *testing.T) {
+	h, snaps, tpl := deadMaster()
+	calls := 0
+	ps := func(pid int) (uint64, error) {
+		calls++
+		if calls == 1 { // the relaunch's own judgement: dead
+			return 0, os.ErrNotExist
+		}
+		return 7, nil
+	}
+	sleeps := 0
+	o := relaunchOptions{Create: true, Prove: proofAfter(0, bus.AgentSnapshot{PID: 30, PIDStart: 7, Pane: "w4:p3s"}, &sleeps)}
+	var out bytes.Buffer
+	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, o, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.closes(); len(got) != 0 || !strings.Contains(out.String(), "no proof of the new agent") {
+		t.Fatalf("closed %q\n%s", got, out.String())
 	}
 }

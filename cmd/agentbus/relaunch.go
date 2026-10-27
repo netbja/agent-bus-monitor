@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -77,9 +78,10 @@ const (
 // line; snap is that agent's life by its snapshot. A relaunch never types into
 // an existing pane: whether a shell waits at its prompt cannot be proven from
 // outside (a builtin read keeps its argv and can even keep a raw terminal), so
-// the command runs in a new pane split from the tab's, and the old pane is
-// left exactly as it is. pane covers every pane of the tab: Shell only when
-// all of them are plain shells.
+// the command runs in a new pane split from the tab's, and nothing is ever
+// typed into the old one (closeOldPanes may close it once the new agent is
+// proven). pane covers every pane of the tab: Shell only when all of them are
+// plain shells.
 func decideRelaunch(agent bool, snap life, hasPane bool, pane paneFacts, create bool) relaunchVerdict {
 	if agent && snap == lifeAlive {
 		return verdictAlive // alive, wherever its pane is
@@ -267,13 +269,32 @@ func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, e
 // relaunchOptions are up's flags for an open workspace.
 type relaunchOptions struct {
 	Resume, DryRun, Create bool
-	Dir                    string // the project directory a new pane starts in
+	Dir                    string         // the project directory a new pane starts in
+	Prove                  *relaunchProof // nil: every old pane is left as it is
+}
+
+// relaunchProof is how up proves a relaunched agent before it closes the pane
+// the dead one left (Bernard, 2026-10-27): the agents' snapshots, read once a
+// second, at most Tries times.
+type relaunchProof struct {
+	Agents func() (map[string]bus.AgentSnapshot, error)
+	Sleep  func(time.Duration)
+	Tries  int
+}
+
+// oldPane is a relaunched agent's old pane, closed only once Role is proven
+// in New (closeOldPanes).
+type oldPane struct {
+	Name, Role, Old, New string
+	Was                  bus.AgentSnapshot
 }
 
 // relaunchOpen checks every tab of an open workspace and reruns the template
 // command in each pane whose agent (or command) is gone. Master goes first,
-// then the template order. It never closes a pane, never types anything but
-// the template command, and touches only panes of workspace ws.
+// then the template order. It never types anything but the template command,
+// into a pane it has just created, and touches only panes of workspace ws.
+// The only pane it closes is a relaunched agent's old one: the pane its
+// snapshot recorded, once the new agent is proven (closeOldPanes).
 func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]bus.AgentSnapshot, snapsOK bool,
 	procStart func(int) (uint64, error), project, ws string, tpl upTemplate, o relaunchOptions, stdout io.Writer) error {
 	panes, err := workspacePanes(herdr, ws)
@@ -294,6 +315,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 		return 0
 	})
 	var errs []error
+	var olds []oldPane
 	for _, t := range tabs {
 		if strings.TrimSpace(t.Command) == "" {
 			continue
@@ -340,6 +362,12 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 				cmd, resumed = rc, true
 			}
 		}
+		// The old pane is closed only when it is the exact pane the dead agent's
+		// snapshot recorded: the tab's other panes are never touched.
+		old := ""
+		if v == verdictRelaunch && isAgent && has && o.Prove != nil && slices.Contains(ref.All, snap.Pane) {
+			old = snap.Pane
+		}
 		word := string(v)
 		switch v {
 		case verdictRelaunch, verdictCreate:
@@ -347,7 +375,12 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 			if o.DryRun {
 				word = "would relaunch"
 			}
-			if v == verdictRelaunch {
+			switch {
+			case v == verdictRelaunch && old != "" && o.DryRun:
+				word += " (new pane; would close the old one " + old + " once the new one is proven)"
+			case v == verdictRelaunch && old != "":
+				word += " (new pane; the old one " + old + " closes once the new one is proven)"
+			case v == verdictRelaunch:
 				word += " (new pane; the old one is left as it is)"
 			}
 			if v == verdictCreate {
@@ -383,11 +416,73 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 					fmt.Fprintf(stdout, "%s: relaunch failed: %v\n", t.Name, err)
 					continue
 				}
+				if old != "" {
+					olds = append(olds, oldPane{Name: t.Name, Role: role, Old: old, New: pane, Was: snap})
+				}
 			}
 		}
 		fmt.Fprintf(stdout, "%s: %s\n", t.Name, word)
 	}
+	if len(olds) > 0 {
+		errs = append(errs, closeOldPanes(herdr, procStart, o.Prove, olds, stdout))
+	}
 	return errors.Join(errs...)
+}
+
+// closeOldPanes waits for each relaunched agent to be proven in its new pane,
+// then closes the old pane it replaced, re-read right before: only a plain
+// shell is closed. Closing is not typing. Anything else (no proof, busy,
+// gone, unreadable) leaves the pane as it is and says so.
+func closeOldPanes(herdr func(args ...string) ([]byte, error), procStart func(int) (uint64, error),
+	p *relaunchProof, olds []oldPane, stdout io.Writer) error {
+	proven := map[string]bool{}
+	for try := 0; len(proven) < len(olds) && try < p.Tries; try++ {
+		if try > 0 {
+			p.Sleep(time.Second)
+		}
+		snaps, err := p.Agents()
+		if err != nil {
+			continue
+		}
+		for _, o := range olds {
+			if s, ok := snaps[o.Role]; ok && provenIn(s, o, procStart) {
+				proven[o.Role] = true
+			}
+		}
+	}
+	var errs []error
+	for _, o := range olds {
+		if !proven[o.Role] {
+			fmt.Fprintf(stdout, "%s: old pane %s left as it is (no proof of the new agent in pane %s after %d s)\n", o.Name, o.Old, o.New, p.Tries)
+			continue
+		}
+		shell, err := paneShell(herdr, o.Old)
+		if err != nil {
+			fmt.Fprintf(stdout, "%s: old pane %s left as it is (unreadable: %v)\n", o.Name, o.Old, err)
+			continue
+		}
+		if !shell {
+			fmt.Fprintf(stdout, "%s: old pane %s left as it is (no longer a plain shell)\n", o.Name, o.Old)
+			continue
+		}
+		if _, err := herdr("pane", "close", o.Old); err != nil {
+			errs = append(errs, fmt.Errorf("herdr pane close %s (%s): %w", o.Old, o.Name, err))
+			fmt.Fprintf(stdout, "%s: old pane %s not closed: %v\n", o.Name, o.Old, err)
+			continue
+		}
+		fmt.Fprintf(stdout, "%s: old pane %s closed\n", o.Name, o.Old)
+	}
+	return errors.Join(errs...)
+}
+
+// provenIn: the agent's verified identity is a new process, alive, bound in
+// the pane the relaunch created.
+func provenIn(s bus.AgentSnapshot, o oldPane, procStart func(int) (uint64, error)) bool {
+	if s.Pane != o.New || s.PID <= 0 || s.PIDStart == 0 || s.PID == o.Was.PID && s.PIDStart == o.Was.PIDStart || procStart == nil {
+		return false
+	}
+	start, err := procStart(s.PID)
+	return err == nil && start == s.PIDStart
 }
 
 // createTab adds a missing tab to the workspace, unfocused, and returns its pane.

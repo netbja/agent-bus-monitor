@@ -571,6 +571,14 @@ func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunchOptions,
 		}
 	}
 	o.Dir = os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
+	if ok {
+		// A relaunched agent is proven by its own bind before its old pane closes.
+		sleep := d.Sleep
+		if sleep == nil {
+			sleep = time.Sleep
+		}
+		o.Prove = &relaunchProof{Agents: func() (map[string]bus.AgentSnapshot, error) { return d.Agents(project) }, Sleep: sleep, Tries: 60}
+	}
 	return relaunchOpen(d.Herdr, snaps, ok, d.ProcStart, project, ws, tpl, o, stdout)
 }
 

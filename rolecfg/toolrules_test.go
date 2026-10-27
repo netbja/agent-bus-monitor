@@ -202,6 +202,10 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 	}
 }
 
+// masterUpRules are master's own rules in the shipped manifest (Bernard,
+// 2026-10-27): the exact relaunch of this project, nothing broader.
+var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)"}
+
 func TestShippedManifestRules(t *testing.T) {
 	m, err := Load(repoPath(t, "roles.toml"))
 	if err != nil {
@@ -220,8 +224,8 @@ func TestShippedManifestRules(t *testing.T) {
 			others++
 		}
 	}
-	if len(r.Allow) != others {
-		t.Fatalf("master allow = %v, want one per role but master and deploy (%d)", r.Allow, others)
+	if len(r.Allow) != others+len(masterUpRules) || !reflect.DeepEqual(r.Allow[others:], masterUpRules) {
+		t.Fatalf("master allow = %v, want one per role but master and deploy (%d), then %v", r.Allow, others, masterUpRules)
 	}
 	for _, role := range m.roleOrder {
 		resolved, err := m.Resolve(role)
