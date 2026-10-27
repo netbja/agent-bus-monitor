@@ -199,6 +199,13 @@ func TestShellComposeKeyCost(t *testing.T) {
 	if n := wrapCalls - calls; n != 1 {
 		t.Errorf("one key wrapped the text %d times, want once", n)
 	}
+	// A fade frame (ten a second while an agent waits) wraps nothing.
+	calls = wrapCalls
+	m = step(t, m, fadeMsg(shellNow.Add(100*time.Millisecond)))
+	_ = m.View()
+	if n := wrapCalls - calls; n != 0 {
+		t.Errorf("a fade frame with the window open wrapped the text %d times", n)
+	}
 }
 
 // Every row of wrap fits its width (a single cluster wider than the width
