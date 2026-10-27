@@ -27,8 +27,8 @@ type textArea struct {
 	top   int
 	limit int
 
-	rev    int   // bumped by every change of text
-	cached []row // the rows of revision cachedRev at width cachedW
+	rev                int   // bumped by every change of text
+	cached             []row // the rows of revision cachedRev at width cachedW
 	cachedRev, cachedW int
 }
 
