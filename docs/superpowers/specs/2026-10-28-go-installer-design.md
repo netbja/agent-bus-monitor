@@ -65,18 +65,30 @@ The live broker shares the compose project and container name with every copy of
 (`name: agent-bus`, `container_name: agent-bus-redis`); an unstubbed `uninstall --yes` in a test
 once stopped it (memory: stub docker in installer tests). Three layers:
 
-1. **One runner.** Every external command (`docker`, `herdr`, `git`, `go`, `systemctl`,
-   `launchctl`, `curl`) goes through `setup.Runner`. Go unit tests construct the package with a
-   fake runner only: the real runner lives in `cmd/agentbus`, and the package's constructor refuses
-   a nil one. No exec exists in a unit test.
-2. **The broker belongs to a checkout.** Before `stop` or `down -v`, `uninstall` reads the
-   container's label `com.docker.compose.project.working_dir` (`docker inspect`) and acts only if
-   it is **this** checkout (resolved paths). The test's copy of the repository is another
-   directory, so even an unstubbed run says "the broker was started from <dir>, not this checkout:
-   left as it is". `status` reports the same fact.
+1. **One runner, wired everywhere.** Every external command (`docker`, `herdr`, `git`, `go`,
+   `systemctl`, `launchctl`, `curl`, and the client CLIs the model refresh runs) goes through
+   `setup.Runner`. That includes the code the installer calls in process: `models.Refresh` today
+   runs `grok models` and `agy models` through `exec.CommandContext` (`models/readers.go`), and
+   `service.Manager` defaults to `exec.Command` (`service/manager.go`). Both gain an injected run
+   function (`models.Refresh(ctx, opts)` with `opts.Run`; `service.NewManager(…, run)`), and
+   `setup.New` wires the one runner into them; it refuses a nil runner. The real runner lives only
+   in `cmd/agentbus`. A unit test of the whole install flow therefore runs no client, no
+   `systemctl`, no `docker`: asserted by a runner that fails the test on any command it was not
+   told to expect.
+2. **The broker belongs to a checkout, for every compose verb.** Every checkout (a test copy, a
+   worktree) shares `name: agent-bus` and `container_name: agent-bus-redis`, so `up -d` from
+   another checkout would recreate the **live** project's container from its own config whenever
+   the 6380 probe fails (the live broker stopped, another port mapping). So before `up -d`,
+   `stop` and `down -v` alike, setup reads the label `com.docker.compose.project.working_dir` of
+   any container named `agent-bus-redis` (`docker inspect`) and acts only when there is none, or
+   when its label is **this** checkout (resolved paths). Otherwise it reports "the broker belongs
+   to <dir>: start or stop it from there" and leaves it: `install` continues without starting
+   Redis (a warning, as `--no-docker` does), `uninstall` skips that step. `status` reports the
+   owner.
 3. **The end-to-end tests keep their fakes first on `PATH`** (`tests/installer_test.sh`,
-   unchanged), and gain one assert: the fake `docker` serves an `inspect` with a foreign
-   `working_dir`, and `uninstall --yes` must not call `compose stop`.
+   unchanged), and gain two asserts: the fake `docker` serves an `inspect` with a foreign
+   `working_dir`, and then `install` (port probe failing) must not call `compose up`, and
+   `uninstall --yes` must not call `compose stop` or `down`.
 
 Services are only ever touched through `service.Manager` (its tests use fake managers already).
 
@@ -86,8 +98,11 @@ Services are only ever touched through `service.Manager` (its tests use fake man
 - No `sed -i`, `readlink -f`, `stat` flags or `/dev/tcp`: `os`, `filepath.EvalSymlinks`, `net`.
 - `docker compose` vs `docker-compose`: detected once, same order as today.
 - herdr config path: `~/.config/herdr/config.toml` on both (as today).
-- Terminal detection for `ask`: `golang.org/x/term`-free, `os.Stdin.Stat()` char-device check, as
-  `busmon` does for `--reset`; `NO_COLOR` and a non-terminal stdout disable colour.
+- Terminal detection for `ask`: a real isatty (`ioctl` `TCGETS` on Linux, `TIOCGETA` on macOS,
+  through `golang.org/x/sys/unix`, already a dependency of the module's terminal libraries), never
+  a character-device check (`/dev/null` is one, so cron, CI or a unit would read as a terminal).
+  And whatever the detection says, EOF on a prompt is the cautious default. `NO_COLOR` and a
+  non-terminal stdout disable colour.
 
 ## Outputs
 
@@ -103,7 +118,10 @@ types). **Stated differences:**
 
 ## Tests
 
-- **Unit** (`setup/`, fake runner, fake FS root, no network): every row of the inventory, the
+- **Unit** (`setup/`, fake runner that fails on any unexpected command, fake FS root, no
+  network): every row of the inventory, the model refresh and the service calls through the
+  injected runner, the broker ownership check before `up -d`, `stop` and `down -v`, EOF on a
+  prompt taking the cautious default, the
   keybinding exact-block swap (unedited, edited, absent, two copies), the plugin record rule,
   the skills marker rule, `uninstall` order and its stop-on-service-failure, `--yes` defaults, the
   no-terminal stop, ownership of the broker, `update`'s exec arguments.
@@ -120,8 +138,8 @@ types). **Stated differences:**
    one release, documented in the release notes.
 3. Remove the legacy script once a release has shipped without a report against the Go installer.
 
-## Open questions for review
+## Settled in review
 
-1. Rebuild `agentbus` stamped inside Go (proposed: one source for the version logic, one extra
-   cached build), or let the thin script stamp it and the Go side copy `os.Executable()`?
-2. Keep `--force` as a no-op forever, or drop it at the switch with a one-release warning?
+1. `agentbus` is rebuilt stamped inside Go: one source for the version logic, one extra cached
+   build (foureyes agrees).
+2. `--force` is dropped at the switch, after one release in which it warns that it does nothing.
