@@ -19,3 +19,22 @@ func TestIdentSessionFollowsTheProofOnly(t *testing.T) {
 		t.Fatalf("no proof, yet an ident session %q", got.IdentSession)
 	}
 }
+
+// A session proved after /clear is never reverted by a status of the same
+// process naming an older session (foureyes' review of lifecycle-1): for the
+// same pid and start a status only fills an empty IdentSession; a new
+// process takes the status's session.
+func TestStatusOfTheSameProcessNeverMovesAProvedSession(t *testing.T) {
+	proved := &AgentSnapshot{PID: 4242, PIDStart: 7, IdentTS: 100, Session: "before-clear-0001", IdentSession: "after-clear-0002"}
+	got := mergeSnapshot(proved, AgentSnapshot{TS: 200, PID: 4242, PIDStart: 7, Session: "before-clear-0001"}, false)
+	if got.IdentSession != "after-clear-0002" {
+		t.Fatalf("same process, older session: ident session %q", got.IdentSession)
+	}
+	empty := &AgentSnapshot{PID: 4242, PIDStart: 7, IdentTS: 100}
+	if got := mergeSnapshot(empty, AgentSnapshot{TS: 200, PID: 4242, PIDStart: 7, Session: "first-own-0003"}, false); got.IdentSession != "first-own-0003" {
+		t.Fatalf("same process, none proved yet: ident session %q", got.IdentSession)
+	}
+	if got := mergeSnapshot(proved, AgentSnapshot{TS: 200, PID: 5151, PIDStart: 8, Session: "relaunched-0004"}, false); got.IdentSession != "relaunched-0004" {
+		t.Fatalf("new process: ident session %q", got.IdentSession)
+	}
+}

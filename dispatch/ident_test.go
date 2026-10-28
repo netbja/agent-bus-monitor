@@ -79,3 +79,40 @@ func TestParseStatOddComm(t *testing.T) {
 		t.Fatalf("parseStat = %+v; want ppid 77 start 123456", f)
 	}
 }
+
+// The SessionStart hook proves its client before it detaches (lifecycle
+// spec, part D): its ancestors with their start times, self excluded, up to
+// init or the first unreadable process.
+func TestAncestorsListsTheChainWithStarts(t *testing.T) {
+	stat := map[int]statFields{50: {40, 500}, 40: {30, 400}, 30: {20, 300}, 20: {1, 200}, 1: {0, 1}}
+	lookup := func(pid int) (statFields, error) {
+		f, ok := stat[pid]
+		if !ok {
+			return statFields{}, os.ErrNotExist
+		}
+		return f, nil
+	}
+	got := ancestors(50, lookup)
+	want := []ProcID{{40, 400}, {30, 300}, {20, 200}, {1, 1}}
+	if len(got) != len(want) {
+		t.Fatalf("ancestors = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ancestors = %v, want %v", got, want)
+		}
+	}
+	delete(stat, 30) // gone mid-walk: the chain stops before it
+	if got := ancestors(50, lookup); len(got) != 1 || got[0] != (ProcID{40, 400}) {
+		t.Fatalf("broken chain: %v", got)
+	}
+	if got := ancestors(99, lookup); len(got) != 0 {
+		t.Fatalf("unknown self: %v", got)
+	}
+
+	live := Ancestors(os.Getpid())
+	start, err := ProcStart(os.Getppid())
+	if err != nil || len(live) == 0 || live[0] != (ProcID{os.Getppid(), start}) {
+		t.Fatalf("Ancestors(self) = %v, want the parent %d (start %d, %v) first", live, os.Getppid(), start, err)
+	}
+}

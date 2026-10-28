@@ -12,9 +12,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"syscall"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // Usage is one day's tokens: In (input, uncached), Write (cache creation),
@@ -37,12 +38,9 @@ type Budget struct {
 	Bytes int64
 }
 
-// sessionIDPattern is a session id that can be joined into a path: no
-// separator, no dot, no glob.
-var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{7,63}$`)
-
-// ValidSessionID reports an id SessionFiles accepts.
-func ValidSessionID(id string) bool { return sessionIDPattern.MatchString(id) }
+// ValidSessionID reports an id SessionFiles accepts: bus's rule, one that can
+// be joined into a path (no separator, no dot, no glob).
+func ValidSessionID(id string) bool { return bus.ValidSessionID(id) }
 
 // SessionFiles are a Claude Code session's transcript and its subagents'
 // transcripts, under any project directory of root (~/.claude/projects).

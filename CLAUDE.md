@@ -503,7 +503,14 @@ It never touches Redis — see README "Deployment topology".
   that reports `env ROLES_TOML=… agent-launch <role> <p> [--profile <p>] --resume <id>` with
   `herdr pane report-agent-session --source agentbus --agent claude` from a detached sender (retried
   15 s while herdr answers `resume_not_accepted`, logged to `<state>/resume.log`): no state report, no
-  authority, so `herdr:claude`'s raw `claude --resume` stays the fallback when herdr refuses. The hook
+  authority, so `herdr:claude`'s raw `claude --resume` stays the fallback when herdr refuses. It also
+  hands the new session to a detached `roles prove-session` with its ancestor chain read before it
+  detaches (`dispatch.Ancestors`; lifecycle spec part D): `Bus.ProveSession` moves `IdentSession`
+  only when the stored verified pid and start are in that chain and the hook's foreground stamp is newer
+  than the stored `ident_session_at` (a new process resets it), so the session follows `/clear`
+  (Linux only, like every verified identity: `/proc`; on macOS no agent is verified, so nothing is proved).
+  The sender re-reads the stored identity and that its pid is alive with that start, but trusts the chain:
+  a documented residual, since the bus is no boundary against the local user (as with `status`). The hook
   never prints on stdout and always exits 0 (spec
   `docs/superpowers/specs/2026-10-21-launcher-resume-design.md`). Units always run `buildinfo.Bin` (setup's
   `$BIN_DIR/agentbus`) when it exists. `agentbus projects` and `agentbus identity` sit above the

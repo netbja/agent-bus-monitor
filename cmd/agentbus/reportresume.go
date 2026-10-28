@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -33,8 +34,11 @@ import (
 // reportResume is the hook. It never prints on stdout (a SessionStart hook's
 // stdout becomes Claude's context) and always exits 0: it hands the report to
 // a detached sender and returns at once, so Claude's start never waits on
-// herdr.
-func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error) int {
+// herdr. It also hands the session to a detached prover (lifecycle spec, part
+// D), with its ancestors read here: once detached, the sender is reparented
+// and its own ancestry proves nothing. Linux only, like every process
+// identity here (/proc): without a chain no prover is spawned.
+func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error, fg hookFacts) int {
 	get := func(k string) string { v, _ := lookupEnv(env, k); return v }
 	pane, herdr, role, project, manifest := get("HERDR_PANE_ID"), get("HERDR_BIN_PATH"), get("AGENT_BUS_AGENT"), get("AGENT_BUS_PROJECT"), get("ROLES_TOML")
 	if len(args) != 1 || get("HERDR_ENV") != "1" || pane == "" || herdr == "" || role == "" || project == "" || manifest == "" {
@@ -57,6 +61,16 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		return 0
 	}
 	logPath := filepath.Join(paths.StateDir(project), "resume.log")
+	if chain := fg.Ancestors(); len(chain) > 0 && bus.ValidName(role) && bus.ValidSessionID(in.SessionID) {
+		at := strconv.FormatInt(fg.Now().UnixNano(), 10) // this event's order, taken before the detach
+		argv := []string{"roles", "prove-session", logPath, project, role, in.SessionID, at, "--"}
+		for _, p := range chain {
+			argv = append(argv, strconv.Itoa(p.PID)+":"+strconv.FormatUint(p.Start, 10))
+		}
+		if err := spawn(argv); err != nil {
+			resumeLog(logPath, time.Now(), "session prover not started: "+err.Error())
+		}
+	}
 	profile, err := resumeProfile(manifest, role, get("AGENT_BUS_PROFILE"))
 	if err != nil {
 		resumeLog(logPath, time.Now(), "refused: "+err.Error())
@@ -91,6 +105,14 @@ func resumeProfile(manifest, role, running string) (string, error) {
 		return "", nil
 	}
 	return running, nil
+}
+
+// hookFacts is what the hook reads in its foreground, before it detaches:
+// its ancestors (the proof of its client) and the clock that orders its
+// event against the next /clear's.
+type hookFacts struct {
+	Ancestors func() []dispatch.ProcID
+	Now       func() time.Time
 }
 
 // spawnDetached starts this binary with argv in its own session, without
@@ -152,6 +174,82 @@ func reportResumeSend(args []string, d senderDeps) int {
 		}
 		d.sleep(time.Second)
 	}
+}
+
+// sessionProver is the bus as the prover needs it.
+type sessionProver interface {
+	Agents(ctx context.Context) (map[string]bus.AgentSnapshot, error)
+	ProveSession(ctx context.Context, agent string, pid int, pidStart uint64, session string, at int64) error
+}
+
+// openProver connects to the project's bus from the environment the hook
+// left the prover.
+func openProver(project string) (sessionProver, func(), error) {
+	r, err := bus.Connect("")
+	if err != nil {
+		return nil, nil, err
+	}
+	b, err := bus.Open(r, project)
+	if err != nil {
+		r.Close()
+		return nil, nil, err
+	}
+	return b, func() { r.Close() }, nil
+}
+
+// proveSessionSend records the new session as the one proved with the agent's
+// process: <log> <project> <agent> <session> <at> -- <pid:start>..., the
+// hook's stamp (Unix ns) and ancestors; a proof older than the stored one is
+// refused by ProveSession (bus.ErrStaleProof), so the later /clear wins. It proves only when the stored verified pid, with its start time,
+// is one of them and is still alive with that start time, read here (a
+// process gone or recycled since the hook proves nothing); ProveSession
+// checks the stored identity again in its transaction. What it cannot
+// re-read is the ancestry itself, which only the hook could see: a process
+// of the same local user could pass a forged chain, as it could forge any
+// status (the bus is no boundary against the local user). Every outcome is
+// one line of the log.
+func proveSessionSend(args []string, open func(project string) (sessionProver, func(), error), procStart func(pid int) (uint64, error)) int {
+	if len(args) < 7 || args[5] != "--" {
+		return 0
+	}
+	logPath, project, agent, session := args[0], args[1], args[2], args[3]
+	at, err := strconv.ParseInt(args[4], 10, 64)
+	if err != nil || at <= 0 {
+		resumeLog(logPath, time.Now(), "session not proved: no stamp")
+		return 0
+	}
+	chain := map[string]bool{}
+	for _, a := range args[6:] {
+		chain[a] = true
+	}
+	b, done, err := open(project)
+	if err != nil {
+		resumeLog(logPath, time.Now(), "session not proved: "+err.Error())
+		return 0
+	}
+	defer done()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	snaps, err := b.Agents(ctx)
+	if err != nil {
+		resumeLog(logPath, time.Now(), "session not proved: "+err.Error())
+		return 0
+	}
+	s := snaps[agent]
+	if s.PID <= 0 || !chain[strconv.Itoa(s.PID)+":"+strconv.FormatUint(s.PIDStart, 10)] {
+		resumeLog(logPath, time.Now(), "session not proved: "+agent+"'s verified process is not this hook's client")
+		return 0
+	}
+	if start, err := procStart(s.PID); err != nil || start != s.PIDStart {
+		resumeLog(logPath, time.Now(), "session not proved: "+agent+"'s verified process is gone")
+		return 0
+	}
+	if err := b.ProveSession(ctx, agent, s.PID, s.PIDStart, session, at); err != nil {
+		resumeLog(logPath, time.Now(), "session not proved: "+err.Error())
+		return 0
+	}
+	resumeLog(logPath, time.Now(), "session proved: "+agent+" "+session)
+	return 0
 }
 
 func oneLine(out []byte, err error) string {

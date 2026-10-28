@@ -78,9 +78,16 @@ type AgentSnapshot struct {
 	IdentTS int64 `json:"ident_ts,omitempty"`
 	// IdentSession (context-alert) is the session recorded with the last
 	// proof: set only when the identity is proved (a status with a pid, or a
-	// bind), so an unverified status naming another session never moves it.
+	// bind), so an unverified status naming another session never moves it;
+	// ProveSession moves it alone for the same process (after /clear), and a
+	// status of the same process only fills an empty one.
 	// The dispatcher reads the context fill of this session only.
 	IdentSession string `json:"ident_session,omitempty"`
+	// IdentSessionAt is the stamp of the SessionStart hook whose proof set
+	// IdentSession (Unix ns, the hook's clock, lifecycle-1): a later proof
+	// writes only with a newer one, so two /clears' provers landing in
+	// reverse order leave the newer session. A new process resets it.
+	IdentSessionAt int64 `json:"ident_session_at,omitempty"`
 	// Client and Provider (v0.13) come from the launcher's AGENT_BUS_CLIENT /
 	// AGENT_BUS_PROVIDER: which AI runs the agent, and whose quota it draws on.
 	Client   string `json:"client,omitempty"`
