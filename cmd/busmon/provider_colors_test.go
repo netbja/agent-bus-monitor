@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
+
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/quota"
 )
@@ -28,11 +30,35 @@ func TestEveryQuotaProviderHasItsColour(t *testing.T) {
 	if providerRole("someone-new", RoleMuted) != RoleMuted {
 		t.Error("an unknown provider lost its fallback colour")
 	}
-	if got := nearest16("#CC785C"); got == "" {
-		t.Error("no nearest ANSI colour")
+	// The 16-colour palette (both reviews of 0b12f23): a hand-picked column,
+	// no two providers alike, none an alert role's colour (attention olive,
+	// error red, maroon) nor the text roles' own gray, silver or teal, and
+	// openai in the terminal's own foreground, readable on dark and light.
+	withPalette(t, "dark", false, 256)
+	seen := map[string]string{}
+	forbidden := map[string]bool{"red": true, "maroon": true, "olive": true, "gray": true, "silver": true, "teal": true}
+	for _, role := range []Role{RoleAttention, RoleError, RoleMuted, RoleDim, RoleAccent, RoleLine} {
+		forbidden[th.tags[role]] = true
 	}
-	if nearest16("#1677FF") != "blue" && nearest16("#1677FF") != "navy" && nearest16("#1677FF") != "teal" {
-		t.Errorf("moonshot's blue maps to %q", nearest16("#1677FF"))
+	for _, h := range providerHues {
+		c := th.tags[h.role]
+		if c == "" {
+			t.Errorf("%s has no 16-colour value", h.provider)
+		}
+		if other, dup := seen[c]; dup {
+			t.Errorf("%s and %s share the 16-colour %q", h.provider, other, c)
+		}
+		seen[c] = h.provider
+		if forbidden[c] {
+			t.Errorf("%s uses %q, a colour busmon gives a role of its own", h.provider, c)
+		}
+	}
+	if th.colors[RoleProvOpenAI] != tcell.ColorDefault {
+		t.Errorf("openai on 16 colours = %q, want the terminal's own foreground", th.tags[RoleProvOpenAI])
+	}
+	withPalette(t, "light", false, 256)
+	if th.colors[RoleProvOpenAI] != tcell.ColorDefault {
+		t.Errorf("openai on light 16 colours = %q: unreadable on white", th.tags[RoleProvOpenAI])
 	}
 	withPalette(t, "dark", false, 1<<24)
 	if r, g, b := th.colors[RoleProvAnthropic].RGB(); r != 0xCC || g != 0x78 || b != 0x5C {

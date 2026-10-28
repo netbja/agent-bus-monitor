@@ -32,20 +32,25 @@ const (
 	roleCount
 )
 
-// providerHues: each provider's colour on dark and on light backgrounds; the
-// 16-colour palette takes the nearest ANSI colour, the no-colour one none.
+// providerHues: each provider's colour on dark and on light backgrounds, and
+// on 16 colours a hand-picked ANSI name (both reviews of busmon-llm-colors:
+// the nearest colour collided). No two providers share a 16-colour value,
+// none is an alert role's colour (attention olive, error red, maroon) or the
+// text roles' gray, silver or teal, and openai keeps the terminal's own
+// foreground ("-"), readable whatever the background. The no-colour palette
+// takes none.
 var providerHues = []struct {
-	provider    string
-	role        Role
-	dark, light string
+	provider          string
+	role              Role
+	dark, light, ansi string
 }{
-	{"anthropic", RoleProvAnthropic, "#CC785C", "#CC785C"},
-	{"openai", RoleProvOpenAI, "#E5E7EB", "#202123"},
-	{"google", RoleProvGoogle, "#34A853", "#34A853"},
-	{"moonshot", RoleProvMoonshot, "#1677FF", "#1677FF"},
-	{"xai", RoleProvXAI, "#7B6FD6", "#7B6FD6"},
-	{"deepseek", RoleProvDeepSeek, "#4D6BFE", "#4D6BFE"},
-	{"xiaomi", RoleProvXiaomi, "#FF6900", "#FF6900"},
+	{"anthropic", RoleProvAnthropic, "#CC785C", "#CC785C", "yellow"},
+	{"openai", RoleProvOpenAI, "#E5E7EB", "#202123", "-"},
+	{"google", RoleProvGoogle, "#34A853", "#34A853", "green"},
+	{"moonshot", RoleProvMoonshot, "#1677FF", "#1677FF", "blue"},
+	{"xai", RoleProvXAI, "#7B6FD6", "#7B6FD6", "fuchsia"},
+	{"deepseek", RoleProvDeepSeek, "#4D6BFE", "#4D6BFE", "aqua"},
+	{"xiaomi", RoleProvXiaomi, "#FF6900", "#FF6900", "lime"},
 }
 
 // providerRole is the provider's role, or fallback for one the table lacks
@@ -57,30 +62,6 @@ func providerRole(provider string, fallback Role) Role {
 		}
 	}
 	return fallback
-}
-
-// ansi16 are the 16 ANSI colours tcell names, with their usual RGB.
-var ansi16 = []struct {
-	name    string
-	r, g, b int32
-}{
-	{"black", 0, 0, 0}, {"maroon", 128, 0, 0}, {"green", 0, 128, 0}, {"olive", 128, 128, 0}, {"navy", 0, 0, 128},
-	{"purple", 128, 0, 128}, {"teal", 0, 128, 128}, {"silver", 192, 192, 192}, {"gray", 128, 128, 128},
-	{"red", 255, 0, 0}, {"lime", 0, 255, 0}, {"yellow", 255, 255, 0}, {"blue", 0, 0, 255}, {"fuchsia", 255, 0, 255},
-	{"aqua", 0, 255, 255}, {"white", 255, 255, 255},
-}
-
-// nearest16 is the ANSI colour closest to hex (squared RGB distance).
-func nearest16(hex string) string {
-	r, g, b := tcell.GetColor(hex).RGB()
-	best, bestD := "", int32(-1)
-	for _, c := range ansi16 {
-		d := (r-c.r)*(r-c.r) + (g-c.g)*(g-c.g) + (b-c.b)*(b-c.b)
-		if bestD < 0 || d < bestD {
-			best, bestD = c.name, d
-		}
-	}
-	return best
 }
 
 type Palette int
@@ -136,7 +117,7 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 		t.palette = Palette16
 		copy(t.tags[:], []string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray"})
 		for _, h := range providerHues {
-			t.tags[h.role] = nearest16(h.dark)
+			t.tags[h.role] = h.ansi
 		}
 	}
 	if noColor {
