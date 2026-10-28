@@ -300,7 +300,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   never wraps by one cell. `forYou` ranks asks, waits, the person's gates and unread lines, and `decisions` is
   its badge and reminder subset; its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
-  in place (`tea_expand.go`), then opens it in the reader, a stack of pages over the lower zone, one
+  in place (`tea_expand.go`; A12: `▼` in the gutter, the text under the message column behind a
+  muted `│` guide, a last muted `↵ full text` line), then opens it in the reader, a stack of pages over the lower zone, one
   per overlay, Esc back; on a page opened from Activity or For you, `n`/`p` (→/←) show the list's next or
   previous item in its place (A5, `readerStep`, `openTracked`) (`tea_reader.go`: bodies built on the update path with a stamp, an ask's
   options answered by digit or click, `ModeShellAsk`), and markdown is cached by id, width and

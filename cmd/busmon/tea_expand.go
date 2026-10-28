@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -84,8 +85,36 @@ func (m *Model) keepExpansion() {
 	}
 }
 
-// withExpansion inserts the expanded row's text after it; width is the
-// rows' width.
+// forYouTextCol is where a For you row's text starts: the glyph, the kind
+// word and the agent's column (forYouParts).
+const forYouTextCol = 2 + 7 + 10
+
+// minExpandText is the narrowest text an indented expansion keeps; a panel
+// narrower than its indent plus this shows the text from the left edge.
+const minExpandText = 24
+
+// expandIndent is the column an expansion's text starts under: the message
+// column of the panel's rows at tier (A12).
+func expandIndent(p PanelID, tier Tier) int {
+	if p == PanelForYou {
+		return forYouTextCol
+	}
+	c := colsFor(tier)
+	return 2 + c.time + c.from + c.to + c.typ
+}
+
+// expansionIndent keeps indent while the text beside its guide still has
+// minExpandText cells in width, else 0.
+func expansionIndent(indent, width int) int {
+	if width-indent-2 < minExpandText {
+		return 0
+	}
+	return indent
+}
+
+// withExpansion inserts the expanded row's text after it, under the row's
+// message column behind a muted guide, then a muted "↵ full text" line for
+// the second Enter (A12); width is the rows' width.
 func (m *Model) withExpansion(p PanelID, items []ListItem, width int) []ListItem {
 	if m.ui.expanded == "" || m.ui.expandIn != p {
 		return items
@@ -95,20 +124,26 @@ func (m *Model) withExpansion(p PanelID, items []ListItem, width int) []ListItem
 	if i < 0 || !ok {
 		return items
 	}
-	limit := max(1, m.lists.of(p).rect.H/2)
-	md := m.cache.markdown(fl.ev.ID, messageBody(fl.ev), max(1, width-2))
-	more := len(md) > limit
-	if more {
-		md = md[:limit-1]
+	indent := expansionIndent(expandIndent(p, m.layout.Tier), width)
+	pad := strings.Repeat(" ", indent)
+	limit := max(2, m.lists.of(p).rect.H/2)
+	md := m.cache.markdown(fl.ev.ID, messageBody(fl.ev), max(1, width-indent-2))
+	more := 0
+	if len(md) > limit-1 {
+		more, md = len(md)-(limit-1), md[:limit-1]
 	}
 	ext := make([]ListItem, 0, len(md)+1)
 	for j, l := range md {
-		ext = append(ext, ListItem{Key: expandKey(j), Line: append(Line{{Text: "  "}}, l...)})
+		ext = append(ext, ListItem{Key: expandKey(j), Line: append(Line{{Text: pad}, {Text: glyphVertical + " ", Role: RoleMuted}}, l...)})
 	}
-	if more {
-		ext = append(ext, ListItem{Key: expandKey(len(md)), Line: Line{{Text: "  ... enter for more", Role: RoleMuted}}})
+	last := pad + GlyphReturn + " full text"
+	if more > 0 {
+		last += fmt.Sprintf(" %s %d more lines", GlyphNone, more)
 	}
-	return slices.Concat(items[:i+1], ext, items[i+1:])
+	ext = append(ext, ListItem{Key: expandKey(len(md)), Line: Line{{Text: last, Role: RoleMuted}}})
+	row := items[i]
+	row.Expanded = true
+	return slices.Concat(items[:i], []ListItem{row}, ext, items[i+1:])
 }
 
 // keepInView sets each list's kept rows: the expanded row's text, which

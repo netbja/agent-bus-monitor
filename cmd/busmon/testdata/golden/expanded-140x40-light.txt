@@ -17,18 +17,18 @@
 │  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 │    14:24  architect            status     done · spec merged                                                                             │
 │    14:50  ♙ Bernard → coder    directive  review lot 1                                                                                   │
-│▶   14:51  coder                report     Lot 1 delivered (+197)                                                                         │
-│    Lot 1 delivered                                                                                                                       │
-│                                                                                                                                          │
-│    Done                                                                                                                                  │
-│    · adapter in d0a72be ; tests green                                                                                                    │
-│      func veryLongFunctionNameForTheGolden(argumentOne string, argumentTwo int, argumentThree []string) (result string, err error) {     │
+│▼   14:51  coder                report     Lot 1 delivered (+197)                                                                         │
+│                                           │ Lot 1 delivered                                                                              │
+│                                           │                                                                                              │
+│                                           │ Done                                                                                         │
+│                                           │ · adapter in d0a72be ; tests green                                                           │
+│                                           │   func veryLongFunctionNameForTheGolden(argumentOne string, argumentTwo int, argumentThree []│
+│                                           │ → string) (result string, err error) {                                                       │
+│                                           ↵ full text                                                                                    │
 │  ○ 14:52  master    → bernard  directive  please look at the plan                                                                        │
 │  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
 │  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
 │    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
-│                                                                                                                                          │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

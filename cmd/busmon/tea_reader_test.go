@@ -52,7 +52,7 @@ func expansionRows(m Model, p PanelID) []string {
 	var out []string
 	for _, it := range m.lists.of(p).items {
 		if isExpandKey(it.Key) {
-			out = append(out, strings.TrimSpace(it.Line.text()))
+			out = append(out, strings.TrimPrefix(strings.TrimSpace(it.Line.text()), glyphVertical+" "))
 		}
 	}
 	return out
@@ -103,8 +103,94 @@ func TestShellExpansionIsCapped(t *testing.T) {
 	m.lists.activity.Select(feedKey(t, m, "1793030000000-0"))
 	m = keys(t, m, kEnter)
 	rows := expansionRows(m, PanelActivity)
-	if limit := m.layout.Lower.H / 2; len(rows) != limit || rows[len(rows)-1] != "... enter for more" {
-		t.Fatalf("%d rows (limit %d), last %q", len(rows), m.layout.Lower.H/2, rows[len(rows)-1])
+	limit := m.layout.Lower.H / 2
+	if len(rows) != limit || !strings.HasPrefix(rows[len(rows)-1], GlyphReturn+" full text "+GlyphNone+" ") ||
+		!strings.HasSuffix(rows[len(rows)-1], " more lines") {
+		t.Fatalf("%d rows (limit %d), last %q", len(rows), limit, rows[len(rows)-1])
+	}
+}
+
+// A12 (Bernard, 2026-10-27): the expanded row shows ▼ in the gutter where a
+// selected row shows ▶; its text is indented under the message column behind
+// a muted │ guide, and a last muted line "↵ full text" says what the second
+// Enter does. Same in For you, under its text column.
+func TestShellExpansionGuide(t *testing.T) {
+	pinLocal(t)
+	check := func(m Model, p PanelID, key string, indent int) {
+		t.Helper()
+		lst := m.lists.of(p)
+		i := lst.index(key)
+		if i < 0 || !lst.items[i].Expanded {
+			t.Fatalf("panel %v: row %q not marked expanded", p, key)
+		}
+		var body []ListItem
+		for _, it := range lst.items[i+1:] {
+			if !isExpandKey(it.Key) {
+				break
+			}
+			body = append(body, it)
+		}
+		if len(body) < 2 {
+			t.Fatalf("panel %v: %d expansion rows", p, len(body))
+		}
+		pad := strings.Repeat(" ", indent)
+		for _, it := range body[:len(body)-1] {
+			if txt := it.Line.text(); !strings.HasPrefix(txt, pad+glyphVertical+" ") {
+				t.Fatalf("panel %v: body row %q not under column %d behind the guide", p, txt, indent)
+			}
+			if it.Line[0].Role != RoleMuted && it.Line[1].Role != RoleMuted {
+				t.Fatalf("panel %v: the guide is not muted: %+v", p, it.Line)
+			}
+		}
+		last := body[len(body)-1]
+		if txt := last.Line.text(); strings.TrimRight(txt, " ") != pad+GlyphReturn+" full text" {
+			t.Fatalf("panel %v: last row %q", p, txt)
+		}
+		for _, sg := range last.Line {
+			if strings.TrimSpace(sg.Text) != "" && sg.Role != RoleMuted {
+				t.Fatalf("panel %v: the last row is not muted: %+v", p, last.Line)
+			}
+		}
+	}
+	m := inState(t, fixtureShell(t, 140, 40), "expanded")
+	check(m, PanelActivity, feedKey(t, m, reportID), expandIndent(PanelActivity, m.layout.Tier))
+
+	m = fixtureShell(t, 140, 40)
+	i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Rank == rankUnread })
+	key := m.forYou[i].Key
+	m.lists.forYou.Select(key)
+	m = keys(t, m, kEnter)
+	check(m, PanelForYou, key, expandIndent(PanelForYou, m.layout.Tier))
+}
+
+// The indent is the message column of the tier's rows, and a panel too
+// narrow for it keeps the text at the left edge instead.
+func TestExpandIndent(t *testing.T) {
+	for _, tier := range []Tier{TierWide, TierMedium, TierNarrow} {
+		c := colsFor(tier)
+		want := 2 + c.time + c.from + c.to + c.typ
+		if got := expandIndent(PanelActivity, tier); got != want {
+			t.Errorf("tier %v: Activity indent %d, want %d", tier, got, want)
+		}
+		probe := activityRowAt(feedLine{id: "x", ev: bus.Event{ID: "1-0", Kind: "notify", From: "f", Message: "MSG"}, at: time.Unix(0, 0)}, tier, 200, time.Unix(0, 0))
+		if at := strings.Index(probe.text(), "MSG"); at != want {
+			t.Errorf("tier %v: the message starts at %d, the indent says %d", tier, at, want)
+		}
+	}
+	// For you: the indent is where a real row's text starts, whatever its kind.
+	for _, it := range []attentionItem{
+		{Rank: rankUnread, Key: "unread:1-0", Agent: "master", Text: "TEXT", At: time.Unix(0, 0)},
+		{Rank: rankAsk, Key: "ask:1-0", Agent: "a-very-long-agent-name", Text: "TEXT"},
+	} {
+		head, _, _ := forYouParts(it, time.Unix(60, 0))
+		txt := forYouRow(it, 200, time.Unix(60, 0)).text()
+		at := Width(txt[:strings.Index(txt, "TEXT")]) // in cells: the kind glyph is several bytes
+		if got := expandIndent(PanelForYou, TierWide); got != head.Width() || at != got {
+			t.Errorf("For you indent %d; the row's text starts at cell %d (head %d)", got, at, head.Width())
+		}
+	}
+	if got := expansionIndent(forYouTextCol, forYouTextCol+minExpandText+1); got != 0 {
+		t.Errorf("a narrow panel keeps indent %d", got)
 	}
 }
 
@@ -457,7 +543,7 @@ func TestShellExpansionStaysInView(t *testing.T) {
 		check := func(when string) {
 			t.Helper()
 			plain := m.grid().plain()
-			if !strings.Contains(plain, "Lot 1 delivered (+197)") || !strings.Contains(plain, "│    Lot 1 delivered ") {
+			if !strings.Contains(plain, "Lot 1 delivered (+197)") || !strings.Contains(plain, glyphVertical+" Lot 1 delivered ") {
 				t.Fatalf("%v %s: the expanded row or its text is off screen:\n%s", size, when, plain)
 			}
 		}
