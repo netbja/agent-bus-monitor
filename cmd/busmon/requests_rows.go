@@ -339,14 +339,14 @@ func reqRowKey(key string) bool {
 // reqThreadsOf are the threads a Requests row stands for.
 func (m *Model) reqThreadsOf(key string) []reqThread {
 	v := requestGroups(m.requestInput())
+	if strings.HasPrefix(key, "older:") {
+		return olderThreads(v, key)
+	}
 	var out []reqThread
 	for s := secOwed; s < secFolded; s++ {
 		for _, g := range v.groups[s] {
-			switch {
-			case key == g.Key() || key == "ntc:"+g.Key():
+			if key == g.Key() || key == "ntc:"+g.Key() {
 				return g.Threads
-			case key == olderKey(g):
-				return g.Threads[min(reqWaitShown, len(g.Threads)):]
 			}
 			for _, th := range g.Threads {
 				if threadKey(th) == key {
