@@ -146,7 +146,13 @@ func (m Model) Init() tea.Cmd { return m.pollCmd(1) }
 // pollCmd runs today's pollOnce against the reader and returns its snapshot.
 func (m Model) pollCmd(tick int) tea.Cmd {
 	cfg := m.cfg
+	tokOpen := m.tokensOpen() // read on the update path: the command must not touch the model
 	return func() tea.Msg {
+		if cfg.st != nil {
+			cfg.st.mu.Lock()
+			cfg.st.tokOpen = tokOpen
+			cfg.st.mu.Unlock()
+		}
 		pollOnce(cfg.ctx, cfg.reader, cfg.st, tick)
 		now := time.Now()
 		return pollMsg{snap: takeSnapshot(cfg.st, now), at: now}
@@ -167,6 +173,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.layoutCompose()
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
+		if m.sig.started.IsZero() {
+			m.sig.started = msg.at
+		}
 		return tea.Batch(tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) }), m.afterPoll())
 	case tickMsg:
 		m.tick++
@@ -174,12 +183,18 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case fadeMsg:
 		m.sig.fading = false
 		m.now = time.Time(msg)
+		if m.tokensSkeleton() && m.rd.top().kind == ovTokens { // the shimmer is in the page body
+			m.rd.top().dirty = true
+		}
 		m.refresh()
 		return m.scheduleFade()
 	case threadMsg:
 		m.gotThread(msg)
 	case servicesMsg:
-		return m.push(page{kind: ovServices, title: "Services", body: msg.body, fixed: true})
+		f := msg.facts
+		return m.push(page{kind: ovServices, title: "Services", svc: &f})
+	case serviceLogMsg:
+		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
 	case answerMsg:
 		m.gotAnswer(msg)
 	case sendResultMsg:

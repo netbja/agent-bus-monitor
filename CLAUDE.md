@@ -193,6 +193,30 @@ it silently never fired.
   fill. busmon shows the fill in the ctx cell and the agent page; health `context` warns at the
   threshold. **Deliberately not reported:** cost (needs a price table that rots every
   release; on a subscription the figure is fiction). Raw context tokens stay in `{p}:usage`.
+- **Tokens** (spec `docs/superpowers/specs/2026-10-28-tokens-dashboard-design.md`, package `tokens/`):
+  the dispatch service records each agent's proved session (`IdentSession` with a pid, never
+  `Session`) in `{p}:sessions` (session → agent, provider, client, first, last from Redis `TIME`; 8
+  days, 512 fields), counts those sessions' Claude Code transcripts (and subagents) incrementally
+  with `tokens.ClaudeScan` (one request once by its last `(message.id, requestId)`, offsets in
+  memory only, 64 files and 128 MiB per pass, `$CLAUDE_CONFIG_DIR` or `~/.claude`, `AGENT_BUS_TOKENS=0`
+  off) and replaces `{p}:tokens` (`day|agent|provider` → in/write/read/out/n, plus `_meta` partial and
+  at) every 5 minutes; the quota pass appends `{p}:quota:hist` when a window changes or every 15
+  minutes. All fenced; none in `projectKinds`, all ignored by `HasKeysBesidesDispatch`. Codex has no
+  proved session: `tokens.CodexScan` (per-session baseline across files) serves only the person's
+  `agentbus tokens --unattributed`. No cost, by rule. `agentbus tokens` (`tokenscmd.go`, above the
+  project-required exit, read-only) prints every project side by side unless `--project` names one on
+  the command line (the ambient `AGENT_BUS_PROJECT` never narrows it), `--by agent|day`, `--days`,
+  `--json`; `--unattributed` is the person's host scan (1 GiB budget) of what no project's record names.
+  busmon's `U` page (`tokens_view.go`, `ovTokens`): the account windows with a 24-hour sparkline from
+  `{p}:quota:hist` (one cell per hour, its last sample), every project side by side (`ProjectNames`,
+  `TokensOf`, read every `requestPoll` tick through the optional `tokensReader`; the open project first,
+  7-day bars scaled across projects, `~` while partial, no key = one `no data` line), the open project by
+  agent today (`tokens.AgentRows`, shared with the CLI: `?` with its reason, 0 only for a proved session).
+  The block glyphs `▁`–`▆` joined the closed set for it. Its honest animation (step 5) rides the fade schedule
+  (`animated`, true colour only, `fadeMsg` frames only while something animates): a skeleton row
+  shimmers where the open project's numbers will be only while the page is open, the dispatcher is up,
+  no reading exists yet and busmon started under `skeletonFor` (2 min) ago (`tokensSkeleton`; after,
+  `?`); an agent's `●` pulses only when it declares `working` and its pane is seen busy, fresh (`pulsing`).
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
   cron wake where a hard exit loses the whole caretaker pass.
 
@@ -506,7 +530,13 @@ It never touches Redis — see README "Deployment topology".
   never resurrected. Don't add a supervisor loop, a `nohup` fallback or a login autostart; don't
   put a secret in a unit; tests use fake `systemctl`/`launchctl` (`tests/installer_test.sh`,
   `service/manager_test.go`) and never the user's manager. busmon only reads the state and the
-  local log (`F3`), never starts or parents a service; `busmon --delete` removes the local
+  local log (`F3`), never starts or parents a service. F3 (busmon-f3, `services_cards.go`) is three cards,
+  side by side at ≥110 cells: dispatch and missions (state, pid and since from `/proc`, summary, last
+  error, log size of `service.LogMax`, `LogKeep` kept) and Redis (where it runs: `docker inspect
+  agent-bus-redis` only when docker is on PATH, else the process from INFO; version, uptime, memory,
+  `DBSIZE` keys via `Bus.RedisInfo`), all gathered in the command that opens the page
+  (`gatherServices`), unknown read `?`; ↑↓ choose a service card, Enter or `l` opens its log tail
+  (`ovServiceLog`, `serviceLogBody`); `busmon --delete` removes the local
   units before the keys.
 - **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
   `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails

@@ -78,6 +78,8 @@ const (
 	ActFold         // Requests: show or hide the answered and older threads
 	ActTour         // the help: the first-launch tour again
 	ActComplete     // the line: complete the @agent (the field does it)
+	ActServiceLog   // Services (F3): the selected service's log
+	ActTokens       // open the tokens page (U)
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -196,6 +198,7 @@ var (
 		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(keyF3), runeIs('s'))},
 		{Keys: "R", Help: "where was I? open the project recap", Act: ActRecap, match: runeIs('R')},
 		{Keys: "P", Help: "the batch's plan: its tasks by state (enter opens one, or expands done)", Act: ActPlan, match: runeIs('P')},
+		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}
@@ -265,6 +268,7 @@ var (
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "t", Help: "in the help: the first-launch tour again", Act: ActTour, match: runeIs('t')},
+		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
 	tourBindings = []binding{

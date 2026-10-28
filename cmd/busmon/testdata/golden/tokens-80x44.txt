@@ -1,0 +1,44 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙ 4  ● 2   15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Bernard [human]  claude 5h 62% │ 7d 41%    
+╭─ For you ───────────────────────────────────────────── 4 for you · 2 unread ─╮
+│  ● ask    master    review lot 1? (2 questions)                            4m│
+│  ♙ wait   foureyes  need a decision on the width rule                      6m│
+│  ♙ wait   sentinel  pane prompt                                            1m│
+│  ◆ gate   coder     by bernard  look at b1                                   │
+│  ● unread dispatch  project paused until 16:56                             8m│
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of …─╮
+│▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule ▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ♙ sentinel  waiting  30m  —   prompt      health ok                         ┃
+│  ✓ architect done     40m  —   escalating  spec merged                       ┃
+│  ○ coder     paused   2m   —   gate 1      busmon-charm-b: b1 shell          ┃
+│  ▲ docs      blocked  50m  —   armed       waiting for the PR                ┃
+│  ▲ qa        blocked  11m  —   held        out of quota                      ┃
+│  ○ ui-grok   quota    3m   —   swapping    reviewed                          │
+│  ● release   working  7m   —   fallback k… tagging                           ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Tokens ────────────────────────────────────────────────────────── esc back ─╮
+│ Account windows                                                              ▲
+│   anthropic  5h  ▇▇▇▇▇▇░░░░  62%  24h  ▁  ▁  ▂  ▃  ▄  ▅  ▆  ▇   resets 2h00  ┃
+│   anthropic  7d  ▇▇▇▇░░░░░░  41%  24h                           resets 72h00 ┃
+│   xai        5h  ▇▇▇▇▇▇▇▇▇▇ 100%  24h                           held 40m     ┃
+│                                                                              ┃
+│ Projects, today and 7 days                                                   ┃
+│   PROJECT                IN+OUT  7 DAYS   7D TOTAL                           ┃
+│   agent-bus-monitor       ~1.8M     ▃ █▆     ~5.1M                           ┃
+│   hyperliquid                 0   ▁           170k                           ┃
+│   polymarket  no data (no dispatch service counting tokens)                  ┃
+│                                                                              ┃
+│ agent-bus-monitor by agent, today                                            ┃
+│   foureyes         anthropic      1.2M     206k                              ┃
+│   coder            anthropic      345k      83k                              ┃
+│   architect                          ?        ?  no session proved with its… ┃
+│   docs                               ?        ?  no session proved with its… │
+│   master                             ?        ?  no session proved with its… │
+│   qa               xai               ?        ?  no session proved with its… │
+│   release                            ?        ?  no session proved with its… │
+│   security                           ?        ?  no session proved with its… │
+│   sentinel                           ?        ?  no session proved with its… ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   Y copy thread   n p ←→ next/prev   esc q close        

@@ -201,6 +201,21 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		st.mu.Unlock()
 		planR = readPlan(pollCtx, b, cursor, pf, known)
 	}
+	var tokR tokState
+	st.mu.Lock()
+	prev, open, wasOpen, last := st.tok, st.tokOpen, st.tokWasOpen, st.tokAttempt
+	readTok := open && (!wasOpen || tick-last >= requestPoll)
+	st.tokWasOpen = open
+	if readTok {
+		st.tokAttempt = tick
+	}
+	st.mu.Unlock()
+	// The U page's facts: only while it is open (one keyspace SCAN and an
+	// HGETALL per project): once on each opening, then every requestPoll ticks
+	// after the last attempt, whether it succeeded or not.
+	if readTok {
+		tokR = readTokens(pollCtx, b, projectOf(b), time.Now(), prev)
+	}
 	var guardRecords map[string]guardian.Record
 	var guardNotes map[string]guardian.Note
 	var guardNow time.Time
@@ -279,6 +294,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		st.board = boardSnap
 	}
 	st.plan.fold(planR, boardSnap, boardErr, asks, asksErr)
+	if readTok {
+		st.tok = tokR
+	}
 	if haveReqs {
 		st.requests = reqs
 	}
@@ -321,7 +339,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		if snapsErr == nil {
 			a.pane = snaps[n].Pane
 			a.pid, a.pidStart = snaps[n].PID, snaps[n].PIDStart
-			a.provider = snaps[n].Provider
+			a.provider, a.client, a.identSession = snaps[n].Provider, snaps[n].Client, snaps[n].IdentSession
 		}
 		if st.holds != nil {
 			_, a.held = held(st.holds, a.provider, time.Now())

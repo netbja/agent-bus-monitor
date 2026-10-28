@@ -1,14 +1,25 @@
-—— systemd services on here, set up 20752d ago ——
-
-dispatch  failed  last update 5s ago, pid 7 on here
-   restarting
-   last error: broker went away
-   log: /nowhere/dispatch.log
-   no log at /nowhere/dispatch.log
-
-missions  idle  last update 0s ago, pid 0 on elsewhere
-   waiting for missions
-   log: /far/missions.log
-   the log is on elsewhere: agentbus --project <p> service logs missions there
-
-agentbus down <p> stops them; agentbus --project <p> service status|logs|restart
+—— systemd services on here, set up 20752d ago ——                                                   
+                                                                                                    
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ dispatch  ▲ failed                                                                               │
+│ pid 7 · updated 5s ago                                                                           │
+│ restarting                                                                                       │
+│ last error: broker went away                                                                     │
+│ log ? of 1 MB, 3 kept                                                                            │
+│ /nowhere/dispatch.log                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ missions  ● idle                                                                                 │
+│ pid ? · updated 0s ago on elsewhere                                                              │
+│ waiting for missions                                                                             │
+│ log ? of 1 MB, 3 kept                                                                            │
+│ /far/missions.log                                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ redis  ▲ ?                                                                                       │
+│ ?                                                                                                │
+│ version ? · up ?                                                                                 │
+│ memory ? · ? keys (every project)                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                    
+enter or l: the selected service's log  ·  agentbus down <p> stops them; agentbus --project <p> ser…

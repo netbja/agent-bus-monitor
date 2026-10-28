@@ -427,7 +427,11 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 	if waitsForPerson(a) {
 		w.Fade = fadeLevel(now) // only the word fades; the glyph and the header stay still
 	}
-	l := Line{col(glyph, c.glyph, role), col(Preview(name), c.name, RoleText), w}
+	g := col(glyph, c.glyph, role)
+	if pulsing(a, now) {
+		g.Fade = fadeLevel(now) // working, and its pane seen running a turn: both facts, or it stays still
+	}
+	l := Line{g, col(Preview(name), c.name, RoleText), w}
 	l = append(l, cell(updatedCell(a, barTier, now), c.updated)...)
 	l = append(l, cell([]Seg{queueCell(a, tier)}, c.queue)...)
 	if c.ctx > 0 {
@@ -461,6 +465,12 @@ const fadePeriod = 3 * time.Second
 
 // fadeFrame is how often the fade redraws: ten steps a second is smooth enough.
 const fadeFrame = 100 * time.Millisecond
+
+// pulsing: the agent declared working and the dispatcher saw its pane busy,
+// fresh (tokens spec, "honest" animation): one fact alone never pulses.
+func pulsing(a *agentState, now time.Time) bool {
+	return a.state == "working" && a.obsBusy && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
+}
 
 // fadeLevel is the waiting word's intensity at now, 20 to 100 percent, eased
 // in and out (a raised cosine, like CSS ease-in-out between 0.2 and 1).
