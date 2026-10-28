@@ -117,6 +117,9 @@ func countSessions(scan *tokens.ClaudeScan, root string, recs map[string]bus.Ses
 		paths[i] = f.path
 	}
 	partial := scan.Pass(paths, b)
+	// Only the files passed are summed: a file the scan still remembers but
+	// that left the window (or the record) counts nowhere, even when a Codex-
+	// style rebuild would have reset it.
 	firstDay := now.In(loc).AddDate(0, 0, -tokensDays).Format("2006-01-02")
 	rows := map[string]bus.TokenRow{}
 	for _, f := range files {

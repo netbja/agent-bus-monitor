@@ -328,3 +328,21 @@ func TestCodexReplacedFileRebuildsItsSession(t *testing.T) {
 		t.Errorf("after a was replaced with a lower total, b %+v, want its delta from a's new total", got)
 	}
 }
+
+// A one-event session replaced with the same content is counted again: the
+// rebuild forgets the session's last total, so its first event is new.
+func TestCodexReplacedSingleEventSessionCountsAgain(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "rollout-2026-10-27T10-00-00-o.jsonl")
+	content := codexMeta("sess-o") + codexCount("2026-10-27T10:00:00Z", [4]int{100, 0, 10, 0}, [4]int{100, 0, 10, 0})
+	write(t, p, content)
+	s := NewCodexScan(paris)
+	s.Pass([]string{p}, big)
+	tmp := p + ".new"
+	write(t, tmp, content)
+	os.Rename(tmp, p)
+	s.Pass([]string{p}, big)
+	if got := s.Sums(p)["2026-10-27"]; got != (Usage{In: 100, Out: 10, N: 1}) {
+		t.Errorf("%+v, want the event counted again", got)
+	}
+}
