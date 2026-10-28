@@ -1,6 +1,6 @@
 id = "netbja.agentbus"
 name = "Agent Bus"
-version = "0.22.0"            # bumped by hand at tag time; the manifest test enforces it
+version = "0.23.0"            # bumped by hand at tag time; the manifest test enforces it
 min_herdr_version = "0.9.0"   # the support floor this repo tests on (global registration: >= 0.7.3)
 description = "Agent Bus: open a project's team workspace, watch it in busmon."
 platforms = ["linux", "macos"]

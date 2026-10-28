@@ -4,6 +4,35 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.23.0 — what needs you, agents that outlive their context, the installer in Go
+
+- For you lists only the gates you opened or that hold you; a reviewer's verdict closes its own
+  gate (with `--ref`, never a newer delta's); `agentbus gate close` and its sweeps close stale
+  gates without a verdict.
+- busmon: herdr-style lower tabs, a fourth tab Plan (`4`), Enter expands a line under its message
+  column, auto-scroll resumes at the bottom, `n`/`p` in the reader, every LLM provider in its own
+  colour, and a first-launch tour (F1 then `t` replays it).
+- The Requests tab says who owes whom an answer, one row per thread, by section; answered and old
+  threads fold (`o`).
+- Tokens per project, agent and day: `agentbus tokens` and busmon's `U` page, with the account
+  windows' 24-hour history; no cost, by design.
+- F3 shows dispatch, missions and the Redis broker as three cards; Enter or `l` opens a log.
+- Agent lifecycle: the verified session follows `/clear`; `agentbus handoff` records a hand-off;
+  `agentbus reload <role>` restarts an idle agent on its role, resuming its session (sentinel after
+  a client update, master for sentinel, a person anyone); the dispatcher's automatic `/clear` after
+  a hand-off ships **off** (`AGENT_BUS_AUTO_CLEAR=1`).
+- The installer in Go, `scripts/setup-go.sh` (`agentbus setup`), beside `./setup.sh`, which stays
+  the installer; it adds a broker ownership check before every compose call.
+- No write as `hermes` from a herdr pane; a desktop notification for an agent lost to an identity
+  mismatch; a pop stuck on its client's dialog is named; health `cmd-delivery` ignores
+  unregistered agents.
+- A read-only Codex reviewer role, `reviewer-codex`. The README and the operational guides (EN, FR)
+  cover everything since the herdr plugin.
+- Restart each project's dispatch service after `./setup.sh update`; relaunch agents for the new
+  tool rules.
+
+[Notes](docs/releases/v0.23.0.md)
+
 ## v0.22.0 — busmon on bubbletea, the context alert, specialist roles
 
 - busmon runs on bubbletea v2 + lipgloss v2 (tview is gone). Its look changed: code in overlays
