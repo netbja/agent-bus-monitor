@@ -122,14 +122,14 @@ func (b *Bus) RedisDetail(ctx context.Context) (RedisDetail, error) {
 		row := ProjectRedis{Project: p.Project, Streams: map[string]int64{}}
 		keys, err := ProjectKeys(ctx, b.r, p.Project)
 		if err != nil {
-			d.ProjectsErr = err.Error()
+			d.Projects, d.ProjectsErr = nil, err.Error() // no partial rows beside the ?
 			return d, nil
 		}
 		row.Keys = len(keys)
 		for _, s := range detailStreams {
 			n, err := b.r.XLen(ctx, p.Project+":"+s).Result()
 			if err != nil {
-				d.ProjectsErr = err.Error()
+				d.Projects, d.ProjectsErr = nil, err.Error()
 				return d, nil
 			}
 			row.Streams[s] = n

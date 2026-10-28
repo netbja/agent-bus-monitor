@@ -69,7 +69,7 @@ func TestGatherRedisPage(t *testing.T) {
 		}
 		return "", errors.New("unexpected")
 	}
-	f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(string) string { return "" }, "")
+	f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return map[string]string{"REDIS_HOST": "127.0.0.1"}[k] }, "")
 	if f.err != "" || !f.loopback || f.bind != "127.0.0.1:6380" || len(f.logs) > redisLogLines || len(f.logs) == 0 {
 		t.Fatalf("facts %+v", f)
 	}
@@ -125,7 +125,7 @@ func TestGatherRedisPageOnlyForTheBrokerItReads(t *testing.T) {
 				return "127.0.0.1:6380", nil
 			}
 			f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return env[k] }, "")
-			if f.loopback || f.bind != "" || !strings.Contains(f.bindErr, "not this host's") || f.logsErr == "" {
+			if f.loopback || f.bind != "" || !strings.Contains(f.bindErr, "this host's") || f.logsErr == "" {
 				t.Fatalf("facts %+v", f)
 			}
 			if strings.Join(calls, ",") != "port" {
@@ -145,7 +145,8 @@ func TestGatherRedisPageOnlyForTheBrokerItReads(t *testing.T) {
 		"an interface endpoint":                   {map[string]string{"REDIS_HOST": "192.168.1.5"}, "192.168.1.5:6380", false},
 		"ipv4 endpoint, ipv4 wildcard":            {map[string]string{"REDIS_HOST": "127.0.0.1"}, "0.0.0.0:6380", true},
 		"ipv6 endpoint, ipv6 loopback":            {map[string]string{"REDIS_URL": "redis://[::1]:6380/0"}, "[::1]:6380", true},
-		"localhost, ipv4 loopback (default)":      {nil, "127.0.0.1:6380", true},
+		"localhost is a name: unknown":            {nil, "127.0.0.1:6380", false},
+		"a different port":                        {map[string]string{"REDIS_HOST": "127.0.0.1"}, "127.0.0.1:6390", false},
 	} {
 		run := func(context.Context, string, ...string) (string, error) { return c.pub, nil }
 		f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return c.env[k] }, "")
@@ -158,8 +159,8 @@ func TestGatherRedisPageOnlyForTheBrokerItReads(t *testing.T) {
 	}
 	// --host overrides REDIS_HOST, as bus.Connect does.
 	run := func(context.Context, string, ...string) (string, error) { return "127.0.0.1:6380", nil }
-	if f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return map[string]string{"REDIS_HOST": "far"}[k] }, "localhost"); !f.loopback {
-		t.Fatalf("--host localhost: %+v", f)
+	if f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return map[string]string{"REDIS_HOST": "far"}[k] }, "127.0.0.1"); !f.loopback {
+		t.Fatalf("--host 127.0.0.1: %+v", f)
 	}
 }
 
@@ -178,5 +179,76 @@ func TestDockerReadIsBounded(t *testing.T) {
 	}
 	if len(out) > svcOutMax || !strings.HasSuffix(out, "line 1999 of a long log") {
 		t.Fatalf("%d bytes kept (max %d), ends %q", len(out), svcOutMax, out[max(0, len(out)-30):])
+	}
+}
+
+// foureyes: the page's two alarms come from the gather, not from a fixture.
+func TestGatherRedisPageAlarms(t *testing.T) {
+	local := map[string]string{"REDIS_HOST": "127.0.0.1"}
+	for pub, wantLoopback := range map[string]bool{
+		"0.0.0.0:6380":                 false,
+		"127.0.0.1:6380\n0.0.0.0:6380": false,
+		"127.0.0.1:6380\n[::1]:6380":   true,
+		"127.0.0.1:6380":               true,
+	} {
+		run := func(_ context.Context, _ string, args ...string) (string, error) {
+			if args[0] == "port" {
+				return pub, nil
+			}
+			return "", nil
+		}
+		f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return local[k] }, "")
+		if f.bindErr != "" || f.loopback != wantLoopback {
+			t.Errorf("%q: loopback %v (want %v), %+v", pub, f.loopback, wantLoopback, f)
+		}
+		body := plainOf(redisPageBody(f, capNow, 100))
+		if wantLoopback == strings.Contains(body, "beyond loopback") {
+			t.Errorf("%q reads:\n%s", pub, body)
+		}
+	}
+	// [::]:6380 does not carry a 127.0.0.1 endpoint: unknown, never loopback.
+	run := func(context.Context, string, ...string) (string, error) { return "[::]:6380", nil }
+	if f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return local[k] }, ""); f.loopback || f.bindErr == "" {
+		t.Errorf("[::]:6380: %+v", f)
+	}
+	for env, want := range map[string]bool{"": true, "AgentBus2025!": true, "a-rotated-secret": false} {
+		f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, nil, func(k string) string {
+			if k == "REDIS_PASSWORD" {
+				return env
+			}
+			return ""
+		}, "")
+		if f.legacyPW != want {
+			t.Errorf("REDIS_PASSWORD=%q: legacyPW %v, want %v", env, f.legacyPW, want)
+		}
+	}
+}
+
+// A failed project scan reads ?, with no partial rows beside it.
+func TestRedisPageProjectsError(t *testing.T) {
+	d := redisFixture()
+	d.Projects, d.ProjectsErr = nil, "WRONGTYPE"
+	body := plainOf(redisPageBody(redisPage{detail: d}, capNow, 100))
+	if !strings.Contains(body, "?  WRONGTYPE") || strings.Contains(body, "demo") {
+		t.Fatalf("body:\n%s", body)
+	}
+}
+
+// The log tail is bounded in bytes and in lines, past what the fake prints.
+func TestGatherRedisPageLogBound(t *testing.T) {
+	long := strings.Repeat(strings.Repeat("x", 1000)+"\n", 30)
+	run := func(_ context.Context, _ string, args ...string) (string, error) {
+		if args[0] == "port" {
+			return "127.0.0.1:6380", nil
+		}
+		return long, nil
+	}
+	f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return map[string]string{"REDIS_HOST": "127.0.0.1"}[k] }, "")
+	total := 0
+	for _, l := range f.logs {
+		total += len(l)
+	}
+	if total > redisLogBytes || len(f.logs) > redisLogLines || len(f.logs) == 0 {
+		t.Fatalf("%d lines, %d bytes kept", len(f.logs), total)
 	}
 }

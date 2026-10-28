@@ -83,6 +83,10 @@ func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(stri
 	host, port := brokerEndpoint(getenv, flagHost)
 	if !publishes(lines, host, port) {
 		f.bindErr = fmt.Sprintf("the broker read is %s, not this host's %s", net.JoinHostPort(host, port), redisContainer)
+		if host != "unix" && net.ParseIP(host) == nil {
+			f.bindErr = fmt.Sprintf("the broker read is %s, a name, not shown to be this host's %s (REDIS_HOST=127.0.0.1 ties it)",
+				net.JoinHostPort(host, port), redisContainer)
+		}
 		f.logsErr = f.bindErr
 		return f
 	}
@@ -146,15 +150,14 @@ func brokerEndpoint(getenv func(string) string, flagHost string) (host, port str
 
 // publishes says whether the endpoint busmon dials is one docker publishes
 // for the container: same port, and an address that carries the endpoint's
-// own: 127.0.0.1 by 127.0.0.1 or 0.0.0.0, ::1 by ::1 or ::. "localhost" is
-// read as either loopback family (a residual: another server on the other
-// family at the same port would pass). Any other endpoint, an interface
-// address or a remote host, is never established as the container.
+// own: 127.0.0.1 by 127.0.0.1 or 0.0.0.0, ::1 by ::1 or ::. A name, even
+// localhost (it may resolve to either family), and any other address, an
+// interface or a remote host, are never established as the container: the
+// page says so (set REDIS_HOST=127.0.0.1 to tie the default broker).
 func publishes(addrs []string, host, port string) bool {
 	carriers := map[string][]string{
 		"127.0.0.1": {"127.0.0.1", "0.0.0.0"},
 		"::1":       {"::1", "::"},
-		"localhost": {"127.0.0.1", "0.0.0.0", "::1", "::"},
 	}[host]
 	for _, a := range addrs {
 		h, p, err := net.SplitHostPort(a)
