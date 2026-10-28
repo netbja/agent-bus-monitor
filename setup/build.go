@@ -19,6 +19,8 @@ type Installer struct {
 	Repo string
 	Tmp  string
 	Rev  string // git describe of the checkout, read once (RepoRev)
+	// Getenv reads the environment (HOME, XDG dirs, SKILLS_REPO, SKILLS_REF).
+	Getenv func(string) string
 }
 
 // RepoRev is setup.sh's REPO_REV: git describe --tags --always --dirty.
