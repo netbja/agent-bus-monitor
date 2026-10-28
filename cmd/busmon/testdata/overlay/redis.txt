@@ -7,7 +7,8 @@ bind 127.0.0.1:6380  ·  loopback only
 password: not the default                                                                           
                                                                                                     
 projects                                                                                            
-demo  30 keys  ·  status 12  ·  report 3  ·  notify 1  ·  cmd 40  ·  verdicts 2                     
+project  keys  status  report  notify   cmd  verdicts                                               
+demo       30      12       3       1    40         2                                               
                                                                                                     
 docker logs (last 20)                                                                               
 1:M 28 Oct 2026 20:00:00.000 * Ready to accept connections tcp                                      

@@ -27,7 +27,7 @@ func TestRedisPageBody(t *testing.T) {
 		logs: []string{"1:M 28 Oct 2026 20:00:00.000 * Ready to accept connections tcp"}}
 	body := plainOf(redisPageBody(f, capNow, 100))
 	for _, want := range []string{"8.0.2", "up 2h", "1.5M", "peak 2.0M", "no limit", "noeviction", "last RDB save 5m ago (ok)", "AOF off",
-		"7 clients", "42 keys", "demo", "30 keys", "status 12", "cmd 40", "verdicts 2",
+		"7 clients", "42 keys", "project  keys  status  report  notify   cmd  verdicts", "demo       30      12       3       1    40         2",
 		"127.0.0.1:6380", "loopback only", "default password", "Ready to accept connections"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("lacks %q:\n%s", want, body)
@@ -284,5 +284,69 @@ func TestGatherRedisPageUsesTheConnectedPeer(t *testing.T) {
 		if !c.want && (f.loopback || f.logs != nil) {
 			t.Errorf("%s: claims %+v", name, f)
 		}
+	}
+}
+
+// busmon-redis-table: the projects block is a table: a muted header row,
+// the project column as wide as the longest name, numbers right-aligned
+// under their header at least 4 digits wide.
+func TestRedisPageProjectsTable(t *testing.T) {
+	d := redisFixture()
+	st := func(s, r, n, c, v int64) map[string]int64 {
+		return map[string]int64{"status": s, "report": r, "notify": n, "cmd": c, "verdicts": v}
+	}
+	d.Projects = []bus.ProjectRedis{
+		{Project: "agent-bus-monitor", Keys: 39, Streams: st(1050, 316, 20, 1002, 362)},
+		{Project: "ks", Keys: 5, Streams: st(93, 68, 30, 14, 0)},
+	}
+	table := func(width int) []string {
+		var rows []string
+		on := false
+		for _, l := range redisPageBody(redisPage{detail: d, bind: "127.0.0.1:6380", loopback: true}, capNow, width) {
+			text := strings.TrimRight(l.text(), " ")
+			switch {
+			case text == "projects":
+				on = true
+			case on && text == "":
+				return rows
+			case on:
+				rows = append(rows, text)
+			}
+		}
+		return rows
+	}
+	want := []string{
+		"project            keys  status  report  notify   cmd  verdicts",
+		"agent-bus-monitor    39    1050     316      20  1002       362",
+		"ks                    5      93      68      30    14         0",
+	}
+	if got := table(100); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("table at 100:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	body := redisPageBody(redisPage{detail: d, bind: "127.0.0.1:6380", loopback: true}, capNow, 100)
+	for _, l := range body {
+		if strings.HasPrefix(l.text(), "project ") && (len(l) == 0 || l[0].Role != RoleMuted) {
+			t.Errorf("the header row is not muted: %+v", l)
+		}
+	}
+	// Narrow: the project column shrinks to 8 cells with an ellipsis, then the
+	// columns go from the right; keys stays.
+	narrow := []string{
+		"project   keys  status  report  notify   cmd",
+		"agent-b…    39    1050     316      20  1002",
+		"ks           5      93      68      30    14",
+	}
+	if got := table(44); strings.Join(got, "\n") != strings.Join(narrow, "\n") {
+		t.Fatalf("table at 44:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(narrow, "\n"))
+	}
+	for _, w := range []int{20, 30, 61, 62, 63} {
+		for _, r := range table(w) {
+			if Width(r) > w {
+				t.Errorf("width %d: row %q is %d cells", w, r, Width(r))
+			}
+		}
+	}
+	if got := table(20); len(got) == 0 || !strings.HasPrefix(got[0], "project   keys") {
+		t.Errorf("table at 20 keeps no keys column: %q", got)
 	}
 }
