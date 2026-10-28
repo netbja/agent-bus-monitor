@@ -86,7 +86,7 @@ func (m Model) headerData() headerData {
 	return headerData{project: m.cfg.project, health: s.health, guardian: s.guardian, dispatch: s.dispatch,
 		missions: s.missions, pilot: s.pilot, self: m.cfg.self, update: s.update, note: s.configNote,
 		waiting: waitingText(mineReqs, mineThreads, m.now), forYou: len(decisions(m.forYou)),
-		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets,
+		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets, bars: m.barView(),
 		plan: s.plan, now: m.now, shell: true}
 }
 

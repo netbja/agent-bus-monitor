@@ -79,7 +79,7 @@ func TestEveryQuotaProviderHasItsColour(t *testing.T) {
 // The header gauge's label carries the provider's colour; the fill keeps its
 // warning roles.
 func TestQuotaGaugeLabelInProviderColour(t *testing.T) {
-	l := budgetSeg("anthropic", bus.BudgetSnapshot{SessionPct: 97, WeeklyPct: 10}, TierWide)
+	l := budgetSeg("anthropic", bus.BudgetSnapshot{SessionPct: 97, WeeklyPct: 10}, TierWide, barView{})
 	if l[0].Role != RoleProvAnthropic {
 		t.Errorf("label role %v", l[0].Role)
 	}

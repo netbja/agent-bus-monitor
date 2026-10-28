@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -103,8 +104,15 @@ func Connect(host string) (*redis.Client, error) {
 		}
 	}
 	// Record the peer each connection reaches (PeerAddr), dialing with
-	// go-redis's own dialer: it reads opt at dial time, after NewClient has
-	// set its defaults, so dial_timeout and TLS are unchanged.
+	// go-redis's own dialer over opt. NewClient clones opt and sets its
+	// defaults on the clone, which this dialer never sees, so the dial
+	// timeout default is set here first: over TCP the pool's per-attempt
+	// context would bound the dial anyway, but a TLS dial ignores it. The
+	// dialer is complete before NewClient, which may dial at once (a pool
+	// with min_idle_conns dials from its own goroutines).
+	if opt.DialTimeout == 0 {
+		opt.DialTimeout = 5 * time.Second // go-redis's own default
+	}
 	rec := &atomic.Value{}
 	if opt.Dialer == nil {
 		opt.Dialer = recordingDialer(rec, redis.NewDialer(opt))

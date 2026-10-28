@@ -371,7 +371,16 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   terminal's own foreground), no-colour none; an unknown provider keeps today's colour): the provider label
   of a header gauge (the fill keeps its 85/95 % roles), the model lines of an agent's page, and the U page's
   account windows and per-agent provider column. `TestEveryQuotaProviderHasItsColour`
-  walks `quota.Builtins`, so a new reader without a colour fails the suite. The tick reads every second
+  walks `quota.Builtins`, so a new reader without a colour fails the suite. The account gauges (busmon-bars,
+  `bars.go`, spec `docs/superpowers/specs/2026-10-29-busmon-bars-design.md`: the header's quota and legacy
+  budget bars, the U page's windows) are one function, `gaugeSegs`: in true colour eight steps per cell
+  (`█` plus the left blocks `▏`–`▉`, in the glyph set) on a track (`Seg.Track`, the line colour as background),
+  a non-zero value never empty and one under 100 never full; 16-colour and no-colour keep `▇`/`░` whole steps.
+  A changed value slides there in 0.5 s (ease-out, `Model.bars` set in `applySnapshot`, keyed provider|window
+  without the reset; View reads `barView{slides, m.now}`), its leading cell lifted towards the text colour
+  (`Seg.Lift`), riding the fade schedule (`animated`); the figure jumps at once, and a first reading, `?`,
+  16 colours, no colour and `fade = false` never slide. `appendSegment` joins only segments equal in every
+  attribute. The tick reads every second
   (pilot, armed, lag, agents, usage, budgets, board, challenges) and every 5th tick the dispatcher
   facts (`DispatchAlive`, `Obligation`, `Wake`); a failed read keeps the last value (queue shows
   `N?`). The usage scopes stay apart: account budget (used %) in the header, an agent's own context

@@ -6,8 +6,11 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/internal/testredis"
 )
 
 // busmon-redis-detail: the dial hook records the address the socket really
@@ -82,5 +85,29 @@ func TestRecordingDialerKeepsTheBaseDialer(t *testing.T) {
 	}
 	if rec.Load() != nil {
 		t.Fatal("a failed dial recorded a peer")
+	}
+}
+
+// The dialer is usable before NewClient returns: with min_idle_conns the
+// pool dials from its own goroutines at once (foureyes, busmon-bars). Run
+// under -race, a late-bound dialer is a data race, or a nil call that kills
+// the process.
+func TestConnectDialsBeforeNewClientReturns(t *testing.T) {
+	testredis.Configure(t)
+	raw := os.Getenv("REDIS_URL")
+	sep := "?"
+	if strings.Contains(raw, "?") {
+		sep = "&"
+	}
+	t.Setenv("REDIS_URL", raw+sep+"min_idle_conns=4")
+	for i := 0; i < 20; i++ {
+		r, err := Connect("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Options().MinIdleConns != 4 {
+			t.Fatalf("min_idle_conns not applied: %d", r.Options().MinIdleConns)
+		}
+		r.Close()
 	}
 }

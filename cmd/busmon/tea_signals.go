@@ -81,12 +81,12 @@ func (m *Model) bell() tea.Cmd {
 	return tea.Raw("\a")
 }
 
-// animated: the waiting word fades now.
+// animated: the waiting word fades, the U page shimmers or a gauge slides now.
 func (m *Model) animated() bool {
 	if !m.cfg.settings.Fade || !th.Animated() {
 		return false
 	}
-	if len(asksFor(m.snap.agents)) > 0 || m.tokensSkeleton() {
+	if len(asksFor(m.snap.agents)) > 0 || m.tokensSkeleton() || m.barView().moving() {
 		return true
 	}
 	for _, a := range m.snap.agents {

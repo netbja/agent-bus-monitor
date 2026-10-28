@@ -20,9 +20,9 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Tokens ────────────────────────────────────────────────────────── esc back ─╮
 │ Account windows                                                              ▲
-│   anthropic  5h  ▇▇▇▇▇▇░░░░  62%  24h  ▁  ▁  ▂  ▃  ▄  ▅  ▆  ▇   resets 2h00  ┃
-│   anthropic  7d  ▇▇▇▇░░░░░░  41%  24h                           resets 72h00 ┃
-│   xai        5h  ▇▇▇▇▇▇▇▇▇▇ 100%  24h                           held 40m     ┃
+│   anthropic  5h  ██████▎     62%  24h  ▁  ▁  ▂  ▃  ▄  ▅  ▆  ▇   resets 2h00  ┃
+│   anthropic  7d  ████▏       41%  24h                           resets 72h00 ┃
+│   xai        5h  ██████████ 100%  24h                           held 40m     ┃
 │                                                                              ┃
 │ Projects, today and 7 days                                                   ┃
 │   PROJECT                IN+OUT  7 DAYS   7D TOTAL                           ┃

@@ -16,21 +16,21 @@ func TestQuotaGauges(t *testing.T) {
 	fresh := bus.BudgetSnapshot{ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{
 		{Name: "5h", UsedPct: 82, ResetsAt: reset}, {Name: "7d", UsedPct: 40, ResetsAt: now.Add(72 * time.Hour).Unix()},
 		{Name: "old", UsedPct: 99, ResetsAt: now.Add(-time.Minute).Unix()}}}
-	if got := quotaSeg("anthropic", fresh, time.Time{}, false, map[string]string{quotaWindowKey("anthropic", fresh.Windows[0]): "~25m"}, now, TierMedium).text(); got != "claude 5h 82% ~25m │ 7d 40%" {
+	if got := quotaSeg("anthropic", fresh, time.Time{}, false, map[string]string{quotaWindowKey("anthropic", fresh.Windows[0]): "~25m"}, now, TierMedium, barView{}).text(); got != "claude 5h 82% ~25m │ 7d 40%" {
 		t.Fatalf("fresh %q", got)
 	}
-	if got := quotaSeg("openai", fresh, time.Unix(reset, 0), true, nil, now, TierMedium).text(); !strings.HasPrefix(got, "codex 5h 82% held ") {
+	if got := quotaSeg("openai", fresh, time.Unix(reset, 0), true, nil, now, TierMedium, barView{}).text(); !strings.HasPrefix(got, "codex 5h 82% held ") {
 		t.Fatalf("held %q", got)
 	}
 	aged := fresh
 	aged.ObservedAt = now.Add(-time.Hour).UnixMilli()
-	if got := quotaSeg("xai", aged, time.Time{}, false, nil, now, TierNarrow).text(); got != "grok 5h 82% ?" {
+	if got := quotaSeg("xai", aged, time.Time{}, false, nil, now, TierNarrow, barView{}).text(); got != "grok 5h 82% ?" {
 		t.Fatalf("aged %q", got)
 	}
-	if got := quotaSeg("moonshot", bus.BudgetSnapshot{Unknown: true}, time.Time{}, false, nil, now, TierNarrow).text(); got != "kimi ?" {
+	if got := quotaSeg("moonshot", bus.BudgetSnapshot{Unknown: true}, time.Time{}, false, nil, now, TierNarrow, barView{}).text(); got != "kimi ?" {
 		t.Fatalf("unknown %q", got)
 	}
-	if quotaSeg("local", bus.BudgetSnapshot{Unlimited: true}, time.Time{}, false, nil, now, TierNarrow) != nil {
+	if quotaSeg("local", bus.BudgetSnapshot{Unlimited: true}, time.Time{}, false, nil, now, TierNarrow, barView{}) != nil {
 		t.Fatal("an unlimited provider has a gauge")
 	}
 }
@@ -40,18 +40,22 @@ func TestQuotaShowsBothWindowsByTierAndAttachesMarkers(t *testing.T) {
 	short := bus.BudgetWindow{Name: "5h", UsedPct: 88, ResetsAt: now.Add(time.Hour).Unix(), Minutes: 300, ObservedAt: now.UnixMilli()}
 	long := bus.BudgetWindow{Name: "7d", UsedPct: 96, ResetsAt: now.Add(48 * time.Hour).Unix(), Minutes: 10080, ObservedAt: now.Add(-time.Hour).UnixMilli()}
 	b := bus.BudgetSnapshot{Windows: []bus.BudgetWindow{long, short}, ObservedAt: now.UnixMilli()}
-	medium := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierMedium)
+	medium := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierMedium, barView{})
 	if got, want := medium.text(), "claude 5h 88% │ 7d 96% ?"; got != want {
 		t.Fatalf("medium %q want %q", got, want)
 	}
 	if medium[0].Role != RoleProvAnthropic || medium[3].Role != RoleAttention || medium[6].Role != RoleMuted { // the label in the provider's colour, then each window's
 		t.Fatalf("medium colours not attached to each window: %+v", medium)
 	}
-	wide := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide)
-	if got := wide.text(); !strings.HasPrefix(got, "claude 5h "+strings.Repeat(GlyphGauge, 4)+GlyphBarEmpty+" 88% │ 7d ") || !strings.Contains(got, "96% ?") {
+	wide := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide, barView{})
+	if got := wide.text(); !strings.HasPrefix(got, "claude 5h "+strings.Repeat(GlyphBarFull, 4)+GlyphEighth3+" 88% │ 7d ") || !strings.Contains(got, "96% ?") {
 		t.Fatalf("wide %q", got)
 	}
-	heldLine := quotaSeg("anthropic", b, time.Unix(short.ResetsAt, 0), true, nil, now, TierMedium)
+	withPalette(t, "dark", false, 16) // whole steps without true colour
+	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide, barView{}).text(); !strings.HasPrefix(got, "claude 5h "+strings.Repeat(GlyphGauge, 4)+GlyphBarEmpty+" 88% │ 7d ") {
+		t.Fatalf("wide, 16 colours %q", got)
+	}
+	heldLine := quotaSeg("anthropic", b, time.Unix(short.ResetsAt, 0), true, nil, now, TierMedium, barView{})
 	if !strings.Contains(heldLine.text(), "5h 88% held ") || strings.Contains(strings.Split(heldLine.text(), " │ ")[1], "held") {
 		t.Fatalf("hold marker attached to wrong window: %q", heldLine.text())
 	}
@@ -151,11 +155,11 @@ func TestHeaderPrefersFreshWindowsAndShowsAStickyHold(t *testing.T) {
 	b := bus.BudgetSnapshot{Windows: []bus.BudgetWindow{
 		{Name: "7d", UsedPct: 97, ResetsAt: now.Add(72 * time.Hour).Unix(), ObservedAt: now.Add(-5 * time.Hour).UnixMilli()},
 		{Name: "5h", UsedPct: 10, ResetsAt: now.Add(time.Hour).Unix(), ObservedAt: now.UnixMilli()}}}
-	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierMedium).text(); got != "claude 5h 10% │ 7d 97% ?" {
+	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierMedium, barView{}).text(); got != "claude 5h 10% │ 7d 97% ?" {
 		t.Fatalf("header %q: fresh/stale windows not independently displayed", got)
 	}
 	unknown := bus.BudgetSnapshot{Unknown: true}
-	if got := quotaSeg("openai", unknown, now.Add(time.Hour), true, nil, now, TierNarrow).text(); !strings.Contains(got, "codex ? held") {
+	if got := quotaSeg("openai", unknown, now.Add(time.Hour), true, nil, now, TierNarrow, barView{}).text(); !strings.Contains(got, "codex ? held") {
 		t.Fatalf("sticky hold header %q", got)
 	}
 	if got := quotaDetail("openai", unknown, true, now.Add(time.Hour), true, now); !strings.Contains(plainOf(got), "still held by the dispatcher") || strings.Contains(plainOf(got), "never holds") {
@@ -192,11 +196,17 @@ func TestQuotaGaugeBar(t *testing.T) {
 	now := time.Now()
 	b := bus.BudgetSnapshot{ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{
 		{Name: "5h", UsedPct: 80, ResetsAt: now.Add(time.Hour).Unix()}}}
-	want := "claude 5h " + strings.Repeat(GlyphGauge, 4) + GlyphBarEmpty + " 80% ~25m"
-	if got := quotaSeg("anthropic", b, time.Time{}, false, map[string]string{quotaWindowKey("anthropic", b.Windows[0]): "~25m"}, now, TierWide).text(); got != want {
+	pace := map[string]string{quotaWindowKey("anthropic", b.Windows[0]): "~25m"}
+	want := "claude 5h " + strings.Repeat(GlyphBarFull, 4) + "  80% ~25m" // one track cell, then the space before the figure
+	if got := quotaSeg("anthropic", b, time.Time{}, false, pace, now, TierWide, barView{}).text(); got != want {
 		t.Fatalf("bar %q, want %q", got, want)
 	}
-	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierNarrow).text(); got != "claude 5h 80%" {
+	withPalette(t, "dark", false, 16)
+	want = "claude 5h " + strings.Repeat(GlyphGauge, 4) + GlyphBarEmpty + " 80% ~25m"
+	if got := quotaSeg("anthropic", b, time.Time{}, false, pace, now, TierWide, barView{}).text(); got != want {
+		t.Fatalf("bar, 16 colours %q, want %q", got, want)
+	}
+	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierNarrow, barView{}).text(); got != "claude 5h 80%" {
 		t.Fatalf("no bar in narrow: %q", got)
 	}
 }
