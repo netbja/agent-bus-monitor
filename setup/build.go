@@ -26,6 +26,10 @@ type Installer struct {
 	Now func() time.Time
 	// Setenv changes setup's own environment (the PATH after installing herdr).
 	Setenv func(k, v string) error
+	// Probe and Sleep are the port check and the wait (PortOpen, time.Sleep
+	// when nil).
+	Probe func(host string, port int) bool
+	Sleep func(time.Duration)
 }
 
 // RepoRev is setup.sh's REPO_REV: git describe --tags --always --dirty.

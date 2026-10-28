@@ -63,10 +63,9 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 	return 1
 }
 
-// runInstall is setup.sh install's steps, in its order. The step not ported
-// yet (Redis: busmon-installer-4) says so and is skipped.
+// runInstall is setup.sh install's steps, in its order.
 func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.Options, repo string, getenv func(string) string) int {
-	missing := setup.Preflight(ctx, r, o, opt, goModVersion(repo), runtime.GOOS, runtime.GOARCH)
+	missing, docker := setup.Preflight(ctx, r, o, opt, goModVersion(repo), runtime.GOOS, runtime.GOARCH)
 	if missing > 0 && !opt.DryRun {
 		o.Fatal(itoa(missing) + " required tool(s) missing; install them and re-run.")
 		return 1
@@ -100,7 +99,7 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 	in.ExternalSkills(ctx)
 	in.RoleSkills(ctx)
 	o.Step("4/5 Checking Redis broker service")
-	o.Info("not ported yet (busmon-installer-4): skipped")
+	in.Redis(ctx, docker)
 	in.Clients()
 	var tty io.ReadWriter
 	if t := setup.OpenTTY(); t != nil {

@@ -9,10 +9,11 @@ import (
 
 // Preflight is setup.sh's step 1: platform, git, curl (only for
 // --install-herdr), Go against goWant (go.mod's version), Docker and compose.
-// It returns how many required tools are missing; the caller stops a real run
+// It returns how many required tools are missing, and what it learned of docker; the caller stops a real run
 // after it, while a dry run goes on and lists every gap.
-func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, goos, goarch string) int {
+func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, goos, goarch string) (int, Docker) {
 	missing := 0
+	var d Docker
 	need := func(s string) { missing++; o.Error(s) }
 	first := func(out []byte) string {
 		s, _, _ := strings.Cut(strings.TrimRight(string(out), "\n"), "\n")
@@ -63,11 +64,13 @@ func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, go
 
 	if _, err := r.LookPath("docker"); err == nil {
 		if _, err := r.Run(ctx, Cmd{Name: "docker", Args: []string{"info"}}); err == nil {
+			d.OK = true
 			o.OK("docker: daemon is running")
 		} else {
 			o.Warn("docker is installed but daemon is not running (needed for Redis broker).")
 		}
-		switch ComposeCmd(ctx, r) {
+		d.Compose = ComposeCmd(ctx, r)
+		switch d.Compose {
 		case "docker compose":
 			o.OK("docker compose: plugin available")
 		case "docker-compose":
@@ -78,7 +81,7 @@ func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, go
 	} else {
 		o.Warn("docker is not installed. Redis broker container requires Docker: https://docs.docker.com/engine/install/")
 	}
-	return missing
+	return missing, d
 }
 
 // ComposeCmd is setup.sh's compose_cmd: the plugin first, then the
