@@ -95,7 +95,7 @@ func TestContextAlertOncePerEpisode(t *testing.T) {
 	pass(coder)
 	got := contextCmds(t, r, b)
 	if len(got) != 2 ||
-		got[0] != "coder||context 85%: at your next stopping point commit WIP and reply to master with a hand-off" ||
+		got[0] != "coder||context 85%: at your next stopping point commit WIP, publish your hand-off with agentbus report coder --to master, then declare it: agentbus handoff coder --report <its id>" ||
 		!strings.HasPrefix(got[1], "master|no|") || !strings.Contains(got[1], "coder") || !strings.Contains(got[1], "85%") {
 		t.Fatalf("first alert: %q", got)
 	}

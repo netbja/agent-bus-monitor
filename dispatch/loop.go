@@ -339,6 +339,12 @@ func (l *loop) reconcile(ctx context.Context) error {
 		}
 		l.logError("", "tokens", err)
 	}
+	if err := l.handoffPass(ctx, snaps); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "handoff", err)
+	}
 	if paused, err := l.paused(ctx); err != nil || paused {
 		return err
 	}
