@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -113,6 +114,13 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 	}
 	if err := l.b.FencedPutBudgets(ctx, l.token, budgets); err != nil {
 		return err
+	}
+	// The account windows' history ({p}:quota:hist) only records: a failure
+	// never gates the policy below. Only a lost lease ends the pass.
+	if err := l.quotaHist(ctx, budgets); errors.Is(err, bus.ErrNotHolder) {
+		return err
+	} else if err != nil {
+		l.logError("", "quota-hist", err)
 	}
 	marks, err := l.b.QuotaMarks(ctx)
 	if err != nil {

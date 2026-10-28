@@ -53,6 +53,7 @@ func main() {
 	// parser below sees only the long forms it always read.
 	args := expandArgs(os.Args[1:])
 	args, host, project := globalArgs(args)
+	explicitProject := project // named on the command line, not inherited from AGENT_BUS_PROJECT
 	if project == "" {
 		project = os.Getenv("AGENT_BUS_PROJECT")
 	}
@@ -88,6 +89,11 @@ func main() {
 	// agents. It answers "which project?", so it needs none, and works with Redis down.
 	if len(args) >= 1 && args[0] == "projects" {
 		os.Exit(runProjects(args[1:], realProjectsDeps(), os.Stdout, os.Stderr))
+	}
+	// tokens (read-only) shows every project unless one is named on the
+	// command line: the ambient AGENT_BUS_PROJECT never narrows it.
+	if len(args) >= 1 && args[0] == "tokens" {
+		os.Exit(runTokens(args[1:], explicitProject, realTokensDeps(host), os.Stdout, os.Stderr))
 	}
 	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
 	if len(args) >= 1 && args[0] == "plugin" {

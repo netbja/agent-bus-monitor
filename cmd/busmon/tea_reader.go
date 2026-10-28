@@ -323,6 +323,8 @@ func (m *Model) buildPage() bool {
 		if s.plan != nil {
 			p.title += " " + GlyphNone + " " + strings.TrimPrefix(planSeg(*s.plan, now).text(), "plan ")
 		}
+	case ovTokens:
+		p.title, p.body = "Tokens", tokensPage(s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton())
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
 	case ovRecap:

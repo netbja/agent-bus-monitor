@@ -17,6 +17,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/quota"
+	"github.com/netbja/agent-bus-monitor/tokens"
 )
 
 // runQuota prints every configured reader's reading, read now, without the
@@ -227,6 +228,26 @@ func serviceContext(getenv func(string) string, lookPath func(string) (string, e
 	return dispatch.ContextConfig{Every: time.Minute, Alert: bus.ContextAlert(getenv), MaxAge: bus.ContextMaxAge,
 		Read:   func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) },
 		Notify: desktopNotify(lookPath, run)}
+}
+
+// serviceTokens is the dispatch service's tokens pass: the transcripts of
+// Claude Code's projects directory ($CLAUDE_CONFIG_DIR/projects, else
+// ~/.claude/projects), {p}:tokens every 5 minutes, 64 files and 128 MiB per
+// pass. AGENT_BUS_TOKENS=0 turns it off.
+func serviceTokens(getenv func(string) string, home func() (string, error)) dispatch.TokensConfig {
+	if getenv("AGENT_BUS_TOKENS") == "0" {
+		return dispatch.TokensConfig{}
+	}
+	base := getenv("CLAUDE_CONFIG_DIR")
+	if base == "" {
+		h, err := home()
+		if err != nil || h == "" {
+			return dispatch.TokensConfig{}
+		}
+		base = filepath.Join(h, ".claude")
+	}
+	return dispatch.TokensConfig{Root: filepath.Join(base, "projects"), Every: 5 * time.Minute,
+		Budget: tokens.Budget{Files: 64, Bytes: 128 << 20}}
 }
 
 // servicePrompt is the dispatch service's prompt notification (prompt-notify):
