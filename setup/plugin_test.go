@@ -304,3 +304,31 @@ func TestKeyBindingWritesAtomicallyThroughALink(t *testing.T) {
 		t.Fatal("the link was replaced on append")
 	}
 }
+
+// A config the person made read-only is not replaced by the rename, even in
+// a writable directory: setup warns and leaves it (reviewer-codex, step 3).
+func TestKeyBindingLeavesAReadOnlyConfig(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root writes a read-only file")
+	}
+	for _, link := range []bool{false, true} {
+		in, out, _, home := pluginWorld(t, "")
+		cfg := home + "/.config/herdr/config.toml"
+		_ = os.MkdirAll(filepath.Dir(cfg), 0o755)
+		real := cfg
+		if link {
+			real = filepath.Join(t.TempDir(), "config.toml")
+			_ = os.Symlink(real, cfg)
+		}
+		for _, content := range []string{"[ui]\n" + OldKeybindBlock + "\n", "[ui]\n"} {
+			_ = os.WriteFile(real, []byte(content), 0o444)
+			_ = os.Chmod(real, 0o444)
+			out.Reset()
+			in.KeyBinding(context.Background(), false)
+			if b, _ := os.ReadFile(real); string(b) != content || !strings.Contains(out.String(), "    ! could not ") {
+				t.Fatalf("link=%v %q %q", link, b, out.String())
+			}
+			_ = os.Chmod(real, 0o644)
+		}
+	}
+}

@@ -155,7 +155,8 @@ func (in *Installer) backup(path string) (string, error) {
 
 // writeAtomic replaces path's content whole: a temp file beside the file
 // path resolves to, renamed over it, so a crash leaves the old content or the
-// new one, a symlinked config stays a link, and the mode is kept.
+// new one, a symlinked config stays a link, and the mode is kept. A file the
+// person cannot write (made read-only) is refused, as a direct write would be.
 func writeAtomic(path string, data []byte) error {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -165,6 +166,11 @@ func writeAtomic(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
+	w, err := os.OpenFile(real, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	_ = w.Close()
 	f, err := os.CreateTemp(filepath.Dir(real), "."+filepath.Base(real)+".tmp*")
 	if err != nil {
 		return err
