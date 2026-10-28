@@ -696,8 +696,8 @@ handles each with a rule you can read, never a guess:
 - **Hand-off.** The agent publishes its hand-off as a report and declares it
   (`agentbus handoff <self> --report <id>`); busmon flags it `handoff` until the agent works
   again. You then type `/clear` in its pane and point the fresh session at that report.
-  The dispatcher can type that `/clear` itself, once per session, when the agent is idle, owed
-  no answer and its pane is ready (`AGENT_BUS_AUTO_CLEAR=1`, Claude Code only); it is **off by
+  The dispatcher can type that `/clear` itself, once per session, when the agent is idle, has
+  no open question or review and its pane is ready (`AGENT_BUS_AUTO_CLEAR=1`, Claude Code only); it is **off by
   default** until its live checks have been run.
 - **Reload after a client update.** The dispatcher notices an agent running an outdated client
   (flag `update`) and tells sentinel, which restarts it on its role and profile, resuming its

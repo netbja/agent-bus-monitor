@@ -414,8 +414,8 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   nouvelle session (`agentbus --project myapp reports <id>`).
 - **`/clear` automatique (désactivé par défaut).** Avec `AGENT_BUS_AUTO_CLEAR=1` exporté avant
   `agentbus up`, le dispatcher tape ce `/clear` lui-même, une fois par session, pour un agent
-  Claude Code dont la passation tient, au repos, à qui aucune réponse n'est due et qui n'est pas
-  en revue, dans un volet prêt ; puis il prouve la nouvelle session et dit à l'agent de lire sa
+  Claude Code dont la passation tient, au repos, sans question ni revue
+  ouverte, dans un volet prêt ; puis il prouve la nouvelle session et dit à l'agent de lire sa
   passation. Il reste désactivé tant que ses vérifications en conditions réelles n'ont pas été
   faites sur cette version.
 - **Mises à jour des clients.** Quand un client est mis à jour sous un agent en cours, busmon

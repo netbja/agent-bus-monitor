@@ -394,7 +394,7 @@ to watch a pane.
   the report (`agentbus --project myapp reports <id>`).
 - **Automatic `/clear` (off by default).** With `AGENT_BUS_AUTO_CLEAR=1` exported before
   `agentbus up`, the dispatcher types that `/clear` itself, once per session, for a Claude Code
-  agent whose hand-off stands, that is idle, owed no answer and not in review, in a ready pane;
+  agent whose hand-off stands, that is idle, with no open question or review, in a ready pane;
   then it proves the new session and tells the agent to read its hand-off. It stays off until
   its live checks have been run on this release.
 - **Client updates.** When a client is updated under a running agent, busmon flags the agent
