@@ -23,23 +23,44 @@ broker, the client and the monitor all live here; nothing depends on any other p
   Code, Codex and others from one manifest (`agentbus up`, `roles.toml`).
 - **Large changes as missions** — a conductor merges, tests and reviews agents' work
   (`agentbus missions`).
+- **Decisions put to you as questions** — an agent asks, busmon shows the options, your
+  answer wakes it (`agentbus ask`).
+- **Quotas watched for you** — every provider's usage windows read from local sources; agents
+  are held before the limit and the project pauses until the reset (`agentbus quota`,
+  `agentbus pause`), and a role can move to a fallback profile (`agentbus swap`).
+- **A team that outlives its context** — at 80 % context an agent hands off; sentinel reloads an
+  agent after a client update (`agentbus handoff`, `agentbus reload`).
+- **Health and spend** — measured project health (`agentbus health`, F5) and tokens per project,
+  agent and day, never a cost (`agentbus tokens`, `U`).
 
 ## Quick start
+
+You need Linux or macOS, Go (the version in `go.mod`), Docker with Compose, Git and curl.
+herdr (0.9.0 or newer) is installed for you with `--install-herdr`.
 
 ```bash
 git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor
 ./setup.sh install --install-herdr     # toolchain check, binaries, skills, herdr plugin, Redis
+agentbus statusline --print-install    # Claude Code users: the statusLine block for ~/.claude/settings.json
 herdr --session myproject              # then, inside herdr:
 agentbus up myproject ~/code/myproject --as <your-name>
 ```
 
-`agentbus up` provisions the team and opens its workspace, with busmon first. Later,
-`Ctrl+B` then `↑` reopens any project.
+`agentbus up` provisions the team and opens its workspace, with busmon first. busmon's
+first-launch tour walks you through its screen (F1 then `t` shows it again). Later, `Ctrl+B`
+then `↑` (the plugin's Projects picker) reopens any project.
 
 - `./setup.sh update` keeps the machine current; busmon shows `↑ vX.Y.Z` in its header when a
   newer release exists.
 - `./setup.sh status` shows what is installed.
 - `./setup.sh uninstall` removes it, asking first at each step.
+- `scripts/setup-go.sh` is the same installer ported to Go (`agentbus setup`), with the same
+  flags. It is there to be tried; `./setup.sh` stays the default until the switch
+  ([below](#agentbus-setup-the-go-installer-preview)).
+
+The `statusLine` step gives agent-bus Claude Code's rate limits and each session's context
+fill: without it the Claude gauges and the context alert have nothing to read. Codex, Grok,
+Kimi Code and agy need nothing ([quotas](docs/OPERATIONAL-GUIDE.md#scenario-c-watching-and-stopping-a-project)).
 
 **What's new:** see the [CHANGELOG](CHANGELOG.md), and [`docs/releases/`](docs/releases/) for
 the full notes of each version. The step-by-step guides are in English and French:
@@ -54,45 +75,13 @@ change ([EN](docs/OPERATIONAL-GUIDE.md#6-starting-work-a-small-task-a-large-chan
 |------------|-----------------------------------------------------------------------------|
 | broker     | `redis:8-alpine` on `localhost:6380` (`docker-compose.yml`)                |
 | `bus/`     | Go package: connection, Streams API (`Bus` handle), publish helpers         |
-| `agentbus` | CLI client — status/report/notify/cmd/subscribe/listen (`cmd/agentbus`)     |
-| `busmon`   | TUI dashboard: Agents / Activity / Board / Requests (`cmd/busmon`)          |
-| `dispatch/`| Wake dispatcher behind `agentbus dispatch`: wakes unarmed agents via herdr  |
-
-## Deployment topology (current: machine ⇄ remote machine)
-
-The bus is consumed by a concrete two-host setup. This is how the pieces wire up
-today — and, importantly, where they *don't* connect.
-
-- **Broker** runs on the **laptop/desktop** (`docker compose up`, redis:8-alpine on `:6380`).
-- The **remotebox** (`user@remotebox`) reaches it through an SSH tunnel it opens *to* the laptop/desktop:
-  `ssh -L 6380:localhost:6380 user@laptop -N`. So `agentbus --host 127.0.0.1`
-  on the remote box publishes onto the laptop's bus.
-- Two Claude Code sessions run on the laptop under **herdr** in `~/myproject`
-  (agents `claude1`, `claude2`); a **hermes agent** runs on the remote box.
-
-**Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
-A session arms `agentbus subscribe <agent> [idle_secs]` as a Claude Code background task. It blocks
-on the project's `:cmd` stream via XREADGROUP, emits one JSON object per fire (a `cmd` object, or a
-`heartbeat` object after the idle window, default 240s) then exits — and that exit re-invokes the
-Claude session that armed it. Each session re-arms after every fire. The whole loop lives in the `agentbus` binary, so
-there is **no wrapper script and no watcher daemon** in the agent path. `busmon` runs alongside as
-the human dashboard.
-
-> This supersedes `myproject/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
-> and the persistent `~/.hermes/scripts/bus_watch_hdl.sh` logger loop. An even earlier prototype,
-> `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes with hard-coded pane IDs. Don't
-> reintroduce a wrapper script — a restart loop never wakes a terminal session. v0.8 revised the
-> pane-relay part on purpose ([decision](docs/memory/decisions/2026-10-10-event-driven-dispatch.md)):
-> **the only automated process that types into panes is `agentbus dispatch`, and it types a wake
-> line, never a message; master's manual pane injection remains the fallback while no dispatcher
-> runs.** Pane ids are self-registered (or bound with `agentbus bind`) and pid-verified, not hard-coded.
-
-**Separate notification path — NOT the bus.** The `Stop` hook in
-`myproject/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
-the remote box's hermes **gateway** at `http://<remote>:8644/webhooks/claude-notify`. That route is
-`Deliver: signal`: it pings a human over Signal when a Claude task stops. The gateway never
-touches Redis, so this path is **independent of the agent bus** — webhook traffic does not appear
-on `hermes:*`, and the bus carries nothing back to Signal.
+| `agentbus` | CLI client and project tooling: status, cmd, subscribe, up, ask, swap… (`cmd/agentbus`) |
+| `busmon`   | TUI dashboard: For you, Agents, Activity, Board, Requests, Plan (`cmd/busmon`) |
+| `dispatch/`| Wake dispatcher behind `agentbus dispatch`: wakes unarmed agents via herdr, watches quotas, health, context |
+| `mission/` | The missions conductor behind `agentbus missions`                          |
+| `service/` | The project services: systemd `--user` units, launchd plists                |
+| `setup.sh`, `setup/` | The installer, in bash and its Go port (`agentbus setup`)         |
+| `herdr-plugin.toml` | The herdr plugin `netbja.agentbus`: Projects picker, busmon action, workspace hook |
 
 ## Run the broker
 
@@ -156,6 +145,29 @@ just pulled.
 The plugin link is unlinked on its own question, and only when setup made it. The repository itself is
 left in place. It has no `--dry-run`: run it without `--yes` and answer each question.
 
+### `agentbus setup`: the Go installer (preview)
+
+`scripts/setup-go.sh` checks Git and Go, builds `agentbus` from the checkout and hands every
+argument to `agentbus setup`, the installer ported to Go. Its subcommands, flags, questions and
+output are setup.sh's, so the commands above work unchanged:
+
+```bash
+scripts/setup-go.sh install --dry-run
+scripts/setup-go.sh install --install-herdr
+scripts/setup-go.sh status
+scripts/setup-go.sh update          # pulls, then runs scripts/setup-go.sh again
+scripts/setup-go.sh uninstall
+```
+
+One thing it adds: it starts, stops or removes the `agent-bus-redis` container only when that
+container does not exist or belongs to this checkout (its Compose `working_dir` label), checked
+again right before each `docker compose` call. A broker started from another copy of the
+repository is refused and named in `status` ("belongs to <dir>"). A question with no terminal
+to ask on takes the cautious answer.
+
+It is rollout step 1: `./setup.sh` stays the installer. Once the Go port has been tried on real
+machines, `./setup.sh` becomes this thin script and the bash one is retired.
+
 ### Manual build
 
 ```bash
@@ -166,10 +178,15 @@ go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus (version "dev": 
 
 ## Use it
 
-`AGENT_BUS_PROJECT` (or `--project <p>`) is required for all commands except `agentbus mem`
+`AGENT_BUS_PROJECT` (or `--project <p>`, `-p <p>`) is required for every command that reads or
+writes one project's bus. The machine-wide ones need none: `up` (the project is its argument),
+`projects`, `tokens`, `quota`, `models`, `identity`, `limits`, `version`, `help`, `agentbus mem`
 ([shared memory](#shared-memory-agentbus-mem), which works on files only) and `agentbus roles`
-(the role manifest the scripts use: `validate`, `tier`, `field`, `launch`, `install`, `template`;
-no Python any more).
+(the role manifest; `roles doctor` and `roles adopt` need the project).
+
+`agentbus help` lists every command, `agentbus help <command>` (or `<command> --help`) shows its
+usage, flags and examples. Every long flag has its GNU short form where the help shows one
+(`-p` project, `-H` host, then the command's own), and `--flag=value` works too.
 
 > **Agents:** a copy-paste command reference (with the flag/positional traps that
 > cause retries) lives in [`docs/AGENT-BUS-GUIDE.md`](docs/AGENT-BUS-GUIDE.md).
@@ -202,7 +219,18 @@ agentbus pilot claim --ttl 120s                    # claim pilot lease (self = A
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
 agentbus verdict --pr 25 myagent approve "LGTM"    # write verdict to {p}:verdicts; --ref resolves matching gate (best-effort)
 agentbus verdicts --pr 25                          # roll-up 4-eyes state: APPROVED/REJECTED/PENDING (exit 0/3/2); no-arg lists recent
-agentbus usage                                     # print every agent's budget; usage <a> '<json>' writes one
+agentbus usage                                     # every agent's model and context
+agentbus agents                                    # every agent's declared state
+agentbus ask master --file questions.json          # put structured questions to the person (busmon answers them)
+agentbus asks --open                               # the open questions; agentbus answer <id> <q> --choice <label>
+agentbus pause --for 2h "release window"           # nobody is woken until then; agentbus resume ends it
+agentbus health                                    # the project's measured health; health detail <id>
+agentbus quota                                     # every provider's usage windows, read now (no project needed)
+agentbus tokens                                    # tokens per project side by side; --project p --by agent|day
+agentbus projects                                  # every known project: templates, broker, services, agents
+agentbus handoff                                   # the declared hand-offs (an agent declares its own)
+agentbus swap coder --profile codex                # move a role to one of its fallback profiles; --back returns
+agentbus reload coder --as <your-name> --dry-run   # what a reload of coder would do (a person may reload anyone)
 agentbus version                                   # print the bus protocol version (no project/broker needed)
 
 busmon --list                                      # what projects are on this bus? (no --project needed)
@@ -715,7 +743,43 @@ REDIS_PORT=6381 ./busmon                          # watch it
 
 > The deployed laptop⇄host1 setup runs this **in reverse**: host1 opens the tunnel *into* the
 > laptop's bus (`ssh -L 6380:localhost:6380 …`) rather than the laptop reaching out. See
-> **Deployment topology** above.
+> **Example deployment** below.
+
+## Example deployment: a laptop and a remote box
+
+One concrete two-host setup, kept as an example of how the pieces wire up — and, importantly,
+where they *don't* connect. A single machine needs none of it.
+
+- **Broker** runs on the **laptop/desktop** (`docker compose up`, redis:8-alpine on `:6380`).
+- The **remotebox** (`user@remotebox`) reaches it through an SSH tunnel it opens *to* the laptop/desktop:
+  `ssh -L 6380:localhost:6380 user@laptop -N`. So `agentbus --host 127.0.0.1`
+  on the remote box publishes onto the laptop's bus.
+- Two Claude Code sessions run on the laptop under **herdr** in `~/myproject`
+  (agents `claude1`, `claude2`); a **hermes agent** runs on the remote box.
+
+**Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
+A session arms `agentbus subscribe <agent> [idle_secs]` as a Claude Code background task. It blocks
+on the project's `:cmd` stream via XREADGROUP, emits one JSON object per fire (a `cmd` object, or a
+`heartbeat` object after the idle window, default 240s) then exits — and that exit re-invokes the
+Claude session that armed it. Each session re-arms after every fire. The whole loop lives in the `agentbus` binary, so
+there is **no wrapper script and no watcher daemon** in the agent path. `busmon` runs alongside as
+the human dashboard.
+
+> This supersedes `myproject/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
+> and the persistent `~/.hermes/scripts/bus_watch_hdl.sh` logger loop. An even earlier prototype,
+> `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes with hard-coded pane IDs. Don't
+> reintroduce a wrapper script — a restart loop never wakes a terminal session. v0.8 revised the
+> pane-relay part on purpose ([decision](docs/memory/decisions/2026-10-10-event-driven-dispatch.md)):
+> **the only automated process that types into panes is `agentbus dispatch`, and it types a wake
+> line, never a message; master's manual pane injection remains the fallback while no dispatcher
+> runs.** Pane ids are self-registered (or bound with `agentbus bind`) and pid-verified, not hard-coded.
+
+**Separate notification path — NOT the bus.** The `Stop` hook in
+`myproject/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
+the remote box's hermes **gateway** at `http://<remote>:8644/webhooks/claude-notify`. That route is
+`Deliver: signal`: it pings a human over Signal when a Claude task stops. The gateway never
+touches Redis, so this path is **independent of the agent bus** — webhook traffic does not appear
+on `hermes:*`, and the bus carries nothing back to Signal.
 
 ## Tuning
 
