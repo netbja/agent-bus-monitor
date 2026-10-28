@@ -219,9 +219,9 @@ func (m *Model) fillLists() {
 	pl.SetFrame(m.lowerTitle(PanelPlan, pt), plabel)
 
 	rq := &m.lists.requests
-	rq.SetItems(requestItems(s.requests, s.threads, now, lower))
-	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: "Requests", Role: RoleText}}),
-		requestsLabel(s.requests, s.threads, m.cfg.self, openQuestionCount(s.asks)))
+	rv := requestGroups(m.requestInput())
+	rq.SetItems(requestRows(rv, m.ui.reqOpen, now, lower))
+	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: "Requests", Role: RoleText}}), requestsTitle(rv, lower))
 
 	m.keepInView()
 	for _, p := range narrowPanels {

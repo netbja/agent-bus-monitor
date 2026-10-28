@@ -114,6 +114,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		l.Last()
 	case ActLive:
 		m.lists.activity.Resume()
+	case ActFold:
+		m.ui.reqOpen.folded = !m.ui.reqOpen.folded
 	case ActOpen:
 		cmd = m.openTracked(m.ui.focus, false)
 	case ActCopy:
@@ -241,15 +243,7 @@ func (m *Model) open(p PanelID) tea.Cmd {
 			return m.push(page{kind: ovPlanTask, key: task})
 		}
 	case PanelRequests:
-		if strings.HasPrefix(key, "req:") {
-			return m.push(page{kind: ovRequest, key: key})
-		}
-		id := strings.TrimPrefix(key, "thr:")
-		for _, t := range s.threads {
-			if t.ID == id {
-				return m.pushMessage(bus.Event{ID: t.ID, Kind: "cmd", Type: t.Type, From: t.From, Target: t.Target, Message: t.Message}, t.At)
-			}
-		}
+		return m.openRequestRow(key)
 	}
 	return nil
 }
@@ -303,10 +297,16 @@ func (m *Model) copySelected() tea.Cmd {
 				return m.copy(plain, "request")
 			}
 		}
-		for _, t := range s.threads {
-			if "thr:"+t.ID == key {
-				return m.copy(t.Message, "message")
+		if ths := m.reqThreadsOf(key); len(ths) > 0 {
+			var lines []string
+			for _, th := range ths {
+				text := th.Subject
+				if th.Root.ID != "" {
+					text = messageBody(th.Root)
+				}
+				lines = append(lines, text)
 			}
+			return m.copy(strings.Join(lines, "\n"), "message")
 		}
 	}
 	return nil

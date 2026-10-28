@@ -244,6 +244,9 @@ const (
 //	                        declared state, so the two stamps differ on purpose.
 //	armed                 — a live subscribe lease. A lease, not a state.
 type agentState struct {
+	delivered  string          // its cmd group's last-delivered id (the Requests view's unread/read)
+	pendingIDs map[string]bool // its pending list
+	deliveryOK bool            // both read on the last dispatcher-facts tick
 	state      string
 	message    string
 	stateAt    time.Time         // when the state above was declared

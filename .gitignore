@@ -1,5 +1,7 @@
 /busmon
 /agentbus
+/cmd/busmon/busmon
+/cmd/agentbus/agentbus
 .env
 
 # local bootstrap markers

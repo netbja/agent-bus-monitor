@@ -327,7 +327,8 @@ func TestShellWheelScrollsEveryZone(t *testing.T) {
 			}
 			m.snap.planState = ps
 			for i := 0; i < 30; i++ {
-				m.snap.threads = append(m.snap.threads, openThread{ID: fmt.Sprintf("%d-0", i+2), Type: "directive", From: "a00", Target: "a02", Message: "t", At: shellNow})
+				m.snap.cmdHistory = append(m.snap.cmdHistory, bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-%d", shellNow.Add(-time.Minute).UnixMilli(), i),
+					Type: "directive", From: "a00", Target: fmt.Sprintf("t%02d", i), Message: "t"})
 			}
 			m.refresh()
 			l := m.lists.of(p)

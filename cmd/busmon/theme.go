@@ -218,6 +218,7 @@ const (
 	GlyphNotEqual    = "≠" // model≠: the running model is not the configured one
 	GlyphGate        = "◆" // a 4-eyes gate waiting on a verdict (For you); ▲ means blocked
 	GlyphReturn      = "↵" // an expansion's last line: Enter again opens the full text
+	GlyphTimes       = "×" // a repeat count: a subject reviewed three times reads `a ×3`
 	glyphVertical    = "│"
 	glyphThumb       = "┃"
 	glyphHorizontal  = "─"
@@ -232,5 +233,5 @@ var UIGlyphs = []string{
 	GlyphSelect, GlyphArrowR, GlyphArrowL, GlyphUp, GlyphDownArrow, GlyphEllipsis,
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
-	GlyphNotEqual, GlyphGate, GlyphReturn,
+	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes,
 }

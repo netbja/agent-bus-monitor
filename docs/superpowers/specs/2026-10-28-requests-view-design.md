@@ -113,7 +113,7 @@ instead of "39 between agents". At 80 columns the labels shorten to `wait 22 · 
 | a thread | the reader's thread page: `Bus.Thread` (every entry of the thread, chronological), as `agentbus thread <id>` prints it |
 | a report notice | the report itself, full text (`agentbus reports <id>`), markdown rendered as in Activity |
 | a tracked request | its request page (today's `req:` page) |
-| a review group | the subject's verdicts roll-up (`agentbus verdicts --subject S`) plus its open gates |
+| a review group | expands it in place into its challenges, each opening its thread (step 2: busmon reads the verdict ledger only while a plan is loaded, so a roll-up page would usually be empty) |
 | a notice group | the list of those notices, one line each |
 
 `d` then `y` on a thread still closes it with a `human=yes`, `wake=no` reply (`Bus.HumanClose`), as

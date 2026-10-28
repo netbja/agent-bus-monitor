@@ -60,6 +60,7 @@ type uiState struct {
 	expanded       string            // the row expanded in place (its list key), "" none
 	expandIn       PanelID           // the list it is in: Activity or For you
 	planExpanded   bool              // the Plan tab shows its done tasks (A11)
+	reqOpen        reqOpen           // the Requests view's expanded groups and folded section
 	compose        *composeState     // the compose window, when open (tea_compose.go)
 	msgCompose     composeDraft      // the window's message draft while it is closed
 	askDrafts      map[string]string // free answers being written, by ask|question
