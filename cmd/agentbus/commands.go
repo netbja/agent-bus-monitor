@@ -28,7 +28,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "report", Text: true, Usage: []string{"report <agent> [--auto] [--to <agent>]... <message...>"},
-		Summary: "publish a report (full text kept); --to also tells who waits for it",
+		Summary: "publish a report (full text kept) and print its id; --to also tells who waits for it",
 		Flags: []cli.Flag{
 			{Long: "auto", Short: 'a', Help: "mark it automatic, not a note"},
 			{Long: "to", Short: 't', Arg: "<agent>", Help: "also send a directive pointing at it (repeatable)"},

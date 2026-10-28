@@ -248,7 +248,14 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   at the horizon floor (v0.8, `EnsureGroup`), entries older than that floor are never replayed. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
   each fire, **not** a long-lived loop (which would never wake a terminal session). `agents [--json]`
   lists every peer's current state. `watch` is the legacy alias of `subscribe` (same handler).
-  `listen` tails all four streams via `Bus.Tail` for debugging. `report` now retains the full
+  `listen` tails all four streams via `Bus.Tail` for debugging. `report` prints its entry id on
+  stdout (lifecycle-2), the id `handoff <self> --report <id>` declares (`bus/handoff.go`:
+  `{p}:handoff`, agent → report, session, pid, pid_start, `at` from Redis `TIME`, written in one
+  script only for the agent's own report from its verified process in its proved session; not in
+  `projectKinds`, ignored by `HasKeysBesidesDispatch`; `Handoff.VoidFor` — working since, another
+  process or session — is the rule the dispatcher's fenced `handoffPass` deletes by and busmon's
+  `handoff` flag shows by; `handoff` alone lists them, read-only for the identity guard; the
+  context alert's directive now asks for both). `report` now retains the full
   text (newlines/tabs kept, ≤8000, `AGENT_BUS_REPORT_FULL_MAX`) in a `full` field **only when it
   differs from the one-line ≤500 preview**; `reports [--json]` lists recent reports (marking those
   with more via ` (+N)`) and `reports <id>` prints one report's full retained text.

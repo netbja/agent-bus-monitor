@@ -229,6 +229,7 @@ func main() {
 				die(fmt.Sprintf("report %s published, but telling %s failed: %v", id, t, err))
 			}
 		}
+		fmt.Println(id) // the entry id, as cmd prints: what `handoff --report` takes
 
 	case "reports":
 		rest, asJSON := extractBool(rest, "--json")
