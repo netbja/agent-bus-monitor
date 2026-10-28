@@ -166,6 +166,9 @@ func main() {
 		os.Exit(runBind(ctx, bindDeps{Bind: b.Bind, Procs: h.ForegroundProcs, Start: dispatch.ProcStart, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
 	case "mission":
 		os.Exit(runMission(ctx, b, self, rest, os.Stdout, os.Stderr))
+	case "handoff":
+		os.Exit(runHandoff(ctx, handoffDeps{Self: self, Ident: statusIdent, Declare: b.DeclareHandoff,
+			List: b.Handoffs, Agents: b.Agents, Now: time.Now}, rest, os.Stdout, os.Stderr))
 	case "dispatch":
 		sctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		code := runDispatch(sctx, b, rest, dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}, os.Stdout, os.Stderr)

@@ -42,7 +42,7 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		return first != "close"
 	case "pilot":
 		return first == "status"
-	case "request", "board":
+	case "request", "board", "handoff":
 		return first == ""
 	case "plan":
 		return first == "" || first == "show"

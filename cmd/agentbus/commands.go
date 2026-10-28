@@ -42,6 +42,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo reports", "agentbus -p demo reports 1792537337865-0"},
 	},
 	{
+		Name: "handoff", Usage: []string{"handoff [--json]", "handoff <self> --report <id>"},
+		Summary: "list declared hand-offs, or declare your own (its report id)",
+		Flags: []cli.Flag{
+			{Long: "report", Short: 'r', Arg: "<id>", Help: "the report that carries your hand-off"},
+			fJSON,
+		},
+		Examples: []string{"agentbus -p demo handoff", "agentbus -p demo handoff coder -r 1793170979006-0"},
+	},
+	{
 		Name: "notify", Text: true, Usage: []string{"notify <message...>"},
 		Summary:  "post a notice for the record; wakes nobody",
 		Examples: []string{"agentbus -p demo notify \"broker restarted\""},
