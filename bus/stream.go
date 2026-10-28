@@ -79,7 +79,8 @@ type AgentSnapshot struct {
 	// IdentSession (context-alert) is the session recorded with the last
 	// proof: set only when the identity is proved (a status with a pid, or a
 	// bind), so an unverified status naming another session never moves it;
-	// ProveSession moves it alone for the same process (after /clear).
+	// ProveSession moves it alone for the same process (after /clear), and a
+	// status of the same process only fills an empty one.
 	// The dispatcher reads the context fill of this session only.
 	IdentSession string `json:"ident_session,omitempty"`
 	// Client and Provider (v0.13) come from the launcher's AGENT_BUS_CLIENT /

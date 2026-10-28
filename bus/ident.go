@@ -37,11 +37,15 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 			out.ClientFP = next.ClientFP
 		}
 		// The session proved with this process (another process proves its
-		// own, even none); nothing unproved keeps one.
+		// own, even none); nothing unproved keeps one. For the same process a
+		// status only fills an empty one: once ProveSession moved it after
+		// /clear, a status naming the older session never moves it back.
 		switch {
 		case at == 0:
 			out.IdentSession = ""
-		case next.Session != "" || next.PID != out.PID || next.PIDStart != out.PIDStart:
+		case next.PID != out.PID || next.PIDStart != out.PIDStart:
+			out.IdentSession = next.Session
+		case next.Session != "" && out.IdentSession == "":
 			out.IdentSession = next.Session
 		}
 		out.Pane, out.PID, out.PIDStart, out.Terminal, out.IdentTS = next.Pane, next.PID, next.PIDStart, next.Terminal, at
