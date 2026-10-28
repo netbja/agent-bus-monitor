@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -47,11 +48,20 @@ func lookupEnv(env []string, key string) (string, bool) {
 }
 
 // manifestPath is ROLES_TOML, else <repo>/roles.toml, where the repo is
-// AGENTBUS_REPO or this binary's directory (the scripts run <repo>/agentbus).
+// AGENTBUS_REPO, else the checkout setup.sh stamped (buildinfo.Repo) when it
+// holds a roles.toml, else this binary's directory (the scripts run
+// <repo>/agentbus).
 func manifestPath(env []string) (string, error) {
 	path, ok := lookupEnv(env, "ROLES_TOML")
 	if !ok || path == "" {
 		repo, ok := lookupEnv(env, "AGENTBUS_REPO")
+		if (!ok || repo == "") && buildinfo.Repo != "" {
+			// The checkout setup.sh stamped, as repoDir finds scripts/bootstrap:
+			// an installed binary has no roles.toml beside it.
+			if st, err := os.Stat(filepath.Join(buildinfo.Repo, "roles.toml")); err == nil && !st.IsDir() {
+				repo, ok = buildinfo.Repo, true
+			}
+		}
 		if !ok || repo == "" {
 			exe, err := os.Executable()
 			if err != nil {

@@ -760,7 +760,9 @@ It never touches Redis — see README "Example deployment".
   identity, not its own pane, not on a fallback, `reloadOpenWork` = swap's `openWork` plus an open
   ask and an `accepted` board task, declared idle, no wake typing, a proved Claude Code session
   unless `--fresh`), the intent and a second readiness read, SIGTERM to the re-checked pid (never
-  SIGKILL), `relaunchRole` (up's lock and relaunch, the role's tab only, resuming `IdentSession`),
+  SIGKILL), `relaunchRole` (up's lock and relaunch, the role's tab only, resuming `IdentSession`; after the
+  exit it re-reads the tab, bounded 20 s, until `judgeTab` — up's own rule — reads a relaunch, since herdr's
+  view lags the exit, and a tab the relaunch skips is an error, not a minute of waiting for proof),
   the proof (`replaced`, plus after an update episode a `client_fp` hashing to the installed
   version), `reloaded`; every failure after the intent is a `failed` ledger entry with its
   recovery. Tool rules: sentinel `agentbus reload *`, master `agentbus reload sentinel`, and a shared

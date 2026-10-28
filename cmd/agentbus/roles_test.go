@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/buildinfo"
 )
 
 // rolesFixture writes a schema-2 manifest with a boot and a pop role and
@@ -148,6 +150,30 @@ func TestRolesManifestDefaultsToRepo(t *testing.T) {
 	env := []string{"AGENTBUS_REPO=" + filepath.Dir(manifest)}
 	if code, out, errOut := roles(env, "tier", "pop"); code != 0 || out != "architect\n" {
 		t.Fatalf("tier pop with <repo>/roles.toml = %d %q %s", code, out, errOut)
+	}
+}
+
+// An installed agentbus (in ~/.local/bin, no roles.toml beside it) finds the
+// manifest in the checkout setup.sh stamped, as up finds scripts/bootstrap:
+// reload, swap and doctor run with no ROLES_TOML in a person's shell.
+func TestManifestPathFollowsTheStampedRepo(t *testing.T) {
+	manifest, _ := rolesFixture(t)
+	old := buildinfo.Repo
+	buildinfo.Repo = filepath.Dir(manifest)
+	t.Cleanup(func() { buildinfo.Repo = old })
+	got, err := manifestPath(nil)
+	if err != nil || got != manifest {
+		t.Fatalf("manifestPath with only buildinfo.Repo = %q, %v; want %q", got, err, manifest)
+	}
+	// An explicit AGENTBUS_REPO still wins, as in repoDir.
+	other := t.TempDir()
+	if got, _ := manifestPath([]string{"AGENTBUS_REPO=" + other}); got != filepath.Join(other, "roles.toml") {
+		t.Fatalf("AGENTBUS_REPO lost to buildinfo.Repo: %q", got)
+	}
+	// A stamped checkout without roles.toml is skipped, not chosen.
+	buildinfo.Repo = t.TempDir()
+	if got, _ := manifestPath(nil); got == filepath.Join(buildinfo.Repo, "roles.toml") {
+		t.Fatalf("a stamped repo with no roles.toml was chosen: %q", got)
 	}
 }
 
