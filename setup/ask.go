@@ -14,6 +14,7 @@ import (
 type Prompter struct {
 	Yes bool
 	TTY io.ReadWriter
+	rd  *bufio.Reader // one for the session: answers pasted ahead stay buffered for their questions
 }
 
 // ErrNoTerminal: a question with no terminal and no --yes, so nothing is
@@ -22,7 +23,7 @@ var ErrNoTerminal = errors.New("no terminal to ask on")
 
 // Ask is setup.sh's ask: yes/no, def the default. An empty answer or EOF
 // takes the default, which every caller makes the cautious choice.
-func Ask(o *Output, p Prompter, question string, def bool) (bool, error) {
+func Ask(o *Output, p *Prompter, question string, def bool) (bool, error) {
 	if p.Yes {
 		return def, nil
 	}
@@ -35,7 +36,10 @@ func Ask(o *Output, p Prompter, question string, def bool) (bool, error) {
 		hint = "[Y/n]"
 	}
 	fmt.Fprintf(p.TTY, "    ? %s %s ", question, hint)
-	line, _ := bufio.NewReader(p.TTY).ReadString('\n') // EOF: an empty answer
+	if p.rd == nil {
+		p.rd = bufio.NewReader(p.TTY)
+	}
+	line, _ := p.rd.ReadString('\n') // EOF: an empty answer
 	switch strings.TrimSpace(line) {
 	case "":
 		return def, nil

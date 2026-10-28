@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -84,4 +85,57 @@ func TestParseArgsFlags(t *testing.T) {
 	if opt, _ := ParseArgs([]string{"status"}, env2, o); opt.BinDir != "/x" {
 		t.Fatalf("BIN_DIR from the environment: %q", opt.BinDir)
 	}
+}
+
+// The thin script refuses an old Go under GOTOOLCHAIN=local before it
+// builds, with setup.sh's words (reviewer-codex): the Go preflight runs only
+// after that build.
+func TestThinScriptRefusesAnOldLocalGoBeforeBuilding(t *testing.T) {
+	repo, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakes := t.TempDir()
+	built := filepath.Join(fakes, "built")
+	goFake := `#!/bin/sh
+case "$*" in
+  "env GOVERSION") echo go1.20.1 ;;
+  "env GOTOOLCHAIN") echo local ;;
+  build*) touch "` + built + `" ;;
+esac
+`
+	for name, body := range map[string]string{"go": goFake, "git": "#!/bin/sh\nexit 0\n"} {
+		if err := os.WriteFile(filepath.Join(fakes, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command("sh", filepath.Join(repo, "scripts", "setup-go.sh"), "install", "--dry-run")
+	cmd.Env = []string{"HOME=" + t.TempDir(), "PATH=" + fakes + ":/usr/bin:/bin", "NO_COLOR=1"}
+	var errw bytes.Buffer
+	cmd.Stderr = &errw
+	if err := cmd.Run(); err == nil {
+		t.Fatal("an old local Go went on")
+	}
+	want := "Go " + goModWant(t, repo) + " or newer is required (found 1.20.1, GOTOOLCHAIN=local): https://go.dev/dl/"
+	if !strings.Contains(errw.String(), want) {
+		t.Fatalf("stderr %q, want %q", errw.String(), want)
+	}
+	if _, err := os.Stat(built); err == nil {
+		t.Fatal("it built before refusing")
+	}
+}
+
+func goModWant(t *testing.T, repo string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(repo, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(l, "go "); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	t.Fatal("no go line")
+	return ""
 }

@@ -14,19 +14,19 @@ import (
 func TestAsk(t *testing.T) {
 	var errw bytes.Buffer
 	o := NewOutput(&bytes.Buffer{}, &errw, false)
-	if ok, err := Ask(o, Prompter{Yes: true}, "stop Redis?", true); !ok || err != nil {
+	if ok, err := Ask(o, &Prompter{Yes: true}, "stop Redis?", true); !ok || err != nil {
 		t.Fatalf("--yes, default y: %v %v", ok, err)
 	}
-	if ok, _ := Ask(o, Prompter{Yes: true}, "purge?", false); ok {
+	if ok, _ := Ask(o, &Prompter{Yes: true}, "purge?", false); ok {
 		t.Fatal("--yes took the non-default")
 	}
-	if _, err := Ask(o, Prompter{}, "q?", true); err == nil || !strings.Contains(errw.String(), "no terminal to ask on: re-run with --yes to accept the cautious defaults") {
+	if _, err := Ask(o, &Prompter{}, "q?", true); err == nil || !strings.Contains(errw.String(), "no terminal to ask on: re-run with --yes to accept the cautious defaults") {
 		t.Fatalf("no terminal: %v %q", err, errw.String())
 	}
 	for in, want := range map[string]bool{"y\n": true, "yes\n": true, "Y\n": true, "n\n": false, "\n": false, "": false, "maybe\n": false} {
 		var shown bytes.Buffer
 		tty := fakeTTY{strings.NewReader(in), &shown}
-		ok, err := Ask(o, Prompter{TTY: tty}, "purge the data?", false)
+		ok, err := Ask(o, &Prompter{TTY: tty}, "purge the data?", false)
 		if err != nil || ok != want {
 			t.Errorf("answer %q (default n): %v %v", in, ok, err)
 		}
@@ -35,7 +35,7 @@ func TestAsk(t *testing.T) {
 		}
 	}
 	tty := fakeTTY{strings.NewReader(""), &bytes.Buffer{}}
-	if ok, _ := Ask(o, Prompter{TTY: tty}, "stop?", true); !ok {
+	if ok, _ := Ask(o, &Prompter{TTY: tty}, "stop?", true); !ok {
 		t.Fatal("EOF did not take the default y")
 	}
 }
@@ -70,3 +70,15 @@ type fakeTTY struct {
 
 func (f fakeTTY) Read(p []byte) (int, error)  { return f.r.Read(p) }
 func (f fakeTTY) Write(p []byte) (int, error) { return f.w.Write(p) }
+
+// One reader for the whole session (reviewer-codex): answers pasted for
+// successive questions are each read by their own question.
+func TestAskReadsPastedAnswersInTurn(t *testing.T) {
+	o := NewOutput(&bytes.Buffer{}, &bytes.Buffer{}, false)
+	p := &Prompter{TTY: fakeTTY{strings.NewReader("y\nn\ny\n"), &bytes.Buffer{}}}
+	for i, want := range []bool{true, false, true} {
+		if got, err := Ask(o, p, "q?", false); err != nil || got != want {
+			t.Fatalf("question %d: %v %v, want %v", i, got, err, want)
+		}
+	}
+}
