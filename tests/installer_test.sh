@@ -4,6 +4,10 @@
 # config edit, agent-bus linked as the herdr plugin netbja.agentbus, external skills cloned),
 # status, uninstall and the Go floor. Hermetic: a fake herdr, a local skills repository, a
 # throwaway HOME; it never touches this checkout, the live BIN_DIR, herdr, docker or the real skills.
+# SETUP_SCRIPT picks the installer under test: setup.sh (default), or the Go installer's thin
+# scripts/setup-go.sh (installer_go_test.sh), which must pass the same asserts plus the broker's
+# ownership ones (docs/superpowers/specs/2026-10-28-go-installer-design.md, Rollout).
+SETUP_SCRIPT="${SETUP_SCRIPT:-setup.sh}"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/.." && pwd)"
 source "$DIR/lib.sh"
@@ -51,17 +55,24 @@ set_registry() {
 }
 # A fake docker: the real one runs the live broker (agent-bus-redis) and must never be touched.
 # An earlier version of this test stopped it (uninstall --yes stops Redis by default).
-export DOCKER_LOG="$T/docker.log" DOCKER_STATE="$T/redis.state"
+# Its container carries the compose label of the checkout that made it, DOCKER_OWNER (the copy
+# below unless a test says otherwise): the Go installer composes only for its own.
+export DOCKER_LOG="$T/docker.log" DOCKER_STATE="$T/redis.state" DOCKER_OWNER="$T/repo"
 echo running > "$DOCKER_STATE"
 cat > "$T/fakebin/docker" <<'EOF'
 #!/bin/sh
 echo "$*" >> "$DOCKER_LOG"
+if [ "$1" = inspect ]; then
+  [ -s "$DOCKER_STATE" ] || { echo "Error: No such object: agent-bus-redis" >&2; exit 1; }
+  echo "$DOCKER_OWNER"; exit 0
+fi
 case "$1 ${2:-}" in
   "ps -a") cat "$DOCKER_STATE" ;;
   "compose version") echo "Docker Compose version test" ;;
+  "compose up") echo running > "$DOCKER_STATE" ;;
   "compose stop") echo exited > "$DOCKER_STATE" ;;
   "compose down") : > "$DOCKER_STATE" ;;
-  "info ") exit 1 ;;
+  "info ") [ -n "${DOCKER_INFO_OK:-}" ] || exit 1 ;;
 esac
 exit 0
 EOF
@@ -100,7 +111,7 @@ mkdir -p "$T/repo" "$T/bin"
 git -C "$REPO" ls-files -z | (cd "$REPO" && xargs -0 tar cf -) | tar xf - -C "$T/repo"
 cp "$REPO/setup.sh" "$T/repo/"
 git -C "$T/repo" init -q && git -C "$T/repo" add -A && git -C "$T/repo" -c user.email=t@t -c user.name=t commit -qm copy && git -C "$T/repo" tag v9.9.9
-SETUP="$T/repo/setup.sh"
+SETUP="$T/repo/$SETUP_SCRIPT"
 
 # Flags
 out="$("$SETUP" --help 2>&1 || true)"
@@ -131,7 +142,7 @@ description = "agent-bus: projects"'
 mkdir -p "$T/cfg/herdr"
 printf '[ui]\ntheme = "dark"\n' > "$T/cfg/herdr/config.toml"
 cp "$T/cfg/herdr/config.toml" "$T/config.orig"
-dry_out="$("$T/repo/setup.sh" install --dry-run --bin-dir "$T/dry-bin" 2>&1)"; rc=$?
+dry_out="$("$SETUP" install --dry-run --bin-dir "$T/dry-bin" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "dry-run exits 0"
 assert_contains "$dry_out" "would compile ./cmd/agentbus -> $T/dry-bin/agentbus" "dry-run names the target"
 assert_contains "$dry_out" "Dry run complete" "dry-run says it is a dry run"
@@ -304,6 +315,28 @@ assert_contains "$(cat "$DOCKER_LOG")" "compose stop" "uninstall --yes stops Red
 assert_eq "$(grep -c "compose down" "$DOCKER_LOG")" "0" "and never removes its data without --purge"
 assert_eq "$([[ -L "$T/My Skills/agent-bus" ]] && echo left || echo gone)" "gone" "a link in a SKILLS_DEST with a space is removed"
 
+# The broker belongs to the checkout whose compose label it carries (Go installer): another
+# checkout's is never started, stopped nor purged from here. The install runs in a network
+# namespace (unshare -rn), where 127.0.0.1:6380 is unreachable, so it would start the broker;
+# the same run with this checkout's label is the control that it does.
+if [[ "$SETUP_SCRIPT" != setup.sh ]]; then
+  if unshare -rn true 2>/dev/null; then
+    : > "$DOCKER_LOG"; : > "$DOCKER_STATE"
+    ctl_out="$(DOCKER_INFO_OK=1 unshare -rn "$SETUP" install --bin-dir "$T/bin" --no-skills 2>&1)"
+    assert_contains "$(cat "$DOCKER_LOG")" "compose up -d" "control: an unreachable broker with no container is started from this checkout"
+    echo running > "$DOCKER_STATE"; : > "$DOCKER_LOG"
+    own_out="$(DOCKER_OWNER="$T/other-checkout" DOCKER_INFO_OK=1 unshare -rn "$SETUP" install --bin-dir "$T/bin" --no-skills 2>&1)"
+    assert_eq "$(grep -c 'compose up' "$DOCKER_LOG")" "0" "install never starts a broker another checkout owns"
+    assert_contains "$own_out" "the broker belongs to $T/other-checkout" "and says whose it is"
+  else
+    echo "  skip: unshare -rn unavailable (the install ownership asserts need an unreachable 6380)"
+  fi
+  echo running > "$DOCKER_STATE"; : > "$DOCKER_LOG"
+  DOCKER_OWNER="$T/other-checkout" $(command -v setsid || true) "$SETUP" uninstall --yes --purge --bin-dir "$T/bin" < /dev/null >/dev/null 2>&1
+  assert_eq "$(grep -c 'compose stop\|compose down' "$DOCKER_LOG")" "0" "uninstall --purge never stops nor purges a broker another checkout owns"
+  assert_eq "$(cat "$DOCKER_STATE")" "running" "and leaves it running"
+fi
+
 # A plugin linked from a path setup did not record is never unlinked
 set_registry "$T/elsewhere"; printf '%s\n' "$T/repo" > "$PLUGIN_RECORD"; : > "$HERDR_LOG"
 $(command -v setsid || true) "$SETUP" uninstall --yes --bin-dir "$T/bin" < /dev/null >/dev/null 2>&1
@@ -332,8 +365,16 @@ assert_eq "$rc" "1" "update without an upstream fails clearly (no remote in the 
 assert_contains "$up_out" "git pull --ff-only failed" "and says why"
 
 # update fast-forwards to a newer release and reinstalls it
+# mark_pulled_installer: the pulled tree's installer prints one more line, so the update must run it.
+mark_pulled_installer() {
+  if [[ "$SETUP_SCRIPT" == setup.sh ]]; then
+    sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/setup.sh" && grep -q "pulled installer" "$T/dev/setup.sh"
+  else
+    sed -i 's|^\to.Step("1/5 Checking system platform & toolchain")$|&; o.Info("the pulled installer is the one running")|' "$T/dev/setup/preflight.go" && grep -q "pulled installer" "$T/dev/setup/preflight.go"
+  fi
+}
 git clone -q --bare "$T/repo" "$T/upstream.git" && git -C "$T/repo" remote add origin "$T/upstream.git" && git -C "$T/repo" fetch -q origin && git -C "$T/repo" branch -q -u origin/$(git -C "$T/repo" rev-parse --abbrev-ref HEAD)
-git clone -q "$T/upstream.git" "$T/dev" && echo more >> "$T/dev/CHANGELOG.md" && echo "- one more rule" >> "$T/dev/skills/agent-bus-sentinel/SKILL.md" && sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/setup.sh" && grep -q "pulled installer" "$T/dev/setup.sh" && git -C "$T/dev" add -A && git -C "$T/dev" -c user.email=t@t -c user.name=t commit -qm next && git -C "$T/dev" tag v9.9.10 && git -C "$T/dev" push -q origin HEAD --tags
+git clone -q "$T/upstream.git" "$T/dev" && echo more >> "$T/dev/CHANGELOG.md" && echo "- one more rule" >> "$T/dev/skills/agent-bus-sentinel/SKILL.md" && mark_pulled_installer && git -C "$T/dev" add -A && git -C "$T/dev" -c user.email=t@t -c user.name=t commit -qm next && git -C "$T/dev" tag v9.9.10 && git -C "$T/dev" push -q origin HEAD --tags
 up_out="$("$SETUP" update --bin-dir "$T/bin" --no-docker --no-skills 2>&1)"; rc=$?
 [[ "$rc" == 0 ]] || printf "%s\n" "$up_out" | tail -15 | sed "s/^/    /"
 assert_eq "$rc" "0" "update exits 0"

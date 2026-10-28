@@ -12,6 +12,7 @@ require (
 	github.com/gdamore/tcell/v2 v2.13.9
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/rivo/uniseg v0.4.7
+	golang.org/x/sys v0.47.0
 )
 
 require (
@@ -28,7 +29,6 @@ require (
 	github.com/xo/terminfo v1.0.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 )

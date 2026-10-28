@@ -459,6 +459,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo roles doctor", "agentbus roles fallbacks coder"},
 	},
 	{
+		Name: "setup", NoProject: true, Internal: true,
+		Usage:   []string{"setup [--repo <dir>] install|update|uninstall|status [setup.sh's flags]"},
+		Summary: "the installer in Go, run by scripts/setup-go.sh (its flags and help are setup.sh's)",
+		Flags: []cli.Flag{
+			{Long: "repo", Arg: "<dir>", Help: "the checkout to install from (the thin script passes it)"},
+		},
+		Examples: []string{"agentbus setup --repo ~/src/agent-bus-monitor install --dry-run"},
+	},
+	{
 		Name: "mem", NoProject: true,
 		Usage: []string{
 			"mem check [--stale-after <dur>] [--strict]",
