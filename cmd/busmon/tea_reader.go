@@ -553,10 +553,13 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.recapKey(k)
 	}
 	if p.kind == ovServices && p.svc != nil { // the cards: arrows choose, enter or l opens the log
+		// Side by side the cards are a row, so ←/→ move between them too;
+		// stacked, ←/→ keep their reader meaning (busmon-f3-keys).
+		row := cardsSideBySide(m.readerWidth()) && (k.Code == keyLeft || k.Code == keyRight)
 		switch {
-		case act == ActUp || act == ActDown:
+		case act == ActUp || act == ActDown || row:
 			step := 1
-			if act == ActUp {
+			if act == ActUp || (row && k.Code == keyLeft) {
 				step = -1
 			}
 			p.sel = clamp(p.sel+step, 0, len(svcCardKinds)-1)

@@ -342,3 +342,44 @@ func TestServiceStartOnlyForItsOwnRunningProcess(t *testing.T) {
 		}
 	}
 }
+
+// busmon-f3-keys: side by side (wide), the cards are a row, so ←/→ move
+// between them as ↑/↓ do; stacked (narrow), they are a column and only ↑/↓
+// move, ←/→ keeping their reader meaning. The footer and the help come from
+// the key table.
+func TestShellServicesCardsLeftRight(t *testing.T) {
+	open := func(w, h int) Model {
+		m := fixtureShell(t, w, h)
+		next, cmd := m.Update(keyMsg(tea.Key{Code: tea.KeyF3}))
+		m = run(t, next.(Model), cmd)
+		if !m.rd.open() || m.rd.top().kind != ovServices {
+			t.Fatal("F3 opened no Services cards")
+		}
+		return m
+	}
+	m := open(140, 40)
+	if m = keys(t, m, kRight); m.rd.top().sel != 1 {
+		t.Fatalf("wide right: card %d, want missions", m.rd.top().sel)
+	}
+	if m = keys(t, m, kRight); m.rd.top().sel != 1 {
+		t.Fatalf("wide right at the last service card: %d", m.rd.top().sel)
+	}
+	if m = keys(t, m, kLeft); m.rd.top().sel != 0 || m.rd.top().kind != ovServices {
+		t.Fatalf("wide left: card %d, page %v", m.rd.top().sel, m.rd.top().kind)
+	}
+	if m = keys(t, m, kDown); m.rd.top().sel != 1 {
+		t.Fatalf("wide down kept: card %d", m.rd.top().sel)
+	}
+	n := open(90, 40)
+	if n = keys(t, n, kRight); n.rd.top().kind == ovServices && n.rd.top().sel != 0 {
+		t.Fatalf("stacked right moved the card to %d", n.rd.top().sel)
+	}
+	n = open(90, 40)
+	if n = keys(t, n, kDown); n.rd.top().sel != 1 {
+		t.Fatalf("stacked down: card %d", n.rd.top().sel)
+	}
+	help := plainOf(helpText())
+	if !strings.Contains(help, GlyphArrowL+GlyphArrowR+" too when side by side") {
+		t.Fatalf("the help lacks the F3 card keys:\n%s", help)
+	}
+}
