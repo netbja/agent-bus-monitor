@@ -306,7 +306,9 @@ the user's herdr or Redis.
   retries; `AGENT_BUS_AUTO_CLEAR=0` never types; a non-Claude client never types;
   `dispatchTypes` over every test of the package.
 - **cmd/agentbus** (`reloadDeps` like `swapDeps`, every outside call faked): each preflight refusal
-  changes nothing; the caller table; SIGTERM only after a fresh pid+start match; no SIGKILL on
+  changes nothing, an idle agent owning an `accepted` board task included (refused before the
+  intent, and refused after it when the task is accepted between the two reads), for sentinel's
+  reload of a peer and of master alike; the caller table; SIGTERM only after a fresh pid+start match; no SIGKILL on
   timeout; relaunch filtered to the role; `--fresh` without a session; each failure row writes a
   `failed` ledger entry and prints its recovery; `--dry-run` writes nothing.
 - **hook**: `report-resume` on `source: clear` proves the ancestry in the foreground (a fake
