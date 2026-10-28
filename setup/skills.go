@@ -67,7 +67,11 @@ func (in *Installer) ExternalSkills(ctx context.Context) {
 			return
 		}
 		if _, err := git("-C", home, "checkout", "--quiet", ref); err != nil {
-			_, _ = git("-C", home, "checkout", "--quiet", "FETCH_HEAD")
+			if _, err := git("-C", home, "checkout", "--quiet", "FETCH_HEAD"); err != nil {
+				// setup.sh stops here (set -e); never report a clone that did not move as updated
+				in.O.Warn("could not check out " + ref + " in " + home + " (kept as they are).")
+				return
+			}
 		}
 		in.O.OK("external skills: " + ref + " (" + home + ")")
 	default:

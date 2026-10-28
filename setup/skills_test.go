@@ -111,3 +111,20 @@ func TestRoleSkills(t *testing.T) {
 		t.Fatalf("dry: %q", out.String())
 	}
 }
+
+// A refresh whose checkouts both fail is not reported as updated
+// (foureyes' review of installer-2): it warns, the clone kept as it is.
+func TestExternalSkillsCheckoutFailsWarns(t *testing.T) {
+	in, out, _, home := skillsWorld(t, nil, nil)
+	sh := home + "/.local/share/agentbus/skills/mattpocock"
+	_ = os.MkdirAll(sh+"/.git", 0o755)
+	_ = os.WriteFile(sh+"/.git/agentbus-setup", nil, 0o644)
+	f := in.R.(*fakeRunner)
+	f.cmds["git -C "+sh+" fetch --quiet --depth 1 origin refs/tags/v1.3.1:refs/tags/v1.3.1"] = fakeCmd{}
+	f.cmds["git -C "+sh+" checkout --quiet v1.3.1"] = fakeCmd{err: errors.New("dirty")}
+	f.cmds["git -C "+sh+" checkout --quiet FETCH_HEAD"] = fakeCmd{err: errors.New("dirty")}
+	in.ExternalSkills(context.Background())
+	if out.String() != "    ! could not check out v1.3.1 in "+sh+" (kept as they are).\n" {
+		t.Fatalf("%q", out.String())
+	}
+}
