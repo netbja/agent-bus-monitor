@@ -51,6 +51,7 @@ type page struct {
 	fromKeys []string // that list's selectable keys, in order, when the walk began
 
 	svc       *svcFacts  // ovServices: the facts the cards show (sel: the card selected)
+	svcBusy   bool       // ovServices, ovRedis: a refresh read is in flight
 	recap     recapModel // ovRecap
 	recapLine int        // ovRecap: the body line of the cursor's row
 }
@@ -93,7 +94,85 @@ type threadMsg struct {
 
 // servicesMsg is the Services page's body, read by servicesCmd (it reads the
 // local logs from disk).
-type servicesMsg struct{ facts svcFacts }
+type servicesMsg struct {
+	facts  svcFacts
+	serial int // the page it refreshes; 0 opens one
+}
+
+// svcRefreshEvery: while the Services or Redis page is open, its facts are
+// read again this often (busmon-f3-live): a card judged once at the open
+// would age into "down" while the header, read every second, says ready.
+const svcRefreshEvery = 5 * time.Second
+
+// svcTickMsg asks for the next read of the page with that serial.
+type svcTickMsg struct{ serial int }
+
+// svcTick schedules the page's next read. Each read schedules the next
+// only once it is back, so reads never overlap; a page closed meanwhile
+// ends the chain (svcRefresh finds no page).
+func svcTick(serial int) tea.Cmd {
+	return tea.Tick(svcRefreshEvery, func(time.Time) tea.Msg { return svcTickMsg{serial: serial} })
+}
+
+// svcPage is the open Services or Redis page with that serial.
+func (m *Model) svcPage(serial int) *page {
+	i := slices.IndexFunc(m.rd.pages, func(p page) bool {
+		return p.serial == serial && (p.kind == ovServices || p.kind == ovRedis)
+	})
+	if i < 0 {
+		return nil
+	}
+	return &m.rd.pages[i]
+}
+
+// svcRefresh reads the page again, unless it is gone or a read is in flight;
+// a page under another one keeps its chain without reading.
+func (m *Model) svcRefresh(serial int) tea.Cmd {
+	p := m.svcPage(serial)
+	if p == nil || p.svcBusy {
+		return nil
+	}
+	if p != m.rd.top() {
+		return svcTick(serial)
+	}
+	p.svcBusy = true
+	if p.kind == ovRedis {
+		return m.redisPageCmd(serial)
+	}
+	return m.servicesCmd(serial)
+}
+
+// gotServices opens the Services page, or refreshes it in place (the card
+// selected stays), then schedules its next read.
+func (m *Model) gotServices(msg servicesMsg) tea.Cmd {
+	f := msg.facts
+	if msg.serial == 0 {
+		cmd := m.push(page{kind: ovServices, title: "Services", svc: &f})
+		return tea.Batch(cmd, svcTick(m.rd.serial))
+	}
+	p := m.svcPage(msg.serial)
+	if p == nil {
+		return nil
+	}
+	p.svc, p.svcBusy, p.dirty = &f, false, true
+	m.refresh()
+	return svcTick(msg.serial)
+}
+
+// gotRedisPage is gotServices for the Redis page.
+func (m *Model) gotRedisPage(msg redisPageMsg) tea.Cmd {
+	if msg.serial == 0 {
+		cmd := m.push(page{kind: ovRedis, title: "Redis", body: msg.body, fixed: true})
+		return tea.Batch(cmd, svcTick(m.rd.serial))
+	}
+	p := m.svcPage(msg.serial)
+	if p == nil {
+		return nil
+	}
+	p.body, p.svcBusy = msg.body, false
+	m.refresh()
+	return svcTick(msg.serial)
+}
 
 // serviceLogMsg is a service's log tail, read by serviceLogCmd.
 type serviceLogMsg struct {
@@ -194,14 +273,24 @@ func (m *Model) gotThread(msg threadMsg) {
 	m.refresh()
 }
 
-func (m *Model) servicesCmd() tea.Cmd {
+// servicesCmd reads the Services page's facts for the page with serial (0:
+// a new one), the records fresh from the bus; the last poll's stand in when
+// that read fails.
+func (m *Model) servicesCmd(serial int) tea.Cmd {
 	inst, recs, r, ctx, project, docker := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx, m.cfg.project, m.cfg.docker
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return func() tea.Msg {
+		if r != nil {
+			c, cancel := context.WithTimeout(ctx, 2*time.Second)
+			if i, rs, err := r.ServiceStates(c); err == nil {
+				inst, recs = i, rs
+			}
+			cancel()
+		}
 		host, _ := os.Hostname()
-		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker)}
+		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker), serial: serial}
 	}
 }
 
@@ -568,7 +657,7 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		case (act == ActServiceLog || k.Code == keyEnter) && p.sel == len(svcCardKinds):
 			if k.Code == keyEnter { // Redis has no service log: Enter opens its page
-				return m.redisPageCmd()
+				return m.redisPageCmd(0)
 			}
 			return nil
 		case act == ActServiceLog || k.Code == keyEnter:

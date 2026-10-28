@@ -570,12 +570,14 @@ It never touches Redis — see README "Example deployment".
   side by side at ≥110 cells: dispatch and missions (state, pid and since from `/proc`, summary, last
   error, log size of `service.LogMax`, `LogKeep` kept) and Redis (where it runs: `docker inspect
   agent-bus-redis` only when docker is on PATH, else the process from INFO; version, uptime, memory,
-  `DBSIZE` keys via `Bus.RedisInfo`), all gathered in the command that opens the page
-  (`gatherServices`), unknown read `?`; ↑↓ choose a service card, Enter or `l` opens its log tail
+  `DBSIZE` keys via `Bus.RedisInfo`), all gathered in a command (`gatherServices`, the records read
+  fresh through `ServiceStates`), unknown read `?`; while the Services or Redis page is the top page it
+  is read again every `svcRefreshEvery` (5 s, busmon-f3-live: each result schedules the next read, so
+  reads never overlap, a page under another keeps its chain without reading, a closed one ends it); ↑↓ choose a service card, Enter or `l` opens its log tail
   (`ovServiceLog`, `serviceLogBody`); the Redis card is selectable too, and Enter opens its read-only page
   (`redis_page.go`, `ovRedis`, busmon-redis-detail: `Bus.RedisDetail` = INFO memory/persistence/clients and
   per project its keys and stream lengths, `docker port` for the loopback bind, `bus.LegacyPasswordInUse`,
-  a `docker logs --tail 20` bounded to 8 KiB; read once at open, unknown read `?`); `busmon --delete` removes the local
+  a `docker logs --tail 20` bounded to 8 KiB; unknown read `?`); `busmon --delete` removes the local
   units before the keys.
 - **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
   `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails

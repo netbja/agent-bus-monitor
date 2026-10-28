@@ -199,12 +199,13 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case threadMsg:
 		m.gotThread(msg)
 	case servicesMsg:
-		f := msg.facts
-		return m.push(page{kind: ovServices, title: "Services", svc: &f})
+		return m.gotServices(msg)
+	case svcTickMsg:
+		return m.svcRefresh(msg.serial)
 	case serviceLogMsg:
 		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
 	case redisPageMsg:
-		return m.push(page{kind: ovRedis, title: "Redis", body: msg.body, fixed: true})
+		return m.gotRedisPage(msg)
 	case answerMsg:
 		m.gotAnswer(msg)
 	case sendResultMsg:

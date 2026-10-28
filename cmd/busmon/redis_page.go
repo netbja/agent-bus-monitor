@@ -46,7 +46,10 @@ type redisPage struct {
 }
 
 // redisPageMsg carries the page's body, built in the command that read it.
-type redisPageMsg struct{ body []Line }
+type redisPageMsg struct {
+	body   []Line
+	serial int // the page it refreshes; 0 opens one
+}
 
 // gatherRedisPage reads the page's facts; it runs in a command, never in
 // View. run nil means no docker call at all.
@@ -300,14 +303,15 @@ func projectsTable(projects []bus.ProjectRedis, width int) []Line {
 	return out
 }
 
-// redisPageCmd reads the page's facts and builds its body.
-func (m *Model) redisPageCmd() tea.Cmd {
+// redisPageCmd reads the page's facts and builds its body, for the page with
+// serial (0: a new one).
+func (m *Model) redisPageCmd(serial int) tea.Cmd {
 	r, ctx, width, docker, flagHost := m.cfg.reader, m.cfg.ctx, m.readerWidth(), m.cfg.docker, m.cfg.brokerHost
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return func() tea.Msg {
 		f := gatherRedisPage(ctx, r, docker, os.Getenv, flagHost)
-		return redisPageMsg{body: redisPageBody(f, time.Now(), width)}
+		return redisPageMsg{body: redisPageBody(f, time.Now(), width), serial: serial}
 	}
 }

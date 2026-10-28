@@ -276,7 +276,7 @@ func (m *Model) activateRecapRow(p *page) tea.Cmd {
 			return m.push(page{kind: ovMessage, title: "Swap " + GlyphNone + " " + r.Swap.Role, body: []Line{{S(RoleText, Preview(swapDescription(*r.Swap)))}}, fixed: true})
 		}
 	case "services":
-		return m.servicesCmd()
+		return m.servicesCmd(0)
 	case "pause":
 		return m.push(page{kind: ovMessage, title: "Project pause", body: []Line{{S(RoleText, Preview(r.Detail))}}, fixed: true})
 	}
