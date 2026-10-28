@@ -273,6 +273,10 @@ func accountLine(ps []tokProject, now time.Time) string {
 			b := p.budgets[n]
 			var ws []string
 			for _, w := range b.Windows {
+				if w.ObservedAt == 0 && w.UsedPct == 0 { // never observed: unknown, never 0%
+					ws = append(ws, w.Name+" ?")
+					continue
+				}
 				s := fmt.Sprintf("%s %.0f%%", w.Name, w.UsedPct)
 				if w.ResetsAt > 0 && w.UsedPct >= 1 {
 					if left := time.Unix(w.ResetsAt, 0).Sub(now); left > 0 {
@@ -375,10 +379,14 @@ func tokensUnattributed(ctx context.Context, o tokensOpts, d tokensDeps, stdout,
 		seen[filepath.Base(p)] = true
 		claude = append(claude, p)
 	}
-	for _, p := range recent(subs) {
-		if id := filepath.Base(filepath.Dir(filepath.Dir(p))); !claimed[id] {
-			claude = append(claude, p)
+	for _, p := range recent(subs) { // a subagent once, whatever project directory mirrors its session
+		id := filepath.Base(filepath.Dir(filepath.Dir(p)))
+		key := id + "/" + filepath.Base(p)
+		if claimed[id] || seen[key] {
+			continue
 		}
+		seen[key] = true
+		claude = append(claude, p)
 	}
 	cs := tokens.NewClaudeScan(d.Loc)
 	partial := cs.Pass(claude, unattributedBudget)
@@ -393,7 +401,9 @@ func tokensUnattributed(ctx context.Context, o tokensOpts, d tokensDeps, stdout,
 		codexFiles = append(codexFiles, m...)
 	}
 	xs := tokens.NewCodexScan(d.Loc)
-	if xs.Pass(codexFiles, unattributedBudget) {
+	used := cs.Used() // one host-scan budget for both: Codex gets what Claude left
+	rest := tokens.Budget{Files: unattributedBudget.Files - used.Files, Bytes: unattributedBudget.Bytes - used.Bytes}
+	if xs.Pass(codexFiles, rest) {
 		partial = true
 	}
 	var oai tokens.Usage

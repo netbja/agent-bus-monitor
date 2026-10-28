@@ -11,6 +11,7 @@ import (
 // request is counted once by remembering the last (message.id, requestId)
 // per file, kept across passes like the offset.
 type ClaudeScan struct {
+	used  Budget
 	loc   *time.Location
 	files map[string]*claudeFile
 }
@@ -45,6 +46,7 @@ type claudeLine struct {
 // a file is not read to its end.
 func (s *ClaudeScan) Pass(paths []string, b Budget) (partial bool) {
 	room, files := b.Bytes, 0
+	s.used = Budget{}
 	for _, p := range paths {
 		f := s.files[p]
 		if f != nil && f.upToDate(p) { // nothing appended: costs no file of the budget
@@ -60,6 +62,7 @@ func (s *ClaudeScan) Pass(paths []string, b Budget) (partial bool) {
 		}
 		done, n, err := readAppended(p, &f.fileState, room, func() { f.lastKey = "" }, func(raw []byte) { s.line(f, raw) })
 		room -= n
+		s.used.Files, s.used.Bytes = files, b.Bytes-room
 		if err != nil || !done { // an unreadable file is not counted: never complete
 			partial = true
 		}
@@ -97,3 +100,6 @@ func (s *ClaudeScan) Sums(path string) DaySums {
 	}
 	return out
 }
+
+// Used is what the last pass spent of its budget (files opened, bytes read).
+func (s *ClaudeScan) Used() Budget { return s.used }

@@ -19,6 +19,7 @@ import (
 // shrunk rebuilds its whole session (rebuildReplaced). Only the session id is
 // decoded from session_meta: its account identifiers never reach a structure.
 type CodexScan struct {
+	used  Budget
 	loc   *time.Location
 	files map[string]*codexFile
 	last  map[string]codexTotal // session -> its last total, whichever file
@@ -66,6 +67,7 @@ func (s *CodexScan) Pass(paths []string, b Budget) (partial bool) {
 	sort.Slice(sorted, func(i, j int) bool { return baseName(sorted[i]) < baseName(sorted[j]) })
 	s.rebuildReplaced(sorted)
 	room, files := b.Bytes, 0
+	s.used = Budget{}
 	for _, p := range sorted {
 		f := s.files[p]
 		if f != nil && f.upToDate(p) { // nothing appended: costs no file of the budget
@@ -81,6 +83,7 @@ func (s *CodexScan) Pass(paths []string, b Budget) (partial bool) {
 		}
 		done, n, err := readAppended(p, &f.fileState, room, func() { f.session = "" }, func(raw []byte) { s.line(f, raw) })
 		room -= n
+		s.used.Files, s.used.Bytes = files, b.Bytes-room
 		if err != nil || !done { // an unreadable file is not counted: never complete
 			partial = true
 		}
@@ -180,3 +183,6 @@ func baseName(p string) string {
 	}
 	return p
 }
+
+// Used is what the last pass spent of its budget (files opened, bytes read).
+func (s *CodexScan) Used() Budget { return s.used }

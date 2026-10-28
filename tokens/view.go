@@ -45,7 +45,8 @@ type AgentRow struct {
 // AgentRows are every registered agent and every agent with tokens today,
 // the most tokens first. known is whether {p}:tokens exists (reason says why
 // not). An agent whose client gives no counted session reads unknown with
-// the reason; 0 only for a proved session with nothing today.
+// the reason; 0 only for a proved session (a pid and a valid session id,
+// the dispatcher's own rule) with nothing today.
 func AgentRows(rows map[string]bus.TokenRow, known bool, reason string, agents map[string]bus.AgentSnapshot, today string) []AgentRow {
 	byAgent := map[string]*AgentRow{}
 	for k, v := range rows {
@@ -74,7 +75,7 @@ func AgentRows(rows map[string]bus.TokenRow, known bool, reason string, agents m
 			a.Reason = "Codex session not proved"
 		case s.Client == "kimi" || s.Provider == "moonshot":
 			a.Reason = "Kimi logs give no token counts"
-		case s.PID == 0 || s.IdentSession == "":
+		case s.PID == 0 || !ValidSessionID(s.IdentSession): // no proof, or an id no transcript path can carry
 			a.Reason = "no session proved with its process"
 		default:
 			in, out := int64(0), int64(0)

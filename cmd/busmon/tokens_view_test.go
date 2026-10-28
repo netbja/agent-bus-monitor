@@ -78,7 +78,7 @@ func pageText(st tokState, agents map[string]*agentState, width int) string {
 // "… not read yet", "?" with its reason, and 0.
 func TestTokensPagePendingUnknownZero(t *testing.T) {
 	agents := map[string]*agentState{
-		"coder":          {registered: true, pid: 1, identSession: "s1", provider: "claude"},
+		"coder":          {registered: true, pid: 1, identSession: "0198e5c4-coder-1", provider: "claude"},
 		"reviewer-codex": {registered: true, pid: 2, provider: "openai", client: "codex"},
 	}
 	if s := pageText(tokState{}, agents, 120); !strings.Contains(s, GlyphEllipsis+" not read yet") || strings.Contains(s, " 0 ") {

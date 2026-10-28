@@ -147,9 +147,13 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	for _, p := range provs {
 		for _, w := range budgets[p].Windows {
 			b.text("  ").text(Fit(Preview(p), 10)).text(" ").text(Fit(Preview(w.Name), 3)).text(" ")
-			n := clamp(int(w.UsedPct/10+0.5), 0, 10)
-			b.seg(budgetRole(w.UsedPct), strings.Repeat(GlyphGauge, n)).seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10-n))
-			b.text(fmt.Sprintf(" %3.0f%%", w.UsedPct))
+			if w.ObservedAt == 0 && w.UsedPct == 0 { // never observed: unknown, never 0%
+				b.seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10)).seg(RoleMuted, "    ?")
+			} else {
+				n := clamp(int(w.UsedPct/10+0.5), 0, 10)
+				b.seg(budgetRole(w.UsedPct), strings.Repeat(GlyphGauge, n)).seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10-n))
+				b.text(fmt.Sprintf(" %3.0f%%", w.UsedPct))
+			}
 			if width >= 70 {
 				b.seg(RoleMuted, "  24h ").seg(RoleAccent, hourSpark(st.hist, p, w.Name, now))
 			}

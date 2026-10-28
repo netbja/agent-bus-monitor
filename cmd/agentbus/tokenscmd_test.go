@@ -65,13 +65,15 @@ func tokFixture() map[string]fakeTokens {
 			"2026-10-28|foureyes|anthropic": {In: 1_000_000, Write: 200_000, Read: 500_000_000, Out: 206_000, N: 40},
 			"2026-10-28|coder|anthropic":    {In: 300_000, Write: 45_000, Out: 83_000, N: 20},
 			"2026-10-27|coder|anthropic":    {In: 2_000_000, Out: 500_000, N: 10},
-		}, budgets: map[string]bus.BudgetSnapshot{"anthropic": {Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 46, ResetsAt: tokNow.Add(2*time.Hour + 49*time.Minute).Unix()}}}},
+		}, budgets: map[string]bus.BudgetSnapshot{"anthropic": {Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 46, ObservedAt: 1, ResetsAt: tokNow.Add(2*time.Hour + 49*time.Minute).Unix()},
+			{Name: "7d"}}}}, // 7d never observed: ?
 			agents: map[string]bus.AgentSnapshot{
-				"coder":          {PID: 1, IdentSession: "s1", Provider: "anthropic"},
-				"foureyes":       {PID: 2, IdentSession: "s2", Provider: "anthropic"},
+				"coder":          {PID: 1, IdentSession: "0198e5c4-coder-1", Provider: "anthropic"},
+				"foureyes":       {PID: 2, IdentSession: "0198e5c4-foureyes-2", Provider: "anthropic"},
+				"evil":           {PID: 6, IdentSession: "../x", Provider: "anthropic"}, // an id no path can carry: unknown
 				"reviewer-codex": {PID: 3, Provider: "openai", Client: "codex"},
 				"ui-kimi":        {PID: 4, Provider: "moonshot", Client: "kimi"},
-				"sentinel":       {PID: 5, IdentSession: "s5", Provider: "anthropic"},
+				"sentinel":       {PID: 5, IdentSession: "0198e5c4-sentinel-5", Provider: "anthropic"},
 			}},
 		"hyperliquid": {ok: true, meta: bus.TokensMeta{Partial: true}, rows: map[string]bus.TokenRow{"2026-10-22|coder|anthropic": {In: 170_000, N: 1}}},
 		"polymarket":  {},
@@ -87,7 +89,7 @@ func TestTokensAllProjects(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, errw.String())
 	}
 	s := out.String()
-	for _, want := range []string{"account   anthropic 5h 46% (resets 2h49)", "PROJECT", "agent-bus-monitor", "1.5M", "289k",
+	for _, want := range []string{"account   anthropic 5h 46% (resets 2h49) · 7d ?", "PROJECT", "agent-bus-monitor", "1.5M", "289k",
 		"polymarket   no data", "~0", "agentbus tokens --unattributed"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("output lacks %q:\n%s", want, s)
@@ -115,6 +117,9 @@ func TestTokensByAgent(t *testing.T) {
 		}
 		if strings.HasPrefix(l, "sentinel") && !strings.Contains(l, " 0 ") {
 			t.Errorf("a proved session with nothing today is 0: %q", l)
+		}
+		if strings.HasPrefix(l, "evil") && (strings.Contains(l, " 0 ") || !strings.Contains(l, "?")) {
+			t.Errorf("an invalid session id reads 0: %q", l)
 		}
 	}
 	var js bytes.Buffer
@@ -164,6 +169,8 @@ func TestTokensUnattributed(t *testing.T) {
 	put(filepath.Join(claude, "-a", "claimed-session-1", "subagents", "x.jsonl"), line("m2", 9000, 9000))
 	put(filepath.Join(claude, "-a", "orphan-session-2.jsonl"), line("m3", 2000, 300))
 	put(filepath.Join(claude, "-b", "orphan-session-2.jsonl"), line("m3", 2000, 300)) // the same session in another directory
+	put(filepath.Join(claude, "-a", "orphan-session-2", "subagents", "s.jsonl"), line("m5", 40, 4))
+	put(filepath.Join(claude, "-b", "orphan-session-2", "subagents", "s.jsonl"), line("m5", 40, 4)) // its subagent, mirrored
 	put(filepath.Join(codex, "2026", "10", "28", "rollout-2026-10-28T09-00-00-c.jsonl"),
 		`{"timestamp":"2026-10-28T09:00:00Z","type":"session_meta","payload":{"id":"c"}}`+"\n"+
 			`{"timestamp":"2026-10-28T09:01:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":500,"cached_input_tokens":0,"output_tokens":50,"total_tokens":550},"last_token_usage":{"input_tokens":500,"cached_input_tokens":0,"output_tokens":50,"total_tokens":550}}}}`+"\n")
@@ -190,10 +197,43 @@ func TestTokensUnattributed(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if a := got.Providers["anthropic"]; a.In != 2000 || a.Out != 300 {
-		t.Errorf("anthropic %+v, want the orphan once, the claimed session and its subagent out", a)
+	if a := got.Providers["anthropic"]; a.In != 2040 || a.Out != 304 {
+		t.Errorf("anthropic %+v, want the orphan and its subagent once, the claimed session and its subagent out", a)
 	}
 	if o := got.Providers["openai"]; o.In != 500 || o.Out != 50 {
 		t.Errorf("openai %+v", o)
+	}
+}
+
+// One host-scan budget for both providers: what Claude spends, Codex lacks;
+// running out keeps the result partial.
+func TestTokensUnattributedSharesOneBudget(t *testing.T) {
+	root := t.TempDir()
+	claude, codex := filepath.Join(root, "claude"), filepath.Join(root, "codex")
+	put := func(p, s string) {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(s), 0o644)
+	}
+	line := `{"type":"assistant","timestamp":"2026-10-28T10:00:00Z","requestId":"r","message":{"id":"m","usage":{"input_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1}}}` + "\n"
+	put(filepath.Join(claude, "-a", "orphan-session-9.jsonl"), line)
+	put(filepath.Join(codex, "2026", "10", "28", "rollout-2026-10-28T09-00-00-c.jsonl"), `{"timestamp":"2026-10-28T09:00:00Z","type":"session_meta","payload":{"id":"c"}}`+"\n")
+	old := unattributedBudget
+	t.Cleanup(func() { unattributedBudget = old })
+	unattributedBudget.Bytes = int64(len(line)) // Claude's file uses it all
+	d := tokDeps(tokFixture())
+	d.ClaudeRoot, d.CodexRoot = claude, codex
+	d.Now = func() time.Time { return tokNow }
+	filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			os.Chtimes(p, tokNow, tokNow)
+		}
+		return nil
+	})
+	var out bytes.Buffer
+	runTokens([]string{"--unattributed", "--json"}, "", d, &out, &out)
+	var got struct{ Partial bool }
+	json.Unmarshal(out.Bytes(), &got)
+	if !got.Partial {
+		t.Errorf("the budget ran out before Codex, yet complete: %s", out.String())
 	}
 }
