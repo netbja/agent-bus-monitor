@@ -15,6 +15,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/clientfp"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -291,12 +292,29 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 				d.Proof, own.Client, own.Provider, b.Project())
 		}
 	}
+	// An update episode's reload must run the client installed now (its
+	// fingerprint's hash is the episode), or it only restarted the old one.
+	if seen && o.Update != nil && o.Update.Source == "fingerprint" {
+		if fp, err := clientfp.Decode(proved.ClientFP); err != nil || fp.Hash() != o.Update.Hash {
+			return failed("proof", "the new process (pid %d) does not run the installed client %s (its client_fp %s); check the launcher's PATH, then reload again",
+				proved.PID, dash(o.Update.Installed), dash(fpHash(proved.ClientFP)))
+		}
+	}
 	if err := b.FinishReload(ctx, bus.SwapEvent{Role: role, FromProfile: own.Profile, ToProfile: own.Profile, ToProvider: own.Provider,
 		By: by, Reason: reason, NewPID: proved.PID, NewPane: proved.Pane}); err != nil {
 		return fail("reloaded (pane %s, pid %d), but the ledger was not written: %v; check agentbus swaps", proved.Pane, proved.PID, err)
 	}
 	fmt.Fprintf(out, "reloaded %s: pid %d -> %d, pane %s -> %s, %s\n", role, snap.PID, proved.PID, snap.Pane, proved.Pane, resumeWord)
 	return 0
+}
+
+// fpHash is an encoded fingerprint's hash, or "" when there is none.
+func fpHash(encoded string) string {
+	fp, err := clientfp.Decode(encoded)
+	if err != nil {
+		return ""
+	}
+	return fp.Hash()
 }
 
 // reloadOpenWork is reload's one readiness rule (part C): swap's open work (a

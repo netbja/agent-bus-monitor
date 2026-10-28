@@ -96,18 +96,19 @@ the prompt: pop a risky role only with the person's yes.
 
 ## Client update
 
-sentinel sends you one proposal per update of a client (the dispatcher saw a newer Claude Code,
-Codex or Grok installed than some agents run; busmon flags them `update`). Put it to the person
-with `agentbus ask`: `reload the ready ones now` / `later` / `skip this version`, with the
-proposal's text as context. Then:
+sentinel reloads the agents on a client update itself (`agentbus reload`, lifecycle part C): one at
+a time, the ready ones, **you last**, and it reports each to you. You have two jobs:
 
-- **now**: one agent at a time, master last. The person types `/exit` in the agent's pane (never
-  you: nothing of ours types into an existing pane). Then run `agentbus up <project> --resume
-  --dry-run`; it must show only that agent's tab, `would relaunch (new pane; the old one is left
-  as it is) (resumed)`. Then run `agentbus up <project> --resume`. The new launch records a new
-  fingerprint, and the flag clears at the next observation.
-- **later / skip this version**: nothing more. The dispatcher proposes once per installed version,
-  so a skipped version is not proposed again; the next update is.
+- **Reload sentinel** once it has reloaded the others and is idle: `agentbus reload sentinel`
+  (`--dry-run` first). That is the only reload you run; the command refuses any other.
+- **Relay what it cannot do**: a failure it escalates (the line carries its recovery), and the
+  agents still `later` (work in flight, a swapped role waiting for `swap --back`). Nothing of ours
+  types into an existing pane, and you never `/exit` an agent yourself.
+
+With `AGENT_BUS_RELOAD=propose`, sentinel sends you a proposal instead. Put it to the person with
+`agentbus ask` (`reload the ready ones now` / `later` / `skip this version`); on **now**, the person
+runs `agentbus reload <agent> --as <name>` from their own shell, one agent at a time. A skipped
+version is not proposed again; the next update is.
 
 ## Specialists
 
@@ -196,7 +197,7 @@ agentbus cmd --no-wake sentinel "skill agent-bus-sentinel changed in v0.22.0: re
 
 One `--no-wake` directive per running agent of those roles: nothing is urgent, it is read at the
 agent's next drain. A changed role prompt (`roles/<role>.md`) is read only at launch: propose the
-reload (`/exit`, then `agentbus up <p> --resume`) to the person instead.
+reload (`agentbus reload <role> --as <name>`, run by the person) instead.
 
 ## Resync — inject text into an agent's pane
 ```bash

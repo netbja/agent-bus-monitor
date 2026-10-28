@@ -734,6 +734,18 @@ It never touches Redis — see README "Deployment topology".
   script: a deleted project is never revived, and tab mode, which has no services marker, still
   reloads), it ends with `reloaded` (`FinishReload`, never the fallback state), an interrupted one is
   closed as a failed reload (`closeInterrupted`), and busmon flags it `reloading` (`SwapIntents`).
+  Lifecycle-3b, `agentbus reload <role> [--fresh] [--dry-run] [--reason] [--as <person>]`
+  (`cmd/agentbus/reload.go`): who may (sentinel any role but itself on an observed update, master
+  last and only with no other pilot driver; master only sentinel; a person anyone by an explicit
+  `--as`, which also passes the identity guard), `AGENT_BUS_RELOAD` (caller's env, else the
+  project's env file; `up --reload on|propose|off`), a preflight that changes nothing (verified live
+  identity, not its own pane, not on a fallback, `reloadOpenWork` = swap's `openWork` plus an open
+  ask and an `accepted` board task, declared idle, no wake typing, a proved Claude Code session
+  unless `--fresh`), the intent and a second readiness read, SIGTERM to the re-checked pid (never
+  SIGKILL), `relaunchRole` (up's lock and relaunch, the role's tab only, resuming `IdentSession`),
+  the proof (`replaced`, plus after an update episode a `client_fp` hashing to the installed
+  version), `reloaded`; every failure after the intent is a `failed` ledger entry with its
+  recovery. Tool rules: sentinel `agentbus reload *`, master `agentbus reload sentinel`.
   A fallback record keeps `held_episode`, and the release of that
   episode earns master one `back:<p>:<role>` notice; its own provider stays watched. The launched
   model (`AGENT_BUS_MODEL`) is part of the verified identity (`AgentSnapshot.Model`, set only with a
@@ -782,7 +794,7 @@ It never touches Redis — see README "Deployment topology".
   agents without one) and adds `update` and `client_judged` to `{p}:observed`; sentinel gets one
   directive per update episode (`FencedCmdOnce`, mark `update:<client>`, episode the installed
   hash); health `client-updates` warns; busmon flags `update`. Metadata only: the dispatcher never
-  runs a client, and nothing restarts one: the person reloads (`/exit`, `agentbus up <p> --resume`).
+  runs a client; sentinel reloads the outdated agents with `agentbus reload` (lifecycle-3b, below).
   v0.15: an observation carries `since` (first reading of
   that state by the same pid, carried forward) and a failed inspection keeps the previous reading
   (`Observation.Fresh`, 120 s); a pane seen `blocked` (its client's own menu or permission prompt)

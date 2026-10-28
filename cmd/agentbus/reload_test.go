@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/clientfp"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/redis/go-redis/v9"
 )
@@ -42,6 +43,10 @@ profile = "review"
 
 const coderSession = "0c9e2a51-7d4b-4f0e-9a51-2c3d4e5f6a7b"
 
+// installedFP is the client installed now, the one an update episode names;
+// a relaunch through the launcher records it as the new process's client_fp.
+var installedFP = clientfp.Fingerprint{Path: "/bin/claude", Target: clientfp.FileFP{Path: "/opt/claude/2.1", Ino: 2}}
+
 // reloadWorld is a fake herdr session for reload (lifecycle spec, part C):
 // processes by pid, a SIGTERM that ends one unless told otherwise, and a
 // relaunch that binds a new process in a new pane, as the launcher does.
@@ -53,9 +58,10 @@ type reloadWorld struct {
 	procs    map[int]uint64
 	calls    []string
 	env      map[string]string
-	ignore   bool  // the client ignores SIGTERM
-	relaunch error // returned by the relaunch
-	noProof  bool  // the relaunch starts nothing
+	ignore   bool   // the client ignores SIGTERM
+	launched string // client_fp the relaunch binds (default installedFP)
+	relaunch error  // returned by the relaunch
+	noProof  bool   // the relaunch starts nothing
 }
 
 func newReloadWorld(t *testing.T) (*reloadWorld, reloadDeps) {
@@ -67,7 +73,7 @@ func newReloadWorld(t *testing.T) (*reloadWorld, reloadDeps) {
 	if err := os.WriteFile(path, []byte(reloadManifest), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w := &reloadWorld{t: t, b: b, r: r, procs: map[int]uint64{4242: 7, 6060: 3}, env: map[string]string{}}
+	w := &reloadWorld{t: t, b: b, r: r, procs: map[int]uint64{4242: 7, 6060: 3}, env: map[string]string{}, launched: installedFP.Encode()}
 	if err := b.MarkServicesInstalled(ctx, bus.ServicesInstall{}); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +115,7 @@ func newReloadWorld(t *testing.T) (*reloadWorld, reloadDeps) {
 		Relaunch: func(_ context.Context, role, session string) error {
 			w.mu.Lock()
 			w.calls = append(w.calls, "relaunch "+role+" "+session)
-			fail, none := w.relaunch, w.noProof
+			fail, none, fp := w.relaunch, w.noProof, w.launched
 			if fail == nil && !none {
 				w.procs[5151] = 9
 			}
@@ -121,7 +127,7 @@ func newReloadWorld(t *testing.T) (*reloadWorld, reloadDeps) {
 			if role == "foureyes" { // its own profile is review (codex)
 				client, provider = "codex", "openai"
 			}
-			return b.Bind(context.Background(), role, bus.AgentIdent{Pane: "p-new", PID: 5151, PIDStart: 9, Client: client, Provider: provider})
+			return b.Bind(context.Background(), role, bus.AgentIdent{Pane: "p-new", PID: 5151, PIDStart: 9, Client: client, Provider: provider, ClientFP: fp})
 		},
 		Now: time.Now, Sleep: func(time.Duration) { time.Sleep(5 * time.Millisecond) },
 		PIDGone: 200 * time.Millisecond, Proof: 200 * time.Millisecond, Recent: 2 * time.Minute,
@@ -148,7 +154,7 @@ func (w *reloadWorld) update(agents ...string) {
 	}
 	obs := map[string]bus.Observation{}
 	for _, a := range agents {
-		obs[a] = bus.Observation{At: time.Now().UnixMilli(), Update: &bus.ClientUpdate{Hash: "h2", Source: "fingerprint"}}
+		obs[a] = bus.Observation{At: time.Now().UnixMilli(), Update: &bus.ClientUpdate{Hash: installedFP.Hash(), Source: "fingerprint"}}
 	}
 	if err := w.b.FencedPutObserved(ctx, "tok", obs); err != nil {
 		w.t.Fatal(err)
@@ -319,6 +325,9 @@ func TestReloadFailuresAreLoggedWithTheirRecovery(t *testing.T) {
 		"relaunch failed": {func(w *reloadWorld) { w.relaunch = errors.New("split refused") }, "term 4242;relaunch coder " + coderSession, "relaunch",
 			"agent-launch coder"},
 		"no proof": {func(w *reloadWorld) { w.noProof = true }, "term 4242;relaunch coder " + coderSession, "proof", "agentbus agents"},
+		"still the old client": {func(w *reloadWorld) {
+			w.launched = clientfp.Fingerprint{Path: "/bin/claude", Target: clientfp.FileFP{Path: "/opt/claude/2.0", Ino: 1}}.Encode()
+		}, "term 4242;relaunch coder " + coderSession, "proof", "installed"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w, d := newReloadWorld(t)
