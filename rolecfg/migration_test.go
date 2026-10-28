@@ -61,10 +61,21 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		}
 		return ShellJoin([]string{s})
 	}
+	// sentinel gains exactly the reload rule (lifecycle part C), nothing else.
+	s1, _ := v1.LaunchRules("sentinel")
+	s2, _ := v2.LaunchRules("sentinel")
+	wantS := s1
+	wantS.Allow = append(append([]string{}, s1.Allow...), "Bash(agentbus reload *)")
+	if !reflect.DeepEqual(wantS, s2) {
+		t.Fatalf("sentinel's rules %+v, want %+v", s2, wantS)
+	}
 	for _, role := range v1.roleOrder {
 		a, b := dry(v1, role), dry(v2, role)
-		if role == "master" {
+		switch role {
+		case "master":
 			a = strings.Replace(a, settings(r1), settings(r2), 1)
+		case "sentinel":
+			a = strings.Replace(a, settings(s1), settings(s2), 1)
 		}
 		if a != b {
 			t.Errorf("%s launches differently:\nschema 1: %s\nschema 2: %s", role, a, b)

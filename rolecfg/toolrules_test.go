@@ -203,8 +203,10 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 }
 
 // masterUpRules are master's own rules in the shipped manifest (Bernard,
-// 2026-10-27): the exact relaunch of this project, nothing broader.
-var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)"}
+// 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
+// exact reload of sentinel, nothing broader.
+var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
+	"Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)"}
 
 func TestShippedManifestRules(t *testing.T) {
 	m, err := Load(repoPath(t, "roles.toml"))
@@ -245,5 +247,13 @@ func TestShippedManifestRules(t *testing.T) {
 		if strings.Contains(rule, "deploy") {
 			t.Fatalf("deploy allowed: %v", r.Allow)
 		}
+	}
+	// Sentinel reloads agents (lifecycle part C): that one command, nothing else.
+	s, err := m.LaunchRules("sentinel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(s.Allow, []string{"Bash(agentbus reload *)"}) || len(s.Ask) != 0 {
+		t.Fatalf("sentinel rules = %+v", s)
 	}
 }

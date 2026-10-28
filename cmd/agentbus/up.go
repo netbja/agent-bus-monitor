@@ -78,7 +78,7 @@ type upTemplate struct {
 // to open it.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if len(args) == 0 || !bus.ValidName(args[0]) {
-		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
+		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
 		return 1
 	}
 	project := args[0]
@@ -105,6 +105,11 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	args, escalate := extractFlag(args, "--escalate-to")
 	if escalate != "" && !bus.ValidName(escalate) {
 		fmt.Fprintf(stderr, "agentbus up: --escalate-to: invalid agent name %q\n", escalate)
+		return 1
+	}
+	args, reload := extractFlag(args, "--reload")
+	if reload != "" && reload != "on" && reload != "propose" && reload != "off" {
+		fmt.Fprintf(stderr, "agentbus up: --reload: want on, propose or off, not %q\n", reload)
 		return 1
 	}
 	kinds := []string{}
@@ -143,7 +148,7 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	}
 	failed := false
 	if m != nil {
-		if err := startServices(d, m, project, tpl.WorkingDir, herdrSession(args, d.Environ), escalate, kinds, stdout); err != nil {
+		if err := startServices(d, m, project, tpl.WorkingDir, herdrSession(args, d.Environ), escalate, reload, kinds, stdout); err != nil {
 			fmt.Fprintf(stderr, "agentbus up: services: %v\n", err)
 			if errors.Is(err, errNotInstalled) {
 				return 1
@@ -154,6 +159,9 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	} else {
 		if !tabs {
 			fmt.Fprintf(stdout, "no service manager (%s): dispatch and missions run as herdr tabs, and stop when the workspace closes\n", why)
+		}
+		if reload != "" {
+			fmt.Fprintf(stderr, "agentbus up: --reload is recorded for services only; in tab mode export AGENT_BUS_RELOAD in sentinel's environment\n")
 		}
 		if escalate != "" {
 			fmt.Fprintf(stderr, "agentbus up: --escalate-to applies to services only; the tabs escalate to master\n")
@@ -264,7 +272,7 @@ var errNotInstalled = errors.New("services not installed")
 // starts each service that is not already running with this configuration.
 // escalate, when set, becomes the project's escalation target; when not, the
 // one an earlier up recorded is kept, so a plain re-run never resets it.
-func startServices(d upDeps, m service.Manager, project, workdir, session, escalate string, kinds []string, stdout io.Writer) error {
+func startServices(d upDeps, m service.Manager, project, workdir, session, escalate, reload string, kinds []string, stdout io.Writer) error {
 	exe, err := d.Exe()
 	if err != nil {
 		return fmt.Errorf("%w: cannot find this agentbus: %v", errNotInstalled, err)
@@ -291,6 +299,18 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 	} else if _, set := env[service.EscalateEnv]; !set {
 		if old, err := service.LoadEnvFile(d.Paths.EnvFile(project)); err == nil && bus.ValidName(old[service.EscalateEnv]) {
 			env[service.EscalateEnv] = old[service.EscalateEnv]
+		}
+	}
+	switch reload { // like the escalation target: kept unless given
+	case "on":
+		delete(env, service.ReloadEnv)
+	case "propose", "off":
+		env[service.ReloadEnv] = reload
+	default:
+		if _, set := env[service.ReloadEnv]; !set {
+			if old, err := service.LoadEnvFile(d.Paths.EnvFile(project)); err == nil && (old[service.ReloadEnv] == "propose" || old[service.ReloadEnv] == "off") {
+				env[service.ReloadEnv] = old[service.ReloadEnv]
+			}
 		}
 	}
 	envChanged, err := service.WriteEnvFile(d.Paths.EnvFile(project), env)

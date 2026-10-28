@@ -114,7 +114,9 @@ skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 # Bernard, 2026-10-27: master relaunches this project's dead agents without a prompt.
 # Exact commands only: no other project, no other flag, no wildcard.
 [roles.master.tool_rules]
-allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)"]
+# Lifecycle part C: master reloads sentinel, and only sentinel.
+allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
+  "Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)"]
 
 [roles.coder]
 profile = "claude-opus"
@@ -130,6 +132,10 @@ skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 profile = "claude-haiku"
 tier = "boot"
 skills = ["agent-bus", "agent-bus-sentinel"]
+# Lifecycle part C: sentinel reloads agents on a client-update episode (the
+# command enforces who and when; this only spares the prompt).
+[roles.sentinel.tool_rules]
+allow = ["Bash(agentbus reload *)"]
 
 [roles.architect]
 profile = "claude-opus-fallback"
