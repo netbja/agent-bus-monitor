@@ -23,6 +23,8 @@
     {"id":"installer-spec","title":"F: spec, installer in Go (agentbus setup)","owner":"coder","review":"installer-spec","after":["onboarding"]},
     {"id":"installer","title":"F: installer in Go","owner":"coder","review":"installer","after":["installer-spec"]},
     {"id":"docs-refresh","title":"README and operational guides (EN + FR) brought up to date since the herdr plugin","owner":"docs","review":"docs-refresh","after":["installer"]},
-    {"id":"release","title":"Tag v0.23.0, release notes, install","owner":"person","after":["a-look","a-board","a-nav","a-identity","a-health","requests-view","tokens","onboarding","installer","a-plan-tab","gate-subject-close","lifecycle","docs-refresh","a-expand"]}
+    {"id":"tabs","title":"Lower tabs herdr-style: blocks, inactive dimmed grey, active pill in its panel colour, one blank column between","owner":"coder","review":"busmon-tabs"},
+    {"id":"f3-services","title":"F3 Services in 3 cards (dispatch, missions, Redis: where, version, memory, keys); log path and size, log tail on Enter","owner":"coder","review":"busmon-f3","after":["tabs"]},
+    {"id":"release","title":"Tag v0.23.0, release notes, install","owner":"person","after":["a-look","a-board","a-nav","a-identity","a-health","requests-view","tokens","onboarding","installer","a-plan-tab","gate-subject-close","lifecycle","docs-refresh","a-expand","tabs","f3-services"]}
   ]
 }
