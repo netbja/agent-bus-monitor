@@ -5,7 +5,6 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -18,12 +17,12 @@ import (
 // peers maps a client Connect made to its last dialed remote address.
 var peers sync.Map // *redis.Client -> *atomic.Value (string)
 
-// recordingDialer dials like go-redis's own plain dialer (5 s timeout, 5 min
-// keep-alive) and keeps the remote address of each connection it opens.
-func recordingDialer(rec *atomic.Value) func(ctx context.Context, network, addr string) (net.Conn, error) {
-	d := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 5 * time.Minute}
+// recordingDialer dials with base (Connect passes go-redis's own
+// redis.NewDialer, so dial_timeout, TLS and keep-alive are unchanged) and
+// keeps the remote address of each connection it opens.
+func recordingDialer(rec *atomic.Value, base func(ctx context.Context, network, addr string) (net.Conn, error)) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		c, err := d.DialContext(ctx, network, addr)
+		c, err := base(ctx, network, addr)
 		if err == nil {
 			rec.Store(c.RemoteAddr().String())
 		}
@@ -32,7 +31,7 @@ func recordingDialer(rec *atomic.Value) func(ctx context.Context, network, addr 
 }
 
 // PeerAddr is the remote address the client's last connection reached, ""
-// when unknown (a client Connect did not make, a TLS connection, none yet).
+// when unknown (a client Connect did not make, none yet).
 func PeerAddr(c *redis.Client) string {
 	v, ok := peers.Load(c)
 	if !ok {

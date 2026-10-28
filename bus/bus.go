@@ -102,15 +102,17 @@ func Connect(host string) (*redis.Client, error) {
 			Password:              envOr("REDIS_PASSWORD", LegacyPassword),
 		}
 	}
-	// Record the peer each connection reaches (PeerAddr). A TLS connection
-	// keeps go-redis's own dialer, which wraps the socket: its peer is unknown.
+	// Record the peer each connection reaches (PeerAddr), dialing with
+	// go-redis's own dialer: it reads opt at dial time, after NewClient has
+	// set its defaults, so dial_timeout and TLS are unchanged.
 	rec := &atomic.Value{}
-	if opt.TLSConfig == nil && opt.Dialer == nil {
-		opt.Dialer = recordingDialer(rec)
+	if opt.Dialer == nil {
+		opt.Dialer = recordingDialer(rec, redis.NewDialer(opt))
 	}
 	client := redis.NewClient(opt)
 	peers.Store(client, rec)
 	if err := client.Ping(context.Background()).Err(); err != nil {
+		peers.Delete(client) // a client nobody gets is not kept alive by the map
 		return nil, err
 	}
 	return client, nil

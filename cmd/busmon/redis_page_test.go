@@ -267,6 +267,7 @@ func TestGatherRedisPageUsesTheConnectedPeer(t *testing.T) {
 		"localhost reached ::1, same publish":           {"[::1]:6380", "[::1]:6380", true},
 		"no peer":                                       {"", "127.0.0.1:6380", false},
 		"peer on another port":                          {"127.0.0.1:6390", "127.0.0.1:6380", false},
+		"::1 peer, an ipv4-only wildcard publish":       {"[::1]:6380", "0.0.0.0:6380", false},
 	} {
 		d := redisFixture()
 		d.Peer = c.peer
