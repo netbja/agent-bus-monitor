@@ -132,7 +132,7 @@ func (p *painter) style(c cellStyle) lipgloss.Style {
 func (p *painter) paint(l Line) string {
 	var sb strings.Builder
 	for _, s := range l {
-		sb.WriteString(p.style(cellStyle{Role: s.Role, Bold: s.Bold, Reverse: s.Reverse, Fade: s.Fade, Pill: s.Pill}).Render(s.Text))
+		sb.WriteString(p.style(cellStyle{Role: s.Role, Bold: s.Bold, Reverse: s.Reverse, Fade: s.Fade, Pill: s.Pill, Off: s.Off}).Render(s.Text))
 	}
 	return sb.String()
 }

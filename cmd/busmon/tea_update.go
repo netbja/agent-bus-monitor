@@ -561,9 +561,9 @@ func (m *Model) panelAt(x, y int) (PanelID, bool) {
 // tabAt is the tab whose label tabBar draws at column x, the bar starting at x0.
 func tabAt(tabs []PanelID, active PanelID, width, x0, x int) (PanelID, bool) {
 	pos := x0
-	for i, s := range tabBar(tabs, active, width) {
-		w := Width(s.Text)
-		if x >= pos && x < pos+w && i < len(tabs) {
+	for i, label := range tabLabels(tabs, active, width) {
+		w := Width(label)
+		if x >= pos && x < pos+w {
 			return tabs[i], true
 		}
 		pos += w

@@ -8,7 +8,7 @@
 [1m│[m  ● unread dispatch  [1m╭─[m[1;7m Welcome to busmon [m[1m────────────────────────────────────────────────[m 1/5 [1m─╮[mscalating… spec merg…│
 [1m│[m                     [1m│[m                                                                          [1m│[mate 1 · d… busmon-ch…▼
 [1m╰─────────────────────[m[1m│[m busmon shows what your agents are doing and what waits for you. A few    [1m│[m─────────────────────╯
-╭─ [1;7m 1 Activity [m 2 Boar[1m│[m short pages;[1m esc[m skips, and[1m F1[m then[1m t[m brings them back.                  [1m│[ments · filter: none ─╮
+╭─ [1;7m 1 Activity[m  2 Boar[1m│[m short pages;[1m esc[m skips, and[1m F1[m then[1m t[m brings them back.                  [1m│[ments · filter: none ─╮
 │    time   from      [1m│[m                                                                          [1m│[m                     │
 │  ── Mon 2026-10-26 -[1m│[m   For you     what needs you: questions, waits, unread lines             [1m│[m─────────────────────│
 │    14:24  architect [1m│[m   Agents      each agent, its state and how fresh it is                  [1m│[m                     │
