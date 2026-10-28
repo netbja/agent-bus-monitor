@@ -3,6 +3,7 @@ package rolecfg
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -202,9 +203,17 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 	}
 }
 
+// reloadAsDeny are the shared denies on an agent passing --as to reload
+// (lifecycle part C, busmon-reload-deny): a person's --as skips the caller
+// table and AGENT_BUS_RELOAD's opt-outs, so no agent may type one. Defence
+// in depth, not a boundary: the client matches command text.
+var reloadAsDeny = []string{"Bash(agentbus reload *--as*)", "Bash(agentbus * reload *--as*)"}
+
 // masterUpRules are master's own rules in the shipped manifest (Bernard,
-// 2026-10-27): the exact relaunch of this project, nothing broader.
-var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)"}
+// 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
+// exact reload of sentinel, nothing broader.
+var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
+	"Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)"}
 
 func TestShippedManifestRules(t *testing.T) {
 	m, err := Load(repoPath(t, "roles.toml"))
@@ -245,5 +254,18 @@ func TestShippedManifestRules(t *testing.T) {
 		if strings.Contains(rule, "deploy") {
 			t.Fatalf("deploy allowed: %v", r.Allow)
 		}
+	}
+	for _, rule := range reloadAsDeny {
+		if !slices.Contains(m.SharedToolRules.Deny, rule) {
+			t.Fatalf("shared deny %v lacks %s", m.SharedToolRules.Deny, rule)
+		}
+	}
+	// Sentinel reloads agents (lifecycle part C): that one command, nothing else.
+	s, err := m.LaunchRules("sentinel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(s.Allow, []string{"Bash(agentbus reload *)"}) || len(s.Ask) != 0 {
+		t.Fatalf("sentinel rules = %+v", s)
 	}
 }

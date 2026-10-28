@@ -56,6 +56,12 @@ report's wording. So the declaration is a fact of its own.
 - `{p}:handoff` is not in `projectKinds` and `HasKeysBesidesDispatch` ignores it, like
   `{p}:observed`: it never discovers or revives a project. busmon shows `handoff` as a flag on the
   agent's row while a record is pending (display only).
+- **As built (lifecycle-2): void is durable.** Any report and any status other than `idle` written
+  by the agent delete its record in the same transaction as the stream entry
+  (`addVoidingHandoff`), so `working` then `idle` before a pass never makes a stale hand-off
+  pending again (reviewer-codex). `idle` keeps it: the agent declares it right after its hand-off,
+  and Part B requires it. The dispatcher still deletes records voided by a session or process
+  change, which no write of the agent's announces.
 - **Void when the agent moves on.** A record is void, and the dispatcher deletes it (fenced), when
   any of these holds: the agent declared `working` after `at`; its `IdentSession` differs from the
   record's (it cleared or was relaunched by other means); its pid differs. A void record is never
@@ -127,6 +133,31 @@ types `/clear` into its pane **only when all of these hold**, in this order (che
   goes to `escalated`, and the escalation target gets one `wake=no` notice: `auto-clear of <agent>
   not confirmed in 30 s; look at its pane`. The person's desktop gets the same through the context
   alert's `notify-send` runner.
+
+### As built (busmon-lifecycle-4)
+
+- **Default off**, until the live checks below pass: `AGENT_BUS_AUTO_CLEAR=1` turns it on.
+- **The wake record is not written `clearing`.** The clear's state is the mark `clear:<agent>` =
+  `session|Redis TIME|report|status id|entries-added` (set by the reservation); an agent cleared in a pass gets no wake in
+  that pass; a reload's wake check is unchanged (its intent already blocks a clear).
+- **A turn around the clear** is read from the bus without a second id: any report or non-idle
+  status of the agent deletes its record (part A's durable void), and an idle status newer than the
+  reservation is caught by the proof, against the status stream's last id recorded in the
+  reservation's script (exact to the sequence: a status in the same millisecond still counts).
+  Either sends the rebuild directive.
+- **A trimmed history fails closed:** the status stream is capped (~1000). The reservation also
+  records the stream's `entries-added` counter; at the proof, fewer entries kept after the boundary
+  than were added since means some were trimmed (one may have been the agent's), so it reads as a
+  turn that ran: the rebuild directive, never the resume (`StatusAfter`). This holds for a boundary
+  of `0-0` (an empty stream at the reservation) too. Not `max-deleted-entry-id`: `XTRIM` leaves it.
+- **An aborted re-inspection** (the pane changed between the two reads) releases the mark: nothing
+  was typed, so the next pass judges again.
+- **Gates:** only those opened within 24 h count (`Bus.ReviewsOfSince`): the open time is the
+  gate's latest challenge entry in `:cmd` (a re-opened gate is dated by its last challenge); a gate
+  whose challenge left the capped stream is dropped only when the oldest retained entry is past
+  24 h, else kept, its age unknown. The wait notice names the gates that hold.
+- The void-record sweep skips a record whose clear is in flight, since its new session would read
+  there as "another session" before the proof.
 
 ### Configuration
 
@@ -227,6 +258,12 @@ explicit `--as <person>` is added to its list, exactly as `answer --as` is, so a
 from their own shell pane. `handoff` is not listed: only an agent (which has `AGENT_BUS_AGENT`)
 declares one. The launcher's tool rules allow exactly `agentbus reload *` for sentinel
 and `agentbus reload sentinel` for master (`[roles.*.tool_rules]`), nothing broader.
+**As built (busmon-reload-deny):** the shared `[tool_rules]` deny `agentbus reload *--as*` and
+`agentbus * reload *--as*` for every role, since an agent passing `--as <person>` would skip the
+caller table and `AGENT_BUS_RELOAD`'s opt-outs. Deny rules bind even under `bypassPermissions`.
+This is defence in depth, not a boundary: the client matches the command's text, so another
+spelling, a wrapper script or a process the agent starts still runs it; the bus does not
+authenticate local processes.
 
 ### The person's yes
 

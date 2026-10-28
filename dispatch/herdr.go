@@ -19,7 +19,14 @@ import (
 type Runtime interface {
 	Inspect(ctx context.Context, pane string) Inspection // errors in Inspection.Err
 	Prompt(ctx context.Context, pane, text, nonce string) (observed bool, err error)
+	// Clear types ClearText into the pane (lifecycle part B): the one other
+	// write besides the wake line. It takes no text: the constant is all it
+	// can type.
+	Clear(ctx context.Context, pane string) error
 }
+
+// ClearText is the only thing Clear types.
+const ClearText = "/clear"
 
 const (
 	herdrCallTimeout = 3 * time.Second        // every herdr call, prompt included
@@ -483,6 +490,15 @@ func (h Herdr) Prompt(ctx context.Context, pane, text, nonce string) (bool, erro
 		return false, nil
 	}
 	return false, err
+}
+
+// Clear types /clear and Enter into pane. A stalled prompt is not an error:
+// the proof (the agent's new proved session) is read on the bus, not here.
+func (h Herdr) Clear(ctx context.Context, pane string) error {
+	if _, err := h.run(ctx, herdrCallTimeout, "agent", "prompt", pane, ClearText); err != nil && errCode(err) != "agent_prompt_stalled" {
+		return err
+	}
+	return nil
 }
 
 // Ping reports whether herdr answers (its server for this session runs): a

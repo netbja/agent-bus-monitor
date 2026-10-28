@@ -28,6 +28,11 @@ var envKeys = []string{
 // master), recorded by `agentbus up --escalate-to`.
 const EscalateEnv = "AGENT_BUS_ESCALATE_TO"
 
+// ReloadEnv is the project's reload policy (lifecycle part C): unset (on),
+// propose or off. `agentbus up --reload` records it; `agentbus reload` reads
+// it from the caller's environment, else from this file.
+const ReloadEnv = "AGENT_BUS_RELOAD"
+
 // envPrefixes are copied whole, except the names below.
 var envPrefixes = []string{"AGENT_BUS_"}
 

@@ -29,6 +29,9 @@ const (
 	SwapWarning = "warning"
 	SwapBack    = "back"
 	SwapRetire  = "retire"
+	// SwapReloaded ends a reload (lifecycle part C): the new process proved;
+	// unlike done and back, it never touches the fallback state.
+	SwapReloaded = "reloaded"
 )
 
 // SwapEvent is one ledger entry. Empty fields are not written.
@@ -49,6 +52,7 @@ type SwapEvent struct {
 	NewPane      string `json:"new_pane,omitempty"`
 	Episode      string `json:"episode,omitempty"`
 	Error        string `json:"error,omitempty"`
+	Kind         string `json:"kind,omitempty"` // "" a swap, SwapKindReload a reload
 }
 
 // SwapReasonMax bounds a ledger reason or error.
@@ -79,6 +83,7 @@ func (e SwapEvent) fields() []interface{} {
 	add("new_pane", e.NewPane)
 	add("episode", e.Episode)
 	add("error", clip(e.Error, SwapReasonMax))
+	add("kind", e.Kind)
 	return out
 }
 
@@ -95,7 +100,7 @@ func (e SwapEvent) valid() error {
 		return fmt.Errorf("invalid role %q", e.Role)
 	}
 	switch e.Event {
-	case SwapBegin, SwapDone, SwapFailed, SwapWarning, SwapBack, SwapRetire:
+	case SwapBegin, SwapDone, SwapFailed, SwapWarning, SwapBack, SwapRetire, SwapReloaded:
 		return nil
 	}
 	return fmt.Errorf("invalid swap event %q", e.Event)
@@ -116,10 +121,16 @@ type FallbackRecord struct {
 }
 
 // beginSwap: 0 an intent exists (nothing written); 1 intent set and begin
-// logged, in one script.
+// logged, in one script; -1 (a reload, given the agents hash and the role as
+// KEYS[3] and ARGV[4]) the role has no snapshot: the project was deleted.
 var beginSwap = redis.NewScript(`
+local first = 4
+if #KEYS > 2 then
+  if redis.call('HEXISTS', KEYS[3], ARGV[4]) == 0 then return -1 end
+  first = 5
+end
 if redis.call('SET', KEYS[1], ARGV[1], 'NX', 'PX', ARGV[2]) == false then return 0 end
-redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[3], '*', unpack(ARGV, 4))
+redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[3], '*', unpack(ARGV, first))
 return 1`)
 
 // BeginSwap writes the intent (SET NX PX) and the ledger's begin entry
@@ -138,13 +149,26 @@ func (b *Bus) BeginSwap(ctx context.Context, role string, in SwapIntent, ev ...S
 		e = ev[0]
 	}
 	e.Role, e.Event = role, SwapBegin
-	args := append([]interface{}{string(v), SwapTTL.Milliseconds(), streamMaxLen}, e.fields()...)
-	n, err := beginSwap.Run(ctx, b.r, []string{SwapKey(b.project, role), SwapsKey(b.project)}, args...).Int()
+	keys := []string{SwapKey(b.project, role), SwapsKey(b.project)}
+	args := []interface{}{string(v), SwapTTL.Milliseconds(), streamMaxLen}
+	if in.Kind == SwapKindReload {
+		// Tab mode (up --tabs) writes no services marker, so a reload is fenced
+		// by the role's own snapshot: what it reloads, and what a deleted
+		// project no longer has (reviewer-codex's review of lifecycle-3a).
+		e.Kind = SwapKindReload
+		keys = append(keys, AgentsKey(b.project))
+		args = append(args, role)
+	}
+	args = append(args, e.fields()...)
+	n, err := beginSwap.Run(ctx, b.r, keys, args...).Int()
 	if err != nil {
 		return err
 	}
-	if n == 0 {
+	switch n {
+	case 0:
 		return ErrSwapInProgress
+	case -1:
+		return ErrNoSnapshot
 	}
 	return nil
 }
@@ -235,7 +259,8 @@ func swapEventFrom(m redis.XMessage) SwapEvent {
 	i := func(k string) int { v, _ := strconv.Atoi(s(k)); return v }
 	return SwapEvent{ID: m.ID, Role: s("role"), Event: s("event"), FromProfile: s("from_profile"), ToProfile: s("to_profile"),
 		FromProvider: s("from_provider"), ToProvider: s("to_provider"), ToModel: s("to_model"), By: s("by"), Reason: s("reason"),
-		OldPID: i("old_pid"), OldPane: s("old_pane"), NewPID: i("new_pid"), NewPane: s("new_pane"), Episode: s("episode"), Error: s("error")}
+		OldPID: i("old_pid"), OldPane: s("old_pane"), NewPID: i("new_pid"), NewPane: s("new_pane"), Episode: s("episode"), Error: s("error"),
+		Kind: s("kind")}
 }
 
 // Interrupted reports whether role's last ledger entry is a begin with no
@@ -250,6 +275,13 @@ func (b *Bus) Interrupted(ctx context.Context, role string) (bool, SwapEvent, er
 		return false, SwapEvent{}, err
 	}
 	return !live, last[0], nil
+}
+
+// FinishReload records a reload's proof: the reloaded entry, and nothing
+// else (the fallback state is a swap's, never a reload's).
+func (b *Bus) FinishReload(ctx context.Context, e SwapEvent) error {
+	e.Event, e.Kind = SwapReloaded, SwapKindReload
+	return b.LogSwap(ctx, e)
 }
 
 // RetireSwap ends a retire: the retire entry and the role's fallback record

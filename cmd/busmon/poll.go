@@ -37,7 +37,8 @@ type busReader interface {
 	QuotaMarks(ctx context.Context) (map[string]string, error)
 	Observed(ctx context.Context) (map[string]bus.Observation, error)
 	Context(ctx context.Context) (map[string]bus.ContextFill, error)
-	Swaps(ctx context.Context) (map[string]bool, error)
+	SwapIntents(ctx context.Context) (map[string]bus.SwapIntent, error)
+	Handoffs(ctx context.Context) (map[string]bus.Handoff, error)
 	Fallbacks(ctx context.Context) (map[string]bus.FallbackRecord, error)
 	ModelVerdicts(ctx context.Context) (map[string]bus.ModelVerdict, error)
 	Asks(ctx context.Context) ([]bus.Ask, error)
@@ -146,8 +147,10 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	observedErr := errNotPolled
 	var fills map[string]bus.ContextFill
 	fillsErr := errNotPolled
-	var swaps map[string]bool
+	var swaps map[string]bus.SwapIntent
 	swapsErr := errNotPolled
+	var handoffs map[string]bus.Handoff
+	handoffsErr := errNotPolled
 	var fallbacks map[string]bus.FallbackRecord
 	fallbacksErr := errNotPolled
 	var verdicts map[string]bus.ModelVerdict
@@ -156,7 +159,8 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		marks, marksErr = b.QuotaMarks(pollCtx)
 		observed, observedErr = b.Observed(pollCtx)
 		fills, fillsErr = b.Context(pollCtx)
-		swaps, swapsErr = b.Swaps(pollCtx)
+		swaps, swapsErr = b.SwapIntents(pollCtx)
+		handoffs, handoffsErr = b.Handoffs(pollCtx)
 		fallbacks, fallbacksErr = b.Fallbacks(pollCtx)
 		verdicts, verdictsErr = b.ModelVerdicts(pollCtx)
 		dispAlive, dispErr = b.DispatchAlive(pollCtx)
@@ -354,7 +358,17 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			a.gated, a.gates = len(m), m
 		}
 		if swapsErr == nil {
-			a.swapping = swaps[n]
+			in, ok := swaps[n]
+			a.swapping, a.reloading = ok && in.Kind != bus.SwapKindReload, ok && in.Kind == bus.SwapKindReload
+		}
+		if handoffsErr == nil && snapsErr == nil {
+			h, has := handoffs[n]
+			s, ok := snaps[n]
+			a.handoff = has
+			if has {
+				void, _ := h.VoidFor(s, ok)
+				a.handoff = !void
+			}
 		}
 		if fallbacksErr == nil {
 			a.fallback = nil

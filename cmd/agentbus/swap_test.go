@@ -470,3 +470,31 @@ func TestRetireClosesOneAgent(t *testing.T) {
 		t.Fatal("an agent retired itself")
 	}
 }
+
+// A reload whose caller died is closed by the next swap as a failed reload
+// (lifecycle spec, part C), with its kind, and listed as one.
+func TestSwapClosesAnInterruptedReloadAsAReload(t *testing.T) {
+	w, d := newSwapWorld(t)
+	ctx := context.Background()
+	if err := w.b.BeginSwap(ctx, "foureyes", bus.SwapIntent{Kind: bus.SwapKindReload, By: "sentinel"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.b.EndSwap(ctx, "foureyes") // the reload's caller died
+	if code, out := w.swap(d, "foureyes", "--profile", "opus"); code != 0 {
+		t.Fatalf("swap: %d %s", code, out)
+	}
+	log, _ := w.b.SwapLog(ctx, "foureyes", 0)
+	var closed *bus.SwapEvent
+	for i := range log {
+		if log[i].Event == bus.SwapFailed {
+			closed = &log[i]
+		}
+	}
+	if closed == nil || closed.Kind != bus.SwapKindReload || !strings.Contains(closed.Error, "reload") {
+		t.Fatalf("ledger %+v", log)
+	}
+	var out, errw bytes.Buffer
+	if code := runSwaps(ctx, w.b, nil, &out, &errw); code != 0 || !strings.Contains(out.String(), "[reload]") {
+		t.Fatalf("swaps: %d %q", code, out.String())
+	}
+}

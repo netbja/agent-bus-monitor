@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -40,9 +41,11 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		return true
 	case "gate":
 		return first != "close"
+	case "reload": // a person, by an explicit --as (lifecycle part C), never the pane's agent
+		return slices.Contains(rest, "--as")
 	case "pilot":
 		return first == "status"
-	case "request", "board":
+	case "request", "board", "handoff":
 		return first == ""
 	case "plan":
 		return first == "" || first == "show"

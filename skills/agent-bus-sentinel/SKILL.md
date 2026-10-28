@@ -41,35 +41,39 @@ directive.
 ## Client update
 
 The dispatcher wakes you once per update of a client (a directive starting `client update:`): a
-newer Claude Code, Codex or Grok is installed than some agents run. **You propose; you never
-restart a client, type into a pane, or run `swap` or `retire`.**
+newer Claude Code, Codex or Grok is installed than some agents run. **Reloading them is your job**
+(lifecycle spec, part C): `agentbus reload` restarts one idle agent on its role and profile,
+resuming its conversation. It types into no pane. You never type into a pane yourself, and never
+run `swap` or `retire`.
 
 1. Read `agentbus agents`, `agentbus health detail client-updates` and `agentbus board`.
 2. Sort the agents the directive names:
    - **ready**: declared `idle`, not observed busy, no `accepted` board task, no open challenge on
-     either side (`agentbus gate <agent>`), no open ask, not on a fallback profile
-     (`agentbus swaps` shows no current fallback);
-   - **later**: anything else. A swapped role is `after agentbus swap <role> --back`, since the
-     reload relaunches its own profile. **master is always last.**
-3. Send master **one** directive with this proposal, then
-   `agentbus health note client-updates "<one line>"`:
+     either side, no open ask, not on a fallback profile;
+   - **later**: anything else. A swapped role waits for `agentbus swap <role> --back` (reload
+     relaunches its own profile and refuses a fallback). **master is always last**, and only when no
+     other driver holds the pilot lease.
+3. For each ready agent, one at a time, master last:
+   ```bash
+   agentbus reload <agent> --dry-run          # what it would do, and why not if it refuses
+   agentbus reload <agent> --reason "<client> <installed>"
+   ```
+   The command checks everything again and refuses with the reason. A refusal is not a failure:
+   that agent is **later**. A failure after it started prints the recovery; escalate that line to
+   master as written. A Codex agent has no session to resume: reload it only with `--fresh`, and
+   only when master asked for it (its conversation is lost).
+4. Report once, with `agentbus report sentinel --to master`: who was reloaded (old pid -> new pid),
+   who waits and why. Then `agentbus health note client-updates "<one line>"`. The agents still
+   later are retried on your next wake.
 
-```
-<Client> <installed> is installed; <N> agents still run <running>.
-Ready to reload now (idle, no work in flight): <agents>.
-Later: <agents or none>. Master last. Swapped roles: <none or role (after swap --back)>.
-Reload keeps the conversation (as last declared), the role rules and the identity:
-  1. in the agent's pane: /exit
-  2. agentbus up <project> --resume --dry-run
-     expect only: <tab>: would relaunch (new pane; the old one is left as it is) (resumed)
-  3. agentbus up <project> --resume
-Reload now, later, or skip this version?
-```
+**When the project's policy is not the default** (`agentbus reload` says so):
+- `AGENT_BUS_RELOAD=propose`: do not reload. Send master **one** directive with the ready and later
+  lists, and the command for each, which the person runs from their own shell:
+  `agentbus reload <agent> --as <person>`. Master asks the person (`agentbus ask`) and acts only on
+  the answer, one agent at a time.
+- `AGENT_BUS_RELOAD=off`: reload nothing; report the lists to master once.
 
-The dry run must list the tabs of the agents being reloaded **and nothing else**: `up --resume`
-relaunches every dead agent of the project. A `(fresh: no Claude Code session to resume)` line
-means that agent's conversation is not kept: say so. master asks the person (`agentbus ask`) and
-acts only on the answer, one agent at a time.
+Master reloads **you** (`agentbus reload sentinel`): never reload yourself.
 
 ## Daily review
 

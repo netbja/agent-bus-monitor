@@ -79,7 +79,7 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 // notification; each entry is written with its mark in one fenced script.
 func (l *loop) alertContext(ctx context.Context, a string, f bus.ContextFill) error {
 	to := l.cfg.EscalateTo
-	directive := fmt.Sprintf("context %.0f%%: at your next stopping point commit WIP and reply to %s with a hand-off", f.Pct, to)
+	directive := fmt.Sprintf("context %.0f%%: at your next stopping point commit WIP, publish your hand-off with agentbus report %s --to %s, then declare it: agentbus handoff %s --report <its id>", f.Pct, a, to, a)
 	sent, err := l.b.FencedCmdOnce(ctx, l.token, contextMark(a), f.Session, dispatchFrom, a, bus.CmdDirective, directive, false)
 	if errors.Is(err, bus.ErrSwapInProgress) {
 		return nil // the agent is being replaced: its successor starts a new session
@@ -98,7 +98,7 @@ func (l *loop) alertContext(ctx context.Context, a string, f bus.ContextFill) er
 	if a == to || !bus.ValidName(to) {
 		return nil // the target is the agent itself: the directive says it all
 	}
-	note := fmt.Sprintf("context: %s at %.0f%%; told to commit WIP and reply to you with a hand-off.", a, f.Pct)
+	note := fmt.Sprintf("context: %s at %.0f%%; told to commit WIP, report its hand-off to you and declare it (agentbus handoff).", a, f.Pct)
 	_, err = l.b.FencedCmdOnce(ctx, l.token, contextNoticeMark(a), f.Session, dispatchFrom, to, bus.CmdDirective, note, true)
 	if errors.Is(err, bus.ErrSwapInProgress) {
 		return nil

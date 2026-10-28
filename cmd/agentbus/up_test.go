@@ -443,6 +443,41 @@ func TestUpRecordsTheEscalationTarget(t *testing.T) {
 	}
 }
 
+// --reload (lifecycle part C) is recorded like --escalate-to: kept by a plain
+// re-run, replaced by a new value, removed by on; anything else is refused.
+func TestUpRecordsTheReloadPolicy(t *testing.T) {
+	work, _, _, boot, deps := upFixture(t)
+	u := withServices(t, &deps)
+	deps.Environ = []string{"PATH=/bin"}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work, "--reload", "propose"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up: %d %s", code, errw.String())
+	}
+	if slices.ContainsFunc(*boot, func(c string) bool { return strings.Contains(c, "reload") }) {
+		t.Fatalf("bootstrap was given --reload: %q", *boot)
+	}
+	read := func() string { env, _ := service.LoadEnvFile(u.paths.EnvFile("demo")); return env[service.ReloadEnv] }
+	if got := read(); got != "propose" {
+		t.Fatalf("policy %q", got)
+	}
+	runUp([]string{"demo"}, deps, &out, &errw)
+	if got := read(); got != "propose" {
+		t.Fatalf("a plain re-run reset it: %q", got)
+	}
+	runUp([]string{"demo", "--reload", "off"}, deps, &out, &errw)
+	if got := read(); got != "off" {
+		t.Fatalf("not replaced: %q", got)
+	}
+	runUp([]string{"demo", "--reload", "on"}, deps, &out, &errw)
+	if got := read(); got != "" {
+		t.Fatalf("on kept %q", got)
+	}
+	*boot = nil
+	if code := runUp([]string{"demo", "--reload", "sometimes"}, deps, &out, &errw); code != 1 || len(*boot) != 0 {
+		t.Fatalf("invalid policy: code %d, bootstrap %q", code, *boot)
+	}
+}
+
 func TestUpNamesTheExpectedTemplatePath(t *testing.T) {
 	work, templates, _, _, deps := upFixture(t)
 	deps.Bootstrap = func([]string) error { return nil } // writes no template

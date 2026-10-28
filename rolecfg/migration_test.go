@@ -51,6 +51,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		want.Allow = append(want.Allow, "Bash(agent-spawn "+role+" *)")
 	}
 	want.Allow = append(want.Allow, masterUpRules...)
+	want.Deny = append(append([]string{}, r1.Deny...), reloadAsDeny...)
 	if !reflect.DeepEqual(want, r2) {
 		t.Fatalf("master's rules %+v, want %+v", r2, want)
 	}
@@ -61,10 +62,32 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		}
 		return ShellJoin([]string{s})
 	}
+	// sentinel gains exactly the reload rule (lifecycle part C), nothing else.
+	s1, _ := v1.LaunchRules("sentinel")
+	s2, _ := v2.LaunchRules("sentinel")
+	wantS := s1
+	wantS.Allow = append(append([]string{}, s1.Allow...), "Bash(agentbus reload *)")
+	wantS.Deny = append(append([]string{}, s1.Deny...), reloadAsDeny...)
+	if !reflect.DeepEqual(wantS, s2) {
+		t.Fatalf("sentinel's rules %+v, want %+v", s2, wantS)
+	}
 	for _, role := range v1.roleOrder {
 		a, b := dry(v1, role), dry(v2, role)
-		if role == "master" {
-			a = strings.Replace(a, settings(r1), settings(r2), 1)
+		// Every role gains exactly the shared --as deny (busmon-reload-deny);
+		// master and sentinel also their checked allows above.
+		o1, _ := v1.LaunchRules(role)
+		o2, _ := v2.LaunchRules(role)
+		switch role {
+		case "master", "sentinel":
+		default:
+			wantO := o1
+			wantO.Deny = append(append([]string{}, o1.Deny...), reloadAsDeny...)
+			if !reflect.DeepEqual(wantO, o2) {
+				t.Fatalf("%s's rules %+v, want %+v", role, o2, wantO)
+			}
+		}
+		if !o1.Empty() {
+			a = strings.Replace(a, settings(o1), settings(o2), 1)
 		}
 		if a != b {
 			t.Errorf("%s launches differently:\nschema 1: %s\nschema 2: %s", role, a, b)

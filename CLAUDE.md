@@ -248,7 +248,15 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   at the horizon floor (v0.8, `EnsureGroup`), entries older than that floor are never replayed. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
   each fire, **not** a long-lived loop (which would never wake a terminal session). `agents [--json]`
   lists every peer's current state. `watch` is the legacy alias of `subscribe` (same handler).
-  `listen` tails all four streams via `Bus.Tail` for debugging. `report` now retains the full
+  `listen` tails all four streams via `Bus.Tail` for debugging. `report` prints its entry id on
+  stdout (lifecycle-2), the id `handoff <self> --report <id>` declares (`bus/handoff.go`:
+  `{p}:handoff`, agent → report, session, pid, pid_start, `at` from Redis `TIME`, written in one
+  script only for the agent's own report from its verified process in its proved session; not in
+  `projectKinds`, ignored by `HasKeysBesidesDispatch`; any report and any non-idle status of the
+  agent delete it in the same MULTI (`addVoidingHandoff`), so voiding never waits for a pass;
+  `Handoff.VoidFor` — another process or session, or working since — is the rule the dispatcher's
+  fenced `handoffPass` deletes by and busmon's `handoff` flag shows by; `handoff` alone lists them, read-only for the identity guard; the
+  context alert's directive now asks for both). `report` now retains the full
   text (newlines/tabs kept, ≤8000, `AGENT_BUS_REPORT_FULL_MAX`) in a `full` field **only when it
   differs from the one-line ≤500 preview**; `reports [--json]` lists recent reports (marking those
   with more via ` (+N)`) and `reports <id>` prints one report's full retained text.
@@ -406,7 +414,13 @@ A still-earlier in-repo prototype, `cmd/busbridge` (relay to herdr panes via `he
 send-text/send-keys`, with hard-coded pane ids), was also **removed**. v0.8 revised that decision
 on purpose (spec §11, `docs/memory/decisions/2026-10-10-event-driven-dispatch.md`): **the only
 automated process that types into panes is `agentbus dispatch`, and it types a wake line, never a
-message; master's manual pane injection remains the fallback while no dispatcher runs.** The wake
+message; master's manual pane injection remains the fallback while no dispatcher runs.** One named
+exception (lifecycle-4, `docs/memory/decisions/2026-10-28-agent-lifecycle.md`): after an agent's
+own declared hand-off, the literal `/clear` (`Runtime.Clear`, `ClearText`, no text parameter) under
+`DecideClear`'s rule, a fenced once-per-session reservation (`clear:<agent>` in `{p}:quota`) and a
+proof before the resume directive (`dispatch/clear.go`); `AGENT_BUS_AUTO_CLEAR=1` turns it on, off
+by default until the spec's live checks pass. The fake runtime enforces `dispatchTypes` in every
+dispatch test: a prompt that is not a wake line, or a `/clear` without its reservation, panics. The wake
 line is fixed — `[agentbus#<nonce>] <project>: <n> message(s) waiting for <agent>. Run: agentbus
 --project <project> subscribe --drain <agent>` — and the agent then drains through Redis. The
 dispatcher touches only unarmed agents with a real obligation, in a pane that is ready, unfocused
@@ -725,7 +739,30 @@ It never touches Redis — see README "Deployment topology".
   interrupted and closed by the next swap); `swap --back` returns a role to its own profile and
   model (refused only when profile, client, provider and launched model all match); `agentbus
   retire <role>` closes one role's tab with the same checks (not `shutdown`, which is team-wide);
-  `agentbus swaps` lists the ledger. A fallback record keeps `held_episode`, and the release of that
+  `agentbus swaps` lists the ledger (a reload's entries tagged `[reload]`). Lifecycle-3a: a reload
+  (`agentbus reload`, part C) holds the same intent with `kind=reload` (`SwapIntent.Kind`,
+  `SwapKindReload`), so every swap rule of the dispatcher applies unchanged; its `begin` carries the
+  kind and is refused when the role has no `{p}:agents` snapshot (`ErrNoSnapshot`, in the intent's
+  script: a deleted project is never revived, and tab mode, which has no services marker, still
+  reloads), it ends with `reloaded` (`FinishReload`, never the fallback state), an interrupted one is
+  closed as a failed reload (`closeInterrupted`), and busmon flags it `reloading` (`SwapIntents`).
+  Lifecycle-3b, `agentbus reload <role> [--fresh] [--dry-run] [--reason] [--as <person>]`
+  (`cmd/agentbus/reload.go`): who may (sentinel any role but itself on an observed update, master
+  last and only with no other pilot driver; master only sentinel; a person anyone by an explicit
+  `--as`, which also passes the identity guard), `AGENT_BUS_RELOAD` (caller's env, else the
+  project's env file; `up --reload on|propose|off`; `propose` and `off` leave only a person's `--as`), a preflight that changes nothing (verified live
+  identity, not its own pane, not on a fallback, `reloadOpenWork` = swap's `openWork` plus an open
+  ask and an `accepted` board task, declared idle, no wake typing, a proved Claude Code session
+  unless `--fresh`), the intent and a second readiness read, SIGTERM to the re-checked pid (never
+  SIGKILL), `relaunchRole` (up's lock and relaunch, the role's tab only, resuming `IdentSession`),
+  the proof (`replaced`, plus after an update episode a `client_fp` hashing to the installed
+  version), `reloaded`; every failure after the intent is a `failed` ledger entry with its
+  recovery. Tool rules: sentinel `agentbus reload *`, master `agentbus reload sentinel`, and a shared
+  deny on `agentbus reload *--as*` / `agentbus * reload *--as*` for every role (busmon-reload-deny),
+  so an agent cannot skip the caller table or the `off`/`propose` opt-outs by naming a person.
+  Defence in depth, not a boundary: the client matches command text (another spelling, a wrapper or
+  a script runs it), and a person's own shell has no such rule.
+  A fallback record keeps `held_episode`, and the release of that
   episode earns master one `back:<p>:<role>` notice; its own provider stays watched. The launched
   model (`AGENT_BUS_MODEL`) is part of the verified identity (`AgentSnapshot.Model`, set only with a
   proof). `agentbus roles doctor [--publish]` compares configured (roles.toml, the current profile),
@@ -773,7 +810,7 @@ It never touches Redis — see README "Deployment topology".
   agents without one) and adds `update` and `client_judged` to `{p}:observed`; sentinel gets one
   directive per update episode (`FencedCmdOnce`, mark `update:<client>`, episode the installed
   hash); health `client-updates` warns; busmon flags `update`. Metadata only: the dispatcher never
-  runs a client, and nothing restarts one: the person reloads (`/exit`, `agentbus up <p> --resume`).
+  runs a client; sentinel reloads the outdated agents with `agentbus reload` (lifecycle-3b, below).
   v0.15: an observation carries `since` (first reading of
   that state by the same pid, carried forward) and a failed inspection keeps the previous reading
   (`Observation.Fresh`, 120 s); a pane seen `blocked` (its client's own menu or permission prompt)

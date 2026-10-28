@@ -285,6 +285,8 @@ type agentState struct {
 	obsSince     time.Time           // first reading of that state (an episode, v0.15)
 	obsPrompt    bool                // its pane was seen blocked, fresh: its client asks something
 	swapping     bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
+	reloading    bool                // agentbus reload holds the same intent, kind reload (lifecycle part C)
+	handoff      bool                // a pending declared hand-off ({p}:handoff, lifecycle part A)
 	fallback     *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
 	model        *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
 	judgedAt     time.Time           // the shell's snapshot time (clock); zero in shared's own state

@@ -31,6 +31,10 @@ func (n noRuntime) Prompt(context.Context, string, string, string) (bool, error)
 	n.t.Error("Prompt called")
 	return false, nil
 }
+func (n noRuntime) Clear(context.Context, string) error {
+	n.t.Error("Clear called")
+	return nil
+}
 
 func TestDispatchStatusExitCodes(t *testing.T) {
 	b := dialDispatchMain(t)

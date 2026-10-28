@@ -59,10 +59,7 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 			return fail("it declared working %s ago; wait, or pass --now (the turn is lost)", d.Now().Sub(time.UnixMilli(snap.TS)).Round(time.Second))
 		}
 	}
-	if bad, ev, err := b.Interrupted(ctx, role); err == nil && bad {
-		_ = b.LogSwap(ctx, bus.SwapEvent{Role: role, Event: bus.SwapFailed, ToProfile: ev.ToProfile, By: self,
-			Error: "interrupted: the swap begun at " + ev.ID + " never finished"})
-	}
+	closeInterrupted(ctx, b, role, self)
 	if err := b.BeginSwap(ctx, role, bus.SwapIntent{By: self, OldPID: snap.PID, OldStart: snap.PIDStart},
 		bus.SwapEvent{FromProvider: snap.Provider, By: self, Reason: reason, OldPID: snap.PID, OldPane: snap.Pane}); err != nil {
 		return fail("%v", err)
@@ -169,6 +166,9 @@ func runSwaps(ctx context.Context, b *bus.Bus, args []string, out, errw io.Write
 		}
 		if e.Error != "" {
 			line += "  " + e.Error
+		}
+		if e.Kind != "" {
+			line += "  [" + e.Kind + "]"
 		}
 		fmt.Fprintln(out, line)
 	}

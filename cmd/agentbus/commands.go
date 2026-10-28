@@ -28,7 +28,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "report", Text: true, Usage: []string{"report <agent> [--auto] [--to <agent>]... <message...>"},
-		Summary: "publish a report (full text kept); --to also tells who waits for it",
+		Summary: "publish a report (full text kept) and print its id; --to also tells who waits for it",
 		Flags: []cli.Flag{
 			{Long: "auto", Short: 'a', Help: "mark it automatic, not a note"},
 			{Long: "to", Short: 't', Arg: "<agent>", Help: "also send a directive pointing at it (repeatable)"},
@@ -40,6 +40,26 @@ var commands = []cli.Command{
 		Summary:  "list recent reports, or print one report's full text",
 		Flags:    []cli.Flag{fJSON},
 		Examples: []string{"agentbus -p demo reports", "agentbus -p demo reports 1792537337865-0"},
+	},
+	{
+		Name: "reload", Usage: []string{"reload <role> [--fresh] [--dry-run] [--reason <text>] [--as <person>]"},
+		Summary: "restart an idle agent on its role and profile, resuming its session (sentinel, master for sentinel, a person)",
+		Flags: []cli.Flag{
+			{Long: "fresh", Short: 'F', Help: "relaunch without resuming: its conversation is lost"},
+			{Long: "dry-run", Short: 'n', Help: "check everything and say what would happen; change nothing"},
+			{Long: "reason", Short: 'r', Arg: "<text>", Help: "why, for the swap ledger"},
+			{Long: "as", Arg: "<person>", Help: "reload as a person (any role); no short form, so the shared deny names every spelling"},
+		},
+		Examples: []string{"agentbus -p demo reload coder --reason \"client update\"", "agentbus -p demo reload coder -n"},
+	},
+	{
+		Name: "handoff", Usage: []string{"handoff [--json]", "handoff <self> --report <id>"},
+		Summary: "list declared hand-offs, or declare your own (its report id)",
+		Flags: []cli.Flag{
+			{Long: "report", Short: 'r', Arg: "<id>", Help: "the report that carries your hand-off"},
+			fJSON,
+		},
+		Examples: []string{"agentbus -p demo handoff", "agentbus -p demo handoff coder -r 1793170979006-0"},
 	},
 	{
 		Name: "notify", Text: true, Usage: []string{"notify <message...>"},
@@ -339,7 +359,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "up", NoProject: true,
-		Usage:   []string{"up <project> [<path>] [--as <name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [bootstrap flags]"},
+		Usage:   []string{"up <project> [<path>] [--as <name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags]"},
 		Summary: "provision a project, start its services, open its herdr workspace",
 		Flags: []cli.Flag{
 			{Long: "as", Short: 'a', Arg: "<name>", Help: "your name in busmon"},
@@ -347,6 +367,7 @@ var commands = []cli.Command{
 			{Long: "resume", Short: 'R', Help: "resume the agents' sessions"},
 			{Long: "dry-run", Short: 'n', Help: "print what would happen"},
 			fEsc,
+			{Long: "reload", Arg: "on|propose|off", Help: "the project's reload policy, kept for the services (agentbus reload)"},
 			{Long: "session", Short: 'S', Arg: "<s>", Help: "herdr session (default HERDR_SESSION)"},
 			{Long: "no-dispatch", Help: "bootstrap: no dispatcher"},
 			{Long: "no-missions", Help: "bootstrap: no conductor"},

@@ -104,6 +104,10 @@ deny = [
   "Edit(**/.env.staging.local)", "Edit(**/.env.preview.local)",
   "Edit(**/*.pem)", "Edit(**/*.key)", "Edit(**/id_rsa*)", "Edit(**/id_ed25519*)",
   "Edit(~/.ssh/**)", "Edit(**/*keypair*.json)", "Edit(**/wallet*.json)",
+  # No agent reloads as a person (lifecycle part C): --as skips reload's caller
+  # table and AGENT_BUS_RELOAD's opt-outs. Defence in depth, not a boundary:
+  # the client matches command text, and a person's own shell is not affected.
+  "Bash(agentbus reload *--as*)", "Bash(agentbus * reload *--as*)",
 ]
 
 [roles.master]
@@ -114,7 +118,9 @@ skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 # Bernard, 2026-10-27: master relaunches this project's dead agents without a prompt.
 # Exact commands only: no other project, no other flag, no wildcard.
 [roles.master.tool_rules]
-allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)"]
+# Lifecycle part C: master reloads sentinel, and only sentinel.
+allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
+  "Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)"]
 
 [roles.coder]
 profile = "claude-opus"
@@ -130,6 +136,12 @@ skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 profile = "claude-haiku"
 tier = "boot"
 skills = ["agent-bus", "agent-bus-sentinel"]
+# Lifecycle part C: sentinel reloads agents on a client-update episode. The
+# command checks who and when from AGENT_BUS_AGENT and the bus facts, but it
+# cannot prove who runs it: an agent passing --as <person> skips the table.
+# This allow only spares the prompt.
+[roles.sentinel.tool_rules]
+allow = ["Bash(agentbus reload *)"]
 
 [roles.architect]
 profile = "claude-opus-fallback"
