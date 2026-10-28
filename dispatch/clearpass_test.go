@@ -237,3 +237,38 @@ func TestClearPassTellsASameMillisecondStatusApart(t *testing.T) {
 		t.Fatalf("cmds %q", got)
 	}
 }
+
+// The re-inspection right before typing (foureyes' review of lifecycle-4):
+// a pane focused, busy or no longer ready since the first read gets no
+// /clear, the reservation is released, and the next pass judges again.
+func TestClearPassReinspectsRightBeforeTyping(t *testing.T) {
+	for name, change := range map[string]func(*Inspection){
+		"focused":   func(in *Inspection) { in.Focused = true },
+		"busy":      func(in *Inspection) { in.Busy = true },
+		"not ready": func(in *Inspection) { in.Ready = false },
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newClearWorld(t, true)
+			var log strings.Builder
+			w.l.cfg.Log = &log
+			w.rt.script = func(_ string, n int) Inspection {
+				in := readyIn()
+				if n == 2 { // the second read of the first pass: just before typing
+					change(&in)
+				}
+				return in
+			}
+			w.pass()
+			if w.clears() != 0 || !strings.Contains(log.String(), "clear-aborted") {
+				t.Fatalf("clears %d, log %q", w.clears(), log.String())
+			}
+			if m, _ := w.b.QuotaMarks(context.Background()); m[bus.ClearMark("coder")] != "" {
+				t.Fatalf("the reservation was kept: %q", m[bus.ClearMark("coder")])
+			}
+			w.pass() // ready again: judged again and cleared
+			if w.clears() != 1 {
+				t.Fatalf("next pass: clears %d", w.clears())
+			}
+		})
+	}
+}
