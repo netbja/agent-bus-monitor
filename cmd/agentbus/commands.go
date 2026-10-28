@@ -384,6 +384,16 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus projects"},
 	},
 	{
+		Name: "tokens", NoProject: true, Usage: []string{"tokens [--project <p> | --all] [--days N] [--by agent|day] [--json]", "tokens --unattributed [--json]"},
+		Summary: "tokens spent per project (all side by side), per agent or per day; no cost, by rule",
+		Flags: []cli.Flag{{Long: "project", Arg: "<p>", Help: "one project (default: every project, whatever AGENT_BUS_PROJECT says)"},
+			{Long: "all", Help: "every project side by side (the default)"},
+			{Long: "days", Arg: "<N>", Help: "days of the chart, 1 to 8 (default 7)"},
+			{Long: "by", Arg: "agent|day", Help: "one project by agent (today) or by day"},
+			{Long: "unattributed", Help: "what no project's session record names: a read-only scan of this host's transcripts"}, fJSON},
+		Examples: []string{"agentbus tokens", "agentbus tokens --project agent-bus-monitor --by agent", "agentbus tokens --unattributed"},
+	},
+	{
 		Name: "identity", NoProject: true, Usage: []string{"identity [set <name>]"},
 		Summary:  "your name as a person in busmon",
 		Examples: []string{"agentbus identity set bernard"},

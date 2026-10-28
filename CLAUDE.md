@@ -203,7 +203,10 @@ it silently never fired.
   at) every 5 minutes; the quota pass appends `{p}:quota:hist` when a window changes or every 15
   minutes. All fenced; none in `projectKinds`, all ignored by `HasKeysBesidesDispatch`. Codex has no
   proved session: `tokens.CodexScan` (per-session baseline across files) serves only the person's
-  `agentbus tokens --unattributed`. No cost, by rule.
+  `agentbus tokens --unattributed`. No cost, by rule. `agentbus tokens` (`tokenscmd.go`, above the
+  project-required exit, read-only) prints every project side by side unless `--project` names one on
+  the command line (the ambient `AGENT_BUS_PROJECT` never narrows it), `--by agent|day`, `--days`,
+  `--json`; `--unattributed` is the person's host scan (1 GiB budget) of what no project's record names.
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
   cron wake where a hard exit loses the whole caretaker pass.
 
