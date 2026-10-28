@@ -382,12 +382,12 @@ func TestShellClickTabsAndTitles(t *testing.T) {
 	m := fixtureShell(t, 140, 40)
 	r := m.layout.Lower
 	x := r.X + 3
-	for i, s := range tabBar(lowerTabs, m.layout.Active, r.W-4) {
+	for i, s := range tabLabels(lowerTabs, m.layout.Active, r.W-4) {
 		want := lowerTabs[i]
 		if m = clickAt(t, m, x+1, r.Y); m.ui.focus != want || m.layout.Active != want {
-			t.Fatalf("click on %q: focus %d", s.Text, m.ui.focus)
+			t.Fatalf("click on %q: focus %d", s, m.ui.focus)
 		}
-		x += Width(s.Text)
+		x += Width(s)
 	}
 	for _, p := range []PanelID{PanelAgents, PanelForYou} {
 		r := m.layout.rect(p)
@@ -397,35 +397,56 @@ func TestShellClickTabsAndTitles(t *testing.T) {
 	}
 	n := fixtureShell(t, 60, 20)
 	x = 0
-	for i, s := range tabBar(narrowPanels, n.layout.Active, 60) {
+	for i, s := range tabLabels(narrowPanels, n.layout.Active, 60) {
 		if n = clickAt(t, n, x+1, n.layout.Tabs.Y); n.layout.Active != narrowPanels[i] {
-			t.Fatalf("narrow click on %q: view %d", s.Text, n.layout.Active)
+			t.Fatalf("narrow click on %q: view %d", s, n.layout.Active)
 		}
-		x += Width(s.Text)
+		x += Width(s)
 	}
 }
 
-// An inactive tab is drawn in its panel's colour, never muted, so it reads
-// beside the focused tab's pill (A4); the active tab stays the only bold one,
-// and the frame title still pills only the active tab.
-func TestInactiveTabsAreVisible(t *testing.T) {
-	l := tabBar(lowerTabs, PanelBoard, 200)
-	for i, s := range l {
-		p := lowerTabs[i]
-		if s.Role == RoleMuted {
-			t.Errorf("tab %d is muted", i+1)
+// herdr-style tabs (busmon-tabs, Bernard): every tab a block followed by one
+// blank column; the active one a bold pill in its panel's colour, dimmed
+// (faded) when the panel has not the focus; the others grey on the tab
+// background. The labels keep their old widths, so the click spans stay.
+func TestTabsAreHerdrBlocks(t *testing.T) {
+	for _, focused := range []bool{true, false} {
+		l := tabBar(lowerTabs, PanelBoard, 200, focused)
+		if len(l) != 2*len(lowerTabs) {
+			t.Fatalf("%d segments, want a block and a blank column per tab", len(l))
 		}
-		if s.Role != panelHue[p] || s.Bold != (p == PanelBoard) {
-			t.Errorf("tab %d = %+v, want role %v bold %v", i+1, s, panelHue[p], p == PanelBoard)
+		for i, p := range lowerTabs {
+			block, gap := l[2*i], l[2*i+1]
+			if gap.Text != " " || !gap.Tab || gap.Off || gap.Pill {
+				t.Errorf("tab %d's separator %+v", i+1, gap)
+			}
+			if !block.Tab || strings.HasPrefix(block.Text, "  ") || strings.HasSuffix(block.Text, " ") {
+				t.Errorf("tab %d's block %+v", i+1, block)
+			}
+			if p == PanelBoard {
+				wantFade := 0
+				if !focused {
+					wantFade = frameFade
+				}
+				if !block.Pill || !block.Bold || block.Role != panelHue[p] || block.Fade != wantFade || block.Off {
+					t.Errorf("active tab (focused %v) %+v", focused, block)
+				}
+			} else if !block.Off || block.Pill || block.Bold || block.Role != RoleMuted {
+				t.Errorf("inactive tab %d %+v", i+1, block)
+			}
+		}
+		if got, want := l.Width(), Width(" 1 Activity  2 Board  3 Requests  4 Plan "); got != want {
+			t.Errorf("bar is %d cells, want the old %d", got, want)
 		}
 	}
-	pills := 0
-	for _, s := range frameTitle(l, panelHue[PanelBoard], true) {
-		if s.Pill {
-			pills++
+	// frameTitle leaves the tabs alone: no pill borrowed, nothing recoloured.
+	title := frameTitle(tabBar(lowerTabs, PanelBoard, 200, true), RoleOK, true)
+	for _, s := range title {
+		if s.Tab && s.Pill && s.Role != panelHue[PanelBoard] {
+			t.Errorf("frameTitle pilled an inactive tab: %+v", s)
 		}
 	}
-	if pills != 1 {
-		t.Errorf("%d pills in the focused title, want 1", pills)
+	if frameTitle(tabBar(lowerTabs, PanelBoard, 200, true), RoleOK, true).Width() != tabBar(lowerTabs, PanelBoard, 200, true).Width()+2 {
+		t.Error("frameTitle changed the bar's width")
 	}
 }

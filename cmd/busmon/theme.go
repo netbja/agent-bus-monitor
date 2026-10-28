@@ -154,6 +154,25 @@ func (t *Theme) Pill(r Role) tcell.Style {
 	return t.Style(r).Reverse(true).Bold(true)
 }
 
+// Tab backgrounds: an inactive tab is a block a shade off the screen's
+// background, as herdr draws its tabs.
+var (
+	tabOffDark  = tcell.GetColor("#1F2630")
+	tabOffLight = tcell.GetColor("#E3E6EA")
+)
+
+// TabOff is an inactive tab: muted text on the tab background. Without true
+// colour it is plain muted text.
+func (t *Theme) TabOff() tcell.Style {
+	switch t.palette {
+	case PaletteDark:
+		return t.Style(RoleMuted).Background(tabOffDark)
+	case PaletteLight:
+		return t.Style(RoleMuted).Background(tabOffLight)
+	}
+	return t.Style(RoleMuted)
+}
+
 // tcellStyle is a cell's style on a tcell screen.
 func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
 	if c.Border {
@@ -172,8 +191,14 @@ func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
 	if c.Reverse {
 		style = style.Reverse(true)
 	}
-	if c.Pill { // replaces the style whole: a pill has no fade; NO_COLOR keeps its reverse in Pill
+	if c.Off { // an inactive tab replaces the style whole
+		style = t.TabOff()
+	}
+	if c.Pill { // replaces the style whole; NO_COLOR keeps its reverse in Pill
 		style = t.Pill(c.Role)
+		if c.Fade > 0 && t.Animated() { // the active tab of an unfocused panel: dimmed like its frame
+			style = style.Background(t.Faded(c.Role, c.Fade))
+		}
 	}
 	return style
 }

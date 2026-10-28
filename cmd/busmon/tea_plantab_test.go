@@ -26,7 +26,7 @@ func TestShellPlanTab(t *testing.T) {
 	m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
 
 	tabs := ""
-	for _, s := range tabBar(lowerTabs, PanelActivity, 200) {
+	for _, s := range tabBar(lowerTabs, PanelActivity, 200, true) {
 		tabs += s.Text
 	}
 	if !strings.Contains(tabs, " 4 Plan ") {
@@ -84,7 +84,7 @@ func TestPlanTabWithoutPlan(t *testing.T) {
 // shorten first, only until the bar fits.
 func TestNarrowTabBarShortensOnlyWhatItMust(t *testing.T) {
 	bar := ""
-	l := tabBar(narrowPanels, PanelForYou, 60)
+	l := tabBar(narrowPanels, PanelForYou, 60, true)
 	for _, s := range l {
 		bar += s.Text
 	}
@@ -98,7 +98,7 @@ func TestNarrowTabBarShortensOnlyWhatItMust(t *testing.T) {
 	}
 	// Wide enough: every name in full.
 	bar = ""
-	for _, s := range tabBar(narrowPanels, PanelForYou, 200) {
+	for _, s := range tabBar(narrowPanels, PanelForYou, 200, true) {
 		bar += s.Text
 	}
 	if !strings.Contains(bar, "3 Activity") || !strings.Contains(bar, "5 Requests") {

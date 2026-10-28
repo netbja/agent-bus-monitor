@@ -329,7 +329,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (`panelHue`, v0.14.5: Agents accent, Activity ok, Board dispatch, Requests attention): its frame
   is that colour when focused and faded towards the background when not (`Theme.FrameBorder`), and
   its title's name is a pill when focused (`frameTitle`, `Seg.Pill`, `Theme.Pill`) without changing
-  the title's width, which the tab click spans rely on. The tick reads every second
+  the title's width, which the tab click spans rely on. The lower panel's tabs are herdr-style blocks
+  (`tabBar`, busmon-tabs): each label is a block plus one blank column (`tabLabels`, the click spans,
+  widths unchanged); the active tab a bold pill in its panel's colour, dimmed with the frame's fade when
+  the panel is not focused; the others grey on `Theme.TabOff` (plain without true colour); `Seg.Tab`
+  makes `frameTitle` leave them alone. The tick reads every second
   (pilot, armed, lag, agents, usage, budgets, board, challenges) and every 5th tick the dispatcher
   facts (`DispatchAlive`, `Obligation`, `Wake`); a failed read keeps the last value (queue shows
   `N?`). The usage scopes stay apart: account budget (used %) in the header, an agent's own context

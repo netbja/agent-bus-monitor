@@ -13,7 +13,9 @@ type Seg struct {
 	Bold    bool
 	Reverse bool // the NO_COLOR stand-in for a highlight (active tab)
 	Fade    int  // 1-100: drawn at that intensity, between RoleLine and its colour (true colour only); 0 = full
-	Pill    bool // drawn on its role's colour (a focused frame's title)
+	Pill    bool // drawn on its role's colour (a focused frame's title); with Fade, on that faded colour
+	Off     bool // an inactive tab: muted text on the tab background (Theme.TabOff)
+	Tab     bool // drawn by tabBar: frameTitle neither pills it nor borrows its spaces
 }
 
 type Line []Seg
@@ -183,11 +185,11 @@ func appendSegment(l Line, text string, style Seg) Line {
 	if text == "" {
 		return l
 	}
-	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold && l[n-1].Reverse == style.Reverse && l[n-1].Fade == style.Fade && l[n-1].Pill == style.Pill {
+	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold && l[n-1].Reverse == style.Reverse && l[n-1].Fade == style.Fade && l[n-1].Pill == style.Pill && l[n-1].Off == style.Off && l[n-1].Tab == style.Tab {
 		l[n-1].Text += text
 		return l
 	}
-	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold, Reverse: style.Reverse, Fade: style.Fade, Pill: style.Pill})
+	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold, Reverse: style.Reverse, Fade: style.Fade, Pill: style.Pill, Off: style.Off, Tab: style.Tab})
 }
 
 // FitLine pads AFTER the ellipsis, consistently with Fit. It never mutates l.
@@ -232,6 +234,7 @@ type cellStyle struct {
 	Reverse  bool
 	Fade     int
 	Pill     bool
+	Off      bool
 	Selected bool
 	Border   bool // a frame line: Theme.FrameBorder(Role, Focused)
 	Focused  bool
@@ -257,7 +260,7 @@ func drawLine(s cellSink, x, y, w int, l Line, selected bool) {
 	}
 	pos := x
 	lineClusters(FitLine(l, w), func(text string, width int, seg Seg) bool {
-		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Selected: selected}
+		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Off: seg.Off, Selected: selected}
 		// A wide cluster's continuation cells first, then its head.
 		if width > 0 {
 			whole := pos >= 0 && pos+width <= sw
@@ -306,7 +309,7 @@ func frameTitle(t Line, hue Role, focused bool) Line {
 	for i := 0; i < len(l); i++ {
 		s := l[i]
 		inner := i > 0 && i < len(l)-1
-		if !inner || !name(s) {
+		if !inner || !name(s) || s.Tab {
 			out = append(out, s)
 			continue
 		}
@@ -318,7 +321,7 @@ func frameTitle(t Line, hue Role, focused bool) Line {
 		s.Pill, s.Bold = true, true
 		// Borrow one leading space from the previous segment, one trailing
 		// space from the next, when they have one to give.
-		if n := len(out); n > 0 && strings.HasSuffix(out[n-1].Text, " ") && !strings.HasPrefix(s.Text, " ") {
+		if n := len(out); n > 0 && !out[n-1].Tab && strings.HasSuffix(out[n-1].Text, " ") && !strings.HasPrefix(s.Text, " ") {
 			out[n-1].Text = strings.TrimSuffix(out[n-1].Text, " ")
 			s.Text = " " + s.Text
 			if out[n-1].Text == "" {
@@ -326,7 +329,7 @@ func frameTitle(t Line, hue Role, focused bool) Line {
 			}
 		}
 		out = append(out, s)
-		if !strings.HasSuffix(s.Text, " ") && strings.HasPrefix(l[i+1].Text, " ") {
+		if !strings.HasSuffix(s.Text, " ") && !l[i+1].Tab && strings.HasPrefix(l[i+1].Text, " ") {
 			out[len(out)-1].Text += " "
 			l[i+1].Text = strings.TrimPrefix(l[i+1].Text, " ")
 		}

@@ -31,7 +31,7 @@ func (m Model) grid() *grid {
 		drawLine(g, 0, l.Header.Y+i, m.width, header[i], false)
 	}
 	if l.Tabs.H > 0 {
-		drawLine(g, 0, l.Tabs.Y, m.width, tabBar(narrowPanels, l.Active, m.width), false)
+		drawLine(g, 0, l.Tabs.Y, m.width, tabBar(narrowPanels, l.Active, m.width, true), false)
 	}
 	reading := m.rd.open()
 	for _, p := range l.Visible {
@@ -93,7 +93,7 @@ func (m Model) headerData() headerData {
 // tabBar is "1 Activity  2 Board  3 Requests" with the active tab
 // highlighted; names shorten when they do not
 // fit width.
-func tabBar(tabs []PanelID, active PanelID, width int) Line {
+func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
 	short := map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req", PanelPlan: "Pln"}
 	names := make([]string, len(tabs))
 	for i, p := range tabs {
@@ -121,13 +121,37 @@ func tabBar(tabs []PanelID, active PanelID, width int) Line {
 		}
 		names[longest] = short[tabs[longest]]
 	}
+	// herdr-style blocks: each label " 1 Activity " is a block " 1 Activity"
+	// and one blank column before the next, so the widths (and the click
+	// spans) never change. The active tab is a pill in its panel's colour,
+	// dimmed like the frame when the panel has not the focus; an inactive
+	// one is grey on the tab background (plain text without true colour).
 	var l Line
 	for i, p := range tabs {
-		// Every tab in its panel's colour (A4: a muted one vanished beside the
-		// focused pill); the active one is bold, and the frame pills it.
-		l = append(l, Seg{Text: label(i), Role: panelHue[p], Bold: p == active, Reverse: p == active && th.Palette() == PaletteNone})
+		block := strings.TrimSuffix(label(i), " ")
+		if p == active {
+			fade := 0
+			if !focused {
+				fade = frameFade
+			}
+			l = append(l, Seg{Text: block, Role: panelHue[p], Bold: true, Pill: true, Fade: fade, Tab: true})
+		} else {
+			l = append(l, Seg{Text: block, Role: RoleMuted, Off: true, Tab: true})
+		}
+		l = append(l, Seg{Text: " ", Role: RoleText, Tab: true})
 	}
 	return l
+}
+
+// tabLabels are the tab bar's labels, one per tab (its block and its blank
+// column): the spans a click hits.
+func tabLabels(tabs []PanelID, active PanelID, width int) []string {
+	l := tabBar(tabs, active, width, true)
+	out := make([]string, 0, len(tabs))
+	for i := 0; i+1 < len(l); i += 2 {
+		out = append(out, l[i].Text+l[i+1].Text)
+	}
+	return out
 }
 
 // fillLists gives every list its place, focus, rows and frame.
@@ -236,7 +260,7 @@ func (m *Model) lowerTitle(p PanelID, own Line) Line {
 	if m.layout.Tier == TierNarrow {
 		return own
 	}
-	t := tabBar(lowerTabs, p, m.layout.Lower.W-4)
+	t := tabBar(lowerTabs, p, m.layout.Lower.W-4, m.ui.focus == p)
 	if len(own) > 1 {
 		t = append(t, own[1:]...)
 	}
