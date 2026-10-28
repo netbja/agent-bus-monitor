@@ -261,7 +261,7 @@ func (l *loop) proveClear(ctx context.Context, a string, c bus.ClearReservation,
 		wrote := false
 		if proved {
 			var err error
-			if wrote, err = l.b.StatusAfter(ctx, a, c.StatusID); err != nil {
+			if wrote, err = l.b.StatusAfter(ctx, a, c.StatusID, c.Added); err != nil {
 				return err
 			}
 		}

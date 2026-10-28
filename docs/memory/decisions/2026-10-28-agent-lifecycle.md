@@ -29,7 +29,7 @@ person at the keyboard, once per agent.
   hand-off, not armed, no wake being typed, and the pane showing that same process, unfocused,
   ready and not on a prompt. `IdentSession` alone never authorises a clear.
 - **Once per session.** A fenced reservation (`FencedReserveClear`) marks `clear:<agent>` =
-  `session|Redis TIME|report|status id` before anything is typed, and the pane is inspected again right
+  `session|Redis TIME|report|status id|entries-added` before anything is typed, and the pane is inspected again right
   before. A dispatcher without the lease types nothing; a restart never clears twice.
 - **Proof, then the ordinary wake.** The clear is proved when the same pid shows a new proved
   session (the SessionStart hook, part D) and the agent wrote nothing since the reservation. Then
@@ -63,8 +63,9 @@ reloading sentinel (lifecycle part C); reload types nothing.
 
 ## Limits / what would invalidate it
 
-- When the capped status stream has trimmed the reservation's boundary by the proof, the history
-  after it is incomplete and the proof fails closed (rebuild, never resume).
+- When the capped status stream has trimmed entries added after the reservation's boundary (fewer
+  kept than its `entries-added` counter says were added since), the history is incomplete and the
+  proof fails closed (rebuild, never resume).
 - A turn that starts between the last inspection and `/clear` and writes nothing on the bus is the
   residual: Claude Code queues `/clear` after it, and that turn's work survives only in Git and
   files.

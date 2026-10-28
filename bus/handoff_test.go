@@ -274,18 +274,20 @@ func TestFencedReserveClearRedis(t *testing.T) {
 	if len(last) != 1 {
 		t.Fatal("no status entry")
 	}
-	if m := marks[ClearMark("coder")]; m != "session-0001|"+strconv.FormatInt(at, 10)+"|"+r+"|"+last[0].ID {
+	if m := marks[ClearMark("coder")]; m != "session-0001|"+strconv.FormatInt(at, 10)+"|"+r+"|"+last[0].ID+"|1" {
 		t.Fatalf("mark %q", m)
 	}
 	c, ok := ParseClearMark(marks[ClearMark("coder")])
-	if !ok || c.Session != "session-0001" || c.At != at || c.Report != r || c.StatusID != last[0].ID {
+	if !ok || c.Session != "session-0001" || c.At != at || c.Report != r || c.StatusID != last[0].ID || c.Added != 1 {
 		t.Fatalf("ParseClearMark: %+v %v", c, ok)
 	}
 }
 
 // A status after the reservation's boundary is found to the sequence: two
 // entries in one millisecond are told apart (reviewer-codex's review of
-// lifecycle-4), and only the agent's own count.
+// lifecycle-4), and only the agent's own count. It fails closed when any
+// entry added after the boundary was trimmed away: the stream's
+// entries-added counter, taken with the boundary, says how many there were.
 func TestStatusAfterIsSequenceExactRedis(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
@@ -297,30 +299,45 @@ func TestStatusAfterIsSequenceExactRedis(t *testing.T) {
 	}
 	for _, c := range []struct {
 		agent, after string
+		added        int64 // entries-added when the boundary was taken
 		want         bool
-	}{{"coder", "1000-0", true}, {"coder", "1000-2", false}, {"foureyes", "1000-1", false}, {"foureyes", "1000-0", true}, {"coder", "", true}} {
-		got, err := b.StatusAfter(ctx, c.agent, c.after)
+	}{{"coder", "1000-0", 1, true}, {"coder", "1000-2", 3, false}, {"foureyes", "1000-1", 2, false}, {"foureyes", "1000-0", 1, true}, {"coder", "", 0, true}} {
+		got, err := b.StatusAfter(ctx, c.agent, c.after, c.added)
 		if err != nil || got != c.want {
-			t.Errorf("StatusAfter(%s, %s) = %v %v, want %v", c.agent, c.after, got, err, c.want)
+			t.Errorf("StatusAfter(%s, %s, %d) = %v %v, want %v", c.agent, c.after, c.added, got, err, c.want)
 		}
 	}
-	// The boundary trimmed away (reviewer-codex): what followed it may be
-	// lost, so it fails closed and reads as written, for any agent.
+	// Entries after the boundary trimmed away (reviewer-codex): fails closed,
+	// for any agent.
 	if err := b.r.XTrimMinID(ctx, key, "1000-2").Err(); err != nil {
 		t.Fatal(err)
 	}
 	for _, agent := range []string{"coder", "foureyes"} {
-		if got, err := b.StatusAfter(ctx, agent, "1000-0"); err != nil || !got {
-			t.Errorf("trimmed boundary, %s: %v %v, want written", agent, got, err)
+		if got, err := b.StatusAfter(ctx, agent, "1000-0", 1); err != nil || !got {
+			t.Errorf("trimmed after the boundary, %s: %v %v, want written", agent, got, err)
 		}
 	}
-	if err := b.r.XTrimMaxLen(ctx, key, 0).Err(); err != nil {
+	// The boundary itself trimmed, nothing after it lost: nothing written.
+	if got, err := b.StatusAfter(ctx, "foureyes", "1000-1", 2); err != nil || got {
+		t.Errorf("only the boundary trimmed: %v %v, want nothing", got, err)
+	}
+
+	// An empty stream at the reservation (boundary 0-0): nothing since is nothing.
+	fresh := dialTest(t)
+	if got, err := fresh.StatusAfter(ctx, "foureyes", "0-0", 0); err != nil || got {
+		t.Errorf("empty then and now: %v %v, want nothing", got, err)
+	}
+	// Empty at the reservation, then the agent's status trimmed away by others'.
+	fk := StreamKey(fresh.project, "status")
+	for _, a := range []string{"coder", "foureyes", "foureyes"} {
+		if err := fresh.r.XAdd(ctx, &redis.XAddArgs{Stream: fk, Values: map[string]any{"agent": a, "state": "idle"}}).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := fresh.r.XTrimMaxLen(ctx, fk, 2).Err(); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := b.StatusAfter(ctx, "foureyes", "1000-2"); err != nil || !got {
-		t.Errorf("stream emptied past the boundary: %v %v, want written", got, err)
-	}
-	if got, err := b.StatusAfter(ctx, "foureyes", "0-0"); err != nil || got {
-		t.Errorf("empty at the reservation and still empty: %v %v, want nothing", got, err)
+	if got, err := fresh.StatusAfter(ctx, "coder", "0-0", 0); err != nil || !got {
+		t.Errorf("empty at the reservation, then trimmed: %v %v, want written", got, err)
 	}
 }

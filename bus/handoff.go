@@ -162,11 +162,13 @@ func (b *Bus) FencedDeleteHandoff(ctx context.Context, token, agent string, h Ha
 }
 
 // ClearMark is the {p}:quota field of an agent's auto-clear (lifecycle part
-// B): "<session>|<at>|<report>|<status id>", the session of the record
-// cleared, the Redis TIME of its reservation, the hand-off's report (named
-// again if the record is gone by the proof) and the status stream's last id
-// at the reservation, the boundary a later status is told apart by, to the
-// sequence. One clear per session, whatever the dispatcher's restarts.
+// B): "<session>|<at>|<report>|<status id>|<added>", the session of the
+// record cleared, the Redis TIME of its reservation, the hand-off's report
+// (named again if the record is gone by the proof), and the status stream's
+// last id and entries-added counter at the reservation: the boundary a later
+// status is told apart by, to the sequence, and how to tell whether anything
+// after it was trimmed. One clear per session, whatever the dispatcher's
+// restarts.
 func ClearMark(agent string) string { return "clear:" + agent }
 
 // ClearReservation is a ClearMark value, read.
@@ -175,40 +177,45 @@ type ClearReservation struct {
 	At       int64
 	Report   string
 	StatusID string
+	Added    int64
 }
 
 // ParseClearMark reads a ClearMark value.
 func ParseClearMark(v string) (ClearReservation, bool) {
 	parts := strings.Split(v, "|")
-	if len(parts) != 4 || parts[0] == "" {
+	if len(parts) != 5 || parts[0] == "" {
 		return ClearReservation{}, false
 	}
-	at, err := strconv.ParseInt(parts[1], 10, 64)
-	return ClearReservation{Session: parts[0], At: at, Report: parts[2], StatusID: parts[3]}, err == nil
+	at, err1 := strconv.ParseInt(parts[1], 10, 64)
+	added, err2 := strconv.ParseInt(parts[4], 10, 64)
+	return ClearReservation{Session: parts[0], At: at, Report: parts[2], StatusID: parts[3], Added: added}, err1 == nil && err2 == nil
 }
 
-// StatusAfter reports whether agent wrote a status after the stream id after:
-// exact to the sequence, so two entries in one millisecond are told apart.
-// The stream is capped (~1000), so the scan is bounded, and it fails closed:
-// once the boundary entry itself is trimmed away, what followed it may be
-// lost too, and that reads as written (reviewer-codex). "0-0" is a boundary
-// taken on an empty stream (nothing to trim); "" (no boundary recorded, not
-// written by today's reservation) scans everything, also erring on written.
-func (b *Bus) StatusAfter(ctx context.Context, agent, after string) (bool, error) {
+// StatusAfter reports whether agent wrote a status after the stream id after,
+// which was taken when the stream's entries-added counter read added: exact
+// to the sequence, so two entries in one millisecond are told apart. It
+// fails closed: the stream is capped (~1000), and when fewer entries remain
+// after the boundary than were added since, some were trimmed away and one
+// may have been the agent's, so it reads as written (reviewer-codex). ""
+// (no boundary) scans everything, also erring on written.
+func (b *Bus) StatusAfter(ctx context.Context, agent, after string, added int64) (bool, error) {
 	key := StreamKey(b.project, "status")
 	start := "-"
 	if after != "" {
 		start = "(" + after
 	}
-	if after != "" && after != "0-0" {
-		kept, err := b.r.XRangeN(ctx, key, after, after, 1).Result()
-		if err != nil {
+	var since int64 = -1 // entries added after the boundary; -1 = not checked
+	if after != "" {
+		info, err := b.r.XInfoStream(ctx, key).Result()
+		switch {
+		case err != nil && strings.Contains(err.Error(), "no such key"):
+			return false, nil // no stream: nothing written since
+		case err != nil:
 			return false, err
 		}
-		if len(kept) == 0 {
-			return true, nil // the boundary was trimmed: history after it is incomplete
-		}
+		since = info.EntriesAdded - added
 	}
+	var kept int64
 	for {
 		msgs, err := b.r.XRangeN(ctx, key, start, "+", 200).Result()
 		if err != nil {
@@ -219,8 +226,9 @@ func (b *Bus) StatusAfter(ctx context.Context, agent, after string) (bool, error
 				return true, nil
 			}
 		}
+		kept += int64(len(msgs))
 		if len(msgs) < 200 {
-			return false, nil
+			return since >= 0 && kept < since, nil // fewer kept than added: trimmed
 		}
 		start = "(" + msgs[len(msgs)-1].ID
 	}
@@ -242,7 +250,12 @@ local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local last = redis.call('XREVRANGE', KEYS[4], '+', '-', 'COUNT', 1)
 local sid = '0-0'
 if #last > 0 then sid = last[1][1] end
-redis.call('HSET', KEYS[3], 'clear:' .. ARGV[2], ARGV[5] .. '|' .. now .. '|' .. ARGV[3] .. '|' .. sid)
+local added = 0
+local okinfo, info = pcall(redis.call, 'XINFO', 'STREAM', KEYS[4])
+if okinfo then
+  for i = 1, #info, 2 do if info[i] == 'entries-added' then added = info[i + 1] end end
+end
+redis.call('HSET', KEYS[3], 'clear:' .. ARGV[2], ARGV[5] .. '|' .. now .. '|' .. ARGV[3] .. '|' .. sid .. '|' .. added)
 return now`)
 
 // FencedReserveClear reserves the clear of agent's record h while token holds

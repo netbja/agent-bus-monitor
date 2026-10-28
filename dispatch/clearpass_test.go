@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -228,7 +229,7 @@ func TestClearPassTellsASameMillisecondStatusApart(t *testing.T) {
 		t.Fatal("no reservation")
 	}
 	ms, _, _ := strings.Cut(id, "-")
-	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), bus.ClearMark("coder"), c.Session+"|"+ms+"|"+c.Report+"|"+c.StatusID)
+	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), bus.ClearMark("coder"), c.Session+"|"+ms+"|"+c.Report+"|"+c.StatusID+"|"+strconv.FormatInt(c.Added, 10))
 	if err := w.b.ProveSession(ctx, "coder", testPID, testStart, "session-0002", time.Now().UnixNano()); err != nil {
 		t.Fatal(err)
 	}
