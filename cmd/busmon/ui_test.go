@@ -142,6 +142,7 @@ type fakeReader struct {
 	marks      map[string]string
 	observed   map[string]bus.Observation
 	swaps      map[string]bool
+	handoffs   map[string]bus.Handoff
 	fallbacks  map[string]bus.FallbackRecord
 	verdicts   map[string]bus.ModelVerdict
 	asks       []bus.Ask
@@ -312,6 +313,10 @@ func (f *fakeReader) Observed(context.Context) (map[string]bus.Observation, erro
 func (f *fakeReader) Swaps(context.Context) (map[string]bool, error) {
 	f.n("Swaps")
 	return f.swaps, nil
+}
+func (f *fakeReader) Handoffs(context.Context) (map[string]bus.Handoff, error) {
+	f.n("Handoffs")
+	return f.handoffs, nil
 }
 func (f *fakeReader) Fallbacks(context.Context) (map[string]bus.FallbackRecord, error) {
 	f.n("Fallbacks")

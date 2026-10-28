@@ -140,6 +140,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	if a.swapping {
 		add("swapping", RoleDispatch, 1, 1)
 	}
+	if a.handoff {
+		add("handoff", RoleDispatch, 3, 1)
+	}
 	if a.fallback != nil {
 		add("fallback "+Preview(a.fallback.Profile), RoleDispatch, 3, 0)
 	}

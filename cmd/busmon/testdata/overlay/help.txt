@@ -105,6 +105,7 @@ STATES
   flags
   prompt               its own client asks something in its tab (a limit menu, a permission): it reads waiting; answer it in that tab.
   swapping             agentbus swap is replacing it by its role on another profile: the dispatcher leaves its pane alone.
+  handoff              it declared a hand-off (agentbus handoff) and has not moved on since: a fresh session can resume from its report.
   escalated            the dispatcher could not wake this agent and told the escalation target.
   escalating           that escalation is being published.
   gate N               N open 4-eyes challenges gate this agent: it must wait for a verdict.
