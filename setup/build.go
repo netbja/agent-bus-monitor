@@ -144,12 +144,24 @@ func OurScriptLink(link, repo string) bool {
 	return err == nil && got == filepath.Join(repo, "scripts", filepath.Base(link))
 }
 
-// sameDir: both resolve to one directory (setup.sh's cd && pwd comparison).
+// sameDir is setup.sh's same_dir: the same directory, by name (even one
+// that is gone) or, when both exist, once symlinks are resolved.
 func sameDir(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	if !isDirPath(a) || !isDirPath(b) {
+		return false
+	}
 	ra, err1 := filepath.EvalSymlinks(a)
 	rb, err2 := filepath.EvalSymlinks(b)
 	return err1 == nil && err2 == nil && ra == rb
 }
+
+func isDirPath(p string) bool { st, err := os.Stat(p); return err == nil && st.IsDir() }
 
 // showTail is setup.sh's show_log: the last 15 lines, indented by six.
 func showTail(w io.Writer, log []byte) {

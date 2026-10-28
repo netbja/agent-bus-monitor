@@ -236,3 +236,37 @@ func TestServicesHint(t *testing.T) {
 		t.Fatalf("%q", out.String())
 	}
 }
+
+// setup.sh's same_dir: equal names match even when the directory is gone;
+// otherwise both must exist and resolve to one directory.
+func TestSameDir(t *testing.T) {
+	d := t.TempDir()
+	_ = os.Symlink(d, d+".link")
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"/gone/x", "/gone/x", true}, {"", "", false}, {d, d + ".link", true}, {d, "/gone/x", false}, {"/gone/x", "/gone/y", false}} {
+		if got := sameDir(c.a, c.b); got != c.want {
+			t.Errorf("sameDir(%q, %q) = %v", c.a, c.b, got)
+		}
+	}
+}
+
+// The checkout setup linked was moved away (its directory is gone): its
+// registration is still setup's, so it is followed (reviewer-codex, step 3).
+func TestLinkPluginFollowsAMovedCheckout(t *testing.T) {
+	in, out, f, home := pluginWorld(t, "")
+	old := filepath.Join(t.TempDir(), "moved-away")
+	f.cmds["herdr plugin list --json"] = fakeCmd{out: listing(row(old, true))}
+	_ = os.MkdirAll(home+"/.local/state/agentbus", 0o755)
+	_ = os.WriteFile(home+"/.local/state/agentbus/plugin.path", []byte(old+"\n"), 0o644)
+	f.cmds["herdr plugin unlink netbja.agentbus"] = fakeCmd{}
+	f.cmds["herdr plugin link "+in.Repo] = fakeCmd{}
+	f.cmds["herdr plugin action list"] = fakeCmd{out: `{"result":{"actions":[{"action_id":"projects","plugin_id":"netbja.agentbus"}]}}`}
+	if in.LinkPlugin(context.Background()) {
+		t.Fatalf("failed: %q", out.String())
+	}
+	if !strings.HasPrefix(out.String(), "    • herdr plugin netbja.agentbus: unlinked from "+old+" (setup's previous checkout)\n    ✓ herdr plugin netbja.agentbus: linked ("+in.Repo+")\n") {
+		t.Fatalf("%q", out.String())
+	}
+}
