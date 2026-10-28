@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -74,7 +75,8 @@ func TestUpGatesAgentsOnTrust(t *testing.T) {
 		t.Fatalf("coder at %d after %d polls", coder, *polls)
 	}
 	msg := out.String()
-	if !strings.Contains(msg, "answer it in master's pane") || !strings.Contains(msg, "agentbus up demo is locked") {
+	// A10: the message names the pane, not only the tab.
+	if !regexp.MustCompile(`answer it in master's pane \([^)\s]+\)`).MatchString(msg) || !strings.Contains(msg, "agentbus up demo is locked") {
 		t.Fatalf("out = %q", msg)
 	}
 }

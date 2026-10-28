@@ -280,3 +280,96 @@ func TestParseProcessInfoProcs(t *testing.T) {
 		t.Fatal("a herdr error must not parse as an empty list")
 	}
 }
+
+// A10: a client's own pre-session dialog (Claude Code's trust check, captured
+// live in a probe pane: screens/claude-trust.txt) is reported by herdr as
+// blocked, so the observe pass reads it as a prompt like any other menu.
+func TestParseAgentGetTrustDialogIsBlocked(t *testing.T) {
+	a, err := parseAgentGet([]byte(readFixture(t, "herdr/agent-get-claude-trust.json")))
+	if err != nil || a.Agent != "claude" || a.Status != "blocked" {
+		t.Fatalf("trust dialog: %+v %v", a, err)
+	}
+	if s := readFixture(t, "screens/claude-trust.txt"); !strings.Contains(s, "Yes, I trust this folder") {
+		t.Fatal("the trust screen fixture lost its dialog")
+	}
+}
+
+// A10: a client's own pre-session dialog reads blocked even when herdr does
+// not say so (Codex's hooks review, read by master in a stuck pane), and is
+// never ready: a wake line typed into it would answer the dialog. Claude
+// Code's trust check (herdr already reports it blocked) matches too. No other
+// fixture matches.
+func TestDialogSignatures(t *testing.T) {
+	for _, c := range []struct{ client, screen string }{{"codex", "codex-hooks"}, {"claude", "claude-trust"}} {
+		if !Signatures[c.client].dialog(readFixture(t, "screens/"+c.screen+".txt")) {
+			t.Errorf("%s: %s not seen as a dialog", c.client, c.screen)
+		}
+	}
+	entries, err := os.ReadDir("testdata/screens")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		name := strings.TrimSuffix(e.Name(), ".txt")
+		if name == "codex-hooks" || name == "claude-trust" || name == "README.md" ||
+			strings.HasSuffix(name, "-then-ready") || strings.Contains(name, "-accepted") {
+			continue
+		}
+		client := strings.SplitN(name, "-", 2)[0]
+		if sig, ok := Signatures[client]; ok && sig.dialog(readFixture(t, "screens/"+e.Name())) {
+			t.Errorf("%s reads as a dialog", e.Name())
+		}
+	}
+}
+
+func TestInspectCodexHooksDialogIsBlocked(t *testing.T) {
+	h, _ := fakeHerdr(t, map[string]string{
+		"agent-get.json":    "=" + `{"result":{"agent":{"agent":"codex","agent_status":"idle","focused":false,"pane_id":"w2:pE","terminal_id":"t"},"type":"agent_info"}}`,
+		"process-info.json": "=" + `{"result":{"process_info":{"foreground_processes":[{"pid":` + strconv.Itoa(os.Getpid()) + `}]}}}`,
+		"screen.txt":        "screens/codex-hooks.txt",
+	})
+	in := h.Inspect(context.Background(), "w2:pE")
+	if in.Err != nil || in.State != "blocked" || in.Ready {
+		t.Fatalf("Inspect = %+v, want blocked and not ready", in)
+	}
+}
+
+// Review (foureyes): the dialog's words on screen are not the dialog. With
+// its text above a ready prompt (Claude Code's trust accepted, Codex's hooks
+// review accepted, or a review quoting them), the pane reads ready, never
+// blocked: the dialog counts only near the bottom and when not ready.
+func TestDialogTextAboveAReadyPromptIsNotADialog(t *testing.T) {
+	for _, c := range []struct{ client, agentGet, screen string }{
+		{"claude", "herdr/agent-get-claude.json", "claude-trust-then-ready"},
+		{"codex", "=" + `{"result":{"agent":{"agent":"codex","agent_status":"idle","focused":false,"pane_id":"w2:pE","terminal_id":"t"},"type":"agent_info"}}`, "codex-hooks-accepted"},
+	} {
+		h, _ := fakeHerdr(t, map[string]string{
+			"agent-get.json":    c.agentGet,
+			"process-info.json": "=" + `{"result":{"process_info":{"foreground_processes":[{"pid":` + strconv.Itoa(os.Getpid()) + `}]}}}`,
+			"screen.txt":        "screens/" + c.screen + ".txt",
+		})
+		in := h.Inspect(context.Background(), "w2:pE")
+		if in.Err != nil || in.State == "blocked" || !in.Ready {
+			t.Errorf("%s: Inspect = %+v, want ready and not blocked", c.screen, in)
+		}
+	}
+	// The ready guard alone: the dialog's lines right above Codex's ready input
+	// box (just accepted) are inside the window, yet the pane reads ready.
+	close := readFixture(t, "screens/codex-hooks-accepted-close.txt")
+	if !Signatures["codex"].dialog(close) {
+		t.Fatal("precondition: the close fixture's dialog lines are inside the window")
+	}
+	h, _ := fakeHerdr(t, map[string]string{
+		"agent-get.json":    "=" + `{"result":{"agent":{"agent":"codex","agent_status":"idle","focused":false,"pane_id":"w2:pE","terminal_id":"t"},"type":"agent_info"}}`,
+		"process-info.json": "=" + `{"result":{"process_info":{"foreground_processes":[{"pid":` + strconv.Itoa(os.Getpid()) + `}]}}}`,
+		"screen.txt":        "screens/codex-hooks-accepted-close.txt",
+	})
+	if in := h.Inspect(context.Background(), "w2:pE"); in.State == "blocked" || !in.Ready {
+		t.Errorf("dialog text just above a ready prompt: Inspect = %+v, want ready", in)
+	}
+	// The anchor alone: the dialog's lines far above the bottom do not count.
+	quoted := readFixture(t, "screens/codex-hooks.txt") + strings.Repeat("some later line\n", 20)
+	if Signatures["codex"].dialog(quoted) {
+		t.Error("dialog text 20 lines above the bottom read as a dialog")
+	}
+}
