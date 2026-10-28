@@ -32,6 +32,7 @@ type snapshot struct {
 	cmdHistory                        []bus.Event // the retained cmd stream (the Requests view)
 	plan                              *planSummary
 	planState                         planState // the plan itself, for its reader page
+	tok                               tokState  // the U page's facts
 	guardianHealth                    map[string]guardian.Record
 	guardianNotes                     map[string]guardian.Note
 	guardianNow                       time.Time
@@ -53,7 +54,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 		guardian: summarizeGuardian(st.guardianHealth, guardNow),
 		agents:   make(map[string]*agentState, len(st.agents)),
 		budgets:  st.budgets, holds: st.holds, pace: maps.Clone(st.pace.last), pause: st.pause, pauseFailed: st.pauseFailed,
-		asks: st.asks, personGates: st.personGates, board: st.board, requests: st.requests, threads: st.threads, cmdHistory: st.cmdHistory,
+		asks: st.asks, personGates: st.personGates, board: st.board, requests: st.requests, threads: st.threads, cmdHistory: st.cmdHistory, tok: st.tok,
 		guardianHealth: st.guardianHealth, guardianNotes: st.guardianNotes, guardianNow: guardNow,
 		svcInst: st.svcInst, svcRecs: st.svcRecs,
 	}

@@ -272,6 +272,8 @@ type agentState struct {
 	ctxFill      *bus.ContextFill    // {p}:context, nil when not published (unknown)
 	registered   bool                // listed in {p}:agents (the conductor only reports: not an @all target)
 	provider     string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
+	client       string              // its client (claude, codex, kimi…), from the launcher
+	identSession string              // the session proved with its process (the U page: counted or not)
 	held         bool                // its provider is held by the dispatcher (quota)
 	openAsk      int                 // unanswered questions of its open ask
 	askID        string              // that ask's id
@@ -322,6 +324,7 @@ type shared struct {
 	cmdHistoryOK   bool        // last bounded cmd read succeeded
 	lastPollAt     time.Time   // last fully successful snapshot tick
 	plan           planState   // the batch's plan (P), derived in pollOnce
+	tok            tokState    // the U page's tokens and account history (tokens_view.go)
 }
 
 func main() {

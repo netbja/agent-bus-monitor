@@ -201,6 +201,14 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		st.mu.Unlock()
 		planR = readPlan(pollCtx, b, cursor, pf, known)
 	}
+	var tokR tokState
+	readTok := tick%requestPoll == 1
+	if readTok { // the U page's facts, at the requests' cadence
+		st.mu.Lock()
+		prev := st.tok
+		st.mu.Unlock()
+		tokR = readTokens(pollCtx, b, projectOf(b), time.Now(), prev)
+	}
 	var guardRecords map[string]guardian.Record
 	var guardNotes map[string]guardian.Note
 	var guardNow time.Time
@@ -279,6 +287,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		st.board = boardSnap
 	}
 	st.plan.fold(planR, boardSnap, boardErr, asks, asksErr)
+	if readTok {
+		st.tok = tokR
+	}
 	if haveReqs {
 		st.requests = reqs
 	}
@@ -321,7 +332,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		if snapsErr == nil {
 			a.pane = snaps[n].Pane
 			a.pid, a.pidStart = snaps[n].PID, snaps[n].PIDStart
-			a.provider = snaps[n].Provider
+			a.provider, a.client, a.identSession = snaps[n].Provider, snaps[n].Client, snaps[n].IdentSession
 		}
 		if st.holds != nil {
 			_, a.held = held(st.holds, a.provider, time.Now())

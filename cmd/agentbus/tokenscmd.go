@@ -183,26 +183,11 @@ func readProject(ctx context.Context, d tokensDeps, project string) tokProject {
 		p.Reason = "no tokens recorded (no dispatch service counting them)"
 	default:
 		p.Known, p.Partial, p.At, p.rows = true, meta.Partial, meta.At, rows
-		p.Days = map[string]bus.TokenRow{}
-		for k, v := range rows {
-			day, _, _ := strings.Cut(k, "|")
-			s := p.Days[day]
-			s.In, s.Write, s.Read, s.Out, s.N = s.In+v.In, s.Write+v.Write, s.Read+v.Read, s.Out+v.Out, s.N+v.N
-			p.Days[day] = s
-		}
+		p.Days = tokens.ProjectDays(rows)
 	}
 	p.budgets, _ = r.Budgets(ctx)
 	p.agents, _ = r.Agents(ctx)
 	return p
-}
-
-// lastDays are the n local days ending today, oldest first.
-func lastDays(now time.Time, loc *time.Location, n int) []string {
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		out[n-1-i] = now.In(loc).AddDate(0, 0, -i).Format("2006-01-02")
-	}
-	return out
 }
 
 func tokensAll(ctx context.Context, o tokensOpts, d tokensDeps, stdout, stderr io.Writer) int {
@@ -216,7 +201,7 @@ func tokensAll(ctx context.Context, o tokensOpts, d tokensDeps, stdout, stderr i
 			return 1
 		}
 	}
-	days := lastDays(d.Now(), d.Loc, o.days)
+	days := tokens.LastDays(d.Now(), d.Loc, o.days)
 	today := days[len(days)-1]
 	var ps []tokProject
 	for _, n := range names {
@@ -306,18 +291,9 @@ func accountLine(ps []tokProject, now time.Time) string {
 	return ""
 }
 
-// tokAgent is one agent's row of a project.
-type tokAgent struct {
-	Agent    string `json:"agent"`
-	Provider string `json:"provider,omitempty"`
-	In       *int64 `json:"in"`  // nil = unknown
-	Out      *int64 `json:"out"` // nil = unknown
-	Reason   string `json:"reason,omitempty"`
-}
-
 func tokensOneProject(ctx context.Context, o tokensOpts, d tokensDeps, stdout, stderr io.Writer) int {
 	p := readProject(ctx, d, o.project)
-	days := lastDays(d.Now(), d.Loc, o.days)
+	days := tokens.LastDays(d.Now(), d.Loc, o.days)
 	today := days[len(days)-1]
 	if o.by == "day" {
 		if o.json {
@@ -334,7 +310,7 @@ func tokensOneProject(ctx context.Context, o tokensOpts, d tokensDeps, stdout, s
 		}
 		return 0
 	}
-	rows := agentRows(p, today)
+	rows := tokens.AgentRows(p.rows, p.Known, p.Reason, p.agents, today)
 	if o.json {
 		return tokJSON(stdout, map[string]any{"project": o.project, "partial": p.Partial, "observed_at": p.At, "agents": rows, "reason": p.Reason})
 	}
@@ -350,64 +326,6 @@ func tokensOneProject(ctx context.Context, o tokensOpts, d tokensDeps, stdout, s
 		fmt.Fprintln(stdout, "~ still counting since the dispatcher started")
 	}
 	return 0
-}
-
-// agentRows: every registered agent and every agent with tokens today; an
-// agent whose client gives no counted session reads ? with the reason.
-func agentRows(p tokProject, today string) []tokAgent {
-	byAgent := map[string]*tokAgent{}
-	for k, v := range p.rows {
-		parts := strings.SplitN(k, "|", 3)
-		if len(parts) != 3 || parts[0] != today {
-			continue
-		}
-		a := byAgent[parts[1]]
-		if a == nil {
-			zero, zero2 := int64(0), int64(0)
-			a = &tokAgent{Agent: parts[1], Provider: parts[2], In: &zero, Out: &zero2}
-			byAgent[parts[1]] = a
-		}
-		*a.In += v.In + v.Write
-		*a.Out += v.Out
-	}
-	for name, s := range p.agents {
-		if byAgent[name] != nil {
-			continue
-		}
-		a := &tokAgent{Agent: name, Provider: s.Provider}
-		switch {
-		case !p.Known:
-			a.Reason = p.Reason
-		case s.Client == "codex" || s.Provider == "openai":
-			a.Reason = "Codex session not proved"
-		case s.Client == "kimi" || s.Provider == "moonshot":
-			a.Reason = "Kimi logs give no token counts"
-		case s.PID == 0 || s.IdentSession == "":
-			a.Reason = "no session proved with its process"
-		default:
-			zero, zero2 := int64(0), int64(0)
-			a.In, a.Out = &zero, &zero2
-		}
-		byAgent[name] = a
-	}
-	out := make([]tokAgent, 0, len(byAgent))
-	for _, a := range byAgent {
-		out = append(out, *a)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		ai, aj := int64(-1), int64(-1)
-		if out[i].In != nil {
-			ai = *out[i].In + *out[i].Out
-		}
-		if out[j].In != nil {
-			aj = *out[j].In + *out[j].Out
-		}
-		if ai != aj {
-			return ai > aj
-		}
-		return out[i].Agent < out[j].Agent
-	})
-	return out
 }
 
 // unattributedBudget bounds the host scan (the spec's 1 GiB): beyond, partial.

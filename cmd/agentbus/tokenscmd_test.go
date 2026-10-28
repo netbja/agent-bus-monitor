@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/tokens"
 )
 
 type fakeTokens struct {
@@ -119,7 +120,7 @@ func TestTokensByAgent(t *testing.T) {
 	var js bytes.Buffer
 	runTokens([]string{"--by", "agent", "--json"}, "agent-bus-monitor", tokDeps(tokFixture()), &js, &js)
 	var got struct {
-		Agents []tokAgent `json:"agents"`
+		Agents []tokens.AgentRow `json:"agents"`
 	}
 	if err := json.Unmarshal(js.Bytes(), &got); err != nil {
 		t.Fatal(err)

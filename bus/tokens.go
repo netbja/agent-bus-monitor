@@ -171,7 +171,29 @@ func (b *Bus) FencedPutTokens(ctx context.Context, token string, rows map[string
 // Tokens reads {p}:tokens: the rows and the meta; ok false when the key is
 // absent (no pass has written it yet).
 func (b *Bus) Tokens(ctx context.Context) (rows map[string]TokenRow, meta TokensMeta, ok bool, err error) {
-	raw, err := b.r.HGetAll(ctx, TokensKey(b.project)).Result()
+	return b.TokensOf(ctx, b.project)
+}
+
+// ProjectNames are the broker's projects (Projects), for a reader that shows
+// them side by side (busmon's U page).
+func (b *Bus) ProjectNames(ctx context.Context) ([]string, error) {
+	ps, err := Projects(ctx, b.r)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(ps))
+	for i, p := range ps {
+		out[i] = p.Project
+	}
+	return out, nil
+}
+
+// TokensOf reads another project's {p}:tokens on the same broker (read-only).
+func (b *Bus) TokensOf(ctx context.Context, project string) (rows map[string]TokenRow, meta TokensMeta, ok bool, err error) {
+	if !ValidName(project) {
+		return nil, meta, false, fmt.Errorf("invalid project %q", project)
+	}
+	raw, err := b.r.HGetAll(ctx, TokensKey(project)).Result()
 	if err != nil || len(raw) == 0 {
 		return nil, meta, false, err
 	}

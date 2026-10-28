@@ -118,3 +118,13 @@ func TestTokenKeysDiscoverNoProject(t *testing.T) {
 		}
 	}
 }
+
+// TokensOf validates the project before touching the client (nil here).
+func TestTokensOfRejectsAnInvalidProject(t *testing.T) {
+	b := &Bus{project: "demo"}
+	for _, p := range []string{"*", "a:b", "", "Demo"} {
+		if _, _, _, err := b.TokensOf(context.Background(), p); err == nil {
+			t.Errorf("%q accepted", p)
+		}
+	}
+}
