@@ -1,0 +1,30 @@
+ [1magent-bus-monitor[m   [38;5;2m● bus ok[m   [38;5;2m● dispatch up[m   [38;5;2m● missions up[m   [38;5;3m♙ 4 for you[m   [38;5;3m● 2 unread[m                       [38;5;7m15:04:05 [m
+ [38;5;3mpaused · resumes in 1h52 (lunch)[m   [38;5;7mclaude 5h [m[38;5;2m▇▇▇[m[38;5;8m░░ [m[38;5;2m62%[m[38;5;7m │ 7d [m[38;5;2m▇▇▇▇[m[38;5;8m░░░░░░ [m[38;5;2m41%[m   [38;5;7mgrok 5h [m[38;5;9m▇▇▇▇▇[m[38;5;8m [m[38;5;9m100% held 15:44             [m
+[38;5;3m╭─[m[1;7;38;5;3m For you [m[38;5;3m─────────────[m [38;5;7m4 for you · 2 unread[m [38;5;3m─╮[m[38;5;8m╭─[m [38;5;6mAgents[m [38;5;8m─[m [38;5;7m10 agents · 1 working · 2 blocked · 1 dormant (a shows) ·…[m[38;5;8m─╮[m
+[38;5;3m│[m  [38;5;6m● ask    [mmaster    review lot 1? (2 ques…[38;5;7m 4m[m[38;5;3m│[m[38;5;8m│[m  [38;5;8m  agent     state     updated queue ctx       flags       message   [m[38;5;8m▲[m
+[38;5;3m│[m  [38;5;3m♙ wait   [mfoureyes  need a decision on th…[38;5;7m 6m[m[38;5;3m│[m[38;5;8m│[m[7;38;5;6m▶ [m[7;38;5;3m♙ [m[7mfoureyes  [m[7;38;5;3mwaiting   [m[7;38;5;7m6m     [m[7m [m[7;38;5;7m—    [m[7m [m[7;38;5;7m—        [m[7m [m[7;38;5;9mescalated  [m[7m need a de…[m[38;5;8m┃[m
+[38;5;3m│[m  [38;5;3m♙ wait   [msentinel  pane prompt           [38;5;7m 1m[m[38;5;3m│[m[38;5;8m│[m  [38;5;3m♙ [mmaster    [38;5;3mwaiting   [m[38;5;7m12m    [m [38;5;7m—    [m 41k 21%   [38;5;6mpilot[m[38;5;7m · ar…[m see my ask[38;5;8m┃[m
+[38;5;3m│[m  [38;5;5m◆ gate   [mcoder     by bernard  look at b1   [38;5;3m│[m[38;5;8m│[m  [38;5;3m♙ [msentinel  [38;5;3mwaiting   [m[38;5;7m30m    [m [38;5;7m—    [m [38;5;7m—        [m [38;5;3mprompt[m[38;5;7m · [m[38;5;3mm…[m health ok [38;5;8m│[m
+[38;5;3m│[m  [38;5;6m● unread [mdispatch  project paused until …[38;5;7m 8m[m[38;5;3m│[m[38;5;8m│[m  [38;5;12m✓ [marchitect [38;5;12mdone      [m[38;5;7m40m    [m [38;5;7m—    [m [38;5;7m—        [m [38;5;9mescalating[m[38;5;7m…[m spec merg…[38;5;8m│[m
+[38;5;3m│[m                     [38;5;6m╭─[m[1;7;38;5;6m Writing to an agent [m[38;5;6m──────────────────────────────────────────────[m [38;5;7m2/5[m [38;5;6m─╮[m[38;5;9mate 1[m[38;5;7m · [m[38;5;3md…[m busmon-ch…[38;5;8m▼[m
+[38;5;3m╰─────────────────────[m[38;5;6m│[m                                                                          [38;5;6m│[m[38;5;8m─────────────────────╯[m
+[38;5;8m╭─[m [1;38;5;2m 1 Activity [m[38;5;5m 2 Boar[m[38;5;6m│[m [1;38;5;6mi[m opens the line at the bottom. Type @name then your text: that agent is [38;5;6m│[m[38;5;7ments · filter: none[m [38;5;8m─╮[m
+[38;5;8m│[m  [38;5;8m  time   from      [m[38;5;6m│[m woken and reads it. @all reaches every agent;[1;38;5;6m tab[m completes a name.      [38;5;6m│[m[38;5;8m                     [m[38;5;8m│[m
+[38;5;8m│[m  [38;5;7m── Mon 2026-10-26 -[m[38;5;6m│[m                                                                          [38;5;6m│[m[38;5;7m─────────────────────[m[38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  14:24  [marchitect [38;5;6m│[m   [1;38;5;6mi[m     the line: @coder please rebase                                   [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  14:50  [m♙ Bernard [38;5;6m│[m   [1;38;5;6mI[m [1;38;5;6m^O[m  the compose window, several lines;[1;38;5;6m ^S[m sends                      [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  14:51  [mcoder     [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m○ 14:52  [mmaster    [38;5;6m│[m Text without @name is a broadcast nobody reads: busmon asks for a second [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;3m● [m[38;5;7m14:56  [mdispatch  [38;5;6m│[m [1;38;5;6menter[m before it sends one.                                               [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;3m● [m[38;5;7m15:00  [mmaster    [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  15:02  [mcoder     [38;5;6m│[m [38;5;7m○ [m[38;5;6m● [m[38;5;7m○ ○ ○ [m  [1;38;5;6menter[m[38;5;7m next · [m[1;38;5;6m←[m[38;5;7m back · [m[1;38;5;6mesc[m[38;5;7m skip                              [m [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m                     [38;5;6m╰──────────────────────────────────────────────────────────────────────────╯[m                     [38;5;8m│[m
+[38;5;8m│[m                                                                                                                      [38;5;8m│[m
+[38;5;8m│[m                                                                                                                      [38;5;8m│[m
+[38;5;8m│[m                                                                                                                      [38;5;8m│[m
+[38;5;8m│[m                                                                                                                      [38;5;8m│[m
+[38;5;8m│[m                                                                                                                      [38;5;8m│[m
+[38;5;8m│[m                                                                                                                      [38;5;8m│[m
+[38;5;8m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[m
+[38;5;6m›                                                                                                                       [m
+ [1;38;5;6menter[m[38;5;7m next[m   [1;38;5;6m←[m[38;5;7m back[m   [1;38;5;6mesc[m[38;5;7m skip                                                                                         [m

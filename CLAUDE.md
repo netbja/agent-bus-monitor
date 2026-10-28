@@ -313,7 +313,16 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `tea_dialogs.go`; bells (`tea.Raw`), the fade's `fadeMsg` schedule, the reminder and the recap's
   auto-open in `tea_signals.go`, after each poll or update. `--pick` runs `pickShell`
   (`tea_pick.go`) over `pick.go`'s rules and drawing (`pickFill`, `drawPick`, `upRunner`,
-  `dialBroker`). Goldens in `testdata/golden/` (`go test -run TestShellGoldens -update`), overlay
+  `dialBroker`). The first-launch tour (`tour.go`, spec
+  `docs/superpowers/specs/2026-10-28-busmon-onboarding-design.md`) is a modal over the shell with its
+  own key table (`ModeTour`): it opens once per session on a calm update, only when every page it will
+  show fits whole (`pageFits`; a cut page shown by F1 then `t` says so and writes no marker), never while
+  `busyForModal` nor on the update a bell rang, when the machine's marker
+  `~/.cache/agentbus/busmon/_tour.json` (no valid project name, so no project's cache collides with
+  it) is behind `tourVersion`, on the pages changed since; any way out writes the marker; F1 then `t`
+  reopens it. Its key cells are drawn from the key tables by (mode, action) (`tourKeys`), its header
+  rows by the header's own segment functions: `TestTourKeysExist` and `TestTourMentionsNoBareKey`
+  keep the prose from naming a key by hand. Goldens in `testdata/golden/` (`go test -run TestShellGoldens -update`), overlay
   body captures in `testdata/overlay/`. No literal outside the glyph set
   (`TestNoStrayNonASCIILiterals`); `TestShellAlignmentSuite` (with `TestShellAlignmentReading` and
   `TestPickShellAlignment`) draws every size × palette × hostile fixture and checks every frame's corners and borders. Each panel has its colour

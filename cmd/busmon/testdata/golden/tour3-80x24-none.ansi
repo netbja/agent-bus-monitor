@@ -1,0 +1,24 @@
+ [1magent-bus-monitor[m  ● bus ok  ● dispatch up  ● missions up  ♙ 4  ● 2   15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Bernard [human]  claude 5h 62% │ 7d 41%    
+[1m╭─[m[1;7m For you [m[1m─────────────────────────────────────────────[m 4 for you · 2 unread [1m─╮[m
+[1m│[m  ● ask    master    review lot 1? (2 questions)                            4m[1m│[m
+[1m│[m  ♙ wait   foureyes  need a decision on the width rule                      6m[1m│[m
+[1m│[m  ♙[1m╭─[m[1;7m Answering a question [m[1m─────────────────────────────────────────[m 3/5 [1m─╮[m 1m[1m│[m
+[1m│[m  ◆[1m│[m                                                                      [1m│[m   [1m│[m
+[1m│[m  ●[1m│[m An agent that needs your decision asks a question. It shows in For   [1m│[m 8m[1m│[m
+[1m╰───[m[1m│[m you with ●, and the agent reads waiting.                             [1m│[m[1m───╯[m
+╭─ A[1m│[m                                                                      [1m│[m …─╮
+│[7m▶ [m[7m♙[m[1m│[m   [1m! w F4[m  open its questions                                         [1m│[m[7mle [m▲
+│  ♙[1m│[m   [1m1-9[m     pick an answer                                             [1m│[m   ┃
+│  ♙[1m│[m   [1mo[m       Other: write your own answer in the compose window         [1m│[m   ▼
+╰───[1m│[m                                                                      [1m│[m───╯
+╭─ [1;7m [m[1m│[m Your answer wakes the agent; nothing else is needed.                 [1m│[ml…─╮
+│   [1m│[m                                                                      [1m│[m   ▲
+│   [1m│[m ○ ○ ● ○ ○   [1menter[m next · [1m←[m back · [1mesc[m skip                           [1m│[m   │
+│  ○[1m╰──────────────────────────────────────────────────────────────────────╯[m   │
+│  ● 14:56 dispatch          notify    project paused until 16:56              ┃
+│  ● 15:00 master            ask       asks · review lot 1? (2 question(s), 2 …┃
+│    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+›                                                                               
+ [1menter[m next   [1m←[m back   [1mesc[m skip                                                 

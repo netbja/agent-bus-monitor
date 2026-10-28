@@ -18,6 +18,8 @@ import (
 // keys before any table (key).
 func (m *Model) mode() Mode {
 	switch {
+	case m.ui.tour != nil:
+		return ModeTour
 	case m.ui.compose != nil:
 		return ModeCompose
 	case m.ui.line == lineFilter:
@@ -43,6 +45,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case m.ui.pausePopup != nil:
 		cmd = m.pauseKey(k)
+	case m.ui.tour != nil:
+		cmd = m.tourKey(k)
 	case m.ui.summary:
 		cmd = m.summaryKey(k)
 		if !m.ui.summary && !m.ui.sending {
@@ -441,6 +445,9 @@ func (m *Model) nextUnread() bool {
 // wheel scrolls the list under the pointer three rows (listState.ScrollBy); it
 // does not move the focus.
 func (m *Model) wheel(ms tea.Mouse) {
+	if m.ui.tour != nil {
+		return
+	}
 	delta := 3
 	switch ms.Button {
 	case tea.MouseWheelUp:
@@ -479,6 +486,10 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	switch {
 	case m.ui.pausePopup != nil: // modal: a click is the popup's
 		return m.pauseClick(ms.X, ms.Y)
+	case m.ui.tour != nil: // modal too
+		cmd := m.tourClick(ms.X, ms.Y)
+		m.refresh()
+		return cmd
 	case m.ui.reminder != nil || m.ui.summary:
 		return nil
 	case m.ui.compose != nil:

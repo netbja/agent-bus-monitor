@@ -52,6 +52,7 @@ KEYS
   Y                    copy thread
   n p ←→               the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)
   enter ! w            answer the agent's open questions
+  t                    in the help: the first-launch tour again
   esc q                close
   ^C                   quit (everywhere)
   answering questions
@@ -68,6 +69,11 @@ KEYS
   tab                  recipient · text; a text that is only @prefix becomes the recipient (completed, or its list opens)
   ^T                   after the open-question hint: answer in its question panel
   esc                  close (draft kept)
+  ^C                   quit (everywhere)
+  the first-launch tour
+  enter →              next
+  ←                    back
+  esc                  skip
   ^C                   quit (everywhere)
   the project picker (--pick)
   type                 to filter

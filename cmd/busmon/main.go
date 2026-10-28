@@ -447,6 +447,10 @@ func main() {
 	if cacheErr != nil {
 		st.configNote = joinNote(st.configNote, "local busmon cache unavailable")
 	}
+	tour, tourErr := loadTourMarker(tourMarkerPath()) // the machine's, not the project's: the panels are the same everywhere
+	if tourErr != nil {
+		st.configNote = joinNote(st.configNote, "tour marker unreadable")
+	}
 	var prior time.Time
 	if cache != nil && cache.LastVisit > 0 {
 		prior = time.UnixMilli(cache.LastVisit)
@@ -456,7 +460,7 @@ func main() {
 	// The Elm shell (busmon Charm spec): Update drives everything, View draws
 	// the model; the poll runs in its commands, the tail is fed in below.
 	shell := newShell(shellConfig{ctx: ctx, reader: b, w: b, st: st, project: project, self: self,
-		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior})
+		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up

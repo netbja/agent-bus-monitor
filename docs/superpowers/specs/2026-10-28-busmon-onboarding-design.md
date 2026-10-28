@@ -13,15 +13,19 @@ cache, never on the bus.
 ## Behaviour
 
 - **When.** On launch, when the tour marker is absent or older than the tour's version. The marker
-  is **one file for the machine**, `~/.cache/agentbus/busmon/tour.json` (`{"seen": <version>}`,
+  is **one file for the machine**, `~/.cache/agentbus/busmon/_tour.json` (`{"seen": <version>}`;
+  step 2 renamed it from `tour.json`, which a project named `tour` would read and overwrite as its own cache;
   0600, written atomically like the per-project cache), not the per-project cache: the panels are
   the same in every project, and a person opening a second project must not see the tour again.
   `--pick` and the CLI paths (`--list`, `--delete`, `--reset`) never show it.
 - **Versioned, not nagging.** The tour has a version constant. A release that changes a page's
   meaning bumps it, and the tour then opens once more on **only the changed pages** (each page
   carries the version it last changed in). A wording fix does not bump it.
-- **Keys.** `enter` or `→` next, `←` back, `esc` skips the rest; every way out writes the marker
-  (a skip counts as seen: the person chose). Mouse: a click on the footer's `next`/`back`/`skip`.
+- **Keys.** `enter` or `→` next, `←` back, `esc` skips the rest; every way out of the tour writes the marker
+  (a skip counts as seen: the person chose; `^C` quits busmon and writes none). A page cut by a short
+  window says so in a muted row, and a tour that showed a cut page writes no marker.
+- **Whole pages only.** It opens by itself only when every page it will show fits whole; otherwise it
+  waits for a size later. Mouse: a click on the footer's `next`/`back`/`skip`.
 - **Reopen.** In the help (`F1` or `?`), `t` starts the tour from its first page. The help's key
   table gains that row, so the footer and the help advertise it like any other key.
 - **Never over a decision.** The tour waits while an ask page, the compose window, a draft, the
