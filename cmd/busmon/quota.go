@@ -73,8 +73,9 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 		return nil
 	}
 	name := Preview(providerLabel(provider))
+	pr := providerRole(provider, RoleMuted) // the provider's own colour on its label, never on the fill
 	if b.Unknown {
-		l := Line{{Text: name + " ?", Role: RoleMuted}}
+		l := Line{{Text: name, Role: pr}, {Text: " ?", Role: RoleMuted}}
 		if isHeld {
 			l = append(l, Seg{Text: " held " + holdUntil.Local().Format("15:04"), Role: RoleError})
 		}
@@ -87,7 +88,7 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 			w, ok = tightestWindow(windows, now)
 		}
 		if !ok {
-			l := Line{{Text: name + " ?", Role: RoleMuted}}
+			l := Line{{Text: name, Role: pr}, {Text: " ?", Role: RoleMuted}}
 			if isHeld {
 				l = append(l, Seg{Text: " held " + holdUntil.Local().Format("15:04"), Role: RoleError})
 			}
@@ -96,13 +97,13 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 		windows = []bus.BudgetWindow{w}
 	}
 	if len(windows) == 0 {
-		l := Line{{Text: name + " ?", Role: RoleMuted}}
+		l := Line{{Text: name, Role: pr}, {Text: " ?", Role: RoleMuted}}
 		if isHeld {
 			l = append(l, Seg{Text: " held " + holdUntil.Local().Format("15:04"), Role: RoleError})
 		}
 		return l
 	}
-	l := Line{{Text: name + " ", Role: RoleMuted}}
+	l := Line{{Text: name, Role: pr}, {Text: " ", Role: RoleMuted}}
 	matchedHold := false
 	for i, w := range windows {
 		if i > 0 {

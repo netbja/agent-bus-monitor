@@ -44,7 +44,7 @@ func TestQuotaShowsBothWindowsByTierAndAttachesMarkers(t *testing.T) {
 	if got, want := medium.text(), "claude 5h 88% │ 7d 96% ?"; got != want {
 		t.Fatalf("medium %q want %q", got, want)
 	}
-	if medium[2].Role != RoleAttention || medium[5].Role != RoleMuted {
+	if medium[0].Role != RoleProvAnthropic || medium[3].Role != RoleAttention || medium[6].Role != RoleMuted { // the label in the provider's colour, then each window's
 		t.Fatalf("medium colours not attached to each window: %+v", medium)
 	}
 	wide := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide)

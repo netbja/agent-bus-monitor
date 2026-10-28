@@ -20,7 +20,49 @@ const (
 	RoleDone
 	RoleDispatch
 	RoleLine
+	// The providers' own colours (busmon-llm-colors): their names and models
+	// wherever written. providerHues is the table; providerRole picks one.
+	RoleProvAnthropic
+	RoleProvOpenAI
+	RoleProvGoogle
+	RoleProvMoonshot
+	RoleProvXAI
+	RoleProvDeepSeek
+	RoleProvXiaomi
+	roleCount
 )
+
+// providerHues: each provider's colour on dark and on light backgrounds, and
+// on 16 colours a hand-picked ANSI name (both reviews of busmon-llm-colors:
+// the nearest colour collided). No two providers share a 16-colour value,
+// none is an alert role's colour (attention olive, error red, maroon) or the
+// text roles' gray, silver or teal, and openai keeps the terminal's own
+// foreground ("-"), readable whatever the background. The no-colour palette
+// takes none.
+var providerHues = []struct {
+	provider          string
+	role              Role
+	dark, light, ansi string
+}{
+	{"anthropic", RoleProvAnthropic, "#CC785C", "#CC785C", "yellow"},
+	{"openai", RoleProvOpenAI, "#E5E7EB", "#202123", "-"},
+	{"google", RoleProvGoogle, "#34A853", "#34A853", "green"},
+	{"moonshot", RoleProvMoonshot, "#1677FF", "#1677FF", "blue"},
+	{"xai", RoleProvXAI, "#7B6FD6", "#7B6FD6", "fuchsia"},
+	{"deepseek", RoleProvDeepSeek, "#4D6BFE", "#4D6BFE", "aqua"},
+	{"xiaomi", RoleProvXiaomi, "#FF6900", "#FF6900", "lime"},
+}
+
+// providerRole is the provider's role, or fallback for one the table lacks
+// (today's colour).
+func providerRole(provider string, fallback Role) Role {
+	for _, h := range providerHues {
+		if h.provider == provider {
+			return h.role
+		}
+	}
+	return fallback
+}
 
 type Palette int
 
@@ -34,8 +76,8 @@ const (
 // Theme is immutable after resolution.
 type Theme struct {
 	palette   Palette
-	colors    [10]tcell.Color
-	tags      [10]string
+	colors    [roleCount]tcell.Color
+	tags      [roleCount]string
 	selection tcell.Color
 }
 
@@ -59,15 +101,24 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 		}
 	}
 	t := &Theme{palette: PaletteDark, selection: tcell.GetColor("#22324A")}
-	t.tags = [10]string{"#E6EDF3", "#7D8A99", "#4A5563", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48"}
+	copy(t.tags[:], []string{"#E6EDF3", "#7D8A99", "#4A5563", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48"})
+	for _, h := range providerHues {
+		t.tags[h.role] = h.dark
+	}
 	if name == "light" {
 		t.palette = PaletteLight
 		t.selection = tcell.GetColor("#DDF4FF")
-		t.tags = [10]string{"#1F2328", "#5A6572", "#B0B8C1", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE"}
+		copy(t.tags[:], []string{"#1F2328", "#5A6572", "#B0B8C1", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE"})
+		for _, h := range providerHues {
+			t.tags[h.role] = h.light
+		}
 	}
 	if colors < 1<<24 {
 		t.palette = Palette16
-		t.tags = [10]string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray"}
+		copy(t.tags[:], []string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray"})
+		for _, h := range providerHues {
+			t.tags[h.role] = h.ansi
+		}
 	}
 	if noColor {
 		t.palette = PaletteNone
@@ -86,7 +137,7 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 func (t *Theme) Palette() Palette { return t.palette }
 
 func themeRole(r Role) Role {
-	if r < RoleText || r > RoleLine {
+	if r < RoleText || r >= roleCount {
 		return RoleText
 	}
 	return r

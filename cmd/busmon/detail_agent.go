@@ -138,10 +138,10 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		case modelDrift(a):
 			rowWrap("Model", RoleAttention, Preview(v.Why))
 		case v.Launched != "":
-			row("Model", text(Preview(v.Launched)+" "+GlyphNone+" as roles.toml configures"))
+			row("Model", S(providerRole(a.provider, RoleText), Preview(v.Launched)), S(RoleText, " "+GlyphNone+" as roles.toml configures"))
 		}
 		if v.Used != "" {
-			row("Used", text(Preview(v.Used)+" (its transcript)"))
+			row("Used", S(providerRole(a.provider, RoleText), Preview(v.Used)), S(RoleText, " (its transcript)"))
 		}
 	}
 	if a.pane == "" && a.pid == 0 {
