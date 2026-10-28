@@ -66,11 +66,13 @@ func (in *Installer) BuildAndInstall(ctx context.Context, name, pkg string) erro
 		in.O.Fatal(fmt.Sprintf("Failed to build %s from %s", name, pkg))
 		return fmt.Errorf("build %s: %w", name, err)
 	}
-	if err := InstallFile(built, filepath.Join(in.Repo, name)); err != nil {
-		return err
-	}
+	dests := []string{filepath.Join(in.Repo, name)}
 	if !sameDir(in.Opt.BinDir, in.Repo) {
-		if err := InstallFile(built, target); err != nil {
+		dests = append(dests, target)
+	}
+	for _, d := range dests {
+		if err := InstallFile(built, d); err != nil {
+			in.O.Fatal(fmt.Sprintf("could not install %s to %s: %v", name, d, err))
 			return err
 		}
 	}

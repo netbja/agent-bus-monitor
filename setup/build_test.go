@@ -133,3 +133,20 @@ func TestRoleScriptLinks(t *testing.T) {
 		t.Fatalf("%q", out2.String())
 	}
 }
+
+// A failed install of a built binary says where and why (reviewer-codex's
+// review of installer-2), as setup.sh's cp or mv would before set -e stops it.
+func TestInstallFailureNamesTheDestination(t *testing.T) {
+	in, _, errw, _, bin := buildWorld(t, "v9.9.9", nil)
+	in.Rev = "v9.9.9"
+	if err := os.Chmod(bin, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(bin, 0o755)
+	if err := in.BuildAndInstall(context.Background(), "agentbus", "./cmd/agentbus"); err == nil {
+		t.Fatal("an unwritable bin dir installed")
+	}
+	if !strings.Contains(errw.String(), "error: could not install agentbus to "+bin+"/agentbus: ") {
+		t.Fatalf("stderr %q", errw.String())
+	}
+}
