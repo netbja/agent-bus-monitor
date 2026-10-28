@@ -12,12 +12,17 @@
     {"id":"a-identity","title":"A8: no write as default hermes in a herdr pane; desktop notice on identity mismatch","owner":"coder","review":"busmon-a-identity","after":["a-nav"]},
     {"id":"a-health","title":"A9: health ignores dead consumer groups; agents forget destroys the group","owner":"coder","review":"busmon-a-health","after":["a-identity"]},
     {"id":"a-pending-pane","title":"A10: proposal: show a new pane waiting on the person (trust/hooks dialog)","owner":"coder","review":"busmon-a-pending-pane","after":["a-health"]},
-    {"id":"requests-view","title":"C: Requests view by thread, readable columns (mock-up first)","owner":"coder","review":"requests-view","after":["a-pending-pane"]},
+    {"id":"gate-subject-close","title":"A verdict with --ref closes only its gate and older ones of the subject","owner":"coder","review":"gate-subject-close","after":["foryou-gates"]},
+    {"id":"a-expand","title":"A12: Activity in-place expansion: ▶ turns ▼ when expanded, body indented under the message with a guide bar","owner":"coder","review":"busmon-a-expand","after":["a-pending-pane"]},
+    {"id":"lifecycle-spec","title":"Spec: auto /clear at 80% by the dispatcher; client reload run by sentinel (agentbus reload), master reloads sentinel","owner":"coder","review":"lifecycle-spec","after":["a-pending-pane"]},
+    {"id":"lifecycle","title":"Agent lifecycle: auto /clear and reload","owner":"coder","review":"lifecycle","after":["lifecycle-spec"]},
+    {"id":"requests-view","title":"C: Requests view by thread, readable columns (mock-up first)","owner":"coder","review":"requests-view","after":["lifecycle"]},
     {"id":"tokens-spec","title":"D: spec, tokens and quotas dashboard (panel U, agentbus tokens), animations","owner":"coder","review":"tokens-spec","after":["requests-view"]},
     {"id":"tokens","title":"D: tokens and quotas dashboard","owner":"coder","review":"tokens","after":["tokens-spec"]},
     {"id":"onboarding","title":"E: busmon first-run onboarding","owner":"coder","review":"onboarding","after":["tokens"]},
     {"id":"installer-spec","title":"F: spec, installer in Go (agentbus setup)","owner":"coder","review":"installer-spec","after":["onboarding"]},
     {"id":"installer","title":"F: installer in Go","owner":"coder","review":"installer","after":["installer-spec"]},
-    {"id":"release","title":"Tag v0.23.0, release notes, install","owner":"person","after":["a-look","a-board","a-nav","a-identity","a-health","requests-view","tokens","onboarding","installer","a-plan-tab"]}
+    {"id":"docs-refresh","title":"README and operational guides (EN + FR) brought up to date since the herdr plugin","owner":"docs","review":"docs-refresh","after":["installer"]},
+    {"id":"release","title":"Tag v0.23.0, release notes, install","owner":"person","after":["a-look","a-board","a-nav","a-identity","a-health","requests-view","tokens","onboarding","installer","a-plan-tab","gate-subject-close","lifecycle","docs-refresh","a-expand"]}
   ]
 }
