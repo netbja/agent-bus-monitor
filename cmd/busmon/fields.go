@@ -35,13 +35,13 @@ func fieldLabel(s string) string {
 	return string(unicode.ToUpper(r)) + s[n:] + ":"
 }
 
-// fields writes the block at the reader's width, each row ending its line;
-// an empty block writes nothing.
-func (b *body) fields(f *fields) *body {
+// fields writes the block at width (the page's own; mdWidth for reader
+// pages), each row ending its line; an empty block writes nothing.
+func (b *body) fields(f *fields, width int) *body {
 	if len(f.rows) == 0 {
 		return b
 	}
-	return b.join(f.lines(mdWidth)).text("\n")
+	return b.join(f.lines(width)).text("\n")
 }
 
 // lines are the block's rows at width: a value that fits keeps its segments

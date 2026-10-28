@@ -236,7 +236,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row(k, text(Preview(t)), S(RoleText, " "), S(boardStateRole(e.State), Preview(e.State)), text(" "+GlyphNone+" "+Preview(branch)))
 	}
 
-	b.fields(&f)
+	b.fields(&f, mdWidth)
 	b.text("\n").seg(RoleAccent, "Recent activity").seg(RoleMuted, " (in the retained window)").text("\n")
 	var mine []feedLine
 	for _, fl := range recent {
@@ -290,7 +290,7 @@ func taskDetail(e bus.BoardEntry, task string, now time.Time) (title string, lin
 	if e.Request != nil {
 		row("Request", S(RoleMuted, "tracked - open it from Requests (F2) for delivery and acceptance"))
 	}
-	b.fields(&f)
+	b.fields(&f, mdWidth)
 	return "Task " + GlyphNone + " " + Preview(task), b.Lines(), strings.Join([]string{task, e.Owner, e.State, branch}, " ")
 }
 

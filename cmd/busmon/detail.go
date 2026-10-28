@@ -216,7 +216,7 @@ func detailText(e bus.Event, at, now time.Time, th threadState) []Line {
 	row("when", S(RoleText, at.Format("2006-01-02 15:04:05")+"  "), S(RoleMuted, "("+humanAge(now.Sub(at))+" ago)"))
 	row("id", S(RoleText, Preview(e.ID)))
 	row("thread", detailThread(e, th)...)
-	b.fields(&rows)
+	b.fields(&rows, mdWidth)
 
 	if threadID(e) != "" {
 		b.text("\n").join(threadSection(e, th, now))

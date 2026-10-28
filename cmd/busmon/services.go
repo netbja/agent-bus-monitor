@@ -84,7 +84,7 @@ func serviceLogBody(r bus.ServiceRecord, kind, host string, width int) []Line {
 	var b body
 	var f fields
 	f.add("log", S(RoleText, Preview(r.Log)))
-	b.fields(&f)
+	b.fields(&f, width)
 	if r.Host != host || r.Log == "" {
 		b.seg(RoleMuted, "the log is on "+Preview(r.Host)+": agentbus --project <p> service logs "+kind+" there").text("\n")
 		return b.Lines()
