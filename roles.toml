@@ -132,8 +132,10 @@ skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 profile = "claude-haiku"
 tier = "boot"
 skills = ["agent-bus", "agent-bus-sentinel"]
-# Lifecycle part C: sentinel reloads agents on a client-update episode (the
-# command enforces who and when; this only spares the prompt).
+# Lifecycle part C: sentinel reloads agents on a client-update episode. The
+# command checks who and when from AGENT_BUS_AGENT and the bus facts, but it
+# cannot prove who runs it: an agent passing --as <person> skips the table.
+# This allow only spares the prompt.
 [roles.sentinel.tool_rules]
 allow = ["Bash(agentbus reload *)"]
 

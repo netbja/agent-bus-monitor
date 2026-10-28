@@ -417,3 +417,35 @@ func TestReloadMasterReloadsSentinel(t *testing.T) {
 		t.Fatalf("calls %q", got)
 	}
 }
+
+// Between the preflight and the stop, the process the reload checked may be
+// replaced, recycled, or start a turn: nothing is signalled, and the stop
+// (or readiness) step is a failed entry (foureyes' review of 3b).
+func TestReloadSignalsOnlyTheCheckedIdleProcess(t *testing.T) {
+	for name, c := range map[string]struct {
+		change func(w *reloadWorld)
+		step   string
+	}{
+		"the snapshot names a new process": {func(w *reloadWorld) {
+			w.procs[4343] = 8
+			if err := w.b.Bind(context.Background(), "coder", bus.AgentIdent{Pane: "p-old", PID: 4343, PIDStart: 8, Client: "claude-code", Provider: "anthropic"}); err != nil {
+				w.t.Fatal(err)
+			}
+		}, "stop"},
+		"the pid was recycled": {func(w *reloadWorld) { w.procs[4242] = 99 }, "stop"},
+		"it declared working":  {func(w *reloadWorld) { w.status("coder", "working") }, "not idle"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, d := newReloadWorld(t)
+			d.AfterIntent = func() { c.change(w) }
+			code, out := w.run(d, "sentinel", "coder")
+			if code == 0 || w.callList() != "" {
+				t.Fatalf("exit %d, calls %q, out %q", code, w.callList(), out)
+			}
+			log := w.ledger("coder")
+			if len(log) != 2 || log[0].Event != bus.SwapFailed || !strings.HasPrefix(log[0].Error, c.step) {
+				t.Fatalf("ledger %+v", log)
+			}
+		})
+	}
+}
