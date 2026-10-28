@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func TestGateMetaRoundTrip(t *testing.T) {
@@ -228,5 +231,58 @@ func TestAllGates(t *testing.T) {
 	}
 	if len(all) != 2 || all["foureyes"]["a"] != "master|x" || all["ui-kimi"]["b"] != "coder|y" {
 		t.Fatalf("AllGates = %v", all)
+	}
+}
+
+// Only gates opened within the horizon hold an auto-clear (lifecycle part B,
+// rule 4): the open time is the gate's latest challenge entry in :cmd; a gate
+// whose challenge left the capped stream is older than everything retained,
+// so it is stale only when the oldest retained entry is past the horizon.
+func TestReviewsOfSinceRedis(t *testing.T) {
+	ctx := context.Background()
+	old := time.Now().Add(-48 * time.Hour).UnixMilli()
+	for name, c := range map[string]struct {
+		challenges []string // refs whose challenge entry is retained, opened 48 h ago
+		recent     []string // refs whose challenge is recent
+		gates      []string // refs gating coder
+		want       int
+	}{
+		"a recent gate holds":                       {recent: []string{"r1"}, gates: []string{"r1"}, want: 1},
+		"a gate opened two days ago does not":       {challenges: []string{"o1"}, gates: []string{"o1"}, want: 0},
+		"a trimmed gate behind an old stream":       {challenges: []string{"x"}, gates: []string{"gone"}, want: 0},
+		"a trimmed gate, the stream all recent":     {recent: []string{"x"}, gates: []string{"gone"}, want: 1},
+		"a re-opened gate is dated by its last one": {challenges: []string{"re"}, recent: []string{"re"}, gates: []string{"re"}, want: 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			b := dialTest(t)
+			key := StreamKey(b.project, "cmd")
+			seq := 0
+			add := func(ms int64, ref string) {
+				seq++
+				if err := b.r.XAdd(ctx, &redis.XAddArgs{Stream: key, ID: fmt.Sprintf("%d-%d", ms, seq),
+					Values: map[string]any{"from": "foureyes", "target": "coder", "type": CmdChallenge, "ref": ref, "command": "review"}}).Err(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, r := range c.challenges {
+				add(old, r)
+			}
+			for _, r := range c.recent {
+				add(time.Now().UnixMilli(), r)
+			}
+			for _, r := range c.gates {
+				if err := b.OpenChallenge(ctx, "coder", r, "foureyes|review"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := b.ReviewsOfSince(ctx, "coder", DefaultHorizon)
+			if err != nil || len(got) != c.want {
+				t.Fatalf("ReviewsOfSince = %v %v, want %d", got, err, c.want)
+			}
+			all, _ := b.ReviewsOf(ctx, "coder")
+			if len(all) != len(c.gates) {
+				t.Fatalf("ReviewsOf changed: %v", all)
+			}
+		})
 	}
 }

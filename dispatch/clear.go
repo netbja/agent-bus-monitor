@@ -192,7 +192,7 @@ func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus
 	for _, k := range asks {
 		f.OpenAsk = f.OpenAsk || k.From == a && k.Open() > 0
 	}
-	if f.Gates, err = l.b.ReviewsOf(ctx, a); err != nil {
+	if f.Gates, err = l.b.ReviewsOfSince(ctx, a, bus.DefaultHorizon); err != nil { // only gates younger than 24 h (rule 4)
 		return err
 	}
 	_, f.Armed = armed[a]

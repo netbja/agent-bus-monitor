@@ -66,7 +66,8 @@ reloading sentinel (lifecycle part C); reload types nothing.
 - A turn that starts between the last inspection and `/clear` and writes nothing on the bus is the
   residual: Claude Code queues `/clear` after it, and that turn's work survives only in Git and
   files.
-- Every open gate counts, not only those younger than 24 h as the spec proposed: a gate's open time
-  is not stored. The wait notice names the gates so stale ones can be closed.
+- Only gates opened within 24 h hold a hand-off (`ReviewsOfSince`): a gate's open time is its latest
+  challenge entry in `:cmd`. A gate whose challenge left the capped stream is dropped only when the
+  oldest retained entry is itself past 24 h; otherwise its age is unknown and it still holds.
 - Another client with known `/clear` semantics would need its own entry in `clearClients` and its
   own live check.

@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -270,5 +271,24 @@ func TestClearPassReinspectsRightBeforeTyping(t *testing.T) {
 				t.Fatalf("next pass: clears %d", w.clears())
 			}
 		})
+	}
+}
+
+// A gate opened over 24 h ago does not hold the hand-off (rule 4): stale
+// gates pile up and would hold it forever.
+func TestClearPassIgnoresAStaleGate(t *testing.T) {
+	w := newClearWorld(t, true)
+	ctx := context.Background()
+	old := time.Now().Add(-48 * time.Hour).UnixMilli()
+	if err := w.r.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(w.b.Project(), "cmd"), ID: fmt.Sprintf("%d-1", old),
+		Values: map[string]any{"from": "foureyes", "target": "coder", "type": bus.CmdChallenge, "ref": "ref-old", "command": "review"}}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.b.OpenChallenge(ctx, "coder", "ref-old", "foureyes|review"); err != nil {
+		t.Fatal(err)
+	}
+	w.pass()
+	if w.clears() != 1 || len(w.cmds()) != 0 {
+		t.Fatalf("a two-day-old gate held it: clears %d, cmds %q", w.clears(), w.cmds())
 	}
 }

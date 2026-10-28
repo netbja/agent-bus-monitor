@@ -147,8 +147,10 @@ types `/clear` into its pane **only when all of these hold**, in this order (che
   Either sends the rebuild directive.
 - **An aborted re-inspection** (the pane changed between the two reads) releases the mark: nothing
   was typed, so the next pass judges again.
-- **Gates:** every open gate on either side counts (a gate's open time is not stored); the wait
-  notice names them.
+- **Gates:** only those opened within 24 h count (`Bus.ReviewsOfSince`): the open time is the
+  gate's latest challenge entry in `:cmd` (a re-opened gate is dated by its last challenge); a gate
+  whose challenge left the capped stream is dropped only when the oldest retained entry is past
+  24 h, else kept, its age unknown. The wait notice names the gates that hold.
 - The void-record sweep skips a record whose clear is in flight, since its new session would read
   there as "another session" before the proof.
 

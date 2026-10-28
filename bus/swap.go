@@ -123,6 +123,68 @@ func (b *Bus) ReviewsOf(ctx context.Context, agent string) ([]string, error) {
 	return out, iter.Err()
 }
 
+// ReviewsOfSince is ReviewsOf without the gates opened before horizon
+// (lifecycle part B, rule 4: stale gates pile up and would hold a hand-off
+// forever). A gate's open time is its latest challenge entry in :cmd; a gate
+// whose challenge left the capped stream is older than everything retained,
+// so it is dropped only when the oldest retained entry is itself past the
+// horizon, and otherwise kept (its age is unknown).
+func (b *Bus) ReviewsOfSince(ctx context.Context, agent string, horizon time.Duration) ([]string, error) {
+	now, err := b.ServerNowMS(ctx)
+	if err != nil {
+		return nil, err
+	}
+	floor := now - horizon.Milliseconds()
+	key := StreamKey(b.project, "cmd")
+	msgs, err := b.r.XRange(ctx, key, "-", "+").Result()
+	if err != nil {
+		return nil, err
+	}
+	opened := map[string]int64{}
+	oldest := int64(-1)
+	for i, m := range msgs {
+		ms, _ := splitID(m.ID)
+		if i == 0 {
+			oldest = ms
+		}
+		e := ParseEntry(key, m.ID, toStringMap(m.Values))
+		if e.Type == CmdChallenge && e.Ref != "" {
+			opened[e.Ref] = ms // the latest wins: a re-opened gate is dated by its last challenge
+		}
+	}
+	var out []string
+	prefix := b.project + ":gate:"
+	iter := b.r.Scan(ctx, 0, prefix+"*", 100).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+		gated := strings.TrimPrefix(key, prefix)
+		if !ValidName(gated) {
+			continue
+		}
+		h, err := b.r.HGetAll(ctx, key).Result()
+		if err != nil {
+			return nil, err
+		}
+		for ref, meta := range h {
+			at, retained := opened[ref]
+			switch {
+			case retained && at < floor:
+				continue
+			case !retained && oldest >= 0 && oldest < floor:
+				continue // its challenge is older than the oldest retained entry
+			}
+			challenger, _, _ := strings.Cut(meta, "|")
+			switch {
+			case gated == agent:
+				out = append(out, fmt.Sprintf("challenge %s gates %s (opened by %s)", ref, agent, challenger))
+			case challenger == agent:
+				out = append(out, fmt.Sprintf("challenge %s opened by %s on %s", ref, agent, gated))
+			}
+		}
+	}
+	return out, iter.Err()
+}
+
 // cmdOnce: 0 the mark already holds ARGV[2]; 1 XADDed and marked. No lease:
 // `agentbus swap` shares the dispatcher's resume mark (§3.3) so a release in
 // the same instant sends one resume, not two.
