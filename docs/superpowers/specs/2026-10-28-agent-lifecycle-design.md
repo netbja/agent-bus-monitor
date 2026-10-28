@@ -93,6 +93,10 @@ types `/clear` into its pane **only when all of these hold**, in this order (che
    foreground processes), is **unfocused**, and its client's signature reads **ready** and not
    busy, by two identical reads (`Inspect`, as for a wake).
 
+`IdentSession` alone never triggers or authorises a clear: it rests on a chain the hook supplies
+(Part D, a documented residual), so the clear always needs the verified pid/pane identity of rule
+6 and a non-void hand-off record declared by that same pid and start.
+
 ### Writing it: reserve, type, prove
 
 - **Reserve, fenced.** One script checks the lease, that the hand-off record is unchanged, and

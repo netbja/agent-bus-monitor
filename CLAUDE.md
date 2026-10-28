@@ -507,7 +507,9 @@ It never touches Redis — see README "Deployment topology".
   hands the new session to a detached `roles prove-session` with its ancestor chain read before it
   detaches (`dispatch.Ancestors`; lifecycle spec part D): `Bus.ProveSession` moves `IdentSession`
   only when the stored verified pid and start are in that chain, so the session follows `/clear`
-  (Linux only, like every verified identity: `/proc`; on macOS no agent is verified, so nothing is proved). The hook
+  (Linux only, like every verified identity: `/proc`; on macOS no agent is verified, so nothing is proved).
+  The sender re-reads the stored identity and that its pid is alive with that start, but trusts the chain:
+  a documented residual, since the bus is no boundary against the local user (as with `status`). The hook
   never prints on stdout and always exits 0 (spec
   `docs/superpowers/specs/2026-10-21-launcher-resume-design.md`). Units always run `buildinfo.Bin` (setup's
   `$BIN_DIR/agentbus`) when it exists. `agentbus projects` and `agentbus identity` sit above the
