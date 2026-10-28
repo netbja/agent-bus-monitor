@@ -261,7 +261,12 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 	if err != nil { // unknown is not idle: fail closed, as the preflight does
 		return failed("not idle", "cannot read its observed pane (%v); nothing was signalled", err)
 	}
-	if o, ok := obsNow[role]; ok && o.Busy && o.Fresh(d.Now().UnixMilli()) {
+	oNow, okNow := obsNow[role]
+	freshNow := okNow && oNow.Fresh(d.Now().UnixMilli())
+	if seen && !freshNow { // observed at the check, not now: whether a turn runs is unknown
+		return failed("not idle", "its pane is no longer observed (the reading aged out); nothing was signalled")
+	}
+	if freshNow && oNow.Busy {
 		return failed("not idle", "its pane started a turn since the check; nothing was signalled")
 	}
 	if start, err := d.ProcStart(snap.PID); err != nil || start != snap.PIDStart {
