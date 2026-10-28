@@ -304,4 +304,23 @@ func TestStatusAfterIsSequenceExactRedis(t *testing.T) {
 			t.Errorf("StatusAfter(%s, %s) = %v %v, want %v", c.agent, c.after, got, err, c.want)
 		}
 	}
+	// The boundary trimmed away (reviewer-codex): what followed it may be
+	// lost, so it fails closed and reads as written, for any agent.
+	if err := b.r.XTrimMinID(ctx, key, "1000-2").Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, agent := range []string{"coder", "foureyes"} {
+		if got, err := b.StatusAfter(ctx, agent, "1000-0"); err != nil || !got {
+			t.Errorf("trimmed boundary, %s: %v %v, want written", agent, got, err)
+		}
+	}
+	if err := b.r.XTrimMaxLen(ctx, key, 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := b.StatusAfter(ctx, "foureyes", "1000-2"); err != nil || !got {
+		t.Errorf("stream emptied past the boundary: %v %v, want written", got, err)
+	}
+	if got, err := b.StatusAfter(ctx, "foureyes", "0-0"); err != nil || got {
+		t.Errorf("empty at the reservation and still empty: %v %v, want nothing", got, err)
+	}
 }

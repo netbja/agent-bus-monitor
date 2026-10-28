@@ -292,3 +292,33 @@ func TestClearPassIgnoresAStaleGate(t *testing.T) {
 		t.Fatalf("a two-day-old gate held it: clears %d, cmds %q", w.clears(), w.cmds())
 	}
 }
+
+// A post-reservation status trimmed away by the capped stream before the
+// proof (reviewer-codex): the reservation's boundary is gone, history after
+// it is incomplete, and the proof fails closed: rebuild, never resume.
+func TestClearPassFailsClosedWhenTheStatusHistoryWasTrimmed(t *testing.T) {
+	w := newClearWorld(t, true)
+	ctx := context.Background()
+	w.pass()
+	who := bus.AgentIdent{Pane: coderPane, PID: testPID, PIDStart: testStart, Session: "session-0001", Client: "claude-code", Provider: "anthropic"}
+	if _, err := w.b.Status(ctx, "coder", "idle", "a queued turn ran", who); err != nil {
+		t.Fatal(err)
+	}
+	// Other agents' statuses push both the boundary and that status out of the stream.
+	key := bus.StreamKey(w.b.Project(), "status")
+	last, err := w.b.Status(ctx, "foureyes", "idle", "", bus.AgentIdent{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.r.XTrimMinID(ctx, key, last).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.b.ProveSession(ctx, "coder", testPID, testStart, "session-0002", time.Now().UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	w.pass()
+	got := w.cmds()
+	if len(got) != 2 || !strings.HasPrefix(got[0], "coder||your context was cleared after a turn") {
+		t.Fatalf("cmds %q", got)
+	}
+}

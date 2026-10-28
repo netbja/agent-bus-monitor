@@ -187,16 +187,30 @@ func ParseClearMark(v string) (ClearReservation, bool) {
 	return ClearReservation{Session: parts[0], At: at, Report: parts[2], StatusID: parts[3]}, err == nil
 }
 
-// StatusAfter reports whether agent wrote a status after the stream id after
-// ("" = any): exact to the sequence, so two entries in one millisecond are
-// told apart. The stream is capped (~1000), so the scan is bounded.
+// StatusAfter reports whether agent wrote a status after the stream id after:
+// exact to the sequence, so two entries in one millisecond are told apart.
+// The stream is capped (~1000), so the scan is bounded, and it fails closed:
+// once the boundary entry itself is trimmed away, what followed it may be
+// lost too, and that reads as written (reviewer-codex). "0-0" is a boundary
+// taken on an empty stream (nothing to trim); "" (no boundary recorded, not
+// written by today's reservation) scans everything, also erring on written.
 func (b *Bus) StatusAfter(ctx context.Context, agent, after string) (bool, error) {
+	key := StreamKey(b.project, "status")
 	start := "-"
 	if after != "" {
 		start = "(" + after
 	}
+	if after != "" && after != "0-0" {
+		kept, err := b.r.XRangeN(ctx, key, after, after, 1).Result()
+		if err != nil {
+			return false, err
+		}
+		if len(kept) == 0 {
+			return true, nil // the boundary was trimmed: history after it is incomplete
+		}
+	}
 	for {
-		msgs, err := b.r.XRangeN(ctx, StreamKey(b.project, "status"), start, "+", 200).Result()
+		msgs, err := b.r.XRangeN(ctx, key, start, "+", 200).Result()
 		if err != nil {
 			return false, err
 		}

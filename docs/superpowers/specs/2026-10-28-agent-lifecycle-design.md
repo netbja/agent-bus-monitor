@@ -145,6 +145,9 @@ types `/clear` into its pane **only when all of these hold**, in this order (che
   reservation is caught by the proof, against the status stream's last id recorded in the
   reservation's script (exact to the sequence: a status in the same millisecond still counts).
   Either sends the rebuild directive.
+- **A trimmed history fails closed:** the status stream is capped (~1000). If the reservation's
+  boundary entry is gone by the proof, what followed it may be gone too, so it reads as a turn
+  that ran: the rebuild directive, never the resume (`StatusAfter`).
 - **An aborted re-inspection** (the pane changed between the two reads) releases the mark: nothing
   was typed, so the next pass judges again.
 - **Gates:** only those opened within 24 h count (`Bus.ReviewsOfSince`): the open time is the

@@ -63,6 +63,8 @@ reloading sentinel (lifecycle part C); reload types nothing.
 
 ## Limits / what would invalidate it
 
+- When the capped status stream has trimmed the reservation's boundary by the proof, the history
+  after it is incomplete and the proof fails closed (rebuild, never resume).
 - A turn that starts between the last inspection and `/clear` and writes nothing on the bus is the
   residual: Claude Code queues `/clear` after it, and that turn's work survives only in Git and
   files.
