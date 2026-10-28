@@ -195,13 +195,13 @@ func (m *Model) gotThread(msg threadMsg) {
 }
 
 func (m *Model) servicesCmd() tea.Cmd {
-	inst, recs, r, ctx, project := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx, m.cfg.project
+	inst, recs, r, ctx, project, docker := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx, m.cfg.project, m.cfg.docker
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return func() tea.Msg {
 		host, _ := os.Hostname()
-		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, realSvcRunner)}
+		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker)}
 	}
 }
 
@@ -562,9 +562,14 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			if act == ActUp || (row && k.Code == keyLeft) {
 				step = -1
 			}
-			p.sel = clamp(p.sel+step, 0, len(svcCardKinds)-1)
+			p.sel = clamp(p.sel+step, 0, len(svcCardKinds)) // the last card is Redis's
 			p.dirty = true
 			m.refresh()
+			return nil
+		case (act == ActServiceLog || k.Code == keyEnter) && p.sel == len(svcCardKinds):
+			if k.Code == keyEnter { // Redis has no service log: Enter opens its page
+				return m.redisPageCmd()
+			}
 			return nil
 		case act == ActServiceLog || k.Code == keyEnter:
 			return m.serviceLogCmd(svcCardKinds[p.sel])

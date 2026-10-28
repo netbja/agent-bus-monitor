@@ -44,6 +44,7 @@ const (
 	ovPlanTask   // one task of the plan; Esc returns to the plan
 	ovNotices    // a Requests notice group: its notices, one line each
 	ovServiceLog // a service's log tail, opened from its F3 card
+	ovRedis      // the Redis card's page (busmon-redis-detail), opened from F3
 	ovTokens     // tokens (U): account windows, projects side by side, the open project by agent
 )
 

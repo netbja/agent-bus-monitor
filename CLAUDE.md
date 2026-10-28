@@ -559,7 +559,10 @@ It never touches Redis — see README "Example deployment".
   agent-bus-redis` only when docker is on PATH, else the process from INFO; version, uptime, memory,
   `DBSIZE` keys via `Bus.RedisInfo`), all gathered in the command that opens the page
   (`gatherServices`), unknown read `?`; ↑↓ choose a service card, Enter or `l` opens its log tail
-  (`ovServiceLog`, `serviceLogBody`); `busmon --delete` removes the local
+  (`ovServiceLog`, `serviceLogBody`); the Redis card is selectable too, and Enter opens its read-only page
+  (`redis_page.go`, `ovRedis`, busmon-redis-detail: `Bus.RedisDetail` = INFO memory/persistence/clients and
+  per project its keys and stream lengths, `docker port` for the loopback bind, `bus.LegacyPasswordInUse`,
+  a `docker logs --tail 20` bounded to 8 KiB; read once at open, unknown read `?`); `busmon --delete` removes the local
   units before the keys.
 - **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
   `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails

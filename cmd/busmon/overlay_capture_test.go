@@ -112,12 +112,14 @@ func overlayCaptures(t *testing.T) map[string]string {
 		"plan-task":         plainOf(planTask),
 		"quota":             plainOf(quotaDetail("openai", b, true, capNow.Add(time.Hour), true, capNow)),
 		"quota-none":        plainOf(quotaDetail("", b, false, time.Time{}, false, capNow)),
-		"services":          plainOf(servicesCards(svcFacts{inst: inst, recs: recs, host: "here", logs: map[string]int64{}, since: map[string]time.Time{}}, 0, capNow, 100)),
-		"health":            plainOf(health),
-		"help":              plainOf(helpText()),
-		"ask":               plainOf(askPanelBody(demoAsk(), askPanel{q: 1, opt: 0}, 70)),
-		"ask-narrow":        plainOf(askPanelBody(demoAsk(), askPanel{q: 2}, 30)),
-		"code-wrap":         plainOf(renderMarkdown(longCode(), 60)),
+		"redis": plainOf(redisPageBody(redisPage{detail: redisFixture(), bind: "127.0.0.1:6380", loopback: true,
+			logs: []string{"1:M 28 Oct 2026 20:00:00.000 * Ready to accept connections tcp"}}, capNow, 100)),
+		"services":   plainOf(servicesCards(svcFacts{inst: inst, recs: recs, host: "here", logs: map[string]int64{}, since: map[string]time.Time{}}, 0, capNow, 100)),
+		"health":     plainOf(health),
+		"help":       plainOf(helpText()),
+		"ask":        plainOf(askPanelBody(demoAsk(), askPanel{q: 1, opt: 0}, 70)),
+		"ask-narrow": plainOf(askPanelBody(demoAsk(), askPanel{q: 2}, 30)),
+		"code-wrap":  plainOf(renderMarkdown(longCode(), 60)),
 	}
 
 	// The recap's body, as its reader page draws it (recapBody). The

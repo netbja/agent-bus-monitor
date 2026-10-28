@@ -468,7 +468,8 @@ func main() {
 	// The Elm shell (busmon Charm spec): Update drives everything, View draws
 	// the model; the poll runs in its commands, the tail is fed in below.
 	shell := newShell(shellConfig{ctx: ctx, reader: b, w: b, st: st, project: project, self: self,
-		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour})
+		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour,
+		docker: realSvcRunner, brokerHost: opts.host})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up

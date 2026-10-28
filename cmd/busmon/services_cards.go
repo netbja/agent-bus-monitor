@@ -50,8 +50,33 @@ func realSvcRunner(ctx context.Context, name string, args ...string) (string, er
 	if _, err := exec.LookPath(name); err != nil {
 		return "", err
 	}
-	out, err := exec.CommandContext(ctx, name, args...).Output()
-	return strings.TrimSpace(string(out)), err
+	tail := &tailBuffer{max: svcOutMax}
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout = tail // drained as it comes: memory stays within the bound, whatever the command prints
+	err := cmd.Run()
+	return strings.TrimSpace(string(tail.buf)), err
+}
+
+// svcOutMax bounds what a docker read keeps: the end of its output.
+const svcOutMax = redisLogBytes
+
+// tailBuffer keeps only the last max bytes written to it.
+type tailBuffer struct {
+	max int
+	buf []byte
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	if len(p) >= t.max {
+		t.buf = append(t.buf[:0], p[len(p)-t.max:]...)
+		return n, nil
+	}
+	if over := len(t.buf) + len(p) - t.max; over > 0 {
+		t.buf = append(t.buf[:0], t.buf[over:]...)
+	}
+	t.buf = append(t.buf, p...)
+	return n, nil
 }
 
 // gatherServices reads the facts; it runs in a command, never in View.
@@ -187,7 +212,7 @@ func servicesCards(f svcFacts, sel int, now time.Time, width int) []Line {
 		for len(c) < height && cols > 1 { // side by side: one height
 			c = append(c, nil)
 		}
-		boxed[i] = boxCard(c, cw, i < len(svcCardKinds) && i == sel)
+		boxed[i] = boxCard(c, cw, i == sel)
 	}
 	if cols == 1 {
 		for _, b := range boxed {
@@ -205,7 +230,7 @@ func servicesCards(f svcFacts, sel int, now time.Time, width int) []Line {
 			out = append(out, l)
 		}
 	}
-	out = append(out, nil, Line{S(RoleMuted, "enter or l: the selected service's log  "+GlyphNone+"  agentbus down <p> stops them; agentbus --project <p> service status|logs|restart")})
+	out = append(out, nil, Line{S(RoleMuted, "enter or l: the selected service's log, enter on Redis: its page  "+GlyphNone+"  agentbus down <p> stops them; agentbus --project <p> service status|logs|restart")})
 	for i := range out {
 		out[i] = FitLine(out[i], width)
 	}

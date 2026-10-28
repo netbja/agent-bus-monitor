@@ -41,6 +41,11 @@ type shellConfig struct {
 	cachePath     string         // where it is saved ("" never saves)
 	priorVisit    time.Time      // the last visit before this one (the recap's since)
 	tour          *tourMarker    // the machine's tour marker; nil = the tour never opens by itself
+	// docker runs the F3 pages' docker reads; nil = none at all (tests).
+	docker svcRunner
+	// brokerHost is --host, which overrides REDIS_HOST (bus.Connect): the
+	// Redis page states container facts only for the broker it reads.
+	brokerHost string
 }
 
 // uiState is the person's place on the screen.
@@ -195,6 +200,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.push(page{kind: ovServices, title: "Services", svc: &f})
 	case serviceLogMsg:
 		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
+	case redisPageMsg:
+		return m.push(page{kind: ovRedis, title: "Redis", body: msg.body, fixed: true})
 	case answerMsg:
 		m.gotAnswer(msg)
 	case sendResultMsg:
