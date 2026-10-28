@@ -55,7 +55,7 @@ func realSvcRunner(ctx context.Context, name string, args ...string) (string, er
 }
 
 // gatherServices reads the facts; it runs in a command, never in View.
-func gatherServices(ctx context.Context, r busReader, inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord, host string, run svcRunner) svcFacts {
+func gatherServices(ctx context.Context, r busReader, project string, inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord, host string, run svcRunner) svcFacts {
 	f := svcFacts{inst: inst, recs: recs, host: host, logs: map[string]int64{}, since: map[string]time.Time{}}
 	for k, rec := range recs {
 		if rec.Host != host {
@@ -64,7 +64,7 @@ func gatherServices(ctx context.Context, r busReader, inst *bus.ServicesInstall,
 		if info, err := os.Stat(rec.Log); err == nil && rec.Log != "" {
 			f.logs[k] = info.Size()
 		}
-		if t, ok := serviceStart(k, rec, "/proc"); ok {
+		if t, ok := serviceStart(project, k, rec, "/proc"); ok {
 			f.since[k] = t
 		}
 	}
@@ -98,7 +98,7 @@ func gatherServices(ctx context.Context, r busReader, inst *bus.ServicesInstall,
 // record says it runs and the pid's command line is that service (a stopped
 // service's pid may have been reused): /proc/<pid>/stat's start (field 22,
 // clock ticks since boot) plus /proc/stat's btime. Anything else: unknown.
-func serviceStart(kind string, rec bus.ServiceRecord, proc string) (time.Time, bool) {
+func serviceStart(project, kind string, rec bus.ServiceRecord, proc string) (time.Time, bool) {
 	switch rec.State {
 	case "", "down", "stopped", "failed", "gave-up":
 		return time.Time{}, false
@@ -107,7 +107,7 @@ func serviceStart(kind string, rec bus.ServiceRecord, proc string) (time.Time, b
 		return time.Time{}, false
 	}
 	cmd, err := os.ReadFile(fmt.Sprintf("%s/%d/cmdline", proc, rec.PID))
-	if err != nil || !strings.Contains(strings.ReplaceAll(string(cmd), "\x00", " "), "service run "+kind) {
+	if err != nil || !isServiceArgv(strings.Split(strings.TrimRight(string(cmd), "\x00"), "\x00"), project, kind) {
 		return time.Time{}, false
 	}
 	stat, err := os.ReadFile(fmt.Sprintf("%s/%d/stat", proc, rec.PID))
@@ -138,6 +138,21 @@ func serviceStart(kind string, rec bus.ServiceRecord, proc string) (time.Time, b
 		}
 	}
 	return time.Time{}, false
+}
+
+// isServiceArgv: argv is this project's service of this kind,
+// "agentbus --project <project> service run <kind>" (services are per project).
+func isServiceArgv(argv []string, project, kind string) bool {
+	proj := ""
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == "--project" {
+			proj = argv[i+1]
+		}
+		if argv[i] == "service" && i+2 < len(argv) && argv[i+1] == "run" && argv[i+2] == kind {
+			return proj == project && project != ""
+		}
+	}
+	return false
 }
 
 // svcCardKinds are the selectable cards, in order (Redis has no log page).

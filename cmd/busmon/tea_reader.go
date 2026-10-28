@@ -195,13 +195,13 @@ func (m *Model) gotThread(msg threadMsg) {
 }
 
 func (m *Model) servicesCmd() tea.Cmd {
-	inst, recs, r, ctx := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx
+	inst, recs, r, ctx, project := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx, m.cfg.project
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return func() tea.Msg {
 		host, _ := os.Hostname()
-		return servicesMsg{facts: gatherServices(ctx, r, inst, recs, host, realSvcRunner)}
+		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, realSvcRunner)}
 	}
 }
 
