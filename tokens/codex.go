@@ -15,9 +15,8 @@ import (
 // session_meta), so a resumed session, appended or in a new file whose first
 // event replays the last total, counts no turn twice: the total is
 // cumulative, so a first event equal to the session's previous total carries
-// no new tokens, whatever its last_token_usage says. Known edge: a file
-// replaced or shrunk whose events all repeat the session's last total is
-// rescanned to nothing (its days were cleared, its events now add 0). Only the session id is
+// no new tokens, whatever its last_token_usage says. A file replaced or
+// shrunk rebuilds its whole session (rebuildReplaced). Only the session id is
 // decoded from session_meta: its account identifiers never reach a structure.
 type CodexScan struct {
 	loc   *time.Location
@@ -65,6 +64,7 @@ func NewCodexScan(loc *time.Location) *CodexScan {
 func (s *CodexScan) Pass(paths []string, b Budget) (partial bool) {
 	sorted := append([]string(nil), paths...)
 	sort.Slice(sorted, func(i, j int) bool { return baseName(sorted[i]) < baseName(sorted[j]) })
+	s.rebuildReplaced(sorted)
 	room, files := b.Bytes, 0
 	for _, p := range sorted {
 		f := s.files[p]
@@ -88,6 +88,38 @@ func (s *CodexScan) Pass(paths []string, b Budget) (partial bool) {
 	return partial
 }
 
+// sessionKey is the file's session, or its own path when it has no session_meta.
+func (f *codexFile) sessionKey() string {
+	if f.session == "" {
+		return "path:" + f.path
+	}
+	return f.session
+}
+
+// rebuildReplaced: a file that shrank or changed identity takes its whole
+// session with it, every file of the session read again from 0 and its
+// baseline forgotten, so the pass (oldest first) rebuilds them consistently.
+func (s *CodexScan) rebuildReplaced(paths []string) {
+	dirty := map[string]bool{}
+	for _, p := range paths {
+		if f := s.files[p]; f != nil && f.replaced(p) {
+			dirty[f.sessionKey()] = true
+		}
+	}
+	if len(dirty) == 0 {
+		return
+	}
+	for _, f := range s.files {
+		if dirty[f.sessionKey()] {
+			f.fileState = fileState{ino: ^uint64(0), days: DaySums{}}
+			f.session = ""
+		}
+	}
+	for k := range dirty {
+		delete(s.last, k)
+	}
+}
+
 func (s *CodexScan) line(f *codexFile, raw []byte) {
 	var l codexLine
 	if json.Unmarshal(raw, &l) != nil {
@@ -103,10 +135,7 @@ func (s *CodexScan) line(f *codexFile, raw []byte) {
 		return
 	}
 	cur, last := l.Payload.Info.Total, l.Payload.Info.Last
-	key := f.session
-	if key == "" { // no session_meta: its own session, never chained to another such file
-		key = "path:" + f.path
-	}
+	key := f.sessionKey() // no session_meta: its own session, never chained to another such file
 	var add Usage
 	prev, seen := s.last[key]
 	switch {

@@ -294,3 +294,37 @@ func TestCodexFilesWithoutMetaAreApart(t *testing.T) {
 		t.Errorf("b %+v, want its own first event, not a delta from a", got)
 	}
 }
+
+// A Codex file replaced or truncated is rescanned with its session's
+// baseline rebuilt: the same content counts the same, and the session's
+// later file is recounted against the new totals.
+func TestCodexReplacedFileRebuildsItsSession(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "rollout-2026-10-27T10-00-00-r.jsonl")
+	b := filepath.Join(dir, "rollout-2026-10-27T12-00-00-r.jsonl")
+	replace := func(path, content string) { // a new inode, as an editor or a copy would make
+		tmp := path + ".new"
+		write(t, tmp, content)
+		if err := os.Rename(tmp, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	contentA := codexMeta("sess-r") + codexCount("2026-10-27T10:00:00Z", [4]int{100, 0, 10, 0}, [4]int{100, 0, 10, 0})
+	write(t, a, contentA)
+	write(t, b, codexMeta("sess-r")+codexCount("2026-10-27T12:01:00Z", [4]int{180, 0, 15, 0}, [4]int{80, 0, 5, 0}))
+	s := NewCodexScan(paris)
+	s.Pass([]string{a, b}, big)
+	replace(a, contentA)
+	s.Pass([]string{a, b}, big)
+	if got := s.Sums(a)["2026-10-27"]; got != (Usage{In: 100, Out: 10, N: 1}) {
+		t.Errorf("replaced file %+v, want its count rebuilt", got)
+	}
+	if got := s.Sums(b)["2026-10-27"]; got != (Usage{In: 80, Out: 5, N: 1}) {
+		t.Errorf("the session's other file %+v, want unchanged", got)
+	}
+	replace(a, codexMeta("sess-r")+codexCount("2026-10-27T10:00:00Z", [4]int{50, 0, 5, 0}, [4]int{50, 0, 5, 0}))
+	s.Pass([]string{a, b}, big)
+	if got := s.Sums(b)["2026-10-27"]; got != (Usage{In: 130, Out: 10, N: 1}) {
+		t.Errorf("after a was replaced with a lower total, b %+v, want its delta from a's new total", got)
+	}
+}

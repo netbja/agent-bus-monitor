@@ -78,6 +78,16 @@ func (st *fileState) upToDate(path string) bool {
 	return ok && sys.Ino == st.ino && info.Size() == st.offset
 }
 
+// replaced reports a file read before that shrank or changed identity since.
+func (st *fileState) replaced(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || st.ino == ^uint64(0) {
+		return false
+	}
+	sys, ok := info.Sys().(*syscall.Stat_t)
+	return info.Size() < st.offset || ok && sys.Ino != st.ino
+}
+
 // readAppended calls line for each complete line appended to path since st's
 // offset, within room bytes, and moves the offset past the last complete
 // line. A file that shrank or changed identity is reset (reset is called) and
