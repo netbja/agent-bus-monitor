@@ -11,8 +11,8 @@ import (
 )
 
 // verdictGates closes the gates a verdict by reviewer answers (foryou-gates):
-// on the reviewer's own gate, the one named by ref and those opened for
-// subject; then, for a ref still open elsewhere, the classic author's gate.
+// on the reviewer's own gate, the one named by ref and the same-subject ones
+// opened before it, or without a ref every one opened for subject; then, for a ref still open elsewhere, the classic author's gate.
 // It returns what to tell the reviewer. A self-verdict closes nothing by any
 // path: the author's-gate fallback would otherwise delete the reviewer's own
 // gate, the conductor's mission gates included.

@@ -231,7 +231,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `listen`/busmon still render the preview. `verdict` is subject-first
   (`--pr N`/`--subject S`), always appends to the `{p}:verdicts` ledger, publishes a live
   `CmdVerdict`, then closes gates best-effort (`verdictGates`, foryou-gates): on the *reviewer's own*
-  gate, the one named by `--ref` and every one opened for that subject (`Bus.CloseReviewGates`; never
+  gate, the one named by `--ref` plus the same-subject ones opened before it (anchored on the challenges'
+  `:cmd` entries, so a verdict on an older commit never closes a newer delta's gate), or without `--ref`
+  every one opened for that subject (`Bus.CloseReviewGates`; never
   a conductor's mission gate, which the conductor closes itself), else the author's gate named by
   `--ref`; a self-verdict closes no gate by either path (it no longer errors when no challenge is open — `verdictGateNotice`).
   `challenge --subject S` stores the subject in the gate's meta (`challenger|[subject S] text`,

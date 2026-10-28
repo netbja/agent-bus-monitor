@@ -95,12 +95,15 @@ if ARGV[3] == '1' then
 end
 return 1`)
 
-// CloseReviewGates closes, on reviewer's own gate, every gate a verdict by
-// reviewer on author's work answers: the one named by ref, and every one
-// whose stored subject is subject. A self-verdict closes nothing, and a
-// conductor's mission gate is left to the conductor. It returns the closed
-// refs, sorted. Each close is compare-and-delete, so a gate re-opened under
-// the same ref in between is kept.
+// CloseReviewGates closes, on reviewer's own gate, the gates a verdict by
+// reviewer on author's work answers. With a ref: the gate named by ref, plus
+// the gates of the same subject opened before it (gate-subject-close: a
+// verdict on an older commit never closes the gate of a newer delta the
+// reviewer has not read). Without a ref: every gate whose stored subject is
+// subject. A self-verdict closes nothing, and a conductor's mission gate is
+// left to the conductor. It returns the closed refs, sorted. Each close is
+// compare-and-delete, so a gate re-opened under the same ref in between is
+// kept.
 func (b *Bus) CloseReviewGates(ctx context.Context, reviewer, author, subject, ref string) ([]string, error) {
 	if reviewer == author {
 		return nil, nil
@@ -109,10 +112,30 @@ func (b *Bus) CloseReviewGates(ctx context.Context, reviewer, author, subject, r
 	if err != nil {
 		return nil, err
 	}
+	var opened map[string]string
+	var anchor string
+	if ref != "" && subject != "" {
+		if opened, anchor, err = b.challengesOpened(ctx, reviewer, ref); err != nil {
+			return nil, err
+		}
+	}
 	var closed []string
 	for r, meta := range open {
 		g := ParseGateMeta(meta)
-		if g.Challenger == ConductorAgent || !(r == ref && ref != "" || g.Subject != "" && g.Subject == subject) {
+		if g.Challenger == ConductorAgent {
+			continue
+		}
+		sameSubject := g.Subject != "" && g.Subject == subject
+		switch {
+		case ref != "" && r == ref:
+		case ref == "" && sameSubject:
+		case ref != "" && sameSubject && anchor != "":
+			// No retained challenge: it left the stream before the anchor's,
+			// so it was opened before it (the stream is trimmed oldest first).
+			if at, ok := opened[r]; ok && !idLess(at, anchor) {
+				continue
+			}
+		default:
 			continue
 		}
 		n, err := closeGateIf.Run(ctx, b.r, []string{GateKey(b.project, reviewer), StreamKey(b.project, "cmd")},
@@ -126,6 +149,34 @@ func (b *Bus) CloseReviewGates(ctx context.Context, reviewer, author, subject, r
 	}
 	sort.Strings(closed)
 	return closed, nil
+}
+
+// challengesOpened reads the cmd stream once: opened maps each ref of a
+// challenge to reviewer to its LAST entry id (a re-challenge under the same
+// ref overwrites the gate, so the gate holds that newer content), and anchor
+// is the id of the first challenge carrying ref (to any target, so an author's gate anchors
+// too), "" when none is retained.
+func (b *Bus) challengesOpened(ctx context.Context, reviewer, ref string) (map[string]string, string, error) {
+	key := StreamKey(b.project, "cmd")
+	msgs, err := b.r.XRange(ctx, key, "-", "+").Result()
+	if err != nil {
+		return nil, "", err
+	}
+	opened := map[string]string{}
+	anchor := ""
+	for _, m := range msgs {
+		e := ParseEntry(key, m.ID, toStringMap(m.Values))
+		if e.Type != CmdChallenge || e.Ref == "" {
+			continue
+		}
+		if e.Ref == ref && anchor == "" {
+			anchor = e.ID
+		}
+		if e.Target == reviewer {
+			opened[e.Ref] = e.ID
+		}
+	}
+	return opened, anchor, nil
 }
 
 // CloseGate closes one gate without a verdict, only while it still holds meta
