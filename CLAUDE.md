@@ -539,7 +539,10 @@ It never touches Redis — see README "Deployment topology".
   otherwise `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` (defaults `localhost`/`6380`/`AgentBus2025!`).
   A non-empty `--host` overrides `REDIS_HOST` only. Note the **non-standard port 6380** (compose
   maps host `6380` → container `6379`). `agentbus` sender identity defaults to `hermes`,
-  overridable via `AGENT_BUS_AGENT`.
+  overridable via `AGENT_BUS_AGENT`; inside a herdr pane (`HERDR_PANE_ID`) with `AGENT_BUS_AGENT`
+  unset, a command that writes as the sender is refused with the fix (A8, `identityGuard`:
+  relaunch through the launcher or export it; read-only commands still run, an unknown command
+  counts as a write).
 - **`docker-compose.yml` binds `6380` to loopback** (`127.0.0.1:6380:6379`) so the bus is not
   LAN-reachable (the password travels in plaintext); the SSH tunnel is the only remote path. Don't
   revert to a bare `6380:6379` (= `0.0.0.0`) without a reason.
@@ -721,7 +724,11 @@ It never touches Redis — see README "Deployment topology".
   `AGENT_BUS_PROMPT_GRACE` s (default 30, `0` = off) of the same pid and `since`, with the same
   suppressions plus a pause or a swap, through the context alert's `notify-send` runner (missing =
   a logged note); its only write is the fenced mark `prompt:<agent>` (= `pid:since`) in `{p}:quota`,
-  deleted when the pane is no longer blocked or the agent leaves the observation. No bus entry, nothing typed. An escalation caused by the pane's state (rules
+  deleted when the pane is no longer blocked or the agent leaves the observation. No bus entry, nothing typed.
+  The same runner rings once per episode for an agent deferred for `identity mismatch` while
+  messages wait for it (A8, `dispatch/identnotify.go`: mark `ident:<agent>` = the registered
+  `pid:pid_start`, deleted once its decision is no longer a mismatch), since that agent's escalation
+  goes to master, which helps nobody when master is the one lost. An escalation caused by the pane's state (rules
   7-8, `Decision.Cause` → wake `esc_cause`, or read from the reason of an older record) is
   re-armed once the pane is ready: the loop inspects such a record before `Decide`, tries clear
   and `at` stays. When the escalation target cannot act (it is the agent, its provider is held,

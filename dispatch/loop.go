@@ -520,6 +520,9 @@ func (s *step) base(d Decision) bus.WakeRecord {
 }
 
 func (l *loop) act(ctx context.Context, s *step, d Decision) error {
+	if err := l.identityNotice(ctx, s, d); err != nil {
+		return err
+	}
 	switch d.Action {
 	case ActNone:
 		l.logDecision(s, d)

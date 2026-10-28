@@ -132,6 +132,10 @@ func main() {
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "hermes")
+	if err := identityGuard(os.Getenv, args[0], args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "agentbus: "+err.Error())
+		os.Exit(2)
+	}
 
 	client, err := bus.Connect(host)
 	if err != nil {
