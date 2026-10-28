@@ -15,7 +15,12 @@ type Prompter struct {
 	Yes bool
 	TTY io.ReadWriter
 	rd  *bufio.Reader // one for the session: answers pasted ahead stay buffered for their questions
+	// aborted: a question found no terminal; the run ends there.
+	aborted bool
 }
+
+// Aborted reports whether a question found no terminal to ask on.
+func (p *Prompter) Aborted() bool { return p.aborted }
 
 // ErrNoTerminal: a question with no terminal and no --yes, so nothing is
 // removed unattended by accident.
@@ -28,7 +33,10 @@ func Ask(o *Output, p *Prompter, question string, def bool) (bool, error) {
 		return def, nil
 	}
 	if p.TTY == nil {
-		o.Fatal("no terminal to ask on: re-run with --yes to accept the cautious defaults")
+		if !p.aborted {
+			o.Fatal("no terminal to ask on: re-run with --yes to accept the cautious defaults")
+		}
+		p.aborted = true
 		return false, ErrNoTerminal
 	}
 	hint := "[y/N]"

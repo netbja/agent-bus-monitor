@@ -16,8 +16,8 @@ import (
 // `agentbus setup [--repo <dir>] install|update|uninstall|status [setup.sh's
 // flags]` (spec docs/superpowers/specs/2026-10-28-go-installer-design.md):
 // the Go port of setup.sh, run by the thin scripts/setup-go.sh. Step 1 of
-// the rollout: install and status are ported; uninstall and update follow in
-// busmon-installer-6..7.
+// the rollout: install, status and uninstall are ported; update follows in
+// busmon-installer-7.
 
 // execRunner is the real setup.Runner, the only one: every external command
 // setup runs goes through it.
@@ -62,8 +62,16 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 	case "status":
 		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv}
 		return in.Status(context.Background())
+	case "uninstall":
+		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv, Now: time.Now}
+		var tty io.ReadWriter
+		if t := setup.OpenTTY(); t != nil {
+			defer t.Close()
+			tty = t
+		}
+		return in.Uninstall(context.Background(), &setup.Prompter{Yes: opt.Yes, TTY: tty})
 	}
-	o.Fatal("agentbus setup " + opt.Sub + ": not ported yet (busmon-installer-6..7); use ./setup.sh " + opt.Sub)
+	o.Fatal("agentbus setup " + opt.Sub + ": not ported yet (busmon-installer-7); use ./setup.sh " + opt.Sub)
 	return 1
 }
 

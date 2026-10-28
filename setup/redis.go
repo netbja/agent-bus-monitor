@@ -45,12 +45,13 @@ func (in *Installer) BrokerOwner(ctx context.Context) (Owner, error) {
 }
 
 // mayCompose reports whether a compose verb may run from this checkout:
-// no broker container, or one this checkout owns. Otherwise it says why not.
-func (in *Installer) mayCompose(ctx context.Context) bool {
+// no broker container, or one this checkout owns. Otherwise it says why not,
+// ending an unreadable owner's warning with refused ("not started.").
+func (in *Installer) mayCompose(ctx context.Context, refused string) bool {
 	o, err := in.BrokerOwner(ctx)
 	switch {
 	case err != nil:
-		in.O.Warn("Redis broker: could not read who owns " + RedisContainer + " (docker inspect failed): not started.")
+		in.O.Warn("Redis broker: could not read who owns " + RedisContainer + " (docker inspect failed): " + refused)
 	case !o.Exists || o.Ours:
 		return true
 	case o.Dir == "":
@@ -92,7 +93,7 @@ func (in *Installer) Redis(ctx context.Context, d Docker) {
 	case !d.OK || d.Compose == "":
 		in.O.Warn("Redis broker not reachable on 127.0.0.1:6380 (run 'docker compose up -d' manually in " + in.Repo + ").")
 		return
-	case !in.mayCompose(ctx):
+	case !in.mayCompose(ctx, "not started."):
 		return
 	case in.Opt.DryRun:
 		in.O.Info("[dry-run] would start Redis container via " + d.Compose + " up -d")
