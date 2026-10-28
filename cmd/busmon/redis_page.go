@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -47,7 +49,7 @@ type redisPageMsg struct{ body []Line }
 
 // gatherRedisPage reads the page's facts; it runs in a command, never in
 // View. run nil means no docker call at all.
-func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(string) string) redisPage {
+func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(string) string, flagHost string) redisPage {
 	var f redisPage
 	c, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -65,22 +67,32 @@ func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(stri
 		f.bindErr, f.logsErr = "no docker", "no docker"
 		return f
 	}
-	if out, err := run(c, "docker", "port", redisContainer, "6379/tcp"); err != nil || out == "" {
+	out, err := run(c, "docker", "port", redisContainer, "6379/tcp")
+	if err != nil || out == "" {
 		f.bindErr = "not published by docker"
 		if err != nil {
 			f.bindErr = err.Error()
 		}
-	} else {
-		lines := strings.Fields(out)
-		f.bind = strings.Join(lines, ", ")
-		f.loopback = true
-		for _, a := range lines {
-			if !strings.HasPrefix(a, "127.0.0.1:") && !strings.HasPrefix(a, "[::1]:") {
-				f.loopback = false
-			}
+		f.logsErr = "the broker read is not shown to be " + redisContainer
+		return f
+	}
+	lines := strings.Fields(out)
+	// The container's facts are the broker's only when busmon reads that
+	// container: a loopback endpoint on one of its published ports.
+	host, port := brokerEndpoint(getenv, flagHost)
+	if !localHost(host) || !publishes(lines, port) {
+		f.bindErr = fmt.Sprintf("the broker read is %s, not this host's %s", net.JoinHostPort(host, port), redisContainer)
+		f.logsErr = f.bindErr
+		return f
+	}
+	f.bind = strings.Join(lines, ", ")
+	f.loopback = true
+	for _, a := range lines {
+		if !strings.HasPrefix(a, "127.0.0.1:") && !strings.HasPrefix(a, "[::1]:") {
+			f.loopback = false
 		}
 	}
-	out, err := run(c, "docker", "logs", "--tail", fmt.Sprint(redisLogLines), redisContainer)
+	out, err = run(c, "docker", "logs", "--tail", fmt.Sprint(redisLogLines), redisContainer)
 	if err != nil {
 		f.logsErr = err.Error()
 		return f
@@ -88,7 +100,7 @@ func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(stri
 	if len(out) > redisLogBytes {
 		out = out[len(out)-redisLogBytes:]
 	}
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	lines = strings.Split(strings.TrimRight(out, "\n"), "\n")
 	if len(lines) > redisLogLines {
 		lines = lines[len(lines)-redisLogLines:]
 	}
@@ -98,6 +110,49 @@ func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(stri
 		}
 	}
 	return f
+}
+
+// brokerEndpoint is the address bus.Connect dials: REDIS_URL's, else
+// REDIS_HOST (overridden by --host) and REDIS_PORT, with its defaults. A unix
+// socket is host "unix".
+func brokerEndpoint(getenv func(string) string, flagHost string) (host, port string) {
+	if raw := getenv("REDIS_URL"); raw != "" {
+		u, err := url.Parse(raw)
+		if err != nil {
+			return "?", "?"
+		}
+		if u.Scheme == "unix" {
+			return "unix", u.Path
+		}
+		host, port = u.Hostname(), u.Port()
+		if port == "" {
+			port = "6379"
+		}
+		return host, port
+	}
+	host, port = getenv("REDIS_HOST"), getenv("REDIS_PORT")
+	if flagHost != "" {
+		host = flagHost
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	if port == "" {
+		port = "6380"
+	}
+	return host, port
+}
+
+func localHost(h string) bool { return h == "localhost" || h == "127.0.0.1" || h == "::1" }
+
+// publishes says whether one of docker port's addresses is on port.
+func publishes(addrs []string, port string) bool {
+	for _, a := range addrs {
+		if _, p, err := net.SplitHostPort(a); err == nil && p == port {
+			return true
+		}
+	}
+	return false
 }
 
 // redisPageBody is the page, pure.
@@ -181,12 +236,12 @@ func redisPageBody(f redisPage, now time.Time, width int) []Line {
 
 // redisPageCmd reads the page's facts and builds its body.
 func (m *Model) redisPageCmd() tea.Cmd {
-	r, ctx, width := m.cfg.reader, m.cfg.ctx, m.readerWidth()
+	r, ctx, width, docker, flagHost := m.cfg.reader, m.cfg.ctx, m.readerWidth(), m.cfg.docker, m.cfg.brokerHost
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return func() tea.Msg {
-		f := gatherRedisPage(ctx, r, realSvcRunner, os.Getenv)
+		f := gatherRedisPage(ctx, r, docker, os.Getenv, flagHost)
 		return redisPageMsg{body: redisPageBody(f, time.Now(), width)}
 	}
 }

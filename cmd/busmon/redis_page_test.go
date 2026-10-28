@@ -69,7 +69,7 @@ func TestGatherRedisPage(t *testing.T) {
 		}
 		return "", errors.New("unexpected")
 	}
-	f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(string) string { return "" })
+	f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(string) string { return "" }, "")
 	if f.err != "" || !f.loopback || f.bind != "127.0.0.1:6380" || len(f.logs) > redisLogLines || len(f.logs) == 0 {
 		t.Fatalf("facts %+v", f)
 	}
@@ -77,7 +77,7 @@ func TestGatherRedisPage(t *testing.T) {
 	if strings.Join(calls, ";") != strings.Join(want, ";") {
 		t.Fatalf("docker calls %q", calls)
 	}
-	f = gatherRedisPage(context.Background(), detailReader{err: errors.New("refused")}, nil, func(string) string { return "" })
+	f = gatherRedisPage(context.Background(), detailReader{err: errors.New("refused")}, nil, func(string) string { return "" }, "")
 	if f.err != "refused" || f.bindErr == "" || f.logsErr == "" {
 		t.Fatalf("no docker, no broker: %+v", f)
 	}
@@ -86,6 +86,9 @@ func TestGatherRedisPage(t *testing.T) {
 // The Redis card is selectable; Enter on it opens the page.
 func TestShellServicesRedisCardOpensItsPage(t *testing.T) {
 	m := fixtureShell(t, 140, 40)
+	if m.cfg.docker != nil {
+		t.Fatal("the test shell has a docker runner: it could read this host's container")
+	}
 	next, cmd := m.Update(keyMsg(tea.Key{Code: tea.KeyF3}))
 	m = run(t, next.(Model), cmd)
 	m = keys(t, m, kDown, kDown)
@@ -97,7 +100,60 @@ func TestShellServicesRedisCardOpensItsPage(t *testing.T) {
 	if m.rd.top().kind != ovRedis || !strings.Contains(plainOf(m.rd.top().body), "redis") {
 		t.Fatalf("enter on Redis opened %v: %s", m.rd.top().kind, plainOf(m.rd.top().body))
 	}
+	if !strings.Contains(plainOf(m.rd.top().body), "bind ?") {
+		t.Errorf("with no docker runner the page claims a bind: %s", plainOf(m.rd.top().body))
+	}
 	if m = keys(t, m, kEsc); m.rd.top().kind != ovServices {
 		t.Error("esc did not return to the cards")
+	}
+}
+
+// The container's facts are the broker's only when busmon reads that
+// container: another endpoint (a remote host, another port, a unix socket)
+// leaves bind and logs unknown, and the logs are not even read.
+func TestGatherRedisPageOnlyForTheBrokerItReads(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"remote url":  {"REDIS_URL": "redis://:pw@far.example:6380/0"},
+		"other port":  {"REDIS_PORT": "6390"},
+		"unix socket": {"REDIS_URL": "unix:///tmp/x/redis.sock"},
+		"remote host": {"REDIS_HOST": "10.0.0.5"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var calls []string
+			run := func(_ context.Context, name string, args ...string) (string, error) {
+				calls = append(calls, args[0])
+				return "127.0.0.1:6380", nil
+			}
+			f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return env[k] }, "")
+			if f.loopback || f.bind != "" || !strings.Contains(f.bindErr, "not this host's") || f.logsErr == "" {
+				t.Fatalf("facts %+v", f)
+			}
+			if strings.Join(calls, ",") != "port" {
+				t.Fatalf("docker calls %q: the logs of another broker were read", calls)
+			}
+		})
+	}
+	// --host overrides REDIS_HOST, as bus.Connect does.
+	run := func(context.Context, string, ...string) (string, error) { return "127.0.0.1:6380", nil }
+	if f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return map[string]string{"REDIS_HOST": "far"}[k] }, "localhost"); !f.loopback {
+		t.Fatalf("--host localhost: %+v", f)
+	}
+}
+
+// A docker read keeps only the end of its output, whatever it prints.
+func TestDockerReadIsBounded(t *testing.T) {
+	tb := &tailBuffer{max: 8}
+	for _, w := range []string{"abc", "defghij", "klmnopqrstuvwxyz", "12"} {
+		tb.Write([]byte(w))
+	}
+	if string(tb.buf) != "uvwxyz12" {
+		t.Fatalf("tail %q", tb.buf)
+	}
+	out, err := realSvcRunner(context.Background(), "sh", "-c", "i=0; while [ $i -lt 2000 ]; do printf 'line %04d of a long log\\n' $i; i=$((i+1)); done")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) > svcOutMax || !strings.HasSuffix(out, "line 1999 of a long log") {
+		t.Fatalf("%d bytes kept (max %d), ends %q", len(out), svcOutMax, out[max(0, len(out)-30):])
 	}
 }

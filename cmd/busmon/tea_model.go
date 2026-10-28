@@ -41,6 +41,11 @@ type shellConfig struct {
 	cachePath     string         // where it is saved ("" never saves)
 	priorVisit    time.Time      // the last visit before this one (the recap's since)
 	tour          *tourMarker    // the machine's tour marker; nil = the tour never opens by itself
+	// docker runs the F3 pages' docker reads; nil = none at all (tests).
+	docker svcRunner
+	// brokerHost is --host, which overrides REDIS_HOST (bus.Connect): the
+	// Redis page states container facts only for the broker it reads.
+	brokerHost string
 }
 
 // uiState is the person's place on the screen.
