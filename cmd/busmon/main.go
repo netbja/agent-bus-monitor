@@ -326,6 +326,8 @@ type shared struct {
 	plan           planState   // the batch's plan (P), derived in pollOnce
 	tok            tokState    // the U page's tokens and account history (tokens_view.go)
 	tokOpen        bool        // the U page is open: only then are they read (a keyspace SCAN per read)
+	tokWasOpen     bool        // it was open at the last poll: a read is due on each opening
+	tokAttempt     int         // the tick of the last read attempt, success or not
 }
 
 func main() {

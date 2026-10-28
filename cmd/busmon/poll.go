@@ -203,11 +203,16 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	}
 	var tokR tokState
 	st.mu.Lock()
-	prev, open := st.tok, st.tokOpen
+	prev, open, wasOpen, last := st.tok, st.tokOpen, st.tokWasOpen, st.tokAttempt
+	readTok := open && (!wasOpen || tick-last >= requestPoll)
+	st.tokWasOpen = open
+	if readTok {
+		st.tokAttempt = tick
+	}
 	st.mu.Unlock()
 	// The U page's facts: only while it is open (one keyspace SCAN and an
-	// HGETALL per project), at once when it opens, then at the requests' cadence.
-	readTok := open && (!prev.polled || tick%requestPoll == 1)
+	// HGETALL per project): once on each opening, then every requestPoll ticks
+	// after the last attempt, whether it succeeded or not.
 	if readTok {
 		tokR = readTokens(pollCtx, b, projectOf(b), time.Now(), prev)
 	}
