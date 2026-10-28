@@ -559,9 +559,14 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			if act == ActUp {
 				step = -1
 			}
-			p.sel = clamp(p.sel+step, 0, len(svcCardKinds)-1)
+			p.sel = clamp(p.sel+step, 0, len(svcCardKinds)) // the last card is Redis's
 			p.dirty = true
 			m.refresh()
+			return nil
+		case (act == ActServiceLog || k.Code == keyEnter) && p.sel == len(svcCardKinds):
+			if k.Code == keyEnter { // Redis has no service log: Enter opens its page
+				return m.redisPageCmd()
+			}
 			return nil
 		case act == ActServiceLog || k.Code == keyEnter:
 			return m.serviceLogCmd(svcCardKinds[p.sel])

@@ -187,7 +187,7 @@ func servicesCards(f svcFacts, sel int, now time.Time, width int) []Line {
 		for len(c) < height && cols > 1 { // side by side: one height
 			c = append(c, nil)
 		}
-		boxed[i] = boxCard(c, cw, i < len(svcCardKinds) && i == sel)
+		boxed[i] = boxCard(c, cw, i == sel)
 	}
 	if cols == 1 {
 		for _, b := range boxed {
@@ -205,7 +205,7 @@ func servicesCards(f svcFacts, sel int, now time.Time, width int) []Line {
 			out = append(out, l)
 		}
 	}
-	out = append(out, nil, Line{S(RoleMuted, "enter or l: the selected service's log  "+GlyphNone+"  agentbus down <p> stops them; agentbus --project <p> service status|logs|restart")})
+	out = append(out, nil, Line{S(RoleMuted, "enter or l: the selected service's log, enter on Redis: its page  "+GlyphNone+"  agentbus down <p> stops them; agentbus --project <p> service status|logs|restart")})
 	for i := range out {
 		out[i] = FitLine(out[i], width)
 	}

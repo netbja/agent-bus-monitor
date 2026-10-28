@@ -1,0 +1,13 @@
+redis  ● 8.0.2  ·  up 2h                                                                            
+                                                                                                    
+memory 1.5M  ·  peak 2.0M  ·  max no limit (noeviction)                                             
+persistence: last RDB save 5m ago (ok)  ·  AOF off                                                  
+7 clients  ·  42 keys (every project)                                                               
+bind 127.0.0.1:6380  ·  loopback only                                                               
+password: not the default                                                                           
+                                                                                                    
+projects                                                                                            
+demo  30 keys  ·  status 12  ·  report 3  ·  notify 1  ·  cmd 40  ·  verdicts 2                     
+                                                                                                    
+docker logs (last 20)                                                                               
+1:M 28 Oct 2026 20:00:00.000 * Ready to accept connections tcp                                      

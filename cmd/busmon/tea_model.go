@@ -195,6 +195,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.push(page{kind: ovServices, title: "Services", svc: &f})
 	case serviceLogMsg:
 		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
+	case redisPageMsg:
+		return m.push(page{kind: ovRedis, title: "Redis", body: msg.body, fixed: true})
 	case answerMsg:
 		m.gotAnswer(msg)
 	case sendResultMsg:
