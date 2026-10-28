@@ -90,7 +90,7 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		reportResumeSend(rest, defaultSenderDeps())
 		return nil
 	case "prove-session":
-		proveSessionSend(rest, openProver)
+		proveSessionSend(rest, openProver, dispatch.ProcStart)
 		return nil
 	}
 	if action == "check-toml" {

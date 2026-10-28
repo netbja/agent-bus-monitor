@@ -191,9 +191,14 @@ func openProver(project string) (sessionProver, func(), error) {
 // proveSessionSend records the new session as the one proved with the agent's
 // process: <log> <project> <agent> <session> -- <pid:start>..., the hook's
 // ancestors. It proves only when the stored verified pid, with its start time,
-// is one of them; ProveSession checks again in its transaction. Every outcome
-// is one line of the log.
-func proveSessionSend(args []string, open func(project string) (sessionProver, func(), error)) int {
+// is one of them and is still alive with that start time, read here (a
+// process gone or recycled since the hook proves nothing); ProveSession
+// checks the stored identity again in its transaction. What it cannot
+// re-read is the ancestry itself, which only the hook could see: a process
+// of the same local user could pass a forged chain, as it could forge any
+// status (the bus is no boundary against the local user). Every outcome is
+// one line of the log.
+func proveSessionSend(args []string, open func(project string) (sessionProver, func(), error), procStart func(pid int) (uint64, error)) int {
 	if len(args) < 6 || args[4] != "--" {
 		return 0
 	}
@@ -218,6 +223,10 @@ func proveSessionSend(args []string, open func(project string) (sessionProver, f
 	s := snaps[agent]
 	if s.PID <= 0 || !chain[strconv.Itoa(s.PID)+":"+strconv.FormatUint(s.PIDStart, 10)] {
 		resumeLog(logPath, time.Now(), "session not proved: "+agent+"'s verified process is not this hook's client")
+		return 0
+	}
+	if start, err := procStart(s.PID); err != nil || start != s.PIDStart {
+		resumeLog(logPath, time.Now(), "session not proved: "+agent+"'s verified process is gone")
 		return 0
 	}
 	if err := b.ProveSession(ctx, agent, s.PID, s.PIDStart, session); err != nil {

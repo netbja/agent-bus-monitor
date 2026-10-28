@@ -65,3 +65,32 @@ func TestProveSessionMovesIdentSessionForTheVerifiedProcessOnlyRedis(t *testing.
 		t.Fatal("accepted an invalid agent name")
 	}
 }
+
+// Both orders end on the proved session: a status naming the old session
+// before the proof is replaced by it, and one after it never reverts it.
+func TestProveSessionAndAStatusInEitherOrderRedis(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	self := AgentIdent{Pane: "w1:p2", PID: 42, PIDStart: 7, Session: "before-clear-0001"}
+	if err := b.Bind(ctx, "coder", AgentIdent{Pane: "w1:p2", PID: 42, PIDStart: 7}); err != nil {
+		t.Fatalf("Bind: %v", err)
+	}
+	if _, err := b.Status(ctx, "coder", "idle", "status first", self); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if got := mustAgents(t, b)["coder"].IdentSession; got != "before-clear-0001" {
+		t.Fatalf("a same-process status fills an empty session: %q", got)
+	}
+	if err := b.ProveSession(ctx, "coder", 42, 7, "after-clear-0002"); err != nil {
+		t.Fatalf("ProveSession: %v", err)
+	}
+	if got := mustAgents(t, b)["coder"].IdentSession; got != "after-clear-0002" {
+		t.Fatalf("status then proof: %q", got)
+	}
+	if _, err := b.Status(ctx, "coder", "working", "status after", self); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if got := mustAgents(t, b)["coder"].IdentSession; got != "after-clear-0002" {
+		t.Fatalf("proof then status: reverted to %q", got)
+	}
+}

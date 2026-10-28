@@ -257,6 +257,24 @@ on its stdin. It gains a second step, split across the detach:
 stdout and always exits 0; a failed write is logged to `<state>/resume.log`. A subagent's start
 (`agent_id` set) proves nothing, as today.
 
+As built (`busmon-lifecycle-1`): the foreground hands the sender its whole ancestor chain
+(`pid:start` each, `dispatch.Ancestors`), so the hook never reads Redis before Claude starts; the
+sender matches the stored verified pid and start against it. **What the sender re-reads itself:**
+the stored identity (from `{p}:agents`, again inside `ProveSession`'s transaction) and that this
+pid is alive now with that start time (`ProcStart`), so a process gone or recycled since the hook
+proves nothing. **What it still trusts:** the chain, i.e. that the stored process is the hook's
+ancestor, which only the hook could see before it detached. A process of the same local user can
+pass a forged chain and name any valid session for an agent. That is acceptable for the same
+reason a forged `status` is: the bus authenticates no local process (one Redis password, the
+user's own files), and the worst outcome is that the context fill and tokens follow the wrong
+session until the next proof, which never moves a pid, a pane or a declared state.
+
+A verified `status` of the same process (same pid and start) only fills an empty `IdentSession`;
+only a new process, a bind or `ProveSession` moves it. So a session proved after `/clear` is never
+reverted by a status naming the older one, whatever the client leaves in Bash's environment (live
+check, 2026-10-28: Claude Code exports the post-`/clear` `CLAUDE_CODE_SESSION_ID`). Linux only,
+like every verified identity (`/proc`): on macOS no agent is verified, so nothing is proved.
+
 ## Invariants
 
 - **The one pane writer stays the dispatcher.** Nothing else types. `reload` types nothing: it

@@ -285,6 +285,7 @@ func TestProveSessionSendProvesOnlyTheStoredIdentity(t *testing.T) {
 		"a recycled pid":                 {bus.AgentSnapshot{PID: 30, PIDStart: 299}, ""},
 		"not an ancestor":                {bus.AgentSnapshot{PID: 77, PIDStart: 300}, ""},
 		"unverified":                     {bus.AgentSnapshot{}, ""},
+		"gone since the hook read it":    {bus.AgentSnapshot{PID: 40, PIDStart: 400}, ""},
 	} {
 		p := &fakeProver{snaps: map[string]bus.AgentSnapshot{"coder": c.snap}}
 		log := filepath.Join(t.TempDir(), "resume.log")
@@ -294,6 +295,11 @@ func TestProveSessionSendProvesOnlyTheStoredIdentity(t *testing.T) {
 					t.Fatalf("opened project %q", project)
 				}
 				return p, func() {}, nil
+			}, func(pid int) (uint64, error) { // the processes alive now: 40 has exited
+				if pid == 30 {
+					return 300, nil
+				}
+				return 0, os.ErrNotExist
 			})
 		if got := strings.Join(p.proved, ","); got != c.want {
 			t.Errorf("%s: proved %q, want %q", name, got, c.want)
