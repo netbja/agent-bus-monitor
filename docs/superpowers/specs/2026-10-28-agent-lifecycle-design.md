@@ -186,13 +186,23 @@ typing anything into any pane:
      profile, so a reload would silently undo a swap. Refused with `agentbus swap <role> --back`
      as the way;
    - `openWork`: no open challenge on either side (`Bus.ReviewsOf`), no mission attempt in
-     progress, no open ask by it, and no board task it owns in state `accepted` (`Bus.Board`:
-     accepted work is in flight even while the agent is idle between turns). This is the one
+     progress, no open ask by it **when `--fresh`**, and no board task it owns in state `accepted`
+     (`Bus.Board`: accepted work is in flight even while the agent is idle between turns). Its
+     own open ask waits on the person, not on a turn (reload-fix-2, 2026-10-28: master's reload
+     was refused for it): a resume keeps the conversation, the ask lives in `{p}:asks` and its
+     answer reaches the agent through its cmd group, so only a fresh relaunch, which loses the
+     context the ask was put in, counts it. This is the one
      readiness rule: the sentinel's reload pass (Part C) and master's last reload apply the same
      `openWork`, never a narrower copy;
    - no running turn: not observed busy (fresh `{p}:observed`), not declared `working` within
      `Recent` (2 min), declared `idle`; no wake `prompting`;
-   - a **resume source** (below), unless `--fresh`.
+   - a **resume source** (below), unless `--fresh`;
+   - **the relaunch can run** (`planRelaunch`, reload-fix-2: two reloads on 2026-10-28 killed
+     agents they could not relaunch): inside herdr (`HERDR_ENV=1`), the project's template and
+     its open workspace, and either exactly one template tab launching the role, or, for a pop
+     role (`tier = "pop"`, no tab), `scripts/agent-spawn` in the checkout and the caller's pane
+     in the project's workspace (agent-spawn opens its tab where it runs). Checked again at the
+     relaunch.
 2. **Intent**: `Bus.BeginSwap` with `kind=reload` (the same `{p}:swap:<role>` key, `SET NX PX
    180000`, and its `{p}:swaps` ledger `begin` in the same script). Reusing the swap intent is
    deliberate: the dispatcher already neither prompts, escalates, resumes nor (Part B) clears an
@@ -212,7 +222,10 @@ typing anything into any pane:
    `Resume: !fresh`): the tab's command is now gone (dead pid, plain shell), so it runs the
    template command plus `--resume <session>` in a new pane split from the tab, proves the new
    identity in that pane (60 s), and closes the exact old pane if it is still a plain shell
-   (`closeOldPanes`).
+   (`closeOldPanes`). A pop has no template tab: it comes back the way it was started and the
+   way swap relaunches, `agent-spawn <role> <p> [--resume <session>]` with
+   `AGENT_LAUNCH_REQUIRE_BIND=1` and `AGENT_SPAWN_WAIT=0`, in a new tab (its old pane went with
+   its exec'd client).
 5. **Proof**: a new pid, alive with its start time, bound in the new pane, same client and
    provider, and, when the reload answers an update episode, a `client_fp` equal to the installed
    fingerprint. Then `EndSwap`, ledger `reloaded`, and a report line.
@@ -248,7 +261,7 @@ closes it as interrupted (`Bus.Interrupted`), as today.
 |---|---|---|
 | sentinel | any role but itself | on a client-update episode for that agent's client (`{p}:observed` `update` true for it), or a health `fail` it is told to remediate |
 | master | sentinel | any time sentinel is idle (who reloads sentinel, decided) |
-| sentinel | master | last of an update episode, only when the preflight passes for master (idle, `openWork` empty: no open challenge, mission attempt, open ask or `accepted` board task it owns) and no pilot lease is held by another driver (`{p}:pilot`) |
+| sentinel | master | last of an update episode, only when the preflight passes for master (idle, `openWork` empty: no open challenge, mission attempt or `accepted` board task it owns; its own open ask only blocks a `--fresh` reload) and no pilot lease is held by another driver (`{p}:pilot`) |
 | a person | anyone | with an explicit `--as <person>` (never an inherited `AGENT_BUS_HUMAN`) |
 
 The CLI enforces the table from `AGENT_BUS_AGENT` and the bus facts; like `gate close --as`, it
@@ -270,7 +283,7 @@ authenticate local processes.
 **Proposed default: none needed.** Bernard: "it is sentinel's task". On an update episode
 sentinel reloads the ready agents one at a time (ready = `reload`'s preflight passes: declared
 idle, not busy, not on a fallback, and `openWork` empty: no open challenge either side, no mission
-attempt, no open ask, no `accepted` board task it owns),
+attempt, no `accepted` board task it owns, and no open ask of its own for a `--fresh` one),
 master last, and reports each one; agents not ready are retried on its next wake. **Opt-out:**
 `AGENT_BUS_RELOAD=propose` restores the client-reload spec's proposal (sentinel → master → `ask`),
 and `AGENT_BUS_RELOAD=off` makes `reload` refuse for every caller but a person. Both are in the

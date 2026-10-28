@@ -63,6 +63,7 @@ type reloadWorld struct {
 	launched string // client_fp the relaunch binds (default installedFP)
 	relaunch error  // returned by the relaunch
 	noProof  bool   // the relaunch starts nothing
+	check    error  // returned by the pre-kill relaunch check
 }
 
 func newReloadWorld(t *testing.T) (*reloadWorld, reloadDeps) {
@@ -113,6 +114,7 @@ func newReloadWorld(t *testing.T) (*reloadWorld, reloadDeps) {
 			}
 			return nil
 		},
+		CheckRelaunch: func(context.Context, string) error { w.mu.Lock(); defer w.mu.Unlock(); return w.check },
 		Relaunch: func(_ context.Context, role, session string) error {
 			w.mu.Lock()
 			w.calls = append(w.calls, "relaunch "+role+" "+session)
@@ -230,7 +232,8 @@ func TestReloadPreflightRefusesWithoutChangingAnything(t *testing.T) {
 		"blocked":                     {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.status("coder", "blocked") }, "idle"},
 		"an accepted task it owns":    {"sentinel", []string{"coder"}, acceptedTask, "lifecycle-9"},
 		"an open challenge":           {"sentinel", []string{"coder"}, openChallenge, "challenge"},
-		"an open ask":                 {"sentinel", []string{"coder"}, openAsk, "ask"},
+		"an open ask, fresh":          {"sentinel", []string{"coder", "--fresh"}, openAsk, "ask"},
+		"no relaunch path":            {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.check = errors.New("not inside herdr") }, "not inside herdr"},
 		"no session to resume":        {"sentinel", []string{"foureyes"}, nil, "--fresh"},
 		"no pilot for master":         {"sentinel", []string{"master"}, nil, "verified pane"},
 		"master while another pilots": {"sentinel", []string{"master"}, masterPilotedByOther, "pilot"},
@@ -475,5 +478,47 @@ func TestReloadAsHasNoShortFlag(t *testing.T) {
 		if got := expandArgs(args); slices.Contains(got, "--as") {
 			t.Fatalf("expandArgs(%q) = %q: a spelling the deny does not name", args, got)
 		}
+	}
+}
+
+// reload-fix-2: everything the relaunch needs is checked before the kill. A
+// relaunch that cannot run (outside herdr, no tab and no pop path) refuses
+// the reload with nothing signalled, the dry run included.
+func TestReloadChecksTheRelaunchBeforeSigterm(t *testing.T) {
+	for _, args := range [][]string{{"coder"}, {"coder", "--dry-run"}} {
+		w, d := newReloadWorld(t)
+		w.check = errors.New("not inside herdr: run it in the project's herdr session")
+		code, out := w.run(d, "sentinel", args...)
+		if code == 0 || !strings.Contains(out, "not inside herdr") || !strings.Contains(out, "nothing was signalled") {
+			t.Fatalf("%v: exit %d, out %q", args, code, out)
+		}
+		if w.callList() != "" || w.intent("coder") || len(w.ledger("coder")) != 0 {
+			t.Fatalf("%v: calls %q, intent %v, ledger %+v", args, w.callList(), w.intent("coder"), w.ledger("coder"))
+		}
+	}
+}
+
+// An agent's own open ask waits on the person: a resumed session keeps the
+// conversation and the ask lives in Redis, so a resume reload goes ahead. A
+// fresh one would lose the context the ask was put in, so it is refused.
+func TestReloadResumesWithItsOwnOpenAsk(t *testing.T) {
+	w, d := newReloadWorld(t)
+	openAsk(w)
+	if code, out := w.run(d, "sentinel", "coder"); code != 0 || !strings.Contains(out, "reloaded coder") {
+		t.Fatalf("resume reload with its own ask: %d %s", code, out)
+	}
+	w, d = newReloadWorld(t)
+	openAsk(w)
+	if code, out := w.run(d, "sentinel", "coder", "--fresh"); code == 0 || !strings.Contains(out, "ask") {
+		t.Fatalf("fresh reload with its own ask: %d %s", code, out)
+	}
+}
+
+// Real deps always carry the pre-kill check; without one nothing is signalled.
+func TestReloadWithoutARelaunchCheckSignalsNothing(t *testing.T) {
+	w, d := newReloadWorld(t)
+	d.CheckRelaunch = nil
+	if code, out := w.run(d, "sentinel", "coder"); code == 0 || !strings.Contains(out, "nothing was signalled") || w.callList() != "" {
+		t.Fatalf("exit %d, out %q, calls %q", code, out, w.callList())
 	}
 }

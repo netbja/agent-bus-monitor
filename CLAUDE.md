@@ -757,9 +757,12 @@ It never touches Redis — see README "Example deployment".
   last and only with no other pilot driver; master only sentinel; a person anyone by an explicit
   `--as`, which also passes the identity guard), `AGENT_BUS_RELOAD` (caller's env, else the
   project's env file; `up --reload on|propose|off`; `propose` and `off` leave only a person's `--as`), a preflight that changes nothing (verified live
-  identity, not its own pane, not on a fallback, `reloadOpenWork` = swap's `openWork` plus an open
-  ask and an `accepted` board task, declared idle, no wake typing, a proved Claude Code session
-  unless `--fresh`), the intent and a second readiness read, SIGTERM to the re-checked pid (never
+  identity, not its own pane, not on a fallback, `reloadOpenWork` = swap's `openWork` plus an
+  `accepted` board task and, only with `--fresh`, its own open ask (a resume keeps the conversation and
+  the ask is in Redis), declared idle, no wake typing, a proved Claude Code session unless `--fresh`,
+  and `planRelaunch` before the kill: inside herdr, the workspace open, one template tab, or for a pop
+  (`tier = "pop"`) agent-spawn and the caller in the project's workspace; a pop comes back through
+  `agent-spawn <role> <p> [--resume <id>]` with the bind required (`spawnPop`), as swap does), the intent and a second readiness read, SIGTERM to the re-checked pid (never
   SIGKILL), `relaunchRole` (up's lock and relaunch, the role's tab only, resuming `IdentSession`; after the
   exit it re-reads the tab, bounded 20 s, until `judgeTab` — up's own rule — reads a relaunch, since herdr's
   view lags the exit, and a tab the relaunch skips is an error, not a minute of waiting for proof),
