@@ -142,6 +142,7 @@ type fakeReader struct {
 	marks      map[string]string
 	observed   map[string]bus.Observation
 	swaps      map[string]bool
+	intents    map[string]bus.SwapIntent // SwapIntents, beside swaps (plain swaps)
 	handoffs   map[string]bus.Handoff
 	fallbacks  map[string]bus.FallbackRecord
 	verdicts   map[string]bus.ModelVerdict
@@ -310,9 +311,18 @@ func (f *fakeReader) Observed(context.Context) (map[string]bus.Observation, erro
 	f.n("Observed")
 	return f.observed, nil
 }
-func (f *fakeReader) Swaps(context.Context) (map[string]bool, error) {
-	f.n("Swaps")
-	return f.swaps, nil
+func (f *fakeReader) SwapIntents(context.Context) (map[string]bus.SwapIntent, error) {
+	f.n("SwapIntents")
+	out := map[string]bus.SwapIntent{}
+	for r, ok := range f.swaps {
+		if ok {
+			out[r] = bus.SwapIntent{}
+		}
+	}
+	for r, in := range f.intents {
+		out[r] = in
+	}
+	return out, nil
 }
 func (f *fakeReader) Handoffs(context.Context) (map[string]bus.Handoff, error) {
 	f.n("Handoffs")

@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -27,7 +28,18 @@ type SwapIntent struct {
 	By        string `json:"by"`
 	OldPID    int    `json:"old_pid"`
 	OldStart  uint64 `json:"old_start"`
+	// Kind is "" for a swap, SwapKindReload for `agentbus reload` (lifecycle
+	// spec, part C): the same intent, so the dispatcher's rules for a swap
+	// (no prompt, escalation, resume or clear) apply to a reload unchanged.
+	Kind string `json:"kind,omitempty"`
 }
+
+// SwapKindReload marks a reload's intent and ledger entries.
+const SwapKindReload = "reload"
+
+// ErrNotInstalled: a reload's intent is refused for a project `agentbus up`
+// never installed (no services marker), so a deleted project is never revived.
+var ErrNotInstalled = fmt.Errorf("the project is not installed (agentbus up)")
 
 // ErrSwapInProgress: another swap of the same role holds the intent.
 var ErrSwapInProgress = fmt.Errorf("a swap of this role is already in progress")
@@ -54,6 +66,29 @@ func (b *Bus) Swaps(ctx context.Context) (map[string]bool, error) {
 		}
 	}
 	return out, iter.Err()
+}
+
+// SwapIntents is role → intent of every live intent (busmon tells a reload
+// from a swap by its Kind); an unreadable intent counts as a swap.
+func (b *Bus) SwapIntents(ctx context.Context) (map[string]SwapIntent, error) {
+	roles, err := b.Swaps(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]SwapIntent, len(roles))
+	for role := range roles {
+		var in SwapIntent
+		v, err := b.r.Get(ctx, SwapKey(b.project, role)).Result()
+		if err == redis.Nil {
+			continue // ended since the scan
+		}
+		if err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(v), &in)
+		out[role] = in
+	}
+	return out, nil
 }
 
 // ReviewsOf (v0.15 §6.1.3) lists the open 4-eyes challenges agent takes part

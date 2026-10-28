@@ -727,7 +727,13 @@ It never touches Redis — see README "Deployment topology".
   interrupted and closed by the next swap); `swap --back` returns a role to its own profile and
   model (refused only when profile, client, provider and launched model all match); `agentbus
   retire <role>` closes one role's tab with the same checks (not `shutdown`, which is team-wide);
-  `agentbus swaps` lists the ledger. A fallback record keeps `held_episode`, and the release of that
+  `agentbus swaps` lists the ledger (a reload's entries tagged `[reload]`). Lifecycle-3a: a reload
+  (`agentbus reload`, part C) holds the same intent with `kind=reload` (`SwapIntent.Kind`,
+  `SwapKindReload`), so every swap rule of the dispatcher applies unchanged; its `begin` carries the
+  kind and is refused without the services `installed` marker (`ErrNotInstalled`, in the intent's
+  script), it ends with `reloaded` (`FinishReload`, never the fallback state), an interrupted one is
+  closed as a failed reload (`closeInterrupted`), and busmon flags it `reloading` (`SwapIntents`).
+  A fallback record keeps `held_episode`, and the release of that
   episode earns master one `back:<p>:<role>` notice; its own provider stays watched. The launched
   model (`AGENT_BUS_MODEL`) is part of the verified identity (`AgentSnapshot.Model`, set only with a
   proof). `agentbus roles doctor [--publish]` compares configured (roles.toml, the current profile),

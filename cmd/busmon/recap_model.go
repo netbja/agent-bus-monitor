@@ -226,7 +226,11 @@ func buildRecap(in recapInput) recapModel {
 				continue
 			}
 			copy := s
-			add(recapRow{Key: "swap:" + s.ID, Section: "Since your last visit", Title: s.Role + " " + GlyphNone + " swap " + s.Event,
+			what := "swap"
+			if s.Kind == bus.SwapKindReload {
+				what = "reload"
+			}
+			add(recapRow{Key: "swap:" + s.ID, Section: "Since your last visit", Title: s.Role + " " + GlyphNone + " " + what + " " + s.Event,
 				Detail: swapDescription(s), Kind: "swap", Agent: s.Role, Swap: &copy, Selectable: true})
 		}
 		if in.Pause != nil && in.Pause.At > in.Since.UnixMilli() {

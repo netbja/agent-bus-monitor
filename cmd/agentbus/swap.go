@@ -203,10 +203,7 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 
 	// 6.2 Handoff. A begin left without an end by a dead caller is closed in
 	// the ledger first (§11.2); the new begin goes with the intent.
-	if bad, ev, err := b.Interrupted(ctx, role); err == nil && bad {
-		_ = b.LogSwap(ctx, bus.SwapEvent{Role: role, Event: bus.SwapFailed, ToProfile: ev.ToProfile, By: self,
-			Error: "interrupted: the swap begun at " + ev.ID + " never finished"})
-	}
+	closeInterrupted(ctx, b, role, self)
 	marks0, err := b.QuotaMarks(ctx)
 	if err != nil {
 		return fail("%v", err)
@@ -351,6 +348,22 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	}
 	fmt.Fprintf(out, "resume sent to %s\n", role)
 	return 0
+}
+
+// closeInterrupted closes in the ledger a begin left without an end by a
+// dead caller (§11.2), as what it was: a swap, a retire or a reload (its
+// kind kept, lifecycle part C).
+func closeInterrupted(ctx context.Context, b *bus.Bus, role, self string) {
+	bad, ev, err := b.Interrupted(ctx, role)
+	if err != nil || !bad {
+		return
+	}
+	what := "swap"
+	if ev.Kind == bus.SwapKindReload {
+		what = "reload"
+	}
+	_ = b.LogSwap(ctx, bus.SwapEvent{Role: role, Event: bus.SwapFailed, ToProfile: ev.ToProfile, By: self, Kind: ev.Kind,
+		Error: "interrupted: the " + what + " begun at " + ev.ID + " never finished"})
 }
 
 // openWork refuses (exit 1) while agent takes part in open work keyed by its
