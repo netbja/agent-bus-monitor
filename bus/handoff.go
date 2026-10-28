@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -158,4 +159,57 @@ func (b *Bus) FencedDeleteHandoff(ctx context.Context, token, agent string, h Ha
 		return ErrNotHolder
 	}
 	return nil
+}
+
+// ClearMark is the {p}:quota field of an agent's auto-clear (lifecycle part
+// B): "<session>|<at>|<report>", the session of the record cleared, the Redis
+// TIME of its reservation and the hand-off's report (named again if the
+// record is gone by the proof). One clear per session, whatever the
+// dispatcher's restarts.
+func ClearMark(agent string) string { return "clear:" + agent }
+
+// ParseClearMark reads a ClearMark value.
+func ParseClearMark(v string) (session string, at int64, report string, ok bool) {
+	parts := strings.Split(v, "|")
+	if len(parts) != 3 || parts[0] == "" {
+		return "", 0, "", false
+	}
+	at, err := strconv.ParseInt(parts[1], 10, 64)
+	return parts[0], at, parts[2], err == nil
+}
+
+// clearReserve: -1 not the holder; 0 the record changed or this session was
+// already cleared; else the Redis TIME (ms) of the reservation, with the mark
+// set.
+var clearReserve = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
+local raw = redis.call('HGET', KEYS[2], ARGV[2])
+if not raw then return 0 end
+local ok, h = pcall(cjson.decode, raw)
+if not ok or type(h) ~= 'table' or h['report'] ~= ARGV[3] or h['at'] ~= tonumber(ARGV[4]) then return 0 end
+local mark = redis.call('HGET', KEYS[3], 'clear:' .. ARGV[2])
+if mark and string.sub(mark, 1, #ARGV[5] + 1) == ARGV[5] .. '|' then return 0 end
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+redis.call('HSET', KEYS[3], 'clear:' .. ARGV[2], ARGV[5] .. '|' .. now .. '|' .. ARGV[3])
+return now`)
+
+// FencedReserveClear reserves the clear of agent's record h while token holds
+// the lease: only while the record stored is still h, and once per h.Session.
+// It returns the reservation's Redis TIME and whether it reserved.
+func (b *Bus) FencedReserveClear(ctx context.Context, token, agent string, h Handoff) (int64, bool, error) {
+	if !ValidName(agent) || !ValidSessionID(h.Session) {
+		return 0, false, fmt.Errorf("reserve clear: invalid agent %q or session", agent)
+	}
+	n, err := clearReserve.Run(ctx, b.r, []string{DispatchKey(b.project), HandoffKey(b.project), QuotaKey(b.project)},
+		token, agent, h.Report, h.At, h.Session).Int64()
+	switch {
+	case err != nil:
+		return 0, false, err
+	case n == -1:
+		return 0, false, ErrNotHolder
+	case n == 0:
+		return 0, false, nil
+	}
+	return n, true, nil
 }

@@ -3,6 +3,7 @@ package dispatch
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -82,7 +83,16 @@ type fakeRT struct {
 	calls    map[string]int
 	prompts  []promptRec
 	observed bool
+	// reserved answers whether a clear of pane is reserved on the bus; a
+	// Clear without it, or unreserved, breaks the dispatchTypes invariant.
+	reserved func(pane string) bool
+	clearErr error
 }
+
+// wakeLinePattern is WakeText's format: the dispatchTypes invariant (lifecycle
+// part B) is that every Runtime write in every test of this package is a wake
+// line or exactly ClearText, and a clear only follows its reservation.
+var wakeLinePattern = regexp.MustCompile(`^\[agentbus#\S+\] \S+: \d+ message\(s\) waiting for \S+\. Run: agentbus --project \S+ subscribe --drain \S+$`)
 
 func newFakeRT(script func(pane string, n int) Inspection) *fakeRT {
 	return &fakeRT{script: script, calls: map[string]int{}, observed: true}
@@ -97,10 +107,23 @@ func (f *fakeRT) Inspect(_ context.Context, pane string) Inspection {
 }
 
 func (f *fakeRT) Prompt(_ context.Context, pane, text, nonce string) (bool, error) {
+	if !wakeLinePattern.MatchString(text) {
+		panic("dispatchTypes: the dispatcher typed something other than a wake line: " + text)
+	}
 	f.mu.Lock()
 	f.prompts = append(f.prompts, promptRec{Pane: pane, Text: text, Nonce: nonce, At: time.Now()})
 	f.mu.Unlock()
 	return f.observed, nil
+}
+
+func (f *fakeRT) Clear(_ context.Context, pane string) error {
+	if f.reserved == nil || !f.reserved(pane) {
+		panic("dispatchTypes: /clear typed into " + pane + " without its reservation")
+	}
+	f.mu.Lock()
+	f.prompts = append(f.prompts, promptRec{Pane: pane, Text: ClearText, At: time.Now()})
+	f.mu.Unlock()
+	return f.clearErr
 }
 
 func (f *fakeRT) Prompts() []promptRec {

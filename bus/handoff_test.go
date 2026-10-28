@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -223,5 +224,51 @@ func TestHandoffVoidedDurablyByWorkOrAReportRedis(t *testing.T) {
 	}
 	if !pending() {
 		t.Fatal("another agent's report voided coder's hand-off")
+	}
+}
+
+// The clear's reservation (lifecycle part B): lease-checked, only for the
+// record judged, once per session; its mark is session|Redis TIME.
+func TestFencedReserveClearRedis(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if err := b.Bind(ctx, "coder", AgentIdent{Pane: "w1:p2", PID: 42, PIDStart: 7}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ProveSession(ctx, "coder", 42, 7, "session-0001", 100); err != nil {
+		t.Fatal(err)
+	}
+	r, err := b.Report(ctx, "coder", ReportNote, "hand-off")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := b.DeclareHandoff(ctx, "coder", r, AgentIdent{PID: 42, PIDStart: 7, Session: "session-0001"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := b.FencedReserveClear(ctx, "tok", "coder", h); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("without the lease: %v", err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	stale := h
+	stale.At--
+	if _, ok, err := b.FencedReserveClear(ctx, "tok", "coder", stale); err != nil || ok {
+		t.Fatalf("a record not the one stored was reserved: %v %v", ok, err)
+	}
+	at, ok, err := b.FencedReserveClear(ctx, "tok", "coder", h)
+	if err != nil || !ok || at < h.At {
+		t.Fatalf("reserve: %d %v %v", at, ok, err)
+	}
+	if _, ok, _ := b.FencedReserveClear(ctx, "tok", "coder", h); ok {
+		t.Fatal("reserved twice for one session")
+	}
+	marks, _ := b.QuotaMarks(ctx)
+	if m := marks[ClearMark("coder")]; m != "session-0001|"+strconv.FormatInt(at, 10)+"|"+r {
+		t.Fatalf("mark %q", m)
+	}
+	if sess, gotAt, rep, ok := ParseClearMark(marks[ClearMark("coder")]); !ok || sess != "session-0001" || gotAt != at || rep != r {
+		t.Fatalf("ParseClearMark: %q %d %q %v", sess, gotAt, rep, ok)
 	}
 }
