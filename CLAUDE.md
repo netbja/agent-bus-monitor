@@ -437,7 +437,7 @@ launchd), started by `agentbus up`; herdr tabs remain only as the explicit fallb
 
 There is also a parallel notification path that is **not** on this bus: a `project-c` `Stop`
 hook POSTs (via `hermes-notify`) to a hermes gateway on host1 (`:8644`) that delivers to Signal.
-It never touches Redis — see README "Deployment topology".
+It never touches Redis — see README "Example deployment".
 
 ### Things that bite
 

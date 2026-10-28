@@ -23,23 +23,44 @@ broker, the client and the monitor all live here; nothing depends on any other p
   Code, Codex and others from one manifest (`agentbus up`, `roles.toml`).
 - **Large changes as missions** — a conductor merges, tests and reviews agents' work
   (`agentbus missions`).
+- **Decisions put to you as questions** — an agent asks, busmon shows the options, your
+  answer wakes it (`agentbus ask`).
+- **Quotas watched for you** — every provider's usage windows read from local sources; agents
+  are held before the limit and the project pauses until the reset (`agentbus quota`,
+  `agentbus pause`), and a role can move to a fallback profile (`agentbus swap`).
+- **A team that outlives its context** — at 80 % context an agent hands off; sentinel reloads an
+  agent after a client update (`agentbus handoff`, `agentbus reload`).
+- **Health and spend** — measured project health (`agentbus health`, F5) and tokens per project,
+  agent and day, never a cost (`agentbus tokens`, `U`).
 
 ## Quick start
+
+You need Linux or macOS, Go (the version in `go.mod`), Docker with Compose, Git and curl.
+herdr (0.9.0 or newer) is installed for you with `--install-herdr`.
 
 ```bash
 git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor
 ./setup.sh install --install-herdr     # toolchain check, binaries, skills, herdr plugin, Redis
+agentbus statusline --print-install    # Claude Code users: the statusLine block for ~/.claude/settings.json
 herdr --session myproject              # then, inside herdr:
 agentbus up myproject ~/code/myproject --as <your-name>
 ```
 
-`agentbus up` provisions the team and opens its workspace, with busmon first. Later,
-`Ctrl+B` then `↑` reopens any project.
+`agentbus up` provisions the team and opens its workspace, with busmon first. busmon's
+first-launch tour walks you through its screen (F1 then `t` shows it again). Later, `Ctrl+B`
+then `↑` (the plugin's Projects picker) reopens any project.
 
 - `./setup.sh update` keeps the machine current; busmon shows `↑ vX.Y.Z` in its header when a
   newer release exists.
 - `./setup.sh status` shows what is installed.
 - `./setup.sh uninstall` removes it, asking first at each step.
+- `scripts/setup-go.sh` is the same installer ported to Go (`agentbus setup`), with the same
+  flags. It is there to be tried; `./setup.sh` stays the default until the switch
+  ([below](#agentbus-setup-the-go-installer-preview)).
+
+The `statusLine` step gives agent-bus Claude Code's rate limits and each session's context
+fill: without it the Claude gauges and the context alert have nothing to read. Codex, Grok,
+Kimi Code and agy need nothing ([quotas](docs/OPERATIONAL-GUIDE.md#scenario-c-watching-and-stopping-a-project)).
 
 **What's new:** see the [CHANGELOG](CHANGELOG.md), and [`docs/releases/`](docs/releases/) for
 the full notes of each version. The step-by-step guides are in English and French:
@@ -54,45 +75,13 @@ change ([EN](docs/OPERATIONAL-GUIDE.md#6-starting-work-a-small-task-a-large-chan
 |------------|-----------------------------------------------------------------------------|
 | broker     | `redis:8-alpine` on `localhost:6380` (`docker-compose.yml`)                |
 | `bus/`     | Go package: connection, Streams API (`Bus` handle), publish helpers         |
-| `agentbus` | CLI client — status/report/notify/cmd/subscribe/listen (`cmd/agentbus`)     |
-| `busmon`   | TUI dashboard: Agents / Activity / Board / Requests (`cmd/busmon`)          |
-| `dispatch/`| Wake dispatcher behind `agentbus dispatch`: wakes unarmed agents via herdr  |
-
-## Deployment topology (current: machine ⇄ remote machine)
-
-The bus is consumed by a concrete two-host setup. This is how the pieces wire up
-today — and, importantly, where they *don't* connect.
-
-- **Broker** runs on the **laptop/desktop** (`docker compose up`, redis:8-alpine on `:6380`).
-- The **remotebox** (`user@remotebox`) reaches it through an SSH tunnel it opens *to* the laptop/desktop:
-  `ssh -L 6380:localhost:6380 user@laptop -N`. So `agentbus --host 127.0.0.1`
-  on the remote box publishes onto the laptop's bus.
-- Two Claude Code sessions run on the laptop under **herdr** in `~/myproject`
-  (agents `claude1`, `claude2`); a **hermes agent** runs on the remote box.
-
-**Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
-A session arms `agentbus subscribe <agent> [idle_secs]` as a Claude Code background task. It blocks
-on the project's `:cmd` stream via XREADGROUP, emits one JSON object per fire (a `cmd` object, or a
-`heartbeat` object after the idle window, default 240s) then exits — and that exit re-invokes the
-Claude session that armed it. Each session re-arms after every fire. The whole loop lives in the `agentbus` binary, so
-there is **no wrapper script and no watcher daemon** in the agent path. `busmon` runs alongside as
-the human dashboard.
-
-> This supersedes `myproject/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
-> and the persistent `~/.hermes/scripts/bus_watch_hdl.sh` logger loop. An even earlier prototype,
-> `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes with hard-coded pane IDs. Don't
-> reintroduce a wrapper script — a restart loop never wakes a terminal session. v0.8 revised the
-> pane-relay part on purpose ([decision](docs/memory/decisions/2026-10-10-event-driven-dispatch.md)):
-> **the only automated process that types into panes is `agentbus dispatch`, and it types a wake
-> line, never a message; master's manual pane injection remains the fallback while no dispatcher
-> runs.** Pane ids are self-registered (or bound with `agentbus bind`) and pid-verified, not hard-coded.
-
-**Separate notification path — NOT the bus.** The `Stop` hook in
-`myproject/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
-the remote box's hermes **gateway** at `http://<remote>:8644/webhooks/claude-notify`. That route is
-`Deliver: signal`: it pings a human over Signal when a Claude task stops. The gateway never
-touches Redis, so this path is **independent of the agent bus** — webhook traffic does not appear
-on `hermes:*`, and the bus carries nothing back to Signal.
+| `agentbus` | CLI client and project tooling: status, cmd, subscribe, up, ask, swap… (`cmd/agentbus`) |
+| `busmon`   | TUI dashboard: For you, Agents, Activity, Board, Requests, Plan (`cmd/busmon`) |
+| `dispatch/`| Wake dispatcher behind `agentbus dispatch`: wakes unarmed agents via herdr, watches quotas, health, context |
+| `mission/` | The missions conductor behind `agentbus missions`                          |
+| `service/` | The project services: systemd `--user` units, launchd plists                |
+| `setup.sh`, `setup/` | The installer, in bash and its Go port (`agentbus setup`)         |
+| `herdr-plugin.toml` | The herdr plugin `netbja.agentbus`: Projects picker, busmon action, workspace hook |
 
 ## Run the broker
 
@@ -156,6 +145,29 @@ just pulled.
 The plugin link is unlinked on its own question, and only when setup made it. The repository itself is
 left in place. It has no `--dry-run`: run it without `--yes` and answer each question.
 
+### `agentbus setup`: the Go installer (preview)
+
+`scripts/setup-go.sh` checks Git and Go, builds `agentbus` from the checkout and hands every
+argument to `agentbus setup`, the installer ported to Go. Its subcommands, flags, questions and
+output are setup.sh's, so the commands above work unchanged:
+
+```bash
+scripts/setup-go.sh install --dry-run
+scripts/setup-go.sh install --install-herdr
+scripts/setup-go.sh status
+scripts/setup-go.sh update          # pulls, then runs scripts/setup-go.sh again
+scripts/setup-go.sh uninstall
+```
+
+One thing it adds: it starts, stops or removes the `agent-bus-redis` container only when that
+container does not exist or belongs to this checkout (its Compose `working_dir` label), checked
+again right before each `docker compose` call. A broker started from another copy of the
+repository is refused and named in `status` ("belongs to <dir>"). A question with no terminal
+to ask on takes the cautious answer.
+
+It is rollout step 1: `./setup.sh` stays the installer. Once the Go port has been tried on real
+machines, `./setup.sh` becomes this thin script and the bash one is retired.
+
 ### Manual build
 
 ```bash
@@ -166,10 +178,15 @@ go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus (version "dev": 
 
 ## Use it
 
-`AGENT_BUS_PROJECT` (or `--project <p>`) is required for all commands except `agentbus mem`
+`AGENT_BUS_PROJECT` (or `--project <p>`, `-p <p>`) is required for every command that reads or
+writes one project's bus. The machine-wide ones need none: `up` (the project is its argument),
+`projects`, `tokens`, `quota`, `models`, `identity`, `limits`, `version`, `help`, `agentbus mem`
 ([shared memory](#shared-memory-agentbus-mem), which works on files only) and `agentbus roles`
-(the role manifest the scripts use: `validate`, `tier`, `field`, `launch`, `install`, `template`;
-no Python any more).
+(the role manifest; `roles doctor` and `roles adopt` need the project).
+
+`agentbus help` lists every command, `agentbus help <command>` (or `<command> --help`) shows its
+usage, flags and examples. Every long flag has its GNU short form where the help shows one
+(`-p` project, `-H` host, then the command's own), and `--flag=value` works too.
 
 > **Agents:** a copy-paste command reference (with the flag/positional traps that
 > cause retries) lives in [`docs/AGENT-BUS-GUIDE.md`](docs/AGENT-BUS-GUIDE.md).
@@ -202,7 +219,18 @@ agentbus pilot claim --ttl 120s                    # claim pilot lease (self = A
 agentbus gate claude2                              # list open 4-eyes challenges; exit 1 if gated
 agentbus verdict --pr 25 myagent approve "LGTM"    # write verdict to {p}:verdicts; --ref resolves matching gate (best-effort)
 agentbus verdicts --pr 25                          # roll-up 4-eyes state: APPROVED/REJECTED/PENDING (exit 0/3/2); no-arg lists recent
-agentbus usage                                     # print every agent's budget; usage <a> '<json>' writes one
+agentbus usage                                     # every agent's model and context
+agentbus agents                                    # every agent's declared state
+agentbus ask master --file questions.json          # put structured questions to the person (busmon answers them)
+agentbus asks --open                               # the open questions; agentbus answer <id> <q> --choice <label>
+agentbus pause --for 2h "release window"           # nobody is woken until then; agentbus resume ends it
+agentbus health                                    # the project's measured health; health detail <id>
+agentbus quota                                     # every provider's usage windows, read now (no project needed)
+agentbus tokens                                    # tokens per project side by side; --project p --by agent|day
+agentbus projects                                  # every known project: templates, broker, services, agents
+agentbus handoff                                   # the declared hand-offs (an agent declares its own)
+agentbus swap coder --profile codex                # move a role to one of its fallback profiles; --back returns
+agentbus reload coder --as <your-name> --dry-run   # what a reload of coder would do (a person may reload anyone)
 agentbus version                                   # print the bus protocol version (no project/broker needed)
 
 busmon --list                                      # what projects are on this bus? (no --project needed)
@@ -318,77 +346,105 @@ default) is blocked and escalated. busmon shows `missions up/down`; the bootstra
 
 ## busmon panes
 
-A btop-style dashboard (v0.9); the [screenshot at the top](#new-in-v090--busmon-redesign) shows it at
-160 columns on a demo project.
+busmon is the person's screen: what needs you, who does what, and what was said. The
+[screenshot at the top](#agent-bus) shows it on a demo project.
 
-<details><summary>The same layout as text, 120 columns</summary>
+<details><summary>The same layout as text, 140 columns</summary>
 
 ```
- uidemo   ● bus ok   ○ dispatch down   autonomous   1 request waiting · oldest 1h                       19:30:14
-╭─ Agents ──────────────────────────────────────────────────────────── 4 agents · 2 working · 1 blocked ─╮
-│    agent     state     updated             queue    ctx     flags               message                │
-│▶ ▲ grok      blocked   ████░░░░░░ 6m       ·        —       gate 1              needs review of PR #46 │
-│  ○ codex     idle      ███████░░░ 3m       1 msg    64k     deferred            waiting                │
-│  ● kimi      working   █████████░ 40s      ·        —       armed               running tests          │
-│  ● master    working   ██████████ 12s      ·        182k    pilot · armed       coordinating v0.9      │
-╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Activity  live ──────────────────────── 8 events · filter: none ─╮╭─ Board ─────────────── 0/1 done ─╮
-│  time   from      to         type       message                   ││  task      owner     state    age │
-│  ── Sat 2026-10-10 ───────────────────────────────────────────────││  ui-theme  codex     working  1h  │
-│  18:23  master    → codex    directive  review render.go          │╰──────────────────────────────────╯
-│  18:23  kimi                 report     go test ./... passed      │╭─ Requests ─────────── 1 waiting ─╮
-╰───────────────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
-› i or : to write · @agent or @all text wakes them · plain text: a broadcast nobody reads
- tab focus   ↑↓ j k select   enter detail   y copy   / filter   i write   esc back   F2 requests   F1 help   q quit
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                                           15:04:05
+ paused · resumes in 1h52 (lunch)   ♙ Bernard [human]   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44
+╭─ For you ───────────────────── 4 for you · 2 unread ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
+│  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
+│  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
+│  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask ┃
+│  ◆ gate   coder     by bernard  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  ┃
+│  ● unread dispatch  project paused until 16:56     8m││  ✓ architect done      40m     —        —         escalating · busy   spec merged┃
+│                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…┃
+│                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…┃
+│                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…┃
+│                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
+│                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity  2 Board  3 Requests  4 Plan   auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
+│    time   from      to         type       message                                                                                        │
+│  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│    14:24  architect            status     done · spec merged                                                                             │
+│    14:50  ♙ Bernard → coder    directive  review lot 1                                                                                   │
+│    14:51  coder                report     Lot 1 delivered (+197)                                                                         │
+│  ○ 14:52  master    → bernard  directive  please look at the plan                                                                        │
+│  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
+│  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
+│    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›
+ tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! w answer   / filter   i write   F1 help   F5 health
 ```
 
 </details>
 
 - **Header** — the project, then the **monitor's own** link to Redis (`● bus ok`, or
   `▲ bus down 42s` — a broker busmon cannot reach looks exactly like a quiet team, and the
-  two call for opposite reactions), the dispatcher (`● dispatch up` / `○ dispatch down`),
-  the pilot (`pilot <name>` or `autonomous`), what is waiting on someone, the account budget
-  **used** per provider (session and week gauges) and the clock. Health and dispatch are never
-  truncated; the rest gives way from the right on a narrow terminal.
-- **Agents** — one row per agent, **attention first**: escalated, gated or blocked; then
-  queued or being woken; then working, idle, done, and agents that never declared a state.
-  Columns: the **declared** state (never overwritten by silence — an agent that said
-  `working` three hours ago still reads `working`), how old that declaration is (the bar
-  empties over 10 minutes: freshness, not liveness — the bus has no heartbeat), the
-  wake-eligible **queue** (`·` measured zero, `—` not measured yet, `2?` last read failed),
-  its own context in raw **tokens** (never a percentage), and up to two flags in words:
-  `escalated`, `gate N`, `deferred`, `unobserved`, `waking`, `woken` (the dispatcher saw its
-  nonce echoed — not proof anything was read), `pilot`, `armed` (a lease, not a state),
-  `stale N`. The panel holds about a third of the screen and scrolls (scrollbar on its right
-  border); **Enter** or a click opens the agent's detail: full status message, pane and pid,
-  lease, queue with the shared-stream lag and its caveat, wake record, possible gap ("possible,
-  not proven"), gates, context, board tasks and its last activity lines.
-- **Activity** — one line per event in columns `time · from · to · type · message`, a day
-  separator at each date change. It follows the feed live; moving up (or the wheel) pauses it
-  and the title counts `paused · N new`; **End**/**G** or **Esc** returns to live. **/** filters
-  (`@agent`, a thread id, words); the filter stays shown in the title. **Enter** opens the
-  message, **y** copies the line (OSC52, works over SSH).
-- **Board** — the shared task board: `task · owner · state · age`, newest first; Enter opens
-  the task (with its branch).
-- **Requests** — tracked requests still waiting, then cmd threads with no answer in the
-  retained history (never shown as accepted); the header counts both.
-- **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` sends a
-  directed cmd (Tab completes the name) that wakes the agent, `@all <text>` one to every agent.
-  Plain text is a notify that no agent reads and nothing wakes for: the first Enter says so, a
-  second one sends it. Esc leaves it and keeps the draft. For more than one line, **`I`** opens
-  the **compose window** (v0.16): Enter is a new line, **Ctrl+S** sends, **Tab** moves to the
-  recipient (`@agent`, `@all`, empty for a broadcast), **Esc** closes and keeps the draft;
-  **Ctrl+O** or **Alt+Enter** in the line (its end says so), or a paste with several lines, moves the text there. `I` in an agent's
-  detail writes to that agent. The free answer in the question panel uses the same window. You write as a **person**: `busmon
-  --as bernard` (or `AGENT_BUS_HUMAN`) shows "♙ Bernard [human · pilot]" in the header (`pilot`
-  while you hold the lease); with no name it is "♙ Pilot [human]". Your entries carry `human=yes`,
-  and agents see `"human": true`.
+  two call for opposite reactions), the dispatcher and the conductor (`dispatch up`,
+  `missions up`, or their service state: `dispatch waiting herdr`, `missions waiting git`…), what
+  is for you (`♙ 4 for you`, `● 2 unread`), the project's health pill, a pause
+  (`paused · resumes in 1h52 (lunch)`), your name as a person, and one usage gauge per provider
+  (`claude 5h 62% │ 7d 41%`, `held` past the hold threshold), each provider in its own colour,
+  then the clock. Health and dispatch are never truncated; the rest gives way from the right.
+- **For you** — what only you can settle: an agent's open questions (`ask`), an
+  agent `waiting` for your decision (`wait`), a 4-eyes gate you opened or that holds you
+  (`gate`), and messages addressed to you that you have not opened (`unread`, `●`; `○` once a
+  newer one, an answer or a closed ask supersedes it). Enter opens one; `!`, `w` or F4 answers the
+  questions (one tab per question, a digit or Enter picks an option, `Other…` writes your own).
+- **Agents** — one row per agent, **attention first** (waiting for you, escalated, gated,
+  blocked; then queued; then working, idle, done). Columns: the **declared** state (never
+  overwritten by silence — an agent that said `working` three hours ago still reads `working`;
+  `paused` or `quota` while the project or its provider is held), how old that declaration is
+  (freshness, not liveness), the wake-eligible **queue**, its **context** (raw tokens, plus the
+  fill when Claude Code reports it: `88k 85%`), up to two **flags** in words (`escalated`,
+  `gate 1`, `deferred`, `armed`, `pilot`, `prompt` when its pane waits on the client's own
+  prompt, `busy` when the pane runs a turn it did not declare, `handoff`, `held`, `swapping`,
+  `reloading`, `fallback <profile>`, `update`, `model≠`…) and its message. An agent silent for
+  more than a day is hidden (`a` shows it; `d` then `y` forgets it). Enter opens its page:
+  status, pane and pid, models (configured, launched, used), queue, wake record, gates, context,
+  board tasks, last activity; `i` there writes to it.
+- **The lower panel's tabs** (`1`–`4`):
+  - **Activity** — one line per event (`time · from · to · type · message`) with a day
+    separator. Enter expands a line in place, a second Enter opens it in the reader (`n`/`p`
+    step to the next or previous one). It scrolls live; `f` or a wheel scroll up stops it, `End`
+    resumes it. `/` filters (`@agent`, a thread id, words), `u` jumps to the next unread line.
+  - **Board** — the shared task board: `task · owner · state · age`; Enter opens a task.
+  - **Requests** — who owes whom an answer, by thread: owed by you, waited on by you, tracked
+    requests, reviews still gated, directives between agents, notices; answered threads and
+    those older than 24 h are folded (`o`). Enter expands a group or opens a thread; `d` then `y`
+    closes a thread with a reply from you.
+  - **Plan** — the batch's plan (`agentbus plan load`), its tasks by state: waiting for you, blocked,
+    in review, in progress, upcoming, done. Enter opens a task: its review, PR, asks and notes.
+- **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent
+  (Tab completes the name), `@all <text>` every registered agent. Plain text is a notice nobody
+  reads: the first Enter says so, a second one sends it. **`I`** opens the compose window for
+  several lines (Ctrl+S sends, Tab moves to the recipient, Esc keeps the draft). You write as a
+  **person**: `busmon --as bernard` (or `AGENT_BUS_HUMAN`, or `agentbus identity set bernard`)
+  shows `♙ Bernard [human]`; your entries carry `human=yes`, and agents see `"human": true`.
 
-**Responsive.** At 120 columns and more, the layout above. From 80 to 119, the header takes
-two lines and the lower area becomes tabs (`1 Activity · 2 Board · 3 Requests`). Under 80,
-one view at a time (`1 Agents · 2 Activity · 3 Board · 4 Req`), with health and dispatch
-still in the header; under 30×6, busmon only says the terminal is too small. It runs the same
-inside herdr or in any terminal.
+**Pages.** Each opens over the lower zone, Esc goes back:
+
+| Key | Page |
+|---|---|
+| Enter | the selected line, agent, task or thread in full |
+| `!` `w` F4 | the open questions of an agent |
+| F1 `?` | the help: every key, state and flag in words; `t` there replays the tour |
+| F2 `r` | tracked requests and unanswered threads, with their delivery evidence |
+| F3 `s` | services: dispatch, missions and the Redis broker as cards (state, pid, last error, log size; Redis version, uptime, memory, keys); Enter or `l` opens a service's log |
+| F5 | project health: each check, its detail and remediation |
+| `R` | the recap: "where was I?", built from what the bus retains, unread first |
+| `P` | the plan |
+| `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |
+
+**Responsive.** At 120 columns and more, For you and Agents side by side above the tabs. From
+80 to 119 they are stacked. Under 80, one view at a time (`1 For you` … `6 Plan`), with health
+and dispatch still in the header; under 30×6, busmon only says the terminal is too small. It runs
+the same inside herdr or in any terminal.
 
 **Theme.** busmon draws on the terminal's own background. `--theme auto|dark|light` (or
 `AGENT_BUS_BUSMON_THEME`; `auto` reads `COLORFGBG`, else dark) picks the accent palette; a
@@ -398,10 +454,14 @@ Frames are drawn with single-cell glyphs only and every width is measured in cel
 box-drawing characters assume the terminal renders East-Asian "ambiguous" width as narrow
 (the default in Western locales).
 
-### Overlays: summary on screen, detail on demand
+**The first-launch tour.** The first time a release changes what busmon shows, a short tour
+over the real screen explains it, once per machine (`~/.cache/agentbus/busmon/_tour.json`);
+it waits for a calm moment and for a terminal large enough to show its pages whole.
 
-Details sit over the layout, one keypress away, so the panes stay compact. A detail is modal:
-keys and clicks outside it go nowhere; Esc or `q` closes it and puts focus back where it was.
+### What a page tells you
+
+A page is modal: keys outside it go nowhere; Esc or `q` closes it and puts focus back where it
+was. Two of them say more than they show:
 
 **Enter — the message in full.** The feed shows one clipped line; this shows the
 whole entry: author, addressee, absolute date and age, entry id, thread, and the
@@ -433,9 +493,6 @@ none was ever written; a body that reads back empty is reported as *not retained
 cause unknown* and never implies the work is done. Cmd threads
 with no answer in the retained history are listed separately and labelled as
 carrying no acceptance signal at all, because the protocol records none for them.
-
-**? / F1 — the legend.** Keys (generated from the same table that drives the footer),
-states, flags, activity types and the delivery vocabulary, in words.
 
 ### Liveness model (why no dedicated heartbeat)
 
@@ -507,7 +564,11 @@ agentbus up myproject /path/to/your/project --as <your-name>   # inside it
   launchd on macOS), not in a tab. Closing busmon, the workspace or herdr no longer stops them.
   When no manager is usable, `up` says so and opens them as tabs; `--tabs` forces that.
 - **Opens the workspace** directly, with busmon first and focused, then one tab per boot role.
-- **On a re-run**, it focuses the open workspace instead of opening a second one.
+  When a client (Claude Code, Codex) does not trust the project folder yet, it starts that
+  client's first agent alone and tells you to answer the client's trust dialog in that pane; the
+  others start once you have.
+- **On a re-run**, it focuses the open workspace and relaunches any agent that is gone, without
+  typing into an existing pane ([Resume a project](#resume-a-project)).
 - **Outside herdr**, it only provisions, and tells you how to open the workspace.
 
 The Projects picker (`Ctrl+B` then `↑`) reopens any provisioned project later (see
@@ -546,8 +607,8 @@ support (only clients with a probed screen signature are prompted).
   project was deleted, when another instance holds the lease, or when its configuration is
   invalid. The next `agentbus up` tries again.
 - **busmon shows it.** The header reads `dispatch ready`, `dispatch waiting herdr`,
-  `missions idle`, `missions busy`, `missions waiting git`, `missions failed` and so on. `F3` (or `s`) opens the Services
-  overlay, with the last error and the tail of the log.
+  `missions idle`, `missions busy`, `missions waiting git`, `missions failed` and so on. `F3` (or `s`) shows dispatch,
+  missions and the Redis broker as cards; Enter or `l` opens a service's log.
 - **Stopping during an integration** (`down`, or a stop) kills the running tests with their
   process group. The conductor redoes that check or integration at its next start.
 - **Secrets.** The broker password is kept in `~/.config/agentbus/services/<p>.env` (0600),
@@ -568,7 +629,7 @@ From there you drive the team as a human:
 Add `--index` (warm codegraph / code-index for the repo) or `--cron` (a daily sentinel review) to
 the `bootstrap new` line when you want them.
 
-### The herdr plugin (v0.20)
+### The herdr plugin
 
 `./setup.sh install` links this checkout into herdr as the plugin `netbja.agentbus` and binds
 `Ctrl+B` then `↑` (prefix+up) to its **Projects** picker. herdr-plus is not needed any more.
@@ -584,7 +645,7 @@ the `bootstrap new` line when you want them.
   migration code and no fallback to the old directory. When you move to v0.20:
 
   ```bash
-  mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/{ai-tradex-solana,hyperliquid}.toml ~/.config/agentbus/projects/
+  mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/*.toml ~/.config/agentbus/projects/
   ```
 
   (elsewhere, `herdr plugin config-dir cloudmanic.herdr-plus` gives the old directory; its
@@ -592,11 +653,13 @@ the `bootstrap new` line when you want them.
 
 ### Resume a project
 
-After a reboot, herdr restores the project's workspace and tabs, but the agents and the
-services are gone. Switching to the workspace (or `agentbus up <p>` in it) brings them back:
+After a reboot, herdr restores the project's workspace and tabs; nothing has started the
+services yet. Switching to the workspace (or `agentbus up <p>` in it) brings everything back:
 
-- **herdr restores the agents.** After a reboot, herdr's native session restore relaunches the
-  agents it knows how to resume, in the shells it has just spawned.
+- **herdr restores the agents.** herdr's native session restore relaunches the agents it knows
+  how to resume, in the shells it has just spawned. Every Claude Code agent started by the
+  launcher reports its own resume command to herdr (`agent-launch <role> <p> --resume <id>`), so
+  it comes back with its role, rules and bus identity, not as a bare `claude --resume`.
 - **The workspace hook (v0.21).** The plugin listens to herdr's `workspace.created` and
   `workspace.focused`. For a workspace labelled with a project that has a template and that the
   broker confirms, it starts the project's stopped services. It rewrites no unit and touches no
@@ -621,6 +684,43 @@ agent-launch coder myproject --resume <session-id>
 
 Never run `claude --resume` by hand. Session resume through the launcher is Claude Code only;
 other clients are refused until their resume flags are defined.
+
+### Keeping a team going: context, hand-offs, reloads, quotas
+
+A team that runs for days meets full contexts, client updates and quota limits. agent-bus
+handles each with a rule you can read, never a guess:
+
+- **Context.** With the `statusLine` installed, Claude Code reports each session's context fill;
+  busmon shows it (`88k 85%`). At 80 % (`AGENT_BUS_CONTEXT_ALERT`, `0` = off) the agent gets one
+  directive to commit its work and hand off, master one notice, your desktop one notification.
+- **Hand-off.** The agent publishes its hand-off as a report and declares it
+  (`agentbus handoff <self> --report <id>`); busmon flags it `handoff` until the agent works
+  again. You then type `/clear` in its pane and point the fresh session at that report.
+  The dispatcher can type that `/clear` itself, once per session, when the agent is idle, has
+  no open question or review and its pane is ready (`AGENT_BUS_AUTO_CLEAR=1`, Claude Code only); it is **off by
+  default** until its live checks have been run.
+- **Reload after a client update.** The dispatcher notices an agent running an outdated client
+  (flag `update`) and tells sentinel, which restarts it on its role and profile, resuming its
+  session (`agentbus reload <role>`): only an idle agent with no open work, never the caller's
+  own pane.
+  master may reload only sentinel; a person may reload anyone with `--as <name>`. `agentbus up
+  <p> --reload propose` makes every reload wait for you, `--reload off` leaves them to you.
+- **Quotas.** The dispatch service reads every provider's usage windows each minute, from local
+  files only (`agentbus quota`). At 85 % master is warned; at 95 % that provider's agents are no
+  longer woken until the reset (`held`); when master's own provider is held, the whole project
+  pauses (`agentbus pause --until-reset`) and resumes by itself. A long hold makes master ask you
+  whether to move a role to one of its `fallback_profiles` (`agentbus swap <role> --profile <p>`,
+  `--back` to return; `agentbus swaps` is the ledger).
+- **Health.** The dispatch service measures the project (services, identities, delivery, quotas,
+  models, versions, secret-like files tracked in Git…); `agentbus health` and busmon's F5 show it. A new failure
+  wakes sentinel once, which may restart a failed service or refresh the model table and
+  escalates the rest.
+- **Tokens.** Tokens per project, agent and day, counted from the Claude Code transcripts of the
+  sessions the bus has proved (`agentbus tokens`, busmon's `U`). No cost, by rule: on a
+  subscription the figure would be fiction.
+
+The [operational guide](docs/OPERATIONAL-GUIDE.md#scenario-d-a-team-that-runs-for-days) goes
+through each with its settings.
 
 ### Roles & pieces
 
@@ -685,7 +785,9 @@ Additional keys: `{p}:pilot` (string, pilot lease), `{p}:gate:{agent}` (hash, 4-
 `{p}:board` (hash, task→owner/state/branch — the shared ownership registry, `agentbus board`),
 `{p}:dispatch` (string with TTL, the dispatcher lease behind `dispatch ●`), `{p}:wake:{agent}`
 (hash, the dispatcher's wake record for one agent: state, last wake time, tries, escalation).
-States: `working`, `idle`, `blocked`, `done`. All transport conventions live in `bus/stream.go`;
+The other per-project keys (asks, pause, services, health, quotas, plan, tokens, hand-offs…) are
+listed with their writers in [CLAUDE.md](CLAUDE.md#stream-layout).
+States: `working`, `idle`, `blocked`, `waiting` (a person must decide), `done`. All transport conventions live in `bus/stream.go`;
 transport-neutral primitives (`Connect`, `ValidStates`, `SanitizeReportMessage`) are in `bus/bus.go`.
 
 ## Connection
@@ -715,7 +817,43 @@ REDIS_PORT=6381 ./busmon                          # watch it
 
 > The deployed laptop⇄host1 setup runs this **in reverse**: host1 opens the tunnel *into* the
 > laptop's bus (`ssh -L 6380:localhost:6380 …`) rather than the laptop reaching out. See
-> **Deployment topology** above.
+> **Example deployment** below.
+
+## Example deployment: a laptop and a remote box
+
+One concrete two-host setup, kept as an example of how the pieces wire up — and, importantly,
+where they *don't* connect. A single machine needs none of it.
+
+- **Broker** runs on the **laptop/desktop** (`docker compose up`, redis:8-alpine on `:6380`).
+- The **remotebox** (`user@remotebox`) reaches it through an SSH tunnel it opens *to* the laptop/desktop:
+  `ssh -L 6380:localhost:6380 user@laptop -N`. So `agentbus --host 127.0.0.1`
+  on the remote box publishes onto the laptop's bus.
+- Two Claude Code sessions run on the laptop under **herdr** in `~/myproject`
+  (agents `claude1`, `claude2`); a **hermes agent** runs on the remote box.
+
+**Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
+A session arms `agentbus subscribe <agent> [idle_secs]` as a Claude Code background task. It blocks
+on the project's `:cmd` stream via XREADGROUP, emits one JSON object per fire (a `cmd` object, or a
+`heartbeat` object after the idle window, default 240s) then exits — and that exit re-invokes the
+Claude session that armed it. Each session re-arms after every fire. The whole loop lives in the `agentbus` binary, so
+there is **no wrapper script and no watcher daemon** in the agent path. `busmon` runs alongside as
+the human dashboard.
+
+> This supersedes `myproject/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
+> and the persistent `~/.hermes/scripts/bus_watch_hdl.sh` logger loop. An even earlier prototype,
+> `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes with hard-coded pane IDs. Don't
+> reintroduce a wrapper script — a restart loop never wakes a terminal session. v0.8 revised the
+> pane-relay part on purpose ([decision](docs/memory/decisions/2026-10-10-event-driven-dispatch.md)):
+> **the only automated process that types into panes is `agentbus dispatch`, and it types a wake
+> line, never a message; master's manual pane injection remains the fallback while no dispatcher
+> runs.** Pane ids are self-registered (or bound with `agentbus bind`) and pid-verified, not hard-coded.
+
+**Separate notification path — NOT the bus.** The `Stop` hook in
+`myproject/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
+the remote box's hermes **gateway** at `http://<remote>:8644/webhooks/claude-notify`. That route is
+`Deliver: signal`: it pings a human over Signal when a Claude task stops. The gateway never
+touches Redis, so this path is **independent of the agent bus** — webhook traffic does not appear
+on `hermes:*`, and the bus carries nothing back to Signal.
 
 ## Tuning
 

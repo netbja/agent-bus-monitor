@@ -48,16 +48,18 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 3. **The `busmon` TUI Dashboard (`cmd/busmon`)**
    - Interactive terminal UI for live multi-agent observability:
-     - **STATUS**: Broker connectivity, active master, pending requests, dispatcher state.
-     - **AGENTS**: Per-agent chips (`working`, `idle`, `blocked`, `done`), age since last update, listening leases `👂`, open challenges `🔒`.
-     - **BOARD**: Shared task registry status (`N/M done`).
-     - **ACTIVITY**: Real-time scrolling feed of messages and reports with full-text inspection (`Enter`).
-     - **INPUT**: Live command field to direct agents (`@coder ...`).
+     - **Header**: broker link, dispatcher and conductor state, what is for you, health, pause, one usage gauge per provider.
+     - **For you**: the questions, decisions, gates and unread messages only you can settle.
+     - **Agents**: declared state (`working`, `idle`, `blocked`, `waiting`, `done`), freshness, queue, context fill, flags in words.
+     - **Activity · Board · Requests · Plan**: the live feed, the shared task board, who owes whom an answer, the batch's plan.
+     - **Pages**: services (F3), health (F5), recap (`R`), plan (`P`), tokens (`U`), help (F1).
+     - **Input**: `@coder ...` sends a directive that wakes the agent.
 
 4. **Event-Driven Dispatcher (`agentbus dispatch`)**
-   - Background service watching the `{p}:cmd` stream.
+   - A user service (systemd `--user`, launchd) watching the `{p}:cmd` stream.
    - When a directive arrives for an idle, unarmed agent, it types a single wake command into its `herdr` pane (only when the pane is idle and not focused).
    - The agent wakes up, drains waiting tasks via `agentbus subscribe --drain <agent>`, executes work, and returns to sleep.
+   - It also reads the provider quotas, the agents' context fill and the project's health, and acts on them by rule (section 5, scenarios C and D).
 
 ---
 
@@ -77,9 +79,11 @@ so re-running it is safe.
 
 ### Step 1: System Prerequisites
 
+- **Linux or macOS.**
 - **Go**: the version `go.mod` requires, currently 1.26.3.
 - **Docker** and **Docker Compose**, for the Redis broker.
 - **Git** and **curl**.
+- **herdr** 0.9.0 or newer; `--install-herdr` installs it when it is missing.
 
 Python is no longer needed (since v0.10.2).
 
@@ -109,6 +113,16 @@ cd ~/agent-bus-monitor
 Make sure `~/.local/bin` is on your `PATH`; `install` warns when it is not, or when another copy
 shadows it.
 
+**Claude Code users, once per machine:** `agentbus statusline --print-install` prints the
+`statusLine` block to put in `~/.claude/settings.json`. Without it agent-bus cannot read Claude's
+usage windows nor each session's context fill (scenarios C and D).
+
+**Trying the Go installer.** `scripts/setup-go.sh` takes the same subcommands and flags
+(`install`, `update`, `status`, `uninstall`) and runs `agentbus setup`, the installer ported to Go.
+It also refuses to start, stop or remove a Redis container that another copy of the repository
+started (it reads the container's Compose `working_dir` label). `./setup.sh` stays the
+installer until the Go port has been tried on real machines.
+
 ### The Projects picker and the busmon action
 
 - **Picker** (`Ctrl+B` then `↑`, or `busmon --pick`): one row per template in
@@ -121,7 +135,7 @@ shadows it.
   code; move them by hand, once:
 
   ```bash
-  mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/{ai-tradex-solana,hyperliquid}.toml ~/.config/agentbus/projects/
+  mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/*.toml ~/.config/agentbus/projects/
   ```
 
 ### Step 3: Check, update, remove
@@ -223,11 +237,19 @@ Assume your target project is at `~/code/myapp`.
 
 1. Start herdr (`herdr --session myapp`).
 2. Run `agentbus up myapp`, or press `Ctrl+B` then `↑` and pick `myapp`.
-   > Tabs open with fresh agent sessions. To resume an earlier Claude Code conversation, use
-   > `claude --resume` and pick `myapp:master` or `myapp:coder`.
-
-   The picker reopens the workspace only. After a reboot, nothing has started the services:
-   `agentbus up myapp` starts them, and busmon shows `dispatch down` until then.
+   - **After a reboot**, herdr restores the workspace and its tabs, and relaunches the Claude
+     Code agents with the resume command each one reported (`agent-launch <role> myapp --resume
+     <id>`): same role, rules and bus identity. Switching to the workspace starts its stopped
+     services (the plugin's workspace hook); until then busmon shows `dispatch down`.
+   - **On an open workspace**, `agentbus up myapp` checks every tab: `alive`, `relaunched`,
+     `relaunched (new pane)`, `relaunched (new tab)`, `skipped (busy)`, `unknown`. A dead agent
+     comes back in a new pane beside its old one; nothing is ever typed into an existing pane.
+     Once the new agent is proven, the old pane is closed if it is still a plain shell.
+     `--dry-run` prints the plan, `--resume` resumes the Claude Code agents' recorded sessions.
+   - **One conversation by hand:** `agent-launch coder myapp --resume <session-id>`. Never run
+     `claude --resume` by hand: the agent would lose its role rules and its bus identity.
+   - `agentbus projects` lists every known project with its broker state, services and agents,
+     and names the `agentbus up` to run.
 
 ---
 
@@ -256,8 +278,15 @@ agent names, no project template):
 ### Scenario C: Watching and Stopping a Project
 
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
-  `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) opens the
-  Services overlay, with the last error and the tail of each log.
+  `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) shows dispatch,
+  missions and the Redis broker as cards (state, pid, last error, log size; Redis version,
+  uptime, memory, keys); `↑↓` chooses one, Enter or `l` opens its log. F5 shows the project's
+  health, `R` a recap of what happened while you were away (unread first), `P` the batch's
+  plan, `U` the tokens. F1 lists every key; `t` there replays the first-launch tour.
+- **For you.** The For you panel, next to Agents, holds what only you can settle: an agent's
+  open questions (`ask`), an agent waiting for your decision (`wait`), a 4-eyes gate you opened
+  or that holds you (`gate`), and messages to you that you have not opened (`unread`). The
+  header counts them (`♙ 4 for you · ● 2 unread`). Enter opens one.
 - **Quotas: stop before the limit.** The dispatch service reads every provider's usage windows
   (used %, reset) from local sources, every minute, with no model call. busmon's header shows one
   gauge per provider (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`); `agentbus quota`
@@ -294,7 +323,7 @@ agent names, no project template):
   one message per agent, so each is delivered on its own, but Activity shows a single
   `→ @all (6)` line.
 - **Questions for you.** When master needs decisions it asks them as questions (`agentbus ask`):
-  the header counts the open questions (`♙ 2 waiting for you`) and the agent row fades `waiting`.
+  they appear in For you as `ask`, the header counts them (`♙ 2 for you`) and the agent row fades `waiting`.
   Press `!` or `w` (or Enter in the agent's detail) to open them: one tab per question, `↑↓` or a digit to pick an option, Enter to
   send that answer at once, `Other…` to write your own, `←→` to change question, Esc to close. An
   answered question shows its answer and never comes back. `agentbus asks --open` lists them in a
@@ -303,11 +332,11 @@ agent names, no project template):
   line gets a paragraph at each upper-case label (`DECISION 1 -`, `VERIFIED:`) and a list for
   inline choices (`(X) … (Y) …`).
 - **An agent waiting for you.** When master (or any agent) needs your decision it declares
-  `waiting`: it moves to the top of Agents with ♙ and the word `waiting` slowly fading in and out, the header reads `♙ 1 waiting for
-  you`, and the terminal bell rings once per new question, which herdr shows on the busmon tab.
+  `waiting`: it moves to the top of Agents with ♙ and the word `waiting` slowly fading in and out, For you lists it, the header counts it
+  (`♙ 1 for you`), and the terminal bell rings once per new question, which herdr shows on the busmon tab.
   Open it (Enter on its row): its last report, the decision it needs, comes right after its
-  status message. Answer with `@master …`; the agent then declares `working` again. The Requests
-  panel counts what is for you (`1 for you`) apart from the agents' own threads.
+  status message. Answer with `@master …`; the agent then declares `working` again. It stays in
+  For you until you have answered.
 - **The `updated` gauge** in Agents (`●●●●●●●○○○ 3m`) is how fresh the agent's last declared
   state is: full right after the declaration, empty after 10 minutes, then the age alone. It does
   not measure work in progress.
@@ -322,9 +351,17 @@ agent names, no project template):
   them (`3 dormant`) and `a` shows them. To retire one for good, select it and press `d` (or
   `Delete`), then `y`: same as `agentbus --project myapp agents forget <name>`. An agent that is
   listening, or declared a status in the last 10 minutes, is refused.
-- **Old requests.** The Requests count only covers the last 24 hours: an older unanswered
-  directive wakes nobody. In the Requests panel, `d` then `y` closes a thread with a reply from
-  you; its history stays. A tracked request is closed by its owner (`agentbus request done`).
+- **Requests: who owes whom an answer.** The Requests tab (`3`) groups threads by what they
+  wait for: owed by you, waited on by you, tracked requests, reviews still gated, directives
+  between agents, notices. Answered threads and those older than 24 hours are folded (`o` shows
+  them): an older unanswered directive wakes nobody. Enter expands a group or opens a thread;
+  `d` then `y` closes a thread with a reply from you, its history stays. A tracked request is
+  closed by its owner (`agentbus request done`).
+- **The plan.** When master loads the batch's plan (`agentbus plan load docs/plans/<name>.json@<commit>`),
+  the Plan tab (`4`) and `P` show its tasks by state (waiting for you, blocked, in review, in
+  progress, upcoming, done), each with its review, PR and asks. A task reads done only when
+  master records it (`agentbus plan done <task>`) or it needs no merge and is delivered and
+  approved.
 - **Read the logs:** `agentbus --project myapp service logs missions -n 100`. They rotate at
   1 MiB, three files kept.
 - **Stop:** `agentbus down myapp` stops the services and deletes nothing. The agents and the
@@ -338,6 +375,59 @@ agent names, no project template):
   holds its lease.
 - **Remove.** `busmon --delete myapp` also removes the project's services on this machine.
   `./setup.sh uninstall` removes every project's services first.
+
+### Scenario D: A team that runs for days
+
+Contexts fill up, clients update, quotas run out. Each case has its rule; none of them needs you
+to watch a pane.
+
+- **Context fill.** With the `statusLine` installed (section 3), Claude Code reports each
+  session's context fill and busmon shows it next to the tokens (`88k 85%`). At 80 %
+  (`AGENT_BUS_CONTEXT_ALERT`, `0` turns it off) the agent gets one directive: at its next stopping
+  point, commit its work, publish its hand-off with `agentbus report <self> --to master`, then
+  declare it. master gets one notice, and the desktop one notification (`notify-send`, when it is
+  on `PATH`). Once per agent and session; never during a pause.
+- **Hand-off.** An agent declares its hand-off with the id of that report:
+  `agentbus --project myapp handoff coder --report <id>`. busmon flags it `handoff`, and
+  `agentbus --project myapp handoff` lists them. Any later report or non-idle status from the
+  agent voids it. Then clear the agent: type `/clear` in its pane and point the fresh session at
+  the report (`agentbus --project myapp reports <id>`).
+- **Automatic `/clear` (off by default).** With `AGENT_BUS_AUTO_CLEAR=1` exported before
+  `agentbus up`, the dispatcher types that `/clear` itself, once per session, for a Claude Code
+  agent whose hand-off stands, that is idle, with no open question or review, in a ready pane;
+  then it proves the new session and tells the agent to read its hand-off. It stays off until
+  its live checks have been run on this release.
+- **Client updates.** When a client is updated under a running agent, busmon flags the agent
+  `update`, health `client-updates` warns, and sentinel gets one directive. sentinel restarts
+  each outdated agent on its role and profile, resuming its conversation:
+  `agentbus --project myapp reload coder`. A reload runs only for an idle agent with no open
+  work (no review, ask, mission or accepted task) and never for the caller's own pane; it stops
+  the agent with SIGTERM, relaunches it in its tab and proves the new process. master may
+  reload only sentinel. You may reload anyone: `agentbus --project myapp reload coder --as
+  <your-name>` (`--dry-run` says what would happen, `--fresh` starts a new conversation).
+  `agentbus up myapp --reload propose` makes every reload wait for you; `--reload off` leaves
+  them to you alone.
+- **Quotas run out.** At 95 % a provider's agents are held (scenario C). When the reset is more
+  than 2 hours away (`AGENT_BUS_QUOTA_LONG_HOLD`), master tells you which held agents had work in
+  flight, so you can move a role to one of its `fallback_profiles` in `roles.toml`:
+  `agentbus --project myapp roles fallbacks coder` lists them, `agentbus --project myapp swap coder
+  --profile codex` replaces the agent (every check before anything is closed: live identity, no
+  open review, no mission in progress, no running turn without `--now`), `swap coder --back`
+  returns it, and `agentbus --project myapp swaps` is the ledger. busmon flags `swapping`, then
+  `fallback <profile>`. `agentbus --project myapp retire <role>` closes one role's tab with the
+  same checks.
+- **Health.** The dispatch service measures the project in the background: services, agent
+  identities and launches, model drift, runaway work, command delivery, quota freshness,
+  secret-like files tracked in Git, Redis exposure, versions, the herdr plugin.
+  `agentbus --project myapp health` lists the checks, `health detail <id>` gives the evidence and
+  what to do; busmon shows the pill in its header and the checks in F5. A missing or stale reading
+  is `unknown`, never `ok`. A new failure wakes sentinel once; it may restart a failed service or
+  refresh the model table, and escalates everything else to master.
+- **Tokens.** `agentbus tokens` shows the tokens spent per project, side by side, over 7 days;
+  `--project myapp --by agent` (today) or `--by day` narrows it, `--json` for scripts. They are
+  counted from the Claude Code transcripts of the sessions the bus has proved, every 5 minutes.
+  busmon's `U` page shows the same with the account windows' 24-hour history. No cost is shown,
+  by rule: on a subscription the figure would be fiction.
 
 ---
 
@@ -381,7 +471,7 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
    @master Plan the change "auth-v2" as missions: write docs/changes/auth-v2/brief.md and
    docs/changes/auth-v2/missions.json on a branch, commit, and send me the commit. Do not start it.
    ```
-   For a design-heavy change, have master pop the architect first (`scripts/agent-spawn architect
+   For a design-heavy change, have master pop the architect first (`agent-spawn architect
    myapp`).
 2. **Review the plan.** In `missions.json`, each mission names its `agent`, its `reviewer` (never
    the same agent), `depends_on`, the `allowed_paths` it may touch, its `test` and a `brief`
@@ -436,7 +526,17 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 | Send direct order | `agentbus --project myapp cmd coder "Fix unit test"` |
 | Inspect thread history | `agentbus --project myapp thread <id-or-ref>` |
 | View report summaries | `agentbus --project myapp reports` |
-| Spawn extra agent | `scripts/agent-spawn architect myapp` (from master) |
+| Spawn extra agent | `agent-spawn architect myapp` (from master) |
+| Every known project | `agentbus projects` |
+| Questions waiting for you | `agentbus --project myapp asks --open` / `answer <id> <q> --choice <label>` |
+| Pause, resume | `agentbus --project myapp pause --for 2h` / `resume` |
+| Provider quotas | `agentbus quota` |
+| Project health | `agentbus --project myapp health` / `health detail <id>` |
+| Tokens spent | `agentbus tokens` / `--project myapp --by agent` |
+| Declared hand-offs | `agentbus --project myapp handoff` |
+| Reload an agent | `agentbus --project myapp reload coder --as <your-name>` |
+| Move a role to a fallback | `agentbus --project myapp swap coder --profile <p>` / `--back` |
+| Every command | `agentbus help` / `agentbus help <command>` |
 | Purge project history | `busmon --project myapp --reset` |
 
 ---
@@ -444,6 +544,6 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 ## 8. Best Practices & Common Traps
 
 1. **`AGENT_BUS_PROJECT` is Mandatory**: Export `export AGENT_BUS_PROJECT=<name>` in agent shells to avoid repeating `--project`.
-2. **Flag Syntax**: Always use double dashes with a space (`--ref abc123`, never `--ref=abc123` or `-ref abc123`).
+2. **Flag Syntax**: `--ref abc123`, `--ref=abc123` and the short form the help shows (`-r abc123`) all work. A single dash with a long name (`-ref`), bundled shorts (`-ab`) and attached values (`-rabc123`) do not.
 3. **Positional Order**: Arguments must follow exact ordering: `agentbus status <agent> <state> <message>`. The message is always last.
 4. **Naming Conventions**: Project and agent names must match `^[a-z][a-z0-9_-]{0,31}$` (lowercase, starting with a letter).
