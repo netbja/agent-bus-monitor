@@ -414,7 +414,13 @@ A still-earlier in-repo prototype, `cmd/busbridge` (relay to herdr panes via `he
 send-text/send-keys`, with hard-coded pane ids), was also **removed**. v0.8 revised that decision
 on purpose (spec §11, `docs/memory/decisions/2026-10-10-event-driven-dispatch.md`): **the only
 automated process that types into panes is `agentbus dispatch`, and it types a wake line, never a
-message; master's manual pane injection remains the fallback while no dispatcher runs.** The wake
+message; master's manual pane injection remains the fallback while no dispatcher runs.** One named
+exception (lifecycle-4, `docs/memory/decisions/2026-10-28-agent-lifecycle.md`): after an agent's
+own declared hand-off, the literal `/clear` (`Runtime.Clear`, `ClearText`, no text parameter) under
+`DecideClear`'s rule, a fenced once-per-session reservation (`clear:<agent>` in `{p}:quota`) and a
+proof before the resume directive (`dispatch/clear.go`); `AGENT_BUS_AUTO_CLEAR=1` turns it on, off
+by default until the spec's live checks pass. The fake runtime enforces `dispatchTypes` in every
+dispatch test: a prompt that is not a wake line, or a `/clear` without its reservation, panics. The wake
 line is fixed — `[agentbus#<nonce>] <project>: <n> message(s) waiting for <agent>. Run: agentbus
 --project <project> subscribe --drain <agent>` — and the agent then drains through Redis. The
 dispatcher touches only unarmed agents with a real obligation, in a pane that is ready, unfocused

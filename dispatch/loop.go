@@ -43,6 +43,8 @@ type Config struct {
 	// Context publishes each verified agent's context fill to {p}:context
 	// (context-alert); a nil Read turns it off.
 	Context ContextConfig
+	// Clear is the auto-clear after a declared hand-off (lifecycle part B).
+	Clear ClearConfig
 	// Tokens records proved sessions and counts their transcripts into
 	// {p}:tokens (tokens.go); an empty Root turns it off.
 	Tokens TokensConfig
@@ -307,6 +309,7 @@ type loop struct {
 	obs        map[string]Observation       // the last observation written
 	obsFresh   bool                         // not yet judged by promptNotices
 	probes     map[string]probeResult       // the last client probe per agent (a once-a-minute throttle)
+	cleared    map[string]bool              // agents /clear was typed into this pass (clear.go)
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
@@ -347,6 +350,14 @@ func (l *loop) reconcile(ctx context.Context) error {
 	}
 	if paused, err := l.paused(ctx); err != nil || paused {
 		return err
+	}
+	// The clear runs after the pause check (a paused project is not cleared)
+	// and before the void-record sweep's next pass judges a cleared record.
+	if err := l.clearPass(ctx, snaps); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "clear", err)
 	}
 	// A paused project alerts nobody: the fills wait, still published.
 	if err := l.contextAlerts(ctx); err != nil {
@@ -411,6 +422,9 @@ func (l *loop) reconcile(ctx context.Context) error {
 		}
 		if l.heldBy(snap) { // its provider is at its limit: no prompt, no escalation
 			l.logOnce(a, map[string]any{"agent": a, "action": "none", "reason": "quota held: " + snap.Provider})
+			continue
+		}
+		if l.cleared[a] { // /clear was typed this pass: nothing else into that pane until the next
 			continue
 		}
 		err := l.agent(ctx, a, snap, hasGroup[a], isTarget[a])

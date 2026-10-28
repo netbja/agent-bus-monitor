@@ -134,6 +134,22 @@ types `/clear` into its pane **only when all of these hold**, in this order (che
   not confirmed in 30 s; look at its pane`. The person's desktop gets the same through the context
   alert's `notify-send` runner.
 
+### As built (busmon-lifecycle-4)
+
+- **Default off**, until the live checks below pass: `AGENT_BUS_AUTO_CLEAR=1` turns it on.
+- **The wake record is not written `clearing`.** The clear's state is the mark `clear:<agent>` =
+  `session|Redis TIME|report` (set by the reservation); an agent cleared in a pass gets no wake in
+  that pass; a reload's wake check is unchanged (its intent already blocks a clear).
+- **A turn around the clear** is read from the bus without a second id: any report or non-idle
+  status of the agent deletes its record (part A's durable void), and an idle status newer than the
+  reservation is caught by the proof. Either sends the rebuild directive.
+- **An aborted re-inspection** (the pane changed between the two reads) releases the mark: nothing
+  was typed, so the next pass judges again.
+- **Gates:** every open gate on either side counts (a gate's open time is not stored); the wait
+  notice names them.
+- The void-record sweep skips a record whose clear is in flight, since its new session would read
+  there as "another session" before the proof.
+
 ### Configuration
 
 `AGENT_BUS_AUTO_CLEAR`: `0` never; `1` (proposed default) clear on a declared hand-off. Read by

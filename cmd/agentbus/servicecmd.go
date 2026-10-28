@@ -425,6 +425,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)            // proved sessions and their tokens (tokens)
 			cfg.Observe = dispatch.ObserveEvery
 			cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, runQuiet) // a pane blocked on its client's prompt (prompt-notify)
+			cfg.Clear = serviceClear(os.Getenv, exec.LookPath, runQuiet)   // /clear after a declared hand-off (lifecycle part B)
 			cfg.Health = realHealthConfig(b, h, paths)
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo

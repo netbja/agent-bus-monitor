@@ -17,8 +17,17 @@ func (l *loop) handoffPass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 	if err != nil || len(recs) == 0 {
 		return err
 	}
+	marks, err := l.b.QuotaMarks(ctx)
+	if err != nil {
+		return err
+	}
 	names := make([]string, 0, len(recs))
 	for a := range recs {
+		// A record under a clear in flight is the proof's to settle: the new
+		// session it waits for would read here as "another session".
+		if sess, _, _, ok := bus.ParseClearMark(marks[bus.ClearMark(a)]); ok && sess == recs[a].Session {
+			continue
+		}
 		names = append(names, a)
 	}
 	sort.Strings(names)

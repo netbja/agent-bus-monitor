@@ -29,6 +29,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 - [agent-bus is developed as an agent-bus project: worktrees, installed release, 4-eyes on the bus (active)](docs/memory/decisions/2026-10-20-dogfood-team.md)
 - [agent-bus as a herdr plugin: linked, Go, own templates, the picker never provisions (active)](docs/memory/decisions/2026-10-19-herdr-plugin.md)
 - [One dispatcher per host, conductor stays per project; decided, not built (active)](docs/memory/decisions/2026-10-26-host-dispatcher.md)
+- [After a declared hand-off the dispatcher may type /clear; reload is sentinel's job (active, auto-clear off by default)](docs/memory/decisions/2026-10-28-agent-lifecycle.md)
 - [For you shows only gates that concern the person; a verdict closes the reviewer's gate (active)](docs/memory/decisions/2026-10-27-foryou-gates.md)
 - [A pane blocked on its client's prompt rings the desktop once per episode (active)](docs/memory/decisions/2026-10-27-prompt-notify.md)
 - [Relaunch closes the old pane once the new agent is proven (active)](docs/memory/decisions/2026-10-27-relaunch-close.md)
