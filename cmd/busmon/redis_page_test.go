@@ -350,3 +350,22 @@ func TestRedisPageProjectsTable(t *testing.T) {
 		t.Errorf("table at 20 keeps no keys column: %q", got)
 	}
 }
+
+// A value wider than 4 digits widens its column, header included, so every
+// row stays aligned (foureyes: a cmd or verdicts stream near its cap).
+func TestRedisPageProjectsTableWidens(t *testing.T) {
+	rows := projectsTable([]bus.ProjectRedis{
+		{Project: "big", Keys: 12345, Streams: map[string]int64{"status": 1, "report": 1, "notify": 1, "cmd": 99999, "verdicts": 10000}},
+		{Project: "ks", Keys: 5, Streams: map[string]int64{"cmd": 14}},
+	}, 100)
+	want := []string{
+		"project   keys  status  report  notify    cmd  verdicts",
+		"big      12345       1       1       1  99999     10000",
+		"ks           5       0       0       0     14         0",
+	}
+	for i, l := range rows {
+		if got := l.text(); got != want[i] {
+			t.Errorf("row %d = %q, want %q", i, got, want[i])
+		}
+	}
+}
