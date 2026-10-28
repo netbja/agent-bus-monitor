@@ -46,10 +46,10 @@ func TestRequestsCountOnlyWhatIsForYou(t *testing.T) {
 		t.Fatalf("label %q", got)
 	}
 	mineR, mineT := forPerson(nil, threads, "bernard")
-	if len(mineR) != 0 || len(mineT) != 1 || waitingText(mineR, mineT, time.Now()) == "" {
-		t.Fatal("header text must count the person's thread")
+	if len(mineR) != 0 || len(mineT) != 1 {
+		t.Fatal("forPerson must keep the person's thread")
 	}
-	if _, none := forPerson(nil, threads[1:], "bernard"); waitingText(nil, none, time.Now()) != "" {
-		t.Fatal("header must stay quiet when nothing is for the person")
+	if _, none := forPerson(nil, threads[1:], "bernard"); len(none) != 0 {
+		t.Fatal("forPerson must keep nothing when nothing is for the person")
 	}
 }

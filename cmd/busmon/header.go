@@ -20,7 +20,8 @@ type headerData struct {
 	self     string            // the person busmon writes as (humanLabel); "" = not shown
 	update   string            // a newer release tag ("" = none): the last, lowest-priority item
 	note     string            // non-fatal local settings note
-	waiting  string            // waitingText: "3 waiting · oldest 42m", "" when nothing waits
+	waiting  string            // owedText: what the Requests view says is owed to the person, "" when nothing
+	between  int               // the Requests view's threads between agents: muted, no age
 	asks     int               // agents in state waiting: decisions a person owes
 	forYou   int               // the shell's for-you badge: decisions(forYou), shown instead of asks
 	shell    bool              // the shell's header: badges first (compact under 120 columns), the pause on row 2
@@ -125,6 +126,9 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	}
 	if d.waiting != "" {
 		add(Line{{Text: Preview(d.waiting), Role: RoleAttention}}, 5, second)
+	}
+	if d.between > 0 { // discreet: nobody owes the person these
+		add(Line{{Text: fmt.Sprintf("%d between agents", d.between), Role: RoleMuted}}, 7, second)
 	}
 	if d.plan != nil {
 		add(planSeg(*d.plan, d.now), 5, second)

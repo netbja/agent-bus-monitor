@@ -87,6 +87,7 @@ type uiState struct {
 // copied by value through Update, the lists' selection rules are listState's.
 type shellLists struct {
 	forYou, agents, activity, board, requests, plan listState
+	reqView                                         reqView // the Requests view fillLists computed: the header reads its counts
 }
 
 func (ls *shellLists) of(p PanelID) *listState {

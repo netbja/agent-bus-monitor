@@ -82,10 +82,10 @@ func (m Model) grid() *grid {
 // the For you subsets: decisions, and the unread lines.
 func (m Model) headerData() headerData {
 	s := m.snap
-	mineReqs, mineThreads := forPerson(s.requests, s.threads, m.cfg.self)
+	_, _, between := m.lists.reqView.titleCounts()
 	return headerData{project: m.cfg.project, health: s.health, guardian: s.guardian, dispatch: s.dispatch,
 		missions: s.missions, pilot: s.pilot, self: m.cfg.self, update: s.update, note: s.configNote,
-		waiting: waitingText(mineReqs, mineThreads, m.now), forYou: len(decisions(m.forYou)),
+		waiting: owedText(m.lists.reqView, m.now), between: between, forYou: len(decisions(m.forYou)),
 		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets, bars: m.barView(),
 		plan: s.plan, now: m.now, shell: true}
 }
@@ -244,6 +244,7 @@ func (m *Model) fillLists() {
 
 	rq := &m.lists.requests
 	rv := requestGroups(m.requestInput())
+	m.lists.reqView = rv
 	rq.SetItems(requestRows(rv, m.ui.reqOpen, now, lower))
 	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: "Requests", Role: RoleText}}), requestsTitle(rv, lower))
 

@@ -150,6 +150,36 @@ func (v reqView) titleCounts() (forYou, wait, agents int) {
 	return v.count(secOwed), v.count(secWait), v.count(secTracked) + v.count(secReviews) + v.count(secDirectives)
 }
 
+// owedOldest is the age of the oldest thread owed by the person (the open
+// questions have none): zero when none is dated.
+func (v reqView) owedOldest(now time.Time) time.Duration {
+	var oldest time.Duration
+	for _, g := range v.groups[secOwed] {
+		if t := g.Oldest(); !t.IsZero() && now.Sub(t) > oldest {
+			oldest = now.Sub(t)
+		}
+	}
+	return oldest
+}
+
+// owedText is the header's orange item (busmon-req-header): the view's own
+// count of what the person owes, with its oldest; "" when nothing is owed.
+func owedText(v reqView, now time.Time) string {
+	n, _, _ := v.titleCounts()
+	if n == 0 {
+		return ""
+	}
+	word := "requests"
+	if n == 1 {
+		word = "request"
+	}
+	text := fmt.Sprintf("%d %s waiting", n, word)
+	if oldest := v.owedOldest(now); oldest > 0 {
+		text += " " + GlyphNone + " oldest " + humanAge(oldest)
+	}
+	return text
+}
+
 // reportPrefix is what `report --to` writes before the report's first line.
 func reportPrefix(id string) string {
 	return "Report " + id + " for you (full text: agentbus reports " + id + "): "
