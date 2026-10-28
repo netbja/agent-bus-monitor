@@ -513,3 +513,12 @@ func TestReloadResumesWithItsOwnOpenAsk(t *testing.T) {
 		t.Fatalf("fresh reload with its own ask: %d %s", code, out)
 	}
 }
+
+// Real deps always carry the pre-kill check; without one nothing is signalled.
+func TestReloadWithoutARelaunchCheckSignalsNothing(t *testing.T) {
+	w, d := newReloadWorld(t)
+	d.CheckRelaunch = nil
+	if code, out := w.run(d, "sentinel", "coder"); code == 0 || !strings.Contains(out, "nothing was signalled") || w.callList() != "" {
+		t.Fatalf("exit %d, out %q, calls %q", code, out, w.callList())
+	}
+}

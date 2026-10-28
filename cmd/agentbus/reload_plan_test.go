@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,9 @@ func planWorld(t *testing.T, env map[string]string) (upDeps, string) {
 	t.Helper()
 	dir := t.TempDir()
 	tpl := "name = \"demo\"\nworking_dir = \"" + dir + "\"\n\n[[tabs]]\nname = \"coder\"\ncommand = \"/r/scripts/agent-launch coder demo\"\n"
+	if env["TWO_CODER_TABS"] != "" { // a template with a second tab launching coder
+		tpl += "\n[[tabs]]\nname = \"coder-2\"\ncommand = \"/r/scripts/agent-launch coder demo\"\n"
+	}
 	if err := os.WriteFile(filepath.Join(dir, "demo.toml"), []byte(tpl), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +57,7 @@ func TestPlanRelaunchChecksEverythingBeforeTheKill(t *testing.T) {
 		"a pop from another workspace": {"reviewer-codex", true, map[string]string{"HERDR_PANE_ID": "w7:p1"}, "run reload from a pane of the demo workspace", false},
 		"a pop with no agent-spawn":    {"reviewer-codex", true, map[string]string{"AGENTBUS_REPO": "/nowhere"}, "checkout", false},
 		"a boot role with no tab":      {"sentinel", false, nil, "no tab launching sentinel and it is not a pop role", false},
+		"two tabs launching the role":  {"coder", false, map[string]string{"TWO_CODER_TABS": "1"}, "the template has 2 tabs launching coder, want 1", false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d, _ := planWorld(t, c.env)
@@ -83,6 +88,14 @@ func TestPlanRelaunchNeedsTheWorkspaceOpen(t *testing.T) {
 func TestSpawnPopResumesThroughAgentSpawn(t *testing.T) {
 	d, record := planWorld(t, nil)
 	var out bytes.Buffer
+	locked := 0
+	d.Lock = func(project string, wait bool) (func(), error) {
+		if project != "demo" || wait {
+			t.Fatalf("lock(%q, %v)", project, wait)
+		}
+		locked++
+		return func() { locked-- }, nil
+	}
 	if err := spawnPop(context.Background(), d, "demo", "reviewer-codex", "93ff25bd-34d8-4077-bf6c-65e6cb135bbf", &out); err != nil {
 		t.Fatal(err)
 	}
@@ -93,6 +106,20 @@ func TestSpawnPopResumesThroughAgentSpawn(t *testing.T) {
 	if want := "reviewer-codex demo --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf REQUIRE_BIND=1 WAIT=0\n"; string(got) != want {
 		t.Fatalf("agent-spawn got %q, want %q", got, want)
 	}
+	if locked != 0 {
+		t.Fatalf("up's lock left held: %d", locked)
+	}
+	// Under up's lock, so it never opens a tab while an up does; a held lock
+	// spawns nothing.
+	d.Lock = func(string, bool) (func(), error) { return nil, errors.New("another up holds the lock") }
+	_ = os.Remove(record)
+	if err := spawnPop(context.Background(), d, "demo", "reviewer-codex", "", &out); err == nil {
+		t.Fatal("spawned while up's lock was held")
+	}
+	if _, err := os.Stat(record); err == nil {
+		t.Fatal("agent-spawn ran while up's lock was held")
+	}
+	d.Lock = nil
 	if err := spawnPop(context.Background(), d, "demo", "reviewer-codex", "", &out); err != nil {
 		t.Fatal(err)
 	}
