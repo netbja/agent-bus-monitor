@@ -13,6 +13,7 @@ type fakeRunner struct {
 	t     *testing.T
 	paths map[string]string // LookPath
 	cmds  map[string]fakeCmd
+	outs  map[string][]string // successive outputs of one command, overriding its cmds out
 	ran   []string
 }
 
@@ -38,6 +39,9 @@ func (f *fakeRunner) Run(_ context.Context, c Cmd) ([]byte, error) {
 	}
 	if r.do != nil {
 		r.do(c)
+	}
+	if q := f.outs[key]; len(q) > 0 {
+		r.out, f.outs[key] = q[0], q[1:]
 	}
 	return []byte(r.out), r.err
 }

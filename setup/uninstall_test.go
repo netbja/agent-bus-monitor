@@ -191,3 +191,22 @@ func TestUninstallBrokerQuestionWithoutTerminal(t *testing.T) {
 		t.Fatalf("%q %q", out.String(), errw.String())
 	}
 }
+
+// The owner is read again right before the compose verb: a container
+// another checkout recreated while the question waited is left
+// (reviewer-codex, step 6). No compose verb is registered.
+func TestUninstallRechecksTheOwnerBeforeComposing(t *testing.T) {
+	for _, purge := range []bool{false, true} {
+		in, out, f, _ := uninstallWorld(t)
+		in.Opt.Purge = purge
+		f.outs = map[string][]string{inspectOwner: {in.Repo + "\n", "/data/projects/agent-bus-monitor\n"}}
+		var shown bytes.Buffer
+		tty := fakeTTY{strings.NewReader("y\ny\ny\ny\ny\ny\ny\ny\ny\ny\n"), &shown}
+		if code := in.Uninstall(context.Background(), &Prompter{TTY: tty}); code != 0 {
+			t.Fatalf("exit %d", code)
+		}
+		if !strings.Contains(out.String(), "    ! Redis broker: the broker belongs to /data/projects/agent-bus-monitor: start or stop it from there.\n") || strings.Contains(out.String(), "Redis: ") {
+			t.Fatalf("purge=%v %q", purge, out.String())
+		}
+	}
+}

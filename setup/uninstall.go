@@ -190,26 +190,34 @@ func (in *Installer) stopBroker(ctx context.Context, ask func(string, bool) bool
 	if state == "absent" || cc == "" || !in.mayCompose(ctx, "left as it is.") {
 		return
 	}
-	run := func(verb ...string) bool {
+	// compose runs verb from this checkout, the owner read again right before
+	// it: a container another checkout recreated while a question waited is
+	// left (reported by mayCompose, ok false). done says whether it ran.
+	compose := func(verb ...string) (done, ok bool) {
+		if !in.mayCompose(ctx, "left as it is.") {
+			return false, false
+		}
 		name, args := composeArgs(cc, verb...)
 		_, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo})
-		return err == nil
+		return true, err == nil
+	}
+	report := func(done, ok bool, success, verb string) {
+		switch {
+		case done && ok:
+			in.O.OK(success)
+		case done:
+			in.O.Warn("Redis: " + cc + " " + verb + " failed")
+		}
 	}
 	purge := in.Opt.Purge || (!p.Yes && ask("remove the Redis container AND its data (every project on the bus)?", false))
 	switch {
 	case p.Aborted():
 	case purge:
-		if run("down", "-v") {
-			in.O.OK("Redis: container and data removed")
-		} else {
-			in.O.Warn("Redis: " + cc + " down -v failed")
-		}
+		done, ok := compose("down", "-v")
+		report(done, ok, "Redis: container and data removed", "down -v")
 	case state == "running" && ask("stop the Redis broker (its data is kept)?", true):
-		if run("stop") {
-			in.O.OK("Redis: stopped (data kept; ./setup.sh install starts it again)")
-		} else {
-			in.O.Warn("Redis: " + cc + " stop failed")
-		}
+		done, ok := compose("stop")
+		report(done, ok, "Redis: stopped (data kept; ./setup.sh install starts it again)", "stop")
 	case !p.Aborted():
 		in.O.Info("Redis: left as it is (" + state + ")")
 	}
