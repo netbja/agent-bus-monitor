@@ -27,6 +27,7 @@ KEYS
   F3 s                 services
   R                    where was I? open the project recap
   P                    the batch's plan: its tasks by state (enter opens one, or expands done)
+  U                    tokens: the account windows, every project side by side, this project by agent
   F1 ?                 help
   q                    quit
   ^C                   quit (everywhere)

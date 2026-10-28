@@ -95,18 +95,22 @@ Ask `1793108028807-0` (2026-10-27), relayed by master (`1793135892379-0`):
 - **Paths are built only from valid ids.** Each session id from `{p}:sessions` passes
   `sessionIDPattern` before it is joined into a transcript path (the record is fenced, but the
   join does not trust it); a non-matching id is skipped and logged.
-- **Codex**: per rollout file, in file order, each `token_count` event (`info` not null) adds
-  `total_token_usage − the previous event's total_token_usage in the same file` to the day of its
-  own `timestamp` (local time). The baseline is per file, never per day: a session that runs past
-  midnight counts its first event after midnight against the last one before it, and a day with a
-  single event counts that event's delta, not zero. The file's first event adds its
-  `last_token_usage` (equal to the total for a new session; for a resumed rollout whose total
-  carries earlier turns, only this turn, the earlier ones being in their own file). A total lower
-  than the previous one (a counter reset) adds that event's `last_token_usage`. A repeated event
-  (same total, seen on real rollouts) adds 0, which is why the per-event `last_token_usage` is not
-  summed. Cumulative counters still survive a missed event in between. The reader keeps each
-  file's last total with its offset, so an incremental pass needs no re-read; a file seen for the
-  first time is read from its start (inside the pass budget) so its baseline is exact.
+- **Codex**: in file order, each `token_count` event (`info` not null) adds `total_token_usage − the
+  previous total of the same session` to the day of its own `timestamp` (local time). The baseline
+  is **per session** (the rollout's first `session_meta` id; a forked subagent's file carries its
+  parent's meta second, so only the first counts; a file with none is its own session), across
+  midnight and across files, read oldest first: a session that runs past midnight counts its first
+  event after midnight against the last one before it, and a day with a single event counts that
+  event's delta, not zero. A session's first event adds its `last_token_usage`. A total lower than
+  the previous one (a counter reset) adds that event's `last_token_usage`. A repeated total adds 0,
+  which is why the per-event `last_token_usage` is not summed. Step 1 changed this from "per
+  rollout file" (review of `busmon-tokens-1`): the total is cumulative, so an event whose total
+  equals the session's previous total carries no new tokens; a resumed session's new file whose
+  first event replays the last total (`total=100, last=20` after a file ending at `total=100`)
+  would have counted those 20 twice under a per-file baseline. No resumed rollout exists on this
+  host to measure; both shapes (appended, new file) are pinned by fixtures. Cumulative counters
+  still survive a missed event in between. The reader keeps each session's last total and each
+  file's offset in memory, so an incremental pass needs no re-read.
 - **Not in `projectKinds`**, and ignored by `HasKeysBesidesDispatch`: none of these keys discovers
   or revives a project (as `{p}:context`, `{p}:observed`).
 - **The account history is per project** (each project's dispatcher writes its own copy of the same
@@ -295,8 +299,9 @@ With a disposable broker (`AGENTBUS_TEST_REDIS_URL`) and fixture files only, nev
   without a proof does not); a session no record names is in no project's sums; nothing is attributed
   from `cwd` or the directory name; pruning at 8 days and the 512 cap.
 - **Codex**: a session spanning midnight (the first event of day 2 counted against day 1's
-  last), a day with one event (its delta, not 0), the first event of a file (`last_token_usage`),
-  a resumed rollout whose first total carries earlier turns, a counter reset, a repeated event
+  last), a day with one event (its delta, not 0), a session's first event (`last_token_usage`),
+  a resumed session appended or in a new file replaying the last total (no turn twice), a forked
+  subagent's own baseline, files without `session_meta` kept apart, a counter reset, a repeated event
   (adds 0), a missing event in between, `info: null` skipped, an incremental pass resuming from
   the kept total; and the account identifiers never appear in any output or key (asserted on the
   fixture's values).

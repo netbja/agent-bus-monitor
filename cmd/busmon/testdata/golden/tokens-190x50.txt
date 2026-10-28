@@ -1,0 +1,50 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                                                                                             15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Bernard [human]   pilot master   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44                                                
+╭─ For you ───────────────────── 4 for you · 2 unread ─╮╭─ Agents ───────────────────────────────────────────────────────────────── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ─╮
+│  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated             queue    ctx       flags               message                                          │
+│  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   ●●●●○○○○○○ 6m       —        —         escalated           need a decision on the width rule                │
+│  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   ○○○○○○○○○○ 12m      —        41k 21%   pilot · armed       see my ask                                       │
+│  ◆ gate   coder     by bernard  look at b1           ││  ♙ sentinel  waiting   ○○○○○○○○○○ 30m      —        —         prompt · model≠     health ok                                        │
+│  ● unread dispatch  project paused until 16:56     8m││  ✓ architect done      ○○○○○○○○○○ 40m      —        —         escalating · busy   spec merged                                      │
+│                                                      ││  ○ coder     paused    ●●●●●●●●○○ 2m       —        88k 85%   gate 1 · deferred   busmon-charm-b: b1 shell                         │
+│                                                      ││  ▲ docs      blocked   ○○○○○○○○○○ 50m      —        —         armed · stale 2     waiting for the PR                               │
+│                                                      ││  ▲ qa        blocked   ○○○○○○○○○○ 11m      —        —         held                out of quota                                     │
+│                                                      ││  ○ ui-grok   quota     ●●●●●●●○○○ 3m       —        —         swapping · update   reviewed                                         │
+│                                                      ││  ● release   working   ●●●○○○○○○○ 7m       —        —         fallback kimi-alt   tagging                                          │
+│                                                      ││  ○ ui-kimi   paused    ●○○○○○○○○○ 9m       —        —         for you             bernard: your call on the tabs                   │
+╰──────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Tokens ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── esc back ─╮
+│ Account windows                                                                                                                                                                            │
+│   anthropic  5h  ▇▇▇▇▇▇░░░░  62%  24h  ▁  ▁  ▂  ▃  ▄  ▅  ▆  ▇   resets 2h00                                                                                                                │
+│   anthropic  7d  ▇▇▇▇░░░░░░  41%  24h                           resets 72h00                                                                                                               │
+│   xai        5h  ▇▇▇▇▇▇▇▇▇▇ 100%  24h                           held 40m                                                                                                                   │
+│                                                                                                                                                                                            │
+│ Projects, today and 7 days                                                                                                                                                                 │
+│   PROJECT                    IN      OUT   CACHE RD  7 DAYS   7D TOTAL                                                                                                                     │
+│   agent-bus-monitor       ~1.5M    ~289k    ~500.0M     ▃ █▆     ~5.1M                                                                                                                     │
+│   hyperliquid                 0        0          0   ▁           170k                                                                                                                     │
+│   polymarket  no data (no dispatch service counting tokens)                                                                                                                                │
+│                                                                                                                                                                                            │
+│ agent-bus-monitor by agent, today                                                                                                                                                          │
+│   foureyes         anthropic      1.2M     206k                                                                                                                                            │
+│   coder            anthropic      345k      83k                                                                                                                                            │
+│   architect                          ?        ?  no session proved with its process                                                                                                        │
+│   docs                               ?        ?  no session proved with its process                                                                                                        │
+│   master                             ?        ?  no session proved with its process                                                                                                        │
+│   qa               xai               ?        ?  no session proved with its process                                                                                                        │
+│   release                            ?        ?  no session proved with its process                                                                                                        │
+│   security                           ?        ?  no session proved with its process                                                                                                        │
+│   sentinel                           ?        ?  no session proved with its process                                                                                                        │
+│   ui-grok          xai               ?        ?  no session proved with its process                                                                                                        │
+│   ui-kimi                            ?        ?  no session proved with its process                                                                                                        │
+│                                                                                                                                                                                            │
+│ IN = input + cache writes, OUT = output; cache reads apart; ~ still counting; no cost, by rule.                                                                                            │
+│ not attributed to any project: agentbus tokens --unattributed                                                                                                                              │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   Y copy thread   n p ←→ next/prev   esc q close   F5 health                                                                                                          

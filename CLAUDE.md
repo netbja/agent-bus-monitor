@@ -193,6 +193,30 @@ it silently never fired.
   fill. busmon shows the fill in the ctx cell and the agent page; health `context` warns at the
   threshold. **Deliberately not reported:** cost (needs a price table that rots every
   release; on a subscription the figure is fiction). Raw context tokens stay in `{p}:usage`.
+- **Tokens** (spec `docs/superpowers/specs/2026-10-28-tokens-dashboard-design.md`, package `tokens/`):
+  the dispatch service records each agent's proved session (`IdentSession` with a pid, never
+  `Session`) in `{p}:sessions` (session → agent, provider, client, first, last from Redis `TIME`; 8
+  days, 512 fields), counts those sessions' Claude Code transcripts (and subagents) incrementally
+  with `tokens.ClaudeScan` (one request once by its last `(message.id, requestId)`, offsets in
+  memory only, 64 files and 128 MiB per pass, `$CLAUDE_CONFIG_DIR` or `~/.claude`, `AGENT_BUS_TOKENS=0`
+  off) and replaces `{p}:tokens` (`day|agent|provider` → in/write/read/out/n, plus `_meta` partial and
+  at) every 5 minutes; the quota pass appends `{p}:quota:hist` when a window changes or every 15
+  minutes. All fenced; none in `projectKinds`, all ignored by `HasKeysBesidesDispatch`. Codex has no
+  proved session: `tokens.CodexScan` (per-session baseline across files) serves only the person's
+  `agentbus tokens --unattributed`. No cost, by rule. `agentbus tokens` (`tokenscmd.go`, above the
+  project-required exit, read-only) prints every project side by side unless `--project` names one on
+  the command line (the ambient `AGENT_BUS_PROJECT` never narrows it), `--by agent|day`, `--days`,
+  `--json`; `--unattributed` is the person's host scan (1 GiB budget) of what no project's record names.
+  busmon's `U` page (`tokens_view.go`, `ovTokens`): the account windows with a 24-hour sparkline from
+  `{p}:quota:hist` (one cell per hour, its last sample), every project side by side (`ProjectNames`,
+  `TokensOf`, read every `requestPoll` tick through the optional `tokensReader`; the open project first,
+  7-day bars scaled across projects, `~` while partial, no key = one `no data` line), the open project by
+  agent today (`tokens.AgentRows`, shared with the CLI: `?` with its reason, 0 only for a proved session).
+  The block glyphs `▁`–`▆` joined the closed set for it. Its honest animation (step 5) rides the fade schedule
+  (`animated`, true colour only, `fadeMsg` frames only while something animates): a skeleton row
+  shimmers where the open project's numbers will be only while the page is open, the dispatcher is up,
+  no reading exists yet and busmon started under `skeletonFor` (2 min) ago (`tokensSkeleton`; after,
+  `?`); an agent's `●` pulses only when it declares `working` and its pane is seen busy, fresh (`pulsing`).
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
   cron wake where a hard exit loses the whole caretaker pass.
 

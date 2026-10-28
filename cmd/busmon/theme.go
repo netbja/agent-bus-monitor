@@ -235,6 +235,14 @@ const (
 	GlyphBarFull   = "█"
 	GlyphBarEmpty  = "░"
 	GlyphGauge     = "▇"
+	// The lower blocks of a sparkline or a bar chart (the U page), with
+	// GlyphGauge and GlyphBarFull its two highest steps.
+	GlyphSpark1 = "▁"
+	GlyphSpark2 = "▂"
+	GlyphSpark3 = "▃"
+	GlyphSpark4 = "▄"
+	GlyphSpark5 = "▅"
+	GlyphSpark6 = "▆"
 	// The updated column's freshness gauge: the same two dots as working/idle.
 	GlyphDotFull     = GlyphWorking
 	GlyphDotEmpty    = GlyphIdle
@@ -258,5 +266,5 @@ var UIGlyphs = []string{
 	GlyphSelect, GlyphArrowR, GlyphArrowL, GlyphUp, GlyphDownArrow, GlyphEllipsis,
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
-	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes,
+	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6,
 }
