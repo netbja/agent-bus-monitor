@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ type settlingHerdr struct {
 	relaunchHerdr
 	lag     int
 	relapse int // a later read that shows the client again (0: none)
+	noInfo  int // the first reads whose pane process-info fails (unknown)
 	reads   int
 }
 
@@ -28,6 +30,9 @@ func (f *settlingHerdr) run(args ...string) ([]byte, error) {
 	case line == "workspace list":
 		f.calls = append(f.calls, line)
 		return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
+	case strings.HasPrefix(line, "pane process-info ") && f.reads <= f.noInfo:
+		f.calls = append(f.calls, line)
+		return nil, errors.New("pane is exiting")
 	case strings.HasPrefix(line, "pane list --workspace w4"):
 		f.reads++
 		if f.reads <= f.lag || f.reads == f.relapse {
@@ -126,5 +131,21 @@ func TestRelaunchRoleFailsWhenTheRelaunchSkipsTheTab(t *testing.T) {
 	}
 	if got := h.ran(); len(got) != 0 {
 		t.Fatalf("a busy tab was relaunched: %q", got)
+	}
+}
+
+// Right after the exit herdr may not answer for the pane (its process-info
+// fails): unknown, which is waited on like busy, never relaunched as is.
+func TestRelaunchRoleWaitsThroughAnUnknownTab(t *testing.T) {
+	h := &settlingHerdr{relaunchHerdr: relaunchHerdr{tabs: `{"label":"coder","tab_id":"w4:t2"}`}, noInfo: 2}
+	snaps := func() map[string]bus.AgentSnapshot {
+		return map[string]bus.AgentSnapshot{"coder": {PID: 4242, PIDStart: 1, Pane: "w4:p2"}}
+	}
+	var out bytes.Buffer
+	if err := relaunchRole(settleDeps(t, h, snaps), "demo", "coder", "", &out); err != nil {
+		t.Fatalf("relaunchRole: %v\n%s", err, out.String())
+	}
+	if got := strings.Join(h.ran(), "\n"); !strings.Contains(got, "pane run w4:p2s /r/scripts/agent-launch coder demo") {
+		t.Fatalf("no relaunch after the tab became readable:\n%s", got)
 	}
 }
