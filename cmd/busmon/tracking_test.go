@@ -164,21 +164,6 @@ func TestRequestsSortByWhatNeedsAttention(t *testing.T) {
 	}
 }
 
-func TestWaitingTextCountsOnlyUnfinishedWork(t *testing.T) {
-	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
-	reqs := []request{
-		{State: "requested", Created: now.Add(-42 * time.Minute), Tracked: true},
-		{State: "done", Created: now.Add(-3 * time.Hour), Tracked: true},
-	}
-	got := waitingText(reqs, nil, now)
-	if !strings.Contains(got, "1 request waiting") || !strings.Contains(got, "42m") {
-		t.Errorf("waitingText = %q, want one request waiting for 42m", got)
-	}
-	if waitingText([]request{{State: "done"}}, nil, now) != "" {
-		t.Error("nothing waiting must render nothing at all")
-	}
-}
-
 // A directive that has been answered is not waiting; one that has not is —
 // and the claim is only ever about the retained history.
 func TestOpenThreadsExcludeAnsweredExchanges(t *testing.T) {

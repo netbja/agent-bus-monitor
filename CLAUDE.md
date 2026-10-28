@@ -396,7 +396,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `reportNotice`'s exact prefix, `from = dispatch`, `wake=no`), then answered or older than 24 h folded
   (`o`). A challenge is owed iff its gate is open now, never from its thread; unread/read come from the
   target's cursor (`Obligation.LastDelivered`, `PendingIDs`, read with the dispatcher facts); the title's
-  numbers are the sums of their sections. Enter expands a group (or `+ N older`), opens a thread, a
+  numbers are the sums of their sections. The header reads the same view (`fillLists` keeps it in
+  `shellLists.reqView`; busmon-req-header, Bernard's "orange = what is owed to you"): its orange `N requests
+  waiting · oldest X` is the owed section's count (`owedText`, questions included, the oldest dated thread),
+  and what agents owe each other a muted `N between agents` (no age, the first item to go for room), each
+  absent at 0. Enter expands a group (or `+ N older`), opens a thread, a
   report notice's report, a request, or a notice group's list; `d`/`y` closes each thread of a group once.
   Activity auto-scroll (v0.12.3): selecting, clicking or opening a line keeps it live; only `f`
   (`listState.Pause`) and a wheel-up leave it, and (A3) moving the selection down onto the newest

@@ -153,10 +153,10 @@ func TestRequestsEmpty(t *testing.T) {
 	}
 }
 
-func TestWaitingCountMatchesWaitingLine(t *testing.T) {
+func TestWaitingCount(t *testing.T) {
 	reqs, threads := requestFixture()
-	if got, line := waitingCount(reqs, threads), waitingText(reqs, threads, boardNow); line != "3 requests waiting · oldest 5m" || got != 3 {
-		t.Fatalf("waitingCount %d vs waitingText %q", got, line)
+	if got := waitingCount(reqs, threads); got != 3 {
+		t.Fatalf("waitingCount %d", got)
 	}
 	if waitingCount(nil, nil) != 0 {
 		t.Fatal("empty count")
