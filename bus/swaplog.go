@@ -121,8 +121,8 @@ type FallbackRecord struct {
 }
 
 // beginSwap: 0 an intent exists (nothing written); 1 intent set and begin
-// logged, in one script; -1 (a reload, given the services key and the
-// installed field as KEYS[3] and ARGV[4]) the project is not installed.
+// logged, in one script; -1 (a reload, given the agents hash and the role as
+// KEYS[3] and ARGV[4]) the role has no snapshot: the project was deleted.
 var beginSwap = redis.NewScript(`
 local first = 4
 if #KEYS > 2 then
@@ -152,9 +152,12 @@ func (b *Bus) BeginSwap(ctx context.Context, role string, in SwapIntent, ev ...S
 	keys := []string{SwapKey(b.project, role), SwapsKey(b.project)}
 	args := []interface{}{string(v), SwapTTL.Milliseconds(), streamMaxLen}
 	if in.Kind == SwapKindReload {
+		// Tab mode (up --tabs) writes no services marker, so a reload is fenced
+		// by the role's own snapshot: what it reloads, and what a deleted
+		// project no longer has (reviewer-codex's review of lifecycle-3a).
 		e.Kind = SwapKindReload
-		keys = append(keys, ServicesKey(b.project))
-		args = append(args, ServicesInstalledField)
+		keys = append(keys, AgentsKey(b.project))
+		args = append(args, role)
 	}
 	args = append(args, e.fields()...)
 	n, err := beginSwap.Run(ctx, b.r, keys, args...).Int()
@@ -165,7 +168,7 @@ func (b *Bus) BeginSwap(ctx context.Context, role string, in SwapIntent, ev ...S
 	case 0:
 		return ErrSwapInProgress
 	case -1:
-		return ErrNotInstalled
+		return ErrNoSnapshot
 	}
 	return nil
 }

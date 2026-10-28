@@ -476,9 +476,6 @@ func TestRetireClosesOneAgent(t *testing.T) {
 func TestSwapClosesAnInterruptedReloadAsAReload(t *testing.T) {
 	w, d := newSwapWorld(t)
 	ctx := context.Background()
-	if err := w.b.MarkServicesInstalled(ctx, bus.ServicesInstall{}); err != nil {
-		t.Fatal(err)
-	}
 	if err := w.b.BeginSwap(ctx, "foureyes", bus.SwapIntent{Kind: bus.SwapKindReload, By: "sentinel"}); err != nil {
 		t.Fatal(err)
 	}

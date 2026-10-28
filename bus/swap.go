@@ -37,9 +37,10 @@ type SwapIntent struct {
 // SwapKindReload marks a reload's intent and ledger entries.
 const SwapKindReload = "reload"
 
-// ErrNotInstalled: a reload's intent is refused for a project `agentbus up`
-// never installed (no services marker), so a deleted project is never revived.
-var ErrNotInstalled = fmt.Errorf("the project is not installed (agentbus up)")
+// ErrNoSnapshot: a reload's intent is refused for a role with no snapshot in
+// {p}:agents (checked in the intent's script), so a deleted project is never
+// revived; tab mode, which writes no services marker, still reloads.
+var ErrNoSnapshot = fmt.Errorf("the role has no snapshot in {p}:agents (project deleted?)")
 
 // ErrSwapInProgress: another swap of the same role holds the intent.
 var ErrSwapInProgress = fmt.Errorf("a swap of this role is already in progress")

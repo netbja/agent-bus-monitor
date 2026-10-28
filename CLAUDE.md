@@ -730,8 +730,9 @@ It never touches Redis — see README "Deployment topology".
   `agentbus swaps` lists the ledger (a reload's entries tagged `[reload]`). Lifecycle-3a: a reload
   (`agentbus reload`, part C) holds the same intent with `kind=reload` (`SwapIntent.Kind`,
   `SwapKindReload`), so every swap rule of the dispatcher applies unchanged; its `begin` carries the
-  kind and is refused without the services `installed` marker (`ErrNotInstalled`, in the intent's
-  script), it ends with `reloaded` (`FinishReload`, never the fallback state), an interrupted one is
+  kind and is refused when the role has no `{p}:agents` snapshot (`ErrNoSnapshot`, in the intent's
+  script: a deleted project is never revived, and tab mode, which has no services marker, still
+  reloads), it ends with `reloaded` (`FinishReload`, never the fallback state), an interrupted one is
   closed as a failed reload (`closeInterrupted`), and busmon flags it `reloading` (`SwapIntents`).
   A fallback record keeps `held_episode`, and the release of that
   episode earns master one `back:<p>:<role>` notice; its own provider stays watched. The launched

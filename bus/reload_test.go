@@ -8,16 +8,17 @@ import (
 
 // A reload (lifecycle spec, part C) reuses the swap intent with kind=reload:
 // the dispatcher's swap rules apply unchanged, while busmon, the ledger and
-// the interrupted check can tell it apart. Its intent is refused for a
-// project `agentbus up` never installed, and it never touches {p}:fallback.
+// the interrupted check can tell it apart. Its intent is refused for a role
+// with no snapshot (a deleted project), allowed in tab mode (no services
+// marker), and it never touches {p}:fallback.
 func TestReloadIntentAndLedgerRedis(t *testing.T) {
 	b := dialDispatch(t)
 	ctx := context.Background()
 	reload := SwapIntent{Kind: SwapKindReload, By: "sentinel", OldPID: 42, OldStart: 7}
 	ev := SwapEvent{Kind: SwapKindReload, By: "sentinel", Reason: "client update", OldPID: 42, OldPane: "w1:p2"}
 
-	if err := b.BeginSwap(ctx, "coder", reload, ev); !errors.Is(err, ErrNotInstalled) {
-		t.Fatalf("reload of an uninstalled project: %v", err)
+	if err := b.BeginSwap(ctx, "coder", reload, ev); !errors.Is(err, ErrNoSnapshot) {
+		t.Fatalf("reload of a role with no snapshot (a deleted project): %v", err)
 	}
 	if live, _ := b.Swapping(ctx, "coder"); live {
 		t.Fatal("a refused reload left an intent")
@@ -25,8 +26,12 @@ func TestReloadIntentAndLedgerRedis(t *testing.T) {
 	if log, _ := b.SwapLog(ctx, "coder", 0); len(log) != 0 {
 		t.Fatalf("a refused reload was logged: %+v", log)
 	}
-	if err := b.MarkServicesInstalled(ctx, ServicesInstall{}); err != nil {
+	// Tab mode (up --tabs): no services marker, only the agent's snapshot.
+	if _, err := b.Status(ctx, "coder", "idle", "", AgentIdent{}); err != nil {
 		t.Fatal(err)
+	}
+	if ok, _ := b.ServicesInstalled(ctx); ok {
+		t.Fatal("the fixture must have no services marker")
 	}
 
 	// A role on a fallback keeps its record through another role's reload.
