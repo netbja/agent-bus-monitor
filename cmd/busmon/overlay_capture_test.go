@@ -112,7 +112,7 @@ func overlayCaptures(t *testing.T) map[string]string {
 		"plan-task":         plainOf(planTask),
 		"quota":             plainOf(quotaDetail("openai", b, true, capNow.Add(time.Hour), true, capNow)),
 		"quota-none":        plainOf(quotaDetail("", b, false, time.Time{}, false, capNow)),
-		"services":          plainOf(servicesPanel(inst, recs, "here", capNow, 100)),
+		"services":          plainOf(servicesCards(svcFacts{inst: inst, recs: recs, host: "here", logs: map[string]int64{}, since: map[string]time.Time{}}, 0, capNow, 100)),
 		"health":            plainOf(health),
 		"help":              plainOf(helpText()),
 		"ask":               plainOf(askPanelBody(demoAsk(), askPanel{q: 1, opt: 0}, 70)),

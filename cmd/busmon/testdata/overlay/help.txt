@@ -53,6 +53,7 @@ KEYS
   n p ←→               the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)
   enter ! w            answer the agent's open questions
   t                    in the help: the first-launch tour again
+  l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card)
   esc q                close
   ^C                   quit (everywhere)
   answering questions
