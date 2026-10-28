@@ -54,7 +54,7 @@ func newClearWorld(t *testing.T, on bool) *clearWorld {
 	w.rt = newFakeRT(func(string, int) Inspection { return readyIn() })
 	w.rt.reserved = func(string) bool {
 		m, _ := b.QuotaMarks(context.Background())
-		_, _, _, ok := bus.ParseClearMark(m[bus.ClearMark("coder")])
+		_, ok := bus.ParseClearMark(m[bus.ClearMark("coder")])
 		return ok
 	}
 	w.l = &loop{b: b, rt: w.rt, token: "clear-holder", last: map[string]string{},
@@ -204,5 +204,36 @@ func TestClearPassWithoutTheLeaseTypesNothing(t *testing.T) {
 	}
 	if w.clears() != 0 {
 		t.Fatal("typed without the lease")
+	}
+}
+
+// An idle status written after the reservation in the same millisecond
+// (reviewer-codex's review of lifecycle-4): the boundary is the status
+// stream's id, so it still reads as a turn that ran, and the rebuild
+// directive goes, not the resume.
+func TestClearPassTellsASameMillisecondStatusApart(t *testing.T) {
+	w := newClearWorld(t, true)
+	ctx := context.Background()
+	w.pass()
+	who := bus.AgentIdent{Pane: coderPane, PID: testPID, PIDStart: testStart, Session: "session-0001", Client: "claude-code", Provider: "anthropic"}
+	id, err := w.b.Status(ctx, "coder", "idle", "a queued turn ran", who)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Put the reservation's time in that status's millisecond, its boundary unchanged.
+	marks, _ := w.b.QuotaMarks(ctx)
+	c, ok := bus.ParseClearMark(marks[bus.ClearMark("coder")])
+	if !ok {
+		t.Fatal("no reservation")
+	}
+	ms, _, _ := strings.Cut(id, "-")
+	w.r.HSet(ctx, bus.QuotaKey(w.b.Project()), bus.ClearMark("coder"), c.Session+"|"+ms+"|"+c.Report+"|"+c.StatusID)
+	if err := w.b.ProveSession(ctx, "coder", testPID, testStart, "session-0002", time.Now().UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	w.pass()
+	got := w.cmds()
+	if len(got) != 2 || !strings.HasPrefix(got[0], "coder||your context was cleared after a turn") {
+		t.Fatalf("cmds %q", got)
 	}
 }

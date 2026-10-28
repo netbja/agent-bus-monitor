@@ -130,13 +130,13 @@ func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		if !ok || !bus.ValidName(a) {
 			continue
 		}
-		sess, at, report, ok := bus.ParseClearMark(v)
+		c, ok := bus.ParseClearMark(v)
 		if !ok {
 			continue
 		}
 		pending[a] = true
 		rec, has := recs[a]
-		if err := l.proveClear(ctx, a, sess, at, report, rec, has, snaps[a], marks, now); err != nil {
+		if err := l.proveClear(ctx, a, c, rec, has, snaps[a], marks, now); err != nil {
 			if errors.Is(err, bus.ErrNotHolder) {
 				return err
 			}
@@ -244,8 +244,9 @@ func (l *loop) clearWaits(ctx context.Context, a string, rec bus.Handoff, gates 
 // session, nothing written since the reservation) sends the resume directive;
 // a turn that ran around the clear sends the rebuild directive; no proof in
 // time escalates once. Each outcome is one message per session.
-func (l *loop) proveClear(ctx context.Context, a, sess string, at int64, report string, rec bus.Handoff, has bool,
+func (l *loop) proveClear(ctx context.Context, a string, c bus.ClearReservation, rec bus.Handoff, has bool,
 	snap bus.AgentSnapshot, marks map[string]string, now int64) error {
+	sess, at, report := c.Session, c.At, c.Report
 	sameRecord := has && rec.Session == sess
 	if marks[clearEnd(a)] == sess { // settled: forget the clear once its record is gone
 		if !sameRecord {
@@ -255,8 +256,17 @@ func (l *loop) proveClear(ctx context.Context, a, sess string, at int64, report 
 	}
 	if sameRecord {
 		proved := snap.PID == rec.PID && snap.PIDStart == rec.PIDStart && snap.IdentSession != "" && snap.IdentSession != sess
+		// A status after the reservation's boundary means a turn ran: told
+		// apart by stream id, not by millisecond (reviewer-codex).
+		wrote := false
+		if proved {
+			var err error
+			if wrote, err = l.b.StatusAfter(ctx, a, c.StatusID); err != nil {
+				return err
+			}
+		}
 		switch {
-		case proved && snap.TS <= at:
+		case proved && !wrote:
 			text := fmt.Sprintf("context cleared: re-run your boot steps (load your role's skills, read the memory index), then read your hand-off: agentbus reports %s", report)
 			if _, err := l.b.FencedCmdOnce(ctx, l.token, clearEnd(a), sess, dispatchFrom, a, bus.CmdDirective, text, false); err != nil {
 				return err
@@ -266,7 +276,7 @@ func (l *loop) proveClear(ctx context.Context, a, sess string, at int64, report 
 				return err
 			}
 			return l.b.FencedQuotaDel(ctx, l.token, bus.ClearMark(a))
-		case proved: // an idle status after the reservation: a turn ran
+		case proved: // a status after the reservation: a turn ran
 			return l.clearRebuild(ctx, a, sess, report)
 		case now-at > l.clearProof().Milliseconds():
 			return l.clearEscalate(ctx, a, sess)

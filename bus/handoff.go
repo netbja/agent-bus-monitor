@@ -162,20 +162,54 @@ func (b *Bus) FencedDeleteHandoff(ctx context.Context, token, agent string, h Ha
 }
 
 // ClearMark is the {p}:quota field of an agent's auto-clear (lifecycle part
-// B): "<session>|<at>|<report>", the session of the record cleared, the Redis
-// TIME of its reservation and the hand-off's report (named again if the
-// record is gone by the proof). One clear per session, whatever the
-// dispatcher's restarts.
+// B): "<session>|<at>|<report>|<status id>", the session of the record
+// cleared, the Redis TIME of its reservation, the hand-off's report (named
+// again if the record is gone by the proof) and the status stream's last id
+// at the reservation, the boundary a later status is told apart by, to the
+// sequence. One clear per session, whatever the dispatcher's restarts.
 func ClearMark(agent string) string { return "clear:" + agent }
 
+// ClearReservation is a ClearMark value, read.
+type ClearReservation struct {
+	Session  string
+	At       int64
+	Report   string
+	StatusID string
+}
+
 // ParseClearMark reads a ClearMark value.
-func ParseClearMark(v string) (session string, at int64, report string, ok bool) {
+func ParseClearMark(v string) (ClearReservation, bool) {
 	parts := strings.Split(v, "|")
-	if len(parts) != 3 || parts[0] == "" {
-		return "", 0, "", false
+	if len(parts) != 4 || parts[0] == "" {
+		return ClearReservation{}, false
 	}
 	at, err := strconv.ParseInt(parts[1], 10, 64)
-	return parts[0], at, parts[2], err == nil
+	return ClearReservation{Session: parts[0], At: at, Report: parts[2], StatusID: parts[3]}, err == nil
+}
+
+// StatusAfter reports whether agent wrote a status after the stream id after
+// ("" = any): exact to the sequence, so two entries in one millisecond are
+// told apart. The stream is capped (~1000), so the scan is bounded.
+func (b *Bus) StatusAfter(ctx context.Context, agent, after string) (bool, error) {
+	start := "-"
+	if after != "" {
+		start = "(" + after
+	}
+	for {
+		msgs, err := b.r.XRangeN(ctx, StreamKey(b.project, "status"), start, "+", 200).Result()
+		if err != nil {
+			return false, err
+		}
+		for _, m := range msgs {
+			if a, _ := m.Values["agent"].(string); a == agent {
+				return true, nil
+			}
+		}
+		if len(msgs) < 200 {
+			return false, nil
+		}
+		start = "(" + msgs[len(msgs)-1].ID
+	}
 }
 
 // clearReserve: -1 not the holder; 0 the record changed or this session was
@@ -191,7 +225,10 @@ local mark = redis.call('HGET', KEYS[3], 'clear:' .. ARGV[2])
 if mark and string.sub(mark, 1, #ARGV[5] + 1) == ARGV[5] .. '|' then return 0 end
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-redis.call('HSET', KEYS[3], 'clear:' .. ARGV[2], ARGV[5] .. '|' .. now .. '|' .. ARGV[3])
+local last = redis.call('XREVRANGE', KEYS[4], '+', '-', 'COUNT', 1)
+local sid = '0-0'
+if #last > 0 then sid = last[1][1] end
+redis.call('HSET', KEYS[3], 'clear:' .. ARGV[2], ARGV[5] .. '|' .. now .. '|' .. ARGV[3] .. '|' .. sid)
 return now`)
 
 // FencedReserveClear reserves the clear of agent's record h while token holds
@@ -201,7 +238,7 @@ func (b *Bus) FencedReserveClear(ctx context.Context, token, agent string, h Han
 	if !ValidName(agent) || !ValidSessionID(h.Session) {
 		return 0, false, fmt.Errorf("reserve clear: invalid agent %q or session", agent)
 	}
-	n, err := clearReserve.Run(ctx, b.r, []string{DispatchKey(b.project), HandoffKey(b.project), QuotaKey(b.project)},
+	n, err := clearReserve.Run(ctx, b.r, []string{DispatchKey(b.project), HandoffKey(b.project), QuotaKey(b.project), StreamKey(b.project, "status")},
 		token, agent, h.Report, h.At, h.Session).Int64()
 	switch {
 	case err != nil:

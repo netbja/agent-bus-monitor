@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // A hand-off is declared by the agent itself (lifecycle spec, part A): its own
@@ -246,6 +248,9 @@ func TestFencedReserveClearRedis(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := b.Status(ctx, "coder", "idle", "hand-off declared", AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
 	if _, _, err := b.FencedReserveClear(ctx, "tok", "coder", h); !errors.Is(err, ErrNotHolder) {
 		t.Fatalf("without the lease: %v", err)
 	}
@@ -265,10 +270,38 @@ func TestFencedReserveClearRedis(t *testing.T) {
 		t.Fatal("reserved twice for one session")
 	}
 	marks, _ := b.QuotaMarks(ctx)
-	if m := marks[ClearMark("coder")]; m != "session-0001|"+strconv.FormatInt(at, 10)+"|"+r {
+	last, _ := b.r.XRevRangeN(ctx, StreamKey(b.project, "status"), "+", "-", 1).Result()
+	if len(last) != 1 {
+		t.Fatal("no status entry")
+	}
+	if m := marks[ClearMark("coder")]; m != "session-0001|"+strconv.FormatInt(at, 10)+"|"+r+"|"+last[0].ID {
 		t.Fatalf("mark %q", m)
 	}
-	if sess, gotAt, rep, ok := ParseClearMark(marks[ClearMark("coder")]); !ok || sess != "session-0001" || gotAt != at || rep != r {
-		t.Fatalf("ParseClearMark: %q %d %q %v", sess, gotAt, rep, ok)
+	c, ok := ParseClearMark(marks[ClearMark("coder")])
+	if !ok || c.Session != "session-0001" || c.At != at || c.Report != r || c.StatusID != last[0].ID {
+		t.Fatalf("ParseClearMark: %+v %v", c, ok)
+	}
+}
+
+// A status after the reservation's boundary is found to the sequence: two
+// entries in one millisecond are told apart (reviewer-codex's review of
+// lifecycle-4), and only the agent's own count.
+func TestStatusAfterIsSequenceExactRedis(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	key := StreamKey(b.project, "status")
+	for _, e := range []struct{ id, agent string }{{"1000-0", "coder"}, {"1000-1", "foureyes"}, {"1000-2", "coder"}} {
+		if err := b.r.XAdd(ctx, &redis.XAddArgs{Stream: key, ID: e.id, Values: map[string]any{"agent": e.agent, "state": "idle"}}).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range []struct {
+		agent, after string
+		want         bool
+	}{{"coder", "1000-0", true}, {"coder", "1000-2", false}, {"foureyes", "1000-1", false}, {"foureyes", "1000-0", true}, {"coder", "", true}} {
+		got, err := b.StatusAfter(ctx, c.agent, c.after)
+		if err != nil || got != c.want {
+			t.Errorf("StatusAfter(%s, %s) = %v %v, want %v", c.agent, c.after, got, err, c.want)
+		}
 	}
 }

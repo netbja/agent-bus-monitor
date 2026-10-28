@@ -29,7 +29,7 @@ person at the keyboard, once per agent.
   hand-off, not armed, no wake being typed, and the pane showing that same process, unfocused,
   ready and not on a prompt. `IdentSession` alone never authorises a clear.
 - **Once per session.** A fenced reservation (`FencedReserveClear`) marks `clear:<agent>` =
-  `session|Redis TIME|report` before anything is typed, and the pane is inspected again right
+  `session|Redis TIME|report|status id` before anything is typed, and the pane is inspected again right
   before. A dispatcher without the lease types nothing; a restart never clears twice.
 - **Proof, then the ordinary wake.** The clear is proved when the same pid shows a new proved
   session (the SessionStart hook, part D) and the agent wrote nothing since the reservation. Then

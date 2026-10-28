@@ -138,11 +138,13 @@ types `/clear` into its pane **only when all of these hold**, in this order (che
 
 - **Default off**, until the live checks below pass: `AGENT_BUS_AUTO_CLEAR=1` turns it on.
 - **The wake record is not written `clearing`.** The clear's state is the mark `clear:<agent>` =
-  `session|Redis TIME|report` (set by the reservation); an agent cleared in a pass gets no wake in
+  `session|Redis TIME|report|status id` (set by the reservation); an agent cleared in a pass gets no wake in
   that pass; a reload's wake check is unchanged (its intent already blocks a clear).
 - **A turn around the clear** is read from the bus without a second id: any report or non-idle
   status of the agent deletes its record (part A's durable void), and an idle status newer than the
-  reservation is caught by the proof. Either sends the rebuild directive.
+  reservation is caught by the proof, against the status stream's last id recorded in the
+  reservation's script (exact to the sequence: a status in the same millisecond still counts).
+  Either sends the rebuild directive.
 - **An aborted re-inspection** (the pane changed between the two reads) releases the mark: nothing
   was typed, so the next pass judges again.
 - **Gates:** every open gate on either side counts (a gate's open time is not stored); the wait
