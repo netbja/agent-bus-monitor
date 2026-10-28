@@ -153,6 +153,39 @@ func (in *Installer) backup(path string) (string, error) {
 	return dst, nil
 }
 
+// writeAtomic replaces path's content whole: a temp file beside the file
+// path resolves to, renamed over it, so a crash leaves the old content or the
+// new one, a symlinked config stays a link, and the mode is kept.
+func writeAtomic(path string, data []byte) error {
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	fi, err := os.Stat(real)
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(real), "."+filepath.Base(real)+".tmp*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, fi.Mode().Perm())
+	}
+	if err == nil {
+		err = os.Rename(tmp, real)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
+}
+
 // KeyBinding writes the Projects picker key binding into herdr's config,
 // idempotently: never when the link failed, and setup's old herdr-plus block
 // is replaced only when unedited. A running herdr is told to reload.
@@ -190,7 +223,7 @@ func (in *Installer) KeyBinding(ctx context.Context, linkFailed bool) {
 		default:
 			b, err := in.backup(cfg)
 			if err == nil {
-				err = os.WriteFile(cfg, []byte(swapped), 0o644)
+				err = writeAtomic(cfg, []byte(swapped))
 			}
 			if err != nil {
 				in.O.Warn("could not rewrite " + cfg + ": " + err.Error())
@@ -206,13 +239,7 @@ func (in *Installer) KeyBinding(ctx context.Context, linkFailed bool) {
 	default:
 		b, err := in.backup(cfg)
 		if err == nil {
-			var f *os.File
-			if f, err = os.OpenFile(cfg, os.O_APPEND|os.O_WRONLY, 0); err == nil {
-				_, err = f.WriteString(KeybindBlock + "\n")
-				if cerr := f.Close(); err == nil {
-					err = cerr
-				}
-			}
+			err = writeAtomic(cfg, append(content, []byte(KeybindBlock+"\n")...))
 		}
 		if err != nil {
 			in.O.Warn("could not append to " + cfg + ": " + err.Error())

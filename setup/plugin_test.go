@@ -270,3 +270,37 @@ func TestLinkPluginFollowsAMovedCheckout(t *testing.T) {
 		t.Fatalf("%q", out.String())
 	}
 }
+
+// herdr's config is rewritten whole and atomically, through its symlink
+// (a dotfiles link stays a link), keeping its mode (foureyes, step 3).
+func TestKeyBindingWritesAtomicallyThroughALink(t *testing.T) {
+	in, _, f, home := pluginWorld(t, "")
+	f.cmds["herdr server reload-config"] = fakeCmd{}
+	real := filepath.Join(t.TempDir(), "dotfiles-config.toml")
+	_ = os.WriteFile(real, []byte("[ui]\n"+OldKeybindBlock+"\n"), 0o600)
+	cfg := home + "/.config/herdr/config.toml"
+	_ = os.MkdirAll(filepath.Dir(cfg), 0o755)
+	_ = os.Symlink(real, cfg)
+	in.KeyBinding(context.Background(), false)
+	if fi, err := os.Lstat(cfg); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("the link was replaced")
+	}
+	b, _ := os.ReadFile(real)
+	fi, _ := os.Stat(real)
+	if string(b) != "[ui]\n"+KeybindBlock+"\n" || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("%q %v", b, fi.Mode())
+	}
+	left, _ := filepath.Glob(filepath.Dir(real) + "/.*tmp*")
+	if len(left) != 0 {
+		t.Fatalf("temp files left: %v", left)
+	}
+	// Appended the same way.
+	_ = os.WriteFile(real, []byte("[ui]\n"), 0o600)
+	in.KeyBinding(context.Background(), false)
+	if b, _ := os.ReadFile(real); string(b) != "[ui]\n"+KeybindBlock+"\n" {
+		t.Fatalf("%q", b)
+	}
+	if fi, _ := os.Lstat(cfg); fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("the link was replaced on append")
+	}
+}
