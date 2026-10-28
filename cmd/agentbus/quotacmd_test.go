@@ -45,3 +45,19 @@ func TestBuiltinStatuslineNeedsNoOtherTool(t *testing.T) {
 		t.Fatalf("the default install chains another tool:\n%s", out.String())
 	}
 }
+
+// The service's tokens pass reads Claude Code's projects directory, from
+// CLAUDE_CONFIG_DIR first; AGENT_BUS_TOKENS=0 turns it off.
+func TestServiceTokens(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	home := func() (string, error) { return "/home/u", nil }
+	if c := serviceTokens(env(nil), home); c.Root != "/home/u/.claude/projects" || c.Every != 5*time.Minute || c.Budget.Files != 64 {
+		t.Errorf("default %+v", c)
+	}
+	if c := serviceTokens(env(map[string]string{"CLAUDE_CONFIG_DIR": "/cfg"}), home); c.Root != "/cfg/projects" {
+		t.Errorf("CLAUDE_CONFIG_DIR: %+v", c)
+	}
+	if c := serviceTokens(env(map[string]string{"AGENT_BUS_TOKENS": "0"}), home); c.Root != "" {
+		t.Errorf("off: %+v", c)
+	}
+}

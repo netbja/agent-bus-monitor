@@ -193,6 +193,17 @@ it silently never fired.
   fill. busmon shows the fill in the ctx cell and the agent page; health `context` warns at the
   threshold. **Deliberately not reported:** cost (needs a price table that rots every
   release; on a subscription the figure is fiction). Raw context tokens stay in `{p}:usage`.
+- **Tokens** (spec `docs/superpowers/specs/2026-10-28-tokens-dashboard-design.md`, package `tokens/`):
+  the dispatch service records each agent's proved session (`IdentSession` with a pid, never
+  `Session`) in `{p}:sessions` (session → agent, provider, client, first, last from Redis `TIME`; 8
+  days, 512 fields), counts those sessions' Claude Code transcripts (and subagents) incrementally
+  with `tokens.ClaudeScan` (one request once by its last `(message.id, requestId)`, offsets in
+  memory only, 64 files and 128 MiB per pass, `$CLAUDE_CONFIG_DIR` or `~/.claude`, `AGENT_BUS_TOKENS=0`
+  off) and replaces `{p}:tokens` (`day|agent|provider` → in/write/read/out/n, plus `_meta` partial and
+  at) every 5 minutes; the quota pass appends `{p}:quota:hist` when a window changes or every 15
+  minutes. All fenced; none in `projectKinds`, all ignored by `HasKeysBesidesDispatch`. Codex has no
+  proved session: `tokens.CodexScan` (per-session baseline across files) serves only the person's
+  `agentbus tokens --unattributed`. No cost, by rule.
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
   cron wake where a hard exit loses the whole caretaker pass.
 

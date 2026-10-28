@@ -114,6 +114,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 	if err := l.b.FencedPutBudgets(ctx, l.token, budgets); err != nil {
 		return err
 	}
+	if err := l.quotaHist(ctx, budgets); err != nil { // the account windows' history ({p}:quota:hist)
+		return err
+	}
 	marks, err := l.b.QuotaMarks(ctx)
 	if err != nil {
 		return err

@@ -43,6 +43,9 @@ type Config struct {
 	// Context publishes each verified agent's context fill to {p}:context
 	// (context-alert); a nil Read turns it off.
 	Context ContextConfig
+	// Tokens records proved sessions and counts their transcripts into
+	// {p}:tokens (tokens.go); an empty Root turns it off.
+	Tokens TokensConfig
 	// Observe, when positive, is how often every verified pane is inspected
 	// and published to {p}:observed (ObserveEvery in the services; 0 = off).
 	Observe time.Duration
@@ -297,6 +300,7 @@ type loop struct {
 	contextAt time.Time                  // the last context publication (contextPass)
 	ctxFills  map[string]bus.ContextFill // that publication
 	ctxFresh  bool                       // not yet judged by contextAlerts
+	tokens    tokensState                // the tokens pass's scan and throttles (tokens.go)
 
 	observedAt time.Time                    // last observePass (local clock: a throttle, never persisted)
 	snaps      map[string]bus.AgentSnapshot // this pass's snapshots
@@ -328,6 +332,12 @@ func (l *loop) reconcile(ctx context.Context) error {
 			return err
 		}
 		l.logError("", "context", err)
+	}
+	if err := l.tokensPass(ctx, snaps); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "tokens", err)
 	}
 	if paused, err := l.paused(ctx); err != nil || paused {
 		return err
