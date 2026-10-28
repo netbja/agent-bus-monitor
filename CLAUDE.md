@@ -358,9 +358,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   widths unchanged); the active tab a bold pill in its panel's colour, dimmed with the frame's fade when
   the panel is not focused; the others grey on `Theme.TabOff` (plain without true colour); `Seg.Tab`
   makes `frameTitle` leave them alone. Each provider has its own colour (busmon-llm-colors: `providerHues` in `theme.go`, one
-  role per provider, `providerRole(p, fallback)`; the 16-colour palette takes `nearest16` of the dark hex,
-  no-colour none; an unknown provider keeps today's colour): the provider label of a header gauge (the
-  fill keeps its 85/95 % roles) and the model lines of an agent's page. `TestEveryQuotaProviderHasItsColour`
+  role per provider, `providerRole(p, fallback)`; the 16-colour palette takes a hand-picked ANSI name per
+  provider (no two alike, none an alert role's colour nor the text roles' gray/silver/teal, openai the
+  terminal's own foreground), no-colour none; an unknown provider keeps today's colour): the provider label
+  of a header gauge (the fill keeps its 85/95 % roles), the model lines of an agent's page, and the U page's
+  account windows and per-agent provider column. `TestEveryQuotaProviderHasItsColour`
   walks `quota.Builtins`, so a new reader without a colour fails the suite. The tick reads every second
   (pilot, armed, lag, agents, usage, budgets, board, challenges) and every 5th tick the dispatcher
   facts (`DispatchAlive`, `Obligation`, `Wake`); a failed read keeps the last value (queue shows

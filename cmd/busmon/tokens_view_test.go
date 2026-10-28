@@ -312,3 +312,36 @@ func linesText(ls []Line) string {
 	}
 	return strings.Join(out, "\n")
 }
+
+// The U page writes each provider in its own colour (busmon-llm-colors): the
+// account windows' label and the agents' provider column; an unknown
+// provider keeps today's colour there (plain text in a window row).
+func TestTokensPageProvidersInTheirColours(t *testing.T) {
+	agents := map[string]*agentState{
+		"coder":          {registered: true, pid: 1, identSession: "0198e5c4-coder-1", provider: "anthropic"},
+		"reviewer-codex": {registered: true, pid: 2, provider: "openai", client: "codex"},
+	}
+	w := []bus.BudgetWindow{{Name: "5h", UsedPct: 40, ObservedAt: 1}}
+	budgets := map[string]bus.BudgetSnapshot{"anthropic": {Windows: w}, "openai": {Windows: w}, "acme": {Windows: w}}
+	roles := map[string]map[Role]bool{}
+	for _, l := range tokensPage(tokFixtureState(shellNow), budgets, nil, agents, "agent-bus-monitor", shellNow, 120, false) {
+		for _, s := range l {
+			// A segment of the text role merges with its neighbours: key it by
+			// the provider name it starts with.
+			p, _, _ := strings.Cut(strings.TrimSpace(s.Text), " ")
+			if roles[p] == nil {
+				roles[p] = map[Role]bool{}
+			}
+			roles[p][s.Role] = true
+		}
+	}
+	if !roles["anthropic"][RoleProvAnthropic] || roles["anthropic"][RoleMuted] || roles["anthropic"][RoleText] {
+		t.Errorf("anthropic drawn in %v, want its own colour everywhere", roles["anthropic"])
+	}
+	if !roles["openai"][RoleProvOpenAI] {
+		t.Errorf("openai drawn in %v", roles["openai"])
+	}
+	if !roles["acme"][RoleText] || len(roles["acme"]) != 1 {
+		t.Errorf("an unknown provider drawn in %v, want today's plain text", roles["acme"])
+	}
+}

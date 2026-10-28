@@ -153,7 +153,7 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	}
 	for _, p := range provs {
 		for _, w := range budgets[p].Windows {
-			b.text("  ").text(Fit(Preview(p), 10)).text(" ").text(Fit(Preview(w.Name), 3)).text(" ")
+			b.text("  ").seg(providerRole(p, RoleText), Fit(Preview(p), 10)).text(" ").text(Fit(Preview(w.Name), 3)).text(" ")
 			if w.ObservedAt == 0 && w.UsedPct == 0 { // never observed: unknown, never 0%
 				b.seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10)).seg(RoleMuted, "    ?")
 			} else {
@@ -286,7 +286,7 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 		reason = "first reading pending"
 	}
 	for _, r := range tokens.AgentRows(open.rows, open.known, reason, snaps, today) {
-		b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ").seg(RoleMuted, Fit(Preview(r.Provider), 10))
+		b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ").seg(providerRole(r.Provider, RoleMuted), Fit(Preview(r.Provider), 10))
 		if r.In == nil {
 			b.seg(RoleMuted, fmt.Sprintf(" %8s %8s  ", "?", "?")).seg(RoleMuted, Preview(r.Reason)).text("\n")
 			continue
