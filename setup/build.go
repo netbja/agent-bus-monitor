@@ -30,6 +30,11 @@ type Installer struct {
 	// when nil).
 	Probe func(host string, port int) bool
 	Sleep func(time.Duration)
+	// Script is the installer update execs after the pull (the thin script
+	// that started this run; the repository's setup.sh when empty), and Exec
+	// replaces this process with it: argv without argv[0], the environment.
+	Script string
+	Exec   func(path string, args, env []string) error
 }
 
 // RepoRev is setup.sh's REPO_REV: git describe --tags --always --dirty.

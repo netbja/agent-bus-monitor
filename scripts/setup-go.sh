@@ -55,4 +55,5 @@ if ! (cd "$REPO_DIR" && go build -o "$TMP_DIR/agentbus" ./cmd/agentbus) >"$TMP_D
   tail -n 15 "$TMP_DIR/build.log" | sed 's/^/      /' >&2
   fatal "could not build agentbus to run the installer (see above)"
 fi
-"$TMP_DIR/agentbus" setup --repo "$REPO_DIR" "$@"
+# update execs this script again after the pull, so the pulled tree builds the installer that runs.
+AGENTBUS_SETUP_SCRIPT="$REPO_DIR/scripts/setup-go.sh" "$TMP_DIR/agentbus" setup --repo "$REPO_DIR" "$@"

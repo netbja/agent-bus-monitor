@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/setup"
@@ -16,8 +17,8 @@ import (
 // `agentbus setup [--repo <dir>] install|update|uninstall|status [setup.sh's
 // flags]` (spec docs/superpowers/specs/2026-10-28-go-installer-design.md):
 // the Go port of setup.sh, run by the thin scripts/setup-go.sh. Step 1 of
-// the rollout: install, status and uninstall are ported; update follows in
-// busmon-installer-7.
+// the rollout: every subcommand is ported; ./setup.sh stays the
+// installer until the switch.
 
 // execRunner is the real setup.Runner, the only one: every external command
 // setup runs goes through it.
@@ -71,8 +72,12 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 		}
 		return in.Uninstall(context.Background(), &setup.Prompter{Yes: opt.Yes, TTY: tty})
 	}
-	o.Fatal("agentbus setup " + opt.Sub + ": not ported yet (busmon-installer-7); use ./setup.sh " + opt.Sub)
-	return 1
+	in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv,
+		Script: getenv("AGENTBUS_SETUP_SCRIPT"),
+		Exec: func(path string, args, env []string) error {
+			return syscall.Exec(path, append([]string{path}, args...), env)
+		}}
+	return in.Update(context.Background())
 }
 
 // runInstall is setup.sh install's steps, in its order.
