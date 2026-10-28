@@ -29,8 +29,9 @@ release exists.
 - A read-only Codex reviewer role, `reviewer-codex`. The README and the operational guides (EN, FR)
   cover everything since the herdr plugin.
 - Restart each project's dispatch service after `./setup.sh update`; relaunch each agent for the
-  new tool rules (`agentbus --project <p> reload <role> --as <you>`, or exit it and `agentbus up
-  <p> --resume`: `up` leaves a live agent alone).
+  new tool rules (`agentbus --project <p> reload <role> --as <you>`, with `--fresh` for a client
+  other than Claude Code, or exit it and `agentbus up <p> --resume`: `up` leaves a live agent
+  alone).
 
 [Notes](docs/releases/v0.23.0.md)
 
