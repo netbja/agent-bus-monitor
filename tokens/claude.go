@@ -60,7 +60,7 @@ func (s *ClaudeScan) Pass(paths []string, b Budget) (partial bool) {
 		}
 		done, n, err := readAppended(p, &f.fileState, room, func() { f.lastKey = "" }, func(raw []byte) { s.line(f, raw) })
 		room -= n
-		if err == nil && !done {
+		if err != nil || !done { // an unreadable file is not counted: never complete
 			partial = true
 		}
 	}

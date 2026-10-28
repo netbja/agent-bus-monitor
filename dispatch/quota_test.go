@@ -606,3 +606,20 @@ func TestRunQuotaHeldWindowReadLowReleases(t *testing.T) {
 		return p == nil
 	})
 }
+
+// A quota history that cannot be written (here {p}:quota:hist holds a
+// string: WRONGTYPE) never gates the policy: the hold still happens.
+func TestRunQuotaHoldsDespiteAFailingHistory(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	t.Cleanup(func() { r.Del(context.Background(), bus.QuotaHistKey(b.Project())) })
+	r.Set(context.Background(), bus.QuotaHistKey(b.Project()), "not a stream", 0)
+	registerAs(t, b, "coder", "p-coder", "openai")
+	f := &fakeQuota{}
+	f.set(reading("openai", 97))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "the hold despite the failing history", func() bool {
+		marks, _ := b.QuotaMarks(context.Background())
+		return marks["hold:openai"] != ""
+	})
+}

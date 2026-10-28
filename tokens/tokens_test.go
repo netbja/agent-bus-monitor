@@ -346,3 +346,18 @@ func TestCodexReplacedSingleEventSessionCountsAgain(t *testing.T) {
 		t.Errorf("%+v, want the event counted again", got)
 	}
 }
+
+// A listed file that cannot be read keeps the pass partial: its tokens are
+// missing, so the sums are not complete.
+func TestUnreadableFileIsPartial(t *testing.T) {
+	dir := t.TempDir()
+	ok := filepath.Join(dir, "s1.jsonl")
+	write(t, ok, cLine("2026-10-27T10:00:00Z", "m1", "r1", 1, 0, 0, 1))
+	gone := filepath.Join(dir, "gone.jsonl") // listed, then vanished before the read
+	if !NewClaudeScan(paris).Pass([]string{ok, gone}, big) {
+		t.Error("a missing Claude transcript, yet complete")
+	}
+	if !NewCodexScan(paris).Pass([]string{gone}, big) {
+		t.Error("a missing Codex rollout, yet complete")
+	}
+}
