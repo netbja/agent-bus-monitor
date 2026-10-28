@@ -73,6 +73,12 @@ out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 AGENT_LAUNCH_REQUIRE_BIND=
 assert_contains "$out" "--profile alt" "agent-spawn passes the profile on"
 assert_contains "$out" "AGENT_LAUNCH_REQUIRE_BIND=1" "and swap mode"
 assert_exit 1 "an injected profile name is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder demo --profile 'alt;touch injected'"
+out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf 2>&1)"
+assert_contains "$out" "--resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf" "agent-spawn passes --resume on (reload of a pop)"
+out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf --profile alt 2>&1)"
+assert_contains "$out" "--profile alt --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf" "with a profile, in either order"
+assert_exit 1 "an injected session id is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder demo --resume 'x;touch injected'"
+assert_exit 1 "an unknown agent-spawn flag is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder demo --nope"
 assert_exit 1 "swap mode outside a herdr pane fails" -- env -u HERDR_ENV AGENT_LAUNCH_REQUIRE_BIND=1 "$L" coder demo --profile alt
 out="$(cd "$root" && env -u HERDR_ENV AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo 2>&1)"
 assert_contains "$out" "agentbus up demo" "agent-spawn outside herdr points at agentbus up <project>"

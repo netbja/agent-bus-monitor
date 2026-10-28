@@ -2,8 +2,9 @@
 # The master's "pop": open a new herdr tab that runs agent-launch <role> <project>.
 # Requires HERDR_ENV=1 (you must be inside herdr to drive it) — same precondition as the
 # agent-bus-master skill. Reuses the exact boot recipe (agent-launch), so pop == boot.
-# Usage: agent-spawn <role> <project> [--profile <profile>]
+# Usage: agent-spawn <role> <project> [--profile <profile>] [--resume <session-id>]
 #   --profile launches the role on another profile of ROLES_TOML (agentbus swap, v0.15).
+#   --resume resumes a Claude Code session through agent-launch (agentbus reload of a pop).
 #   AGENT_LAUNCH_REQUIRE_BIND=1 is passed on: the launch fails if it cannot bind its pane.
 #   AGENT_SPAWN_DRYRUN=1 -> print the herdr command instead of running it (test seam).
 #   AGENT_SPAWN_WAIT=<s> -> seconds to wait for the agent's first status (default 30, 0 = none);
@@ -22,14 +23,27 @@ source "$SCRIPT_DIR/lib/roles.sh"
 
 die() { echo "agent-spawn: $*" >&2; exit 1; }
 
-role="${1:?usage: agent-spawn <role> <project> [--profile <profile>]}"
-project="${2:?usage: agent-spawn <role> <project> [--profile <profile>]}"
+usage="usage: agent-spawn <role> <project> [--profile <profile>] [--resume <session-id>]"
+role="${1:?$usage}"
+project="${2:?$usage}"
 profile=""
-if [[ $# -gt 2 ]]; then
-  [[ $# -eq 4 && "$3" == "--profile" ]] || die "usage: agent-spawn <role> <project> [--profile <profile>]"
-  profile="$4"
-  [[ "$profile" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid profile name"
-fi
+resume=""
+shift 2
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile)
+      [[ $# -ge 2 && -z "$profile" ]] || die "$usage"
+      profile="$2"
+      [[ "$profile" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid profile name"
+      shift 2 ;;
+    --resume)
+      [[ $# -ge 2 && -z "$resume" ]] || die "$usage"
+      resume="$2"
+      [[ "$resume" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || die "invalid session id"
+      shift 2 ;;
+    *) die "$usage" ;;
+  esac
+done
 
 [[ "${HERDR_ENV:-}" == "1" ]] || die "not inside herdr (HERDR_ENV != 1); open the project with agentbus up $project, or prefix+up (the Projects picker), then spawn from there"
 [[ "$project" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "invalid project name"
@@ -41,6 +55,7 @@ envs=("ROLES_TOML=$ROLES_TOML")
 [[ "${AGENT_LAUNCH_REQUIRE_BIND:-}" == "1" ]] && envs+=("AGENT_LAUNCH_REQUIRE_BIND=1")
 args=("$SCRIPT_DIR/agent-launch" "$role" "$project")
 [[ -n "$profile" ]] && args+=(--profile "$profile")
+[[ -n "$resume" ]] && args+=(--resume "$resume")
 printf -v launch 'exec env'
 for w in "${envs[@]}" "${args[@]}"; do printf -v launch '%s %q' "$launch" "$w"; done
 
