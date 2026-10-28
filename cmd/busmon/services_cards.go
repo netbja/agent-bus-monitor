@@ -174,7 +174,7 @@ func servicesCards(f svcFacts, sel int, now time.Time, width int) []Line {
 	}
 	cards = append(cards, redisCard(f.redis))
 	cols := 1
-	if width >= 110 {
+	if cardsSideBySide(width) {
 		cols = len(cards)
 	}
 	cw := (width - (cols - 1)) / cols
@@ -312,3 +312,7 @@ func humanBytes(n int64) string {
 	}
 	return fmt.Sprintf("%.0f MB", float64(n)/(1<<20))
 }
+
+// cardsSideBySide is whether the F3 cards sit in one row (at least 110
+// cells): then ←/→ move between them as ↑/↓ do (busmon-f3-keys).
+func cardsSideBySide(width int) bool { return width >= 110 }
