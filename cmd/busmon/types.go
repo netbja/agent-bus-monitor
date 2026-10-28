@@ -152,6 +152,14 @@ func plainLine(e bus.Event, et time.Time) string {
 
 var panelNames = map[PanelID]string{PanelAgents: "Agents", PanelActivity: "Activity", PanelBoard: "Board", PanelRequests: "Requests", PanelPlan: "Plan"}
 
+// panelLabel is a panel's name as the shell shows it, For you included.
+func panelLabel(p PanelID) string {
+	if p == PanelForYou {
+		return "For you"
+	}
+	return panelNames[p]
+}
+
 // agentsLabel is the Agents frame's label: counts, the dormant hint and the
 // scroll position.
 func agentsLabel(shown, working, blocked, hidden int, showAll bool, sc ScrollState) string {

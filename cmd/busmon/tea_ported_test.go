@@ -270,7 +270,7 @@ func TestLookupMatrix(t *testing.T) {
 		{"for you End is last", ModeShell, PanelForYou, TierWide, kc(keyEnd), ActLast},
 		{"board G is last", ModeShell, PanelBoard, TierWide, rk('G'), ActLast},
 		{"input q is text", ModeInput, PanelAgents, TierWide, rk('q'), ActNone},
-		{"input Tab completes", ModeInput, PanelAgents, TierWide, kc(keyTab), ActNone},
+		{"input Tab completes", ModeInput, PanelAgents, TierWide, kc(keyTab), ActComplete}, // named for the tour; the field still completes
 		{"input digit is text", ModeInput, PanelAgents, TierMedium, rk('1'), ActNone},
 		{"input Enter sends", ModeInput, PanelAgents, TierWide, kc(keyEnter), ActSend},
 		{"input Esc", ModeInput, PanelAgents, TierWide, kc(keyEscape), ActEscape},

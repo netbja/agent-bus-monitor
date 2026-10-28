@@ -1,0 +1,24 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙ 4  ● 2   15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Bernard [human]  claude 5h 62% │ 7d 41%    
+╭─ For you ───────────────────────────────────────────── 4 for you · 2 unread ─╮
+│  ● ask    master    review lot 1? (2 questions)                            4m│
+│  ♙ wait   foureyes  need a decision on the width rule                      6m│
+│  ♙╭─ Writing to an agent ────────────────────────────────────────── 2/5 ─╮ 1m│
+│  ◆│                                                                      │   │
+│  ●│ i opens the line at the bottom. Type @name then your text: that      │ 8m│
+╰───│ agent is woken and reads it. @all reaches every agent; tab completes │───╯
+╭─ A│ a name.                                                              │ …─╮
+│▶ ♙│                                                                      │le ▲
+│  ♙│   i     the line: @coder please rebase                               │   ┃
+│  ♙│   I ^O  the compose window, several lines; ^S sends                  │   ▼
+╰───│                                                                      │───╯
+╭─  │ Text without @name is a broadcast nobody reads: busmon asks for a    │l…─╮
+│   │ second enter before it sends one.                                    │   ▲
+│   │                                                                      │   │
+│  ○│ ○ ● ○ ○ ○   enter next · ← back · esc skip                           │   │
+│  ●╰──────────────────────────────────────────────────────────────────────╯   ┃
+│  ● 15:00 master            ask       asks · review lot 1? (2 question(s), 2 …┃
+│    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+›                                                                               
+ enter next   ← back   esc skip                                                 

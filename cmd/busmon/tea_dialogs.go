@@ -276,7 +276,7 @@ type reminderDialog struct {
 // automatic recap waits for it to end.
 func (m *Model) busyForModal() bool {
 	return m.ui.compose != nil || m.rd.open() || m.ui.line != lineNone || strings.TrimSpace(m.ui.msgDraft) != "" ||
-		m.ui.askChoose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary
+		m.ui.askChoose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary || m.ui.tour != nil
 }
 
 // maybeReminder opens the reminder when decisions are due (PopupAfter) and

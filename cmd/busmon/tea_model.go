@@ -40,6 +40,7 @@ type shellConfig struct {
 	cache         *busmonCache   // the local cache: snoozes, last visit
 	cachePath     string         // where it is saved ("" never saves)
 	priorVisit    time.Time      // the last visit before this one (the recap's since)
+	tour          *tourMarker    // the machine's tour marker; nil = the tour never opens by itself
 }
 
 // uiState is the person's place on the screen.
@@ -73,6 +74,7 @@ type uiState struct {
 	reminder       *reminderDialog   // the reminder, when open
 	summary        bool              // the recap's summary confirmation is open
 	summarySent    bool              // the summary request is in flight: its success closes the recap
+	tour           *tourState        // the first-launch tour, when open (tour.go)
 }
 
 // shellLists are the shell's lists. They live behind a pointer: the Model is

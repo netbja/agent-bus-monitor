@@ -24,6 +24,8 @@ type signalState struct {
 	rung          map[string]string // agent -> the waiting declaration rung for
 	rungAsks      map[string]bool   // ask ids rung for
 	bells         int               // bells rung (what the tests count)
+	tourHold      bool              // a bell rang on this update: the tour waits for the next
+	tourShown     bool              // the tour opened by itself this session
 	fading        bool              // a fadeMsg is scheduled
 	recap         recapModel        // the last recap built
 	recapLoading  bool
@@ -96,6 +98,7 @@ func (m *Model) scheduleFade() tea.Cmd {
 func (m *Model) afterPoll() tea.Cmd {
 	var cmds []tea.Cmd
 	if m.ring() {
+		m.sig.tourHold = true // the tour never opens over a bell
 		cmds = append(cmds, m.bell())
 	}
 	cmds = append(cmds, m.scheduleFade(), m.autoRecap())
@@ -108,6 +111,7 @@ func (m *Model) afterUpdate() tea.Cmd {
 	if m.width == 0 {
 		return nil
 	}
+	m.maybeTour()
 	m.maybeOpenRecap()
 	var save tea.Cmd
 	if m.sig.readDirty {

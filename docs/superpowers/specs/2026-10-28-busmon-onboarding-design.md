@@ -13,7 +13,8 @@ cache, never on the bus.
 ## Behaviour
 
 - **When.** On launch, when the tour marker is absent or older than the tour's version. The marker
-  is **one file for the machine**, `~/.cache/agentbus/busmon/tour.json` (`{"seen": <version>}`,
+  is **one file for the machine**, `~/.cache/agentbus/busmon/_tour.json` (`{"seen": <version>}`;
+  step 2 renamed it from `tour.json`, which a project named `tour` would read and overwrite as its own cache;
   0600, written atomically like the per-project cache), not the per-project cache: the panels are
   the same in every project, and a person opening a second project must not see the tour again.
   `--pick` and the CLI paths (`--list`, `--delete`, `--reset`) never show it.

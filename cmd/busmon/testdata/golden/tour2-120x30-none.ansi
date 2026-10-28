@@ -1,0 +1,30 @@
+ [1magent-bus-monitor[m   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                       15:04:05 
+ paused · resumes in 1h52 (lunch)   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44             
+[1m╭─[m[1;7m For you [m[1m─────────────[m 4 for you · 2 unread [1m─╮[m╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ·…─╮
+[1m│[m  ● ask    master    review lot 1? (2 ques… 4m[1m│[m│    agent     state     updated queue ctx       flags       message   ▲
+[1m│[m  ♙ wait   foureyes  need a decision on th… 6m[1m│[m│[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting   [m[7m6m     [m[7m [m[7m—    [m[7m [m[7m—        [m[7m [m[7mescalated  [m[7m need a de…[m┃
+[1m│[m  ♙ wait   sentinel  pane prompt            1m[1m│[m│  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
+[1m│[m  ◆ gate   coder     by bernard  look at b1   [1m│[m│  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+[1m│[m  ● unread dispatch  project paused until … 8m[1m│[m│  ✓ architect done      40m     —     —         escalating… spec merg…│
+[1m│[m                     [1m╭─[m[1;7m Writing to an agent [m[1m──────────────────────────────────────────────[m 2/5 [1m─╮[mate 1 · d… busmon-ch…▼
+[1m╰─────────────────────[m[1m│[m                                                                          [1m│[m─────────────────────╯
+╭─ [1;7m 1 Activity [m 2 Boar[1m│[m [1mi[m opens the line at the bottom. Type @name then your text: that agent is [1m│[ments · filter: none ─╮
+│    time   from      [1m│[m woken and reads it. @all reaches every agent;[1m tab[m completes a name.      [1m│[m                     │
+│  ── Mon 2026-10-26 -[1m│[m                                                                          [1m│[m─────────────────────│
+│    14:24  architect [1m│[m   [1mi[m     the line: @coder please rebase                                   [1m│[m                     │
+│    14:50  ♙ Bernard [1m│[m   [1mI[m [1m^O[m  the compose window, several lines;[1m ^S[m sends                      [1m│[m                     │
+│    14:51  coder     [1m│[m                                                                          [1m│[m                     │
+│  ○ 14:52  master    [1m│[m Text without @name is a broadcast nobody reads: busmon asks for a second [1m│[m                     │
+│  ● 14:56  dispatch  [1m│[m [1menter[m before it sends one.                                               [1m│[m                     │
+│  ● 15:00  master    [1m│[m                                                                          [1m│[m                     │
+│    15:02  coder     [1m│[m ○ ● ○ ○ ○   [1menter[m next · [1m←[m back · [1mesc[m skip                               [1m│[m                     │
+│                     [1m╰──────────────────────────────────────────────────────────────────────────╯[m                     │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                                       
+ [1menter[m next   [1m←[m back   [1mesc[m skip                                                                                         
