@@ -34,6 +34,7 @@ func TestIdentityGuard(t *testing.T) {
 		{"reports"}, {"thread", "1"}, {"verdicts"}, {"agents"}, {"board"}, {"board", "--json"}, {"request"},
 		{"gate", "coder"}, {"pilot", "status"}, {"plan", "show"}, {"plan"}, {"health"}, {"health", "list"}, {"health", "detail", "services"}, {"health", "log"},
 		{"asks"}, {"swaps"}, {"usage"}, {"budget"}, {"listen"}, {"subscribe", "--drain", "coder"}, {"pane", "coder"},
+		{"roles", "doctor", "--publish"}, {"roles", "adopt", "x", "--ask", "1"}, // no sender in what they write
 	}
 	for _, r := range reads {
 		if err := identityGuard(env(pane), r[0], r[1:]); err != nil {

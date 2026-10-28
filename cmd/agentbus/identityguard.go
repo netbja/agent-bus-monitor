@@ -35,7 +35,8 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		"subscribe", "watch", // the agent is named on the command line
 		"bind", "dispatch", "missions", // the launcher's and the services' own identities
 		"answer", // a person (--as, AGENT_BUS_HUMAN), never the agent
-		"roles":  // doctor and adopt read the bus and the manifest
+		"roles":  // only doctor and adopt get here (main exits the others first, no bus); neither names a sender:
+		// doctor --publish writes unauthored model verdicts, adopt writes the manifest
 		return true
 	case "gate":
 		return first != "close"
