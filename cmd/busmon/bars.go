@@ -86,7 +86,7 @@ func barTargets(budgets map[string]bus.BudgetSnapshot) map[string]float64 {
 			out[barKey(p, "session")], out[barKey(p, "week")] = b.SessionPct, b.WeeklyPct
 		default:
 			for _, w := range b.Windows {
-				if w.ObservedAt == 0 && w.UsedPct == 0 { // never observed: unknown, as the U page reads it
+				if windowUnobserved(w) {
 					continue
 				}
 				out[barKey(p, w.Name)] = w.UsedPct

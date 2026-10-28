@@ -276,3 +276,22 @@ func TestBarUnobservedWindowNeverSlides(t *testing.T) {
 		t.Errorf("the first real reading after unknown: shown %.1f moving %v", shown, moving)
 	}
 }
+
+// The header draws a never-observed window as unknown: its label and `?`,
+// no bar and no 0 %, in every tier and palette.
+func TestHeaderUnobservedWindowHasNoBar(t *testing.T) {
+	now := time.Now()
+	b := bus.BudgetSnapshot{ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{
+		{Name: "5h", ResetsAt: now.Add(time.Hour).Unix(), Minutes: 300},
+		{Name: "7d", UsedPct: 41, ResetsAt: now.Add(48 * time.Hour).Unix(), Minutes: 10080, ObservedAt: now.UnixMilli()}}}
+	for _, colors := range []int{1 << 24, 16} {
+		withPalette(t, "dark", false, colors)
+		for _, tier := range []Tier{TierWide, TierMedium} {
+			got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, tier, barView{}).text()
+			first := strings.Split(got, " │ ")[0]
+			if first != "claude 5h ?" {
+				t.Errorf("colours %d tier %v: unobserved window = %q, want %q", colors, tier, first, "claude 5h ?")
+			}
+		}
+	}
+}

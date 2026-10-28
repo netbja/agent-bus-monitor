@@ -154,7 +154,7 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	for _, p := range provs {
 		for _, w := range budgets[p].Windows {
 			b.text("  ").seg(providerRole(p, RoleText), Fit(Preview(p), 10)).text(" ").text(Fit(Preview(w.Name), 3)).text(" ")
-			if w.ObservedAt == 0 && w.UsedPct == 0 { // never observed: unknown, never 0%
+			if windowUnobserved(w) { // never observed: unknown, never 0%
 				b.seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10)).seg(RoleMuted, "    ?")
 			} else {
 				b.segs(bars.gauge(barKey(p, w.Name), w.UsedPct, 10, budgetRole(w.UsedPct))...)

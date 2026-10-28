@@ -120,6 +120,13 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 			role = RoleError
 		}
 		l = append(l, Seg{Text: Preview(windowLabel(w)) + " ", Role: RoleMuted})
+		if windowUnobserved(w) { // unknown, never a 0 % bar
+			l = append(l, Seg{Text: "?", Role: RoleMuted})
+			if holdsWindow {
+				l = append(l, Seg{Text: " held " + holdUntil.Local().Format("15:04"), Role: RoleError})
+			}
+			continue
+		}
 		if tier == TierWide {
 			cells := quotaBarCells(w)
 			l = append(l, bars.gauge(barKey(provider, w.Name), w.UsedPct, cells, role)...)
@@ -255,6 +262,11 @@ func (p *paceTracker) observe(budgets map[string]bus.BudgetSnapshot, now time.Ti
 
 // windowAged: the window's own observation (else the reading's) is missing or
 // older than quotaMaxAge.
+// windowUnobserved: the window was never read (no observation, 0 %), so it
+// is unknown, never 0 %: the header and the U page show `?`, and it has no
+// bar to slide (barTargets).
+func windowUnobserved(w bus.BudgetWindow) bool { return w.ObservedAt == 0 && w.UsedPct == 0 }
+
 func windowAged(w bus.BudgetWindow, b bus.BudgetSnapshot, now time.Time) bool {
 	obs := w.ObservedAt
 	if obs == 0 {
