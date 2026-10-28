@@ -350,20 +350,15 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			if err != nil {
 				return health.Unknown, "consumer-group state unavailable", err
 			}
-			worstPending, worstLag, hasPending := time.Duration(0), int64(0), false
-			for _, group := range groups {
-				if group.Pending > 0 && group.OldestAt > 0 {
-					age := now.Sub(time.UnixMilli(group.OldestAt))
-					if age > worstPending {
-						worstPending = age
-						hasPending = true
-					}
-				}
-				if group.Lag > worstLag {
-					worstLag = group.Lag
-				}
+			snaps, err := b.Agents(ctx)
+			if err != nil {
+				return health.Unknown, "agent registry unavailable", err
 			}
-			out := health.EvaluateDelivery(health.DeliveryEvidence{Known: true, Pending: worstPending, Lag: worstLag, HasPending: hasPending})
+			ev, ignored := deliveryEvidence(groups, snaps, now)
+			out := health.EvaluateDelivery(ev)
+			if ignored > 0 {
+				out.Detail += fmt.Sprintf(" (%d group(s) of unregistered agents ignored: agentbus agents forget <name>)", ignored)
+			}
 			return out.Status, out.Detail, nil
 		}),
 		healthTask("cmd-targets", func(ctx context.Context) (health.Status, string, error) {
@@ -909,4 +904,25 @@ func contextEvidence(fills map[string]bus.ContextFill) []health.ContextEvidence 
 		ev = append(ev, health.ContextEvidence{Agent: a, Pct: f.Pct, Known: f.Known()})
 	}
 	return ev
+}
+
+// deliveryEvidence is cmd-delivery's evidence from the consumer groups of the
+// agents registered in {p}:agents only (A9): a dead group (a name never
+// forgotten) keeps a lag no one will read, and once tripped "fail" for nobody.
+// It returns how many groups it ignored.
+func deliveryEvidence(groups []bus.CmdDeliveryGroup, registered map[string]bus.AgentSnapshot, now time.Time) (health.DeliveryEvidence, int) {
+	ev, ignored := health.DeliveryEvidence{Known: true}, 0
+	for _, group := range groups {
+		if _, ok := registered[group.Group]; !ok {
+			ignored++
+			continue
+		}
+		if group.Pending > 0 && group.OldestAt > 0 {
+			if age := now.Sub(time.UnixMilli(group.OldestAt)); age > ev.Pending {
+				ev.Pending, ev.HasPending = age, true
+			}
+		}
+		ev.Lag = max(ev.Lag, group.Lag)
+	}
+	return ev, ignored
 }

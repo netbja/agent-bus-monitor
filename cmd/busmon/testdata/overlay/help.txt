@@ -49,6 +49,7 @@ KEYS
   end G                last row
   y                    copy
   Y                    copy thread
+  n p ←→               the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)
   enter ! w            answer the agent's open questions
   esc q                close
   ^C                   quit (everywhere)

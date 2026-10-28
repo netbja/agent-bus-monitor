@@ -66,7 +66,8 @@ func realSwapDeps(env []string) swapDeps {
 				return err
 			}
 			c := exec.CommandContext(ctx, filepath.Join(repo, "scripts", "agent-spawn"), role, project, "--profile", profile)
-			c.Env = append(os.Environ(), "AGENT_LAUNCH_REQUIRE_BIND=1")
+			// swap proves the new agent itself: agent-spawn need not wait for it (A10).
+			c.Env = append(os.Environ(), "AGENT_LAUNCH_REQUIRE_BIND=1", "AGENT_SPAWN_WAIT=0")
 			out, err := c.CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("agent-spawn: %v: %s", err, strings.TrimSpace(string(out)))

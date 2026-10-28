@@ -290,3 +290,45 @@ func TestHeaderYieldsInTinyFrame(t *testing.T) {
 		}
 	}
 }
+
+// A3: a paused tail list turns live again when the selection reaches the
+// newest item or the wheel brings the view back to the bottom; f and End
+// are no longer the only ways back.
+func TestTailResumesAtTheBottom(t *testing.T) {
+	l := newList(30, 6, numbered(10)) // 4 rows
+	l.SetTail(true)
+	drawList(t, l)
+	l.ScrollBy(-3)
+	if l.Live() {
+		t.Fatal("wheel up did not pause")
+	}
+	l.ScrollBy(1)
+	if l.Live() {
+		t.Fatal("live again before the bottom")
+	}
+	l.ScrollBy(5) // clamped at the bottom
+	if !l.Live() {
+		t.Fatalf("wheel back to the bottom: live %v top %d", l.Live(), l.Scroll().Top)
+	}
+	l.Pause()
+	l.Move(-1) // f then up: the newest item selected, still paused
+	if l.Live() || l.Selected() != "k09" {
+		t.Fatalf("first up after a pause: live %v sel %q", l.Live(), l.Selected())
+	}
+	l.Move(-2)
+	l.Move(1)
+	if l.Live() || l.Selected() != "k08" {
+		t.Fatalf("live again before the newest item: live %v sel %q", l.Live(), l.Selected())
+	}
+	l.Move(1) // down onto the newest item
+	if !l.Live() || l.Selected() != "k09" {
+		t.Fatalf("selection back on the newest item: live %v sel %q", l.Live(), l.Selected())
+	}
+	// A list without tail mode never turns live.
+	b := newList(30, 6, numbered(10))
+	b.Move(1)
+	b.Last()
+	if b.Live() {
+		t.Fatal("a plain list went live")
+	}
+}

@@ -45,6 +45,11 @@ type page struct {
 	expanded bool       // ovPlan: the done group is open
 	items    []planItem // ovPlan
 
+	from     PanelID // the list the page was opened from (A5: n/p move in it)
+	fromList bool
+	fromKey  string   // the list item this page shows
+	fromKeys []string // that list's selectable keys, in order, when the walk began
+
 	recap     recapModel // ovRecap
 	recapLine int        // ovRecap: the body line of the cursor's row
 }
@@ -527,6 +532,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.copy(p.plain, "text")
 	case ActCopyThread:
 		return m.copy(p.threadPlain, "thread")
+	case ActNextItem, ActPrevItem:
+		return m.readerStep(p, act == ActNextItem)
 	case ActHealth:
 		return m.push(page{kind: ovHealth})
 	case ActComposeOpen: // in an agent's page: write to that agent
@@ -732,4 +739,113 @@ func (m Model) drawReader(g *grid) {
 		}
 		drawLine(g, r.X+2, r.Y+1+i, r.W-4, l, false)
 	}
+}
+
+// readerStep is n/p (and right/left) on a page opened from a list (A5): it
+// shows the item after (or before) the page's own in that list's order, in
+// place of the page, without going back; at either end it stays and says so.
+// The order is the one taken when the walk began, not the live selection:
+// opening an unread For you line reads it and its row leaves the list, which
+// would shift the selection under the page (reviewer-codex).
+func (m *Model) readerStep(p *page, next bool) tea.Cmd {
+	if !p.fromList {
+		return nil
+	}
+	from, keys := p.from, p.fromKeys
+	l := m.lists.of(from)
+	present := map[string]bool{}
+	for _, it := range l.items {
+		if it.Selectable {
+			present[it.Key] = true
+		}
+	}
+	i := slices.Index(keys, p.fromKey)
+	step := -1
+	if next {
+		step = 1
+	}
+	target := ""
+	for j := i + step; i >= 0 && j >= 0 && j < len(keys); j += step {
+		// A line read since stays walkable; one gone for another reason is skipped.
+		if present[keys[j]] || strings.HasPrefix(keys[j], "unread:") {
+			target = keys[j]
+			break
+		}
+	}
+	if target == "" {
+		m.ui.flash, m.ui.flashErr = "no previous item", false
+		if next {
+			m.ui.flash = "no next item"
+		}
+		return nil
+	}
+	m.pop()
+	depth := len(m.rd.pages)
+	var cmd tea.Cmd
+	if id, ok := strings.CutPrefix(target, "unread:"); ok && !present[target] {
+		cmd = m.openFeedLine(id) // read since: no row left to select
+	} else {
+		l.Select(target)
+		cmd = m.openDirect(from)
+	}
+	// Only the page this step pushed is tagged (foureyes): an item that no
+	// longer opens (an event trimmed from the feed) leaves the page below as
+	// it was.
+	if top := m.rd.top(); len(m.rd.pages) > depth && top != nil {
+		top.from, top.fromList, top.fromKey, top.fromKeys = from, true, target, keys
+	}
+	return cmd
+}
+
+// openTracked opens list p's selected item and records on the page it
+// pushed which list and item it came from, and that list's order. direct
+// opens an Activity or unread line straight in the reader (n/p) instead of
+// expanding it first.
+func (m *Model) openTracked(p PanelID, direct bool) tea.Cmd {
+	depth := len(m.rd.pages)
+	l := m.lists.of(p)
+	key := l.Selected()
+	var keys []string
+	for _, it := range l.items {
+		if it.Selectable {
+			keys = append(keys, it.Key)
+		}
+	}
+	var cmd tea.Cmd
+	if direct {
+		cmd = m.openDirect(p)
+	} else {
+		cmd = m.open(p)
+	}
+	if top := m.rd.top(); len(m.rd.pages) > depth && top != nil && !top.fromList {
+		top.from, top.fromList, top.fromKey, top.fromKeys = p, true, key, keys
+	}
+	return cmd
+}
+
+// openFeedLine opens the feed line of event id in the reader.
+func (m *Model) openFeedLine(id string) tea.Cmd {
+	for _, fl := range m.feed.feed {
+		if fl.ev.ID == id {
+			return m.pushMessage(fl.ev, fl.at)
+		}
+	}
+	return nil
+}
+
+// openDirect is open without the in-place expansion step.
+func (m *Model) openDirect(p PanelID) tea.Cmd {
+	key := m.lists.of(p).Selected()
+	switch p {
+	case PanelActivity:
+		if fl, ok := m.feedLine(key); ok {
+			return m.pushMessage(fl.ev, fl.at)
+		}
+		return nil
+	case PanelForYou:
+		if id, ok := strings.CutPrefix(key, "unread:"); ok {
+			return m.openFeedLine(id)
+		}
+	}
+	return m.open(p)
 }

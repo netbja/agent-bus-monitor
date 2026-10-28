@@ -2,6 +2,8 @@ package bus
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -65,12 +67,22 @@ func TestCloseReviewGates(t *testing.T) {
 	open("foureyes", "m1", "conductor|[subject roles-impl] mission review")
 	open("ui-kimi", "k1", "master|[subject roles-impl] review roles")
 
+	// r1 has no challenge on the cmd stream, so nothing says what was opened
+	// before it: the verdict closes r1 alone (gate-subject-close).
 	closed, err := b.CloseReviewGates(ctx, "foureyes", "coder", "roles-impl", "r1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(closed) != 2 || closed[0] != "r1" || closed[1] != "s1" {
-		t.Fatalf("closed = %v, want [r1 s1]", closed)
+	if len(closed) != 1 || closed[0] != "r1" {
+		t.Fatalf("closed = %v, want [r1]", closed)
+	}
+	// Without a ref, the subject sweeps every gate opened for it.
+	closed, err = b.CloseReviewGates(ctx, "foureyes", "coder", "roles-impl", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(closed) != 1 || closed[0] != "s1" {
+		t.Fatalf("closed = %v, want [s1]", closed)
 	}
 	if m, _ := b.OpenChallenges(ctx, "foureyes"); len(m) != 2 || m["s2"] == "" || m["m1"] == "" {
 		t.Fatalf("foureyes keeps %v, want s2 and m1", m)
@@ -85,6 +97,74 @@ func TestCloseReviewGates(t *testing.T) {
 	// No subject match and no ref: nothing.
 	if closed, _ := b.CloseReviewGates(ctx, "foureyes", "coder", "nothing", ""); len(closed) != 0 {
 		t.Fatalf("closed %v", closed)
+	}
+}
+
+// The live case (gate-subject-close): master challenged foureyes on a
+// subject, then again on a newer delta of the same subject. foureyes' verdict
+// on the older commit, naming its ref, must not close the newer delta's gate
+// it has not read yet. It closes its ref and the same-subject gates opened
+// before it; a gate whose challenge left the cmd stream is older than any
+// retained one, so it goes too.
+func TestCloseReviewGatesWithRefSparesNewerDeltas(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	p := b.Project()
+	t.Cleanup(func() { b.r.Del(ctx, GateKey(p, "foureyes"), StreamKey(p, "cmd")) })
+	challenge := func(ref, subject string) {
+		t.Helper()
+		if err := b.OpenChallenge(ctx, "foureyes", ref, FormatGateMeta("master", subject, "review "+ref)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.Cmd(ctx, "master", "foureyes", CmdChallenge, ref, "review "+ref); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// "trimmed": its challenge entry is gone from the stream (or never was).
+	if err := b.OpenChallenge(ctx, "foureyes", "trimmed", FormatGateMeta("master", "gsc", "old")); err != nil {
+		t.Fatal(err)
+	}
+	challenge("first", "gsc")
+	challenge("other", "elsewhere")
+	challenge("read", "gsc")
+	challenge("delta", "gsc")
+
+	closed, err := b.CloseReviewGates(ctx, "foureyes", "coder", "gsc", "read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"first", "read", "trimmed"}; strings.Join(closed, " ") != strings.Join(want, " ") {
+		t.Fatalf("closed = %v, want %v", closed, want)
+	}
+	m, _ := b.OpenChallenges(ctx, "foureyes")
+	if len(m) != 2 || m["delta"] == "" || m["other"] == "" {
+		t.Fatalf("foureyes keeps %v, want delta and other", m)
+	}
+}
+
+// A gate re-opened under the same ref (a re-challenge on its thread
+// overwrites the gate) holds the newer delta: it is dated by its last
+// challenge, so a verdict anchored between the two leaves it open (foureyes'
+// probe on PR #144).
+func TestCloseReviewGatesDatesAReopenedGateByItsLastChallenge(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	p := b.Project()
+	t.Cleanup(func() { b.r.Del(ctx, GateKey(p, "foureyes"), StreamKey(p, "cmd")) })
+	for i, ref := range []string{"old", "cur", "old"} {
+		if err := b.OpenChallenge(ctx, "foureyes", ref, FormatGateMeta("master", "s", fmt.Sprintf("v%d", i+1))); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.Cmd(ctx, "master", "foureyes", CmdChallenge, ref, fmt.Sprintf("v%d", i+1)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	closed, err := b.CloseReviewGates(ctx, "foureyes", "coder", "s", "cur")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(closed) != 1 || closed[0] != "cur" {
+		t.Fatalf("closed = %v, want [cur]: the re-opened old gate holds the unread v3", closed)
 	}
 }
 

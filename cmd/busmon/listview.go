@@ -157,7 +157,13 @@ func (l *listState) Move(delta int) {
 		}
 		i = j
 	}
+	// A3: moving down onto the newest item of a paused tail list resumes it
+	// (the selection stays, as a selection made while live does).
 	l.setSel(i)
+	if step > 0 && l.tail && !l.live && i == l.lastSelectable() {
+		l.live = true
+		l.changed()
+	}
 }
 
 // First selects the first selectable item.
@@ -184,8 +190,13 @@ func (l *listState) Open() {
 func (l *listState) ScrollBy(delta int) {
 	l.top = clamp(l.top+delta, 0, max(0, len(l.items)-l.rows()))
 	l.setAnchor()
-	if l.tail && l.live && delta < 0 {
+	switch {
+	case l.tail && l.live && delta < 0:
 		l.live = false
+		l.changed()
+	case l.tail && !l.live && delta > 0 && l.top >= max(0, len(l.items)-l.rows()):
+		// A3: the wheel back at the bottom resumes auto-scroll.
+		l.sel, l.live, l.anchor = "", true, ""
 		l.changed()
 	}
 }

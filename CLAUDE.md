@@ -231,7 +231,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `listen`/busmon still render the preview. `verdict` is subject-first
   (`--pr N`/`--subject S`), always appends to the `{p}:verdicts` ledger, publishes a live
   `CmdVerdict`, then closes gates best-effort (`verdictGates`, foryou-gates): on the *reviewer's own*
-  gate, the one named by `--ref` and every one opened for that subject (`Bus.CloseReviewGates`; never
+  gate, the one named by `--ref` plus the same-subject ones opened before it (anchored on the challenges'
+  `:cmd` entries, so a verdict on an older commit never closes a newer delta's gate), or without `--ref`
+  every one opened for that subject (`Bus.CloseReviewGates`; never
   a conductor's mission gate, which the conductor closes itself), else the author's gate named by
   `--ref`; a self-verdict closes no gate by either path (it no longer errors when no challenge is open — `verdictGateNotice`).
   `challenge --subject S` stores the subject in the gate's meta (`challenger|[subject S] text`,
@@ -300,7 +302,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`; A12: `▼` in the gutter, the text under the message column behind a
   muted `│` guide, a last muted `↵ full text` line), then opens it in the reader, a stack of pages over the lower zone, one
-  per overlay, Esc back (`tea_reader.go`: bodies built on the update path with a stamp, an ask's
+  per overlay, Esc back; on a page opened from Activity or For you, `n`/`p` (→/←) show the list's next or
+  previous item in its place (A5, `readerStep`, `openTracked`) (`tea_reader.go`: bodies built on the update path with a stamp, an ask's
   options answered by digit or click, `ModeShellAsk`), and markdown is cached by id, width and
   palette (`tea_cache.go`), so a `fadeMsg` renders none. The input line (`tea_input.go`) and the
   compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells)
@@ -328,7 +331,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   or declared within 10 min) or closes an untracked thread with a `human=yes`, `wake=no` reply
   (`Bus.HumanClose`). The Requests count covers only threads younger than `bus.DefaultHorizon`.
   Activity auto-scroll (v0.12.3): selecting, clicking or opening a line keeps it live; only `f`
-  (`listState.Pause`) and a wheel-up leave it.
+  (`listState.Pause`) and a wheel-up leave it, and (A3) moving the selection down onto the newest
+  line or wheeling back to the bottom resumes it (`f`/End still do).
   Attention marks (spec `docs/superpowers/specs/2026-10-21-busmon-ux-design.md`): an idle agent whose
   status message names the person (`forYouHint`, `foryou.go`; never for the default `pilot`) gets
   the flag `for you`: a hint, it never relabels, rings or counts. Activity entries for the person
@@ -463,7 +467,7 @@ It never touches Redis — see README "Deployment topology".
   folder a client (Claude Code, Codex) does not trust yet, it starts the first agent of that client
   alone, says to answer the client's own dialog in its pane, polls the trust (2 s, 10 min) and only
   then starts that client's other agents; a timeout starts nothing more and keeps the workspace
-  (`errTrustPending`). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
+  (`errTrustPending`); its message names the pane to answer in (A10). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
   as Claude Code documents (`trustKey`: git root, a worktree's main checkout, else the folder) and
   return a bool, never file content (`~/.claude.json` can hold an API key). agentbus never writes
   those files. Nil `upDeps.Trusted` = no gate.
@@ -499,6 +503,16 @@ It never touches Redis — see README "Deployment topology".
   merged into every role before its own rules; the shipped Claude Code Read/Edit denies cover
   common secret-file names even with `bypassPermissions`. This is defense in depth, not a boundary:
   processes an agent starts (tests, dotenv, and similar tools) can still read environment files.
+  A pop's client can stop on its own pre-session dialog (trust, hooks review) before it declares a
+  status (A10): `agent-launch` binds the pane first, so the observe pass already inspects it, and a
+  dialog herdr reports as `blocked` (Claude Code's trust check, `testdata/screens/claude-trust.txt`)
+  gets busmon's `prompt` flag and the prompt-notify ring; `agent-spawn` waits `AGENT_SPAWN_WAIT` s
+  (default 30, `0` = no wait; `swap` passes 0, it proves the agent itself) for the first status
+  (`agentbus agents wait <agent> --since <ms> --timeout <d>`, read-only) and otherwise names the
+  pane. A dialog herdr does not report (Codex's hooks review) is read from the screen: a
+  `Signature.Dialog` match, in the last 14 non-blank lines and only when the client is not ready,
+  makes the inspection `blocked`, never ready (`screens/codex-hooks.txt`,
+  `claude-trust.txt`); only patterns pinned by a real screen.
   `setup.sh install/update` also links `agent-launch` and `agent-spawn` into `BIN_DIR`; those links
   resolve back to this repository's scripts, and uninstall removes only links to these exact files.
   Resume Claude Code with `agent-launch <role> <project> [--profile <p>] --resume <session-id>` to
@@ -546,7 +560,9 @@ It never touches Redis — see README "Deployment topology".
   Sentinel may restart an identified failed project service once within its budget, or refresh the
   local model table; everything else is escalated. Usage refresh is at most every 15 minutes with
   a fenced writer; model refresh is daily under a host-local lock. busmon shows the health pill, F5
-  details and retained transitions in its R recap. Runaway is warning-only. Scanner, canary, key
+  details and retained transitions in its R recap. Runaway is warning-only. `cmd-delivery` judges only the consumer groups of agents registered in
+  `{p}:agents` (A9, `deliveryEvidence`: a dead group's lag tripped `fail` for nobody; `agents forget`
+  destroys a forgotten agent's group). Scanner, canary, key
   inventory, project-defined checks and password rotation belong to later releases; health is not
   a security boundary.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's

@@ -188,7 +188,8 @@ To review a peer's risky change: `agentbus challenge <target> <why>` opens a gat
 (a self-approval never counts). Query the recorded state with `agentbus verdicts`.
 To ask a reviewer for a verdict, challenge it with the subject: `agentbus challenge foureyes
 --subject <s> "<what to review>"`; its `verdict --subject <s>` closes that gate. As the gated
-reviewer, answer on the subject you were given (or pass the challenge's `--ref`). A gate you opened
+reviewer, answer on the subject you were given and pass the challenge's `--ref`: it then closes
+that gate and the subject's older ones, never the gate of a newer delta you have not read. A gate you opened
 that is no longer needed: `agentbus gate close <agent> <ref> --note "<why>"` (never a verdict).
 
 ## Shared working tree — one checkout, several agents

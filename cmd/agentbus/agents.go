@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,4 +131,45 @@ func runAgentsForget(ctx context.Context, d forgetDeps, args []string, out, errw
 		}
 	}
 	return code
+}
+
+// runAgentsWait (A10) waits for agent's first verified status at or after
+// --since (Unix ms): a declared state from a bound process. It reads once a
+// second until --timeout (default 30s) and returns 0 once it has one, 1 if
+// none came (its client may be waiting on a dialog in its pane), 2 on usage.
+// Read-only: agent-spawn uses it to say which pane to look at.
+func runAgentsWait(ctx context.Context, read func(context.Context) (map[string]bus.AgentSnapshot, error),
+	sleep func(time.Duration), args []string, out, errw io.Writer) int {
+	args, sinceS := extractFlag(args, "--since")
+	args, timeoutS := extractFlag(args, "--timeout")
+	if len(args) != 1 || !bus.ValidName(args[0]) {
+		fmt.Fprintln(errw, "usage: agents wait <agent> [--since <unix-ms>] [--timeout <dur>]")
+		return 2
+	}
+	agent := args[0]
+	since, err := strconv.ParseInt(sinceS, 10, 64)
+	if sinceS != "" && err != nil {
+		fmt.Fprintln(errw, "agents wait: --since takes Unix milliseconds")
+		return 2
+	}
+	timeout := 30 * time.Second
+	if timeoutS != "" {
+		if timeout, err = time.ParseDuration(timeoutS); err != nil || timeout <= 0 {
+			fmt.Fprintln(errw, "agents wait: --timeout takes a positive duration (30s)")
+			return 2
+		}
+	}
+	for i, n := 0, max(1, int(timeout/time.Second)); i < n; i++ {
+		if snaps, err := read(ctx); err == nil {
+			if s, ok := snaps[agent]; ok && s.PID > 0 && s.State != "" && s.TS >= since {
+				fmt.Fprintf(out, "%s: %s\n", agent, s.State)
+				return 0
+			}
+		}
+		if i < n-1 {
+			sleep(time.Second)
+		}
+	}
+	fmt.Fprintf(errw, "agents wait: no status from %s within %s\n", agent, timeout)
+	return 1
 }
