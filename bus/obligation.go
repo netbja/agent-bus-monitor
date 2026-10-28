@@ -126,6 +126,7 @@ type Obligation struct {
 	OldestID      string // oldest wake-relevant id (PEL + unread)
 	HighID        string // newest wake-relevant id
 	LastDelivered string
+	PendingIDs    []string // every entry in the group's pending list (busmon's Requests: delivered, not acknowledged)
 }
 
 // Wakes reports whether anything is worth waking the agent for.
@@ -192,6 +193,7 @@ func (b *Bus) Obligation(ctx context.Context, agent string, horizon time.Duratio
 		cmds := make([]*redis.XMessageSliceCmd, len(pend))
 		for i, p := range pend {
 			cmds[i] = pipe.XRange(ctx, stream, p.ID, p.ID)
+			o.PendingIDs = append(o.PendingIDs, p.ID)
 		}
 		if len(pend) > 0 {
 			if _, err := pipe.Exec(ctx); err != nil {

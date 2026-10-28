@@ -53,6 +53,19 @@ func hostileShared(now time.Time, down bool) *shared {
 	}
 	st.requests = []request{{Task: "t-" + hostileText, Tracked: true, From: "a00", Target: "a01", State: "blocked", BlockedReason: hostileText, Created: now}}
 	st.threads = []openThread{{ID: "1-0", Type: "directive", From: "a00", Target: "a02", Message: hostileText, At: now}}
+	for i := 0; i < 12; i++ { // the Requests view's rows: every section, hostile senders, targets and texts
+		from, to, typ, msg := "a0"+fmt.Sprint(i%3)+hostileText, "a0"+fmt.Sprint(i%4), "directive", hostileText
+		switch i % 4 {
+		case 1:
+			from = "bernard"
+		case 2:
+			from = "dispatch"
+		case 3:
+			msg = reportPrefix("1-1") + hostileText
+		}
+		st.cmdHistory = append(st.cmdHistory, bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-%d", now.Add(-time.Minute).UnixMilli(), i), Type: typ,
+			From: from, Target: to, Message: msg})
+	}
 	if down {
 		st.health = health{ok: false, since: now.Add(-42 * time.Second), err: hostileText}
 	}

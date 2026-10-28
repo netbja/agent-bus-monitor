@@ -378,6 +378,11 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		if wi, ok := wakes[n]; ok {
 			if wi.obOK {
 				a.waiting, a.stale, a.gap = wi.ob.Size(), wi.ob.Stale, wi.ob.GapPossible
+				a.delivered, a.deliveryOK = wi.ob.LastDelivered, wi.ob.GroupExists
+				a.pendingIDs = make(map[string]bool, len(wi.ob.PendingIDs))
+				for _, id := range wi.ob.PendingIDs {
+					a.pendingIDs[id] = true
+				}
 				a.queueKnown, a.queueFailed, a.queueAt = true, false, time.Now()
 			} else {
 				a.queueFailed = true

@@ -1,0 +1,40 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up                                                  15:04:05 
+ ♙ Bernard [human]   pilot master   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44             
+╭─ For you ─ 0 for you · 0 unread ─╮╭─ Agents ────────────────────────────────────── 6 agents · 0 working · 0 blocked ─╮
+│  nothing waits for you           ││    agent     state     updated queue    ctx       flags               message    │
+│                                  ││▶ ○ coder     idle      0s      —        —                                        │
+│                                  ││  ○ foureyes  idle      0s      —        —                                        │
+│                                  ││  ○ master    idle      0s      —        —         pilot                          │
+│                                  ││  ○ reviewer… quota     0s      —        —                                        │
+│                                  ││  ○ sentinel  idle      0s      —        —                                        │
+│                                  ││  ○ ui-kimi   idle      0s      —        —                                        │
+╰──────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity  2 Board  3 Requests  4 Plan  ───────────────────────── 0 for you · you wait on 22 · 21 between agents ─╮
+│    FROM→TO                KIND      SUBJECT / FIRST LINE                                                       N  AGE│
+│  owed by you · 0                                                                                                     │
+│  you wait on master · 22, no reply on their thread  (oldest 1h)                                                      │
+│  ○ bernard→master         directive message 21 from the person                                                 1   5m│
+│  ○ bernard→master         directive message 20 from the person                                                 1  10m│
+│    bernard→master         directive + 20 older  (enter expands)                                               20   1h│
+│  tracked requests · 1 waiting                                                                                        │
+│    master→coder           request   busmon-group-a                                                             1   1h│
+│  reviews still gated · 1 reviewer, 9 open gates                                                                      │
+│  ● coder→reviewer-codex   challenge lifecycle-spec · gate-subject-close · a-pending-pane ×3 · a-identity · …   9   1h│
+│  directives between agents, no reply on the thread · 11 in 5 pairs                                                   │
+│  ● coder→ui-kimi          directive coder to ui-kimi                                                           1  12h│
+│  ○ master→sentinel        directive master to sentinel                                                         2  14h│
+│  ○ master→foureyes        directive master to foureyes                                                         1  12h│
+│  ○ master→coder           directive master to coder                                                            1  11h│
+│  ○ sentinel→master        directive sentinel to master                                                         6  48m│
+│  notices · folded, nobody owes an answer  (enter lists them)                                                         │
+│  · dispatch→sentinel      notices   dispatcher notice for sentinel                                             6  45m│
+│  · dispatch→master        notices   dispatcher notice for master                                               5  44m│
+│  · dispatch→coder         notices   dispatcher notice for coder                                                1  40m│
+│  · coder→master           reports   report 9 first line                                                       10  10m│
+│  answered or older than 24 h · 77 folded  (o shows them)                                                             │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                                       
+ tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! w answer   F1 help   F5 health        

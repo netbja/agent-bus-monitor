@@ -174,30 +174,38 @@ func (m *Model) askRemove() {
 		}
 		m.ui.confirm = &pendingRemoval{key: "agent:" + key, label: key}
 		m.ui.flash, m.ui.flashErr = "forget agent "+key+" (state, usage, queue)? y confirms, any other key cancels", true
-	case strings.HasPrefix(key, "thr:"):
-		t, ok := m.thread(key)
-		if !ok {
+	case m.ui.focus == PanelRequests && reqRowKey(key):
+		ths := m.reqThreadsOf(key)
+		var closable []reqThread
+		for _, t := range ths {
+			if t.Kind != kindChallenge && t.Request == nil {
+				closable = append(closable, t)
+			}
+		}
+		if len(closable) == 0 {
+			if len(ths) > 0 {
+				m.ui.flash, m.ui.flashErr = "a review ends with a verdict or agentbus gate close", true
+			}
 			return
 		}
-		m.ui.confirm = &pendingRemoval{key: key, label: t.Target}
-		m.ui.flash, m.ui.flashErr = fmt.Sprintf("close the %s to %s (history kept)? y confirms, any other key cancels", t.Type, t.Target), true
+		t := closable[0]
+		m.ui.confirm = &pendingRemoval{key: key, label: t.Target, threads: closable}
+		if len(closable) == 1 {
+			m.ui.flash = fmt.Sprintf("close the %s to %s (history kept)? y confirms, any other key cancels", t.Kind, t.Target)
+		} else {
+			m.ui.flash = fmt.Sprintf("close %d threads %s%s%s (history kept)? y closes %d, any other key cancels", len(closable), t.From, GlyphArrowR, t.Target, len(closable))
+		}
+		m.ui.flashErr = true
 	case strings.HasPrefix(key, "req:"):
 		m.ui.flash, m.ui.flashErr = "a tracked request is closed by its owner (agentbus request done or block)", true
 	}
 }
 
-func (m *Model) thread(key string) (openThread, bool) {
-	for _, t := range m.snap.threads {
-		if "thr:"+t.ID == key {
-			return t, true
-		}
-	}
-	return openThread{}, false
-}
-
-// removeMsg is the result of a confirmed removal.
+// removeMsg is the result of a confirmed removal: the threads closed (ids),
+// the first error.
 type removeMsg struct {
 	key string
+	ids []string
 	err error
 }
 
@@ -216,7 +224,7 @@ func (m *Model) confirmKey(k Key) tea.Cmd {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	t, isThread := m.thread(c.key)
+	threads := c.threads
 	return func() tea.Msg {
 		cc, cancel := context.WithTimeout(ctx, pollBudget)
 		defer cancel()
@@ -224,15 +232,19 @@ func (m *Model) confirmKey(k Key) tea.Cmd {
 			_, err := w.ForgetAgent(cc, name)
 			return removeMsg{key: c.key, err: err}
 		}
-		if !isThread {
-			return removeMsg{key: c.key}
+		out := removeMsg{key: c.key}
+		for _, t := range threads { // each thread once
+			to := t.From
+			if !bus.ValidName(to) {
+				to = t.Target
+			}
+			if _, err := w.HumanClose(cc, self, to, t.ID, "closed from busmon by "+self); err != nil {
+				out.err = err
+				break
+			}
+			out.ids = append(out.ids, t.ID)
 		}
-		to := t.From
-		if !bus.ValidName(to) {
-			to = t.Target
-		}
-		_, err := w.HumanClose(cc, self, to, t.ID, "closed from busmon by "+self)
-		return removeMsg{key: c.key, err: err}
+		return out
 	}
 }
 
@@ -255,14 +267,28 @@ func (m *Model) gotRemove(msg removeMsg) {
 		m.snap.agents = agents // a copy: the snapshot's maps are never written
 		m.ui.flash, m.ui.flashErr = GlyphDone+" "+name+" forgotten", false
 	default:
+		closed := map[string]bool{}
+		for _, id := range msg.ids {
+			closed[id] = true
+		}
 		var kept []openThread
 		for _, t := range m.snap.threads {
-			if "thr:"+t.ID != msg.key {
+			if !closed[t.ID] {
 				kept = append(kept, t)
 			}
 		}
 		m.snap.threads = kept
+		// The replies the next poll will read, so the view folds them now
+		// (a copy: the snapshot's slices are never written).
+		hist := append([]bus.Event(nil), m.snap.cmdHistory...)
+		for _, id := range msg.ids {
+			hist = append(hist, bus.Event{Kind: "cmd", Type: bus.CmdReply, From: m.cfg.self, Ref: id, NoWake: true, Human: true})
+		}
+		m.snap.cmdHistory = hist
 		m.ui.flash, m.ui.flashErr = GlyphDone+" thread closed", false
+		if len(msg.ids) > 1 {
+			m.ui.flash = fmt.Sprintf("%s %d threads closed", GlyphDone, len(msg.ids))
+		}
 	}
 }
 

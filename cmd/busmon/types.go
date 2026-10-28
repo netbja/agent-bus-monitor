@@ -42,12 +42,14 @@ const (
 	ovAsk
 	ovPlan     // the batch's plan (P)
 	ovPlanTask // one task of the plan; Esc returns to the plan
+	ovNotices  // a Requests notice group: its notices, one line each
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.
 type pendingRemoval struct {
-	key   string // "agent:<name>", "thr:<id>"
-	label string
+	key     string // "agent:<name>", a Requests row key
+	label   string
+	threads []reqThread // the Requests threads y closes, each once
 }
 
 // sendResult is what one send did (v0.16 §7); the caller closes or keeps.

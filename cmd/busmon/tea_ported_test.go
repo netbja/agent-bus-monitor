@@ -734,13 +734,23 @@ func TestShellAgentPageShowsOneSharedAccountRowWithBothResets(t *testing.T) {
 
 func TestShellDeleteClosesAnOpenThreadWithAReply(t *testing.T) {
 	st := dormantShared(time.Now())
-	st.threads = []openThread{{ID: "1-0", Type: "directive", From: "master", Target: "claude-hl-coder", At: time.Now().Add(-time.Hour)}}
+	id := fmt.Sprintf("%d-0", time.Now().Add(-time.Hour).UnixMilli())
+	st.cmdHistory = []bus.Event{{Kind: "cmd", ID: id, Type: "directive", From: "master", Target: "claude-hl-coder", Message: "x"}}
 	fw := &fakeWriter{}
 	m := keys(t, shellOf(t, st, 160, 45, fw), '3') // Requests
-	m.lists.requests.Select("thr:1-0")
+	m.lists.requests.Select("thr:" + id)
+	if m.lists.requests.Selected() != "thr:"+id {
+		t.Fatalf("no row for the thread")
+	}
 	m, cmd := pressCmd(t, keys(t, m, 'd'), 'y')
-	if m = run(t, m, cmd); sentBy(fw) != "close master 1-0" || len(m.snap.threads) != 0 {
-		t.Fatalf("sent %q, threads %v", sentBy(fw), m.snap.threads)
+	m = run(t, m, cmd)
+	if sentBy(fw) != "close master "+id {
+		t.Fatalf("sent %q", sentBy(fw))
+	}
+	for _, it := range m.lists.requests.items {
+		if it.Key == "thr:"+id {
+			t.Fatal("the closed thread is still listed")
+		}
 	}
 }
 

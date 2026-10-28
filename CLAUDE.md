@@ -338,7 +338,15 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   nothing is **hidden** from the panel and from `@all` (`a` shows it), never relabelled; `d`/`Delete`
   then `y` forgets an agent (`Bus.ForgetAgent`, `agentbus agents forget`, refused while it listens
   or declared within 10 min) or closes an untracked thread with a `human=yes`, `wake=no` reply
-  (`Bus.HumanClose`). The Requests count covers only threads younger than `bus.DefaultHorizon`.
+  (`Bus.HumanClose`). The Requests tab answers who owes whom an answer (spec
+  `docs/superpowers/specs/2026-10-28-requests-view-design.md`; `requests_view.go` pure, `requests_rows.go`
+  rows): a thread is the unit, a row a group (section, sender, target, kind); sections owed by you, you wait on,
+  tracked requests, reviews still gated, directives between agents, notices (report notices by
+  `reportNotice`'s exact prefix, `from = dispatch`, `wake=no`), then answered or older than 24 h folded
+  (`o`). A challenge is owed iff its gate is open now, never from its thread; unread/read come from the
+  target's cursor (`Obligation.LastDelivered`, `PendingIDs`, read with the dispatcher facts); the title's
+  numbers are the sums of their sections. Enter expands a group (or `+ N older`), opens a thread, a
+  report notice's report, a request, or a notice group's list; `d`/`y` closes each thread of a group once.
   Activity auto-scroll (v0.12.3): selecting, clicking or opening a line keeps it live; only `f`
   (`listState.Pause`) and a wheel-up leave it, and (A3) moving the selection down onto the newest
   line or wheeling back to the bottom resumes it (`f`/End still do).

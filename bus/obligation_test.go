@@ -132,6 +132,9 @@ func TestObligationPendingMissingBodyCounts(t *testing.T) {
 	if o.Pending != 1 || o.PendingTotal != 1 || !o.Wakes() {
 		t.Fatalf("obligation = %+v, want Pending 1", o)
 	}
+	if len(o.PendingIDs) != 1 { // busmon's Requests reads a pending entry as unread
+		t.Fatalf("PendingIDs = %v, want the one pending entry", o.PendingIDs)
+	}
 }
 
 func TestObligationNoGroupScansStream(t *testing.T) {
