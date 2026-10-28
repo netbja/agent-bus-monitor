@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"regexp"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -74,6 +75,14 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 // transaction, so a bind and a status racing on the same agent never lose
 // each other's fields.
 func (b *Bus) putSnapshot(ctx context.Context, agent string, next AgentSnapshot, identityOnly bool) error {
+	return b.updateSnapshot(ctx, agent, func(old *AgentSnapshot) (AgentSnapshot, error) {
+		return mergeSnapshot(old, next, identityOnly), nil
+	})
+}
+
+// updateSnapshot replaces the stored entry with change(stored) in one
+// optimistic transaction; an error from change writes nothing.
+func (b *Bus) updateSnapshot(ctx context.Context, agent string, change func(old *AgentSnapshot) (AgentSnapshot, error)) error {
 	key := AgentsKey(b.project)
 	txf := func(tx *redis.Tx) error {
 		var old *AgentSnapshot
@@ -88,7 +97,11 @@ func (b *Bus) putSnapshot(ctx context.Context, agent string, next AgentSnapshot,
 				old = &s
 			}
 		}
-		snap, err := json.Marshal(mergeSnapshot(old, next, identityOnly))
+		next, err := change(old)
+		if err != nil {
+			return err
+		}
+		snap, err := json.Marshal(next)
 		if err != nil {
 			return err
 		}
@@ -130,4 +143,39 @@ func (b *Bus) Bind(ctx context.Context, agent string, who AgentIdent) error {
 	}
 	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, IdentTS: now,
 		Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP}, true)
+}
+
+// sessionIDPattern is what a session id proved by ProveSession looks like
+// (a Claude Code session is a UUID): nothing that could become a path.
+var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{7,63}$`)
+
+// ValidSessionID reports whether id may be proved as a session.
+func ValidSessionID(id string) bool { return sessionIDPattern.MatchString(id) }
+
+// ProveSession records session as the one proved with agent's process
+// (lifecycle spec, part D): /clear keeps the process and starts a new
+// session, which only the SessionStart hook sees. It moves IdentSession, and
+// nothing else, only while pid and pidStart are still the stored verified
+// identity; any other caller, or no snapshot, writes nothing.
+func (b *Bus) ProveSession(ctx context.Context, agent string, pid int, pidStart uint64, session string) error {
+	if !ValidName(agent) {
+		return fmt.Errorf("invalid agent %q", agent)
+	}
+	if pid <= 0 || pidStart == 0 {
+		return fmt.Errorf("prove session: no process")
+	}
+	if !ValidSessionID(session) {
+		return fmt.Errorf("prove session: %q is not a session id", session)
+	}
+	return b.updateSnapshot(ctx, agent, func(old *AgentSnapshot) (AgentSnapshot, error) {
+		switch {
+		case old == nil:
+			return AgentSnapshot{}, fmt.Errorf("prove session: %s has no snapshot", agent)
+		case old.PID != pid || old.PIDStart != pidStart:
+			return AgentSnapshot{}, fmt.Errorf("prove session: pid %d is not %s's verified process", pid, agent)
+		}
+		out := *old
+		out.IdentSession = session
+		return out, nil
+	})
 }

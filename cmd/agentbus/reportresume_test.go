@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 )
 
 // resumeFixture: a Claude manifest with an own and a fallback profile, the
@@ -19,6 +22,7 @@ type resumeFixture struct {
 	manifest string
 	env      []string
 	spawned  [][]string
+	chain    []dispatch.ProcID // the hook's ancestors
 }
 
 func newResumeFixture(t *testing.T) *resumeFixture {
@@ -46,7 +50,7 @@ func (f *resumeFixture) hook(stdin string, env ...string) string {
 		strings.NewReader(stdin), &out, &errw, func(argv []string) error {
 			f.spawned = append(f.spawned, argv)
 			return nil
-		})
+		}, func() []dispatch.ProcID { return f.chain })
 	if code != 0 || out.Len() != 0 {
 		f.t.Fatalf("hook exit %d, stdout %q (stderr %q): a SessionStart hook prints nothing and never fails", code, out.String(), errw.String())
 	}
@@ -207,4 +211,96 @@ func indexOfStr(xs []string, s string) int {
 		}
 	}
 	return -1
+}
+
+// spawnedVerb is the one spawned sender of that verb, or nil.
+func (f *resumeFixture) spawnedVerb(verb string) []string {
+	var got []string
+	for _, argv := range f.spawned {
+		if len(argv) > 1 && argv[1] == verb {
+			if got != nil {
+				f.t.Fatalf("two %s senders: %q", verb, f.spawned)
+			}
+			got = argv
+		}
+	}
+	return got
+}
+
+const clearStart = `{"session_id":"0c9e2a51-7d4b-4f0e-9a51-2c3d4e5f6a7b","hook_event_name":"SessionStart","source":"clear"}`
+
+// After /clear the hook proves its client among its ancestors before it
+// detaches (lifecycle spec, part D): it hands the chain, read in the
+// foreground, to a detached prover.
+func TestReportResumeHandsItsAncestryToTheProver(t *testing.T) {
+	f := newResumeFixture(t)
+	f.chain = []dispatch.ProcID{{PID: 40, Start: 400}, {PID: 30, Start: 300}, {PID: 1, Start: 1}}
+	f.hook(clearStart)
+	want := []string{"roles", "prove-session", filepath.Join(filepath.Dir(f.manifest), "state", "agentbus", "demo", "resume.log"),
+		"demo", "coder", "0c9e2a51-7d4b-4f0e-9a51-2c3d4e5f6a7b", "--", "40:400", "30:300", "1:1"}
+	if got := f.spawnedVerb("prove-session"); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("prover argv\n got %q\nwant %q", got, want)
+	}
+	if f.spawnedVerb("report-resume-send") == nil {
+		t.Fatal("the resume report is no longer sent")
+	}
+
+	for name, c := range map[string]struct {
+		stdin string
+		chain []dispatch.ProcID
+	}{
+		"no ancestry read": {clearStart, nil},
+		"subagent":         {strings.Replace(clearStart, `"source"`, `"agent_id":"a1","source"`, 1), f.chain},
+		"not a session id": {strings.Replace(clearStart, "0c9e2a51-7d4b", "../../etc", 1), f.chain},
+	} {
+		f.chain = c.chain
+		f.hook(c.stdin)
+		if got := f.spawnedVerb("prove-session"); got != nil {
+			t.Errorf("%s: prover spawned %q", name, got)
+		}
+	}
+}
+
+// fakeProver is the bus as the prover sees it.
+type fakeProver struct {
+	snaps  map[string]bus.AgentSnapshot
+	proved []string
+}
+
+func (p *fakeProver) Agents(context.Context) (map[string]bus.AgentSnapshot, error) {
+	return p.snaps, nil
+}
+func (p *fakeProver) ProveSession(_ context.Context, agent string, pid int, start uint64, session string) error {
+	p.proved = append(p.proved, agent+" "+strconv.Itoa(pid)+":"+strconv.FormatUint(start, 10)+" "+session)
+	return nil
+}
+
+func TestProveSessionSendProvesOnlyTheStoredIdentity(t *testing.T) {
+	const sess = "0c9e2a51-7d4b-4f0e-9a51-2c3d4e5f6a7b"
+	for name, c := range map[string]struct {
+		snap bus.AgentSnapshot
+		want string
+	}{
+		"the client among the ancestors": {bus.AgentSnapshot{PID: 30, PIDStart: 300}, "coder 30:300 " + sess},
+		"a recycled pid":                 {bus.AgentSnapshot{PID: 30, PIDStart: 299}, ""},
+		"not an ancestor":                {bus.AgentSnapshot{PID: 77, PIDStart: 300}, ""},
+		"unverified":                     {bus.AgentSnapshot{}, ""},
+	} {
+		p := &fakeProver{snaps: map[string]bus.AgentSnapshot{"coder": c.snap}}
+		log := filepath.Join(t.TempDir(), "resume.log")
+		proveSessionSend([]string{log, "demo", "coder", sess, "--", "40:400", "30:300", "1:1"},
+			func(project string) (sessionProver, func(), error) {
+				if project != "demo" {
+					t.Fatalf("opened project %q", project)
+				}
+				return p, func() {}, nil
+			})
+		if got := strings.Join(p.proved, ","); got != c.want {
+			t.Errorf("%s: proved %q, want %q", name, got, c.want)
+		}
+		b, _ := os.ReadFile(log)
+		if !strings.Contains(string(b), "session") {
+			t.Errorf("%s: log %q says nothing", name, b)
+		}
+	}
 }

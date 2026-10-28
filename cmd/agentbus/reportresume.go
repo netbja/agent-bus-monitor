@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -33,8 +34,10 @@ import (
 // reportResume is the hook. It never prints on stdout (a SessionStart hook's
 // stdout becomes Claude's context) and always exits 0: it hands the report to
 // a detached sender and returns at once, so Claude's start never waits on
-// herdr.
-func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error) int {
+// herdr. It also hands the session to a detached prover (lifecycle spec, part
+// D), with its ancestors read here: once detached, the sender is reparented
+// and its own ancestry proves nothing.
+func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error, ancestors func() []dispatch.ProcID) int {
 	get := func(k string) string { v, _ := lookupEnv(env, k); return v }
 	pane, herdr, role, project, manifest := get("HERDR_PANE_ID"), get("HERDR_BIN_PATH"), get("AGENT_BUS_AGENT"), get("AGENT_BUS_PROJECT"), get("ROLES_TOML")
 	if len(args) != 1 || get("HERDR_ENV") != "1" || pane == "" || herdr == "" || role == "" || project == "" || manifest == "" {
@@ -57,6 +60,15 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		return 0
 	}
 	logPath := filepath.Join(paths.StateDir(project), "resume.log")
+	if chain := ancestors(); len(chain) > 0 && bus.ValidName(role) && bus.ValidSessionID(in.SessionID) {
+		argv := []string{"roles", "prove-session", logPath, project, role, in.SessionID, "--"}
+		for _, p := range chain {
+			argv = append(argv, strconv.Itoa(p.PID)+":"+strconv.FormatUint(p.Start, 10))
+		}
+		if err := spawn(argv); err != nil {
+			resumeLog(logPath, time.Now(), "session prover not started: "+err.Error())
+		}
+	}
 	profile, err := resumeProfile(manifest, role, get("AGENT_BUS_PROFILE"))
 	if err != nil {
 		resumeLog(logPath, time.Now(), "refused: "+err.Error())
@@ -152,6 +164,67 @@ func reportResumeSend(args []string, d senderDeps) int {
 		}
 		d.sleep(time.Second)
 	}
+}
+
+// sessionProver is the bus as the prover needs it.
+type sessionProver interface {
+	Agents(ctx context.Context) (map[string]bus.AgentSnapshot, error)
+	ProveSession(ctx context.Context, agent string, pid int, pidStart uint64, session string) error
+}
+
+// openProver connects to the project's bus from the environment the hook
+// left the prover.
+func openProver(project string) (sessionProver, func(), error) {
+	r, err := bus.Connect("")
+	if err != nil {
+		return nil, nil, err
+	}
+	b, err := bus.Open(r, project)
+	if err != nil {
+		r.Close()
+		return nil, nil, err
+	}
+	return b, func() { r.Close() }, nil
+}
+
+// proveSessionSend records the new session as the one proved with the agent's
+// process: <log> <project> <agent> <session> -- <pid:start>..., the hook's
+// ancestors. It proves only when the stored verified pid, with its start time,
+// is one of them; ProveSession checks again in its transaction. Every outcome
+// is one line of the log.
+func proveSessionSend(args []string, open func(project string) (sessionProver, func(), error)) int {
+	if len(args) < 6 || args[4] != "--" {
+		return 0
+	}
+	logPath, project, agent, session := args[0], args[1], args[2], args[3]
+	chain := map[string]bool{}
+	for _, a := range args[5:] {
+		chain[a] = true
+	}
+	b, done, err := open(project)
+	if err != nil {
+		resumeLog(logPath, time.Now(), "session not proved: "+err.Error())
+		return 0
+	}
+	defer done()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	snaps, err := b.Agents(ctx)
+	if err != nil {
+		resumeLog(logPath, time.Now(), "session not proved: "+err.Error())
+		return 0
+	}
+	s := snaps[agent]
+	if s.PID <= 0 || !chain[strconv.Itoa(s.PID)+":"+strconv.FormatUint(s.PIDStart, 10)] {
+		resumeLog(logPath, time.Now(), "session not proved: "+agent+"'s verified process is not this hook's client")
+		return 0
+	}
+	if err := b.ProveSession(ctx, agent, s.PID, s.PIDStart, session); err != nil {
+		resumeLog(logPath, time.Now(), "session not proved: "+err.Error())
+		return 0
+	}
+	resumeLog(logPath, time.Now(), "session proved: "+agent+" "+session)
+	return 0
 }
 
 func oneLine(out []byte, err error) string {

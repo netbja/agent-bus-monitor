@@ -86,3 +86,28 @@ func ancestorAmong(candidates []int, self int, ppidOf func(int) (int, error)) (i
 	}
 	return found, ok
 }
+
+// ProcID is one process for its whole life: a pid and its start time.
+type ProcID struct {
+	PID   int
+	Start uint64
+}
+
+// Ancestors is self's ancestor chain, nearest first, self excluded, each with
+// its start time: up to init, or to the first process that cannot be read.
+func Ancestors(self int) []ProcID {
+	return ancestors(self, readStat)
+}
+
+func ancestors(self int, statOf func(int) (statFields, error)) []ProcID {
+	var out []ProcID
+	f, err := statOf(self)
+	for hops := 0; err == nil && f.ppid > 0 && hops < 256; hops++ {
+		pid := f.ppid
+		if f, err = statOf(pid); err != nil {
+			break
+		}
+		out = append(out, ProcID{PID: pid, Start: f.start})
+	}
+	return out
+}
