@@ -29,6 +29,7 @@ type headerData struct {
 	holds    map[string]int64  // provider → quota hold reset
 	pace     map[string]string // provider → "~25m"
 	budgets  map[string]bus.BudgetSnapshot
+	bars     barView      // the gauges as they slide
 	plan     *planSummary // the batch's plan (P); nil when none is loaded
 	now      time.Time
 }
@@ -140,11 +141,11 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	for i, n := range names {
 		b := d.budgets[n]
 		if len(b.Windows) == 0 && !b.Unknown && !b.Unlimited {
-			add(budgetSeg(n, b, tier), gaugePrio+i, second) // a legacy snapshot (no dispatcher): the old gauge
+			add(budgetSeg(n, b, tier, d.bars), gaugePrio+i, second) // a legacy snapshot (no dispatcher): the old gauge
 			continue
 		}
 		until, isHeld := held(d.holds, n, d.now)
-		if l := quotaSeg(n, b, until, isHeld, d.pace, d.now, tier); l != nil {
+		if l := quotaSeg(n, b, until, isHeld, d.pace, d.now, tier, d.bars); l != nil {
 			add(l, gaugePrio+i, second) // the rightmost provider has the lowest priority
 		}
 	}
@@ -258,8 +259,8 @@ func budgetRole(pct float64) Role {
 
 // budgetSeg is one provider's USED share of its account windows: gauges in
 // wide (10 cells) and medium (5), plain "provider 25%/44%" in narrow.
-func budgetSeg(name string, b bus.BudgetSnapshot, tier Tier) Line {
-	pr := providerRole(name, RoleMuted)
+func budgetSeg(name string, b bus.BudgetSnapshot, tier Tier, bars barView) Line {
+	pr, key := providerRole(name, RoleMuted), name
 	name = Preview(name)
 	if tier == TierNarrow {
 		return Line{{Text: name, Role: pr}, {Text: fmt.Sprintf(" %.0f%%/%.0f%%", b.SessionPct, b.WeeklyPct), Role: budgetRole(max(b.SessionPct, b.WeeklyPct))}}
@@ -270,16 +271,14 @@ func budgetSeg(name string, b bus.BudgetSnapshot, tier Tier) Line {
 		cells, sep = 5, " "
 	}
 	l := Line{{Text: name, Role: pr}, {Text: " used" + sep, Role: RoleMuted}}
-	gauge := func(label string, pct float64) {
-		n := clamp(int(pct*float64(cells)/100+0.5), 0, cells)
-		l = append(l, Seg{Text: label + " ", Role: RoleMuted},
-			Seg{Text: strings.Repeat(GlyphGauge, n), Role: budgetRole(pct)},
-			Seg{Text: strings.Repeat(GlyphBarEmpty, cells-n), Role: RoleDim},
-			Seg{Text: fmt.Sprintf(" %.0f%%", pct), Role: RoleText})
+	gauge := func(label, window string, pct float64) {
+		l = append(l, Seg{Text: label + " ", Role: RoleMuted})
+		l = append(l, bars.gauge(barKey(key, window), pct, cells, budgetRole(pct))...)
+		l = append(l, Seg{Text: fmt.Sprintf(" %.0f%%", pct), Role: RoleText})
 	}
-	gauge("session", b.SessionPct)
+	gauge("session", "session", b.SessionPct)
 	l = append(l, Seg{Text: sep})
-	gauge("week", b.WeeklyPct)
+	gauge("week", "week", b.WeeklyPct)
 	return l
 }
 

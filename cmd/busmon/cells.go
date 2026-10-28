@@ -16,6 +16,8 @@ type Seg struct {
 	Pill    bool // drawn on its role's colour (a focused frame's title); with Fade, on that faded colour
 	Off     bool // an inactive tab: muted text on the tab background (Theme.TabOff)
 	Tab     bool // drawn by tabBar: frameTitle neither pills it nor borrows its spaces
+	Track   bool // drawn on a gauge's track colour (true colour only): the bar's empty part
+	Lift    int  // 1-100: the colour that far towards the text colour (true colour only): a sliding bar's leading cell
 }
 
 type Line []Seg
@@ -185,11 +187,17 @@ func appendSegment(l Line, text string, style Seg) Line {
 	if text == "" {
 		return l
 	}
-	if n := len(l); n > 0 && l[n-1].Role == style.Role && l[n-1].Bold == style.Bold && l[n-1].Reverse == style.Reverse && l[n-1].Fade == style.Fade && l[n-1].Pill == style.Pill && l[n-1].Off == style.Off && l[n-1].Tab == style.Tab {
-		l[n-1].Text += text
-		return l
+	style.Text = ""
+	if n := len(l); n > 0 { // same attributes, every one: extend the last segment
+		last := l[n-1]
+		last.Text = ""
+		if last == style {
+			l[n-1].Text += text
+			return l
+		}
 	}
-	return append(l, Seg{Text: text, Role: style.Role, Bold: style.Bold, Reverse: style.Reverse, Fade: style.Fade, Pill: style.Pill, Off: style.Off, Tab: style.Tab})
+	style.Text = text
+	return append(l, style)
 }
 
 // FitLine pads AFTER the ellipsis, consistently with Fit. It never mutates l.
@@ -235,6 +243,8 @@ type cellStyle struct {
 	Fade     int
 	Pill     bool
 	Off      bool
+	Track    bool
+	Lift     int
 	Selected bool
 	Border   bool // a frame line: Theme.FrameBorder(Role, Focused)
 	Focused  bool
@@ -260,7 +270,7 @@ func drawLine(s cellSink, x, y, w int, l Line, selected bool) {
 	}
 	pos := x
 	lineClusters(FitLine(l, w), func(text string, width int, seg Seg) bool {
-		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Off: seg.Off, Selected: selected}
+		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Off: seg.Off, Track: seg.Track, Lift: seg.Lift, Selected: selected}
 		// A wide cluster's continuation cells first, then its head.
 		if width > 0 {
 			whole := pos >= 0 && pos+width <= sw

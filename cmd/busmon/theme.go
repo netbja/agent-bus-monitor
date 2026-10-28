@@ -162,6 +162,21 @@ func (t *Theme) Faded(r Role, pct int) tcell.Color {
 	return tcell.NewRGBColor(mix(r1, r2), mix(g1, g2), mix(b1, b2))
 }
 
+// Lifted is r's colour pct percent of the way to the text colour: lighter
+// on the dark palette, darker on the light one (a sliding bar's leading
+// cell). Without true colour the colour stays whole.
+func (t *Theme) Lifted(r Role, pct int) tcell.Color {
+	c := t.colors[themeRole(r)]
+	if !t.Animated() {
+		return c
+	}
+	pct = max(0, min(100, pct))
+	r1, g1, b1 := c.RGB()
+	r2, g2, b2 := t.colors[RoleText].RGB()
+	mix := func(a, b int32) int32 { return a + (b-a)*int32(pct)/100 }
+	return tcell.NewRGBColor(mix(r1, r2), mix(g1, g2), mix(b1, b2))
+}
+
 // Animated: the palette has the shades a fade needs.
 func (t *Theme) Animated() bool { return t.palette == PaletteDark || t.palette == PaletteLight }
 
@@ -236,6 +251,12 @@ func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
 	if c.Fade > 0 {
 		style = style.Foreground(t.Faded(c.Role, c.Fade))
 	}
+	if c.Lift > 0 && t.Animated() {
+		style = style.Foreground(t.Lifted(c.Role, c.Lift))
+	}
+	if c.Track && t.Animated() {
+		style = style.Background(t.colors[RoleLine])
+	}
 	if c.Bold {
 		style = style.Bold(true)
 	}
@@ -294,6 +315,15 @@ const (
 	GlyphSpark4 = "▄"
 	GlyphSpark5 = "▅"
 	GlyphSpark6 = "▆"
+	// A gauge's partial cell in true colour, one to seven eighths filled from
+	// the left (busmon-bars); GlyphBarFull is the whole cell.
+	GlyphEighth1 = "▏"
+	GlyphEighth2 = "▎"
+	GlyphEighth3 = "▍"
+	GlyphEighth4 = "▌"
+	GlyphEighth5 = "▋"
+	GlyphEighth6 = "▊"
+	GlyphEighth7 = "▉"
 	// The updated column's freshness gauge: the same two dots as working/idle.
 	GlyphDotFull     = GlyphWorking
 	GlyphDotEmpty    = GlyphIdle
@@ -318,4 +348,5 @@ var UIGlyphs = []string{
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
 	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6,
+	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7,
 }

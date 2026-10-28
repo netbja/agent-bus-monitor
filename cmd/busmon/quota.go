@@ -68,7 +68,7 @@ func tightestWindow(ws []bus.BudgetWindow, now time.Time) (bus.BudgetWindow, boo
 // quotaSeg shows both account windows where there is room. Wide uses one
 // compact bar for short windows and a 10-cell bar for longer ones; medium
 // shows percentages only; narrow keeps the tightest window.
-func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld bool, pace map[string]string, now time.Time, tier Tier) Line {
+func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld bool, pace map[string]string, now time.Time, tier Tier, bars barView) Line {
 	if b.Unlimited {
 		return nil
 	}
@@ -122,9 +122,8 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 		l = append(l, Seg{Text: Preview(windowLabel(w)) + " ", Role: RoleMuted})
 		if tier == TierWide {
 			cells := quotaBarCells(w)
-			n := clamp(int(w.UsedPct*float64(cells)/100+0.5), 0, cells)
-			l = append(l, Seg{Text: strings.Repeat(GlyphGauge, n), Role: role},
-				Seg{Text: strings.Repeat(GlyphBarEmpty, cells-n) + " ", Role: RoleDim})
+			l = append(l, bars.gauge(barKey(provider, w.Name), w.UsedPct, cells, role)...)
+			l = append(l, Seg{Text: " "})
 		}
 		l = append(l, Seg{Text: fmt.Sprintf("%.0f%%", w.UsedPct), Role: role})
 		if aged {

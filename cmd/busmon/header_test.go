@@ -125,7 +125,7 @@ func TestHeaderBudgetUsedLabel(t *testing.T) {
 		l := headerLines(d, 200, TierWide)[0]
 		found := false
 		for _, s := range l {
-			if strings.Contains(s.Text, GlyphGauge) {
+			if strings.Contains(s.Text, GlyphBarFull) { // the eighths in true colour (bars.go)
 				found = true
 				if s.Role != role {
 					t.Errorf("pct %v: first gauge role %v, want %v", pct, s.Role, role)

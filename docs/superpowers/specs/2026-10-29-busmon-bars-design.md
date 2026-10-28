@@ -1,6 +1,7 @@
 # busmon bars: eighth-cell gauges that slide (design, step 1: mock-up)
 
-Status: mock-up for Bernard's validation (by ask). No code until he picks.
+Status: step 2 implemented on `feat/busmon-bars` (`cmd/busmon/bars.go`). Bernard chose (ask
+1793225062775-0) style A, the tint while sliding, and the clamps as proposed.
 Task: busmon-bars (master's directive 1793222842434-0). Bernard chose "B, maquette d'abord";
 his reference was bubbles/progress (an animated bar with a colour blend).
 
@@ -42,8 +43,9 @@ the rest of a partial cell, so a blank gap opens between the fill and the track.
 **A — full-height bar on a track (recommended).** Whole cells become `█`; the empty part is a
 background colour (the track: `RoleDim` faded, drawn as spaces), and the partial cell is its
 left block in the fill colour **on the track colour**, so fill and track meet exactly. This
-needs one new cell attribute: a background role on a `Seg` (`Seg.On Role`, painted by
-`tea_grid.go`'s painter like `Pill`, which already sets a background). Cost: bars on adjacent
+needs one new cell attribute: a background on a `Seg` (built as `Seg.Track bool`, the line
+colour as background, since a `Role` field's zero value is `RoleText`; painted in
+`Theme.tcellStyle` like `Pill`, which already sets a background). Cost: bars on adjacent
 rows of the U page touch (one solid band per bar, like bubbles/progress), and the `░` texture
 goes away in true colour.
 
@@ -117,7 +119,8 @@ provider or window name), the 16-colour and no-colour palettes, and `fade = fals
 ## How it fits the Elm shell (step 2, if A or B is accepted)
 
 - **State in the Model, set in Update.** `m.bars map[string]barSlide` keyed
-  `provider|window` (the header and the U page share a key, so they move together):
+  `provider|window` (the header and the U page share a key, so they move together; a legacy
+  snapshot's bars are `provider|session` and `provider|week`):
   `{from, to float64; at time.Time}`. On each `pollMsg`, a key whose target differs from its
   `to` gets `from = shown(now)` (a slide interrupted by a new reading continues from where it is
   drawn), `to = new`, `at = m.now`; a key seen for the first time gets `from = to`. Keys no
@@ -126,6 +129,8 @@ provider or window name), the 16-colour and no-colour palettes, and `fade = fals
   the `m.now` that Update set. No clock in View.
 - **Frames only while moving:** `animated()` gains "a slide has `m.now − at < 500 ms`"; the
   `fadeMsg` case already sets `m.now`, refreshes and reschedules, so nothing else is added.
+- **Unknown keeps its texture:** the U page's never-observed window still draws `░` and `?`
+  in true colour, so "no reading" never looks like an empty track (0 %).
 - **One bar function** replaces the three copies: `gaugeSegs(pct float64, cells int, role Role,
   lead bool) []Seg`, eighths when `th.Animated()`, today's whole steps otherwise.
 

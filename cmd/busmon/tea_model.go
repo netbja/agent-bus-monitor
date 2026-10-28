@@ -123,9 +123,10 @@ type Model struct {
 	tick   int
 	gen    int // data generation: bumped by pollMsg and tailMsg only
 	paint  *painter
-	rd     *reader      // the reader's pages
-	cache  *viewCache   // rendered markdown
-	sig    *signalState // bells, fade, recap, reminder (tea_signals.go)
+	rd     *reader             // the reader's pages
+	cache  *viewCache          // rendered markdown
+	sig    *signalState        // bells, fade, recap, reminder (tea_signals.go)
+	bars   map[string]barSlide // the account gauges' slides (bars.go)
 }
 
 // newShell is the shell before its first poll and size.
@@ -187,8 +188,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.pollCmd(m.tick + 1)
 	case fadeMsg:
 		m.sig.fading = false
+		sliding := m.barView().moving() // its last frame draws the bar at rest
 		m.now = time.Time(msg)
-		if m.tokensSkeleton() && m.rd.top().kind == ovTokens { // the shimmer is in the page body
+		if top := m.rd.top(); top != nil && top.kind == ovTokens && (sliding || m.tokensSkeleton()) { // the shimmer and the bars are in the page body
 			m.rd.top().dirty = true
 		}
 		m.refresh()
@@ -256,6 +258,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 func (m *Model) applySnapshot(s snapshot, at time.Time) {
 	m.snap, m.now = s, at
 	m.gen++
+	m.bars = updateSlides(m.bars, barTargets(s.budgets), at, m.cfg.settings.Fade && th.Animated())
 	// lookEvent reads the asks the last fill saw (activity.go): set here, on
 	// the update path, never in View. Step c removes the global.
 	currentAsks = map[string]bus.Ask{}
@@ -266,6 +269,9 @@ func (m *Model) applySnapshot(s snapshot, at time.Time) {
 	m.forgetAnswers()
 	m.refresh()
 }
+
+// barView is the gauges' slides at the Model's now.
+func (m Model) barView() barView { return barView{slides: m.bars, now: m.now} }
 
 // counts is what the layout needs from the content.
 func (m *Model) counts() shellCounts {

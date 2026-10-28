@@ -1,5 +1,5 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                                           15:04:05 
- paused · resumes in 1h52 (lunch)   ♙ Bernard [human]   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44             
+ paused · resumes in 1h52 (lunch)   ♙ Bernard [human]   claude 5h ███▏  62% │ 7d ████▏      41%   grok 5h █████ 100% held 15:44             
 ╭─ For you ───────────────────── 4 for you · 2 unread ─╮╭─ Agents ─────────────── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ─╮
 │  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    │
 │  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…│

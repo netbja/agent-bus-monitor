@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -42,6 +43,15 @@ func hostileShell(t testing.TB, w, h int, down bool) Model {
 // The shell's frames stay straight at every size, palette and hostile input,
 // on the cell grid its View produces, and that grid is what the terminal
 // shows under both width methods.
+// midSlide is every gauge of budgets 200 ms into a slide from half its value.
+func midSlide(budgets map[string]bus.BudgetSnapshot, now time.Time) map[string]barSlide {
+	out := map[string]barSlide{}
+	for k, v := range barTargets(budgets) {
+		out[k] = barSlide{from: v / 2, to: v, at: now.Add(-200 * time.Millisecond)}
+	}
+	return out
+}
+
 func TestShellAlignmentSuite(t *testing.T) {
 	pinLocal(t)
 	for _, pal := range []struct {
@@ -62,6 +72,7 @@ func TestShellAlignmentSuite(t *testing.T) {
 						m := hostileShell(t, sz[0], sz[1], down)
 						m.ui.tab, m.ui.view = tab, view
 						m.paint = newPainter(th)
+						m.bars = midSlide(m.snap.budgets, m.now) // every gauge drawn mid-slide, its leading cell tinted
 						m.refresh()
 						g := m.grid()
 						l := m.layout

@@ -69,7 +69,7 @@ func TestTokensPageGoldens(t *testing.T) {
 
 func pageText(st tokState, agents map[string]*agentState, width int) string {
 	var out []string
-	for _, l := range tokensPage(st, nil, nil, agents, "agent-bus-monitor", shellNow, width, false) {
+	for _, l := range tokensPage(st, nil, nil, agents, "agent-bus-monitor", shellNow, width, false, barView{}) {
 		out = append(out, l.text())
 	}
 	return strings.Join(out, "\n")
@@ -280,12 +280,12 @@ func TestTokensSkeletonAndFadeSchedule(t *testing.T) {
 		t.Error("the skeleton outlived its 2 minutes")
 	}
 	// Rendered after the window: the open project reads ? with its reason, no shimmer.
-	page := linesText(tokensPage(later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton()))
+	page := linesText(tokensPage(later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}))
 	if strings.Contains(page, "first reading pending") || !strings.Contains(page, "agent-bus-monitor") || !strings.Contains(page, "?") || !strings.Contains(page, "not read yet") {
 		t.Errorf("after the window:\n%s", page)
 	}
 	later.snap.tok = tokState{polled: true, projects: []tokProject{{name: "agent-bus-monitor"}}}
-	page = linesText(tokensPage(later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton()))
+	page = linesText(tokensPage(later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}))
 	if !strings.Contains(page, "no tokens recorded") || strings.Contains(page, "first reading pending") {
 		t.Errorf("after the window, no key:\n%s", page)
 	}
@@ -324,7 +324,7 @@ func TestTokensPageProvidersInTheirColours(t *testing.T) {
 	w := []bus.BudgetWindow{{Name: "5h", UsedPct: 40, ObservedAt: 1}}
 	budgets := map[string]bus.BudgetSnapshot{"anthropic": {Windows: w}, "openai": {Windows: w}, "acme": {Windows: w}}
 	roles := map[string]map[Role]bool{}
-	for _, l := range tokensPage(tokFixtureState(shellNow), budgets, nil, agents, "agent-bus-monitor", shellNow, 120, false) {
+	for _, l := range tokensPage(tokFixtureState(shellNow), budgets, nil, agents, "agent-bus-monitor", shellNow, 120, false, barView{}) {
 		for _, s := range l {
 			// A segment of the text role merges with its neighbours: key it by
 			// the provider name it starts with.

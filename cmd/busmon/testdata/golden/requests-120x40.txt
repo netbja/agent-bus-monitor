@@ -1,5 +1,5 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up                                                  15:04:05 
- ♙ Bernard [human]   pilot master   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44             
+ ♙ Bernard [human]   pilot master   claude 5h ███▏  62% │ 7d ████▏      41%   grok 5h █████ 100% held 15:44             
 ╭─ For you ─ 0 for you · 0 unread ─╮╭─ Agents ────────────────────────────────────── 6 agents · 0 working · 0 blocked ─╮
 │  nothing waits for you           ││    agent     state     updated queue    ctx       flags               message    │
 │                                  ││▶ ○ coder     idle      0s      —        —                                        │
