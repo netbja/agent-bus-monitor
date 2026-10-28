@@ -91,7 +91,7 @@ func TestRequestsEnter(t *testing.T) {
 	if m = keys(t, m, kEnter); len(rowKeys(m)) != n {
 		t.Errorf("group did not fold: %d rows", len(rowKeys(m)))
 	}
-	m.lists.requests.Select("older:master")
+	m.lists.requests.Select(hasKey(m, "older:"))
 	if m = keys(t, m, kEnter); len(rowKeys(m)) != n+20 {
 		t.Errorf("+ 20 older expanded to %d rows, want %d", len(rowKeys(m)), n+20)
 	}

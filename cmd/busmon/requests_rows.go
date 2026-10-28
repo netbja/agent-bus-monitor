@@ -191,12 +191,12 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 			v.count(secWait), humanAge(now.Sub(oldest)))))
 		for _, g := range gs {
 			for i, th := range g.Threads {
-				if i < reqWaitShown || open.groups["older:"+g.Target] {
+				if i < reqWaitShown || open.groups[olderKey(g)] {
 					out = append(out, threadRow(th, i >= reqWaitShown))
 				}
 			}
 			if rest := g.Threads[min(reqWaitShown, len(g.Threads)):]; len(rest) > 0 {
-				key := "older:" + g.Target
+				key := olderKey(g)
 				older := reqGroup{Threads: rest}
 				label := fmt.Sprintf("+ %d older  (enter expands)", len(rest))
 				if open.groups[key] {
@@ -312,6 +312,20 @@ func (m *Model) requestInput() reqInput {
 	return in
 }
 
+// olderKey is a "you wait on" group's "+ N older" row: the group's whole
+// identity, so two groups to one recipient (directives, challenges) never share it.
+func olderKey(g reqGroup) string { return "older:" + g.Key() }
+
+// olderThreads are the threads behind an older row.
+func olderThreads(v reqView, key string) []reqThread {
+	for _, g := range v.groups[secWait] {
+		if olderKey(g) == key {
+			return g.Threads[min(reqWaitShown, len(g.Threads)):]
+		}
+	}
+	return nil
+}
+
 // reqRowKey is a Requests row that stands for threads.
 func reqRowKey(key string) bool {
 	for _, p := range []string{"thr:", "grp:", "ntc:", "older:"} {
@@ -331,7 +345,7 @@ func (m *Model) reqThreadsOf(key string) []reqThread {
 			switch {
 			case key == g.Key() || key == "ntc:"+g.Key():
 				return g.Threads
-			case key == "older:"+g.Target && s == secWait:
+			case key == olderKey(g):
 				return g.Threads[min(reqWaitShown, len(g.Threads)):]
 			}
 			for _, th := range g.Threads {

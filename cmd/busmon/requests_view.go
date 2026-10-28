@@ -183,7 +183,7 @@ func requestGroups(in reqInput) reqView {
 		if r.ID != "" {
 			known[r.ID] = true
 		}
-		if !r.Tracked || !r.waiting() {
+		if !r.Tracked {
 			continue
 		}
 		at := r.Created
@@ -193,6 +193,11 @@ func requestGroups(in reqInput) reqView {
 		th := reqThread{ID: "req:" + r.Task, From: r.From, Target: target(r), Kind: kindRequest, Subject: r.Task,
 			State: r.State, At: at, Request: &r, Section: secTracked}
 		switch {
+		case !r.waiting(): // done or superseded: answered, folded with its own history
+			th.Section = secFolded
+			if !r.Updated.IsZero() {
+				th.At = r.Updated
+			}
 		case th.Target == in.self:
 			th.Section = secOwed
 		case th.From == in.self:

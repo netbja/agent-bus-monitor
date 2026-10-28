@@ -215,3 +215,63 @@ func TestRequestReviewSubjectFallsBackToTheFirstWord(t *testing.T) {
 		t.Errorf("subject %q, want the stored one", got)
 	}
 }
+
+// Two "you wait on" groups to one recipient (directives and challenges):
+// each "+ N older" row is its own, and resolves to its own threads.
+func TestRequestWaitOlderRowsAreTheirGroups(t *testing.T) {
+	now := time.UnixMilli(1_000_000)
+	var cmds []bus.Event
+	gates := map[string]map[string]string{"master": {}}
+	for i := 0; i < 4; i++ {
+		cmds = append(cmds, bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-0", 900_000+i), Type: bus.CmdDirective, From: "bernard", Target: "master", Message: "d"})
+		ref := fmt.Sprintf("c%d", i)
+		cmds = append(cmds, bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-1", 900_000+i), Type: bus.CmdChallenge, From: "bernard", Target: "master", Ref: ref, Message: "c"})
+		gates["master"][ref] = "bernard|c"
+	}
+	v := requestGroups(reqInput{cmds: cmds, gates: gates, self: "bernard", now: now})
+	var older []string
+	for _, it := range requestRows(v, reqOpen{}, now, 120) {
+		if strings.HasPrefix(it.Key, "older:") {
+			older = append(older, it.Key)
+		}
+	}
+	if len(older) != 2 || older[0] == older[1] {
+		t.Fatalf("older rows %v, want two distinct", older)
+	}
+	open := reqOpen{groups: map[string]bool{older[0]: true}}
+	n := 0
+	for _, it := range requestRows(v, open, now, 120) {
+		if it.Selectable && strings.HasPrefix(it.Key, "thr:") {
+			n++
+		}
+	}
+	if n != 2+2+2 { // both groups' 2 shown, plus the opened group's 2 older
+		t.Errorf("opening one older row shows %d thread rows, want 6", n)
+	}
+	for _, k := range older {
+		ths := olderThreads(v, k)
+		if len(ths) != 2 {
+			t.Fatalf("%s resolves to %d threads", k, len(ths))
+		}
+		if want := map[string]string{"directive": kindDirective, "challenge": kindChallenge}; ths[0].Kind != ths[1].Kind {
+			t.Errorf("%s mixes kinds %v", k, want)
+		}
+	}
+	if olderThreads(v, older[0])[0].Kind == olderThreads(v, older[1])[0].Kind {
+		t.Error("both older rows resolve to the same group")
+	}
+}
+
+// A tracked request that is done or superseded is folded as answered, never lost.
+func TestRequestDoneTrackedRequestIsFolded(t *testing.T) {
+	now := time.UnixMilli(1_000_000)
+	root := bus.Event{Kind: "cmd", ID: "990000-0", Type: bus.CmdDirective, From: "master", Target: "coder", Message: "do x"}
+	r := request{Task: "x", Tracked: true, ID: root.ID, Thread: root.ID, From: "master", Target: "coder", State: "done", Updated: now.Add(-time.Minute)}
+	v := requestGroups(reqInput{cmds: []bus.Event{root}, reqs: []request{r}, now: now})
+	if len(v.folded) != 1 || v.folded[0].Request == nil || v.folded[0].Subject != "x" {
+		t.Fatalf("folded %+v, want the done request", v.folded)
+	}
+	if v.count(secTracked) != 0 {
+		t.Error("a done request still waits")
+	}
+}
