@@ -104,6 +104,10 @@ deny = [
   "Edit(**/.env.staging.local)", "Edit(**/.env.preview.local)",
   "Edit(**/*.pem)", "Edit(**/*.key)", "Edit(**/id_rsa*)", "Edit(**/id_ed25519*)",
   "Edit(~/.ssh/**)", "Edit(**/*keypair*.json)", "Edit(**/wallet*.json)",
+  # No agent reloads as a person (lifecycle part C): --as skips reload's caller
+  # table and AGENT_BUS_RELOAD's opt-outs. Defence in depth, not a boundary:
+  # the client matches command text, and a person's own shell is not affected.
+  "Bash(agentbus reload *--as*)", "Bash(agentbus * reload *--as*)",
 ]
 
 [roles.master]

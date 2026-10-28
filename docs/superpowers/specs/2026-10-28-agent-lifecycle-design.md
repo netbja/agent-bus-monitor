@@ -233,6 +233,12 @@ explicit `--as <person>` is added to its list, exactly as `answer --as` is, so a
 from their own shell pane. `handoff` is not listed: only an agent (which has `AGENT_BUS_AGENT`)
 declares one. The launcher's tool rules allow exactly `agentbus reload *` for sentinel
 and `agentbus reload sentinel` for master (`[roles.*.tool_rules]`), nothing broader.
+**As built (busmon-reload-deny):** the shared `[tool_rules]` deny `agentbus reload *--as*` and
+`agentbus * reload *--as*` for every role, since an agent passing `--as <person>` would skip the
+caller table and `AGENT_BUS_RELOAD`'s opt-outs. Deny rules bind even under `bypassPermissions`.
+This is defence in depth, not a boundary: the client matches the command's text, so another
+spelling, a wrapper script or a process the agent starts still runs it; the bus does not
+authenticate local processes.
 
 ### The person's yes
 

@@ -745,7 +745,11 @@ It never touches Redis — see README "Deployment topology".
   SIGKILL), `relaunchRole` (up's lock and relaunch, the role's tab only, resuming `IdentSession`),
   the proof (`replaced`, plus after an update episode a `client_fp` hashing to the installed
   version), `reloaded`; every failure after the intent is a `failed` ledger entry with its
-  recovery. Tool rules: sentinel `agentbus reload *`, master `agentbus reload sentinel`.
+  recovery. Tool rules: sentinel `agentbus reload *`, master `agentbus reload sentinel`, and a shared
+  deny on `agentbus reload *--as*` / `agentbus * reload *--as*` for every role (busmon-reload-deny),
+  so an agent cannot skip the caller table or the `off`/`propose` opt-outs by naming a person.
+  Defence in depth, not a boundary: the client matches command text (another spelling, a wrapper or
+  a script runs it), and a person's own shell has no such rule.
   A fallback record keeps `held_episode`, and the release of that
   episode earns master one `back:<p>:<role>` notice; its own provider stays watched. The launched
   model (`AGENT_BUS_MODEL`) is part of the verified identity (`AgentSnapshot.Model`, set only with a
