@@ -113,8 +113,8 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 			return fail("AGENT_BUS_RELOAD=off: only a person reloads an agent (--as <person>)")
 		case self == "sentinel" && role == "sentinel":
 			return fail("sentinel cannot reload itself: master reloads sentinel")
-		case self == "sentinel" && mode == "propose":
-			return fail("AGENT_BUS_RELOAD=propose: propose the reload to master, who asks the person")
+		case mode == "propose": // the person approves every reload, master's of sentinel included
+			return fail("AGENT_BUS_RELOAD=propose: a person runs the reload (--as <person>) once they approve; propose it to master, who asks them")
 		case self == "master" && role != "sentinel":
 			return fail("master may reload only sentinel; sentinel reloads the others, a person anyone (--as)")
 		case self != "sentinel" && self != "master":

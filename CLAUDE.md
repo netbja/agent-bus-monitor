@@ -738,7 +738,7 @@ It never touches Redis — see README "Deployment topology".
   (`cmd/agentbus/reload.go`): who may (sentinel any role but itself on an observed update, master
   last and only with no other pilot driver; master only sentinel; a person anyone by an explicit
   `--as`, which also passes the identity guard), `AGENT_BUS_RELOAD` (caller's env, else the
-  project's env file; `up --reload on|propose|off`), a preflight that changes nothing (verified live
+  project's env file; `up --reload on|propose|off`; `propose` and `off` leave only a person's `--as`), a preflight that changes nothing (verified live
   identity, not its own pane, not on a fallback, `reloadOpenWork` = swap's `openWork` plus an open
   ask and an `accepted` board task, declared idle, no wake typing, a proved Claude Code session
   unless `--fresh`), the intent and a second readiness read, SIGTERM to the re-checked pid (never

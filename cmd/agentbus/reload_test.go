@@ -220,6 +220,7 @@ func TestReloadPreflightRefusesWithoutChangingAnything(t *testing.T) {
 		"no update for it":            {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.update("foureyes") }, "update"},
 		"reloads are off":             {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.env["AGENT_BUS_RELOAD"] = "off" }, "AGENT_BUS_RELOAD"},
 		"reloads are proposed":        {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.env["AGENT_BUS_RELOAD"] = "propose" }, "propose"},
+		"master under propose":        {"master", []string{"sentinel"}, func(w *reloadWorld) { reloadableSentinel(w); w.env["AGENT_BUS_RELOAD"] = "propose" }, "propose"},
 		"unknown role":                {"sentinel", []string{"ghost"}, nil, "unknown role"},
 		"its own pane":                {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.env["HERDR_PANE_ID"] = "p-old" }, "own pane"},
 		"its process is gone":         {"sentinel", []string{"coder"}, func(w *reloadWorld) { delete(w.procs, 4242) }, "not running"},
@@ -388,5 +389,31 @@ func TestReloadPassesTheIdentityGuardOnlyWithAs(t *testing.T) {
 	}
 	if err := identityGuard(get, "reload", []string{"coder"}); err == nil {
 		t.Fatal("reload without --as passed the guard")
+	}
+}
+
+// reloadableSentinel gives sentinel a verified, idle identity with a proved
+// session: everything a reload needs.
+func reloadableSentinel(w *reloadWorld) {
+	ctx := context.Background()
+	w.procs[8080] = 5
+	if err := w.b.Bind(ctx, "sentinel", bus.AgentIdent{Pane: "p-sent", PID: 8080, PIDStart: 5, Client: "claude-code", Provider: "anthropic"}); err != nil {
+		w.t.Fatal(err)
+	}
+	if err := w.b.ProveSession(ctx, "sentinel", 8080, 5, "5e5e5e5e-0000-4000-8000-000000000001", 100); err != nil {
+		w.t.Fatal(err)
+	}
+	w.status("sentinel", "idle")
+}
+
+// Master reloads sentinel by default (no update episode needed).
+func TestReloadMasterReloadsSentinel(t *testing.T) {
+	w, d := newReloadWorld(t)
+	reloadableSentinel(w)
+	if code, out := w.run(d, "master", "sentinel"); code != 0 {
+		t.Fatalf("reload: %d %s", code, out)
+	}
+	if got := w.callList(); got != "term 8080;relaunch sentinel 5e5e5e5e-0000-4000-8000-000000000001" {
+		t.Fatalf("calls %q", got)
 	}
 }
