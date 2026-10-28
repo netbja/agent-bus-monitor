@@ -434,6 +434,9 @@ func TestReloadSignalsOnlyTheCheckedIdleProcess(t *testing.T) {
 		}, "stop"},
 		"the pid was recycled": {func(w *reloadWorld) { w.procs[4242] = 99 }, "stop"},
 		"it declared working":  {func(w *reloadWorld) { w.status("coder", "working") }, "not idle"},
+		"the observation is unreadable": {func(w *reloadWorld) {
+			w.r.Set(context.Background(), bus.ObservedKey(w.b.Project()), "not a hash", 0) // WRONGTYPE on read
+		}, "not idle"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w, d := newReloadWorld(t)
