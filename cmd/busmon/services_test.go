@@ -451,6 +451,21 @@ func TestShellServicesPageLive(t *testing.T) {
 	if again == nil {
 		t.Fatal("a refresh scheduled no next one")
 	}
+	// The next tick reads again (the first read cleared its busy mark), and
+	// sees the records change once more: the page never freezes.
+	f.svcRecs = map[string]bus.ServiceRecord{"dispatch": rec("ready", 0), "missions": rec("idle", 0)}
+	second := m.svcRefresh(serial)
+	if second == nil {
+		t.Fatal("the second tick reads nothing: the page refreshed once, then froze")
+	}
+	next, _ = m.Update(second())
+	m = next.(Model)
+	if c := card(m); !strings.Contains(c, "ready") || strings.Contains(c, "busy") {
+		t.Fatalf("after the second refresh: card %q", c)
+	}
+	if m.svcRefresh(serial) == nil {
+		t.Fatal("a third tick reads nothing")
+	}
 	// Closed: the chain stops.
 	m = keys(t, m, kEsc)
 	if m.rd.open() || m.svcRefresh(serial) != nil {

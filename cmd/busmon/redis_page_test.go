@@ -118,6 +118,15 @@ func TestShellServicesRedisCardOpensItsPage(t *testing.T) {
 	if len(m.rd.pages) != 2 || m.rd.top().kind != ovRedis || m.rd.top().svcBusy || again == nil {
 		t.Fatalf("the refresh: %d pages, top %v, busy %v, next %v", len(m.rd.pages), m.rd.top().kind, m.rd.top().svcBusy, again != nil)
 	}
+	second := m.svcRefresh(redis) // the next tick reads again: the page never freezes
+	if second == nil {
+		t.Fatal("the Redis page's second tick reads nothing")
+	}
+	next, _ = m.Update(second())
+	m = next.(Model)
+	if m.rd.top().kind != ovRedis || m.rd.top().svcBusy || m.svcRefresh(redis) == nil {
+		t.Fatal("after the Redis page's second refresh: still busy, or no third read")
+	}
 	if m = keys(t, m, kEsc); m.rd.top().kind != ovServices {
 		t.Error("esc did not return to the cards")
 	}
