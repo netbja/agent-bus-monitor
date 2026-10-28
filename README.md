@@ -785,6 +785,8 @@ Additional keys: `{p}:pilot` (string, pilot lease), `{p}:gate:{agent}` (hash, 4-
 `{p}:board` (hash, task→owner/state/branch — the shared ownership registry, `agentbus board`),
 `{p}:dispatch` (string with TTL, the dispatcher lease behind `dispatch ●`), `{p}:wake:{agent}`
 (hash, the dispatcher's wake record for one agent: state, last wake time, tries, escalation).
+The other per-project keys (asks, pause, services, health, quotas, plan, tokens, hand-offs…) are
+listed with their writers in [CLAUDE.md](CLAUDE.md#stream-layout).
 States: `working`, `idle`, `blocked`, `waiting` (a person must decide), `done`. All transport conventions live in `bus/stream.go`;
 transport-neutral primitives (`Connect`, `ValidStates`, `SanitizeReportMessage`) are in `bus/bus.go`.
 
