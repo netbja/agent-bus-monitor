@@ -38,7 +38,7 @@ import (
 // D), with its ancestors read here: once detached, the sender is reparented
 // and its own ancestry proves nothing. Linux only, like every process
 // identity here (/proc): without a chain no prover is spawned.
-func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error, ancestors func() []dispatch.ProcID) int {
+func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error, fg hookFacts) int {
 	get := func(k string) string { v, _ := lookupEnv(env, k); return v }
 	pane, herdr, role, project, manifest := get("HERDR_PANE_ID"), get("HERDR_BIN_PATH"), get("AGENT_BUS_AGENT"), get("AGENT_BUS_PROJECT"), get("ROLES_TOML")
 	if len(args) != 1 || get("HERDR_ENV") != "1" || pane == "" || herdr == "" || role == "" || project == "" || manifest == "" {
@@ -61,8 +61,9 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		return 0
 	}
 	logPath := filepath.Join(paths.StateDir(project), "resume.log")
-	if chain := ancestors(); len(chain) > 0 && bus.ValidName(role) && bus.ValidSessionID(in.SessionID) {
-		argv := []string{"roles", "prove-session", logPath, project, role, in.SessionID, "--"}
+	if chain := fg.Ancestors(); len(chain) > 0 && bus.ValidName(role) && bus.ValidSessionID(in.SessionID) {
+		at := strconv.FormatInt(fg.Now().UnixNano(), 10) // this event's order, taken before the detach
+		argv := []string{"roles", "prove-session", logPath, project, role, in.SessionID, at, "--"}
 		for _, p := range chain {
 			argv = append(argv, strconv.Itoa(p.PID)+":"+strconv.FormatUint(p.Start, 10))
 		}
@@ -104,6 +105,14 @@ func resumeProfile(manifest, role, running string) (string, error) {
 		return "", nil
 	}
 	return running, nil
+}
+
+// hookFacts is what the hook reads in its foreground, before it detaches:
+// its ancestors (the proof of its client) and the clock that orders its
+// event against the next /clear's.
+type hookFacts struct {
+	Ancestors func() []dispatch.ProcID
+	Now       func() time.Time
 }
 
 // spawnDetached starts this binary with argv in its own session, without
@@ -170,7 +179,7 @@ func reportResumeSend(args []string, d senderDeps) int {
 // sessionProver is the bus as the prover needs it.
 type sessionProver interface {
 	Agents(ctx context.Context) (map[string]bus.AgentSnapshot, error)
-	ProveSession(ctx context.Context, agent string, pid int, pidStart uint64, session string) error
+	ProveSession(ctx context.Context, agent string, pid int, pidStart uint64, session string, at int64) error
 }
 
 // openProver connects to the project's bus from the environment the hook
@@ -189,8 +198,9 @@ func openProver(project string) (sessionProver, func(), error) {
 }
 
 // proveSessionSend records the new session as the one proved with the agent's
-// process: <log> <project> <agent> <session> -- <pid:start>..., the hook's
-// ancestors. It proves only when the stored verified pid, with its start time,
+// process: <log> <project> <agent> <session> <at> -- <pid:start>..., the
+// hook's stamp (Unix ns) and ancestors; a proof older than the stored one is
+// refused by ProveSession (bus.ErrStaleProof), so the later /clear wins. It proves only when the stored verified pid, with its start time,
 // is one of them and is still alive with that start time, read here (a
 // process gone or recycled since the hook proves nothing); ProveSession
 // checks the stored identity again in its transaction. What it cannot
@@ -199,12 +209,17 @@ func openProver(project string) (sessionProver, func(), error) {
 // status (the bus is no boundary against the local user). Every outcome is
 // one line of the log.
 func proveSessionSend(args []string, open func(project string) (sessionProver, func(), error), procStart func(pid int) (uint64, error)) int {
-	if len(args) < 6 || args[4] != "--" {
+	if len(args) < 7 || args[5] != "--" {
 		return 0
 	}
 	logPath, project, agent, session := args[0], args[1], args[2], args[3]
+	at, err := strconv.ParseInt(args[4], 10, 64)
+	if err != nil || at <= 0 {
+		resumeLog(logPath, time.Now(), "session not proved: no stamp")
+		return 0
+	}
 	chain := map[string]bool{}
-	for _, a := range args[5:] {
+	for _, a := range args[6:] {
 		chain[a] = true
 	}
 	b, done, err := open(project)
@@ -229,7 +244,7 @@ func proveSessionSend(args []string, open func(project string) (sessionProver, f
 		resumeLog(logPath, time.Now(), "session not proved: "+agent+"'s verified process is gone")
 		return 0
 	}
-	if err := b.ProveSession(ctx, agent, s.PID, s.PIDStart, session); err != nil {
+	if err := b.ProveSession(ctx, agent, s.PID, s.PIDStart, session, at); err != nil {
 		resumeLog(logPath, time.Now(), "session not proved: "+err.Error())
 		return 0
 	}

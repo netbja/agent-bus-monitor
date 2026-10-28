@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/dispatch"
@@ -84,7 +85,8 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 	}
 	switch action { // Claude's SessionStart hook and its sender: silent, never failing
 	case "report-resume":
-		reportResume(rest, env, os.Stdin, stdout, stderr, spawnDetached, func() []dispatch.ProcID { return dispatch.Ancestors(os.Getpid()) })
+		reportResume(rest, env, os.Stdin, stdout, stderr, spawnDetached,
+			hookFacts{Ancestors: func() []dispatch.ProcID { return dispatch.Ancestors(os.Getpid()) }, Now: time.Now})
 		return nil
 	case "report-resume-send":
 		reportResumeSend(rest, defaultSenderDeps())

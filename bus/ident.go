@@ -42,9 +42,9 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 		// /clear, a status naming the older session never moves it back.
 		switch {
 		case at == 0:
-			out.IdentSession = ""
+			out.IdentSession, out.IdentSessionAt = "", 0
 		case next.PID != out.PID || next.PIDStart != out.PIDStart:
-			out.IdentSession = next.Session
+			out.IdentSession, out.IdentSessionAt = next.Session, 0
 		case next.Session != "" && out.IdentSession == "":
 			out.IdentSession = next.Session
 		}
@@ -156,12 +156,18 @@ var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{7,63}$`)
 // ValidSessionID reports whether id may be proved as a session.
 func ValidSessionID(id string) bool { return sessionIDPattern.MatchString(id) }
 
+// ErrStaleProof: a newer SessionStart hook already proved the agent's session.
+var ErrStaleProof = errors.New("prove session: a newer session is already proved")
+
 // ProveSession records session as the one proved with agent's process
 // (lifecycle spec, part D): /clear keeps the process and starts a new
-// session, which only the SessionStart hook sees. It moves IdentSession, and
-// nothing else, only while pid and pidStart are still the stored verified
-// identity; any other caller, or no snapshot, writes nothing.
-func (b *Bus) ProveSession(ctx context.Context, agent string, pid int, pidStart uint64, session string) error {
+// session, which only the SessionStart hook sees. It moves IdentSession and
+// its stamp, nothing else, only while pid and pidStart are still the stored
+// verified identity and at (the hook's stamp, taken in its foreground) is
+// newer than the stored one: of two provers racing, the later hook wins
+// (ErrStaleProof for the other). Any other caller, or no snapshot, writes
+// nothing.
+func (b *Bus) ProveSession(ctx context.Context, agent string, pid int, pidStart uint64, session string, at int64) error {
 	if !ValidName(agent) {
 		return fmt.Errorf("invalid agent %q", agent)
 	}
@@ -171,6 +177,9 @@ func (b *Bus) ProveSession(ctx context.Context, agent string, pid int, pidStart 
 	if !ValidSessionID(session) {
 		return fmt.Errorf("prove session: %q is not a session id", session)
 	}
+	if at <= 0 {
+		return fmt.Errorf("prove session: no stamp")
+	}
 	return b.updateSnapshot(ctx, agent, func(old *AgentSnapshot) (AgentSnapshot, error) {
 		switch {
 		case old == nil:
@@ -178,8 +187,11 @@ func (b *Bus) ProveSession(ctx context.Context, agent string, pid int, pidStart 
 		case old.PID != pid || old.PIDStart != pidStart:
 			return AgentSnapshot{}, fmt.Errorf("prove session: pid %d is not %s's verified process", pid, agent)
 		}
+		if at <= old.IdentSessionAt {
+			return AgentSnapshot{}, ErrStaleProof
+		}
 		out := *old
-		out.IdentSession = session
+		out.IdentSession, out.IdentSessionAt = session, at
 		return out, nil
 	})
 }
