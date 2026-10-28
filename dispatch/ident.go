@@ -95,6 +95,8 @@ type ProcID struct {
 
 // Ancestors is self's ancestor chain, nearest first, self excluded, each with
 // its start time: up to init, or to the first process that cannot be read.
+// Like ProcStart it reads /proc, so it is Linux only: elsewhere it is empty,
+// and no agent has a verified identity to prove a session against anyway.
 func Ancestors(self int) []ProcID {
 	return ancestors(self, readStat)
 }

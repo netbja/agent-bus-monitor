@@ -304,3 +304,17 @@ func TestProveSessionSendProvesOnlyTheStoredIdentity(t *testing.T) {
 		}
 	}
 }
+
+// Without /proc (macOS) the chain is empty: the hook spawns no prover, and
+// still reports the resume command.
+func TestReportResumeWithoutProcSpawnsNoProver(t *testing.T) {
+	f := newResumeFixture(t)
+	f.chain = dispatch.Ancestors(999999999) // no such process: what a missing /proc reads
+	f.hook(clearStart)
+	if got := f.spawnedVerb("prove-session"); got != nil {
+		t.Fatalf("prover spawned %q", got)
+	}
+	if f.spawnedVerb("report-resume-send") == nil {
+		t.Fatal("the resume report was dropped")
+	}
+}

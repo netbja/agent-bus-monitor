@@ -36,7 +36,8 @@ import (
 // a detached sender and returns at once, so Claude's start never waits on
 // herdr. It also hands the session to a detached prover (lifecycle spec, part
 // D), with its ancestors read here: once detached, the sender is reparented
-// and its own ancestry proves nothing.
+// and its own ancestry proves nothing. Linux only, like every process
+// identity here (/proc): without a chain no prover is spawned.
 func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error, ancestors func() []dispatch.ProcID) int {
 	get := func(k string) string { v, _ := lookupEnv(env, k); return v }
 	pane, herdr, role, project, manifest := get("HERDR_PANE_ID"), get("HERDR_BIN_PATH"), get("AGENT_BUS_AGENT"), get("AGENT_BUS_PROJECT"), get("ROLES_TOML")
