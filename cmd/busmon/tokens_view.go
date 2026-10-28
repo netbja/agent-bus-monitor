@@ -277,3 +277,16 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	}
 	return lines
 }
+
+// tokensOpen: the U page is on the reader's stack.
+func (m Model) tokensOpen() bool {
+	if m.rd == nil {
+		return false
+	}
+	for _, p := range m.rd.pages {
+		if p.kind == ovTokens {
+			return true
+		}
+	}
+	return false
+}

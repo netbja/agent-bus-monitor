@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -143,5 +144,51 @@ func TestTokensPageAlignment(t *testing.T) {
 				break
 			}
 		}
+	}
+}
+
+// tokFake is a poll reader that also reads tokens, counting the scans.
+type tokFake struct {
+	*fakeReader
+	scans int
+}
+
+func (f *tokFake) ProjectNames(context.Context) ([]string, error) {
+	f.scans++
+	return []string{"p"}, nil
+}
+func (f *tokFake) TokensOf(context.Context, string) (map[string]bus.TokenRow, bus.TokensMeta, bool, error) {
+	return nil, bus.TokensMeta{}, false, nil
+}
+func (f *tokFake) QuotaHist(context.Context, int64) ([]bus.QuotaSample, error) { return nil, nil }
+
+// The poll reads tokens (a keyspace SCAN) only while the U page is open: at
+// once when it opens, then at the requests' cadence.
+func TestTokensReadOnlyWhileTheUPageIsOpen(t *testing.T) {
+	f := &tokFake{fakeReader: &fakeReader{calls: map[string]int{}}}
+	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
+	for tick := 1; tick <= 11; tick++ {
+		pollOnce(context.Background(), f, st, tick)
+	}
+	if f.scans != 0 {
+		t.Fatalf("%d scans with the page closed", f.scans)
+	}
+	st.tokOpen = true
+	pollOnce(context.Background(), f, st, 12) // opened: read at once
+	if f.scans != 1 {
+		t.Fatalf("%d scans on opening, want 1", f.scans)
+	}
+	for tick := 13; tick <= 21; tick++ { // then every requestPoll tick (16, 21)
+		pollOnce(context.Background(), f, st, tick)
+	}
+	if f.scans != 3 {
+		t.Errorf("%d scans over 10 open ticks, want 3", f.scans)
+	}
+	m := fixtureShell(t, 120, 40)
+	if m.tokensOpen() {
+		t.Error("the page reads as open before U")
+	}
+	if m = keys(t, m, 'U'); !m.tokensOpen() {
+		t.Error("U did not open the page")
 	}
 }

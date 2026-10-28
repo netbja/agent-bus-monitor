@@ -202,11 +202,13 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		planR = readPlan(pollCtx, b, cursor, pf, known)
 	}
 	var tokR tokState
-	readTok := tick%requestPoll == 1
-	if readTok { // the U page's facts, at the requests' cadence
-		st.mu.Lock()
-		prev := st.tok
-		st.mu.Unlock()
+	st.mu.Lock()
+	prev, open := st.tok, st.tokOpen
+	st.mu.Unlock()
+	// The U page's facts: only while it is open (one keyspace SCAN and an
+	// HGETALL per project), at once when it opens, then at the requests' cadence.
+	readTok := open && (!prev.polled || tick%requestPoll == 1)
+	if readTok {
 		tokR = readTokens(pollCtx, b, projectOf(b), time.Now(), prev)
 	}
 	var guardRecords map[string]guardian.Record

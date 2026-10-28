@@ -146,7 +146,13 @@ func (m Model) Init() tea.Cmd { return m.pollCmd(1) }
 // pollCmd runs today's pollOnce against the reader and returns its snapshot.
 func (m Model) pollCmd(tick int) tea.Cmd {
 	cfg := m.cfg
+	tokOpen := m.tokensOpen() // read on the update path: the command must not touch the model
 	return func() tea.Msg {
+		if cfg.st != nil {
+			cfg.st.mu.Lock()
+			cfg.st.tokOpen = tokOpen
+			cfg.st.mu.Unlock()
+		}
 		pollOnce(cfg.ctx, cfg.reader, cfg.st, tick)
 		now := time.Now()
 		return pollMsg{snap: takeSnapshot(cfg.st, now), at: now}

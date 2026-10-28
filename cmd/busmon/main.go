@@ -325,6 +325,7 @@ type shared struct {
 	lastPollAt     time.Time   // last fully successful snapshot tick
 	plan           planState   // the batch's plan (P), derived in pollOnce
 	tok            tokState    // the U page's tokens and account history (tokens_view.go)
+	tokOpen        bool        // the U page is open: only then are they read (a keyspace SCAN per read)
 }
 
 func main() {
