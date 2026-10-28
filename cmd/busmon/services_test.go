@@ -361,11 +361,20 @@ func TestShellServicesCardsLeftRight(t *testing.T) {
 	if m = keys(t, m, kRight); m.rd.top().sel != 1 {
 		t.Fatalf("wide right: card %d, want missions", m.rd.top().sel)
 	}
-	if m = keys(t, m, kRight); m.rd.top().sel != 1 {
-		t.Fatalf("wide right at the last service card: %d", m.rd.top().sel)
+	if m = keys(t, m, kRight); m.rd.top().sel != 2 { // the Redis card is selectable too (busmon-redis-detail)
+		t.Fatalf("wide right: card %d, want redis", m.rd.top().sel)
+	}
+	if m = keys(t, m, kRight); m.rd.top().sel != 2 {
+		t.Fatalf("wide right at the last card: %d", m.rd.top().sel)
+	}
+	if m = keys(t, m, kLeft); m.rd.top().sel != 1 {
+		t.Fatalf("wide left from redis: card %d, want missions", m.rd.top().sel)
 	}
 	if m = keys(t, m, kLeft); m.rd.top().sel != 0 || m.rd.top().kind != ovServices {
 		t.Fatalf("wide left: card %d, page %v", m.rd.top().sel, m.rd.top().kind)
+	}
+	if m = keys(t, m, kLeft); m.rd.top().sel != 0 || m.rd.top().kind != ovServices {
+		t.Fatalf("wide left at the first card: card %d, page %v", m.rd.top().sel, m.rd.top().kind)
 	}
 	if m = keys(t, m, kDown); m.rd.top().sel != 1 {
 		t.Fatalf("wide down kept: card %d", m.rd.top().sel)
