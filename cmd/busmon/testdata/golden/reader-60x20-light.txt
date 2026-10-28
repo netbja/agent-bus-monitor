@@ -12,9 +12,9 @@
 │ → ng, argumentTwo int, argumentThree []string) (result s ┃
 │ → tring, err error) {                                    ┃
 │                                                          │
-│ text    retained text, 197 chars                         │
-│         completeness not marked on this entry — publish… │
-│                                                          │
-│ kind    report · note                                    ▼
+│ Text:    retained text, 197 chars                        │
+│          completeness not marked on this entry —         │
+│          published before the marker existed             │
+│                                                          ▼
 ╰──────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   Y copy thread   esc q close       

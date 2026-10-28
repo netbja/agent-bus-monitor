@@ -384,10 +384,10 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 			r = x
 		}
 	}
-	var lines []string
+	var f fields
 	add := func(k, v string) {
 		if v != "" {
-			lines = append(lines, fmt.Sprintf("%-10s %s", k, v))
+			f.add(k, S(RoleText, v))
 		}
 	}
 	state := plan.Label(r.State)
@@ -435,10 +435,12 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 	if r.LastFact > 0 {
 		add("last fact", plan.Age(r.LastFact, now)+" ago")
 	}
-	plain = strings.Join(lines, "\n")
-	for _, l := range lines {
-		body = append(body, Line{S(RoleText, l)})
+	var lines []string
+	for _, l := range f.lines(1 << 20) { // the copy: one line per row, unwrapped
+		lines = append(lines, l.text())
 	}
+	plain = strings.Join(lines, "\n")
+	body = f.lines(mdWidth)
 	if len(body) == 0 {
 		body = []Line{nil}
 	}

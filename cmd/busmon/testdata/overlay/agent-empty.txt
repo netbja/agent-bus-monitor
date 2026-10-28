@@ -1,19 +1,19 @@
 Status message
 no status message
 
-Declared        never declared
-Last seen       —
-Observed        pane not observed (no dispatch service, or no verified pane)
-Pane            not recorded
-Receiver lease  not armed
-Queue           not measured yet
-                lag 0: entries of the SHARED cmd stream this agent's group has not read - not a
-                work queue
-Wake            no wake record
-Gate            none
-Context         not reported
-Fill            unknown (no fresh reading from its client)
-Board           none
+Declared:        never declared
+Last seen:       —
+Observed:        pane not observed (no dispatch service, or no verified pane)
+Pane:            not recorded
+Receiver lease:  not armed
+Queue:           not measured yet
+                 lag 0: entries of the SHARED cmd stream this agent's group has not read - not a
+                 work queue
+Wake:            no wake record
+Gate:            none
+Context:         not reported
+Fill:            unknown (no fresh reading from its client)
+Board:           none
 
 Recent activity (in the retained window)
 none in the retained window

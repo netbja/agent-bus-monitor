@@ -54,7 +54,7 @@ func TestShellPlanPageKeys(t *testing.T) {
 		t.Fatalf("j did not move: %q %q", first, second)
 	}
 	m = keys(t, m, kEnter)
-	if p := m.rd.top(); p.kind != ovPlanTask || !strings.Contains(p.plain, "state") {
+	if p := m.rd.top(); p.kind != ovPlanTask || !strings.Contains(p.plain, "State:") {
 		t.Fatalf("enter did not open the task: %v %q", p.kind, p.plain)
 	}
 	m = keys(t, m, kEsc)

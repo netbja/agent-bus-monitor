@@ -1,4 +1,5 @@
-state      waiting for you
-title      Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle
-owner      person
-ask        9-0 (! answers it)
+State:  waiting for you
+Title:  Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle
+        Ti[red]tle Ti[red]tle Ti[red]tle
+Owner:  person
+Ask:    9-0 (! answers it)

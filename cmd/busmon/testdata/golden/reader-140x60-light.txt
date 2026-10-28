@@ -22,15 +22,15 @@
 │ · adapter in d0a72be ; tests green                                                                                                       │
 │   func veryLongFunctionNameForTheGolden(argumentOne string, argumentTwo int, argumentThree []string) (result string, err error) {        │
 │                                                                                                                                          │
-│ text    retained text, 197 chars                                                                                                         │
-│         completeness not marked on this entry — published before the marker existed                                                      │
+│ Text:    retained text, 197 chars                                                                                                        │
+│          completeness not marked on this entry — published before the marker existed                                                     │
 │                                                                                                                                          │
-│ kind    report · note                                                                                                                    │
-│ from    coder                                                                                                                            │
-│ to      (broadcast — every reader of this project)                                                                                       │
-│ when    2026-10-26 14:51:05  (13m ago)                                                                                                   │
-│ id      1793026265000-0                                                                                                                  │
-│ thread  — (this stream carries no thread id)                                                                                             │
+│ Kind:    report · note                                                                                                                   │
+│ From:    coder                                                                                                                           │
+│ To:      (broadcast — every reader of this project)                                                                                      │
+│ When:    2026-10-26 14:51:05  (13m ago)                                                                                                  │
+│ Id:      1793026265000-0                                                                                                                 │
+│ Thread:  — (this stream carries no thread id)                                                                                            │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

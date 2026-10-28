@@ -33,11 +33,9 @@ func wakeMeaning(state string) string {
 // the agent are shown and labelled as coming from that window.
 func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.BoardEntry, recent []feedLine, now time.Time) (title string, lines []Line) {
 	var b body
-	row := func(k string, v ...Seg) { b.seg(RoleMuted, Fit(k, 15)).text(" ").segs(v...).text("\n") }
-	// rowWrap is a row whose long value wraps under the value column.
-	rowWrap := func(k string, r Role, v string) {
-		b.join(wrapSpans([]mdSpan{{text: v, role: r}}, mdWidth, Fit(k, 15)+" ", strings.Repeat(" ", 16))).text("\n")
-	}
+	var f fields // the facts' rows, written before Recent activity
+	row := f.add
+	rowWrap := func(k string, r Role, v string) { f.add(k, S(r, v)) } // a long value wraps under its value
 	ago := func(t time.Time) string { return humanAge(now.Sub(t)) + " ago" }
 	text := func(s string) Seg { return S(RoleText, s) }
 
@@ -238,6 +236,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row(k, text(Preview(t)), S(RoleText, " "), S(boardStateRole(e.State), Preview(e.State)), text(" "+GlyphNone+" "+Preview(branch)))
 	}
 
+	b.fields(&f)
 	b.text("\n").seg(RoleAccent, "Recent activity").seg(RoleMuted, " (in the retained window)").text("\n")
 	var mine []feedLine
 	for _, fl := range recent {
@@ -277,7 +276,8 @@ func taskDetail(e bus.BoardEntry, task string, now time.Time) (title string, lin
 		branch = GlyphDash
 	}
 	var b body
-	row := func(k string, v Seg) { b.seg(RoleMuted, Fit(k, 10)).text(" ").segs(v).text("\n") }
+	var f fields
+	row := func(k string, v Seg) { f.add(k, v) }
 	row("Task", S(RoleText, Preview(task)))
 	row("Owner", S(RoleText, Preview(e.Owner)))
 	row("State", S(boardStateRole(e.State), Preview(e.State)))
@@ -290,6 +290,7 @@ func taskDetail(e bus.BoardEntry, task string, now time.Time) (title string, lin
 	if e.Request != nil {
 		row("Request", S(RoleMuted, "tracked - open it from Requests (F2) for delivery and acceptance"))
 	}
+	b.fields(&f)
 	return "Task " + GlyphNone + " " + Preview(task), b.Lines(), strings.Join([]string{task, e.Owner, e.State, branch}, " ")
 }
 
