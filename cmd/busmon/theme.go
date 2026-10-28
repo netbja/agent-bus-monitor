@@ -20,7 +20,68 @@ const (
 	RoleDone
 	RoleDispatch
 	RoleLine
+	// The providers' own colours (busmon-llm-colors): their names and models
+	// wherever written. providerHues is the table; providerRole picks one.
+	RoleProvAnthropic
+	RoleProvOpenAI
+	RoleProvGoogle
+	RoleProvMoonshot
+	RoleProvXAI
+	RoleProvDeepSeek
+	RoleProvXiaomi
+	roleCount
 )
+
+// providerHues: each provider's colour on dark and on light backgrounds; the
+// 16-colour palette takes the nearest ANSI colour, the no-colour one none.
+var providerHues = []struct {
+	provider    string
+	role        Role
+	dark, light string
+}{
+	{"anthropic", RoleProvAnthropic, "#CC785C", "#CC785C"},
+	{"openai", RoleProvOpenAI, "#E5E7EB", "#202123"},
+	{"google", RoleProvGoogle, "#34A853", "#34A853"},
+	{"moonshot", RoleProvMoonshot, "#1677FF", "#1677FF"},
+	{"xai", RoleProvXAI, "#7B6FD6", "#7B6FD6"},
+	{"deepseek", RoleProvDeepSeek, "#4D6BFE", "#4D6BFE"},
+	{"xiaomi", RoleProvXiaomi, "#FF6900", "#FF6900"},
+}
+
+// providerRole is the provider's role, or fallback for one the table lacks
+// (today's colour).
+func providerRole(provider string, fallback Role) Role {
+	for _, h := range providerHues {
+		if h.provider == provider {
+			return h.role
+		}
+	}
+	return fallback
+}
+
+// ansi16 are the 16 ANSI colours tcell names, with their usual RGB.
+var ansi16 = []struct {
+	name    string
+	r, g, b int32
+}{
+	{"black", 0, 0, 0}, {"maroon", 128, 0, 0}, {"green", 0, 128, 0}, {"olive", 128, 128, 0}, {"navy", 0, 0, 128},
+	{"purple", 128, 0, 128}, {"teal", 0, 128, 128}, {"silver", 192, 192, 192}, {"gray", 128, 128, 128},
+	{"red", 255, 0, 0}, {"lime", 0, 255, 0}, {"yellow", 255, 255, 0}, {"blue", 0, 0, 255}, {"fuchsia", 255, 0, 255},
+	{"aqua", 0, 255, 255}, {"white", 255, 255, 255},
+}
+
+// nearest16 is the ANSI colour closest to hex (squared RGB distance).
+func nearest16(hex string) string {
+	r, g, b := tcell.GetColor(hex).RGB()
+	best, bestD := "", int32(-1)
+	for _, c := range ansi16 {
+		d := (r-c.r)*(r-c.r) + (g-c.g)*(g-c.g) + (b-c.b)*(b-c.b)
+		if bestD < 0 || d < bestD {
+			best, bestD = c.name, d
+		}
+	}
+	return best
+}
 
 type Palette int
 
@@ -34,8 +95,8 @@ const (
 // Theme is immutable after resolution.
 type Theme struct {
 	palette   Palette
-	colors    [10]tcell.Color
-	tags      [10]string
+	colors    [roleCount]tcell.Color
+	tags      [roleCount]string
 	selection tcell.Color
 }
 
@@ -59,15 +120,24 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 		}
 	}
 	t := &Theme{palette: PaletteDark, selection: tcell.GetColor("#22324A")}
-	t.tags = [10]string{"#E6EDF3", "#7D8A99", "#4A5563", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48"}
+	copy(t.tags[:], []string{"#E6EDF3", "#7D8A99", "#4A5563", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48"})
+	for _, h := range providerHues {
+		t.tags[h.role] = h.dark
+	}
 	if name == "light" {
 		t.palette = PaletteLight
 		t.selection = tcell.GetColor("#DDF4FF")
-		t.tags = [10]string{"#1F2328", "#5A6572", "#B0B8C1", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE"}
+		copy(t.tags[:], []string{"#1F2328", "#5A6572", "#B0B8C1", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE"})
+		for _, h := range providerHues {
+			t.tags[h.role] = h.light
+		}
 	}
 	if colors < 1<<24 {
 		t.palette = Palette16
-		t.tags = [10]string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray"}
+		copy(t.tags[:], []string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray"})
+		for _, h := range providerHues {
+			t.tags[h.role] = nearest16(h.dark)
+		}
 	}
 	if noColor {
 		t.palette = PaletteNone
@@ -86,7 +156,7 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 func (t *Theme) Palette() Palette { return t.palette }
 
 func themeRole(r Role) Role {
-	if r < RoleText || r > RoleLine {
+	if r < RoleText || r >= roleCount {
 		return RoleText
 	}
 	return r

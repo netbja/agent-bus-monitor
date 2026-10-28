@@ -259,16 +259,17 @@ func budgetRole(pct float64) Role {
 // budgetSeg is one provider's USED share of its account windows: gauges in
 // wide (10 cells) and medium (5), plain "provider 25%/44%" in narrow.
 func budgetSeg(name string, b bus.BudgetSnapshot, tier Tier) Line {
+	pr := providerRole(name, RoleMuted)
 	name = Preview(name)
 	if tier == TierNarrow {
-		return Line{{Text: fmt.Sprintf("%s %.0f%%/%.0f%%", name, b.SessionPct, b.WeeklyPct), Role: budgetRole(max(b.SessionPct, b.WeeklyPct))}}
+		return Line{{Text: name, Role: pr}, {Text: fmt.Sprintf(" %.0f%%/%.0f%%", b.SessionPct, b.WeeklyPct), Role: budgetRole(max(b.SessionPct, b.WeeklyPct))}}
 	}
 	cells := 10
 	sep := "  "
 	if tier == TierMedium {
 		cells, sep = 5, " "
 	}
-	l := Line{{Text: name + " used" + sep, Role: RoleMuted}}
+	l := Line{{Text: name, Role: pr}, {Text: " used" + sep, Role: RoleMuted}}
 	gauge := func(label string, pct float64) {
 		n := clamp(int(pct*float64(cells)/100+0.5), 0, cells)
 		l = append(l, Seg{Text: label + " ", Role: RoleMuted},
