@@ -3,6 +3,7 @@ package setup
 import (
 	"bytes"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -17,8 +18,17 @@ func bashSetup(t *testing.T, home string, args ...string) (string, string, int) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Failing fakes first on PATH (CLAUDE.md: setup's tests stub docker and
+	// herdr): a copy of the repository shares the live broker's compose
+	// project, so the real docker must never answer a test.
+	fakes := t.TempDir()
+	for _, name := range []string{"docker", "docker-compose", "herdr", "systemctl", "launchctl"} {
+		if err := os.WriteFile(filepath.Join(fakes, name), []byte("#!/bin/sh\necho \"fake $0 refuses: $*\" >&2\nexit 1\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cmd := exec.Command("sh", append([]string{filepath.Join(repo, "setup.sh")}, args...)...)
-	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "NO_COLOR=1"}
+	cmd.Env = []string{"HOME=" + home, "PATH=" + fakes + ":/usr/bin:/bin", "NO_COLOR=1"}
 	var out, errw bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errw
 	code := 0
