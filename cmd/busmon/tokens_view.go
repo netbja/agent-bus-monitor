@@ -130,8 +130,15 @@ func tokCount(n int64) string {
 
 // tokensPage is the U page's body at width cells.
 func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[string]int64, agents map[string]*agentState,
-	project string, now time.Time, width int) []Line {
+	project string, now time.Time, width int, pending bool) []Line {
 	var b body
+	// pending: the first reading is on its way (tokensSkeleton): a shimmering
+	// skeleton row stands where the open project's numbers will be.
+	skeleton := func() {
+		b.text("  ").seg(RoleAccent, Fit(Preview(project), 20)).text(" ").
+			segs(Seg{Text: strings.Repeat(GlyphBarEmpty, 24), Role: RoleMuted, Fade: fadeLevel(now)}).
+			seg(RoleMuted, "  first reading pending").text("\n")
+	}
 	head := func(s string) { b.seg(RoleAccent, s).text("\n") }
 	muted := func(s string) { b.seg(RoleMuted, s).text("\n") }
 
@@ -172,7 +179,9 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	days := tokens.LastDays(now, time.Local, 7)
 	today := days[len(days)-1]
 	head("Projects, today and 7 days")
-	if !st.polled {
+	if !st.polled && pending {
+		skeleton()
+	} else if !st.polled {
 		muted("  " + GlyphEllipsis + " not read yet")
 	} else {
 		cache := width >= 110
@@ -206,6 +215,10 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 		muted(hdr + "  7 DAYS   7D TOTAL")
 		var none []string
 		for _, p := range ps {
+			if !p.known && pending && p.name == project {
+				skeleton()
+				continue
+			}
 			if !p.known {
 				none = append(none, p.name)
 				continue
@@ -260,6 +273,9 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	if !st.polled {
 		reason = "not read yet"
 	}
+	if pending {
+		reason = "first reading pending"
+	}
 	for _, r := range tokens.AgentRows(open.rows, open.known, reason, snaps, today) {
 		b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ").seg(RoleMuted, Fit(Preview(r.Provider), 10))
 		if r.In == nil {
@@ -289,4 +305,27 @@ func (m Model) tokensOpen() bool {
 		}
 	}
 	return false
+}
+
+// skeletonFor is how long after busmon starts a pending first reading
+// shimmers; after it, an absent reading is unknown ('?'), not pending.
+const skeletonFor = 2 * time.Minute
+
+// tokensSkeleton: the U page is open, the dispatcher is up, the open
+// project's tokens have no reading yet, and busmon started less than
+// skeletonFor ago. Only then does the page shimmer.
+func (m Model) tokensSkeleton() bool {
+	if !m.tokensOpen() || m.sig.started.IsZero() || m.now.Sub(m.sig.started) >= skeletonFor {
+		return false
+	}
+	switch m.snap.dispatch {
+	case "", "down", "stopped", "failed", "gave-up":
+		return false
+	}
+	for _, p := range m.snap.tok.projects {
+		if p.name == m.cfg.project {
+			return !p.known
+		}
+	}
+	return true // not read yet
 }

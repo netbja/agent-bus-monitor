@@ -212,7 +212,11 @@ it silently never fired.
   `TokensOf`, read every `requestPoll` tick through the optional `tokensReader`; the open project first,
   7-day bars scaled across projects, `~` while partial, no key = one `no data` line), the open project by
   agent today (`tokens.AgentRows`, shared with the CLI: `?` with its reason, 0 only for a proved session).
-  The block glyphs `▁`–`▆` joined the closed set for it.
+  The block glyphs `▁`–`▆` joined the closed set for it. Its honest animation (step 5) rides the fade schedule
+  (`animated`, true colour only, `fadeMsg` frames only while something animates): a skeleton row
+  shimmers where the open project's numbers will be only while the page is open, the dispatcher is up,
+  no reading exists yet and busmon started under `skeletonFor` (2 min) ago (`tokensSkeleton`; after,
+  `?`); an agent's `●` pulses only when it declares `working` and its pane is seen busy, fresh (`pulsing`).
 - `refresh` never fails hard — a missing source becomes a note, because it runs from the sentinel's
   cron wake where a hard exit loses the whole caretaker pass.
 

@@ -69,7 +69,7 @@ func TestTokensPageGoldens(t *testing.T) {
 
 func pageText(st tokState, agents map[string]*agentState, width int) string {
 	var out []string
-	for _, l := range tokensPage(st, nil, nil, agents, "agent-bus-monitor", shellNow, width) {
+	for _, l := range tokensPage(st, nil, nil, agents, "agent-bus-monitor", shellNow, width, false) {
 		out = append(out, l.text())
 	}
 	return strings.Join(out, "\n")
@@ -191,4 +191,81 @@ func TestTokensReadOnlyWhileTheUPageIsOpen(t *testing.T) {
 	if m = keys(t, m, 'U'); !m.tokensOpen() {
 		t.Error("U did not open the page")
 	}
+}
+
+// The pulse needs both facts: declared working and its pane seen busy.
+func TestPulseNeedsWorkingAndBusy(t *testing.T) {
+	now := shellNow
+	for _, tc := range []struct {
+		state string
+		busy  bool
+		want  bool
+	}{{"working", true, true}, {"working", false, false}, {"idle", true, false}} {
+		a := &agentState{state: tc.state, obsBusy: tc.busy, obsAt: now.Add(-5 * time.Second), stateAt: now, judgedAt: now}
+		row := agentRow("coder", a, false, TierWide, 140, now)
+		if got := row[0].Fade > 0; got != tc.want {
+			t.Errorf("%s busy=%v: glyph fade %d, want pulsing %v", tc.state, tc.busy, row[0].Fade, tc.want)
+		}
+		if got := pulsing(a, now); got != tc.want {
+			t.Errorf("%s busy=%v: pulsing %v", tc.state, tc.busy, got)
+		}
+	}
+	stale := &agentState{state: "working", obsBusy: true, obsAt: now.Add(-observedFresh - time.Second)}
+	if pulsing(stale, now) {
+		t.Error("a stale observation pulses")
+	}
+}
+
+// The skeleton shimmers only within its 2 minutes, with the dispatcher up,
+// the U page open and no reading of the open project; the fade schedule runs
+// only while something animates, in true colour only.
+func TestTokensSkeletonAndFadeSchedule(t *testing.T) {
+	withPalette(t, "dark", false, 1<<24)
+	m := fixtureShell(t, 120, 40)
+	m.cfg.settings.Fade = true
+	m.snap.agents = map[string]*agentState{"coder": {state: "idle", registered: true, stateAt: shellNow}} // nothing else animates
+	m.snap.asks = nil
+	m.snap.dispatch = "ready"
+	m.snap.tok = tokState{}
+	if m.animated() {
+		t.Fatal("animated with nothing to animate")
+	}
+	m = keys(t, m, 'U')
+	if !m.tokensSkeleton() || !m.animated() {
+		t.Fatal("no skeleton on a pending first reading")
+	}
+	if body := linesText(m.rd.top().body); !strings.Contains(body, "first reading pending") {
+		t.Errorf("page without the skeleton:\n%s", body)
+	}
+	if cmd := m.scheduleFade(); cmd == nil {
+		t.Error("the fade did not schedule for the skeleton")
+	}
+	m.sig.fading = false
+	later := m
+	later.now = m.sig.started.Add(skeletonFor)
+	if later.tokensSkeleton() {
+		t.Error("the skeleton outlived its 2 minutes")
+	}
+	down := m
+	down.snap.dispatch = "down"
+	if down.tokensSkeleton() {
+		t.Error("a skeleton with the dispatcher down")
+	}
+	known := m
+	known.snap.tok = tokState{polled: true, projects: []tokProject{{name: "agent-bus-monitor", known: true}}}
+	if known.tokensSkeleton() {
+		t.Error("a skeleton over a known reading")
+	}
+	withPalette(t, "dark", false, 16)
+	if m.animated() {
+		t.Error("animated in 16 colours")
+	}
+}
+
+func linesText(ls []Line) string {
+	var out []string
+	for _, l := range ls {
+		out = append(out, l.text())
+	}
+	return strings.Join(out, "\n")
 }

@@ -24,6 +24,7 @@ type signalState struct {
 	rung          map[string]string // agent -> the waiting declaration rung for
 	rungAsks      map[string]bool   // ask ids rung for
 	bells         int               // bells rung (what the tests count)
+	started       time.Time         // the first poll: the U page's skeleton shows for skeletonFor after it
 	tourHold      bool              // a bell rang on this update: the tour waits for the next
 	tourShown     bool              // the tour opened by itself this session
 	fading        bool              // a fadeMsg is scheduled
@@ -82,7 +83,18 @@ func (m *Model) bell() tea.Cmd {
 
 // animated: the waiting word fades now.
 func (m *Model) animated() bool {
-	return len(asksFor(m.snap.agents)) > 0 && m.cfg.settings.Fade && th.Animated()
+	if !m.cfg.settings.Fade || !th.Animated() {
+		return false
+	}
+	if len(asksFor(m.snap.agents)) > 0 || m.tokensSkeleton() {
+		return true
+	}
+	for _, a := range m.snap.agents {
+		if pulsing(a, m.now) {
+			return true
+		}
+	}
+	return false
 }
 
 // scheduleFade schedules the next fade frame while one is due and none is.

@@ -173,6 +173,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.layoutCompose()
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
+		if m.sig.started.IsZero() {
+			m.sig.started = msg.at
+		}
 		return tea.Batch(tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) }), m.afterPoll())
 	case tickMsg:
 		m.tick++
@@ -180,6 +183,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case fadeMsg:
 		m.sig.fading = false
 		m.now = time.Time(msg)
+		if m.tokensSkeleton() && m.rd.top().kind == ovTokens { // the shimmer is in the page body
+			m.rd.top().dirty = true
+		}
 		m.refresh()
 		return m.scheduleFade()
 	case threadMsg:
