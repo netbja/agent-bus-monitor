@@ -307,15 +307,12 @@ func (in *Installer) CheckHerdr(ctx context.Context) {
 	}
 }
 
-// ServicesHint names the running project services, which keep the binary
-// they started with, and how to move each on (setup.sh's project_services,
-// read through the agentbus installed, else the checkout's).
-func (in *Installer) ServicesHint(ctx context.Context) {
-	if in.Opt.DryRun {
-		return
-	}
+// serviceLines is setup.sh's project_services: one "<project> <kind>
+// <state>" line per agentbus user service, read through the agentbus
+// installed, else the checkout's; none when there is no service.
+func (in *Installer) serviceLines(ctx context.Context) []string {
 	for _, ab := range []string{filepath.Join(in.Opt.BinDir, "agentbus"), filepath.Join(in.Repo, "agentbus")} {
-		if st, err := os.Stat(ab); err != nil || st.Mode()&0o111 == 0 || st.IsDir() {
+		if !isExec(ab) {
 			continue
 		}
 		out, _ := in.R.Run(ctx, Cmd{Name: ab, Args: []string{"service", "list"}, Stdout: true})
@@ -326,18 +323,36 @@ func (in *Installer) ServicesHint(ctx context.Context) {
 			}
 		}
 		if strings.TrimSpace(strings.Join(lines, "")) == "" {
-			return
+			return nil
 		}
-		in.O.Info("project services keep running the previous agentbus until restarted:")
-		for _, l := range lines {
-			f := strings.Fields(l)
-			for len(f) < 2 {
-				f = append(f, "")
-			}
-			p, k := f[0], f[1]
-			rest := strings.Join(f[2:], " ")
-			in.O.Info("  " + p + " " + k + " (" + rest + "): agentbus --project " + p + " service restart " + k)
-		}
+		return lines
+	}
+	return nil
+}
+
+func isExec(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir() && st.Mode()&0o111 != 0
+}
+
+// ServicesHint names the running project services, which keep the binary
+// they started with, and how to move each on.
+func (in *Installer) ServicesHint(ctx context.Context) {
+	if in.Opt.DryRun {
 		return
+	}
+	lines := in.serviceLines(ctx)
+	if len(lines) == 0 {
+		return
+	}
+	in.O.Info("project services keep running the previous agentbus until restarted:")
+	for _, l := range lines {
+		f := strings.Fields(l)
+		for len(f) < 2 {
+			f = append(f, "")
+		}
+		p, k := f[0], f[1]
+		rest := strings.Join(f[2:], " ")
+		in.O.Info("  " + p + " " + k + " (" + rest + "): agentbus --project " + p + " service restart " + k)
 	}
 }
