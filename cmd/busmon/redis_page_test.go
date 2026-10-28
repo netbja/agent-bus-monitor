@@ -133,6 +133,29 @@ func TestGatherRedisPageOnlyForTheBrokerItReads(t *testing.T) {
 			}
 		})
 	}
+	// The address and its family must be the one published, not just the port.
+	for name, c := range map[string]struct {
+		env  map[string]string
+		pub  string
+		want bool
+	}{
+		"ipv4 endpoint, ipv6-only publish":        {map[string]string{"REDIS_URL": "redis://127.0.0.1:6380/0"}, "[::1]:6380", false},
+		"ipv6 endpoint, ipv4-only publish":        {map[string]string{"REDIS_URL": "redis://[::1]:6380/0"}, "127.0.0.1:6380", false},
+		"loopback endpoint, an interface publish": {map[string]string{"REDIS_HOST": "127.0.0.1"}, "192.168.1.5:6380", false},
+		"an interface endpoint":                   {map[string]string{"REDIS_HOST": "192.168.1.5"}, "192.168.1.5:6380", false},
+		"ipv4 endpoint, ipv4 wildcard":            {map[string]string{"REDIS_HOST": "127.0.0.1"}, "0.0.0.0:6380", true},
+		"ipv6 endpoint, ipv6 loopback":            {map[string]string{"REDIS_URL": "redis://[::1]:6380/0"}, "[::1]:6380", true},
+		"localhost, ipv4 loopback (default)":      {nil, "127.0.0.1:6380", true},
+	} {
+		run := func(context.Context, string, ...string) (string, error) { return c.pub, nil }
+		f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return c.env[k] }, "")
+		if got := f.bindErr == ""; got != c.want {
+			t.Errorf("%s: established %v, want %v (%+v)", name, got, c.want, f)
+		}
+		if !c.want && (f.loopback || f.logs != nil) {
+			t.Errorf("%s: claims %+v", name, f)
+		}
+	}
 	// --host overrides REDIS_HOST, as bus.Connect does.
 	run := func(context.Context, string, ...string) (string, error) { return "127.0.0.1:6380", nil }
 	if f := gatherRedisPage(context.Background(), detailReader{d: redisFixture()}, run, func(k string) string { return map[string]string{"REDIS_HOST": "far"}[k] }, "localhost"); !f.loopback {

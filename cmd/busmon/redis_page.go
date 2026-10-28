@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -80,7 +81,7 @@ func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(stri
 	// The container's facts are the broker's only when busmon reads that
 	// container: a loopback endpoint on one of its published ports.
 	host, port := brokerEndpoint(getenv, flagHost)
-	if !localHost(host) || !publishes(lines, port) {
+	if !publishes(lines, host, port) {
 		f.bindErr = fmt.Sprintf("the broker read is %s, not this host's %s", net.JoinHostPort(host, port), redisContainer)
 		f.logsErr = f.bindErr
 		return f
@@ -143,12 +144,21 @@ func brokerEndpoint(getenv func(string) string, flagHost string) (host, port str
 	return host, port
 }
 
-func localHost(h string) bool { return h == "localhost" || h == "127.0.0.1" || h == "::1" }
-
-// publishes says whether one of docker port's addresses is on port.
-func publishes(addrs []string, port string) bool {
+// publishes says whether the endpoint busmon dials is one docker publishes
+// for the container: same port, and an address that carries the endpoint's
+// own: 127.0.0.1 by 127.0.0.1 or 0.0.0.0, ::1 by ::1 or ::. "localhost" is
+// read as either loopback family (a residual: another server on the other
+// family at the same port would pass). Any other endpoint, an interface
+// address or a remote host, is never established as the container.
+func publishes(addrs []string, host, port string) bool {
+	carriers := map[string][]string{
+		"127.0.0.1": {"127.0.0.1", "0.0.0.0"},
+		"::1":       {"::1", "::"},
+		"localhost": {"127.0.0.1", "0.0.0.0", "::1", "::"},
+	}[host]
 	for _, a := range addrs {
-		if _, p, err := net.SplitHostPort(a); err == nil && p == port {
+		h, p, err := net.SplitHostPort(a)
+		if err == nil && p == port && slices.Contains(carriers, h) {
 			return true
 		}
 	}
