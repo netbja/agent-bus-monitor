@@ -75,7 +75,8 @@ type barSlide struct {
 func barKey(provider, window string) string { return provider + "|" + window }
 
 // barTargets is every bar's value in a snapshot: the dispatcher's windows,
-// or a legacy snapshot's session and week. Unknown and unlimited have none.
+// or a legacy snapshot's session and week. Unknown, unlimited and a window
+// never observed have none.
 func barTargets(budgets map[string]bus.BudgetSnapshot) map[string]float64 {
 	out := map[string]float64{}
 	for p, b := range budgets {
@@ -85,6 +86,9 @@ func barTargets(budgets map[string]bus.BudgetSnapshot) map[string]float64 {
 			out[barKey(p, "session")], out[barKey(p, "week")] = b.SessionPct, b.WeeklyPct
 		default:
 			for _, w := range b.Windows {
+				if w.ObservedAt == 0 && w.UsedPct == 0 { // never observed: unknown, as the U page reads it
+					continue
+				}
 				out[barKey(p, w.Name)] = w.UsedPct
 			}
 		}

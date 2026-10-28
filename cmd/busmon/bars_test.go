@@ -260,3 +260,19 @@ func TestAppendSegmentKeepsTrackAndLift(t *testing.T) {
 		t.Fatalf("segments %+v", l)
 	}
 }
+
+// A window never observed (ObservedAt 0, UsedPct 0) is unknown, as the U page
+// reads it: it has no target, so its first real reading starts still.
+func TestBarUnobservedWindowNeverSlides(t *testing.T) {
+	unobserved := map[string]bus.BudgetSnapshot{"anthropic": {Windows: []bus.BudgetWindow{{Name: "5h"}, {Name: "7d", UsedPct: 41, ObservedAt: 1}}}}
+	targets := barTargets(unobserved)
+	if _, ok := targets["anthropic|5h"]; ok {
+		t.Fatalf("an unobserved window has a target: %v", targets)
+	}
+	slides := updateSlides(nil, targets, shellNow, true)
+	observed := map[string]bus.BudgetSnapshot{"anthropic": {Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 62, ObservedAt: 2}, {Name: "7d", UsedPct: 41, ObservedAt: 2}}}}
+	slides = updateSlides(slides, barTargets(observed), shellNow.Add(time.Minute), true)
+	if shown, moving := (barView{slides: slides, now: shellNow.Add(time.Minute)}).at("anthropic|5h", 62); moving || shown != 62 {
+		t.Errorf("the first real reading after unknown: shown %.1f moving %v", shown, moving)
+	}
+}
