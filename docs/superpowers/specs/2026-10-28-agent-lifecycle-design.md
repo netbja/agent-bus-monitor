@@ -56,6 +56,12 @@ report's wording. So the declaration is a fact of its own.
 - `{p}:handoff` is not in `projectKinds` and `HasKeysBesidesDispatch` ignores it, like
   `{p}:observed`: it never discovers or revives a project. busmon shows `handoff` as a flag on the
   agent's row while a record is pending (display only).
+- **As built (lifecycle-2): void is durable.** Any report and any status other than `idle` written
+  by the agent delete its record in the same transaction as the stream entry
+  (`addVoidingHandoff`), so `working` then `idle` before a pass never makes a stale hand-off
+  pending again (reviewer-codex). `idle` keeps it: the agent declares it right after its hand-off,
+  and Part B requires it. The dispatcher still deletes records voided by a session or process
+  change, which no write of the agent's announces.
 - **Void when the agent moves on.** A record is void, and the dispatcher deletes it (fenced), when
   any of these holds: the agent declared `working` after `at`; its `IdentSession` differs from the
   record's (it cleared or was relaunched by other means); its pid differs. A void record is never

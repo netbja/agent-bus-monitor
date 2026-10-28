@@ -234,9 +234,9 @@ agentbus status <you> idle "hand-off declared"
 ```
 `report` prints the entry id; `handoff` refuses another agent's report and any caller that is not
 your verified client in its current session. The record is what lets a fresh session (after
-`/clear`) resume from that report. It becomes void (and busmon's `handoff` flag goes) as soon as
-you declare `working` again, or your session or process changes. So declare it last, and do
-not start new work after it. `agentbus handoff` lists every record, pending or void.
+`/clear`) resume from that report. Any report or any status other than `idle` you write after
+it deletes it (busmon's `handoff` flag goes), and so does a change of session or process. So
+declare it last, declare `idle`, and do not start new work after it. `agentbus handoff` lists every record, pending or void.
 
 ## The board — who owns what, check it before you start
 `{project}:board` is the shared ownership registry (task → owner → state → branch). Read it

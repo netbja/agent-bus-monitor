@@ -149,3 +149,79 @@ func TestFencedDeleteHandoffRedis(t *testing.T) {
 		t.Fatalf("not deleted: %v", m)
 	}
 }
+
+// Voiding is durable (reviewer-codex's review of lifecycle-2): any non-idle
+// status or any report the agent writes after its hand-off deletes the record
+// in the same transaction, so working then idle before the dispatcher's next
+// pass never makes a stale hand-off pending again. An idle status keeps it:
+// it is what the agent declares right after its hand-off.
+func TestHandoffVoidedDurablyByWorkOrAReportRedis(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if err := b.Bind(ctx, "coder", AgentIdent{Pane: "w1:p2", PID: 42, PIDStart: 7}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ProveSession(ctx, "coder", 42, 7, "session-0001", 100); err != nil {
+		t.Fatal(err)
+	}
+	self := AgentIdent{Pane: "w1:p2", PID: 42, PIDStart: 7, Session: "session-0001"}
+	declare := func() {
+		t.Helper()
+		r, err := b.Report(ctx, "coder", ReportNote, "hand-off")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.DeclareHandoff(ctx, "coder", r, self); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending := func() bool {
+		m, err := b.Handoffs(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ok := m["coder"]
+		return ok
+	}
+	status := func(state string) {
+		t.Helper()
+		if _, err := b.Status(ctx, "coder", state, "", self); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	declare()
+	status("idle")
+	if !pending() {
+		t.Fatal("the idle status after a hand-off voided it")
+	}
+	status("working")
+	status("idle") // before any dispatcher pass
+	if pending() {
+		t.Fatal("working then idle left the hand-off pending")
+	}
+
+	for _, st := range []string{"blocked", "waiting", "done"} {
+		declare()
+		status(st)
+		if pending() {
+			t.Errorf("a %s status left the hand-off pending", st)
+		}
+	}
+
+	declare()
+	if _, err := b.Report(ctx, "coder", ReportNote, "more work"); err != nil {
+		t.Fatal(err)
+	}
+	if pending() {
+		t.Fatal("a later report left the hand-off pending")
+	}
+
+	declare()
+	if _, err := b.Report(ctx, "foureyes", ReportNote, "someone else"); err != nil {
+		t.Fatal(err)
+	}
+	if !pending() {
+		t.Fatal("another agent's report voided coder's hand-off")
+	}
+}

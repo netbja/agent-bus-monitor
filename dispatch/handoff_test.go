@@ -42,8 +42,10 @@ func TestHandoffPassDeletesOnlyVoidRecords(t *testing.T) {
 		t.Fatalf("a pending record was deleted: %v", m)
 	}
 
-	time.Sleep(2 * time.Millisecond) // the status's stream id must be newer than the record's TIME
-	if _, err := b.Status(ctx, "coder", "working", "back at it", bus.AgentIdent{Pane: "w1:p2", PID: testPID, PIDStart: testStart, Session: "session-0001"}); err != nil {
+	// A /clear by hand: the same process proves a new session. Only the
+	// dispatcher can see that the record no longer stands (a status or report
+	// would have deleted it itself, bus/stream.go).
+	if err := b.ProveSession(ctx, "coder", testPID, testStart, "session-0002", time.Now().UnixNano()); err != nil {
 		t.Fatal(err)
 	}
 	if err := pass("not-the-holder"); err != bus.ErrNotHolder {

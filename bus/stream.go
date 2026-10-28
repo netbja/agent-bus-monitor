@@ -305,6 +305,23 @@ func (b *Bus) add(ctx context.Context, kind string, values map[string]interface{
 	}).Result()
 }
 
+// addVoidingHandoff appends to a stream and, in the same transaction, deletes
+// agent's hand-off record (lifecycle-2): work or a report after a hand-off is
+// not covered by it, and the void must not depend on a dispatcher pass seeing
+// the state in between.
+func (b *Bus) addVoidingHandoff(ctx context.Context, kind, agent string, values map[string]interface{}) (string, error) {
+	var add *redis.StringCmd
+	_, err := b.r.TxPipelined(ctx, func(p redis.Pipeliner) error {
+		add = p.XAdd(ctx, &redis.XAddArgs{Stream: StreamKey(b.project, kind), MaxLen: streamMaxLen, Approx: true, Values: values})
+		p.HDel(ctx, HandoffKey(b.project), agent)
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return add.Result()
+}
+
 // Status publishes an agent's state to the {project}:status stream. pane is the
 // agent's HERDR_PANE_ID (empty outside herdr); it is stored in the {project}:agents
 // snapshot only, never in the status stream.
@@ -315,9 +332,14 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	if !ValidStates[state] {
 		return "", fmt.Errorf("invalid state %q (working|idle|blocked|waiting|done)", state)
 	}
-	id, err := b.add(ctx, "status", map[string]interface{}{
-		"agent": agent, "state": state, "message": message,
-	})
+	values := map[string]interface{}{"agent": agent, "state": state, "message": message}
+	var id string
+	var err error
+	if state == "idle" { // what an agent declares right after its hand-off: the record stands
+		id, err = b.add(ctx, "status", values)
+	} else {
+		id, err = b.addVoidingHandoff(ctx, "status", agent, values)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -353,7 +375,7 @@ func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, 
 	if message != preview {
 		values["full"] = message
 	}
-	return b.add(ctx, "report", values)
+	return b.addVoidingHandoff(ctx, "report", agent, values)
 }
 
 // Notify broadcasts a message on the {project}:notify stream. from is advisory
