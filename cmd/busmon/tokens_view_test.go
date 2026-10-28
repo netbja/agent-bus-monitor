@@ -82,15 +82,28 @@ func TestTokensPagePendingUnknownZero(t *testing.T) {
 		"coder":          {registered: true, pid: 1, identSession: "0198e5c4-coder-1", provider: "claude"},
 		"reviewer-codex": {registered: true, pid: 2, provider: "openai", client: "codex"},
 	}
-	if s := pageText(tokState{}, agents, 120); !strings.Contains(s, GlyphEllipsis+" not read yet") || strings.Contains(s, " 0 ") {
+	// The open project's row stays, unknown, with its reason: never folded, never 0.
+	openRow := func(s string) string {
+		for _, l := range strings.Split(s, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(l), "agent-bus-monitor ") && strings.Contains(l, "?") {
+				return l
+			}
+		}
+		return ""
+	}
+	if s := pageText(tokState{}, agents, 120); !strings.Contains(openRow(s), "not read yet") || strings.Contains(s, " 0 ") {
 		t.Errorf("before the first read:\n%s", s)
 	}
-	none := tokState{polled: true, projects: []tokProject{{name: "agent-bus-monitor"}}}
-	if s := pageText(none, agents, 120); !strings.Contains(s, "no data") || !strings.Contains(s, "?") {
-		t.Errorf("no tokens key:\n%s", s)
+	none := tokState{polled: true, projects: []tokProject{{name: "agent-bus-monitor"}, {name: "other"}}}
+	s := pageText(none, agents, 120)
+	if !strings.Contains(openRow(s), "no tokens recorded") || strings.Contains(s, "agent-bus-monitor other") {
+		t.Errorf("no tokens key: the open project must be its own ? row, the others fold:\n%s", s)
+	}
+	if !strings.Contains(s, "other  no data") {
+		t.Errorf("another project without a key no longer folds:\n%s", s)
 	}
 	zero := tokState{polled: true, projects: []tokProject{{name: "agent-bus-monitor", known: true}}}
-	s := pageText(zero, agents, 120)
+	s = pageText(zero, agents, 120)
 	for _, l := range strings.Split(s, "\n") {
 		if strings.Contains(l, "coder") && !strings.Contains(l, " 0 ") {
 			t.Errorf("a proved session with nothing today reads 0: %q", l)
@@ -265,6 +278,16 @@ func TestTokensSkeletonAndFadeSchedule(t *testing.T) {
 	later.now = m.sig.started.Add(skeletonFor)
 	if later.tokensSkeleton() {
 		t.Error("the skeleton outlived its 2 minutes")
+	}
+	// Rendered after the window: the open project reads ? with its reason, no shimmer.
+	page := linesText(tokensPage(later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton()))
+	if strings.Contains(page, "first reading pending") || !strings.Contains(page, "agent-bus-monitor") || !strings.Contains(page, "?") || !strings.Contains(page, "not read yet") {
+		t.Errorf("after the window:\n%s", page)
+	}
+	later.snap.tok = tokState{polled: true, projects: []tokProject{{name: "agent-bus-monitor"}}}
+	page = linesText(tokensPage(later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton()))
+	if !strings.Contains(page, "no tokens recorded") || strings.Contains(page, "first reading pending") {
+		t.Errorf("after the window, no key:\n%s", page)
 	}
 	down := m
 	down.snap.dispatch = "down"

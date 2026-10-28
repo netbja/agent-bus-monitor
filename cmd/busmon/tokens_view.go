@@ -179,10 +179,15 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	days := tokens.LastDays(now, time.Local, 7)
 	today := days[len(days)-1]
 	head("Projects, today and 7 days")
+	// unknownRow keeps the open project visible, unknown, with its reason,
+	// once no reading is pending any more (never folded, never 0).
+	unknownRow := func(reason string) {
+		b.text("  ").seg(RoleAccent, Fit(Preview(project), 20)).seg(RoleMuted, fmt.Sprintf(" %8s %8s  ", "?", "?")).seg(RoleMuted, reason).text("\n")
+	}
 	if !st.polled && pending {
 		skeleton()
 	} else if !st.polled {
-		muted("  " + GlyphEllipsis + " not read yet")
+		unknownRow("not read yet")
 	} else {
 		cache := width >= 110
 		joined := width < 90 // one in+out column
@@ -215,8 +220,12 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 		muted(hdr + "  7 DAYS   7D TOTAL")
 		var none []string
 		for _, p := range ps {
-			if !p.known && pending && p.name == project {
-				skeleton()
+			if !p.known && p.name == project {
+				if pending {
+					skeleton()
+				} else {
+					unknownRow("no tokens recorded (no dispatch service counting them)")
+				}
 				continue
 			}
 			if !p.known {

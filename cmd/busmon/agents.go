@@ -466,14 +466,14 @@ const fadePeriod = 3 * time.Second
 // fadeFrame is how often the fade redraws: ten steps a second is smooth enough.
 const fadeFrame = 100 * time.Millisecond
 
-// fadeLevel is the waiting word's intensity at now, 20 to 100 percent, eased
-// in and out (a raised cosine, like CSS ease-in-out between 0.2 and 1).
 // pulsing: the agent declared working and the dispatcher saw its pane busy,
 // fresh (tokens spec, "honest" animation): one fact alone never pulses.
 func pulsing(a *agentState, now time.Time) bool {
 	return a.state == "working" && a.obsBusy && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
 }
 
+// fadeLevel is the waiting word's intensity at now, 20 to 100 percent, eased
+// in and out (a raised cosine, like CSS ease-in-out between 0.2 and 1).
 func fadeLevel(now time.Time) int {
 	phase := float64(now.UnixMilli()%fadePeriod.Milliseconds()) / float64(fadePeriod.Milliseconds())
 	return 20 + int(math.Round(80*(1-math.Cos(2*math.Pi*phase))/2))
