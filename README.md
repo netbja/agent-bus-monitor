@@ -695,7 +695,7 @@ handles each with a rule you can read, never a guess:
   directive to commit its work and hand off, master one notice, your desktop one notification.
 - **Hand-off.** The agent publishes its hand-off as a report and declares it
   (`agentbus handoff <self> --report <id>`); busmon flags it `handoff` until the agent works
-  again. You then type `/clear` in its pane; the fresh session reads that report and carries on.
+  again. You then type `/clear` in its pane and point the fresh session at that report.
   The dispatcher can type that `/clear` itself, once per session, when the agent is idle, owed
   no answer and its pane is ready (`AGENT_BUS_AUTO_CLEAR=1`, Claude Code only); it is **off by
   default** until its live checks have been run.
