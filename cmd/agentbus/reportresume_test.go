@@ -50,7 +50,7 @@ func (f *resumeFixture) hook(stdin string, env ...string) string {
 		strings.NewReader(stdin), &out, &errw, func(argv []string) error {
 			f.spawned = append(f.spawned, argv)
 			return nil
-		}, func() []dispatch.ProcID { return f.chain })
+		}, hookFacts{Ancestors: func() []dispatch.ProcID { return f.chain }, Now: func() time.Time { return time.Unix(0, 1793000000123456789) }})
 	if code != 0 || out.Len() != 0 {
 		f.t.Fatalf("hook exit %d, stdout %q (stderr %q): a SessionStart hook prints nothing and never fails", code, out.String(), errw.String())
 	}
@@ -237,7 +237,7 @@ func TestReportResumeHandsItsAncestryToTheProver(t *testing.T) {
 	f.chain = []dispatch.ProcID{{PID: 40, Start: 400}, {PID: 30, Start: 300}, {PID: 1, Start: 1}}
 	f.hook(clearStart)
 	want := []string{"roles", "prove-session", filepath.Join(filepath.Dir(f.manifest), "state", "agentbus", "demo", "resume.log"),
-		"demo", "coder", "0c9e2a51-7d4b-4f0e-9a51-2c3d4e5f6a7b", "--", "40:400", "30:300", "1:1"}
+		"demo", "coder", "0c9e2a51-7d4b-4f0e-9a51-2c3d4e5f6a7b", "1793000000123456789", "--", "40:400", "30:300", "1:1"}
 	if got := f.spawnedVerb("prove-session"); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("prover argv\n got %q\nwant %q", got, want)
 	}
@@ -270,8 +270,8 @@ type fakeProver struct {
 func (p *fakeProver) Agents(context.Context) (map[string]bus.AgentSnapshot, error) {
 	return p.snaps, nil
 }
-func (p *fakeProver) ProveSession(_ context.Context, agent string, pid int, start uint64, session string) error {
-	p.proved = append(p.proved, agent+" "+strconv.Itoa(pid)+":"+strconv.FormatUint(start, 10)+" "+session)
+func (p *fakeProver) ProveSession(_ context.Context, agent string, pid int, start uint64, session string, at int64) error {
+	p.proved = append(p.proved, agent+" "+strconv.Itoa(pid)+":"+strconv.FormatUint(start, 10)+" "+session+" @"+strconv.FormatInt(at, 10))
 	return nil
 }
 
@@ -281,7 +281,7 @@ func TestProveSessionSendProvesOnlyTheStoredIdentity(t *testing.T) {
 		snap bus.AgentSnapshot
 		want string
 	}{
-		"the client among the ancestors": {bus.AgentSnapshot{PID: 30, PIDStart: 300}, "coder 30:300 " + sess},
+		"the client among the ancestors": {bus.AgentSnapshot{PID: 30, PIDStart: 300}, "coder 30:300 " + sess + " @1793000000123456789"},
 		"a recycled pid":                 {bus.AgentSnapshot{PID: 30, PIDStart: 299}, ""},
 		"not an ancestor":                {bus.AgentSnapshot{PID: 77, PIDStart: 300}, ""},
 		"unverified":                     {bus.AgentSnapshot{}, ""},
@@ -289,7 +289,7 @@ func TestProveSessionSendProvesOnlyTheStoredIdentity(t *testing.T) {
 	} {
 		p := &fakeProver{snaps: map[string]bus.AgentSnapshot{"coder": c.snap}}
 		log := filepath.Join(t.TempDir(), "resume.log")
-		proveSessionSend([]string{log, "demo", "coder", sess, "--", "40:400", "30:300", "1:1"},
+		proveSessionSend([]string{log, "demo", "coder", sess, "1793000000123456789", "--", "40:400", "30:300", "1:1"},
 			func(project string) (sessionProver, func(), error) {
 				if project != "demo" {
 					t.Fatalf("opened project %q", project)

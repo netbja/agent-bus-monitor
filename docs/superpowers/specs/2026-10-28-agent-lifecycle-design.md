@@ -273,6 +273,12 @@ reason a forged `status` is: the bus authenticates no local process (one Redis p
 user's own files), and the worst outcome is that the context fill and tokens follow the wrong
 session until the next proof, which never moves a pid, a pane or a declared state.
 
+**Order.** Two `/clear`s in a row start two detached provers that may land in either order. The
+hook stamps its event in the foreground (its clock, Unix ns) and passes it to the sender;
+`ProveSession` writes only a stamp newer than the stored `ident_session_at` (in its transaction),
+so the later `/clear` wins and the older proof gets `ErrStaleProof`. A new process (another pid or
+start) resets the stamp, so a relaunched agent's first proof always counts.
+
 A verified `status` of the same process (same pid and start) only fills an empty `IdentSession`;
 only a new process, a bind or `ProveSession` moves it. So a session proved after `/clear` is never
 reverted by a status naming the older one, whatever the client leaves in Bash's environment (live
