@@ -19,6 +19,7 @@ type fakeRunner struct {
 type fakeCmd struct {
 	out string
 	err error
+	do  func(c Cmd) // a side effect, such as the file a build writes
 }
 
 func (f *fakeRunner) LookPath(name string) (string, error) {
@@ -34,6 +35,9 @@ func (f *fakeRunner) Run(_ context.Context, c Cmd) ([]byte, error) {
 	r, ok := f.cmds[key]
 	if !ok {
 		f.t.Fatalf("unexpected command: %s", key)
+	}
+	if r.do != nil {
+		r.do(c)
 	}
 	return []byte(r.out), r.err
 }
