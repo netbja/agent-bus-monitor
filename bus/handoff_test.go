@@ -16,7 +16,7 @@ func TestDeclareHandoffNeedsTheAgentsOwnReportProcessAndSessionRedis(t *testing.
 	if err := b.Bind(ctx, "coder", AgentIdent{Pane: "w1:p2", PID: 42, PIDStart: 7}); err != nil {
 		t.Fatalf("Bind: %v", err)
 	}
-	if err := b.ProveSession(ctx, "coder", 42, 7, "session-0001"); err != nil {
+	if err := b.ProveSession(ctx, "coder", 42, 7, "session-0001", 100); err != nil {
 		t.Fatalf("ProveSession: %v", err)
 	}
 	own, err := b.Report(ctx, "coder", ReportNote, "hand-off: branch x at abc, next: y")
@@ -113,7 +113,7 @@ func TestFencedDeleteHandoffRedis(t *testing.T) {
 	if err := b.Bind(ctx, "coder", AgentIdent{Pane: "w1:p2", PID: 42, PIDStart: 7}); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.ProveSession(ctx, "coder", 42, 7, "session-0001"); err != nil {
+	if err := b.ProveSession(ctx, "coder", 42, 7, "session-0001", 100); err != nil {
 		t.Fatal(err)
 	}
 	self := AgentIdent{PID: 42, PIDStart: 7, Session: "session-0001"}
