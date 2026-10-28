@@ -235,6 +235,10 @@ func TestShellBarSlideSchedule(t *testing.T) {
 		if m.sig.fading != c.want {
 			t.Errorf("%s: a moved window scheduled frames %v, want %v", c.name, m.sig.fading, c.want)
 		}
+		// Any redraw now (a key, a tail line) draws the bar mid-slide only when it slides.
+		if _, moving := m.barView().at(barKey("anthropic", "5h"), 80); moving != c.want {
+			t.Errorf("%s: the bar is mid-slide %v, want %v", c.name, moving, c.want)
+		}
 		if !c.want {
 			continue
 		}
@@ -293,5 +297,46 @@ func TestHeaderUnobservedWindowHasNoBar(t *testing.T) {
 				t.Errorf("colours %d tier %v: unobserved window = %q, want %q", colors, tier, first, "claude 5h ?")
 			}
 		}
+	}
+}
+
+// The U page's bars slide with the header's: a slide frame rebuilds the page.
+func TestTokensPageBarsSlide(t *testing.T) {
+	pinLocal(t)
+	withPalette(t, "dark", false, 1<<24)
+	calm := func(pct float64) snapshot {
+		s := shellFixture(shellNow)
+		s.dispatch = "down" // no skeleton: only the bars animate
+		for _, a := range s.agents {
+			a.state, a.askID, a.openAsk, a.obsPrompt, a.obsBusy = "idle", "", 0, false, false
+		}
+		w := s.budgets["anthropic"]
+		w.Windows = append([]bus.BudgetWindow(nil), w.Windows...)
+		w.Windows[0].UsedPct = pct
+		s.budgets["anthropic"] = w
+		return s
+	}
+	row := func(m Model) string {
+		for _, l := range strings.Split(linesText(m.rd.top().body), "\n") {
+			if strings.Contains(l, "anthropic") && strings.Contains(l, "5h") {
+				return l
+			}
+		}
+		t.Fatalf("no anthropic 5h row:\n%s", linesText(m.rd.top().body))
+		return ""
+	}
+	m := newShell(shellConfig{project: "agent-bus-monitor", self: "bernard", settings: busmonSettings{Fade: true}})
+	m = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 44})
+	m = pollAgain(t, m, calm(62), shellNow)
+	m = keys(t, m, 'U')
+	at := shellNow.Add(time.Second)
+	m = pollAgain(t, m, calm(80), at)
+	start := row(m)
+	m = step(t, m, fadeMsg(at.Add(300*time.Millisecond)))
+	mid := row(m)
+	m = step(t, m, fadeMsg(at.Add(600*time.Millisecond)))
+	end := row(m)
+	if mid == start || mid == end || !strings.Contains(end, strings.Repeat(GlyphBarFull, 8)+" ") {
+		t.Errorf("the U page's bar did not slide:\nstart %q\nmid   %q\nend   %q", start, mid, end)
 	}
 }
