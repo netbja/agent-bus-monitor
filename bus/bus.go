@@ -8,6 +8,7 @@ package bus
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -103,13 +104,20 @@ func Connect(host string) (*redis.Client, error) {
 		}
 	}
 	// Record the peer each connection reaches (PeerAddr), dialing with
-	// go-redis's own dialer: it reads opt at dial time, after NewClient has
-	// set its defaults, so dial_timeout and TLS are unchanged.
+	// go-redis's own dialer over the client's options: NewClient clones opt
+	// and sets its defaults on the clone, so a dialer built from opt would
+	// see DialTimeout 0. Over TCP the pool's per-attempt context would still
+	// bound the dial, but a TLS dial ignores that context. base is set
+	// before the first dial (the Ping below).
 	rec := &atomic.Value{}
+	var base func(ctx context.Context, network, addr string) (net.Conn, error)
 	if opt.Dialer == nil {
-		opt.Dialer = recordingDialer(rec, redis.NewDialer(opt))
+		opt.Dialer = recordingDialer(rec, func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return base(ctx, network, addr)
+		})
 	}
 	client := redis.NewClient(opt)
+	base = redis.NewDialer(client.Options())
 	peers.Store(client, rec)
 	if err := client.Ping(context.Background()).Err(); err != nil {
 		peers.Delete(client) // a client nobody gets is not kept alive by the map
