@@ -40,10 +40,11 @@ const (
 	ovHealth
 	ovHelp
 	ovAsk
-	ovPlan     // the batch's plan (P)
-	ovPlanTask // one task of the plan; Esc returns to the plan
-	ovNotices  // a Requests notice group: its notices, one line each
-	ovTokens   // tokens (U): account windows, projects side by side, the open project by agent
+	ovPlan       // the batch's plan (P)
+	ovPlanTask   // one task of the plan; Esc returns to the plan
+	ovNotices    // a Requests notice group: its notices, one line each
+	ovServiceLog // a service's log tail, opened from its F3 card
+	ovTokens     // tokens (U): account windows, projects side by side, the open project by agent
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.

@@ -50,6 +50,7 @@ type page struct {
 	fromKey  string   // the list item this page shows
 	fromKeys []string // that list's selectable keys, in order, when the walk began
 
+	svc       *svcFacts  // ovServices: the facts the cards show (sel: the card selected)
 	recap     recapModel // ovRecap
 	recapLine int        // ovRecap: the body line of the cursor's row
 }
@@ -92,7 +93,13 @@ type threadMsg struct {
 
 // servicesMsg is the Services page's body, read by servicesCmd (it reads the
 // local logs from disk).
-type servicesMsg struct{ body []Line }
+type servicesMsg struct{ facts svcFacts }
+
+// serviceLogMsg is a service's log tail, read by serviceLogCmd.
+type serviceLogMsg struct {
+	kind string
+	body []Line
+}
 
 // answerMsg is the result of one answer sent by answerCmd.
 type answerMsg struct {
@@ -188,10 +195,26 @@ func (m *Model) gotThread(msg threadMsg) {
 }
 
 func (m *Model) servicesCmd() tea.Cmd {
-	inst, recs, now, width := m.snap.svcInst, m.snap.svcRecs, m.now, m.readerWidth()
+	inst, recs, r, ctx, project := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx, m.cfg.project
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	return func() tea.Msg {
 		host, _ := os.Hostname()
-		return servicesMsg{body: servicesPanel(inst, recs, host, now, width)}
+		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, realSvcRunner)}
+	}
+}
+
+// serviceLogCmd reads the selected service's log tail (and its crash file).
+func (m *Model) serviceLogCmd(kind string) tea.Cmd {
+	rec, ok := m.snap.svcRecs[kind]
+	if !ok {
+		return nil
+	}
+	width := m.readerWidth()
+	return func() tea.Msg {
+		host, _ := os.Hostname()
+		return serviceLogMsg{kind: kind, body: serviceLogBody(rec, kind, host, width)}
 	}
 }
 
@@ -304,6 +327,10 @@ func (m *Model) buildPage() bool {
 	case ovRequests:
 		label := requestsLabel(s.requests, s.threads, m.cfg.self, openQuestionCount(s.asks)).text()
 		p.title, p.body = fmt.Sprintf("Requests %s %s", GlyphNone, label), requestsPanel(s.requests, s.threads, now, width)
+	case ovServices:
+		if p.svc != nil {
+			p.title, p.body = "Services", servicesCards(*p.svc, p.sel, now, width)
+		}
 	case ovHealth:
 		gnow := s.guardianNow
 		if gnow.IsZero() {
@@ -524,6 +551,21 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.askKey(act, k)
 	case ovRecap:
 		return m.recapKey(k)
+	}
+	if p.kind == ovServices && p.svc != nil { // the cards: arrows choose, enter or l opens the log
+		switch {
+		case act == ActUp || act == ActDown:
+			step := 1
+			if act == ActUp {
+				step = -1
+			}
+			p.sel = clamp(p.sel+step, 0, len(svcCardKinds)-1)
+			p.dirty = true
+			m.refresh()
+			return nil
+		case act == ActServiceLog || k.Code == keyEnter:
+			return m.serviceLogCmd(svcCardKinds[p.sel])
+		}
 	}
 	rows := m.readerRows()
 	switch act {

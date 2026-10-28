@@ -526,7 +526,13 @@ It never touches Redis — see README "Deployment topology".
   never resurrected. Don't add a supervisor loop, a `nohup` fallback or a login autostart; don't
   put a secret in a unit; tests use fake `systemctl`/`launchctl` (`tests/installer_test.sh`,
   `service/manager_test.go`) and never the user's manager. busmon only reads the state and the
-  local log (`F3`), never starts or parents a service; `busmon --delete` removes the local
+  local log (`F3`), never starts or parents a service. F3 (busmon-f3, `services_cards.go`) is three cards,
+  side by side at ≥110 cells: dispatch and missions (state, pid and since from `/proc`, summary, last
+  error, log size of `service.LogMax`, `LogKeep` kept) and Redis (where it runs: `docker inspect
+  agent-bus-redis` only when docker is on PATH, else the process from INFO; version, uptime, memory,
+  `DBSIZE` keys via `Bus.RedisInfo`), all gathered in the command that opens the page
+  (`gatherServices`), unknown read `?`; ↑↓ choose a service card, Enter or `l` opens its log tail
+  (`ovServiceLog`, `serviceLogBody`); `busmon --delete` removes the local
   units before the keys.
 - **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
   `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails

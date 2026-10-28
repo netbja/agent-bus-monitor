@@ -191,7 +191,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case threadMsg:
 		m.gotThread(msg)
 	case servicesMsg:
-		return m.push(page{kind: ovServices, title: "Services", body: msg.body, fixed: true})
+		f := msg.facts
+		return m.push(page{kind: ovServices, title: "Services", svc: &f})
+	case serviceLogMsg:
+		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
 	case answerMsg:
 		m.gotAnswer(msg)
 	case sendResultMsg:
