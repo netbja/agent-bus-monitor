@@ -228,12 +228,8 @@ func redisPageBody(f redisPage, now time.Time, width int) []Line {
 		case len(d.Projects) == 0:
 			out = append(out, Line{S(RoleMuted, "none")})
 		}
-		for _, p := range d.Projects {
-			var parts []string
-			for _, s := range bus.DetailStreams() {
-				parts = append(parts, fmt.Sprintf("%s %d", s, p.Streams[s]))
-			}
-			out = append(out, Line{S(RoleAccent, Preview(p.Project)), S(RoleText, fmt.Sprintf("  %d keys%s%s", p.Keys, sep, strings.Join(parts, sep)))})
+		if len(d.Projects) > 0 {
+			out = append(out, projectsTable(d.Projects, width)...)
 		}
 	}
 	out = append(out, nil, Line{S(RoleMuted, fmt.Sprintf("docker logs (last %d)", redisLogLines))})
@@ -248,6 +244,58 @@ func redisPageBody(f redisPage, now time.Time, width int) []Line {
 	}
 	for i := range out {
 		out[i] = FitLine(out[i], width)
+	}
+	return out
+}
+
+// projectsTable is the page's projects as a table (busmon-redis-table): a
+// muted header row, the project column as wide as the longest name, numbers
+// right-aligned under their header and at least 4 digits wide, 2 cells
+// apart. Too narrow, the project column shrinks to 8 cells (an ellipsis),
+// then the stream columns go from the right; keys always stays.
+func projectsTable(projects []bus.ProjectRedis, width int) []Line {
+	const gap, minProject = 2, 8
+	names := append([]string{"keys"}, bus.DetailStreams()...)
+	cols := make([]int, len(names))
+	projW := Width("project")
+	for i, n := range names {
+		cols[i] = max(Width(n), 4)
+	}
+	for _, p := range projects {
+		projW = max(projW, Width(Preview(p.Project)))
+		cols[0] = max(cols[0], len(fmt.Sprint(p.Keys)))
+		for i, n := range names[1:] {
+			cols[i+1] = max(cols[i+1], len(fmt.Sprint(p.Streams[n])))
+		}
+	}
+	rest := func(n int) int {
+		w := 0
+		for _, c := range cols[:n] {
+			w += gap + c
+		}
+		return w
+	}
+	shown := len(names)
+	if projW+rest(shown) > width {
+		projW = max(minProject, width-rest(shown))
+	}
+	for shown > 1 && projW+rest(shown) > width {
+		shown--
+	}
+	row := func(first string, role Role, cells []string, cellRole Role) Line {
+		var b strings.Builder
+		for i, c := range cells[:shown] {
+			b.WriteString(strings.Repeat(" ", gap+cols[i]-Width(c)) + c)
+		}
+		return Line{S(role, Fit(first, projW)), S(cellRole, b.String())}
+	}
+	out := []Line{row("project", RoleMuted, names, RoleMuted)}
+	for _, p := range projects {
+		cells := []string{fmt.Sprint(p.Keys)}
+		for _, n := range names[1:] {
+			cells = append(cells, fmt.Sprint(p.Streams[n]))
+		}
+		out = append(out, row(Preview(p.Project), RoleAccent, cells, RoleText))
 	}
 	return out
 }
