@@ -21,4 +21,4 @@
 │ · adapter in d0a72be ; tests green                                           │
 │   func veryLongFunctionNameForTheGolden(argumentOne string, argumentTwo int, ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k scroll   y copy   Y copy thread   esc q close   F5 health               
+ ↑↓ j k scroll   y copy   Y copy thread   n p ←→ next/prev   esc q close        

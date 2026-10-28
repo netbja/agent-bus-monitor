@@ -115,7 +115,7 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 	case ActLive:
 		m.lists.activity.Resume()
 	case ActOpen:
-		cmd = m.open(m.ui.focus)
+		cmd = m.openTracked(m.ui.focus, false)
 	case ActCopy:
 		cmd = m.copySelected()
 	case ActRequests:
@@ -527,7 +527,7 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	// A click on the selected row opens it as Enter does (expands, then the
 	// reader); one on an expanded row's text opens the reader.
 	if i, ok := lst.itemAt(ms.X, ms.Y); ok && (isExpandKey(lst.items[i].Key) || lst.items[i].Key == lst.sel) {
-		cmd = m.open(p)
+		cmd = m.openTracked(p, false)
 	} else {
 		lst.click(ms.X, ms.Y)
 	}

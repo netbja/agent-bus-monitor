@@ -84,7 +84,7 @@ func TestHelpCoversVocabulary(t *testing.T) {
 // is folded into on purpose. A new key without a Hint or Help fails here.
 func TestHelpListsEveryBinding(t *testing.T) {
 	help := helpText()
-	folded := map[string]bool{"j": true, "2": true, "3": true, "4": true, "@": true}
+	folded := map[string]bool{"j": true, "2": true, "3": true, "4": true, "@": true, "p": true} // p: in the reader's "n p ←→" row
 	for _, m := range []Mode{ModePanel, ModeInput, ModeFilter, ModeOverlay} {
 		for _, b := range bindings(m) {
 			k, d, ok := helpRow(b)
