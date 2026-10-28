@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
@@ -84,24 +85,31 @@ func envOr(key, def string) string {
 // AgentBus2025!). A non-empty host overrides REDIS_HOST. It pings before
 // returning so callers fail fast instead of inside the first command.
 func Connect(host string) (*redis.Client, error) {
-	var client *redis.Client
+	var opt *redis.Options
 	if url := os.Getenv("REDIS_URL"); url != "" {
-		opt, err := redis.ParseURL(url)
-		if err != nil {
+		var err error
+		if opt, err = redis.ParseURL(url); err != nil {
 			return nil, err
 		}
 		opt.ContextTimeoutEnabled = true
-		client = redis.NewClient(opt)
 	} else {
 		if host == "" {
 			host = envOr("REDIS_HOST", "localhost")
 		}
-		client = redis.NewClient(&redis.Options{
+		opt = &redis.Options{
 			ContextTimeoutEnabled: true,
 			Addr:                  host + ":" + envOr("REDIS_PORT", "6380"),
 			Password:              envOr("REDIS_PASSWORD", LegacyPassword),
-		})
+		}
 	}
+	// Record the peer each connection reaches (PeerAddr). A TLS connection
+	// keeps go-redis's own dialer, which wraps the socket: its peer is unknown.
+	rec := &atomic.Value{}
+	if opt.TLSConfig == nil && opt.Dialer == nil {
+		opt.Dialer = recordingDialer(rec)
+	}
+	client := redis.NewClient(opt)
+	peers.Store(client, rec)
 	if err := client.Ping(context.Background()).Err(); err != nil {
 		return nil, err
 	}

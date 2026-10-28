@@ -64,6 +64,7 @@ type RedisDetail struct {
 	Clients         int    // connected_clients
 	Projects        []ProjectRedis
 	ProjectsErr     string // the project scan failed: the rows are unknown, never empty
+	Peer            string // the address this client's socket reached (PeerAddr), "" unknown
 }
 
 // ProjectRedis is one project's footprint on the broker.
@@ -79,7 +80,7 @@ var detailStreams = []string{"status", "report", "notify", "cmd", "verdicts"}
 // RedisDetail reads the broker's detail page. An unreadable project scan is
 // stated in ProjectsErr; the INFO part fails the call, as RedisInfo does.
 func (b *Bus) RedisDetail(ctx context.Context) (RedisDetail, error) {
-	var d RedisDetail
+	d := RedisDetail{Peer: PeerAddr(b.r)}
 	info, err := b.RedisInfo(ctx)
 	d.Info = info
 	if err != nil {

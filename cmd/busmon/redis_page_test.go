@@ -252,3 +252,36 @@ func TestGatherRedisPageLogBound(t *testing.T) {
 		t.Fatalf("%d lines, %d bytes kept", len(f.logs), total)
 	}
 }
+
+// localhost, the default, is tied by the address the socket really reached
+// (RedisDetail.Peer), never by the name: a peer on the other family than
+// the container's publish is unknown, and no peer leaves it unknown.
+func TestGatherRedisPageUsesTheConnectedPeer(t *testing.T) {
+	for name, c := range map[string]struct {
+		peer, pub string
+		want      bool
+	}{
+		"localhost reached ::1, container on 127.0.0.1": {"[::1]:6380", "127.0.0.1:6380", false},
+		"localhost reached 127.0.0.1, container on ::1": {"127.0.0.1:6380", "[::1]:6380", false},
+		"localhost reached 127.0.0.1, same publish":     {"127.0.0.1:6380", "127.0.0.1:6380", true},
+		"localhost reached ::1, same publish":           {"[::1]:6380", "[::1]:6380", true},
+		"no peer":                                       {"", "127.0.0.1:6380", false},
+		"peer on another port":                          {"127.0.0.1:6390", "127.0.0.1:6380", false},
+	} {
+		d := redisFixture()
+		d.Peer = c.peer
+		run := func(_ context.Context, _ string, args ...string) (string, error) {
+			if args[0] == "port" {
+				return c.pub, nil
+			}
+			return "a log line", nil
+		}
+		f := gatherRedisPage(context.Background(), detailReader{d: d}, run, func(string) string { return "" }, "")
+		if got := f.bindErr == ""; got != c.want {
+			t.Errorf("%s: established %v, want %v (%s)", name, got, c.want, f.bindErr)
+		}
+		if !c.want && (f.loopback || f.logs != nil) {
+			t.Errorf("%s: claims %+v", name, f)
+		}
+	}
+}
