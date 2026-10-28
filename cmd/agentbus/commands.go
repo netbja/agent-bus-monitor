@@ -48,7 +48,7 @@ var commands = []cli.Command{
 			{Long: "fresh", Short: 'F', Help: "relaunch without resuming: its conversation is lost"},
 			{Long: "dry-run", Short: 'n', Help: "check everything and say what would happen; change nothing"},
 			{Long: "reason", Short: 'r', Arg: "<text>", Help: "why, for the swap ledger"},
-			{Long: "as", Short: 'a', Arg: "<person>", Help: "reload as a person (any role)"},
+			{Long: "as", Arg: "<person>", Help: "reload as a person (any role); no short form, so the shared deny names every spelling"},
 		},
 		Examples: []string{"agentbus -p demo reload coder --reason \"client update\"", "agentbus -p demo reload coder -n"},
 	},

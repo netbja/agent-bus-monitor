@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -453,5 +454,26 @@ func TestReloadSignalsOnlyTheCheckedIdleProcess(t *testing.T) {
 				t.Fatalf("ledger %+v", log)
 			}
 		})
+	}
+}
+
+// reload's --as has no short spelling (foureyes' review of reload-deny):
+// expandArgs would turn it into --as after the deny rules matched the text,
+// so the only spellings are the ones the shared deny names.
+func TestReloadAsHasNoShortFlag(t *testing.T) {
+	for _, c := range commands {
+		if c.Name != "reload" {
+			continue
+		}
+		for _, f := range c.Flags {
+			if f.Long == "as" && f.Short != 0 {
+				t.Fatalf("reload --as has the short -%c", f.Short)
+			}
+		}
+	}
+	for _, args := range [][]string{{"reload", "coder", "-a", "bernard"}, {"reload", "-a", "bernard", "coder"}} {
+		if got := expandArgs(args); slices.Contains(got, "--as") {
+			t.Fatalf("expandArgs(%q) = %q: a spelling the deny does not name", args, got)
+		}
 	}
 }
