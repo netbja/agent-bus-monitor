@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/setup"
 )
@@ -26,6 +27,13 @@ func (execRunner) Run(ctx context.Context, c setup.Cmd) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
 	cmd.Env = append(os.Environ(), c.Env...)
 	cmd.Dir = c.Dir
+	switch {
+	case c.Attach:
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		return nil, cmd.Run()
+	case c.Stdout:
+		return cmd.Output()
+	}
 	return cmd.CombinedOutput()
 }
 
@@ -55,9 +63,8 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 	return 1
 }
 
-// runInstall is setup.sh install's steps, in its order. Steps not ported yet
-// (herdr, the plugin and its key binding, the services hint: busmon-installer-3;
-// Redis: busmon-installer-4) say so and are skipped.
+// runInstall is setup.sh install's steps, in its order. The step not ported
+// yet (Redis: busmon-installer-4) says so and is skipped.
 func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.Options, repo string, getenv func(string) string) int {
 	missing := setup.Preflight(ctx, r, o, opt, goModVersion(repo), runtime.GOOS, runtime.GOARCH)
 	if missing > 0 && !opt.DryRun {
@@ -70,9 +77,9 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 		return 1
 	}
 	defer os.RemoveAll(tmp)
-	in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Tmp: tmp, Getenv: getenv}
+	in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Tmp: tmp, Getenv: getenv, Now: time.Now, Setenv: os.Setenv}
 	o.Step("2/5 Checking herdr workspace manager")
-	o.Info("not ported yet (busmon-installer-3): skipped")
+	in.CheckHerdr(ctx)
 	o.Step("3/5 Building and installing agentbus & busmon, linking the herdr plugin")
 	in.Rev = in.RepoRev(ctx)
 	if !opt.DryRun {
@@ -87,6 +94,8 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 		}
 	}
 	in.RoleScriptLinks()
+	in.KeyBinding(ctx, in.LinkPlugin(ctx))
+	in.ServicesHint(ctx)
 	in.CheckPath(getenv("PATH"))
 	in.ExternalSkills(ctx)
 	in.RoleSkills(ctx)

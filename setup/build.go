@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Installer is one install run: the runner, the output, the flags, the
@@ -21,6 +22,10 @@ type Installer struct {
 	Rev  string // git describe of the checkout, read once (RepoRev)
 	// Getenv reads the environment (HOME, XDG dirs, SKILLS_REPO, SKILLS_REF).
 	Getenv func(string) string
+	// Now is the clock for backup names (setup.sh's date +%Y%m%d%H%M%S).
+	Now func() time.Time
+	// Setenv changes setup's own environment (the PATH after installing herdr).
+	Setenv func(k, v string) error
 }
 
 // RepoRev is setup.sh's REPO_REV: git describe --tags --always --dirty.

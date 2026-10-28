@@ -3,12 +3,16 @@ package setup
 import "context"
 
 // Cmd is one external command: name, arguments, extra environment
-// (KEY=value, added to the inherited one) and working directory.
+// (KEY=value, added to the inherited one) and working directory. Stdout
+// drops stderr from the result (setup.sh's 2>/dev/null); Attach gives the
+// command setup's own terminal instead and returns nothing.
 type Cmd struct {
-	Name string
-	Args []string
-	Env  []string
-	Dir  string
+	Name   string
+	Args   []string
+	Env    []string
+	Dir    string
+	Stdout bool
+	Attach bool
 }
 
 // Runner is the one way setup reaches the outside world (spec: Safety,
