@@ -103,8 +103,38 @@ func TestShellServicesRedisCardOpensItsPage(t *testing.T) {
 	if !strings.Contains(plainOf(m.rd.top().body), "bind ?") {
 		t.Errorf("with no docker runner the page claims a bind: %s", plainOf(m.rd.top().body))
 	}
+	// busmon-f3-live: the open page is read again in place, one read at a
+	// time, and no more once it is closed.
+	redis, cards := m.rd.top().serial, m.rd.pages[0].serial
+	if m.svcRefresh(cards) == nil || m.rd.pages[0].svcBusy { // its chain kept, no read started
+		t.Fatal("the cards under the Redis page are read while hidden")
+	}
+	refresh := m.svcRefresh(redis)
+	if refresh == nil || m.svcRefresh(redis) != nil {
+		t.Fatal("the Redis page: no refresh read, or a second one in flight")
+	}
+	next, again := m.Update(refresh())
+	m = next.(Model)
+	if len(m.rd.pages) != 2 || m.rd.top().kind != ovRedis || m.rd.top().svcBusy || again == nil {
+		t.Fatalf("the refresh: %d pages, top %v, busy %v, next %v", len(m.rd.pages), m.rd.top().kind, m.rd.top().svcBusy, again != nil)
+	}
+	second := m.svcRefresh(redis) // the next tick reads again: the page never freezes
+	if second == nil {
+		t.Fatal("the Redis page's second tick reads nothing")
+	}
+	next, _ = m.Update(second())
+	m = next.(Model)
+	if m.rd.top().kind != ovRedis || m.rd.top().svcBusy || m.svcRefresh(redis) == nil {
+		t.Fatal("after the Redis page's second refresh: still busy, or no third read")
+	}
 	if m = keys(t, m, kEsc); m.rd.top().kind != ovServices {
 		t.Error("esc did not return to the cards")
+	}
+	if m.svcRefresh(redis) != nil {
+		t.Error("a tick after the Redis page closed still reads")
+	}
+	if m.svcRefresh(cards) == nil {
+		t.Error("the cards under it are no longer read")
 	}
 }
 

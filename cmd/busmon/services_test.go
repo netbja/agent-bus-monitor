@@ -392,3 +392,83 @@ func TestShellServicesCardsLeftRight(t *testing.T) {
 		t.Fatalf("the help lacks the F3 card keys:\n%s", help)
 	}
 }
+
+// busmon-f3-live (Bernard): the Services page judged its cards from the
+// records the last poll held, then never again, so a record 25 s old at the
+// open read down while the header said ready. The page reads the records
+// fresh in its command, and re-reads them every svcRefresh while it is open.
+func TestShellServicesPageLive(t *testing.T) {
+	now := time.Now()
+	rec := func(state string, age time.Duration) bus.ServiceRecord {
+		return bus.ServiceRecord{State: state, At: now.Add(-age).UnixMilli(), Host: "h"}
+	}
+	inst := &bus.ServicesInstall{Kinds: []string{"dispatch", "missions"}, Manager: "systemd", Host: "h"}
+	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true},
+		svcInst: inst, svcRecs: map[string]bus.ServiceRecord{"dispatch": rec("ready", 25*time.Second), "missions": rec("idle", 25*time.Second)}}
+	f := &fakeReader{calls: map[string]int{}, svcInst: inst,
+		svcRecs: map[string]bus.ServiceRecord{"dispatch": rec("ready", time.Second), "missions": rec("idle", time.Second)}}
+	m := shellOf(t, st, 160, 45, nil)
+	m.cfg.reader = f
+	card := func(m Model) string {
+		for _, l := range strings.Split(m.grid().plain(), "\n") {
+			if strings.Contains(l, "dispatch") && (strings.Contains(l, "ready") || strings.Contains(l, "down") || strings.Contains(l, "busy")) {
+				return l
+			}
+		}
+		return ""
+	}
+	m, cmd := pressCmd(t, m, 's')
+	msg := cmd()
+	opened, ok := msg.(servicesMsg)
+	if !ok {
+		t.Fatalf("open: %T", msg)
+	}
+	next, tick := m.Update(opened)
+	m = next.(Model)
+	if c := card(m); !strings.Contains(c, "ready") || strings.Contains(c, "down") {
+		t.Fatalf("open with a fresh record: card %q", c)
+	}
+	if tick == nil {
+		t.Fatal("the open scheduled no refresh")
+	}
+	serial := m.rd.top().serial
+	// The next reading: busy. The refresh reads it, keeps the card selected.
+	f.svcRecs = map[string]bus.ServiceRecord{"dispatch": rec("busy", 0), "missions": rec("idle", 0)}
+	m = keys(t, m, kDown)
+	sel := m.rd.top().sel
+	refresh := m.svcRefresh(serial)
+	if refresh == nil {
+		t.Fatal("a tick on the open page reads nothing")
+	}
+	if m.svcRefresh(serial) != nil {
+		t.Fatal("a second tick while a read is in flight reads again")
+	}
+	next, again := m.Update(refresh())
+	m = next.(Model)
+	if c := card(m); !strings.Contains(c, "busy") || m.rd.top().sel != sel || len(m.rd.pages) != 1 {
+		t.Fatalf("after the refresh: card %q, sel %d (want %d), %d pages", c, m.rd.top().sel, sel, len(m.rd.pages))
+	}
+	if again == nil {
+		t.Fatal("a refresh scheduled no next one")
+	}
+	// The next tick reads again (the first read cleared its busy mark), and
+	// sees the records change once more: the page never freezes.
+	f.svcRecs = map[string]bus.ServiceRecord{"dispatch": rec("ready", 0), "missions": rec("idle", 0)}
+	second := m.svcRefresh(serial)
+	if second == nil {
+		t.Fatal("the second tick reads nothing: the page refreshed once, then froze")
+	}
+	next, _ = m.Update(second())
+	m = next.(Model)
+	if c := card(m); !strings.Contains(c, "ready") || strings.Contains(c, "busy") {
+		t.Fatalf("after the second refresh: card %q", c)
+	}
+	if m.svcRefresh(serial) == nil {
+		t.Fatal("a third tick reads nothing")
+	}
+	// Closed: the chain stops.
+	m = keys(t, m, kEsc)
+	if m.rd.open() || m.svcRefresh(serial) != nil {
+		t.Fatal("a tick after the close still reads")
+	}
+}

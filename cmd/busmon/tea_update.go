@@ -127,7 +127,7 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 	case ActRequests:
 		cmd = m.push(page{kind: ovRequests})
 	case ActServices:
-		cmd = m.servicesCmd()
+		cmd = m.servicesCmd(0)
 	case ActHealth:
 		cmd = m.push(page{kind: ovHealth})
 	case ActHelp:
