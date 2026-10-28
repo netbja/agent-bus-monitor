@@ -13,7 +13,11 @@ import (
 // last_token_usage; a repeated total adds 0; a lower total (a reset) adds
 // last_token_usage. The baseline follows the session id (the file's first
 // session_meta), so a resumed session, appended or in a new file whose first
-// event replays the last total, counts no turn twice. Only the session id is
+// event replays the last total, counts no turn twice: the total is
+// cumulative, so a first event equal to the session's previous total carries
+// no new tokens, whatever its last_token_usage says. Known edge: a file
+// replaced or shrunk whose events all repeat the session's last total is
+// rescanned to nothing (its days were cleared, its events now add 0). Only the session id is
 // decoded from session_meta: its account identifiers never reach a structure.
 type CodexScan struct {
 	loc   *time.Location
@@ -23,6 +27,7 @@ type CodexScan struct {
 
 type codexFile struct {
 	fileState
+	path    string
 	session string
 }
 
@@ -71,7 +76,7 @@ func (s *CodexScan) Pass(paths []string, b Budget) (partial bool) {
 		}
 		files++
 		if f == nil {
-			f = &codexFile{fileState: fileState{ino: ^uint64(0), days: DaySums{}}}
+			f = &codexFile{fileState: fileState{ino: ^uint64(0), days: DaySums{}}, path: p}
 			s.files[p] = f
 		}
 		done, n, err := readAppended(p, &f.fileState, room, func() { f.session = "" }, func(raw []byte) { s.line(f, raw) })
@@ -98,8 +103,12 @@ func (s *CodexScan) line(f *codexFile, raw []byte) {
 		return
 	}
 	cur, last := l.Payload.Info.Total, l.Payload.Info.Last
+	key := f.session
+	if key == "" { // no session_meta: its own session, never chained to another such file
+		key = "path:" + f.path
+	}
 	var add Usage
-	prev, seen := s.last[f.session]
+	prev, seen := s.last[key]
 	switch {
 	case !seen:
 		add = last.usage()
@@ -109,7 +118,7 @@ func (s *CodexScan) line(f *codexFile, raw []byte) {
 		add = Usage{In: max(0, (cur.Input-cur.Cached)-(prev.Input-prev.Cached)), Read: max(0, cur.Cached-prev.Cached),
 			Out: max(0, cur.Output-prev.Output)}
 	}
-	s.last[f.session] = cur
+	s.last[key] = cur
 	if add == (Usage{}) {
 		return // a repeat
 	}

@@ -111,8 +111,10 @@ func readAppended(path string, st *fileState, room int64, reset func(), line fun
 	}
 	buf = buf[:n]
 	end := bytes.LastIndexByte(buf, '\n')
-	if end < 0 {
-		return false, int64(n), nil // half a line: the next pass
+	if end < 0 { // half a line, or a line longer than the room left: the next pass
+		// (a single line longer than a whole pass's budget, 128 MiB, would never
+		// complete and keep the file partial; transcripts' lines are far shorter)
+		return false, int64(n), nil
 	}
 	sc := bufio.NewScanner(bytes.NewReader(buf[:end+1]))
 	sc.Buffer(make([]byte, 0, 64<<10), len(buf))

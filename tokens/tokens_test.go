@@ -258,3 +258,39 @@ func TestClaudeReplacedFileForgetsItsLastRequest(t *testing.T) {
 		t.Errorf("replaced file: %+v, want its one request", got)
 	}
 }
+
+// A pass whose new bytes hold no newline (half a line, or a budget smaller
+// than one line) moves no offset: the line counts once, when complete.
+func TestHalfALineOnlyMovesNothing(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "s1.jsonl")
+	line := cLine("2026-10-27T10:00:00Z", "m1", "r1", 3, 0, 0, 3)
+	write(t, p, line[:10])
+	s := NewClaudeScan(paris)
+	if !s.Pass([]string{p}, big) {
+		t.Error("half a line, yet not partial")
+	}
+	appendTo(t, p, line[10:])
+	if !s.Pass([]string{p}, Budget{Files: 1, Bytes: 5}) { // room smaller than the line
+		t.Error("a budget smaller than the line, yet not partial")
+	}
+	s.Pass([]string{p}, big)
+	if got := s.Sums(p)["2026-10-27"]; got.N != 1 || got.In != 3 {
+		t.Errorf("%+v, want the line once", got)
+	}
+}
+
+// A rollout with no session_meta is its own session (keyed by its path):
+// two such files never chain their totals.
+func TestCodexFilesWithoutMetaAreApart(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "rollout-2026-10-27T10-00-00-a.jsonl")
+	b := filepath.Join(dir, "rollout-2026-10-27T11-00-00-b.jsonl")
+	write(t, a, codexCount("2026-10-27T10:00:00Z", [4]int{100, 0, 10, 0}, [4]int{100, 0, 10, 0}))
+	write(t, b, codexCount("2026-10-27T11:00:00Z", [4]int{150, 0, 15, 0}, [4]int{150, 0, 15, 0}))
+	s := NewCodexScan(paris)
+	s.Pass([]string{a, b}, big)
+	if got := s.Sums(b)["2026-10-27"]; got != (Usage{In: 150, Out: 15, N: 1}) {
+		t.Errorf("b %+v, want its own first event, not a delta from a", got)
+	}
+}
