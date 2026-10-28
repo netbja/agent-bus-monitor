@@ -271,6 +271,64 @@ type relaunchOptions struct {
 	Resume, DryRun, Create bool
 	Dir                    string         // the project directory a new pane starts in
 	Prove                  *relaunchProof // nil: every old pane is left as it is
+	// Verdicts, when set, receives each tab's verdict by tab name: a caller
+	// that relaunches one role (reload) fails on anything but a relaunch.
+	Verdicts map[string]relaunchVerdict
+}
+
+// tabJudgement is one template tab of an open workspace, judged.
+type tabJudgement struct {
+	V       relaunchVerdict
+	Note    string // why an unknown is unknown, when it is decided before the panes are read
+	Role    string
+	IsAgent bool
+	Snap    bus.AgentSnapshot
+	Has     bool // a snapshot of an agent tab, read successfully
+	Ref     paneRef
+}
+
+// judgeTab reads herdr's facts for tab t and applies decideRelaunch: the
+// one rule both up and reload's relaunch use.
+func judgeTab(herdr func(args ...string) ([]byte, error), panes map[string]paneRef, t upTab, project string,
+	snaps map[string]bus.AgentSnapshot, snapsOK bool, procStart func(int) (uint64, error), create bool) tabJudgement {
+	role, isAgent := launchRole(t.Command, project)
+	snap, has := snaps[role]
+	has = has && isAgent && snapsOK
+	sl := lifeUnknown
+	if isAgent {
+		sl = snapLife(snap, has, procStart)
+	}
+	j := tabJudgement{Role: role, IsAgent: isAgent, Snap: snap, Has: has}
+	ref, hasPane := panes[t.Name]
+	j.Ref = ref
+	if ref.Dup && !(isAgent && sl == lifeAlive) {
+		j.V, j.Note = verdictUnknown, "several tabs are named "+t.Name+"; close the extra one"
+		return j
+	}
+	if hasPane && ref.Pane == "" && !(isAgent && sl == lifeAlive) {
+		j.V, j.Note = verdictUnknown, "herdr lists the tab but no pane in it"
+		return j
+	}
+	facts := paneFacts{}
+	if hasPane {
+		facts.Agent = ref.Agent
+		facts.Known = true
+		if ref.Agent == "" && !(isAgent && sl == lifeAlive) {
+			// The tab's command is gone only if every pane is a plain shell: a
+			// process in any of them may be the agent herdr does not detect.
+			facts.Shell = true
+			for _, p := range ref.All {
+				shell, err := paneShell(herdr, p)
+				if err != nil {
+					facts.Known = false
+					break
+				}
+				facts.Shell = facts.Shell && shell
+			}
+		}
+	}
+	j.V = decideRelaunch(isAgent, sl, hasPane, facts, create)
+	return j
 }
 
 // relaunchProof is how up proves a relaunched agent before it closes the pane
@@ -320,41 +378,15 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 		if strings.TrimSpace(t.Command) == "" {
 			continue
 		}
-		role, isAgent := launchRole(t.Command, project)
-		snap, has := snaps[role]
-		has = has && isAgent && snapsOK
-		sl := lifeUnknown
-		if isAgent {
-			sl = snapLife(snap, has, procStart)
+		j := judgeTab(herdr, panes, t, project, snaps, snapsOK, procStart, o.Create)
+		if o.Verdicts != nil {
+			o.Verdicts[t.Name] = j.V
 		}
-		ref, hasPane := panes[t.Name]
-		if ref.Dup && !(isAgent && sl == lifeAlive) {
-			fmt.Fprintf(stdout, "%s: unknown (several tabs are named %s; close the extra one)\n", t.Name, t.Name)
+		if j.Note != "" {
+			fmt.Fprintf(stdout, "%s: %s (%s)\n", t.Name, j.V, j.Note)
 			continue
 		}
-		if hasPane && ref.Pane == "" && !(isAgent && sl == lifeAlive) {
-			fmt.Fprintf(stdout, "%s: unknown (herdr lists the tab but no pane in it)\n", t.Name)
-			continue
-		}
-		facts := paneFacts{}
-		if hasPane {
-			facts.Agent = ref.Agent
-			facts.Known = true
-			if ref.Agent == "" && !(isAgent && sl == lifeAlive) {
-				// The tab's command is gone only if every pane is a plain shell: a
-				// process in any of them may be the agent herdr does not detect.
-				facts.Shell = true
-				for _, p := range ref.All {
-					shell, err := paneShell(herdr, p)
-					if err != nil {
-						facts.Known = false
-						break
-					}
-					facts.Shell = facts.Shell && shell
-				}
-			}
-		}
-		v := decideRelaunch(isAgent, sl, hasPane, facts, o.Create)
+		role, isAgent, snap, has, ref, v := j.Role, j.IsAgent, j.Snap, j.Has, j.Ref, j.V
 		cmd := t.Command
 		resumed := false
 		if o.Resume && isAgent && (v == verdictRelaunch || v == verdictCreate) {

@@ -416,8 +416,48 @@ func relaunchRole(d upDeps, project, role, session string, stdout io.Writer) err
 	if sleep == nil {
 		sleep = time.Sleep
 	}
-	o := relaunchOptions{Resume: session != "", Create: true,
+	// The old process is gone, but herdr's view of its tab lags its exit: its
+	// agent detection and the pane's foreground process still show the
+	// client for a moment, which decideRelaunch reads as busy. Wait, bounded,
+	// for the tab to be what a relaunch needs (no agent, every pane a plain
+	// shell), as up --resume finds it seconds later. The rule is not relaxed
+	// and nothing is typed while waiting.
+	tab := tpl.Tabs[0]
+	for try := 1; ; try++ {
+		panes, err := workspacePanes(d.Herdr, ws)
+		if err != nil {
+			return err
+		}
+		j := judgeTab(d.Herdr, panes, tab, project, snaps, true, d.ProcStart, true)
+		if j.V == verdictRelaunch || j.V == verdictCreate {
+			break
+		}
+		if (j.V != verdictBusy && j.V != verdictUnknown) || try >= settleTries {
+			why := string(j.V)
+			if j.Note != "" {
+				why += " (" + j.Note + ")"
+			}
+			return fmt.Errorf("its tab %s still reads %s %s after the old process exited; nothing was relaunched",
+				tab.Name, why, settleEvery*time.Duration(try))
+		}
+		sleep(settleEvery)
+	}
+	verdicts := map[string]relaunchVerdict{}
+	o := relaunchOptions{Resume: session != "", Create: true, Verdicts: verdicts,
 		Dir:   os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1)),
 		Prove: &relaunchProof{Agents: func() (map[string]bus.AgentSnapshot, error) { return d.Agents(project) }, Sleep: sleep, Tries: 60}}
-	return relaunchOpen(d.Herdr, snaps, true, d.ProcStart, project, ws, tpl, o, stdout)
+	if err := relaunchOpen(d.Herdr, snaps, true, d.ProcStart, project, ws, tpl, o, stdout); err != nil {
+		return err
+	}
+	if v := verdicts[tab.Name]; v != verdictRelaunch && v != verdictCreate {
+		return fmt.Errorf("its tab %s read %s at the relaunch; nothing was relaunched", tab.Name, v)
+	}
+	return nil
 }
+
+// settleTries reads of the role's tab, settleEvery apart (20 s), before a
+// relaunch gives up on a tab that still reads busy after the old exit.
+const (
+	settleTries = 40
+	settleEvery = 500 * time.Millisecond
+)
