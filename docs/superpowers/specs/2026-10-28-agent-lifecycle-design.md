@@ -151,7 +151,10 @@ typing anything into any pane:
      profile, so a reload would silently undo a swap. Refused with `agentbus swap <role> --back`
      as the way;
    - `openWork`: no open challenge on either side (`Bus.ReviewsOf`), no mission attempt in
-     progress, no open ask by it;
+     progress, no open ask by it, and no board task it owns in state `accepted` (`Bus.Board`:
+     accepted work is in flight even while the agent is idle between turns). This is the one
+     readiness rule: the sentinel's reload pass (Part C) and master's last reload apply the same
+     `openWork`, never a narrower copy;
    - no running turn: not observed busy (fresh `{p}:observed`), not declared `working` within
      `Recent` (2 min), declared `idle`; no wake `prompting`;
    - a **resume source** (below), unless `--fresh`.
@@ -210,7 +213,7 @@ closes it as interrupted (`Bus.Interrupted`), as today.
 |---|---|---|
 | sentinel | any role but itself | on a client-update episode for that agent's client (`{p}:observed` `update` true for it), or a health `fail` it is told to remediate |
 | master | sentinel | any time sentinel is idle (who reloads sentinel, decided) |
-| sentinel | master | last of an update episode, only when master is idle, has no open ask, no `accepted` board task it owns, and no pilot lease is held by another driver (`{p}:pilot`) |
+| sentinel | master | last of an update episode, only when the preflight passes for master (idle, `openWork` empty: no open challenge, mission attempt, open ask or `accepted` board task it owns) and no pilot lease is held by another driver (`{p}:pilot`) |
 | a person | anyone | with an explicit `--as <person>` (never an inherited `AGENT_BUS_HUMAN`) |
 
 The CLI enforces the table from `AGENT_BUS_AGENT` and the bus facts; like `gate close --as`, it
@@ -224,8 +227,9 @@ and `agentbus reload sentinel` for master (`[roles.*.tool_rules]`), nothing broa
 ### The person's yes
 
 **Proposed default: none needed.** Bernard: "it is sentinel's task". On an update episode
-sentinel reloads the ready agents one at a time (ready as the client-reload spec defines it:
-idle, not busy, no accepted task, no open challenge either side, no open ask, not on a fallback),
+sentinel reloads the ready agents one at a time (ready = `reload`'s preflight passes: declared
+idle, not busy, not on a fallback, and `openWork` empty: no open challenge either side, no mission
+attempt, no open ask, no `accepted` board task it owns),
 master last, and reports each one; agents not ready are retried on its next wake. **Opt-out:**
 `AGENT_BUS_RELOAD=propose` restores the client-reload spec's proposal (sentinel → master → `ask`),
 and `AGENT_BUS_RELOAD=off` makes `reload` refuse for every caller but a person. Both are in the
@@ -338,5 +342,5 @@ foureyes' first review settled the proposals below; they stay open for the perso
 1. A hand-off with an open gate on the agent **waits** (gates younger than 24 h only, one notice
    per wait), rather than clearing anyway.
 2. Reload **reuses** `{p}:swap:<role>` with `kind=reload`; its readers are listed in Part C.
-3. Sentinel **reloads master** last, only when master is idle, has no open ask, no accepted task,
-   and no other driver holds the pilot lease.
+3. Sentinel **reloads master** last, only when the preflight passes for master (idle, `openWork`
+   empty, accepted tasks included) and no other driver holds the pilot lease.
