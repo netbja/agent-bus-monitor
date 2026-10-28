@@ -25,6 +25,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/models"
+	"github.com/netbja/agent-bus-monitor/setup"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
 
@@ -64,6 +65,11 @@ func main() {
 	if len(args) == 0 {
 		cli.Index(os.Stderr, "agentbus", globalFlags, commands)
 		os.Exit(1)
+	}
+	// setup is the installer (the Go port of setup.sh): no project, no broker.
+	if len(args) >= 1 && args[0] == "setup" {
+		color := setup.IsTerminal(os.Stdout) && os.Getenv("NO_COLOR") == ""
+		os.Exit(runSetup(args[1:], os.Getenv, execRunner{}, os.Stdout, os.Stderr, color))
 	}
 	// mem works on files in the working tree — no project, no broker — so it
 	// runs before the project check, like limits and version.
