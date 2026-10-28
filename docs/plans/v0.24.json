@@ -1,0 +1,20 @@
+{
+  "plan": "v0.24",
+  "goal": "Reliable lifecycle, F3 and Redis, feedback spec, config spec, Go installer by default, infra role",
+  "tasks": [
+    {"id":"reload-fix-2","title":"reload: every check before the kill; pop roles like agent-spawn; own open ask OK on resume","owner":"coder","review":"reload-fix-2"},
+    {"id":"reload-team","title":"Reload master on v0.23 rules (Bernard runs reload master --as bernard)","owner":"person","after":["reload-fix-2"]},
+    {"id":"autoclear-live","title":"Live trial of the auto /clear at 80% (AGENT_BUS_AUTO_CLEAR) with Bernard, then its default","owner":"person","after":["reload-team"]},
+    {"id":"f3-keys","title":"F3: left/right move between the cards (up/down kept; narrow tier keeps up/down)","owner":"coder","review":"busmon-f3-keys"},
+    {"id":"redis-detail","title":"F3: Enter on the Redis card opens a read-only detail page (memory, persistence, clients, keys, logs)","owner":"coder","review":"busmon-redis-detail","after":["f3-keys"]},
+    {"id":"redis-watch","title":"Sentinel watches Redis updates: daily check, health redis-version warns, the person updates","owner":"coder","review":"redis-watch","after":["redis-detail"]},
+    {"id":"usage-session","title":"Security: {p}:usage reads only the proved session (IdentSession), like {p}:context","owner":"coder","review":"usage-session"},
+    {"id":"feedback-spec","title":"Spec: feedback loop (agentbus feedback stats; skill-patch PRs decided by the person)","owner":"coder","review":"feedback-spec"},
+    {"id":"config-spec","title":"Spec: one config file for busmon and agentbus; agentbus config shows each value's source","owner":"coder","review":"config-spec"},
+    {"id":"installer-default","title":"The Go installer (agentbus setup) becomes the default; setup.sh kept one more release","owner":"coder","review":"installer-default"},
+    {"id":"infra-role","title":"Pop role infra (Ansible, Terraform, IaC): person approval, plan/check only, apply after an ask","owner":"coder","review":"infra-role"},
+    {"id":"discuss","title":"Discuss with Bernard: distributed mode, full backup and recovery, parallel coders","owner":"person"},
+    {"id":"docs-v024","title":"README and guides (EN + FR) for this release's changes","owner":"coder","review":"docs-v024","after":["reload-fix-2","redis-detail","redis-watch","installer-default","infra-role"]},
+    {"id":"release","title":"Tag v0.24.0, release notes, install","owner":"person","after":["reload-team","autoclear-live","f3-keys","redis-detail","redis-watch","usage-session","feedback-spec","config-spec","installer-default","infra-role","docs-v024"]}
+  ]
+}
