@@ -1,0 +1,30 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                       15:04:05 
+ paused · resumes in 1h52 (lunch)   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44             
+╭─ For you ───────────── 4 for you · 2 unread ─╮╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ·…─╮
+│  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
+│  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
+│  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
+│  ◆ gate   coder     by bernard  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+│  ● unread dispatch  ╭─ Welcome to busmon ──────────────────────────────────────────────── 1/5 ─╮scalating… spec merg…│
+│                     │                                                                          │ate 1 · d… busmon-ch…▼
+╰─────────────────────│ busmon shows what your agents are doing and what waits for you. A few    │─────────────────────╯
+╭─  1 Activity  2 Boar│ short pages; esc skips, and F1 then t brings them back.                  │ents · filter: none ─╮
+│    time   from      │                                                                          │                     │
+│  ── Mon 2026-10-26 -│   For you     what needs you: questions, waits, unread lines             │─────────────────────│
+│    14:24  architect │   Agents      each agent, its state and how fresh it is                  │                     │
+│    14:50  ♙ Bernard │   1 Activity  everything said on the bus, live                           │                     │
+│    14:51  coder     │   2 Board     who owns which task                                        │                     │
+│  ○ 14:52  master    │   3 Requests  who owes whom an answer                                    │                     │
+│  ● 14:56  dispatch  │   4 Plan      the batch's tasks by state                                 │                     │
+│  ● 15:00  master    │                                                                          │                     │
+│    15:02  coder     │ tab moves the focus between panels; 1-4 pick one of the tabs.            │                     │
+│                     │                                                                          │                     │
+│                     │ ● ○ ○ ○ ○   enter next · ← back · esc skip                               │                     │
+│                     ╰──────────────────────────────────────────────────────────────────────────╯                     │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                                       
+ enter next   ← back   esc skip                                                                                         

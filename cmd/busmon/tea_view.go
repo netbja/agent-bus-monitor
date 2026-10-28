@@ -69,6 +69,9 @@ func (m Model) grid() *grid {
 	case m.ui.summary:
 		m.drawSummary(g)
 	}
+	if m.ui.tour != nil {
+		m.drawTour(g)
+	}
 	if d := m.ui.pausePopup; d != nil {
 		drawPausePopup(g, m.pauseDialogRect(), d.rec, d.sel, m.now)
 	}
@@ -94,10 +97,7 @@ func tabBar(tabs []PanelID, active PanelID, width int) Line {
 	short := map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req", PanelPlan: "Pln"}
 	names := make([]string, len(tabs))
 	for i, p := range tabs {
-		names[i] = panelNames[p]
-		if p == PanelForYou {
-			names[i] = "For you"
-		}
+		names[i] = panelLabel(p)
 	}
 	label := func(i int) string { return fmt.Sprintf(" %d %s ", i+1, names[i]) }
 	total := func() int {

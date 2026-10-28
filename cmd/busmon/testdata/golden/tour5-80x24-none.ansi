@@ -1,0 +1,24 @@
+ [1magent-bus-monitor[m  ● bus ok  ● dispatch up  ● missions up  ♙ 4  ● 2   15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Bernard [human]  claude 5h 62% │ 7d 41%    
+[1m╭─[m[1;7m For you [m[1m─────────────────────────────────────────────[m 4 for you · 2 unread [1m─╮[m
+[1m│[m  ● ask    master    review lot 1? (2 questions)                            4m[1m│[m
+[1m│[m  ♙ wait   foureyes  need a decision on the width rule                      6m[1m│[m
+[1m│[m  ♙[1m╭─[m[1;7m The header [m[1m───────────────────────────────────────────────────[m 5/5 [1m─╮[m 1m[1m│[m
+[1m│[m  ◆[1m│[m                                                                      [1m│[m   [1m│[m
+[1m│[m  ●[1m│[m   ● bus ok           busmon reads the bus                            [1m│[m 8m[1m│[m
+[1m╰───[m[1m│[m   ● dispatch up      the service that wakes idle agents runs         [1m│[m[1m───╯[m
+╭─ A[1m│[m   ● missions up      the conductor runs                              [1m│[m …─╮
+│[7m▶ [m[7m♙[m[1m│[m   health !2          two health problems;[1m F5[m says which              [1m│[m[7mle [m▲
+│  ♙[1m│[m   claude 62%/40%     your account's windows, shared by every agent   [1m│[m   ┃
+│  ♙[1m│[m   ♙ Bernard [human]  you, as the agents see you                      [1m│[m   ▼
+╰───[1m│[m                                                                      [1m│[m───╯
+╭─ [1;7m [m[1m│[m That is all.[1m F1[m then[1m t[m shows these pages again.                      [1m│[ml…─╮
+│   [1m│[m                                                                      [1m│[m   ▲
+│   [1m│[m ○ ○ ○ ○ ●   [1menter[m next · [1m←[m back · [1mesc[m skip                           [1m│[m   │
+│  ○[1m╰──────────────────────────────────────────────────────────────────────╯[m   │
+│  ● 14:56 dispatch          notify    project paused until 16:56              ┃
+│  ● 15:00 master            ask       asks · review lot 1? (2 question(s), 2 …┃
+│    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+›                                                                               
+ [1menter[m next   [1m←[m back   [1mesc[m skip                                                 

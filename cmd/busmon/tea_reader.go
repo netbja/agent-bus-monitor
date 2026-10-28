@@ -536,6 +536,12 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.readerStep(p, act == ActNextItem)
 	case ActHealth:
 		return m.push(page{kind: ovHealth})
+	case ActTour: // the help's: the tour from its first page
+		if p.kind == ovHelp {
+			m.closeReader()
+			m.openTour(true)
+		}
+		return nil
 	case ActComposeOpen: // in an agent's page: write to that agent
 		if p.kind == ovAgent {
 			agent := p.key

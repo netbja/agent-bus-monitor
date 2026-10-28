@@ -17,7 +17,7 @@ func helpText() []Line {
 	for _, sec := range []struct {
 		name string
 		m    Mode
-	}{{"panels", ModePanel}, {"writing a message", ModeInput}, {"editing the filter", ModeFilter}, {"an open detail", ModeOverlay}, {"answering questions", ModeAsk}, {"the compose window", ModeCompose}, {"the project picker (--pick)", ModePick}} {
+	}{{"panels", ModePanel}, {"writing a message", ModeInput}, {"editing the filter", ModeFilter}, {"an open detail", ModeOverlay}, {"answering questions", ModeAsk}, {"the compose window", ModeCompose}, {"the first-launch tour", ModeTour}, {"the project picker (--pick)", ModePick}} {
 		sub(sec.name)
 		for _, bd := range bindings(sec.m) {
 			if k, d, ok := helpRow(bd); ok {

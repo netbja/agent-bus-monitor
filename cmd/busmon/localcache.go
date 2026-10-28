@@ -49,13 +49,6 @@ func (c *busmonCache) save(path string) error {
 	if path == "" {
 		return fmt.Errorf("empty busmon cache path")
 	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	if err := os.Chmod(dir, 0700); err != nil {
-		return err
-	}
 	now := time.Now().UnixMilli()
 	for key, until := range c.Snoozes { // expired snoozes would only grow the file
 		if until <= now {
@@ -64,6 +57,19 @@ func (c *busmonCache) save(path string) error {
 	}
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
+		return err
+	}
+	return writeFileAtomic(path, append(b, '\n'))
+}
+
+// writeFileAtomic writes b to path, mode 0600 in a 0700 directory, through
+// a synced temporary file renamed over it.
+func writeFileAtomic(path string, b []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(dir, ".busmon-*.tmp")
@@ -76,7 +82,7 @@ func (c *busmonCache) save(path string) error {
 		f.Close()
 		return err
 	}
-	if _, err := f.Write(append(b, '\n')); err != nil {
+	if _, err := f.Write(b); err != nil {
 		f.Close()
 		return err
 	}

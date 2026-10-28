@@ -20,6 +20,7 @@ const (
 	ModePick     // busmon --pick (v0.20): the Projects picker, its own screen
 	ModeShell    // the step-b shell's panels (busmon Charm spec): ModePanel's table with the shell's tabs
 	ModeShellAsk // the shell's reader on an ask: ModeAsk's table, where a digit answers
+	ModeTour     // the first-launch tour (tour.go): its pages own the keyboard
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -74,6 +75,8 @@ const (
 	ActNextItem     // reader: the next item of the list the page came from (A5)
 	ActPrevItem     // reader: the previous one
 	ActAskOther     // the shell's ask: a free answer ("Other") in the compose window
+	ActTour         // the help: the first-launch tour again
+	ActComplete     // the line: complete the @agent (the field does it)
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -212,7 +215,7 @@ var (
 	inputBindings    = []binding{
 		{Keys: "^O", Hint: "several lines", Alt: "alt-enter", Act: ActComposeOpen, match: either(keyIs(keyCtrlO), altEnter)},
 		{Keys: "enter", Hint: "send", Act: ActSend, match: keyIs(keyEnter)},
-		{Keys: "tab", Hint: "complete @agent", Act: ActNone, match: keyIs(keyTab)},
+		{Keys: "tab", Hint: "complete @agent", Act: ActComplete, match: keyIs(keyTab)},
 		{Keys: "esc", Hint: "back (draft kept)", Act: ActEscape, match: keyIs(keyEscape)},
 	}
 	filterBindings = []binding{
@@ -259,7 +262,13 @@ var (
 		{Keys: "n p " + GlyphArrowL + GlyphArrowR, Hint: "next/prev", Help: "the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)", Act: ActNextItem, match: either(runeIs('n'), keyIs(keyRight))},
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
+		{Keys: "t", Help: "in the help: the first-launch tour again", Act: ActTour, match: runeIs('t')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
+	}
+	tourBindings = []binding{
+		{Keys: "enter", Hint: "next", Alt: GlyphArrowR, Act: ActNextItem, match: either(keyIs(keyEnter), keyIs(keyRight))},
+		{Keys: GlyphArrowL, Hint: "back", Act: ActPrevItem, match: keyIs(keyLeft)},
+		{Keys: "esc", Hint: "skip", Act: ActClose, match: keyIs(keyEscape)},
 	}
 )
 
@@ -319,6 +328,8 @@ func bindings(m Mode) []binding {
 		bs = shellBindings
 	case ModeShellAsk:
 		bs = shellAskBindings
+	case ModeTour:
+		bs = tourBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }

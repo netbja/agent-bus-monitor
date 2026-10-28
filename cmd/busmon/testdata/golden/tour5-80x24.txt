@@ -1,0 +1,24 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙ 4  ● 2   15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Bernard [human]  claude 5h 62% │ 7d 41%    
+╭─ For you ───────────────────────────────────────────── 4 for you · 2 unread ─╮
+│  ● ask    master    review lot 1? (2 questions)                            4m│
+│  ♙ wait   foureyes  need a decision on the width rule                      6m│
+│  ♙╭─ The header ─────────────────────────────────────────────────── 5/5 ─╮ 1m│
+│  ◆│                                                                      │   │
+│  ●│   ● bus ok           busmon reads the bus                            │ 8m│
+╰───│   ● dispatch up      the service that wakes idle agents runs         │───╯
+╭─ A│   ● missions up      the conductor runs                              │ …─╮
+│▶ ♙│   health !2          two health problems; F5 says which              │le ▲
+│  ♙│   claude 62%/40%     your account's windows, shared by every agent   │   ┃
+│  ♙│   ♙ Bernard [human]  you, as the agents see you                      │   ▼
+╰───│                                                                      │───╯
+╭─  │ That is all. F1 then t shows these pages again.                      │l…─╮
+│   │                                                                      │   ▲
+│   │ ○ ○ ○ ○ ●   enter next · ← back · esc skip                           │   │
+│  ○╰──────────────────────────────────────────────────────────────────────╯   │
+│  ● 14:56 dispatch          notify    project paused until 16:56              ┃
+│  ● 15:00 master            ask       asks · review lot 1? (2 question(s), 2 …┃
+│    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+›                                                                               
+ enter next   ← back   esc skip                                                 

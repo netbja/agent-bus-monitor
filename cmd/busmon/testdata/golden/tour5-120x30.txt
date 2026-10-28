@@ -1,0 +1,30 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                       15:04:05 
+ paused · resumes in 1h52 (lunch)   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44             
+╭─ For you ───────────── 4 for you · 2 unread ─╮╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ·…─╮
+│  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
+│  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
+│  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
+│  ◆ gate   coder     by bernard  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+│  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
+│                     ╭─ The header ─────────────────────────────────────────────────────── 5/5 ─╮ate 1 · d… busmon-ch…▼
+╰─────────────────────│                                                                          │─────────────────────╯
+╭─  1 Activity  2 Boar│   ● bus ok           busmon reads the bus                                │ents · filter: none ─╮
+│    time   from      │   ● dispatch up      the service that wakes idle agents runs             │                     │
+│  ── Mon 2026-10-26 -│   ● missions up      the conductor runs                                  │─────────────────────│
+│    14:24  architect │   health !2          two health problems; F5 says which                  │                     │
+│    14:50  ♙ Bernard │   claude 62%/40%     your account's windows, shared by every agent       │                     │
+│    14:51  coder     │   ♙ Bernard [human]  you, as the agents see you                          │                     │
+│  ○ 14:52  master    │                                                                          │                     │
+│  ● 14:56  dispatch  │ That is all. F1 then t shows these pages again.                          │                     │
+│  ● 15:00  master    │                                                                          │                     │
+│    15:02  coder     │ ○ ○ ○ ○ ●   enter next · ← back · esc skip                               │                     │
+│                     ╰──────────────────────────────────────────────────────────────────────────╯                     │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                                       
+ enter next   ← back   esc skip                                                                                         
