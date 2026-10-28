@@ -49,14 +49,58 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 		return 1
 	}
 	if opt.Sub == "install" {
-		missing := setup.Preflight(context.Background(), r, o, opt, goModVersion(repo), runtime.GOOS, runtime.GOARCH)
-		if missing > 0 && !opt.DryRun {
-			o.Fatal(itoa(missing) + " required tool(s) missing; install them and re-run.")
+		return runInstall(context.Background(), r, o, opt, repo, getenv)
+	}
+	o.Fatal("agentbus setup " + opt.Sub + ": not ported yet (busmon-installer-5..7); use ./setup.sh " + opt.Sub)
+	return 1
+}
+
+// runInstall is setup.sh install's steps, in its order. Steps not ported yet
+// (herdr, the plugin and its key binding, the services hint: busmon-installer-3;
+// Redis: busmon-installer-4) say so and are skipped.
+func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.Options, repo string, getenv func(string) string) int {
+	missing := setup.Preflight(ctx, r, o, opt, goModVersion(repo), runtime.GOOS, runtime.GOARCH)
+	if missing > 0 && !opt.DryRun {
+		o.Fatal(itoa(missing) + " required tool(s) missing; install them and re-run.")
+		return 1
+	}
+	tmp, err := os.MkdirTemp("", "agentbus-setup-")
+	if err != nil {
+		o.Fatal(err.Error())
+		return 1
+	}
+	defer os.RemoveAll(tmp)
+	in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Tmp: tmp, Getenv: getenv}
+	o.Step("2/5 Checking herdr workspace manager")
+	o.Info("not ported yet (busmon-installer-3): skipped")
+	o.Step("3/5 Building and installing agentbus & busmon, linking the herdr plugin")
+	in.Rev = in.RepoRev(ctx)
+	if !opt.DryRun {
+		if err := os.MkdirAll(opt.BinDir, 0o755); err != nil {
+			o.Fatal(err.Error())
 			return 1
 		}
 	}
-	o.Fatal("agentbus setup " + opt.Sub + ": not ported yet past the preflight (busmon-installer-2..7); use ./setup.sh " + opt.Sub)
-	return 1
+	for _, b := range [][2]string{{"agentbus", "./cmd/agentbus"}, {"busmon", "./cmd/busmon"}} {
+		if err := in.BuildAndInstall(ctx, b[0], b[1]); err != nil {
+			return 1
+		}
+	}
+	in.RoleScriptLinks()
+	in.CheckPath(getenv("PATH"))
+	in.ExternalSkills(ctx)
+	in.RoleSkills(ctx)
+	o.Step("4/5 Checking Redis broker service")
+	o.Info("not ported yet (busmon-installer-4): skipped")
+	in.Clients()
+	var tty io.ReadWriter
+	if t := setup.OpenTTY(); t != nil {
+		defer t.Close()
+		tty = t
+	}
+	in.Identity(ctx, &setup.Prompter{Yes: opt.Yes, TTY: tty})
+	in.Models(ctx)
+	return o.Summary(opt, missing, in.Rev)
 }
 
 // goModVersion is go.mod's go line, as setup.sh reads it.
