@@ -437,3 +437,61 @@ func TestTourAlignment(t *testing.T) {
 		}
 	}
 }
+
+// At every alignment size the auto-opened tour shows each of its pages
+// whole, or does not open (it waits for a size later).
+func TestTourAutoOpensOnlyWhenEveryPageFits(t *testing.T) {
+	opened, waited := 0, 0
+	for _, sz := range shellAlignSizes {
+		m, _ := tourShell(t, sz[0], sz[1], 0, true)
+		fits := true
+		for i := range tourBook {
+			if !m.pageFits(i) {
+				fits = false
+			}
+		}
+		switch {
+		case m.ui.tour != nil && !fits:
+			t.Errorf("%dx%d: the tour opened though a page is cut", sz[0], sz[1])
+		case m.ui.tour == nil && fits && m.layout.Tier != TierTooSmall:
+			t.Errorf("%dx%d: every page fits, yet the tour did not open", sz[0], sz[1])
+		case m.ui.tour != nil:
+			opened++
+			for i := range tourBook {
+				r := m.tourRectFor(i)
+				if n := len(tourLines(tourBook[i], r.W-4, "bernard")); n > r.H-5 {
+					t.Errorf("%dx%d page %d: %d lines in %d rows", sz[0], sz[1], i+1, n, r.H-5)
+				}
+			}
+		default:
+			waited++
+		}
+	}
+	if opened == 0 || waited == 0 {
+		t.Errorf("opened at %d sizes, waited at %d: the sizes no longer test both", opened, waited)
+	}
+}
+
+// F1 then t on a short screen: a cut page says so in a muted row, and the
+// marker is not written from a tour whose page was cut.
+func TestTourCutPageIsNeverMarkedSeen(t *testing.T) {
+	m, path := tourShell(t, 80, 11, 0, true)
+	if m.ui.tour != nil {
+		t.Fatal("the tour auto-opened on 11 rows")
+	}
+	m = keys(t, keys(t, m, kF1), 't')
+	if m.ui.tour == nil {
+		t.Fatal("F1 then t opened no tour")
+	}
+	if !strings.Contains(m.grid().plain(), "more") {
+		t.Error("the cut page does not say so")
+	}
+	next, cmd := m.Update(keyMsg(kEsc))
+	m = run(t, next.(Model), cmd)
+	if m.ui.tour != nil {
+		t.Fatal("esc left the tour open")
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("a tour with a cut page wrote the marker")
+	}
+}

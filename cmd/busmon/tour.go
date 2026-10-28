@@ -304,6 +304,7 @@ func tourLines(p tourPage, width int, self string) []Line {
 type tourState struct {
 	pages []int
 	at    int
+	cut   bool // a page was shown cut (the screen too short): the marker is not written
 }
 
 // openTour opens the tour on every page (all) or on those changed since the marker.
@@ -314,6 +315,15 @@ func (m *Model) openTour(all bool) {
 	}
 	if len(pages) > 0 {
 		m.ui.tour = &tourState{pages: pages}
+		m.noteCut()
+	}
+}
+
+// noteCut records that the page on screen does not fit whole: a tour that
+// showed a cut page is not marked seen.
+func (m *Model) noteCut() {
+	if t := m.ui.tour; t != nil && !m.pageFits(t.pages[t.at]) {
+		t.cut = true
 	}
 }
 
@@ -332,18 +342,27 @@ func (m *Model) maybeTour() {
 		return
 	}
 	m.openTour(false)
-	if m.ui.tour != nil && !m.tourFits() { // a size later
-		m.ui.tour = nil
-		return
+	if t := m.ui.tour; t != nil {
+		for _, i := range t.pages {
+			if !m.pageFits(i) { // a page would be cut: a size later
+				m.ui.tour = nil
+				return
+			}
+		}
 	}
 	s.tourShown = true
 }
 
 // closeTour closes it and records the version seen: a skip counts, the
-// person chose.
+// person chose; a tour that showed a cut page records nothing.
 func (m *Model) closeTour() tea.Cmd {
+	cut := m.ui.tour.cut
 	m.ui.tour = nil
 	mk := m.cfg.tour
+	if cut {
+		m.ui.flash, m.ui.flashErr = "tour not marked seen: a page did not fit the window", false
+		return nil
+	}
 	if mk == nil {
 		return nil
 	}
@@ -364,8 +383,10 @@ func (m *Model) tourAct(act Action) tea.Cmd {
 			return m.closeTour()
 		}
 		t.at++
+		m.noteCut()
 	case ActPrevItem:
 		t.at = max(0, t.at-1)
+		m.noteCut()
 	case ActClose:
 		return m.closeTour()
 	}
@@ -436,10 +457,19 @@ func (m Model) tourPage() tourPage { return tourBook[m.ui.tour.pages[m.ui.tour.a
 
 // tourRect is the modal: 76 columns at most, 8 fewer than the screen, as
 // tall as the page (border, blank, body, blank, keys, border), centred.
-func (m Model) tourRect() Rect {
+func (m Model) tourRect() Rect { return m.tourRectFor(m.ui.tour.pages[m.ui.tour.at]) }
+
+// tourRectFor is the modal for page i of the book.
+func (m Model) tourRectFor(i int) Rect {
 	w := max(0, min(76, m.width-8))
-	h := min(len(tourLines(m.tourPage(), max(1, w-4), m.cfg.self))+5, m.height-2)
+	h := min(len(tourLines(tourBook[i], max(1, w-4), m.cfg.self))+5, m.height-2)
 	return Rect{(m.width - w) / 2, max(0, (m.height-h)/2), w, h}
+}
+
+// pageFits: page i is drawn whole at this size.
+func (m Model) pageFits(i int) bool {
+	w := min(76, m.width-8)
+	return w >= 20 && len(tourLines(tourBook[i], w-4, m.cfg.self))+5 <= m.height-2
 }
 
 // tourFits: the modal can be drawn (20 columns, 5 rows); below, only the
@@ -459,11 +489,16 @@ func (m Model) drawTour(g *grid) {
 	}
 	drawFrame(g, r.X, r.Y, r.W, r.H, Frame{Title: Line{{Text: m.tourPage().title, Role: RoleText}},
 		Label: Line{{Text: fmt.Sprintf("%d/%d", t.at+1, len(t.pages)), Role: RoleMuted}}, Focused: true, Hue: RoleAccent})
-	for i, l := range tourLines(m.tourPage(), r.W-4, m.cfg.self) {
-		if 2+i >= r.H-3 {
+	lines, rows := tourLines(m.tourPage(), r.W-4, m.cfg.self), r.H-5
+	if len(lines) > rows && rows > 0 { // cut: the last row says so
+		more := len(lines) - rows + 1
+		lines = append(lines[:rows-1:rows-1], Line{S(RoleMuted, fmt.Sprintf("%s %d more lines: a taller window shows the page whole", GlyphEllipsis, more))})
+	}
+	for i, l := range lines {
+		if i >= rows {
 			break
 		}
-		drawLine(g, r.X+2, r.Y+2+i, r.W-4, l, false)
+		drawLine(g, r.X+2, r.Y+2+i, r.W-4, FitLine(l, r.W-4), false)
 	}
 	drawLine(g, r.X+2, r.Y+r.H-2, r.W-4, m.tourKeyLine(), false)
 }
