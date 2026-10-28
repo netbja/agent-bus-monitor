@@ -40,9 +40,9 @@ const (
 	ovHealth
 	ovHelp
 	ovAsk
-	ovPlan     // the batch's plan (P)
-	ovPlanTask // one task of the plan; Esc returns to the plan
-	ovNotices  // a Requests notice group: its notices, one line each
+	ovPlan       // the batch's plan (P)
+	ovPlanTask   // one task of the plan; Esc returns to the plan
+	ovNotices    // a Requests notice group: its notices, one line each
 	ovServiceLog // a service's log tail, opened from its F3 card
 )
 

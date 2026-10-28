@@ -157,7 +157,7 @@ func TestGatherServices(t *testing.T) {
 		return "redis:8-alpine|running", nil
 	}
 	f := gatherServices(context.Background(), r, nil, recs, "here", docker)
-	if f.logs["dispatch"] != 5 || f.since["dispatch"].IsZero() {
+	if f.logs["dispatch"] != 5 || !f.since["dispatch"].IsZero() { // the test process is no running service: no since
 		t.Errorf("local facts %v %v", f.logs, f.since)
 	}
 	if _, ok := f.logs["missions"]; ok {
@@ -303,5 +303,40 @@ func TestShellServicesCardsOpenTheLog(t *testing.T) {
 	next, cmd = m.Update(keyMsg('l'))
 	if m = run(t, next.(Model), cmd); m.rd.top().kind != ovServiceLog {
 		t.Error("l opened no log")
+	}
+}
+
+// since is read only for a running service whose pid's command line is that
+// service: a stopped record's pid (maybe reused) or another process reads ?.
+func TestServiceStartOnlyForItsOwnRunningProcess(t *testing.T) {
+	proc := t.TempDir()
+	os.WriteFile(filepath.Join(proc, "stat"), []byte("cpu 1 2 3\nbtime 1000000\n"), 0o600)
+	put := func(pid int, cmd string) {
+		d := filepath.Join(proc, fmt.Sprint(pid))
+		os.MkdirAll(d, 0o755)
+		os.WriteFile(filepath.Join(d, "cmdline"), []byte(strings.ReplaceAll(cmd, " ", "\x00")), 0o600)
+		// field 22 (starttime) = 500 ticks = 5 s after boot; the comm holds a space
+		os.WriteFile(filepath.Join(d, "stat"), []byte(fmt.Sprintf("%d (agent bus) S 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 500 19 20\n", pid)), 0o600)
+	}
+	put(10, "agentbus --project p service run dispatch")
+	put(11, "vim notes.txt")
+	got, ok := serviceStart("dispatch", bus.ServiceRecord{State: "ready", PID: 10}, proc)
+	if !ok || !got.Equal(time.Unix(1000005, 0)) {
+		t.Errorf("running dispatch: %v %v, want btime + 5 s", got, ok)
+	}
+	for name, rec := range map[string]bus.ServiceRecord{
+		"stopped":       {State: "stopped", PID: 10},
+		"failed":        {State: "failed", PID: 10},
+		"reused pid":    {State: "ready", PID: 11},
+		"other service": {State: "ready", PID: 10},
+		"gone":          {State: "ready", PID: 99},
+	} {
+		kind := "dispatch"
+		if name == "other service" {
+			kind = "missions"
+		}
+		if _, ok := serviceStart(kind, rec, proc); ok {
+			t.Errorf("%s: a start was read", name)
+		}
 	}
 }

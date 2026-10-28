@@ -64,10 +64,8 @@ func gatherServices(ctx context.Context, r busReader, inst *bus.ServicesInstall,
 		if info, err := os.Stat(rec.Log); err == nil && rec.Log != "" {
 			f.logs[k] = info.Size()
 		}
-		if rec.PID > 0 {
-			if info, err := os.Stat(fmt.Sprintf("/proc/%d", rec.PID)); err == nil {
-				f.since[k] = info.ModTime() // the process's start, Linux
-			}
+		if t, ok := serviceStart(k, rec, "/proc"); ok {
+			f.since[k] = t
 		}
 	}
 	c, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -94,6 +92,52 @@ func gatherServices(ctx context.Context, r busReader, inst *bus.ServicesInstall,
 		}
 	}
 	return f
+}
+
+// serviceStart is a running service's process start, read only when the
+// record says it runs and the pid's command line is that service (a stopped
+// service's pid may have been reused): /proc/<pid>/stat's start (field 22,
+// clock ticks since boot) plus /proc/stat's btime. Anything else: unknown.
+func serviceStart(kind string, rec bus.ServiceRecord, proc string) (time.Time, bool) {
+	switch rec.State {
+	case "", "down", "stopped", "failed", "gave-up":
+		return time.Time{}, false
+	}
+	if rec.PID <= 0 {
+		return time.Time{}, false
+	}
+	cmd, err := os.ReadFile(fmt.Sprintf("%s/%d/cmdline", proc, rec.PID))
+	if err != nil || !strings.Contains(strings.ReplaceAll(string(cmd), "\x00", " "), "service run "+kind) {
+		return time.Time{}, false
+	}
+	stat, err := os.ReadFile(fmt.Sprintf("%s/%d/stat", proc, rec.PID))
+	if err != nil {
+		return time.Time{}, false
+	}
+	s := string(stat)
+	end := strings.LastIndexByte(s, ')') // the command name may hold spaces
+	if end < 0 {
+		return time.Time{}, false
+	}
+	fields := strings.Fields(s[end+1:]) // field 3 onward
+	if len(fields) < 20 {
+		return time.Time{}, false
+	}
+	var ticks int64
+	if _, err := fmt.Sscan(fields[19], &ticks); err != nil { // field 22
+		return time.Time{}, false
+	}
+	boot, err := os.ReadFile(proc + "/stat")
+	if err != nil {
+		return time.Time{}, false
+	}
+	for _, line := range strings.Split(string(boot), "\n") {
+		var btime int64
+		if n, _ := fmt.Sscanf(line, "btime %d", &btime); n == 1 {
+			return time.Unix(btime, 0).Add(time.Duration(ticks) * time.Second / 100), true // USER_HZ 100 on Linux
+		}
+	}
+	return time.Time{}, false
 }
 
 // svcCardKinds are the selectable cards, in order (Redis has no log page).
