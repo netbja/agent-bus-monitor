@@ -75,8 +75,8 @@ func tokFixture() map[string]fakeTokens {
 				"ui-kimi":        {PID: 4, Provider: "moonshot", Client: "kimi"},
 				"sentinel":       {PID: 5, IdentSession: "0198e5c4-sentinel-5", Provider: "anthropic"},
 			}},
-		"hyperliquid": {ok: true, meta: bus.TokensMeta{Partial: true}, rows: map[string]bus.TokenRow{"2026-10-22|coder|anthropic": {In: 170_000, N: 1}}},
-		"polymarket":  {},
+		"blog": {ok: true, meta: bus.TokensMeta{Partial: true}, rows: map[string]bus.TokenRow{"2026-10-22|coder|anthropic": {In: 170_000, N: 1}}},
+		"wiki":  {},
 	}
 }
 
@@ -90,12 +90,12 @@ func TestTokensAllProjects(t *testing.T) {
 	}
 	s := out.String()
 	for _, want := range []string{"account   anthropic 5h 46% (resets 2h49) · 7d ?", "PROJECT", "agent-bus-monitor", "1.5M", "289k",
-		"polymarket   no data", "~0", "agentbus tokens --unattributed"} {
+		"wiki   no data", "~0", "agentbus tokens --unattributed"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("output lacks %q:\n%s", want, s)
 		}
 	}
-	if strings.Index(s, "agent-bus-monitor") > strings.Index(s, "hyperliquid") {
+	if strings.Index(s, "agent-bus-monitor") > strings.Index(s, "blog") {
 		t.Error("the busiest project is not first")
 	}
 }

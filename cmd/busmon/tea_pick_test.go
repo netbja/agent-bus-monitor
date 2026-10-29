@@ -19,9 +19,9 @@ import (
 func pickFixture() []projlist.Row {
 	return []projlist.Row{
 		{Name: "agent-bus-monitor", WorkingDir: "/data/projects/agent-bus-monitor", Broker: projlist.Present},
-		{Name: "ai-tradex-solana", WorkingDir: "/data/projects/ai-tradex-solana", Broker: projlist.Present},
-		{Name: "hyperliquid", WorkingDir: "/data/projects/trading/very/deep/hyperliquid-bot", Broker: projlist.Absent},
-		{Name: "polymarket", WorkingDir: "", Broker: projlist.Unknown},
+		{Name: "shop", WorkingDir: "/data/projects/shop", Broker: projlist.Present},
+		{Name: "blog", WorkingDir: "/data/projects/shopping/very/deep/blog-engine", Broker: projlist.Absent},
+		{Name: "wiki", WorkingDir: "", Broker: projlist.Unknown},
 	}
 }
 
@@ -53,7 +53,7 @@ func (r *pickRecorder) run(p string) error {
 // pickShellAt is the picker after its startup check, at w x h.
 func pickShellAt(t testing.TB, w, h int, rows []projlist.Row, rec *pickRecorder) pickShell {
 	t.Helper()
-	m := newPickShell(context.Background(), "/home/bernard/.config/agentbus/projects", nil, nil, rec.keys, rec.run)
+	m := newPickShell(context.Background(), "/home/user/.config/agentbus/projects", nil, nil, rec.keys, rec.run)
 	m.now = shellNow
 	m = pickStep(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	return pickStep(t, m, pickAnnotatedMsg{rows: rows})
@@ -136,15 +136,15 @@ func TestPickShellGoldens(t *testing.T) {
 // is a letter of the filter, as in tview's picker).
 func TestPickShellKeys(t *testing.T) {
 	m := pickShellAt(t, 120, 30, pickFixture(), &pickRecorder{})
-	for _, r := range "trad" {
+	for _, r := range "shop" {
 		m, _ = pickPress(t, m, r)
 	}
 	vis := m.snapshot().vis
-	if len(vis) != 2 || vis[0].Name != "ai-tradex-solana" || vis[1].Name != "hyperliquid" { // hyperliquid by its directory
-		t.Fatalf("filter trad: %v", vis)
+	if len(vis) != 2 || vis[0].Name != "shop" || vis[1].Name != "blog" { // blog by its directory (shopping)
+		t.Fatalf("filter shop: %v", vis)
 	}
 	m, _ = pickPress(t, m, kDown)
-	if row, _ := m.selected(); row.Name != "hyperliquid" {
+	if row, _ := m.selected(); row.Name != "blog" {
 		t.Fatalf("down: %s", row.Name)
 	}
 	for range 4 {
@@ -196,8 +196,8 @@ func TestPickShellNeverProvisions(t *testing.T) {
 		status string
 		ran    bool
 	}{
-		{"absent", 2, &pickRecorder{}, "hyperliquid has no keys on the broker (deleted?). To re-create it: agentbus up hyperliquid /data/projects/trading/very/deep/hyperliquid-bot", false},
-		{"no dir", 3, &pickRecorder{}, "polymarket has no keys on the broker (deleted?). To re-create it: agentbus up polymarket <path>", false},
+		{"absent", 2, &pickRecorder{}, "blog has no keys on the broker (deleted?). To re-create it: agentbus up blog /data/projects/shopping/very/deep/blog-engine", false},
+		{"no dir", 3, &pickRecorder{}, "wiki has no keys on the broker (deleted?). To re-create it: agentbus up wiki <path>", false},
 		{"check fails", 0, &pickRecorder{checkErr: errors.New("connection refused")}, "cannot check agent-bus-monitor on the broker: connection refused", false},
 		{"up fails", 0, &pickRecorder{present: []string{"agent-bus-monitor"}, upErr: errors.New("template broken")}, "agentbus up agent-bus-monitor: template broken", true},
 	} {
