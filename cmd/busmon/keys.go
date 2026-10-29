@@ -94,6 +94,7 @@ type binding struct {
 	Act    Action
 	Panels []PanelID // nil = every panel
 	Tiers  []Tier    // nil = every tier
+	OnPage bool      // advertised in the footer only on a page that offers it (footerHintsOn's offers)
 	match  func(Key) bool
 }
 
@@ -269,7 +270,7 @@ var (
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "t", Help: "in the help: the first-launch tour again", Act: ActTour, match: runeIs('t')},
-		{Keys: "c", Help: "on a plan task waiting for you: start it (the compose window, to master, prefilled)", Act: ActPlanStart, match: runeIs('c')},
+		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
@@ -357,9 +358,15 @@ func lookup(m Mode, p PanelID, t Tier, ev Key) Action {
 // with the function keys grouped last in ascending order (A7), as whole
 // "keys hint" pairs; a pair that does not fit is left out, never cut.
 func footerHints(m Mode, p PanelID, t Tier, width int) Line {
+	return footerHintsOn(m, p, t, width, nil)
+}
+
+// footerHintsOn is footerHints on a page: a binding marked OnPage is
+// advertised only when offers says the page offers its action (nil: none is).
+func footerHintsOn(m Mode, p PanelID, t Tier, width int, offers func(Action) bool) Line {
 	var shown, fkeys []binding
 	for _, b := range bindings(m) {
-		if b.Hint == "" || !b.applies(p, t) {
+		if b.Hint == "" || !b.applies(p, t) || b.OnPage && (offers == nil || !offers(b.Act)) {
 			continue
 		}
 		if fkey(b.Keys) {

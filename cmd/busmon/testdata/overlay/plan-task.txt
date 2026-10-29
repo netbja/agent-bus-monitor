@@ -1,7 +1,6 @@
-State:  waiting for you
-Title:  Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle
-        Ti[red]tle Ti[red]tle Ti[red]tle
-Owner:  person
-Ask:    9-0 (! answers it)
-
-        c  start: write to master about this task
+State:   waiting for you
+Title:   Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle Ti[red]tle
+         Ti[red]tle Ti[red]tle Ti[red]tle
+Owner:   person
+Action:  enter  start the discussion with master
+Ask:     9-0 (! answers it)

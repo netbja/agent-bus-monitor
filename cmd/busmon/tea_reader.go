@@ -683,16 +683,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			m.openTour(true)
 		}
 		return nil
-	case ActPlanStart: // a plan task waiting for the person: tell master, through the normal send
-		if r, ok := planStartable(m.snap.planState, p.key); ok && p.kind == ovPlanTask {
-			m.closeReader()
-			if strings.TrimSpace(m.ui.msgCompose.body) != "" { // an unsent draft is never overwritten
-				m.openMessageCompose("", "")
-				m.ui.flash, m.ui.flashErr = "your unsent draft is open: the plan task's text was not put in", false
-				return nil
-			}
-			m.openMessageCompose("@master "+planStartText(r), "")
-		}
+	case ActPlanStart:
+		m.planStart(p)
 		return nil
 	case ActComposeOpen: // in an agent's page: write to that agent
 		if p.kind == ovAgent {
@@ -705,6 +697,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		switch {
 		case p.kind == ovPlan && k.Code == keyEnter:
 			return m.openPlanItem(p)
+		case p.kind == ovPlanTask && k.Code == keyEnter: // the plan task's own action (busmon-plan-start-ux)
+			m.planStart(p)
 		case p.kind == ovAgent && m.snap.agents[p.key] != nil && m.snap.agents[p.key].openAsk > 0:
 			return m.pushAskOf(p.key)
 		case k.Code != keyEnter:
@@ -1006,4 +1000,36 @@ func (m *Model) openDirect(p PanelID) tea.Cmd {
 		}
 	}
 	return m.open(p)
+}
+
+// planStart starts a plan task waiting for the person: the compose window to
+// master, prefilled; nothing is sent until its own send key. Any other page
+// or task: nothing.
+func (m *Model) planStart(p *page) {
+	r, ok := planStartable(m.snap.planState, p.key)
+	if !ok || p.kind != ovPlanTask {
+		return
+	}
+	m.closeReader()
+	if strings.TrimSpace(m.ui.msgCompose.body) != "" { // an unsent draft is never overwritten
+		m.openMessageCompose("", "")
+		m.ui.flash, m.ui.flashErr = "your unsent draft is open: the plan task's text was not put in", false
+		return
+	}
+	m.openMessageCompose("@master "+planStartText(r), "")
+}
+
+// pageOffers reports whether the reader's top page offers act, for the
+// footer's OnPage keys.
+func (m Model) pageOffers(act Action) bool {
+	p := m.rd.top()
+	if p == nil {
+		return false
+	}
+	switch act {
+	case ActPlanStart:
+		_, ok := planStartable(m.snap.planState, p.key)
+		return ok && p.kind == ovPlanTask
+	}
+	return false
 }

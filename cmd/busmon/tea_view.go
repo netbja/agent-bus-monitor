@@ -49,7 +49,7 @@ func (m Model) grid() *grid {
 			drawLine(g, l.Input.X, l.Input.Y-1, l.Input.W, row, false)
 		}
 	}
-	footer := footerHints(m.mode(), m.ui.focus, l.Tier, m.width)
+	footer := footerHintsOn(m.mode(), m.ui.focus, l.Tier, m.width, m.pageOffers)
 	if m.ui.flash != "" {
 		role := RoleOK
 		if m.ui.flashErr {
