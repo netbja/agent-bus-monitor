@@ -849,42 +849,50 @@ func lookAgentCLI(getenv func(string) string, look func(string) (string, error),
 	}
 }
 
+// probeDone ends the probe's own output with command -v's status, so a
+// shell that fails before running it (rc error, unsupported invocation) is
+// told from a clean miss (reviewer-codex).
+const probeDone = "AGENTBUS_PROBE_DONE"
+
 // shellProbe asks $SHELL, as a login interactive shell, where exe is
-// (command -v), within timeout: the path it prints last, errCLIAbsent on a
-// clean non-zero exit, any other error when it cannot answer. exe is passed
-// as an argument, never spliced into the script.
+// (command -v), within timeout: the path command -v printed when its status
+// is 0, errCLIAbsent when it ran and failed, any other error when the shell
+// could not answer (no SHELL, a timeout, no marker). exe is passed as an
+// argument, never spliced into the script; fish gets its own syntax.
 func shellProbe(getenv func(string) string, timeout time.Duration) func(string) (string, error) {
 	return func(exe string) (string, error) {
 		sh := getenv("SHELL")
 		if sh == "" {
 			return "", errors.New("no SHELL to ask")
 		}
-		script := `command -v -- "$1"`
+		script := `command -v -- "$1"; printf '\n` + probeDone + ` %s\n' "$?"`
 		if filepath.Base(sh) == "fish" {
-			script = `command -v -- $argv[1]`
+			script = `command -v -- $argv[1]; printf '\n` + probeDone + ` %s\n' $status`
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, sh, "-lic", script, "agentbus", exe)
-		cmd.Stdin = nil
 		cmd.WaitDelay = 500 * time.Millisecond
-		out, err := cmd.Output()
+		out, _ := cmd.Output() // the shell's own exit status is not the answer: the marker is
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("%s did not answer within %s", filepath.Base(sh), timeout)
 		}
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			return "", errCLIAbsent
-		}
-		if err != nil {
-			return "", err
-		}
-		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		lines := strings.Split(string(out), "\n")
 		for i := len(lines) - 1; i >= 0; i-- {
-			if l := strings.TrimSpace(lines[i]); strings.HasPrefix(l, "/") {
-				return l, nil
+			status, ok := strings.CutPrefix(strings.TrimSpace(lines[i]), probeDone+" ")
+			if !ok {
+				continue
 			}
+			if status != "0" {
+				return "", errCLIAbsent
+			}
+			for k := i - 1; k >= 0; k-- {
+				if l := strings.TrimSpace(lines[k]); l != "" {
+					return l, nil
+				}
+			}
+			return "", errors.New("command -v found it but printed nothing")
 		}
-		return "", errors.New("no path in the shell's answer")
+		return "", fmt.Errorf("%s gave no answer (it may have failed while starting)", filepath.Base(sh))
 	}
 }

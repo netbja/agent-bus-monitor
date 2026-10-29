@@ -245,19 +245,39 @@ func TestUpKeepsATabItCannotJudge(t *testing.T) {
 	}
 }
 
-// The real probe asks $SHELL as a login, interactive shell, and reads a
-// clean miss from its exit status; no $SHELL cannot answer.
+// The real probe asks $SHELL as a login, interactive shell, and trusts only
+// its own result marker: command -v's status after it ran. A shell that
+// fails before (startup error, unsupported invocation) cannot answer
+// (reviewer-codex), and fish gets its own syntax (foureyes).
 func TestShellProbe(t *testing.T) {
 	dir := t.TempDir()
-	fake := filepath.Join(dir, "fakesh")
-	// A shell that prints noise, then the path when asked for "present".
-	_ = os.WriteFile(fake, []byte("#!/bin/sh\necho 'motd noise'\n[ \"$4\" = present ] && { echo /opt/x/present; exit 0; }\nexit 1\n"), 0o755)
-	probe := shellProbe(func(k string) string { return map[string]string{"SHELL": fake}[k] }, time.Second)
+	// A posix-ish fake: rc noise, then it runs the script it is given with
+	// "$1" set to the name, as sh -c does.
+	posix := filepath.Join(dir, "fakesh")
+	_ = os.WriteFile(posix, []byte("#!/bin/sh\necho 'motd noise'\nshift\nscript=\"$1\"; shift; shift\ncommand() { [ \"$3\" = present ] && { echo /opt/x/present; return 0; }; return 1; }\neval \"$script\"\n"), 0o755)
+	probe := shellProbe(func(k string) string { return map[string]string{"SHELL": posix}[k] }, time.Second)
 	if p, err := probe("present"); err != nil || p != "/opt/x/present" {
 		t.Fatalf("present: %q, %v", p, err)
 	}
 	if _, err := probe("absent"); !errors.Is(err, errCLIAbsent) {
 		t.Fatalf("absent: %v, want errCLIAbsent", err)
+	}
+	// A login shell that fails at startup, before the command: not a miss.
+	broken := filepath.Join(dir, "brokensh")
+	_ = os.WriteFile(broken, []byte("#!/bin/sh\necho 'rc: syntax error' >&2\nexit 2\n"), 0o755)
+	if _, err := shellProbe(func(string) string { return broken }, time.Second)("absent"); err == nil || errors.Is(err, errCLIAbsent) {
+		t.Fatalf("a shell failing at startup: %v, want an unknown answer", err)
+	}
+	// fish: its script uses $argv and $status; a fake fish that only runs
+	// fish syntax would fail on "$1".
+	fish := filepath.Join(dir, "fish")
+	_ = os.WriteFile(fish, []byte("#!/bin/sh\ncase \"$2\" in *'$argv[1]'*'$status'*) ;; *) exit 127 ;; esac\n[ \"$4\" = present ] && { echo /opt/f/present; printf '\\nAGENTBUS_PROBE_DONE 0\\n'; exit 0; }\nprintf '\\nAGENTBUS_PROBE_DONE 1\\n'\n"), 0o755)
+	fprobe := shellProbe(func(k string) string { return map[string]string{"SHELL": fish}[k] }, time.Second)
+	if p, err := fprobe("present"); err != nil || p != "/opt/f/present" {
+		t.Fatalf("fish present: %q, %v", p, err)
+	}
+	if _, err := fprobe("absent"); !errors.Is(err, errCLIAbsent) {
+		t.Fatalf("fish absent: %v", err)
 	}
 	if _, err := shellProbe(func(string) string { return "" }, time.Second)("x"); err == nil || errors.Is(err, errCLIAbsent) {
 		t.Fatalf("no SHELL: %v, want an unknown answer", err)

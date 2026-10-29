@@ -592,8 +592,8 @@ It never touches Redis — see README "Example deployment".
   template is read and before any service or tab, warns about the agent tabs whose executable
   (`tabExecutable`, through the tab's manifest, split with `rolecfg.ShellSplit`) `lookAgentCLI` finds
   neither on PATH, nor in the usual per-user dirs, nor through the person's login shell
-  (`shellProbe`: `$SHELL -lic 'command -v "$1"'`, 3 s; only its clean non-zero exit is
-  `errCLIAbsent`, anything else `errCLIUnknown`, counted as found: fail open), and starts every tab
+  (`shellProbe`: `$SHELL -lic 'command -v "$1"'`, fish's `$argv`, 3 s; only command -v's own non-zero status is
+  `errCLIAbsent`, read from its own `AGENTBUS_PROBE_DONE <status>` marker so a shell failing at startup is not a miss; anything else `errCLIUnknown`, counted as found: fail open), and starts every tab
   anyway (master: a lookup alone never drops a tab); only with none of the team's found does it
   refuse (exit 1) with the pointers and `agentbus up <p>`. Nil `TabExe`/`LookPath` = no check.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
