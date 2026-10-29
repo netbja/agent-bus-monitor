@@ -151,9 +151,18 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
 		return 1
 	}
-	var ok bool
-	if tpl, ok = checkClients(d, project, tpl, stdout, stderr); !ok {
+	absent, ok := checkClients(d, project, tpl, stdout, stderr)
+	if !ok {
 		return 1
+	}
+	if len(absent) > 0 && d.TabClient != nil { // no trust gate for a CLI that is not there (foureyes)
+		clientOf := d.TabClient
+		d.TabClient = func(cmd string) string {
+			if absent[d.TabExe(cmd)] {
+				return ""
+			}
+			return clientOf(cmd)
+		}
 	}
 	failed := false
 	if m != nil {
@@ -761,11 +770,13 @@ func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 // client's install pointer and the next command, and false. With some
 // missing it starts every tab as before and warns with their names (master:
 // a lookup alone never drops a tab; their panes say if they fail). A CLI
-// nobody could judge (errCLIUnknown) counts as found: fail open.
-func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Writer) (upTemplate, bool) {
+// nobody could judge (errCLIUnknown) counts as found: fail open. It returns
+// the executables confirmed absent, which open no trust gate.
+func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Writer) (map[string]bool, bool) {
 	if d.TabExe == nil || d.LookPath == nil {
-		return tpl, true
+		return nil, true
 	}
+	absent := map[string]bool{}
 	var missing []string
 	agents := 0
 	for _, t := range tpl.Tabs {
@@ -781,10 +792,11 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 			fmt.Fprintf(stdout, "could not tell whether %s is installed (%v): %s starts anyway\n", exe, err, t.Name)
 		default:
 			missing = append(missing, t.Name+" needs "+exe)
+			absent[exe] = true
 		}
 	}
 	if len(missing) == 0 {
-		return tpl, true
+		return nil, true
 	}
 	if len(missing) == agents {
 		fmt.Fprintf(stderr, "agentbus up: no agent CLI on PATH for this team (%s): nothing was started. Install at least one of:\n", strings.Join(missing, ", "))
@@ -792,7 +804,7 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 			fmt.Fprintln(stderr, "  "+l)
 		}
 		fmt.Fprintf(stderr, "busmon and the bus work meanwhile (busmon --project %s); once one is installed, then run: agentbus up %s\n", project, project)
-		return tpl, false
+		return absent, false
 	}
 	for _, m := range missing {
 		exe := m[strings.LastIndex(m, " ")+1:]
@@ -804,12 +816,13 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 		}
 		fmt.Fprintf(stdout, "warning: %s, not found%s; its tab starts anyway and says so if it fails\n", m, where)
 	}
-	return tpl, true
+	return absent, true
 }
 
 // errCLIAbsent: the user's login shell says the CLI is not installed; only
-// this drops an agent's tab. errCLIUnknown: nobody could tell (no shell, a
-// timeout, an error): the tab is kept and the reason said (foureyes).
+// this counts as missing (a warning, or the refusal when every agent's CLI
+// is). errCLIUnknown: nobody could tell (no shell, a timeout, no answer): it
+// counts as found, and the reason is said (foureyes).
 var (
 	errCLIAbsent  = errors.New("not installed")
 	errCLIUnknown = errors.New("could not tell")
