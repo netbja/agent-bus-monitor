@@ -60,19 +60,19 @@ func TestAskAnswerReplaceWithdraw(t *testing.T) {
 		t.Fatal("people is a cmd target")
 	}
 
-	if _, _, err := b.Answer(ctx, id, "amend", "bernard", "Maybe", ""); err == nil {
+	if _, _, err := b.Answer(ctx, id, "amend", "charlie", "Maybe", ""); err == nil {
 		t.Fatal("a choice that is not a label was accepted")
 	}
-	got, left, err := b.Answer(ctx, id, "amend", "bernard", "Yes", "")
+	got, left, err := b.Answer(ctx, id, "amend", "charlie", "Yes", "")
 	if err != nil || got != id || left != 2 {
 		t.Fatalf("answer: %v %s %d", err, got, left)
 	}
-	if _, _, err := b.Answer(ctx, id, "amend", "bernard", "No", ""); !errors.Is(err, ErrAskRefused) {
+	if _, _, err := b.Answer(ctx, id, "amend", "charlie", "No", ""); !errors.Is(err, ErrAskRefused) {
 		t.Fatalf("second answer: %v", err)
 	}
 	evs, _, _ = b.Recent(ctx, []string{"cmd"}, 5)
 	r := evs[len(evs)-1]
-	if r.Type != CmdReply || r.Ref != id || r.Target != "master" || r.From != "bernard" || !r.Human || r.NoWake ||
+	if r.Type != CmdReply || r.Ref != id || r.Target != "master" || r.From != "charlie" || !r.Human || r.NoWake ||
 		!strings.Contains(r.Message, `Answer to "Amendment": Yes (2 question(s) still open)`) {
 		t.Fatalf("reply %+v", r)
 	}
@@ -89,21 +89,21 @@ func TestAskAnswerReplaceWithdraw(t *testing.T) {
 		t.Fatalf("replace: %v %s", err, state)
 	}
 	// An answer on the old ask follows the replacement for an unchanged question...
-	if got, left, err := b.Answer(ctx, id, "date", "bernard", "Mon", ""); err != nil || got != id2 || left != 1 {
+	if got, left, err := b.Answer(ctx, id, "date", "charlie", "Mon", ""); err != nil || got != id2 || left != 1 {
 		t.Fatalf("answer via the old id: %v %s %d", err, got, left)
 	}
 	// ...but not for one the replacement dropped.
-	if _, _, err := b.Answer(ctx, id, "sha", "bernard", "X", ""); !errors.Is(err, ErrAskRefused) {
+	if _, _, err := b.Answer(ctx, id, "sha", "charlie", "X", ""); !errors.Is(err, ErrAskRefused) {
 		t.Fatalf("answer to a dropped question: %v", err)
 	}
-	if _, left, err := b.Answer(ctx, id2, "sha2", "bernard", "", "neither, ship dev"); err != nil || left != 0 {
+	if _, left, err := b.Answer(ctx, id2, "sha2", "charlie", "", "neither, ship dev"); err != nil || left != 0 {
 		t.Fatalf("free text: %v %d", err, left)
 	}
 	asks, _ := b.Asks(ctx)
 	if len(asks) != 2 || asks[0].State != "replaced" || asks[0].ReplacedBy != id2 || asks[1].State != "answered" || asks[1].Open() != 0 {
 		t.Fatalf("asks %+v", asks)
 	}
-	if a := asks[1].Questions[0].Answer; a == nil || a.Choice != "Yes" || a.By != "bernard" || a.At == 0 {
+	if a := asks[1].Questions[0].Answer; a == nil || a.Choice != "Yes" || a.By != "charlie" || a.At == 0 {
 		t.Fatalf("carried answer %+v", a)
 	}
 	// Answered: a new ask is allowed; withdraw it.
@@ -117,7 +117,7 @@ func TestAskAnswerReplaceWithdraw(t *testing.T) {
 	if err := b.Withdraw(ctx, "master", id3); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := b.Answer(ctx, id3, "x", "bernard", "a", ""); !errors.Is(err, ErrAskRefused) {
+	if _, _, err := b.Answer(ctx, id3, "x", "charlie", "a", ""); !errors.Is(err, ErrAskRefused) {
 		t.Fatalf("answer to a withdrawn ask: %v", err)
 	}
 }
@@ -128,7 +128,7 @@ func TestReplacementFullyAnsweredIsAnswered(t *testing.T) {
 	ctx := context.Background()
 	def := AskDef{From: "master", Title: "T", Questions: []AskQuestion{q("a", "A", "1"), q("b", "B", "1")}}
 	id, _, _ := b.Ask(ctx, def, "")
-	b.Answer(ctx, id, "a", "bernard", "1", "")
+	b.Answer(ctx, id, "a", "charlie", "1", "")
 	_, state, err := b.Ask(ctx, AskDef{From: "master", Title: "T", Questions: []AskQuestion{q("a", "A", "1")}}, id)
 	if err != nil || state != "answered" {
 		t.Fatalf("replacement keeping only the answered question: %v %s", err, state)
@@ -148,7 +148,7 @@ func TestWithdrawSweepsExpiredAsks(t *testing.T) {
 		t.Fatal(err)
 	}
 	b.r.HSet(ctx, k, "2-0", `{}`, "2-0|e", "1") // expired again after the create swept
-	if _, _, err := b.Answer(ctx, id, "a", "bernard", "1", ""); err != nil {
+	if _, _, err := b.Answer(ctx, id, "a", "charlie", "1", ""); err != nil {
 		t.Fatal(err)
 	}
 	b.r.HSet(ctx, k, "3-0", `{}`, "3-0|e", "1")
@@ -170,7 +170,7 @@ func TestAnswerTextFitsTheCapWithItsSuffix(t *testing.T) {
 	cleanAsks(t, b)
 	ctx := context.Background()
 	id, _, _ := b.Ask(ctx, AskDef{From: "master", Title: "T", Questions: []AskQuestion{q("a", "A", "1"), q("b", "B", "1")}}, "")
-	if _, _, err := b.Answer(ctx, id, "a", "bernard", "", strings.Repeat("x", CmdMaxRunes-20)); err == nil {
+	if _, _, err := b.Answer(ctx, id, "a", "charlie", "", strings.Repeat("x", CmdMaxRunes-20)); err == nil {
 		t.Fatal("an answer that only fits without the suffix was accepted")
 	}
 }
@@ -203,7 +203,7 @@ func TestWithdrawOneQuestion(t *testing.T) {
 	if v := asks[0].Questions[0].Answer.Value(); !strings.Contains(v, "withdrawn by master") {
 		t.Fatalf("value %q", v)
 	}
-	if _, _, err := b.Answer(ctx, id, "date", "bernard", "Mon", ""); err != nil {
+	if _, _, err := b.Answer(ctx, id, "date", "charlie", "Mon", ""); err != nil {
 		t.Fatal(err)
 	}
 	asks, _ = b.Asks(ctx)

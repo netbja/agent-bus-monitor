@@ -1,5 +1,5 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up             15:04:05 
- ♙ Bernard [human]  claude 5h 62% │ 7d 41%  grok 5h 100% held 15:44             
+ ♙ Charlie [human]  claude 5h 62% │ 7d 41%  grok 5h 100% held 15:44             
 ╭─ For you ───────────────────────────────────────────── 0 for you · 0 unread ─╮
 │  nothing waits for you                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -15,9 +15,9 @@
 │    FROM→TO            SUBJECT                                          N  AGE│
 │  owed by you · 0                                                             │
 │  you wait on master · 22, no reply on their thread  (oldest 1h)              │
-│  ○ bernard→master     message 21 from the person                       1   5m│
-│  ○ bernard→master     message 20 from the person                       1  10m│
-│    bernard→master     + 20 older  (enter expands)                     20   1h│
+│  ○ charlie→master     message 21 from the person                       1   5m│
+│  ○ charlie→master     message 20 from the person                       1  10m│
+│    charlie→master     + 20 older  (enter expands)                     20   1h│
 │  tracked requests · 1 waiting                                                │
 │    master→coder       busmon-group-a                                   1   1h│
 │  reviews still gated · 1 reviewer, 9 open gates                              │

@@ -1,25 +1,25 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                                           15:04:05 
- paused · resumes in 1h52 (lunch)   ♙ Bernard [human]   claude 5h ███▏  62% │ 7d ████▏      41%   grok 5h █████ 100% held 15:44             
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ███▏  62% │ 7d ████▏      41%   grok 5h █████ 100% held 15:44             
 ╭─ For you ───────────────────── 4 for you · 2 unread ─╮╭─ Agents ─────────────── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ─╮
 │  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    │
 │  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…│
 │  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask │
-│  ◆ gate   coder     by bernard  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  │
+│  ◆ gate   coder     by charlie  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  │
 │  ● unread dispatch  project paused until 16:56     8m││  ✓ architect done      40m     —        —         escalating · busy   spec merged│
 │                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…│
 │                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…│
 │                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…│
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
-│                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             bernard: y…│
+│                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity  2 Board  3 Requests  4 Plan   auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
 │    time   from      to         type       message                                                                                        │
 │  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 │    14:24  architect            status     done · spec merged                                                                             │
-│    14:50  ♙ Bernard → coder    directive  review lot 1                                                                                   │
+│    14:50  ♙ Charlie → coder    directive  review lot 1                                                                                   │
 │    14:51  coder                report     Lot 1 delivered (+197)                                                                         │
-│  ○ 14:52  master    → bernard  directive  please look at the plan                                                                        │
+│  ○ 14:52  master    → charlie  directive  please look at the plan                                                                        │
 │  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
 │  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
 │    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │

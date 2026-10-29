@@ -87,7 +87,7 @@ assert_exit 0 "auto recalls existing project" -- bash -c "PATH='$stub:$PATH' AGE
 # busmon is the first tab (herdr focuses it when the workspace opens); --as puts the person's name on it
 first_tab="$(grep -m1 -A1 '^\[\[tabs\]\]' "$tpl" | tail -1)"
 assert_eq "$first_tab" 'name = "busmon"' "busmon is the first tab"
-run new demoas "$projdir" --as bernard >/dev/null
-assert_contains "$(cat "$proj/demoas.toml")" "busmon --project demoas --as bernard" "--as reaches the busmon tab"
-assert_exit 1 "an invalid --as is refused" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' new demoas2 '$projdir' --as Bernard"
+run new demoas "$projdir" --as charlie >/dev/null
+assert_contains "$(cat "$proj/demoas.toml")" "busmon --project demoas --as charlie" "--as reaches the busmon tab"
+assert_exit 1 "an invalid --as is refused" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' new demoas2 '$projdir' --as Charlie"
 finish

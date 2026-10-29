@@ -357,7 +357,7 @@ func TestSubscribeDrainReceiverBusyExit75(t *testing.T) {
 }
 
 func TestCmdEventCarriesHuman(t *testing.T) {
-	ev := cmdEvent(bus.Event{ID: "1-0", Type: bus.CmdDirective, From: "bernard", Target: "codex", Message: "x", Human: true}, nil)
+	ev := cmdEvent(bus.Event{ID: "1-0", Type: bus.CmdDirective, From: "charlie", Target: "codex", Message: "x", Human: true}, nil)
 	var buf bytes.Buffer
 	if err := emit(&buf, ev); err != nil {
 		t.Fatal(err)
@@ -384,10 +384,10 @@ func TestRunSubscribeFromNowKeepsAPersonsEntry(t *testing.T) {
 	if _, err := b.Cmd(ctx, "helper", "dev", bus.CmdDirective, "", "OLD from an agent"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.HumanClose(ctx, "bernard", "dev", "1-0", "closed by a person"); err != nil {
+	if _, err := b.HumanClose(ctx, "charlie", "dev", "1-0", "closed by a person"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.HumanCmd(ctx, "bernard", "dev", "ANSWER"); err != nil {
+	if _, err := b.HumanCmd(ctx, "charlie", "dev", "ANSWER"); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(5 * time.Millisecond) // the floor is "<ms>-0": entries of its own millisecond count as new
@@ -412,7 +412,7 @@ func TestRunSubscribeFromNowKeepsAPersonsEntry(t *testing.T) {
 	if _, err := b.Cmd(ctx, "helper", "fresh", bus.CmdDirective, "", "agent backlog"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.HumanCmd(ctx, "bernard", "fresh", "FIRST ANSWER"); err != nil {
+	if _, err := b.HumanCmd(ctx, "charlie", "fresh", "FIRST ANSWER"); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(5 * time.Millisecond)
@@ -434,7 +434,7 @@ func TestRunSubscribeFromNowKeepsAPersonsEntry(t *testing.T) {
 
 	// An explicit cursor is the agent's own record of what it handled: a
 	// person's entry at or below it is not delivered again.
-	id, err := b.HumanCmd(ctx, "bernard", "dev", "HANDLED")
+	id, err := b.HumanCmd(ctx, "charlie", "dev", "HANDLED")
 	if err != nil {
 		t.Fatal(err)
 	}

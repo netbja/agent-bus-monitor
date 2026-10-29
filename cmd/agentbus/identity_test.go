@@ -24,7 +24,7 @@ func TestIdentitySetCreatesThePrivateFile(t *testing.T) {
 	if code := runIdentity(nil, env, &out, &errw); code != 1 {
 		t.Fatalf("unset: code %d", code)
 	}
-	if code := runIdentity([]string{"set", "bernard"}, env, &out, &errw); code != 0 {
+	if code := runIdentity([]string{"set", "charlie"}, env, &out, &errw); code != 0 {
 		t.Fatalf("set: %d %s", code, errw.String())
 	}
 	st, err := os.Stat(path)
@@ -32,7 +32,7 @@ func TestIdentitySetCreatesThePrivateFile(t *testing.T) {
 		t.Fatalf("stat %v %v", st, err)
 	}
 	out.Reset()
-	if code := runIdentity(nil, env, &out, &errw); code != 0 || strings.TrimSpace(out.String()) != "bernard" {
+	if code := runIdentity(nil, env, &out, &errw); code != 0 || strings.TrimSpace(out.String()) != "charlie" {
 		t.Fatalf("get: %d %q", code, out.String())
 	}
 }
@@ -47,11 +47,11 @@ func TestIdentitySetKeepsTheOtherSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errw bytes.Buffer
-	if code := runIdentity([]string{"set", "bernard"}, env, &out, &errw); code != 0 {
+	if code := runIdentity([]string{"set", "charlie"}, env, &out, &errw); code != 0 {
 		t.Fatalf("set: %d %s", code, errw.String())
 	}
 	b, _ := os.ReadFile(path)
-	if !strings.HasPrefix(string(b), orig) || !strings.Contains(string(b), "[identity]\nas = \"bernard\"") {
+	if !strings.HasPrefix(string(b), orig) || !strings.Contains(string(b), "[identity]\nas = \"charlie\"") {
 		t.Fatalf("file:\n%s", b)
 	}
 	if code := runIdentity([]string{"set", "other"}, env, &out, &errw); code != 1 {
@@ -62,7 +62,7 @@ func TestIdentitySetKeepsTheOtherSettings(t *testing.T) {
 func TestIdentityRefusesBadNamesAndBrokenFiles(t *testing.T) {
 	env, path := identityEnv(t)
 	var out, errw bytes.Buffer
-	if code := runIdentity([]string{"set", "Bernard J"}, env, &out, &errw); code != 1 {
+	if code := runIdentity([]string{"set", "Charlie J"}, env, &out, &errw); code != 1 {
 		t.Fatalf("bad name: %d", code)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -71,7 +71,7 @@ func TestIdentityRefusesBadNamesAndBrokenFiles(t *testing.T) {
 	if err := os.WriteFile(path, []byte("[waiting\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code := runIdentity([]string{"set", "bernard"}, env, &out, &errw); code != 1 {
+	if code := runIdentity([]string{"set", "charlie"}, env, &out, &errw); code != 1 {
 		t.Fatalf("broken file: %d", code)
 	}
 	if b, _ := os.ReadFile(path); string(b) != "[waiting\n" {
@@ -82,7 +82,7 @@ func TestIdentityRefusesBadNamesAndBrokenFiles(t *testing.T) {
 func TestUpDefaultsAsToTheRecordedName(t *testing.T) {
 	work, _, _, boot, deps := upFixture(t)
 	env, _ := identityEnv(t)
-	if code := runIdentity([]string{"set", "bernard"}, env, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+	if code := runIdentity([]string{"set", "charlie"}, env, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
 		t.Fatal("set failed")
 	}
 	base := deps.Env
@@ -95,8 +95,8 @@ func TestUpDefaultsAsToTheRecordedName(t *testing.T) {
 	var out, errw bytes.Buffer
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	runUp([]string{"demo", work, "--as", "pilot"}, deps, &out, &errw)
-	if len(*boot) < 2 || (*boot)[0] != "demo "+work+" --as bernard" || !strings.HasSuffix((*boot)[len(*boot)-1], "--as pilot") ||
-		strings.Contains((*boot)[len(*boot)-1], "bernard") {
+	if len(*boot) < 2 || (*boot)[0] != "demo "+work+" --as charlie" || !strings.HasSuffix((*boot)[len(*boot)-1], "--as pilot") ||
+		strings.Contains((*boot)[len(*boot)-1], "charlie") {
 		t.Fatalf("bootstrap calls = %q", *boot)
 	}
 }

@@ -60,7 +60,7 @@ func TestNoWorkOpensOnASwappingAgent(t *testing.T) {
 	if err := b.BeginSwap(ctx, "foureyes", SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.BeginSwap(ctx, "foureyes", SwapIntent{ToProfile: "opus", By: "bernard"}); !errors.Is(err, ErrSwapInProgress) {
+	if err := b.BeginSwap(ctx, "foureyes", SwapIntent{ToProfile: "opus", By: "charlie"}); !errors.Is(err, ErrSwapInProgress) {
 		t.Fatalf("second BeginSwap = %v", err)
 	}
 	if err := b.OpenChallenge(ctx, "foureyes", "pr-1", "coder|review"); err == nil {

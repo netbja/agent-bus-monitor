@@ -81,7 +81,7 @@ func TestObserveSkipsAPausedProject(t *testing.T) {
 	b, _ := dialRun(t)
 	ctx := context.Background()
 	register(t, b, "dev", "p1")
-	if _, err := b.SetPause(ctx, "bernard", "master", "test", time.Now().Add(time.Hour)); err != nil {
+	if _, err := b.SetPause(ctx, "charlie", "master", "test", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	rt := newFakeRT(alwaysReady)

@@ -393,7 +393,7 @@ func TestShellServicesCardsLeftRight(t *testing.T) {
 	}
 }
 
-// busmon-f3-live (Bernard): the Services page judged its cards from the
+// busmon-f3-live (Charlie): the Services page judged its cards from the
 // records the last poll held, then never again, so a record 25 s old at the
 // open read down while the header said ready. The page reads the records
 // fresh in its command, and re-reads them every svcRefresh while it is open.

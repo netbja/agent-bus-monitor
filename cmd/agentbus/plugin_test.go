@@ -59,10 +59,10 @@ func TestPluginProjectsOpensThePicker(t *testing.T) {
 
 func TestPluginBusmonOpensThePaneForAProject(t *testing.T) {
 	r := newPluginRig(t, `{"workspace_id":"w2","focused_pane_id":"w2:p1","workspace_label":"demo"}`)
-	tpl := "name = \"demo\"\nworking_dir = \"/w\"\n\n[[tabs]]\nname = \"busmon\"\ncommand = \"'/r/busmon' --project demo --as 'Bernard J'\"\n"
+	tpl := "name = \"demo\"\nworking_dir = \"/w\"\n\n[[tabs]]\nname = \"busmon\"\ncommand = \"'/r/busmon' --project demo --as 'Charlie J'\"\n"
 	os.WriteFile(filepath.Join(r.env["AGENTBUS_PROJECTS_DIR"], "demo.toml"), []byte(tpl), 0o600)
 	r.run("busmon")
-	want := open + "busmon --target-pane w2:p1 --env AGENTBUS_PLUGIN_PROJECT=demo --env AGENTBUS_PLUGIN_AS=Bernard J"
+	want := open + "busmon --target-pane w2:p1 --env AGENTBUS_PLUGIN_PROJECT=demo --env AGENTBUS_PLUGIN_AS=Charlie J"
 	if len(r.calls) != 1 || r.calls[0] != want {
 		t.Fatalf("calls %q want %q", r.calls, want)
 	}
@@ -132,12 +132,12 @@ func TestPluginPaneTargetsMatchPlacement(t *testing.T) {
 func TestPluginBusmonPaneRunsBusmon(t *testing.T) {
 	r := newPluginRig(t, "")
 	r.env["AGENTBUS_PLUGIN_PROJECT"] = "demo"
-	r.env["AGENTBUS_PLUGIN_AS"] = "Bernard J"
+	r.env["AGENTBUS_PLUGIN_AS"] = "Charlie J"
 	r.run("busmon-pane")
 	exe, _ := os.Executable()
 	exe, _ = filepath.EvalSymlinks(exe)
 	bm := filepath.Join(filepath.Dir(exe), "busmon")
-	want := []string{bm, bm, "--project", "demo", "--as", "Bernard J"}
+	want := []string{bm, bm, "--project", "demo", "--as", "Charlie J"}
 	if len(r.execs) != 1 || strings.Join(r.execs[0], "|") != strings.Join(want, "|") {
 		t.Fatalf("execs %q want %q", r.execs, want)
 	}

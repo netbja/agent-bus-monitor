@@ -79,8 +79,8 @@ func TestReaderNextInForYouUnread(t *testing.T) {
 	// the same sender would supersede the older one).
 	at := func(d time.Duration) string { return fmt.Sprintf("%d-0", shellNow.Add(-d).UnixMilli()) }
 	m = step(t, m, tailMsg{events: []bus.Event{
-		{ID: at(90 * time.Second), Kind: "cmd", Type: bus.CmdDirective, From: "architect", Target: "bernard", Message: "spec question"},
-		{ID: at(60 * time.Second), Kind: "cmd", Type: bus.CmdDirective, From: "sentinel", Target: "bernard", Message: "health note"},
+		{ID: at(90 * time.Second), Kind: "cmd", Type: bus.CmdDirective, From: "architect", Target: "charlie", Message: "spec question"},
+		{ID: at(60 * time.Second), Kind: "cmd", Type: bus.CmdDirective, From: "sentinel", Target: "charlie", Message: "health note"},
 	}})
 	m.focusPanel(PanelForYou)
 	m.refresh()

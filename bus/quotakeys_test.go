@@ -67,16 +67,16 @@ func TestQuotaPauseNeverReplacesAnotherPause(t *testing.T) {
 	}
 	// A person's pause carrying the same reason is never taken for the
 	// dispatcher's: only the exact record the dispatcher wrote is ended.
-	if _, err := b.SetPause(ctx, "bernard", "master", "quota anthropic", time.Now().Add(time.Hour)); err != nil {
+	if _, err := b.SetPause(ctx, "charlie", "master", "quota anthropic", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _ := b.FencedQuotaUnpause(ctx, "tok", "anthropic", "dispatch"); ok {
 		t.Fatal("ended a person's pause that only shares the reason")
 	}
-	if pz, _ := b.Pause(ctx); pz == nil || pz.By != "bernard" {
+	if pz, _ := b.Pause(ctx); pz == nil || pz.By != "charlie" {
 		t.Fatalf("the person's pause is gone: %+v", pz)
 	}
-	if _, err := b.SetPause(ctx, "bernard", "master", "dinner", time.Now().Add(time.Hour)); err != nil {
+	if _, err := b.SetPause(ctx, "charlie", "master", "dinner", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _ := b.FencedQuotaPause(ctx, "tok", "anthropic", "master", until); ok {

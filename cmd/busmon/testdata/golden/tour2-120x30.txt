@@ -4,7 +4,7 @@
 │  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
 │  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
 │  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-│  ◆ gate   coder     by bernard  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+│  ◆ gate   coder     by charlie  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
 │  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
 │                     ╭─ Writing to an agent ────────────────────────────────────────────── 2/5 ─╮ate 1 · d… busmon-ch…▼
 ╰─────────────────────│                                                                          │─────────────────────╯
@@ -12,7 +12,7 @@
 │    time   from      │ woken and reads it. @all reaches every agent; tab completes a name.      │                     │
 │  ── Mon 2026-10-26 -│                                                                          │─────────────────────│
 │    14:24  architect │   i     the line: @coder please rebase                                   │                     │
-│    14:50  ♙ Bernard │   I ^O  the compose window, several lines; ^S sends                      │                     │
+│    14:50  ♙ Charlie │   I ^O  the compose window, several lines; ^S sends                      │                     │
 │    14:51  coder     │                                                                          │                     │
 │  ○ 14:52  master    │ Text without @name is a broadcast nobody reads: busmon asks for a second │                     │
 │  ● 14:56  dispatch  │ enter before it sends one.                                               │                     │

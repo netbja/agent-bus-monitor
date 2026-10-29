@@ -23,7 +23,7 @@ import (
 // shellOf is the shell on st, as the program has it after a size and a poll.
 func shellOf(t testing.TB, st *shared, w, h int, fw *fakeWriter) Model {
 	t.Helper()
-	cfg := shellConfig{project: "demo", self: "bernard", st: st}
+	cfg := shellConfig{project: "demo", self: "charlie", st: st}
 	if fw != nil {
 		cfg.w = fw
 	}
@@ -335,7 +335,7 @@ func TestLookupMatrix(t *testing.T) {
 func TestShellCompletionNames(t *testing.T) {
 	now := time.Now()
 	st := demoShared(now)
-	st.agents["bernard"] = &agentState{state: "idle", stateAt: now, registered: true}
+	st.agents["charlie"] = &agentState{state: "idle", stateAt: now, registered: true}
 	st.agents["old"] = &agentState{state: "idle", stateAt: now.Add(-48 * time.Hour), lastSeen: now.Add(-48 * time.Hour), registered: true}
 	st.agents["ghost"] = &agentState{armed: true}
 	m := shellOf(t, st, 160, 45, nil)
@@ -527,10 +527,10 @@ func TestShellComposeScrollbar(t *testing.T) {
 
 func TestShellTailSetsTheHint(t *testing.T) {
 	f := &fakeReader{calls: map[string]int{}, snaps: map[string]bus.AgentSnapshot{
-		"master": {State: "idle", Message: "lot 1 delivered; awaiting bernard", TS: 1},
+		"master": {State: "idle", Message: "lot 1 delivered; awaiting charlie", TS: 1},
 		"coder":  {State: "idle", Message: "done", TS: 1}}}
 	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{},
-		health: health{ok: true}, person: "bernard"}
+		health: health{ok: true}, person: "charlie"}
 	pollOnce(context.Background(), f, st, 1)
 	if !st.agents["master"].forYou || st.agents["coder"].forYou {
 		t.Fatalf("poll: master %v coder %v", st.agents["master"].forYou, st.agents["coder"].forYou)
@@ -538,7 +538,7 @@ func TestShellTailSetsTheHint(t *testing.T) {
 	m := shellOf(t, st, 140, 40, nil)
 	m = step(t, m, tailMsg{events: []bus.Event{
 		{ID: "2-0", Kind: "status", Agent: "master", State: "working", Message: "on it"},
-		{ID: "3-0", Kind: "status", Agent: "coder", State: "idle", Message: "handed to Bernard"}}})
+		{ID: "3-0", Kind: "status", Agent: "coder", State: "idle", Message: "handed to Charlie"}}})
 	if st.agents["master"].forYou || !st.agents["coder"].forYou || !m.snap.agents["coder"].forYou {
 		t.Fatalf("tail: master %v coder %v", st.agents["master"].forYou, st.agents["coder"].forYou)
 	}
@@ -684,10 +684,10 @@ func TestShellAllFanOutReadsAsOneActivityLine(t *testing.T) {
 	var evs []bus.Event
 	for i, a := range []string{"coder", "foureyes", "master"} {
 		evs = append(evs, bus.Event{ID: fmt.Sprintf("%d-0", base+int64(i)), Kind: "cmd", Type: bus.CmdDirective,
-			From: "bernard", Target: a, Message: "end of session", Human: true})
+			From: "charlie", Target: a, Message: "end of session", Human: true})
 	}
 	evs = append(evs, bus.Event{ID: fmt.Sprintf("%d-0", base+5), Kind: "cmd", Type: bus.CmdDirective,
-		From: "bernard", Target: "coder", Message: "another thing", Human: true})
+		From: "charlie", Target: "coder", Message: "another thing", Human: true})
 	m = step(t, m, tailMsg{events: evs})
 	var events []feedLine
 	for _, fl := range m.feed.feed {
@@ -868,11 +868,11 @@ func TestShellReportOfAWaitingAgentIsForThePerson(t *testing.T) {
 // still in the retained window; its save runs in a command.
 func TestShellOpeningAMarkedLineReadsItAndSavesTheCache(t *testing.T) {
 	dir := t.TempDir()
-	cfg := shellConfig{project: "demo", self: "bernard", st: demoShared(time.Now()),
+	cfg := shellConfig{project: "demo", self: "charlie", st: demoShared(time.Now()),
 		cache: &busmonCache{Project: "demo", Read: []string{"1-0"}}, cachePath: filepath.Join(dir, "busmon", "demo.json")}
 	m := newShell(cfg)
 	m = step(t, m, tea.WindowSizeMsg{Width: 160, Height: 45})
-	m = step(t, m, tailMsg{events: []bus.Event{{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "bernard", Message: "look"}}})
+	m = step(t, m, tailMsg{events: []bus.Event{{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "charlie", Message: "look"}}})
 	if !m.feed.unread.forPerson["200-0"] || m.feed.feed[len(m.feed.feed)-1].mark != markUnread {
 		t.Fatal("a cmd to the person is not marked unread")
 	}
@@ -898,7 +898,7 @@ func TestShellOpeningAMarkedLineReadsItAndSavesTheCache(t *testing.T) {
 		t.Fatal("still marked after opening")
 	}
 	// A new shell on that cache starts with the line read.
-	again := newShell(shellConfig{project: "demo", self: "bernard", cache: &busmonCache{Read: []string{"200-0"}}})
+	again := newShell(shellConfig{project: "demo", self: "charlie", cache: &busmonCache{Read: []string{"200-0"}}})
 	if !again.feed.unread.read["200-0"] {
 		t.Fatal("the read marks are not loaded at start")
 	}
@@ -924,7 +924,7 @@ func TestShellAskFollowsAReplacement(t *testing.T) {
 	m := keys(t, shellOf(t, st, 160, 45, fw), '!')
 	old, repl := demoAsk(), demoAsk()
 	repl.ID = "200-0"
-	repl.Questions[1].Answer = &bus.AskAnswer{Choice: "Mon 10:00", By: "bernard"}
+	repl.Questions[1].Answer = &bus.AskAnswer{Choice: "Mon 10:00", By: "charlie"}
 	old.State, old.ReplacedBy = "replaced", "200-0"
 	m, cmd := pressCmd(t, m, kEnter)
 	st.asks = []bus.Ask{old, repl} // the poll brings the replacement
@@ -952,7 +952,7 @@ func TestShellYCopiesTheQuestion(t *testing.T) {
 func TestShellBellOncePerAskNotOnItsCompletion(t *testing.T) {
 	now := time.Now()
 	st := demoShared(now)
-	m := newShell(shellConfig{project: "demo", self: "bernard", st: st, settings: busmonSettings{Bell: true}})
+	m := newShell(shellConfig{project: "demo", self: "charlie", st: st, settings: busmonSettings{Bell: true}})
 	m = step(t, m, tea.WindowSizeMsg{Width: 160, Height: 45})
 	poll := func(f func(a *agentState)) {
 		a := *st.agents["master"]
@@ -978,7 +978,7 @@ func TestShellReminderWaitsForADraftAndAPage(t *testing.T) {
 	now := time.Now()
 	st := &shared{agents: map[string]*agentState{}, asks: []bus.Ask{{ID: "1-0", From: "coder", State: "open", Title: "Review?",
 		CreatedAt: now.Add(-10 * time.Minute).UnixMilli(), Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "q1", Question: "Review?"}}}}}}
-	m := newShell(shellConfig{project: "demo", self: "bernard", st: st})
+	m := newShell(shellConfig{project: "demo", self: "charlie", st: st})
 	m = step(t, m, tea.WindowSizeMsg{Width: 160, Height: 45})
 	m.ui.msgDraft = "draft"
 	m.cfg.settings = busmonSettings{PopupAfter: time.Minute, Snooze: time.Hour}

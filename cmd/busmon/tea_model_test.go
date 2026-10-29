@@ -48,8 +48,8 @@ func TestShellViewIsPure(t *testing.T) {
 // pollMsg schedules the next tick.
 func TestShellPollCycle(t *testing.T) {
 	f := &fakeReader{calls: map[string]int{}}
-	st := &shared{agents: map[string]*agentState{}, person: "bernard"}
-	m := newShell(shellConfig{ctx: context.Background(), reader: f, st: st, project: "demo", self: "bernard"})
+	st := &shared{agents: map[string]*agentState{}, person: "charlie"}
+	m := newShell(shellConfig{ctx: context.Background(), reader: f, st: st, project: "demo", self: "charlie"})
 	m = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
 	if f.calls["PilotDriver"] != 0 {
 		t.Fatal("a size read the bus")
@@ -85,8 +85,8 @@ func TestShellPollCycle(t *testing.T) {
 
 // A tailed status reaches both the Activity feed and the agent's state.
 func TestShellTailFoldsEvents(t *testing.T) {
-	st := &shared{agents: map[string]*agentState{}, person: "bernard"}
-	m := newShell(shellConfig{st: st, project: "demo", self: "bernard"})
+	st := &shared{agents: map[string]*agentState{}, person: "charlie"}
+	m := newShell(shellConfig{st: st, project: "demo", self: "charlie"})
 	m = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
 	gen := m.gen
 	m = step(t, m, tailMsg{events: []bus.Event{{ID: "1793000000000-0", Kind: "status", Agent: "coder", State: "working", Message: "x"}}})
@@ -102,7 +102,7 @@ func TestShellTailFoldsEvents(t *testing.T) {
 }
 
 // At the medium tier For you shows four items, then "+N more"; focused, it
-// lists them all and scrolls (Bernard's decision 1).
+// lists them all and scrolls (Charlie's decision 1).
 func TestShellForYouMediumShowsFourThenMore(t *testing.T) {
 	pinLocal(t)
 	m := fixtureShell(t, 80, 24)

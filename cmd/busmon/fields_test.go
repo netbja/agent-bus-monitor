@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// busmon-detail-labels (Bernard): a page's "key  value" rows read as
+// busmon-detail-labels (Charlie): a page's "key  value" rows read as
 // "Label:  value": the label capitalised with a colon, every value of the
 // block in one column two cells after the longest label, a long value
 // wrapping under its value and never under the label; an empty label
@@ -13,7 +13,7 @@ import (
 func TestFieldsAlignAndWrap(t *testing.T) {
 	var f fields
 	f.add("state", S(RoleAttention, "waiting for you"))
-	f.add("title", S(RoleText, "Live trial of the auto /clear at 80% (AGENT_BUS_AUTO_CLEAR) with Bernard, then its default"))
+	f.add("title", S(RoleText, "Live trial of the auto /clear at 80% (AGENT_BUS_AUTO_CLEAR) with Charlie, then its default"))
 	f.add("", S(RoleMuted, "a continuation"))
 	f.gap()
 	f.add("last fact", S(RoleText, "3m ago"))
@@ -24,7 +24,7 @@ func TestFieldsAlignAndWrap(t *testing.T) {
 		"Title:      Live trial of the auto",
 		"            /clear at 80%",
 		"            (AGENT_BUS_AUTO_CLEAR) with",
-		"            Bernard, then its default",
+		"            Charlie, then its default",
 		"            a continuation",
 		"",
 		"Last fact:  3m ago",

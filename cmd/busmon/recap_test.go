@@ -20,7 +20,7 @@ func TestBuildRecapIsDeterministicAndCoversTheExpectedSections(t *testing.T) {
 		"second": {State: "open", Owner: "coder", Branch: "feat/second"},
 	}
 	input := recapInput{
-		Now: now, Since: since, Human: "bernard",
+		Now: now, Since: since, Human: "charlie",
 		Agents: map[string]*agentState{
 			"master":  {state: "working", message: "coordinating", stateAt: now.Add(-5 * time.Minute), registered: true, provider: "anthropic"},
 			"coder":   {state: "waiting", message: "review this", stateAt: now.Add(-30 * time.Minute), registered: true},
@@ -69,7 +69,7 @@ func TestBuildRecapIsDeterministicAndCoversTheExpectedSections(t *testing.T) {
 
 func TestBuildRecapLabelsReadFailuresAndDisablesUnsafeSummary(t *testing.T) {
 	now := time.Now()
-	m := buildRecap(recapInput{Now: now, Since: now.Add(-time.Hour), Human: "bernard",
+	m := buildRecap(recapInput{Now: now, Since: now.Add(-time.Hour), Human: "charlie",
 		Agents: map[string]*agentState{"master": {registered: true, provider: "anthropic"}},
 		Holds:  map[string]int64{"anthropic": now.Add(time.Hour).Unix()}, Pause: &bus.PauseRecord{},
 		Errors: map[string]error{"cmd": errTestRead, "Board": errTestRead}})

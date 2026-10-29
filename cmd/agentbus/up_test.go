@@ -79,10 +79,10 @@ func upFixture(t *testing.T) (string, string, *fakeHerdr, *[]string, upDeps) {
 func TestUpProvisionsAndOpensBusmonFirst(t *testing.T) {
 	work, _, h, boot, deps := upFixture(t)
 	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work, "--as", "bernard"}, deps, &out, &errw); code != 0 {
+	if code := runUp([]string{"demo", work, "--as", "charlie"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if len(*boot) != 1 || (*boot)[0] != "demo "+work+" --as bernard" {
+	if len(*boot) != 1 || (*boot)[0] != "demo "+work+" --as charlie" {
 		t.Fatalf("bootstrap calls = %q", *boot)
 	}
 	want := []string{

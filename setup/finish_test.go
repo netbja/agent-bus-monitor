@@ -52,11 +52,11 @@ func TestIdentity(t *testing.T) {
 	_ = os.WriteFile(ab, []byte("#!/bin/sh\n"), 0o755)
 	f := in.R.(*fakeRunner)
 	f.cmds[ab+" identity"] = fakeCmd{err: errors.New("none")}
-	f.cmds[ab+" identity set bernard"] = fakeCmd{}
+	f.cmds[ab+" identity set charlie"] = fakeCmd{}
 	var shown bytes.Buffer
-	in.Identity(ctx, &Prompter{TTY: fakeTTY{strings.NewReader("bernard\n"), &shown}})
+	in.Identity(ctx, &Prompter{TTY: fakeTTY{strings.NewReader("charlie\n"), &shown}})
 	if shown.String() != "    ? Your name on the bus (lowercase, e.g. charlie; Enter to skip): " ||
-		out.String() != "    ✓ busmon and agentbus up will know you as bernard\n" {
+		out.String() != "    ✓ busmon and agentbus up will know you as charlie\n" {
 		t.Fatalf("%q %q", shown.String(), out.String())
 	}
 	for name, set := range map[string]func(){

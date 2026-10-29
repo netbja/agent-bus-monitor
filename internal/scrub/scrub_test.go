@@ -17,19 +17,19 @@ import (
 // denied are matched case-insensitively, as whole words.
 var denied = regexp.MustCompile(`(?i)\b(host1|hermes|hyperliquid|ai-tradex(-solana)?|polymarket|sysnet|project-c|myprojecttools|herdr-radar)\b`)
 
-// maintainer is the maintainer's name: allowed only where it is history or a
-// test's sample person (master: specs, releases, plans, memory, the
-// CHANGELOG, tests and fixtures); anywhere else a user-facing example uses
-// charlie and prose "the person" (reviewer-codex).
+// maintainer is the maintainer's name: allowed only in history (master:
+// specs, releases, plans, memory and the CHANGELOG); anywhere else, tests and
+// fixtures included, the sample person is charlie and prose says "the
+// person" (reviewer-codex).
 var maintainer = regexp.MustCompile(`(?i)\bbernard\b`)
 
 func maintainerAllowed(path string) bool {
-	for _, p := range []string{"docs/superpowers/", "docs/releases/", "docs/plans/", "docs/memory/", "specs/", "tests/"} {
+	for _, p := range []string{"docs/superpowers/", "docs/releases/", "docs/plans/", "docs/memory/", "specs/"} {
 		if strings.HasPrefix(path, p) {
 			return true
 		}
 	}
-	return path == "CHANGELOG.md" || strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/testdata/")
+	return path == "CHANGELOG.md"
 }
 
 func TestNoPrivateReferences(t *testing.T) {
@@ -74,7 +74,7 @@ func TestDenylistPattern(t *testing.T) {
 		path string
 		ok   bool
 	}{{"README.md", false}, {"skills/x/SKILL.md", false}, {"roles.toml", false}, {"cmd/busmon/human.go", false},
-		{"cmd/busmon/human_test.go", true}, {"cmd/busmon/testdata/golden/x.txt", true}, {"tests/bootstrap_test.sh", true},
+		{"cmd/busmon/human_test.go", false}, {"cmd/busmon/testdata/golden/x.txt", false}, {"tests/bootstrap_test.sh", false},
 		{"docs/releases/v0.6.0.md", true}, {"docs/memory/INDEX.md", true}, {"CHANGELOG.md", true}} {
 		if maintainerAllowed(c.path) != c.ok {
 			t.Errorf("%s: allowed %v, want %v", c.path, !c.ok, c.ok)

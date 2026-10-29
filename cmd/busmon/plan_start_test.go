@@ -10,8 +10,8 @@ import (
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
-// busmon-detail-labels (Bernard): a plan task waiting for the person had no
-// way to act from its page. busmon-plan-start-ux (Bernard): the action is a
+// busmon-detail-labels (Charlie): a plan task waiting for the person had no
+// way to act from its page. busmon-plan-start-ux (Charlie): the action is a
 // row of the fields block, right under Owner ("Action:  enter  start the
 // discussion with master"), not a line floating below it; Enter or s start it,
 // the key cell drawn from the overlay key table. Starting opens the compose

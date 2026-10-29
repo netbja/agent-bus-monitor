@@ -156,8 +156,8 @@ func TestShellPausePopup(t *testing.T) {
 		{"s", func(m Model) (Model, tea.Cmd) { return pressCmd(t, m, 's') }, []string{"cmd coder go"}},
 		{"click send", func(m Model) (Model, tea.Cmd) { x, y := pauseButton(t, m, 1); return clickCmd(t, m, x, y) }, []string{"cmd coder go"}},
 		{"enter on send", func(m Model) (Model, tea.Cmd) { return pressCmd(t, keys(t, m, kBacktab), kEnter) }, []string{"cmd coder go"}},
-		{"r", func(m Model) (Model, tea.Cmd) { return pressCmd(t, m, 'r') }, []string{"resume bernard", "cmd coder go"}},
-		{"click resume", func(m Model) (Model, tea.Cmd) { x, y := pauseButton(t, m, 0); return clickCmd(t, m, x, y) }, []string{"resume bernard", "cmd coder go"}},
+		{"r", func(m Model) (Model, tea.Cmd) { return pressCmd(t, m, 'r') }, []string{"resume charlie", "cmd coder go"}},
+		{"click resume", func(m Model) (Model, tea.Cmd) { x, y := pauseButton(t, m, 0); return clickCmd(t, m, x, y) }, []string{"resume charlie", "cmd coder go"}},
 	} {
 		fw := &fakeWriter{}
 		m := typeText(t, keys(t, shellWith(t, 140, 40, shellConfig{w: fw}, true), 'i'), "@coder go")
@@ -235,7 +235,7 @@ var (
 // lineShown is the line's text with its cursor marked "|".
 func lineShown(m Model) string { return show(m.ui.edit, m.lineCur()) }
 
-// busmon-input-cursor (Bernard): a typo is fixed in place. Left/Right move by
+// busmon-input-cursor (Charlie): a typo is fixed in place. Left/Right move by
 // cluster, Home/End and Ctrl+A/Ctrl+E jump to the ends, typing, Backspace and
 // Delete act at the cursor, Ctrl+W and Ctrl+U delete back to a word or the
 // start, and the line still sends what it shows.

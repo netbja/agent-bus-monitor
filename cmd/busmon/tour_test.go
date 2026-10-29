@@ -33,7 +33,7 @@ func keyMsg(k any) tea.Msg {
 func tourShell(t *testing.T, w, h, seen int, poll bool) (Model, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "busmon", tourMarkerFile)
-	m := newShell(shellConfig{project: "agent-bus-monitor", self: "bernard", tour: &tourMarker{Seen: seen, path: path}})
+	m := newShell(shellConfig{project: "agent-bus-monitor", self: "charlie", tour: &tourMarker{Seen: seen, path: path}})
 	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	m = step(t, m, tailMsg{events: shellEvents(shellNow)})
 	if poll {
@@ -115,7 +115,7 @@ func TestTourSkipAndFinishWriteTheMarker(t *testing.T) {
 	if err != nil || mk.Seen != tourVersion {
 		t.Fatalf("reload: %+v %v", mk, err)
 	}
-	m2 := newShell(shellConfig{project: "another", self: "bernard", tour: mk})
+	m2 := newShell(shellConfig{project: "another", self: "charlie", tour: mk})
 	m2 = step(t, m2, tea.WindowSizeMsg{Width: 120, Height: 30})
 	if m2 = tourPoll(t, m2); m2.ui.tour != nil {
 		t.Error("a second project reopened the tour")
@@ -267,7 +267,7 @@ func TestTourWaitsForTheCalm(t *testing.T) {
 	})
 	t.Run("bell", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), tourMarkerFile)
-		m := newShell(shellConfig{project: "agent-bus-monitor", self: "bernard", settings: busmonSettings{Bell: true},
+		m := newShell(shellConfig{project: "agent-bus-monitor", self: "charlie", settings: busmonSettings{Bell: true},
 			tour: &tourMarker{path: path}})
 		m = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
 		m = tourPoll(t, m) // the fixture's waiting agents ring
@@ -353,11 +353,11 @@ func TestTourMentionsNoBareKey(t *testing.T) {
 func TestTourHeaderPageUsesTheHeaderPills(t *testing.T) {
 	plain := func(l Line) string { return l.text() }
 	got := ""
-	for _, l := range tourLines(tourBook[len(tourBook)-1], 72, "bernard") {
+	for _, l := range tourLines(tourBook[len(tourBook)-1], 72, "charlie") {
 		got += l.text() + "\n"
 	}
 	for _, want := range []string{plain(healthSeg(health{ok: true}, shellNow, false)), plain(dispatchSeg("up", false)),
-		plain(missionsSeg("up", false)), plain(guardianSeg(tourGuardian(), false)), humanLabel("bernard", "")} {
+		plain(missionsSeg("up", false)), plain(guardianSeg(tourGuardian(), false)), humanLabel("charlie", "")} {
 		if !strings.Contains(got, want) {
 			t.Errorf("header page lacks the pill %q:\n%s", want, got)
 		}
@@ -429,7 +429,7 @@ func TestTourAlignment(t *testing.T) {
 			}
 			g := m.grid()
 			checkFrameAt(t, func(x, y int) string { return g.at(x, y).text }, fmt.Sprintf("tour page %d at %dx%d", i+1, sz[0], sz[1]), r, false)
-			for _, l := range tourLines(tourBook[i], r.W-4, "bernard") {
+			for _, l := range tourLines(tourBook[i], r.W-4, "charlie") {
 				if l.Width() > r.W-4 {
 					t.Errorf("%dx%d page %d: line %q is %d cells, wider than %d", sz[0], sz[1], i+1, l.text(), l.Width(), r.W-4)
 				}
@@ -459,7 +459,7 @@ func TestTourAutoOpensOnlyWhenEveryPageFits(t *testing.T) {
 			opened++
 			for i := range tourBook {
 				r := m.tourRectFor(i)
-				if n := len(tourLines(tourBook[i], r.W-4, "bernard")); n > r.H-5 {
+				if n := len(tourLines(tourBook[i], r.W-4, "charlie")); n > r.H-5 {
 					t.Errorf("%dx%d page %d: %d lines in %d rows", sz[0], sz[1], i+1, n, r.H-5)
 				}
 			}

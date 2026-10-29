@@ -13,5 +13,5 @@ Id:      1792999991000-0
 Thread:  1792999980000-0  (reply in thread)  [2 retained entries]
 
 ── thread ──
-  07:33:00 directive bernard→master   start lot 1
+  07:33:00 directive charlie→master   start lot 1
 ▶ 07:33:11 directive master→coder     review [red]lot 1[-] please

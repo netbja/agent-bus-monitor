@@ -29,9 +29,9 @@ func shellFixture(now time.Time) snapshot {
 			Options: []bus.AskOption{{Label: "yes"}, {Label: "no"}}}}
 	}
 	return snapshot{
-		person: "bernard", pilot: "master", dispatch: "up", missions: "up",
+		person: "charlie", pilot: "master", dispatch: "up", missions: "up",
 		health: health{ok: true, since: ago(time.Hour)},
-		pause:  &bus.PauseRecord{Until: now.Add(112 * time.Minute).UnixMilli(), By: "bernard", Reason: "lunch", At: ms(8 * time.Minute)},
+		pause:  &bus.PauseRecord{Until: now.Add(112 * time.Minute).UnixMilli(), By: "charlie", Reason: "lunch", At: ms(8 * time.Minute)},
 		budgets: map[string]bus.BudgetSnapshot{
 			"anthropic": {Provider: "anthropic", Windows: []bus.BudgetWindow{
 				{Name: "5h", UsedPct: 62, ResetsAt: now.Add(2 * time.Hour).Unix(), Minutes: 300, ObservedAt: ms(time.Minute)},
@@ -53,13 +53,13 @@ func shellFixture(now time.Time) snapshot {
 				ctxFill: &bus.ContextFill{Pct: 21, Session: "s-master", ObservedAt: ms(time.Minute), At: ms(0), Alert: &fixtureAlert}},
 			"coder": {state: "working", message: "busmon-charm-b: b1 shell", stateAt: ago(2 * time.Minute), lastSeen: ago(time.Minute),
 				registered: true, paused: true, ctxRaw: "88000", gated: 1,
-				ctxFill: &bus.ContextFill{Pct: 85, Session: "s-coder", ObservedAt: ms(2 * time.Minute), At: ms(0), Alert: &fixtureAlert}, gates: map[string]string{"pr-122": "bernard|look at b1"},
+				ctxFill: &bus.ContextFill{Pct: 85, Session: "s-coder", ObservedAt: ms(2 * time.Minute), At: ms(0), Alert: &fixtureAlert}, gates: map[string]string{"pr-122": "charlie|look at b1"},
 				wake: &bus.WakeRecord{State: "deferred"}},
 			"foureyes": {state: "waiting", message: "need a decision on the width rule", stateAt: ago(6 * time.Minute), lastSeen: ago(6 * time.Minute),
 				registered: true, wake: &bus.WakeRecord{Escalated: "true"}},
 			"ui-grok": {state: "idle", message: "reviewed", stateAt: ago(3 * time.Minute), lastSeen: ago(3 * time.Minute), registered: true,
 				provider: "xai", held: true, swapping: true, obsAt: ago(5 * time.Second), clientUpdate: &bus.ClientUpdate{Client: "grok", Installed: "1.1"}},
-			"ui-kimi": {state: "idle", message: "bernard: your call on the tabs", stateAt: ago(9 * time.Minute), lastSeen: ago(9 * time.Minute),
+			"ui-kimi": {state: "idle", message: "charlie: your call on the tabs", stateAt: ago(9 * time.Minute), lastSeen: ago(9 * time.Minute),
 				registered: true, paused: true, forYou: true},
 			"release": {state: "working", message: "tagging", stateAt: ago(7 * time.Minute), lastSeen: ago(7 * time.Minute), registered: true,
 				fallback: &bus.FallbackRecord{Profile: "kimi-alt"}},
@@ -86,10 +86,10 @@ func shellEvents(now time.Time) []bus.Event {
 	code := "```go\nfunc veryLongFunctionNameForTheGolden(argumentOne string, argumentTwo int, argumentThree []string) (result string, err error) {\n```"
 	return []bus.Event{
 		{ID: id(40 * time.Minute), Kind: "status", Agent: "architect", State: "done", Message: "spec merged"},
-		{ID: id(14 * time.Minute), Kind: "cmd", Type: bus.CmdDirective, From: "bernard", Target: "coder", Message: "review lot 1", Human: true},
+		{ID: id(14 * time.Minute), Kind: "cmd", Type: bus.CmdDirective, From: "charlie", Target: "coder", Message: "review lot 1", Human: true},
 		{ID: id(13 * time.Minute), Kind: "report", Agent: "coder", RKind: bus.ReportNote, Message: "Lot 1 delivered",
 			Full: "Lot 1 delivered\n## Done\n- adapter in `d0a72be`; tests green\n" + code},
-		{ID: id(12 * time.Minute), Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "bernard", Message: "please look at the plan"},
+		{ID: id(12 * time.Minute), Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "charlie", Message: "please look at the plan"},
 		{ID: id(8 * time.Minute), Kind: "notify", From: "dispatch", Message: "project paused until 16:56", For: bus.ForPerson},
 		{ID: id(4 * time.Minute), Kind: "cmd", Type: bus.CmdAsk, From: "master", Target: "people", Message: "review lot 1?"},
 		{ID: id(2 * time.Minute), Kind: "status", Agent: "coder", State: "working", Message: "busmon-charm-b: b1 shell"},
@@ -100,7 +100,7 @@ func shellEvents(now time.Time) []bus.Event {
 // have it after a size, a poll and the tail's backfill.
 func fixtureShell(t testing.TB, w, h int) Model {
 	t.Helper()
-	m := newShell(shellConfig{project: "agent-bus-monitor", self: "bernard"})
+	m := newShell(shellConfig{project: "agent-bus-monitor", self: "charlie"})
 	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	m = step(t, m, tailMsg{events: shellEvents(shellNow)})
 	snap := shellFixture(shellNow)
@@ -129,7 +129,7 @@ func pinLocal(t testing.TB) {
 // prior visit), with the project pause on or off.
 func shellWith(t testing.TB, w, h int, cfg shellConfig, paused bool) Model {
 	t.Helper()
-	cfg.project, cfg.self = "agent-bus-monitor", "bernard"
+	cfg.project, cfg.self = "agent-bus-monitor", "charlie"
 	m := newShell(cfg)
 	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	m = step(t, m, tailMsg{events: shellEvents(shellNow)})
