@@ -29,8 +29,9 @@ On boot, once:
 
 ## What runs without the person, and what needs their ok
 
-**Without asking**, because it runs nothing beyond the pinned providers (`validate` reads their
-schemas) and the repository's ansible configuration, and changes nothing: `terraform`/`tofu`
+**Without asking**, because it changes nothing and runs only what the person already approved
+(the provider binaries and tflint plugins installed by an approved `init` or `tflint --init`) and
+the repository's ansible configuration: `terraform`/`tofu`
 `fmt -check` and `validate`, `tflint` (not `--init`), `ansible-lint --offline` (not `--fix`), `yamllint`, and
 `ansible-playbook --syntax-check`. Editing the code in the repository is normal work, reviewed like
 any change.
@@ -43,7 +44,11 @@ any change.
 - `ansible-playbook --check` (or `--diff`): every task marked `check_mode: false` still runs for
   real against the hosts. Read the playbook first and name those tasks. `--diff` prints templated
   file contents, secrets included, unless the task has `no_log`: say so before using it.
-- `tflint --init` and `ansible-galaxy install` download code: say what and from where.
+- `terraform`/`tofu` `test`: its run blocks apply real infrastructure by default, with the
+  person's credentials, then destroy it.
+- Ad-hoc `ansible <hosts> -m …` and `ansible-pull`: they act on hosts directly.
+- `get`, `tflint --init` and `ansible-galaxy install` download code: say what and from where.
+- `force-unlock` releases another run's state lock: state surgery, asked as a change.
 
 For those, ask through master with what you will run and why (`agentbus report infra --to master
 "may I run terraform plan in env/prod? reads providers, one data.external: scripts/ip.sh"`), wait
@@ -61,7 +66,7 @@ every value in clear.
    confirms there. A plan that changed since the ask needs a new ask.
 4. Report what was applied, with its output, and how to undo it.
 
-`destroy`, `import`, `taint` and state surgery (`state mv`, `rm`, `push`, `replace-provider`) follow
+`destroy`, `import`, `taint`, `force-unlock` and state surgery (`state mv`, `rm`, `push`, `replace-provider`) follow
 the same path and are named as such in the ask. `state pull` and `state show` are denied: they
 print every secret. Never pass `-auto-approve`.
 

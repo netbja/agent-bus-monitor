@@ -71,6 +71,11 @@ func TestInfraDraft(t *testing.T) {
 		{"terraform -chdir=prod import a.b id", "ask"}, {"tofu -chdir=prod taint a.b", "ask"},
 		{"terraform -chdir=prod taint a.b", "ask"}, {"tofu -chdir=prod import a.b id", "ask"},
 		{"terraform state mv a b", "ask"}, {"tofu state rm a.b", "ask"}, {"terraform -chdir=x state push s", "ask"},
+		{"terraform test", "ask"}, {"tofu -chdir=x test", "ask"},
+		{"terraform force-unlock 1234", "ask"}, {"tofu -chdir=x force-unlock 1234", "ask"},
+		{"terraform get -update", "ask"}, {"tofu -chdir=x get", "ask"},
+		{"ansible all -i prod -m shell -a reboot", "ask"}, {"ansible-pull -U https://x/repo.git", "ask"},
+		{"ansible-galaxy install -r requirements.yml", "ask"},
 		{"ansible-playbook -i prod site.yml", "prompt"}, // a real run: the manual pane (an ask catch-all would also catch --syntax-check)
 		// secrets: never
 		{"terraform output -raw db_password", "deny"}, {"terraform -chdir=env/prod output", "deny"},
