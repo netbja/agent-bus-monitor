@@ -320,7 +320,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `detail_agent.go` (page bodies; their `Label:  value` rows go through `fields.go`, busmon-detail-labels:
   label capitalised with a colon, a block's values in one column after its longest label, a long value
   wrapped under its value, never under the label; the plan task, board task, agent, message and
-  service-log pages), `keys.go` (one key table per mode drives the handler, the footer
+  service-log pages; a plan task waiting for the person has an `Action:` row under Owner, Enter or
+  `s` opening the compose window to master prefilled, busmon-plan-start-ux: the footer advertises a
+  binding marked `OnPage` only where `pageOffers` says the page offers it), `keys.go` (one key table per mode drives the handler, the footer
   (its F-keys grouped last, ascending; on the main screen room is kept for F1 help and F5 health) and the help; `key.go`'s engine-neutral `Key`, `keyOfTea` its adapter), `poll.go` (`pollOnce`
   behind the `busReader` interface: the 1 s tick and its read inventory), `types.go` (`busWriter`,
   the page kinds, the Activity feed), `main.go` (flags, CLI paths, the tail goroutine feeding the

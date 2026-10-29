@@ -397,6 +397,10 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 	add("state", state)
 	add("title", Preview(r.Task.Title))
 	add("owner", r.Task.Owner)
+	if _, ok := planStartable(p, id); ok { // the person's own task: the way to act on it, a row of the block
+		key, _, _ := strings.Cut(tourKeys(tourRef{m: ModeOverlay, act: ActPlanStart}), " ")
+		f.add("action", S(RoleAccent, key), S(RoleText, "  start the discussion with master"))
+	}
 	if e, ok := p.in.Board[r.Task.Board]; ok && r.Task.Board != "" {
 		v := r.Task.Board + ": " + e.State
 		if e.Branch != "" {
@@ -434,10 +438,6 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 	add("note", Preview(r.Note))
 	if r.LastFact > 0 {
 		add("last fact", plan.Age(r.LastFact, now)+" ago")
-	}
-	if _, ok := planStartable(p, id); ok { // the person's own task: the way to act on it
-		f.gap()
-		f.add("", S(RoleAccent, tourKeys(tourRef{m: ModeOverlay, act: ActPlanStart})), S(RoleText, "  start: write to master about this task"))
 	}
 	var lines []string
 	for _, l := range f.lines(1 << 20) { // the copy: one line per row, unwrapped
