@@ -106,8 +106,9 @@ writes no file, and `./setup.sh status` warns. An install made before this (no f
 
 The rotation runs only on the broker this checkout owns, and only with no `REDIS_PASSWORD` or
 `REDIS_URL` exported, none in the checkout's `.env`, and none in a project's services env file. It writes the new file (keeping the old one as `redis.env.prev`), sets the
-password on the running broker (no restart, no data lost), proves it with a new connection, then
-restarts the running project services. A refused change or a failed proof puts the broker and the
+password on the running broker, proves it with a new connection, recreates the broker's container
+from this checkout (a few seconds; the data stays in its volume), so a restart or a reboot keeps the
+new password, then restarts the running project services. A refused change or a failed proof puts the broker and the
 file back as they were; if the broker cannot be set back, the new file is kept (the old one in
 `redis.env.prev`) and the error says so. Reopen busmon afterwards, and copy the new file to any machine that reaches
 the broker through a tunnel. `uninstall` leaves the file. The bash fallback,

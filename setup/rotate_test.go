@@ -243,6 +243,12 @@ func rotateWorld(t *testing.T, env map[string]string) (*Installer, *bytes.Buffer
 	f.cmds[inspectOwner] = fakeCmd{out: in.Repo + "\n"}
 	f.cmds[ab+" service list"] = fakeCmd{out: "demo                     dispatch  active (running), pid 7\ndemo                     missions  inactive (dead)\n"}
 	f.cmds[ab+" --project demo service restart dispatch"] = fakeCmd{}
+	f.cmds["docker compose version"] = fakeCmd{}
+	f.cmds["docker compose up -d --force-recreate redis"] = fakeCmd{do: func(c Cmd) {
+		if c.Dir != in.Repo {
+			t.Errorf("compose ran in %q, want the checkout", c.Dir)
+		}
+	}}
 	return in, &out, f, filepath.Join(home, ".config", "agentbus", "redis.env"), ab
 }
 
@@ -269,7 +275,34 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 			t.Fatal("a stopped service was restarted (started)")
 		}
 	}
+	// foureyes: the container keeps the env_file it was created with, so the
+	// broker is recreated once the new password is proved, and its services
+	// restart after it: a reboot comes back on the new password.
+	recreate, restart := -1, -1
+	for i, r := range f.ran {
+		switch {
+		case r == "docker compose up -d --force-recreate redis":
+			recreate = i
+		case strings.HasSuffix(r, "service restart dispatch"):
+			restart = i
+		}
+	}
+	if recreate < 0 || restart < recreate {
+		t.Fatalf("recreate at %d, service restart at %d: %q", recreate, restart, f.ran)
+	}
 	_ = ab
+
+	// The recreate fails: the file and the running broker hold the new
+	// password; the error gives the way back to a running container.
+	in, out, f, path, _ = rotateWorld(t, map[string]string{})
+	f.cmds["docker compose up -d --force-recreate redis"] = fakeCmd{err: errors.New("1"), out: "port is already allocated\n"}
+	b = &fakeBroker{pw: bus.LegacyPassword}
+	if code := in.RotateRedisPassword(ctx, yes, b.dial); code != 1 || !strings.Contains(out.String(), "docker compose up -d") || !strings.Contains(out.String(), in.Repo) {
+		t.Fatalf("recreate failure: exit %d, %q", code, out)
+	}
+	if pw, _ := bus.ReadPassword(path); pw != b.pw {
+		t.Fatal("after a failed recreate the file and the broker disagree")
+	}
 
 	// From a file: the previous one is kept beside it.
 	in, out, _, path, _ = rotateWorld(t, map[string]string{})
@@ -305,6 +338,9 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 			_ = os.WriteFile(filepath.Join(in.Repo, ".env"), []byte("REDIS_PASSWORD=x\n"), 0o600)
 		}, &fakeBroker{pw: bus.LegacyPassword}, ".env sets REDIS_PASSWORD"},
 		{"a wrong current password", map[string]string{}, nil, &fakeBroker{pw: "something-else"}, "does not log in"},
+		{"no docker compose", map[string]string{}, func(_ *Installer, f *fakeRunner, _ string) {
+			f.cmds["docker compose version"] = fakeCmd{err: errors.New("1")}
+		}, &fakeBroker{pw: bus.LegacyPassword}, "no docker compose"},
 		{"a broker that refuses CONFIG SET", map[string]string{}, nil, &fakeBroker{pw: bus.LegacyPassword, refuse: true}, "nothing changed"},
 	} {
 		in, out, f, path, _ := rotateWorld(t, c.env)

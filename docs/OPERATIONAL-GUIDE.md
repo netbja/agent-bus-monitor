@@ -152,8 +152,9 @@ use it, since the next release removes it.
 `~/.config/agentbus/redis.env` (0600); compose and every agentbus and busmon process read it, so
 nothing needs exporting. An install made before keeps the historical `AgentBus2025!` (health
 `redis-password` warns) until you run `./setup.sh rotate-redis-password`: it checks first, asks,
-sets the new password on the running broker without a restart, proves it, restarts the running
-project services, and puts everything back if a step fails. An exported `REDIS_PASSWORD` wins over
+sets the new password on the running broker, proves it, recreates the broker's container (a few
+seconds, the data kept) so a reboot keeps it, restarts the running project services, and puts
+everything back if the change or its proof fails. An exported `REDIS_PASSWORD` wins over
 the file; the rotation refuses to run while one is exported. Reopen busmon after it, and copy the
 file to any machine that reaches the broker through a tunnel.
 

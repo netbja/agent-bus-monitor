@@ -679,7 +679,9 @@ It never touches Redis — see README "Example deployment".
   nor in any project's services env file, the current one logs in), asks (or `--yes`;
   `--dry-run`), then `RotatePassword`: new file (old kept as `.prev`), `CONFIG SET requirepass`, a
   fresh login, else the broker set back and the file put back byte for byte (if the set-back fails the
-  new file stays, the old in `.prev`: the broker may hold either); then the running
+  new file stays, the old in `.prev`: the broker may hold either); then `docker compose up -d
+  --force-recreate redis` from the checkout (foureyes: the container keeps the env_file it was created
+  with, so a restart would come back on the old password), a fresh login waited for; then the running
   project services restart. Its rollback test starts private `redis-server` processes (CONFIG SET
   changes a whole server, never the shared test broker), opt-in through `AGENTBUS_TEST_REDIS_URL`.
   `scripts/setup-legacy.sh` neither writes nor rotates it; its help is compared to the Go one without

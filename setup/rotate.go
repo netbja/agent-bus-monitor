@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -158,6 +159,11 @@ func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial 
 		o.Fatal("the broker belongs to " + where + ": rotate its password from there")
 		return 1
 	}
+	compose := ComposeCmd(ctx, in.R)
+	if compose == "" {
+		o.Fatal("no docker compose to recreate the broker with after the change (its container keeps the password it was created with): install it first")
+		return 1
+	}
 	if setsKey(filepath.Join(in.Repo, ".env"), "REDIS_PASSWORD") {
 		o.Fatal(filepath.Join(in.Repo, ".env") + " sets REDIS_PASSWORD: compose would start the broker with it, not with the password file. Remove that line, then run this again.")
 		return 1
@@ -182,7 +188,7 @@ func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial 
 	}
 	defer closeLive()
 	if in.Opt.DryRun {
-		o.Info("[dry-run] would write a new random password to " + path + " (0600), set it on the running broker, prove it, then restart the running project services")
+		o.Info("[dry-run] would write a new random password to " + path + " (0600), set it on the running broker, prove it, recreate the broker's container from " + in.Repo + " (so a restart keeps it), then restart the running project services")
 		return 0
 	}
 	if !p.Yes {
@@ -213,6 +219,21 @@ func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial 
 		kept = "; the previous one kept as " + path + ".prev"
 	}
 	o.OK("Redis password: replaced on the running broker and in " + path + " (0600)" + kept)
+	// The container keeps the env_file it was created with: a restart or a
+	// reboot would start Redis on the old password (foureyes). Recreate it now
+	// from this checkout (a few seconds; the data stays in its volume).
+	name, args := composeArgs(compose, "up", "-d", "--force-recreate", "redis")
+	if out, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo}); err != nil {
+		showTail(o.err, out)
+		o.Fatal("Redis password: the broker could not be recreated (" + err.Error() + "). The running broker and " + path +
+			" hold the new password, but its container still has the old one for its next start: run docker compose up -d --force-recreate redis in " + in.Repo + " before it restarts")
+		return 1
+	}
+	if !in.waitLogin(ctx, dial, pw) {
+		o.Fatal("Redis password: the recreated broker does not log in with the new password yet; check it with docker compose ps in " + in.Repo + " (the password is in " + path + ")")
+		return 1
+	}
+	o.OK("Redis broker: recreated with the new password, so a restart keeps it")
 	code := in.restartRunningServices(ctx)
 	o.Info("reopen busmon; a client on another machine (SSH tunnel) needs the new " + path)
 	return code
@@ -279,4 +300,17 @@ func (in *Installer) restartRunningServices(ctx context.Context) int {
 		in.O.OK("restarted " + f[0] + " " + f[1])
 	}
 	return code
+}
+
+// waitLogin waits up to 30 s for a fresh login with pw (the recreated
+// broker starting).
+func (in *Installer) waitLogin(ctx context.Context, dial Dialer, pw string) bool {
+	for range 30 {
+		if _, closeIt, err := dial(ctx, pw); err == nil {
+			closeIt()
+			return true
+		}
+		in.sleep(time.Second)
+	}
+	return false
 }
