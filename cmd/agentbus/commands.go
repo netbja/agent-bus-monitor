@@ -461,7 +461,7 @@ var commands = []cli.Command{
 	{
 		Name: "setup", NoProject: true, Internal: true,
 		Usage:   []string{"setup [--repo <dir>] install|update|uninstall|status [setup.sh's flags]"},
-		Summary: "the installer in Go, run by scripts/setup-go.sh (its flags and help are setup.sh's)",
+		Summary: "the installer in Go, run by ./setup.sh (its flags and help are the bash installer's)",
 		Flags: []cli.Flag{
 			{Long: "repo", Arg: "<dir>", Help: "the checkout to install from (the thin script passes it)"},
 		},

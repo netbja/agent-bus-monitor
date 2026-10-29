@@ -16,9 +16,8 @@ import (
 
 // `agentbus setup [--repo <dir>] install|update|uninstall|status [setup.sh's
 // flags]` (spec docs/superpowers/specs/2026-10-28-go-installer-design.md):
-// the Go port of setup.sh, run by the thin scripts/setup-go.sh. Step 1 of
-// the rollout: every subcommand is ported; ./setup.sh stays the
-// installer until the switch.
+// the installer, run by the thin ./setup.sh since the switch (rollout step
+// 2); the bash one it replaces stays one release as scripts/setup-legacy.sh.
 
 // execRunner is the real setup.Runner, the only one: every external command
 // setup runs goes through it.

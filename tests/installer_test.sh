@@ -4,9 +4,10 @@
 # config edit, agent-bus linked as the herdr plugin netbja.agentbus, external skills cloned),
 # status, uninstall and the Go floor. Hermetic: a fake herdr, a local skills repository, a
 # throwaway HOME; it never touches this checkout, the live BIN_DIR, herdr, docker or the real skills.
-# SETUP_SCRIPT picks the installer under test: setup.sh (default), or the Go installer's thin
-# scripts/setup-go.sh (installer_go_test.sh), which must pass the same asserts plus the broker's
-# ownership ones (docs/superpowers/specs/2026-10-28-go-installer-design.md, Rollout).
+# SETUP_SCRIPT picks the installer under test: setup.sh (default), the Go installer's thin front
+# since the switch, which also passes the broker's ownership asserts; or the bash installer kept
+# one release as scripts/setup-legacy.sh (installer_legacy_test.sh), which must pass the same
+# asserts but those (docs/superpowers/specs/2026-10-28-go-installer-design.md, Rollout).
 SETUP_SCRIPT="${SETUP_SCRIPT:-setup.sh}"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/.." && pwd)"
@@ -319,7 +320,7 @@ assert_eq "$([[ -L "$T/My Skills/agent-bus" ]] && echo left || echo gone)" "gone
 # checkout's is never started, stopped nor purged from here. The install runs in a network
 # namespace (unshare -rn), where 127.0.0.1:6380 is unreachable, so it would start the broker;
 # the same run with this checkout's label is the control that it does.
-if [[ "$SETUP_SCRIPT" != setup.sh ]]; then
+if [[ "$SETUP_SCRIPT" != scripts/setup-legacy.sh ]]; then
   if unshare -rn true 2>/dev/null; then
     : > "$DOCKER_LOG"; : > "$DOCKER_STATE"
     ctl_out="$(DOCKER_INFO_OK=1 unshare -rn "$SETUP" install --bin-dir "$T/bin" --no-skills 2>&1)"
@@ -367,8 +368,8 @@ assert_contains "$up_out" "git pull --ff-only failed" "and says why"
 # update fast-forwards to a newer release and reinstalls it
 # mark_pulled_installer: the pulled tree's installer prints one more line, so the update must run it.
 mark_pulled_installer() {
-  if [[ "$SETUP_SCRIPT" == setup.sh ]]; then
-    sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/setup.sh" && grep -q "pulled installer" "$T/dev/setup.sh"
+  if [[ "$SETUP_SCRIPT" == scripts/setup-legacy.sh ]]; then
+    sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/scripts/setup-legacy.sh" && grep -q "pulled installer" "$T/dev/scripts/setup-legacy.sh"
   else
     sed -i 's|^\to.Step("1/5 Checking system platform & toolchain")$|&; o.Info("the pulled installer is the one running")|' "$T/dev/setup/preflight.go" && grep -q "pulled installer" "$T/dev/setup/preflight.go"
   fi

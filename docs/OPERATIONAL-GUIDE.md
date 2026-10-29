@@ -117,11 +117,12 @@ shadows it.
 `statusLine` block to put in `~/.claude/settings.json`. Without it agent-bus cannot read Claude's
 usage windows nor each session's context fill (scenarios C and D).
 
-**Trying the Go installer.** `scripts/setup-go.sh` takes the same subcommands and flags
-(`install`, `update`, `status`, `uninstall`) and runs `agentbus setup`, the installer ported to Go.
-It also refuses to start, stop or remove a Redis container that another copy of the repository
-started (it reads the container's Compose `working_dir` label). `./setup.sh` stays the
-installer until the Go port has been tried on real machines.
+**The installer is in Go.** `./setup.sh` builds `agentbus` and runs `agentbus setup`, with the same
+subcommands and flags (`install`, `update`, `status`, `uninstall`) as before. It also refuses to
+start, stop or remove a Redis container that another copy of the repository started (it reads the
+container's Compose `working_dir` label). Should it fail on a machine, the former bash installer
+stays one release as `scripts/setup-legacy.sh` (same subcommands and flags): report what made you
+use it, since the next release removes it.
 
 ### The Projects picker and the busmon action
 
