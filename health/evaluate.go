@@ -375,7 +375,7 @@ var redisVersionPattern = regexp.MustCompile(`^v?([0-9]+)\.([0-9]+)\.([0-9]+)$`)
 
 // EvaluateRedisVersion (redis-watch) compares the broker's version with the
 // latest release of its own major (latest: major -> version, from a recent
-// check): the compose pins the major, so a pull stays in it. Warn when behind
+// check). Warn when behind
 // in that major; a newer major is never a warning, only named in the detail
 // (changing major is the person's decision); unknown when anything is not
 // known.
@@ -403,7 +403,7 @@ func EvaluateRedisVersion(running string, latest map[int]string, foundAt, now ti
 	want, _ := parseRedisVersion(same)
 	newer := ""
 	if top > have[0] {
-		newer = fmt.Sprintf("; Redis %s is out; this broker follows the compose pin (%d); changing major is your decision", newest, have[0])
+		newer = fmt.Sprintf("; Redis %s is out; this broker runs %d.x; changing major is your decision", newest, have[0])
 	}
 	if versionBelow(have, want) {
 		return Outcome{Warn, fmt.Sprintf("Redis %s runs; %s is the latest %d.x%s", running, same, have[0], newer)}

@@ -21,7 +21,7 @@ import (
 
 // redis-watch: the dispatch service checks the latest Redis release of each
 // major once a day per host, for the health check redis-version (which
-// compares the broker within its own major, the one the compose pins). It
+// compares the broker within its own major). It
 // only reads and reports: nothing here restarts or upgrades the broker.
 
 // redisReleasesURL is GitHub's recent releases of Redis: Redis ships patches

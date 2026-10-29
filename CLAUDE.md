@@ -663,7 +663,7 @@ It never touches Redis — see README "Example deployment".
   local model table; everything else is escalated. Usage refresh is at most every 15 minutes with
   a fenced writer; model refresh is daily under a host-local lock. `redis-version` (redis-watch,
   `cmd/agentbus/redislatest.go`) compares the broker's INFO version with the latest Redis release
-  **of its own major** (the compose pins `redis:8-alpine`, so a pull stays in it): the dispatch
+  **of its own major** (the major it runs, read from INFO; no claim about the compose tag): the dispatch
   service's `RedisRefresh` chore reads GitHub's recent `redis/redis` releases (5 s, drafts and
   prereleases skipped) once a day under a host-local lock into `~/.cache/agentbus/redis-latest.json`
   (major -> newest release, 0600; a failed fetch moves only `checked_at`, silently); warn when behind

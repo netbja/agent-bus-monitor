@@ -7,8 +7,8 @@ import (
 )
 
 // redis-watch: the broker is compared only with the latest release of its
-// own major (the compose pins redis:8-alpine, so a pull stays in that major;
-// master's call on reviewer-codex's review). Behind in its major warns; a newer
+// own major (master's call on reviewer-codex's reviews; the check knows the
+// running major, never the compose file's tag). Behind in its major warns; a newer
 // major is never a warning, only a line in the detail: changing major is the
 // person's decision. Anything not known (no broker version, no recent
 // successful check, no release of its major found) is unknown, never ok.
@@ -28,8 +28,8 @@ func TestEvaluateRedisVersion(t *testing.T) {
 		{"behind by a minor in its major", "8.0.3", eight, fresh, Warn, "8.2.2 is the latest 8.x"},
 		{"behind in its major, a newer major out", "8.2.1", nine, fresh, Warn, "Redis 9.0.1 is out"},
 		{"equal", "8.2.2", eight, fresh, OK, "Redis 8.2.2 is the latest 8.x"},
-		{"equal, a newer major only", "8.2.2", nine, fresh, OK, "Redis 9.0.1 is out; this broker follows the compose pin (8); changing major is your decision"},
-		{"an older major, current in it", "7.4.6", eight, fresh, OK, "Redis 8.2.2 is out; this broker follows the compose pin (7)"},
+		{"equal, a newer major only", "8.2.2", nine, fresh, OK, "Redis 9.0.1 is out; this broker runs 8.x; changing major is your decision"},
+		{"an older major, current in it", "7.4.6", eight, fresh, OK, "Redis 8.2.2 is out; this broker runs 7.x"},
 		{"ahead of the release", "8.4.0", eight, fresh, OK, "Redis 8.4.0"},
 		{"ten beats nine numerically", "8.10.0", map[int]string{8: "8.9.0"}, fresh, OK, ""},
 		{"no release of its major found", "6.2.1", eight, fresh, Unknown, "no recent release of Redis 6"},
@@ -56,6 +56,9 @@ func TestEvaluateRedisVersion(t *testing.T) {
 		if c.want != Warn && strings.Contains(got.Detail, "pull") {
 			t.Errorf("%s: %q suggests a pull without a warning", c.name, got.Detail)
 		}
+		if strings.Contains(got.Detail, "pin") {
+			t.Errorf("%s: %q claims a compose pin the check cannot know", c.name, got.Detail)
+		}
 		if !SafeText(got.Detail) {
 			t.Errorf("%s: unsafe detail %q", c.name, got.Detail)
 		}
@@ -73,9 +76,12 @@ func TestRedisVersionRemediation(t *testing.T) {
 		t.Fatalf("interval %v, deadline %v", d.Interval, d.Deadline)
 	}
 	r := strings.ToLower(d.Remediation)
-	for _, want := range []string{"person", "never restarts or upgrades", "same major", "pin"} {
+	for _, want := range []string{"person", "never restarts or upgrades", "same major"} {
 		if !strings.Contains(r, want) {
 			t.Errorf("remediation %q lacks %q", d.Remediation, want)
 		}
+	}
+	if strings.Contains(r, "pin") {
+		t.Errorf("remediation %q claims a compose pin", d.Remediation)
 	}
 }
