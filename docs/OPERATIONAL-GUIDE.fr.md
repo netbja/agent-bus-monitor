@@ -624,3 +624,9 @@ l'exécute étape par étape.
   [fichier de configuration](superpowers/specs/2026-10-29-config-file-design.md) (un seul
   `config.toml` pour vos préférences, et `agentbus config` pour montrer la valeur de chaque réglage
   et sa provenance).
+
+---
+
+## 10. Licence
+
+MIT, voir [LICENSE](../LICENSE).

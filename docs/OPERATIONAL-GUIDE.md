@@ -593,3 +593,9 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
   proposed as a pull request only after your yes) and the
   [config file](superpowers/specs/2026-10-29-config-file-design.md) (one `config.toml` for your
   preferences, and `agentbus config` to show each setting's value and where it comes from).
+
+---
+
+## 10. Licence
+
+MIT, see [LICENSE](../LICENSE).
