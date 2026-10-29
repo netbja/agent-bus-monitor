@@ -20,8 +20,9 @@ const healthLogMaxLen = 1000
 const LegacyPassword = "AgentBus2025!"
 
 // LegacyPasswordInUse reports whether the credential Connect would use is the
-// historical default: no explicit password, or one equal to it in REDIS_PASSWORD
-// or in REDIS_URL. It never returns or logs a credential.
+// historical default: no password anywhere, or one equal to it in REDIS_URL,
+// REDIS_PASSWORD or the password file. A file that cannot be read is not
+// claimed as legacy. It never returns or logs a credential.
 func LegacyPasswordInUse(getenv func(string) string) bool {
 	if raw := getenv("REDIS_URL"); raw != "" {
 		u, err := url.Parse(raw)
@@ -31,8 +32,8 @@ func LegacyPasswordInUse(getenv func(string) string) bool {
 		pw, _ := u.User.Password()
 		return pw == LegacyPassword
 	}
-	pw := getenv("REDIS_PASSWORD")
-	return pw == "" || pw == LegacyPassword
+	pw, err := resolvePassword(getenv)
+	return err == nil && pw == LegacyPassword
 }
 
 type CmdDeliveryGroup struct {

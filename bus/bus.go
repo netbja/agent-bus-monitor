@@ -82,8 +82,9 @@ func envOr(key, def string) string {
 }
 
 // Connect resolves a Redis client the way agent_bus.py does: REDIS_URL takes
-// precedence, otherwise REDIS_HOST/PORT/PASSWORD (defaults localhost:6380 /
-// AgentBus2025!). A non-empty host overrides REDIS_HOST. It pings before
+// precedence, otherwise REDIS_HOST/PORT (defaults localhost:6380) with the
+// password from REDIS_PASSWORD, else the password file (PasswordFile), else
+// AgentBus2025!. A non-empty host overrides REDIS_HOST. It pings before
 // returning so callers fail fast instead of inside the first command.
 func Connect(host string) (*redis.Client, error) {
 	var opt *redis.Options
@@ -97,10 +98,14 @@ func Connect(host string) (*redis.Client, error) {
 		if host == "" {
 			host = envOr("REDIS_HOST", "localhost")
 		}
+		pw, err := resolvePassword(os.Getenv)
+		if err != nil {
+			return nil, err
+		}
 		opt = &redis.Options{
 			ContextTimeoutEnabled: true,
 			Addr:                  host + ":" + envOr("REDIS_PORT", "6380"),
-			Password:              envOr("REDIS_PASSWORD", LegacyPassword),
+			Password:              pw,
 		}
 	}
 	// Record the peer each connection reaches (PeerAddr), dialing with
