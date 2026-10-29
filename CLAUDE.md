@@ -176,8 +176,11 @@ it silently never fired.
   (they held account-scope data); new writers leave them empty.
 - **How the transcript is found:** `agentbus status` captures `CLAUDE_CODE_SESSION_ID` into
   `AgentSnapshot.Session` from the environment, exactly as it captures `HERDR_PANE_ID` — see
-  `bus.AgentIdent`. The agent never types it, so it cannot drift. A peer with no session id (a
-  non-Claude-Code agent) is skipped with a note, never invented.
+  `bus.AgentIdent`. The agent never types it, so it cannot drift. The transcript is read only from
+  the session proved with the agent's process (`IdentSession`, with a pid; usage-session), like
+  `{p}:context`: an unverified status that names another session moves `Session`, never the file
+  `{p}:usage` is read from. A peer with no proved session (a non-Claude-Code agent, an unverified
+  one) is skipped with a note, never invented.
 - **Context fill as a percentage comes from the client, never from a table** (decision
   `docs/memory/decisions/2026-10-27-context-fill.md`): Claude Code's statusLine stdin carries
   `context_window.used_percentage`; `agentbus statusline` records it per session in
