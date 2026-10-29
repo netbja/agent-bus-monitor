@@ -16,8 +16,9 @@ import (
 
 // installer-no-client (Bernard): up with no agent CLI for any role of the
 // template refuses before it starts a service or opens a tab, with the install
-// pointers and the exact next command; with some missing it starts the
-// others and names the missing ones.
+// pointers and the exact next command; with some missing it starts every tab
+// as before and warns with the missing ones (master: never drop a tab on a
+// lookup alone).
 
 // withClients gives the fixture an agent tab per role (master on Claude Code,
 // coder on Codex) and a PATH holding only have.
@@ -82,18 +83,20 @@ func TestUpWithNoAgentCLIRefusesBeforeOpeningAnything(t *testing.T) {
 	}
 }
 
-func TestUpStartsTheAgentsWhoseCLIIsThere(t *testing.T) {
+func TestUpStartsEveryTabAndNamesTheMissingCLI(t *testing.T) {
 	work, templates, h, _, deps := upFixture(t)
 	deps = withClients(t, deps, templates, "codex")
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
+	// master's call: a lookup alone never drops a tab; the missing one is
+	// named, and every tab starts as before (its pane says if it fails).
 	got := strings.Join(h.calls, "\n")
-	if !strings.Contains(got, "--label coder") || strings.Contains(got, "--label master") {
-		t.Fatalf("want coder opened and master left out:\n%s", got)
+	if !strings.Contains(got, "--label coder") || !strings.Contains(got, "--label master") {
+		t.Fatalf("want every tab opened:\n%s", got)
 	}
-	if !strings.Contains(out.String(), "not started: master needs claude (Claude Code (claude): https://code.claude.com/docs/en/setup)") {
+	if !strings.Contains(out.String(), "warning: master needs claude, not found (Claude Code (claude): https://code.claude.com/docs/en/setup)") {
 		t.Fatalf("the missing one is not named: %q", out.String())
 	}
 }
@@ -263,5 +266,28 @@ func TestShellProbe(t *testing.T) {
 	_ = os.WriteFile(slow, []byte("#!/bin/sh\nsleep 5\n"), 0o755)
 	if _, err := shellProbe(func(k string) string { return slow }, 200*time.Millisecond)("x"); err == nil || errors.Is(err, errCLIAbsent) {
 		t.Fatalf("slow shell: %v, want an unknown answer", err)
+	}
+}
+
+// master: a timeout is a start. The real lookup with a shell too slow to
+// answer: no CLI is taken for missing, nothing is refused, every tab opens.
+func TestUpStartsEveryTabWhenTheShellTimesOut(t *testing.T) {
+	work, templates, h, _, deps := upFixture(t)
+	deps = withClients(t, deps, templates)
+	slow := filepath.Join(t.TempDir(), "slowsh")
+	_ = os.WriteFile(slow, []byte("#!/bin/sh\nsleep 5\n"), 0o755)
+	notOnPath := func(string) (string, error) { return "", errors.New("not found") }
+	deps.LookPath = lookAgentCLI(func(string) string { return "" }, notOnPath,
+		shellProbe(func(k string) string { return map[string]string{"SHELL": slow}[k] }, 200*time.Millisecond))
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d, want 0 (fail open): %s", code, errw.String())
+	}
+	got := strings.Join(h.calls, "\n")
+	if !strings.Contains(got, "--label master") || !strings.Contains(got, "--label coder") {
+		t.Fatalf("a tab was not opened:\n%s", got)
+	}
+	if !strings.Contains(out.String(), "could not tell whether claude is installed") || !strings.Contains(out.String(), "did not answer within") {
+		t.Fatalf("the timeout is not said: %q", out.String())
 	}
 }

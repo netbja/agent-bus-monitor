@@ -756,35 +756,32 @@ func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 	return code
 }
 
-// checkClients drops the template's agent tabs whose CLI is not on PATH and
-// names them (installer-no-client). With none of the team's CLIs there it
-// refuses before any service starts or any tab opens, with each client's
-// install pointer and the next command; false then. A tab running no agent
-// (busmon) is never dropped.
+// checkClients (installer-no-client) refuses before any service starts or any
+// tab opens only when none of the team's agent CLIs is found: then each
+// client's install pointer and the next command, and false. With some
+// missing it starts every tab as before and warns with their names (master:
+// a lookup alone never drops a tab; their panes say if they fail). A CLI
+// nobody could judge (errCLIUnknown) counts as found: fail open.
 func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Writer) (upTemplate, bool) {
 	if d.TabExe == nil || d.LookPath == nil {
 		return tpl, true
 	}
-	var keep []upTab
 	var missing []string
 	agents := 0
 	for _, t := range tpl.Tabs {
 		exe := d.TabExe(t.Command)
 		if exe == "" {
-			keep = append(keep, t)
 			continue
 		}
 		agents++
 		_, err := d.LookPath(exe)
 		switch {
 		case err == nil:
-		case errors.Is(err, errCLIUnknown): // never drop what nobody could judge
-			fmt.Fprintf(stdout, "could not tell whether %s is installed (%v): %s starts anyway; its pane says if it is missing\n", exe, err, t.Name)
+		case errors.Is(err, errCLIUnknown):
+			fmt.Fprintf(stdout, "could not tell whether %s is installed (%v): %s starts anyway\n", exe, err, t.Name)
 		default:
 			missing = append(missing, t.Name+" needs "+exe)
-			continue
 		}
-		keep = append(keep, t)
 	}
 	if len(missing) == 0 {
 		return tpl, true
@@ -805,9 +802,8 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 				where = " (" + c.Name + " (" + c.Exe + "): " + c.Install + ")"
 			}
 		}
-		fmt.Fprintf(stdout, "not started: %s%s; the others start. Once it is installed: agentbus up %s\n", m, where, project)
+		fmt.Fprintf(stdout, "warning: %s, not found%s; its tab starts anyway and says so if it fails\n", m, where)
 	}
-	tpl.Tabs = keep
 	return tpl, true
 }
 

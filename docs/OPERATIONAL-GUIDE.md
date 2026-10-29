@@ -86,8 +86,8 @@ so re-running it is safe.
 - **herdr** 0.9.0 or newer; `--install-herdr` installs it when it is missing.
 - **At least one agent CLI**, installed by you: Claude Code (`claude`), Codex CLI (`codex`), Kimi
   Code CLI (`kimi`) or Grok Build (`grok`). The install never fails without one: it lists where to
-  get each, and the bus and busmon work meanwhile. `agentbus up` starts only the agents whose CLI
-  it finds, names the others, and with none at all starts nothing and says what to install.
+  get each, and the bus and busmon work meanwhile. `agentbus up` with none of the team's CLIs starts
+  nothing and says what to install; with only some missing it starts every tab and warns with them.
 
 Python is no longer needed (since v0.10.2).
 

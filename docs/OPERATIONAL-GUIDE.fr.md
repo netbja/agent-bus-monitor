@@ -86,8 +86,9 @@ sans risque.
 - **herdr** 0.9.0 ou plus récent ; `--install-herdr` l'installe s'il manque.
 - **Au moins un CLI d'agent**, que vous installez : Claude Code (`claude`), Codex CLI (`codex`),
   Kimi Code CLI (`kimi`) ou Grok Build (`grok`). L'installation n'échoue jamais sans : elle indique
-  où trouver chacun, et le bus et busmon fonctionnent en attendant. `agentbus up` ne lance que les
-  agents dont il trouve le CLI, nomme les autres, et sans aucun ne lance rien et dit quoi installer.
+  où trouver chacun, et le bus et busmon fonctionnent en attendant. `agentbus up` sans aucun des CLI
+  de l'équipe ne lance rien et dit quoi installer ; s'il en manque seulement certains, il lance tous
+  les onglets et avertit en les nommant.
 
 Python n'est plus nécessaire depuis la v0.10.2.
 
