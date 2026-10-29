@@ -10,8 +10,10 @@ skills = ["agent-bus", "diagnosing-bugs"]
 # depth, not a boundary: the client matches command text only, deny before ask
 # before allow.
 [roles.infra.tool_rules]
-# Syntax and lint only: they run no code the repository or a provider chose.
-# (ansible-lint only --offline: its default pre-run installs Galaxy content.)
+# Syntax and lint only: they run nothing beyond the pinned providers (validate
+# reads their schemas) and the repository's ansible configuration, and change
+# nothing (ansible-lint only --offline, as its default pre-run installs Galaxy
+# content; its --fix and --write rewrite files and are asked).
 allow = [
   "Bash(terraform fmt -check*)", "Bash(terraform validate*)",
   "Bash(tofu fmt -check*)", "Bash(tofu validate*)",
@@ -27,19 +29,20 @@ ask = [
   "Bash(terraform plan*)", "Bash(terraform init*)", "Bash(terraform refresh*)", "Bash(terraform import*)",
   "Bash(terraform taint*)", "Bash(terraform apply*)", "Bash(terraform destroy*)", "Bash(terraform state *)",
   "Bash(terraform -chdir=* plan*)", "Bash(terraform -chdir=* init*)", "Bash(terraform -chdir=* refresh*)", "Bash(terraform -chdir=* import*)",
-  "Bash(terraform -chdir=* apply*)", "Bash(terraform -chdir=* destroy*)", "Bash(terraform -chdir=* state *)",
+  "Bash(terraform -chdir=* taint*)", "Bash(terraform -chdir=* apply*)", "Bash(terraform -chdir=* destroy*)", "Bash(terraform -chdir=* state *)",
   "Bash(tofu plan*)", "Bash(tofu init*)", "Bash(tofu refresh*)", "Bash(tofu import*)",
   "Bash(tofu taint*)", "Bash(tofu apply*)", "Bash(tofu destroy*)", "Bash(tofu state *)",
   "Bash(tofu -chdir=* plan*)", "Bash(tofu -chdir=* init*)", "Bash(tofu -chdir=* refresh*)", "Bash(tofu -chdir=* import*)",
-  "Bash(tofu -chdir=* apply*)", "Bash(tofu -chdir=* destroy*)", "Bash(tofu -chdir=* state *)",
-  "Bash(tflint --init*)", "Bash(tflint * --init*)",
+  "Bash(tofu -chdir=* taint*)", "Bash(tofu -chdir=* apply*)", "Bash(tofu -chdir=* destroy*)", "Bash(tofu -chdir=* state *)",
+  "Bash(tflint --init*)", "Bash(tflint * --init*)", "Bash(ansible-lint *--fix*)", "Bash(ansible-lint *--write*)",
   "Bash(ansible-playbook --check*)", "Bash(ansible-playbook --diff*)",
   "Bash(ansible-playbook * --check*)", "Bash(ansible-playbook * --diff*)",
 ]
 # Never a secret: state and plan files (every value in clear), variable files,
 # vault passwords, cloud and cluster credentials, and the commands that print
 # state, outputs or the environment (state pull and state show print every
-# secret: denied, while the other state subcommands are asked).
+# secret: denied, while the other state subcommands are asked). `env *` also
+# closes `env VAR=x terraform apply`, which would start outside the ask rules.
 deny = [
   "Read(**/*.tfstate*)", "Read(**/.terraform/**)", "Read(**/*.tfplan)", "Read(**/*.tfvars*)", "Read(~/.terraform.d/**)",
   "Read(**/*vault_pass*)", "Read(**/.vault_pass*)", "Bash(ansible-vault *)",
@@ -50,6 +53,6 @@ deny = [
   "Bash(tofu output*)", "Bash(tofu show*)", "Bash(tofu console*)", "Bash(tofu state pull*)", "Bash(tofu state show*)",
   "Bash(tofu -chdir=* output*)", "Bash(tofu -chdir=* show*)", "Bash(tofu -chdir=* console*)",
   "Bash(tofu -chdir=* state pull*)", "Bash(tofu -chdir=* state show*)",
-  "Bash(terraform plan * -out*)", "Bash(terraform plan -out*)", "Bash(tofu plan * -out*)", "Bash(tofu plan -out*)",
-  "Bash(printenv*)", "Bash(env)",
+  "Bash(terraform plan*-out*)", "Bash(terraform -chdir=* plan*-out*)", "Bash(tofu plan*-out*)", "Bash(tofu -chdir=* plan*-out*)",
+  "Bash(printenv*)", "Bash(env)", "Bash(env *)",
 ]

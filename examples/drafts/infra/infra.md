@@ -29,8 +29,9 @@ On boot, once:
 
 ## What runs without the person, and what needs their ok
 
-**Without asking**, because it runs no code the repository or a provider chose: `terraform`/`tofu`
-`fmt -check` and `validate`, `tflint` (not `--init`), `ansible-lint --offline`, `yamllint`, and
+**Without asking**, because it runs nothing beyond the pinned providers (`validate` reads their
+schemas) and the repository's ansible configuration, and changes nothing: `terraform`/`tofu`
+`fmt -check` and `validate`, `tflint` (not `--init`), `ansible-lint --offline` (not `--fix`), `yamllint`, and
 `ansible-playbook --syntax-check`. Editing the code in the repository is normal work, reviewed like
 any change.
 
@@ -69,7 +70,7 @@ print every secret. Never pass `-auto-approve`.
 - read or print a secret: no state file (`*.tfstate`), no plan file, no `*.tfvars`, no vault
   password or `ansible-vault view`/`decrypt`, no `~/.ssh`, no cloud or cluster credentials
   (`~/.aws`, `~/.config/gcloud`, `~/.azure`, `~/.kube`), no `terraform output`, `show`,
-  `console`, `state pull` or `state show`, no `printenv` or `env`. A value you need from one of them is asked of the person, who decides
+  `console`, `state pull` or `state show`, no `printenv` or `env` (nor `env VAR=x <command>`). A value you need from one of them is asked of the person, who decides
   how to provide it;
 - write a secret into the repository, a commit, a report or the bus;
 - widen access (a security group, an IAM policy, a firewall rule, a key) beyond what the task

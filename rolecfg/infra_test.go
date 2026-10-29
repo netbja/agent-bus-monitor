@@ -64,9 +64,12 @@ func TestInfraDraft(t *testing.T) {
 		{"tflint --init", "ask"}, {"tflint --recursive --init", "ask"},
 		{"ansible-playbook --check site.yml", "ask"}, {"ansible-playbook -i prod --check site.yml", "ask"},
 		{"ansible-playbook --diff site.yml", "ask"}, {"ansible-lint site.yml", "prompt"},
+		{"ansible-lint --offline --fix site.yml", "ask"}, {"ansible-lint --offline --write site.yml", "ask"},
 		// changes, state surgery included: the person's ok
 		{"terraform apply", "ask"}, {"tofu destroy -target=x", "ask"}, {"terraform -chdir=env/prod apply", "ask"},
 		{"terraform import a.b id", "ask"}, {"tofu taint a.b", "ask"},
+		{"terraform -chdir=prod import a.b id", "ask"}, {"tofu -chdir=prod taint a.b", "ask"},
+		{"terraform -chdir=prod taint a.b", "ask"}, {"tofu -chdir=prod import a.b id", "ask"},
 		{"terraform state mv a b", "ask"}, {"tofu state rm a.b", "ask"}, {"terraform -chdir=x state push s", "ask"},
 		{"ansible-playbook -i prod site.yml", "prompt"}, // a real run: the manual pane (an ask catch-all would also catch --syntax-check)
 		// secrets: never
@@ -74,7 +77,9 @@ func TestInfraDraft(t *testing.T) {
 		{"terraform state pull", "deny"}, {"tofu -chdir=x state show a.b", "deny"},
 		{"terraform show", "deny"}, {"tofu console", "deny"},
 		{"terraform plan -out=prod.tfplan", "deny"}, {"tofu plan -lock=false -out x", "deny"},
-		{"ansible-vault view secrets.yml", "deny"}, {"printenv", "deny"}, {"env", "deny"},
+		{"terraform -chdir=env/prod plan -out=p.tfplan", "deny"}, {"tofu -chdir=x plan -lock=false -out=p", "deny"},
+		{"ansible-vault view secrets.yml", "deny"}, {"printenv", "deny"}, {"env", "deny"}, {"env -0", "deny"}, {"env AWS_KEY=x", "deny"},
+		{"env TF_VAR_x=1 terraform apply", "deny"},
 	} {
 		if got := decide(r, c.cmd); got != c.want {
 			t.Errorf("%q: %s, want %s", c.cmd, got, c.want)
