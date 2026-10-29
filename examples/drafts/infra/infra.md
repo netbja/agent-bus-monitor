@@ -29,12 +29,13 @@ On boot, once:
 
 ## What runs without the person, and what needs their ok
 
-**Without asking**, because it changes nothing and runs only what the person already approved
-(the provider binaries and tflint plugins installed by an approved `init` or `tflint --init`) and
-the repository's ansible configuration: `terraform`/`tofu`
-`fmt -check` and `validate`, `tflint` (not `--init`), `ansible-lint --offline` (not `--fix`), `yamllint`, and
-`ansible-playbook --syntax-check`. Editing the code in the repository is normal work, reviewed like
-any change.
+**Without asking**, and only in exactly these forms (no other flag or argument):
+`terraform fmt -check`, `terraform fmt -check -recursive`, `terraform validate` (and the same with
+`tofu`), `tflint`, `tflint --recursive`, `ansible-lint --offline`, `yamllint .`. They change
+nothing; `validate` and `tflint` run only the provider binaries and plugins the person approved at
+`init` and `tflint --init`. Anything else you type shows in your pane for the person: **the person
+approves everything that runs IaC**, and the rules in `roles.toml` are a defence in depth, not a
+lock. Editing the code in the repository is normal work, reviewed like any change.
 
 **Only with the person's ok**, because it is **not** inert even when it is meant to change nothing:
 

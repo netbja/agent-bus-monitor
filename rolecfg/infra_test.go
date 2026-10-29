@@ -42,12 +42,19 @@ func TestInfraDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Allowed without a prompt: syntax and lint only, which run no code the
-	// repository or a provider chose (master's classes).
-	readOnly := regexp.MustCompile(`^Bash\((terraform|tofu) (fmt -check|validate)\*\)$|^Bash\((tflint|yamllint)\*\)$|^Bash\(ansible-lint --offline\*\)$|^Bash\(ansible-playbook --syntax-check \*\)$`)
+	// Allowed without a prompt: exactly these invocations, no wildcard
+	// (master), so no flag or argument rides on an allow.
+	exact := []string{
+		"Bash(terraform fmt -check)", "Bash(terraform fmt -check -recursive)", "Bash(terraform validate)",
+		"Bash(tofu fmt -check)", "Bash(tofu fmt -check -recursive)", "Bash(tofu validate)",
+		"Bash(tflint)", "Bash(tflint --recursive)", "Bash(ansible-lint --offline)", "Bash(yamllint .)",
+	}
+	if !slices.Equal(r.Allow, exact) {
+		t.Errorf("allow %v, want exactly %v", r.Allow, exact)
+	}
 	for _, rule := range r.Allow {
-		if !readOnly.MatchString(rule) {
-			t.Errorf("allow %q is not a syntax or lint check", rule)
+		if strings.Contains(rule, "*") {
+			t.Errorf("allow %q has a wildcard", rule)
 		}
 	}
 
@@ -57,7 +64,12 @@ func TestInfraDraft(t *testing.T) {
 		// syntax and lint: no prompt
 		{"terraform fmt -check -recursive", "allow"}, {"tofu validate", "allow"},
 		{"tflint", "allow"}, {"tflint --recursive", "allow"}, {"yamllint .", "allow"},
-		{"ansible-lint --offline site.yml", "allow"}, {"ansible-playbook --syntax-check site.yml", "allow"},
+		{"ansible-lint --offline", "allow"},
+		// anything beyond the exact forms: the pane prompts (or an ask rule)
+		{"terraform fmt -check=false", "prompt"}, {"tofu fmt -check=false", "prompt"}, // writes files
+		{"terraform fmt", "prompt"}, {"terraform validate -json", "prompt"},
+		{"ansible-lint --offline site.yml", "prompt"}, {"ansible-playbook --syntax-check site.yml", "prompt"},
+		{"yamllint -c x.yml .", "prompt"},
 		// evaluates providers, modules or data sources, touches a target, downloads: the person's ok
 		{"terraform plan", "ask"}, {"tofu plan -var-file=prod.tfvars", "ask"},
 		{"terraform init", "ask"}, {"tofu init -upgrade", "ask"}, {"terraform refresh", "ask"}, {"tofu refresh", "ask"}, {"terraform -chdir=env/prod plan", "ask"},
@@ -75,7 +87,7 @@ func TestInfraDraft(t *testing.T) {
 		{"terraform force-unlock 1234", "ask"}, {"tofu -chdir=x force-unlock 1234", "ask"},
 		{"terraform get -update", "ask"}, {"tofu -chdir=x get", "ask"},
 		{"ansible all -i prod -m shell -a reboot", "ask"}, {"ansible-pull -U https://x/repo.git", "ask"},
-		{"ansible-galaxy install -r requirements.yml", "ask"},
+		{"ansible-galaxy install -r requirements.yml", "ask"}, {"ansible-galaxy collection install a.b", "ask"},
 		{"ansible-playbook -i prod site.yml", "prompt"}, // a real run: the manual pane (an ask catch-all would also catch --syntax-check)
 		// secrets: never
 		{"terraform output -raw db_password", "deny"}, {"terraform -chdir=env/prod output", "deny"},

@@ -10,16 +10,15 @@ skills = ["agent-bus", "diagnosing-bugs"]
 # depth, not a boundary: the client matches command text only, deny before ask
 # before allow.
 [roles.infra.tool_rules]
-# Syntax and lint only, which change nothing. They do run code: validate the
-# provider binaries and tflint its ruleset plugins (the ones the person approved
-# at init and tflint --init, both asked), and --syntax-check the repository's
-# ansible.cfg. ansible-lint only --offline (its default pre-run installs Galaxy
-# content); its --fix and --write rewrite files and are asked.
+# Exact invocations only (master): no wildcard, so no extra flag or argument
+# rides on an allow (`fmt -check=false` writes files: it prompts). These change
+# nothing; validate and tflint run the provider binaries and plugins the person
+# approved at init and tflint --init (both asked). Anything else prompts in the
+# manual pane or is asked below: the person approves everything that runs IaC.
 allow = [
-  "Bash(terraform fmt -check*)", "Bash(terraform validate*)",
-  "Bash(tofu fmt -check*)", "Bash(tofu validate*)",
-  "Bash(tflint*)", "Bash(ansible-lint --offline*)", "Bash(yamllint*)",
-  "Bash(ansible-playbook --syntax-check *)",
+  "Bash(terraform fmt -check)", "Bash(terraform fmt -check -recursive)", "Bash(terraform validate)",
+  "Bash(tofu fmt -check)", "Bash(tofu fmt -check -recursive)", "Bash(tofu validate)",
+  "Bash(tflint)", "Bash(tflint --recursive)", "Bash(ansible-lint --offline)", "Bash(yamllint .)",
 ]
 # The person approves each: what evaluates providers, modules or data sources
 # (a data "external" runs a program during a plan), what touches a target

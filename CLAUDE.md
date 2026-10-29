@@ -489,10 +489,10 @@ It never touches Redis — see README "Example deployment".
   `doctor`: only after an `adopt` answer not given by the asker; appends to the manifest after
   checking it loads, never overwrites a prompt). `examples/drafts/infra/` is the `infra` pop role
   (Ansible, Terraform/OpenTofu, IT automation) as an inert draft, adopted with `roles adopt infra
-  --ask <id> --from examples/drafts`: manual profile, approval person; allowed only syntax and lint
-  (`fmt -check`, `validate`, `tflint` without `--init`, `ansible-lint --offline`, `yamllint`,
-  `ansible-playbook --syntax-check`); asked: what evaluates providers or data sources or touches a
-  target or downloads (`plan`, `init`, `refresh`, `get`, `test`, `ansible-playbook --check`/`--diff`,
+  --ask <id> --from examples/drafts`: manual profile, approval person; allowed only exact syntax/lint invocations, no wildcard
+  (`terraform|tofu fmt -check [-recursive]`, `validate`, `tflint [--recursive]`, `ansible-lint
+  --offline`, `yamllint .`); everything else prompts in the pane, and asked as well: what evaluates
+  providers or data sources, touches a target or downloads (`plan`, `init`, `refresh`, `get`, `test`, `ansible-playbook --check`/`--diff`,
   ad-hoc `ansible`, `ansible-pull`, `ansible-galaxy`, `tflint --init`) and every change (apply,
   destroy, import, taint, state surgery, force-unlock), one `terraform *<verb>*` pattern per tool
   so `-chdir=` forms match; denied: state, plan
