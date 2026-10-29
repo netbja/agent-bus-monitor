@@ -80,6 +80,18 @@ func TestDenylistPattern(t *testing.T) {
 			t.Errorf("%s: allowed %v, want %v", c.path, !c.ok, c.ok)
 		}
 	}
+	// The name pattern itself (reviewer-codex): a never-matching one would
+	// pass the scan of a tree that has no occurrence left.
+	for _, s := range []string{"Ask Bernard first", "--as bernard", "BERNARD"} {
+		if !maintainer.MatchString(s) {
+			t.Errorf("maintainer pattern misses %q", s)
+		}
+	}
+	for _, s := range []string{"bernardo", "charlie", "the person"} {
+		if maintainer.MatchString(s) {
+			t.Errorf("maintainer pattern catches %q", s)
+		}
+	}
 	for _, s := range []string{"host10", "hermetic", "project-config", "helper", "anonymous"} {
 		if denied.MatchString(s) {
 			t.Errorf("%q caught", s)
