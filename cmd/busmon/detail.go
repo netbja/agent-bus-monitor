@@ -184,7 +184,8 @@ func detailThread(e bus.Event, th threadState) Line {
 // entry; nothing is inferred from silence.
 func detailText(e bus.Event, at, now time.Time, th threadState) []Line {
 	var b body
-	row := func(k string, v ...Seg) { b.seg(RoleMuted, pad(k, 6)).text("  ").segs(v...).text("\n") }
+	var rows fields // the technical block, after the body
+	row := rows.add
 
 	// One attribution line, then the body with what can honestly be said about
 	// its completeness right under it; the technical block follows.
@@ -208,13 +209,14 @@ func detailText(e bus.Event, at, now time.Time, th threadState) []Line {
 	if e.Kind == "status" && e.State != "" {
 		row("state", S(colorRole(stateColor(e.State)), Preview(e.State)), S(RoleText, "  "), S(RoleMuted, "(as declared by the agent)"))
 	}
-	b.text("\n")
+	rows.gap()
 	row("kind", S(RoleText, Preview(detailKind(e))))
 	row("from", S(RoleText, Preview(detailFrom(e))))
 	row("to", S(RoleText, Preview(detailTo(e))))
 	row("when", S(RoleText, at.Format("2006-01-02 15:04:05")+"  "), S(RoleMuted, "("+humanAge(now.Sub(at))+" ago)"))
 	row("id", S(RoleText, Preview(e.ID)))
 	row("thread", detailThread(e, th)...)
+	b.fields(&rows, mdWidth)
 
 	if threadID(e) != "" {
 		b.text("\n").join(threadSection(e, th, now))

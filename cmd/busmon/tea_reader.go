@@ -683,6 +683,17 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			m.openTour(true)
 		}
 		return nil
+	case ActPlanStart: // a plan task waiting for the person: tell master, through the normal send
+		if r, ok := planStartable(m.snap.planState, p.key); ok && p.kind == ovPlanTask {
+			m.closeReader()
+			if strings.TrimSpace(m.ui.msgCompose.body) != "" { // an unsent draft is never overwritten
+				m.openMessageCompose("", "")
+				m.ui.flash, m.ui.flashErr = "your unsent draft is open: the plan task's text was not put in", false
+				return nil
+			}
+			m.openMessageCompose("@master "+planStartText(r), "")
+		}
+		return nil
 	case ActComposeOpen: // in an agent's page: write to that agent
 		if p.kind == ovAgent {
 			agent := p.key

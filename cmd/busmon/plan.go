@@ -384,10 +384,10 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 			r = x
 		}
 	}
-	var lines []string
+	var f fields
 	add := func(k, v string) {
 		if v != "" {
-			lines = append(lines, fmt.Sprintf("%-10s %s", k, v))
+			f.add(k, S(RoleText, v))
 		}
 	}
 	state := plan.Label(r.State)
@@ -435,14 +435,36 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 	if r.LastFact > 0 {
 		add("last fact", plan.Age(r.LastFact, now)+" ago")
 	}
-	plain = strings.Join(lines, "\n")
-	for _, l := range lines {
-		body = append(body, Line{S(RoleText, l)})
+	if _, ok := planStartable(p, id); ok { // the person's own task: the way to act on it
+		f.gap()
+		f.add("", S(RoleAccent, tourKeys(tourRef{m: ModeOverlay, act: ActPlanStart})), S(RoleText, "  start: write to master about this task"))
 	}
+	var lines []string
+	for _, l := range f.lines(1 << 20) { // the copy: one line per row, unwrapped
+		lines = append(lines, l.text())
+	}
+	plain = strings.Join(lines, "\n")
+	body = f.lines(mdWidth)
 	if len(body) == 0 {
 		body = []Line{nil}
 	}
 	return "Plan " + GlyphNone + " " + id, body, plain
+}
+
+// planStartable is the task when it waits for the person themselves: theirs,
+// its dependencies done (the plan's own Waiting), not an agent's open ask.
+func planStartable(p planState, id string) (plan.Row, bool) {
+	for _, r := range p.rows {
+		if r.Task.ID == id {
+			return r, r.State == plan.Waiting && r.Task.Owner == plan.Person
+		}
+	}
+	return plan.Row{}, false
+}
+
+// planStartText is what the person writes to master to start the task.
+func planStartText(r plan.Row) string {
+	return "Plan " + Preview(r.Task.ID) + ": I start this one - " + Preview(r.Task.Title)
 }
 
 func short7(s string) string {

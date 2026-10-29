@@ -38,7 +38,7 @@ func TestAgentDetailFieldsAndAbsent(t *testing.T) {
 		"Queue", "2 waiting", "1 stale", "measured 3s ago",
 		"lag 40", "SHARED cmd stream",
 		"Wake", "woken", "nonce echoed", "not read or accepted", "tries 2", "escalating", "pane focused",
-		"Gap", "possible, not proven",
+		"Gap:", "possible, not",
 		"Gate", "1 open",
 		"Context", "608k", "608k ctx",
 		"Board", "pr-46-review", "fix/pr-46",
@@ -132,7 +132,7 @@ func TestMessageDetailOrder(t *testing.T) {
 	e := bus.Event{ID: "1791649424805-0", Kind: "cmd", Type: "directive", From: "master", Target: "codex",
 		Message: "BODYTEXT", TextComplete: "yes"}
 	got := detailText(e, detNow, detNow, threadState{Loaded: true})
-	body, from, id := strings.Index(plainOf(got), "BODYTEXT"), strings.Index(plainOf(got), "from"), strings.Index(plainOf(got), "1791649424805-0")
+	body, from, id := strings.Index(plainOf(got), "BODYTEXT"), strings.Index(plainOf(got), "From:"), strings.Index(plainOf(got), "1791649424805-0")
 	if body < 0 || from < 0 || id < 0 || !(body < from && from < id) {
 		t.Fatalf("order body %d < from %d < id %d violated:\n%s", body, from, id, plainOf(got))
 	}

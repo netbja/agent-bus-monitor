@@ -79,6 +79,7 @@ const (
 	ActTour         // the help: the first-launch tour again
 	ActComplete     // the line: complete the @agent (the field does it)
 	ActServiceLog   // Services (F3): the selected service's log
+	ActPlanStart    // a plan task waiting for the person: write to master that they start it
 	ActTokens       // open the tokens page (U)
 )
 
@@ -268,6 +269,7 @@ var (
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "t", Help: "in the help: the first-launch tour again", Act: ActTour, match: runeIs('t')},
+		{Keys: "c", Help: "on a plan task waiting for you: start it (the compose window, to master, prefilled)", Act: ActPlanStart, match: runeIs('c')},
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
