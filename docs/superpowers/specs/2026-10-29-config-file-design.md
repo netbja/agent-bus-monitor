@@ -60,7 +60,7 @@ code accepts today, byte for byte: `AGENT_BUS_AUTO_CLEAR` is on only for `1`, `T
 | `waiting.fade` | — | — | bool, true | (file only) | busmon |
 | `recap.auto_after` | — | — | duration, 8h | (file only) | busmon |
 | `display.theme` | `AGENT_BUS_BUSMON_THEME` | busmon `--theme` | `auto`/`dark`/`light`, auto | one of the three; anything else stops busmon with an error | busmon |
-| `display.limit` | `AGENT_BUS_BUSMON_LIMIT` | busmon `--limit` | int ≥ 0, 25 | an integer ≥ 0, else 25 | busmon |
+| `display.limit` | `AGENT_BUS_BUSMON_LIMIT` | busmon `--limit` | int, 25; 0 or negative = all retained history | any integer after trimming spaces (0 or negative = all history, so `-1` is valid); a non-numeric value is ignored and the next source down applies | busmon |
 | `identity.as` | `AGENT_BUS_HUMAN` | busmon `--as` | name, `pilot` in busmon | a valid name; anything else stops busmon with an error | busmon, `agentbus identity` |
 | `updates.check` | `AGENT_BUS_NO_UPDATE_CHECK` | — | bool, true | `1` turns it off | busmon |
 | `dispatch.context_alert` | `AGENT_BUS_CONTEXT_ALERT` | — | percent 0–100, 80; 0 = off | a number in 0–100, else 80 | dispatch service, busmon, health |
@@ -200,7 +200,8 @@ settings (only existing ones get a file key).
   functions and wrappers (`num("AGENT_BUS_QUOTA_WARN")`), which an `os.Getenv` check would miss.
 - Env rules unchanged: for each row, today's accepted and rejected env values give today's result
   (`AUTO_CLEAR=true` stays off, `TOKENS=false` stays on, `QUOTA=no` stays on, an invalid runaway
-  value makes the check unknown). With no `config.toml`, every existing test passes as is.
+  value makes the check unknown; `AGENT_BUS_BUSMON_LIMIT=-1` replays all history, and
+  `AGENT_BUS_BUSMON_LIMIT=abc` with `display.limit = 40` in the file gives 40, without it 25). With no `config.toml`, every existing test passes as is.
 - Precedence: each step wins over the next, per key (flag, env, `config.toml`, `busmon.toml`,
   default), and a machine with both files mixes them per key; for the services, env file over
   `config.toml` over default for `AGENT_BUS_*`, `config.toml` over default for the runaway keys.
