@@ -72,3 +72,8 @@ Context fill  unknown
   since: never measured
   detail: no current measurement
   remediation: The dispatcher told the agent to commit WIP and send master a hand-off; let it reach a stopping point, then the person reloads it (/clear or a new session). Never type into its pane.
+
+Redis version  unknown
+  since: never measured
+  detail: no current measurement
+  remediation: The person updates the broker when it suits them (docker compose pull redis, then docker compose up -d redis); sentinel never restarts or upgrades the broker, it only reports.

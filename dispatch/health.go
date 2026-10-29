@@ -28,6 +28,7 @@ type HealthConfig struct {
 	DailyWake     bool
 	UsageRefresh  func(context.Context, string) error
 	ModelsRefresh func(context.Context) error
+	RedisRefresh  func(context.Context) error // redis-watch: the daily latest-release check
 }
 
 func (c HealthConfig) filled() HealthConfig {
@@ -46,7 +47,7 @@ func (c HealthConfig) filled() HealthConfig {
 func (l *loop) healthLoop(ctx context.Context) error {
 	cfg := l.cfg.Health.filled()
 	next := make(map[string]time.Time, len(cfg.Checks))
-	nextUsage, nextModels := time.Time{}, time.Time{}
+	nextUsage, nextModels, nextRedis := time.Time{}, time.Time{}, time.Time{}
 	lastDaily := time.Time{}
 	ticker := time.NewTicker(cfg.Tick)
 	defer ticker.Stop()
@@ -77,6 +78,15 @@ func (l *loop) healthLoop(ctx context.Context) error {
 			nextModels = time.Now().Add(24 * time.Hour)
 			if err != nil && ctx.Err() == nil {
 				l.logError("", "health model refresh", err)
+			}
+		}
+		if cfg.RedisRefresh != nil && !time.Now().Before(nextRedis) && time.Until(passEnd) > 0 {
+			cctx, ccancel := context.WithTimeout(passCtx, 10*time.Second)
+			err := cfg.RedisRefresh(cctx)
+			ccancel()
+			nextRedis = time.Now().Add(24 * time.Hour)
+			if err != nil && ctx.Err() == nil {
+				l.logError("", "health redis release check", err)
 			}
 		}
 		for _, check := range cfg.Checks {

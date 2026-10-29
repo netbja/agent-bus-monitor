@@ -661,7 +661,12 @@ It never touches Redis — see README "Example deployment".
   is static guidance. A new `fail` episode wakes sentinel once, plus one separate daily directive.
   Sentinel may restart an identified failed project service once within its budget, or refresh the
   local model table; everything else is escalated. Usage refresh is at most every 15 minutes with
-  a fenced writer; model refresh is daily under a host-local lock. busmon shows the health pill, F5
+  a fenced writer; model refresh is daily under a host-local lock. `redis-version` (redis-watch,
+  `cmd/agentbus/redislatest.go`) compares the broker's INFO version with the latest Redis release:
+  the dispatch service's `RedisRefresh` chore asks GitHub (`redis/redis` latest, 5 s) once a day under
+  a host-local lock into `~/.cache/agentbus/redis-latest.json` (0600; a failed fetch moves only
+  `checked_at`, silently); warn when behind, unknown when the broker is unread or no check succeeded
+  within 48 h. The person updates the broker; sentinel never restarts or upgrades it. busmon shows the health pill, F5
   details and retained transitions in its R recap. Runaway is warning-only. `cmd-delivery` judges only the consumer groups of agents registered in
   `{p}:agents` (A9, `deliveryEvidence`: a dead group's lag tripped `fail` for nobody; `agents forget`
   destroys a forgotten agent's group). Scanner, canary, key
