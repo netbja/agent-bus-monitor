@@ -42,39 +42,39 @@ func TestInfraDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Allowed without a prompt: only commands that run no repository-chosen
-	// code and change nothing.
-	readOnly := regexp.MustCompile(`^Bash\((terraform|tofu) (fmt -check|validate)\*\)$|^Bash\(ansible-lint --offline\*\)$`)
+	// Allowed without a prompt: syntax and lint only, which run no code the
+	// repository or a provider chose (master's classes).
+	readOnly := regexp.MustCompile(`^Bash\((terraform|tofu) (fmt -check|validate)\*\)$|^Bash\((tflint|yamllint)\*\)$|^Bash\(ansible-lint --offline\*\)$|^Bash\(ansible-playbook --syntax-check \*\)$`)
 	for _, rule := range r.Allow {
 		if !readOnly.MatchString(rule) {
-			t.Errorf("allow %q is not a check that runs no repository code", rule)
+			t.Errorf("allow %q is not a syntax or lint check", rule)
 		}
 	}
-	if len(r.Allow) == 0 {
-		t.Error("infra allows nothing: fmt and validate would prompt every time")
-	}
 
-	// Concrete commands, as the client decides them: deny, then ask, then
-	// allow, else the manual profile prompts.
+	// Concrete commands, by class, as the client decides them: deny, then
+	// ask, then allow, else the manual profile prompts.
 	for _, c := range []struct{ cmd, want string }{
-		{"terraform fmt -check -recursive", "allow"},
-		{"tofu validate", "allow"},
-		{"ansible-lint --offline site.yml", "allow"},
-		{"terraform plan", "prompt"},                        // a data "external" source runs a program
-		{"tofu plan -var-file=prod.tfvars", "prompt"},       // same
-		{"ansible-playbook --check site.yml", "ask"},        // check_mode: false tasks run for real
-		{"ansible-playbook --syntax-check site.yml", "ask"}, // every playbook run is asked
-		{"ansible-playbook -i prod site.yml", "ask"},
-		{"tflint --init", "prompt"}, // downloads plugins
-		{"terraform apply", "ask"}, {"tofu destroy -target=x", "ask"},
-		{"terraform -chdir=env/prod apply", "ask"}, {"tofu -chdir=x destroy", "ask"},
+		// syntax and lint: no prompt
+		{"terraform fmt -check -recursive", "allow"}, {"tofu validate", "allow"},
+		{"tflint", "allow"}, {"tflint --recursive", "allow"}, {"yamllint .", "allow"},
+		{"ansible-lint --offline site.yml", "allow"}, {"ansible-playbook --syntax-check site.yml", "allow"},
+		// evaluates providers, modules or data sources, touches a target, downloads: the person's ok
+		{"terraform plan", "ask"}, {"tofu plan -var-file=prod.tfvars", "ask"},
+		{"terraform init", "ask"}, {"tofu init -upgrade", "ask"}, {"terraform refresh", "ask"}, {"tofu refresh", "ask"}, {"terraform -chdir=env/prod plan", "ask"},
+		{"tflint --init", "ask"}, {"tflint --recursive --init", "ask"},
+		{"ansible-playbook --check site.yml", "ask"}, {"ansible-playbook -i prod --check site.yml", "ask"},
+		{"ansible-playbook --diff site.yml", "ask"}, {"ansible-lint site.yml", "prompt"},
+		// changes, state surgery included: the person's ok
+		{"terraform apply", "ask"}, {"tofu destroy -target=x", "ask"}, {"terraform -chdir=env/prod apply", "ask"},
 		{"terraform import a.b id", "ask"}, {"tofu taint a.b", "ask"},
+		{"terraform state mv a b", "ask"}, {"tofu state rm a.b", "ask"}, {"terraform -chdir=x state push s", "ask"},
+		{"ansible-playbook -i prod site.yml", "prompt"}, // a real run: the manual pane (an ask catch-all would also catch --syntax-check)
+		// secrets: never
 		{"terraform output -raw db_password", "deny"}, {"terraform -chdir=env/prod output", "deny"},
-		{"tofu -chdir=x state pull", "deny"}, {"terraform state mv a b", "deny"},
+		{"terraform state pull", "deny"}, {"tofu -chdir=x state show a.b", "deny"},
 		{"terraform show", "deny"}, {"tofu console", "deny"},
 		{"terraform plan -out=prod.tfplan", "deny"}, {"tofu plan -lock=false -out x", "deny"},
-		{"ansible-vault view secrets.yml", "deny"},
-		{"printenv", "deny"}, {"env", "deny"},
+		{"ansible-vault view secrets.yml", "deny"}, {"printenv", "deny"}, {"env", "deny"},
 	} {
 		if got := decide(r, c.cmd); got != c.want {
 			t.Errorf("%q: %s, want %s", c.cmd, got, c.want)
@@ -96,8 +96,8 @@ func TestInfraDraft(t *testing.T) {
 	// Never a secret: state, plan files, vault passwords, cloud and cluster
 	// credentials, plus the shared denies every role carries (~/.ssh).
 	for _, rule := range []string{
-		"Read(**/*.tfstate)", "Read(**/*.tfstate.backup)", "Read(**/.terraform/**)", "Read(**/*.tfplan)",
-		"Read(**/*.tfvars)", "Read(~/.terraform.d/**)",
+		"Read(**/*.tfstate*)", "Read(**/.terraform/**)", "Read(**/*.tfplan)",
+		"Read(**/*.tfvars*)", "Read(~/.terraform.d/**)",
 		"Read(**/*vault_pass*)", "Read(**/.vault_pass*)", "Bash(ansible-vault *)",
 		"Read(~/.aws/**)", "Read(~/.config/gcloud/**)", "Read(~/.azure/**)", "Read(~/.kube/**)",
 		"Read(~/.ssh/**)",

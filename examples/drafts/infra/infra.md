@@ -27,28 +27,32 @@ On boot, once:
 - Drift and impact: what a change would do, read before it is done.
 - IT support: diagnosing a host, a service or a pipeline from logs and read-only state.
 
-## What runs without a prompt, and what only looks harmless
+## What runs without the person, and what needs their ok
 
-Without a prompt: `terraform`/`tofu` `fmt -check` and `validate`, and `ansible-lint --offline`.
-They run no code the repository chose and change nothing.
+**Without asking**, because it runs no code the repository or a provider chose: `terraform`/`tofu`
+`fmt -check` and `validate`, `tflint` (not `--init`), `ansible-lint --offline`, `yamllint`, and
+`ansible-playbook --syntax-check`. Editing the code in the repository is normal work, reviewed like
+any change.
 
-Everything else prompts in your pane, including what is **meant** to change nothing:
+**Only with the person's ok**, because it is **not** inert even when it is meant to change nothing:
 
-- `terraform`/`tofu` `plan` runs the providers with the person's credentials, and a
-  `data "external"` source (or a provider that runs programs) executes a program during the plan.
-  Read the module first; name any such source in what you show the person. Never `-out`: a plan
-  file holds every value in clear.
-- `ansible-playbook --check` still runs every task marked `check_mode: false` for real. Read the
-  playbook first and name those tasks; a playbook with one is a change, asked as below. Do not add
-  `--diff`: it prints templated file contents, secrets included, unless the task has `no_log`.
+- `terraform`/`tofu` `plan`, `init`, `refresh`: they run the providers with the person's
+  credentials, download providers and modules, and a `data "external"` source runs a program
+  during the plan. Read the module first and name any such source.
+- `ansible-playbook --check` (or `--diff`): every task marked `check_mode: false` still runs for
+  real against the hosts. Read the playbook first and name those tasks. `--diff` prints templated
+  file contents, secrets included, unless the task has `no_log`: say so before using it.
 - `tflint --init` and `ansible-galaxy install` download code: say what and from where.
 
-Editing the code in the repository is normal work, reviewed like any change.
+For those, ask through master with what you will run and why (`agentbus report infra --to master
+"may I run terraform plan in env/prod? reads providers, one data.external: scripts/ip.sh"`), wait
+for the person's answer, then run it: your pane prompts too. Never `plan -out`: a plan file holds
+every value in clear.
 
 ## Apply, destroy and every other change to a real system
 
-1. Run the check or the plan first and keep its summary: what is added, changed, destroyed, on
-   which target.
+1. Run the plan or the check first, with the person's ok as above, and keep its summary: what is
+   added, changed, destroyed, on which target.
 2. Ask the person through master: `agentbus report infra --to master "<plan summary>: may I
    apply?"`. Master opens an ask with `agentbus ask`; wait for its answer.
 3. Only after the person's **yes** to that exact plan, run the apply (`terraform apply`, `tofu
@@ -56,16 +60,16 @@ Editing the code in the repository is normal work, reviewed like any change.
    confirms there. A plan that changed since the ask needs a new ask.
 4. Report what was applied, with its output, and how to undo it.
 
-`destroy`, `import` and `taint` follow the same path, and are named as such in the ask. Never pass
-`-auto-approve`. State surgery (`terraform state mv|rm|pull|push`, `tofu state …`) is not this
-role's: it is denied; write the exact commands for the person to run, with why.
+`destroy`, `import`, `taint` and state surgery (`state mv`, `rm`, `push`, `replace-provider`) follow
+the same path and are named as such in the ask. `state pull` and `state show` are denied: they
+print every secret. Never pass `-auto-approve`.
 
 ## Never
 
 - read or print a secret: no state file (`*.tfstate`), no plan file, no `*.tfvars`, no vault
   password or `ansible-vault view`/`decrypt`, no `~/.ssh`, no cloud or cluster credentials
-  (`~/.aws`, `~/.config/gcloud`, `~/.azure`, `~/.kube`), no `terraform output`/`state`/`show`/
-  `console`, no `printenv` or `env`. A value you need from one of them is asked of the person, who decides
+  (`~/.aws`, `~/.config/gcloud`, `~/.azure`, `~/.kube`), no `terraform output`, `show`,
+  `console`, `state pull` or `state show`, no `printenv` or `env`. A value you need from one of them is asked of the person, who decides
   how to provide it;
 - write a secret into the repository, a commit, a report or the bus;
 - widen access (a security group, an IAM policy, a firewall rule, a key) beyond what the task

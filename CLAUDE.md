@@ -489,12 +489,13 @@ It never touches Redis — see README "Example deployment".
   `doctor`: only after an `adopt` answer not given by the asker; appends to the manifest after
   checking it loads, never overwrites a prompt). `examples/drafts/infra/` is the `infra` pop role
   (Ansible, Terraform/OpenTofu, IT automation) as an inert draft, adopted with `roles adopt infra
-  --ask <id> --from examples/drafts`: manual profile, approval person; only `fmt -check`, `validate`
-  and `ansible-lint --offline` run unprompted (plan can run a `data "external"` program, `--check`
-  runs `check_mode: false` tasks: both prompt); apply/destroy/import/taint and every
-  `ansible-playbook` asked; state, plan files, tfvars, vault passwords, cloud credentials,
-  state/output/show/console (with `-chdir=` too) and `env` denied (`rolecfg/infra_test.go`, a
-  command table); no `roles/infra.md` until adopted.
+  --ask <id> --from examples/drafts`: manual profile, approval person; allowed only syntax and lint
+  (`fmt -check`, `validate`, `tflint` without `--init`, `ansible-lint --offline`, `yamllint`,
+  `ansible-playbook --syntax-check`); asked: what evaluates providers or data sources or touches a
+  target (`plan`, `init`, `refresh`, `ansible-playbook --check`/`--diff`, `tflint --init`) and every
+  change (apply, destroy, import, taint, state surgery), with `-chdir=` forms; denied: state, plan
+  and tfvars files, vault passwords, cloud credentials, `output`/`show`/`console`/`state pull|show`,
+  `env` (`rolecfg/infra_test.go`, a command table per class); no `roles/infra.md` until adopted.
 - **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
   `update`, `uninstall`, `status`. It stamps `buildinfo.Version` (from
   `git describe` when it is a `v*` tag, else `dev`) and `buildinfo.Repo` via ldflags; `agentbus up`
