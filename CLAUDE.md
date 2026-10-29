@@ -487,7 +487,18 @@ It never touches Redis — see README "Example deployment".
   `roles draft <role> --task …` (an inert draft in `.agent-bus/drafts`, skills from the launcher's
   roots, least privileged) and `roles adopt <role> --ask <id>` (needs the project's bus, like
   `doctor`: only after an `adopt` answer not given by the asker; appends to the manifest after
-  checking it loads, never overwrites a prompt).
+  checking it loads, never overwrites a prompt). `examples/drafts/infra/` is the `infra` pop role
+  (Ansible, Terraform/OpenTofu, IT automation) as an inert draft, adopted with `roles adopt infra
+  --ask <id> --from examples/drafts`: manual profile, approval person; allowed only exact syntax/lint invocations, no wildcard
+  (`terraform|tofu fmt -check [-recursive]`, `validate`, `tflint [--recursive]`, `ansible-lint
+  --offline`, `yamllint .`); everything else prompts in the pane, and asked as well: what evaluates
+  providers or data sources, touches a target or downloads (`plan`, `init`, `refresh`, `get`, `test`, `ansible-playbook --check`/`--diff`,
+  ad-hoc `ansible`, `ansible-pull`, `ansible-galaxy`, `tflint --init`) and every change (apply,
+  destroy, import, taint, state surgery, force-unlock, workspace) and every `ansible-playbook` run,
+  one `terraform *<verb>*` pattern per tool
+  so `-chdir=` forms match; denied: state, plan
+  and tfvars files, vault passwords, cloud credentials, `output`/`show`/`console`/`state pull|show`,
+  `env` (`rolecfg/infra_test.go`, a command table per class); no `roles/infra.md` until adopted.
 - **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
   `update`, `uninstall`, `status`. Since installer-default it is a thin script that builds
   `agentbus` and runs `agentbus setup` (package `setup/`, every external command through
