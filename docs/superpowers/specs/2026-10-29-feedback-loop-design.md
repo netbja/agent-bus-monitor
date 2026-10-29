@@ -90,7 +90,8 @@ must show, not vanish.
      not approved, 1 + **every** independent reject so far, the newest verdict **included** (one
      reject alone: 2). It does not depend on who reviewed: A rejects once and B approves is 2;
      redis-watch (rejected twice, then approved) is 3. It overcounts when two reviewers reject the
-     same delta (2 for one round). The proxy is the only reject count per subject: a separate
+     same delta: two reviewers rejecting one delta, then an approve, reads 3 where the true count
+     is 2 (also 3 while not approved). The proxy is the only reject count per subject: a separate
      "rejects" column would carry the same number less one.
    - **re-reviews**: independent approves that follow an approve by the same reviewer with no
      reject of its in between (a rebase, a delta re-checked), summed over the reviewers, in their
@@ -226,11 +227,13 @@ per project); scheduling (sentinel may run it later, read-only).
   approved; the median to verdict and its "n of m"; `--since` bounds by verdict time; the window
   starts at the oldest retained verdict; the roll-up agrees with `bus.RollUp`.
 - Rounds and re-reviews: approve only (1 round), reject then approve, reviewers that rotate (A
-  rejects, B approves: 2), two rejects of one delta (2: the stated overcount), approvals after a
+  rejects, B approves: 2), two reviewers rejecting one delta then an approve (3, the stated overcount: the true count is 2;
+  also 3 while not approved), approvals after a
   rebase (re-reviews, not rounds), not approved yet, the newest verdict included (one reject
   alone: 2; reject, reject: 3).
-- Self-verdicts: a self-reject makes the state REJECTED as RollUp says, and counts nowhere else; a
-  self-approve changes nothing but the totals.
+- Self-verdicts: a self-reject makes the state REJECTED as RollUp says, is left out of every
+  independent-only figure (per reviewer, rounds, re-reviews, time to approval, categories) and is
+  counted in the self-verdict totals; a self-approve changes only the self-verdict totals.
 - The standing approval: one reviewer approves, the other rejects later, then approves (time to
   approval and rounds measured at the last transition into APPROVED); the join rule (a
   challenge reached only through a verdict's ref; a verdict without ref joins nothing).
