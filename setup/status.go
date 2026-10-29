@@ -195,6 +195,16 @@ func (in *Installer) ownerLine(ctx context.Context) {
 // never what it is.
 func (in *Installer) passwordLine() {
 	path := bus.PasswordFile(in.Getenv)
+	if in.Repo != "" && in.Getenv("REDIS_PASSWORD") == "" && setsKey(filepath.Join(in.Repo, ".env"), "REDIS_PASSWORD") {
+		// compose starts the broker with it; the clients read the file or the
+		// default (reviewer-codex).
+		clients := "the historical default"
+		if path != "" {
+			clients = path
+		}
+		in.O.Warn("Redis password: " + filepath.Join(in.Repo, ".env") + " sets REDIS_PASSWORD: compose starts the broker with it, while the clients read " + clients + "; export the same value for the clients, or move it into the password file and remove that line")
+		return
+	}
 	switch {
 	case in.Getenv("REDIS_URL") != "":
 		in.O.Info("Redis password: from REDIS_URL")

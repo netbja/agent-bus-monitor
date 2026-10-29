@@ -671,13 +671,15 @@ It never touches Redis — see README "Example deployment".
   same order). Compose reads the file through `env_file` (`required: false`) and gives redis-server
   its password as a config on stdin (a shell `REDIS_PASSWORD` at `compose up` wins, then the file,
   then the default; `"` and `\` escaped; the healthcheck uses `REDISCLI_AUTH`), never on an argv.
-  `setup` writes it (`password` in `setup/redis.go`) only for a fresh broker: no file, none exported, no
+  `setup` writes it (`password` in `setup/redis.go`) only for a fresh broker: no file, none exported nor in the checkout's `.env` (compose would use it;
+  status warns about it), no
   `agent-bus-redis` container and no `agent-bus_redis-data` volume, each read for sure. `./setup.sh
   rotate-redis-password` (`setup/rotate.go`, the person's act, never sentinel's) checks everything
   first (none exported, this checkout's broker running, no `REDIS_PASSWORD` in the checkout's `.env`
   nor in any project's services env file, the current one logs in), asks (or `--yes`;
   `--dry-run`), then `RotatePassword`: new file (old kept as `.prev`), `CONFIG SET requirepass`, a
-  fresh login, else the broker set back and the file put back byte for byte; then the running
+  fresh login, else the broker set back and the file put back byte for byte (if the set-back fails the
+  new file stays, the old in `.prev`: the broker may hold either); then the running
   project services restart. Its rollback test starts private `redis-server` processes (CONFIG SET
   changes a whole server, never the shared test broker), opt-in through `AGENTBUS_TEST_REDIS_URL`.
   `scripts/setup-legacy.sh` neither writes nor rotates it; its help is compared to the Go one without

@@ -69,11 +69,17 @@ func RotatePassword(ctx context.Context, live PasswordSetter, path, old, pw stri
 		return fmt.Errorf("the broker refused the new password (%v); nothing changed", err)
 	}
 	if err := verify(ctx, pw); err != nil {
-		back := live.SetPassword(ctx, old)
+		if back := live.SetPassword(ctx, old); back != nil {
+			// The broker may hold the new one: the file keeps it, the old one
+			// stays beside it, and nothing is restored (reviewer-codex).
+			prev := "the previous one is the historical default"
+			if had {
+				prev = "the previous one is in " + path + ".prev"
+			}
+			return fmt.Errorf("the new password does not log in (%v), and the broker could not be set back to the old one (%v): it may hold the new one, kept in %s; %s. Try both before anything else", err, back, path, prev)
+		}
 		rerr := restore()
 		switch {
-		case back != nil:
-			return fmt.Errorf("the new password does not log in (%v), and the broker could not be set back (%v): it now holds the password in %s", err, back, path)
 		case rerr != nil:
 			return fmt.Errorf("the new password does not log in (%v); the broker is back on the old one, but %s could not be put back: %v", err, path, rerr)
 		}

@@ -95,7 +95,8 @@ docker compose ps
 `REDIS_PASSWORD="…"` line). Compose reads that file (`env_file`) and hands the password to Redis
 as a config on its stdin, never on a command line; `agentbus` and `busmon` read the same file, so
 nothing needs exporting. A `REDIS_PASSWORD` exported in the shell wins over the file, for compose
-and the clients alike; one in the checkout's `.env` reaches compose only (`.env.example`). An install made before this (no file) keeps the historical
+and the clients alike; one in the checkout's `.env` reaches compose only (`.env.example`): install then
+writes no file, and `./setup.sh status` warns. An install made before this (no file) keeps the historical
 `AgentBus2025!`, and health `redis-password` warns about it until you rotate:
 
 ```bash
@@ -107,7 +108,8 @@ The rotation runs only on the broker this checkout owns, and only with no `REDIS
 `REDIS_URL` exported, none in the checkout's `.env`, and none in a project's services env file. It writes the new file (keeping the old one as `redis.env.prev`), sets the
 password on the running broker (no restart, no data lost), proves it with a new connection, then
 restarts the running project services. A refused change or a failed proof puts the broker and the
-file back as they were. Reopen busmon afterwards, and copy the new file to any machine that reaches
+file back as they were; if the broker cannot be set back, the new file is kept (the old one in
+`redis.env.prev`) and the error says so. Reopen busmon afterwards, and copy the new file to any machine that reaches
 the broker through a tunnel. `uninstall` leaves the file. The bash fallback,
 `scripts/setup-legacy.sh`, neither writes nor rotates it.
 

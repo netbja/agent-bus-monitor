@@ -371,3 +371,29 @@ func TestSetsKey(t *testing.T) {
 		t.Error("an unreadable file must count as setting it (refuse rather than guess)")
 	}
 }
+
+// reviewer-codex: the new password fails its proof and the broker cannot be
+// set back: the broker may hold the new one, so the new file stays (with the
+// previous one beside it) and the error says so; nothing is restored.
+func TestRotatePasswordKeepsTheNewFileWhenTheBrokerCannotBeSetBack(t *testing.T) {
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "agentbus")
+	path := filepath.Join(dir, "redis.env")
+	if err := bus.WritePassword(path, "old-pw"); err != nil {
+		t.Fatal(err)
+	}
+	live := &fakeSetter{fail: map[string]error{"old-pw": errors.New("connection reset")}}
+	err := RotatePassword(ctx, live, path, "old-pw", "new-pw", func(context.Context, string) error { return errors.New("WRONGPASS") })
+	if err == nil {
+		t.Fatal("reported success")
+	}
+	if pw, _ := bus.ReadPassword(path); pw != "new-pw" {
+		t.Fatalf("the file holds %q: the broker may hold new-pw, so must the file", pw)
+	}
+	if prev, _ := bus.ReadPassword(path + ".prev"); prev != "old-pw" {
+		t.Fatalf("the previous password is not kept beside it: %q", prev)
+	}
+	if !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), ".prev") {
+		t.Fatalf("the error does not say where each password is: %v", err)
+	}
+}

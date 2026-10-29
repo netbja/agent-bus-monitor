@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -142,6 +143,10 @@ func (in *Installer) password(ctx context.Context) {
 	}
 	if in.Getenv("REDIS_PASSWORD") != "" {
 		in.O.Info("Redis password: REDIS_PASSWORD is exported, compose uses it (no file written)")
+		return
+	}
+	if setsKey(filepath.Join(in.Repo, ".env"), "REDIS_PASSWORD") { // compose would start the broker with it (reviewer-codex)
+		in.O.Info("Redis password: " + filepath.Join(in.Repo, ".env") + " sets REDIS_PASSWORD, compose uses it (no file written); export the same value for the clients")
 		return
 	}
 	if !in.freshBroker(ctx) {

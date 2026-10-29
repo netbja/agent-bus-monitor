@@ -197,6 +197,15 @@ func TestRedisPasswordForAFreshBroker(t *testing.T) {
 		t.Fatalf("exported: file %v, %q", err, out.String())
 	}
 
+	// reviewer-codex: a REDIS_PASSWORD in the checkout's .env is what compose
+	// would start the broker with: no file that the broker would not use.
+	in, out, path = world(map[string]string{}, noContainer, noVolume)
+	_ = os.WriteFile(filepath.Join(in.Repo, ".env"), []byte("REDIS_PASSWORD=custom\n"), 0o600)
+	in.Redis(ctx, up)
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) || !strings.Contains(out.String(), ".env sets REDIS_PASSWORD") {
+		t.Fatalf(".env: file %v, %q", err, out.String())
+	}
+
 	// A dry run writes nothing and says what it would do.
 	in, out, path = world(map[string]string{}, noContainer, noVolume)
 	in.Opt.DryRun = true

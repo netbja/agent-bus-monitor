@@ -142,6 +142,7 @@ func TestStatusForeignThings(t *testing.T) {
 // the password itself.
 func TestStatusPasswordLine(t *testing.T) {
 	cfg := t.TempDir()
+	repo := t.TempDir()
 	path := filepath.Join(cfg, "agentbus", "redis.env")
 	for _, c := range []struct {
 		env  map[string]string
@@ -154,6 +155,7 @@ func TestStatusPasswordLine(t *testing.T) {
 		{map[string]string{}, "bad", "! Redis password: " + path + " cannot be read"},
 		{map[string]string{"REDIS_PASSWORD": "exported-secret"}, "ok", "• Redis password: from the exported REDIS_PASSWORD (it overrides the password file)"},
 		{map[string]string{"REDIS_URL": "redis://:url-secret@h:1"}, "ok", "• Redis password: from REDIS_URL"},
+		{map[string]string{"dotenv": "1"}, "ok", "! Redis password: " + repo + "/.env sets REDIS_PASSWORD: compose starts the broker with it, while the clients read " + path + "; export the same value for the clients, or move it into the password file and remove that line"},
 	} {
 		_ = os.RemoveAll(filepath.Join(cfg, "agentbus"))
 		switch c.file {
@@ -170,7 +172,11 @@ func TestStatusPasswordLine(t *testing.T) {
 		}
 		var out bytes.Buffer
 		c.env["XDG_CONFIG_HOME"] = cfg
-		in := &Installer{O: NewOutput(&out, &out, false), Getenv: func(k string) string { return c.env[k] }}
+		_ = os.Remove(filepath.Join(repo, ".env"))
+		if c.env["dotenv"] != "" {
+			_ = os.WriteFile(filepath.Join(repo, ".env"), []byte("REDIS_PASSWORD=dotenv-secret\n"), 0o600)
+		}
+		in := &Installer{O: NewOutput(&out, &out, false), Repo: repo, Getenv: func(k string) string { return c.env[k] }}
 		in.passwordLine()
 		if got := strings.TrimSpace(out.String()); got != c.want {
 			t.Errorf("%v %q: %q, want %q", c.env, c.file, got, c.want)
