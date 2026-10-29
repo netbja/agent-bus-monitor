@@ -293,19 +293,24 @@ noms d'onglets et d'agents, sans modèle de projet) :
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) montre dispatch,
   missions et le broker Redis sous forme de cartes (état, pid, dernière erreur, taille du
-  journal ; version de Redis, durée de fonctionnement, mémoire, clés) ; `↑↓` en choisit une,
-  Entrée ou `l` ouvre son journal. F5 montre la santé du projet, `R` un récapitulatif de ce qui
+  journal ; version de Redis, durée de fonctionnement, mémoire, clés), relues toutes les 5 secondes
+  tant que la page est ouverte ; `↑↓` (ou `←→` quand les cartes sont côte à côte) en choisit une,
+  Entrée ou `l` ouvre le journal d'un service, et Entrée sur la carte Redis ouvre sa page en
+  lecture seule : mémoire, persistance, clients, clés et streams de chaque projet, liaison du port
+  et dernières lignes du journal du conteneur. F5 montre la santé du projet, `R` un récapitulatif de ce qui
   s'est passé en votre absence (non lus d'abord), `P` le plan du lot, `U` les tokens. F1 liste
   toutes les touches ; `t` y rejoue la visite de premier lancement.
 - **For you.** Le panneau For you, à côté d'Agents, regroupe ce que vous seul pouvez régler : les
   questions ouvertes d'un agent (`ask`), un agent qui attend votre décision (`wait`), un verrou
   4-yeux que vous avez ouvert ou qui vous bloque (`gate`), et les messages qui vous sont adressés
   et que vous n'avez pas ouverts (`unread`). L'en-tête les compte (`♙ 4 for you · ● 2 unread`).
-  Entrée en ouvre un.
+  Entrée en ouvre un. Chaque page se lit `Label:  value`, les valeurs d'un bloc alignées sur une
+  colonne.
 - **Quotas : s'arrêter avant la limite.** Le service dispatch lit chaque minute les fenêtres
   d'usage de chaque fournisseur (% utilisé, remise à zéro) dans des sources locales, sans appel au
   modèle. L'en-tête de busmon affiche une jauge par fournisseur
-  (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`) ; `agentbus quota` les affiche dans
+  (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`), remplie par huitièmes de case et
+  qui glisse vers une nouvelle valeur dans un terminal en couleurs vraies ; `agentbus quota` les affiche dans
   un terminal. À 85 % d'une fenêtre, master reçoit un avertissement ; à 95 %, les agents de ce
   fournisseur ne sont plus réveillés jusqu'à la remise à zéro (leur colonne state affiche `quota`, ou le
   marqueur `held` s'ils ont déclaré blocked ou done) ; quand le
@@ -375,9 +380,14 @@ noms d'onglets et d'agents, sans modèle de projet) :
   les montre) : une directive plus ancienne restée sans réponse ne réveille personne. Entrée
   déplie un groupe ou ouvre un fil ; `d` puis `y` clôt un fil par une réponse de votre part, son
   historique reste. Une requête suivie est close par son destinataire (`agentbus request done`).
+  L'en-tête reprend les mêmes comptes : ce que vous devez en orange
+  (`2 requests waiting · oldest 3h`), ce que les agents se doivent entre eux en gris
+  (`4 between agents`), chacun absent à 0.
 - **Le plan.** Quand master charge le plan du lot (`agentbus plan load docs/plans/<nom>.json@<commit>`),
   l'onglet Plan (`4`) et `P` montrent ses tâches par état (waiting for you, blocked, in review,
-  in progress, upcoming, done), chacune avec sa revue, sa PR et ses questions. Une tâche n'est
+  in progress, upcoming, done), chacune avec sa revue, sa PR et ses questions. Une tâche qui vous
+  attend a une ligne `Action:` : Entrée ou `s` ouvre la fenêtre de rédaction vers master,
+  préremplie, pour la démarrer. Une tâche n'est
   done que si master l'enregistre (`agentbus plan done <tâche>`), ou si elle n'a pas à être
   fusionnée et qu'elle est livrée et approuvée.
 - **Lire les journaux :** `agentbus --project myapp service logs missions -n 100`. Ils tournent
@@ -418,14 +428,20 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   Claude Code dont la passation tient, au repos, sans question ni revue
   ouverte, dans un volet prêt ; puis il prouve la nouvelle session et dit à l'agent de lire sa
   passation. Il reste désactivé tant que ses vérifications en conditions réelles n'ont pas été
-  faites sur cette version.
+  faites sur cette version. Activez-le sur la ligne `up` (`AGENT_BUS_AUTO_CLEAR=1 agentbus up
+  myapp`) : `up` écrit les variables `AGENT_BUS_*` de son shell dans le fichier d'environnement des
+  services, `~/.config/agentbus/services/myapp.env`, et le réécrit à chaque lancement, si bien
+  qu'une ligne ajoutée à la main est perdue au `up` suivant. Ses lignes sont au format
+  `KEY="value"` ; une ligne sans guillemets arrête le dispatcher pour configuration invalide. Pour
+  le désactiver, relancez `up` sans la variable.
 - **Mises à jour des clients.** Quand un client est mis à jour sous un agent en cours, busmon
   signale l'agent `update`, la santé `client-updates` avertit, et sentinel reçoit une directive.
   sentinel redémarre chaque agent périmé sur son rôle et son profil, en reprenant sa
   conversation : `agentbus --project myapp reload coder`. Un rechargement ne se fait que pour un
-  agent au repos sans travail ouvert (ni revue, ni question, ni mission, ni tâche acceptée), et
-  jamais pour le volet de l'appelant ; il arrête l'agent par SIGTERM, le relance dans son onglet
-  et prouve le nouveau processus. master ne peut recharger que sentinel. Vous pouvez recharger
+  agent au repos sans travail ouvert (ni revue, ni mission, ni tâche acceptée ; sa propre question
+  ouverte seulement avec `--fresh`, car une conversation reprise la garde), et jamais pour le volet
+  de l'appelant. Il vérifie la relance avant de rien arrêter, arrête l'agent par SIGTERM, le
+  relance dans son onglet (un rôle pop par `agent-spawn`) et prouve le nouveau processus. master ne peut recharger que sentinel. Vous pouvez recharger
   n'importe qui : `agentbus --project myapp reload coder --as <votre-nom>` (`--dry-run` dit ce qui
   se passerait, `--fresh` démarre une nouvelle conversation). `agentbus up myapp --reload
   propose` fait attendre chaque rechargement votre accord ; `--reload off` vous les laisse.
@@ -446,10 +462,17 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   dans F5. Une lecture manquante ou périmée est `unknown`, jamais `ok`. Une nouvelle panne réveille
   sentinel une fois ; il peut redémarrer un service en panne ou rafraîchir la table des modèles,
   et remonte tout le reste à master.
+- **Version de Redis.** La vérification `redis-version` compare le broker à la dernière version de
+  Redis de sa propre version majeure, lue une fois par jour dans la liste des versions publiées sur
+  GitHub. En retard dans sa majeure, c'est un avertissement ; une majeure plus récente est
+  seulement nommée, car changer de majeure est votre décision. Sans vérification réussie depuis
+  48 heures, elle est `unknown`. Vous mettez le broker à jour vous-même ; sentinel ne le redémarre
+  ni ne le met à jour jamais.
 - **Tokens.** `agentbus tokens` montre les tokens dépensés par projet, côte à côte, sur 7 jours ;
   `--project myapp --by agent` (aujourd'hui) ou `--by day` resserre la vue, `--json` pour les
   scripts. Ils sont comptés toutes les 5 minutes dans les transcriptions Claude Code des sessions
-  que le bus a prouvées. La page `U` de busmon montre la même chose avec l'historique sur 24 heures
+  que le bus a prouvées. Le modèle et le contexte d'un agent (`agentbus usage`) viennent de cette
+  même session prouvée, jamais d'une session qu'un statut se contente de nommer. La page `U` de busmon montre la même chose avec l'historique sur 24 heures
   des fenêtres du compte. Aucun coût n'est affiché, par principe : sur un abonnement, ce chiffre
   serait une fiction.
 
@@ -574,3 +597,24 @@ l'exécute étape par étape.
 2. **Format des options** : `--ref abc123`, `--ref=abc123` et la forme courte indiquée par l'aide (`-r abc123`) fonctionnent. Un seul tiret devant un nom long (`-ref`), des options courtes groupées (`-ab`) et une valeur collée (`-rabc123`) ne fonctionnent pas.
 3. **Ordre positionnel strict** : Les arguments suivent un ordre précis : `agentbus status <agent> <state> <message>`. Le message se place toujours en dernier.
 4. **Nommage normalisé** : Les noms de projets et d'agents doivent respecter l'expression régulière `^[a-z][a-z0-9_-]{0,31}$` (minuscules, débutant par une lettre).
+5. **Un `AGENT_BUS_*` exporté reste dans les services** : `agentbus up` copie chaque variable
+   `AGENT_BUS_*` de son shell dans le fichier d'environnement du projet, et les services la gardent
+   après que vous l'avez retirée de votre shell, jusqu'au prochain `up` sans elle.
+
+---
+
+## 9. Brouillons et Projets
+
+- **Le rôle `infra` est un brouillon, pas adopté.** `examples/drafts/infra/` contient un rôle pop
+  pour Ansible, Terraform/OpenTofu et l'automatisation informatique : un profil manuel où seules
+  des commandes exactes de syntaxe et de lint tournent sans confirmation, où les plans, les
+  vérifications et chaque changement passent par vous, et où les secrets sont refusés. Son README
+  décrit l'adoption : master vous pose la question, puis
+  `agentbus --project myapp roles adopt infra --ask <id> --from examples/drafts`.
+- **Deux spécifications, non construites.** La
+  [boucle de feedback](superpowers/specs/2026-10-29-feedback-loop-design.md) (`agentbus feedback` :
+  des statistiques en lecture seule sur les revues que le bus retient ; une modification de skill
+  proposée en pull request seulement après votre oui) et le
+  [fichier de configuration](superpowers/specs/2026-10-29-config-file-design.md) (un seul
+  `config.toml` pour vos préférences, et `agentbus config` pour montrer la valeur de chaque réglage
+  et sa provenance).
