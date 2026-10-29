@@ -17,6 +17,21 @@ import (
 // denied are matched case-insensitively, as whole words.
 var denied = regexp.MustCompile(`(?i)\b(host1|hermes|hyperliquid|ai-tradex(-solana)?|polymarket|sysnet|project-c|myprojecttools|herdr-radar)\b`)
 
+// maintainer is the maintainer's name: allowed only where it is history or a
+// test's sample person (master: specs, releases, plans, memory, the
+// CHANGELOG, tests and fixtures); anywhere else a user-facing example uses
+// charlie and prose "the person" (reviewer-codex).
+var maintainer = regexp.MustCompile(`(?i)\bbernard\b`)
+
+func maintainerAllowed(path string) bool {
+	for _, p := range []string{"docs/superpowers/", "docs/releases/", "docs/plans/", "docs/memory/", "specs/", "tests/"} {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return path == "CHANGELOG.md" || strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/testdata/")
+}
+
 func TestNoPrivateReferences(t *testing.T) {
 	root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
@@ -41,6 +56,9 @@ func TestNoPrivateReferences(t *testing.T) {
 			if m := denied.FindString(line); m != "" {
 				t.Errorf("%s:%d: %q is a private reference (scrub): use a neutral name (demo, myproject, your-host, user, anonymous)", path, i+1, m)
 			}
+			if m := maintainer.FindString(line); m != "" && !maintainerAllowed(path) {
+				t.Errorf("%s:%d: %q outside history and tests (scrub): a sample person is charlie, prose says the person", path, i+1, m)
+			}
 		}
 	}
 }
@@ -50,6 +68,16 @@ func TestDenylistPattern(t *testing.T) {
 	for _, s := range []string{"ssh user@host1", "AGENT_BUS_AGENT=hermes", "Hyperliquid", "ai-tradex-solana", "the project-c hook"} {
 		if !denied.MatchString(s) {
 			t.Errorf("%q not caught", s)
+		}
+	}
+	for _, c := range []struct {
+		path string
+		ok   bool
+	}{{"README.md", false}, {"skills/x/SKILL.md", false}, {"roles.toml", false}, {"cmd/busmon/human.go", false},
+		{"cmd/busmon/human_test.go", true}, {"cmd/busmon/testdata/golden/x.txt", true}, {"tests/bootstrap_test.sh", true},
+		{"docs/releases/v0.6.0.md", true}, {"docs/memory/INDEX.md", true}, {"CHANGELOG.md", true}} {
+		if maintainerAllowed(c.path) != c.ok {
+			t.Errorf("%s: allowed %v, want %v", c.path, !c.ok, c.ok)
 		}
 	}
 	for _, s := range []string{"host10", "hermetic", "project-config", "helper", "anonymous"} {

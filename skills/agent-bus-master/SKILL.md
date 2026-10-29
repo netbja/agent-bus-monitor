@@ -339,7 +339,7 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
 - Delivered and the next step is the person's (a review, a go, a merge, a test)? That is a
   decision: open an ask with the options (`go`, `changes`, `later`), which declares you `waiting`.
   Declare `idle` only when nothing is expected of the person. An idle status that names the
-  person ("awaiting bernard") only earns a muted `for you` hint in busmon: nothing rings.
+  person ("awaiting charlie") only earns a muted `for you` hint in busmon: nothing rings.
 - Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
   answer it in busmon: prefer the ask.
 
