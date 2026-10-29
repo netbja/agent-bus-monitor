@@ -134,8 +134,10 @@ What `install` does:
 - **Agent CLIs.** agent-bus runs its agents in a CLI you install: Claude Code (`claude`), Codex CLI
   (`codex`), Kimi Code CLI (`kimi`) or Grok Build (`grok`). Setup lists those it finds and never
   fails without one: it then says where to get each, and the bus and busmon work meanwhile. `agentbus
-  up` starts only the agents whose CLI it finds (on its PATH or in `~/.local/bin` and the like),
-  names the others, and with none at all starts nothing and gives the next command.
+  up` starts only the agents whose CLI it finds (on its PATH, in `~/.local/bin` and the like, or as
+  your login shell finds it: nvm, volta, a CLI's own installer), names the others, and with none at
+  all starts nothing and gives the next command. A CLI it cannot judge (the shell does not answer
+  in 3 s) is started anyway, and it says so.
 
 `update` refuses a tree with uncommitted changes, fast-forwards it, then runs the `setup.sh` it
 just pulled.

@@ -585,7 +585,7 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 		Lock:      upLock(upCacheDir(os.Getenv)),
 		TabClient: func(cmd string) string { return tabClient(cmd, os.Getenv) },
 		TabExe:    func(cmd string) string { return tabExecutable(cmd, os.Getenv) },
-		LookPath:  lookAgentCLI(os.Getenv, exec.LookPath),
+		LookPath:  lookAgentCLI(os.Getenv, exec.LookPath, shellProbe(os.Getenv, 3*time.Second)),
 		Trusted:   clientTrusted(os.Getenv),
 		Sleep:     time.Sleep,
 		Out:       stdout,
@@ -775,7 +775,12 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 			continue
 		}
 		agents++
-		if _, err := d.LookPath(exe); err != nil {
+		_, err := d.LookPath(exe)
+		switch {
+		case err == nil:
+		case errors.Is(err, errCLIUnknown): // never drop what nobody could judge
+			fmt.Fprintf(stdout, "could not tell whether %s is installed (%v): %s starts anyway; its pane says if it is missing\n", exe, err, t.Name)
+		default:
 			missing = append(missing, t.Name+" needs "+exe)
 			continue
 		}
@@ -806,31 +811,84 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 	return tpl, true
 }
 
+// errCLIAbsent: the user's login shell says the CLI is not installed; only
+// this drops an agent's tab. errCLIUnknown: nobody could tell (no shell, a
+// timeout, an error): the tab is kept and the reason said (foureyes).
+var (
+	errCLIAbsent  = errors.New("not installed")
+	errCLIUnknown = errors.New("could not tell")
+)
+
 // lookAgentCLI finds an agent's CLI on up's PATH, else in the usual per-user
-// install directories: up may run from a pane (the herdr plugin's picker)
-// whose PATH is narrower than the login shell an agent's tab runs in, so a
-// CLI there is not taken for missing.
-func lookAgentCLI(getenv func(string) string, look func(string) (string, error)) func(string) (string, error) {
+// install directories, else through the person's own login shell (shell):
+// up may run from a pane (the herdr plugin's picker) whose PATH is narrower
+// than the shell an agent's tab runs in, where nvm, volta, asdf, mise or a
+// CLI's own installer put it on PATH. A miss is errCLIAbsent only when that
+// shell says so; when it cannot answer, errCLIUnknown.
+func lookAgentCLI(getenv func(string) string, look func(string) (string, error), shell func(string) (string, error)) func(string) (string, error) {
 	return func(exe string) (string, error) {
-		p, err := look(exe)
-		if err == nil {
+		if p, err := look(exe); err == nil {
 			return p, nil
 		}
-		home := getenv("HOME")
-		if home == "" {
+		var dirs []string
+		if home := getenv("HOME"); home != "" {
+			for _, d := range []string{".local/bin", "bin", ".npm-global/bin", ".bun/bin", ".cargo/bin"} {
+				dirs = append(dirs, filepath.Join(home, d))
+			}
+		}
+		for _, dir := range append(dirs, "/usr/local/bin", "/opt/homebrew/bin") {
+			cand := filepath.Join(dir, exe)
+			if st, err := os.Stat(cand); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+				return cand, nil
+			}
+		}
+		p, err := shell(exe)
+		switch {
+		case err == nil:
+			return p, nil
+		case errors.Is(err, errCLIAbsent):
 			return "", err
 		}
-		for _, dir := range []string{".local/bin", "bin", ".npm-global/bin", ".bun/bin", ".cargo/bin"} {
-			cand := filepath.Join(home, dir, exe)
-			if st, serr := os.Stat(cand); serr == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
-				return cand, nil
+		return "", fmt.Errorf("%w: %v", errCLIUnknown, err)
+	}
+}
+
+// shellProbe asks $SHELL, as a login interactive shell, where exe is
+// (command -v), within timeout: the path it prints last, errCLIAbsent on a
+// clean non-zero exit, any other error when it cannot answer. exe is passed
+// as an argument, never spliced into the script.
+func shellProbe(getenv func(string) string, timeout time.Duration) func(string) (string, error) {
+	return func(exe string) (string, error) {
+		sh := getenv("SHELL")
+		if sh == "" {
+			return "", errors.New("no SHELL to ask")
+		}
+		script := `command -v -- "$1"`
+		if filepath.Base(sh) == "fish" {
+			script = `command -v -- $argv[1]`
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, sh, "-lic", script, "agentbus", exe)
+		cmd.Stdin = nil
+		cmd.WaitDelay = 500 * time.Millisecond
+		out, err := cmd.Output()
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("%s did not answer within %s", filepath.Base(sh), timeout)
+		}
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return "", errCLIAbsent
+		}
+		if err != nil {
+			return "", err
+		}
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		for i := len(lines) - 1; i >= 0; i-- {
+			if l := strings.TrimSpace(lines[i]); strings.HasPrefix(l, "/") {
+				return l, nil
 			}
 		}
-		for _, cand := range []string{"/usr/local/bin/" + exe, "/opt/homebrew/bin/" + exe} {
-			if st, serr := os.Stat(cand); serr == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
-				return cand, nil
-			}
-		}
-		return "", err
+		return "", errors.New("no path in the shell's answer")
 	}
 }

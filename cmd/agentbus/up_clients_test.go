@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -132,7 +134,8 @@ func TestTabExecutable(t *testing.T) {
 func TestLookAgentCLIFindsAUserInstall(t *testing.T) {
 	home := t.TempDir()
 	notOnPath := func(string) (string, error) { return "", errors.New("not found") }
-	look := lookAgentCLI(func(k string) string { return map[string]string{"HOME": home}[k] }, notOnPath)
+	noShell := func(string) (string, error) { return "", errCLIAbsent }
+	look := lookAgentCLI(func(k string) string { return map[string]string{"HOME": home}[k] }, notOnPath, noShell)
 	if _, err := look("claude"); err == nil {
 		t.Fatal("found a CLI that is nowhere")
 	}
@@ -146,7 +149,7 @@ func TestLookAgentCLIFindsAUserInstall(t *testing.T) {
 	if p, err := look("claude"); err != nil || p != filepath.Join(bin, "claude") {
 		t.Fatalf("~/.local/bin/claude: %q, %v", p, err)
 	}
-	onPath := lookAgentCLI(func(string) string { return home }, func(e string) (string, error) { return "/p/" + e, nil })
+	onPath := lookAgentCLI(func(string) string { return home }, func(e string) (string, error) { return "/p/" + e, nil }, noShell)
 	if p, _ := onPath("codex"); p != "/p/codex" {
 		t.Fatalf("PATH first: %q", p)
 	}
@@ -192,5 +195,73 @@ func TestTabExecutableReadsAGeneratedTemplateWithASpacedPath(t *testing.T) {
 	}
 	if found == 0 {
 		t.Fatal("no agent tab in the generated template")
+	}
+}
+
+// foureyes: a CLI outside the fixed dirs (nvm, Kimi's own installer, volta,
+// asdf, mise...) is found by the user's login shell, the one the tab runs
+// in; only that shell's clean "no" drops a tab, and a shell that cannot
+// answer keeps it, with the reason.
+func TestLookAgentCLIAsksTheLoginShell(t *testing.T) {
+	home := t.TempDir()
+	env := func(k string) string { return map[string]string{"HOME": home}[k] }
+	notOnPath := func(string) (string, error) { return "", errors.New("not found") }
+	viaShell := lookAgentCLI(env, notOnPath, func(exe string) (string, error) { return home + "/.nvm/bin/" + exe, nil })
+	if p, err := viaShell("codex"); err != nil || p != home+"/.nvm/bin/codex" {
+		t.Fatalf("shell fallback: %q, %v", p, err)
+	}
+	unsure := lookAgentCLI(env, notOnPath, func(string) (string, error) { return "", errors.New("shell timed out") })
+	if _, err := unsure("kimi"); !errors.Is(err, errCLIUnknown) {
+		t.Fatalf("a shell that cannot answer: %v, want errCLIUnknown", err)
+	}
+	absent := lookAgentCLI(env, notOnPath, func(string) (string, error) { return "", errCLIAbsent })
+	if _, err := absent("kimi"); err == nil || errors.Is(err, errCLIUnknown) {
+		t.Fatalf("the shell's clean no: %v, want a miss", err)
+	}
+}
+
+// up keeps a tab whose CLI cannot be told present or absent, and says why.
+func TestUpKeepsATabItCannotJudge(t *testing.T) {
+	work, templates, h, _, deps := upFixture(t)
+	deps = withClients(t, deps, templates, "claude")
+	deps.LookPath = func(exe string) (string, error) {
+		if exe == "claude" {
+			return "/bin/claude", nil
+		}
+		return "", fmt.Errorf("%w: zsh timed out", errCLIUnknown)
+	}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if got := strings.Join(h.calls, "\n"); !strings.Contains(got, "--label coder") {
+		t.Fatalf("the unjudged tab was dropped:\n%s", got)
+	}
+	if !strings.Contains(out.String(), "could not tell whether codex is installed") {
+		t.Fatalf("no reason given: %q", out.String())
+	}
+}
+
+// The real probe asks $SHELL as a login, interactive shell, and reads a
+// clean miss from its exit status; no $SHELL cannot answer.
+func TestShellProbe(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "fakesh")
+	// A shell that prints noise, then the path when asked for "present".
+	_ = os.WriteFile(fake, []byte("#!/bin/sh\necho 'motd noise'\n[ \"$4\" = present ] && { echo /opt/x/present; exit 0; }\nexit 1\n"), 0o755)
+	probe := shellProbe(func(k string) string { return map[string]string{"SHELL": fake}[k] }, time.Second)
+	if p, err := probe("present"); err != nil || p != "/opt/x/present" {
+		t.Fatalf("present: %q, %v", p, err)
+	}
+	if _, err := probe("absent"); !errors.Is(err, errCLIAbsent) {
+		t.Fatalf("absent: %v, want errCLIAbsent", err)
+	}
+	if _, err := shellProbe(func(string) string { return "" }, time.Second)("x"); err == nil || errors.Is(err, errCLIAbsent) {
+		t.Fatalf("no SHELL: %v, want an unknown answer", err)
+	}
+	slow := filepath.Join(dir, "slowsh")
+	_ = os.WriteFile(slow, []byte("#!/bin/sh\nsleep 5\n"), 0o755)
+	if _, err := shellProbe(func(k string) string { return slow }, 200*time.Millisecond)("x"); err == nil || errors.Is(err, errCLIAbsent) {
+		t.Fatalf("slow shell: %v, want an unknown answer", err)
 	}
 }

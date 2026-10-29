@@ -590,8 +590,10 @@ It never touches Redis — see README "Example deployment".
   `builtinBinary`, `TestClientsMatchTheLauncher`); setup's step 5 scans them and, with none, warns
   with each install page (never a failure, nothing installed); `up`'s `checkClients`, right after the
   template is read and before any service or tab, drops the agent tabs whose executable
-  (`tabExecutable`, through the tab's manifest) `lookAgentCLI` finds neither on PATH nor in the usual
-  per-user dirs, names them, and with none of the team's refuses (exit 1) with the pointers and
+  (`tabExecutable`, through the tab's manifest, split with `rolecfg.ShellSplit`) `lookAgentCLI` finds
+  neither on PATH, nor in the usual per-user dirs, nor through the person's login shell
+  (`shellProbe`: `$SHELL -lic 'command -v "$1"'`, 3 s; only its clean non-zero exit is
+  `errCLIAbsent`, anything else `errCLIUnknown`, whose tab is kept and named), names them, and with none of the team's refuses (exit 1) with the pointers and
   `agentbus up <p>`. Nil `TabExe`/`LookPath` = no check.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
