@@ -32,7 +32,7 @@ type sendResultMsg struct {
 
 // openLine gives the input line the keyboard on text.
 func (m *Model) openLine(kind lineKind, text string) {
-	m.ui.line, m.ui.edit, m.ui.pick = kind, text, 0
+	m.ui.line, m.ui.edit, m.ui.tail, m.ui.pick = kind, text, 0, 0
 	if kind == lineFilter {
 		m.focusPanel(PanelActivity)
 	}
@@ -44,7 +44,43 @@ func (m *Model) leaveLine(keep bool) {
 	if m.ui.line == lineMessage && keep {
 		m.ui.msgDraft = m.ui.edit
 	}
-	m.ui.line, m.ui.edit = lineNone, ""
+	m.ui.line, m.ui.edit, m.ui.tail = lineNone, "", 0
+}
+
+// lineCur is the line's cursor, a byte offset into its text.
+func (m *Model) lineCur() int { return lineCursor(m.ui.edit, m.ui.tail) }
+
+// setLine puts the line's text and its cursor.
+func (m *Model) setLine(s string, cur int) { m.ui.edit, m.ui.tail = s, len(s)-cur }
+
+// editLine is a key that edits the line at its cursor (both lines: a message
+// and the filter); false when it is not one.
+func (m *Model) editLine(k Key) bool {
+	s, cur := m.ui.edit, m.lineCur()
+	switch {
+	case k.Code == keyLeft:
+		cur = lineLeft(s, cur)
+	case k.Code == keyRight:
+		cur = lineRight(s, cur)
+	case k.Code == keyHome, k.Code == keyCtrlA:
+		cur = 0
+	case k.Code == keyEnd, k.Code == keyCtrlE:
+		cur = len(s)
+	case k.Code == keyBackspace:
+		s, cur = lineBackspace(s, cur)
+	case k.Code == keyDelete:
+		s, cur = lineDelete(s, cur)
+	case k.Code == keyCtrlW:
+		s, cur = lineDeleteWord(s, cur)
+	case k.Code == keyCtrlU:
+		s, cur = s[cur:], 0
+	case k.Code == keyRune && !k.Alt:
+		s, cur = lineInsert(s, cur, string(k.Rune))
+	default:
+		return false
+	}
+	m.setLine(s, cur)
+	return true
 }
 
 // completions are the line's "@" completions (recipientCompletions: the @all
@@ -75,7 +111,7 @@ func (m *Model) lineKey(act Action, k Key) tea.Cmd {
 		m.ui.msgDraft = ""
 		m.openMessageCompose(text, "")
 	case len(cands) > 0 && (act == ActSend || k.Code == keyTab):
-		m.ui.edit, m.ui.pick = cands[min(m.ui.pick, len(cands)-1)], 0
+		m.ui.edit, m.ui.tail, m.ui.pick = cands[min(m.ui.pick, len(cands)-1)], 0, 0
 	case len(cands) > 0 && (k.Code == keyUp || k.Code == keyDown):
 		step := 1
 		if k.Code == keyUp {
@@ -92,13 +128,7 @@ func (m *Model) lineKey(act Action, k Key) tea.Cmd {
 	case act == ActEscape:
 		m.ui.askDraft = ""
 		m.leaveLine(true)
-	case k.Code == keyBackspace:
-		if r := []rune(m.ui.edit); len(r) > 0 {
-			m.ui.edit = string(r[:len(r)-1])
-		}
-		m.ui.pick = 0
-	case k.Code == keyRune && !k.Alt:
-		m.ui.edit += string(k.Rune)
+	case m.editLine(k):
 		m.ui.pick = 0
 	}
 	return nil
@@ -107,7 +137,7 @@ func (m *Model) lineKey(act Action, k Key) tea.Cmd {
 // pasteLine is a paste into the line: one line, its newlines as spaces.
 func (m *Model) pasteLine(s string) {
 	s = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").Replace(s)
-	m.ui.edit += Preview(s)
+	m.setLine(lineInsert(m.ui.edit, m.lineCur(), Preview(s)))
 }
 
 // sendLine sends the line's text: "@agent body" is a directive, anything
@@ -115,7 +145,7 @@ func (m *Model) pasteLine(s string) {
 func (m *Model) sendLine() tea.Cmd {
 	text := strings.TrimSpace(m.ui.edit)
 	if text == "" {
-		m.ui.broadcastDraft, m.ui.edit, m.ui.msgDraft = "", "", ""
+		m.ui.broadcastDraft, m.ui.edit, m.ui.tail, m.ui.msgDraft = "", "", 0, ""
 		return nil
 	}
 	tgt, body, directed := parseDirected(text)
@@ -188,7 +218,7 @@ func (m *Model) gotSend(msg sendResultMsg) {
 	}
 	m.ui.msgDraft = ""
 	if m.ui.line == lineMessage {
-		m.ui.edit = ""
+		m.ui.edit, m.ui.tail = "", 0
 	}
 }
 
@@ -267,8 +297,11 @@ func (m *Model) answerPrefilled(agent, text string) tea.Cmd {
 	return cmd
 }
 
-// inputRow is the line as drawn: its label, the text's tail that fits, and a
-// cursor cell while it has the keyboard.
+// inputRow is the line as drawn: its label, then the text around the cursor
+// cell (the cluster it stands on, reversed; a space past the end) while it
+// has the keyboard. A text wider than the line keeps the cursor in view with
+// a quarter of the room after it when there is more: cut at clusters, in
+// cells.
 func (m *Model) inputRow(width int) Line {
 	label := GlyphPrompt + " "
 	if m.ui.line == lineFilter {
@@ -278,13 +311,28 @@ func (m *Model) inputRow(width int) Line {
 	if m.ui.line == lineNone {
 		return l
 	}
-	room := max(1, width-Width(label)-1)
-	text := Preview(m.ui.edit)
-	for Width(text) > room { // the tail, where the cursor is
-		_, size := firstCluster(text)
-		text = text[size:]
+	room := max(1, width-Width(label))
+	cur := m.lineCur()
+	before, rest := Preview(m.ui.edit[:cur]), Preview(m.ui.edit[cur:])
+	at, size := " ", 0
+	if rest != "" {
+		at, size = firstCluster(rest)
 	}
-	return append(l, Seg{Text: text, Role: RoleText}, Seg{Text: " ", Role: RoleText, Reverse: true})
+	rest = rest[size:]
+	after := min(Width(rest), room/4)
+	for before != "" && Width(before)+Width(at)+after > room {
+		_, size := firstCluster(before)
+		before = before[size:]
+	}
+	shown, left := "", room-Width(before)-Width(at)
+	for rest != "" {
+		c, size := firstCluster(rest)
+		if Width(c) > left {
+			break
+		}
+		shown, left, rest = shown+c, left-Width(c), rest[size:]
+	}
+	return append(l, Seg{Text: before, Role: RoleText}, Seg{Text: at, Role: RoleText, Reverse: true}, Seg{Text: shown, Role: RoleText})
 }
 
 // completionRow lists the line's completions, the highlighted one as a pill.

@@ -34,8 +34,12 @@ const (
 	keyF3
 	keyF4
 	keyF5
+	keyCtrlA
 	keyCtrlC
+	keyCtrlE
 	keyCtrlO
 	keyCtrlS
 	keyCtrlT
+	keyCtrlU
+	keyCtrlW
 )

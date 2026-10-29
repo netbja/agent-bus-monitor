@@ -81,6 +81,7 @@ const (
 	ActServiceLog   // Services (F3): the selected service's log
 	ActPlanStart    // a plan task waiting for the person: write to master that they start it
 	ActTokens       // open the tokens page (U)
+	ActLineEdit     // the line: move its cursor or delete at it (the field does it)
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -224,11 +225,18 @@ var (
 		{Keys: "enter", Hint: "send", Act: ActSend, match: keyIs(keyEnter)},
 		{Keys: "tab", Hint: "complete @agent", Act: ActComplete, match: keyIs(keyTab)},
 		{Keys: "esc", Hint: "back (draft kept)", Act: ActEscape, match: keyIs(keyEscape)},
+		lineEditBinding,
 	}
 	filterBindings = []binding{
 		{Keys: "enter", Hint: "apply", Act: ActSend, match: keyIs(keyEnter)},
 		{Keys: "esc", Hint: "cancel", Act: ActEscape, match: keyIs(keyEscape)},
+		lineEditBinding,
 	}
+	// lineEditBinding: both lines edit at their cursor (busmon-input-cursor);
+	// the help lists it, the footer does not.
+	lineEditBinding = binding{Keys: GlyphArrowL + GlyphArrowR + " home end",
+		Help: "move the cursor by character or to either end (^A ^E too); del deletes at it, ^W back to a word, ^U to the start",
+		Act:  ActLineEdit, match: keyIs(keyLeft, keyRight, keyHome, keyEnd, keyCtrlA, keyCtrlE, keyDelete, keyCtrlW, keyCtrlU)}
 	askBindings = []binding{
 		{Keys: arrows + " j k", Hint: "choose", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},

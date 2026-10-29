@@ -345,7 +345,10 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   per overlay, Esc back; on a page opened from Activity or For you, `n`/`p` (→/←) show the list's next or
   previous item in its place (A5, `readerStep`, `openTracked`) (`tea_reader.go`: bodies built on the update path with a stamp, an ask's
   options answered by digit or click, `ModeShellAsk`), and markdown is cached by id, width and
-  palette (`tea_cache.go`), so a `fadeMsg` renders none. The input line (`tea_input.go`) and the
+  palette (`tea_cache.go`), so a `fadeMsg` renders none. The input line (`tea_input.go`; its cursor and
+  the filter's, busmon-input-cursor: `lineedit.go`, a pure editor on cluster boundaries, the cursor kept as
+  `ui.tail`, the bytes after it, so a text set whole has it at the end; drawn reversed, kept in view with a
+  quarter of the room after it) and the
   compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells)
   send through `send.go` (`planSend` decides, `exec` makes the bus calls in a command, `outcome`
   reads them; recipient and body are fields, never an `@name body` line); the pause popup
