@@ -1,0 +1,16 @@
+{
+  "plan": "v0.25",
+  "goal": "Public release: a stranger can install, run and list agent-bus as a herdr plugin",
+  "tasks": [
+    {"id": "license", "title": "MIT LICENSE, copyright line, README licence section", "owner": "coder", "review": "license"},
+    {"id": "redis-password", "title": "Install generates a random Redis password (0600 env, compose reads it); AgentBus2025! only for existing installs, with a health warning and a rotation path", "owner": "coder", "review": "redis-password"},
+    {"id": "scrub", "title": "Scrub host1, hermes, hyperliquid, sysnet and other private references from code, docs and examples", "owner": "coder", "review": "scrub"},
+    {"id": "plugin-listing", "title": "herdr-plugin.toml and README meet herdr's listing rules; check a clean install from a fresh clone", "owner": "coder", "review": "plugin-listing", "after": ["license", "scrub"]},
+    {"id": "screenshot", "title": "Fresh busmon screenshot and a short demo for the README", "owner": "person"},
+    {"id": "macos-try", "title": "Try the installer and busmon on macOS; list what breaks", "owner": "person"},
+    {"id": "stranger-test", "title": "Onboarding test from a clean user account: install, agentbus up, first task; fix what blocks", "owner": "coder", "review": "stranger-test", "after": ["redis-password", "scrub"]},
+    {"id": "docs-v025", "title": "README and guides (EN + FR) for the public release", "owner": "coder", "review": "docs-v025", "after": ["license", "redis-password", "scrub", "plugin-listing"]},
+    {"id": "topic", "title": "Add the GitHub topic herdr-plugin and make the repository public", "owner": "person", "after": ["screenshot", "stranger-test", "docs-v025"]},
+    {"id": "release", "title": "Tag v0.25.0, release notes, install", "owner": "person", "after": ["topic"]}
+  ]
+}
