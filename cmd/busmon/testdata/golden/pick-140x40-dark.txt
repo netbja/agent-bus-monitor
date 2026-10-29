@@ -1,11 +1,11 @@
- Projects  /home/bernard/.config/agentbus/projects                                                                              ● broker ok 
+ Projects  /home/user/.config/agentbus/projects                                                                                 ● broker ok 
  / type to filter by name or directory                                                                                                      
 ╭─ Templates ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 4 ─╮
-│  name              working dir                                       broker                                                              │
-│  agent-bus-monitor /data/projects/agent-bus-monitor                  present                                                             │
-│▶ ai-tradex-solana  /data/projects/ai-tradex-solana                   present                                                             │
-│  hyperliquid       /data/projects/trading/very/deep/hyperliquid-bot  absent                                                              │
-│  polymarket        —                                                 ?                                                                   │
+│  name              working dir                                    broker                                                                 │
+│  agent-bus-monitor /data/projects/agent-bus-monitor               present                                                                │
+│▶ shop              /data/projects/shop                            present                                                                │
+│  blog              /data/projects/shopping/very/deep/blog-engine  absent                                                                 │
+│  wiki              —                                              ?                                                                      │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

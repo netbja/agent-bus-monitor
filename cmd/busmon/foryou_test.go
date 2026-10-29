@@ -16,7 +16,7 @@ func TestForYouHint(t *testing.T) {
 		{"idle", "over to bernard: review PR 12", "bernard", true},
 		{"idle", "waiting for bernardo", "bernard", false},
 		{"idle", "see https://example.com/bernard/x", "bernard", false},
-		{"idle", "notes in /home/bernard/notes.md", "bernard", false},
+		{"idle", "notes in /srv/bernard/notes.md", "bernard", false},
 		{"idle", "nothing to do", "bernard", false},
 		{"waiting", "awaiting bernard", "bernard", false}, // waiting says it already
 		{"working", "awaiting bernard", "bernard", false},

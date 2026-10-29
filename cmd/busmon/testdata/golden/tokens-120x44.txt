@@ -22,8 +22,8 @@
 │ Projects, today and 7 days                                                                                           ┃
 │   PROJECT                    IN      OUT   CACHE RD  7 DAYS   7D TOTAL                                               ┃
 │   agent-bus-monitor       ~1.5M    ~289k    ~500.0M     ▃ █▆     ~5.1M                                               ┃
-│   hyperliquid                 0        0          0   ▁           170k                                               ┃
-│   polymarket  no data (no dispatch service counting tokens)                                                          ┃
+│   blog                        0        0          0   ▁           170k                                               ┃
+│   wiki  no data (no dispatch service counting tokens)                                                                ┃
 │                                                                                                                      ┃
 │ agent-bus-monitor by agent, today                                                                                    ┃
 │   foureyes         anthropic      1.2M     206k                                                                      ┃
