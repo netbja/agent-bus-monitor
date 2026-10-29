@@ -150,7 +150,7 @@ left in place. It has no `--dry-run`: run it without `--yes` and answer each que
 `./setup.sh` checks Git and Go, builds `agentbus` from the checkout and hands every argument to
 `agentbus setup`, the installer in Go. Its subcommands, flags, questions and output are the bash
 installer's, so the commands above are unchanged. `--force` has had no effect since v0.20: it now
-warns, and the next release drops it.
+warns and is ignored, and the next release drops it.
 
 The bash installer it replaces stays **one release** as `scripts/setup-legacy.sh`, with the same
 subcommands and flags, should the Go one fail on a machine:
@@ -762,12 +762,14 @@ through each with its settings.
 | `architect` | pop | design and specifications |
 | `deploy` | pop | deployment and target monitoring |
 | `security` | pop | repository security review and proposed corrections |
+| `infra` | pop | Ansible, Terraform and OpenTofu, IT automation; popped only with your yes |
 
-`examples/drafts/infra/` holds an `infra` pop role (Ansible, Terraform and OpenTofu, IT
-automation) as an inert draft, **not adopted**: a manual profile where only exact syntax and lint
-commands run without a prompt, plans, checks and every change go through the person, and
-secrets are denied. Its README says how to adopt it (`agentbus roles adopt infra --ask <id>
---from examples/drafts`, after your `adopt` answer).
+`infra` runs on a manual profile: only exact syntax and lint commands run without a prompt;
+plans, checks, downloads and every change go through you, and secrets (state, plan and variable
+files, vault passwords, cloud credentials) are denied. master pops it only with your yes. It was
+adopted from the reviewed draft in `examples/drafts/infra/` (`agentbus roles adopt infra --ask <id>
+--from examples/drafts`, after your `adopt` answer); its tool rules are defence in depth, not a
+lock.
 
 Execution settings live in the manifest, not in these role descriptions. For schema
 v2, `defaults.profile` selects the common profile and `roles.<role>.profile` overrides

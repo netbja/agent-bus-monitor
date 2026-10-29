@@ -8,13 +8,13 @@ import (
 	"testing"
 )
 
-// infra-role (Bernard): the infra pop role is an inert draft
-// (examples/drafts/infra, for `agentbus roles adopt infra --from
-// examples/drafts`). Appended to this repository's manifest, as adopt appends
-// it, it loads as a pop role popped only through the person, on a manual
-// profile; its session may check, plan, diff and lint, asks before any apply
-// or destroy, and never reads a secret.
-func TestInfraDraft(t *testing.T) {
+// infra-role (Bernard): the infra pop role, reviewed as a draft
+// (examples/drafts/infra) and adopted into this repository's manifest with
+// `agentbus roles adopt infra --from examples/drafts` (#187). It loads as a
+// pop role popped only through the person, on a manual profile; its session
+// may check, plan, diff and lint, asks before any apply or destroy, and never
+// reads a secret.
+func TestInfraRole(t *testing.T) {
 	base, err := os.ReadFile(repoPath(t, "roles.toml"))
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +23,7 @@ func TestInfraDraft(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := Load(writeConfig(t, string(base)+"\n"+string(add)))
+	m, err := Load(repoPath(t, "roles.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,9 +108,10 @@ func TestInfraDraft(t *testing.T) {
 	// An ask rule refuses bypassPermissions, so the prompt cannot be switched off.
 	loose := strings.Replace(string(add), `profile = "claude-opus-manual"`, `profile = "claude-opus-bypass"`, 1) +
 		"\n[profiles.claude-opus-bypass]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\n[profiles.claude-opus-bypass.options]\npermission = \"bypassPermissions\"\n"
-	_, lerr := Load(writeConfig(t, string(base)+"\n"+loose))
+	looseManifest := strings.Replace(string(base), string(add), loose, 1)
+	_, lerr := Load(writeConfig(t, looseManifest))
 	if lerr == nil {
-		lm, _ := Load(writeConfig(t, string(base)+"\n"+loose))
+		lm, _ := Load(writeConfig(t, looseManifest))
 		_, lerr = lm.Resolve("infra")
 	}
 	if lerr == nil || !strings.Contains(lerr.Error(), "bypassPermissions") {
@@ -140,16 +141,22 @@ func TestInfraDraft(t *testing.T) {
 		t.Errorf("master pops infra without the person: allow %v ask %v", mr.Allow, mr.Ask)
 	}
 
-	// The draft is inert and adoptable: it defines [roles.infra] and nothing
-	// else, and roles/infra.md does not exist yet (adopt never overwrites one).
+	// What runs is what was reviewed: the manifest holds the draft's entry
+	// byte for byte, once, and roles/infra.md is the draft's prompt. The draft
+	// defines [roles.infra] and nothing else.
 	if strings.Count(string(add), "[profiles.") > 0 || !strings.Contains(string(add), "[roles.infra]") {
 		t.Errorf("the draft's entry must define [roles.infra] and nothing else:\n%s", add)
 	}
-	if _, err := os.Stat(repoPath(t, "roles/infra.md")); err == nil {
-		t.Error("roles/infra.md exists: roles adopt would refuse to install the draft's prompt")
+	if strings.Count(string(base), string(add)) != 1 || strings.Count(string(base), "[roles.infra]") != 1 {
+		t.Error("roles.toml does not hold the reviewed draft's entry exactly once")
 	}
-	if st, err := os.Stat(repoPath(t, "examples/drafts/infra/infra.md")); err != nil || st.Size() == 0 {
-		t.Errorf("the draft's prompt: %v", err)
+	prompt, err := os.ReadFile(repoPath(t, "roles/infra.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := os.ReadFile(repoPath(t, "examples/drafts/infra/infra.md"))
+	if err != nil || len(draft) == 0 || string(prompt) != string(draft) {
+		t.Errorf("roles/infra.md is not the reviewed draft's prompt (%v)", err)
 	}
 }
 

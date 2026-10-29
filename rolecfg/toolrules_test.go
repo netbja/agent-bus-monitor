@@ -224,25 +224,39 @@ func TestShippedManifestRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(r.Ask, []string{"Bash(agent-spawn deploy *)"}) {
-		t.Fatalf("master ask = %v", r.Ask)
-	}
+	// The roles popped only through the person (approval = "person": deploy,
+	// infra) are asked, in manifest order; every other role is allowed.
+	var asked []string
 	others := 0
 	for _, role := range m.roleOrder {
-		if role != "master" && role != "deploy" {
+		p, err := m.Resolve(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch {
+		case role == "master":
+		case p.Approval == "person":
+			asked = append(asked, "Bash(agent-spawn "+role+" *)")
+		default:
 			others++
 		}
 	}
+	if want := []string{"Bash(agent-spawn deploy *)", "Bash(agent-spawn infra *)"}; !reflect.DeepEqual(asked, want) || !reflect.DeepEqual(r.Ask, want) {
+		t.Fatalf("master ask = %v, person-approved roles %v, want %v", r.Ask, asked, want)
+	}
 	if len(r.Allow) != others+len(masterUpRules) || !reflect.DeepEqual(r.Allow[others:], masterUpRules) {
-		t.Fatalf("master allow = %v, want one per role but master and deploy (%d), then %v", r.Allow, others, masterUpRules)
+		t.Fatalf("master allow = %v, want one per role but master and the person-approved ones (%d), then %v", r.Allow, others, masterUpRules)
 	}
 	for _, role := range m.roleOrder {
 		resolved, err := m.Resolve(role)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(resolved.ToolRules.Deny, m.SharedToolRules.Deny) {
-			t.Fatalf("%s shared deny rules = %v", role, resolved.ToolRules.Deny)
+		// Every role carries the shared denies first; a role may add its own
+		// after them (infra's secrets), never drop one.
+		d := resolved.ToolRules.Deny
+		if len(d) < len(m.SharedToolRules.Deny) || !reflect.DeepEqual(d[:len(m.SharedToolRules.Deny)], m.SharedToolRules.Deny) {
+			t.Fatalf("%s shared deny rules = %v", role, d)
 		}
 	}
 	for _, rule := range m.SharedToolRules.Deny {
@@ -251,8 +265,10 @@ func TestShippedManifestRules(t *testing.T) {
 		}
 	}
 	for _, rule := range r.Allow {
-		if strings.Contains(rule, "deploy") {
-			t.Fatalf("deploy allowed: %v", r.Allow)
+		for _, a := range asked {
+			if rule == a {
+				t.Fatalf("%s allowed: %v", a, r.Allow)
+			}
 		}
 	}
 	for _, rule := range reloadAsDeny {

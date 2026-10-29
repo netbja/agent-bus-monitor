@@ -4,6 +4,24 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## v0.24.0 — the installer in Go by default, busmon's pages read better, reloads checked first
+
+- `./setup.sh` is now the Go installer (`agentbus setup`), same subcommands and flags; the bash one
+  stays one release as `scripts/setup-legacy.sh`; `--force` warns and is ignored.
+- `agentbus reload` checks the relaunch before it stops anything, brings a pop role back through
+  `agent-spawn`, and an agent's own open question blocks only `--fresh`.
+- busmon: the F3 Redis card opens a read-only Redis page, F3 refreshes every 5 s, `←`/`→` move
+  between cards; account gauges in eighths of a cell that slide; the header counts what you owe
+  and what agents owe each other; pages read `Label:  value`; a plan task waiting for you starts
+  with Enter or `s`; the input line and the filter edit at a cursor.
+- Health `redis-version`: the broker against the latest Redis release of its own major, checked
+  daily; a newer major is only named.
+- `{p}:usage` reads only the session proved with the agent's process.
+- A new pop role, `infra` (Ansible, Terraform/OpenTofu), adopted: manual profile, approval by the
+  person, secrets denied.
+- Specs, not built: the feedback loop and one config file. The README and the operational guides
+  (EN, FR) cover the release.
+
 ## v0.23.0 — what needs you, agents that outlive their context, the installer in Go
 
 - For you lists only the gates you opened or that hold you; a reviewer's verdict closes its own

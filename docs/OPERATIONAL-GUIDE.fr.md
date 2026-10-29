@@ -608,13 +608,14 @@ l'exécute étape par étape.
 
 ---
 
-## 9. Brouillons et Spécifications Prévues
+## 9. Le Rôle infra et les Spécifications Prévues
 
-- **Le rôle `infra` est un brouillon, pas adopté.** `examples/drafts/infra/` contient un rôle pop
-  pour Ansible, Terraform/OpenTofu et l'automatisation informatique : un profil manuel où seules
-  des commandes exactes de syntaxe et de lint tournent sans confirmation, où les plans, les
-  vérifications et chaque changement passent par vous, et où les secrets sont refusés. Son README
-  décrit l'adoption : master vous pose la question, puis
+- **Le rôle `infra`.** Un rôle pop pour Ansible, Terraform/OpenTofu et l'automatisation
+  informatique, sur un profil manuel : seules des commandes exactes de syntaxe et de lint tournent
+  sans confirmation ; les plans, les vérifications, les téléchargements et chaque changement
+  passent par vous, et les secrets sont refusés. master ne le lance qu'avec votre oui. Il a été
+  adopté depuis le brouillon relu de `examples/drafts/infra/`, dont le README décrit l'adoption
+  pour un autre projet : master vous pose la question, puis
   `agentbus --project myapp roles adopt infra --ask <id> --from examples/drafts`.
 - **Deux spécifications, non construites.** La
   [boucle de feedback](superpowers/specs/2026-10-29-feedback-loop-design.md) (`agentbus feedback` :
