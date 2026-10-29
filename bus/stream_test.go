@@ -26,7 +26,7 @@ func TestStreamKeyNaming(t *testing.T) {
 }
 
 func TestValidName(t *testing.T) {
-	valid := []string{"dev", "busmon", "dev-1", "hermes", "x", "a_b-2"}
+	valid := []string{"dev", "busmon", "dev-1", "helper", "x", "a_b-2"}
 	invalid := []string{"", "Dev", "1dev", "a:b", "dev ", "trading/dev",
 		"this-name-is-way-too-long-to-be-accepted-okay"}
 	for _, s := range valid {
@@ -54,8 +54,8 @@ func TestParseEntry(t *testing.T) {
 			map[string]string{"agent": "dev", "kind": "note", "message": "bug fixed"},
 			Event{ID: "1-0", Project: "busmon", Kind: "report", Agent: "dev", RKind: "note", Message: "bug fixed"}},
 		{"notify", "trading:notify",
-			map[string]string{"from": "hermes", "message": "soak running"},
-			Event{ID: "1-0", Project: "trading", Kind: "notify", From: "hermes", Message: "soak running"}},
+			map[string]string{"from": "helper", "message": "soak running"},
+			Event{ID: "1-0", Project: "trading", Kind: "notify", From: "helper", Message: "soak running"}},
 		{"cmd", "busmon:cmd",
 			map[string]string{"from": "review", "target": "dev", "type": "challenge", "ref": "C1", "command": "justify X"},
 			Event{ID: "1-0", Project: "busmon", Kind: "cmd", From: "review", Target: "dev", Type: "challenge", Ref: "C1", Message: "justify X"}},
@@ -112,7 +112,7 @@ func TestPublishValidation(t *testing.T) {
 	if _, err := b.Status(ctx, "Bad Agent", "working", "x", AgentIdent{}); err == nil {
 		t.Error("Status accepted invalid agent, want error")
 	}
-	if _, err := b.Cmd(ctx, "hermes", "dev", "shout", "", "x"); err == nil {
+	if _, err := b.Cmd(ctx, "helper", "dev", "shout", "", "x"); err == nil {
 		t.Error("Cmd accepted invalid type, want error")
 	}
 	if _, err := b.Status(ctx, "dev", "working", "ok", AgentIdent{}); err != nil {
@@ -156,11 +156,11 @@ func TestPilotLease(t *testing.T) {
 	if d, err := b.PilotDriver(ctx); err != nil || d != "" {
 		t.Fatalf("PilotDriver before claim = (%q, %v), want (\"\", nil)", d, err)
 	}
-	if err := b.Pilot(ctx, "hermes", 90*time.Second); err != nil {
+	if err := b.Pilot(ctx, "helper", 90*time.Second); err != nil {
 		t.Fatalf("Pilot: %v", err)
 	}
-	if d, err := b.PilotDriver(ctx); err != nil || d != "hermes" {
-		t.Fatalf("PilotDriver after claim = (%q, %v), want (\"hermes\", nil)", d, err)
+	if d, err := b.PilotDriver(ctx); err != nil || d != "helper" {
+		t.Fatalf("PilotDriver after claim = (%q, %v), want (\"helper\", nil)", d, err)
 	}
 	if ttl := b.r.TTL(ctx, PilotKey(b.Project())).Val(); ttl <= 0 {
 		t.Fatalf("pilot key TTL = %v, want > 0 (lease must expire)", ttl)
@@ -188,18 +188,18 @@ func TestChallengeGate(t *testing.T) {
 	if err := b.OpenChallenge(ctx, "dev", "C1", "review|justify X"); err != nil {
 		t.Fatalf("OpenChallenge C1: %v", err)
 	}
-	if err := b.OpenChallenge(ctx, "dev", "C2", "hermes|recheck Y"); err != nil {
+	if err := b.OpenChallenge(ctx, "dev", "C2", "helper|recheck Y"); err != nil {
 		t.Fatalf("OpenChallenge C2: %v", err)
 	}
 	m, err := b.OpenChallenges(ctx, "dev")
-	if err != nil || len(m) != 2 || m["C1"] != "review|justify X" || m["C2"] != "hermes|recheck Y" {
+	if err != nil || len(m) != 2 || m["C1"] != "review|justify X" || m["C2"] != "helper|recheck Y" {
 		t.Fatalf("OpenChallenges after 2 opens = (%v, %v), want {C1,C2}", m, err)
 	}
 	// Resolving C1 leaves C2 gating the agent.
 	if err := b.ResolveChallenge(ctx, "dev", "C1"); err != nil {
 		t.Fatalf("ResolveChallenge C1: %v", err)
 	}
-	if m, err := b.OpenChallenges(ctx, "dev"); err != nil || len(m) != 1 || m["C2"] != "hermes|recheck Y" {
+	if m, err := b.OpenChallenges(ctx, "dev"); err != nil || len(m) != 1 || m["C2"] != "helper|recheck Y" {
 		t.Fatalf("OpenChallenges after resolving C1 = (%v, %v), want {C2}", m, err)
 	}
 	if err := b.ResolveChallenge(ctx, "dev", "C2"); err != nil {
@@ -269,7 +269,7 @@ func TestCmdLag(t *testing.T) {
 		t.Fatalf("XGroupCreate: %v", err)
 	}
 	for i := 0; i < 3; i++ {
-		if _, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "do "+strconv.Itoa(i)); err != nil {
+		if _, err := b.Cmd(ctx, "helper", "dev", CmdDirective, "", "do "+strconv.Itoa(i)); err != nil {
 			t.Fatalf("Cmd: %v", err)
 		}
 	}
@@ -315,7 +315,7 @@ func TestWatchCmdDelivers(t *testing.T) {
 	if err := b.r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
 		t.Fatalf("XGroupCreate: %v", err)
 	}
-	if _, err := b.Cmd(ctx, "hermes", "other", CmdDirective, "", "not for dev"); err != nil {
+	if _, err := b.Cmd(ctx, "helper", "other", CmdDirective, "", "not for dev"); err != nil {
 		t.Fatalf("Cmd other: %v", err)
 	}
 	if _, err := b.Cmd(ctx, "review", "dev", CmdChallenge, "C1", "justify X"); err != nil {
@@ -348,11 +348,11 @@ func TestWatchCmdFloorSkipsBacklog(t *testing.T) {
 	if err := b.r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
 		t.Fatalf("XGroupCreate: %v", err)
 	}
-	oldID, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "OLD")
+	oldID, err := b.Cmd(ctx, "helper", "dev", CmdDirective, "", "OLD")
 	if err != nil {
 		t.Fatalf("Cmd OLD: %v", err)
 	}
-	if _, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "NEW"); err != nil {
+	if _, err := b.Cmd(ctx, "helper", "dev", CmdDirective, "", "NEW"); err != nil {
 		t.Fatalf("Cmd NEW: %v", err)
 	}
 	var got Event
@@ -488,14 +488,14 @@ func TestAppendVerdictValidation(t *testing.T) {
 func TestThread(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	root, err := b.Cmd(ctx, "hermes", "claude2", CmdDirective, "", "review the migration")
+	root, err := b.Cmd(ctx, "helper", "claude2", CmdDirective, "", "review the migration")
 	if err != nil {
 		t.Fatalf("Cmd directive: %v", err)
 	}
-	if _, err := b.Cmd(ctx, "claude2", "hermes", CmdReply, root, "on it"); err != nil {
+	if _, err := b.Cmd(ctx, "claude2", "helper", CmdReply, root, "on it"); err != nil {
 		t.Fatalf("Cmd reply: %v", err)
 	}
-	if _, err := b.Cmd(ctx, "hermes", "dev", CmdDirective, "", "unrelated"); err != nil {
+	if _, err := b.Cmd(ctx, "helper", "dev", CmdDirective, "", "unrelated"); err != nil {
 		t.Fatalf("Cmd unrelated: %v", err)
 	}
 	evs, err := b.Thread(ctx, root)
@@ -535,7 +535,7 @@ func TestThreadChallengeRef(t *testing.T) {
 func TestThreadBareMS(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	root, err := b.Cmd(ctx, "hermes", "claude2", CmdDirective, "", "x")
+	root, err := b.Cmd(ctx, "helper", "claude2", CmdDirective, "", "x")
 	if err != nil {
 		t.Fatalf("Cmd: %v", err)
 	}

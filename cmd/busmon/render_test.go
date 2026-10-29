@@ -49,7 +49,7 @@ func TestParseDirected(t *testing.T) {
 // The first three cases are the line's former agentCompletions test, kept as
 // they were.
 func TestRecipientCompletions(t *testing.T) {
-	names := []string{"claude2", "claude1", "hermes"}
+	names := []string{"claude2", "claude1", "helper"}
 	got := recipientCompletions("@cl", names)
 	if len(got) != 2 || got[0] != "@claude1 " || got[1] != "@claude2 " {
 		t.Fatalf("recipientCompletions(@cl) = %v, want [@claude1 , @claude2 ]", got)
@@ -60,13 +60,13 @@ func TestRecipientCompletions(t *testing.T) {
 	if recipientCompletions("hello", names) != nil {
 		t.Fatal("no completions when not @-prefixed")
 	}
-	if got := strings.Join(recipientCompletions("@", names), "|"); got != "@all |@claude1 |@claude2 |@hermes " {
+	if got := strings.Join(recipientCompletions("@", names), "|"); got != "@all |@claude1 |@claude2 |@helper " {
 		t.Fatalf("@ alone = %q", got)
 	}
 	if got := strings.Join(recipientCompletions("@a", names), "|"); got != "@all " {
 		t.Fatalf("@a = %q", got)
 	}
-	if recipientCompletions("@hermes ", names) != nil {
+	if recipientCompletions("@helper ", names) != nil {
 		t.Fatal("a completed name offers nothing more")
 	}
 }

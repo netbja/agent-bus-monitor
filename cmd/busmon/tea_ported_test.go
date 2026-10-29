@@ -140,7 +140,7 @@ func TestShellReaderShowsLongUnicodeBodyAndFitsNarrowTerminals(t *testing.T) {
 
 // From TestScreenDetailAdmitsUnknownCompletenessOnOldEntries.
 func TestShellReaderAdmitsUnknownCompletenessOnOldEntries(t *testing.T) {
-	e := bus.Event{ID: "1-0", Kind: "report", Agent: "hermes", RKind: bus.ReportNote,
+	e := bus.Event{ID: "1-0", Kind: "report", Agent: "helper", RKind: bus.ReportNote,
 		Message: "an old report from before the marker existed"}
 	if screen := readerScreen(t, 140, 40, nil, messagePage(e, time.Unix(1, 0))); !strings.Contains(screen, "completeness not marked") {
 		t.Errorf("an unmarked entry must say its completeness is unverified:\n%s", screen)

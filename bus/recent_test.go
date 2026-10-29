@@ -42,7 +42,7 @@ func seedSpaced(t *testing.T, b *Bus, entries [][2]string) {
 		case "notify":
 			_, err = b.Notify(ctx, "x", e[1])
 		case "cmd":
-			_, err = b.Cmd(ctx, "hermes", "dev", CmdDirective, "", e[1])
+			_, err = b.Cmd(ctx, "helper", "dev", CmdDirective, "", e[1])
 		}
 		if err != nil {
 			t.Fatalf("seed %s %q: %v", e[0], e[1], err)

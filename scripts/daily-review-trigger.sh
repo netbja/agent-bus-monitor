@@ -10,7 +10,7 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"   # cron's env is minimal; herdr/agentbus live here.
 
 : "${AGENT_BUS_PROJECT:?set AGENT_BUS_PROJECT (the crontab line does this)}"
-export AGENT_BUS_AGENT="${AGENT_BUS_AGENT:-hermes}"
+export AGENT_BUS_AGENT="${AGENT_BUS_AGENT:-anonymous}"
 [[ -n "${HERDR_SESSION:-}" ]] || echo "daily-review-trigger: warning: HERDR_SESSION unset" >&2
 
 read -r -d '' MSG <<'EOF' || true

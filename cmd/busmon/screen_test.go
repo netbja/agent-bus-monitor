@@ -12,7 +12,7 @@ import (
 // A filter hides; it never forgets. Clearing it brings the whole journal back.
 func TestFilterHidesWithoutForgetting(t *testing.T) {
 	lines := []feedLine{
-		{id: "1", ev: bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder", Message: "rebase"}},
+		{id: "1", ev: bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder", Message: "rebase"}},
 		{id: "2", ev: bus.Event{Kind: "report", Agent: "foureyes", Message: "review done"}},
 		{id: "sep"}, // a day separator carries no event
 	}

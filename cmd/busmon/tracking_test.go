@@ -15,7 +15,7 @@ func requestedEntry() bus.BoardEntry {
 		Owner: "foureyes", State: "requested", Updated: 1758142000,
 		Request: &bus.RequestInfo{
 			ID: "1758141663000-0", Thread: "1758141663000-0",
-			From: "hermes", Target: "foureyes",
+			From: "helper", Target: "foureyes",
 			CreatedAt: 1758141663000, ExpiresAt: 0,
 			Delivery: "queued", Availability: "retained",
 		},
@@ -34,7 +34,7 @@ func TestBoardRequestsMapsEveryContractField(t *testing.T) {
 	for name, ok := range map[string]bool{
 		"task":         r.Task == "task-20",
 		"target":       r.Target == "foureyes",
-		"from":         r.From == "hermes",
+		"from":         r.From == "helper",
 		"state":        r.State == "requested",
 		"thread":       r.Thread == "1758141663000-0",
 		"id":           r.ID == "1758141663000-0",
@@ -168,8 +168,8 @@ func TestRequestsSortByWhatNeedsAttention(t *testing.T) {
 // and the claim is only ever about the retained history.
 func TestOpenThreadsExcludeAnsweredExchanges(t *testing.T) {
 	cmds := []bus.Event{
-		{ID: "100-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder", Message: "rebase"},
-		{ID: "150-0", Kind: "cmd", Type: bus.CmdReply, Ref: "100-0", From: "coder", Target: "hermes", Message: "done"},
+		{ID: "100-0", Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder", Message: "rebase"},
+		{ID: "150-0", Kind: "cmd", Type: bus.CmdReply, Ref: "100-0", From: "coder", Target: "helper", Message: "done"},
 		{ID: "200-0", Kind: "cmd", Type: bus.CmdChallenge, From: "foureyes", Target: "coder", Message: "explain this diff"},
 	}
 	got := openThreads(cmds, nil)
@@ -185,7 +185,7 @@ func TestRequestsPanelSeparatesTrackedFromUntracked(t *testing.T) {
 	now := time.Now()
 	reqs := boardRequests(map[string]bus.BoardEntry{"task-20": requestedEntry()})
 	threads := openThreads([]bus.Event{
-		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder", Message: "look at the flake"},
+		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder", Message: "look at the flake"},
 	}, reqs)
 	panel := requestsPanel(reqs, threads, now, 80)
 	for _, want := range []string{

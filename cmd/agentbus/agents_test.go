@@ -14,7 +14,7 @@ func TestAgentsTable(t *testing.T) {
 	now := time.UnixMilli(1_700_000_000_000)
 	m := map[string]bus.AgentSnapshot{
 		"claude1": {State: "working", Message: "plan 10", TS: now.Add(-12 * time.Second).UnixMilli(), Pane: "w1:p1"},
-		"hermes":  {State: "done", TS: now.Add(-11 * time.Minute).UnixMilli()},
+		"helper":  {State: "done", TS: now.Add(-11 * time.Minute).UnixMilli()},
 	}
 	out := agentsTable(m, now)
 	if !strings.Contains(out, "claude1") || !strings.Contains(out, "working") || !strings.Contains(out, "plan 10") {
@@ -24,9 +24,9 @@ func TestAgentsTable(t *testing.T) {
 		t.Fatalf("claude1 age wrong: %q", out)
 	}
 	if !strings.Contains(out, "bus activity stale") {
-		t.Fatalf("hermes (11m) should show stale bus activity: %q", out)
+		t.Fatalf("helper (11m) should show stale bus activity: %q", out)
 	}
-	if strings.Index(out, "claude1") > strings.Index(out, "hermes") {
+	if strings.Index(out, "claude1") > strings.Index(out, "helper") {
 		t.Fatalf("rows not sorted by name: %q", out)
 	}
 	if !strings.Contains(out, "⧉w1:p1") {
