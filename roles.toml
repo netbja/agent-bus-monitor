@@ -182,3 +182,67 @@ skills = ["agent-bus"]
 profile = "codex-review"
 tier = "pop"
 skills = ["agent-bus"]
+
+# Drafted by master for: infrastructure as code and IT automation: Ansible playbooks and roles, Terraform and OpenTofu plans, linting, drift checks, IT support; check plan diff lint freely, apply or destroy only after the person says yes, never secrets
+[roles.infra]
+profile = "claude-opus-manual"
+tier = "pop"
+approval = "person"
+skills = ["agent-bus", "diagnosing-bugs"]
+
+# Least privilege (infra-role, master's classes). The profile is manual: every
+# command prompts in the pane unless a rule below says otherwise. A defence in
+# depth, not a boundary: the client matches command text only, deny before ask
+# before allow.
+[roles.infra.tool_rules]
+# Exact invocations only (master): no wildcard, so no extra flag or argument
+# rides on an allow (`fmt -check=false` writes files: it prompts). These change
+# nothing; validate and tflint run the provider binaries and plugins the person
+# approved at init and tflint --init (both asked). Anything else prompts in the
+# manual pane or is asked below: the person approves everything that runs IaC.
+allow = [
+  "Bash(terraform fmt -check)", "Bash(terraform fmt -check -recursive)", "Bash(terraform validate)",
+  "Bash(tofu fmt -check)", "Bash(tofu fmt -check -recursive)", "Bash(tofu validate)",
+  "Bash(tflint)", "Bash(tflint --recursive)", "Bash(ansible-lint --offline)", "Bash(yamllint .)",
+]
+# The person approves each: what evaluates providers, modules or data sources
+# (a data "external" runs a program during a plan), what touches a target
+# (--check still runs check_mode: false tasks; test applies real resources by
+# default; ad-hoc ansible), downloads (init, get, tflint --init, ansible-galaxy,
+# ansible-pull), and every change (apply, destroy, import, taint, state surgery,
+# force-unlock, workspace: delete -force drops state while resources live on),
+# and every ansible-playbook run (--check and --syntax-check included). Each verb is one pattern per tool, `terraform *<verb>*`, so the
+# -chdir= forms match too; it may over-ask (a path holding the word), never
+# under-ask. An ask rule also refuses a bypassPermissions profile.
+ask = [
+  "Bash(terraform *plan*)", "Bash(terraform *init*)", "Bash(terraform *refresh*)", "Bash(terraform *get*)",
+  "Bash(terraform *import*)", "Bash(terraform *taint*)", "Bash(terraform *apply*)", "Bash(terraform *destroy*)",
+  "Bash(terraform *state *)", "Bash(terraform *force-unlock*)", "Bash(terraform *test*)", "Bash(terraform *workspace*)",
+  "Bash(tofu *plan*)", "Bash(tofu *init*)", "Bash(tofu *refresh*)", "Bash(tofu *get*)",
+  "Bash(tofu *import*)", "Bash(tofu *taint*)", "Bash(tofu *apply*)", "Bash(tofu *destroy*)",
+  "Bash(tofu *state *)", "Bash(tofu *force-unlock*)", "Bash(tofu *test*)", "Bash(tofu *workspace*)",
+  "Bash(tflint *--init*)", "Bash(ansible-lint *--fix*)", "Bash(ansible-lint *--write*)",
+  "Bash(ansible-playbook*)",
+  "Bash(ansible *)", "Bash(ansible-pull*)", "Bash(ansible-galaxy *)",
+]
+# Never a secret: state and plan files (every value in clear), variable files,
+# vault passwords, cloud and cluster credentials, and the commands that print
+# state, outputs or the environment (state pull and state show print every
+# secret: denied, while the other state subcommands are asked), and
+# workspace new -state=, which copies a state file through the CLI (a Read deny
+# does not reach a subprocess). `env *` also
+# closes `env VAR=x terraform apply`, which would start outside the ask rules.
+deny = [
+  "Read(**/*.tfstate*)", "Read(**/.terraform/**)", "Read(**/*.tfplan)", "Read(**/*.tfvars*)", "Read(~/.terraform.d/**)",
+  "Read(**/*vault_pass*)", "Read(**/.vault_pass*)", "Bash(ansible-vault *)",
+  "Read(~/.aws/**)", "Read(~/.config/gcloud/**)", "Read(~/.azure/**)", "Read(~/.kube/**)", "Read(~/.docker/config.json)",
+  "Bash(terraform output*)", "Bash(terraform show*)", "Bash(terraform console*)", "Bash(terraform state pull*)", "Bash(terraform state show*)",
+  "Bash(terraform -chdir=* output*)", "Bash(terraform -chdir=* show*)", "Bash(terraform -chdir=* console*)",
+  "Bash(terraform -chdir=* state pull*)", "Bash(terraform -chdir=* state show*)",
+  "Bash(tofu output*)", "Bash(tofu show*)", "Bash(tofu console*)", "Bash(tofu state pull*)", "Bash(tofu state show*)",
+  "Bash(tofu -chdir=* output*)", "Bash(tofu -chdir=* show*)", "Bash(tofu -chdir=* console*)",
+  "Bash(tofu -chdir=* state pull*)", "Bash(tofu -chdir=* state show*)",
+  "Bash(terraform *plan*-out*)", "Bash(tofu *plan*-out*)",
+  "Bash(terraform *workspace new*-state*)", "Bash(tofu *workspace new*-state*)",
+  "Bash(printenv*)", "Bash(env)", "Bash(env *)",
+]
