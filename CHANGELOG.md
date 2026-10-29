@@ -6,7 +6,8 @@ release exists.
 
 ## Unreleased
 
-- The CLI's default sender, when `AGENT_BUS_AGENT` is unset, is now `anonymous` (it was `hermes`).
+- The CLI's default sender, when `AGENT_BUS_AGENT` is unset, is now `anonymous` (it was a
+  different built-in name).
   The same rules apply: refused as a writer inside a herdr pane. Entries already on a bus keep the
   sender they were written with; nothing migrates.
 
@@ -47,7 +48,7 @@ release exists.
   a hand-off ships **off** (`AGENT_BUS_AUTO_CLEAR=1`).
 - The installer in Go, `scripts/setup-go.sh` (`agentbus setup`), beside `./setup.sh`, which stays
   the installer; it adds a broker ownership check before every compose call.
-- No write as `hermes` from a herdr pane; a desktop notification for an agent lost to an identity
+- No write as the default sender from a herdr pane; a desktop notification for an agent lost to an identity
   mismatch; a pop stuck on its client's dialog is named; health `cmd-delivery` ignores
   unregistered agents.
 - A read-only Codex reviewer role, `reviewer-codex`. The README and the operational guides (EN, FR)

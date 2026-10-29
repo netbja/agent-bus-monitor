@@ -1,9 +1,9 @@
- demo  ·  ⬢ MASTER hermes  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
+ demo  ·  ⬢ MASTER helper  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
 ┌───────────────────────── AGENTS ─────────────────────────┐┌──────────────────── BOARD  [1/5 done] ───────────────────┐
 │archite╔═════════ MESSAGE · report · note  [↑↓/jk scroll · y copy text · Y copy thread · Esc back] ══════════╗… 3m    │
 │coder: ║kind    report · note                                                                                ║0m      │
 │foureye║from    sentinel                                                                                     ║        │
-│⬢ herme║to      (broadcast — every reader of this project)                                                   ║        │
+│⬢ helpe║to      (broadcast — every reader of this project)                                                   ║        │
 │sentine║when    2026-09-18 04:10:59  (3m ago)                                                                ║… 3h    │
 └───────║id      1789697459000-0                                                                              ║────────┘
 ┌───────║thread  — (this stream carries no thread id)                                                         ║────────┐

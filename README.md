@@ -366,12 +366,12 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 
 ```
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                                           15:04:05
- paused · resumes in 1h52 (lunch)   ♙ Bernard [human]   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44
 ╭─ For you ───────────────────── 4 for you · 2 unread ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
 │  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
 │  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
 │  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask ┃
-│  ◆ gate   coder     by bernard  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  ┃
+│  ◆ gate   coder     by charlie  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  ┃
 │  ● unread dispatch  project paused until 16:56     8m││  ✓ architect done      40m     —        —         escalating · busy   spec merged┃
 │                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…┃
 │                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…┃
@@ -383,9 +383,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 │    time   from      to         type       message                                                                                        │
 │  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 │    14:24  architect            status     done · spec merged                                                                             │
-│    14:50  ♙ Bernard → coder    directive  review lot 1                                                                                   │
+│    14:50  ♙ Charlie → coder    directive  review lot 1                                                                                   │
 │    14:51  coder                report     Lot 1 delivered (+197)                                                                         │
-│  ○ 14:52  master    → bernard  directive  please look at the plan                                                                        │
+│  ○ 14:52  master    → charlie  directive  please look at the plan                                                                        │
 │  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
 │  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
 │    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
@@ -446,8 +446,8 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   the start. Plain text is a notice nobody
   reads: the first Enter says so, a second one sends it. **`I`** opens the compose window for
   several lines (Ctrl+S sends, Tab moves to the recipient, Esc keeps the draft). You write as a
-  **person**: `busmon --as bernard` (or `AGENT_BUS_HUMAN`, or `agentbus identity set bernard`)
-  shows `♙ Bernard [human]`; your entries carry `human=yes`, and agents see `"human": true`.
+  **person**: `busmon --as charlie` (or `AGENT_BUS_HUMAN`, or `agentbus identity set charlie`)
+  shows `♙ Charlie [human]`; your entries carry `human=yes`, and agents see `"human": true`.
 
 **Pages.** Each opens over the lower zone, Esc goes back:
 
@@ -818,7 +818,7 @@ Stream keys are `{project}:{kind}`. Project and agent names must match `^[a-z][a
 | Stream              | Key fields                                       | Pane it feeds                   |
 |---------------------|--------------------------------------------------|---------------------------------|
 | `{p}:status`        | `agent state message`                            | AGENTS + ACTIVITY               |
-| `{p}:report`        | `agent kind(note\|auto) message`; optional `full` (kept only when it differs from the ≤500 preview) | AGENTS + ACTIVITY + hermes      |
+| `{p}:report`        | `agent kind(note\|auto) message`; optional `full` (kept only when it differs from the ≤500 preview) | AGENTS + ACTIVITY              |
 | `{p}:notify`        | `from message`                                   | ACTIVITY                        |
 | `{p}:cmd`           | `from target type ref command`; optional `wake=no` | ACTIVITY + agents + dispatch  |
 | `{p}:verdicts`      | `subject author reviewer decision message ref`   | audit ledger                    |
@@ -851,16 +851,15 @@ travels in plaintext, so the bus is never exposed raw over the network. To watch
 box, forward its port through SSH and point a tool at the local end of the tunnel:
 
 ```bash
-ssh -NL 6381:localhost:6380 user@host1 &   # tunnel host1 bus -> local :6381
+ssh -NL 6381:localhost:6380 user@your-host &   # tunnel your-host's bus -> local :6381
 REDIS_PORT=6381 ./busmon                          # watch it
 
 # one shot, with automatic tunnel teardown:
-./remote-bus.sh user@host1
+./remote-bus.sh user@your-host
 ```
 
-> The deployed laptop⇄host1 setup runs this **in reverse**: host1 opens the tunnel *into* the
-> laptop's bus (`ssh -L 6380:localhost:6380 …`) rather than the laptop reaching out. See
-> **Example deployment** below.
+> The example deployment below runs this **in reverse**: the remote box opens the tunnel *into*
+> the laptop's bus (`ssh -L 6380:localhost:6380 …`) rather than the laptop reaching out.
 
 ## Example deployment: a laptop and a remote box
 
@@ -872,7 +871,7 @@ where they *don't* connect. A single machine needs none of it.
   `ssh -L 6380:localhost:6380 user@laptop -N`. So `agentbus --host 127.0.0.1`
   on the remote box publishes onto the laptop's bus.
 - Two Claude Code sessions run on the laptop under **herdr** in `~/myproject`
-  (agents `claude1`, `claude2`); a **hermes agent** runs on the remote box.
+  (agents `claude1`, `claude2`); another agent runs on the remote box.
 
 **Inbound to the laptop Claudes — `agentbus subscribe` (the canonical bridge).**
 A session arms `agentbus subscribe <agent> [idle_secs]` as a Claude Code background task. It blocks
@@ -882,21 +881,20 @@ Claude session that armed it. Each session re-arms after every fire. The whole l
 there is **no wrapper script and no watcher daemon** in the agent path. `busmon` runs alongside as
 the human dashboard.
 
-> This supersedes `myproject/tools/bus_watch.sh` (a thin shell wrapper over `agentbus watch`)
-> and the persistent `~/.hermes/scripts/bus_watch_hdl.sh` logger loop. An even earlier prototype,
-> `cmd/busbridge`, relayed `hermes:cmd:*` into herdr panes with hard-coded pane IDs. Don't
+> This supersedes an older thin shell wrapper over `agentbus watch` and a persistent logger
+> loop. An even earlier prototype, `cmd/busbridge`, relayed commands into herdr panes with
+> hard-coded pane IDs. Don't
 > reintroduce a wrapper script — a restart loop never wakes a terminal session. v0.8 revised the
 > pane-relay part on purpose ([decision](docs/memory/decisions/2026-10-10-event-driven-dispatch.md)):
 > **the only automated process that types into panes is `agentbus dispatch`, and it types a wake
 > line, never a message; master's manual pane injection remains the fallback while no dispatcher
 > runs.** Pane ids are self-registered (or bound with `agentbus bind`) and pid-verified, not hard-coded.
 
-**Separate notification path — NOT the bus.** The `Stop` hook in
-`myproject/.claude/settings.local.json` calls `hermes-notify`, which HMAC-signs a POST to
-the remote box's hermes **gateway** at `http://<remote>:8644/webhooks/claude-notify`. That route is
-`Deliver: signal`: it pings a human over Signal when a Claude task stops. The gateway never
-touches Redis, so this path is **independent of the agent bus** — webhook traffic does not appear
-on `hermes:*`, and the bus carries nothing back to Signal.
+**Separate notification path — NOT the bus.** A Claude Code `Stop` hook in
+`myproject/.claude/settings.local.json` can POST to a notification webhook of your own (on the
+remote box, say) that pings you on your phone when a task stops. Such a webhook never touches
+Redis, so that path is **independent of the agent bus**: its traffic does not appear on the bus,
+and the bus carries nothing back to it.
 
 ## Planned
 

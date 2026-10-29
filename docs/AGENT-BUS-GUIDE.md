@@ -1,6 +1,6 @@
 # Agent Bus — Quick-Use Card for Agents
 
-You are an agent (Claude Code, Codex, hermes, …) talking to other agents over a
+You are an agent (Claude Code, Codex, Kimi, Grok, …) talking to other agents over a
 shared **Redis Streams** bus. One CLI: **`agentbus`**. This card is the full
 syntax — copy a line, change the words, run it. **Don't guess the flags; they
 are listed verbatim below.**
@@ -57,7 +57,7 @@ them before retrying anything.
    always goes **last** and needs no quotes (quotes are fine too).
 4. **`<agent>`/`<project>` names must match `^[a-z][a-z0-9_-]{0,31}$`** —
    lowercase, start with a **letter**, then letters/digits/`_`/`-`, ≤32 chars.
-   - ✅ `claude1`  ✅ `claude_1`  ✅ `dev`  ✅ `hermes`  ✅ `c`
+   - ✅ `claude1`  ✅ `claude_1`  ✅ `dev`  ✅ `helper`  ✅ `c`
    - ❌ `Claude1` (uppercase)  ❌ `1claude` (leading digit)  ❌ `_claude` (leading `_`)  ❌ `claude.1` (dot)
 
 State values are a closed set: **`working` · `idle` · `blocked` · `done`**.
@@ -68,7 +68,7 @@ State values are a closed set: **`working` · `idle` · `blocked` · `done`**.
 
 ```bash
 export AGENT_BUS_PROJECT=<project> # REQUIRED namespace (every stream is {project}:{kind})
-export AGENT_BUS_AGENT=claude1     # who YOU are (used as `from` and pilot identity); default "hermes"
+export AGENT_BUS_AGENT=claude1     # who YOU are (used as `from` and pilot identity); default "anonymous"
 ```
 
 With those exported you can drop `--project` from every command below. The
@@ -117,7 +117,7 @@ agentbus cmd [--ref T] <target> <command...>           # prints the entry id (= 
 agentbus thread <thread-id>                            # show the :cmd thread (ref or id == arg), chronological
 agentbus cmd claude2 run the integration suite
 ID=$(agentbus cmd claude2 run the integration suite)   # capture the printed id = thread root
-agentbus reply --ref "$ID" hermes on it                # thread a reply onto that directive
+agentbus reply --ref "$ID" master on it                # thread a reply onto that directive
 agentbus thread "$ID"                                  # see the whole chain (directive → reply → verdict)
 # a full <ms>-<seq> id is an exact match; a bare <ms> is best-effort. Flag tokens (--ref) in cmd text are reserved.
 agentbus cmd --no-wake claude2 read this when you are next up   # wake=no: delivered at its next drain/subscribe, never wakes it
@@ -136,8 +136,8 @@ agentbus gate claude1 && echo "clear to proceed"
 
 # ── PILOT LEASE (who is driving: the pilot vs autonomous) ────────────────────────
 agentbus pilot <claim|renew|release|status> [--ttl 90s]
-agentbus pilot status                                   # prints "piloted by hermes" OR "autonomous"
-agentbus pilot claim --ttl 120s                         # hermes only: take/renew the lease
+agentbus pilot status                                   # prints "piloted by master" OR "autonomous"
+agentbus pilot claim --ttl 120s                         # the coordinator only: take/renew the lease
 agentbus pilot release                                  # hand off to autonomous now
 
 # ── PEERS: current state of every agent (one line each) ───────────────────────
@@ -209,7 +209,7 @@ agentbus subscribe [--since <cursor>] <agent> [idle_secs]   # blocks for ONE cmd
 agentbus subscribe claude1                              # no --since = start at "now" — see the warning below; arm as a background task
 agentbus subscribe --since 1782053749061-3 claude1      # resume after a persisted cursor (the `id` from the last fire)
 agentbus subscribe claude1 3600                         # 1h idle window before it heartbeats and exits
-agentbus subscribe --loop hermes                        # HEADLESS callers only (hermes/shell): consume continuously, never exit
+agentbus subscribe --loop helper                        # HEADLESS callers only (scripts, shells): consume continuously, never exit
 agentbus watch claude1                                  # legacy alias of subscribe
 agentbus --project <p> subscribe --drain claude1        # WOKEN? run this first: JSONL, one object per waiting entry, then exit (0 / 64 empty / 75 error)
 # WARNING — --since is a floor, and a floor DISCARDS. It filters pending entries too: anything
@@ -272,12 +272,12 @@ last `status`/`report` entry. So emit `status` whenever your state changes and a
 ```bash
 agentbus pilot status
 ```
-- **`piloted by hermes`** → wait for a directive; don't act on your own. Arm
+- **`piloted by master`** → wait for a directive; don't act on your own. Arm
   `agentbus subscribe <self>` to receive it.
 - **`autonomous`** → proceed on your own plan; just keep emitting `status`/`report`.
 
-hermes holds the lease (`pilot claim`, default 90s TTL) only while it has budget.
-When the lease expires (hermes silent / out of budget / crashed) the mode flips
+The coordinator (master) holds the lease (`pilot claim`, default 90s TTL) only while it has budget.
+When the lease expires (the coordinator silent / out of budget / crashed) the mode flips
 to autonomous automatically — there is no "I'm done" message.
 
 ### `subscribe` is wake-on-exit, not a long loop
@@ -352,7 +352,7 @@ different thing entirely: it is you telling the board, with a reason, that this 
 cannot move. You can be `blocked` on a request while your own status is `working`. busmon shows a `👂` badge next to armed agents.
 **Do not** wrap `subscribe` in a `while` loop or a daemon — a long-lived loop
 never wakes a terminal session. (The one exception is `--loop`, for **headless**
-consumers like hermes; it emits one `cmd` object per entry, with no `rearm`.) The
+consumers (scripts); it emits one `cmd` object per entry, with no `rearm`.) The
 whole loop lives in the binary; there is no wrapper script and no watcher daemon. The one
 automated process that types into panes is the dispatcher (next section), and it types a
 wake line, never a message.

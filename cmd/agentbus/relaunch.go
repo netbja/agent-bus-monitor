@@ -332,7 +332,7 @@ func judgeTab(herdr func(args ...string) ([]byte, error), panes map[string]paneR
 }
 
 // relaunchProof is how up proves a relaunched agent before it closes the pane
-// the dead one left (Bernard, 2026-10-27): the agents' snapshots, read once a
+// the dead one left (the person, 2026-10-27): the agents' snapshots, read once a
 // second, at most Tries times.
 type relaunchProof struct {
 	Agents func() (map[string]bus.AgentSnapshot, error)

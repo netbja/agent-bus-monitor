@@ -13,7 +13,7 @@ one automated pane writer, a wake line only, every dispatcher write fenced.
 
 Each project that `agentbus up` starts gets two user services, `agentbus-<p>-dispatch` and
 `agentbus-<p>-missions`. On this host today that is four processes for two projects
-(`agent-bus-monitor`, `hyperliquid`), plus an env file for a third (`ai-tradex-solana`) with no unit
+(`agent-bus-monitor` and a second project), plus an env file for a third with no unit
 running. Each project's dispatcher repeats work that belongs to the host, not to the project:
 
 - **Quota collection.** Each dispatcher runs every quota reader once a minute: the Claude cache

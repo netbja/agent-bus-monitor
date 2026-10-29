@@ -7,7 +7,7 @@ import (
 )
 
 // fields is a block of a page's "Label:  value" rows (busmon-detail-labels,
-// Bernard): each label capitalised with a colon, every value of the block in
+// the person): each label capitalised with a colon, every value of the block in
 // one column two cells after the longest label; a value too long for the
 // line wraps under its value, never under the label. An empty label
 // continues the row above; a gap is a blank line inside the same block, so

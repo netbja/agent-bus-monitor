@@ -20,7 +20,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 ## How to use it
 
 - [Read/write protocol and note template](docs/memory/PROTOCOL.md)
-- [Human access in Obsidian and laptop/host1 access](docs/memory/ACCESS.md)
+- [Human access in Obsidian and laptop/remote-host access](docs/memory/ACCESS.md)
 - [Project boundaries and cross-project knowledge](docs/memory/PROJECTS.md)
 - [Validation and delivery status](docs/memory/VALIDATION.md)
 

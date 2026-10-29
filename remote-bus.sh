@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Watch a remote Agent Bus through an SSH tunnel, then tear it down on exit.
 # Usage: ./remote-bus.sh <ssh-target> [remote-port=6380] [local-port=6381]
-#   ./remote-bus.sh user@host1
+#   ./remote-bus.sh user@your-host
 set -euo pipefail
 
 target="${1:?usage: remote-bus.sh <ssh-target> [remote-port=6380] [local-port=6381]}"

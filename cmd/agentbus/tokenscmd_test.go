@@ -76,7 +76,7 @@ func tokFixture() map[string]fakeTokens {
 				"sentinel":       {PID: 5, IdentSession: "0198e5c4-sentinel-5", Provider: "anthropic"},
 			}},
 		"blog": {ok: true, meta: bus.TokensMeta{Partial: true}, rows: map[string]bus.TokenRow{"2026-10-22|coder|anthropic": {In: 170_000, N: 1}}},
-		"wiki":  {},
+		"wiki": {},
 	}
 }
 
