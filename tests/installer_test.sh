@@ -122,6 +122,10 @@ SELF=./setup.sh
 out="$("$SETUP" --help 2>&1 || true)"
 assert_contains "$out" "Agent Bus Monitor — setup" "help displays the title"
 assert_contains "$out" "$SELF uninstall" "help lists uninstall"
+# Every script the help names exists (reviewer-codex: it once advertised a ./install.sh alias that never did).
+for named in $(printf '%s\n' "$out" | grep -oE '(\./|scripts/)[A-Za-z0-9_./-]+\.sh' | sort -u); do
+  assert_eq "$([[ -f "$T/repo/${named#./}" ]] && echo exists || echo "missing $named")" "exists" "help names $named, which exists"
+done
 if [[ "$SELF" != ./setup.sh ]]; then
   assert_eq "$([[ "$out" == *"./setup.sh"* ]] && echo named || echo self)" "self" "the fallback's help never names ./setup.sh"
 fi

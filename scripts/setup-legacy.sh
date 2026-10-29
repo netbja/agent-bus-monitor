@@ -80,7 +80,7 @@ usage() {
 Agent Bus Monitor — setup
 
 Usage:
-  scripts/setup-legacy.sh install   [options]          (./install.sh is an alias)
+  scripts/setup-legacy.sh install   [options]
   scripts/setup-legacy.sh update    [options]          git pull --ff-only, then install
   scripts/setup-legacy.sh uninstall [--yes] [--purge]  asks before every removal
   scripts/setup-legacy.sh status

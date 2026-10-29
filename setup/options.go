@@ -89,7 +89,7 @@ func Usage(getenv func(string) string) string {
 	return `Agent Bus Monitor — setup
 
 Usage:
-  ./setup.sh install   [options]          (./install.sh is an alias)
+  ./setup.sh install   [options]
   ./setup.sh update    [options]          git pull --ff-only, then install
   ./setup.sh uninstall [--yes] [--purge]  asks before every removal
   ./setup.sh status
