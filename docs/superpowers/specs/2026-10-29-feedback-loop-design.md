@@ -70,22 +70,29 @@ and a verdict written without `--ref`, never join: they still count in every fig
 
 ### What it computes
 
-Self-verdicts (author = reviewer) are excluded from every figure, as the roll-up excludes them,
-and **counted** in the totals: a mis-addressed verdict (a non-Claude reviewer writing as the
-author) must show, not vanish.
+**Self-verdicts** (author = reviewer) follow `bus.RollUp` exactly where the state is concerned and
+are left out of everything else. The roll-up ignores a self-approve but counts a self-reject (it
+moves its last reject), so the **state** column is RollUp's, self-rejects included, never a
+recomputation. Every other figure (per reviewer, rounds, re-reviews, rejects before approval,
+categories) counts independent verdicts only. Self-approves and self-rejects are **counted**
+separately in the totals: a mis-addressed verdict (a non-Claude reviewer writing as the author)
+must show, not vanish.
 
 1. **Per reviewer**: its provider (the verdicts' `reviewer_provider`, the latest one), verdicts,
    rejects, reject rate, and the median time from a challenge to that reviewer's verdict naming
    it (measured ones only, with their count).
 2. **Per subject (a task)**, over its whole retained ledger:
    - **state now**: `bus.RollUp` (approved, rejected, pending).
-   - **rounds**: for each reviewer, its verdicts up to and including its first approve after its
-     last reject (a reviewer that never rejected: 1; one whose last verdict is a reject: all of
-     them so far); the subject's rounds are the largest. redis-watch: reviewer-codex rejected
-     twice then approved, 3 rounds.
-   - **re-reviews**: the verdicts after that approve (a rebase, a delta re-checked), summed over
-     the reviewers, in their own column. installer-default: 3 rounds, 4 re-reviews;
-     busmon-detail-labels: 1 round, 2 re-reviews (approved, then approved again after a rebase).
+   - **rounds**, a proxy and labelled so (`rounds*` in the text, `rounds_proxy` in JSON): the ledger
+     has no round identifier, so rounds = 1 + the independent rejects older than the approval that
+     stands (or, not approved, than the newest verdict). It does not depend on who reviewed: A
+     rejects once and B approves is 2 rounds; redis-watch (rejected twice, then approved) is 3. It
+     overcounts when two reviewers reject the same delta (2 for one round), which the reject
+     column next to it makes visible.
+   - **re-reviews**: independent approves that follow an approve by the same reviewer with no
+     reject of its in between (a rebase, a delta re-checked), summed over the reviewers, in their
+     own column. installer-default: 4 re-reviews; busmon-detail-labels: 2 (approved, then
+     approved again after each rebase).
    - **rejects before approval**: the rejects older than the verdict that made the current
      APPROVED (RollUp's `deciderIdx`); with two reviewers, a subject can flip APPROVED at one's
      approve and back at the other's later reject, so only the approval that stands counts.
@@ -124,6 +131,8 @@ review and in our own feature names: the tokens dashboard, flock and the pilot l
 
 The output says how each count was reached (`tagged 9, matched 20, other 4`) and names the table
 (`keywords: table v1, whole words`): the keywords are a heuristic, the tags are the reviewers'.
+Categories are a summary for people to read: nothing decides or triggers on them, in step 1 or
+in step 2 (where a person answers an ask first).
 
 ### Output
 
@@ -131,16 +140,17 @@ Text by default, in the CLI's usual plain columns:
 
 ```
 feedback: agent-bus-monitor, verdicts since 2026-10-20 (oldest retained), 214 verdicts, 63 subjects
-self-verdicts excluded: 2 · keywords: table v1, whole words
+self-verdicts: 1 approve, 1 reject (state follows RollUp) · keywords: table v1, whole words
+rounds* = 1 + rejects before the approval that stands (a proxy: no round id in the ledger)
 
 reviewers        provider  verdicts  rejects  rate   median to verdict
 reviewer-codex   openai          98       21   21%    6m (71 of 98 measured)
 foureyes         anthropic      116       12   10%    9m (80 of 116 measured)
 
-subjects                 rounds  re-reviews  state      rejects  to approval
-installer-default             3           4  approved         2  1h05m
-redis-watch                   3           1  approved         2  1h12m
-busmon-plan-start-ux          1           0  approved         0  14m
+subjects                 rounds*  re-reviews  state      rejects  to approval
+installer-default              3           4  approved         2  1h05m
+redis-watch                    3           1  approved         2  1h12m
+busmon-plan-start-ux           1           0  approved         0  14m
 …
 
 recurring rejects (33: tagged 9, matched 20, other 4)
@@ -210,14 +220,16 @@ per project); scheduling (sentinel may run it later, read-only).
   time to approval from the first retained challenge, absent when it was trimmed, absent when not
   approved; the median to verdict and its "n of m"; `--since` bounds by verdict time; the window
   starts at the oldest retained verdict; the roll-up agrees with `bus.RollUp`.
-- Rounds and re-reviews: approve-only reviewers (1 round), reject then approve, approvals after a
-  rebase (re-reviews, not rounds), a reviewer whose last verdict is a reject.
+- Rounds and re-reviews: approve only (1 round), reject then approve, reviewers that rotate (A
+  rejects, B approves: 2), two rejects of one delta (2: the stated overcount), approvals after a
+  rebase (re-reviews, not rounds), not approved yet (1 + every reject so far).
+- Self-verdicts: a self-reject makes the state REJECTED as RollUp says, and counts nowhere else; a
+  self-approve changes nothing but the totals.
 - The standing approval: one reviewer approves, the other rejects later, then approves (time to
   approval and rejects-before measured at the last transition into APPROVED); the join rule (a
   challenge reached only through a verdict's ref; a verdict without ref joins nothing).
 - `--since`: a subject with one verdict in the window keeps its whole-ledger rounds and state; a
   subject with none is left out; per-reviewer counts only the window.
-- Self-verdicts excluded from the figures and counted in the totals.
 - Categories: the tag wins over keywords; an unknown tag refused by `verdict`; each table row
   matched by its phrases, whole words only (`tokens`, `flock`, `latest` match nothing);
   several per reject; `other`; approves never categorised; the table version printed.
