@@ -121,11 +121,11 @@ func TestRunSubscribeFloorSkipsBacklog(t *testing.T) {
 	if err := r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
 		t.Fatalf("XGroupCreate: %v", err)
 	}
-	oldID, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", "OLD")
+	oldID, err := b.Cmd(ctx, "helper", "dev", bus.CmdDirective, "", "OLD")
 	if err != nil {
 		t.Fatalf("Cmd OLD: %v", err)
 	}
-	if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", "NEW"); err != nil {
+	if _, err := b.Cmd(ctx, "helper", "dev", bus.CmdDirective, "", "NEW"); err != nil {
 		t.Fatalf("Cmd NEW: %v", err)
 	}
 	var buf bytes.Buffer
@@ -189,7 +189,7 @@ func TestRunSubscribeLoopDeliversMany(t *testing.T) {
 		t.Fatalf("XGroupCreate: %v", err)
 	}
 	for i := 0; i < 2; i++ {
-		if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", "do "+strconv.Itoa(i)); err != nil {
+		if _, err := b.Cmd(ctx, "helper", "dev", bus.CmdDirective, "", "do "+strconv.Itoa(i)); err != nil {
 			t.Fatalf("Cmd: %v", err)
 		}
 	}
@@ -232,7 +232,7 @@ func TestSubscribeDrainJSONLAndExitCodes(t *testing.T) {
 	}
 
 	for _, msg := range []string{"one", "two"} {
-		if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", msg); err != nil {
+		if _, err := b.Cmd(ctx, "helper", "dev", bus.CmdDirective, "", msg); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -325,7 +325,7 @@ func TestSubscribeDrainOutputThenAckFailureExit75(t *testing.T) {
 	b, r := dialMain(t)
 	ctx := context.Background()
 	for _, msg := range []string{"one", "two"} {
-		if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", msg); err != nil {
+		if _, err := b.Cmd(ctx, "helper", "dev", bus.CmdDirective, "", msg); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -381,7 +381,7 @@ func TestRunSubscribeFromNowKeepsAPersonsEntry(t *testing.T) {
 	if err := r.XGroupCreateMkStream(ctx, stream, "dev", "0").Err(); err != nil {
 		t.Fatalf("XGroupCreate: %v", err)
 	}
-	if _, err := b.Cmd(ctx, "hermes", "dev", bus.CmdDirective, "", "OLD from an agent"); err != nil {
+	if _, err := b.Cmd(ctx, "helper", "dev", bus.CmdDirective, "", "OLD from an agent"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.HumanClose(ctx, "bernard", "dev", "1-0", "closed by a person"); err != nil {
@@ -409,7 +409,7 @@ func TestRunSubscribeFromNowKeepsAPersonsEntry(t *testing.T) {
 
 	// No group yet (the agent never listened): a person's entry written just
 	// before its first plain subscribe is delivered, an agent's is not.
-	if _, err := b.Cmd(ctx, "hermes", "fresh", bus.CmdDirective, "", "agent backlog"); err != nil {
+	if _, err := b.Cmd(ctx, "helper", "fresh", bus.CmdDirective, "", "agent backlog"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.HumanCmd(ctx, "bernard", "fresh", "FIRST ANSWER"); err != nil {

@@ -70,7 +70,7 @@ func overlayCaptures(t *testing.T) map[string]string {
 
 	reqs := boardRequests(map[string]bus.BoardEntry{"task-20": requestedEntry()})
 	threads := openThreads([]bus.Event{
-		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder", Message: "look at the flake"},
+		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder", Message: "look at the flake"},
 	}, reqs)
 
 	board := map[string]bus.BoardEntry{"pr-46-review": {Owner: "grok", State: "blocked", Branch: "fix/pr-46"},

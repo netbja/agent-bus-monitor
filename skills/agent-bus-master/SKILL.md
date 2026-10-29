@@ -350,9 +350,8 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
    ```
    Map each blocked pane back to its bus agent by inverting `agentbus agents --json`.
 2. **Read the question:** `herdr pane read "$pane" --source detection`.
-3. **Alert a human** (one-way Signal + the bus — they may be away):
+3. **Alert a human** (the bus, plus your own notification webhook if you have one — they may be away):
    ```bash
-   hermes-notify "claude1 is BLOCKED: <question>"
    agentbus notify "claude1 BLOCKED: <question> — reply in busmon: @claude1 <answer>"
    ```
 4. **Receive the answer over the bus.** The human answers in busmon (`@claude1 <answer>`, type `@`

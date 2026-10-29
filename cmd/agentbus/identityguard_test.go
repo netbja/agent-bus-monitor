@@ -6,7 +6,7 @@ import (
 )
 
 // A8(a): inside a herdr pane with no AGENT_BUS_AGENT, a command that writes
-// as the sender would post as the default "hermes" (the agent's own name
+// as the sender would post as the default "anonymous" (the agent's own name
 // lost); it is refused with the fix, while read-only commands still run.
 func TestIdentityGuard(t *testing.T) {
 	pane := map[string]string{"HERDR_PANE_ID": "w2:pA"}
@@ -21,10 +21,10 @@ func TestIdentityGuard(t *testing.T) {
 	for _, w := range writes {
 		err := identityGuard(env(pane), w[0], w[1:])
 		if err == nil {
-			t.Errorf("%v allowed as hermes in a pane", w)
+			t.Errorf("%v allowed as anonymous in a pane", w)
 			continue
 		}
-		for _, want := range []string{"hermes", "AGENT_BUS_AGENT", "agentbus up", "--resume"} {
+		for _, want := range []string{"anonymous", "AGENT_BUS_AGENT", "agentbus up", "--resume"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%v: message %q lacks %q", w, err, want)
 			}
@@ -47,8 +47,8 @@ func TestIdentityGuard(t *testing.T) {
 			t.Errorf("env %v: %v", m, err)
 		}
 	}
-	// AGENT_BUS_AGENT=hermes said on purpose is an identity, not the default.
-	if err := identityGuard(env(map[string]string{"HERDR_PANE_ID": "w2:pA", "AGENT_BUS_AGENT": "hermes"}), "notify", []string{"x"}); err != nil {
-		t.Errorf("explicit hermes refused: %v", err)
+	// AGENT_BUS_AGENT=anonymous said on purpose is an identity, not the default.
+	if err := identityGuard(env(map[string]string{"HERDR_PANE_ID": "w2:pA", "AGENT_BUS_AGENT": "anonymous"}), "notify", []string{"x"}); err != nil {
+		t.Errorf("explicit anonymous refused: %v", err)
 	}
 }

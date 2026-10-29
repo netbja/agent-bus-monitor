@@ -2,7 +2,7 @@
 //
 // The project is required (--project or AGENT_BUS_PROJECT); every stream is
 // namespaced {project}:{kind}. Self identity (for `from`/pilot driver) is
-// AGENT_BUS_AGENT (default "hermes"). Trailing words are joined into one message.
+// AGENT_BUS_AGENT (default "anonymous"). Trailing words are joined into one message.
 //
 // Every command's usage, flags (long and short) and examples are in one
 // table, commands.go: `agentbus help`, `agentbus help <cmd>` or
@@ -143,7 +143,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 
-	self := envOr("AGENT_BUS_AGENT", "hermes")
+	self := envOr("AGENT_BUS_AGENT", "anonymous")
 	if err := identityGuard(os.Getenv, args[0], args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "agentbus: "+err.Error())
 		os.Exit(2)

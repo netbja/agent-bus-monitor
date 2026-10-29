@@ -94,7 +94,7 @@ func TestGateCloseOneRefusesSomeoneElsesGate(t *testing.T) {
 func TestGateCloseAsPerson(t *testing.T) {
 	b := openGatesFixture(t)
 	ctx := context.Background()
-	code, out, errOut := runGate(b, "hermes", "--subject", "roles-impl", "--as", "Bernard", "--note", "reviewed in person")
+	code, out, errOut := runGate(b, "helper", "--subject", "roles-impl", "--as", "Bernard", "--note", "reviewed in person")
 	if code != 0 || !strings.HasSuffix(out, "2 gate(s) closed\n") {
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
 	}

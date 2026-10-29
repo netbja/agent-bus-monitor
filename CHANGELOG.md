@@ -4,6 +4,12 @@ One entry per release. The full notes for each are in [`docs/releases/`](docs/re
 Update a machine with `./setup.sh update`; busmon shows `↑ vX.Y.Z` in its header when a newer
 release exists.
 
+## Unreleased
+
+- The CLI's default sender, when `AGENT_BUS_AGENT` is unset, is now `anonymous` (it was `hermes`).
+  The same rules apply: refused as a writer inside a herdr pane. Entries already on a bus keep the
+  sender they were written with; nothing migrates.
+
 ## v0.24.0 — the installer in Go by default, busmon's pages read better, reloads checked first
 
 - `./setup.sh` is now the Go installer (`agentbus setup`), same subcommands and flags; the bash one

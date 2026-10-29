@@ -9,7 +9,7 @@ import (
 )
 
 // defaultHuman is the sender when no name is given: busmon's operator is a
-// person piloting the agents, never an agent (the old default was "hermes").
+// person piloting the agents, never an agent (not the CLI's default sender).
 const defaultHuman = "pilot"
 
 // humanIdentity is the bus name busmon writes as: --as, else AGENT_BUS_HUMAN,
