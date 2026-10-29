@@ -10,8 +10,8 @@ import (
 	"testing"
 )
 
-// bashSetup runs the repository's setup.sh (the reference while both
-// exist, spec rollout step 1) with a throwaway HOME, and returns its stdout,
+// bashSetup runs the bash installer, scripts/setup-legacy.sh since the switch
+// (the reference while both exist, spec rollout), with a throwaway HOME, and returns its stdout,
 // stderr and exit code. Only paths that stop before any work are run.
 func bashSetup(t *testing.T, home string, args ...string) (string, string, int) {
 	t.Helper()
@@ -28,7 +28,7 @@ func bashSetup(t *testing.T, home string, args ...string) (string, string, int) 
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("sh", append([]string{filepath.Join(repo, "setup.sh")}, args...)...)
+	cmd := exec.Command("sh", append([]string{filepath.Join(repo, "scripts", "setup-legacy.sh")}, args...)...)
 	cmd.Env = []string{"HOME=" + home, "PATH=" + fakes + ":/usr/bin:/bin", "NO_COLOR=1"}
 	var out, errw bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errw
@@ -40,7 +40,10 @@ func bashSetup(t *testing.T, home string, args ...string) (string, string, int) 
 		}
 		code = ee.ExitCode()
 	}
-	return out.String(), errw.String(), code
+	// The fallback names itself where the Go installer says ./setup.sh
+	// (reviewer-codex); everything else is the reference, byte for byte.
+	self := func(s string) string { return strings.ReplaceAll(s, "scripts/setup-legacy.sh", "./setup.sh") }
+	return self(out.String()), self(errw.String()), code
 }
 
 // goSetup parses args as agentbus setup does, with the same throwaway HOME
@@ -81,6 +84,21 @@ func TestParseArgsFlags(t *testing.T) {
 	if code != -1 || opt.Sub != "uninstall" || !opt.Yes || !opt.Purge || opt.BinDir != "/h/.local/bin" {
 		t.Fatalf("%d %+v", code, opt)
 	}
+	// --force has done nothing since v0.20: the switch's release says so, and
+	// the next one drops it (spec: Settled in review, 2).
+	var warned bytes.Buffer
+	if opt, code := ParseArgs([]string{"install", "--force"}, env, NewOutput(&warned, &bytes.Buffer{}, false)); code != -1 || !opt.Force ||
+		!strings.Contains(warned.String(), "--force has had no effect since v0.20 and is removed in the next release") {
+		t.Fatalf("--force: %d %q", code, warned.String())
+	}
+	var once bytes.Buffer // update hands --force to the install it runs, which warns: not twice
+	if _, code := ParseArgs([]string{"update", "--force"}, env, NewOutput(&once, &bytes.Buffer{}, false)); code != -1 || once.Len() != 0 {
+		t.Fatalf("update --force: %d %q", code, once.String())
+	}
+	var quiet bytes.Buffer
+	if _, code := ParseArgs([]string{"install", "--dry-run"}, env, NewOutput(&quiet, &bytes.Buffer{}, false)); code != -1 || quiet.Len() != 0 {
+		t.Fatalf("without --force: %d %q", code, quiet.String())
+	}
 	env2 := func(k string) string { return map[string]string{"HOME": "/h", "BIN_DIR": "/x"}[k] }
 	if opt, _ := ParseArgs([]string{"status"}, env2, o); opt.BinDir != "/x" {
 		t.Fatalf("BIN_DIR from the environment: %q", opt.BinDir)
@@ -109,7 +127,7 @@ esac
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("sh", filepath.Join(repo, "scripts", "setup-go.sh"), "install", "--dry-run")
+	cmd := exec.Command("sh", filepath.Join(repo, "setup.sh"), "install", "--dry-run")
 	cmd.Env = []string{"HOME=" + t.TempDir(), "PATH=" + fakes + ":/usr/bin:/bin", "NO_COLOR=1"}
 	var errw bytes.Buffer
 	cmd.Stderr = &errw

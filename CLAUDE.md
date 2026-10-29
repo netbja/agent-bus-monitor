@@ -489,7 +489,11 @@ It never touches Redis — see README "Example deployment".
   `doctor`: only after an `adopt` answer not given by the asker; appends to the manifest after
   checking it loads, never overwrites a prompt).
 - **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
-  `update`, `uninstall`, `status`. It stamps `buildinfo.Version` (from
+  `update`, `uninstall`, `status`. Since installer-default it is a thin script that builds
+  `agentbus` and runs `agentbus setup` (package `setup/`, every external command through
+  `setup.Runner`); the bash installer stays one release as `scripts/setup-legacy.sh`, the fallback
+  (`tests/installer_legacy_test.sh` runs the same suite on it), removed in the next; `--force`
+  warns there, and goes with it. It stamps `buildinfo.Version` (from
   `git describe` when it is a `v*` tag, else `dev`) and `buildinfo.Repo` via ldflags; `agentbus up`
   finds `scripts/bootstrap` through `AGENTBUS_REPO`, then `buildinfo.Repo`, then the binary's
   directory. A copy of the repository uses the same compose project and container name as the live

@@ -117,11 +117,12 @@ autre copie passe devant.
 `statusLine` à mettre dans `~/.claude/settings.json`. Sans lui, agent-bus ne peut lire ni les
 fenêtres d'usage de Claude, ni le remplissage du contexte de chaque session (cas C et D).
 
-**Essayer l'installeur en Go.** `scripts/setup-go.sh` prend les mêmes sous-commandes et options
-(`install`, `update`, `status`, `uninstall`) et lance `agentbus setup`, l'installeur porté en Go.
-Il refuse en plus de démarrer, d'arrêter ou de supprimer un conteneur Redis lancé depuis une autre
-copie du dépôt (il lit son étiquette Compose `working_dir`). `./setup.sh` reste l'installeur tant
-que le portage en Go n'a pas été essayé sur de vraies machines.
+**L'installeur est en Go.** `./setup.sh` compile `agentbus` et lance `agentbus setup`, avec les
+mêmes sous-commandes et options (`install`, `update`, `status`, `uninstall`) qu'avant. Il refuse en
+plus de démarrer, d'arrêter ou de supprimer un conteneur Redis lancé depuis une autre copie du dépôt
+(il lit son étiquette Compose `working_dir`). S'il échoue sur une machine, l'ancien installeur bash
+reste une version de plus sous `scripts/setup-legacy.sh` (mêmes sous-commandes et options) :
+signalez ce qui vous y a obligé, la version suivante le retire.
 
 ### Le sélecteur Projects et l'action busmon
 

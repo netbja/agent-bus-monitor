@@ -54,9 +54,9 @@ then `↑` (the plugin's Projects picker) reopens any project.
   newer release exists.
 - `./setup.sh status` shows what is installed.
 - `./setup.sh uninstall` removes it, asking first at each step.
-- `scripts/setup-go.sh` is the same installer ported to Go (`agentbus setup`), with the same
-  flags. It is there to be tried; `./setup.sh` stays the default until the switch
-  ([below](#agentbus-setup-the-go-installer-preview)).
+- `./setup.sh` is a thin script that builds `agentbus` and runs `agentbus setup`, the installer in
+  Go. The former bash installer stays one release as `scripts/setup-legacy.sh`, the fallback
+  ([below](#the-installer-in-go-and-its-fallback)).
 
 The `statusLine` step gives agent-bus Claude Code's rate limits and each session's context
 fill: without it the Claude gauges and the context alert have nothing to read. Codex, Grok,
@@ -145,19 +145,23 @@ just pulled.
 The plugin link is unlinked on its own question, and only when setup made it. The repository itself is
 left in place. It has no `--dry-run`: run it without `--yes` and answer each question.
 
-### `agentbus setup`: the Go installer (preview)
+### The installer in Go, and its fallback
 
-`scripts/setup-go.sh` checks Git and Go, builds `agentbus` from the checkout and hands every
-argument to `agentbus setup`, the installer ported to Go. Its subcommands, flags, questions and
-output are setup.sh's, so the commands above work unchanged:
+`./setup.sh` checks Git and Go, builds `agentbus` from the checkout and hands every argument to
+`agentbus setup`, the installer in Go. Its subcommands, flags, questions and output are the bash
+installer's, so the commands above are unchanged. `--force` has had no effect since v0.20: it now
+warns, and the next release drops it.
+
+The bash installer it replaces stays **one release** as `scripts/setup-legacy.sh`, with the same
+subcommands and flags, should the Go one fail on a machine:
 
 ```bash
-scripts/setup-go.sh install --dry-run
-scripts/setup-go.sh install --install-herdr
-scripts/setup-go.sh status
-scripts/setup-go.sh update          # pulls, then runs scripts/setup-go.sh again
-scripts/setup-go.sh uninstall
+scripts/setup-legacy.sh status
+scripts/setup-legacy.sh install --install-herdr
+scripts/setup-legacy.sh update      # pulls, then runs the pulled scripts/setup-legacy.sh
 ```
+
+Please report anything that made you reach for it: it is removed in the next release.
 
 One thing it adds: it starts, stops or removes the `agent-bus-redis` container only when that
 container does not exist or belongs to this checkout (its Compose `working_dir` label), checked
@@ -165,8 +169,9 @@ again right before each `docker compose` call. A broker started from another cop
 repository is refused and named in `status` ("belongs to <dir>"). A question with no terminal
 to ask on takes the cautious answer.
 
-It is rollout step 1: `./setup.sh` stays the installer. Once the Go port has been tried on real
-machines, `./setup.sh` becomes this thin script and the bash one is retired.
+That is rollout step 2 of the [spec](docs/superpowers/specs/2026-10-28-go-installer-design.md):
+step 3 removes `scripts/setup-legacy.sh` once a release has shipped with no report against the Go
+installer.
 
 ### Manual build
 

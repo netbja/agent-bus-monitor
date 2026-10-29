@@ -4,9 +4,10 @@
 # config edit, agent-bus linked as the herdr plugin netbja.agentbus, external skills cloned),
 # status, uninstall and the Go floor. Hermetic: a fake herdr, a local skills repository, a
 # throwaway HOME; it never touches this checkout, the live BIN_DIR, herdr, docker or the real skills.
-# SETUP_SCRIPT picks the installer under test: setup.sh (default), or the Go installer's thin
-# scripts/setup-go.sh (installer_go_test.sh), which must pass the same asserts plus the broker's
-# ownership ones (docs/superpowers/specs/2026-10-28-go-installer-design.md, Rollout).
+# SETUP_SCRIPT picks the installer under test: setup.sh (default), the Go installer's thin front
+# since the switch, which also passes the broker's ownership asserts; or the bash installer kept
+# one release as scripts/setup-legacy.sh (installer_legacy_test.sh), which must pass the same
+# asserts but those (docs/superpowers/specs/2026-10-28-go-installer-design.md, Rollout).
 SETUP_SCRIPT="${SETUP_SCRIPT:-setup.sh}"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/.." && pwd)"
@@ -112,15 +113,33 @@ git -C "$REPO" ls-files -z | (cd "$REPO" && xargs -0 tar cf -) | tar xf - -C "$T
 cp "$REPO/setup.sh" "$T/repo/"
 git -C "$T/repo" init -q && git -C "$T/repo" add -A && git -C "$T/repo" -c user.email=t@t -c user.name=t commit -qm copy && git -C "$T/repo" tag v9.9.9
 SETUP="$T/repo/$SETUP_SCRIPT"
+# SELF is how the installer under test names itself in what it tells the person to run: the
+# fallback never sends them back to ./setup.sh, the Go installer they fell back from (reviewer-codex).
+SELF=./setup.sh
+[[ "$SETUP_SCRIPT" == scripts/setup-legacy.sh ]] && SELF=scripts/setup-legacy.sh
 
 # Flags
 out="$("$SETUP" --help 2>&1 || true)"
 assert_contains "$out" "Agent Bus Monitor — setup" "help displays the title"
-assert_contains "$out" "./setup.sh uninstall" "help lists uninstall"
+assert_contains "$out" "$SELF uninstall" "help lists uninstall"
+assert_eq "$([[ "$out" == *install.sh* ]] && echo named || echo gone)" "gone" "help no longer mentions install.sh (master: the alias never existed)"
+# Every script the help names exists (reviewer-codex: it once advertised a ./install.sh alias that never did).
+for named in $(printf '%s\n' "$out" | grep -oE '(\./|scripts/)[A-Za-z0-9_./-]+\.sh' | sort -u); do
+  assert_eq "$([[ -f "$T/repo/${named#./}" ]] && echo exists || echo "missing $named")" "exists" "help names $named, which exists"
+done
+if [[ "$SELF" != ./setup.sh ]]; then
+  assert_eq "$([[ "$out" == *"./setup.sh"* ]] && echo named || echo self)" "self" "the fallback's help never names ./setup.sh"
+fi
 assert_contains "$out" "--install-herdr" "help lists --install-herdr"
 assert_eq "$([[ "$out" == *HERDR_PLUS* || "$out" == *"herdr-plus"* ]] && echo named || echo gone)" "gone" "help no longer mentions herdr-plus"
 assert_exit 0 "help exits 0" -- "$SETUP" --help
 assert_exit 1 "unknown flag exits with code 1" -- "$SETUP" install --unknown-flag-test
+if [[ "$SETUP_SCRIPT" != scripts/setup-legacy.sh ]]; then
+  # The preview's name before the switch still runs it (an update started from it re-execs it),
+  # from any directory; --force's warning is the Go installer's only.
+  shim_out="$(cd "$T" && "$T/repo/scripts/setup-go.sh" install --dry-run --force --bin-dir "$T/dry-bin" 2>&1)"
+  assert_contains "$shim_out" "--force has had no effect since v0.20" "scripts/setup-go.sh runs the Go installer"
+fi
 
 # The herdr-plus binding an older setup wrote, byte for byte, between two sections of the user's.
 OLD_BLOCK='
@@ -158,6 +177,7 @@ run_setup() { "$SETUP" "$@" --bin-dir "$T/bin" --no-docker 2>&1; }
 : > "$HERDR_LOG"
 inst_out="$(run_setup install --install-herdr)"; rc=$?
 assert_eq "$rc" "0" "install exits 0"
+assert_contains "$inst_out" "Keep it current: $SELF update" "the summary names the installer that ran"
 assert_contains "$("$T/bin/agentbus" version 2>&1)" "agentbus version v9.9.9" "stale agentbus rebuilt and stamped with the release"
 assert_contains "$("$T/bin/busmon" --version 2>&1)" "busmon version v9.9.9" "busmon stamped too"
 assert_contains "$("$T/repo/agentbus" version 2>&1)" "agentbus protocol" "agentbus also built in the repo (the herdr tabs use it)"
@@ -208,7 +228,7 @@ assert_eq "$(cat "$PLUGIN_RECORD")" "$T/repo" "the record is not rewritten"
 set_registry "$T/old-repo"; printf '%s\n' "$T/old-repo" > "$PLUGIN_RECORD"; : > "$HERDR_LOG"
 relink_out="$(HERDR_FAIL_LINK=1 run_setup install --no-skills)"
 assert_contains "$relink_out" "is now NOT linked" "a failed relink says the plugin is now not linked"
-assert_contains "$relink_out" "re-run ./setup.sh install" "and how to fix it"
+assert_contains "$relink_out" "re-run $SELF install" "and how to fix it"
 
 # A record that cannot be written is a visible warning, not a silent or fatal one
 : > "$HERDR_PLUGINS"; rm -f "$PLUGIN_RECORD"
@@ -263,6 +283,9 @@ assert_contains "$(cat "$HERDR_LOG")" "server reload-config" "a running herdr is
 # status changes nothing and reports what is there
 mkdir -p "$T/state/agentbus" && echo v0.1.16 > "$T/state/agentbus/herdr-plus.ref"; : > "$HERDR_LOG"
 status_out="$("$SETUP" status --bin-dir "$T/bin" 2>&1)"; rc=$?
+if [[ "$SELF" != ./setup.sh ]]; then
+  assert_eq "$([[ "$inst_out$status_out" == *"./setup.sh"* ]] && echo named || echo self)" "self" "the fallback's install and status never send the person to ./setup.sh"
+fi
 assert_eq "$rc" "0" "status exits 0"
 assert_contains "$status_out" "agentbus v9.9.9: $T/bin/agentbus" "status shows the installed version"
 assert_contains "$status_out" "agent-launch: $T/bin/agent-launch -> $T/repo/scripts/agent-launch" "status reports agent-launch"
@@ -319,7 +342,7 @@ assert_eq "$([[ -L "$T/My Skills/agent-bus" ]] && echo left || echo gone)" "gone
 # checkout's is never started, stopped nor purged from here. The install runs in a network
 # namespace (unshare -rn), where 127.0.0.1:6380 is unreachable, so it would start the broker;
 # the same run with this checkout's label is the control that it does.
-if [[ "$SETUP_SCRIPT" != setup.sh ]]; then
+if [[ "$SETUP_SCRIPT" != scripts/setup-legacy.sh ]]; then
   if unshare -rn true 2>/dev/null; then
     : > "$DOCKER_LOG"; : > "$DOCKER_STATE"
     ctl_out="$(DOCKER_INFO_OK=1 unshare -rn "$SETUP" install --bin-dir "$T/bin" --no-skills 2>&1)"
@@ -367,8 +390,8 @@ assert_contains "$up_out" "git pull --ff-only failed" "and says why"
 # update fast-forwards to a newer release and reinstalls it
 # mark_pulled_installer: the pulled tree's installer prints one more line, so the update must run it.
 mark_pulled_installer() {
-  if [[ "$SETUP_SCRIPT" == setup.sh ]]; then
-    sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/setup.sh" && grep -q "pulled installer" "$T/dev/setup.sh"
+  if [[ "$SETUP_SCRIPT" == scripts/setup-legacy.sh ]]; then
+    sed -i "s|^log_step \"1/5 Checking system platform & toolchain\"$|&\nlog_info \"the pulled installer is the one running\"|" "$T/dev/scripts/setup-legacy.sh" && grep -q "pulled installer" "$T/dev/scripts/setup-legacy.sh"
   else
     sed -i 's|^\to.Step("1/5 Checking system platform & toolchain")$|&; o.Info("the pulled installer is the one running")|' "$T/dev/setup/preflight.go" && grep -q "pulled installer" "$T/dev/setup/preflight.go"
   fi

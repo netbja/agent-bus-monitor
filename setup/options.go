@@ -78,6 +78,9 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 		o.Fatal("uninstall has no --dry-run: it asks before every step (run it without --yes to choose)")
 		return opt, 1
 	}
+	if opt.Force && opt.Sub != "update" { // the switch's release warns, once (update hands --force to the install it runs); the next one drops the flag (spec: Settled in review, 2)
+		o.Warn("--force has had no effect since v0.20 and is removed in the next release: drop it from your commands")
+	}
 	return opt, -1
 }
 
@@ -86,7 +89,7 @@ func Usage(getenv func(string) string) string {
 	return `Agent Bus Monitor — setup
 
 Usage:
-  ./setup.sh install   [options]          (./install.sh is an alias)
+  ./setup.sh install   [options]
   ./setup.sh update    [options]          git pull --ff-only, then install
   ./setup.sh uninstall [--yes] [--purge]  asks before every removal
   ./setup.sh status

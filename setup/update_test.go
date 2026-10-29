@@ -45,7 +45,7 @@ func TestUpdateFastForwards(t *testing.T) {
 	_ = os.MkdirAll(in.Repo+"/docs/releases", 0o755)
 	_ = os.WriteFile(in.Repo+"/docs/releases/v1.1.0.md", nil, 0o644)
 	in.Opt.InstallHerdr, in.Opt.Yes, in.Opt.StartDocker, in.Opt.InstallSkills = true, true, false, true
-	in.Script = "/r/scripts/setup-go.sh"
+	in.Script = "/r/setup.sh"
 	if code := in.Update(context.Background()); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
@@ -57,7 +57,7 @@ func TestUpdateFastForwards(t *testing.T) {
 	if out.String() != want {
 		t.Fatalf("got\n%s\nwant\n%s", out.String(), want)
 	}
-	if w := []string{"/r/scripts/setup-go.sh", "install", "--bin-dir", in.Opt.BinDir, "--install-herdr", "--no-docker", "--yes", "AGENTBUS_SETUP_FROM=v1.0.0"}; !reflect.DeepEqual(*exec, w) {
+	if w := []string{"/r/setup.sh", "install", "--bin-dir", in.Opt.BinDir, "--install-herdr", "--no-docker", "--yes", "AGENTBUS_SETUP_FROM=v1.0.0"}; !reflect.DeepEqual(*exec, w) {
 		t.Fatalf("exec %q", *exec)
 	}
 }
