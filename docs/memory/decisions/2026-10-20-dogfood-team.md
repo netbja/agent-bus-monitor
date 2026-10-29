@@ -53,7 +53,7 @@ The team runs on the tool it changes, so these rules keep a bad change from brea
 
 Every change to this repository from v0.21.1 on, by any agent.
 
-Other projects (ai-tradex-solana, hyperliquid) keep running the installed release. A release
+Other projects on the same machine keep running the installed release. A release
 reaches them too, so the person's go covers both.
 
 ## Evidence

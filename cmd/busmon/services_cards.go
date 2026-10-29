@@ -12,7 +12,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
-// F3 Services as cards (busmon-f3, Bernard): dispatch, missions and Redis,
+// F3 Services as cards (busmon-f3, the person): dispatch, missions and Redis,
 // side by side when wide, stacked otherwise. Every fact is gathered in the
 // command that opens the page (gatherServices: the records, the logs' sizes,
 // the processes' start, the broker's INFO and, when docker is on PATH, its

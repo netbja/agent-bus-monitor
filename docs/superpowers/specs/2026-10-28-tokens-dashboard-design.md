@@ -39,7 +39,7 @@ Ask `1793108028807-0` (2026-10-27), relayed by master (`1793135892379-0`):
   1.4 M output, 884 M cache reads. By proved session: foureyes 1.2 M / 206 k, master 744 k / 254 k,
   coder 345 k / 83 k; **2.9 M / 873 k belong to sessions no agent proves any more** (sessions
   before a `/clear` or a relaunch). Per day, 21 → 27 Oct: 3.6 M, 2.5 M, 1.7 M, 4.0 M, 0, 5.3 M,
-  6.5 M (input + cache writes + output). hyperliquid: 0.17 M and 0.32 M on 21 and 22 Oct.
+  6.5 M (input + cache writes + output). another project: 0.17 M and 0.32 M on 21 and 22 Oct.
 
 ## Sources and attribution
 
@@ -166,9 +166,9 @@ account   anthropic 5h 46% (resets 2h49) · 7d 8%   openai 5h 98% (resets 3h30) 
 
 PROJECT             TODAY IN  TODAY OUT  CACHE READ  7 DAYS    7D TOTAL
 agent-bus-monitor       5.1M       1.4M        884M  ▅▄▃▅ ▇█      23.6M
-hyperliquid                0          0           0  ▁▁            0.5M
-ai-tradex-solana           0          0           0                   0
-busdev ks polymarket   no agents, no data
+blog                       0          0           0  ▁▁            0.5M
+shop                       0          0           0                   0
+busdev ks wiki         no agents, no data
 
 tokens = input + cache writes (IN) and output (OUT); cache reads apart; no cost, by rule.
 $ agentbus tokens --project agent-bus-monitor --by agent
@@ -208,9 +208,9 @@ in shape (no history exists yet; each ends at today's reading); every other numb
 │ projects (all on this broker; the open one first)  ·  tokens = input + cache writes + output; cache reads apart                                                                            │
 │   project              today in   today out   cache read   7 days (21→27 Oct)   7d total   share of anthropic today                                                                        │
 │   agent-bus-monitor ●     5.1M        1.4M        884M     ▅▄▃▅ ▇█               23.6M     ████████████████████ 100%                                                                       │
-│   hyperliquid                0           0           0     ▁▁                     0.5M     0%                                                                                              │
-│   ai-tradex-solana           0           0           0                                    0     0%                                                                                         │
-│   busdev · ks · polymarket   no agents, no data                                                                                                                                            │
+│   blog                       0           0           0     ▁▁                     0.5M     0%                                                                                              │
+│   shop                       0           0           0                                    0     0%                                                                                         │
+│   busdev · ks · wiki         no agents, no data                                                                                                                                            │
 │                                                                                                                                                                                            │
 │ agent-bus-monitor by agent, today  (sessions proved with the agent's process only)                                                                                                         │
 │   ● foureyes         anthropic    1.2M in    206k out                                                                                                                                      │
@@ -236,9 +236,9 @@ in shape (no history exists yet; each ends at today's reading); every other numb
 │ projects (all on this broker; the open one first)  ·  tokens = input + cache writes + output; cache reads apart      │
 │   project              today in  today out  7 days   7d total  share                                                 │
 │   agent-bus-monitor ●     5.1M       1.4M  ▅▄▃▅ ▇█    23.6M   100%                                                   │
-│   hyperliquid                0          0  ▁▁          0.5M     0%                                                   │
-│   ai-tradex-solana           0          0                 0      0%                                                  │
-│   busdev · ks · polymarket   no agents, no data                                                                      │
+│   blog                       0          0  ▁▁          0.5M     0%                                                   │
+│   shop                       0          0                 0      0%                                                  │
+│   busdev · ks · wiki         no agents, no data                                                                      │
 │                                                                                                                      │
 │ agent-bus-monitor by agent, today  (sessions proved with the agent's process only)                                   │
 │   ● foureyes         anthropic    1.2M in   206k out                                                                 │
@@ -264,9 +264,9 @@ in shape (no history exists yet; each ends at today's reading); every other numb
 │ projects, open one first (in + cache writes + out)                           │
 │  project           in+out  7 days   7d                                       │
 │  agent-bus-mon… ●    6.5M  ▅▄▃▅ ▇█  23.6M                                    │
-│  hyperliquid           0  ▁▁        0.5M                                     │
-│  ai-tradex-solana      0            0                                        │
-│  busdev ks polymarket  no data                                               │
+│  blog                  0  ▁▁        0.5M                                     │
+│  shop                  0            0                                        │
+│  busdev ks wiki        no data                                               │
 │                                                                              │
 │ agent-bus-monitor by agent, today (proved only)                              │
 │  ● foureyes        1.2M/206k                                                 │

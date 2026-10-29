@@ -55,7 +55,7 @@ func TestIdentity(t *testing.T) {
 	f.cmds[ab+" identity set bernard"] = fakeCmd{}
 	var shown bytes.Buffer
 	in.Identity(ctx, &Prompter{TTY: fakeTTY{strings.NewReader("bernard\n"), &shown}})
-	if shown.String() != "    ? Your name on the bus (lowercase, e.g. bernard; Enter to skip): " ||
+	if shown.String() != "    ? Your name on the bus (lowercase, e.g. charlie; Enter to skip): " ||
 		out.String() != "    ✓ busmon and agentbus up will know you as bernard\n" {
 		t.Fatalf("%q %q", shown.String(), out.String())
 	}

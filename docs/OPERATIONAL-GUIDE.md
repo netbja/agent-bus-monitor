@@ -67,7 +67,7 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 - **Zero Token Cost While Idle**: With the event-driven dispatcher, idle agents do not run token-wasting polling loops; they are awakened only when concrete work is assigned.
 - **Claude by Default, Adaptable to Any Model**: Uses Claude Code by default (`roles.toml`), with full support for mixed teams running OpenAI Codex or Kimi CLI through declarative profiles (`docs/AGENT-PROFILES.md`).
-- **100% Local, Ready for Remote**: Operates entirely on your local workstation (`127.0.0.1:6380`), while natively supporting remote servers (host1, GPU clusters) via secure SSH port forwarding.
+- **100% Local, Ready for Remote**: Operates entirely on your local workstation (`127.0.0.1:6380`), while natively supporting remote servers (a remote box, GPU clusters) via secure SSH port forwarding.
 - **Observability & Governance**: Full human visibility through `busmon`, enforced with mandatory 4-eyes code review gates (`foureyes`, `security`).
 
 ---
@@ -189,7 +189,7 @@ offers: stop it and keep the data (the default), remove it together with its dat
 ### 100% Local Setup (Default)
 All processes run on the same workstation. Agents and `busmon` connect directly to `127.0.0.1:6380`, with the password in `~/.config/agentbus/redis.env` (an install from before keeps `AgentBus2025!` until it is rotated).
 
-### Hybrid Setup with Remote Servers (host1 / GPU)
+### Hybrid Setup with Remote Servers (a remote box / GPU)
 For security, the broker binds strictly to loopback (`127.0.0.1:6380`). Remote access uses SSH tunnels:
 
 - **Scenario A: Monitoring a remote bus from your local machine**:
@@ -240,8 +240,8 @@ Assume your target project is at `~/code/myapp`.
    - Run again, it focuses the open workspace instead of opening a second one.
 
    busmon shows you as `♙ <Name> [human]`, with `· pilot` while you hold the pilot lease. With no
-   `--as`, you are `Pilot [human]`. The name is lowercase, like an agent's: `--as bernard` shows
-   `Bernard`. `export AGENT_BUS_HUMAN=bernard` sets it for every busmon.
+   `--as`, you are `Pilot [human]`. The name is lowercase, like an agent's: `--as charlie` shows
+   `Charlie`. `export AGENT_BUS_HUMAN=charlie` sets it for every busmon.
 
 3. **Assign the first task** from busmon's input line (`i`):
    ```text

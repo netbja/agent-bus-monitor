@@ -9,7 +9,7 @@
     {"id":"a-board","title":"A2: Board columns sized to content","owner":"coder","review":"busmon-a-board","after":["a-look"]},
     {"id":"a-plan-tab","title":"A11: a 4th tab Plan in the lower panel (beside Activity, Board, Requests)","owner":"coder","review":"busmon-a-plan-tab","after":["a-board"]},
     {"id":"a-nav","title":"A3/A5: auto-scroll back on at the bottom; n/p and left/right in the reader","owner":"coder","review":"busmon-a-nav","after":["a-plan-tab"]},
-    {"id":"a-identity","title":"A8: no write as default hermes in a herdr pane; desktop notice on identity mismatch","owner":"coder","review":"busmon-a-identity","after":["a-nav"]},
+    {"id":"a-identity","title":"A8: no write as the default sender in a herdr pane; desktop notice on identity mismatch","owner":"coder","review":"busmon-a-identity","after":["a-nav"]},
     {"id":"a-health","title":"A9: health ignores dead consumer groups; agents forget destroys the group","owner":"coder","review":"busmon-a-health","after":["a-identity"]},
     {"id":"a-pending-pane","title":"A10: proposal: show a new pane waiting on the person (trust/hooks dialog)","owner":"coder","review":"busmon-a-pending-pane","after":["a-health"]},
     {"id":"gate-subject-close","title":"A verdict with --ref closes only its gate and older ones of the subject","owner":"coder","review":"gate-subject-close","after":["foryou-gates"]},

@@ -416,7 +416,7 @@ var commands = []cli.Command{
 	{
 		Name: "identity", NoProject: true, Usage: []string{"identity [set <name>]"},
 		Summary:  "your name as a person in busmon",
-		Examples: []string{"agentbus identity set bernard"},
+		Examples: []string{"agentbus identity set charlie"},
 	},
 	{
 		Name: "quota", NoProject: true, Usage: []string{"quota [--json]"},

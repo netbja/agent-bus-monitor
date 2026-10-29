@@ -28,7 +28,7 @@ func humanIdentity(flag, env string) (string, error) {
 	return name, nil
 }
 
-// displayName capitalises a bus name for people: "bernard" -> "Bernard".
+// displayName capitalises a bus name for people: "charlie" -> "Charlie".
 func displayName(name string) string {
 	if name == "" {
 		return ""
@@ -39,7 +39,7 @@ func displayName(name string) string {
 	return name
 }
 
-// humanLabel is how the header shows the operator: "♙ Bernard [human]", with
+// humanLabel is how the header shows the operator: "♙ Charlie [human]", with
 // "· pilot" while they hold the pilot lease.
 func humanLabel(self, pilot string) string {
 	role := "human"
