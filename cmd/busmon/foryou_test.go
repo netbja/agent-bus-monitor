@@ -11,17 +11,17 @@ func TestForYouHint(t *testing.T) {
 		state, msg, person string
 		want               bool
 	}{
-		{"idle", "lot 1 delivered; awaiting bernard", "bernard", true},
-		{"idle", "Lot 1 delivered. Awaiting Bernard.", "bernard", true},
-		{"idle", "over to bernard: review PR 12", "bernard", true},
-		{"idle", "waiting for bernardo", "bernard", false},
-		{"idle", "see https://example.com/bernard/x", "bernard", false},
-		{"idle", "notes in /srv/bernard/notes.md", "bernard", false},
-		{"idle", "nothing to do", "bernard", false},
-		{"waiting", "awaiting bernard", "bernard", false}, // waiting says it already
-		{"working", "awaiting bernard", "bernard", false},
+		{"idle", "lot 1 delivered; awaiting charlie", "charlie", true},
+		{"idle", "Lot 1 delivered. Awaiting Charlie.", "charlie", true},
+		{"idle", "over to charlie: review PR 12", "charlie", true},
+		{"idle", "waiting for charlies", "charlie", false},
+		{"idle", "see https://example.com/charlie/x", "charlie", false},
+		{"idle", "notes in /srv/charlie/notes.md", "charlie", false},
+		{"idle", "nothing to do", "charlie", false},
+		{"waiting", "awaiting charlie", "charlie", false}, // waiting says it already
+		{"working", "awaiting charlie", "charlie", false},
 		{"idle", "piloted by master; awaiting pilot", "pilot", false}, // the default identity is a bus word
-		{"idle", "awaiting bernard", "", false},
+		{"idle", "awaiting charlie", "", false},
 	}
 	for _, c := range cases {
 		if got := forYouHint(c.state, c.msg, c.person); got != c.want {
@@ -31,7 +31,7 @@ func TestForYouHint(t *testing.T) {
 }
 
 func TestForYouFlagOnlyHints(t *testing.T) {
-	a := &agentState{state: "idle", message: "awaiting bernard", forYou: true}
+	a := &agentState{state: "idle", message: "awaiting charlie", forYou: true}
 	fs := agentFlags(a, false)
 	if len(fs) == 0 || fs[0].Word != "for you" || fs[0].Role != RoleAttention {
 		t.Fatalf("flags %+v", fs)
@@ -47,7 +47,7 @@ func TestForYouFlagOnlyHints(t *testing.T) {
 
 func TestForYouDetailLine(t *testing.T) {
 	now := time.Now()
-	a := &agentState{state: "idle", message: "awaiting bernard", stateAt: now, forYou: true}
+	a := &agentState{state: "idle", message: "awaiting charlie", stateAt: now, forYou: true}
 	_, body := agentDetail("master", a, false, nil, nil, now)
 	if !strings.Contains(plainOf(body), "It names you but declared idle: no question is open.") {
 		t.Fatalf("detail:\n%s", plainOf(body))

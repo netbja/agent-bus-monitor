@@ -189,7 +189,7 @@ func TestSwapRefusals(t *testing.T) {
 			_, _ = w.b.Status(context.Background(), "foureyes", "working", "reviewing", bus.AgentIdent{})
 		}, []string{"foureyes", "--profile", "opus"}, "declared working"},
 		{"swap in progress", func(w *swapWorld) {
-			_ = w.b.BeginSwap(context.Background(), "foureyes", bus.SwapIntent{ToProfile: "opus", By: "bernard"})
+			_ = w.b.BeginSwap(context.Background(), "foureyes", bus.SwapIntent{ToProfile: "opus", By: "charlie"})
 		}, []string{"foureyes", "--profile", "opus"}, "already in progress"},
 	}
 	for _, c := range cases {

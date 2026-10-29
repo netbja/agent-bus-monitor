@@ -94,12 +94,12 @@ func TestGateCloseOneRefusesSomeoneElsesGate(t *testing.T) {
 func TestGateCloseAsPerson(t *testing.T) {
 	b := openGatesFixture(t)
 	ctx := context.Background()
-	code, out, errOut := runGate(b, "helper", "--subject", "roles-impl", "--as", "Bernard", "--note", "reviewed in person")
+	code, out, errOut := runGate(b, "helper", "--subject", "roles-impl", "--as", "Charlie", "--note", "reviewed in person")
 	if code != 0 || !strings.HasSuffix(out, "2 gate(s) closed\n") {
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
 	}
 	evs, _ := b.Thread(ctx, "1793000000003-0")
-	if len(evs) != 1 || evs[0].From != "bernard" || !evs[0].Human {
+	if len(evs) != 1 || evs[0].From != "charlie" || !evs[0].Human {
 		t.Fatalf("person trace = %+v", evs)
 	}
 	// Without --as, a subject sweep by a non-challenger closes nothing it did not open.
@@ -119,7 +119,7 @@ func TestGateCloseAsPerson(t *testing.T) {
 		!strings.HasSuffix(out, "0 gate(s) would close; dry run, nothing written\n") {
 		t.Fatalf("--by dry run as an agent: %d %q", code, out)
 	}
-	code, out, _ = runGate(b2, "coder", "--by", "master", "--dry-run", "--as", "bernard")
+	code, out, _ = runGate(b2, "coder", "--by", "master", "--dry-run", "--as", "charlie")
 	if code != 0 || !strings.HasSuffix(out, "3 gate(s) would close; dry run, nothing written\n") {
 		t.Fatalf("--by dry run as a person: %d %q", code, out)
 	}

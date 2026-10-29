@@ -668,7 +668,7 @@ func TestRulesNotAppliedNote(t *testing.T) {
 
 func TestShellSplitRoundTrip(t *testing.T) {
 	for _, x := range [][]string{
-		{"/r/busmon", "--project", "demo", "--as", "Bernard J"},
+		{"/r/busmon", "--project", "demo", "--as", "Charlie J"},
 		{"a", "it's", "", "x\"y", "$(z)"},
 	} {
 		got, err := ShellSplit(ShellJoin(x))

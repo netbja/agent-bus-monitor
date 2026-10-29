@@ -217,15 +217,15 @@ func (f *fakeReader) OpenChallenges(_ context.Context, agent string) (map[string
 // snapshot's personGates; the default identity "pilot" is never read.
 func TestPollReadsThePersonsGate(t *testing.T) {
 	f := &fakeReader{calls: map[string]int{}, gates: map[string]map[string]string{
-		"bernard": {"1793000000001-0": "master|sign off"}, "coder": {"1793000000002-0": "master|review"}}}
-	st := &shared{person: "bernard", agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}}
+		"charlie": {"1793000000001-0": "master|sign off"}, "coder": {"1793000000002-0": "master|review"}}}
+	st := &shared{person: "charlie", agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}}
 	pollOnce(context.Background(), f, st, 1) // the agents arrive
 	pollOnce(context.Background(), f, st, 2)
 	if len(st.personGates) != 1 || st.personGates["1793000000001-0"] == "" {
 		t.Fatalf("personGates = %v", st.personGates)
 	}
 	items := forYou(takeSnapshot(st, time.Now()), nil)
-	if len(items) != 1 || items[0].Agent != "bernard" || items[0].By != "master" {
+	if len(items) != 1 || items[0].Agent != "charlie" || items[0].By != "master" {
 		t.Fatalf("for you = %+v", items)
 	}
 	pilot := &shared{person: defaultHuman, agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}}

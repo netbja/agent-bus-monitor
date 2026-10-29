@@ -228,7 +228,7 @@ func TestRunQuotaReleaseResumesInterruptedWork(t *testing.T) {
 	if _, err := b.Status(ctx, "coder", "working", "mid-build", bus.AgentIdent{Pane: "p-coder", PID: testPID, PIDStart: testStart, Provider: "openai"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.Status(ctx, "arch", "blocked", "needs Bernard", bus.AgentIdent{Pane: "p-arch", PID: testPID, PIDStart: testStart, Provider: "openai"}); err != nil {
+	if _, err := b.Status(ctx, "arch", "blocked", "needs Charlie", bus.AgentIdent{Pane: "p-arch", PID: testPID, PIDStart: testStart, Provider: "openai"}); err != nil {
 		t.Fatal(err)
 	}
 	board := bus.BoardKey(b.Project())
@@ -322,11 +322,11 @@ func TestRunQuotaPauseFollowsTheCoordinatorsProvider(t *testing.T) {
 	waitFor(t, 3*time.Second, "one resume directive", func() bool { return resumed() == 1 })
 
 	// A person's pause, whatever its reason, stays.
-	if _, err := b.SetPause(ctx, "bernard", "master", "quota anthropic", time.Now().Add(time.Hour)); err != nil {
+	if _, err := b.SetPause(ctx, "charlie", "master", "quota anthropic", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(300 * time.Millisecond)
-	if p, _ := b.Pause(ctx); p == nil || p.By != "bernard" {
+	if p, _ := b.Pause(ctx); p == nil || p.By != "charlie" {
 		t.Fatalf("a person's pause was touched: %+v", p)
 	}
 }

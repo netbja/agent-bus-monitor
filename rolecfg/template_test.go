@@ -82,9 +82,9 @@ func TestTemplateBusmonFirstWithName(t *testing.T) {
 	m := writeSkillsManifest(t,
 		"[profiles.main]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"test\"\n",
 		"[roles.coder]\ntier = \"boot\"\nskills = []\n")
-	got := Template(m, "/r/roles.toml", "demo", "/w", "/r/scripts", "/r", "bernard", false, false)
+	got := Template(m, "/r/roles.toml", "demo", "/w", "/r/scripts", "/r", "charlie", false, false)
 	first := strings.Index(got, "[[tabs]]")
-	if first < 0 || !strings.HasPrefix(got[first:], "[[tabs]]\nname = \"busmon\"\ncommand = \"/r/busmon --project demo --as bernard\"\n") {
+	if first < 0 || !strings.HasPrefix(got[first:], "[[tabs]]\nname = \"busmon\"\ncommand = \"/r/busmon --project demo --as charlie\"\n") {
 		t.Fatalf("busmon is not the first tab with --as:\n%s", got)
 	}
 }

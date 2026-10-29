@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// busmon-input-cursor (Bernard): the one-line input has a cursor. The editor
+// busmon-input-cursor (Charlie): the one-line input has a cursor. The editor
 // is pure: a text and a byte offset on a cluster boundary in, the same out.
 // "|" marks the cursor in the cases below.
 const (

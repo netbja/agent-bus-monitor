@@ -4,7 +4,7 @@
 [38;5;3m│[m  [38;5;6m● ask    [mmaster    review lot 1? (2 ques…[38;5;7m 4m[m[38;5;3m│[m[38;5;8m│[m  [38;5;8m  agent     state     updated queue ctx       flags       message   [m[38;5;8m▲[m
 [38;5;3m│[m  [38;5;3m♙ wait   [mfoureyes  need a decision on th…[38;5;7m 6m[m[38;5;3m│[m[38;5;8m│[m[7;38;5;6m▶ [m[7;38;5;3m♙ [m[7mfoureyes  [m[7;38;5;3mwaiting   [m[7;38;5;7m6m     [m[7m [m[7;38;5;7m—    [m[7m [m[7;38;5;7m—        [m[7m [m[7;38;5;9mescalated  [m[7m need a de…[m[38;5;8m┃[m
 [38;5;3m│[m  [38;5;3m♙ wait   [msentinel  pane prompt           [38;5;7m 1m[m[38;5;3m│[m[38;5;8m│[m  [38;5;3m♙ [mmaster    [38;5;3mwaiting   [m[38;5;7m12m    [m [38;5;7m—    [m 41k 21%   [38;5;6mpilot[m[38;5;7m · ar…[m see my ask[38;5;8m┃[m
-[38;5;3m│[m  [38;5;5m◆ gate   [mcoder     by bernard  look at b1   [38;5;3m│[m[38;5;8m│[m  [38;5;3m♙ [msentinel  [38;5;3mwaiting   [m[38;5;7m30m    [m [38;5;7m—    [m [38;5;7m—        [m [38;5;3mprompt[m[38;5;7m · [m[38;5;3mm…[m health ok [38;5;8m│[m
+[38;5;3m│[m  [38;5;5m◆ gate   [mcoder     by charlie  look at b1   [38;5;3m│[m[38;5;8m│[m  [38;5;3m♙ [msentinel  [38;5;3mwaiting   [m[38;5;7m30m    [m [38;5;7m—    [m [38;5;7m—        [m [38;5;3mprompt[m[38;5;7m · [m[38;5;3mm…[m health ok [38;5;8m│[m
 [38;5;3m│[m  [38;5;6m● unread [mdispatch  [38;5;6m╭─[m[1;7;38;5;6m Welcome to busmon [m[38;5;6m────────────────────────────────────────────────[m [38;5;7m1/5[m [38;5;6m─╮[m[38;5;9mscalating[m[38;5;7m…[m spec merg…[38;5;8m│[m
 [38;5;3m│[m                     [38;5;6m│[m                                                                          [38;5;6m│[m[38;5;9mate 1[m[38;5;7m · [m[38;5;3md…[m busmon-ch…[38;5;8m▼[m
 [38;5;3m╰─────────────────────[m[38;5;6m│[m busmon shows what your agents are doing and what waits for you. A few    [38;5;6m│[m[38;5;8m─────────────────────╯[m
@@ -12,7 +12,7 @@
 [38;5;8m│[m  [38;5;8m  time   from      [m[38;5;6m│[m                                                                          [38;5;6m│[m[38;5;8m                     [m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m── Mon 2026-10-26 -[m[38;5;6m│[m   [38;5;3mFor you[m     what needs you: questions, waits, unread lines             [38;5;6m│[m[38;5;7m─────────────────────[m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m  14:24  [marchitect [38;5;6m│[m   [38;5;6mAgents[m      each agent, its state and how fresh it is                  [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m  [38;5;7m  14:50  [m♙ Bernard [38;5;6m│[m   [38;5;2m1 Activity[m  everything said on the bus, live                           [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  14:50  [m♙ Charlie [38;5;6m│[m   [38;5;2m1 Activity[m  everything said on the bus, live                           [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;7m  14:51  [mcoder     [38;5;6m│[m   [38;5;5m2 Board[m     who owns which task                                        [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;7m○ 14:52  [mmaster    [38;5;6m│[m   [38;5;3m3 Requests[m  who owes whom an answer                                    [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;3m● [m[38;5;7m14:56  [mdispatch  [38;5;6m│[m   [38;5;12m4 Plan[m      the batch's tasks by state                                 [38;5;6m│[m                     [38;5;8m│[m

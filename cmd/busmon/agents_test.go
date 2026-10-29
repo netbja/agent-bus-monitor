@@ -310,7 +310,7 @@ func TestSwappingFlagAndLongPauseHint(t *testing.T) {
 	}
 	for _, p := range []*bus.PauseRecord{
 		{Until: now.Add(time.Hour).UnixMilli(), Reason: "quota anthropic", By: "dispatch"},
-		{Until: now.Add(61 * time.Hour).UnixMilli(), Reason: "quota anthropic", By: "bernard"},
+		{Until: now.Add(61 * time.Hour).UnixMilli(), Reason: "quota anthropic", By: "charlie"},
 	} {
 		if got := pauseSeg(p, now)[0].Text; strings.Contains(got, "long pause") {
 			t.Fatalf("pause %+v = %q", p, got)

@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseEntryReadsHuman(t *testing.T) {
-	e := ParseEntry("p:cmd", "1-0", map[string]string{"from": "bernard", "target": "codex", "type": "directive", "command": "x", "human": "yes"})
+	e := ParseEntry("p:cmd", "1-0", map[string]string{"from": "charlie", "target": "codex", "type": "directive", "command": "x", "human": "yes"})
 	if !e.Human {
 		t.Fatal("human=yes not parsed")
 	}
@@ -18,7 +18,7 @@ func TestParseEntryReadsHuman(t *testing.T) {
 func TestHumanWritesAreMarkedRedis(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	if _, err := b.HumanCmd(ctx, "bernard", "codex", "relis t4"); err != nil {
+	if _, err := b.HumanCmd(ctx, "charlie", "codex", "relis t4"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.HumanNotify(ctx, "pilot", "hello"); err != nil {

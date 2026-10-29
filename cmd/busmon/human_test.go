@@ -12,7 +12,7 @@ import (
 
 func TestHumanIdentity(t *testing.T) {
 	for _, c := range []struct{ flag, env, want string }{
-		{"", "", "pilot"}, {"bernard", "", "bernard"}, {"", "alice", "alice"}, {"bernard", "alice", "bernard"},
+		{"", "", "pilot"}, {"charlie", "", "charlie"}, {"", "alice", "alice"}, {"charlie", "alice", "charlie"},
 	} {
 		if got, err := humanIdentity(c.flag, c.env); err != nil || got != c.want {
 			t.Fatalf("humanIdentity(%q, %q) = %q, %v; want %q", c.flag, c.env, got, err, c.want)
@@ -25,9 +25,9 @@ func TestHumanIdentity(t *testing.T) {
 
 func TestHumanLabel(t *testing.T) {
 	for _, c := range []struct{ self, pilot, want string }{
-		{"bernard", "bernard", GlyphHuman + " Bernard [human · pilot]"},
+		{"charlie", "charlie", GlyphHuman + " Charlie [human · pilot]"},
 		{"pilot", "", GlyphHuman + " Pilot [human]"},
-		{"bernard", "codex", GlyphHuman + " Bernard [human]"},
+		{"charlie", "codex", GlyphHuman + " Charlie [human]"},
 	} {
 		if got := humanLabel(c.self, c.pilot); got != c.want {
 			t.Fatalf("humanLabel(%q, %q) = %q, want %q", c.self, c.pilot, got, c.want)
@@ -36,8 +36,8 @@ func TestHumanLabel(t *testing.T) {
 }
 
 func TestLookEventShowsHumans(t *testing.T) {
-	look := lookEvent(bus.Event{Kind: "cmd", Type: "directive", From: "bernard", Target: "codex", Message: "x", Human: true})
-	if look.From != GlyphHuman+" Bernard" {
+	look := lookEvent(bus.Event{Kind: "cmd", Type: "directive", From: "charlie", Target: "codex", Message: "x", Human: true})
+	if look.From != GlyphHuman+" Charlie" {
 		t.Fatalf("human from = %q", look.From)
 	}
 	if look := lookEvent(bus.Event{Kind: "cmd", Type: "directive", From: "codex", Target: "claude", Message: "x"}); look.From != "codex" {
@@ -47,8 +47,8 @@ func TestLookEventShowsHumans(t *testing.T) {
 
 func TestHeaderShowsTheHuman(t *testing.T) {
 	now := time.Now()
-	for _, c := range []struct{ pilot, want string }{{"bernard", "[human · pilot]"}, {"", "Bernard [human]"}} {
-		lines := headerLines(headerData{project: "demo", self: "bernard", pilot: c.pilot, now: now, health: health{ok: true, since: now}}, 160, TierWide)
+	for _, c := range []struct{ pilot, want string }{{"charlie", "[human · pilot]"}, {"", "Charlie [human]"}} {
+		lines := headerLines(headerData{project: "demo", self: "charlie", pilot: c.pilot, now: now, health: health{ok: true, since: now}}, 160, TierWide)
 		text := ""
 		for _, l := range lines {
 			for _, s := range l {

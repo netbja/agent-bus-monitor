@@ -5,7 +5,7 @@
 │  ● ask    master    review lot 1? (2 questions)        4m│
 │  ♙ wait   foureyes  need a decision on the width rule  6m│
 │  ♙ wait   sentinel  pane prompt                        1m│
-│  ◆ gate   coder     by bernard  look at b1               │
+│  ◆ gate   coder     by charlie  look at b1               │
 │  ● unread dispatch  project paused until 16:56         8m│
 │                                                          │
 │                                                          │

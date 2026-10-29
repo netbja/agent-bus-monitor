@@ -37,7 +37,7 @@ func TestMarkdownBlocks(t *testing.T) {
 }
 
 func TestMarkdownLosesNoWord(t *testing.T) {
-	src := "SYNTHESE ACTE DCA n4 + DECISION BERNARD. Etat verifie: acte n4 (docs seul) approuve par foureyes a 4d5d51b; DECISION 1 - date cible T: ma proposition lundi 2026-10-19 vers 10:00 UTC. supercalifragilisticexpialidocious-and-even-longer-word-here"
+	src := "SYNTHESE ACTE DCA n4 + DECISION CHARLIE. Etat verifie: acte n4 (docs seul) approuve par foureyes a 4d5d51b; DECISION 1 - date cible T: ma proposition lundi 2026-10-19 vers 10:00 UTC. supercalifragilisticexpialidocious-and-even-longer-word-here"
 	got := strings.Join(plainMD(plainOf(renderMarkdown(src, 30))), " ")
 	for _, w := range strings.Fields(src) {
 		if !strings.Contains(strings.ReplaceAll(got, " ", ""), strings.ReplaceAll(w, " ", "")) {

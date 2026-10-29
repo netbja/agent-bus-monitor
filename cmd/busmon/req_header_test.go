@@ -9,7 +9,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// busmon-req-header (Bernard: "Orange = ce qui t'est dû"): the header's
+// busmon-req-header (Charlie: "Orange = ce qui t'est dû"): the header's
 // orange item counts only what is owed to the person, the Requests view's
 // own section, so it agrees with the tab's title; what agents owe each other
 // is a muted "N between agents", no age, absent at 0.
@@ -29,7 +29,7 @@ func TestHeaderRequestsMatchTheTab(t *testing.T) {
 	m := fixtureShell(t, 190, 50)
 	cmds := reqFixture(shellNow).cmds
 	cmds = append(cmds, bus.Event{ID: fmt.Sprintf("%d-0", shellNow.Add(-3*time.Hour).UnixMilli()), Kind: "cmd", Type: bus.CmdDirective,
-		From: "master", Target: "bernard", Message: "which tag?"})
+		From: "master", Target: "charlie", Message: "which tag?"})
 	m.snap.cmdHistory = cmds
 	m.refresh()
 	you, _, agents := requestGroups(m.requestInput()).titleCounts()
@@ -72,8 +72,8 @@ func TestHeaderRequestsMatchTheTab(t *testing.T) {
 func TestOwedTextOldestAndSingular(t *testing.T) {
 	now := shellNow
 	thread := func(from string, ago time.Duration) reqGroup {
-		return reqGroup{Section: secOwed, From: from, Target: "bernard", Kind: kindDirective,
-			Threads: []reqThread{{From: from, Target: "bernard", Kind: kindDirective, At: now.Add(-ago), Section: secOwed}}}
+		return reqGroup{Section: secOwed, From: from, Target: "charlie", Kind: kindDirective,
+			Threads: []reqThread{{From: from, Target: "charlie", Kind: kindDirective, At: now.Add(-ago), Section: secOwed}}}
 	}
 	two := reqView{groups: map[reqSection][]reqGroup{secOwed: {thread("master", 10*time.Minute), thread("foureyes", 3*time.Hour)}}}
 	if got, want := owedText(two, now), "2 requests waiting "+GlyphNone+" oldest 3h"; got != want {

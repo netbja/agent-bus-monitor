@@ -191,17 +191,17 @@ func TestDetailThreadSaysNoneForStreamsWithoutThreads(t *testing.T) {
 
 func TestHumanMessageReplyIsVisibleOnActivityAndInThread(t *testing.T) {
 	root := bus.Event{ID: "1758141663000-0", Kind: "cmd", Type: bus.CmdDirective,
-		From: "bernard", Target: "master", Message: "what is the project status?", Human: true}
+		From: "charlie", Target: "master", Message: "what is the project status?", Human: true}
 	reply := bus.Event{ID: "1758141664000-0", Kind: "cmd", Type: bus.CmdReply,
-		From: "master", Target: "bernard", Ref: root.ID, Message: "all tests pass"}
-	if got := lookEvent(root); got.From != GlyphHuman+" Bernard" || got.To != "master" || !strings.Contains(got.Text, "project status") {
+		From: "master", Target: "charlie", Ref: root.ID, Message: "all tests pass"}
+	if got := lookEvent(root); got.From != GlyphHuman+" Charlie" || got.To != "master" || !strings.Contains(got.Text, "project status") {
 		t.Fatalf("human directive activity = %+v", got)
 	}
-	if got := lookEvent(reply); got.From != "master" || got.To != "bernard" || got.Type != "reply" || got.Text != "all tests pass" {
+	if got := lookEvent(reply); got.From != "master" || got.To != "charlie" || got.Type != "reply" || got.Text != "all tests pass" {
 		t.Fatalf("agent reply activity = %+v", got)
 	}
 	thread := threadSection(reply, threadState{ID: root.ID, Loaded: true, Entries: []bus.Event{root, reply}}, time.Unix(1758141664, 0))
-	for _, want := range []string{"bernard→master", "master→bernard", "what is the project status?", "all tests pass"} {
+	for _, want := range []string{"charlie→master", "master→charlie", "what is the project status?", "all tests pass"} {
 		if !strings.Contains(plainOf(thread), want) {
 			t.Errorf("thread missing %q:\n%s", want, plainOf(thread))
 		}

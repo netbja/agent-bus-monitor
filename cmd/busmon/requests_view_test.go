@@ -26,7 +26,7 @@ func reqFixture(now time.Time) reqInput {
 		return e
 	}
 	for i := 0; i < 22; i++ {
-		add(bus.Event{ID: at(time.Duration(22-i) * 5 * time.Minute), Type: bus.CmdDirective, From: "bernard", Target: "master", Human: true,
+		add(bus.Event{ID: at(time.Duration(22-i) * 5 * time.Minute), Type: bus.CmdDirective, From: "charlie", Target: "master", Human: true,
 			Message: fmt.Sprintf("message %d from the person", i)})
 	}
 	gates := map[string]map[string]string{"reviewer-codex": {}}
@@ -75,7 +75,7 @@ func reqFixture(now time.Time) reqInput {
 	reqs := []request{{Task: "busmon-group-a", Owner: "coder", State: "accepted", Tracked: true, ID: "req1", Thread: "req1", From: "master",
 		Target: "coder", Created: now.Add(-66 * time.Minute)}}
 	delivered := fmt.Sprintf("%d-9999", now.UnixMilli()) // every entry delivered
-	return reqInput{cmds: cmds, reqs: reqs, gates: gates, self: "bernard", now: now,
+	return reqInput{cmds: cmds, reqs: reqs, gates: gates, self: "charlie", now: now,
 		delivery: map[string]reqDelivery{"master": {lastDelivered: delivered}, "sentinel": {lastDelivered: delivered},
 			"foureyes": {lastDelivered: delivered}, "coder": {lastDelivered: delivered}, "ui-kimi": {lastDelivered: "1-0"}},
 		held: map[string]bool{"reviewer-codex": true}}
@@ -98,7 +98,7 @@ func TestRequestGroups(t *testing.T) {
 		want string
 	}{
 		{secOwed, "[]"},
-		{secWait, "[bernard>master directive 22]"},
+		{secWait, "[charlie>master directive 22]"},
 		{secTracked, "[master>coder request 1]"},
 		{secReviews, "[coder>reviewer-codex challenge 9]"},
 		{secDirectives, "[coder>ui-kimi directive 1 master>sentinel directive 2 master>foureyes directive 1 master>coder directive 1 sentinel>master directive 6]"},
@@ -121,7 +121,7 @@ func TestRequestGroups(t *testing.T) {
 		t.Errorf("title %d · %d · %d, want 0 · 22 · 21", you, wait, agents)
 	}
 	// Each title number is the sum of its sections' rows, on any fixture.
-	for _, in := range []reqInput{reqFixture(shellNow), {now: shellNow, self: "bernard"}, func() reqInput {
+	for _, in := range []reqInput{reqFixture(shellNow), {now: shellNow, self: "charlie"}, func() reqInput {
 		in := reqFixture(shellNow)
 		in.self, in.questions = "master", 2
 		return in
@@ -223,12 +223,12 @@ func TestRequestWaitOlderRowsAreTheirGroups(t *testing.T) {
 	var cmds []bus.Event
 	gates := map[string]map[string]string{"master": {}}
 	for i := 0; i < 4; i++ {
-		cmds = append(cmds, bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-0", 900_000+i), Type: bus.CmdDirective, From: "bernard", Target: "master", Message: "d"})
+		cmds = append(cmds, bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-0", 900_000+i), Type: bus.CmdDirective, From: "charlie", Target: "master", Message: "d"})
 		ref := fmt.Sprintf("c%d", i)
-		cmds = append(cmds, bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-1", 900_000+i), Type: bus.CmdChallenge, From: "bernard", Target: "master", Ref: ref, Message: "c"})
-		gates["master"][ref] = "bernard|c"
+		cmds = append(cmds, bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-1", 900_000+i), Type: bus.CmdChallenge, From: "charlie", Target: "master", Ref: ref, Message: "c"})
+		gates["master"][ref] = "charlie|c"
 	}
-	v := requestGroups(reqInput{cmds: cmds, gates: gates, self: "bernard", now: now})
+	v := requestGroups(reqInput{cmds: cmds, gates: gates, self: "charlie", now: now})
 	var older []string
 	for _, it := range requestRows(v, reqOpen{}, now, 120) {
 		if strings.HasPrefix(it.Key, "older:") {

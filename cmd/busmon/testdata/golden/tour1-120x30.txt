@@ -4,7 +4,7 @@
 │  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
 │  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
 │  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-│  ◆ gate   coder     by bernard  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+│  ◆ gate   coder     by charlie  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
 │  ● unread dispatch  ╭─ Welcome to busmon ──────────────────────────────────────────────── 1/5 ─╮scalating… spec merg…│
 │                     │                                                                          │ate 1 · d… busmon-ch…▼
 ╰─────────────────────│ busmon shows what your agents are doing and what waits for you. A few    │─────────────────────╯
@@ -12,7 +12,7 @@
 │    time   from      │                                                                          │                     │
 │  ── Mon 2026-10-26 -│   For you     what needs you: questions, waits, unread lines             │─────────────────────│
 │    14:24  architect │   Agents      each agent, its state and how fresh it is                  │                     │
-│    14:50  ♙ Bernard │   1 Activity  everything said on the bus, live                           │                     │
+│    14:50  ♙ Charlie │   1 Activity  everything said on the bus, live                           │                     │
 │    14:51  coder     │   2 Board     who owns which task                                        │                     │
 │  ○ 14:52  master    │   3 Requests  who owes whom an answer                                    │                     │
 │  ● 14:56  dispatch  │   4 Plan      the batch's tasks by state                                 │                     │

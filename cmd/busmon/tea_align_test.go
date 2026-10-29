@@ -20,15 +20,15 @@ var shellAlignSizes = append([][2]int{{60, 20}, {80, 24}, {120, 30}, {140, 40}},
 func hostileShell(t testing.TB, w, h int, down bool) Model {
 	t.Helper()
 	st := hostileShared(shellNow, down)
-	st.person = "bernard"
-	m := newShell(shellConfig{project: "demo-" + hostileText, self: "bernard"})
+	st.person = "charlie"
+	m := newShell(shellConfig{project: "demo-" + hostileText, self: "charlie"})
 	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	var events []bus.Event
 	for i := 0; i < 40; i++ {
 		target, forWho := "a02", ""
 		switch i % 8 {
 		case 3:
-			target = "bernard"
+			target = "charlie"
 		case 2:
 			forWho = bus.ForPerson
 		}

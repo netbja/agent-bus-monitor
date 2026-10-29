@@ -110,7 +110,7 @@ func TestShellExpansionIsCapped(t *testing.T) {
 	}
 }
 
-// A12 (Bernard, 2026-10-27): the expanded row shows ▼ in the gutter where a
+// A12 (Charlie, 2026-10-27): the expanded row shows ▼ in the gutter where a
 // selected row shows ▶; its text is indented under the message column behind
 // a muted │ guide, and a last muted line "↵ full text" says what the second
 // Enter does. Same in For you, under its text column.
@@ -617,12 +617,12 @@ func TestShellWheelScrollsAroundAnExpansion(t *testing.T) {
 func TestShellPlanTaskPage(t *testing.T) {
 	pinLocal(t)
 	task := plan.Task{ID: "b3", Title: "reader", Owner: "coder", Board: "busmon-charm-b"}
-	st := &shared{agents: map[string]*agentState{}, person: "bernard"}
+	st := &shared{agents: map[string]*agentState{}, person: "charlie"}
 	st.plan = planState{loaded: true, file: plan.File{Plan: "charm", Goal: "swap", Tasks: []plan.Task{task}},
 		rows:   []plan.Row{{Task: task, State: plan.InReview}},
 		in:     plan.Inputs{Board: map[string]bus.BoardEntry{"busmon-charm-b": {Owner: "coder", State: "accepted", Branch: "feat/b3"}}},
 		ledger: map[string][]bus.Verdict{"busmon-charm-b": {{Subject: "busmon-charm-b", Reviewer: "foureyes", Decision: "approve"}}}}
-	m := newShell(shellConfig{project: "demo", self: "bernard", st: st})
+	m := newShell(shellConfig{project: "demo", self: "charlie", st: st})
 	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
 	m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
 	// The poller's next fold appends in place: the snapshot must not see it.

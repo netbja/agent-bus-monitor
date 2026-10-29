@@ -57,7 +57,7 @@ func hostileShared(now time.Time, down bool) *shared {
 		from, to, typ, msg := "a0"+fmt.Sprint(i%3)+hostileText, "a0"+fmt.Sprint(i%4), "directive", hostileText
 		switch i % 4 {
 		case 1:
-			from = "bernard"
+			from = "charlie"
 		case 2:
 			from = "dispatch"
 		case 3:

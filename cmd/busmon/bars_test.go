@@ -219,7 +219,7 @@ func TestShellBarSlideSchedule(t *testing.T) {
 		{"no colour", true, 1 << 24, true, false},
 	} {
 		withPalette(t, "dark", c.noCol, c.colors)
-		m := newShell(shellConfig{project: "agent-bus-monitor", self: "bernard", settings: busmonSettings{Fade: c.fade}})
+		m := newShell(shellConfig{project: "agent-bus-monitor", self: "charlie", settings: busmonSettings{Fade: c.fade}})
 		m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
 		m = pollAgain(t, m, calm(), shellNow)
 		if m.sig.fading {
@@ -325,7 +325,7 @@ func TestTokensPageBarsSlide(t *testing.T) {
 		t.Fatalf("no anthropic 5h row:\n%s", linesText(m.rd.top().body))
 		return ""
 	}
-	m := newShell(shellConfig{project: "agent-bus-monitor", self: "bernard", settings: busmonSettings{Fade: true}})
+	m := newShell(shellConfig{project: "agent-bus-monitor", self: "charlie", settings: busmonSettings{Fade: true}})
 	m = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 44})
 	m = pollAgain(t, m, calm(62), shellNow)
 	m = keys(t, m, 'U')

@@ -210,7 +210,7 @@ func TestCloseGate(t *testing.T) {
 	if err := b.OpenChallenge(ctx, "foureyes", "g2", "master|other"); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := b.CloseGate(ctx, "foureyes", "g2", "master|other", "bernard", "not needed", true); err != nil || !ok {
+	if ok, err := b.CloseGate(ctx, "foureyes", "g2", "master|other", "charlie", "not needed", true); err != nil || !ok {
 		t.Fatalf("person CloseGate = %v, %v", ok, err)
 	}
 	if evs, _ := b.Thread(ctx, "g2"); len(evs) != 1 || !evs[0].Human {
