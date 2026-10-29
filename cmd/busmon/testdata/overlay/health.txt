@@ -76,4 +76,4 @@ Context fill  unknown
 Redis version  unknown
   since: never measured
   detail: no current measurement
-  remediation: The person updates the broker when it suits them (docker compose pull redis, then docker compose up -d redis); sentinel never restarts or upgrades the broker, it only reports.
+  remediation: Behind in its major: the person updates the broker when it suits them (docker compose pull redis, then docker compose up -d redis), which stays in the same major the compose pins. A newer major is never a warning: moving the pin is the person's decision after reading its release notes. Sentinel never restarts or upgrades the broker, it only reports.

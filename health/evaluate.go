@@ -374,9 +374,12 @@ const RedisLatestMaxAge = 48 * time.Hour
 var redisVersionPattern = regexp.MustCompile(`^v?([0-9]+)\.([0-9]+)\.([0-9]+)$`)
 
 // EvaluateRedisVersion (redis-watch) compares the broker's version with the
-// latest Redis release a recent check found: warn when the broker is behind,
-// ok when it is not, unknown when either side is not known.
-func EvaluateRedisVersion(running, latest string, foundAt, now time.Time) Outcome {
+// latest release of its own major (latest: major -> version, from a recent
+// check): the compose pins the major, so a pull stays in it. Warn when behind
+// in that major; a newer major is never a warning, only named in the detail
+// (changing major is the person's decision); unknown when anything is not
+// known.
+func EvaluateRedisVersion(running string, latest map[int]string, foundAt, now time.Time) Outcome {
 	have, ok := parseRedisVersion(running)
 	if !ok {
 		return Outcome{Unknown, "broker version unavailable"}
@@ -384,22 +387,40 @@ func EvaluateRedisVersion(running, latest string, foundAt, now time.Time) Outcom
 	if foundAt.IsZero() || now.Sub(foundAt) > RedisLatestMaxAge || foundAt.After(now.Add(5*time.Minute)) {
 		return Outcome{Unknown, "latest Redis release not checked in the last 48 hours"}
 	}
-	want, ok := parseRedisVersion(latest)
-	if !ok {
-		return Outcome{Unknown, "latest Redis release unreadable"}
-	}
-	for i := range have {
-		if have[i] != want[i] {
-			if have[i] < want[i] {
-				return Outcome{Warn, fmt.Sprintf("Redis %s runs; %s is released", running, latest)}
-			}
-			break
+	top, newest := 0, ""
+	for major, v := range latest {
+		if _, ok := parseRedisVersion(v); !ok {
+			return Outcome{Unknown, "latest Redis release unreadable"}
+		}
+		if major > top {
+			top, newest = major, v
 		}
 	}
-	if have == want {
-		return Outcome{OK, fmt.Sprintf("Redis %s is the latest release", running)}
+	same, ok := latest[have[0]]
+	if !ok {
+		return Outcome{Unknown, fmt.Sprintf("no recent release of Redis %d found", have[0])}
 	}
-	return Outcome{OK, fmt.Sprintf("Redis %s is not behind the latest release %s", running, latest)}
+	want, _ := parseRedisVersion(same)
+	newer := ""
+	if top > have[0] {
+		newer = fmt.Sprintf("; Redis %s is out; this broker follows the compose pin (%d); changing major is your decision", newest, have[0])
+	}
+	if versionBelow(have, want) {
+		return Outcome{Warn, fmt.Sprintf("Redis %s runs; %s is the latest %d.x%s", running, same, have[0], newer)}
+	}
+	if have == want {
+		return Outcome{OK, fmt.Sprintf("Redis %s is the latest %d.x%s", running, have[0], newer)}
+	}
+	return Outcome{OK, fmt.Sprintf("Redis %s is not behind the latest %d.x (%s)%s", running, have[0], same, newer)}
+}
+
+func versionBelow(a, b [3]int) bool {
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
 }
 
 func parseRedisVersion(s string) ([3]int, bool) {
