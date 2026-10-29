@@ -906,4 +906,4 @@ of `cmd/busmon/main.go`.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). Copyright (c) 2026 Bernard Jaulin.
+MIT, see [LICENSE](LICENSE). Copyright (c) 2026 NetBJA.
