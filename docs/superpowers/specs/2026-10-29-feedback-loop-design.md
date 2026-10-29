@@ -11,7 +11,7 @@ tests, docs left behind, wording that claims too much), which is exactly what a 
 should teach. Today nobody reads them together. The loop has two steps:
 
 1. **`agentbus feedback`**: read-only, deterministic statistics over what the bus retains. No
-   model, no network, no cost, no write.
+   model, no external network (only the project's configured broker), no cost, no write.
 2. **Skill patches by proposal**: from a recurring finding, an agent may propose a patch to a
    skill as a normal pull request, only after the person says yes to an ask. Nothing ever edits
    a skill on its own.
@@ -109,20 +109,23 @@ must show, not vanish.
 
 **`--tag` on `agentbus verdict`** (part of v1): one optional field, `tag`, written to the ledger
 entry (additive: `ParseEntry` and older readers ignore it), its value one of the table's category
-names, refused otherwise. The reviewer's tag wins; the keywords only fill in for untagged history,
+names, refused otherwise; one tag per verdict, and only on a reject (`--tag` on an approve is
+refused: an approve has no finding to categorise). The reviewer's tag wins; the keywords only fill in for untagged history,
 so the signal people trust grows as reviewers tag. The reviewer skills (`agent-bus` 4-eyes section)
 mention the flag in one line.
 
 **The keyword table** lives in the package (`feedback/categories.go`), versioned, one line per
 category; a change to it is a reviewed change like any other. Phrases match **whole words**,
-case-insensitive, never inside another word, and exclude this team's ordinary words (`test`,
+case-insensitive, never inside another word (a phrase's last word also matches with a trailing
+`s`: secrets, races, survivors), never inside a path (`docs/memory/…` matches nothing; that is why
+`docs` alone is not a phrase), and exclude this team's ordinary words (`test`,
 `message`, `says`, `comment`, `token`, `lock`, `missing`, `empty`, `zero` appear in nearly every
 review and in our own feature names: the tokens dashboard, flock and the pilot lease). Starting set:
 
 | Category | Phrases (whole words) |
 |---|---|
 | `tests` | untested, not tested, no test, missing test, mutant, survivor, coverage |
-| `docs` | readme, claude.md, changelog, documentation, docs, operational guide |
+| `docs` | readme, claude.md, changelog, documentation, operational guide |
 | `wording` | wording, misleading, help text, false claim |
 | `scope` | out of scope, scope creep, unrelated change |
 | `security` | secret, credential, password, injection, traversal, leak |
@@ -197,8 +200,10 @@ may let `agentbus feedback --candidates` print the step-1 candidates in the ask'
 
 ## Security
 
-- **Read-only, local.** Two `XRANGE` reads on the project's broker; no write, no network, no
-  model call. The package imports no network library (a test asserts it).
+- **Read-only, no external network.** Two `XRANGE` reads on the project's configured broker (which
+  may be remote, through the usual SSH tunnel), and nothing else: no write, no other host, no model
+  call. The pure package `feedback/` imports no network library at all (a test asserts it); only
+  the command's Redis client talks to the broker.
 - **Text that leaves the ledger.** Verdict messages are agent-written and could quote anything an
   agent saw, a secret included. By default the output carries counts and verdict ids, never a
   message. A later `--examples` (not in v1) would print at most 120 characters per verdict,
@@ -209,7 +214,7 @@ may let `agentbus feedback --candidates` print the step-1 candidates in the ask'
 ## Out of scope
 
 Step 2 as code; a busmon page; a bus message or any write by `agentbus feedback` (the only new
-write is the optional `tag` a reviewer puts on its own verdict); a model, embeddings or any network
+write is the optional `tag` a reviewer puts on its own verdict); a model, embeddings or any external
 call; costs (by rule); missions, reports and transcripts as sources; cross-project totals (run it
 per project); scheduling (sentinel may run it later, read-only).
 
@@ -230,12 +235,14 @@ per project); scheduling (sentinel may run it later, read-only).
   challenge reached only through a verdict's ref; a verdict without ref joins nothing).
 - `--since`: a subject with one verdict in the window keeps its whole-ledger rounds and state; a
   subject with none is left out; per-reviewer counts only the window.
-- Categories: the tag wins over keywords; an unknown tag refused by `verdict`; each table row
+- Categories: the tag wins over keywords; an unknown tag, a second tag and a tag on an approve
+  refused by `verdict`; a trailing `s` matches (`secrets`); a path does not (`docs/memory/x.md`); each table row
   matched by its phrases, whole words only (`tokens`, `flock`, `latest` match nothing);
   several per reject; `other`; approves never categorised; the table version printed.
 - Output: text columns and the 20-subject cap with `+ N more`; JSON keys; no verdict message in
   either output (a fixture with a fake credential in its message proves it).
-- No network: a test lists the package's imports and refuses `net`, `net/http`.
+- No external network: a test lists the pure package's imports and refuses `net`, `net/http`; the
+  command's only connection is the bus client it already has.
 - Read-only: the command's reader is an interface with read methods only; one integration test on
   the disposable test broker (`AGENTBUS_TEST_REDIS_URL`, never the live one) writes verdicts and
   challenges, runs the command, and checks that the keyspace is unchanged afterwards.
