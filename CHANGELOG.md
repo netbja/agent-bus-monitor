@@ -7,7 +7,7 @@ release exists.
 ## v0.24.0 — the installer in Go by default, busmon's pages read better, reloads checked first
 
 - `./setup.sh` is now the Go installer (`agentbus setup`), same subcommands and flags; the bash one
-  stays one release as `scripts/setup-legacy.sh`; `--force` warns.
+  stays one release as `scripts/setup-legacy.sh`; `--force` warns and is ignored.
 - `agentbus reload` checks the relaunch before it stops anything, brings a pop role back through
   `agent-spawn`, and an agent's own open question blocks only `--fresh`.
 - busmon: the F3 Redis card opens a read-only Redis page, F3 refreshes every 5 s, `←`/`→` move
