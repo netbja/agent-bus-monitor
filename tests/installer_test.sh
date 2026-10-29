@@ -122,6 +122,12 @@ assert_contains "$out" "--install-herdr" "help lists --install-herdr"
 assert_eq "$([[ "$out" == *HERDR_PLUS* || "$out" == *"herdr-plus"* ]] && echo named || echo gone)" "gone" "help no longer mentions herdr-plus"
 assert_exit 0 "help exits 0" -- "$SETUP" --help
 assert_exit 1 "unknown flag exits with code 1" -- "$SETUP" install --unknown-flag-test
+if [[ "$SETUP_SCRIPT" != scripts/setup-legacy.sh ]]; then
+  # The preview's name before the switch still runs it (an update started from it re-execs it),
+  # from any directory; --force's warning is the Go installer's only.
+  shim_out="$(cd "$T" && "$T/repo/scripts/setup-go.sh" install --dry-run --force --bin-dir "$T/dry-bin" 2>&1)"
+  assert_contains "$shim_out" "--force has had no effect since v0.20" "scripts/setup-go.sh runs the Go installer"
+fi
 
 # The herdr-plus binding an older setup wrote, byte for byte, between two sections of the user's.
 OLD_BLOCK='
