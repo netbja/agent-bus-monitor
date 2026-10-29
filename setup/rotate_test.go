@@ -311,6 +311,22 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 		t.Fatal("after a failed recreate the file and the broker disagree")
 	}
 
+	// foureyes: the recreated broker comes back on another password (a compose
+	// override, a stale .env): no "recreated" claim, exit 1, the way to check.
+	in, out, f, _, _ = rotateWorld(t, map[string]string{})
+	in.Sleep = func(time.Duration) {}
+	b = &fakeBroker{pw: bus.LegacyPassword}
+	f.cmds["docker compose up -d --force-recreate redis"] = fakeCmd{do: func(Cmd) { b.pw = "something-else" }}
+	if code := in.RotateRedisPassword(ctx, yes, b.dial); code != 1 || strings.Contains(out.String(), "recreated with the new password") ||
+		!strings.Contains(out.String(), "does not log in with the new password") {
+		t.Fatalf("a recreated broker on another password: exit %d, %q", code, out)
+	}
+	for _, r := range f.ran {
+		if strings.Contains(r, "service restart") {
+			t.Fatal("services restarted against a broker that refuses the new password")
+		}
+	}
+
 	// From a file: the previous one is kept beside it.
 	in, out, _, path, _ = rotateWorld(t, map[string]string{})
 	if err := bus.WritePassword(path, "first"); err != nil {
