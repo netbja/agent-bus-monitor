@@ -489,9 +489,12 @@ It never touches Redis — see README "Example deployment".
   `doctor`: only after an `adopt` answer not given by the asker; appends to the manifest after
   checking it loads, never overwrites a prompt). `examples/drafts/infra/` is the `infra` pop role
   (Ansible, Terraform/OpenTofu, IT automation) as an inert draft, adopted with `roles adopt infra
-  --ask <id> --from examples/drafts`: manual profile, approval person, only check/plan/validate/lint
-  allowed, apply/destroy/import/taint asked, state, plan files, tfvars, vault passwords and cloud
-  credentials denied (`rolecfg/infra_test.go`); no `roles/infra.md` until adopted.
+  --ask <id> --from examples/drafts`: manual profile, approval person; only `fmt -check`, `validate`
+  and `ansible-lint --offline` run unprompted (plan can run a `data "external"` program, `--check`
+  runs `check_mode: false` tasks: both prompt); apply/destroy/import/taint and every
+  `ansible-playbook` asked; state, plan files, tfvars, vault passwords, cloud credentials,
+  state/output/show/console (with `-chdir=` too) and `env` denied (`rolecfg/infra_test.go`, a
+  command table); no `roles/infra.md` until adopted.
 - **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
   `update`, `uninstall`, `status`. It stamps `buildinfo.Version` (from
   `git describe` when it is a `v*` tag, else `dev`) and `buildinfo.Repo` via ldflags; `agentbus up`

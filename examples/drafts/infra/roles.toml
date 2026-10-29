@@ -5,33 +5,42 @@ tier = "pop"
 approval = "person"
 skills = ["agent-bus", "diagnosing-bugs"]
 
-# Least privilege (infra-role): every command prompts in the pane (manual), but
-# these run without a prompt because they change nothing. A defence in depth,
-# not a boundary: the client matches command text only.
+# Least privilege (infra-role): every command prompts in the pane (manual).
+# Only these run without a prompt, because they run no repository-chosen code
+# and change nothing. terraform/tofu plan and ansible-playbook --check are NOT
+# here: a data "external" source runs a program during a plan, and a task with
+# check_mode: false runs for real under --check; they prompt like any command.
+# A defence in depth, not a boundary: the client matches command text only.
 [roles.infra.tool_rules]
 allow = [
-  "Bash(terraform fmt -check*)", "Bash(terraform validate*)", "Bash(terraform plan*)",
-  "Bash(tofu fmt -check*)", "Bash(tofu validate*)", "Bash(tofu plan*)",
-  "Bash(tflint*)", "Bash(ansible-lint*)",
-  "Bash(ansible-playbook --check *)", "Bash(ansible-playbook --syntax-check *)",
+  "Bash(terraform fmt -check*)", "Bash(terraform validate*)",
+  "Bash(tofu fmt -check*)", "Bash(tofu validate*)",
+  "Bash(ansible-lint --offline*)",
 ]
 # Changes to real infrastructure always prompt, even if the profile is loosened
 # (an ask rule refuses bypassPermissions); the role's prompt adds the person's
-# yes through master's ask before it even types them.
+# yes through master's ask before it even types them. Every ansible-playbook
+# run is asked, --check and --syntax-check included (ask beats allow).
 ask = [
   "Bash(terraform apply*)", "Bash(terraform destroy*)", "Bash(terraform import*)", "Bash(terraform taint*)",
+  "Bash(terraform -chdir=* apply*)", "Bash(terraform -chdir=* destroy*)",
   "Bash(tofu apply*)", "Bash(tofu destroy*)", "Bash(tofu import*)", "Bash(tofu taint*)",
+  "Bash(tofu -chdir=* apply*)", "Bash(tofu -chdir=* destroy*)",
+  "Bash(ansible-playbook*)",
 ]
 # Never a secret: state and plan files (they hold every value in clear),
-# variable files, vault passwords, cloud and cluster credentials, and the
-# commands that print state or outputs.
+# variable files, vault passwords, cloud and cluster credentials, the
+# commands that print state, outputs or the environment, and state surgery
+# (not this role's: it hands those commands to the person).
 deny = [
   "Read(**/*.tfstate)", "Read(**/*.tfstate.backup)", "Read(**/.terraform/**)", "Read(**/*.tfplan)",
   "Read(**/*.tfvars)", "Read(**/*.tfvars.json)", "Read(~/.terraform.d/**)",
   "Read(**/*vault_pass*)", "Read(**/.vault_pass*)", "Bash(ansible-vault *)",
   "Read(~/.aws/**)", "Read(~/.config/gcloud/**)", "Read(~/.azure/**)", "Read(~/.kube/**)", "Read(~/.docker/config.json)",
   "Bash(terraform state *)", "Bash(terraform output*)", "Bash(terraform show*)", "Bash(terraform console*)",
+  "Bash(terraform -chdir=* state *)", "Bash(terraform -chdir=* output*)", "Bash(terraform -chdir=* show*)", "Bash(terraform -chdir=* console*)",
   "Bash(tofu state *)", "Bash(tofu output*)", "Bash(tofu show*)", "Bash(tofu console*)",
+  "Bash(tofu -chdir=* state *)", "Bash(tofu -chdir=* output*)", "Bash(tofu -chdir=* show*)", "Bash(tofu -chdir=* console*)",
   "Bash(terraform plan * -out*)", "Bash(terraform plan -out*)", "Bash(tofu plan * -out*)", "Bash(tofu plan -out*)",
-  "Bash(printenv*)",
+  "Bash(printenv*)", "Bash(env)",
 ]

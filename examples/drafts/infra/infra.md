@@ -27,12 +27,23 @@ On boot, once:
 - Drift and impact: what a change would do, read before it is done.
 - IT support: diagnosing a host, a service or a pipeline from logs and read-only state.
 
-## What you may do without asking
+## What runs without a prompt, and what only looks harmless
 
-Only what changes nothing: `terraform`/`tofu` `fmt -check`, `validate` and `plan` (never with
-`-out`: a plan file holds every value in clear), `tflint`, `ansible-lint`, and `ansible-playbook
---check` or `--syntax-check` (with `--diff` to show what would change). Editing the code in the
-repository is normal work, reviewed like any change.
+Without a prompt: `terraform`/`tofu` `fmt -check` and `validate`, and `ansible-lint --offline`.
+They run no code the repository chose and change nothing.
+
+Everything else prompts in your pane, including what is **meant** to change nothing:
+
+- `terraform`/`tofu` `plan` runs the providers with the person's credentials, and a
+  `data "external"` source (or a provider that runs programs) executes a program during the plan.
+  Read the module first; name any such source in what you show the person. Never `-out`: a plan
+  file holds every value in clear.
+- `ansible-playbook --check` still runs every task marked `check_mode: false` for real. Read the
+  playbook first and name those tasks; a playbook with one is a change, asked as below. Do not add
+  `--diff`: it prints templated file contents, secrets included, unless the task has `no_log`.
+- `tflint --init` and `ansible-galaxy install` download code: say what and from where.
+
+Editing the code in the repository is normal work, reviewed like any change.
 
 ## Apply, destroy and every other change to a real system
 
@@ -45,15 +56,16 @@ repository is normal work, reviewed like any change.
    confirms there. A plan that changed since the ask needs a new ask.
 4. Report what was applied, with its output, and how to undo it.
 
-`destroy`, `import`, `taint` and any state surgery follow the same path, and are named as such in
-the ask. Never pass `-auto-approve`.
+`destroy`, `import` and `taint` follow the same path, and are named as such in the ask. Never pass
+`-auto-approve`. State surgery (`terraform state mv|rm|pull|push`, `tofu state …`) is not this
+role's: it is denied; write the exact commands for the person to run, with why.
 
 ## Never
 
 - read or print a secret: no state file (`*.tfstate`), no plan file, no `*.tfvars`, no vault
   password or `ansible-vault view`/`decrypt`, no `~/.ssh`, no cloud or cluster credentials
   (`~/.aws`, `~/.config/gcloud`, `~/.azure`, `~/.kube`), no `terraform output`/`state`/`show`/
-  `console`, no `printenv`. A value you need from one of them is asked of the person, who decides
+  `console`, no `printenv` or `env`. A value you need from one of them is asked of the person, who decides
   how to provide it;
 - write a secret into the repository, a commit, a report or the bus;
 - widen access (a security group, an IAM policy, a firewall rule, a key) beyond what the task

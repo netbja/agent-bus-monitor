@@ -42,37 +42,55 @@ func TestInfraDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Allowed without a prompt: only commands that change nothing.
-	readOnly := regexp.MustCompile(`^Bash\((terraform|tofu) (fmt -check|validate|plan)\b|^Bash\(tflint\b|^Bash\(ansible-lint\b|^Bash\(ansible-playbook (--check|--syntax-check) `)
+	// Allowed without a prompt: only commands that run no repository-chosen
+	// code and change nothing.
+	readOnly := regexp.MustCompile(`^Bash\((terraform|tofu) (fmt -check|validate)\*\)$|^Bash\(ansible-lint --offline\*\)$`)
 	for _, rule := range r.Allow {
 		if !readOnly.MatchString(rule) {
-			t.Errorf("allow %q is not a check, plan, diff or lint", rule)
+			t.Errorf("allow %q is not a check that runs no repository code", rule)
 		}
 	}
 	if len(r.Allow) == 0 {
-		t.Error("infra allows nothing: check and plan would prompt every time")
+		t.Error("infra allows nothing: fmt and validate would prompt every time")
 	}
-	for _, rule := range append(slices.Clone(r.Allow), r.Ask...) {
-		for _, word := range []string{"apply", "destroy", "ansible-vault", " state", " output", " show", "import", "taint", "-auto-approve"} {
-			if strings.Contains(rule, word) && slices.Contains(r.Allow, rule) {
-				t.Errorf("allow %q: %q runs without the person", rule, strings.TrimSpace(word))
-			}
+
+	// Concrete commands, as the client decides them: deny, then ask, then
+	// allow, else the manual profile prompts.
+	for _, c := range []struct{ cmd, want string }{
+		{"terraform fmt -check -recursive", "allow"},
+		{"tofu validate", "allow"},
+		{"ansible-lint --offline site.yml", "allow"},
+		{"terraform plan", "prompt"},                        // a data "external" source runs a program
+		{"tofu plan -var-file=prod.tfvars", "prompt"},       // same
+		{"ansible-playbook --check site.yml", "ask"},        // check_mode: false tasks run for real
+		{"ansible-playbook --syntax-check site.yml", "ask"}, // every playbook run is asked
+		{"ansible-playbook -i prod site.yml", "ask"},
+		{"tflint --init", "prompt"}, // downloads plugins
+		{"terraform apply", "ask"}, {"tofu destroy -target=x", "ask"},
+		{"terraform -chdir=env/prod apply", "ask"}, {"tofu -chdir=x destroy", "ask"},
+		{"terraform import a.b id", "ask"}, {"tofu taint a.b", "ask"},
+		{"terraform output -raw db_password", "deny"}, {"terraform -chdir=env/prod output", "deny"},
+		{"tofu -chdir=x state pull", "deny"}, {"terraform state mv a b", "deny"},
+		{"terraform show", "deny"}, {"tofu console", "deny"},
+		{"terraform plan -out=prod.tfplan", "deny"}, {"tofu plan -lock=false -out x", "deny"},
+		{"ansible-vault view secrets.yml", "deny"},
+		{"printenv", "deny"}, {"env", "deny"},
+	} {
+		if got := decide(r, c.cmd); got != c.want {
+			t.Errorf("%q: %s, want %s", c.cmd, got, c.want)
 		}
 	}
 
-	// apply and destroy prompt in the pane, whatever the profile becomes.
-	for _, rule := range []string{"Bash(terraform apply*)", "Bash(terraform destroy*)", "Bash(tofu apply*)", "Bash(tofu destroy*)"} {
-		if !slices.Contains(r.Ask, rule) {
-			t.Errorf("ask lacks %s: %v", rule, r.Ask)
-		}
-	}
 	// An ask rule refuses bypassPermissions, so the prompt cannot be switched off.
 	loose := strings.Replace(string(add), `profile = "claude-opus-manual"`, `profile = "claude-opus-bypass"`, 1) +
 		"\n[profiles.claude-opus-bypass]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\n[profiles.claude-opus-bypass.options]\npermission = \"bypassPermissions\"\n"
-	if lm, err := Load(writeConfig(t, string(base)+"\n"+loose)); err == nil {
-		if _, err := lm.Resolve("infra"); err == nil {
-			t.Error("infra on a bypassPermissions profile resolves: its ask rules would never prompt")
-		}
+	_, lerr := Load(writeConfig(t, string(base)+"\n"+loose))
+	if lerr == nil {
+		lm, _ := Load(writeConfig(t, string(base)+"\n"+loose))
+		_, lerr = lm.Resolve("infra")
+	}
+	if lerr == nil || !strings.Contains(lerr.Error(), "bypassPermissions") {
+		t.Errorf("infra on a bypassPermissions profile: %v, want a refusal naming bypassPermissions", lerr)
 	}
 
 	// Never a secret: state, plan files, vault passwords, cloud and cluster
@@ -82,9 +100,6 @@ func TestInfraDraft(t *testing.T) {
 		"Read(**/*.tfvars)", "Read(~/.terraform.d/**)",
 		"Read(**/*vault_pass*)", "Read(**/.vault_pass*)", "Bash(ansible-vault *)",
 		"Read(~/.aws/**)", "Read(~/.config/gcloud/**)", "Read(~/.azure/**)", "Read(~/.kube/**)",
-		"Bash(terraform state *)", "Bash(terraform output*)", "Bash(terraform show*)", "Bash(terraform console*)",
-		"Bash(tofu state *)", "Bash(tofu output*)", "Bash(tofu show*)", "Bash(tofu console*)",
-		"Bash(terraform plan * -out*)", "Bash(terraform plan -out*)", "Bash(tofu plan * -out*)", "Bash(tofu plan -out*)",
 		"Read(~/.ssh/**)",
 	} {
 		if !slices.Contains(r.Deny, rule) {
@@ -112,4 +127,35 @@ func TestInfraDraft(t *testing.T) {
 	if st, err := os.Stat(repoPath(t, "examples/drafts/infra/infra.md")); err != nil || st.Size() == 0 {
 		t.Errorf("the draft's prompt: %v", err)
 	}
+}
+
+// decide is the client's decision for a shell command under rules: the first
+// list holding a matching Bash rule, deny before ask before allow; "prompt"
+// when none matches (the manual profile asks). A rule's * matches anything.
+func decide(r ToolRules, cmd string) string {
+	match := func(rules []string) bool {
+		for _, rule := range rules {
+			body, ok := strings.CutPrefix(rule, "Bash(")
+			if !ok {
+				continue
+			}
+			parts := strings.Split(strings.TrimSuffix(body, ")"), "*")
+			for i := range parts {
+				parts[i] = regexp.QuoteMeta(parts[i])
+			}
+			if regexp.MustCompile("^" + strings.Join(parts, ".*") + "$").MatchString(cmd) {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case match(r.Deny):
+		return "deny"
+	case match(r.Ask):
+		return "ask"
+	case match(r.Allow):
+		return "allow"
+	}
+	return "prompt"
 }
