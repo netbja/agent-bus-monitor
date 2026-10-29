@@ -113,11 +113,18 @@ git -C "$REPO" ls-files -z | (cd "$REPO" && xargs -0 tar cf -) | tar xf - -C "$T
 cp "$REPO/setup.sh" "$T/repo/"
 git -C "$T/repo" init -q && git -C "$T/repo" add -A && git -C "$T/repo" -c user.email=t@t -c user.name=t commit -qm copy && git -C "$T/repo" tag v9.9.9
 SETUP="$T/repo/$SETUP_SCRIPT"
+# SELF is how the installer under test names itself in what it tells the person to run: the
+# fallback never sends them back to ./setup.sh, the Go installer they fell back from (reviewer-codex).
+SELF=./setup.sh
+[[ "$SETUP_SCRIPT" == scripts/setup-legacy.sh ]] && SELF=scripts/setup-legacy.sh
 
 # Flags
 out="$("$SETUP" --help 2>&1 || true)"
 assert_contains "$out" "Agent Bus Monitor — setup" "help displays the title"
-assert_contains "$out" "./setup.sh uninstall" "help lists uninstall"
+assert_contains "$out" "$SELF uninstall" "help lists uninstall"
+if [[ "$SELF" != ./setup.sh ]]; then
+  assert_eq "$([[ "$out" == *"./setup.sh"* ]] && echo named || echo self)" "self" "the fallback's help never names ./setup.sh"
+fi
 assert_contains "$out" "--install-herdr" "help lists --install-herdr"
 assert_eq "$([[ "$out" == *HERDR_PLUS* || "$out" == *"herdr-plus"* ]] && echo named || echo gone)" "gone" "help no longer mentions herdr-plus"
 assert_exit 0 "help exits 0" -- "$SETUP" --help
@@ -165,6 +172,7 @@ run_setup() { "$SETUP" "$@" --bin-dir "$T/bin" --no-docker 2>&1; }
 : > "$HERDR_LOG"
 inst_out="$(run_setup install --install-herdr)"; rc=$?
 assert_eq "$rc" "0" "install exits 0"
+assert_contains "$inst_out" "Keep it current: $SELF update" "the summary names the installer that ran"
 assert_contains "$("$T/bin/agentbus" version 2>&1)" "agentbus version v9.9.9" "stale agentbus rebuilt and stamped with the release"
 assert_contains "$("$T/bin/busmon" --version 2>&1)" "busmon version v9.9.9" "busmon stamped too"
 assert_contains "$("$T/repo/agentbus" version 2>&1)" "agentbus protocol" "agentbus also built in the repo (the herdr tabs use it)"
@@ -215,7 +223,7 @@ assert_eq "$(cat "$PLUGIN_RECORD")" "$T/repo" "the record is not rewritten"
 set_registry "$T/old-repo"; printf '%s\n' "$T/old-repo" > "$PLUGIN_RECORD"; : > "$HERDR_LOG"
 relink_out="$(HERDR_FAIL_LINK=1 run_setup install --no-skills)"
 assert_contains "$relink_out" "is now NOT linked" "a failed relink says the plugin is now not linked"
-assert_contains "$relink_out" "re-run ./setup.sh install" "and how to fix it"
+assert_contains "$relink_out" "re-run $SELF install" "and how to fix it"
 
 # A record that cannot be written is a visible warning, not a silent or fatal one
 : > "$HERDR_PLUGINS"; rm -f "$PLUGIN_RECORD"
@@ -270,6 +278,9 @@ assert_contains "$(cat "$HERDR_LOG")" "server reload-config" "a running herdr is
 # status changes nothing and reports what is there
 mkdir -p "$T/state/agentbus" && echo v0.1.16 > "$T/state/agentbus/herdr-plus.ref"; : > "$HERDR_LOG"
 status_out="$("$SETUP" status --bin-dir "$T/bin" 2>&1)"; rc=$?
+if [[ "$SELF" != ./setup.sh ]]; then
+  assert_eq "$([[ "$inst_out$status_out" == *"./setup.sh"* ]] && echo named || echo self)" "self" "the fallback's install and status never send the person to ./setup.sh"
+fi
 assert_eq "$rc" "0" "status exits 0"
 assert_contains "$status_out" "agentbus v9.9.9: $T/bin/agentbus" "status shows the installed version"
 assert_contains "$status_out" "agent-launch: $T/bin/agent-launch -> $T/repo/scripts/agent-launch" "status reports agent-launch"

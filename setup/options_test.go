@@ -40,7 +40,10 @@ func bashSetup(t *testing.T, home string, args ...string) (string, string, int) 
 		}
 		code = ee.ExitCode()
 	}
-	return out.String(), errw.String(), code
+	// The fallback names itself where the Go installer says ./setup.sh
+	// (reviewer-codex); everything else is the reference, byte for byte.
+	self := func(s string) string { return strings.ReplaceAll(s, "scripts/setup-legacy.sh", "./setup.sh") }
+	return self(out.String()), self(errw.String()), code
 }
 
 // goSetup parses args as agentbus setup does, with the same throwaway HOME

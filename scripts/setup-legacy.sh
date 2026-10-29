@@ -4,16 +4,16 @@
 #
 # LEGACY: the bash installer, kept one release as the fallback after the switch to the Go
 # installer (./setup.sh -> agentbus setup; docs/superpowers/specs/2026-10-28-go-installer-design.md,
-# rollout step 2). Run it as scripts/setup-legacy.sh; the lines below still name ./setup.sh, the
-# command the person types. It goes away in the next release.
+# rollout step 2). Every command it tells the person to run names scripts/setup-legacy.sh, never
+# ./setup.sh, which is now the Go installer the person fell back from (reviewer-codex). It goes
+# away in the next release.
 #
-#   ./setup.sh install   [options]   preflight, build agentbus + busmon, the herdr plugin, external skills, Redis
-#   ./setup.sh update    [options]   git pull --ff-only, then install (prints vA -> vB and what changed)
-#   ./setup.sh uninstall [--yes] [--purge]   remove what install added, asking at every step
-#   ./setup.sh status                what is installed, where, and whether it runs
+#   scripts/setup-legacy.sh install   [options]   preflight, build agentbus + busmon, the herdr plugin, external skills, Redis
+#   scripts/setup-legacy.sh update    [options]   git pull --ff-only, then install (prints vA -> vB and what changed)
+#   scripts/setup-legacy.sh uninstall [--yes] [--purge]   remove what install added, asking at every step
+#   scripts/setup-legacy.sh status                what is installed, where, and whether it runs
 #
 # Run it from a clone of this repository; piping it into sh is not supported.
-# ./install.sh is kept as an alias of ./setup.sh install.
 #
 set -eu
 
@@ -80,10 +80,10 @@ usage() {
 Agent Bus Monitor — setup
 
 Usage:
-  ./setup.sh install   [options]          (./install.sh is an alias)
-  ./setup.sh update    [options]          git pull --ff-only, then install
-  ./setup.sh uninstall [--yes] [--purge]  asks before every removal
-  ./setup.sh status
+  scripts/setup-legacy.sh install   [options]          (./install.sh is an alias)
+  scripts/setup-legacy.sh update    [options]          git pull --ff-only, then install
+  scripts/setup-legacy.sh uninstall [--yes] [--purge]  asks before every removal
+  scripts/setup-legacy.sh status
 
 Install / update options:
   --bin-dir <dir>   Install directory for binaries (default: \$HOME/.local/bin)
@@ -429,7 +429,7 @@ do_status() {
   elif ! printf '%s\n' "$rows" | grep -qx '#plugins'; then
     log_warn "herdr plugin list --json could not be read: the $PLUGIN_ID registration is unknown"
   elif [ -z "$row" ]; then
-    log_info "$PLUGIN_ID: not linked into herdr (./setup.sh install)"
+    log_info "$PLUGIN_ID: not linked into herdr (scripts/setup-legacy.sh install)"
   else
     if ! same_dir "$root" "$REPO_DIR"; then
       log_warn "$PLUGIN_ID: linked from $root, not from this checkout"
@@ -448,7 +448,7 @@ do_status() {
     log_info "herdr-plus: installed by an older setup, no longer needed: herdr plugin uninstall cloudmanic.herdr-plus"
   fi
   if grep -qF "$KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then log_ok "herdr key binding: prefix+up -> $PLUGIN_ID.projects"
-  elif grep -qF "$OLD_KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then log_info "herdr key binding: still herdr-plus's (./setup.sh install moves it to $PLUGIN_ID)"
+  elif grep -qF "$OLD_KEYBIND_MARK" "$HERDR_CONFIG" 2>/dev/null; then log_info "herdr key binding: still herdr-plus's (scripts/setup-legacy.sh install moves it to $PLUGIN_ID)"
   else log_info "herdr key binding: not added"; fi
   svcs="$(project_services)"
   if [ -n "$svcs" ]; then
@@ -548,7 +548,7 @@ do_uninstall() {
     if [ "$PURGE" = "1" ] || { [ "$ASSUME_YES" = "0" ] && ask "remove the Redis container AND its data (every project on the bus)?" n; }; then
       if ( cd "$REPO_DIR" && $cc down -v ) >/dev/null 2>&1; then log_ok "Redis: container and data removed"; else log_warn "Redis: $cc down -v failed"; fi
     elif [ "$state" = "running" ] && ask "stop the Redis broker (its data is kept)?" y; then
-      if ( cd "$REPO_DIR" && $cc stop ) >/dev/null 2>&1; then log_ok "Redis: stopped (data kept; ./setup.sh install starts it again)"; else log_warn "Redis: $cc stop failed"; fi
+      if ( cd "$REPO_DIR" && $cc stop ) >/dev/null 2>&1; then log_ok "Redis: stopped (data kept; scripts/setup-legacy.sh install starts it again)"; else log_warn "Redis: $cc stop failed"; fi
     else
       log_info "Redis: left as it is ($state)"
     fi
@@ -782,7 +782,7 @@ link_plugin() {
     show_log "$TMP_DIR/herdr-link.log"
     log_warn "herdr plugin link $REPO_DIR failed: the Projects picker is not available."
     if [ "${1:-}" = "relink" ]; then
-      log_warn "$PLUGIN_ID is now NOT linked (setup had just unlinked the previous checkout): re-run ./setup.sh install to link this one."
+      log_warn "$PLUGIN_ID is now NOT linked (setup had just unlinked the previous checkout): re-run scripts/setup-legacy.sh install to link this one."
     fi
     PLUGIN_LINK_FAILED=1
   fi
@@ -825,7 +825,7 @@ else
   if [ "$DRY_RUN" = "0" ] && [ "$PLUGIN_LINK_FAILED" = "0" ]; then
     case "$(plugin_action_state)" in
       ok)       log_ok "herdr plugin $PLUGIN_ID: Projects picker action available" ;;
-      noserver) log_info "herdr plugin $PLUGIN_ID: Projects picker not checked (no herdr server running here, run ./setup.sh status inside herdr)" ;;
+      noserver) log_info "herdr plugin $PLUGIN_ID: Projects picker not checked (no herdr server running here, run scripts/setup-legacy.sh status inside herdr)" ;;
       *)        log_warn "herdr lists no $PLUGIN_ID.projects action (check: herdr plugin action list)." ;;
     esac
   fi
@@ -1078,5 +1078,5 @@ echo "  2. Inside it, provision and open the Agent Bus team in one command:"
 echo "     ${CYAN}agentbus up myproject /path/to/your/codebase --as <your-name>${RESET}"
 echo "     (busmon opens first; later, reopen any project with ${BOLD}Ctrl+B${RESET} then ${BOLD}Up${RESET})"
 echo ""
-echo "  Keep it current: ${CYAN}./setup.sh update${RESET} · check it: ${CYAN}./setup.sh status${RESET} · remove it: ${CYAN}./setup.sh uninstall${RESET}"
+echo "  Keep it current: ${CYAN}scripts/setup-legacy.sh update${RESET} · check it: ${CYAN}scripts/setup-legacy.sh status${RESET} · remove it: ${CYAN}scripts/setup-legacy.sh uninstall${RESET}"
 echo ""
