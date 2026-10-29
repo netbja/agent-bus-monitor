@@ -43,7 +43,7 @@ type usageBaseline struct {
 func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths) dispatch.HealthConfig {
 	manager, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
 	return dispatch.HealthConfig{Checks: realHealthChecks(b, rt, manager, paths), DailyWake: true,
-		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(b)}
+		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(b), RedisRefresh: redisRefresh(b)}
 }
 
 func healthTask(id string, run func(context.Context) (health.Status, string, error)) dispatch.HealthCheck {
@@ -488,6 +488,16 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			}
 			outcome := health.EvaluateRedis(local, bus.LegacyPasswordInUse(os.Getenv))
 			return outcome.Status, outcome.Detail, nil
+		}),
+		healthTask("redis-version", func(ctx context.Context) (health.Status, string, error) {
+			info, runErr := b.RedisInfo(ctx)
+			path, err := redisLatestPath()
+			cache, cacheErr := redisLatest{}, err
+			if err == nil {
+				cache, cacheErr = readRedisLatest(path)
+			}
+			out := redisVersionOutcome(info.Version, runErr, cache, cacheErr, time.Now())
+			return out.Status, out.Detail, nil
 		}),
 		healthTask("service-env", func(ctx context.Context) (health.Status, string, error) {
 			installed, err := b.ServicesInstalled(ctx)

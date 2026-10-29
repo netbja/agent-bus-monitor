@@ -38,6 +38,12 @@ pane. Escalate anything outside the allow-list to master with a concise `agentbu
 ask the person when a decision or credential change is needed. Do not act on a stale or unrelated
 directive.
 
+`redis-version` warns when the broker runs an older Redis than the latest release of its own
+major the dispatch service found (a daily, cached check; offline reads `unknown`). A newer major is
+never a warning, only a line in its detail: changing major is the person's decision. It is the person's to act on:
+mention it to master for the person, once per daily review. Never restart, pull, recreate or
+upgrade the broker yourself.
+
 ## Client update
 
 The dispatcher wakes you once per update of a client (a directive starting `client update:`): a

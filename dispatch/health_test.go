@@ -80,3 +80,38 @@ func TestHealthLoopStopsWritingAfterLeaseLoss(t *testing.T) {
 		t.Fatalf("stale holder wrote health records: %+v", records)
 	}
 }
+
+// redis-watch: the latest-release check runs once a day, however many health
+// passes run, and its failure never stops the loop or its checks.
+func TestHealthLoopRunsRedisRefreshDaily(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "health-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if err := b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}, Manager: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := health.ByID("services")
+	d.Interval = time.Millisecond
+	var refreshes, checks atomic.Int32
+	check := HealthCheck{Definition: d, Run: func(context.Context) (health.Status, string, error) {
+		checks.Add(1)
+		return health.OK, "service check complete", nil
+	}}
+	refresh := func(context.Context) error { refreshes.Add(1); return io.ErrUnexpectedEOF }
+	l := &loop{b: b, token: "health-holder", cfg: Config{EscalateTo: "master", Log: io.Discard,
+		Health: HealthConfig{Checks: []HealthCheck{check}, Tick: time.Millisecond, PassBudget: time.Second, RedisRefresh: refresh}}}
+	runCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	err := l.healthLoop(runCtx)
+	cancel()
+	if err != context.DeadlineExceeded {
+		t.Fatalf("healthLoop = %v", err)
+	}
+	if refreshes.Load() != 1 {
+		t.Fatalf("redis refresh calls = %d, want 1", refreshes.Load())
+	}
+	if checks.Load() < 3 {
+		t.Fatalf("a failed refresh stopped the checks: %d calls", checks.Load())
+	}
+}
