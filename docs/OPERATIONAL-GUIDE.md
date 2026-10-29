@@ -281,16 +281,21 @@ agent names, no project template):
 - **Watch.** busmon's header reads `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed` and so on. `F3` (or `s`) shows dispatch,
   missions and the Redis broker as cards (state, pid, last error, log size; Redis version,
-  uptime, memory, keys); `↑↓` chooses one, Enter or `l` opens its log. F5 shows the project's
+  uptime, memory, keys), read again every 5 seconds while the page is open; `↑↓` (or `←→` when the
+  cards sit side by side) chooses one, Enter or `l` opens a service's log, and Enter on the Redis
+  card opens its read-only page: memory, persistence, clients, each project's keys and streams,
+  the port bind and the container's last log lines. F5 shows the project's
   health, `R` a recap of what happened while you were away (unread first), `P` the batch's
   plan, `U` the tokens. F1 lists every key; `t` there replays the first-launch tour.
 - **For you.** The For you panel, next to Agents, holds what only you can settle: an agent's
   open questions (`ask`), an agent waiting for your decision (`wait`), a 4-eyes gate you opened
   or that holds you (`gate`), and messages to you that you have not opened (`unread`). The
-  header counts them (`♙ 4 for you · ● 2 unread`). Enter opens one.
+  header counts them (`♙ 4 for you · ● 2 unread`). Enter opens one. Every page reads
+  `Label:  value`, with the values of a block in one column.
 - **Quotas: stop before the limit.** The dispatch service reads every provider's usage windows
   (used %, reset) from local sources, every minute, with no model call. busmon's header shows one
-  gauge per provider (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`); `agentbus quota`
+  gauge per provider (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`), filled in
+  eighths of a cell and sliding to a new value in a true-colour terminal; `agentbus quota`
   prints them in a terminal. At 85% of a window master gets one warning; at 95% the agents of that
   provider are no longer woken until the reset (their state column reads `quota`, the flag `held`
   when they declared blocked or done); when master's own provider is at
@@ -357,10 +362,14 @@ agent names, no project template):
   between agents, notices. Answered threads and those older than 24 hours are folded (`o` shows
   them): an older unanswered directive wakes nobody. Enter expands a group or opens a thread;
   `d` then `y` closes a thread with a reply from you, its history stays. A tracked request is
-  closed by its owner (`agentbus request done`).
+  closed by its owner (`agentbus request done`). The header carries the same counts: what you owe
+  in orange (`2 requests waiting · oldest 3h`), what agents owe each other muted
+  (`4 between agents`), each absent at 0.
 - **The plan.** When master loads the batch's plan (`agentbus plan load docs/plans/<name>.json@<commit>`),
   the Plan tab (`4`) and `P` show its tasks by state (waiting for you, blocked, in review, in
-  progress, upcoming, done), each with its review, PR and asks. A task reads done only when
+  progress, upcoming, done), each with its review, PR and asks. A task waiting for you has an
+  `Action:` row: Enter or `s` opens the compose window to master, prefilled, to start it. A task
+  reads done only when
   master records it (`agentbus plan done <task>`) or it needs no merge and is delivered and
   approved.
 - **Read the logs:** `agentbus --project myapp service logs missions -n 100`. They rotate at
@@ -397,13 +406,22 @@ to watch a pane.
   `agentbus up`, the dispatcher types that `/clear` itself, once per session, for a Claude Code
   agent whose hand-off stands, that is idle, with no open question or review, in a ready pane;
   then it proves the new session and tells the agent to read its hand-off. It stays off until
-  its live checks have been run on this release.
+  its live checks have been run on this release. Set it on the `up` line
+  (`AGENT_BUS_AUTO_CLEAR=1 agentbus up myapp`). `up` builds the services' env file,
+  `~/.config/agentbus/services/myapp.env`, from its shell: the `AGENT_BUS_*` variables except the
+  project and agent names, plus the escalation target and the reload setting, which it keeps from
+  the old file unless you change them (`--escalate-to`, `--reload`). When the result differs from
+  the file it replaces it, so any other line added by hand is lost at the next `up`. Its lines are
+  `KEY="value"`; an unquoted one stops the dispatcher on an invalid configuration. To turn it off,
+  run `up` again without the variable.
 - **Client updates.** When a client is updated under a running agent, busmon flags the agent
   `update`, health `client-updates` warns, and sentinel gets one directive. sentinel restarts
   each outdated agent on its role and profile, resuming its conversation:
   `agentbus --project myapp reload coder`. A reload runs only for an idle agent with no open
-  work (no review, ask, mission or accepted task) and never for the caller's own pane; it stops
-  the agent with SIGTERM, relaunches it in its tab and proves the new process. master may
+  work (no review, mission or accepted task; its own open question only with `--fresh`, since a
+  resumed conversation keeps it) and never for the caller's own pane. It checks the relaunch
+  before it stops anything, stops the agent with SIGTERM, relaunches it in its tab (a pop role
+  through `agent-spawn`) and proves the new process. master may
   reload only sentinel. You may reload anyone: `agentbus --project myapp reload coder --as
   <your-name>` (`--dry-run` says what would happen, `--fresh` starts a new conversation).
   `agentbus up myapp --reload propose` makes every reload wait for you; `--reload off` leaves
@@ -424,9 +442,15 @@ to watch a pane.
   what to do; busmon shows the pill in its header and the checks in F5. A missing or stale reading
   is `unknown`, never `ok`. A new failure wakes sentinel once; it may restart a failed service or
   refresh the model table, and escalates everything else to master.
+- **Redis version.** Health `redis-version` compares the broker with the latest Redis release of
+  its own major, read once a day from GitHub's release list. Behind in its major is a warning; a
+  newer major is only named, since changing major is your decision. No check for 48 hours reads
+  `unknown`. You update the broker yourself; sentinel never restarts or upgrades it.
 - **Tokens.** `agentbus tokens` shows the tokens spent per project, side by side, over 7 days;
   `--project myapp --by agent` (today) or `--by day` narrows it, `--json` for scripts. They are
   counted from the Claude Code transcripts of the sessions the bus has proved, every 5 minutes.
+  An agent's model and context (`agentbus usage`) come from that same proved session, never from
+  one a status merely names.
   busmon's `U` page shows the same with the account windows' 24-hour history. No cost is shown,
   by rule: on a subscription the figure would be fiction.
 
@@ -548,3 +572,23 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 2. **Flag Syntax**: `--ref abc123`, `--ref=abc123` and the short form the help shows (`-r abc123`) all work. A single dash with a long name (`-ref`), bundled shorts (`-ab`) and attached values (`-rabc123`) do not.
 3. **Positional Order**: Arguments must follow exact ordering: `agentbus status <agent> <state> <message>`. The message is always last.
 4. **Naming Conventions**: Project and agent names must match `^[a-z][a-z0-9_-]{0,31}$` (lowercase, starting with a letter).
+5. **An exported `AGENT_BUS_*` stays with the services**: `agentbus up` copies the `AGENT_BUS_*`
+   variables of its shell (except the project and agent names) into the project's env file, and
+   the services keep one after you unset it in your shell, until the next `up` without it. The
+   escalation target and the reload setting stay even then, until `--escalate-to` or `--reload`
+   changes them.
+
+---
+
+## 9. Drafts and Planned Specs
+
+- **The `infra` role is a draft, not adopted.** `examples/drafts/infra/` holds a pop role for
+  Ansible, Terraform/OpenTofu and IT automation: a manual profile where only exact syntax and lint
+  commands run without a prompt, plans, checks and every change go through you, and secrets are
+  denied. Its README gives the adoption: master asks you, then
+  `agentbus --project myapp roles adopt infra --ask <id> --from examples/drafts`.
+- **Two specs, not built.** The [feedback loop](superpowers/specs/2026-10-29-feedback-loop-design.md)
+  (`agentbus feedback`: read-only statistics over the reviews the bus retains; a skill change
+  proposed as a pull request only after your yes) and the
+  [config file](superpowers/specs/2026-10-29-config-file-design.md) (one `config.toml` for your
+  preferences, and `agentbus config` to show each setting's value and where it comes from).

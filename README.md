@@ -395,7 +395,11 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   is for you (`♙ 4 for you`, `● 2 unread`), the project's health pill, a pause
   (`paused · resumes in 1h52 (lunch)`), your name as a person, and one usage gauge per provider
   (`claude 5h 62% │ 7d 41%`, `held` past the hold threshold), each provider in its own colour,
-  then the clock. Health and dispatch are never truncated; the rest gives way from the right.
+  then the clock. In a true-colour terminal a gauge fills in eighths of a cell and slides to a new
+  value in half a second (the figure changes at once); a 16-colour terminal keeps whole cells.
+  What is owed to you in Requests reads in orange (`2 requests waiting · oldest 3h`), what agents
+  owe each other muted (`4 between agents`); each is absent at 0. Health and dispatch are never
+  truncated; the rest gives way from the right.
 - **For you** — what only you can settle: an agent's open questions (`ask`), an
   agent `waiting` for your decision (`wait`), a 4-eyes gate you opened or that holds you
   (`gate`), and messages addressed to you that you have not opened (`unread`, `●`; `○` once a
@@ -412,7 +416,8 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   `reloading`, `fallback <profile>`, `update`, `model≠`…) and its message. An agent silent for
   more than a day is hidden (`a` shows it; `d` then `y` forgets it). Enter opens its page:
   status, pane and pid, models (configured, launched, used), queue, wake record, gates, context,
-  board tasks, last activity; `i` there writes to it.
+  board tasks, last activity; `i` there writes to it. Every page reads `Label:  value`, the
+  values of a block in one column.
 - **The lower panel's tabs** (`1`–`4`):
   - **Activity** — one line per event (`time · from · to · type · message`) with a day
     separator. Enter expands a line in place, a second Enter opens it in the reader (`n`/`p`
@@ -425,6 +430,8 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     closes a thread with a reply from you.
   - **Plan** — the batch's plan (`agentbus plan load`), its tasks by state: waiting for you, blocked,
     in review, in progress, upcoming, done. Enter opens a task: its review, PR, asks and notes.
+    A task waiting for you has an `Action:` row: Enter or `s` opens the compose window to master,
+    prefilled, to start it.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent
   (Tab completes the name), `@all <text>` every registered agent. Plain text is a notice nobody
   reads: the first Enter says so, a second one sends it. **`I`** opens the compose window for
@@ -440,7 +447,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | `!` `w` F4 | the open questions of an agent |
 | F1 `?` | the help: every key, state and flag in words; `t` there replays the tour |
 | F2 `r` | tracked requests and unanswered threads, with their delivery evidence |
-| F3 `s` | services: dispatch, missions and the Redis broker as cards (state, pid, last error, log size; Redis version, uptime, memory, keys); Enter or `l` opens a service's log |
+| F3 `s` | services: dispatch, missions and the Redis broker as cards (state, pid, last error, log size; Redis version, uptime, memory, keys), read again every 5 s while open; `↑↓` (or `←→` when side by side) choose a card, Enter or `l` opens a service's log, Enter on Redis its page (memory, persistence, clients, each project's keys and streams, the port bind, its last log lines) |
 | F5 | project health: each check, its detail and remediation |
 | `R` | the recap: "where was I?", built from what the bus retains, unread first |
 | `P` | the plan |
@@ -613,7 +620,8 @@ support (only clients with a probed screen signature are prompted).
   invalid. The next `agentbus up` tries again.
 - **busmon shows it.** The header reads `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions waiting git`, `missions failed` and so on. `F3` (or `s`) shows dispatch,
-  missions and the Redis broker as cards; Enter or `l` opens a service's log.
+  missions and the Redis broker as cards, read again every 5 s while open; Enter or `l` opens a
+  service's log, Enter on the Redis card its read-only page.
 - **Stopping during an integration** (`down`, or a stop) kills the running tests with their
   process group. The conductor redoes that check or integration at its next start.
 - **Secrets.** The broker password is kept in `~/.config/agentbus/services/<p>.env` (0600),
@@ -703,11 +711,19 @@ handles each with a rule you can read, never a guess:
   again. You then type `/clear` in its pane and point the fresh session at that report.
   The dispatcher can type that `/clear` itself, once per session, when the agent is idle, has
   no open question or review and its pane is ready (`AGENT_BUS_AUTO_CLEAR=1`, Claude Code only); it is **off by
-  default** until its live checks have been run.
+  default** until its live checks have been run. Turn it on with
+  `AGENT_BUS_AUTO_CLEAR=1 agentbus up <p>`. `up` builds the services' env file
+  (`~/.config/agentbus/services/<p>.env`, `KEY="value"` lines) from its shell: the `AGENT_BUS_*`
+  variables except the project and agent names, plus the escalation target and the reload setting,
+  which it keeps from the old file unless you change them. When the result differs from the file it
+  replaces it, so any other line added by hand is lost at the next `up`; an unquoted one stops the
+  dispatcher on an invalid configuration.
 - **Reload after a client update.** The dispatcher notices an agent running an outdated client
   (flag `update`) and tells sentinel, which restarts it on its role and profile, resuming its
   session (`agentbus reload <role>`): only an idle agent with no open work, never the caller's
-  own pane.
+  own pane. The relaunch is checked before the agent is stopped, a pop role comes back through
+  `agent-spawn`, and an agent's own open question does not block a reload that resumes its
+  conversation (it does with `--fresh`).
   master may reload only sentinel; a person may reload anyone with `--as <name>`. `agentbus up
   <p> --reload propose` makes every reload wait for you, `--reload off` leaves them to you.
 - **Quotas.** The dispatch service reads every provider's usage windows each minute, from local
@@ -717,12 +733,16 @@ handles each with a rule you can read, never a guess:
   whether to move a role to one of its `fallback_profiles` (`agentbus swap <role> --profile <p>`,
   `--back` to return; `agentbus swaps` is the ledger).
 - **Health.** The dispatch service measures the project (services, identities, delivery, quotas,
-  models, versions, secret-like files tracked in Git…); `agentbus health` and busmon's F5 show it. A new failure
+  models, versions, secret-like files tracked in Git…); `agentbus health` and busmon's F5 show it.
+  `redis-version` compares the broker with the latest Redis release of its own major, checked
+  once a day on GitHub: behind is a warning, a newer major only a note, since changing major is
+  your decision; you update the broker, nothing else does. A new failure
   wakes sentinel once, which may restart a failed service or refresh the model table and
   escalates the rest.
 - **Tokens.** Tokens per project, agent and day, counted from the Claude Code transcripts of the
   sessions the bus has proved (`agentbus tokens`, busmon's `U`). No cost, by rule: on a
-  subscription the figure would be fiction.
+  subscription the figure would be fiction. An agent's model and context (`agentbus usage`) are
+  read from the same proved session, never from one a status merely names.
 
 The [operational guide](docs/OPERATIONAL-GUIDE.md#scenario-d-a-team-that-runs-for-days) goes
 through each with its settings.
@@ -740,6 +760,12 @@ through each with its settings.
 | `architect` | pop | design and specifications |
 | `deploy` | pop | deployment and target monitoring |
 | `security` | pop | repository security review and proposed corrections |
+
+`examples/drafts/infra/` holds an `infra` pop role (Ansible, Terraform and OpenTofu, IT
+automation) as an inert draft, **not adopted**: a manual profile where only exact syntax and lint
+commands run without a prompt, plans, checks and every change go through the person, and
+secrets are denied. Its README says how to adopt it (`agentbus roles adopt infra --ask <id>
+--from examples/drafts`, after your `adopt` answer).
 
 Execution settings live in the manifest, not in these role descriptions. For schema
 v2, `defaults.profile` selects the common profile and `roles.<role>.profile` overrides
@@ -859,6 +885,17 @@ the remote box's hermes **gateway** at `http://<remote>:8644/webhooks/claude-not
 `Deliver: signal`: it pings a human over Signal when a Claude task stops. The gateway never
 touches Redis, so this path is **independent of the agent bus** — webhook traffic does not appear
 on `hermes:*`, and the bus carries nothing back to Signal.
+
+## Planned
+
+Two specs are written and reviewed, not built:
+
+- [Feedback loop](docs/superpowers/specs/2026-10-29-feedback-loop-design.md): `agentbus feedback`,
+  read-only statistics over the reviews the bus retains, and a skill change proposed as a pull
+  request only after your yes to an ask.
+- [Config file](docs/superpowers/specs/2026-10-29-config-file-design.md): one `config.toml` for the
+  preferences now spread over environment variables and files, and `agentbus config` to show each
+  setting's value and where it comes from.
 
 ## Tuning
 
