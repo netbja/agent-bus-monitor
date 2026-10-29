@@ -154,8 +154,11 @@ dans `~/.config/agentbus/redis.env` (0600) ; compose et tous les processus agent
 lisent, rien n'est à exporter. Une installation antérieure garde l'historique `AgentBus2025!` (la
 santé `redis-password` avertit) jusqu'à `./setup.sh rotate-redis-password` : il vérifie d'abord,
 demande, pose le nouveau mot de passe sur le broker en marche, le prouve, recrée le conteneur du
-broker (quelques secondes, les données gardées) pour qu'un redémarrage le garde, redémarre les
-services de projet en marche, et remet tout en place si le changement ou sa preuve échoue. Un
+broker (quelques secondes, les données gardées) pour qu'un redémarrage le garde, et redémarre les
+services de projet en marche. Si le broker refuse le changement, ou si le nouveau mot de passe échoue
+à sa preuve et que le broker est remis sur l'ancien, le broker et le fichier sont remis comme avant ;
+si le broker peut détenir le nouveau (impossible de le remettre, ou aucun des deux prouvé), le
+nouveau fichier est gardé, l'ancien dans `redis.env.prev`, et l'erreur dit d'essayer les deux. Un
 `REDIS_PASSWORD` exporté l'emporte sur le fichier ; la rotation refuse de tourner tant qu'il l'est.
 Rouvrez busmon ensuite, et copiez le fichier sur toute machine qui atteint le broker par un tunnel.
 

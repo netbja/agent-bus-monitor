@@ -109,8 +109,9 @@ The rotation runs only on the broker this checkout owns, and only with no `REDIS
 password on the running broker, proves it with a new connection, recreates the broker's container
 from this checkout (a few seconds; the data stays in its volume), so a restart or a reboot keeps the
 new password, then restarts the running project services. A refused change or a failed proof puts the broker and the
-file back as they were; if the broker cannot be set back, the new file is kept (the old one in
-`redis.env.prev`) and the error says so. Reopen busmon afterwards, and copy the new file to any machine that reaches
+file back as they were; if the broker might hold the new password (it cannot be set back, or neither
+password can be proved), the new file is kept (the old one in `redis.env.prev`) and the error says to
+try both. Reopen busmon afterwards, and copy the new file to any machine that reaches
 the broker through a tunnel. `uninstall` leaves the file. The bash fallback,
 `scripts/setup-legacy.sh`, neither writes nor rotates it.
 
