@@ -150,7 +150,7 @@ left in place. It has no `--dry-run`: run it without `--yes` and answer each que
 `./setup.sh` checks Git and Go, builds `agentbus` from the checkout and hands every argument to
 `agentbus setup`, the installer in Go. Its subcommands, flags, questions and output are the bash
 installer's, so the commands above are unchanged. `--force` has had no effect since v0.20: it now
-warns, and the next release drops it.
+warns and is ignored, and the next release drops it.
 
 The bash installer it replaces stays **one release** as `scripts/setup-legacy.sh`, with the same
 subcommands and flags, should the Go one fail on a machine:

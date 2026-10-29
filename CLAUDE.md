@@ -509,8 +509,9 @@ It never touches Redis — see README "Example deployment".
   `update`, `uninstall`, `status`. Since installer-default it is a thin script that builds
   `agentbus` and runs `agentbus setup` (package `setup/`, every external command through
   `setup.Runner`); the bash installer stays one release as `scripts/setup-legacy.sh`, the fallback
-  (`tests/installer_legacy_test.sh` runs the same suite on it), removed in the next; `--force`
-  warns there, and goes with it. It stamps `buildinfo.Version` (from
+  (`tests/installer_legacy_test.sh` runs the same suite on it), removed in the next, and run only
+  when invoked by name (the thin `setup.sh` never execs it); `--force` only warns and is ignored, in
+  both installers, and is dropped with the bash one. It stamps `buildinfo.Version` (from
   `git describe` when it is a `v*` tag, else `dev`) and `buildinfo.Repo` via ldflags; `agentbus up`
   finds `scripts/bootstrap` through `AGENTBUS_REPO`, then `buildinfo.Repo`, then the binary's
   directory. A copy of the repository uses the same compose project and container name as the live
