@@ -145,7 +145,17 @@ use it, since the next release removes it.
 ./setup.sh status       # versions, PATH shadowing, skills, herdr plugin, key binding, Redis
 ./setup.sh update       # git pull --ff-only, then install; prints vA -> vB and the release notes
 ./setup.sh uninstall    # asks at every step; --yes = cautious defaults; --purge = Redis data too
+./setup.sh rotate-redis-password   # replace the broker's password (asks first; --dry-run, --yes)
 ```
+
+**The broker's password.** An install on a fresh broker writes a random password to
+`~/.config/agentbus/redis.env` (0600); compose and every agentbus and busmon process read it, so
+nothing needs exporting. An install made before keeps the historical `AgentBus2025!` (health
+`redis-password` warns) until you run `./setup.sh rotate-redis-password`: it checks first, asks,
+sets the new password on the running broker without a restart, proves it, restarts the running
+project services, and puts everything back if a step fails. An exported `REDIS_PASSWORD` wins over
+the file; the rotation refuses to run while one is exported. Reopen busmon after it, and copy the
+file to any machine that reaches the broker through a tunnel.
 
 busmon shows a discreet `↑ vX.Y.Z` in its header when a newer release exists. It checks once a
 day; `AGENT_BUS_NO_UPDATE_CHECK=1` turns the check off.
@@ -169,7 +179,7 @@ offers: stop it and keep the data (the default), remove it together with its dat
 ## 4. Network Topology: Local vs Remote
 
 ### 100% Local Setup (Default)
-All processes run on the same workstation. Agents and `busmon` connect directly to `127.0.0.1:6380` (default password: `AgentBus2025!`).
+All processes run on the same workstation. Agents and `busmon` connect directly to `127.0.0.1:6380`, with the password in `~/.config/agentbus/redis.env` (an install from before keeps `AgentBus2025!` until it is rotated).
 
 ### Hybrid Setup with Remote Servers (host1 / GPU)
 For security, the broker binds strictly to loopback (`127.0.0.1:6380`). Remote access uses SSH tunnels:

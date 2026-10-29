@@ -301,6 +301,9 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 			_ = os.MkdirAll(dir, 0o700)
 			_ = os.WriteFile(filepath.Join(dir, "shop.env"), []byte("REDIS_PASSWORD=\"x\"\n"), 0o600)
 		}, &fakeBroker{pw: bus.LegacyPassword}, "shop"},
+		{"a REDIS_PASSWORD in the checkout's .env", map[string]string{}, func(in *Installer, _ *fakeRunner, _ string) {
+			_ = os.WriteFile(filepath.Join(in.Repo, ".env"), []byte("REDIS_PASSWORD=x\n"), 0o600)
+		}, &fakeBroker{pw: bus.LegacyPassword}, ".env sets REDIS_PASSWORD"},
 		{"a wrong current password", map[string]string{}, nil, &fakeBroker{pw: "something-else"}, "does not log in"},
 		{"a broker that refuses CONFIG SET", map[string]string{}, nil, &fakeBroker{pw: bus.LegacyPassword, refuse: true}, "nothing changed"},
 	} {
@@ -336,5 +339,35 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) || b.pw != bus.LegacyPassword {
 			t.Fatalf("dry=%v: something changed: %s", c.dry, out)
 		}
+	}
+}
+
+func TestSetsKey(t *testing.T) {
+	dir := t.TempDir()
+	for _, c := range []struct {
+		body string
+		want bool
+	}{
+		{"REDIS_PASSWORD=x\n", true},
+		{"REDIS_PASSWORD=\"x\"\n", true},
+		{"export REDIS_PASSWORD='x'\n", true},
+		{"# REDIS_PASSWORD=x\n", false}, // a comment
+		{"REDIS_PASSWORD=\n", false},
+		{"REDIS_PASSWORD=\"\"\n", false},
+		{"OTHER=1\n", false},
+	} {
+		p := filepath.Join(dir, "e")
+		_ = os.WriteFile(p, []byte(c.body), 0o644)
+		if got := setsKey(p, "REDIS_PASSWORD"); got != c.want {
+			t.Errorf("%q: %v", c.body, got)
+		}
+	}
+	if setsKey(filepath.Join(dir, "absent"), "REDIS_PASSWORD") {
+		t.Error("a missing file sets nothing")
+	}
+	unreadable := filepath.Join(dir, "unreadable")
+	_ = os.WriteFile(unreadable, []byte("OTHER=1\n"), 0o000)
+	if os.Geteuid() != 0 && !setsKey(unreadable, "REDIS_PASSWORD") {
+		t.Error("an unreadable file must count as setting it (refuse rather than guess)")
 	}
 }

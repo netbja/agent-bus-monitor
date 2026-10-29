@@ -663,7 +663,25 @@ It never touches Redis — see README "Example deployment".
   busmon sorts it first with ♙, fades the word `waiting` in and out (3 s, `fadeLevel`, ~10 redraws a second only while one waits; true colour only), counts it in the header and rings the bell once per new
   declaration (`tea_signals.go`, after the poll, never in View).
 - **Connection resolution order** (matches the legacy `agent_bus.py`): `REDIS_URL` wins if set;
-  otherwise `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` (defaults `localhost`/`6380`/`AgentBus2025!`).
+  otherwise `REDIS_HOST`/`REDIS_PORT` (defaults `localhost`/`6380`) with the password from
+  `REDIS_PASSWORD`, else the password file, else `AgentBus2025!` (redis-password, `bus/password.go`:
+  `PasswordFile` = `$XDG_CONFIG_HOME/agentbus/redis.env`, else `~/.config/agentbus/redis.env`, one
+  `REDIS_PASSWORD="…"` line, 0600 in 0700, written by a rename; a file that exists but cannot be read
+  is an error, never the default, and no error quotes its content; `LegacyPasswordInUse` reads the
+  same order). Compose reads the file through `env_file` (`required: false`) and gives redis-server
+  its password as a config on stdin (a shell `REDIS_PASSWORD` at `compose up` wins, then the file,
+  then the default; `"` and `\` escaped; the healthcheck uses `REDISCLI_AUTH`), never on an argv.
+  `setup` writes it (`password` in `setup/redis.go`) only for a fresh broker: no file, none exported, no
+  `agent-bus-redis` container and no `agent-bus_redis-data` volume, each read for sure. `./setup.sh
+  rotate-redis-password` (`setup/rotate.go`, the person's act, never sentinel's) checks everything
+  first (none exported, this checkout's broker running, no `REDIS_PASSWORD` in the checkout's `.env`
+  nor in any project's services env file, the current one logs in), asks (or `--yes`;
+  `--dry-run`), then `RotatePassword`: new file (old kept as `.prev`), `CONFIG SET requirepass`, a
+  fresh login, else the broker set back and the file put back byte for byte; then the running
+  project services restart. Its rollback test starts private `redis-server` processes (CONFIG SET
+  changes a whole server, never the shared test broker), opt-in through `AGENTBUS_TEST_REDIS_URL`.
+  `scripts/setup-legacy.sh` neither writes nor rotates it; its help is compared to the Go one without
+  `RotateHelp`.
   A non-empty `--host` overrides `REDIS_HOST` only. Note the **non-standard port 6380** (compose
   maps host `6380` → container `6379`). `agentbus` sender identity defaults to `hermes`,
   overridable via `AGENT_BUS_AGENT`; inside a herdr pane (`HERDR_PANE_ID`) with `AGENT_BUS_AGENT`
@@ -700,8 +718,8 @@ It never touches Redis — see README "Example deployment".
   details and retained transitions in its R recap. Runaway is warning-only. `cmd-delivery` judges only the consumer groups of agents registered in
   `{p}:agents` (A9, `deliveryEvidence`: a dead group's lag tripped `fail` for nobody; `agents forget`
   destroys a forgotten agent's group). Scanner, canary, key
-  inventory, project-defined checks and password rotation belong to later releases; health is not
-  a security boundary.
+  inventory and project-defined checks belong to later releases (password rotation shipped as
+  `./setup.sh rotate-redis-password`, the person's act); health is not a security boundary.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

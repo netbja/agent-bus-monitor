@@ -118,8 +118,10 @@ type Dialer func(ctx context.Context, pw string) (PasswordSetter, func(), error)
 
 // RotateRedisPassword is ./setup.sh rotate-redis-password: everything is
 // checked before anything changes (no exported REDIS_URL or REDIS_PASSWORD,
-// which would win over the file; this checkout's broker running; no project's
-// services env file carrying a password; the current one logs in), then the
+// which would win over the file; this checkout's broker running; no
+// REDIS_PASSWORD in the checkout's .env, which compose would use; no
+// project's services env file carrying a password; the current one logs
+// in), then the
 // person confirms (or --yes), then RotatePassword, then the running project
 // services are restarted so their new connections use it. It never prints a
 // password.
@@ -148,6 +150,10 @@ func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial 
 			where = ow.Dir
 		}
 		o.Fatal("the broker belongs to " + where + ": rotate its password from there")
+		return 1
+	}
+	if setsKey(filepath.Join(in.Repo, ".env"), "REDIS_PASSWORD") {
+		o.Fatal(filepath.Join(in.Repo, ".env") + " sets REDIS_PASSWORD: compose would start the broker with it, not with the password file. Remove that line, then run this again.")
 		return 1
 	}
 	if carriers := in.envFilesWithPassword(); len(carriers) > 0 {
@@ -216,12 +222,32 @@ func (in *Installer) envFilesWithPassword() []string {
 	files, _ := filepath.Glob(filepath.Join(paths.ConfigHome, "agentbus", "services", "*.env"))
 	var out []string
 	for _, f := range files {
-		env, err := service.LoadEnvFile(f)
-		if err == nil && (env["REDIS_PASSWORD"] != "" || env["REDIS_URL"] != "") {
+		if setsKey(f, "REDIS_PASSWORD") || setsKey(f, "REDIS_URL") {
 			out = append(out, strings.TrimSuffix(filepath.Base(f), ".env"))
 		}
 	}
 	return out
+}
+
+// setsKey reports whether an env file (KEY=value or KEY="value" lines, an
+// optional export) sets key to a non-empty value; its values are never
+// returned. A file that exists but cannot be read counts as setting it, so a
+// rotation is refused rather than guessed.
+func setsKey(path, key string) bool {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	if err != nil {
+		return true
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		k, v, ok := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "export "), "=")
+		if ok && strings.TrimSpace(k) == key && strings.Trim(strings.TrimSpace(v), `"'`) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // restartRunningServices restarts each project service that runs, so its

@@ -146,7 +146,17 @@ signalez ce qui vous y a obligé, la version suivante le retire.
 ./setup.sh status       # versions, PATH, skills, plugin herdr, raccourci, Redis
 ./setup.sh update       # git pull --ff-only puis install ; affiche vA -> vB et les notes de version
 ./setup.sh uninstall    # demande à chaque étape ; --yes = choix prudents ; --purge = données Redis aussi
+./setup.sh rotate-redis-password   # remplace le mot de passe du broker (demande d'abord ; --dry-run, --yes)
 ```
+
+**Le mot de passe du broker.** Une installation sur un broker neuf écrit un mot de passe aléatoire
+dans `~/.config/agentbus/redis.env` (0600) ; compose et tous les processus agentbus et busmon le
+lisent, rien n'est à exporter. Une installation antérieure garde l'historique `AgentBus2025!` (la
+santé `redis-password` avertit) jusqu'à `./setup.sh rotate-redis-password` : il vérifie d'abord,
+demande, pose le nouveau mot de passe sur le broker en marche sans le redémarrer, le prouve,
+redémarre les services de projet en marche, et remet tout en place si une étape échoue. Un
+`REDIS_PASSWORD` exporté l'emporte sur le fichier ; la rotation refuse de tourner tant qu'il l'est.
+Rouvrez busmon ensuite, et copiez le fichier sur toute machine qui atteint le broker par un tunnel.
 
 Quand une version plus récente existe, busmon l'indique discrètement dans son en-tête :
 `↑ vX.Y.Z`. La vérification a lieu une fois par jour ; `AGENT_BUS_NO_UPDATE_CHECK=1` la
@@ -172,7 +182,7 @@ ou ne rien toucher.
 ## 4. Topologie Réseau : Local vs Distant
 
 ### Déploiement 100% Local (par défaut)
-Tous les processus tournent sur la même machine. Les agents et `busmon` se connectent directement à `127.0.0.1:6380` (mot de passe par défaut : `AgentBus2025!`).
+Tous les processus tournent sur la même machine. Les agents et `busmon` se connectent directement à `127.0.0.1:6380`, avec le mot de passe de `~/.config/agentbus/redis.env` (une installation antérieure garde `AgentBus2025!` jusqu'à sa rotation).
 
 ### Déploiement Hybride avec Serveur Distant (host1 / GPU)
 Le broker Redis reste confiné au loopback (`127.0.0.1:6380`) pour des raisons de sécurité. La connexion distante s'opère via un tunnel SSH sécurisé :
