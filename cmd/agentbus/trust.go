@@ -220,7 +220,12 @@ func tabExecutable(command string, env func(string) string) string {
 
 // tabProfile resolves the role a tab's agent-launch names.
 func tabProfile(command string, env func(string) string) (rolecfg.Profile, bool) {
-	words := strings.Fields(strings.ReplaceAll(command, "'", ""))
+	// The template quotes its words (rolecfg.ShellJoin): split them back as a
+	// shell would, so a path with a space stays one word (reviewer-codex).
+	words, err := rolecfg.ShellSplit(command)
+	if err != nil {
+		words = strings.Fields(strings.ReplaceAll(command, "'", ""))
+	}
 	manifest, role := env("ROLES_TOML"), ""
 	for i, w := range words {
 		if m, ok := strings.CutPrefix(w, "ROLES_TOML="); ok {

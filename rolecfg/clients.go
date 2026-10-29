@@ -14,7 +14,7 @@ type ClientInfo struct {
 var Clients = []ClientInfo{
 	{Client: "claude-code", Exe: "claude", Name: "Claude Code", Install: "https://code.claude.com/docs/en/setup"},
 	{Client: "codex", Exe: "codex", Name: "Codex CLI", Install: "https://github.com/openai/codex"},
-	{Client: "kimi-cli", Exe: "kimi", Name: "Kimi Code CLI", Install: "https://github.com/MoonshotAI/kimi-cli"},
+	{Client: "kimi-cli", Exe: "kimi", Name: "Kimi Code CLI", Install: "https://github.com/MoonshotAI/kimi-code"}, // the successor of the archived kimi-cli (reviewer-codex)
 	{Client: "grok", Exe: "grok", Name: "Grok Build (xAI, beta)", Install: "https://x.ai/cli"},
 }
 

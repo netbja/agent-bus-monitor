@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
 // installer-no-client (Bernard): up with no agent CLI for any role of the
@@ -146,5 +149,48 @@ func TestLookAgentCLIFindsAUserInstall(t *testing.T) {
 	onPath := lookAgentCLI(func(string) string { return home }, func(e string) (string, error) { return "/p/" + e, nil })
 	if p, _ := onPath("codex"); p != "/p/codex" {
 		t.Fatalf("PATH first: %q", p)
+	}
+}
+
+// reviewer-codex: a generated template quotes the ROLES_TOML assignment
+// (ShellJoin); with a space in the manifest's path the tab must still resolve,
+// or checkClients would count no agent and let the tabs launch.
+func TestTabExecutableReadsAGeneratedTemplateWithASpacedPath(t *testing.T) {
+	src, err := os.ReadFile("../../roles.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "my checkout")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(dir, "roles.toml")
+	if err := os.WriteFile(manifest, src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := rolecfg.Load(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tpl upTemplate
+	body := rolecfg.Template(m, manifest, "demo", dir, filepath.Join(dir, "scripts"), dir, "", false, false)
+	if _, err := toml.Decode(body, &tpl); err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, tab := range tpl.Tabs {
+		if tab.Name == "busmon" {
+			continue
+		}
+		if !strings.Contains(tab.Command, "'") {
+			t.Fatalf("the template no longer quotes the spaced path: %q", tab.Command)
+		}
+		if got := tabExecutable(tab.Command, func(string) string { return "" }); got != "claude" {
+			t.Errorf("%s: %q, want claude", tab.Name, got)
+		}
+		found++
+	}
+	if found == 0 {
+		t.Fatal("no agent tab in the generated template")
 	}
 }

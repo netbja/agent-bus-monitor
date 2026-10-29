@@ -29,7 +29,7 @@ func TestClients(t *testing.T) {
 		"    ! No agent CLI on PATH: agent-bus starts its agents in one of these, so install at least one:\n",
 		"      Claude Code (claude): https://code.claude.com/docs/en/setup\n",
 		"      Codex CLI (codex): https://github.com/openai/codex\n",
-		"      Kimi Code CLI (kimi): https://github.com/MoonshotAI/kimi-cli\n",
+		"      Kimi Code CLI (kimi): https://github.com/MoonshotAI/kimi-code\n",
 		"      Grok Build (xAI, beta) (grok): https://x.ai/cli\n",
 		"    • Meanwhile the bus and busmon work. Once one is installed: agentbus up <project> <path>\n",
 	} {
