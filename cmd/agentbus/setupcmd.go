@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/setup"
+	"github.com/redis/go-redis/v9"
 )
 
 // `agentbus setup [--repo <dir>] install|update|uninstall|status [setup.sh's
@@ -62,6 +63,14 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 	case "status":
 		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv}
 		return in.Status(context.Background())
+	case "rotate-redis-password":
+		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv}
+		var tty io.ReadWriter
+		if t := setup.OpenTTY(); t != nil {
+			defer t.Close()
+			tty = t
+		}
+		return in.RotateRedisPassword(context.Background(), &setup.Prompter{Yes: opt.Yes, TTY: tty}, dialLocalBroker)
 	case "uninstall":
 		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv, Now: time.Now}
 		var tty io.ReadWriter
@@ -143,3 +152,14 @@ func goModVersion(repo string) string {
 
 func isFile(p string) bool { st, err := os.Stat(p); return err == nil && st.Mode().IsRegular() }
 func isDir(p string) bool  { st, err := os.Stat(p); return err == nil && st.IsDir() }
+
+// dialLocalBroker is the rotation's connection: the broker this checkout's
+// compose publishes on 127.0.0.1:6380, with pw (redis-password).
+func dialLocalBroker(ctx context.Context, pw string) (setup.PasswordSetter, func(), error) {
+	c := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6380", Password: pw, DialTimeout: 5 * time.Second})
+	if err := c.Ping(ctx).Err(); err != nil {
+		_ = c.Close()
+		return nil, nil, err
+	}
+	return setup.RedisSetter{C: c}, func() { _ = c.Close() }, nil
+}
