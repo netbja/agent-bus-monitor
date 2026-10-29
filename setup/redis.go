@@ -2,10 +2,15 @@ package setup
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // RedisContainer is the broker's container name, shared by every checkout.
@@ -96,9 +101,11 @@ func (in *Installer) Redis(ctx context.Context, d Docker) {
 	case !in.mayCompose(ctx, "not started."):
 		return
 	case in.Opt.DryRun:
+		in.password(ctx)
 		in.O.Info("[dry-run] would start Redis container via " + d.Compose + " up -d")
 		return
 	}
+	in.password(ctx)
 	in.O.Info("Redis not detected on :6380. Starting broker container...")
 	name, args := composeArgs(d.Compose, "up", "-d")
 	if out, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo}); err != nil {
@@ -115,6 +122,55 @@ func (in *Installer) Redis(ctx context.Context, d Docker) {
 		in.sleep(time.Second)
 	}
 	in.O.Warn("Redis container started but port 6380 is not yet responsive.")
+}
+
+// RedisVolume is the broker's data volume (compose project agent-bus).
+const RedisVolume = "agent-bus_redis-data"
+
+// password writes a random password file before compose starts a fresh
+// broker (redis-password): no file yet, no exported REDIS_PASSWORD (compose
+// would use it instead), no broker container and no data volume. An
+// existing broker keeps its password: the person replaces it with
+// ./setup.sh rotate-redis-password. It never prints the password.
+func (in *Installer) password(ctx context.Context) {
+	path := bus.PasswordFile(in.Getenv)
+	if path == "" {
+		return
+	}
+	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
+		return // there already (or unreadable): never replaced here
+	}
+	if in.Getenv("REDIS_PASSWORD") != "" {
+		in.O.Info("Redis password: REDIS_PASSWORD is exported, compose uses it (no file written)")
+		return
+	}
+	if !in.freshBroker(ctx) {
+		in.O.Info("Redis password: an existing broker keeps its password (./setup.sh rotate-redis-password replaces it)")
+		return
+	}
+	if in.Opt.DryRun {
+		in.O.Info("[dry-run] would write a random Redis password to " + path + " (0600)")
+		return
+	}
+	pw, err := bus.NewPassword()
+	if err == nil {
+		err = bus.WritePassword(path, pw)
+	}
+	if err != nil {
+		in.O.Warn("Redis password: could not write " + path + " (" + err.Error() + "); the broker starts with the historical default")
+		return
+	}
+	in.O.OK("Redis password: a random one written to " + path + " (0600)")
+}
+
+// freshBroker: neither the broker's container nor its data volume exists,
+// both read for sure (an unreadable answer is not fresh).
+func (in *Installer) freshBroker(ctx context.Context) bool {
+	if o, err := in.BrokerOwner(ctx); err != nil || o.Exists {
+		return false
+	}
+	out, err := in.R.Run(ctx, Cmd{Name: "docker", Args: []string{"volume", "inspect", "--format", "{{.Name}}", RedisVolume}})
+	return err != nil && strings.Contains(strings.ToLower(string(out)), "no such volume")
 }
 
 func (in *Installer) sleep(d time.Duration) {

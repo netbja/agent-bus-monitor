@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 const inspectOwner = `docker inspect --format {{index .Config.Labels "com.docker.compose.project.working_dir"}} agent-bus-redis`
@@ -121,5 +125,90 @@ func TestBrokerOwner(t *testing.T) {
 	f.cmds[inspectOwner] = fakeCmd{out: in.Repo + "/\n"}
 	if o, err := in.BrokerOwner(context.Background()); err != nil || !o.Exists || !o.Ours || o.Dir != in.Repo+"/" {
 		t.Fatalf("%+v %v", o, err)
+	}
+}
+
+const inspectVolume = "docker volume inspect --format {{.Name}} agent-bus_redis-data"
+
+// redis-password: install writes a random password file for a fresh broker
+// only (no file, no container, no data volume, none exported), before compose
+// starts it; an existing broker keeps its password; a dry run says which.
+func TestRedisPasswordForAFreshBroker(t *testing.T) {
+	ctx := context.Background()
+	up := Docker{OK: true, Compose: "docker compose"}
+	noContainer := fakeCmd{err: errors.New("1"), out: "\nError: No such object: agent-bus-redis\n"}
+	noVolume := fakeCmd{err: errors.New("1"), out: "Error response from daemon: get agent-bus_redis-data: no such volume\n"}
+	world := func(env map[string]string, owner, volume fakeCmd) (*Installer, *bytes.Buffer, string) {
+		in, out, _, f := redisWorld(t, false, true)
+		if owner.out == "ours" { // the broker's container exists and belongs to this checkout
+			owner.out = in.Repo + "\n"
+		}
+		cfg := t.TempDir()
+		env["XDG_CONFIG_HOME"] = cfg
+		in.Getenv = func(k string) string { return env[k] }
+		f.cmds[inspectOwner] = owner
+		f.cmds[inspectVolume] = volume
+		f.cmds["docker compose up -d"] = fakeCmd{}
+		return in, out, filepath.Join(cfg, "agentbus", "redis.env")
+	}
+
+	// Fresh: a password written 0600 before compose up, and said so (never its value).
+	in, out, path := world(map[string]string{}, noContainer, noVolume)
+	in.Redis(ctx, up)
+	pw, err := bus.ReadPassword(path)
+	if err != nil || len(pw) < 40 {
+		t.Fatalf("fresh broker: password %d chars, %v", len(pw), err)
+	}
+	if st, _ := os.Stat(path); st.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", st.Mode().Perm())
+	}
+	if !strings.Contains(out.String(), "Redis password: a random one written to "+path+" (0600)") || strings.Contains(out.String(), pw) {
+		t.Fatalf("%q", out.String())
+	}
+	if i, j := strings.Index(out.String(), "Redis password"), strings.Index(out.String(), "Starting broker"); i < 0 || j < 0 || i > j {
+		t.Fatalf("the password is not written before compose starts the broker: %q", out.String())
+	}
+
+	// A second install keeps the file as it is.
+	in.Redis(ctx, up)
+	if again, _ := bus.ReadPassword(path); again != pw {
+		t.Fatal("a second install replaced the password")
+	}
+
+	// An existing broker (its container, or only its data volume) keeps its password.
+	for name, c := range map[string][2]fakeCmd{
+		"its stopped container": {{out: "ours"}, noVolume},
+		"its data volume":       {noContainer, {out: "agent-bus_redis-data\n"}},
+	} {
+		in, out, path := world(map[string]string{}, c[0], c[1])
+		in.Redis(ctx, up)
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s: a password was written for an existing broker", name)
+		}
+		if !strings.Contains(out.String(), "an existing broker keeps its password") {
+			t.Fatalf("%s: %q", name, out.String())
+		}
+	}
+
+	// An exported REDIS_PASSWORD is what compose uses: no file.
+	in, out, path = world(map[string]string{"REDIS_PASSWORD": "mine"}, noContainer, noVolume)
+	in.Redis(ctx, up)
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) || !strings.Contains(out.String(), "REDIS_PASSWORD is exported") {
+		t.Fatalf("exported: file %v, %q", err, out.String())
+	}
+
+	// A dry run writes nothing and says what it would do.
+	in, out, path = world(map[string]string{}, noContainer, noVolume)
+	in.Opt.DryRun = true
+	in.Redis(ctx, up)
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) || !strings.Contains(out.String(), "[dry-run] would write a random Redis password to "+path) {
+		t.Fatalf("dry run: file %v, %q", err, out.String())
+	}
+
+	// An unreadable volume answer is not taken for a fresh broker.
+	in, _, path = world(map[string]string{}, noContainer, fakeCmd{err: errors.New("1"), out: "Cannot connect to the Docker daemon\n"})
+	in.Redis(ctx, up)
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("a password was written when the volume could not be read")
 	}
 }
