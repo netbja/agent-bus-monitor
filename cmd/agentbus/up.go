@@ -58,6 +58,11 @@ type upDeps struct {
 	TrustPoll    time.Duration
 	TrustTimeout time.Duration
 	Out          io.Writer // the gate's messages (runUp's stdout)
+
+	// The agents' CLIs (installer-no-client): TabExe is the program a tab's
+	// agent runs ("" for none), LookPath finds it on up's PATH. Nil: no check.
+	TabExe   func(command string) string
+	LookPath func(string) (string, error)
 }
 
 type upTab struct {
@@ -145,6 +150,19 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if _, err := toml.DecodeFile(path, &tpl); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
 		return 1
+	}
+	absent, ok := checkClients(d, project, tpl, stdout, stderr)
+	if !ok {
+		return 1
+	}
+	if len(absent) > 0 && d.TabClient != nil { // no trust gate for a CLI that is not there (foureyes)
+		clientOf := d.TabClient
+		d.TabClient = func(cmd string) string {
+			if absent[d.TabExe(cmd)] {
+				return ""
+			}
+			return clientOf(cmd)
+		}
 	}
 	failed := false
 	if m != nil {
@@ -575,6 +593,8 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 		ProcStart: procStartFn(),
 		Lock:      upLock(upCacheDir(os.Getenv)),
 		TabClient: func(cmd string) string { return tabClient(cmd, os.Getenv) },
+		TabExe:    func(cmd string) string { return tabExecutable(cmd, os.Getenv) },
+		LookPath:  lookAgentCLI(os.Getenv, exec.LookPath, shellProbe(os.Getenv, 3*time.Second)),
 		Trusted:   clientTrusted(os.Getenv),
 		Sleep:     time.Sleep,
 		Out:       stdout,
@@ -743,4 +763,159 @@ func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: %s started (it was stopped)\n", project, k)
 	}
 	return code
+}
+
+// checkClients (installer-no-client) refuses before any service starts or any
+// tab opens only when none of the team's agent CLIs is found: then each
+// client's install pointer and the next command, and false. With some
+// missing it starts every tab as before and warns with their names (master:
+// a lookup alone never drops a tab; their panes say if they fail). A CLI
+// nobody could judge (errCLIUnknown) counts as found: fail open. It returns
+// the executables confirmed absent, which open no trust gate.
+func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Writer) (map[string]bool, bool) {
+	if d.TabExe == nil || d.LookPath == nil {
+		return nil, true
+	}
+	absent := map[string]bool{}
+	type miss struct {
+		tab, exe string
+		why      error
+	}
+	var missing []miss
+	agents := 0
+	for _, t := range tpl.Tabs {
+		exe := d.TabExe(t.Command)
+		if exe == "" {
+			continue
+		}
+		agents++
+		_, err := d.LookPath(exe)
+		switch {
+		case err == nil:
+		case errors.Is(err, errCLIUnknown):
+			fmt.Fprintf(stdout, "could not tell whether %s is installed (%v): %s starts anyway\n", exe, err, t.Name)
+		default:
+			missing = append(missing, miss{t.Name, exe, err})
+			absent[exe] = true
+		}
+	}
+	if len(missing) == 0 {
+		return nil, true
+	}
+	if len(missing) == agents {
+		var names []string
+		for _, m := range missing {
+			names = append(names, m.tab+" needs "+m.exe)
+		}
+		fmt.Fprintf(stderr, "agentbus up: no agent CLI on PATH for this team (%s; %v): nothing was started. Install at least one of:\n", strings.Join(names, ", "), missing[0].why)
+		for _, l := range rolecfg.ClientGuidance() {
+			fmt.Fprintln(stderr, "  "+l)
+		}
+		fmt.Fprintf(stderr, "busmon and the bus work meanwhile (busmon --project %s); once one is installed, then run: agentbus up %s\n", project, project)
+		return absent, false
+	}
+	for _, m := range missing {
+		where := ""
+		for _, c := range rolecfg.Clients {
+			if c.Exe == m.exe {
+				where = " (" + c.Name + " (" + c.Exe + "): " + c.Install + ")"
+			}
+		}
+		fmt.Fprintf(stdout, "warning: %s needs %s, not found%s: %v; its tab starts anyway and says so if it fails\n", m.tab, m.exe, where, m.why)
+	}
+	return absent, true
+}
+
+// errCLIAbsent: the user's login shell says the CLI is not installed; only
+// this counts as missing (a warning, or the refusal when every agent's CLI
+// is). errCLIUnknown: nobody could tell (no shell, a timeout, no answer): it
+// counts as found, and the reason is said (foureyes).
+var (
+	errCLIAbsent  = errors.New("not installed")
+	errCLIUnknown = errors.New("could not tell")
+)
+
+// lookAgentCLI finds an agent's CLI on up's PATH, else in the usual per-user
+// install directories, else through the person's own login shell (shell):
+// up may run from a pane (the herdr plugin's picker) whose PATH is narrower
+// than the shell an agent's tab runs in, where nvm, volta, asdf, mise or a
+// CLI's own installer put it on PATH. A miss is errCLIAbsent only when that
+// shell says so; when it cannot answer, errCLIUnknown.
+func lookAgentCLI(getenv func(string) string, look func(string) (string, error), shell func(string) (string, error)) func(string) (string, error) {
+	return func(exe string) (string, error) {
+		if p, err := look(exe); err == nil {
+			return p, nil
+		}
+		var dirs []string
+		if home := getenv("HOME"); home != "" {
+			for _, d := range []string{".local/bin", "bin", ".npm-global/bin", ".bun/bin", ".cargo/bin"} {
+				dirs = append(dirs, filepath.Join(home, d))
+			}
+		}
+		for _, dir := range append(dirs, "/usr/local/bin", "/opt/homebrew/bin") {
+			cand := filepath.Join(dir, exe)
+			if st, err := os.Stat(cand); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+				return cand, nil
+			}
+		}
+		p, err := shell(exe)
+		switch {
+		case err == nil:
+			return p, nil
+		case errors.Is(err, errCLIAbsent):
+			return "", err
+		}
+		return "", fmt.Errorf("%w: %v", errCLIUnknown, err)
+	}
+}
+
+// probeDone ends the probe's own output with command -v's status, so a
+// shell that fails before running it (rc error, unsupported invocation) is
+// told from a clean miss (reviewer-codex).
+const probeDone = "AGENTBUS_PROBE_DONE"
+
+// shellProbe asks $SHELL, as a login interactive shell, where exe is
+// (command -v), within timeout: the path command -v printed when its status
+// is 0, errCLIAbsent when it ran and failed, any other error when the shell
+// could not answer (no SHELL, a timeout, no marker). exe is passed as an
+// argument, never spliced into the script; fish gets its own syntax.
+func shellProbe(getenv func(string) string, timeout time.Duration) func(string) (string, error) {
+	return func(exe string) (string, error) {
+		sh := getenv("SHELL")
+		if sh == "" {
+			return "", errors.New("no SHELL to ask")
+		}
+		// POSIX shells give -c's first argument to $0, so a placeholder comes
+		// first and the name is $1; fish puts every argument in $argv, so the
+		// name alone is $argv[1] (reviewer-codex).
+		args := []string{"-lic", `command -v -- "$1"; printf '\n` + probeDone + ` %s\n' "$?"`, "agentbus", exe}
+		if filepath.Base(sh) == "fish" {
+			args = []string{"-lic", `command -v -- $argv[1]; printf '\n` + probeDone + ` %s\n' $status`, exe}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, sh, args...)
+		cmd.WaitDelay = 500 * time.Millisecond
+		out, _ := cmd.Output() // the shell's own exit status is not the answer: the marker is
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("%s did not answer within %s", filepath.Base(sh), timeout)
+		}
+		lines := strings.Split(string(out), "\n")
+		for i := len(lines) - 1; i >= 0; i-- {
+			status, ok := strings.CutPrefix(strings.TrimSpace(lines[i]), probeDone+" ")
+			if !ok {
+				continue
+			}
+			if status != "0" {
+				return "", fmt.Errorf("%w (checked with %s)", errCLIAbsent, filepath.Base(sh))
+			}
+			for k := i - 1; k >= 0; k-- {
+				if l := strings.TrimSpace(lines[k]); l != "" {
+					return l, nil
+				}
+			}
+			return "", errors.New("command -v found it but printed nothing")
+		}
+		return "", fmt.Errorf("%s gave no answer (it may have failed while starting)", filepath.Base(sh))
+	}
 }

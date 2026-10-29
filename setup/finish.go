@@ -7,22 +7,31 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
 // Clients is setup.sh's step 5: which AI clients are on PATH (informational).
+// The clients are the ones the launcher can run (rolecfg.Clients); none is a
+// warning, never a failure (installer-no-client): the bus and busmon work
+// without one, and nothing is installed for the person.
 func (in *Installer) Clients() {
 	in.O.Step("5/5 Scanning installed AI coding agents")
 	found := false
-	for _, c := range []string{"claude", "codex", "kimi", "agy"} {
-		if p, err := in.R.LookPath(c); err == nil {
-			in.O.OK(c + ": available (" + p + ")")
+	for _, c := range rolecfg.Clients {
+		if p, err := in.R.LookPath(c.Exe); err == nil {
+			in.O.OK(c.Exe + ": available (" + p + ")")
 			found = true
 		} else {
-			in.O.Info(c + ": not installed (optional)")
+			in.O.Info(c.Exe + ": not installed (optional)")
 		}
 	}
 	if !found {
-		in.O.Warn("No recognized agent CLI found on PATH (claude, codex, kimi, agy). Install at least one agent client.")
+		in.O.Warn("No agent CLI on PATH: agent-bus starts its agents in one of these, so install at least one:")
+		for _, l := range rolecfg.ClientGuidance() {
+			fmt.Fprintln(in.O.out, "      "+l)
+		}
+		in.O.Info("Meanwhile the bus and busmon work. Once one is installed: agentbus up <project> <path>")
 	}
 }
 

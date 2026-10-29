@@ -121,3 +121,40 @@ func TestUpDryRunShowsTheGate(t *testing.T) {
 		t.Fatalf("out = %q", out.String())
 	}
 }
+
+// foureyes: a client whose CLI is confirmed absent opens no trust gate. Its
+// tabs start (master's policy), and nobody waits ten minutes for a dialog its
+// missing CLI can never show.
+func TestUpOpensNoTrustGateForAnAbsentCLI(t *testing.T) {
+	work, h, deps, polls := gateFixture(t, -1) // claude's trust never comes
+	deps.TabExe = func(cmd string) string {
+		switch {
+		case strings.Contains(cmd, "foureyes"):
+			return "codex"
+		case strings.Contains(cmd, "agent-launch"):
+			return "claude"
+		}
+		return ""
+	}
+	deps.LookPath = func(exe string) (string, error) {
+		if exe == "codex" {
+			return "/bin/codex", nil
+		}
+		return "", errCLIAbsent
+	}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if *polls != 0 || strings.Contains(out.String(), "asks whether you trust") {
+		t.Fatalf("a trust gate waited for an absent CLI (%d polls): %q", *polls, out.String())
+	}
+	for _, tab := range []string{"agent-launch master", "agent-launch coder", "agent-launch foureyes"} {
+		if runIndex(h.calls, tab) < 0 {
+			t.Fatalf("%s not started:\n%s", tab, strings.Join(h.calls, "\n"))
+		}
+	}
+	if !strings.Contains(out.String(), "warning: master needs claude, not found") {
+		t.Fatalf("no warning: %q", out.String())
+	}
+}
