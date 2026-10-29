@@ -903,3 +903,7 @@ Two specs are written and reviewed, not built:
 
 The freshness bar of the Agents table empties over `staleAfter` (10m), a constant at the top
 of `cmd/busmon/main.go`.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE). Copyright (c) 2026 Bernard Jaulin.
