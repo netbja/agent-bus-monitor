@@ -777,7 +777,11 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 		return nil, true
 	}
 	absent := map[string]bool{}
-	var missing []string
+	type miss struct {
+		tab, exe string
+		why      error
+	}
+	var missing []miss
 	agents := 0
 	for _, t := range tpl.Tabs {
 		exe := d.TabExe(t.Command)
@@ -791,7 +795,7 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 		case errors.Is(err, errCLIUnknown):
 			fmt.Fprintf(stdout, "could not tell whether %s is installed (%v): %s starts anyway\n", exe, err, t.Name)
 		default:
-			missing = append(missing, t.Name+" needs "+exe)
+			missing = append(missing, miss{t.Name, exe, err})
 			absent[exe] = true
 		}
 	}
@@ -799,7 +803,11 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 		return nil, true
 	}
 	if len(missing) == agents {
-		fmt.Fprintf(stderr, "agentbus up: no agent CLI on PATH for this team (%s): nothing was started. Install at least one of:\n", strings.Join(missing, ", "))
+		var names []string
+		for _, m := range missing {
+			names = append(names, m.tab+" needs "+m.exe)
+		}
+		fmt.Fprintf(stderr, "agentbus up: no agent CLI on PATH for this team (%s; %v): nothing was started. Install at least one of:\n", strings.Join(names, ", "), missing[0].why)
 		for _, l := range rolecfg.ClientGuidance() {
 			fmt.Fprintln(stderr, "  "+l)
 		}
@@ -807,14 +815,13 @@ func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Wr
 		return absent, false
 	}
 	for _, m := range missing {
-		exe := m[strings.LastIndex(m, " ")+1:]
 		where := ""
 		for _, c := range rolecfg.Clients {
-			if c.Exe == exe {
+			if c.Exe == m.exe {
 				where = " (" + c.Name + " (" + c.Exe + "): " + c.Install + ")"
 			}
 		}
-		fmt.Fprintf(stdout, "warning: %s, not found%s; its tab starts anyway and says so if it fails\n", m, where)
+		fmt.Fprintf(stdout, "warning: %s needs %s, not found%s: %v; its tab starts anyway and says so if it fails\n", m.tab, m.exe, where, m.why)
 	}
 	return absent, true
 }
@@ -878,13 +885,16 @@ func shellProbe(getenv func(string) string, timeout time.Duration) func(string) 
 		if sh == "" {
 			return "", errors.New("no SHELL to ask")
 		}
-		script := `command -v -- "$1"; printf '\n` + probeDone + ` %s\n' "$?"`
+		// POSIX shells give -c's first argument to $0, so a placeholder comes
+		// first and the name is $1; fish puts every argument in $argv, so the
+		// name alone is $argv[1] (reviewer-codex).
+		args := []string{"-lic", `command -v -- "$1"; printf '\n` + probeDone + ` %s\n' "$?"`, "agentbus", exe}
 		if filepath.Base(sh) == "fish" {
-			script = `command -v -- $argv[1]; printf '\n` + probeDone + ` %s\n' $status`
+			args = []string{"-lic", `command -v -- $argv[1]; printf '\n` + probeDone + ` %s\n' $status`, exe}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, sh, "-lic", script, "agentbus", exe)
+		cmd := exec.CommandContext(ctx, sh, args...)
 		cmd.WaitDelay = 500 * time.Millisecond
 		out, _ := cmd.Output() // the shell's own exit status is not the answer: the marker is
 		if ctx.Err() != nil {
@@ -897,7 +907,7 @@ func shellProbe(getenv func(string) string, timeout time.Duration) func(string) 
 				continue
 			}
 			if status != "0" {
-				return "", errCLIAbsent
+				return "", fmt.Errorf("%w (checked with %s)", errCLIAbsent, filepath.Base(sh))
 			}
 			for k := i - 1; k >= 0; k-- {
 				if l := strings.TrimSpace(lines[k]); l != "" {

@@ -268,16 +268,26 @@ func TestShellProbe(t *testing.T) {
 	if _, err := shellProbe(func(string) string { return broken }, time.Second)("absent"); err == nil || errors.Is(err, errCLIAbsent) {
 		t.Fatalf("a shell failing at startup: %v, want an unknown answer", err)
 	}
-	// fish: its script uses $argv and $status; a fake fish that only runs
-	// fish syntax would fail on "$1".
+	// fish: every argument after the script is $argv (no $0, reviewer-codex),
+	// so the fake maps them as fish does and answers for $argv[1] only when
+	// the script asks for it.
 	fish := filepath.Join(dir, "fish")
-	_ = os.WriteFile(fish, []byte("#!/bin/sh\ncase \"$2\" in *'$argv[1]'*'$status'*) ;; *) exit 127 ;; esac\n[ \"$4\" = present ] && { echo /opt/f/present; printf '\\nAGENTBUS_PROBE_DONE 0\\n'; exit 0; }\nprintf '\\nAGENTBUS_PROBE_DONE 1\\n'\n"), 0o755)
+	_ = os.WriteFile(fish, []byte(`#!/bin/sh
+shift # -lic
+script="$1"; shift # what remains is fish's $argv
+case "$script" in *'$argv[1]'*'$status'*) name="$1" ;; *) exit 127 ;; esac
+[ "$name" = present ] && { echo /opt/f/present; printf '\nAGENTBUS_PROBE_DONE 0\n'; exit 0; }
+printf '\nAGENTBUS_PROBE_DONE 1\n'
+`), 0o755)
 	fprobe := shellProbe(func(k string) string { return map[string]string{"SHELL": fish}[k] }, time.Second)
 	if p, err := fprobe("present"); err != nil || p != "/opt/f/present" {
-		t.Fatalf("fish present: %q, %v", p, err)
+		t.Fatalf("fish present: %q, %v (is $argv[1] the name?)", p, err)
 	}
 	if _, err := fprobe("absent"); !errors.Is(err, errCLIAbsent) {
 		t.Fatalf("fish absent: %v", err)
+	}
+	if _, err := probe("absent"); err == nil || !strings.Contains(err.Error(), "checked with fakesh") {
+		t.Fatalf("a miss does not name the shell it was checked with: %v", err)
 	}
 	if _, err := shellProbe(func(string) string { return "" }, time.Second)("x"); err == nil || errors.Is(err, errCLIAbsent) {
 		t.Fatalf("no SHELL: %v, want an unknown answer", err)
