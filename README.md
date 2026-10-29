@@ -712,10 +712,12 @@ handles each with a rule you can read, never a guess:
   The dispatcher can type that `/clear` itself, once per session, when the agent is idle, has
   no open question or review and its pane is ready (`AGENT_BUS_AUTO_CLEAR=1`, Claude Code only); it is **off by
   default** until its live checks have been run. Turn it on with
-  `AGENT_BUS_AUTO_CLEAR=1 agentbus up <p>`: `up` writes every `AGENT_BUS_*` variable of its shell into
-  the services' env file (`~/.config/agentbus/services/<p>.env`, `KEY="value"` lines), and rewrites
-  that file on each run, so a line edited by hand is lost at the next `up`; an unquoted one stops
-  the dispatcher on an invalid configuration.
+  `AGENT_BUS_AUTO_CLEAR=1 agentbus up <p>`. `up` builds the services' env file
+  (`~/.config/agentbus/services/<p>.env`, `KEY="value"` lines) from its shell: the `AGENT_BUS_*`
+  variables except the project and agent names, plus the escalation target and the reload setting,
+  which it keeps from the old file unless you change them. When the result differs from the file it
+  replaces it, so any other line added by hand is lost at the next `up`; an unquoted one stops the
+  dispatcher on an invalid configuration.
 - **Reload after a client update.** The dispatcher notices an agent running an outdated client
   (flag `update`) and tells sentinel, which restarts it on its role and profile, resuming its
   session (`agentbus reload <role>`): only an idle agent with no open work, never the caller's

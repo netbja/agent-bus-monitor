@@ -429,11 +429,14 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   ouverte, dans un volet prêt ; puis il prouve la nouvelle session et dit à l'agent de lire sa
   passation. Il reste désactivé tant que ses vérifications en conditions réelles n'ont pas été
   faites sur cette version. Activez-le sur la ligne `up` (`AGENT_BUS_AUTO_CLEAR=1 agentbus up
-  myapp`) : `up` écrit les variables `AGENT_BUS_*` de son shell dans le fichier d'environnement des
-  services, `~/.config/agentbus/services/myapp.env`, et le réécrit à chaque lancement, si bien
-  qu'une ligne ajoutée à la main est perdue au `up` suivant. Ses lignes sont au format
-  `KEY="value"` ; une ligne sans guillemets arrête le dispatcher pour configuration invalide. Pour
-  le désactiver, relancez `up` sans la variable.
+  myapp`). `up` construit le fichier d'environnement des services,
+  `~/.config/agentbus/services/myapp.env`, à partir de son shell : les variables `AGENT_BUS_*` sauf
+  les noms du projet et de l'agent, plus la cible d'escalade et le réglage de rechargement, qu'il
+  garde de l'ancien fichier tant que vous ne les changez pas (`--escalate-to`, `--reload`). Quand
+  le résultat diffère du fichier, il le remplace, si bien que toute autre ligne ajoutée à la main
+  est perdue au `up` suivant. Ses lignes sont au format `KEY="value"` ; une ligne sans guillemets
+  arrête le dispatcher pour configuration invalide. Pour le désactiver, relancez `up` sans la
+  variable.
 - **Mises à jour des clients.** Quand un client est mis à jour sous un agent en cours, busmon
   signale l'agent `update`, la santé `client-updates` avertit, et sentinel reçoit une directive.
   sentinel redémarre chaque agent périmé sur son rôle et son profil, en reprenant sa
@@ -597,13 +600,15 @@ l'exécute étape par étape.
 2. **Format des options** : `--ref abc123`, `--ref=abc123` et la forme courte indiquée par l'aide (`-r abc123`) fonctionnent. Un seul tiret devant un nom long (`-ref`), des options courtes groupées (`-ab`) et une valeur collée (`-rabc123`) ne fonctionnent pas.
 3. **Ordre positionnel strict** : Les arguments suivent un ordre précis : `agentbus status <agent> <state> <message>`. Le message se place toujours en dernier.
 4. **Nommage normalisé** : Les noms de projets et d'agents doivent respecter l'expression régulière `^[a-z][a-z0-9_-]{0,31}$` (minuscules, débutant par une lettre).
-5. **Un `AGENT_BUS_*` exporté reste dans les services** : `agentbus up` copie chaque variable
-   `AGENT_BUS_*` de son shell dans le fichier d'environnement du projet, et les services la gardent
-   après que vous l'avez retirée de votre shell, jusqu'au prochain `up` sans elle.
+5. **Un `AGENT_BUS_*` exporté reste dans les services** : `agentbus up` copie les variables
+   `AGENT_BUS_*` de son shell (sauf les noms du projet et de l'agent) dans le fichier
+   d'environnement du projet, et les services en gardent une après que vous l'avez retirée de votre
+   shell, jusqu'au prochain `up` sans elle. La cible d'escalade et le réglage de rechargement
+   restent même alors, jusqu'à ce que `--escalate-to` ou `--reload` les change.
 
 ---
 
-## 9. Brouillons et Projets
+## 9. Brouillons et Spécifications Prévues
 
 - **Le rôle `infra` est un brouillon, pas adopté.** `examples/drafts/infra/` contient un rôle pop
   pour Ansible, Terraform/OpenTofu et l'automatisation informatique : un profil manuel où seules

@@ -407,11 +407,13 @@ to watch a pane.
   agent whose hand-off stands, that is idle, with no open question or review, in a ready pane;
   then it proves the new session and tells the agent to read its hand-off. It stays off until
   its live checks have been run on this release. Set it on the `up` line
-  (`AGENT_BUS_AUTO_CLEAR=1 agentbus up myapp`): `up` writes the `AGENT_BUS_*` variables of its
-  shell into the services' env file, `~/.config/agentbus/services/myapp.env`, and rewrites it on
-  every run, so a line added by hand is lost at the next `up`. Its lines are `KEY="value"`; an
-  unquoted one stops the dispatcher on an invalid configuration. To turn it off, run `up` again
-  without the variable.
+  (`AGENT_BUS_AUTO_CLEAR=1 agentbus up myapp`). `up` builds the services' env file,
+  `~/.config/agentbus/services/myapp.env`, from its shell: the `AGENT_BUS_*` variables except the
+  project and agent names, plus the escalation target and the reload setting, which it keeps from
+  the old file unless you change them (`--escalate-to`, `--reload`). When the result differs from
+  the file it replaces it, so any other line added by hand is lost at the next `up`. Its lines are
+  `KEY="value"`; an unquoted one stops the dispatcher on an invalid configuration. To turn it off,
+  run `up` again without the variable.
 - **Client updates.** When a client is updated under a running agent, busmon flags the agent
   `update`, health `client-updates` warns, and sentinel gets one directive. sentinel restarts
   each outdated agent on its role and profile, resuming its conversation:
@@ -570,13 +572,15 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 2. **Flag Syntax**: `--ref abc123`, `--ref=abc123` and the short form the help shows (`-r abc123`) all work. A single dash with a long name (`-ref`), bundled shorts (`-ab`) and attached values (`-rabc123`) do not.
 3. **Positional Order**: Arguments must follow exact ordering: `agentbus status <agent> <state> <message>`. The message is always last.
 4. **Naming Conventions**: Project and agent names must match `^[a-z][a-z0-9_-]{0,31}$` (lowercase, starting with a letter).
-5. **An exported `AGENT_BUS_*` stays with the services**: `agentbus up` copies every
-   `AGENT_BUS_*` variable of its shell into the project's env file, and the services keep it after
-   you unset it in your shell, until the next `up` without it.
+5. **An exported `AGENT_BUS_*` stays with the services**: `agentbus up` copies the `AGENT_BUS_*`
+   variables of its shell (except the project and agent names) into the project's env file, and
+   the services keep one after you unset it in your shell, until the next `up` without it. The
+   escalation target and the reload setting stay even then, until `--escalate-to` or `--reload`
+   changes them.
 
 ---
 
-## 9. Drafts and Plans
+## 9. Drafts and Planned Specs
 
 - **The `infra` role is a draft, not adopted.** `examples/drafts/infra/` holds a pop role for
   Ansible, Terraform/OpenTofu and IT automation: a manual profile where only exact syntax and lint
