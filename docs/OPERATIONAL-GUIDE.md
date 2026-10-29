@@ -580,12 +580,13 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 
 ---
 
-## 9. Drafts and Planned Specs
+## 9. The infra Role and Planned Specs
 
-- **The `infra` role is a draft, not adopted.** `examples/drafts/infra/` holds a pop role for
-  Ansible, Terraform/OpenTofu and IT automation: a manual profile where only exact syntax and lint
-  commands run without a prompt, plans, checks and every change go through you, and secrets are
-  denied. Its README gives the adoption: master asks you, then
+- **The `infra` role.** A pop role for Ansible, Terraform/OpenTofu and IT automation, on a manual
+  profile: only exact syntax and lint commands run without a prompt; plans, checks, downloads and
+  every change go through you, and secrets are denied. master pops it only with your yes. It was
+  adopted from the reviewed draft in `examples/drafts/infra/`, whose README gives the adoption for
+  another project: master asks you, then
   `agentbus --project myapp roles adopt infra --ask <id> --from examples/drafts`.
 - **Two specs, not built.** The [feedback loop](superpowers/specs/2026-10-29-feedback-loop-design.md)
   (`agentbus feedback`: read-only statistics over the reviews the bus retains; a skill change

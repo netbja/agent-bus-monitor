@@ -490,8 +490,8 @@ It never touches Redis — see README "Example deployment".
   `roles draft <role> --task …` (an inert draft in `.agent-bus/drafts`, skills from the launcher's
   roots, least privileged) and `roles adopt <role> --ask <id>` (needs the project's bus, like
   `doctor`: only after an `adopt` answer not given by the asker; appends to the manifest after
-  checking it loads, never overwrites a prompt). `examples/drafts/infra/` is the `infra` pop role
-  (Ansible, Terraform/OpenTofu, IT automation) as an inert draft, adopted with `roles adopt infra
+  checking it loads, never overwrites a prompt). `infra` is a pop role (Ansible, Terraform/OpenTofu,
+  IT automation), adopted (#187) from the reviewed draft `examples/drafts/infra/` with `roles adopt infra
   --ask <id> --from examples/drafts`: manual profile, approval person; allowed only exact syntax/lint invocations, no wildcard
   (`terraform|tofu fmt -check [-recursive]`, `validate`, `tflint [--recursive]`, `ansible-lint
   --offline`, `yamllint .`); everything else prompts in the pane, and asked as well: what evaluates
@@ -501,7 +501,10 @@ It never touches Redis — see README "Example deployment".
   one `terraform *<verb>*` pattern per tool
   so `-chdir=` forms match; denied: state, plan
   and tfvars files, vault passwords, cloud credentials, `output`/`show`/`console`/`state pull|show`,
-  `env` (`rolecfg/infra_test.go`, a command table per class); no `roles/infra.md` until adopted.
+  `env` (`rolecfg/infra_test.go`, a command table per class; it also holds the manifest to the
+  draft's entry byte for byte and `roles/infra.md` to the draft's prompt). A role popped only through
+  the person (deploy, infra) is an ask in master's rules; `TestShippedManifestRules` and the
+  migration test derive that from `approval`.
 - **`setup.sh` is the installer; tests of it must stub `docker` and `herdr`.** `install`,
   `update`, `uninstall`, `status`. Since installer-default it is a thin script that builds
   `agentbus` and runs `agentbus setup` (package `setup/`, every external command through
