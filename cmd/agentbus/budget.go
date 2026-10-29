@@ -92,20 +92,23 @@ func collectBudgets(ccPath string) (map[string]bus.BudgetSnapshot, []string) {
 	return out, notes
 }
 
-// collectAgentUsage turns each agent's registered session id into a usage
-// snapshot read straight from its transcript. Agents with no session id (any
-// non-Claude-Code peer, or one that has not published a status yet) are skipped
-// with a note rather than silently dropped.
+// collectAgentUsage turns each agent's proved session into a usage snapshot
+// read straight from its transcript. Only the session recorded with the
+// agent's identity proof (IdentSession, with a pid) is read, as for
+// {p}:context (usage-session): an unverified status that names another
+// session moves Session, never the transcript read here. Agents with no proved
+// session (any non-Claude-Code peer, an unverified one, or one that has not
+// published a status yet) are skipped with a note rather than silently dropped.
 func collectAgentUsage(agents map[string]bus.AgentSnapshot, projectsRoot string) (map[string]bus.UsageSnapshot, []string) {
 	out := map[string]bus.UsageSnapshot{}
 	var notes []string
 	for _, name := range sortedAgents(agents) {
 		a := agents[name]
-		if a.Session == "" {
-			notes = append(notes, fmt.Sprintf("%s: no session id registered (skipped)", name))
+		if a.PID == 0 || !bus.ValidSessionID(a.IdentSession) {
+			notes = append(notes, fmt.Sprintf("%s: no session proved with its process (skipped)", name))
 			continue
 		}
-		path, err := usage.FindTranscript(projectsRoot, a.Session)
+		path, err := usage.FindTranscript(projectsRoot, a.IdentSession)
 		if err != nil {
 			notes = append(notes, fmt.Sprintf("%s: %v", name, err))
 			continue
