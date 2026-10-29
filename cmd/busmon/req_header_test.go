@@ -65,3 +65,28 @@ func TestHeaderRequestsMatchTheTab(t *testing.T) {
 		t.Errorf("empty: header %q", l.text())
 	}
 }
+
+// owedText (foureyes' survivors on busmon-req-header): with two dated owed
+// threads the age is the OLDEST, whichever group comes first; one thread
+// reads in the singular.
+func TestOwedTextOldestAndSingular(t *testing.T) {
+	now := shellNow
+	thread := func(from string, ago time.Duration) reqGroup {
+		return reqGroup{Section: secOwed, From: from, Target: "bernard", Kind: kindDirective,
+			Threads: []reqThread{{From: from, Target: "bernard", Kind: kindDirective, At: now.Add(-ago), Section: secOwed}}}
+	}
+	two := reqView{groups: map[reqSection][]reqGroup{secOwed: {thread("master", 10*time.Minute), thread("foureyes", 3*time.Hour)}}}
+	if got, want := owedText(two, now), "2 requests waiting "+GlyphNone+" oldest 3h"; got != want {
+		t.Errorf("two owed threads: %q, want %q", got, want)
+	}
+	one := reqView{groups: map[reqSection][]reqGroup{secOwed: {thread("master", 10*time.Minute)}}}
+	if got, want := owedText(one, now), "1 request waiting "+GlyphNone+" oldest 10m"; got != want {
+		t.Errorf("one owed thread: %q, want %q", got, want)
+	}
+	if got := owedText(reqView{questions: 1}, now); got != "1 request waiting" { // a question has no age
+		t.Errorf("one open question: %q", got)
+	}
+	if got := owedText(reqView{}, now); got != "" {
+		t.Errorf("nothing owed: %q", got)
+	}
+}
