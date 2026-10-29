@@ -338,12 +338,8 @@ func (m *Model) editFilter(act Action, k Key) {
 		m.focusPanel(PanelActivity)
 	case act == ActEscape:
 		m.leaveLine(false)
-	case k.Code == keyBackspace:
-		if r := []rune(m.ui.edit); len(r) > 0 {
-			m.ui.edit = string(r[:len(r)-1])
-		}
-	case k.Code == keyRune && !k.Alt:
-		m.ui.edit += string(k.Rune)
+	default:
+		m.editLine(k)
 	}
 }
 

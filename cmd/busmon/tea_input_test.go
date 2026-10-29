@@ -222,3 +222,160 @@ func TestShellRemoveAgent(t *testing.T) {
 		t.Fatalf("a live agent: %q", m.ui.flash)
 	}
 }
+
+var (
+	kHome   = tea.Key{Code: tea.KeyHome}
+	kDelete = tea.Key{Code: tea.KeyDelete}
+	kCtrlA  = tea.Key{Code: 'a', Mod: tea.ModCtrl}
+	kCtrlE  = tea.Key{Code: 'e', Mod: tea.ModCtrl}
+	kCtrlW  = tea.Key{Code: 'w', Mod: tea.ModCtrl}
+	kCtrlU  = tea.Key{Code: 'u', Mod: tea.ModCtrl}
+)
+
+// lineShown is the line's text with its cursor marked "|".
+func lineShown(m Model) string { return show(m.ui.edit, m.lineCur()) }
+
+// busmon-input-cursor (Bernard): a typo is fixed in place. Left/Right move by
+// cluster, Home/End and Ctrl+A/Ctrl+E jump to the ends, typing, Backspace and
+// Delete act at the cursor, Ctrl+W and Ctrl+U delete back to a word or the
+// start, and the line still sends what it shows.
+func TestShellLineEditsAtItsCursor(t *testing.T) {
+	pinLocal(t)
+	fw := &fakeWriter{}
+	m := typeText(t, keys(t, shellWith(t, 140, 40, shellConfig{w: fw}, false), 'i'), "@coder revew lot 2")
+	for _, c := range []struct {
+		keys []any
+		want string
+	}{
+		{[]any{kLeft, kLeft, kLeft, kLeft, kLeft, kLeft}, "@coder revew| lot 2"},
+		{[]any{kLeft, kLeft}, "@coder rev|ew lot 2"},
+		{[]any{'i'}, "@coder revi|ew lot 2"},
+		{[]any{kEnd}, "@coder review lot 2|"},
+		{[]any{kRight}, "@coder review lot 2|"}, // the end stays
+		{[]any{kHome}, "|@coder review lot 2"},
+		{[]any{kLeft, kBackspce}, "|@coder review lot 2"}, // the start stays
+		{[]any{kCtrlE, kBackspce, '3'}, "@coder review lot 3|"},
+		{[]any{kCtrlA, kDelete}, "|coder review lot 3"},
+		{[]any{'@', kCtrlE, kCtrlW}, "@coder review lot |"},
+		{[]any{'4', kLeft, kCtrlU}, "|4"},
+		{[]any{kCtrlE, kCtrlU}, "|"},
+	} {
+		if m = keys(t, m, c.keys...); lineShown(m) != c.want {
+			t.Fatalf("after %v: %q, want %q", c.keys, lineShown(m), c.want)
+		}
+		if m.mode() != ModeInput {
+			t.Fatalf("after %v the line lost the keyboard (mode %d)", c.keys, m.mode())
+		}
+	}
+	m = keys(t, typeText(t, m, "@coder lot 2"), kLeft, kLeft, kLeft, kLeft, kLeft)
+	m = typeText(t, m, "review ")
+	m, cmd := pressCmd(t, m, kEnter)
+	if m = run(t, m, cmd); !slices.Equal(fw.sent, []string{"cmd coder review lot 2"}) || lineShown(m) != "|" {
+		t.Fatalf("sent %q, line %q", fw.sent, lineShown(m))
+	}
+}
+
+// A draft, a completion and a paste keep the cursor where the person expects
+// it: a draft and a completion at the end, a paste at the cursor.
+func TestShellLineCursorAfterDraftCompletionAndPaste(t *testing.T) {
+	pinLocal(t)
+	m := typeText(t, keys(t, shellWith(t, 140, 40, shellConfig{}, false), 'i'), "@docs later")
+	m = keys(t, m, kLeft, kLeft, kEsc, 'i')
+	if lineShown(m) != "@docs later|" {
+		t.Fatalf("the draft came back as %q", lineShown(m))
+	}
+	m = keys(t, m, kEsc)
+	m.ui.tail = 4 // a stale cursor never carries into a reopened line
+	if m = keys(t, m, 'i'); lineShown(m) != "@docs later|" {
+		t.Fatalf("the reopened draft: %q", lineShown(m))
+	}
+	m = keys(t, m, kCtrlU)
+	m = keys(t, typeText(t, m, "@cod"), kLeft, kTab)
+	if lineShown(m) != "@coder |" {
+		t.Fatalf("the completion: %q", lineShown(m))
+	}
+	m = keys(t, typeText(t, m, "lot"), kHome, kRight)
+	m = step(t, m, tea.PasteMsg{Content: "x\ny"})
+	if lineShown(m) != "@x y|coder lot" {
+		t.Fatalf("the paste: %q", lineShown(m))
+	}
+}
+
+// The filter line edits the same way.
+func TestShellFilterLineEditsAtItsCursor(t *testing.T) {
+	pinLocal(t)
+	m := typeText(t, keys(t, shellWith(t, 140, 40, shellConfig{}, false), '/'), "@codr")
+	m = keys(t, m, kLeft, 'e', kHome, kDelete, '#', kEnd, kBackspce, 'r')
+	if m.mode() != ModeFilter || lineShown(m) != "#coder|" {
+		t.Fatalf("the filter line: mode %d, %q", m.mode(), lineShown(m))
+	}
+}
+
+// The line draws its cursor on the cluster it stands on (a space past the
+// end), and keeps it in view on a text wider than the line: the row never
+// passes its width, in cells.
+func TestShellLineDrawsItsCursor(t *testing.T) {
+	m := shellWith(t, 140, 40, shellConfig{}, false)
+	cursorOf := func(l Line) (before, at string) {
+		for _, s := range l[1:] {
+			if s.Reverse {
+				return before, s.Text
+			}
+			before += s.Text
+		}
+		return before, ""
+	}
+	m.ui.line = lineMessage
+	for _, c := range []struct {
+		text       string
+		tail       int
+		width      int
+		wantBefore string
+		wantAt     string
+	}{
+		{"@coder hi", 0, 40, "@coder hi", " "},
+		{"@coder hi", 2, 40, "@coder ", "h"},
+		{"@coder " + tWide + "!", 4, 40, "@coder " + tWide[:3], tWide[3:]}, // a tWide cluster whole
+		{"x" + tAcc + "y", 3, 40, "x", tAcc},
+		{strings.Repeat("a", 60) + "b", 0, 30, strings.Repeat("a", 26) + "b", " "}, // the tail, as before
+	} {
+		m.ui.edit, m.ui.tail = c.text, c.tail
+		l := m.inputRow(c.width)
+		before, at := cursorOf(l)
+		if before != c.wantBefore || at != c.wantAt {
+			t.Errorf("%q tail %d: before %q at %q, want %q %q", c.text, c.tail, before, at, c.wantBefore, c.wantAt)
+		}
+		if l.Width() > c.width {
+			t.Errorf("%q tail %d: %d cells in %d", c.text, c.tail, l.Width(), c.width)
+		}
+	}
+	// A long text with the cursor far from its end: the cursor is shown, and
+	// so is some of what follows it.
+	for _, s := range []string{strings.Repeat("a", 50) + strings.Repeat(tWide, 20), strings.Repeat(tWide, 40)} {
+		for cur := 0; cur <= len(s); cur = lineRight(s, cur) {
+			m.ui.edit, m.ui.tail = s, len(s)-cur
+			l := m.inputRow(30)
+			_, at := cursorOf(l)
+			if want, _ := firstClusterOr(s[cur:]); at != want {
+				t.Fatalf("cursor %d: at %q, want %q", cur, at, want)
+			}
+			if l.Width() > 30 {
+				t.Fatalf("cursor %d: %d cells in 30", cur, l.Width())
+			}
+			if c, size := firstClusterOr(s[cur:]); cur+size < len(s) && !strings.Contains(l.text(), c+s[cur+size:][:1]) {
+				t.Fatalf("cursor %d: nothing of what follows it is shown: %q", cur, l.text())
+			}
+			if cur == len(s) {
+				break
+			}
+		}
+	}
+}
+
+// firstClusterOr is s's first cluster, or a space for an empty s.
+func firstClusterOr(s string) (string, int) {
+	if s == "" {
+		return " ", 0
+	}
+	return firstCluster(s)
+}

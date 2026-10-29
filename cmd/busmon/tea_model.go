@@ -58,6 +58,7 @@ type uiState struct {
 	filter         feedFilter
 	line           lineKind // what the input line edits (tea_input.go)
 	edit           string   // its text
+	tail           int      // its cursor, as the bytes after it (0: at the end; lineedit.go)
 	pick           int      // the highlighted "@" completion
 	msgDraft       string   // the message line's draft, kept by Esc
 	pause          pauseCursor

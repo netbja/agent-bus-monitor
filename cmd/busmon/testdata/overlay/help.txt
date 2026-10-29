@@ -36,10 +36,12 @@ KEYS
   enter                send
   tab                  complete @agent
   esc                  back (draft kept)
+  ←→ home end          move the cursor by character or to either end (^A ^E too); del deletes at it, ^W back to a word, ^U to the start
   ^C                   quit (everywhere)
   editing the filter
   enter                apply
   esc                  cancel
+  ←→ home end          move the cursor by character or to either end (^A ^E too); del deletes at it, ^W back to a word, ^U to the start
   ^C                   quit (everywhere)
   an open detail
   F5                   health

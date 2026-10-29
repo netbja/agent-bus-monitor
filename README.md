@@ -426,7 +426,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   - **Plan** — the batch's plan (`agentbus plan load`), its tasks by state: waiting for you, blocked,
     in review, in progress, upcoming, done. Enter opens a task: its review, PR, asks and notes.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent
-  (Tab completes the name), `@all <text>` every registered agent. Plain text is a notice nobody
+  (Tab completes the name), `@all <text>` every registered agent. The line edits at its cursor:
+  `←` `→` by character, Home/End (or Ctrl+A/Ctrl+E) to the ends, Delete, Ctrl+W back a word, Ctrl+U to
+  the start. Plain text is a notice nobody
   reads: the first Enter says so, a second one sends it. **`I`** opens the compose window for
   several lines (Ctrl+S sends, Tab moves to the recipient, Esc keeps the draft). You write as a
   **person**: `busmon --as bernard` (or `AGENT_BUS_HUMAN`, or `agentbus identity set bernard`)
