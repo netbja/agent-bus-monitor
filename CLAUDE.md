@@ -494,7 +494,8 @@ It never touches Redis — see README "Example deployment".
   --offline`, `yamllint .`); everything else prompts in the pane, and asked as well: what evaluates
   providers or data sources, touches a target or downloads (`plan`, `init`, `refresh`, `get`, `test`, `ansible-playbook --check`/`--diff`,
   ad-hoc `ansible`, `ansible-pull`, `ansible-galaxy`, `tflint --init`) and every change (apply,
-  destroy, import, taint, state surgery, force-unlock), one `terraform *<verb>*` pattern per tool
+  destroy, import, taint, state surgery, force-unlock, workspace) and every `ansible-playbook` run,
+  one `terraform *<verb>*` pattern per tool
   so `-chdir=` forms match; denied: state, plan
   and tfvars files, vault passwords, cloud credentials, `output`/`show`/`console`/`state pull|show`,
   `env` (`rolecfg/infra_test.go`, a command table per class); no `roles/infra.md` until adopted.

@@ -14,8 +14,8 @@ adopt names the expected one when it refuses).
 
 **The person approves everything that runs IaC.** Only a short list of exact syntax and lint
 invocations runs without a prompt (`fmt -check`, `validate`, `tflint`, `ansible-lint --offline`,
-`yamllint .`); everything else prompts in the role's pane, and plans, checks, inits, tests and every
-change are also ask rules, which keep a prompt even if the profile is loosened (an ask rule refuses
+`yamllint .`); everything else prompts in the role's pane, and plans, checks, inits, tests, workspaces, every
+`ansible-playbook` run and every change are also ask rules, which keep a prompt even if the profile is loosened (an ask rule refuses
 `bypassPermissions`). State and plan files, variable files, vault passwords, cloud and cluster
 credentials, and the commands that print them are denied.
 

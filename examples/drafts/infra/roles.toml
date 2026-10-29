@@ -25,24 +25,27 @@ allow = [
 # (--check still runs check_mode: false tasks; test applies real resources by
 # default; ad-hoc ansible), downloads (init, get, tflint --init, ansible-galaxy,
 # ansible-pull), and every change (apply, destroy, import, taint, state surgery,
-# force-unlock). Each verb is one pattern per tool, `terraform *<verb>*`, so the
+# force-unlock, workspace: delete -force drops state while resources live on),
+# and every ansible-playbook run (--check and --syntax-check included). Each verb is one pattern per tool, `terraform *<verb>*`, so the
 # -chdir= forms match too; it may over-ask (a path holding the word), never
 # under-ask. An ask rule also refuses a bypassPermissions profile.
 ask = [
   "Bash(terraform *plan*)", "Bash(terraform *init*)", "Bash(terraform *refresh*)", "Bash(terraform *get*)",
   "Bash(terraform *import*)", "Bash(terraform *taint*)", "Bash(terraform *apply*)", "Bash(terraform *destroy*)",
-  "Bash(terraform *state *)", "Bash(terraform *force-unlock*)", "Bash(terraform *test*)",
+  "Bash(terraform *state *)", "Bash(terraform *force-unlock*)", "Bash(terraform *test*)", "Bash(terraform *workspace*)",
   "Bash(tofu *plan*)", "Bash(tofu *init*)", "Bash(tofu *refresh*)", "Bash(tofu *get*)",
   "Bash(tofu *import*)", "Bash(tofu *taint*)", "Bash(tofu *apply*)", "Bash(tofu *destroy*)",
-  "Bash(tofu *state *)", "Bash(tofu *force-unlock*)", "Bash(tofu *test*)",
+  "Bash(tofu *state *)", "Bash(tofu *force-unlock*)", "Bash(tofu *test*)", "Bash(tofu *workspace*)",
   "Bash(tflint *--init*)", "Bash(ansible-lint *--fix*)", "Bash(ansible-lint *--write*)",
-  "Bash(ansible-playbook *--check*)", "Bash(ansible-playbook *--diff*)",
+  "Bash(ansible-playbook*)",
   "Bash(ansible *)", "Bash(ansible-pull*)", "Bash(ansible-galaxy *)",
 ]
 # Never a secret: state and plan files (every value in clear), variable files,
 # vault passwords, cloud and cluster credentials, and the commands that print
 # state, outputs or the environment (state pull and state show print every
-# secret: denied, while the other state subcommands are asked). `env *` also
+# secret: denied, while the other state subcommands are asked), and
+# workspace new -state=, which copies a state file through the CLI (a Read deny
+# does not reach a subprocess). `env *` also
 # closes `env VAR=x terraform apply`, which would start outside the ask rules.
 deny = [
   "Read(**/*.tfstate*)", "Read(**/.terraform/**)", "Read(**/*.tfplan)", "Read(**/*.tfvars*)", "Read(~/.terraform.d/**)",
@@ -54,6 +57,7 @@ deny = [
   "Bash(tofu output*)", "Bash(tofu show*)", "Bash(tofu console*)", "Bash(tofu state pull*)", "Bash(tofu state show*)",
   "Bash(tofu -chdir=* output*)", "Bash(tofu -chdir=* show*)", "Bash(tofu -chdir=* console*)",
   "Bash(tofu -chdir=* state pull*)", "Bash(tofu -chdir=* state show*)",
-  "Bash(terraform plan*-out*)", "Bash(terraform -chdir=* plan*-out*)", "Bash(tofu plan*-out*)", "Bash(tofu -chdir=* plan*-out*)",
+  "Bash(terraform *plan*-out*)", "Bash(tofu *plan*-out*)",
+  "Bash(terraform *workspace new*-state*)", "Bash(tofu *workspace new*-state*)",
   "Bash(printenv*)", "Bash(env)", "Bash(env *)",
 ]

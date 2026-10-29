@@ -68,7 +68,7 @@ func TestInfraDraft(t *testing.T) {
 		// anything beyond the exact forms: the pane prompts (or an ask rule)
 		{"terraform fmt -check=false", "prompt"}, {"tofu fmt -check=false", "prompt"}, // writes files
 		{"terraform fmt", "prompt"}, {"terraform validate -json", "prompt"},
-		{"ansible-lint --offline site.yml", "prompt"}, {"ansible-playbook --syntax-check site.yml", "prompt"},
+		{"ansible-lint --offline site.yml", "prompt"}, {"ansible-playbook --syntax-check site.yml", "ask"},
 		{"yamllint -c x.yml .", "prompt"},
 		// evaluates providers, modules or data sources, touches a target, downloads: the person's ok
 		{"terraform plan", "ask"}, {"tofu plan -var-file=prod.tfvars", "ask"},
@@ -88,7 +88,9 @@ func TestInfraDraft(t *testing.T) {
 		{"terraform get -update", "ask"}, {"tofu -chdir=x get", "ask"},
 		{"ansible all -i prod -m shell -a reboot", "ask"}, {"ansible-pull -U https://x/repo.git", "ask"},
 		{"ansible-galaxy install -r requirements.yml", "ask"}, {"ansible-galaxy collection install a.b", "ask"},
-		{"ansible-playbook -i prod site.yml", "prompt"}, // a real run: the manual pane (an ask catch-all would also catch --syntax-check)
+		{"ansible-playbook -i prod site.yml", "ask"}, {"ansible-playbook site.yml", "ask"}, // every playbook run is asked
+		{"terraform workspace delete -force prod", "ask"}, {"tofu -chdir=x workspace select prod", "ask"},
+		{"terraform workspace new -state=prod.tfstate staging", "deny"}, {"tofu workspace new -lock=false -state=x.tfstate y", "deny"},
 		// secrets: never
 		{"terraform output -raw db_password", "deny"}, {"terraform -chdir=env/prod output", "deny"},
 		{"terraform state pull", "deny"}, {"tofu -chdir=x state show a.b", "deny"},

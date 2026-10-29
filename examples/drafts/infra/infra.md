@@ -42,14 +42,16 @@ lock. Editing the code in the repository is normal work, reviewed like any chang
 - `terraform`/`tofu` `plan`, `init`, `refresh`: they run the providers with the person's
   credentials, download providers and modules, and a `data "external"` source runs a program
   during the plan. Read the module first and name any such source.
-- `ansible-playbook --check` (or `--diff`): every task marked `check_mode: false` still runs for
+- Every `ansible-playbook` run, `--syntax-check` included. `--check` (or `--diff`): every task marked `check_mode: false` still runs for
   real against the hosts. Read the playbook first and name those tasks. `--diff` prints templated
   file contents, secrets included, unless the task has `no_log`: say so before using it.
 - `terraform`/`tofu` `test`: its run blocks apply real infrastructure by default, with the
   person's credentials, then destroy it.
 - Ad-hoc `ansible <hosts> -m …` and `ansible-pull`: they act on hosts directly.
 - `get`, `tflint --init` and `ansible-galaxy install` download code: say what and from where.
-- `force-unlock` releases another run's state lock: state surgery, asked as a change.
+- `force-unlock` releases another run's state lock, and `workspace delete -force` drops a
+  workspace's state while its resources live on: state surgery, asked as a change. Never
+  `workspace new -state=…`: it copies a state file (denied).
 
 For those, ask through master with what you will run and why (`agentbus report infra --to master
 "may I run terraform plan in env/prod? reads providers, one data.external: scripts/ip.sh"`), wait
