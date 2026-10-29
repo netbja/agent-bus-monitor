@@ -84,6 +84,10 @@ sans risque.
 - **Docker** et **Docker Compose**, pour le broker Redis.
 - **Git** et **curl**.
 - **herdr** 0.9.0 ou plus récent ; `--install-herdr` l'installe s'il manque.
+- **Au moins un CLI d'agent**, que vous installez : Claude Code (`claude`), Codex CLI (`codex`),
+  Kimi Code CLI (`kimi`) ou Grok Build (`grok`). L'installation n'échoue jamais sans : elle indique
+  où trouver chacun, et le bus et busmon fonctionnent en attendant. `agentbus up` ne lance que les
+  agents dont il trouve le CLI, nomme les autres, et sans aucun ne lance rien et dit quoi installer.
 
 Python n'est plus nécessaire depuis la v0.10.2.
 

@@ -16,14 +16,29 @@ func TestClients(t *testing.T) {
 		"    ✓ claude: available (/b/claude)\n" +
 		"    • codex: not installed (optional)\n" +
 		"    • kimi: not installed (optional)\n" +
-		"    • agy: not installed (optional)\n"
+		"    • grok: not installed (optional)\n"
 	if out.String() != want {
 		t.Fatalf("%q", out.String())
 	}
+	// installer-no-client: none at all is a warning, never a failure, with each
+	// client's install pointer and what works meanwhile.
 	in2, out2, _, _ := skillsWorld(t, nil, nil)
 	in2.Clients()
-	if !strings.HasSuffix(out2.String(), "    ! No recognized agent CLI found on PATH (claude, codex, kimi, agy). Install at least one agent client.\n") {
-		t.Fatalf("%q", out2.String())
+	got := out2.String()
+	for _, w := range []string{
+		"    ! No agent CLI on PATH: agent-bus starts its agents in one of these, so install at least one:\n",
+		"      Claude Code (claude): https://code.claude.com/docs/en/setup\n",
+		"      Codex CLI (codex): https://github.com/openai/codex\n",
+		"      Kimi Code CLI (kimi): https://github.com/MoonshotAI/kimi-cli\n",
+		"      Grok Build (xAI, beta) (grok): https://x.ai/cli\n",
+		"    • Meanwhile the bus and busmon work. Once one is installed: agentbus up <project> <path>\n",
+	} {
+		if !strings.Contains(got, w) {
+			t.Errorf("missing %q in\n%s", w, got)
+		}
+	}
+	if in2.O.Warnings != 1 {
+		t.Errorf("%d warnings, want one", in2.O.Warnings)
 	}
 }
 

@@ -131,6 +131,11 @@ What `install` does:
   `${XDG_DATA_HOME:-~/.local/share}/agentbus/skills/mattpocock`. A skill that is still missing
   only warns, in `agentbus up` and when an agent starts; the agent runs without it. A folder
   there that setup did not clone is left alone.
+- **Agent CLIs.** agent-bus runs its agents in a CLI you install: Claude Code (`claude`), Codex CLI
+  (`codex`), Kimi Code CLI (`kimi`) or Grok Build (`grok`). Setup lists those it finds and never
+  fails without one: it then says where to get each, and the bus and busmon work meanwhile. `agentbus
+  up` starts only the agents whose CLI it finds (on its PATH or in `~/.local/bin` and the like),
+  names the others, and with none at all starts nothing and gives the next command.
 
 `update` refuses a tree with uncommitted changes, fast-forwards it, then runs the `setup.sh` it
 just pulled.

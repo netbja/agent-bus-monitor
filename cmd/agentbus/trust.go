@@ -200,6 +200,26 @@ func clientLabel(client string) string {
 // else the caller's. "" when the tab launches no agent or the role does not
 // resolve (no gate for it: today's behaviour).
 func tabClient(command string, env func(string) string) string {
+	p, ok := tabProfile(command, env)
+	if !ok {
+		return ""
+	}
+	return p.Client
+}
+
+// tabExecutable is the program a template tab's agent runs (installer-no-
+// client): the builtin client's binary or the adapter's executable, "" when
+// the tab launches no agent or the role does not resolve.
+func tabExecutable(command string, env func(string) string) string {
+	p, ok := tabProfile(command, env)
+	if !ok {
+		return ""
+	}
+	return rolecfg.ClientExecutable(p)
+}
+
+// tabProfile resolves the role a tab's agent-launch names.
+func tabProfile(command string, env func(string) string) (rolecfg.Profile, bool) {
 	words := strings.Fields(strings.ReplaceAll(command, "'", ""))
 	manifest, role := env("ROLES_TOML"), ""
 	for i, w := range words {
@@ -211,17 +231,17 @@ func tabClient(command string, env func(string) string) string {
 		}
 	}
 	if role == "" || manifest == "" {
-		return ""
+		return rolecfg.Profile{}, false
 	}
 	m, err := rolecfg.Load(manifest)
 	if err != nil {
-		return ""
+		return rolecfg.Profile{}, false
 	}
 	p, err := m.Resolve(role)
 	if err != nil {
-		return ""
+		return rolecfg.Profile{}, false
 	}
-	return p.Client
+	return p, true
 }
 
 // clientTrusted reads the trust of dir by client from its own file: Claude

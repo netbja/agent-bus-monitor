@@ -585,7 +585,14 @@ It never touches Redis — see README "Example deployment".
   (`errTrustPending`); its message names the pane to answer in (A10). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
   as Claude Code documents (`trustKey`: git root, a worktree's main checkout, else the folder) and
   return a bool, never file content (`~/.claude.json` can hold an API key). agentbus never writes
-  those files. Nil `upDeps.Trusted` = no gate.
+  those files. Nil `upDeps.Trusted` = no gate. **Agent CLIs** (installer-no-client): `rolecfg.Clients`
+  is the launchable clients (manifest name, executable, name, official install page; in step with
+  `builtinBinary`, `TestClientsMatchTheLauncher`); setup's step 5 scans them and, with none, warns
+  with each install page (never a failure, nothing installed); `up`'s `checkClients`, right after the
+  template is read and before any service or tab, drops the agent tabs whose executable
+  (`tabExecutable`, through the tab's manifest) `lookAgentCLI` finds neither on PATH nor in the usual
+  per-user dirs, names them, and with none of the team's refuses (exit 1) with the pointers and
+  `agentbus up <p>`. Nil `TabExe`/`LookPath` = no check.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P

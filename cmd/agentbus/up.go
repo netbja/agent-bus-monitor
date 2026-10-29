@@ -58,6 +58,11 @@ type upDeps struct {
 	TrustPoll    time.Duration
 	TrustTimeout time.Duration
 	Out          io.Writer // the gate's messages (runUp's stdout)
+
+	// The agents' CLIs (installer-no-client): TabExe is the program a tab's
+	// agent runs ("" for none), LookPath finds it on up's PATH. Nil: no check.
+	TabExe   func(command string) string
+	LookPath func(string) (string, error)
 }
 
 type upTab struct {
@@ -144,6 +149,10 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	var tpl upTemplate
 	if _, err := toml.DecodeFile(path, &tpl); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
+		return 1
+	}
+	var ok bool
+	if tpl, ok = checkClients(d, project, tpl, stdout, stderr); !ok {
 		return 1
 	}
 	failed := false
@@ -575,6 +584,8 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 		ProcStart: procStartFn(),
 		Lock:      upLock(upCacheDir(os.Getenv)),
 		TabClient: func(cmd string) string { return tabClient(cmd, os.Getenv) },
+		TabExe:    func(cmd string) string { return tabExecutable(cmd, os.Getenv) },
+		LookPath:  lookAgentCLI(os.Getenv, exec.LookPath),
 		Trusted:   clientTrusted(os.Getenv),
 		Sleep:     time.Sleep,
 		Out:       stdout,
@@ -743,4 +754,83 @@ func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: %s started (it was stopped)\n", project, k)
 	}
 	return code
+}
+
+// checkClients drops the template's agent tabs whose CLI is not on PATH and
+// names them (installer-no-client). With none of the team's CLIs there it
+// refuses before any service starts or any tab opens, with each client's
+// install pointer and the next command; false then. A tab running no agent
+// (busmon) is never dropped.
+func checkClients(d upDeps, project string, tpl upTemplate, stdout, stderr io.Writer) (upTemplate, bool) {
+	if d.TabExe == nil || d.LookPath == nil {
+		return tpl, true
+	}
+	var keep []upTab
+	var missing []string
+	agents := 0
+	for _, t := range tpl.Tabs {
+		exe := d.TabExe(t.Command)
+		if exe == "" {
+			keep = append(keep, t)
+			continue
+		}
+		agents++
+		if _, err := d.LookPath(exe); err != nil {
+			missing = append(missing, t.Name+" needs "+exe)
+			continue
+		}
+		keep = append(keep, t)
+	}
+	if len(missing) == 0 {
+		return tpl, true
+	}
+	if len(missing) == agents {
+		fmt.Fprintf(stderr, "agentbus up: no agent CLI on PATH for this team (%s): nothing was started. Install at least one of:\n", strings.Join(missing, ", "))
+		for _, l := range rolecfg.ClientGuidance() {
+			fmt.Fprintln(stderr, "  "+l)
+		}
+		fmt.Fprintf(stderr, "busmon and the bus work meanwhile (busmon --project %s); once one is installed, then run: agentbus up %s\n", project, project)
+		return tpl, false
+	}
+	for _, m := range missing {
+		exe := m[strings.LastIndex(m, " ")+1:]
+		where := ""
+		for _, c := range rolecfg.Clients {
+			if c.Exe == exe {
+				where = " (" + c.Name + " (" + c.Exe + "): " + c.Install + ")"
+			}
+		}
+		fmt.Fprintf(stdout, "not started: %s%s; the others start. Once it is installed: agentbus up %s\n", m, where, project)
+	}
+	tpl.Tabs = keep
+	return tpl, true
+}
+
+// lookAgentCLI finds an agent's CLI on up's PATH, else in the usual per-user
+// install directories: up may run from a pane (the herdr plugin's picker)
+// whose PATH is narrower than the login shell an agent's tab runs in, so a
+// CLI there is not taken for missing.
+func lookAgentCLI(getenv func(string) string, look func(string) (string, error)) func(string) (string, error) {
+	return func(exe string) (string, error) {
+		p, err := look(exe)
+		if err == nil {
+			return p, nil
+		}
+		home := getenv("HOME")
+		if home == "" {
+			return "", err
+		}
+		for _, dir := range []string{".local/bin", "bin", ".npm-global/bin", ".bun/bin", ".cargo/bin"} {
+			cand := filepath.Join(home, dir, exe)
+			if st, serr := os.Stat(cand); serr == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+				return cand, nil
+			}
+		}
+		for _, cand := range []string{"/usr/local/bin/" + exe, "/opt/homebrew/bin/" + exe} {
+			if st, serr := os.Stat(cand); serr == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+				return cand, nil
+			}
+		}
+		return "", err
+	}
 }
