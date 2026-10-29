@@ -199,7 +199,7 @@ func (in *Installer) passwordLine() {
 		// compose starts the broker with it; the clients read the file or the
 		// default (reviewer-codex).
 		clients := "the historical default"
-		if path != "" {
+		if _, err := os.Lstat(path); path != "" && err == nil {
 			clients = path
 		}
 		in.O.Warn("Redis password: " + filepath.Join(in.Repo, ".env") + " sets REDIS_PASSWORD: compose starts the broker with it, while the clients read " + clients + "; export the same value for the clients, or move it into the password file and remove that line")

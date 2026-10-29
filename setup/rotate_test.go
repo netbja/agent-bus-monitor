@@ -69,9 +69,16 @@ func TestRotatePasswordRollsBack(t *testing.T) {
 		}
 		before := dirState(t, dir)
 
-		// The broker refuses the new password: nothing changed, on either side.
+		// The broker refuses the new password: nothing changed, on either side
+		// (the old one still logs in, the new one does not).
 		live := &fakeSetter{fail: map[string]error{"new-pw": errors.New("ERR unknown command 'CONFIG'")}}
-		if err := RotatePassword(ctx, live, path, old, "new-pw", ok); err == nil {
+		oldOnly := func(_ context.Context, pw string) error {
+			if pw != old {
+				return errors.New("WRONGPASS")
+			}
+			return nil
+		}
+		if err := RotatePassword(ctx, live, path, old, "new-pw", oldOnly); err == nil {
 			t.Fatalf("prior=%v: a refused CONFIG SET reported success", prior)
 		}
 		if after := dirState(t, dir); !sameFiles(before, after) {
@@ -391,6 +398,9 @@ func TestSetsKey(t *testing.T) {
 		{"REDIS_PASSWORD=\n", false},
 		{"REDIS_PASSWORD=\"\"\n", false},
 		{"OTHER=1\n", false},
+		{"REDIS_PASSWORD: custom\n", true}, // compose's colon form (reviewer-codex)
+		{"REDIS_PASSWORD : 'x'\n", true},
+		{"REDIS_PASSWORD:\n", false},
 	} {
 		p := filepath.Join(dir, "e")
 		_ = os.WriteFile(p, []byte(c.body), 0o644)
@@ -431,5 +441,64 @@ func TestRotatePasswordKeepsTheNewFileWhenTheBrokerCannotBeSetBack(t *testing.T)
 	}
 	if !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), ".prev") {
 		t.Fatalf("the error does not say where each password is: %v", err)
+	}
+}
+
+// reviewer-codex: a CONFIG SET whose reply is lost may have been applied.
+// The rotation asks the broker which password logs in before it restores:
+// the new one = go on; the old one = restore; neither = keep the new file
+// and the previous one beside it.
+type lossySetter struct {
+	broker  *string
+	applies bool // the change lands before the error
+}
+
+func (s lossySetter) SetPassword(_ context.Context, pw string) error {
+	if s.applies {
+		*s.broker = pw
+	}
+	return errors.New("i/o timeout")
+}
+
+func TestRotatePasswordAsksTheBrokerAfterAnAmbiguousError(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		name     string
+		applies  bool
+		reach    bool // the broker answers logins at all
+		wantErr  bool
+		wantFile string
+		wantPrev bool
+	}{
+		{"applied, reply lost", true, true, false, "new-pw", true},
+		{"not applied", false, true, true, "old-pw", false},
+		{"cannot tell", true, false, true, "new-pw", true},
+	} {
+		dir := filepath.Join(t.TempDir(), "agentbus")
+		path := filepath.Join(dir, "redis.env")
+		if err := bus.WritePassword(path, "old-pw"); err != nil {
+			t.Fatal(err)
+		}
+		broker := "old-pw"
+		verify := func(_ context.Context, pw string) error {
+			if !c.reach {
+				return errors.New("connection refused")
+			}
+			if pw != broker {
+				return errors.New("WRONGPASS")
+			}
+			return nil
+		}
+		err := RotatePassword(ctx, lossySetter{&broker, c.applies}, path, "old-pw", "new-pw", verify)
+		if (err != nil) != c.wantErr {
+			t.Fatalf("%s: err %v", c.name, err)
+		}
+		if pw, _ := bus.ReadPassword(path); pw != c.wantFile {
+			t.Fatalf("%s: file %q, want %q", c.name, pw, c.wantFile)
+		}
+		_, perr := os.Stat(path + ".prev")
+		if (perr == nil) != c.wantPrev {
+			t.Fatalf("%s: .prev present=%v, want %v", c.name, perr == nil, c.wantPrev)
+		}
 	}
 }

@@ -64,6 +64,18 @@ func RotatePassword(ctx context.Context, live PasswordSetter, path, old, pw stri
 		return err
 	}
 	if err := live.SetPassword(ctx, pw); err != nil {
+		// The reply may be lost after the broker applied it (reviewer-codex):
+		// ask the broker which one logs in before restoring anything.
+		switch {
+		case verify(ctx, pw) == nil: // applied after all, and proved by this login
+			return nil
+		case verify(ctx, old) != nil:
+			prev := "the previous one is the historical default"
+			if had {
+				prev = "the previous one is in " + path + ".prev"
+			}
+			return fmt.Errorf("setting the new password failed (%v) and the broker answers neither password: it may hold the new one, kept in %s; %s. Try both before anything else", err, path, prev)
+		}
 		if rerr := restore(); rerr != nil {
 			return fmt.Errorf("the broker refused the new password (%v), and %s could not be put back: %v", err, path, rerr)
 		}
@@ -256,8 +268,8 @@ func (in *Installer) envFilesWithPassword() []string {
 	return out
 }
 
-// setsKey reports whether an env file (KEY=value or KEY="value" lines, an
-// optional export) sets key to a non-empty value; its values are never
+// setsKey reports whether an env file (KEY=value, KEY="value" or compose's
+// KEY: value lines, an optional export) sets key to a non-empty value; its values are never
 // returned. A file that exists but cannot be read counts as setting it, so a
 // rotation is refused rather than guessed.
 func setsKey(path, key string) bool {
@@ -269,8 +281,14 @@ func setsKey(path, key string) bool {
 		return true
 	}
 	for _, line := range strings.Split(string(data), "\n") {
-		k, v, ok := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "export "), "=")
-		if ok && strings.TrimSpace(k) == key && strings.Trim(strings.TrimSpace(v), `"'`) != "" {
+		line = strings.TrimPrefix(strings.TrimSpace(line), "export ")
+		// KEY=value, and compose's KEY: value (reviewer-codex): the first
+		// delimiter of either kind ends the key.
+		i := strings.IndexAny(line, "=:")
+		if i < 0 {
+			continue
+		}
+		if strings.TrimSpace(line[:i]) == key && strings.Trim(strings.TrimSpace(line[i+1:]), `"'`) != "" {
 			return true
 		}
 	}

@@ -156,6 +156,7 @@ func TestStatusPasswordLine(t *testing.T) {
 		{map[string]string{"REDIS_PASSWORD": "exported-secret"}, "ok", "• Redis password: from the exported REDIS_PASSWORD (it overrides the password file)"},
 		{map[string]string{"REDIS_URL": "redis://:url-secret@h:1"}, "ok", "• Redis password: from REDIS_URL"},
 		{map[string]string{"dotenv": "1"}, "ok", "! Redis password: " + repo + "/.env sets REDIS_PASSWORD: compose starts the broker with it, while the clients read " + path + "; export the same value for the clients, or move it into the password file and remove that line"},
+		{map[string]string{"dotenv": "1"}, "", "! Redis password: " + repo + "/.env sets REDIS_PASSWORD: compose starts the broker with it, while the clients read the historical default; export the same value for the clients, or move it into the password file and remove that line"},
 	} {
 		_ = os.RemoveAll(filepath.Join(cfg, "agentbus"))
 		switch c.file {
