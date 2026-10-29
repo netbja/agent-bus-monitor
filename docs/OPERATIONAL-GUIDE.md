@@ -154,10 +154,10 @@ nothing needs exporting. An install made before keeps the historical `AgentBus20
 `redis-password` warns) until you run `./setup.sh rotate-redis-password`: it checks first, asks,
 sets the new password on the running broker, proves it, recreates the broker's container (a few
 seconds, the data kept) so a reboot keeps it, and restarts the running project services. If the
-broker refuses the change, or the new password fails its proof and the broker is set back, the
-broker and the file are put back as they were; if the broker might hold the new password (it cannot
-be set back, or neither password can be proved), the new file is kept, the old one in
-`redis.env.prev`, and the error says to try both. An exported `REDIS_PASSWORD` wins over
+broker refuses the change, or the new password fails its proof and the broker is set back, the file
+is put back too (the error says so if that fails); if the broker might hold the new password (it
+cannot be set back, or neither password can be proved), the new file is kept, the old one in
+`redis.env.prev` (on a first rotation, the historical default), and the error says to try both. An exported `REDIS_PASSWORD` wins over
 the file; the rotation refuses to run while one is exported. Reopen busmon after it, and copy the
 file to any machine that reaches the broker through a tunnel.
 
