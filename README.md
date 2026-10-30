@@ -46,6 +46,11 @@ herdr --session myproject              # then, inside herdr:
 agentbus up myproject ~/code/myproject --as <your-name>
 ```
 
+> **Found it in herdr's plugin list?** Install it with the commands above, not
+> `herdr plugin install`: the plugin needs the Redis broker, the binaries and the skills that
+> `./setup.sh` sets up, and setup links it into herdr for you. `herdr plugin install
+> netbja/agent-bus-monitor` stops with the same advice and installs nothing.
+
 `agentbus up` provisions the team and opens its workspace, with busmon first. busmon's
 first-launch tour walks you through its screen (F1 then `t` shows it again). Later, `Ctrl+B`
 then `↑` (the plugin's Projects picker) reopens any project.
@@ -682,6 +687,8 @@ the `bootstrap new` line when you want them.
 
 `./setup.sh install` links this checkout into herdr as the plugin `netbja.agentbus` and binds
 `Ctrl+B` then `↑` (prefix+up) to its **Projects** picker. herdr-plus is not needed any more.
+The plugin is linked, never installed by herdr: its one build step makes `herdr plugin install`
+stop with how to install from a clone, and register nothing (`herdr plugin link` runs no build).
 
 - **Picker.** `busmon --pick` (the plugin runs it in a pane) lists the templates in
   `~/.config/agentbus/projects`, each with the broker's state for it: `present`, `absent` or `?`

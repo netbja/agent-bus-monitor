@@ -5,7 +5,7 @@ scope: project
 kind: decision
 status: active
 created: 2026-10-19
-last_verified: 2026-10-20
+last_verified: 2026-10-30
 author: claude
 confidence: verified
 ---
@@ -16,7 +16,11 @@ Since v0.20, agent-bus is itself a herdr plugin, `netbja.agentbus`, and herdr-pl
 installed or needed. Each part of the decision with its reason:
 
 - **Go, not Rust.** The plugin is the two binaries this repository already builds
-  (`./agentbus plugin …`, `./busmon --pick`), declared in `herdr-plugin.toml` with no `[[build]]`.
+  (`./agentbus plugin …`, `./busmon --pick`), declared in `herdr-plugin.toml`. Its one
+  `[[build]]` step only refuses (plugin-listing, v0.25): herdr's plugin list offers
+  `herdr plugin install`, which runs nothing but `[[build]]`, so the step prints how to install
+  from a clone (`./setup.sh install`) and exits 1; herdr aborts and registers nothing.
+  `TestPluginBuildRefusesInstall` holds it. `herdr plugin link` runs no build.
   v0.20 had no `[[events]]`; v0.21 adds exactly two, `workspace.created` and `workspace.focused`,
   both running `./agentbus plugin workspace-event`, the hook that starts stopped services (see
   the v0.21 spec).
@@ -54,6 +58,11 @@ letting the picker create a project.
   `HERDR_SESSION`, `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH` and `HERDR_PLUGIN_*`; `--env` reaches the
   pane; the working directory is the plugin root. This is why entry points are `./agentbus` and
   `./busmon` and panes are opened without `--cwd`.
+- Check of 2026-10-30 (herdr 0.9.5, throwaway HOME, XDG dirs and socket; never the person's
+  herdr): `herdr plugin install netbja/agent-bus-monitor --ref chore/plugin-listing --yes` shows
+  the build step in its preview, prints the refusal under `error: plugin build failed`, ends with
+  `Plugin was not installed.` and leaves `plugin list` empty; `herdr plugin link` on the same tree
+  registers it and runs no build.
 - PR #90 (merged): the groundwork, session from `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`, templates
   directory. The plugin itself is the PR of branch `feat/v020-herdr-plugin`.
 - Committed: the [manifest](../../../herdr-plugin.toml), the [picker model](../../../projlist/projlist.go),

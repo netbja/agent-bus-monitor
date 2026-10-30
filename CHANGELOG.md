@@ -10,6 +10,10 @@ release exists.
   different built-in name).
   The same rules apply: refused as a writer inside a herdr pane. Entries already on a bus keep the
   sender they were written with; nothing migrates.
+- `herdr plugin install netbja/agent-bus-monitor` (what herdr's plugin list offers) now stops at
+  the plugin's build step with how to install from a clone (`./setup.sh install`), and installs
+  nothing. Before, it registered a plugin whose binaries did not exist. `herdr plugin link`, which
+  setup uses, is unchanged.
 
 ## v0.24.0 — the installer in Go by default, busmon's pages read better, reloads checked first
 
