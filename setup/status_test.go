@@ -6,7 +6,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 const psRedis = "docker ps -a --filter name=^agent-bus-redis$ --format {{.State}}"
@@ -63,7 +66,8 @@ func TestStatusAllInstalled(t *testing.T) {
 		"    ✓ netbja.agentbus: Projects picker available (Ctrl+B then Up)\n" +
 		"    ✓ herdr key binding: prefix+up -> netbja.agentbus.projects\n" +
 		"    • project service: demo dispatch running\n" +
-		"    ✓ Redis broker: running (agent-bus-redis, 127.0.0.1:6380)\n"
+		"    ✓ Redis broker: running (agent-bus-redis, 127.0.0.1:6380)\n" +
+		"    ! Redis password: the historical default (./setup.sh rotate-redis-password replaces it)\n"
 	if out.String() != want {
 		t.Fatalf("got\n%s\nwant\n%s", out.String(), want)
 	}
@@ -132,4 +136,54 @@ func TestStatusForeignThings(t *testing.T) {
 		}
 	}
 	_ = filepath.Join
+}
+
+// redis-password: status names where the clients' password comes from, never
+// the password itself.
+func TestStatusPasswordLine(t *testing.T) {
+	cfg := t.TempDir()
+	repo := t.TempDir()
+	path := filepath.Join(cfg, "agentbus", "redis.env")
+	for _, c := range []struct {
+		env  map[string]string
+		file string // "" none, "ok", "loose" (0644), "bad"
+		want string
+	}{
+		{map[string]string{}, "", "! Redis password: the historical default (./setup.sh rotate-redis-password replaces it)"},
+		{map[string]string{}, "ok", "✓ Redis password: " + path + " (0600)"},
+		{map[string]string{}, "loose", "! Redis password: " + path + " is not 0600"},
+		{map[string]string{}, "bad", "! Redis password: " + path + " cannot be read"},
+		{map[string]string{"REDIS_PASSWORD": "exported-secret"}, "ok", "• Redis password: from the exported REDIS_PASSWORD (it overrides the password file)"},
+		{map[string]string{"REDIS_URL": "redis://:url-secret@h:1"}, "ok", "• Redis password: from REDIS_URL"},
+		{map[string]string{"dotenv": "1"}, "ok", "! Redis password: " + repo + "/.env sets REDIS_PASSWORD: compose starts the broker with it, while the clients read " + path + "; export the same value for the clients, or move it into the password file and remove that line"},
+		{map[string]string{"dotenv": "1"}, "", "! Redis password: " + repo + "/.env sets REDIS_PASSWORD: compose starts the broker with it, while the clients read the historical default; export the same value for the clients, or move it into the password file and remove that line"},
+	} {
+		_ = os.RemoveAll(filepath.Join(cfg, "agentbus"))
+		switch c.file {
+		case "ok", "loose":
+			if err := bus.WritePassword(path, "file-secret"); err != nil {
+				t.Fatal(err)
+			}
+			if c.file == "loose" {
+				_ = os.Chmod(path, 0o644)
+			}
+		case "bad":
+			_ = os.MkdirAll(filepath.Dir(path), 0o700)
+			_ = os.WriteFile(path, []byte("garbage\n"), 0o600)
+		}
+		var out bytes.Buffer
+		c.env["XDG_CONFIG_HOME"] = cfg
+		_ = os.Remove(filepath.Join(repo, ".env"))
+		if c.env["dotenv"] != "" {
+			_ = os.WriteFile(filepath.Join(repo, ".env"), []byte("REDIS_PASSWORD=dotenv-secret\n"), 0o600)
+		}
+		in := &Installer{O: NewOutput(&out, &out, false), Repo: repo, Getenv: func(k string) string { return c.env[k] }}
+		in.passwordLine()
+		if got := strings.TrimSpace(out.String()); got != c.want {
+			t.Errorf("%v %q: %q, want %q", c.env, c.file, got, c.want)
+		}
+		if strings.Contains(out.String(), "secret") {
+			t.Errorf("the line discloses a password: %q", out.String())
+		}
+	}
 }

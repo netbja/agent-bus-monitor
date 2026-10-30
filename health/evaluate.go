@@ -218,7 +218,7 @@ func EvaluateRedis(local, legacy bool) Outcome {
 	if !local {
 		return Outcome{Unknown, "Redis binding or credential source is not locally verifiable"}
 	}
-	if legacy { // warn until v0.19.1 ships the rotation command: there is nothing to run yet
+	if legacy { // a warning: the person rotates (./setup.sh rotate-redis-password), never sentinel
 		return Outcome{Warn, "Redis still uses the historical default password"}
 	}
 	return Outcome{OK, "Redis is loopback-bound and uses an explicit credential source"}

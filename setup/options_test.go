@@ -66,6 +66,7 @@ func TestParseArgsMatchesTheBashByteForByte(t *testing.T) {
 		home := t.TempDir() // the help names it: one HOME for both
 		wantOut, wantErr, wantCode := bashSetup(t, home, args...)
 		gotOut, gotErr, gotCode := goSetup(t, home, args...)
+		gotOut = strings.Replace(gotOut, RotateHelp, "", 1) // the Go installer's alone (redis-password)
 		if gotCode != wantCode || gotOut != wantOut || gotErr != wantErr {
 			t.Errorf("%q:\n go   (%d) out=%q err=%q\n bash (%d) out=%q err=%q", args, gotCode, gotOut, gotErr, wantCode, wantOut, wantErr)
 		}

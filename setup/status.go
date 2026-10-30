@@ -2,10 +2,14 @@ package setup
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // herdrPlusState is where setup before v0.20 recorded the herdr-plus it
@@ -164,9 +168,11 @@ func (in *Installer) Status(ctx context.Context) int {
 	case "running":
 		o.OK("Redis broker: running (" + RedisContainer + ", 127.0.0.1:6380)")
 		in.ownerLine(ctx)
+		in.passwordLine()
 	case "stopped":
 		o.Info("Redis broker: stopped (" + RedisContainer + ")")
 		in.ownerLine(ctx)
+		in.passwordLine()
 	default:
 		o.Info("Redis broker: no container")
 	}
@@ -182,6 +188,43 @@ func (in *Installer) ownerLine(ctx context.Context) {
 		in.O.Info("Redis broker: belongs to no checkout (no compose label)")
 	default:
 		in.O.Info("Redis broker: belongs to " + ow.Dir + " (start or stop it from there)")
+	}
+}
+
+// passwordLine says where the clients' password comes from (redis-password),
+// never what it is.
+func (in *Installer) passwordLine() {
+	path := bus.PasswordFile(in.Getenv)
+	if in.Repo != "" && in.Getenv("REDIS_PASSWORD") == "" && setsKey(filepath.Join(in.Repo, ".env"), "REDIS_PASSWORD") {
+		// compose starts the broker with it; the clients read the file or the
+		// default (reviewer-codex).
+		clients := "the historical default"
+		if _, err := os.Lstat(path); path != "" && err == nil {
+			clients = path
+		}
+		in.O.Warn("Redis password: " + filepath.Join(in.Repo, ".env") + " sets REDIS_PASSWORD: compose starts the broker with it, while the clients read " + clients + "; export the same value for the clients, or move it into the password file and remove that line")
+		return
+	}
+	switch {
+	case in.Getenv("REDIS_URL") != "":
+		in.O.Info("Redis password: from REDIS_URL")
+	case in.Getenv("REDIS_PASSWORD") != "":
+		in.O.Info("Redis password: from the exported REDIS_PASSWORD (it overrides the password file)")
+	case path == "":
+		in.O.Info("Redis password: unknown (no HOME)")
+	default:
+		st, err := os.Lstat(path)
+		_, rerr := bus.ReadPassword(path)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			in.O.Warn("Redis password: the historical default (./setup.sh rotate-redis-password replaces it)")
+		case err != nil || rerr != nil:
+			in.O.Warn("Redis password: " + path + " cannot be read")
+		case st.Mode().Perm() != 0o600:
+			in.O.Warn("Redis password: " + path + " is not 0600")
+		default:
+			in.O.OK("Redis password: " + path + " (0600)")
+		}
 	}
 }
 

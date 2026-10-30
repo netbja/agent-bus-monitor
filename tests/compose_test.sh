@@ -13,4 +13,18 @@ if [[ "$compose" == *'"0.0.0.0:6380:6379"'* || "$compose" == *'"6380:6379"'* ]];
 else
   _ok "broker port not published on all interfaces"
 fi
+# The password (redis-password): read from the person's 0600 file through env_file (optional, so an
+# install from before keeps the historical default), never put on the server's argv, where `ps` and
+# `docker inspect` show it, nor on redis-cli's.
+assert_contains "$compose" 'path: ${XDG_CONFIG_HOME:-${HOME}/.config}/agentbus/redis.env' "password file read through env_file"
+assert_contains "$compose" 'required: false' "the password file is optional (an older install keeps its default)"
+assert_contains "$compose" 'redis-server - --appendonly yes' "the server reads its password from a config on stdin"
+assert_contains "$compose" 'REDISCLI_AUTH=' "the healthcheck authenticates through REDISCLI_AUTH"
+assert_contains "$compose" '$${AGENTBUS_SHELL_PASSWORD:-$${REDIS_PASSWORD:-AgentBus2025!}}' "shell, then file, then the historical default, as the clients"
+assert_contains "$compose" "sed 's/[\\\\\"]/\\\\&/g'" "a quote or backslash in the password is escaped for the config line"
+if [[ "$compose" == *"--requirepass"* || "$compose" == *"redis-cli\", \"-a"* || "$compose" == *"redis-cli -a"* ]]; then
+  _bad "the password is on a command line (server --requirepass or redis-cli -a)"
+else
+  _ok "the password is on no command line"
+fi
 finish

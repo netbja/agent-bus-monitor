@@ -90,8 +90,33 @@ docker compose up -d        # redis:8-alpine on :6380, compose project "agent-bu
 docker compose ps
 ```
 
-Password defaults to `AgentBus2025!`; override via `REDIS_PASSWORD` (see
-`.env.example` → copy to `.env`). Redis Streams entries are capped at ~1000 per
+**The password.** `./setup.sh install` on a fresh broker writes a random one to
+`~/.config/agentbus/redis.env` (`$XDG_CONFIG_HOME/agentbus/redis.env`; 0600, one
+`REDIS_PASSWORD="…"` line). Compose reads that file (`env_file`) and hands the password to Redis
+as a config on its stdin, never on a command line; `agentbus` and `busmon` read the same file, so
+nothing needs exporting. A `REDIS_PASSWORD` exported in the shell wins over the file, for compose
+and the clients alike; one in the checkout's `.env` reaches compose only (`.env.example`): install then
+writes no file, and `./setup.sh status` warns. An install made before this (no file) keeps the historical
+`AgentBus2025!`, and health `redis-password` warns about it until you rotate:
+
+```bash
+./setup.sh rotate-redis-password --dry-run   # what it would do
+./setup.sh rotate-redis-password             # asks first; --yes skips the question
+```
+
+The rotation runs only on the broker this checkout owns, and only with no `REDIS_PASSWORD` or
+`REDIS_URL` exported, none in the checkout's `.env`, and none in a project's services env file. It writes the new file (keeping the old one as `redis.env.prev`), sets the
+password on the running broker, proves it with a new connection, recreates the broker's container
+from this checkout (a few seconds; the data stays in its volume), so a restart or a reboot keeps the
+new password, then restarts the running project services. On a refused change or a failed proof, once
+the broker is known to be on the old password, the file is put back too (the error says so if that
+fails); if the broker might hold the new password (it cannot be set back, or neither password can be
+proved), the new file is kept, the old one in `redis.env.prev` (on a first rotation, the historical
+default), and the error says to try both. Reopen busmon afterwards, and copy the new file to any machine that reaches
+the broker through a tunnel. `uninstall` leaves the file. The bash fallback,
+`scripts/setup-legacy.sh`, neither writes nor rotates it.
+
+Redis Streams entries are capped at ~1000 per
 stream (XADD MAXLEN ~); the pilot lease and challenge gates use ordinary keys/hashes.
 
 > The broker is bound to **loopback only** (`127.0.0.1:6380:6379` in `docker-compose.yml`), so it
@@ -634,8 +659,9 @@ support (only clients with a probed screen signature are prompted).
   service's log, Enter on the Redis card its read-only page.
 - **Stopping during an integration** (`down`, or a stop) kills the running tests with their
   process group. The conductor redoes that check or integration at its next start.
-- **Secrets.** The broker password is kept in `~/.config/agentbus/services/<p>.env` (0600),
-  never in a unit, an argument or a log.
+- **Secrets.** The services read the broker password from `~/.config/agentbus/redis.env`, as every
+  client does; their own env file (`~/.config/agentbus/services/<p>.env`, 0600) carries one only if
+  the shell that ran `agentbus up` exported it. Never in a unit, an argument or a log.
 - **Removal.** `busmon --delete <p>` removes the project's services on this machine before its
   keys. `./setup.sh uninstall` removes every project's services first.
 - **Upgrade.** A running service keeps the binary it started with. `./setup.sh install` lists
@@ -839,8 +865,9 @@ Resolved by both `agentbus` and `busmon` in the same order as the old
 `agent_bus.py`:
 
 1. `REDIS_URL` (e.g. `redis://:pass@host:6380/0`) — takes precedence when set
-2. otherwise `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`
-   (defaults `localhost` / `6380` / `AgentBus2025!`)
+2. otherwise `REDIS_HOST` / `REDIS_PORT` (defaults `localhost` / `6380`), with the password from
+   `REDIS_PASSWORD`, else `~/.config/agentbus/redis.env`, else `AgentBus2025!`. A password file
+   that exists but cannot be read is an error, never the default.
 
 `--host <host>` overrides `REDIS_HOST`.
 
@@ -852,7 +879,7 @@ box, forward its port through SSH and point a tool at the local end of the tunne
 
 ```bash
 ssh -NL 6381:localhost:6380 user@host1 &   # tunnel host1 bus -> local :6381
-REDIS_PORT=6381 ./busmon                          # watch it
+REDIS_PORT=6381 ./busmon                          # watch it (with host1's redis.env, or its REDIS_PASSWORD)
 
 # one shot, with automatic tunnel teardown:
 ./remote-bus.sh user@host1

@@ -46,7 +46,7 @@ Tracked secret-like files  fail
 Redis exposure and password  unknown
   since: never measured
   detail: no current measurement
-  remediation: Restrict Redis to loopback; the default password is replaced by ./setup.sh rotate-redis-password (v0.19.1).
+  remediation: Restrict Redis to loopback. The historical default password is replaced by the person, when it suits them, with ./setup.sh rotate-redis-password (an install on a fresh broker already gets a random one); an exported REDIS_PASSWORD or REDIS_URL overrides the password file. Sentinel never rotates it.
 
 Service environment permissions  unknown
   since: never measured

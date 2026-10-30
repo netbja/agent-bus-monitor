@@ -7,7 +7,7 @@ const PluginID = "netbja.agentbus"
 
 // Options are setup.sh's flags.
 type Options struct {
-	Sub                         string // install, update, uninstall, status
+	Sub                         string // install, update, uninstall, status, rotate-redis-password
 	BinDir                      string
 	DryRun, Force, InstallHerdr bool
 	StartDocker, InstallSkills  bool
@@ -39,7 +39,7 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 	}
 	if len(args) > 0 {
 		switch args[0] {
-		case "install", "update", "uninstall", "status":
+		case "install", "update", "uninstall", "status", "rotate-redis-password":
 			opt.Sub, args = args[0], args[1:]
 		}
 	}
@@ -74,6 +74,10 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 			return opt, 1
 		}
 	}
+	if opt.Sub == "rotate-redis-password" && (opt.InstallHerdr || opt.Purge || opt.Force || !opt.StartDocker || !opt.InstallSkills) {
+		o.Fatal("rotate-redis-password takes only --dry-run and --yes (see --help)")
+		return opt, 1
+	}
 	if opt.Sub == "uninstall" && opt.DryRun {
 		o.Fatal("uninstall has no --dry-run: it asks before every step (run it without --yes to choose)")
 		return opt, 1
@@ -84,6 +88,10 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 	return opt, -1
 }
 
+// RotateHelp is the help's one line the bash fallback has no counterpart for
+// (redis-password): scripts/setup-legacy.sh cannot rotate the password.
+const RotateHelp = "  ./setup.sh rotate-redis-password [--dry-run] [--yes]  replace the broker's password\n"
+
 // Usage is setup.sh's help text.
 func Usage(getenv func(string) string) string {
 	return `Agent Bus Monitor — setup
@@ -93,7 +101,7 @@ Usage:
   ./setup.sh update    [options]          git pull --ff-only, then install
   ./setup.sh uninstall [--yes] [--purge]  asks before every removal
   ./setup.sh status
-
+` + RotateHelp + `
 Install / update options:
   --bin-dir <dir>   Install directory for binaries (default: $HOME/.local/bin)
   --dry-run         Inspect the environment and show the actions, change nothing
