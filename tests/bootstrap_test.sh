@@ -80,6 +80,10 @@ run recall demos >/dev/null
 assert_eq "$(grep -c 'plugin' "$stub/herdr.calls")" "0" "bootstrap calls no herdr plugin command (new and recall)"
 rec_out="$(run recall demo 2>&1)"
 assert_contains "$rec_out" "agentbus up demo" "recall names agentbus up <project>"
+# run by agentbus up (stranger-test): the hint to run agentbus up is not printed to someone who just did
+up_out="$(AGENTBUS_UP=1 run recall demo 2>&1)"
+assert_contains "$up_out" "bootstrap: recall demo done" "recall from up still completes"
+assert_eq "$([[ "$up_out" == *"agentbus up demo"* ]] && echo hinted || echo quiet)" "quiet" "recall from up prints no 'agentbus up' hint"
 
 # auto verb -> recall when template exists (no crash, broker still ensured)
 assert_exit 0 "auto recalls existing project" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' demo"
