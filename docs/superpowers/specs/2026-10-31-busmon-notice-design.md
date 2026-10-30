@@ -102,13 +102,26 @@ out. A pause with no valid notify target gets no directive at all, so its end sh
 
 **Cadence, honestly.** busmon reads the pause and the health every tick (1 s), and the swap
 intents and fallbacks only every fifth tick (`wakePollDue`, 5 s). The notices therefore read the
-ledger, not the intents: one bounded read of its newest entries every fifth tick (`SwapLog`, the
-entries after the last id seen; the first read only records that id). `SwapLog` returns them newest
-first: they are reversed before they join the queue, so the queue stays in arrival order. Every
-reload and swap still retained in the ledger is seen, its line up to 5 s late. The ledger is capped
-(`MAXLEN ~` 1000), so in principle entries could be trimmed between two reads: when the oldest
-entry read is newer than the saved cursor (a gap), one line says so instead of pretending,
-`▲ some reloads or swaps were not shown (agentbus swaps)`, attention. A pause shorter than one
+ledger, not the intents, through **one new bus method** (`bus/swaplog.go`), since `SwapLog` always
+reads the newest 1000 entries and has no cursor:
+
+- `SwapEventsAfter(ctx, after string, page int) (events []SwapEvent, added int64, last string, err error)`:
+  first `XINFO STREAM` for `entries-added` and `last-generated-id` (Redis 7 and later; compose runs
+  Redis 8), then `XRANGE` from `(after` to that `last-generated-id` (not `+`), oldest first,
+  `COUNT page` (50), looped until a page comes back short. Ending at the id read with the count keeps
+  the two consistent: an entry appended in between is read next time, never counted as lost. An
+  absent stream reads as no events, `added` 0, `last` `0-0`.
+- **Baseline:** the first successful read only records `last` as the cursor and `entries-added` as
+  the count, and shows nothing (so an empty ledger at start is cursor `0-0`, count 0). A failed read
+  sets no baseline; the next fifth tick tries again.
+- **Each later read** (every fifth tick): the events after the cursor, already in arrival order, join
+  the queue; the cursor moves to the last one, the count to `entries-added`.
+- **Loss, exactly:** entries were trimmed before busmon read them when `entries-added` grew by more
+  than the number of events read. Then, and only then, one line says so:
+  `▲ some reloads or swaps were trimmed before busmon read them (agentbus swaps)`, attention. No
+  false alarm on an empty start or a full page, since the count, not the ids, decides.
+
+Every reload and swap still retained in the ledger is seen, its line up to 5 s late. A pause shorter than one
 tick can still be missed; that is accepted (it would end before anyone could read about it).
 
 Not notices: an agent's ask or waiting state, a pane's prompt, an escalation to master, a
@@ -121,6 +134,6 @@ Not notices: an agent's ask or waiting state, a pane's prompt, an escalation to 
    enough to read one line.
 
 Settled in review (foureyes, reviewer-codex): the ledger `{p}:swaps` is read for reloads and swaps
-(an existing key, one bounded read per fifth tick, within rule 5), which also shows a failed reload;
+(an existing key, read forward from a cursor every fifth tick through `SwapEventsAfter`, within rule 5), which also shows a failed reload;
 the person's own pauses, resumes, reloads and swaps are left out by their author field; the
 resume is taken from the dispatcher's directive in the tail, not from the record's disappearance.
