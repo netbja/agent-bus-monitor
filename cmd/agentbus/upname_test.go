@@ -36,6 +36,14 @@ func TestUpSaysWhyAProjectNameIsRefused(t *testing.T) {
 	if !strings.Contains(errw.String(), "try: agentbus up demo '/home/x/my code' --as charlie") {
 		t.Errorf("suggestion lost the rest of the command:\n%s", errw.String())
 	}
+	// every shell metacharacter is quoted, so the line pasted runs up and nothing else
+	// (reviewer-codex, foureyes); a plain path and ~ stay as typed
+	out.Reset()
+	errw.Reset()
+	runUp([]string{"Demo", "/tmp/work;id", "c`d`", "a|b", "~/code/x"}, upDeps{}, &out, &errw)
+	if want := `try: agentbus up demo '/tmp/work;id' 'c` + "`d`" + `' 'a|b' ~/code/x`; !strings.Contains(errw.String(), want) {
+		t.Errorf("metacharacters not quoted:\n%s\nwant %s", errw.String(), want)
+	}
 	out.Reset()
 	errw.Reset() // no project at all: the usage line, as before
 	if code := runUp(nil, upDeps{}, &out, &errw); code != 1 || !strings.HasPrefix(errw.String(), "usage: agentbus up") {

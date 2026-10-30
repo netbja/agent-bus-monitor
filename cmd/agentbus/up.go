@@ -96,10 +96,7 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		if low := strings.ToLower(args[0]); bus.ValidName(low) {
 			try := []string{"agentbus", "up", low}
 			for _, a := range args[1:] {
-				if strings.ContainsAny(a, " '\"$\\") {
-					a = shellQuote(a)
-				}
-				try = append(try, a)
+				try = append(try, shellWord(a))
 			}
 			fmt.Fprintf(stderr, "try: %s\n", strings.Join(try, " "))
 		}
@@ -1001,4 +998,14 @@ func waitBroker(ping func(time.Duration) error, sleep func(time.Duration), now f
 func brokerStarting(err error) bool {
 	return strings.HasPrefix(err.Error(), "LOADING") || errors.Is(err, syscall.ECONNREFUSED) ||
 		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF)
+}
+
+// shellWord is a as one shell word: as typed when every character is safe
+// (letters, digits and _ . / : = @ % + , ~ -), else single-quoted, so a
+// suggested command pasted back runs that command and nothing else.
+func shellWord(a string) string {
+	if a != "" && strings.Trim(a, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:=@%+,~-") == "" {
+		return a
+	}
+	return shellQuote(a)
 }
