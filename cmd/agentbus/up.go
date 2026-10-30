@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -948,9 +947,10 @@ const (
 )
 
 // waitBroker pings until the broker answers, for at most brokerWait. Only what a wait can
-// fix is retried: LOADING (the dataset is being read back), a connection that is refused,
-// dropped or times out (the container is starting); any other answer, a wrong password say,
-// returns at once. A nil ping waits for nothing.
+// fix is retried: LOADING (the dataset is being read back) and a connection that is refused or
+// dropped (the container is starting). Any other answer returns at once: a wrong password, and
+// a timeout too, since a starting local container refuses, it does not black-hole (a wrong
+// host or a dead tunnel would only wait the whole budget; foureyes). A nil ping waits for nothing.
 func waitBroker(ping func(time.Duration) error, sleep func(time.Duration), now func() time.Time) error {
 	if ping == nil {
 		return nil
@@ -962,15 +962,22 @@ func waitBroker(ping func(time.Duration) error, sleep func(time.Duration), now f
 		now = time.Now
 	}
 	deadline := now().Add(brokerWait)
-	var err error
+	var err, starting error // starting: the last answer a wait could fix
 	for {
 		left := deadline.Sub(now())
 		if left <= 0 {
 			return err
 		}
-		if err = ping(min(left, brokerAttempt)); err == nil || !brokerStarting(err) {
+		if err = ping(min(left, brokerAttempt)); err == nil {
+			return nil
+		}
+		if !brokerStarting(err) {
+			if starting != nil && errors.Is(err, context.DeadlineExceeded) {
+				return starting // the budget cut the last ping short: say what the broker said
+			}
 			return err
 		}
+		starting = err
 		if left = deadline.Sub(now()); left > 0 {
 			sleep(min(brokerPoll, left))
 		}
@@ -978,8 +985,6 @@ func waitBroker(ping func(time.Duration) error, sleep func(time.Duration), now f
 }
 
 func brokerStarting(err error) bool {
-	var op *net.OpError
-	return strings.HasPrefix(err.Error(), "LOADING") || errors.As(err, &op) ||
-		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) ||
-		errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET)
+	return strings.HasPrefix(err.Error(), "LOADING") || errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF)
 }

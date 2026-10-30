@@ -608,8 +608,9 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   never resurrected. `up` writes that marker only once the broker answers PING (`waitBroker`,
   up-broker-ready: a 10 s deadline on the clock that counts the pings' own time, each ping through
   `bus.ConnectContext` given at most 2 s and never more than is left, 250 ms between them;
-  retrying only LOADING and a refused, dropped or timed-out connection; any other answer fails at
-  once). Don't add a supervisor loop, a `nohup` fallback or a login autostart; don't
+  retrying only LOADING and a refused or reset connection (or EOF): a timeout or another dial
+  error fails at once, since a starting local container refuses rather than black-holes; a give-up
+  cut short by the budget names the broker's last answer, not the deadline). Don't add a supervisor loop, a `nohup` fallback or a login autostart; don't
   put a secret in a unit; tests use fake `systemctl`/`launchctl` (`tests/installer_test.sh`,
   `service/manager_test.go`) and never the user's manager. busmon only reads the state and the
   local log (`F3`), never starts or parents a service. F3 (busmon-f3, `services_cards.go`) is three cards,

@@ -46,7 +46,11 @@ func (f *fakeBroker) wire(deps *upDeps) {
 	deps.Sleep = func(d time.Duration) { f.slept = append(f.slept, d); f.clock = f.clock.Add(d) }
 }
 
-var errLoading = errors.New("LOADING Redis is loading the dataset in memory")
+var (
+	errLoading = errors.New("LOADING Redis is loading the dataset in memory")
+	refused    = &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
+	timedOut   = &net.OpError{Op: "dial", Net: "tcp", Err: os.ErrDeadlineExceeded}
+)
 
 func TestUpWaitsForTheBrokerBeforeMarkingServices(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
@@ -91,13 +95,13 @@ func TestUpGivesUpOnABrokerThatStaysLoading(t *testing.T) {
 	}
 }
 
-// reviewer-codex: the pings' own time counts. A broker that hangs makes each ping use its whole
-// timeout; the wait still ends by the deadline, and no ping is given more than is left.
+// reviewer-codex, foureyes: the pings' own time counts. A refusing broker whose every ping uses
+// its whole timeout (go-redis's own retries take time) still ends the wait by the deadline, and
+// no ping is given more than is left.
 func TestUpBrokerWaitCountsThePingsOwnTime(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
 	u := withServices(t, &deps)
-	hung := &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}
-	f := &fakeBroker{answers: []error{hung}, hang: true}
+	f := &fakeBroker{answers: []error{refused}, hang: true}
 	f.wire(&deps)
 	start := f.clock
 	var out, errw bytes.Buffer
@@ -116,31 +120,34 @@ func TestUpBrokerWaitCountsThePingsOwnTime(t *testing.T) {
 }
 
 func TestUpDoesNotWaitOnAnAnswerThatWillNotChange(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
-	u := withServices(t, &deps)
-	f := &fakeBroker{answers: []error{errors.New("WRONGPASS invalid username-password pair")}}
-	f.wire(&deps)
-	deps.Sleep = func(time.Duration) { t.Fatal("slept on an error that no wait fixes") }
-	var out, errw bytes.Buffer
-	runUp([]string{"demo", work}, deps, &out, &errw)
-	if f.calls != 1 || len(u.marks) != 0 || !strings.Contains(errw.String(), "WRONGPASS") {
-		t.Fatalf("pings = %d, marks = %d, stderr %q", f.calls, len(u.marks), errw.String())
+	for _, answer := range []error{errors.New("WRONGPASS invalid username-password pair"), timedOut} {
+		work, _, _, _, deps := upFixture(t)
+		u := withServices(t, &deps)
+		f := &fakeBroker{answers: []error{answer}}
+		f.wire(&deps)
+		deps.Sleep = func(time.Duration) { t.Fatalf("slept on %v, which no wait fixes", answer) }
+		var out, errw bytes.Buffer
+		runUp([]string{"demo", work}, deps, &out, &errw)
+		if f.calls != 1 || len(u.marks) != 0 || !strings.Contains(errw.String(), answer.Error()) {
+			t.Fatalf("%v: pings = %d, marks = %d, stderr %q", answer, f.calls, len(u.marks), errw.String())
+		}
 	}
 }
 
 // What a wait can fix, and what it cannot: each retried form on its own, so no branch of
-// brokerStarting rides on another.
+// brokerStarting rides on another; a timeout or an unreachable host is not retried.
 func TestBrokerStarting(t *testing.T) {
 	for _, c := range []struct {
 		err  error
 		want bool
 	}{
 		{errLoading, true},
-		{&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("no route to host")}, true},
-		{context.DeadlineExceeded, true},
+		{refused, true},
+		{&net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)}, true},
 		{io.EOF, true},
-		{syscall.ECONNREFUSED, true},
-		{syscall.ECONNRESET, true},
+		{timedOut, false},
+		{context.DeadlineExceeded, false},
+		{&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("no route to host")}, false},
 		{errors.New("WRONGPASS invalid username-password pair"), false},
 		{errors.New("NOAUTH Authentication required."), false},
 		{errors.New("ERR unknown command"), false},
@@ -148,5 +155,19 @@ func TestBrokerStarting(t *testing.T) {
 		if got := brokerStarting(c.err); got != c.want {
 			t.Errorf("brokerStarting(%v) = %v, want %v", c.err, got, c.want)
 		}
+	}
+}
+
+// When the budget cuts the last ping short (a context deadline), up says what the broker said
+// before, not the deadline.
+func TestUpBrokerGiveUpNamesTheBrokersAnswer(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	withServices(t, &deps)
+	f := &fakeBroker{answers: []error{refused, refused, context.DeadlineExceeded}, hang: true}
+	f.wire(&deps)
+	var out, errw bytes.Buffer
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	if !strings.Contains(errw.String(), "connection refused") || strings.Contains(errw.String(), "deadline") {
+		t.Fatalf("stderr %q: must name the refusal, not the deadline", errw.String())
 	}
 }
