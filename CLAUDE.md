@@ -518,7 +518,9 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   broker, so an unstubbed `uninstall --yes` in a test stops the production Redis.
   `tests/installer_test.sh` puts fakes first on `PATH`; keep it that way. Since v0.20 setup
   links *this checkout* as the herdr plugin `netbja.agentbus` (`herdr plugin link`, the plugin
-  root is the checkout, no download, no `[[build]]`); herdr-plus is no longer installed, and a
+  root is the checkout, no download; its one `[[build]]` exits 1 with how to install, so
+  `herdr plugin install` from herdr's plugin list registers nothing, `TestPluginBuildRefusesInstall`,
+  plugin-listing); herdr-plus is no longer installed, and a
   herdr-plus an older setup installed is reported by `status`, never removed. setup owns only
   what it wrote: it unlinks only the registration it recorded, and replaces only its own,
   unedited key-binding block.
