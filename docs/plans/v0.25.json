@@ -8,6 +8,7 @@
     {"id": "plugin-listing", "title": "herdr-plugin.toml and README meet herdr's listing rules; check a clean install from a fresh clone", "owner": "coder", "review": "plugin-listing", "after": ["license", "scrub"]},
     {"id": "screenshot", "title": "Fresh busmon screenshot and a short demo for the README", "owner": "person"},
     {"id": "macos-try", "title": "Try the installer and busmon on macOS; list what breaks", "owner": "person"},
+    {"id": "discuss", "title": "Discuss with Bernard: distributed mode on several hosts, full backup and recovery, parallel coders and local LLMs", "owner": "person"},
     {"id": "stranger-test", "title": "Onboarding test from a clean user account: install, agentbus up, first task; fix what blocks", "owner": "coder", "review": "stranger-test", "after": ["redis-password", "scrub"]},
     {"id": "docs-v025", "title": "README and guides (EN + FR) for the public release", "owner": "coder", "review": "docs-v025", "after": ["license", "redis-password", "scrub", "plugin-listing"]},
     {"id": "topic", "title": "Add the GitHub topic herdr-plugin and make the repository public", "owner": "person", "after": ["screenshot", "stranger-test", "docs-v025"]},
