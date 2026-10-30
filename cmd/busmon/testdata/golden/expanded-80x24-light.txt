@@ -21,4 +21,4 @@
 │                                      ↵ full text · 5 more lines              ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- tab focus   1-4 tabs   ↑↓ j k select   end G live   F1 help   F5 health        
+ tab focus   1-4 tabs   ←→ tab   ↑↓ j k select   y copy   F1 help   F5 health   

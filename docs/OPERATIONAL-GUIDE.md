@@ -348,7 +348,7 @@ agent names, no project template):
   `→ @all (6)` line.
 - **Questions for you.** When master needs decisions it asks them as questions (`agentbus ask`):
   they appear in For you as `ask`, the header counts them (`♙ 2 for you`) and the agent row fades `waiting`.
-  Press `!` or `w` (or Enter in the agent's detail) to open them: one tab per question, `↑↓` or a digit to pick an option, Enter to
+  Press `!` or `w` (or Enter in the agent's detail) to open them (with no question open, `w` writes to master instead): one tab per question, `↑↓` or a digit to pick an option, Enter to
   send that answer at once, `Other…` to write your own, `←→` to change question, Esc to close. An
   answered question shows its answer and never comes back. `agentbus asks --open` lists them in a
   terminal, `agentbus answer <id> <question> --choice <label>` answers without busmon. Long texts

@@ -72,6 +72,9 @@ const (
 	ActPlan         // open the batch's plan
 	ActTab5         // the shell's narrow tier: the fifth view
 	ActTab6         // the shell's narrow tier: the sixth view (Plan)
+	ActTabNext      // the lower panel's next tab, wrapping (busmon-keys)
+	ActTabPrev      // the lower panel's previous tab, wrapping
+	ActAskOrWrite   // w: the open question, or with none the compose window to master
 	ActNextItem     // reader: the next item of the list the page came from (A5)
 	ActPrevItem     // reader: the previous one
 	ActAskOther     // the shell's ask: a free answer ("Other") in the compose window
@@ -177,6 +180,8 @@ var (
 		{Keys: "2", Act: ActTab2, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('2')},
 		{Keys: "3", Act: ActTab3, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('3')},
 		{Keys: "4", Act: ActTab4, Tiers: []Tier{TierNarrow}, match: runeIs('4')},
+		{Keys: GlyphArrowL + GlyphArrowR, Hint: "tab", Help: "the lower panel's previous or next tab (Activity, Board, Requests, Plan), wrapping", Act: ActTabNext, Panels: lowerTabs, match: keyIs(keyRight)},
+		{Keys: GlyphArrowL, Act: ActTabPrev, Panels: lowerTabs, match: keyIs(keyLeft)},
 		{Keys: arrows + " j k", Hint: "select", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
 		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(keyPgUp)},
@@ -188,7 +193,8 @@ var (
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "f", Hint: "auto-scroll", Act: ActFollow, match: runeIs('f')},
 		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
-		{Keys: "! w", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!', 'w'))},
+		{Keys: "!", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!'))},
+		{Keys: "w", Help: "answer the open question, or with none open write to master", Act: ActAskOrWrite, match: runeIs('w')},
 		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(keyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "o", Help: "Requests: show or hide the answered threads and those older than 24 h", Act: ActFold, Panels: []PanelID{PanelRequests}, match: runeIs('o')},
@@ -276,7 +282,7 @@ var (
 		{Keys: "Y", Hint: "copy thread", Act: ActCopyThread, match: runeIs('Y')},
 		{Keys: "n p " + GlyphArrowL + GlyphArrowR, Hint: "next/prev", Help: "the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)", Act: ActNextItem, match: either(runeIs('n'), keyIs(keyRight))},
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
-		{Keys: "enter ! w", Help: "answer the agent's open questions", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
+		{Keys: "enter ! w", Help: "answer the agent's open questions (w with none open: write to master)", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "t", Help: "in the help: the first-launch tour again", Act: ActTour, match: runeIs('t')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},

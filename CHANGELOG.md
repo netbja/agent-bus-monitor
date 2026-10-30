@@ -6,6 +6,9 @@ release exists.
 
 ## Unreleased
 
+- busmon: `←` and `→` step the lower panel's tabs (Activity, Board, Requests, Plan) while one of them
+  has the focus, wrapping as herdr's tabs do; on an opened page they still step its list. `w` with no
+  question open opens the compose window to master (with one open it still opens it, as `!` does).
 - The CLI's default sender, when `AGENT_BUS_AGENT` is unset, is now `anonymous` (it was a
   different built-in name).
   The same rules apply: refused as a writer inside a herdr pane. Entries already on a bus keep the

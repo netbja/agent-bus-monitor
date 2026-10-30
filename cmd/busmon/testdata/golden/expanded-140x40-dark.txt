@@ -37,4 +37,4 @@
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                           
- tab focus   1-4 tabs   ↑↓ j k select   end G live   enter detail   y copy   f auto-scroll   ! w answer   / filter   F1 help   F5 health    
+ tab focus   1-4 tabs   ←→ tab   ↑↓ j k select   end G live   enter detail   y copy   f auto-scroll   ! answer   F1 help   F5 health        

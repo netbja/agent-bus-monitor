@@ -376,7 +376,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (`tabBar`, busmon-tabs): each label is a block plus one blank column (`tabLabels`, the click spans,
   widths unchanged); the active tab a bold pill in its panel's colour, dimmed with the frame's fade when
   the panel is not focused; the others grey on `Theme.TabOff` (plain without true colour); `Seg.Tab`
-  makes `frameTitle` leave them alone. Each provider has its own colour (busmon-llm-colors: `providerHues` in `theme.go`, one
+  makes `frameTitle` leave them alone; `←`/`→` step them while one has the focus, wrapping as herdr's
+  next/previous tab does (busmon-keys, `ActTabNext`/`ActTabPrev`, `Panels: lowerTabs`; a page keeps
+  them for its previous/next item). Each provider has its own colour (busmon-llm-colors: `providerHues` in `theme.go`, one
   role per provider, `providerRole(p, fallback)`; the 16-colour palette takes a hand-picked ANSI name per
   provider (no two alike, none an alert role's colour nor the text roles' gray/silver/teal, openai the
   terminal's own foreground), no-colour none; an unknown provider keeps today's colour): the provider label
@@ -893,7 +895,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   open ask per agent; each answer is a `reply` (ref = ask id, `human=yes`) that wakes the agent. Client
   JSON never carries answers. v0.15.1: `ask <agent> --withdraw <id> --question <qid> --note …` closes one
   question (`AskAnswer.Withdrawn`), the ask ends with the last one; a directive typed to an agent with an
-  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). busmon: the reader's ask page (`tea_reader.go`, `ModeShellAsk`, `!`/`w`/F4, Enter on a For you ask or in the agent's page; `askpanel.go`'s bodies), counts and fade follow open
+  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). busmon: the reader's ask page (`tea_reader.go`, `ModeShellAsk`, `!`/`w`/F4; `w` with no ask open
+  opens the compose window to master, `ActAskOrWrite`, busmon-keys; Enter on a For you ask or in the agent's page; `askpanel.go`'s bodies), counts and fade follow open
   questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,
   overlay bodies only; rows stay on `Preview`).
 - **Observed is not declared (v0.14.3).** The services' dispatcher inspects every verified pane

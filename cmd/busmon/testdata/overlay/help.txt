@@ -5,6 +5,7 @@ KEYS
   F5                   health
   1-3                  view
   1-4                  view
+  ←→                   the lower panel's previous or next tab (Activity, Board, Requests, Plan), wrapping
   ↑↓ j k               select
   pgup                 page up
   pgdn                 page down
@@ -15,7 +16,8 @@ KEYS
   y                    copy
   f                    auto-scroll
   u                    Activity: the next unread message for you (●), wrapping
-  ! w F4               answer
+  ! F4                 answer
+  w                    answer the open question, or with none open write to master
   d del                remove
   a                    show or hide the agents silent for more than a day
   o                    Requests: show or hide the answered threads and those older than 24 h
@@ -54,7 +56,7 @@ KEYS
   y                    copy
   Y                    copy thread
   n p ←→               the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)
-  enter ! w            answer the agent's open questions
+  enter ! w            answer the agent's open questions (w with none open: write to master)
   t                    in the help: the first-launch tour again
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)

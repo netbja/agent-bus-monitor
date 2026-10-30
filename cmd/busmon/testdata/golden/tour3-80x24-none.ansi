@@ -8,9 +8,9 @@
 [1m│[m  ●[1m│[m An agent that needs your decision asks a question. It shows in For   [1m│[m 8m[1m│[m
 [1m╰───[m[1m│[m you with ●, and the agent reads waiting.                             [1m│[m[1m───╯[m
 ╭─ A[1m│[m                                                                      [1m│[m …─╮
-│[7m▶ [m[7m♙[m[1m│[m   [1m! w F4[m  open its questions                                         [1m│[m[7mle [m▲
-│  ♙[1m│[m   [1m1-9[m     pick an answer                                             [1m│[m   ┃
-│  ♙[1m│[m   [1mo[m       Other: write your own answer in the compose window         [1m│[m   ▼
+│[7m▶ [m[7m♙[m[1m│[m   [1m! F4[m  open its questions                                           [1m│[m[7mle [m▲
+│  ♙[1m│[m   [1m1-9[m   pick an answer                                               [1m│[m   ┃
+│  ♙[1m│[m   [1mo[m     Other: write your own answer in the compose window           [1m│[m   ▼
 ╰───[1m│[m                                                                      [1m│[m───╯
 ╭─ [1;7m [m[1m│[m Your answer wakes the agent; nothing else is needed.                 [1m│[ml…─╮
 │   [1m│[m                                                                      [1m│[m   ▲

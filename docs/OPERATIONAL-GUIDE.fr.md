@@ -367,7 +367,7 @@ noms d'onglets et d'agents, sans modèle de projet) :
   n'affiche qu'une ligne `→ @all (6)`.
 - **Des questions pour vous.** Quand master a besoin de décisions, il les pose comme des questions
   (`agentbus ask`) : elles apparaissent dans For you comme `ask`, l'en-tête les compte (`♙ 2 for you`) et la ligne de
-  l'agent affiche `waiting` en fondu. Faites `!` ou `w` (ou Entrée dans la fiche de l'agent) pour les ouvrir : un onglet par question,
+  l'agent affiche `waiting` en fondu. Faites `!` ou `w` (ou Entrée dans la fiche de l'agent) pour les ouvrir (sans question ouverte, `w` écrit à master) : un onglet par question,
   `↑↓` ou un chiffre pour choisir une option, Entrée pour envoyer cette réponse tout de suite,
   `Other…` pour écrire la vôtre, `←→` pour changer de question, Échap pour fermer. Une question
   répondue affiche sa réponse et ne revient jamais. `agentbus asks --open` les liste dans un

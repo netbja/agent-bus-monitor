@@ -8,9 +8,9 @@
 │  ●│ An agent that needs your decision asks a question. It shows in For   │ 8m│
 ╰───│ you with ●, and the agent reads waiting.                             │───╯
 ╭─ A│                                                                      │ …─╮
-│▶ ♙│   ! w F4  open its questions                                         │le ▲
-│  ♙│   1-9     pick an answer                                             │   ┃
-│  ♙│   o       Other: write your own answer in the compose window         │   ▼
+│▶ ♙│   ! F4  open its questions                                           │le ▲
+│  ♙│   1-9   pick an answer                                               │   ┃
+│  ♙│   o     Other: write your own answer in the compose window           │   ▼
 ╰───│                                                                      │───╯
 ╭─  │ Your answer wakes the agent; nothing else is needed.                 │l…─╮
 │   │                                                                      │   ▲
