@@ -72,21 +72,39 @@ t=4.0  … ! answer   / filter   i write   F1 help   F5 health              gone
 
 ## Sources: what shows, from what
 
-Each line is detected from data busmon already reads: the live tail (events after start only),
-or a transition between two polls (never against the first poll).
+Each line comes from data busmon already reads: the live tail (events after start only), a
+transition between two polls (never against the first poll), or, for reloads and swaps, the
+ledger `{p}:swaps`, which records every one of them durably.
 
-| Event | From (already read) | Detected as | Line | Level |
+| Event | From | Detected as | Line | Level |
 |---|---|---|---|---|
-| project paused | `{p}:pause`, polled | absent → present | `dispatch: project paused until 16:56 (lunch)` | info |
-| project resumed | `{p}:pause`, polled | present → absent | `project resumed` | done |
-| quota pause | `{p}:pause` with the dispatcher's quota reason | absent → present | `dispatch: paused for claude's quota until 15:44` | attention |
-| reload begins | `{p}:swap:*` intents, polled (`SwapIntents`) | a `reload` intent appears | `sentinel reloads coder (client update)` | info |
-| reload ends | intent gone, the agent's identity a new pid | intent present → absent | `✓ coder reloaded` | done |
-| swap to a fallback | intents, then the agent's `fallback` flag | intent gone, fallback set | `coder now runs on kimi-alt (quota)` | info |
-| auto `/clear` | the tail: dispatch's resume directive (`context cleared: …`) | live cmd from `dispatch` | `coder: context cleared after its hand-off` | info |
-| health worsens | `{p}:health`, polled | ok → warn, or any → fail | `▲ health: redis-version warns (behind in 8.2)` | attention |
-| health recovers | `{p}:health`, polled | warn/fail → ok | `✓ health: dispatch ok again` | done |
-| sentinel restarts a service | `{p}:health`'s service check, polled | fail → ok after sentinel's note | `✓ sentinel restarted missions` | done |
+| project paused | `{p}:pause`, every tick | absent → present, `By` not the person | `dispatch: project paused until 16:56 (lunch)` | info |
+| quota pause | `{p}:pause`, every tick | absent → present, `By == "dispatch"` and `Reason == bus.QuotaPauseReason(provider)` | `dispatch: paused for claude's quota until 15:44` | attention |
+| project resumed | the tail: the directive `FencedResume` writes from `dispatch` ("Project resumed: the pause …") | live cmd from `dispatch` with that prefix | `project resumed` | done |
+| reload begins | `{p}:swaps` ledger, `begin` with `kind=reload` | a new entry, `By` not the person | `sentinel reloads coder: client update` | info |
+| reload ends | ledger `reloaded` / `failed` (kind reload) | a new entry | `✓ coder reloaded` / `▲ coder: reload failed (agentbus swaps)` | done / attention |
+| swap to a fallback | ledger `done` | a new entry, `By` not the person | `coder now runs on kimi-alt: quota` | info |
+| swap back | ledger `back` | a new entry, `By` not the person | `✓ coder back on its own profile` | done |
+| auto `/clear` | the tail: dispatch's directive "context cleared: …" | live cmd from `dispatch` | `coder: context cleared after its hand-off` | info |
+| health worsens | `{p}:health`, every tick | ok → warn, or any → fail | `▲ health: redis-version warns (behind in 8.2)` | attention |
+| health recovers | `{p}:health`, every tick | warn/fail → ok | `✓ health: dispatch ok again` | done |
+| sentinel restarts a service | `{p}:health` service check plus sentinel's note (`{p}:health:notes`), every tick | fail → ok with a newer sentinel note | `✓ sentinel restarted missions` | done |
+
+The text after a colon (`client update`, `quota`) is the ledger entry's `Reason`; with none, the
+line ends at the name.
+
+**Never the person's own act (rule 3), by its author field.** A pause, a reload (`agentbus reload
+--as <person>`) and a swap can be the person's. A notice shows only when the author (`PauseRecord.By`,
+`SwapEvent.By`) is `dispatch` or an agent registered in `{p}:agents`; any other author, the
+person's name included, shows nothing. An early `agentbus resume` by the person deletes the pause
+without the dispatcher's directive, so it shows nothing either.
+
+**Cadence, honestly.** busmon reads the pause and the health every tick (1 s), and the swap
+intents and fallbacks only every fifth tick (`wakePollDue`, 5 s). The notices therefore read the
+ledger, not the intents: one bounded read of its newest entries every fifth tick (`SwapLog`, the
+entries after the last id seen; the first read only records that id), so no reload or swap is
+missed, and its line may come up to 5 s late. A pause shorter than one tick can still be missed;
+that is accepted (it would end before anyone could read about it).
 
 Not notices: an agent's ask or waiting state, a pane's prompt, an escalation to master, a
 `for=person` notify (they are For you items), anything `human=yes`.
@@ -94,9 +112,10 @@ Not notices: an agent's ask or waiting state, a pane's prompt, an escalation to 
 ## Open points for the review
 
 1. Placement A, B or C (Bernard).
-2. A failed reload: the intent's end alone cannot tell success from failure; the reload
-   ledger (`{p}:swaps`) can, and busmon does not read it today. Reading its newest entries
-   each poll is one more read of an existing key, within rule 5. Proposed: yes, bounded to the
-   entries newer than busmon's start.
-3. Durations: 4 s alone, 2 s while others wait, 1 s of fade. Short enough to stay discreet, long
+2. Durations: 4 s alone, 2 s while others wait, 1 s of fade. Short enough to stay discreet, long
    enough to read one line.
+
+Settled in review (foureyes, reviewer-codex): the ledger `{p}:swaps` is read for reloads and swaps
+(an existing key, one bounded read per fifth tick, within rule 5), which also shows a failed reload;
+the person's own pauses, resumes, reloads and swaps are left out by their author field; the
+resume is taken from the dispatcher's directive in the tail, not from the record's disappearance.
