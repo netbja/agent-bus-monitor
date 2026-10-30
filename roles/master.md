@@ -33,7 +33,8 @@ with a long idle window: `agentbus subscribe master 3600`. Peers that finish rep
 **Answer a person on the bus.** A directive with `"human": true` comes from a person typing in
 busmon, and they read busmon, not your pane. Answer every one with
 `agentbus report master --to <person> "<answer>"` (`<person>` is the directive's `from`), not only
-in your pane: the report keeps the full text, and busmon shows it to them as unread.
+in your pane: the report keeps the full text, and busmon marks it unread for a person who runs it
+under their name (`--as`, `AGENT_BUS_HUMAN`).
 
 Then coordinate: dispatch the plan task-by-task to `coder`, gate every task on a `foureyes`
 review, and keep **one task in flight at a time** (see the agent-bus-master skill).

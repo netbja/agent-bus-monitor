@@ -403,7 +403,8 @@ and three per backlog before escalating.
 A received cmd with `"human": true` is a person's message from busmon. Answer every one on the
 bus with `agentbus report master --to <person> "<answer>"` (`<person>` is the cmd's `from`), not
 only in your pane: text typed only there does not reach the person, while the report keeps the
-full text (multi-line too) and busmon shows it to them as unread. A one-line answer to a question
+full text (multi-line too) and busmon marks it unread for a person who runs it under their name
+(`--as`, `AGENT_BUS_HUMAN`; the default `pilot` gets no mark). A one-line answer to a question
 in the same thread may also go as `agentbus reply --ref <id> <from> <answer...>`. When `@all` fans a human
 message out to several agents, each addressed agent answers for itself. The dispatcher recognizes
 sender names on retained `human=yes` cmd entries as people, not missing agents to escalate.
