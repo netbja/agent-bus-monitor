@@ -393,7 +393,7 @@ func main() {
 		project = os.Getenv("AGENT_BUS_PROJECT")
 	}
 	if project == "" {
-		fmt.Fprintln(os.Stderr, "error: project required: -project <p> or AGENT_BUS_PROJECT")
+		fmt.Fprint(os.Stderr, noProjectText())
 		os.Exit(1)
 	}
 	// busmon writes as a person, never as an agent: --as, AGENT_BUS_HUMAN, else "pilot".
@@ -537,4 +537,12 @@ func terminalColors() int {
 		return 16
 	}
 	return 0
+}
+
+// noProjectText is what busmon says without a project (stranger-test): how to
+// name one, and how to find one.
+func noProjectText() string {
+	return "error: no project: busmon --project <p> (or AGENT_BUS_PROJECT)\n" +
+		"  busmon --list   the broker's projects\n" +
+		"  busmon --pick   choose one and open it\n"
 }
