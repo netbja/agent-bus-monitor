@@ -31,7 +31,7 @@ type shellLayout struct {
 
 const (
 	minShellLower     = 8 // the tabbed panel at the wide tier
-	forYouMediumRows  = 4 // items shown at the medium tier, then "+N more" (Bernard's decision 1)
+	forYouMediumRows  = 4 // items shown at the medium tier, then "+N more" (the person's decision 1)
 	minShellLowerMed  = 6
 	shellHeaderHeight = 2
 	forYouMinWidth    = 36 // its title and label, "N for you · M unread"

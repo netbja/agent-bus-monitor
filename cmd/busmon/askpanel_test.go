@@ -11,7 +11,7 @@ import (
 func demoAsk() bus.Ask {
 	return bus.Ask{ID: "100-0", From: "master", Title: "Opening of act 4", State: "open", Questions: []bus.AskQuestionState{
 		{AskQuestion: bus.AskQuestion{ID: "amend", Header: "Amendment", Question: "Draft the amendment?", Options: []bus.AskOption{{Label: "Yes"}, {Label: "No"}}},
-			Answer: &bus.AskAnswer{Choice: "Yes", By: "bernard"}},
+			Answer: &bus.AskAnswer{Choice: "Yes", By: "charlie"}},
 		{AskQuestion: bus.AskQuestion{ID: "date", Header: "Date T", Question: "When should it open?",
 			Context: "## Why\n- act approved\n- 48 h rule",
 			Options: []bus.AskOption{{Label: "Mon 10:00", Description: "before the DCA slice", Recommended: true}, {Label: "Wed 10:00"}}}},
@@ -59,8 +59,8 @@ func TestAskRowFadesWhateverTheAgentDeclared(t *testing.T) {
 }
 
 func TestRequestsLabelAddsQuestionsOnce(t *testing.T) {
-	threads := []openThread{{ID: "1", Target: "bernard"}, {ID: "2", Target: "foureyes"}, {ID: "3", Target: "coder"}}
-	if got := requestsLabel(nil, threads, "bernard", 3).text(); got != "4 for you · 2 between agents" {
+	threads := []openThread{{ID: "1", Target: "charlie"}, {ID: "2", Target: "foureyes"}, {ID: "3", Target: "coder"}}
+	if got := requestsLabel(nil, threads, "charlie", 3).text(); got != "4 for you · 2 between agents" {
 		t.Fatalf("label %q", got)
 	}
 }

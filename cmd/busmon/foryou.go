@@ -7,7 +7,7 @@ import (
 )
 
 // forYouHint reports whether an idle agent's status message names the person
-// (busmon's identity) as a whole word: "lot 1 delivered; awaiting bernard".
+// (busmon's identity) as a whole word: "lot 1 delivered; awaiting charlie".
 // It is a hint, never a state: busmon does not relabel the declaration, ring
 // or count it (spec 2026-10-21 busmon UX, item 5). The default identity
 // "pilot" is a bus word (the pilot lease), so it never matches.

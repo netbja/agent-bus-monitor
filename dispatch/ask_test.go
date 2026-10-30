@@ -29,7 +29,7 @@ func TestRunAskWakesOnlyOnTheAnswer(t *testing.T) {
 	if hasGroup(t, b, bus.PeopleTarget) {
 		t.Fatal("a consumer group was created for people")
 	}
-	if _, _, err := b.Answer(ctx, id, "d", "bernard", "Mon", ""); err != nil {
+	if _, _, err := b.Answer(ctx, id, "d", "charlie", "Mon", ""); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, 3*time.Second, "master woken by the answer", func() bool { return len(rt.Prompts()) == 1 })

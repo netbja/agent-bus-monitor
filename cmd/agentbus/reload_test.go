@@ -299,7 +299,7 @@ func masterPilotedByOther(w *reloadWorld) {
 	w.procs[7070] = 4
 	w.status("master", "idle")
 	w.update("master")
-	if err := w.b.Pilot(ctx, "bernard", time.Minute); err != nil {
+	if err := w.b.Pilot(ctx, "charlie", time.Minute); err != nil {
 		w.t.Fatal(err)
 	}
 }
@@ -307,7 +307,7 @@ func masterPilotedByOther(w *reloadWorld) {
 // Master may reload sentinel, and a person anyone, by an explicit --as.
 func TestReloadCallerTable(t *testing.T) {
 	w, d := newReloadWorld(t)
-	if code, out := w.run(d, "coder", "foureyes", "--as", "bernard", "--fresh"); code != 0 {
+	if code, out := w.run(d, "coder", "foureyes", "--as", "charlie", "--fresh"); code != 0 {
 		t.Fatalf("a person's reload: %d %s", code, out)
 	}
 	if got := w.callList(); got != "term 6060;relaunch foureyes " {
@@ -388,7 +388,7 @@ func TestReloadRechecksOpenWorkAfterTheIntent(t *testing.T) {
 // --as (as with answer --as); without it the guard refuses, like any write.
 func TestReloadPassesTheIdentityGuardOnlyWithAs(t *testing.T) {
 	get := func(k string) string { return map[string]string{"HERDR_PANE_ID": "w1:p9"}[k] }
-	if err := identityGuard(get, "reload", []string{"coder", "--as", "bernard"}); err != nil {
+	if err := identityGuard(get, "reload", []string{"coder", "--as", "charlie"}); err != nil {
 		t.Fatalf("reload --as refused: %v", err)
 	}
 	if err := identityGuard(get, "reload", []string{"coder"}); err == nil {
@@ -474,7 +474,7 @@ func TestReloadAsHasNoShortFlag(t *testing.T) {
 			}
 		}
 	}
-	for _, args := range [][]string{{"reload", "coder", "-a", "bernard"}, {"reload", "-a", "bernard", "coder"}} {
+	for _, args := range [][]string{{"reload", "coder", "-a", "charlie"}, {"reload", "-a", "charlie", "coder"}} {
 		if got := expandArgs(args); slices.Contains(got, "--as") {
 			t.Fatalf("expandArgs(%q) = %q: a spelling the deny does not name", args, got)
 		}

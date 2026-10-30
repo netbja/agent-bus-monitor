@@ -12,7 +12,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// The prompt notification (prompt-notify, Bernard 2026-10-27 "Bureau"): an
+// The prompt notification (prompt-notify, the person, 2026-10-27 "Bureau"): an
 // agent whose pane shows its client's own prompt (a permission or limit
 // menu, read by the observe pass as herdr state blocked: busmon's `prompt`
 // flag) earns the person one desktop notification, once per episode, after

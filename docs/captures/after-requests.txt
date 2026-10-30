@@ -1,9 +1,9 @@
- demo  ·  ⬢ MASTER hermes  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
+ demo  ·  ⬢ MASTER helper  ·  5 requests waiting · oldest 3h  ·  anthropic 25%/44%  ·  ⇄ bus ok
 ┌───────────────────────── AGENTS ─────────────────────────┐┌──────────────────── BOARD  [1/5 done] ───────────────────┐
 │archite╔══════════════════════════ REQUESTS · 5 waiting  [↑↓/jk scroll · Esc back] ══════════════════════════╗… 3m    │
 │coder: ║── tracked requests (3 waiting of 4) ──                                                              ║0m      │
 │foureye║task-22 → coder blocked  asked 3h ago                                                                ║        │
-│⬢ herme║   blocked by coder: clé API absente sur host1                                                      ║        │
+│⬢ helpe║   blocked by coder: clé API absente sur hostA                                                      ║        │
 │sentine║   no deadline set · written to subscriber output (not proof it was read) · body still on the bus    ║… 3h    │
 └───────║task-20 → foureyes requested  asked 42m ago                                                          ║────────┘
 ┌───────║   not accepted yet — foureyes has not taken it                                                      ║────────┐
@@ -19,7 +19,7 @@
 │04:04:0║── cmd threads with no answer in the retained history (2) ──                                         ║        │
 │04:07:0║   untracked: the protocol records no acceptance for these, and an answer                            ║        │
 │04:08:0║   that has been trimmed from the stream looks the same as one that never came.                      ║        │
-│04:09:0║directive hermes → foureyes  asked 11m ago · thread 1789696923000-0                                  ║        │
+│04:09:0║directive helper → foureyes  asked 11m ago · thread 1789696923000-0                                  ║        │
 │04:12:2║   relis la tranche busmon quand elle est stable                                                     ║        │
 │04:12:3║challenge foureyes → coder  asked 4m ago · thread pr-42                                              ║        │
 │       ║   explique pourquoi le parser ignore le champ full                                                  ║        │

@@ -405,7 +405,7 @@ func TestShellClickTabsAndTitles(t *testing.T) {
 	}
 }
 
-// herdr-style tabs (busmon-tabs, Bernard): every tab a block followed by one
+// herdr-style tabs (busmon-tabs, Charlie): every tab a block followed by one
 // blank column; the active one a bold pill in its panel's colour, dimmed
 // (faded) when the panel has not the focus; the others grey on the tab
 // background. The labels keep their old widths, so the click spans stay.

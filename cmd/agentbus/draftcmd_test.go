@@ -149,7 +149,7 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 		t.Fatal("adopted with an open ask")
 	}
 	unchanged("open ask")
-	if _, _, err := b.Answer(ctx, open, qid, "bernard", "discard", ""); err != nil {
+	if _, _, err := b.Answer(ctx, open, qid, "charlie", "discard", ""); err != nil {
 		t.Fatal(err)
 	}
 	if adopt(open) == 0 {
@@ -167,13 +167,13 @@ func TestRolesAdoptNeedsThePersonsAdopt(t *testing.T) {
 	unchanged("self answer")
 
 	yes := ask()
-	if _, _, err := b.Answer(ctx, yes, qid, "bernard", "adopt", ""); err != nil {
+	if _, _, err := b.Answer(ctx, yes, qid, "charlie", "adopt", ""); err != nil {
 		t.Fatal(err)
 	}
 	// The person must see what they approve: a question that does not name
 	// the role and the draft's id is not enough, even with the right id.
 	vague := askText(qid, "Adopt it?")
-	if _, _, err := b.Answer(ctx, vague, qid, "bernard", "adopt", ""); err != nil {
+	if _, _, err := b.Answer(ctx, vague, qid, "charlie", "adopt", ""); err != nil {
 		t.Fatal(err)
 	}
 	if adopt(vague) == 0 {

@@ -23,13 +23,13 @@ func TestBusmonFlagTableIsValid(t *testing.T) {
 
 func TestShortFlagsEqualLongFlags(t *testing.T) {
 	long := []string{"--project", "demo", "--host", "h1", "--limit", "5", "--reset", "--yes", "--list",
-		"--delete", "old", "--theme", "light", "--as", "Bernard", "--version", "--pick"}
+		"--delete", "old", "--theme", "light", "--as", "Charlie", "--version", "--pick"}
 	short := []string{"-p", "demo", "-H", "h1", "-n", "5", "-r", "-y", "-l",
-		"-d", "old", "-t", "light", "-a", "Bernard", "-V", "-k"}
+		"-d", "old", "-t", "light", "-a", "Charlie", "-V", "-k"}
 	legacy := []string{"-project", "demo", "-host=h1", "--limit=5", "-reset", "-yes", "-list",
-		"-delete", "old", "-theme", "light", "-as", "Bernard", "-version", "-pick"}
+		"-delete", "old", "-theme", "light", "-as", "Charlie", "-version", "-pick"}
 	want := busmonOpts{project: "demo", host: "h1", limit: 5, reset: true, yes: true, list: true,
-		delete: "old", theme: "light", as: "Bernard", version: true, pick: true}
+		delete: "old", theme: "light", as: "Charlie", version: true, pick: true}
 	for _, args := range [][]string{long, short, legacy} {
 		got, set, err := parseFlags(args, io.Discard)
 		if err != nil || got != want {

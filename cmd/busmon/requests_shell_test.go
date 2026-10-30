@@ -14,7 +14,7 @@ import (
 func reqShell(t *testing.T, w, h int, fw *fakeWriter) Model {
 	t.Helper()
 	in := reqFixture(shellNow)
-	cfg := shellConfig{project: "agent-bus-monitor", self: "bernard"}
+	cfg := shellConfig{project: "agent-bus-monitor", self: "charlie"}
 	if fw != nil {
 		cfg.w = fw
 	}

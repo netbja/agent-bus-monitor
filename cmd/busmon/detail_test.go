@@ -95,7 +95,7 @@ func TestThreadSectionDoesNotInventAMissingRootForASubjectRef(t *testing.T) {
 	}
 	// A real stream id that is absent is still reported.
 	reply := bus.Event{ID: "900-0", Kind: "cmd", Type: bus.CmdReply, Ref: "1758141663000-0",
-		From: "coder", Target: "hermes", Message: "done"}
+		From: "coder", Target: "helper", Message: "done"}
 	th = threadState{ID: "1758141663000-0", Loaded: true, Entries: []bus.Event{reply}}
 	if got := threadSection(reply, th, time.Unix(0, 0)); !strings.Contains(plainOf(got), "not retained") {
 		t.Errorf("an absent stream-id root must still be reported:\n%s", plainOf(got))
@@ -124,13 +124,13 @@ func TestDetailTextCarriesAuthorRecipientDateAndID(t *testing.T) {
 	now := at.Add(12 * time.Minute)
 	e := bus.Event{
 		ID: "1758141663000-0", Kind: "cmd", Type: bus.CmdDirective,
-		From: "hermes", Target: "coder", Ref: "1758141000000-0",
+		From: "helper", Target: "coder", Ref: "1758141000000-0",
 		Message: "rebase onto main and re-run the suite",
 	}
 	got := detailText(e, at, now, threadState{ID: e.Ref, Loaded: true, Entries: []bus.Event{e}})
 
 	for _, want := range []string{
-		"hermes",              // author
+		"helper",              // author
 		"coder",               // recipient
 		"2026-09-17 22:41:03", // absolute date
 		"12m ago",             // age
@@ -191,17 +191,17 @@ func TestDetailThreadSaysNoneForStreamsWithoutThreads(t *testing.T) {
 
 func TestHumanMessageReplyIsVisibleOnActivityAndInThread(t *testing.T) {
 	root := bus.Event{ID: "1758141663000-0", Kind: "cmd", Type: bus.CmdDirective,
-		From: "bernard", Target: "master", Message: "what is the project status?", Human: true}
+		From: "charlie", Target: "master", Message: "what is the project status?", Human: true}
 	reply := bus.Event{ID: "1758141664000-0", Kind: "cmd", Type: bus.CmdReply,
-		From: "master", Target: "bernard", Ref: root.ID, Message: "all tests pass"}
-	if got := lookEvent(root); got.From != GlyphHuman+" Bernard" || got.To != "master" || !strings.Contains(got.Text, "project status") {
+		From: "master", Target: "charlie", Ref: root.ID, Message: "all tests pass"}
+	if got := lookEvent(root); got.From != GlyphHuman+" Charlie" || got.To != "master" || !strings.Contains(got.Text, "project status") {
 		t.Fatalf("human directive activity = %+v", got)
 	}
-	if got := lookEvent(reply); got.From != "master" || got.To != "bernard" || got.Type != "reply" || got.Text != "all tests pass" {
+	if got := lookEvent(reply); got.From != "master" || got.To != "charlie" || got.Type != "reply" || got.Text != "all tests pass" {
 		t.Fatalf("agent reply activity = %+v", got)
 	}
 	thread := threadSection(reply, threadState{ID: root.ID, Loaded: true, Entries: []bus.Event{root, reply}}, time.Unix(1758141664, 0))
-	for _, want := range []string{"bernard→master", "master→bernard", "what is the project status?", "all tests pass"} {
+	for _, want := range []string{"charlie→master", "master→charlie", "what is the project status?", "all tests pass"} {
 		if !strings.Contains(plainOf(thread), want) {
 			t.Errorf("thread missing %q:\n%s", want, plainOf(thread))
 		}
@@ -223,7 +223,7 @@ func TestThreadIDIsRefElseOwnID(t *testing.T) {
 // Quietly listing the survivors would read as the whole exchange.
 func TestThreadSectionFlagsAMissingRoot(t *testing.T) {
 	now := time.Unix(1000, 0)
-	reply := bus.Event{ID: "900-0", Kind: "cmd", Type: bus.CmdReply, Ref: "100-0", From: "coder", Target: "hermes", Message: "done"}
+	reply := bus.Event{ID: "900-0", Kind: "cmd", Type: bus.CmdReply, Ref: "100-0", From: "coder", Target: "helper", Message: "done"}
 	th := threadState{ID: "100-0", Loaded: true, Entries: []bus.Event{reply}}
 	got := threadSection(reply, th, now)
 	if !strings.Contains(plainOf(got), "100-0") || !strings.Contains(plainOf(got), "not retained") {
@@ -234,7 +234,7 @@ func TestThreadSectionFlagsAMissingRoot(t *testing.T) {
 // Before the read comes back, the thread is unknown — not empty. "No replies"
 // on a request that has one would send the operator down the wrong path.
 func TestThreadSectionDistinguishesLoadingFromEmpty(t *testing.T) {
-	e := bus.Event{ID: "5-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder"}
+	e := bus.Event{ID: "5-0", Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder"}
 	loading := threadSection(e, threadState{ID: "5-0"}, time.Unix(0, 0))
 	if !strings.Contains(plainOf(loading), "reading") {
 		t.Errorf("an unloaded thread must read as loading:\n%s", plainOf(loading))
@@ -246,8 +246,8 @@ func TestThreadSectionDistinguishesLoadingFromEmpty(t *testing.T) {
 }
 
 func TestThreadPlainCopiesTheWholeExchange(t *testing.T) {
-	root := bus.Event{ID: "100-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder", Message: "review PR 42"}
-	reply := bus.Event{ID: "200-0", Kind: "cmd", Type: bus.CmdReply, Ref: "100-0", From: "coder", Target: "hermes", Message: "found two issues"}
+	root := bus.Event{ID: "100-0", Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder", Message: "review PR 42"}
+	reply := bus.Event{ID: "200-0", Kind: "cmd", Type: bus.CmdReply, Ref: "100-0", From: "coder", Target: "helper", Message: "found two issues"}
 	got := threadPlain(root, threadState{ID: "100-0", Loaded: true, Entries: []bus.Event{root, reply}})
 	for _, want := range []string{"review PR 42", "found two issues", "thread 100-0"} {
 		if !strings.Contains(got, want) {

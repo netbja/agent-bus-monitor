@@ -209,7 +209,7 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 // in depth, not a boundary: the client matches command text.
 var reloadAsDeny = []string{"Bash(agentbus reload *--as*)", "Bash(agentbus * reload *--as*)"}
 
-// masterUpRules are master's own rules in the shipped manifest (Bernard,
+// masterUpRules are master's own rules in the shipped manifest (Charlie,
 // 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
 // exact reload of sentinel, nothing broader.
 var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",

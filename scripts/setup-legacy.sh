@@ -1030,7 +1030,7 @@ fi
 # no terminal or AGENTBUS_SETUP_NO_IDENTITY=1 (the installer tests) skip it.
 if [ "$DRY_RUN" != "1" ] && [ "$ASSUME_YES" != "1" ] && [ "${AGENTBUS_SETUP_NO_IDENTITY:-0}" != "1" ] \
   && [ -x "$BIN_DIR/agentbus" ] && ! "$BIN_DIR/agentbus" identity >/dev/null 2>&1 && ( : < /dev/tty ) 2>/dev/null; then
-  printf "    ? Your name on the bus (lowercase, e.g. bernard; Enter to skip): " > /dev/tty
+  printf "    ? Your name on the bus (lowercase, e.g. charlie; Enter to skip): " > /dev/tty
   read -r who < /dev/tty || who=""
   if [ -n "$who" ]; then
     if "$BIN_DIR/agentbus" identity set "$who"; then log_ok "busmon and agentbus up will know you as $who"

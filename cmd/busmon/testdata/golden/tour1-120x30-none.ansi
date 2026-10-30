@@ -4,7 +4,7 @@
 [1m│[m  ● ask    master    review lot 1? (2 ques… 4m[1m│[m│    agent     state     updated queue ctx       flags       message   ▲
 [1m│[m  ♙ wait   foureyes  need a decision on th… 6m[1m│[m│[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting   [m[7m6m     [m[7m [m[7m—    [m[7m [m[7m—        [m[7m [m[7mescalated  [m[7m need a de…[m┃
 [1m│[m  ♙ wait   sentinel  pane prompt            1m[1m│[m│  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-[1m│[m  ◆ gate   coder     by bernard  look at b1   [1m│[m│  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+[1m│[m  ◆ gate   coder     by charlie  look at b1   [1m│[m│  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
 [1m│[m  ● unread dispatch  [1m╭─[m[1;7m Welcome to busmon [m[1m────────────────────────────────────────────────[m 1/5 [1m─╮[mscalating… spec merg…│
 [1m│[m                     [1m│[m                                                                          [1m│[mate 1 · d… busmon-ch…▼
 [1m╰─────────────────────[m[1m│[m busmon shows what your agents are doing and what waits for you. A few    [1m│[m─────────────────────╯
@@ -12,7 +12,7 @@
 │    time   from      [1m│[m                                                                          [1m│[m                     │
 │  ── Mon 2026-10-26 -[1m│[m   For you     what needs you: questions, waits, unread lines             [1m│[m─────────────────────│
 │    14:24  architect [1m│[m   Agents      each agent, its state and how fresh it is                  [1m│[m                     │
-│    14:50  ♙ Bernard [1m│[m   1 Activity  everything said on the bus, live                           [1m│[m                     │
+│    14:50  ♙ Charlie [1m│[m   1 Activity  everything said on the bus, live                           [1m│[m                     │
 │    14:51  coder     [1m│[m   2 Board     who owns which task                                        [1m│[m                     │
 │  ○ 14:52  master    [1m│[m   3 Requests  who owes whom an answer                                    [1m│[m                     │
 │  ● 14:56  dispatch  [1m│[m   4 Plan      the batch's tasks by state                                 [1m│[m                     │

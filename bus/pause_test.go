@@ -25,7 +25,7 @@ func TestPauseSetReadResume(t *testing.T) {
 	if err != nil || p == nil || p.Reason != "quota" || p.Notify != "master" || p.Until != until.UnixMilli() {
 		t.Fatalf("pause = %+v, %v", p, err)
 	}
-	ok, err := b.Resume(ctx, "bernard", "go on")
+	ok, err := b.Resume(ctx, "charlie", "go on")
 	if err != nil || !ok {
 		t.Fatalf("resume = %v, %v", ok, err)
 	}
@@ -36,7 +36,7 @@ func TestPauseSetReadResume(t *testing.T) {
 	if len(evs) == 0 || evs[len(evs)-1].Target != "master" || !strings.Contains(evs[len(evs)-1].Message, "quota") {
 		t.Fatalf("resume directive = %+v", evs)
 	}
-	if ok, _ := b.Resume(ctx, "bernard", ""); ok {
+	if ok, _ := b.Resume(ctx, "charlie", ""); ok {
 		t.Fatal("a second resume found a pause")
 	}
 }

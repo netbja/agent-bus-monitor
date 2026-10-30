@@ -40,7 +40,7 @@ func TestPathsHonourXDGAndIgnoreRelative(t *testing.T) {
 
 func TestCollectEnvKeepsConnectionDropsPaneIdentity(t *testing.T) {
 	env := CollectEnv([]string{"PATH=/bin", "REDIS_PASSWORD=s3cret", "HERDR_SESSION=s", "HERDR_PANE_ID=w1:p1",
-		"HERDR_TAB_ID=t", "AGENT_BUS_PROJECT=x", "AGENT_BUS_AGENT=me", "AGENT_BUS_HUMAN=bernard", "ANTHROPIC_API_KEY=k", "HOME=/h"})
+		"HERDR_TAB_ID=t", "AGENT_BUS_PROJECT=x", "AGENT_BUS_AGENT=me", "AGENT_BUS_HUMAN=charlie", "ANTHROPIC_API_KEY=k", "HOME=/h"})
 	for _, k := range []string{"PATH", "REDIS_PASSWORD", "HERDR_SESSION", "AGENT_BUS_HUMAN"} {
 		if _, ok := env[k]; !ok {
 			t.Fatalf("%s dropped: %v", k, env)

@@ -61,17 +61,17 @@ func TestObligationIgnoresOtherTargetsAndNoWake(t *testing.T) {
 func TestCmdTargetsAndHumanSenders(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	if _, err := b.HumanCmd(ctx, "bernard", "dev", "please check this"); err != nil {
+	if _, err := b.HumanCmd(ctx, "charlie", "dev", "please check this"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.Cmd(ctx, "peer", "bernard", CmdDirective, "", "question for person"); err != nil {
+	if _, err := b.Cmd(ctx, "peer", "charlie", CmdDirective, "", "question for person"); err != nil {
 		t.Fatal(err)
 	}
 	targets, humans, err := b.CmdTargetsAndHumanSenders(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(targets, []string{"bernard", "dev"}) || !reflect.DeepEqual(humans, []string{"bernard"}) {
+	if !reflect.DeepEqual(targets, []string{"charlie", "dev"}) || !reflect.DeepEqual(humans, []string{"charlie"}) {
 		t.Fatalf("routing targets=%v human senders=%v", targets, humans)
 	}
 }

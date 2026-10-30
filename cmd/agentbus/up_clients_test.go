@@ -14,7 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
-// installer-no-client (Bernard): up with no agent CLI for any role of the
+// installer-no-client (Charlie): up with no agent CLI for any role of the
 // template refuses before it starts a service or opens a tab, with the install
 // pointers and the exact next command; with some missing it starts every tab
 // as before and warns with the missing ones (master: never drop a tab on a

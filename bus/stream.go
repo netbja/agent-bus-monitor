@@ -23,7 +23,7 @@ const streamMaxLen = 1000
 
 // cmd entry types carried in the {project}:cmd stream "type" field.
 const (
-	CmdDirective = "directive" // from hermes; gated by the pilot lease
+	CmdDirective = "directive" // from the coordinator; gated by the pilot lease
 	CmdChallenge = "challenge" // from a peer; opens a 4-eyes gate on the target
 	CmdReply     = "reply"     // response to a challenge, correlated by ref
 	CmdVerdict   = "verdict"   // closes a challenge, correlated by ref
@@ -759,7 +759,7 @@ func (b *Bus) ServerFloor(ctx context.Context) (string, error) {
 }
 
 // Pilot sets (or renews — they are the same SET) the project's pilot lease to
-// driver with a TTL. Hermes calls this on an interval while it has budget;
+// driver with a TTL. The coordinator calls this on an interval while it has budget;
 // stopping = letting workers fall back to autonomous mode. driver must be
 // non-empty: "" is PilotDriver's "no lease / autonomous" sentinel, so an empty
 // driver would be an unreadable lease.
@@ -777,7 +777,7 @@ func (b *Bus) ReleasePilot(ctx context.Context) error {
 }
 
 // PilotDriver returns the current driver, or "" if no lease is held — "" means
-// autonomous mode (Hermes is out of budget or down).
+// autonomous mode (the coordinator is out of budget or down).
 func (b *Bus) PilotDriver(ctx context.Context) (string, error) {
 	v, err := b.r.Get(ctx, PilotKey(b.project)).Result()
 	if errors.Is(err, redis.Nil) {

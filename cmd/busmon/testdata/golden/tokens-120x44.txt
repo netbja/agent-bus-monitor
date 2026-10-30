@@ -4,14 +4,14 @@
 │  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   │
 │  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…│
 │  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask│
-│  ◆ gate   coder     by bernard  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+│  ◆ gate   coder     by charlie  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
 │  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
 │                                              ││  ○ coder     paused    2m      —     88k 85%   gate 1 · d… busmon-ch…│
 │                                              ││  ▲ docs      blocked   50m     —     —         armed · st… waiting f…│
 │                                              ││  ▲ qa        blocked   11m     —     —         held        out of qu…│
 │                                              ││  ○ ui-grok   quota     3m      —     —         swapping ·… reviewed  │
 │                                              ││  ● release   working   7m      —     —         fallback k… tagging   │
-│                                              ││  ○ ui-kimi   paused    9m      —     —         for you     bernard: …│
+│                                              ││  ○ ui-kimi   paused    9m      —     —         for you     charlie: …│
 ╰──────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────╯
 ╭─ Tokens ────────────────────────────────────────────────────────────────────────────────────────────────── esc back ─╮
 │ Account windows                                                                                                      ▲
@@ -22,8 +22,8 @@
 │ Projects, today and 7 days                                                                                           ┃
 │   PROJECT                    IN      OUT   CACHE RD  7 DAYS   7D TOTAL                                               ┃
 │   agent-bus-monitor       ~1.5M    ~289k    ~500.0M     ▃ █▆     ~5.1M                                               ┃
-│   hyperliquid                 0        0          0   ▁           170k                                               ┃
-│   polymarket  no data (no dispatch service counting tokens)                                                          ┃
+│   blog                        0        0          0   ▁           170k                                               ┃
+│   wiki  no data (no dispatch service counting tokens)                                                                ┃
 │                                                                                                                      ┃
 │ agent-bus-monitor by agent, today                                                                                    ┃
 │   foureyes         anthropic      1.2M     206k                                                                      ┃

@@ -53,7 +53,7 @@ func (in *Installer) Identity(ctx context.Context, p *Prompter) {
 	if _, err := in.R.Run(ctx, Cmd{Name: ab, Args: []string{"identity"}}); err == nil {
 		return // already known
 	}
-	fmt.Fprint(p.TTY, "    ? Your name on the bus (lowercase, e.g. bernard; Enter to skip): ")
+	fmt.Fprint(p.TTY, "    ? Your name on the bus (lowercase, e.g. charlie; Enter to skip): ")
 	if p.rd == nil {
 		p.rd = bufio.NewReader(p.TTY)
 	}

@@ -131,7 +131,7 @@ kinds per project:
 | Stream key          | Fields written                                  | Consumed by              |
 |---------------------|-------------------------------------------------|--------------------------|
 | `{p}:status`        | `agent state message`                           | busmon Agents+Activity   |
-| `{p}:report`        | `agent kind message` (kind: note/auto); optional `full` (retained only when it differs from the ≤500 preview) | busmon ACTIVITY + hermes |
+| `{p}:report`        | `agent kind message` (kind: note/auto); optional `full` (retained only when it differs from the ≤500 preview) | busmon ACTIVITY          |
 | `{p}:notify`        | `from message`; optional `for=person` (a dispatcher notice only the person can act on: busmon marks it unread) | busmon ACTIVITY          |
 | `{p}:cmd`           | `from target type ref command`; optional `wake=no` (delivered, never wakes) | busmon ACTIVITY + agents + dispatch |
 
@@ -304,7 +304,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `--theme auto|dark|light` (or `AGENT_BUS_BUSMON_THEME`). busmon writes as a **person**, never
   as an agent: `--as <name>` or `AGENT_BUS_HUMAN`, else `pilot` (`humanIdentity`, `human.go`),
   through `Bus.HumanCmd`/`HumanNotify`, whose entries carry `human=yes` (`Event.Human`,
-  subscribe's `"human": true`). The header shows `♙ Bernard [human · pilot]`; `@all` fans a
+  subscribe's `"human": true`). The header shows `♙ Charlie [human · pilot]`; `@all` fans a
   directive out to every known agent; a plain-text notify needs a second Enter, because nobody
   reads one and nothing wakes for it.
 
@@ -408,7 +408,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (`o`). A challenge is owed iff its gate is open now, never from its thread; unread/read come from the
   target's cursor (`Obligation.LastDelivered`, `PendingIDs`, read with the dispatcher facts); the title's
   numbers are the sums of their sections. The header reads the same view (`fillLists` keeps it in
-  `shellLists.reqView`; busmon-req-header, Bernard's "orange = what is owed to you"): its orange `N requests
+  `shellLists.reqView`; busmon-req-header, the person's "orange = what is owed to you"): its orange `N requests
   waiting · oldest X` is the owed section's count (`owedText`, questions included, the oldest dated thread),
   and what agents owe each other a muted `N between agents` (no age, the first item to go for room), each
   absent at 0. Enter expands a group (or `+ N older`), opens a thread, a
@@ -435,9 +435,9 @@ background task: it blocks on the project's `:cmd` stream, prints the first addr
 exits — and that exit re-invokes the session that armed it, which then re-arms. The whole loop is
 self-contained in the `agentbus` binary (this repo); there is **no external wrapper script** and
 **no daemon** in the subscribe path (the one process that runs alongside is `agentbus
-dispatch`, which only types a wake line — see the dispatcher paragraph below). The old `myprojecttools/bus_watch.sh` (and the persistent
-`~/.hermes/scripts/bus_watch_hdl.sh` logger loop) are **superseded** — agents call `agentbus
-subscribe` directly. Don't reintroduce a wrapper script: a restart loop just re-runs the watcher
+dispatch`, which only types a wake line — see the dispatcher paragraph below). The old shell
+wrapper over `agentbus watch` (and a persistent logger loop) are **superseded** — agents call
+`agentbus subscribe` directly. Don't reintroduce a wrapper script: a restart loop just re-runs the watcher
 and never wakes a terminal session.
 
 A still-earlier in-repo prototype, `cmd/busbridge` (relay to herdr panes via `herdr pane
@@ -459,9 +459,9 @@ content. Since v0.12 it runs, with the conductor, as a **user service** (systemd
 launchd), started by `agentbus up`; herdr tabs remain only as the explicit fallback
 (`docs/memory/decisions/2026-10-14-project-services.md`).
 
-There is also a parallel notification path that is **not** on this bus: a `project-c` `Stop`
-hook POSTs (via `hermes-notify`) to a hermes gateway on host1 (`:8644`) that delivers to Signal.
-It never touches Redis — see README "Example deployment".
+There can also be a parallel notification path that is **not** on this bus: a Claude Code `Stop`
+hook POSTing to a notification webhook of the person's own. It never touches Redis — see README
+"Example deployment".
 
 ### Things that bite
 
@@ -697,7 +697,7 @@ It never touches Redis — see README "Example deployment".
   `scripts/setup-legacy.sh` neither writes nor rotates it; its help is compared to the Go one without
   `RotateHelp`.
   A non-empty `--host` overrides `REDIS_HOST` only. Note the **non-standard port 6380** (compose
-  maps host `6380` → container `6379`). `agentbus` sender identity defaults to `hermes`,
+  maps host `6380` → container `6379`). `agentbus` sender identity defaults to `anonymous`,
   overridable via `AGENT_BUS_AGENT`; inside a herdr pane (`HERDR_PANE_ID`) with `AGENT_BUS_AGENT`
   unset, a command that writes as the sender is refused with the fix (A8, `identityGuard`:
   relaunch through the launcher or export it; read-only commands still run, an unknown command

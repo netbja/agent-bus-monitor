@@ -9,7 +9,7 @@ import (
 )
 
 // defaultHuman is the sender when no name is given: busmon's operator is a
-// person piloting the agents, never an agent (the old default was "hermes").
+// person piloting the agents, never an agent (not the CLI's default sender).
 const defaultHuman = "pilot"
 
 // humanIdentity is the bus name busmon writes as: --as, else AGENT_BUS_HUMAN,
@@ -28,7 +28,7 @@ func humanIdentity(flag, env string) (string, error) {
 	return name, nil
 }
 
-// displayName capitalises a bus name for people: "bernard" -> "Bernard".
+// displayName capitalises a bus name for people: "charlie" -> "Charlie".
 func displayName(name string) string {
 	if name == "" {
 		return ""
@@ -39,7 +39,7 @@ func displayName(name string) string {
 	return name
 }
 
-// humanLabel is how the header shows the operator: "♙ Bernard [human]", with
+// humanLabel is how the header shows the operator: "♙ Charlie [human]", with
 // "· pilot" while they hold the pilot lease.
 func humanLabel(self, pilot string) string {
 	role := "human"

@@ -15,7 +15,7 @@ import (
 // The compose window (busmon Charm spec, "Input"; v0.16's window): a message
 // with its recipient, or a free answer to one question. Its text area is our
 // own, over Line: bubbles' textarea counts its limit in cells, so a cap of N
-// runes stopped at N/2 wide runes typed one by one (the step-b cap test, Bernard's
+// runes stopped at N/2 wide runes typed one by one (the step-b cap test, the person's
 // decision 4). The cap is enforced in Update, in runes, never mid-rune.
 
 // textArea is the window's text and cursor, in runes; top is the first

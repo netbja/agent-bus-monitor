@@ -34,12 +34,12 @@ func TestAskCLIRoundTrip(t *testing.T) {
 		t.Fatalf("a forged answer was stored: %+v", asks)
 	}
 	out.Reset()
-	if code := runAnswer(ctx, b, []string{id, "date", "--choice", "Mon", "--as", "Bernard"}, func(string) string { return "" }, &out, &errw); code != 0 {
+	if code := runAnswer(ctx, b, []string{id, "date", "--choice", "Mon", "--as", "Charlie"}, func(string) string { return "" }, &out, &errw); code != 0 {
 		t.Fatalf("answer: %d %s", code, errw.String())
 	}
 	out.Reset()
 	runAsks(ctx, b, nil, &out, &errw)
-	if !strings.Contains(out.String(), "answered") || !strings.Contains(out.String(), "Mon (bernard)") {
+	if !strings.Contains(out.String(), "answered") || !strings.Contains(out.String(), "Mon (charlie)") {
 		t.Fatalf("asks:\n%s", out.String())
 	}
 	if code := runAsk(ctx, b, []string{"master"}, strings.NewReader(`{"title":"x","questions":[]}`), &out, &errw); code == 0 {

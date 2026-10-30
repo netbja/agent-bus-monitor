@@ -4,7 +4,7 @@
   "tasks": [
     {"id": "license", "title": "MIT LICENSE, copyright line, README licence section", "owner": "coder", "review": "license"},
     {"id": "redis-password", "title": "A random Redis password at install (0600 file, compose reads it); old installs keep theirs, warned, with a rotation", "owner": "coder", "review": "redis-password"},
-    {"id": "scrub", "title": "Scrub host1, hermes, hyperliquid, sysnet and other private references from code, docs and examples", "owner": "coder", "review": "scrub"},
+    {"id": "scrub", "title": "Scrub private host, project and user references and the old default sender from code, docs and examples", "owner": "coder", "review": "scrub"},
     {"id": "plugin-listing", "title": "herdr-plugin.toml and README meet herdr's listing rules; check a clean install from a fresh clone", "owner": "coder", "review": "plugin-listing", "after": ["license", "scrub"]},
     {"id": "screenshot", "title": "Fresh busmon screenshot and a short demo for the README", "owner": "person"},
     {"id": "macos-try", "title": "Try the installer and busmon on macOS; list what breaks", "owner": "person"},

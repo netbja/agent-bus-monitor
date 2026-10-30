@@ -339,7 +339,7 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
 - Delivered and the next step is the person's (a review, a go, a merge, a test)? That is a
   decision: open an ask with the options (`go`, `changes`, `later`), which declares you `waiting`.
   Declare `idle` only when nothing is expected of the person. An idle status that names the
-  person ("awaiting bernard") only earns a muted `for you` hint in busmon: nothing rings.
+  person ("awaiting charlie") only earns a muted `for you` hint in busmon: nothing rings.
 - Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
   answer it in busmon: prefer the ask.
 
@@ -350,9 +350,8 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
    ```
    Map each blocked pane back to its bus agent by inverting `agentbus agents --json`.
 2. **Read the question:** `herdr pane read "$pane" --source detection`.
-3. **Alert a human** (one-way Signal + the bus — they may be away):
+3. **Alert a human** (the bus, plus your own notification webhook if you have one — they may be away):
    ```bash
-   hermes-notify "claude1 is BLOCKED: <question>"
    agentbus notify "claude1 BLOCKED: <question> — reply in busmon: @claude1 <answer>"
    ```
 4. **Receive the answer over the bus.** The human answers in busmon (`@claude1 <answer>`, type `@`

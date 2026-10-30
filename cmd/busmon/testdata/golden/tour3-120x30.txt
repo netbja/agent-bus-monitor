@@ -4,7 +4,7 @@
 │  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
 │  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
 │  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-│  ◆ gate   coder     by bernard  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+│  ◆ gate   coder     by charlie  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
 │  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
 │                     ╭─ Answering a question ───────────────────────────────────────────── 3/5 ─╮ate 1 · d… busmon-ch…▼
 ╰─────────────────────│                                                                          │─────────────────────╯
@@ -12,7 +12,7 @@
 │    time   from      │ with ●, and the agent reads waiting.                                     │                     │
 │  ── Mon 2026-10-26 -│                                                                          │─────────────────────│
 │    14:24  architect │   ! w F4  open its questions                                             │                     │
-│    14:50  ♙ Bernard │   1-9     pick an answer                                                 │                     │
+│    14:50  ♙ Charlie │   1-9     pick an answer                                                 │                     │
 │    14:51  coder     │   o       Other: write your own answer in the compose window             │                     │
 │  ○ 14:52  master    │                                                                          │                     │
 │  ● 14:56  dispatch  │ Your answer wakes the agent; nothing else is needed.                     │                     │

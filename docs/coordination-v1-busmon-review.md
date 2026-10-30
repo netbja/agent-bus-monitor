@@ -71,7 +71,7 @@ nothing. Suggestion: leave `updated` to explicit transitions.
 expiry check inside the accept transition. `delivery.go:172` compares
 `e.ExpiresAt` against `time.Now().UnixMilli()` — the subscriber host's clock.
 
-This project deliberately spans a laptop and host1 over an SSH tunnel, so skew
+This project deliberately spans a laptop and a remote host over an SSH tunnel, so skew
 between a subscriber and the broker is a realistic condition, not a theoretical
 one. With a fast subscriber clock a request is delivered as `expired` and its
 body blanked while `AcceptRequest` on the server still accepts it; with a slow

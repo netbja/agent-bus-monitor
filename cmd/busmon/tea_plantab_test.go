@@ -17,11 +17,11 @@ func TestShellPlanTab(t *testing.T) {
 	pinLocal(t)
 	a := plan.Task{ID: "a-board", Title: "Board columns", Owner: "coder", Board: "a-board"}
 	b := plan.Task{ID: "a-look", Title: "busmon look", Owner: "coder", Board: "a-look"}
-	st := &shared{agents: map[string]*agentState{}, person: "bernard"}
+	st := &shared{agents: map[string]*agentState{}, person: "charlie"}
 	st.plan = planState{loaded: true, file: plan.File{Plan: "v0.23", Goal: "group A", Tasks: []plan.Task{a, b}},
 		rows: []plan.Row{{Task: a, State: plan.InProgress}, {Task: b, State: plan.Done}},
 		in:   plan.Inputs{Board: map[string]bus.BoardEntry{}}}
-	m := newShell(shellConfig{project: "demo", self: "bernard", st: st})
+	m := newShell(shellConfig{project: "demo", self: "charlie", st: st})
 	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
 	m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
 
@@ -113,11 +113,11 @@ func TestPlanTabCopyAndEnd(t *testing.T) {
 	pinLocal(t)
 	a := plan.Task{ID: "a-board", Title: "Board columns", Owner: "coder"}
 	b := plan.Task{ID: "a-nav", Title: "reader navigation", Owner: "coder"}
-	st := &shared{agents: map[string]*agentState{}, person: "bernard"}
+	st := &shared{agents: map[string]*agentState{}, person: "charlie"}
 	st.plan = planState{loaded: true, file: plan.File{Plan: "v0.23", Goal: "group A", Tasks: []plan.Task{a, b}},
 		rows: []plan.Row{{Task: a, State: plan.InProgress}, {Task: b, State: plan.InProgress}},
 		in:   plan.Inputs{Board: map[string]bus.BoardEntry{}}}
-	m := newShell(shellConfig{project: "demo", self: "bernard", st: st})
+	m := newShell(shellConfig{project: "demo", self: "charlie", st: st})
 	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
 	m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
 	m = keys(t, m, '4')

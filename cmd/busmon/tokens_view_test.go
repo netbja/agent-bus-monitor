@@ -22,9 +22,9 @@ func tokFixtureState(now time.Time) tokState {
 	}
 	hl := map[string]bus.TokenRow{bus.TokenKey(day(5), "coder", "anthropic"): {In: 170_000, N: 1}}
 	st := tokState{polled: true, projects: []tokProject{
-		{name: "hyperliquid", known: true, days: daysOf(hl)},
+		{name: "blog", known: true, days: daysOf(hl)},
 		{name: "agent-bus-monitor", known: true, partial: true, days: daysOf(abm), rows: abm},
-		{name: "polymarket"},
+		{name: "wiki"},
 	}}
 	for h := 0; h < 24; h += 3 {
 		st.hist = append(st.hist, bus.QuotaSample{Provider: "anthropic", Window: "5h", Pct: float64(h * 4), At: now.Add(-time.Duration(23-h) * time.Hour).UnixMilli()})

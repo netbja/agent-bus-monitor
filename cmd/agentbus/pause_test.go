@@ -75,13 +75,13 @@ func TestPauseRefusesNoDeadlineAndShowsStatus(t *testing.T) {
 		}
 		return ""
 	}
-	runPause(context.Background(), *d, "bernard", []string{"--for", "90m", "quota"}, &out, &errw)
+	runPause(context.Background(), *d, "charlie", []string{"--for", "90m", "quota"}, &out, &errw)
 	out.Reset()
 	if code := runPause(context.Background(), *d, "x", []string{"--status"}, &out, &errw); code != 0 || !strings.Contains(out.String(), "in 1h30m") || !strings.Contains(out.String(), "resume goes to lead") {
 		t.Fatalf("status: %d %q", code, out.String())
 	}
 	out.Reset()
-	runResume(context.Background(), *d, "bernard", nil, &out, &errw)
+	runResume(context.Background(), *d, "charlie", nil, &out, &errw)
 	if !strings.Contains(out.String(), "resumed") {
 		t.Fatalf("resume: %q", out.String())
 	}

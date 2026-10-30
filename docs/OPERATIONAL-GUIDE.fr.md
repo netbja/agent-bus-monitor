@@ -67,7 +67,7 @@ Ce guide pratique est conçu en complément du `README.md`. Il fournit une march
 
 - **Zéro coût de jetons au repos** : Grâce au dispatcher événementiel, un agent inactif ne consomme aucun token en boucle de veille inutile ; il est réveillé uniquement lorsqu'une tâche concrète lui est assignée.
 - **Claude par défaut, adaptable à tout modèle** : Le projet utilise Claude Code par défaut (`roles.toml`), mais supporte nativement des équipes mixtes avec OpenAI Codex ou Kimi CLI via des profils configurables (`docs/AGENT-PROFILES.md`).
-- **100% local, prêt pour le distant** : Fonctionne entièrement en local sur votre machine (`127.0.0.1:6380`), tout en étant nativement conçu pour relier des serveurs distants (host1, serveurs GPU) via un simple tunnel SSH chiffré.
+- **100% local, prêt pour le distant** : Fonctionne entièrement en local sur votre machine (`127.0.0.1:6380`), tout en étant nativement conçu pour relier des serveurs distants (une machine distante, serveurs GPU) via un simple tunnel SSH chiffré.
 - **Observabilité et gouvernance** : Visibilité immédiate pour l'humain via le TUI `busmon`, combinée à une barrière de relecture obligatoire à 4 yeux (`foureyes`, `security`).
 
 ---
@@ -194,7 +194,7 @@ ou ne rien toucher.
 ### Déploiement 100% Local (par défaut)
 Tous les processus tournent sur la même machine. Les agents et `busmon` se connectent directement à `127.0.0.1:6380`, avec le mot de passe de `~/.config/agentbus/redis.env` (une installation antérieure garde `AgentBus2025!` jusqu'à sa rotation).
 
-### Déploiement Hybride avec Serveur Distant (host1 / GPU)
+### Déploiement Hybride avec Serveur Distant (machine distante / GPU)
 Le broker Redis reste confiné au loopback (`127.0.0.1:6380`) pour des raisons de sécurité. La connexion distante s'opère via un tunnel SSH sécurisé :
 
 - **Cas A : Vous surveillez depuis votre machine un bus tournant sur un serveur distant** :
@@ -248,7 +248,7 @@ Votre projet est dans `~/code/myapp`.
 
    busmon vous affiche comme `♙ <Nom> [human]`, avec `· pilot` tant que vous tenez le bail
    pilote. Sans `--as`, vous êtes `Pilot [human]`. Le nom s'écrit en minuscules, comme celui d'un
-   agent : `--as bernard` affiche `Bernard`. `export AGENT_BUS_HUMAN=bernard` le fixe pour tous
+   agent : `--as charlie` affiche `Charlie`. `export AGENT_BUS_HUMAN=charlie` le fixe pour tous
    les busmon.
 
 3. **Donner la première tâche** depuis la ligne de saisie de busmon (`i`) :

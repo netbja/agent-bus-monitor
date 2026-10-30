@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// infra-role (Bernard): the infra pop role, reviewed as a draft
+// infra-role (Charlie): the infra pop role, reviewed as a draft
 // (examples/drafts/infra) and adopted into this repository's manifest with
 // `agentbus roles adopt infra --from examples/drafts` (#187). It loads as a
 // pop role popped only through the person, on a manual profile; its session

@@ -66,11 +66,11 @@ func overlayCaptures(t *testing.T) map[string]string {
 	directive := ev("1792999991000-0", "cmd", bus.CmdDirective, "master", "coder", "review [red]lot 1[-] please", "")
 	directive.Ref = "1792999980000-0"
 	thread := threadState{ID: directive.Ref, Loaded: true, Entries: []bus.Event{
-		ev("1792999980000-0", "cmd", bus.CmdDirective, "bernard", "master", "start lot 1", ""), directive}}
+		ev("1792999980000-0", "cmd", bus.CmdDirective, "charlie", "master", "start lot 1", ""), directive}}
 
 	reqs := boardRequests(map[string]bus.BoardEntry{"task-20": requestedEntry()})
 	threads := openThreads([]bus.Event{
-		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "hermes", Target: "coder", Message: "look at the flake"},
+		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder", Message: "look at the flake"},
 	}, reqs)
 
 	board := map[string]bus.BoardEntry{"pr-46-review": {Owner: "grok", State: "blocked", Branch: "fix/pr-46"},
@@ -134,7 +134,7 @@ func overlayCaptures(t *testing.T) map[string]string {
 func recapCaptureInput() recapInput {
 	now := time.UnixMilli(1_800_000_000_000)
 	return recapInput{
-		Now: now, Since: now.Add(-time.Hour), Human: "bernard",
+		Now: now, Since: now.Add(-time.Hour), Human: "charlie",
 		Agents: map[string]*agentState{
 			"master": {state: "working", message: "coordinating", stateAt: now.Add(-5 * time.Minute), registered: true, provider: "anthropic"},
 			"coder":  {state: "waiting", message: "review [red]this[-]", stateAt: now.Add(-30 * time.Minute), registered: true},

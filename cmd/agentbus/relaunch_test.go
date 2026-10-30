@@ -564,7 +564,7 @@ func proofAfter(n int, next bus.AgentSnapshot, sleeps *int) *relaunchProof {
 	}
 }
 
-// Bernard's decision (2026-10-27): once the relaunched agent is proven in its
+// Charlie's decision (2026-10-27): once the relaunched agent is proven in its
 // new pane, the old pane it replaced is closed, if it is still a plain shell
 // when re-read. Nothing is typed into it, and no other pane is closed.
 func TestRelaunchOpenClosesTheOldPaneOnceTheNewOneIsProven(t *testing.T) {

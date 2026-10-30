@@ -16,15 +16,15 @@ func TestPersonEntry(t *testing.T) {
 		person string
 		want   bool
 	}{
-		{"an ask", bus.Event{Kind: "cmd", Type: bus.CmdAsk, From: "master", Target: bus.PeopleTarget}, "bernard", true},
-		{"a cmd to the person", bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "bernard"}, "bernard", true},
+		{"an ask", bus.Event{Kind: "cmd", Type: bus.CmdAsk, From: "master", Target: bus.PeopleTarget}, "charlie", true},
+		{"a cmd to the person", bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "charlie"}, "charlie", true},
 		{"a cmd to the default identity", bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "pilot"}, "pilot", false},
-		{"agent to agent", bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "coder"}, "bernard", false},
-		{"the person's own message", bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "bernard", Target: "bernard", Human: true}, "bernard", false},
-		{"a notice for the person", bus.Event{Kind: "notify", From: "dispatch", For: bus.ForPerson}, "bernard", true},
-		{"the trim-gap notice", bus.Event{Kind: "notify", From: "dispatch"}, "bernard", false},
-		{"a notify from an agent", bus.Event{Kind: "notify", From: "coder"}, "bernard", false},
-		{"a report", bus.Event{Kind: "report", Agent: "master"}, "bernard", false},
+		{"agent to agent", bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "coder"}, "charlie", false},
+		{"the person's own message", bus.Event{Kind: "cmd", Type: bus.CmdDirective, From: "charlie", Target: "charlie", Human: true}, "charlie", false},
+		{"a notice for the person", bus.Event{Kind: "notify", From: "dispatch", For: bus.ForPerson}, "charlie", true},
+		{"the trim-gap notice", bus.Event{Kind: "notify", From: "dispatch"}, "charlie", false},
+		{"a notify from an agent", bus.Event{Kind: "notify", From: "coder"}, "charlie", false},
+		{"a report", bus.Event{Kind: "report", Agent: "master"}, "charlie", false},
 	}
 	for _, c := range cases {
 		if got := personEntry(c.e, c.person); got != c.want {
@@ -42,7 +42,7 @@ func line(name, kind, from, target, typ string, at time.Time) feedLine {
 }
 
 func TestActivityRowCarriesTheMark(t *testing.T) {
-	fl := line("9", "cmd", "master", "bernard", bus.CmdDirective, time.Now())
+	fl := line("9", "cmd", "master", "charlie", bus.CmdDirective, time.Now())
 	for _, c := range []struct {
 		m     mark
 		glyph string
@@ -80,8 +80,8 @@ func headerText(d headerData) string {
 // The recap lists unread entries first, under "Expected from you".
 func TestRecapListsUnreadFirst(t *testing.T) {
 	now := time.Now()
-	m := buildRecap(recapInput{Now: now, Human: "bernard", Agents: map[string]*agentState{},
-		Unread: []bus.Event{{ID: fmt.Sprintf("%d-0", now.Add(-time.Minute).UnixMilli()), Kind: "cmd", From: "master", Target: "bernard", Message: "lot 1 is yours"}},
+	m := buildRecap(recapInput{Now: now, Human: "charlie", Agents: map[string]*agentState{},
+		Unread: []bus.Event{{ID: fmt.Sprintf("%d-0", now.Add(-time.Minute).UnixMilli()), Kind: "cmd", From: "master", Target: "charlie", Message: "lot 1 is yours"}},
 		Asks:   []bus.Ask{{ID: "a1", From: "coder", State: "open", Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "q", Header: "Go?"}}}}}})
 	if len(m.Rows) < 3 || m.Rows[0].Title != "Expected from you" || !strings.Contains(m.Rows[1].Title, "unread") || !strings.Contains(m.Rows[1].Detail, "lot 1 is yours") {
 		var got []string
@@ -96,12 +96,12 @@ func TestMarks(t *testing.T) {
 	now := time.Now()
 	at := func(m int) time.Time { return now.Add(time.Duration(m) * time.Minute) }
 	feed := []feedLine{
-		line("1-0", "cmd", "master", "bernard", bus.CmdDirective, at(-50)), // older than the floor
-		line("2-0", "cmd", "master", "bernard", bus.CmdDirective, at(-30)), // superseded by 3-0
-		line("3-0", "cmd", "master", "bernard", bus.CmdDirective, at(-20)), // unread
+		line("1-0", "cmd", "master", "charlie", bus.CmdDirective, at(-50)), // older than the floor
+		line("2-0", "cmd", "master", "charlie", bus.CmdDirective, at(-30)), // superseded by 3-0
+		line("3-0", "cmd", "master", "charlie", bus.CmdDirective, at(-20)), // unread
 		line("4-0", "notify", "dispatch", "", "", at(-15)),                 // read
-		line("5-0", "cmd", "coder", "bernard", bus.CmdDirective, at(-10)),  // answered by the person below
-		line("6-0", "cmd", "bernard", "coder", bus.CmdDirective, at(-5)),   // the answer
+		line("5-0", "cmd", "coder", "charlie", bus.CmdDirective, at(-10)),  // answered by the person below
+		line("6-0", "cmd", "charlie", "coder", bus.CmdDirective, at(-5)),   // the answer
 		line("7-0", "cmd", "sentinel", "people", bus.CmdAsk, at(-4)),       // a closed ask
 		line("8-0", "cmd", "foureyes", "coder", bus.CmdDirective, at(-3)),  // not for the person
 	}

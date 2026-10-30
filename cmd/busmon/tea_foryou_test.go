@@ -24,7 +24,7 @@ func forYouFixture() (snapshot, []feedLine) {
 		return s
 	}
 	s := snapshot{
-		person: "bernard",
+		person: "charlie",
 		asks: []bus.Ask{
 			{ID: "200-0", From: "master", Title: "review lot 1?", State: "open", CreatedAt: ms(20), Questions: []bus.AskQuestionState{q("q1", false), q("q2", false), q("q3", true)}},
 			{ID: "100-0", From: "architect", Title: "pick a store", State: "open", CreatedAt: ms(10), Questions: []bus.AskQuestionState{q("q1", false)}},
@@ -36,16 +36,16 @@ func forYouFixture() (snapshot, []feedLine) {
 			"sentinel":  {state: "waiting", message: "older wait", stateAt: at(25)},
 			"ui-grok":   {state: "idle", obsPrompt: true, obsAt: at(40), obsSince: at(35), judgedAt: at(41)},
 			"ui-kimi":   {state: "waiting", message: "answered", stateAt: at(1), answeredAt: at(2)},
-			"architect": {state: "idle", message: "bernard: a hint", forYou: true, openAsk: 1, askID: "100-0"},
+			"architect": {state: "idle", message: "charlie: a hint", forYou: true, openAsk: 1, askID: "100-0"},
 			"foureyes": {state: "working", gated: 3, gates: map[string]string{
 				"1792000000000-0": "coder|review launcher-resume", "pr-8": "master|[subject pr:8] look at PR 8",
-				"pr-9": "bernard|[subject pr:9] look at PR 9"}},
+				"pr-9": "charlie|[subject pr:9] look at PR 9"}},
 		},
 		// A gate on the person: someone holds the person until they answer.
 		personGates: map[string]string{"1792000000001-0": "master|sign off the release"},
 	}
 	ev := func(id, from, msg string) bus.Event {
-		return bus.Event{ID: id, Kind: "cmd", Type: bus.CmdDirective, From: from, Target: "bernard", Message: msg}
+		return bus.Event{ID: id, Kind: "cmd", Type: bus.CmdDirective, From: from, Target: "charlie", Message: msg}
 	}
 	feed := []feedLine{
 		{id: "1", ev: ev("1792999000000-0", "coder", "old, superseded"), at: at(45), mark: markSuperseded},
@@ -71,7 +71,7 @@ func TestForYouRanksAndOrders(t *testing.T) {
 		{rankWait, "sentinel", "wait:sentinel"},
 		{rankWait, "coder", "wait:coder"},
 		{rankWait, "ui-grok", "prompt:ui-grok"},
-		{rankGate, "bernard", "gate:bernard:1792000000001-0"}, // a dated ref first
+		{rankGate, "charlie", "gate:charlie:1792000000001-0"}, // a dated ref first
 		{rankGate, "foureyes", "gate:foureyes:pr-9"},          // only the gate the person opened
 		{rankUnread, "master", "unread:1792999050000-0"},
 		{rankUnread, "coder", "unread:1792999100000-0"},
@@ -88,7 +88,7 @@ func TestForYouRanksAndOrders(t *testing.T) {
 	if got[1].Count != 2 || got[1].Text != "review lot 1?" {
 		t.Errorf("ask row: %+v", got[1])
 	}
-	if g := got[6]; g.Agent != "foureyes" || g.By != "bernard" || g.Text != "look at PR 9" {
+	if g := got[6]; g.Agent != "foureyes" || g.By != "charlie" || g.Text != "look at PR 9" {
 		t.Errorf("gate row: %+v", g)
 	}
 	// The unread line of an open ask is folded into the ask's row: listed once.
@@ -147,7 +147,7 @@ func TestForYouItemsLeaveWithTheirFact(t *testing.T) {
 // it, or it holds the person. A review between agents is theirs: with nothing
 // else for the person, the list and the badge are empty.
 func TestForYouIgnoresAgentToAgentGates(t *testing.T) {
-	s := snapshot{person: "bernard", agents: map[string]*agentState{
+	s := snapshot{person: "charlie", agents: map[string]*agentState{
 		"foureyes": {state: "working", gated: 2, gates: map[string]string{
 			"1793000000001-0": "master|[subject roles-impl] review", "1793000000002-0": "coder|look"}},
 		"ui-kimi": {state: "idle", gated: 1, gates: map[string]string{"1793000000003-0": "master|review"}},

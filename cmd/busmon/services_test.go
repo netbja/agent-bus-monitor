@@ -393,7 +393,7 @@ func TestShellServicesCardsLeftRight(t *testing.T) {
 	}
 }
 
-// busmon-f3-live (Bernard): the Services page judged its cards from the
+// busmon-f3-live (Charlie): the Services page judged its cards from the
 // records the last poll held, then never again, so a record 25 s old at the
 // open read down while the header said ready. The page reads the records
 // fresh in its command, and re-reads them every svcRefresh while it is open.
@@ -477,7 +477,7 @@ func TestShellServicesPageLive(t *testing.T) {
 // reader's default (reviewer-codex): a long log path on a narrow page wraps
 // under its value instead of running past the frame.
 func TestServiceLogHeaderWrapsAtItsWidth(t *testing.T) {
-	log := "/home/someone/.local/state/agentbus/agent-bus-monitor/services/dispatch.log"
+	log := "/home/user/.local/state/agentbus/agent-bus-monitor/services/dispatch.log"
 	lines := serviceLogBody(bus.ServiceRecord{Log: "/missing " + log, Host: "here"}, "dispatch", "here", 56)
 	for _, l := range lines[:2] { // the header block; the read error after it is another line
 		if l.Width() > 56 {

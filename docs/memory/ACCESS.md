@@ -25,11 +25,11 @@ existing notes belong to other project history. A link to this project may be
 added there by its owner, without copying the notes or changing their provenance.
 No Obsidian UI configuration or external-vault file is changed by this slice.
 
-## Laptop and host1
+## Laptop and a remote host
 
 Share committed notes through the existing repository remote and normal reviewed
 Git workflow. Each host reads its local checkout; compare commit IDs when freshness
-matters. A symlink on the laptop does not synchronize host1. A local uncommitted
+matters. A symlink on the laptop does not synchronize the remote host. A local uncommitted
 note, unpublished branch, or stale checkout is not shared memory across hosts.
 An offline host reads its last available revision and must report that limitation.
 This protocol does not authorize a pull, deployment, or restart of an active host.
