@@ -87,8 +87,22 @@ type upTemplate struct {
 // then Ctrl+B Up and pick the project". Outside herdr it provisions and says how
 // to open it.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
-	if len(args) == 0 || !bus.ValidName(args[0]) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
+		return 1
+	}
+	if !bus.ValidName(args[0]) { // stranger-test: say why, and what would do
+		fmt.Fprintf(stderr, "agentbus up: invalid project name %q: a lowercase letter, then lowercase letters, digits, - or _, up to 32 in all\n", args[0])
+		if low := strings.ToLower(args[0]); bus.ValidName(low) {
+			try := []string{"agentbus", "up", low}
+			for _, a := range args[1:] {
+				if strings.ContainsAny(a, " '\"$\\") {
+					a = shellQuote(a)
+				}
+				try = append(try, a)
+			}
+			fmt.Fprintf(stderr, "try: %s\n", strings.Join(try, " "))
+		}
 		return 1
 	}
 	project := args[0]
