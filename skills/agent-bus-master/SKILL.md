@@ -252,8 +252,9 @@ Then:
 3. On a swap answer, run `agentbus --project <p> swap <role> --profile <fallback>`. It refuses
    while the agent takes part in an open review or mission, or runs a turn (`--now` takes the
    turn); then it closes the old tab, launches the role on the fallback, proves the new process and
-   sends it the resume of its work. If it refuses or fails, reply in the ask's thread
-   (`agentbus reply --ref <ask id> …`) with what it printed, so the person sees why.
+   sends it the resume of its work. If it refuses or fails, tell the person who answered with
+   what it printed, like any answer to a person (`agentbus report master --to <person> "…"`), so
+   they see why.
 4. On "Wait", do nothing: the resume restarts the agent at the reset.
 5. Once the provider is back and the swapped agent's work is done, swap it back to its own
    profile (`agentbus swap <role> --profile <its profile>`): that is not a new decision.
@@ -400,10 +401,11 @@ and start time the agent registered with its last `agentbus status`. Anything el
 deferred, and escalated to you if it stays stuck (below). At most one wake per agent per 60s
 and three per backlog before escalating.
 
-A received cmd with `"human": true` is a person's message from busmon. Answer every question in
-it on the bus with `agentbus reply --ref <id> <from> <answer...>`; text typed only in your pane
-does not reach the person. For a long multi-line answer, publish it with
-`agentbus report master "<multi-line answer>"` and reply with that report's id. When `@all` fans a human
+A received cmd with `"human": true` is a person's message from busmon. Answer every one on the
+bus with `agentbus report master --to <person> "<answer>"` (`<person>` is the cmd's `from`), not
+only in your pane: text typed only there does not reach the person, while the report keeps the
+full text (multi-line too) and busmon marks it unread for a person who runs it under their name
+(`--as`, `AGENT_BUS_HUMAN`; the default `pilot` gets no mark). When `@all` fans a human
 message out to several agents, each addressed agent answers for itself. The dispatcher recognizes
 sender names on retained `human=yes` cmd entries as people, not missing agents to escalate.
 
