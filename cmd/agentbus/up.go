@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,6 +42,9 @@ type upDeps struct {
 	Environ   []string // the service environment is picked from it
 	Mark      func(project string, inst bus.ServicesInstall) error
 	Host      string
+	// Ping asks the broker for PING before the marker is written (up-broker-ready): a broker
+	// docker has just started answers LOADING for a while. Nil: no wait.
+	Ping func() error
 
 	// The relaunch of an open workspace (v0.21): the agents' snapshots, the
 	// process start time (nil off Linux: snapshots then decide nothing) and the
@@ -335,6 +339,9 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNotInstalled, err)
 	}
+	if err := waitBroker(d.Ping, d.Sleep); err != nil {
+		return fmt.Errorf("%w: marking %s: the broker did not answer: %v", errNotInstalled, bus.ServicesKey(project), err)
+	}
 	if err := d.Mark(project, bus.ServicesInstall{Kinds: kinds, Manager: m.Name(), Host: d.Host}); err != nil {
 		return fmt.Errorf("%w: marking %s: %v", errNotInstalled, bus.ServicesKey(project), err)
 	}
@@ -587,6 +594,16 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			return b.MarkServicesInstalled(ctx, inst)
 		},
 		Host: host,
+		Ping: func() error {
+			c, err := bus.Connect("")
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			return c.Ping(ctx).Err()
+		},
 		Agents: func(project string) (map[string]bus.AgentSnapshot, error) {
 			return readAgents(project)
 		},
@@ -918,4 +935,36 @@ func shellProbe(getenv func(string) string, timeout time.Duration) func(string) 
 		}
 		return "", fmt.Errorf("%s gave no answer (it may have failed while starting)", filepath.Base(sh))
 	}
+}
+
+// Broker readiness (up-broker-ready): how long up waits for a broker that is still starting.
+const (
+	brokerPoll = 250 * time.Millisecond
+	brokerWait = 10 * time.Second
+)
+
+// waitBroker pings until the broker answers, for at most brokerWait. Only what a wait can
+// fix is retried: LOADING (the dataset is being read back) and a connection that is refused
+// or dropped (the container is starting); any other answer, a wrong password say, returns at
+// once. A nil ping waits for nothing.
+func waitBroker(ping func() error, sleep func(time.Duration)) error {
+	if ping == nil {
+		return nil
+	}
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+	var err error
+	for waited := time.Duration(0); ; waited += brokerPoll {
+		if err = ping(); err == nil || !brokerStarting(err) || waited >= brokerWait {
+			return err
+		}
+		sleep(brokerPoll)
+	}
+}
+
+func brokerStarting(err error) bool {
+	var op *net.OpError
+	return strings.HasPrefix(err.Error(), "LOADING") || errors.As(err, &op) ||
+		errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET)
 }

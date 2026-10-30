@@ -10,6 +10,9 @@ release exists.
   different built-in name).
   The same rules apply: refused as a writer inside a herdr pane. Entries already on a bus keep the
   sender they were written with; nothing migrates.
+- `agentbus up` right after a fresh `docker compose up` no longer fails with `marking
+  <p>:services: LOADING`: it waits for the broker to answer PING (up to 10 s, only while it is
+  loading its data or refusing connections) before marking the project's services.
 - `herdr plugin install netbja/agent-bus-monitor` (what herdr's plugin list offers) now stops at
   the plugin's build step with how to install from a clone (`./setup.sh install`), and installs
   nothing. Before, it registered a plugin whose binaries did not exist. `herdr plugin link`, which
