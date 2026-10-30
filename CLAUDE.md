@@ -606,8 +606,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   state goes to `{p}:services` through an `EXISTS`-guarded script (`bus/services.go`); without the
   `installed` marker that `up` writes, a service exits and writes nothing, so a deleted project is
   never resurrected. `up` writes that marker only once the broker answers PING (`waitBroker`,
-  up-broker-ready: 250 ms polls for at most 10 s, retrying only LOADING and a refused or dropped
-  connection; any other answer fails at once). Don't add a supervisor loop, a `nohup` fallback or a login autostart; don't
+  up-broker-ready: a 10 s deadline on the clock that counts the pings' own time, each ping through
+  `bus.ConnectContext` given at most 2 s and never more than is left, 250 ms between them;
+  retrying only LOADING and a refused, dropped or timed-out connection; any other answer fails at
+  once). Don't add a supervisor loop, a `nohup` fallback or a login autostart; don't
   put a secret in a unit; tests use fake `systemctl`/`launchctl` (`tests/installer_test.sh`,
   `service/manager_test.go`) and never the user's manager. busmon only reads the state and the
   local log (`F3`), never starts or parents a service. F3 (busmon-f3, `services_cards.go`) is three cards,

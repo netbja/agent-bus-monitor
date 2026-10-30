@@ -87,6 +87,12 @@ func envOr(key, def string) string {
 // AgentBus2025!. A non-empty host overrides REDIS_HOST. It pings before
 // returning so callers fail fast instead of inside the first command.
 func Connect(host string) (*redis.Client, error) {
+	return ConnectContext(context.Background(), host)
+}
+
+// ConnectContext is Connect with its PING bounded by ctx (up-broker-ready: up
+// gives a broker that is starting a budget, and a hung one must not outlast it).
+func ConnectContext(ctx context.Context, host string) (*redis.Client, error) {
 	var opt *redis.Options
 	if url := os.Getenv("REDIS_URL"); url != "" {
 		var err error
@@ -124,7 +130,8 @@ func Connect(host string) (*redis.Client, error) {
 	}
 	client := redis.NewClient(opt)
 	peers.Store(client, rec)
-	if err := client.Ping(context.Background()).Err(); err != nil {
+	if err := client.Ping(ctx).Err(); err != nil {
+		client.Close()
 		peers.Delete(client) // a client nobody gets is not kept alive by the map
 		return nil, err
 	}
