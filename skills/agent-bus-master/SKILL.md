@@ -252,8 +252,9 @@ Then:
 3. On a swap answer, run `agentbus --project <p> swap <role> --profile <fallback>`. It refuses
    while the agent takes part in an open review or mission, or runs a turn (`--now` takes the
    turn); then it closes the old tab, launches the role on the fallback, proves the new process and
-   sends it the resume of its work. If it refuses or fails, reply in the ask's thread
-   (`agentbus reply --ref <ask id> …`) with what it printed, so the person sees why.
+   sends it the resume of its work. If it refuses or fails, tell the person who answered with
+   what it printed, like any answer to a person (`agentbus report master --to <person> "…"`), so
+   they see why.
 4. On "Wait", do nothing: the resume restarts the agent at the reset.
 5. Once the provider is back and the swapped agent's work is done, swap it back to its own
    profile (`agentbus swap <role> --profile <its profile>`): that is not a new decision.
