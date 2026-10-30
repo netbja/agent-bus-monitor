@@ -562,7 +562,7 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			if err != nil {
 				return err
 			}
-			cmd := exec.Command(filepath.Join(repo, "scripts", "bootstrap"), args...)
+			cmd := bootstrapCommand(repo, args)
 			cmd.Stdout, cmd.Stderr, cmd.Stdin = stdout, stderr, os.Stdin
 			return cmd.Run()
 		},
@@ -987,4 +987,16 @@ func waitBroker(ping func(time.Duration) error, sleep func(time.Duration), now f
 func brokerStarting(err error) bool {
 	return strings.HasPrefix(err.Error(), "LOADING") || errors.Is(err, syscall.ECONNREFUSED) ||
 		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF)
+}
+
+// upCallerEnv tells scripts/bootstrap that agentbus up runs it, so its recall
+// does not tell the person to run agentbus up (stranger-test).
+const upCallerEnv = "AGENTBUS_UP=1"
+
+// bootstrapCommand is the repository's bootstrap with args, in up's environment
+// plus upCallerEnv.
+func bootstrapCommand(repo string, args []string) *exec.Cmd {
+	cmd := exec.Command(filepath.Join(repo, "scripts", "bootstrap"), args...)
+	cmd.Env = append(os.Environ(), upCallerEnv)
+	return cmd
 }

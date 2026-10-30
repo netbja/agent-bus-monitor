@@ -6,6 +6,8 @@ release exists.
 
 ## Unreleased
 
+- `agentbus up` no longer prints bootstrap's `recall: … open it with agentbus up <p>` hint, which told the
+  person to run the command they had just run (`bootstrap recall` run by hand still prints it).
 - busmon: `←` and `→` step the lower panel's tabs (Activity, Board, Requests, Plan) while one of them
   has the focus, wrapping as herdr's tabs do; on an opened page they still step its list. `w` with no
   question open opens the compose window to master (with one open it still opens it, as `!` does).

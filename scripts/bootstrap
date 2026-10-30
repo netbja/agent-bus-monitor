@@ -116,7 +116,8 @@ case "$verb" in
   recall)
     ensure_broker
     [[ -f "$template" ]] || warn "no template at $template (run 'bootstrap new $project')"
-    echo "recall: broker up; open '$project' with agentbus up $project, or prefix+up (the Projects picker)"
+    # agentbus up runs this itself (AGENTBUS_UP): it is not told to run agentbus up
+    [[ -n "${AGENTBUS_UP:-}" ]] || echo "recall: broker up; open '$project' with agentbus up $project, or prefix+up (the Projects picker)"
     ;;
 esac
 [[ "$do_index" == "1" ]] && index_preflight
