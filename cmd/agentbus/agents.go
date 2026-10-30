@@ -43,6 +43,9 @@ func agentPane(m map[string]bus.AgentSnapshot, agent string) (string, bool) {
 // sorted by name. Entries older than agentIdleAfter/agentStaleAfter are marked
 // idle/offline (never deleted — age is the staleness signal).
 func agentsTable(m map[string]bus.AgentSnapshot, now time.Time) string {
+	if len(m) == 0 { // stranger-test: say so rather than print nothing
+		return "no agent has declared a status yet (each appears with its first agentbus status)\n"
+	}
 	names := make([]string, 0, len(m))
 	for n := range m {
 		names = append(names, n)
