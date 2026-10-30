@@ -11,9 +11,9 @@
 ╭─  1 Activity  2 Boar│ An agent that needs your decision asks a question. It shows in For you   │ents · filter: none ─╮
 │    time   from      │ with ●, and the agent reads waiting.                                     │                     │
 │  ── Mon 2026-10-26 -│                                                                          │─────────────────────│
-│    14:24  architect │   ! w F4  open its questions                                             │                     │
-│    14:50  ♙ Charlie │   1-9     pick an answer                                                 │                     │
-│    14:51  coder     │   o       Other: write your own answer in the compose window             │                     │
+│    14:24  architect │   ! F4  open its questions                                               │                     │
+│    14:50  ♙ Charlie │   1-9   pick an answer                                                   │                     │
+│    14:51  coder     │   o     Other: write your own answer in the compose window               │                     │
 │  ○ 14:52  master    │                                                                          │                     │
 │  ● 14:56  dispatch  │ Your answer wakes the agent; nothing else is needed.                     │                     │
 │  ● 15:00  master    │                                                                          │                     │

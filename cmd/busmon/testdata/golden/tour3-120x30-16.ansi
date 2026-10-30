@@ -11,9 +11,9 @@
 [38;5;8m╭─[m [1;7;38;5;2m 1 Activity[m [38;5;7m 2 Boar[m[38;5;6m│[m An agent that needs your decision asks a question. It shows in For you   [38;5;6m│[m[38;5;7ments · filter: none[m [38;5;8m─╮[m
 [38;5;8m│[m  [38;5;8m  time   from      [m[38;5;6m│[m with ●, and the agent reads waiting.                                     [38;5;6m│[m[38;5;8m                     [m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m── Mon 2026-10-26 -[m[38;5;6m│[m                                                                          [38;5;6m│[m[38;5;7m─────────────────────[m[38;5;8m│[m
-[38;5;8m│[m  [38;5;7m  14:24  [marchitect [38;5;6m│[m   [1;38;5;6m! w F4[m  open its questions                                             [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m  [38;5;7m  14:50  [m♙ Charlie [38;5;6m│[m   [1;38;5;6m1-9[m     pick an answer                                                 [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m  [38;5;7m  14:51  [mcoder     [38;5;6m│[m   [1;38;5;6mo[m       Other: write your own answer in the compose window             [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  14:24  [marchitect [38;5;6m│[m   [1;38;5;6m! F4[m  open its questions                                               [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  14:50  [m♙ Charlie [38;5;6m│[m   [1;38;5;6m1-9[m   pick an answer                                                   [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  14:51  [mcoder     [38;5;6m│[m   [1;38;5;6mo[m     Other: write your own answer in the compose window               [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;7m○ 14:52  [mmaster    [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;3m● [m[38;5;7m14:56  [mdispatch  [38;5;6m│[m Your answer wakes the agent; nothing else is needed.                     [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;3m● [m[38;5;7m15:00  [mmaster    [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m

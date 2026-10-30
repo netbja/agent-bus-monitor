@@ -41,4 +41,4 @@
 │                                                                                                                                                                                            │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                                                                             
- tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! w answer   d del remove   / filter   i write   esc back   q quit   F1 help   F2 requests   F5 health        
+ tab focus   1-4 tabs   ←→ tab   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! answer   d del remove   / filter   i write   esc back   q quit   F1 help   F5 health               

@@ -100,6 +100,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		m.cyclePanel(act == ActNextPanel)
 	case ActTab1, ActTab2, ActTab3, ActTab4:
 		m.switchTab(int(act - ActTab1))
+	case ActTabNext, ActTabPrev:
+		m.stepTab(act == ActTabNext)
 	case ActTab5:
 		m.switchTab(4)
 	case ActTab6:
@@ -142,6 +144,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 			agent = sel
 		}
 		cmd = m.pushAskOf(agent)
+	case ActAskOrWrite:
+		cmd = m.askOrWrite()
 	case ActFollow:
 		if act := &m.lists.activity; act.Live() {
 			act.Pause()
@@ -381,6 +385,34 @@ func (m *Model) switchTab(n int) {
 	if n < len(tabs) {
 		m.focusPanel(tabs[n])
 	}
+}
+
+// stepTab moves the focus to the lower panel's next or previous tab, wrapping
+// as herdr's own next and previous tab do (busmon-keys).
+func (m *Model) stepTab(next bool) {
+	i := slices.Index(lowerTabs, m.ui.focus)
+	if i < 0 {
+		return
+	}
+	step := 1
+	if !next {
+		step = len(lowerTabs) - 1
+	}
+	m.focusPanel(lowerTabs[(i+step)%len(lowerTabs)])
+}
+
+// askOrWrite is w: the open question as ! opens it, or, with none open, the
+// compose window to master (an unsent draft is kept as it is).
+func (m *Model) askOrWrite() tea.Cmd {
+	if len(openAsks(m.snap.asks)) > 0 {
+		agent := ""
+		if sel := m.lists.agents.Selected(); m.ui.focus == PanelAgents && m.snap.agents[sel] != nil && m.snap.agents[sel].openAsk > 0 {
+			agent = sel
+		}
+		return m.pushAskOf(agent)
+	}
+	m.openMessageCompose("", "master")
+	return nil
 }
 
 // escape clears the focused selection, then Activity's pause, then the

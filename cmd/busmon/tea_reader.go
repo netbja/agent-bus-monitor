@@ -701,6 +701,9 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			m.planStart(p)
 		case p.kind == ovAgent && m.snap.agents[p.key] != nil && m.snap.agents[p.key].openAsk > 0:
 			return m.pushAskOf(p.key)
+		case k.Rune == 'w' && len(openAsks(m.snap.asks)) == 0: // busmon-keys: w writes to master
+			m.closeReader()
+			m.openMessageCompose("", "master")
 		case k.Code != keyEnter:
 			return m.pushAskOf("")
 		}

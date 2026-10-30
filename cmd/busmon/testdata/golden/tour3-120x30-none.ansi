@@ -11,9 +11,9 @@
 ╭─ [1;7m 1 Activity[m  2 Boar[1m│[m An agent that needs your decision asks a question. It shows in For you   [1m│[ments · filter: none ─╮
 │    time   from      [1m│[m with ●, and the agent reads waiting.                                     [1m│[m                     │
 │  ── Mon 2026-10-26 -[1m│[m                                                                          [1m│[m─────────────────────│
-│    14:24  architect [1m│[m   [1m! w F4[m  open its questions                                             [1m│[m                     │
-│    14:50  ♙ Charlie [1m│[m   [1m1-9[m     pick an answer                                                 [1m│[m                     │
-│    14:51  coder     [1m│[m   [1mo[m       Other: write your own answer in the compose window             [1m│[m                     │
+│    14:24  architect [1m│[m   [1m! F4[m  open its questions                                               [1m│[m                     │
+│    14:50  ♙ Charlie [1m│[m   [1m1-9[m   pick an answer                                                   [1m│[m                     │
+│    14:51  coder     [1m│[m   [1mo[m     Other: write your own answer in the compose window               [1m│[m                     │
 │  ○ 14:52  master    [1m│[m                                                                          [1m│[m                     │
 │  ● 14:56  dispatch  [1m│[m Your answer wakes the agent; nothing else is needed.                     [1m│[m                     │
 │  ● 15:00  master    [1m│[m                                                                          [1m│[m                     │

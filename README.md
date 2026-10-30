@@ -421,7 +421,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 │    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›
- tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! w answer   / filter   i write   F1 help   F5 health
+ tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! answer   / filter   i write   F1 help   F5 health
 ```
 
 </details>
@@ -443,6 +443,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   (`gate`), and messages addressed to you that you have not opened (`unread`, `●`; `○` once a
   newer one, an answer or a closed ask supersedes it). Enter opens one; `!`, `w` or F4 answers the
   questions (one tab per question, a digit or Enter picks an option, `Other…` writes your own).
+  With no question open, `w` opens the compose window to master instead.
 - **Agents** — one row per agent, **attention first** (waiting for you, escalated, gated,
   blocked; then queued; then working, idle, done). Columns: the **declared** state (never
   overwritten by silence — an agent that said `working` three hours ago still reads `working`;
@@ -456,7 +457,8 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   status, pane and pid, models (configured, launched, used), queue, wake record, gates, context,
   board tasks, last activity; `i` there writes to it. Every page reads `Label:  value`, the
   values of a block in one column.
-- **The lower panel's tabs** (`1`–`4`):
+- **The lower panel's tabs** (`1`–`4`, or `←` `→` while one of them has the focus: previous and next,
+  wrapping as herdr's tabs do; on an opened page `←` `→` still step its list):
   - **Activity** — one line per event (`time · from · to · type · message`) with a day
     separator. Enter expands a line in place, a second Enter opens it in the reader (`n`/`p`
     step to the next or previous one). It scrolls live; `f` or a wheel scroll up stops it, `End`
@@ -484,7 +486,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | Key | Page |
 |---|---|
 | Enter | the selected line, agent, task or thread in full |
-| `!` `w` F4 | the open questions of an agent |
+| `!` `w` F4 | the open questions of an agent (`w` with none open: the compose window to master) |
 | F1 `?` | the help: every key, state and flag in words; `t` there replays the tour |
 | F2 `r` | tracked requests and unanswered threads, with their delivery evidence |
 | F3 `s` | services: dispatch, missions and the Redis broker as cards (state, pid, last error, log size; Redis version, uptime, memory, keys), read again every 5 s while open; `↑↓` (or `←→` when side by side) choose a card, Enter or `l` opens a service's log, Enter on Redis its page (memory, persistence, clients, each project's keys and streams, the port bind, its last log lines) |
