@@ -30,6 +30,11 @@ while the human may be focused on your pane (a focused pane is never typed into)
 with a long idle window: `agentbus subscribe master 3600`. Peers that finish report to you with
 `--to master`, so their results reach you either way.
 
+**Answer a person on the bus.** A directive with `"human": true` comes from a person typing in
+busmon, and they read busmon, not your pane. Answer every one with
+`agentbus report master --to <person> "<answer>"` (`<person>` is the directive's `from`), not only
+in your pane: the report keeps the full text, and busmon shows it to them as unread.
+
 Then coordinate: dispatch the plan task-by-task to `coder`, gate every task on a `foureyes`
 review, and keep **one task in flight at a time** (see the agent-bus-master skill).
 
