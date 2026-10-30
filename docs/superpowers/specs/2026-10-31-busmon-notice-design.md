@@ -96,15 +96,20 @@ line ends at the name.
 **Never the person's own act (rule 3), by its author field.** A pause, a reload (`agentbus reload
 --as <person>`) and a swap can be the person's. A notice shows only when the author (`PauseRecord.By`,
 `SwapEvent.By`) is `dispatch` or an agent registered in `{p}:agents`; any other author, the
-person's name included, shows nothing. An early `agentbus resume` by the person deletes the pause
-without the dispatcher's directive, so it shows nothing either.
+person's name included, shows nothing. An early `agentbus resume` by the person (`Bus.Resume`)
+does write the same resume directive, but from the person, so the `from == dispatch` test leaves it
+out. A pause with no valid notify target gets no directive at all, so its end shows nothing.
 
 **Cadence, honestly.** busmon reads the pause and the health every tick (1 s), and the swap
 intents and fallbacks only every fifth tick (`wakePollDue`, 5 s). The notices therefore read the
 ledger, not the intents: one bounded read of its newest entries every fifth tick (`SwapLog`, the
-entries after the last id seen; the first read only records that id), so no reload or swap is
-missed, and its line may come up to 5 s late. A pause shorter than one tick can still be missed;
-that is accepted (it would end before anyone could read about it).
+entries after the last id seen; the first read only records that id). `SwapLog` returns them newest
+first: they are reversed before they join the queue, so the queue stays in arrival order. Every
+reload and swap still retained in the ledger is seen, its line up to 5 s late. The ledger is capped
+(`MAXLEN ~` 1000), so in principle entries could be trimmed between two reads: when the oldest
+entry read is newer than the saved cursor (a gap), one line says so instead of pretending,
+`▲ some reloads or swaps were not shown (agentbus swaps)`, attention. A pause shorter than one
+tick can still be missed; that is accepted (it would end before anyone could read about it).
 
 Not notices: an agent's ask or waiting state, a pane's prompt, an escalation to master, a
 `for=person` notify (they are For you items), anything `human=yes`.
