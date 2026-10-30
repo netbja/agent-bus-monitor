@@ -5,6 +5,13 @@ min_herdr_version = "0.9.0"   # the support floor this repo tests on (global reg
 description = "Agent Bus: open a project's team workspace, watch it in busmon."
 platforms = ["linux", "macos"]
 
+# plugin-listing: agent-bus is not installed by herdr. `herdr plugin install` (what herdr's plugin
+# list offers) runs only [[build]], and the plugin needs the broker, the binaries and the skills
+# that ./setup.sh sets up, then links this checkout. So this one step refuses: it exits 1, herdr
+# aborts the install and registers nothing. `herdr plugin link` never runs [[build]].
+[[build]]
+command = ["sh", "-c", "printf '%s\\n' 'agent-bus is not installed with herdr plugin install: it needs a Redis broker, its binaries and skills, which its installer sets up.' 'Install it from a clone instead; setup links the plugin into herdr for you:' '  git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor && ./setup.sh install' 'Nothing was installed.' >&2; exit 1"]
+
 [[actions]]
 id = "projects"
 title = "Agent Bus: Projects"
