@@ -77,7 +77,7 @@ executable = "/path/to/agent-bus-monitor/scripts/local-llm-peer"   # exec agentb
 [profiles.local]
 client   = "local-llm"
 provider = "local"
-model    = "qwen2.5-coder:3b"             # optional: else the endpoint's model
+model    = "qwen2.5-coder:3b"             # required (rolecfg refuses a profile without one)
 [profiles.local.options]
 endpoint = "local"                        # the [llm.<name>] table
 
@@ -87,7 +87,7 @@ tier    = "pop"
 skills  = []
 ```
 
-The role's prompt is `roles/local.md`, as for every role. An adapter's `executable` is resolved
+The profile's `model` is required, as for every schema-2 profile (rolecfg refuses one without; a `tier` would need a models-table source the local endpoint does not have), and it is what the peer asks the endpoint for. It must equal the endpoint's `model` in `config.toml`: the peer refuses to start when they differ and names both, so the one name is written twice but checked. The role's prompt is `roles/local.md`, as for every role. An adapter's `executable` is resolved
 against the manifest's own directory, so a manifest outside this checkout names the script by
 its absolute path (or setup links it into `BIN_DIR` beside `agent-launch`; a choice for step 1).
 The shipped manifest gets nothing; `examples/roles.local-llm.toml` holds this, and the test
@@ -118,9 +118,12 @@ included) until it exits:
 2. **Receive** under the same lease (what `WatchCmdDelivery` does: at-least-once, ACK after
    handling), for its whole life.
 
-Today `DrainCmd` and `watchCmdDelivery` each take the lease and release it when they return
-(`holdReceiver` … `defer rc.close()`), so calling one after the other leaves a moment with no
-lease (reviewer-codex). Step 1 therefore adds one exported receiver handle (take, renew, close;
+`WatchCmdDelivery` already holds one lease for its whole loop and renews it while `deliver`
+runs (it returns only when `deliver` says done or errs; the peer never says done). The gap is
+between the two: `DrainCmd` and `watchCmdDelivery` each take the lease and release it when they
+return (`holdReceiver` … `defer rc.close()`), so calling one after the other leaves a moment
+with no lease (reviewer-codex; foureyes: harmless today, the dispatcher defers a pane with no
+signature and never prompts it, but the spec promises no gap). Step 1 therefore adds one exported receiver handle (take, renew, close;
 the lease's contract unchanged: token, renewal, loss cancels) whose drain and delivery reuse the
 held lease instead of taking their own; the existing callers keep their behaviour. A test sends
 an entry at the drain-to-receive boundary and proves the lease key never disappears and the
@@ -158,7 +161,7 @@ For each cmd entry addressed to it (directive, challenge, reply, request):
 
 | Tool | Does | Limits |
 |---|---|---|
-| `read_file(path, offset?, limit?)` | Text of a file under the project's root | Path resolved and kept under the root (symlinks resolved, `..` refused); 64 KiB per call; refuses what the manifest's `Read(…)` denies match (the top-level `[tool_rules]` of the manifest the launch names; the shipped list covers `.env*`, `*.pem`, `*.key`, SSH keys, …) |
+| `read_file(path, offset?, limit?)` | Text of a file under the project's root | Path resolved and kept under the root (symlinks resolved, `..` refused); 64 KiB per call; refuses what the manifest's `Read(…)` denies match (the top-level `[tool_rules]` of the manifest the launch names; the shipped list names `.env`, `.env.local`, `.env.production`, … one by one, plus `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `~/.ssh/**`, …), read with Claude Code's glob meaning (`**` any depth, `*` within one segment, `~` the home directory) and tested against those same entries, so the peer's matcher cannot quietly differ |
 | `list_dir(path)` | Names under a directory of the root | 500 entries; same root rule |
 | `grep(pattern, path?)` | Matching lines under the root | Go regexp; 200 matches, 1 MiB read per call; skips `.git`, binaries and denied files |
 | `bus_thread(id)` | A thread's entries | Read-only, 20 entries |
@@ -196,14 +199,15 @@ One check in the dispatcher's health loop, run only when a registered agent has 
   like any other.
 
 The peer checks the same thing itself before each turn: an endpoint down declares `blocked
-"llm endpoint: <reason>"`, retries every 30 s, and goes back to `idle` when it answers. busmon
+"llm endpoint: <reason>"`, retries every 30 s inside the delivery (the lease stays held), and
+goes back to `idle` when it answers. busmon
 shows that without the health check; the check adds F5's history.
 
 ## Failure modes
 
 | What | What the peer does |
 |---|---|
-| Endpoint down at start or mid-turn | `blocked` with the reason; the entry stays unacknowledged and is handled when the endpoint answers |
+| Endpoint down at start or mid-turn | Retried **inside** the delivery (every 30 s), so the lease stays held and nothing is acknowledged: `blocked` with the reason, the entry handled when the endpoint answers. `deliver` never returns an error for an endpoint fault (an error would end the delivery and close the lease, and the dispatcher would then escalate the waiting entries after 10 minutes) |
 | Model not pulled / wrong name | `blocked "model <m> not served by <url>"`; health warns |
 | Model without tool calling (the server refuses `tools`) | Retries the turn once without tools (answer from the thread alone) and says so in the reply |
 | Malformed tool call (bad JSON, unknown tool) | The error goes back to the model as the tool's result; counts towards the 8 calls |
