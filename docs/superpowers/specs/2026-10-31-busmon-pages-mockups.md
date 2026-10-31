@@ -330,6 +330,11 @@ is **reached**, with the authentication result noted apart in the detail, never 
 | failed | failed | **unknown** (offline or blocked), a **warn** once it has lasted an hour |
 | no GitHub remote | | **unknown**, not run |
 
+A probe that cannot run at all (no `ssh` or `git` on the service's `PATH`, or the exec fails) is
+neither reached nor failed: it reads **unknown** for that probe, and the row is read with the other
+probe alone (the other reached: **ok** is not claimed, the status is **unknown** with the reason;
+the other failed: **unknown**).
+
 There is **no fail** status: neither probe can prove that GitHub itself refuses this host. The
 check never opens a fail episode, so sentinel is never woken by it.
 
@@ -352,13 +357,21 @@ Three limits, each said in the check's detail:
 Reachability is still not permission: a push can hang on credentials that neither probe touches (as
 on this host today), and the detail says so.
 
-Place (section 1): **For you** when warn. Its remediation names what to do: for one transport down,
-the one that works (`push over https: git remote set-url --push origin
-https://github.com/<owner>/<repo>`); for both down an hour, `check the network, then
-githubstatus.com`.
+Place (section 1): **For you** when warn. Its remediation keeps reachability and authentication
+apart, and only proposes a push URL when the transport is known to authenticate:
+
+| Situation | Remediation |
+|---|---|
+| SSH down, HTTPS reached | `HTTPS reaches GitHub (not authenticated by this check). To push over it, check that a credential is configured (gh auth status), then git remote set-url --push origin https://github.com/<owner>/<repo>` |
+| HTTPS down, SSH reached and authenticated | `push over ssh works from the service: git remote set-url --push origin git@github.com:<owner>/<repo>.git` |
+| HTTPS down, SSH reached but not authenticated | `SSH reaches GitHub, but the service has no key GitHub accepts: add one for the service, or push from your own shell` |
+| both down an hour | `check the network, then githubstatus.com` |
+
+The HTTPS probe never authenticates (its helpers are emptied), so it never claims a push over
+HTTPS works.
 
 ```
-│  ▲ GitHub reachable   ssh times out · https ok        git remote set-url --push origin https://…  15m │
+│  ▲ GitHub reachable   ssh times out · https reaches GitHub         check credentials (gh auth status)  15m │
 │  ? GitHub reachable   offline or blocked: neither transport reaches GitHub                       2m  │
 ```
 
