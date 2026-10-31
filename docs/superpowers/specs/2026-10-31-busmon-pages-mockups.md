@@ -312,46 +312,54 @@ remote is on github.com. It answers one question: **can the project's services r
 each transport, from where they run?** It is not a push test. It stores and prints no credential;
 what each probe does with one is stated row by row below.
 
-| Probe | How | ok when |
+| Probe | How | reached when |
 |---|---|---|
-| SSH | `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com`: an **authentication** probe, with the service's own SSH identities (its keys or agent socket), as a push over SSH would; BatchMode never prompts for a passphrase | exit 1 with "successfully authenticated" |
-| HTTPS | `git -c credential.helper= ls-remote https://github.com/<owner>/<repo>` with `GIT_TERMINAL_PROMPT=0`: a **reachability** probe, no helper and no prompt, so no credential at all | exit 0 within the deadline, whatever refs come back (an empty repository lists none and is still reachable; no `--exit-code`) |
+| SSH | `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com`: an **authentication** probe, with the service's own SSH identities (its keys or agent socket), as a push over SSH would; BatchMode never prompts for a passphrase | GitHub answers: "successfully authenticated" (exit 1), or "Permission denied" (exit 255 after the server's reply), the latter noted as not authenticated |
+| HTTPS | `git -c credential.helper= ls-remote https://github.com/<owner>/<repo>` with `GIT_TERMINAL_PROMPT=0`: a **reachability** probe, no helper and no prompt, so no credential at all | GitHub answers within the deadline: exit 0 whatever refs come back (an empty repository lists none and is still reachable; no `--exit-code`), or an authentication refusal from GitHub (a private repository), noted as not authenticated |
+
+Each probe has one **network result**: **reached** (it connected and GitHub answered, whatever the
+answer) or **failed** (no DNS, no route, timeout, refused, reset). An answer that is not a success
+still means GitHub was reached: an SSH "permission denied" or an HTTPS "authentication required"
+is **reached**, with the authentication result noted apart in the detail, never in the status.
+
+| SSH | HTTPS | Status |
+|---|---|---|
+| reached | reached | **ok** |
+| reached | failed | **warn** (`https fails · ssh reaches GitHub`) |
+| failed | reached | **warn** (`ssh times out · https ok`) |
+| failed | failed | **unknown** (offline or blocked), a **warn** once it has lasted an hour |
+| no GitHub remote | | **unknown**, not run |
+
+There is **no fail** status: neither probe can prove that GitHub itself refuses this host. The
+check never opens a fail episode, so sentinel is never woken by it.
 
 Three limits, each said in the check's detail:
 
 - **Authentication and reachability are apart.** HTTPS judges reachability only:
   `-c credential.helper=` empties the helpers (store, gh, libsecret), so it never asks for a stored
-  token; `GIT_TERMINAL_PROMPT=0` alone would only stop the terminal prompt. SSH judges
-  authentication with whatever identity the service already has, and nothing else. A private repository therefore answers "authentication required": that reads
-  **https unknown (private repository)**, never a fail.
-- **The service's context, not the person's shell; authentication is never reachability.**
-  Under `systemd --user` or launchd there is usually no `SSH_AUTH_SOCK`, and the service's keys
-  may not be the person's. So an SSH **authentication** answer that is not a success ("permission
-  denied", no usable key) reads **ssh unknown (not authenticated from the service)**, never a
-  failure: GitHub answered, which proves the network, not the key. Only network-level failures
-  (connect timeout, refused, reset) count against a transport.
-- **A network outage is not the person's problem to fix here.** When neither transport gets
-  through at the network level (no DNS, no route, timeout or refusal on both), the check reads
-  **unknown (offline or blocked)**, whatever DNS says: a resolver cache can answer for github.com on
-  an offline laptop. It becomes a **warn** only when that has lasted an hour, and it never opens a
-  fail episode, so sentinel is not woken for a laptop on a train. Neither probe can prove that
-  GitHub itself refuses this host, so the check has **no fail**.
+  token; `GIT_TERMINAL_PROMPT=0` alone would only stop the terminal prompt. A private repository
+  answers "authentication required": reached, and the detail says `https: private repository, not
+  authenticated (by design)`. SSH authenticates with whatever identity the service already has,
+  and nothing else.
+- **The service's context, not the person's shell.** Under `systemd --user` or launchd there is
+  usually no `SSH_AUTH_SOCK`, and the service's keys may not be the person's. An SSH "permission
+  denied" is reached, with `ssh: not authenticated from the service` in the detail: it proves the
+  network, not the key, and it is never a failure.
+- **A network outage is not the person's problem to fix here.** Both transports failing reads
+  unknown whatever DNS says (a resolver cache can answer for github.com on an offline laptop),
+  and a warn only after an hour.
 
-Statuses, from network-level results only (an authentication answer is "unknown" for that probe):
-**ok** when at least one probe can be judged and every judged probe got through (none judged, such
-as a private repository and no usable SSH key, is **unknown**, never ok); **warn** when one transport
-gets through and the other fails at the network level (`ssh times out · https ok`), or when both have
-failed at the network level for an hour; **unknown** when both fail at the network level for less
-than an hour (offline or blocked), when no probe could be judged, or with no GitHub remote. There is
-**no fail** status for this check. Reachability is still not permission: a push can hang on credentials that
-neither probe touches (as on this host today), and the detail says so.
+Reachability is still not permission: a push can hang on credentials that neither probe touches (as
+on this host today), and the detail says so.
 
-Place (section 1): **For you** when warn; the remediation names the transport that works
-(`push over https: git remote set-url --push origin https://github.com/<owner>/<repo>`).
+Place (section 1): **For you** when warn. Its remediation names what to do: for one transport down,
+the one that works (`push over https: git remote set-url --push origin
+https://github.com/<owner>/<repo>`); for both down an hour, `check the network, then
+githubstatus.com`.
 
 ```
 │  ▲ GitHub reachable   ssh times out · https ok        git remote set-url --push origin https://…  15m │
-│  ? GitHub reachable   offline or blocked: neither transport gets through                         2m  │
+│  ? GitHub reachable   offline or blocked: neither transport reaches GitHub                       2m  │
 ```
 
 ---
@@ -373,6 +381,5 @@ only be walked line by line. No other key changes.
 3. U page: which of `s` sort, `f` provider, `d` period are wanted?
 4. Requests: fold done threads after 7 days (proposed) or keep today's 24 h?
 5. Activity's pinned For you section: always, or only when the For you panel is not on screen?
-6. GitHub check: warn when only one transport works, and when both have been unreachable for an
-   hour (proposed), with no fail status at all? Is an hour right? And should a private repository's
-   HTTPS probe be skipped rather than read as unknown?
+6. GitHub check: warn when only one transport reaches GitHub, and when both have failed for an
+   hour (proposed), with no fail status at all? Is an hour right?
