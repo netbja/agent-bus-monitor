@@ -439,7 +439,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `(cursor..last-generated-id`, paged 50; `swapCursor`: first read = baseline, entries-added grown by
   more than the events read = one attention line, a count gone down = a new baseline). Only an
   automatic author (`dispatch` or a registered agent, never the person). A queue of 5 plus a collapsed
-  rest, 4 s alone and 2 s while others wait, held by a flash or a dialog (`noticeHeld`), blended out
+  rest, 4 s alone and 2 s while others wait, held by a flash or a dialog (`noticeHeld`; one on screen stops
+  ageing until it is released), a health recovery only `ok again` (no record names a restarted service), blended out
   over the last second in true colour on the fade schedule; no bell, no mark, no count.
 
 ### How the bus is actually consumed (lives outside this repo)

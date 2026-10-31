@@ -101,7 +101,7 @@ func TestNoticeTail(t *testing.T) {
 
 // Health: a check worsening or recovering between two polls; a check new
 // since the last read, or the first read, shows nothing. A fail mended with
-// a sentinel note written since the fail began shows the note.
+// no note is taken as proof of a restart (the record names no service).
 func TestNoticeHealth(t *testing.T) {
 	rec := func(st guardian.Status, detail string, since int64) guardian.Record {
 		return guardian.Record{ID: "services", Status: st, Detail: detail, Since: since}
@@ -118,7 +118,7 @@ func TestNoticeHealth(t *testing.T) {
 		{"unknown to fail", rec(guardian.Unknown, "", 1), rec(guardian.Fail, "", 2), nil, GlyphBlocked + " health: services fails"},
 		{"warn to ok", rec(guardian.Warn, "", 1), rec(guardian.OK, "fine", 2), nil, GlyphDone + " health: services ok again"},
 		{"fail to ok, sentinel's note", rec(guardian.Fail, "", failSince), rec(guardian.OK, "", 2),
-			&guardian.Note{ID: "services", Author: "sentinel", At: failSince + 1000, Text: "restarted missions"}, GlyphDone + " sentinel: restarted missions"},
+			&guardian.Note{ID: "services", Author: "sentinel", At: failSince + 1000, Text: "restarted missions"}, GlyphDone + " health: services ok again"},
 		{"fail to ok, an old note", rec(guardian.Fail, "", failSince), rec(guardian.OK, "", 2),
 			&guardian.Note{ID: "services", Author: "sentinel", At: failSince - 1000, Text: "restarted missions"}, GlyphDone + " health: services ok again"},
 		{"fail to ok, the person's note", rec(guardian.Fail, "", failSince), rec(guardian.OK, "", 2),
@@ -297,6 +297,25 @@ func TestNoticeQueue(t *testing.T) {
 	m.ui.flash = ""
 	if m = step(t, m, fadeMsg(t0.Add(3*time.Second))); noticeText(m) == "" || !m.notice.start.Equal(t0.Add(3*time.Second)) {
 		t.Fatalf("not started after the flash: %q at %v", noticeText(m), m.notice.start)
+	}
+
+	// One on screen when a flash comes keeps the time it had left: it does
+	// not age under the flash (reviewer-codex).
+	m = quiet(t, false)
+	m = step(t, m, pollMsg{snap: shellFixture(shellNow), at: t0, swaps: evs[:1]})
+	m = step(t, m, fadeMsg(t0.Add(time.Second)))
+	m.ui.flash = "auto-scroll on" // set by a key: the same update sees it
+	m = step(t, m, fadeMsg(t0.Add(time.Second)))
+	if m = step(t, m, fadeMsg(t0.Add(30*time.Second))); noticeText(m) == "" {
+		t.Fatal("aged out under the flash")
+	}
+	m.ui.flash = ""
+	m = step(t, m, fadeMsg(t0.Add(30*time.Second)))
+	if m = step(t, m, fadeMsg(t0.Add(32900*time.Millisecond))); noticeText(m) == "" {
+		t.Fatal("lost the time it had left")
+	}
+	if m = step(t, m, fadeMsg(t0.Add(33*time.Second))); noticeText(m) != "" {
+		t.Fatalf("outlived its 4 s: %q", noticeText(m))
 	}
 }
 

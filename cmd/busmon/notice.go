@@ -63,12 +63,12 @@ type noticeState struct {
 	queue []notice
 	more  int       // collapsed past noticeQueueMax
 	cur   *notice   // on screen
-	start time.Time // when cur was put on screen
+	start time.Time // when cur was put on screen, moved on by the time it was held
+	held  time.Time // since when cur is held under a flash or a dialog; zero = not held
 
 	pauseKnown bool // a pause read succeeded: the next one can be a transition
 	pause      *bus.PauseRecord
 	health     map[string]guardian.Record
-	notes      map[string]guardian.Note
 }
 
 func (n *noticeState) push(x notice) {
@@ -88,8 +88,21 @@ func (n *noticeState) duration() time.Duration {
 }
 
 // advance drops the notice whose time is up and, unless held, puts the next
-// on screen at now; it reports whether one went on screen.
+// on screen at now; it reports whether one went on screen. The one on screen
+// does not age while held: it keeps the time it had left.
 func (n *noticeState) advance(now time.Time, held bool) bool {
+	if n.cur != nil {
+		switch {
+		case held && n.held.IsZero():
+			n.held = now
+		case !held && !n.held.IsZero():
+			n.start = n.start.Add(now.Sub(n.held))
+			n.held = time.Time{}
+		}
+		if held {
+			return false
+		}
+	}
 	if n.cur != nil && now.Sub(n.start) >= n.duration() {
 		n.cur = nil
 	}
@@ -139,11 +152,11 @@ func (n *noticeState) fromPoll(s snapshot, self string, swaps []bus.SwapEvent, l
 	}
 	if s.guardianHealth != nil {
 		if n.health != nil {
-			for _, x := range healthNotices(n.health, s.guardianHealth, s.guardianNotes, func(by string) bool { return automatic(s, self, by) }) {
+			for _, x := range healthNotices(n.health, s.guardianHealth) {
 				n.push(x)
 			}
 		}
-		n.health, n.notes = s.guardianHealth, s.guardianNotes
+		n.health = s.guardianHealth
 	}
 	for _, e := range swaps {
 		if automatic(s, self, e.By) {
@@ -170,9 +183,10 @@ func pauseNotice(p bus.PauseRecord) notice {
 }
 
 // healthNotices are the checks that worsened or recovered between two reads;
-// a check absent from the last read is a baseline. A fail mended with a note
-// by an automatic author written since the fail began shows that note.
-func healthNotices(prev, cur map[string]guardian.Record, notes map[string]guardian.Note, auto func(string) bool) []notice {
+// a check absent from the last read is a baseline. A recovery says only that
+// the check is ok again: no record names a restarted service, and a note is
+// context, not proof of one (reviewer-codex).
+func healthNotices(prev, cur map[string]guardian.Record) []notice {
 	ids := make([]string, 0, len(cur))
 	for id := range cur {
 		ids = append(ids, id)
@@ -195,10 +209,6 @@ func healthNotices(prev, cur map[string]guardian.Record, notes map[string]guardi
 		case old.Status == guardian.OK && r.Status == guardian.Warn:
 			out = append(out, notice{text: "health: " + id + " warns" + detail, level: noticeAttention})
 		case r.Status == guardian.OK && (old.Status == guardian.Warn || old.Status == guardian.Fail):
-			if note, ok := notes[id]; ok && old.Status == guardian.Fail && note.At > old.Since && auto(note.Author) && note.Text != "" {
-				out = append(out, notice{text: Preview(note.Author) + ": " + Preview(note.Text), level: noticeDone})
-				continue
-			}
 			out = append(out, notice{text: "health: " + id + " ok again", level: noticeDone})
 		}
 	}
