@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙ 4  ● 2         
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ 1 For you  2 Agents  3 Act  4 Board  5 Requests  6 Plan    
+╭─ For you ───────────────────────── 4 for you · 2 unread ─╮
+│  ● ask    master    review lot 1? (2 questions)        4m│
+│  ♙ wait   foureyes  need a decision on the width rule  6m│
+│  ♙ wait   sentinel  pane prompt                        1m│
+│  ◆ gate   coder     by charlie  look at b1               │
+│  ● unread dispatch  project paused until 16:56         8m│
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰──────────────────────────────────────────────────────────╯
+ tab focus   F1 help   F5 health           ✓ coder reloaded 

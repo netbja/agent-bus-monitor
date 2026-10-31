@@ -56,6 +56,8 @@ func (m Model) grid() *grid {
 			role = RoleError
 		}
 		footer = FitLine(Line{{Text: " " + m.ui.flash, Role: role}}, m.width)
+	} else if n := m.noticeLine(m.width); n != nil {
+		footer = m.footerWithNotice(n)
 	}
 	drawLine(g, 0, l.Footer.Y, m.width, footer, false)
 	// The window and the dialogs over everything, footer included; the

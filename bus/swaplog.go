@@ -294,3 +294,41 @@ func (b *Bus) RetireSwap(ctx context.Context, e SwapEvent) error {
 	args := append([]interface{}{e.Role, "", streamMaxLen}, e.fields()...)
 	return swapDone.Run(ctx, b.r, []string{SwapsKey(b.project), FallbackKey(b.project)}, args...).Err()
 }
+
+// SwapEventsAfter reads the ledger forward from the cursor after (exclusive,
+// "0-0" from the start), oldest first, page entries at a time (busmon-notice).
+// It ends at the last-generated-id read together with entries-added, so an
+// entry appended in between is read next time and never counted as lost:
+// entries were trimmed unread when added grew by more than the events read.
+// An absent ledger reads as no events, added 0, last "0-0". An empty after is
+// the baseline read: the count and the last id only, no events.
+func (b *Bus) SwapEventsAfter(ctx context.Context, after string, page int) (events []SwapEvent, added int64, last string, err error) {
+	info, err := b.r.XInfoStream(ctx, SwapsKey(b.project)).Result()
+	if err != nil {
+		if strings.Contains(err.Error(), "no such key") {
+			return nil, 0, "0-0", nil
+		}
+		return nil, 0, "", err
+	}
+	last = info.LastGeneratedID
+	if after == "" {
+		return nil, info.EntriesAdded, last, nil
+	}
+	if page <= 0 {
+		page = 50
+	}
+	for from := after; from != last; {
+		msgs, err := b.r.XRangeN(ctx, SwapsKey(b.project), "("+from, last, int64(page)).Result()
+		if err != nil {
+			return nil, 0, "", err
+		}
+		for _, m := range msgs {
+			events = append(events, swapEventFrom(m))
+		}
+		if len(msgs) < page {
+			break
+		}
+		from = msgs[len(msgs)-1].ID
+	}
+	return events, info.EntriesAdded, last, nil
+}
