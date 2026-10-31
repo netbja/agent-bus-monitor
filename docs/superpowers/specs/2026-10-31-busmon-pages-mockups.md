@@ -330,26 +330,28 @@ Three limits, each said in the check's detail:
   denied", no usable key) reads **ssh unknown (not authenticated from the service)**, never a
   failure: GitHub answered, which proves the network, not the key. Only network-level failures
   (connect timeout, refused, reset) count against a transport.
-- **A network outage is not the person's problem to fix here.** When neither github.com resolves
-  nor any probe connects (DNS failure, no route, connection refused on both), the check reads
-  **unknown (offline)**: it never opens a fail episode, so sentinel is not woken for a laptop on a
-  train.
+- **A network outage is not the person's problem to fix here.** When neither transport gets
+  through at the network level (no DNS, no route, timeout or refusal on both), the check reads
+  **unknown (offline or blocked)**, whatever DNS says: a resolver cache can answer for github.com on
+  an offline laptop. It becomes a **warn** only when that has lasted an hour, and it never opens a
+  fail episode, so sentinel is not woken for a laptop on a train. Neither probe can prove that
+  GitHub itself refuses this host, so the check has **no fail**.
 
 Statuses, from network-level results only (an authentication answer is "unknown" for that probe):
 **ok** when at least one probe can be judged and every judged probe got through (none judged, such
 as a private repository and no usable SSH key, is **unknown**, never ok); **warn** when one transport
-gets through and the other fails at the network level (`ssh times out · https ok`); **fail** when
-github.com resolves and both transports fail at the network level (GitHub blocked or down from here,
-while DNS works); **unknown** when github.com does not resolve (offline), when no probe could be
-judged, or with no GitHub remote. Reachability is still not permission: a push can hang on credentials that
+gets through and the other fails at the network level (`ssh times out · https ok`), or when both have
+failed at the network level for an hour; **unknown** when both fail at the network level for less
+than an hour (offline or blocked), when no probe could be judged, or with no GitHub remote. There is
+**no fail** status for this check. Reachability is still not permission: a push can hang on credentials that
 neither probe touches (as on this host today), and the detail says so.
 
-Place (section 1): **For you** when warn or fail; the remediation names the transport that works
+Place (section 1): **For you** when warn; the remediation names the transport that works
 (`push over https: git remote set-url --push origin https://github.com/<owner>/<repo>`).
 
 ```
 │  ▲ GitHub reachable   ssh times out · https ok        git remote set-url --push origin https://…  15m │
-│  ? GitHub reachable   offline: github.com does not resolve                                       2m  │
+│  ? GitHub reachable   offline or blocked: neither transport gets through                         2m  │
 ```
 
 ---
@@ -371,5 +373,6 @@ only be walked line by line. No other key changes.
 3. U page: which of `s` sort, `f` provider, `d` period are wanted?
 4. Requests: fold done threads after 7 days (proposed) or keep today's 24 h?
 5. Activity's pinned For you section: always, or only when the For you panel is not on screen?
-6. GitHub check: warn when only one transport works (proposed), or only fail when both do? And
-   should a private repository's HTTPS probe be skipped rather than read as unknown?
+6. GitHub check: warn when only one transport works, and when both have been unreachable for an
+   hour (proposed), with no fail status at all? Is an hour right? And should a private repository's
+   HTTPS probe be skipped rather than read as unknown?
