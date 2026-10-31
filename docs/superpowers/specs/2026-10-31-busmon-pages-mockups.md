@@ -331,7 +331,7 @@ Three limits, each said in the check's detail:
   **unknown (offline)**: it never opens a fail episode, so sentinel is not woken for a laptop on a
   train.
 
-Statuses: **ok** when every probe that can be judged answers; **warn** when one transport answers
+Statuses: **ok** when at least one probe can be judged and every probe that can be judged answers (none judged, such as a private repository and no SSH agent, is **unknown**, never ok); **warn** when one transport answers
 and the other connects but is refused or times out (`ssh times out · https ok`); **fail** only when
 GitHub answers the network but refuses both judged probes; **unknown** in the three cases above, or
 with no GitHub remote. Reachability is still not permission: a push can hang on credentials that
