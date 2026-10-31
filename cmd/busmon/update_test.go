@@ -55,16 +55,17 @@ func TestLatestReleaseFailsSilentlyAndWaits(t *testing.T) {
 }
 
 func TestUpdateNoticeGate(t *testing.T) {
+	// The opt-out (updates.check, AGENT_BUS_NO_UPDATE_CHECK=1) is a setting now:
+	// TestUpdateCheckOptOut.
 	for _, c := range []struct {
-		version, latest, optOut, want string
+		version, latest, want string
 	}{
-		{"v0.11.0", "v0.11.1", "", "v0.11.1"},
-		{"v0.11.1", "v0.11.1", "", ""},
-		{"v0.11.0", "v0.11.1", "1", ""},
-		{"dev", "v9.0.0", "", ""},
+		{"v0.11.0", "v0.11.1", "v0.11.1"},
+		{"v0.11.1", "v0.11.1", ""},
+		{"dev", "v9.0.0", ""},
 	} {
-		if got := updateNotice(c.version, c.latest, c.optOut); got != c.want {
-			t.Errorf("updateNotice(%q, %q, opt-out %q) = %q, want %q", c.version, c.latest, c.optOut, got, c.want)
+		if got := updateNotice(c.version, c.latest); got != c.want {
+			t.Errorf("updateNotice(%q, %q) = %q, want %q", c.version, c.latest, got, c.want)
 		}
 	}
 }

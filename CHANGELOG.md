@@ -6,6 +6,12 @@ release exists.
 
 ## Unreleased
 
+- busmon reads its settings from `~/.config/agentbus/config.toml` (or `$XDG_CONFIG_HOME/agentbus/`),
+  key by key above `busmon.toml`, which is still read: flag, then environment, then `config.toml`, then
+  `busmon.toml`, then the default. New key `[updates] check = false` turns the update check off, like
+  `AGENT_BUS_NO_UPDATE_CHECK=1`. A file problem is still a note, now naming the file, line and key and
+  never the value. One change: a negative `display.limit` in a file now replays all history, as the
+  flag and the environment always did, instead of falling back to 25. Nothing changes without a file.
 - Docs for the public release: a French README (`README.fr.md`), a "First run" section (name rule,
   the client's trust dialog, busmon without a project, an empty team, the `anonymous` default sender),
   the busmon notice line, and where pull requests go (GitHub today; GitLab, Bitbucket and a local mode
