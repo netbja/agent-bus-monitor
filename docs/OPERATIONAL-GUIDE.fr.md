@@ -1,6 +1,6 @@
 # Guide Opérationnel : Agent Bus Monitor (`agent-bus`)
 
-Ce guide pratique est conçu en complément du `README.md`. Il fournit une marche à suivre pas à pas pour installer, configurer et utiliser `agent-bus-monitor`, le gestionnaire d'espaces de travail `herdr`, son plugin `netbja.agentbus`, ainsi que le pilotage quotidien d'équipes d'agents IA sur un projet neuf ou existant.
+Ce guide pratique est conçu en complément du [README](../README.fr.md) (la référence complète est dans le [README anglais](../README.md)). Il fournit une marche à suivre pas à pas pour installer, configurer et utiliser `agent-bus-monitor`, le gestionnaire d'espaces de travail `herdr`, son plugin `netbja.agentbus`, ainsi que le pilotage quotidien d'équipes d'agents IA sur un projet neuf ou existant.
 
 ---
 
@@ -114,6 +114,11 @@ cd ~/agent-bus-monitor
   `~/.local/share/agentbus/skills/mattpocock` et lie les skills des rôles. S'il en manque un,
   l'agent démarre sans lui, avec un avertissement ;
 - démarre le broker Redis sur `127.0.0.1:6380`.
+
+**Vu dans la liste des plugins de herdr ?** Installez-le comme ci-dessus, pas avec
+`herdr plugin install` : le plugin a besoin du broker, des binaires et des skills que `./setup.sh`
+met en place, et setup le relie à herdr pour vous. `herdr plugin install netbja/agent-bus-monitor`
+s'arrête sur le même conseil et n'installe rien.
 
 Vérifiez que `~/.local/bin` est dans votre `PATH` : `install` prévient s'il n'y est pas, ou si une
 autre copie passe devant.
@@ -258,6 +263,21 @@ Votre projet est dans `~/code/myapp`.
    `@agent` réveille cet agent, `@all` les réveille tous. Un texte sans `@` est une diffusion
    que personne ne lit : busmon demande une seconde Entrée avant de l'envoyer.
 
+**Ce qu'un premier lancement peut vous dire :**
+- `agentbus up MyApp …` est refusé : un nom de projet est en minuscules (une lettre, puis des
+  lettres, chiffres, `-` ou `_`, 32 au plus), et le message donne la commande en minuscules à lancer.
+- Le dialogue de confiance du client : quand Claude Code ou Codex n'a jamais ouvert le dossier,
+  `up` démarre seul le premier agent de ce client et nomme le volet où le dialogue attend ;
+  répondez-y, et les autres agents de ce client démarrent.
+- `busmon` lancé sans projet dit de passer `--project <p>` et renvoie vers `busmon --list` et
+  `busmon --pick`.
+- `agentbus --project myapp agents` avant qu'un agent ait rejoint le projet le dit, au lieu de ne
+  rien afficher.
+- Depuis un shell, `agentbus` écrit au nom de `AGENT_BUS_AGENT`, et de `anonymous` quand elle n'est
+  pas définie. Dans un volet herdr où elle ne l'est pas, une commande qui écrit est refusée avec le
+  correctif, pour qu'un agent ne publie jamais sous un mauvais nom. Dans busmon, vous écrivez en
+  tant que personne (`--as`).
+
 ---
 
 ### Cas B : Reprendre un Projet EXISTANT
@@ -320,6 +340,16 @@ noms d'onglets et d'agents, sans modèle de projet) :
   et dernières lignes du journal du conteneur. F5 montre la santé du projet, `R` un récapitulatif de ce qui
   s'est passé en votre absence (non lus d'abord), `P` le plan du lot, `U` les tokens. F1 liste
   toutes les touches ; `t` y rejoue la visite de premier lancement.
+- **La ligne d'information.** À l'extrémité droite du pied de page, quelques secondes, busmon dit
+  ce qui s'est passé tout seul pendant que vous regardiez : une pause posée par le dispatcher ou un
+  agent (une pause de quota avec `▲`), la reprise du projet, le contexte d'un agent vidé après sa
+  passation, un rechargement commencé, réussi ou échoué, un rôle passé sur un profil de repli ou
+  revenu, une vérification de santé qui se dégrade ou se rétablit (après un échec, la note de
+  sentinel dessus quand il en a écrit une). Une à la fois, 4 s chacune, 2 s quand d'autres
+  attendent ; au-delà de cinq, le reste en une ligne `N more automatic actions (R: recap)`. Elle ne
+  sonne ni ne compte jamais, ne montre jamais votre propre action, une question ou un message pour
+  vous (ceux-là sont dans For you), et un message éphémère ou un dialogue la retient. Ce qui s'est
+  passé pendant que busmon était fermé est dans `R`.
 - **For you.** Le panneau For you, à côté d'Agents, regroupe ce que vous seul pouvez régler : les
   questions ouvertes d'un agent (`ask`), un agent qui attend votre décision (`wait`), un verrou
   4-yeux que vous avez ouvert ou qui vous bloque (`gate`), et les messages qui vous sont adressés
@@ -625,6 +655,11 @@ l'exécute étape par étape.
    d'environnement du projet, et les services en gardent une après que vous l'avez retirée de votre
    shell, jusqu'au prochain `up` sans elle. La cible d'escalade et le réglage de rechargement
    restent même alors, jusqu'à ce que `--escalate-to` ou `--reload` les change.
+6. **Les pull requests vont aujourd'hui sur GitHub** : le bus et le conducteur des missions n'ont
+   besoin que de Git (le conducteur fusionne et teste sur des branches locales et ne pousse jamais),
+   mais la livraison vers une forge passe par GitHub : l'agent docs ouvre sa pull request avec la
+   CLI `gh`. GitLab, Bitbucket et un mode local sans forge
+   sont prévus pour la v0.26.
 
 ---
 

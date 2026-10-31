@@ -6,6 +6,10 @@ release exists.
 
 ## Unreleased
 
+- Docs for the public release: a French README (`README.fr.md`), a "First run" section (name rule,
+  the client's trust dialog, busmon without a project, an empty team, the `anonymous` default sender),
+  the busmon notice line, and where pull requests go (GitHub today; GitLab, Bitbucket and a local mode
+  planned for v0.26), in the README and both operational guides.
 - busmon: a quiet line at the right end of the footer for what happened by itself while it runs: a
   pause the dispatcher or an agent set (a quota pause in orange), the project resumed, an automatic
   `/clear`, a reload begun, done or failed, a swap to a fallback or back, a health check worsening or
