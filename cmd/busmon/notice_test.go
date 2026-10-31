@@ -374,6 +374,21 @@ func TestNoticeFade(t *testing.T) {
 	if f := held.noticeLine(30)[0].Fade; noticeText(held) == "" || f < 40 || f > 60 {
 		t.Fatalf("held: %q, fade %d (want the blend where it was held)", noticeText(held), f)
 	}
+	// A notice queued during the hold does not shorten the held one: it keeps
+	// the 4 s it had when held, its look and its time left (reviewer-codex).
+	held.notice.push(notice{text: "next", level: noticeInfo})
+	held = step(t, held, fadeMsg(t0.Add(10*time.Second)))
+	if f := held.noticeLine(30)[0].Fade; f < 40 || f > 60 {
+		t.Fatalf("a queued notice changed the held one's blend: %d", f)
+	}
+	held.ui.reminder = nil
+	held = step(t, held, fadeMsg(t0.Add(10*time.Second))) // released: 0.5 s left
+	if held = step(t, held, fadeMsg(t0.Add(10400*time.Millisecond))); noticeText(held) != GlyphDone+" coder reloaded" {
+		t.Fatalf("released, lost its time left: %q", noticeText(held))
+	}
+	if held = step(t, held, fadeMsg(t0.Add(10500*time.Millisecond))); noticeText(held) != GlyphNone+" next" {
+		t.Fatalf("after its time left: %q", noticeText(held))
+	}
 	m = step(t, m, fadeMsg(t0.Add(4*time.Second)))
 	if noticeText(m) != "" {
 		t.Fatal("still there after 4 s")

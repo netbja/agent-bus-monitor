@@ -61,10 +61,11 @@ func (n notice) role() Role {
 // the next poll is compared with, behind a pointer like the lists.
 type noticeState struct {
 	queue []notice
-	more  int       // collapsed past noticeQueueMax
-	cur   *notice   // on screen
-	start time.Time // when cur was put on screen, moved on by the time it was held
-	held  time.Time // since when cur is held under a flash or a dialog; zero = not held
+	more  int           // collapsed past noticeQueueMax
+	cur   *notice       // on screen
+	start time.Time     // when cur was put on screen, moved on by the time it was held
+	held  time.Time     // since when cur is held under a flash or a dialog; zero = not held
+	fixed time.Duration // cur's duration once it has been held (a later arrival never shortens it); 0 = not fixed
 
 	pauseKnown bool // a pause read succeeded: the next one can be a transition
 	pause      *bus.PauseRecord
@@ -79,8 +80,12 @@ func (n *noticeState) push(x notice) {
 	n.more++
 }
 
-// duration is how long the notice on screen stays: shorter while others wait.
+// duration is how long the notice on screen stays: shorter while others wait,
+// unless it was held, which fixes what it had then.
 func (n *noticeState) duration() time.Duration {
+	if n.fixed > 0 {
+		return n.fixed
+	}
 	if len(n.queue) > 0 || n.more > 0 {
 		return noticeShort
 	}
@@ -94,7 +99,7 @@ func (n *noticeState) advance(now time.Time, held bool) bool {
 	if n.cur != nil {
 		switch {
 		case held && n.held.IsZero():
-			n.held = now
+			n.held, n.fixed = now, n.duration()
 		case !held && !n.held.IsZero():
 			n.start = n.start.Add(now.Sub(n.held))
 			n.held = time.Time{}
@@ -113,14 +118,14 @@ func (n *noticeState) advance(now time.Time, held bool) bool {
 	case len(n.queue) > 0:
 		x := n.queue[0]
 		n.queue = n.queue[1:]
-		n.cur = &x
+		n.cur, n.fixed = &x, 0
 	case n.more > 0:
 		what := "actions"
 		if n.more == 1 {
 			what = "action"
 		}
 		n.cur = &notice{text: fmt.Sprintf("%d more automatic %s (R: recap)", n.more, what), level: noticeInfo}
-		n.more = 0
+		n.more, n.fixed = 0, 0
 	default:
 		return false
 	}
