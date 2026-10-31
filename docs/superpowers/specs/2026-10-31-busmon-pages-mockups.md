@@ -358,12 +358,13 @@ Reachability is still not permission: a push can hang on credentials that neithe
 on this host today), and the detail says so.
 
 Place (section 1): **For you** when warn. Its remediation keeps reachability and authentication
-apart, and only proposes a push URL when the transport is known to authenticate:
+apart, and never claims a push will work: neither probe checks access to the repository nor write
+permission, so every push URL comes after a check the person runs:
 
 | Situation | Remediation |
 |---|---|
 | SSH down, HTTPS reached | `HTTPS reaches GitHub (not authenticated by this check). To push over it, check that a credential is configured (gh auth status), then git remote set-url --push origin https://github.com/<owner>/<repo>` |
-| HTTPS down, SSH reached and authenticated | `push over ssh works from the service: git remote set-url --push origin git@github.com:<owner>/<repo>.git` |
+| HTTPS down, SSH reached and authenticated | `SSH authenticates from the service (identity accepted; access to this repository and write permission not checked). To push over it, check write access (git push --dry-run from the checkout), then git remote set-url --push origin git@github.com:<owner>/<repo>.git` |
 | HTTPS down, SSH reached but not authenticated | `SSH reaches GitHub, but the service has no key GitHub accepts: add one for the service, or push from your own shell` |
 | both down an hour | `check the network, then githubstatus.com` |
 
