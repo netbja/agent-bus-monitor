@@ -133,7 +133,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 		if r.Source == legacy.Label {
 			legacyUsed++
 		}
-		if services != nil {
+		if services != nil && servedByServices(k) {
 			s := services.Get(k.Name)
 			svc := &configSvc{Value: config.Format(s.Value), Source: s.Source}
 			if strings.HasPrefix(s.Source, "env ") {
@@ -141,6 +141,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 			}
 			if s.Invalid {
 				svc.Value = "invalid"
+				doc.Warnings = append(doc.Warnings, fmt.Sprintf("project %s env file %s: invalid; %s", project, k.Env, k.Invalid))
 			}
 			svc.Differs = svc.Value != row.Value
 			row.Services = svc
@@ -163,6 +164,11 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 	doc.Warnings = append(fileWarnings, doc.Warnings...)
 	doc.Connection = connectionFacts(getenv)
 	return doc, nil
+}
+
+// servedByServices: a key the project's services read (busmon's are not).
+func servedByServices(k *config.Key) bool {
+	return strings.Contains(k.ReadBy, "dispatch") || strings.Contains(k.ReadBy, "writer")
 }
 
 func fileState(f *config.File) string {
@@ -275,6 +281,10 @@ func printConfigDoc(out io.Writer, doc configDoc) {
 				mark = " *"
 			}
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s%s\t%s\n", r.Key, r.Value, r.Source, r.Services.Value, r.Services.Source, mark, r.ReadBy)
+			continue
+		}
+		if doc.Project != nil {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t-\t\t%s\n", r.Key, r.Value, r.Source, r.ReadBy)
 			continue
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Key, r.Value, r.Source, r.ReadBy)

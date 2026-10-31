@@ -209,3 +209,31 @@ func TestConfigUsage(t *testing.T) {
 		t.Errorf("exit %d %q", code, errw)
 	}
 }
+
+// An invalid value in the env file warns with its consequence, never its
+// value; busmon-only keys get no services column.
+func TestConfigProjectInvalidAndBusmonOnly(t *testing.T) {
+	f := newConfigFixture(t)
+	f.write(t, "services/demo.env", "AGENT_BUS_BUSMON_THEME=\"bogus-VALUE\"\nAGENT_BUS_CONTEXT_ALERT=\"60\"\n")
+	for _, args := range [][]string{nil, {"--json"}} {
+		out, _, code := f.run(t, "demo", args...)
+		if code != 0 || strings.Contains(out, "bogus-VALUE") {
+			t.Fatalf("exit %d or the value echoed:\n%s", code, out)
+		}
+		if args == nil {
+			if row := strings.Join(rowOf(t, out, "display.theme"), " "); row != "display.theme auto default - busmon" {
+				t.Errorf("busmon-only row = %q", row)
+			}
+			if strings.Contains(out, "env file AGENT_BUS_BUSMON_THEME") {
+				t.Errorf("a busmon-only key was judged for the services:\n%s", out)
+			}
+		}
+	}
+	// A key the services read keeps its column.
+	f.write(t, "services/demo.env", "AGENT_BUS_CONTEXT_ALERT=\"60\"\n")
+	f.write(t, "config.toml", "")
+	out, _, _ := f.run(t, "demo")
+	if row := strings.Join(rowOf(t, out, "dispatch.context_alert"), " "); !strings.Contains(row, "80 default 60 env file (frozen at up) *") {
+		t.Errorf("service row = %q", row)
+	}
+}
