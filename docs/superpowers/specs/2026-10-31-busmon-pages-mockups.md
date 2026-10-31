@@ -316,7 +316,7 @@ stated row by row below.
 | Probe | How | reached when |
 |---|---|---|
 | SSH | `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com`: it connects with the service's own SSH identities (its keys or agent socket); BatchMode never prompts for a passphrase | GitHub answers: "successfully authenticated" (exit 1), or "Permission denied" (exit 255 after the server's reply), the latter with its authentication unknown |
-| HTTPS | `git -c credential.helper= ls-remote https://github.com/<owner>/<repo>` with `GIT_TERMINAL_PROMPT=0`: a **reachability** probe, no helper and no prompt, so no credential at all | GitHub answers within the deadline: exit 0 whatever refs come back (an empty repository lists none and is still reachable; no `--exit-code`), or an authentication refusal from GitHub (a private repository), with its authentication unknown |
+| HTTPS | `git -c credential.helper= ls-remote https://github.com/<owner>/<repo>` with `GIT_TERMINAL_PROMPT=0`: a **reachability** probe, with no credential helper and no prompt (other Git settings of the service, such as `http.extraHeader`, still apply as for any git command) | GitHub answers within the deadline: exit 0 whatever refs come back (an empty repository lists none and is still reachable; no `--exit-code`), or an authentication refusal from GitHub (a private repository), with its authentication unknown |
 
 Each probe has one **network result**: **reached** (it connected and GitHub answered, whatever the
 answer) or **failed** (no DNS, no route, timeout, refused, reset). An answer that is not a success
@@ -342,8 +342,8 @@ check never opens a fail episode, so sentinel is never woken by it.
 Three limits, each said in the check's detail:
 
 - **Authentication and reachability are apart.** HTTPS judges reachability only:
-  `-c credential.helper=` empties the helpers (store, gh, libsecret), so it never asks for a stored
-  token; `GIT_TERMINAL_PROMPT=0` alone would only stop the terminal prompt. A private repository
+  `-c credential.helper=` empties the helpers (store, gh, libsecret) and `GIT_TERMINAL_PROMPT=0`
+  stops the prompt; nothing more is promised about the service's Git settings. A private repository
   answers "authentication required": reached, authentication unknown. SSH connects with whatever
   identity the service already has, and nothing else.
 - **The service's context, not the person's shell.** Under `systemd --user` or launchd there is
