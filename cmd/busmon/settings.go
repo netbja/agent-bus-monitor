@@ -2,155 +2,77 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
-type busmonFileConfig struct {
-	Waiting struct {
-		PopupAfter string `toml:"popup_after"`
-		Snooze     string `toml:"snooze"`
-		Bell       *bool  `toml:"bell"`
-		Fade       *bool  `toml:"fade"`
-	} `toml:"waiting"`
-	Recap struct {
-		AutoAfter string `toml:"auto_after"`
-	} `toml:"recap"`
-	Display struct {
-		Theme *string `toml:"theme"`
-		Limit *int    `toml:"limit"`
-	} `toml:"display"`
-	Identity struct {
-		As *string `toml:"as"`
-	} `toml:"identity"`
-}
-
 type busmonSettings struct {
-	PopupAfter time.Duration
-	Snooze     time.Duration
-	Bell       bool
-	Fade       bool
-	AutoAfter  time.Duration
-	Theme      string
-	Limit      int
-	Identity   string
-	Note       string
+	PopupAfter  time.Duration
+	Snooze      time.Duration
+	Bell        bool
+	Fade        bool
+	AutoAfter   time.Duration
+	Theme       string
+	Limit       int
+	Identity    string
+	UpdateCheck bool
+	Note        string
 }
 
-type settingsOverrides struct {
-	LimitSet  bool
-	LimitFlag int
-	LimitEnv  string
-	ThemeFlag string
-	ThemeEnv  string
-	AsFlag    string
-	AsEnv     string
+// settingsFlags are busmon's flags over the settings: they win over every
+// other source. An empty Theme or As is not given.
+type settingsFlags struct {
+	LimitSet bool
+	Limit    int
+	Theme    string
+	As       string
 }
 
-func defaultBusmonSettings() busmonSettings {
-	return busmonSettings{PopupAfter: 5 * time.Minute, Snooze: 15 * time.Minute, Bell: true, Fade: true,
-		AutoAfter: 8 * time.Hour, Theme: "auto", Limit: 25}
-}
-
-func busmonConfigPath() string {
-	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
-		return filepath.Join(d, "agentbus", "busmon.toml")
+// loadBusmonSettings resolves busmon's settings through the registry (spec
+// docs/superpowers/specs/2026-10-29-config-file-design.md): flag, env,
+// config.toml, busmon.toml (legacy), default, per key. A file problem is a
+// note, never a failure. An invalid env theme or name keeps its raw value, so
+// the validation after this stops busmon as it always has.
+func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonSettings {
+	cfg := config.Load(config.Path(getenv), "config.toml")
+	legacy := config.LoadLegacy(config.LegacyPath(getenv), "busmon.toml")
+	r := config.Resolver{Getenv: getenv, Files: []*config.File{cfg, legacy}}
+	s := busmonSettings{
+		PopupAfter: r.Duration("waiting.popup_after"), Snooze: r.Duration("waiting.snooze"),
+		Bell: r.Bool("waiting.bell"), Fade: r.Bool("waiting.fade"), AutoAfter: r.Duration("recap.auto_after"),
+		Limit: r.Int("display.limit"), UpdateCheck: r.Bool("updates.check"),
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "agentbus", "busmon.toml")
-}
-
-func resolveBusmonSettings(file busmonFileConfig, overrides settingsOverrides) busmonSettings {
-	s := defaultBusmonSettings()
+	raw := func(name string) string { k, _ := config.Lookup(name); return getenv(k.Env) }
+	if t := r.Get("display.theme"); t.Invalid {
+		s.Theme = raw("display.theme")
+	} else {
+		s.Theme = t.Value.(string)
+	}
+	if as := r.Get("identity.as"); as.Invalid {
+		s.Identity = raw("identity.as")
+	} else {
+		s.Identity = as.Value.(string)
+	}
+	if flags.LimitSet {
+		s.Limit = flags.Limit
+	}
+	if flags.Theme != "" {
+		s.Theme = flags.Theme
+	}
+	if flags.As != "" {
+		s.Identity = flags.As
+	}
 	var notes []string
-	setDuration := func(name, raw string, dst *time.Duration, zeroOK bool) {
-		if raw == "" {
-			return
-		}
-		if raw == "0" {
-			if zeroOK {
-				*dst = 0
-			} else {
-				notes = append(notes, "invalid "+name)
-			}
-			return
-		}
-		d, err := time.ParseDuration(raw)
-		if err != nil || d < 0 {
-			notes = append(notes, "invalid "+name)
-			return
-		}
-		*dst = d
-	}
-	setDuration("waiting.popup_after", file.Waiting.PopupAfter, &s.PopupAfter, true)
-	setDuration("waiting.snooze", file.Waiting.Snooze, &s.Snooze, false)
-	setDuration("recap.auto_after", file.Recap.AutoAfter, &s.AutoAfter, true)
-	if file.Waiting.Bell != nil {
-		s.Bell = *file.Waiting.Bell
-	}
-	if file.Waiting.Fade != nil {
-		s.Fade = *file.Waiting.Fade
-	}
-	if file.Display.Theme != nil {
-		if oneOf(*file.Display.Theme, "auto", "dark", "light") {
-			s.Theme = *file.Display.Theme
-		} else {
-			notes = append(notes, "invalid display.theme")
+	for _, f := range []*config.File{cfg, legacy} {
+		for _, w := range f.Warnings {
+			notes = append(notes, w.String())
 		}
 	}
-	if file.Display.Limit != nil {
-		if *file.Display.Limit >= 0 {
-			s.Limit = *file.Display.Limit
-		} else {
-			notes = append(notes, "invalid display.limit")
-		}
-	}
-	if file.Identity.As != nil {
-		if *file.Identity.As == "" || bus.ValidName(*file.Identity.As) {
-			s.Identity = *file.Identity.As
-		} else {
-			notes = append(notes, "invalid identity.as")
-		}
-	}
-	if overrides.LimitSet {
-		s.Limit = overrides.LimitFlag
-	} else if raw := strings.TrimSpace(overrides.LimitEnv); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil {
-			s.Limit = n
-		}
-	}
-	if overrides.ThemeFlag != "" {
-		s.Theme = overrides.ThemeFlag
-	} else if overrides.ThemeEnv != "" {
-		s.Theme = overrides.ThemeEnv
-	}
-	if overrides.AsFlag != "" {
-		s.Identity = overrides.AsFlag
-	} else if overrides.AsEnv != "" {
-		s.Identity = overrides.AsEnv
-	}
-	s.Note = strings.Join(notes, ", ")
+	s.Note = strings.Join(notes, "; ")
 	return s
-}
-
-func loadBusmonSettings(path string, overrides settingsOverrides) busmonSettings {
-	var file busmonFileConfig
-	if _, err := toml.DecodeFile(path, &file); err != nil && !os.IsNotExist(err) {
-		s := resolveBusmonSettings(busmonFileConfig{}, overrides)
-		if s.Note != "" {
-			s.Note = "busmon.toml ignored; " + s.Note
-		} else {
-			s.Note = "busmon.toml ignored"
-		}
-		return s
-	}
-	return resolveBusmonSettings(file, overrides)
 }
 
 func oneOf(s string, options ...string) bool {

@@ -349,10 +349,8 @@ func main() {
 		fmt.Println("busmon version " + buildinfo.Version)
 		return
 	}
-	settings := loadBusmonSettings(busmonConfigPath(), settingsOverrides{
-		LimitSet: set["limit"], LimitFlag: opts.limit, LimitEnv: os.Getenv("AGENT_BUS_BUSMON_LIMIT"),
-		ThemeFlag: ifSet(set["theme"], opts.theme), ThemeEnv: os.Getenv("AGENT_BUS_BUSMON_THEME"),
-		AsFlag: ifSet(set["as"], opts.as), AsEnv: os.Getenv("AGENT_BUS_HUMAN"),
+	settings := loadBusmonSettings(os.Getenv, settingsFlags{
+		LimitSet: set["limit"], Limit: opts.limit, Theme: ifSet(set["theme"], opts.theme), As: ifSet(set["as"], opts.as),
 	})
 	// --pick chooses the project, so like --list it must run before the
 	// project-required exit, and before --reset and --delete: a picker never
@@ -468,7 +466,9 @@ func main() {
 	if cache != nil && cache.LastVisit > 0 {
 		prior = time.UnixMilli(cache.LastVisit)
 	}
-	go checkForUpdate(ctx, st) // at most once a day; silent offline (AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
+	if settings.UpdateCheck {
+		go checkForUpdate(ctx, st) // at most once a day; silent offline (updates.check, AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
+	}
 
 	// The Elm shell (busmon Charm spec): Update drives everything, View draws
 	// the model; the poll runs in its commands, the tail is fed in below.

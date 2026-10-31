@@ -52,9 +52,9 @@ func latestRelease(ctx context.Context, url, cachePath string, now time.Time) st
 }
 
 // updateNotice is the tag to show, or "": only for a released build, when the
-// latest tag is newer, and unless AGENT_BUS_NO_UPDATE_CHECK=1.
-func updateNotice(version, latest, optOut string) string {
-	if optOut == "1" || !buildinfo.Newer(latest, version) {
+// latest tag is newer (the opt-out, updates.check, is the caller's).
+func updateNotice(version, latest string) string {
+	if !buildinfo.Newer(latest, version) {
 		return ""
 	}
 	return latest
@@ -72,14 +72,14 @@ func updateCachePath() string {
 // checkForUpdate runs once in the background at startup; it never blocks the
 // UI and changes nothing but the header's last, lowest-priority item.
 func checkForUpdate(ctx context.Context, st *shared) {
-	if buildinfo.Version == "dev" || os.Getenv("AGENT_BUS_NO_UPDATE_CHECK") == "1" {
+	if buildinfo.Version == "dev" {
 		return
 	}
 	path := updateCachePath()
 	if path == "" {
 		return
 	}
-	tag := updateNotice(buildinfo.Version, latestRelease(ctx, latestReleaseURL, path, time.Now()), os.Getenv("AGENT_BUS_NO_UPDATE_CHECK"))
+	tag := updateNotice(buildinfo.Version, latestRelease(ctx, latestReleaseURL, path, time.Now()))
 	st.mu.Lock()
 	st.update = tag
 	st.mu.Unlock()

@@ -677,6 +677,15 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   Resume Claude Code with `agent-launch <role> <project> [--profile <p>] --resume <session-id>` to
   retain role settings and identity; never use `claude --resume` by hand. Every Claude launch passes
   `--settings` (the resume hook, plus tool rules when there are any). Other clients currently refuse resume.
+- **Settings: one registry, `config/keys.go`** (config-file, spec
+  `docs/superpowers/specs/2026-10-29-config-file-design.md`): every tunable's file key, env name,
+  default, today's env rule (use, skip to the next source, or invalid) and typed file rule; per key, env
+  over `config.toml` over the legacy `busmon.toml` (busmon's keys only) over the default; warnings name
+  file, line and key and never echo a value; no secret and no connection in the file. Readers resolve
+  through `config.Resolver`; `TestNoEnvLiteralOutsideTheRegistry` fails on a registry env name written
+  as a literal elsewhere (its `notYetMigrated` list shrinks as readers move). busmon's settings are
+  migrated (`loadBusmonSettings`); `config` does not import `bus` (bus will read its caps through it),
+  so `ValidName` is repeated there, held equal by a test.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
@@ -734,7 +743,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   and snooze locally. `R` opens a recap built from current snapshots and retained events; capped
   history boundaries and failed reads are labelled instead of treated as empty. The optional
   summary directive requires an explicit `y` confirmation and uses the normal send path (`send.go`).
-  Global settings are in `~/.config/agentbus/busmon.toml` (or `$XDG_CONFIG_HOME/agentbus/`), and
+  Global settings are in `~/.config/agentbus/config.toml`, then the legacy `busmon.toml` (or
+  `$XDG_CONFIG_HOME/agentbus/`), and
   local last-visit/snooze data is atomically cached under `~/.cache/agentbus/` with mode `0600`.
 - **Project health (v0.19)** — the dispatcher's separate bounded health loop writes
   `{p}:health`, transition-only `{p}:health:log`, and `{p}:health:notes` through fenced scripts;
