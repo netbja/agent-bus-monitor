@@ -63,7 +63,9 @@ type Key struct {
 	Kind    Kind
 	Default any // of Kind
 	ReadBy  string
-	Legacy  bool // also read from busmon.toml
+	Legacy  bool   // also read from busmon.toml
+	Flag    string // the flag above the env, for the command that has it
+	Invalid string // what an invalid env value does (only for rules that refuse one)
 
 	env  func(raw string) (any, envResult) // today's env rule, for a non-empty value
 	file func(v any) (any, string)         // a decoded file value: the setting, or why not
@@ -76,6 +78,7 @@ var Keys = []*Key{
 	{Name: "waiting.fade", Kind: Bool, Default: true, ReadBy: "busmon", Legacy: true, file: fileBool},
 	{Name: "recap.auto_after", Kind: Duration, Default: 8 * time.Hour, ReadBy: "busmon", Legacy: true, file: fileDuration(true)},
 	{Name: "display.theme", Env: "AGENT_BUS_BUSMON_THEME", Kind: String, Default: "auto", ReadBy: "busmon", Legacy: true,
+		Flag: "busmon --theme", Invalid: "busmon refuses to start",
 		env: func(raw string) (any, envResult) {
 			if isTheme(raw) {
 				return raw, envUse
@@ -88,7 +91,7 @@ var Keys = []*Key{
 			}
 			return nil, "want auto, dark or light"
 		}},
-	{Name: "display.limit", Env: "AGENT_BUS_BUSMON_LIMIT", Kind: Int, Default: 25, ReadBy: "busmon", Legacy: true,
+	{Name: "display.limit", Env: "AGENT_BUS_BUSMON_LIMIT", Kind: Int, Default: 25, ReadBy: "busmon", Legacy: true, Flag: "busmon --limit",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
 				return n, envUse
@@ -97,6 +100,7 @@ var Keys = []*Key{
 		},
 		file: fileInt(func(int) bool { return true }, "")},
 	{Name: "identity.as", Env: "AGENT_BUS_HUMAN", Kind: String, Default: "", ReadBy: "busmon, agentbus identity, ask, plugin", Legacy: true,
+		Flag: "busmon --as", Invalid: "busmon refuses to start",
 		env: func(raw string) (any, envResult) {
 			if validName(raw) {
 				return raw, envUse
@@ -166,10 +170,10 @@ var Keys = []*Key{
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
-	{Name: "health.runaway.silent_after", Env: "AGENTBUS_HEALTH_RUNAWAY_SILENT_AFTER", Kind: Duration, Default: 30 * time.Minute, ReadBy: "dispatch (health)", env: envRunawayDuration, file: filePositiveDuration},
-	{Name: "health.runaway.context_growth", Env: "AGENTBUS_HEALTH_RUNAWAY_CONTEXT_GROWTH", Kind: Int, Default: 100000, ReadBy: "dispatch (health)", env: envRunawayInt, file: filePositiveInt},
-	{Name: "health.runaway.growth_span", Env: "AGENTBUS_HEALTH_RUNAWAY_GROWTH_SPAN", Kind: Duration, Default: 10 * time.Minute, ReadBy: "dispatch (health)", env: envRunawayDuration, file: filePositiveDuration},
-	{Name: "health.runaway.screen_repeats", Env: "AGENTBUS_HEALTH_RUNAWAY_SCREEN_REPEATS", Kind: Int, Default: 4, ReadBy: "dispatch (health)", env: envRunawayInt, file: filePositiveInt},
+	{Name: "health.runaway.silent_after", Env: "AGENTBUS_HEALTH_RUNAWAY_SILENT_AFTER", Kind: Duration, Default: 30 * time.Minute, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayDuration, file: filePositiveDuration},
+	{Name: "health.runaway.context_growth", Env: "AGENTBUS_HEALTH_RUNAWAY_CONTEXT_GROWTH", Kind: Int, Default: 100000, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayInt, file: filePositiveInt},
+	{Name: "health.runaway.growth_span", Env: "AGENTBUS_HEALTH_RUNAWAY_GROWTH_SPAN", Kind: Duration, Default: 10 * time.Minute, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayDuration, file: filePositiveDuration},
+	{Name: "health.runaway.screen_repeats", Env: "AGENTBUS_HEALTH_RUNAWAY_SCREEN_REPEATS", Kind: Int, Default: 4, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayInt, file: filePositiveInt},
 }
 
 // Lookup is the row of a file key.
@@ -203,6 +207,8 @@ func envPositiveInt(raw string) (any, envResult) {
 	}
 	return nil, envSkip
 }
+
+const runawayInvalid = "the runaway check reads unknown"
 
 // The runaway check reads unknown on an invalid value: it never falls through.
 func envRunawayDuration(raw string) (any, envResult) {

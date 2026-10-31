@@ -414,6 +414,12 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus tokens", "agentbus tokens --project agent-bus-monitor --by agent", "agentbus tokens --unattributed"},
 	},
 	{
+		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]"},
+		Summary:  "each setting's effective value and where it comes from (env, config.toml, busmon.toml, default); --project adds what that project's services see",
+		Flags:    []cli.Flag{fJSON},
+		Examples: []string{"agentbus config", "agentbus config --project agent-bus-monitor"},
+	},
+	{
 		Name: "identity", NoProject: true, Usage: []string{"identity [set <name>]"},
 		Summary:  "your name as a person in busmon",
 		Examples: []string{"agentbus identity set charlie"},

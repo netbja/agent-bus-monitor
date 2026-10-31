@@ -231,7 +231,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`plan`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`plan`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`config`/`version`. Parses args manually;
   trailing words are joined. Every command's usage, flags and examples are one table
   (`cmd/agentbus/commands.go`, types in `cli/`): `agentbus help [<cmd>]` and `<cmd> --help`
   render it above the project-required exit, and `expandArgs` rewrites the table's short flags
@@ -693,7 +693,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `config.Path` reads `XDG_CONFIG_HOME`/`HOME` through
   the injected getenv only, absolute paths only, so a test's environment never reaches the real home;
   `config` does not import `bus` (bus will read its caps through it),
-  so `ValidName` is repeated there, held equal by a test.
+  so `ValidName` is repeated there, held equal by a test. `agentbus config`
+  (`configcmd.go`, above the project-required exit, no broker) prints each value and its source;
+  `--project` reads that project's env file for what its services see (only registry keys and the two
+  per-project facts, never another line).
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
