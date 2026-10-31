@@ -45,36 +45,39 @@ colour.
 
 ### What the person should understand
 
-A check is in one of three places, and the page says which:
+A check is in one of four places, and the page says which:
 
 | Place | Meaning | Examples |
 |---|---|---|
 | **For you** | Only the person can fix it; the row says the exact command | a tracked secret, the old Redis password, Redis behind in its major, an install behind, a service out of its restart budget |
 | **In hand** | Something is already dealing with it; nothing to do but watch | a service failure sentinel restarts, an agent past its context threshold handing off, a client update sentinel proposes, runaway work master looks at |
-| **Fine** | ok, or not measured yet (`?`: the dispatcher is down or the check has not run) | everything else |
+| **Fine** | measured ok | everything that is ok |
+| **Not measured** | no current measurement (`?`: the dispatcher is down, the check has not run yet, or its evidence is stale); never counted as fine, by the standing rule | a check after a restart, every check while the dispatcher is down |
 
 Which place a check goes to is a fixed property of the check and its status (a table in the
 spec, next to `Remediation`), never guessed from text.
 
 ### Header
 
-Today: `health !7`, red, whatever the seven are. Proposed:
+Today: `health !7`, red when one of them fails and in the attention colour when they only warn,
+whatever the seven are. Proposed:
 
 ```
   health ▲ 2 to do (F5)        two checks only the person can fix (attention colour; red if one fails)
   health ● 3 in hand           nothing for the person; muted
-  health ✓                     all fine
-  health ?13                   nothing measured yet (as today)
+  health ✓                     every check measured ok, none unknown
+  health ?3                    no problem, but 3 checks not measured (muted, as today's ?N; never ✓)
 ```
 
-`to do` wins over `in hand`; the compact header keeps the short form (`▲2`, `●3`). Bernard's own
+`to do` wins over `in hand`, and both over `?N`; the compact header keeps the short form (`▲2`,
+`●3`, `?3`). Bernard's own
 words were `! 7 a voir (F5)`. The UI is in English by standing rule, so the proposal is `2 to do
 (F5)`: **question 1**.
 
 ### F5 at 140x40
 
 ```
-╭─ Health ─────────────────────────────────── 2 to do · 3 in hand · 11 ok · 1 not measured ─ esc back ─╮
+╭─ Health ────────────────────────────────── 2 to do · 3 in hand · 11 fine · 1 not measured ─ esc back ─╮
 │  For you                                                                                               │
 │  ▲ Tracked secret-like files   a private-key path is tracked            git rm --cached <path>    3h   │
 │  ▲ Redis version               7.4.1, 7.4.2 is out in its major          docker compose pull redis 2d   │
@@ -82,7 +85,9 @@ words were `! 7 a voir (F5)`. The UI is in English by standing rule, so the prop
 │  ● Context fill                coder at 85 %, told to hand off           (dispatch)               12m   │
 │  ● Client updates              claude 2.1.4 installed, 2 agents on 2.1.3 (sentinel proposes)      40m   │
 │  ● Runaway work                docs silent 35m while working             (master looks)            5m   │
-│  ── fine · 11 ok, 1 not measured  (a shows them) ──                                                    │
+│  Not measured                                                                                          │
+│  ? Model drift                 no current measurement                                             2h   │
+│  ── fine · 11  (a shows them) ──                                                                       │
 │                                                                                                        │
 │                                                                                                        │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯
@@ -106,7 +111,7 @@ Enter on a row expands it in place (today's four lines: since, detail, remediati
 
 ```
  agent-bus-monitor  ● bus  ● disp  health ▲2                              15:04
-╭─ Health ────────────────────────── 2 to do · 3 in hand · 12 fine ─╮
+╭─ Health ──────────────── 2 to do · 3 in hand · 11 fine · 1 ? ─╮
 │ For you                                                            │
 │ ▲ Tracked secrets   private-key path tracked                  3h   │
 │     git rm --cached <path>                                         │
@@ -116,8 +121,8 @@ Enter on a row expands it in place (today's four lines: since, detail, remediati
 │ ● Context fill      coder 85 %, handing off                  12m   │
 │ ● Client updates    2 agents on 2.1.3                        40m   │
 │ ● Runaway work      docs silent 35m                           5m   │
-│ ── fine · 12  (a shows them) ──                                    │
-│                                                                    │
+│ ? Model drift       not measured                              2h   │
+│ ── fine · 11  (a shows them) ──                                    │
 ╰────────────────────────────────────────────────────────────────────╯
  ↑↓ select  enter detail  a all  y copy  esc back
 ```
@@ -222,7 +227,7 @@ already our glyphs (`▁`–`▆`, `▇`, `█` and the eighths).
 │ anthropic 7d ████▏    41 % 3d    │
 │ xai       5h █████████ held 40m  │
 │ Projects          in     7 days  │
-│ agent-bus-mon~ **~1.5M** ███ 5.1M│
+│ agent-bus-mo… **~1.5M** ███ 5.1M │
 │ blog                 0 ▌   170k  │
 │ wiki        no dispatch service  │
 │ Agents              in      out  │
@@ -302,24 +307,42 @@ medium tiers, so nothing shows twice. **Question 5:** pinned always, or only in 
 
 ## 6. A new health check: GitHub reachable
 
-`github` (Interval 15m, Deadline 10 s), run only when the project's Git remote is on github.com.
+`github` (Interval 15m, Deadline 10 s), run by the dispatch service only when the project's Git
+remote is on github.com. It answers one question: **can the project's services reach GitHub, by
+each transport, from where they run?** It is not a push test and it reads no credential.
 
 | Probe | How | ok when |
 |---|---|---|
 | SSH | `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` | exit 1 with "successfully authenticated" |
-| HTTPS | `git ls-remote --exit-code https://github.com/<owner>/<repo> HEAD` (no credential helper prompt: `GIT_TERMINAL_PROMPT=0`) | exit 0 within the deadline |
+| HTTPS | `git -c credential.helper= ls-remote --exit-code https://github.com/<owner>/<repo> HEAD` with `GIT_TERMINAL_PROMPT=0` | exit 0 within the deadline |
 
-- **ok:** both answer. **warn:** one fails or hangs (`ssh: timed out; https ok`). **fail:** both.
-  **unknown:** no GitHub remote, or the probe could not run.
-- Place (section 1): **For you**; the remediation names the transport that works (`push over
-  https: git remote set-url --push origin https://github.com/<owner>/<repo>`).
-- Limit, said in the detail: reachability is not permission. `ls-remote` proves a fetch, not a
-  push; a push can still hang on credentials (as on this host today). A dry-run push needs
-  credentials, so the check does not try one.
-- No credential is read, and nothing is pushed.
+Three limits, each said in the check's detail:
+
+- **No credential, really.** `-c credential.helper=` empties the helpers (store, gh, libsecret),
+  so the HTTPS probe never asks for a stored token; `GIT_TERMINAL_PROMPT=0` alone would only stop
+  the terminal prompt. A private repository therefore answers "authentication required": that reads
+  **https unknown (private repository)**, never a fail.
+- **The service's context, not the person's shell.** Under `systemd --user` or launchd there is
+  usually no `SSH_AUTH_SOCK`, so a key that lives in the person's agent cannot be used: an SSH
+  "permission denied" with no agent socket reads **ssh unknown (no SSH agent in the service)**,
+  never a fail. Only what the service can see is judged.
+- **A network outage is not the person's problem to fix here.** When neither github.com resolves
+  nor any probe connects (DNS failure, no route, connection refused on both), the check reads
+  **unknown (offline)**: it never opens a fail episode, so sentinel is not woken for a laptop on a
+  train.
+
+Statuses: **ok** when every probe that can be judged answers; **warn** when one transport answers
+and the other connects but is refused or times out (`ssh times out · https ok`); **fail** only when
+GitHub answers the network but refuses both judged probes; **unknown** in the three cases above, or
+with no GitHub remote. Reachability is still not permission: a push can hang on credentials that
+neither probe touches (as on this host today), and the detail says so.
+
+Place (section 1): **For you** when warn or fail; the remediation names the transport that works
+(`push over https: git remote set-url --push origin https://github.com/<owner>/<repo>`).
 
 ```
 │  ▲ GitHub reachable   ssh times out · https ok        git remote set-url --push origin https://…  15m │
+│  ? GitHub reachable   offline: github.com does not resolve                                       2m  │
 ```
 
 ---
@@ -336,9 +359,10 @@ only be walked line by line. No other key changes.
 
 1. The header in English, `health ▲ 2 to do (F5)`, by the standing English-UI rule, or the
    French `a voir`?
-2. Health: is the three-place split (For you, In hand, Fine) right, and should `In hand` count in
-   the header at all, or only show on F5?
+2. Health: is the split (For you, In hand, Fine, Not measured) right, and should `In hand` count
+   in the header at all, or only show on F5?
 3. U page: which of `s` sort, `f` provider, `d` period are wanted?
 4. Requests: fold done threads after 7 days (proposed) or keep today's 24 h?
 5. Activity's pinned For you section: always, or only when the For you panel is not on screen?
-6. GitHub check: warn when only one transport works (proposed), or only fail when both do?
+6. GitHub check: warn when only one transport works (proposed), or only fail when both do? And
+   should a private repository's HTTPS probe be skipped rather than read as unknown?
