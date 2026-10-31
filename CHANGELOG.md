@@ -10,7 +10,8 @@ release exists.
   name already in `busmon.toml` no longer refuses it: the new one wins, and the command says the old one
   is shadowed. `agentbus identity` and `agentbus up`'s default `--as` read `config.toml`, then
   `busmon.toml`; `agentbus identity` names the file on stderr. The settings files are found through
-  `$XDG_CONFIG_HOME` or `$HOME` only when absolute, as the password file and the services already are.
+  `$XDG_CONFIG_HOME` or `$HOME` only when absolute, as the password file and the services already are
+  (a relative `XDG_CONFIG_HOME`, which busmon used to accept, is now ignored, as the XDG spec says).
 - busmon reads its settings from `~/.config/agentbus/config.toml` (or `$XDG_CONFIG_HOME/agentbus/`),
   key by key above `busmon.toml`, which is still read: flag, then environment, then `config.toml`, then
   `busmon.toml`, then the default. New key `[updates] check = false` turns the update check off, like

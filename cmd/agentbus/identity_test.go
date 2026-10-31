@@ -74,6 +74,9 @@ func TestIdentityRefusesBadNamesAndBrokenFiles(t *testing.T) {
 	if code := runIdentity([]string{"set", "charlie"}, env, &out, &errw); code != 1 {
 		t.Fatalf("broken file: %d", code)
 	}
+	if strings.Contains(errw.String(), "waiting") || !strings.Contains(errw.String(), "does not parse") {
+		t.Fatalf("the refusal quotes the file or says nothing: %q", errw.String())
+	}
 	if b, _ := os.ReadFile(path); string(b) != "[waiting\n" {
 		t.Fatalf("a broken file was touched: %q", b)
 	}

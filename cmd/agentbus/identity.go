@@ -63,7 +63,12 @@ func runIdentity(args []string, env func(string) string, stdout, stderr io.Write
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
-		fmt.Fprintf(stderr, "agentbus identity: %s does not parse (%v); not touched\n", path, err)
+		var pe toml.ParseError
+		if errors.As(err, &pe) { // toml's own message can quote the file: the line only
+			fmt.Fprintf(stderr, "agentbus identity: %s:%d does not parse; not touched\n", path, pe.Position.Line)
+		} else {
+			fmt.Fprintf(stderr, "agentbus identity: %s cannot be read; not touched\n", path)
+		}
 		return 1
 	case md.IsDefined("identity", "as"):
 		fmt.Fprintf(stderr, "agentbus identity: %s already names you; edit it to change\n", path)
