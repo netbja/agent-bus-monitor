@@ -277,6 +277,9 @@ func TestFileRules(t *testing.T) {
 		{"[dispatch]\nquota_warn = 0", "dispatch.quota_warn", false, nil},
 		{"[dispatch]\nquota_hold = 90", "dispatch.quota_hold", true, 90.0},
 		{"[dispatch]\nquota_hold = 101", "dispatch.quota_hold", false, nil},
+		{"[dispatch]\nquota_hold = nan", "dispatch.quota_hold", false, nil},
+		{"[dispatch]\ncontext_alert = nan", "dispatch.context_alert", false, nil},
+		{"[dispatch]\nquota_warn = inf", "dispatch.quota_warn", false, nil},
 		{"[health.runaway]\nscreen_repeats = 6", "health.runaway.screen_repeats", true, 6},
 		{"[updates]\ncheck = false", "updates.check", true, false},
 	} {

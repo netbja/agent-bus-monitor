@@ -236,7 +236,7 @@ func filePercent(v any) (any, string) {
 	default:
 		return nil, "want a number from 0 to 100"
 	}
-	if f < 0 || f > 100 {
+	if !(f >= 0 && f <= 100) { // NaN fails both
 		return nil, "want a number from 0 to 100"
 	}
 	return f, ""
