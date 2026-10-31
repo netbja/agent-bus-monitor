@@ -377,6 +377,7 @@ func TestNoticeFade(t *testing.T) {
 	// A notice queued during the hold does not shorten the held one: it keeps
 	// the 4 s it had when held, its look and its time left (reviewer-codex).
 	held.notice.push(notice{text: "next", level: noticeInfo})
+	held.notice.push(notice{text: "later", level: noticeInfo})
 	held = step(t, held, fadeMsg(t0.Add(10*time.Second)))
 	if f := held.noticeLine(30)[0].Fade; f < 40 || f > 60 {
 		t.Fatalf("a queued notice changed the held one's blend: %d", f)
@@ -388,6 +389,9 @@ func TestNoticeFade(t *testing.T) {
 	}
 	if held = step(t, held, fadeMsg(t0.Add(10500*time.Millisecond))); noticeText(held) != GlyphNone+" next" {
 		t.Fatalf("after its time left: %q", noticeText(held))
+	}
+	if d := held.notice.duration(); d != noticeShort { // the next is not held: one waits behind it, so 2 s (foureyes)
+		t.Fatalf("the next notice inherited the held one's duration: %v", d)
 	}
 	m = step(t, m, fadeMsg(t0.Add(4*time.Second)))
 	if noticeText(m) != "" {
