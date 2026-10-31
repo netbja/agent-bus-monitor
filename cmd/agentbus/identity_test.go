@@ -15,7 +15,7 @@ func identityEnv(t *testing.T) (func(string) string, string) {
 			return dir
 		}
 		return ""
-	}, filepath.Join(dir, "agentbus", "busmon.toml")
+	}, filepath.Join(dir, "agentbus", "config.toml")
 }
 
 func TestIdentitySetCreatesThePrivateFile(t *testing.T) {
@@ -98,5 +98,58 @@ func TestUpDefaultsAsToTheRecordedName(t *testing.T) {
 	if len(*boot) < 2 || (*boot)[0] != "demo "+work+" --as charlie" || !strings.HasSuffix((*boot)[len(*boot)-1], "--as pilot") ||
 		strings.Contains((*boot)[len(*boot)-1], "charlie") {
 		t.Fatalf("bootstrap calls = %q", *boot)
+	}
+}
+
+// A name in busmon.toml is still read; set records the new one in config.toml,
+// which wins, and says the old one is shadowed.
+func TestIdentitySetShadowsBusmonTOML(t *testing.T) {
+	env, path := identityEnv(t)
+	legacy := filepath.Join(filepath.Dir(path), "busmon.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, []byte("[identity]\nas = \"oldname\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errw bytes.Buffer
+	if code := runIdentity(nil, env, &out, &errw); code != 0 || strings.TrimSpace(out.String()) != "oldname" || !strings.Contains(errw.String(), "busmon.toml") {
+		t.Fatalf("legacy read: %d %q %q", code, out.String(), errw.String())
+	}
+	out.Reset()
+	if code := runIdentity([]string{"set", "charlie"}, env, &out, &errw); code != 0 || !strings.Contains(out.String(), "recorded charlie in config.toml; busmon.toml's name oldname is now shadowed") {
+		t.Fatalf("set: %d %q %q", code, out.String(), errw.String())
+	}
+	if b, _ := os.ReadFile(legacy); string(b) != "[identity]\nas = \"oldname\"\n" {
+		t.Fatalf("busmon.toml was touched: %q", b)
+	}
+	out.Reset()
+	errw.Reset()
+	if code := runIdentity(nil, env, &out, &errw); code != 0 || strings.TrimSpace(out.String()) != "charlie" || !strings.Contains(errw.String(), "config.toml") {
+		t.Fatalf("after set: %d %q %q", code, out.String(), errw.String())
+	}
+	// A config.toml with [identity] but no as refuses, as busmon.toml did.
+	env2, path2 := identityEnv(t)
+	if err := os.MkdirAll(filepath.Dir(path2), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path2, []byte("[identity]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := runIdentity([]string{"set", "charlie"}, env2, &out, &errw); code != 1 {
+		t.Fatalf("an [identity] section without as: %d", code)
+	}
+}
+
+// up's default --as reads config.toml before busmon.toml.
+func TestUpDefaultAsPrefersConfigTOML(t *testing.T) {
+	env, path := identityEnv(t)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(filepath.Dir(path), "busmon.toml"), []byte("[identity]\nas = \"oldname\"\n"), 0o600)
+	os.WriteFile(path, []byte("[identity]\nas = \"charlie\"\n"), 0o600)
+	if got := settingsIdentity(env); got != "charlie" {
+		t.Fatalf("settingsIdentity = %q, want charlie", got)
 	}
 }

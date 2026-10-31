@@ -14,7 +14,6 @@ import (
 // notYetMigrated are the env names whose readers still read them raw; each
 // migration step empties a part of it, and the last one deletes it.
 var notYetMigrated = map[string]bool{
-	"AGENT_BUS_HUMAN":                        true, // agentbus ask, plugin
 	"AGENT_BUS_CONTEXT_ALERT":                true,
 	"AGENT_BUS_PROMPT_GRACE":                 true,
 	"AGENT_BUS_QUOTA":                        true,

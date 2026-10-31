@@ -45,6 +45,16 @@ func (r Resolver) Get(name string) Resolved {
 	return Resolved{Key: k, Value: k.Default, Source: "default"}
 }
 
+// EnvName is a key's environment variable, for a reader that keeps its own
+// raw rule; an unknown name panics (a programming error).
+func EnvName(name string) string {
+	k, ok := Lookup(name)
+	if !ok {
+		panic("config: no key " + name)
+	}
+	return k.Env
+}
+
 // Bool, Int, Float, Duration and String are Get's value for a key of that kind.
 func (r Resolver) Bool(name string) bool              { return r.Get(name).Value.(bool) }
 func (r Resolver) Int(name string) int                { return r.Get(name).Value.(int) }

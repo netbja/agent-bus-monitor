@@ -41,7 +41,7 @@ type shellConfig struct {
 	w             busWriter // sends, answers, thread reads, removals, resume
 	st            *shared
 	project, self string
-	settings      busmonSettings // bell, fade, reminder and recap timings (busmon.toml)
+	settings      busmonSettings // bell, fade, reminder and recap timings (config.toml, busmon.toml)
 	cache         *busmonCache   // the local cache: snoozes, last visit
 	cachePath     string         // where it is saved ("" never saves)
 	priorVisit    time.Time      // the last visit before this one (the recap's since)
