@@ -109,21 +109,29 @@ copies it into a throwaway project.
 
 ## How it reads the bus
 
-The peer is its own receiver, not a terminal session waiting to be woken:
+The peer is its own receiver, not a terminal session waiting to be woken. It takes **one**
+receiver lease before anything else and keeps that same lease (one token, renewed, a turn
+included) until it exits:
 
-1. At start, it **drains** (`Bus.DrainCmd`: PEL first, then unread, no floor), exactly what a
-   woken agent runs, so nothing sent while it was down is lost.
-2. It then **holds the receiver lease for its whole life** and receives through
-   `WatchCmdDelivery` (the subscribe path, at-least-once, ACK after handling). The lease is
-   renewed while a turn runs, too.
+1. **Take the lease**, then **drain** under it (PEL first, then unread, no floor; what
+   `Bus.DrainCmd` does), so nothing sent while it was down is lost.
+2. **Receive** under the same lease (what `WatchCmdDelivery` does: at-least-once, ACK after
+   handling), for its whole life.
 
-Why the lease must stay held during a turn: the dispatcher leaves an agent with a receiver lease
-alone (`Decide` rule 2). Without it, a message arriving during a slow CPU turn would be an
+Today `DrainCmd` and `watchCmdDelivery` each take the lease and release it when they return
+(`holdReceiver` … `defer rc.close()`), so calling one after the other leaves a moment with no
+lease (reviewer-codex). Step 1 therefore adds one exported receiver handle (take, renew, close;
+the lease's contract unchanged: token, renewal, loss cancels) whose drain and delivery reuse the
+held lease instead of taking their own; the existing callers keep their behaviour. A test sends
+an entry at the drain-to-receive boundary and proves the lease key never disappears and the
+dispatcher's decision for the peer stays rule 2 throughout. If the lease is lost (broker gone
+past its renewal), the peer stops receiving, takes it again, and drains again before receiving. That gap is the only one, as long as the broker is unreachable; the dispatcher, which needs the same broker, defers rather than prompts a pane with no signature, and escalates only once it has lasted `--escalate-after` (10 minutes).
+
+Why the lease must stay held, a turn included: the dispatcher leaves an agent with a receiver
+lease alone (`Decide` rule 2). Without it, a message arriving during a slow CPU turn would be an
 obligation for a pane herdr detects no agent in: never ready, deferred, then **escalated to
 master after 10 minutes**. Held, the dispatcher never touches the peer's pane, and the peer
-needs **no herdr signature**. This needs one exported way to hold the lease beyond one delivery
-(today `holdReceiver` is internal); the lease's contract (token, renewal, loss cancels) is
-unchanged.
+needs **no herdr signature**.
 
 This is not the forbidden wrapper loop: that rule is about a terminal client that a restarted
 watcher never wakes. Here the receiving process *is* the agent.
@@ -156,7 +164,7 @@ For each cmd entry addressed to it (directive, challenge, reply, request):
 | `bus_thread(id)` | A thread's entries | Read-only, 20 entries |
 | `bus_agents()` | Who is on the bus and their state | Read-only |
 
-No shell, no write to any file, no network but the configured URL. Its only bus writes are its
+No shell and no write to any file. Its only connections are the bus's Redis (as for every agent: `bus.Connect`'s usual resolution) and the configured endpoint URL; the peer opens no other, and no tool takes a URL. Its only bus writes are its
 own status, the reply on the thread it was asked on, and its report. **No verdict** in this
 step: a model nobody has measured does not get to approve a review. A challenge gets a reply
 with its opinion; the gate stays open for a real reviewer.
@@ -240,7 +248,7 @@ Passes when 2–8 hold. Clean-up: kill the server, remove the temporary director
 ## Steps, once approved
 
 1. `agentbus peer` (`peer/` package: config reader, client, tools, loop) with a fake endpoint in
-   tests (`httptest`: tools, no tools, slow, down, bad JSON); the exported receiver hold; the
+   tests (`httptest`: tools, no tools, slow, down, bad JSON); the exported receiver handle, drain and delivery under one lease, and its boundary test; the
    adapter script and example manifest; provider `local` unlimited with its colour.
 2. The `llm-endpoint` health check.
 3. Later, only after the test's numbers: a verdict for a peer the person trusts, the endpoint's
