@@ -6,6 +6,8 @@ release exists.
 
 ## Unreleased
 
+- `busmon` without a project now says `--project <p>` (it said `-project`) and points to `busmon --list`
+  and `busmon --pick`.
 - busmon: `←` and `→` step the lower panel's tabs (Activity, Board, Requests, Plan) while one of them
   has the focus, wrapping as herdr's tabs do; on an opened page they still step its list. `w` with no
   question open opens the compose window to master (with one open it still opens it, as `!` does).
