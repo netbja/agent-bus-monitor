@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 const askUsage = "usage: ask <agent> [--file questions.json | < questions.json] [--replace <id>] [--task <plan-task>] | ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"
@@ -147,7 +148,7 @@ func runAnswer(ctx context.Context, b *bus.Bus, args []string, getenv func(strin
 	}
 	by := as
 	if by == "" {
-		by = getenv("AGENT_BUS_HUMAN")
+		by = getenv(config.EnvName("identity.as")) // raw, lower-cased below, as always
 	}
 	if by == "" {
 		by = "pilot"

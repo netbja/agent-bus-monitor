@@ -298,9 +298,17 @@ func TestPaths(t *testing.T) {
 	if got := LegacyPath(env(map[string]string{"XDG_CONFIG_HOME": "/x"})); got != "/x/agentbus/busmon.toml" {
 		t.Errorf("LegacyPath = %s", got)
 	}
-	home, _ := os.UserHomeDir()
-	if got := Path(env(nil)); got != filepath.Join(home, ".config", "agentbus", "config.toml") {
+	if got := Path(env(map[string]string{"HOME": "/h"})); got != "/h/.config/agentbus/config.toml" {
 		t.Errorf("Path without XDG = %s", got)
+	}
+	// Neither, or a relative one: no path, never the process's real home.
+	for _, m := range []map[string]string{nil, {"XDG_CONFIG_HOME": "rel", "HOME": "also-rel"}} {
+		if got := Path(env(m)); got != "" {
+			t.Errorf("Path(%v) = %q, want none", m, got)
+		}
+	}
+	if f := Load("", "config.toml"); f.Exists || len(f.Warnings) != 0 {
+		t.Errorf("Load of no path = %+v", f)
 	}
 }
 

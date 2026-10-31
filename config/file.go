@@ -12,18 +12,22 @@ import (
 )
 
 // Path is the machine's config file: $XDG_CONFIG_HOME/agentbus/config.toml,
-// else ~/.config/agentbus/config.toml.
+// else $HOME/.config/agentbus/config.toml, both read through getenv only (an
+// injected environment never reaches the process's real home); "" with
+// neither, which loads as an absent file.
 func Path(getenv func(string) string) string { return inConfigDir(getenv, "config.toml") }
 
 // LegacyPath is busmon's own file, still read below config.toml.
 func LegacyPath(getenv func(string) string) string { return inConfigDir(getenv, "busmon.toml") }
 
 func inConfigDir(getenv func(string) string, name string) string {
-	if d := getenv("XDG_CONFIG_HOME"); d != "" {
+	if d := getenv("XDG_CONFIG_HOME"); filepath.IsAbs(d) {
 		return filepath.Join(d, "agentbus", name)
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "agentbus", name)
+	if home := getenv("HOME"); filepath.IsAbs(home) {
+		return filepath.Join(home, ".config", "agentbus", name)
+	}
+	return ""
 }
 
 // Warning is one problem with a file, never fatal: the key it names falls
@@ -83,6 +87,9 @@ var secretNames = map[string]bool{"password": true, "passwd": true, "secret": tr
 
 func load(path, label string, legacy bool) *File {
 	f := &File{Label: label, Path: path, values: map[string]fileValue{}}
+	if path == "" {
+		return f
+	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return f

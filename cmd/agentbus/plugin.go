@@ -18,6 +18,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -148,7 +149,7 @@ func pluginBusmon(d pluginDeps, stderr io.Writer) int {
 // pluginIdentity is AGENT_BUS_HUMAN, else the --as of the template's busmon
 // tab. The command is only parsed, never run; an unparsable one yields "".
 func pluginIdentity(env func(string) string, templatePath string) string {
-	if h := env("AGENT_BUS_HUMAN"); h != "" {
+	if h := env(config.EnvName("identity.as")); h != "" {
 		return h
 	}
 	var t struct {

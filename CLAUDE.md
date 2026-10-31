@@ -684,7 +684,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   file, line and key and never echo a value; no secret and no connection in the file. Readers resolve
   through `config.Resolver`; `TestNoEnvLiteralOutsideTheRegistry` fails on a registry env name written
   as a literal elsewhere (its `notYetMigrated` list shrinks as readers move). busmon's settings are
-  migrated (`loadBusmonSettings`); `config` does not import `bus` (bus will read its caps through it),
+  migrated (`loadBusmonSettings`), and so is the person's name (`personName` in `identity.go`: the files
+  only, `config.toml` then `busmon.toml`; `identity set` writes `config.toml`; `ask` and the plugin keep
+  their raw env rule through `config.EnvName`). `config.Path` reads `XDG_CONFIG_HOME`/`HOME` through
+  the injected getenv only, absolute paths only, so a test's environment never reaches the real home;
+  `config` does not import `bus` (bus will read its caps through it),
   so `ValidName` is repeated there, held equal by a test.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the

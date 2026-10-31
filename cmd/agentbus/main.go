@@ -87,7 +87,7 @@ func main() {
 	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && (args[1] == "doctor" || args[1] == "adopt")) {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}
-	// identity is the person's name in busmon.toml (v0.21): no project, no broker.
+	// identity is the person's name in config.toml, else the legacy busmon.toml: no project, no broker.
 	if len(args) >= 1 && args[0] == "identity" {
 		os.Exit(runIdentity(args[1:], os.Getenv, os.Stdout, os.Stderr))
 	}
