@@ -309,25 +309,26 @@ medium tiers, so nothing shows twice. **Question 5:** pinned always, or only in 
 
 `github` (Interval 15m, Deadline 10 s), run by the dispatch service only when the project's Git
 remote is on github.com. It answers one question: **can the project's services reach GitHub, by
-each transport, from where they run?** It is not a push test. It stores and prints no credential;
-what each probe does with one is stated row by row below.
+each transport, from where they run?** It says only what it measured: reachable by HTTPS, by SSH,
+by neither, or not judged. It stores and prints no credential; what each probe does with one is
+stated row by row below.
 
 | Probe | How | reached when |
 |---|---|---|
-| SSH | `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com`: an **authentication** probe, with the service's own SSH identities (its keys or agent socket), as a push over SSH would; BatchMode never prompts for a passphrase | GitHub answers: "successfully authenticated" (exit 1), or "Permission denied" (exit 255 after the server's reply), the latter noted as not authenticated |
-| HTTPS | `git -c credential.helper= ls-remote https://github.com/<owner>/<repo>` with `GIT_TERMINAL_PROMPT=0`: a **reachability** probe, no helper and no prompt, so no credential at all | GitHub answers within the deadline: exit 0 whatever refs come back (an empty repository lists none and is still reachable; no `--exit-code`), or an authentication refusal from GitHub (a private repository), noted as not authenticated |
+| SSH | `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com`: it connects with the service's own SSH identities (its keys or agent socket); BatchMode never prompts for a passphrase | GitHub answers: "successfully authenticated" (exit 1), or "Permission denied" (exit 255 after the server's reply), the latter with its authentication unknown |
+| HTTPS | `git -c credential.helper= ls-remote https://github.com/<owner>/<repo>` with `GIT_TERMINAL_PROMPT=0`: a **reachability** probe, no helper and no prompt, so no credential at all | GitHub answers within the deadline: exit 0 whatever refs come back (an empty repository lists none and is still reachable; no `--exit-code`), or an authentication refusal from GitHub (a private repository), with its authentication unknown |
 
 Each probe has one **network result**: **reached** (it connected and GitHub answered, whatever the
 answer) or **failed** (no DNS, no route, timeout, refused, reset). An answer that is not a success
 still means GitHub was reached: an SSH "permission denied" or an HTTPS "authentication required"
-is **reached**, with the authentication result noted apart in the detail, never in the status.
+is **reached**, its authentication **unknown**, noted apart in the detail, never in the status.
 
 | SSH | HTTPS | Status |
 |---|---|---|
 | reached | reached | **ok** |
-| reached | failed | **warn** (`https fails · ssh reaches GitHub`) |
-| failed | reached | **warn** (`ssh times out · https ok`) |
-| failed | failed | **unknown** (offline or blocked), a **warn** once it has lasted an hour |
+| reached | failed | **warn** (`reachable by SSH only`) |
+| failed | reached | **warn** (`reachable by HTTPS only`) |
+| failed | failed | **unknown** (`reachable by neither`: offline or blocked), a **warn** once it has lasted an hour |
 | no GitHub remote | | **unknown**, not run |
 
 A probe that cannot run at all (no `ssh` or `git` on the service's `PATH`, or the exec fails) is
@@ -343,37 +344,23 @@ Three limits, each said in the check's detail:
 - **Authentication and reachability are apart.** HTTPS judges reachability only:
   `-c credential.helper=` empties the helpers (store, gh, libsecret), so it never asks for a stored
   token; `GIT_TERMINAL_PROMPT=0` alone would only stop the terminal prompt. A private repository
-  answers "authentication required": reached, and the detail says `https: private repository, not
-  authenticated (by design)`. SSH authenticates with whatever identity the service already has,
-  and nothing else.
+  answers "authentication required": reached, authentication unknown. SSH connects with whatever
+  identity the service already has, and nothing else.
 - **The service's context, not the person's shell.** Under `systemd --user` or launchd there is
   usually no `SSH_AUTH_SOCK`, and the service's keys may not be the person's. An SSH "permission
-  denied" is reached, with `ssh: not authenticated from the service` in the detail: it proves the
-  network, not the key, and it is never a failure.
+  denied" is reached, authentication unknown: it proves the network, not the key, and it is never
+  a failure.
 - **A network outage is not the person's problem to fix here.** Both transports failing reads
   unknown whatever DNS says (a resolver cache can answer for github.com on an offline laptop),
   and a warn only after an hour.
 
-Reachability is still not permission: a push can hang on credentials that neither probe touches (as
-on this host today), and the detail says so.
-
-Place (section 1): **For you** when warn. Its remediation keeps reachability and authentication
-apart, and never claims a push will work: neither probe checks access to the repository nor write
-permission, so every push URL comes after a check the person runs:
-
-| Situation | Remediation |
-|---|---|
-| SSH down, HTTPS reached | `HTTPS reaches GitHub (not authenticated by this check). To push over it, check that a credential is configured (gh auth status), then git remote set-url --push origin https://github.com/<owner>/<repo>` |
-| HTTPS down, SSH reached and authenticated | `SSH authenticates from the service (identity accepted; access to this repository and write permission not checked). To push over it, check write access against the SSH URL itself, which leaves the checkout's remotes as they are: git push --dry-run git@github.com:<owner>/<repo>.git HEAD (GitHub checks write access before the dry run stops); if it passes, git remote set-url --push origin git@github.com:<owner>/<repo>.git` |
-| HTTPS down, SSH reached but not authenticated | `SSH reaches GitHub, but the service has no key GitHub accepts: add one for the service, or push from your own shell` |
-| both down an hour | `check the network, then githubstatus.com` |
-
-The HTTPS probe never authenticates (its helpers are emptied), so it never claims a push over
-HTTPS works.
+Place (section 1): **For you** when warn, with one remediation line for every case:
+`Check your git remote and credentials; try: git ls-remote <your remote URL>`. The check makes no
+claim about pushing.
 
 ```
-│  ▲ GitHub reachable   ssh times out · https reaches GitHub         check credentials (gh auth status)  15m │
-│  ? GitHub reachable   offline or blocked: neither transport reaches GitHub                       2m  │
+│  ▲ GitHub reachable   reachable by HTTPS only            check your git remote and credentials   15m │
+│  ? GitHub reachable   reachable by neither: offline or blocked                                   2m  │
 ```
 
 ---
