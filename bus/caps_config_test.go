@@ -30,3 +30,21 @@ func TestCapsReadConfigTOML(t *testing.T) {
 		t.Fatalf("env over file: %d %d", reportMaxLen(), verdictMaxLen())
 	}
 }
+
+// The real branch reads the process's config.toml through XDG_CONFIG_HOME.
+func TestCapFilesRealBranch(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "agentbus"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "agentbus", "config.toml"), []byte("[bus]\nreport_max = 77\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	old := inTestBinary
+	inTestBinary = func() bool { return false }
+	t.Cleanup(func() { inTestBinary = old })
+	if got := reportMaxLen(); got != 77 {
+		t.Fatalf("reportMaxLen = %d, want 77 from config.toml", got)
+	}
+}

@@ -91,9 +91,8 @@ func runConfig(args []string, project string, getenv func(string) string, out, e
 }
 
 func buildConfigDoc(project string, getenv func(string) string) (configDoc, error) {
-	cfg := config.Load(config.Path(getenv), "config.toml")
-	legacy := config.LoadLegacy(config.LegacyPath(getenv), "busmon.toml (legacy)")
-	shell := config.Resolver{Getenv: getenv, Files: []*config.File{cfg, legacy}}
+	shell := config.Machine(getenv)
+	cfg, legacy := shell.Files[0], shell.Files[1]
 
 	var services *config.Resolver
 	var proj *configProject
@@ -132,6 +131,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 		}
 		if r.Source == legacy.Label {
 			legacyUsed++
+			row.Source = legacy.Label + " (legacy)"
 		}
 		if services != nil && servedByServices(k) {
 			s := services.Get(k.Name)
@@ -152,8 +152,8 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 	doc.Files = []configFile{
 		{Name: "config.toml", Path: cfg.Path, State: fileState(cfg)},
 		{Name: "busmon.toml", Path: legacy.Path, State: legacyState(legacy, legacyUsed)},
-		plainFile("quota.toml", filepath.Join(filepath.Dir(cfg.Path), "quota.toml")),
-		plainFile("models.toml", filepath.Join(filepath.Dir(cfg.Path), "models.toml")),
+		plainFile("quota.toml", cfg.Path),
+		plainFile("models.toml", cfg.Path),
 	}
 	var fileWarnings []string
 	for _, f := range []*config.File{cfg, legacy} {
@@ -194,7 +194,12 @@ func legacyState(f *config.File, used int) string {
 	return fmt.Sprintf("present (legacy: %d %s still read from it)", used, what)
 }
 
-func plainFile(name, path string) configFile {
+// plainFile is a file beside config.toml that agentbus config only names.
+func plainFile(name, beside string) configFile {
+	if beside == "" { // no config home: neither XDG_CONFIG_HOME nor HOME is set
+		return configFile{Name: name, State: "unknown (no config home)"}
+	}
+	path := filepath.Join(filepath.Dir(beside), name)
 	state := "absent"
 	if _, err := os.Stat(path); err == nil {
 		state = "ok"

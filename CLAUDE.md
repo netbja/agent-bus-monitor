@@ -689,7 +689,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   their raw env rule through `config.EnvName`), and so are the services and writers (`config.Machine(getenv)`:
   env, that environment's `config.toml`, `busmon.toml`; `serviceQuota`/`Tokens`/`Clear`, `dispatch.PromptGrace`,
   `bus.ContextAlert`, `runawayThresholdsFromEnv`; the writers' caps per call through `bus.capFiles`, which
-  reads no file in a test binary, `testing.Testing()`, so the person's own file never changes a test).
+  reads no file in a test binary (`inTestBinary`, `testing.Testing`), so the person's own file never changes a test).
   `config.Path` reads `XDG_CONFIG_HOME`/`HOME` through
   the injected getenv only, absolute paths only, so a test's environment never reaches the real home;
   `config` does not import `bus` (bus will read its caps through it),
