@@ -92,6 +92,10 @@ func TestEnvRulesUnchanged(t *testing.T) {
 		{"dispatch.quota", "no", true, "use"},
 		{"dispatch.quota_warn", "70", 70.0, "use"},
 		{"dispatch.quota_warn", "x", nil, "skip"},
+		{"dispatch.quota_warn", "0", nil, "skip"},
+		{"dispatch.quota_hold", "-5", nil, "skip"},
+		{"dispatch.quota_max_age", "0s", nil, "skip"},
+		{"dispatch.quota_max_age", "-1m", nil, "skip"},
 		{"dispatch.quota_hold", "99.5", 99.5, "use"},
 		{"dispatch.quota_max_age", "10m", 10 * time.Minute, "use"},
 		{"dispatch.quota_max_age", "ten", nil, "skip"},
@@ -270,6 +274,9 @@ func TestFileRules(t *testing.T) {
 		{"[dispatch]\nquota_long_hold = \"0\"", "dispatch.quota_long_hold", true, time.Duration(0)},
 		{"[dispatch]\nquota_max_age = \"0s\"", "dispatch.quota_max_age", false, nil},
 		{"[bus]\nreport_max = 0", "bus.report_max", false, nil},
+		{"[dispatch]\nquota_warn = 0", "dispatch.quota_warn", false, nil},
+		{"[dispatch]\nquota_hold = 90", "dispatch.quota_hold", true, 90.0},
+		{"[dispatch]\nquota_hold = 101", "dispatch.quota_hold", false, nil},
 		{"[health.runaway]\nscreen_repeats = 6", "health.runaway.screen_repeats", true, 6},
 		{"[updates]\ncheck = false", "updates.check", true, false},
 	} {
@@ -291,5 +298,22 @@ func TestPaths(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	if got := Path(env(nil)); got != filepath.Join(home, ".config", "agentbus", "config.toml") {
 		t.Errorf("Path without XDG = %s", got)
+	}
+}
+
+// A quota threshold of 0 in the env was always the default: it never masks the file.
+func TestZeroQuotaEnvDoesNotMaskTheFile(t *testing.T) {
+	f := Load(writeFile(t, "config.toml", "[dispatch]\nquota_hold = 90\n"), "config.toml")
+	r := Resolver{Getenv: env(map[string]string{"AGENT_BUS_QUOTA_HOLD": "0"}), Files: []*File{f}}
+	if got := r.Get("dispatch.quota_hold"); got.Value != 90.0 || got.Source != "config.toml" {
+		t.Errorf("quota_hold = %#v from %s, want 90 from config.toml", got.Value, got.Source)
+	}
+}
+
+// A parse error's warning names the line, never toml's text, which can quote the file.
+func TestParseWarningQuotesNothing(t *testing.T) {
+	f := Load(writeFile(t, "config.toml", "[dispatch]\nPASTE%q-HERE = 1\n"), "config.toml")
+	if len(f.Warnings) != 1 || f.Warnings[0].Line != 2 || strings.Contains(f.Warnings[0].String(), "PASTE") || strings.Contains(f.Warnings[0].String(), "%") {
+		t.Errorf("warnings = %v", f.Warnings)
 	}
 }

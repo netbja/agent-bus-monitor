@@ -97,7 +97,7 @@ func load(path, label string, legacy bool) *File {
 		w := Warning{File: label, Msg: "does not parse; ignored"}
 		var pe toml.ParseError
 		if errors.As(err, &pe) {
-			w.Line, w.Msg = pe.Position.Line, "does not parse ("+pe.Message+"); ignored"
+			w.Line = pe.Position.Line // toml's message can quote the file: never shown
 		}
 		f.Warnings = append(f.Warnings, w)
 		return f

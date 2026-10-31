@@ -96,7 +96,7 @@ var Keys = []*Key{
 			return nil, envSkip
 		},
 		file: fileInt(func(int) bool { return true }, "")},
-	{Name: "identity.as", Env: "AGENT_BUS_HUMAN", Kind: String, Default: "", ReadBy: "busmon, agentbus identity", Legacy: true,
+	{Name: "identity.as", Env: "AGENT_BUS_HUMAN", Kind: String, Default: "", ReadBy: "busmon, agentbus identity, ask, plugin", Legacy: true,
 		env: func(raw string) (any, envResult) {
 			if validName(raw) {
 				return raw, envUse
@@ -136,11 +136,11 @@ var Keys = []*Key{
 	{Name: "dispatch.quota", Env: "AGENT_BUS_QUOTA", Kind: Bool, Default: true, ReadBy: "dispatch",
 		env:  func(raw string) (any, envResult) { return raw != "off", envUse }, // off turns it off
 		file: fileBool},
-	{Name: "dispatch.quota_warn", Env: "AGENT_BUS_QUOTA_WARN", Kind: Float, Default: 85.0, ReadBy: "dispatch", env: envFloat, file: filePercent},
-	{Name: "dispatch.quota_hold", Env: "AGENT_BUS_QUOTA_HOLD", Kind: Float, Default: 95.0, ReadBy: "dispatch", env: envFloat, file: filePercent},
+	{Name: "dispatch.quota_warn", Env: "AGENT_BUS_QUOTA_WARN", Kind: Float, Default: 85.0, ReadBy: "dispatch", env: envPositiveFloat, file: filePositivePercent},
+	{Name: "dispatch.quota_hold", Env: "AGENT_BUS_QUOTA_HOLD", Kind: Float, Default: 95.0, ReadBy: "dispatch", env: envPositiveFloat, file: filePositivePercent},
 	{Name: "dispatch.quota_max_age", Env: "AGENT_BUS_QUOTA_MAX_AGE", Kind: Duration, Default: 30 * time.Minute, ReadBy: "dispatch",
 		env: func(raw string) (any, envResult) {
-			if d, err := time.ParseDuration(raw); err == nil {
+			if d, err := time.ParseDuration(raw); err == nil && d > 0 { // <= 0 was always the default
 				return d, envUse
 			}
 			return nil, envSkip
@@ -188,8 +188,10 @@ var validName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString
 
 func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" }
 
-func envFloat(raw string) (any, envResult) {
-	if f, err := strconv.ParseFloat(raw, 64); err == nil {
+// envPositiveFloat: today a value <= 0 (or none that parses) is the
+// dispatcher's default, never a setting.
+func envPositiveFloat(raw string) (any, envResult) {
+	if f, err := strconv.ParseFloat(raw, 64); err == nil && f > 0 {
 		return f, envUse
 	}
 	return nil, envSkip
@@ -238,6 +240,13 @@ func filePercent(v any) (any, string) {
 		return nil, "want a number from 0 to 100"
 	}
 	return f, ""
+}
+
+func filePositivePercent(v any) (any, string) {
+	if f, why := filePercent(v); why == "" && f.(float64) > 0 {
+		return f, ""
+	}
+	return nil, "want a number above 0, up to 100"
 }
 
 func fileInt(ok func(int) bool, want string) func(any) (any, string) {
