@@ -429,6 +429,18 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   and the compose window share one `@` completion (`recipientCompletions`, `completionNames`: the
   @all targets, plus dormant agents while `a` is on); in the compose window Tab on a text that is
   only `@prefix` makes it the recipient, but the text is never read as a recipient at send time.
+  The notice (busmon-notice, `notice.go`, spec `docs/superpowers/specs/2026-10-31-busmon-notice-design.md`):
+  one quiet line at the footer's right end (`footerWithNotice`, the hints computed for the room left)
+  for automatic acts seen while busmon runs, never at start (the first poll is the baseline, the tail's
+  backfill and anything older than `liveFrom` never count): `{p}:pause` and `{p}:health` transitions
+  between two polls (`noticeState.fromPoll`), the dispatcher's resume and `/clear` directives in the live
+  tail (`tailNotice`, exact prefixes, `from = dispatch`), and the swap ledger read forward every fifth
+  tick through the optional `swapLedgerReader` (`Bus.SwapEventsAfter`: XINFO STREAM then XRANGE
+  `(cursor..last-generated-id`, paged 50; `swapCursor`: first read = baseline, entries-added grown by
+  more than the events read = one attention line, a count gone down = a new baseline). Only an
+  automatic author (`dispatch` or a registered agent, never the person). A queue of 5 plus a collapsed
+  rest, 4 s alone and 2 s while others wait, held by a flash or a dialog (`noticeHeld`), blended out
+  over the last second in true colour on the fade schedule; no bell, no mark, no count.
 
 ### How the bus is actually consumed (lives outside this repo)
 

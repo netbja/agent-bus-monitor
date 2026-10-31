@@ -86,7 +86,7 @@ func (m *Model) animated() bool {
 	if !m.cfg.settings.Fade || !th.Animated() {
 		return false
 	}
-	if len(asksFor(m.snap.agents)) > 0 || m.tokensSkeleton() || m.barView().moving() {
+	if len(asksFor(m.snap.agents)) > 0 || m.tokensSkeleton() || m.barView().moving() || m.notice.cur != nil {
 		return true
 	}
 	for _, a := range m.snap.agents {
@@ -125,12 +125,16 @@ func (m *Model) afterUpdate() tea.Cmd {
 	}
 	m.maybeTour()
 	m.maybeOpenRecap()
+	var frames tea.Cmd
+	if m.notice.advance(m.now, m.noticeHeld()) { // its frames, from the moment it shows
+		frames = m.scheduleFade()
+	}
 	var save tea.Cmd
 	if m.sig.readDirty {
 		m.sig.readDirty = false
 		save = m.saveCache("local busmon cache not saved")
 	}
-	return tea.Batch(save, m.maybeReminder())
+	return tea.Batch(save, m.maybeReminder(), frames)
 }
 
 // autoRecap, once, at the first poll: it records this visit and builds the

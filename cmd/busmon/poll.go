@@ -44,6 +44,12 @@ type busReader interface {
 	Asks(ctx context.Context) ([]bus.Ask, error)
 }
 
+// swapLedgerReader reads the swap ledger forward from a cursor (optional:
+// *bus.Bus has it; a reader without it shows no reload or swap notice).
+type swapLedgerReader interface {
+	SwapEventsAfter(ctx context.Context, after string, page int) ([]bus.SwapEvent, int64, string, error)
+}
+
 // setHealth records the monitor's OWN link to the broker. A transition stamps
 // `since`, so the header can say how long it has been down — and an
 // unreachable broker never gets rendered as agents falling silent.
@@ -166,6 +172,17 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		dispAlive, dispErr = b.DispatchAlive(pollCtx)
 		missionsState, missionsErr = missionsFact(pollCtx, b)
 		svcInst, svcRecs, svcErr = b.ServiceStates(pollCtx)
+		if lr, ok := b.(swapLedgerReader); ok {
+			st.mu.Lock()
+			after := st.swapCur.after()
+			st.mu.Unlock()
+			if ev, added, last, err := lr.SwapEventsAfter(pollCtx, after, swapLedgerPage); err == nil { // a failed read moves nothing
+				st.mu.Lock()
+				fresh, lost := st.swapCur.advance(ev, added, last)
+				st.swapNews, st.swapLost = append(st.swapNews, fresh...), st.swapLost || lost
+				st.mu.Unlock()
+			}
+		}
 		for _, n := range names {
 			var wi wakeInfo
 			if ob, err := b.Obligation(pollCtx, n, bus.DefaultHorizon); err == nil {

@@ -297,7 +297,12 @@ type agentState struct {
 // reader is the shell's poll command (takeSnapshot, under the lock), and the whole snapshot is
 // small enough that finer locking would only buy bugs.
 type shared struct {
-	mu             sync.Mutex
+	mu sync.Mutex
+	// The swap ledger read for the notices (busmon-notice): the cursor, and
+	// what the polls read since the last pollMsg took it (takeSwapNews).
+	swapCur        swapCursor
+	swapNews       []bus.SwapEvent
+	swapLost       bool
 	person         string // busmon's identity, for the "for you" hint; constant
 	agents         map[string]*agentState
 	pilot          string                        // pilot-lease driver, "" = autonomous
@@ -467,7 +472,7 @@ func main() {
 
 	// The Elm shell (busmon Charm spec): Update drives everything, View draws
 	// the model; the poll runs in its commands, the tail is fed in below.
-	shell := newShell(shellConfig{ctx: ctx, reader: b, w: b, st: st, project: project, self: self,
+	shell := newShell(shellConfig{ctx: ctx, liveFrom: time.Now(), reader: b, w: b, st: st, project: project, self: self,
 		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour,
 		docker: realSvcRunner, brokerHost: opts.host})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
@@ -495,7 +500,7 @@ func main() {
 	}
 	go func() {
 		if len(backfill) > 0 {
-			prog.Send(tailMsg{events: backfill})
+			prog.Send(tailMsg{events: backfill, backfill: true})
 		}
 		replayAll := limit <= 0 // no --limit: replay everything once…
 		for {

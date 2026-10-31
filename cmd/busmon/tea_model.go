@@ -14,15 +14,20 @@ import (
 
 // pollMsg is one tick's snapshot, taken by pollCmd at `at`.
 type pollMsg struct {
-	snap snapshot
-	at   time.Time
+	snap     snapshot
+	at       time.Time
+	swaps    []bus.SwapEvent // the swap ledger's entries new since the last pollMsg
+	swapLost bool            // entries were trimmed before they were read
 }
 
 // tickMsg schedules the next poll.
 type tickMsg time.Time
 
 // tailMsg is a batch of events from the tail goroutine (Program.Send).
-type tailMsg struct{ events []bus.Event }
+type tailMsg struct {
+	events   []bus.Event
+	backfill bool // the start's backfill: history, never a notice
+}
 
 // fadeMsg is a fade frame: only the waiting words change (busmon Charm spec,
 // "Caching"). It moves the clock and bumps no data; scheduleFade sends it
@@ -46,6 +51,9 @@ type shellConfig struct {
 	// brokerHost is --host, which overrides REDIS_HOST (bus.Connect): the
 	// Redis page states container facts only for the broker it reads.
 	brokerHost string
+	// liveFrom is busmon's start: a tail event older than it is history,
+	// never a notice (the --limit 0 replay comes through the live tail).
+	liveFrom time.Time
 }
 
 // uiState is the person's place on the screen.
@@ -129,13 +137,14 @@ type Model struct {
 	cache  *viewCache          // rendered markdown
 	sig    *signalState        // bells, fade, recap, reminder (tea_signals.go)
 	bars   map[string]barSlide // the account gauges' slides (bars.go)
+	notice *noticeState        // the quiet line for automatic actions (notice.go)
 }
 
 // newShell is the shell before its first poll and size.
 func newShell(cfg shellConfig) Model {
 	m := Model{cfg: cfg, feed: &activityFeed{unread: newUnreadState()}, lists: &shellLists{}, paint: newPainter(th),
 		ui: uiState{focus: PanelForYou, tab: PanelActivity, view: PanelForYou, askDrafts: map[string]string{}},
-		rd: newReader(), cache: newViewCache(), sig: newSignals(cfg.cache)}
+		rd: newReader(), cache: newViewCache(), sig: newSignals(cfg.cache), notice: &noticeState{}}
 	if c := cfg.cache; c != nil { // the person's read marks; nothing older than the last visit is marked
 		for _, id := range c.Read {
 			m.feed.unread.read[id] = true
@@ -163,7 +172,8 @@ func (m Model) pollCmd(tick int) tea.Cmd {
 		}
 		pollOnce(cfg.ctx, cfg.reader, cfg.st, tick)
 		now := time.Now()
-		return pollMsg{snap: takeSnapshot(cfg.st, now), at: now}
+		swaps, lost := takeSwapNews(cfg.st)
+		return pollMsg{snap: takeSnapshot(cfg.st, now), at: now, swaps: swaps, swapLost: lost}
 	}
 }
 
@@ -181,6 +191,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.layoutCompose()
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
+		m.notice.fromPoll(msg.snap, m.cfg.self, msg.swaps, msg.swapLost)
 		if m.sig.started.IsZero() {
 			m.sig.started = msg.at
 		}
@@ -247,6 +258,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 				ingestEvent(m.cfg.st, e)
 			}
 			m.feed.add(e, m.cfg.self)
+			if n, ok := tailNotice(e); ok && !msg.backfill && !eventTimestamp(e.ID).Before(m.cfg.liveFrom) {
+				m.notice.push(n)
+			}
 		}
 		if m.cfg.st != nil {
 			m.snap = takeSnapshot(m.cfg.st, m.now)

@@ -6,6 +6,13 @@ release exists.
 
 ## Unreleased
 
+- busmon: a quiet line at the right end of the footer for what happened by itself while it runs: a
+  pause the dispatcher or an agent set (a quota pause in orange), the project resumed, an automatic
+  `/clear`, a reload begun, done or failed, a swap to a fallback or back, a health check worsening or
+  recovering (with sentinel's note when it mended a fail). One at a time, 4 s (2 s while others wait,
+  past five the rest in one `N more automatic actions (R: recap)` line), fading out over its last second
+  in true colour; no bell, no mark, no count, never the person's own act, never an ask or a message.
+  The hints give way from the right; a flash or a dialog holds it back.
 - `busmon` without a project now says `--project <p>` (it said `-project`) and points to `busmon --list`
   and `busmon --pick`.
 - `agentbus up` with an invalid project name (`MyProject`) now says why it is refused and what is

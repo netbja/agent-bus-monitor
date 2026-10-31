@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,7 +57,7 @@ func checkGolden(t *testing.T, name, got string) {
 // goldenStates are the screens the goldens draw (busmon Charm spec, step b
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
-var goldenStates = []string{"dashboard", "expanded", "reader", "compose"}
+var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice"}
 
 // reportID is the fixture's report, whose fenced code is longer than any width.
 var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
@@ -67,6 +68,12 @@ func inState(t testing.TB, m Model, state string) Model {
 	switch state {
 	case "dashboard":
 		return m
+	case "notice": // sentinel reloaded coder: the notice at the footer's right end (busmon-notice)
+		snap := shellFixture(shellNow)
+		for _, a := range snap.agents {
+			a.judgedAt = shellNow
+		}
+		return step(t, m, pollMsg{snap: snap, at: shellNow, swaps: []bus.SwapEvent{{Role: "coder", Event: bus.SwapReloaded, Kind: bus.SwapKindReload, By: "sentinel"}}})
 	case "compose": // a directive to coder, two lines written
 		m = typeText(t, keys(t, m, 'I'), "@cod")
 		m = typeText(t, keys(t, m, kTab), "Review lot 1 please: the reader, the ask mode and the cache.")
