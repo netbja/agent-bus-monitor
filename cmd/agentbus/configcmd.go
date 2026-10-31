@@ -95,6 +95,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 	cfg, legacy := shell.Files[0], shell.Files[1]
 
 	var services *config.Resolver
+	var svcEnv func(string) string
 	var proj *configProject
 	if project != "" {
 		envFile, facts, err := projectEnv(project, getenv)
@@ -105,7 +106,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 		// The services see the env file up wrote (AGENT_BUS_* only: up never copies
 		// the runaway keys), then their own config.toml, then the default. They
 		// find config.toml through the env file's XDG_CONFIG_HOME.
-		svcEnv := func(k string) string {
+		svcEnv = func(k string) string {
 			if strings.HasPrefix(k, "AGENT_BUS_") {
 				return envFile[k]
 			}
@@ -129,6 +130,9 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 			row.Value = "invalid"
 			doc.Warnings = append(doc.Warnings, fmt.Sprintf("%s: invalid; %s", r.Source, k.Invalid))
 		}
+		if k.Env != "" && !r.Invalid && getenv(k.Env) != "" && r.Source != "env "+k.Env {
+			doc.Warnings = append(doc.Warnings, fmt.Sprintf("env %s: set but not a value its rule takes; %s applies", k.Env, r.Source))
+		}
 		if r.Source == legacy.Label {
 			legacyUsed++
 			row.Source = legacy.Label + " (legacy)"
@@ -138,6 +142,9 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 			svc := &configSvc{Value: config.Format(s.Value), Source: s.Source}
 			if strings.HasPrefix(s.Source, "env ") {
 				svc.Source = "env file (frozen at up)"
+			}
+			if k.Env != "" && !s.Invalid && svcEnv(k.Env) != "" && !strings.HasPrefix(s.Source, "env ") {
+				doc.Warnings = append(doc.Warnings, fmt.Sprintf("project %s env file %s: set but not a value its rule takes; %s applies", project, k.Env, s.Source))
 			}
 			if s.Invalid {
 				svc.Value = "invalid"
@@ -159,6 +166,12 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 	for _, f := range []*config.File{cfg, legacy} {
 		for _, w := range f.Warnings {
 			fileWarnings = append(fileWarnings, w.String())
+		}
+	}
+	// The services' config.toml, when it is another file than this shell's.
+	if services != nil && services.Files[0].Path != cfg.Path {
+		for _, w := range services.Files[0].Warnings {
+			fileWarnings = append(fileWarnings, fmt.Sprintf("project %s services' %s (%s)", project, w.String(), services.Files[0].Path))
 		}
 	}
 	doc.Warnings = append(fileWarnings, doc.Warnings...)

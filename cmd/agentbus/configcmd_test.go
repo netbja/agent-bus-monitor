@@ -237,3 +237,34 @@ func TestConfigProjectInvalidAndBusmonOnly(t *testing.T) {
 		t.Errorf("service row = %q", row)
 	}
 }
+
+// The services' own config.toml warns too, once; a set value a rule skips says so.
+func TestConfigServiceFileWarningsAndSkippedEnv(t *testing.T) {
+	f := newConfigFixture(t)
+	other := t.TempDir()
+	os.MkdirAll(filepath.Join(other, "agentbus"), 0o700)
+	os.WriteFile(filepath.Join(other, "agentbus", "config.toml"), []byte("[dispatch]\nprompt_grace = 4000\n"), 0o600)
+	f.write(t, "services/demo.env", "XDG_CONFIG_HOME=\""+other+"\"\nAGENT_BUS_QUOTA_HOLD=\"nope-VALUE\"\n")
+	f.env["AGENT_BUS_QUOTA_WARN"] = "high-VALUE"
+	out, _, code := f.run(t, "demo")
+	if code != 0 || strings.Contains(out, "VALUE") {
+		t.Fatalf("exit %d or a value echoed:\n%s", code, out)
+	}
+	for _, want := range []string{
+		"project demo services' config.toml:2: dispatch.prompt_grace:",
+		"env AGENT_BUS_QUOTA_WARN: set but not a value its rule takes; default applies",
+		"project demo env file AGENT_BUS_QUOTA_HOLD: set but not a value its rule takes; default applies",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("misses %q:\n%s", want, out)
+		}
+	}
+	// The same file as the shell's warns once.
+	f2 := newConfigFixture(t)
+	f2.write(t, "config.toml", "[dispatch]\nprompt_grace = 4000\n")
+	f2.write(t, "services/demo.env", "XDG_CONFIG_HOME=\""+f2.xdg+"\"\n")
+	out, _, _ = f2.run(t, "demo")
+	if strings.Count(out, "dispatch.prompt_grace:") != 1 {
+		t.Errorf("the shared file warned twice:\n%s", out)
+	}
+}
