@@ -59,3 +59,36 @@ func TestSwapLedgerLifecycle(t *testing.T) {
 		t.Fatal("an unknown event was logged")
 	}
 }
+
+// busmon-notice: the ledger read forward from a cursor, paged, up to the
+// last-generated-id read with entries-added, so the caller can count losses.
+func TestSwapEventsAfter(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	ev, added, last, err := b.SwapEventsAfter(ctx, "0-0", 2)
+	if err != nil || len(ev) != 0 || added != 0 || last != "0-0" {
+		t.Fatalf("absent ledger = %v %d %q %v", ev, added, last, err)
+	}
+	for _, r := range []string{"coder", "foureyes", "master"} {
+		if err := b.LogSwap(ctx, SwapEvent{Role: r, Event: SwapDone, By: "dispatch"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ev, added, last, err = b.SwapEventsAfter(ctx, "0-0", 2) // a page of 2: read twice
+	if err != nil || len(ev) != 3 || added != 3 || ev[0].Role != "coder" || ev[2].Role != "master" || last != ev[2].ID {
+		t.Fatalf("all = %+v %d %q %v", ev, added, last, err)
+	}
+	if after, _, _, _ := b.SwapEventsAfter(ctx, ev[1].ID, 2); len(after) != 1 || after[0].Role != "master" {
+		t.Fatalf("after the second = %+v", after)
+	}
+	if none, a, l, err := b.SwapEventsAfter(ctx, last, 2); err != nil || len(none) != 0 || a != 3 || l != last {
+		t.Fatalf("at the end = %+v %d %q %v", none, a, l, err)
+	}
+	if err := b.r.XTrimMaxLen(ctx, SwapsKey(b.project), 1).Err(); err != nil {
+		t.Fatal(err)
+	}
+	// Trimmed: fewer events than entries-added grew by; the count still says 3.
+	if kept, a, _, _ := b.SwapEventsAfter(ctx, "0-0", 2); len(kept) != 1 || a != 3 {
+		t.Fatalf("after a trim = %+v %d", kept, a)
+	}
+}
