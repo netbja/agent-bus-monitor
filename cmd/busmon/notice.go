@@ -152,7 +152,7 @@ func (n *noticeState) fromPoll(s snapshot, self string, swaps []bus.SwapEvent, l
 	}
 	if s.guardianHealth != nil {
 		if n.health != nil {
-			for _, x := range healthNotices(n.health, s.guardianHealth) {
+			for _, x := range healthNotices(n.health, s.guardianHealth, s.guardianNotes) {
 				n.push(x)
 			}
 		}
@@ -183,10 +183,11 @@ func pauseNotice(p bus.PauseRecord) notice {
 }
 
 // healthNotices are the checks that worsened or recovered between two reads;
-// a check absent from the last read is a baseline. A recovery says only that
-// the check is ok again: no record names a restarted service, and a note is
-// context, not proof of one (reviewer-codex).
-func healthNotices(prev, cur map[string]guardian.Record) []notice {
+// a check absent from the last read is a baseline. A fail now ok with a
+// sentinel note written since the fail began shows that note, attributed to
+// its author and never read as a claimed restart (the record names no
+// service; master's ruling); otherwise the check is ok again.
+func healthNotices(prev, cur map[string]guardian.Record, notes map[string]guardian.Note) []notice {
 	ids := make([]string, 0, len(cur))
 	for id := range cur {
 		ids = append(ids, id)
@@ -209,6 +210,10 @@ func healthNotices(prev, cur map[string]guardian.Record) []notice {
 		case old.Status == guardian.OK && r.Status == guardian.Warn:
 			out = append(out, notice{text: "health: " + id + " warns" + detail, level: noticeAttention})
 		case r.Status == guardian.OK && (old.Status == guardian.Warn || old.Status == guardian.Fail):
+			if note, ok := notes[id]; ok && old.Status == guardian.Fail && note.Author == "sentinel" && note.At > old.Since && note.Text != "" {
+				out = append(out, notice{text: "sentinel: " + Preview(note.Text), level: noticeDone})
+				continue
+			}
 			out = append(out, notice{text: "health: " + id + " ok again", level: noticeDone})
 		}
 	}
@@ -307,7 +312,11 @@ func (m Model) noticeLine(width int) Line {
 	fade := 0
 	if m.cfg.settings.Fade && th.Animated() {
 		d := m.notice.duration()
-		if e := m.now.Sub(m.notice.start); e > d-noticeBlend {
+		at := m.now
+		if !m.notice.held.IsZero() { // held: it stays as it was when held
+			at = m.notice.held
+		}
+		if e := at.Sub(m.notice.start); e > d-noticeBlend {
 			fade = max(1, int(100*(1-float64(e-(d-noticeBlend))/float64(noticeBlend))))
 		}
 	}

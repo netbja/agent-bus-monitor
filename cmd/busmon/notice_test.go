@@ -101,7 +101,8 @@ func TestNoticeTail(t *testing.T) {
 
 // Health: a check worsening or recovering between two polls; a check new
 // since the last read, or the first read, shows nothing. A fail mended with
-// no note is taken as proof of a restart (the record names no service).
+// a sentinel note written since the fail began shows that note, attributed,
+// never a claimed restart (master's ruling); else "ok again".
 func TestNoticeHealth(t *testing.T) {
 	rec := func(st guardian.Status, detail string, since int64) guardian.Record {
 		return guardian.Record{ID: "services", Status: st, Detail: detail, Since: since}
@@ -118,7 +119,9 @@ func TestNoticeHealth(t *testing.T) {
 		{"unknown to fail", rec(guardian.Unknown, "", 1), rec(guardian.Fail, "", 2), nil, GlyphBlocked + " health: services fails"},
 		{"warn to ok", rec(guardian.Warn, "", 1), rec(guardian.OK, "fine", 2), nil, GlyphDone + " health: services ok again"},
 		{"fail to ok, sentinel's note", rec(guardian.Fail, "", failSince), rec(guardian.OK, "", 2),
-			&guardian.Note{ID: "services", Author: "sentinel", At: failSince + 1000, Text: "restarted missions"}, GlyphDone + " health: services ok again"},
+			&guardian.Note{ID: "services", Author: "sentinel", At: failSince + 1000, Text: "restarted missions"}, GlyphDone + " sentinel: restarted missions"},
+		{"warn to ok, sentinel's note", rec(guardian.Warn, "", failSince), rec(guardian.OK, "", 2),
+			&guardian.Note{ID: "services", Author: "sentinel", At: failSince + 1000, Text: "looked"}, GlyphDone + " health: services ok again"},
 		{"fail to ok, an old note", rec(guardian.Fail, "", failSince), rec(guardian.OK, "", 2),
 			&guardian.Note{ID: "services", Author: "sentinel", At: failSince - 1000, Text: "restarted missions"}, GlyphDone + " health: services ok again"},
 		{"fail to ok, the person's note", rec(guardian.Fail, "", failSince), rec(guardian.OK, "", 2),
@@ -360,6 +363,16 @@ func TestNoticeFade(t *testing.T) {
 	m = step(t, m, fadeMsg(t0.Add(3500*time.Millisecond)))
 	if f := m.noticeLine(30)[0].Fade; f < 40 || f > 60 {
 		t.Fatalf("half way through the blend: %d", f)
+	}
+	// Held under a dialog that leaves the footer visible: it neither ages nor
+	// blends (foureyes).
+	held := quiet(t, true) // its own model: a copy shares the notice state
+	held = step(t, held, pollMsg{snap: shellFixture(shellNow), at: t0, swaps: reload})
+	held.ui.reminder = &reminderDialog{}
+	held = step(t, held, fadeMsg(t0.Add(3500*time.Millisecond)))
+	held = step(t, held, fadeMsg(t0.Add(9*time.Second)))
+	if f := held.noticeLine(30)[0].Fade; noticeText(held) == "" || f < 40 || f > 60 {
+		t.Fatalf("held: %q, fade %d (want the blend where it was held)", noticeText(held), f)
 	}
 	m = step(t, m, fadeMsg(t0.Add(4*time.Second)))
 	if noticeText(m) != "" {

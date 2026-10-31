@@ -440,7 +440,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   more than the events read = one attention line, a count gone down = a new baseline). Only an
   automatic author (`dispatch` or a registered agent, never the person). A queue of 5 plus a collapsed
   rest, 4 s alone and 2 s while others wait, held by a flash or a dialog (`noticeHeld`; one on screen stops
-  ageing until it is released), a health recovery only `ok again` (no record names a restarted service), blended out
+  ageing until it is released), a health recovery `ok again`, or after a fail with a sentinel note written since the fail began
+  `sentinel: <note>` (the note, never a claimed restart: no record names the service), blended out
   over the last second in true colour on the fade schedule; no bell, no mark, no count.
 
 ### How the bus is actually consumed (lives outside this repo)
