@@ -324,19 +324,24 @@ Three limits, each said in the check's detail:
   token; `GIT_TERMINAL_PROMPT=0` alone would only stop the terminal prompt. SSH judges
   authentication with whatever identity the service already has, and nothing else. A private repository therefore answers "authentication required": that reads
   **https unknown (private repository)**, never a fail.
-- **The service's context, not the person's shell.** Under `systemd --user` or launchd there is
-  usually no `SSH_AUTH_SOCK`, so a key that lives in the person's agent cannot be used: an SSH
-  "permission denied" with no agent socket reads **ssh unknown (no SSH agent in the service)**,
-  never a fail. Only what the service can see is judged.
+- **The service's context, not the person's shell; authentication is never reachability.**
+  Under `systemd --user` or launchd there is usually no `SSH_AUTH_SOCK`, and the service's keys
+  may not be the person's. So an SSH **authentication** answer that is not a success ("permission
+  denied", no usable key) reads **ssh unknown (not authenticated from the service)**, never a
+  failure: GitHub answered, which proves the network, not the key. Only network-level failures
+  (connect timeout, refused, reset) count against a transport.
 - **A network outage is not the person's problem to fix here.** When neither github.com resolves
   nor any probe connects (DNS failure, no route, connection refused on both), the check reads
   **unknown (offline)**: it never opens a fail episode, so sentinel is not woken for a laptop on a
   train.
 
-Statuses: **ok** when at least one probe can be judged and every probe that can be judged answers (none judged, such as a private repository and no SSH agent, is **unknown**, never ok); **warn** when one transport answers
-and the other connects but is refused or times out (`ssh times out · https ok`); **fail** only when
-GitHub answers the network but refuses both judged probes; **unknown** in the three cases above, or
-with no GitHub remote. Reachability is still not permission: a push can hang on credentials that
+Statuses, from network-level results only (an authentication answer is "unknown" for that probe):
+**ok** when at least one probe can be judged and every judged probe got through (none judged, such
+as a private repository and no usable SSH key, is **unknown**, never ok); **warn** when one transport
+gets through and the other fails at the network level (`ssh times out · https ok`); **fail** when
+github.com resolves and both transports fail at the network level (GitHub blocked or down from here,
+while DNS works); **unknown** when github.com does not resolve (offline), when no probe could be
+judged, or with no GitHub remote. Reachability is still not permission: a push can hang on credentials that
 neither probe touches (as on this host today), and the detail says so.
 
 Place (section 1): **For you** when warn or fail; the remediation names the transport that works
