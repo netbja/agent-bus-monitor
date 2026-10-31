@@ -29,8 +29,8 @@ the same way wherever it is.
 - **Filters on single keys**, the same letters on every page where they apply: `o` folded items
   shown, `a` all (also the quiet ones), `/` text filter. Page-specific keys are listed in its footer.
 - **Symbols from the closed set only** (`theme.go`): `▲` act or failing, `◆` waits on someone,
-  `●` live or unread, `○` quiet or read, `✓` fine or done, `·` nothing to say, `?` not measured
-  (as today's `?N`). Colour is never the only signal (`NO_COLOR` keeps the symbol and the word).
+  `●` live or unread, `○` quiet or read, `✓` fine or done, `·` nothing to say. `?` (not measured,
+  as today's `?N`) is a plain ASCII marker, not a glyph of the set, as it already is in the header. Colour is never the only signal (`NO_COLOR` keeps the symbol and the word).
 - **Ages:** `humanAge` as today; past 7 days a day count (`10d`); never a timestamp on a row.
 
 Sizes: each page is shown at **80x24** (the narrow tier: one view at a time, the page fills the
@@ -309,18 +309,20 @@ medium tiers, so nothing shows twice. **Question 5:** pinned always, or only in 
 
 `github` (Interval 15m, Deadline 10 s), run by the dispatch service only when the project's Git
 remote is on github.com. It answers one question: **can the project's services reach GitHub, by
-each transport, from where they run?** It is not a push test and it reads no credential.
+each transport, from where they run?** It is not a push test. It stores and prints no credential;
+what each probe does with one is stated row by row below.
 
 | Probe | How | ok when |
 |---|---|---|
-| SSH | `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` | exit 1 with "successfully authenticated" |
-| HTTPS | `git -c credential.helper= ls-remote --exit-code https://github.com/<owner>/<repo> HEAD` with `GIT_TERMINAL_PROMPT=0` | exit 0 within the deadline |
+| SSH | `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com`: an **authentication** probe, with the service's own SSH identities (its keys or agent socket), as a push over SSH would; BatchMode never prompts for a passphrase | exit 1 with "successfully authenticated" |
+| HTTPS | `git -c credential.helper= ls-remote https://github.com/<owner>/<repo>` with `GIT_TERMINAL_PROMPT=0`: a **reachability** probe, no helper and no prompt, so no credential at all | exit 0 within the deadline, whatever refs come back (an empty repository lists none and is still reachable; no `--exit-code`) |
 
 Three limits, each said in the check's detail:
 
-- **No credential, really.** `-c credential.helper=` empties the helpers (store, gh, libsecret),
-  so the HTTPS probe never asks for a stored token; `GIT_TERMINAL_PROMPT=0` alone would only stop
-  the terminal prompt. A private repository therefore answers "authentication required": that reads
+- **Authentication and reachability are apart.** HTTPS judges reachability only:
+  `-c credential.helper=` empties the helpers (store, gh, libsecret), so it never asks for a stored
+  token; `GIT_TERMINAL_PROMPT=0` alone would only stop the terminal prompt. SSH judges
+  authentication with whatever identity the service already has, and nothing else. A private repository therefore answers "authentication required": that reads
   **https unknown (private repository)**, never a fail.
 - **The service's context, not the person's shell.** Under `systemd --user` or launchd there is
   usually no `SSH_AUTH_SOCK`, so a key that lives in the person's agent cannot be used: an SSH
