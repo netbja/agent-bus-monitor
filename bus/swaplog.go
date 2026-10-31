@@ -300,7 +300,8 @@ func (b *Bus) RetireSwap(ctx context.Context, e SwapEvent) error {
 // It ends at the last-generated-id read together with entries-added, so an
 // entry appended in between is read next time and never counted as lost:
 // entries were trimmed unread when added grew by more than the events read.
-// An absent ledger reads as no events, added 0, last "0-0".
+// An absent ledger reads as no events, added 0, last "0-0". An empty after is
+// the baseline read: the count and the last id only, no events.
 func (b *Bus) SwapEventsAfter(ctx context.Context, after string, page int) (events []SwapEvent, added int64, last string, err error) {
 	info, err := b.r.XInfoStream(ctx, SwapsKey(b.project)).Result()
 	if err != nil {
@@ -310,6 +311,9 @@ func (b *Bus) SwapEventsAfter(ctx context.Context, after string, page int) (even
 		return nil, 0, "", err
 	}
 	last = info.LastGeneratedID
+	if after == "" {
+		return nil, info.EntriesAdded, last, nil
+	}
 	if page <= 0 {
 		page = 50
 	}

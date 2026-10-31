@@ -74,6 +74,11 @@ func TestSwapEventsAfter(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// The baseline read (busmon's first, after = ""): the count and the last
+	// id only, no events, on a ledger that has entries (foureyes).
+	if none, a, l, err := b.SwapEventsAfter(ctx, "", 2); err != nil || len(none) != 0 || a != 3 || l == "0-0" {
+		t.Fatalf("baseline read = %+v %d %q %v", none, a, l, err)
+	}
 	ev, added, last, err = b.SwapEventsAfter(ctx, "0-0", 2) // a page of 2: read twice
 	if err != nil || len(ev) != 3 || added != 3 || ev[0].Role != "coder" || ev[2].Role != "master" || last != ev[2].ID {
 		t.Fatalf("all = %+v %d %q %v", ev, added, last, err)
