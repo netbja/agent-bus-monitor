@@ -683,10 +683,14 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   over `config.toml` over the legacy `busmon.toml` (busmon's keys only) over the default; warnings name
   file, line and key and never echo a value; no secret and no connection in the file. Readers resolve
   through `config.Resolver`; `TestNoEnvLiteralOutsideTheRegistry` fails on a registry env name written
-  as a literal elsewhere (its `notYetMigrated` list shrinks as readers move). busmon's settings are
+  as a literal elsewhere. busmon's settings are
   migrated (`loadBusmonSettings`), and so is the person's name (`personName` in `identity.go`: the files
   only, `config.toml` then `busmon.toml`; `identity set` writes `config.toml`; `ask` and the plugin keep
-  their raw env rule through `config.EnvName`). `config.Path` reads `XDG_CONFIG_HOME`/`HOME` through
+  their raw env rule through `config.EnvName`), and so are the services and writers (`config.Machine(getenv)`:
+  env, that environment's `config.toml`, `busmon.toml`; `serviceQuota`/`Tokens`/`Clear`, `dispatch.PromptGrace`,
+  `bus.ContextAlert`, `runawayThresholdsFromEnv`; the writers' caps per call through `bus.capFiles`, which
+  reads no file in a test binary, `testing.Testing()`, so the person's own file never changes a test).
+  `config.Path` reads `XDG_CONFIG_HOME`/`HOME` through
   the injected getenv only, absolute paths only, so a test's environment never reaches the real home;
   `config` does not import `bus` (bus will read its caps through it),
   so `ValidName` is repeated there, held equal by a test.

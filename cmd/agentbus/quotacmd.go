@@ -9,12 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/quota"
 	"github.com/netbja/agent-bus-monitor/tokens"
@@ -190,7 +190,8 @@ func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''
 // and the thresholds from the environment (AGENT_BUS_QUOTA_WARN, _HOLD,
 // _MAX_AGE; AGENT_BUS_QUOTA=off disables it).
 func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfig {
-	if getenv("AGENT_BUS_QUOTA") == "off" {
+	settings := config.Machine(getenv)
+	if !settings.Bool("dispatch.quota") {
 		return dispatch.QuotaConfig{}
 	}
 	cfg, err := quota.LoadConfig(quota.ConfigPath(), exec.LookPath)
@@ -199,22 +200,10 @@ func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfi
 	}
 	readers := quota.Readers(cfg, time.Now)
 	q := dispatch.QuotaConfig{Read: func(ctx context.Context) []quota.Reading { return quota.ReadAll(ctx, readers) }}
-	num := func(k string) float64 {
-		f, _ := strconv.ParseFloat(getenv(k), 64)
-		return f
-	}
-	q.WarnPct, q.HoldPct = num("AGENT_BUS_QUOTA_WARN"), num("AGENT_BUS_QUOTA_HOLD")
-	if d, err := time.ParseDuration(getenv("AGENT_BUS_QUOTA_MAX_AGE")); err == nil {
-		q.MaxAge = d
-	}
-	switch v := getenv("AGENT_BUS_QUOTA_LONG_HOLD"); v {
-	case "":
-	case "0":
-		q.LongHold = -1 // off
-	default:
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			q.LongHold = d
-		}
+	q.WarnPct, q.HoldPct = settings.Float("dispatch.quota_warn"), settings.Float("dispatch.quota_hold")
+	q.MaxAge = settings.Duration("dispatch.quota_max_age")
+	if q.LongHold = settings.Duration("dispatch.quota_long_hold"); q.LongHold == 0 {
+		q.LongHold = -1 // 0 = off
 	}
 	return q
 }
@@ -235,7 +224,7 @@ func serviceContext(getenv func(string) string, lookPath func(string) (string, e
 // ~/.claude/projects), {p}:tokens every 5 minutes, 64 files and 128 MiB per
 // pass. AGENT_BUS_TOKENS=0 turns it off.
 func serviceTokens(getenv func(string) string, home func() (string, error)) dispatch.TokensConfig {
-	if getenv("AGENT_BUS_TOKENS") == "0" {
+	if !config.Machine(getenv).Bool("dispatch.tokens") {
 		return dispatch.TokensConfig{}
 	}
 	base := getenv("CLAUDE_CONFIG_DIR")
@@ -264,7 +253,7 @@ func servicePrompt(getenv func(string) string, lookPath func(string) (string, er
 // clear rings the desktop through the context alert's runner.
 func serviceClear(getenv func(string) string, lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) dispatch.ClearConfig {
-	return dispatch.ClearConfig{On: getenv("AGENT_BUS_AUTO_CLEAR") == "1", Proof: 30 * time.Second, Notify: desktopNotify(lookPath, run)}
+	return dispatch.ClearConfig{On: config.Machine(getenv).Bool("dispatch.auto_clear"), Proof: 30 * time.Second, Notify: desktopNotify(lookPath, run)}
 }
 
 // desktopNotify runs notify-send, bounded to 5 s; nil when it is not on PATH.

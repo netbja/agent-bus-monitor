@@ -9,13 +9,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"sync/atomic"
+	"testing"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -32,33 +33,30 @@ const (
 // within a version are non-breaking and must not bump it.
 const ProtocolVersion = 1
 
-const defaultReportMax = 500
-
-// reportMaxLen resolves the report rune cap: AGENT_BUS_REPORT_MAX if it parses
-// to a positive int, else defaultReportMax (500). Read per call so it stays
-// settable from tests and per-process env.
-func reportMaxLen() int {
-	if v := os.Getenv("AGENT_BUS_REPORT_MAX"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
+// capFiles are the settings files the writers' caps read below the env: the
+// process's config.toml, read per call so a writer follows the file without a
+// restart. A test binary reads none, so the person's own file never changes a
+// test (TestCapsReadConfigTOML replaces it).
+var capFiles = func() []*config.File {
+	if testing.Testing() {
+		return nil
 	}
-	return defaultReportMax
+	return []*config.File{config.Load(config.Path(os.Getenv), "config.toml")}
 }
 
-const defaultVerdictMax = 10000
+// reportMaxLen resolves the report rune cap: AGENT_BUS_REPORT_MAX if it parses
+// to a positive int, else config.toml's bus.report_max, else 500. Read per call so it stays
+// settable from tests and per-process env.
+func reportMaxLen() int {
+	return config.Resolver{Getenv: os.Getenv, Files: capFiles()}.Int("bus.report_max")
+}
 
 // verdictMaxLen resolves the verdict-ledger cap: AGENT_BUS_VERDICT_MAX if it
-// parses to a positive int, else defaultVerdictMax (10000). The ledger is the
+// parses to a positive int, else config.toml's bus.verdict_max, else 10000. The ledger is the
 // money-path audit trail, so it is capped far higher than the 1000-entry
 // activity streams — low volume, but we keep ~all of it.
 func verdictMaxLen() int {
-	if v := os.Getenv("AGENT_BUS_VERDICT_MAX"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return defaultVerdictMax
+	return config.Resolver{Getenv: os.Getenv, Files: capFiles()}.Int("bus.verdict_max")
 }
 
 var ValidStates = map[string]bool{
@@ -155,18 +153,11 @@ func SanitizeReportMessage(s string) string {
 	return out
 }
 
-const defaultReportFullMax = 8000
-
 // reportFullMax resolves the retained-full-text cap: AGENT_BUS_REPORT_FULL_MAX if
-// it parses to a positive int, else defaultReportFullMax (8000). Read per call,
+// it parses to a positive int, else config.toml's bus.report_full_max, else 8000. Read per call,
 // mirroring reportMaxLen.
 func reportFullMax() int {
-	if v := os.Getenv("AGENT_BUS_REPORT_FULL_MAX"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return defaultReportFullMax
+	return config.Resolver{Getenv: os.Getenv, Files: capFiles()}.Int("bus.report_full_max")
 }
 
 // SanitizeReportFull is the fidelity-preserving companion to

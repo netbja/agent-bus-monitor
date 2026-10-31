@@ -11,27 +11,6 @@ import (
 	"testing"
 )
 
-// notYetMigrated are the env names whose readers still read them raw; each
-// migration step empties a part of it, and the last one deletes it.
-var notYetMigrated = map[string]bool{
-	"AGENT_BUS_CONTEXT_ALERT":                true,
-	"AGENT_BUS_PROMPT_GRACE":                 true,
-	"AGENT_BUS_QUOTA":                        true,
-	"AGENT_BUS_QUOTA_WARN":                   true,
-	"AGENT_BUS_QUOTA_HOLD":                   true,
-	"AGENT_BUS_QUOTA_MAX_AGE":                true,
-	"AGENT_BUS_QUOTA_LONG_HOLD":              true,
-	"AGENT_BUS_TOKENS":                       true,
-	"AGENT_BUS_AUTO_CLEAR":                   true,
-	"AGENT_BUS_REPORT_MAX":                   true,
-	"AGENT_BUS_REPORT_FULL_MAX":              true,
-	"AGENT_BUS_VERDICT_MAX":                  true,
-	"AGENTBUS_HEALTH_RUNAWAY_SILENT_AFTER":   true,
-	"AGENTBUS_HEALTH_RUNAWAY_CONTEXT_GROWTH": true,
-	"AGENTBUS_HEALTH_RUNAWAY_GROWTH_SPAN":    true,
-	"AGENTBUS_HEALTH_RUNAWAY_SCREEN_REPEATS": true,
-}
-
 // TestNoEnvLiteralOutsideTheRegistry: a reader resolves a setting through the
 // registry, so no registry env name is a string literal anywhere else in the
 // Go sources (tests aside: they set the environment). Readers go through
@@ -41,11 +20,6 @@ func TestNoEnvLiteralOutsideTheRegistry(t *testing.T) {
 	for _, k := range Keys {
 		if k.Env != "" {
 			names[k.Env] = true
-		}
-	}
-	for n := range notYetMigrated {
-		if !names[n] {
-			t.Errorf("notYetMigrated names %s, which is not in the registry", n)
 		}
 	}
 	root := ".."
@@ -69,7 +43,7 @@ func TestNoEnvLiteralOutsideTheRegistry(t *testing.T) {
 			if !ok || lit.Kind != token.STRING {
 				return true
 			}
-			if v, err := strconv.Unquote(lit.Value); err == nil && names[v] && !notYetMigrated[v] {
+			if v, err := strconv.Unquote(lit.Value); err == nil && names[v] {
 				t.Errorf("%s: %s read outside the registry", fset.Position(lit.Pos()), v)
 			}
 			return true
