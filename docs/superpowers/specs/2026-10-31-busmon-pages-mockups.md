@@ -364,7 +364,7 @@ permission, so every push URL comes after a check the person runs:
 | Situation | Remediation |
 |---|---|
 | SSH down, HTTPS reached | `HTTPS reaches GitHub (not authenticated by this check). To push over it, check that a credential is configured (gh auth status), then git remote set-url --push origin https://github.com/<owner>/<repo>` |
-| HTTPS down, SSH reached and authenticated | `SSH authenticates from the service (identity accepted; access to this repository and write permission not checked). To push over it, check write access (git push --dry-run from the checkout), then git remote set-url --push origin git@github.com:<owner>/<repo>.git` |
+| HTTPS down, SSH reached and authenticated | `SSH authenticates from the service (identity accepted; access to this repository and write permission not checked). To push over it, check write access against the SSH URL itself, which leaves the checkout's remotes as they are: git push --dry-run git@github.com:<owner>/<repo>.git HEAD (GitHub checks write access before the dry run stops); if it passes, git remote set-url --push origin git@github.com:<owner>/<repo>.git` |
 | HTTPS down, SSH reached but not authenticated | `SSH reaches GitHub, but the service has no key GitHub accepts: add one for the service, or push from your own shell` |
 | both down an hour | `check the network, then githubstatus.com` |
 
