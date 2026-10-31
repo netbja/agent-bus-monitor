@@ -87,8 +87,19 @@ type upTemplate struct {
 // then Ctrl+B Up and pick the project". Outside herdr it provisions and says how
 // to open it.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
-	if len(args) == 0 || !bus.ValidName(args[0]) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
+		return 1
+	}
+	if !bus.ValidName(args[0]) { // stranger-test: say why, and what would do
+		fmt.Fprintf(stderr, "agentbus up: invalid project name %q: a lowercase letter, then lowercase letters, digits, - or _, up to 32 in all\n", args[0])
+		if low := strings.ToLower(args[0]); bus.ValidName(low) {
+			try := []string{"agentbus", "up", low}
+			for _, a := range args[1:] {
+				try = append(try, shellWord(a))
+			}
+			fmt.Fprintf(stderr, "try: %s\n", strings.Join(try, " "))
+		}
 		return 1
 	}
 	project := args[0]
@@ -562,7 +573,7 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 			if err != nil {
 				return err
 			}
-			cmd := exec.Command(filepath.Join(repo, "scripts", "bootstrap"), args...)
+			cmd := bootstrapCommand(repo, args)
 			cmd.Stdout, cmd.Stderr, cmd.Stdin = stdout, stderr, os.Stdin
 			return cmd.Run()
 		},
@@ -987,4 +998,26 @@ func waitBroker(ping func(time.Duration) error, sleep func(time.Duration), now f
 func brokerStarting(err error) bool {
 	return strings.HasPrefix(err.Error(), "LOADING") || errors.Is(err, syscall.ECONNREFUSED) ||
 		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF)
+}
+
+// shellWord is a as one shell word: as typed when every character is safe
+// (letters, digits and _ . / : = @ % + , ~ -), else single-quoted, so a
+// suggested command pasted back runs that command and nothing else.
+func shellWord(a string) string {
+	if a != "" && strings.Trim(a, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:=@%+,~-") == "" {
+		return a
+	}
+	return shellQuote(a)
+}
+
+// upCallerEnv tells scripts/bootstrap that agentbus up runs it, so its recall
+// does not tell the person to run agentbus up (stranger-test).
+const upCallerEnv = "AGENTBUS_UP=1"
+
+// bootstrapCommand is the repository's bootstrap with args, in up's environment
+// plus upCallerEnv.
+func bootstrapCommand(repo string, args []string) *exec.Cmd {
+	cmd := exec.Command(filepath.Join(repo, "scripts", "bootstrap"), args...)
+	cmd.Env = append(os.Environ(), upCallerEnv)
+	return cmd
 }

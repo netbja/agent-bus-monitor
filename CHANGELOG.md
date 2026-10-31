@@ -8,6 +8,11 @@ release exists.
 
 - `busmon` without a project now says `--project <p>` (it said `-project`) and points to `busmon --list`
   and `busmon --pick`.
+- `agentbus up` with an invalid project name (`MyProject`) now says why it is refused and what is
+  allowed, and suggests the lowercase name with the rest of the command, instead of only its usage line.
+- `agentbus up` no longer prints bootstrap's `recall: … open it with agentbus up <p>` hint, which told the
+  person to run the command they had just run (`bootstrap recall` run by hand still prints it).
+- `agentbus agents` on a project no agent has joined yet says so instead of printing nothing.
 - busmon: `←` and `→` step the lower panel's tabs (Activity, Board, Requests, Plan) while one of them
   has the focus, wrapping as herdr's tabs do; on an opened page they still step its list. `w` with no
   question open opens the compose window to master (with one open it still opens it, as `!` does).

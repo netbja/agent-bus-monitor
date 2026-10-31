@@ -108,3 +108,14 @@ func TestAgentsForgetRefusesLiveAgentsUnlessForced(t *testing.T) {
 		t.Fatalf("invalid name: code %d", code)
 	}
 }
+
+// stranger-test: a project no agent has joined yet says so, instead of printing nothing.
+func TestAgentsTableSaysWhenNoAgentYet(t *testing.T) {
+	out := agentsTable(map[string]bus.AgentSnapshot{}, time.Now())
+	if !strings.Contains(out, "no agent has declared a status yet") || !strings.HasSuffix(out, "\n") {
+		t.Fatalf("empty table: %q", out)
+	}
+	if strings.Contains(agentsTable(map[string]bus.AgentSnapshot{"coder": {State: "idle"}}, time.Now()), "no agent") {
+		t.Fatal("the empty note shows with an agent present")
+	}
+}
