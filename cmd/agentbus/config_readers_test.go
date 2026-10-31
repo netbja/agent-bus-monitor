@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,5 +109,40 @@ func TestRegistryDefaultsMatchTheReaders(t *testing.T) {
 	}
 	if lim := bus.Limits(); r.Int("bus.report_max") != lim.PreviewRunes || r.Int("bus.report_full_max") != lim.FullRunes || r.Int("bus.verdict_max") != lim.VerdictEntries {
 		t.Errorf("bus caps differ: %+v", lim)
+	}
+}
+
+// A bad value in config.toml falls back and is said once, never its value.
+func TestSettingsWarningsAreSaid(t *testing.T) {
+	getenv := withConfig(t, "[dispatch]\nquota_warn = 0\n[x]\ntoken = \"SECRET-v\"\n", nil)
+	var buf bytes.Buffer
+	printSettingsWarnings(getenv, &buf)
+	out := buf.String()
+	if !strings.Contains(out, "agentbus: settings: config.toml:2: dispatch.quota_warn:") || !strings.Contains(out, "x.token: unknown key") || strings.Contains(out, "SECRET") {
+		t.Errorf("warnings:\n%s", out)
+	}
+	if strings.Count(out, "quota_warn") != 1 {
+		t.Errorf("not once:\n%s", out)
+	}
+	if q := serviceQuota(getenv, io.Discard); q.WarnPct != 85 {
+		t.Errorf("the bad value did not fall back: %v", q.WarnPct)
+	}
+	printSettingsWarnings(func(string) string { return "" }, &buf)
+}
+
+// service run logs the settings warnings once at start.
+func TestServiceRunLogsSettingsWarnings(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	d.Settings = func() []string {
+		return []string{"config.toml:2: dispatch.quota_warn: want a number above 0, up to 100; ignored"}
+	}
+	d.RunDispatch = func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
+		return 0
+	}
+	var log bytes.Buffer
+	serviceRun(context.Background(), b, "dispatch", nil, d, &log)
+	if strings.Count(log.String(), "service: settings: config.toml:2: dispatch.quota_warn") != 1 {
+		t.Errorf("log:\n%s", log.String())
 	}
 }
