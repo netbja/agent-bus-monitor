@@ -2,10 +2,19 @@
 
 # agent-bus
 
+**English** · [Français](README.fr.md)
+
 A self-contained multi-agent coordination bus over **Redis Streams**, plus the Go tooling
 around it. Agents publish status, commands and notifications on a shared Redis instance, under
 a required project namespace. `busmon`, a terminal dashboard, shows the traffic live. The
 broker, the client and the monitor all live here; nothing depends on any other project.
+
+It aims to stay **small, simple and fast**: one Redis container, two Go binaries and a few
+scripts, on your own machine. It is also **light on your LLM subscriptions**: nothing polls
+an agent, an idle agent waits on the bus without spending tokens, and the dispatcher types
+only a one-line wake-up into its pane when work arrives for it (plus, if you turn it on, a
+`/clear` after the agent's own hand-off). Usage windows and context fill
+are read from local sources, without spending tokens on them.
 
 <p align="center"><img src="docs/assets/busmon.png" alt="busmon showing the fictional acme-shop project: five agents, the activity feed, the task board and the tracked requests" width="900"></p>
 
@@ -55,6 +64,24 @@ agentbus up myproject ~/code/myproject --as <your-name>
 first-launch tour walks you through its screen (F1 then `t` shows it again). Later, `Ctrl+B`
 then `↑` (the plugin's Projects picker) reopens any project.
 
+### First run
+
+What to expect the first time:
+
+- **A project name is lowercase**: a letter, then letters, digits, `-` or `_` (32 at most).
+  `agentbus up MyProject …` is refused with the rule and the lowercase command to run instead.
+- **The client's own trust dialog.** When Claude Code or Codex has never opened the project's
+  folder, `up` starts the first agent of that client alone and names the pane where its dialog
+  waits for your answer; the client's other agents start once you have answered.
+- **busmon needs a project.** Started bare, it says to pass `--project <p>` and points to
+  `busmon --list` (the broker's projects) and `busmon --pick` (the picker).
+- **An empty team says so.** `agentbus agents` on a project no agent has joined yet says that,
+  rather than printing nothing; agents appear as they start.
+- **Who you are on the bus.** In busmon you write as a person: `--as <your-name>` (or
+  `AGENT_BUS_HUMAN`, or `agentbus identity set <your-name>`). From a shell, `agentbus` writes as
+  `AGENT_BUS_AGENT`, and as `anonymous` when it is unset; inside a herdr pane with it unset, a
+  command that writes is refused with the fix, so an agent never posts under the wrong name.
+
 - `./setup.sh update` keeps the machine current; busmon shows `↑ vX.Y.Z` in its header when a
   newer release exists.
 - `./setup.sh status` shows what is installed.
@@ -66,6 +93,11 @@ then `↑` (the plugin's Projects picker) reopens any project.
 The `statusLine` step gives agent-bus Claude Code's rate limits and each session's context
 fill: without it the Claude gauges and the context alert have nothing to read. Codex, Grok,
 Kimi Code and agy need nothing ([quotas](docs/OPERATIONAL-GUIDE.md#scenario-c-watching-and-stopping-a-project)).
+
+**Pull requests and forges.** The bus itself needs only Git: the missions conductor merges and
+tests on local branches and never pushes. Delivery to a forge is GitHub today: the docs agent opens
+its pull request with the `gh` CLI. GitLab, Bitbucket and a local mode with no forge are planned
+for v0.26.
 
 **What's new:** see the [CHANGELOG](CHANGELOG.md), and [`docs/releases/`](docs/releases/) for
 the full notes of each version. The step-by-step guides are in English and French:
@@ -480,6 +512,15 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   several lines (Ctrl+S sends, Tab moves to the recipient, Esc keeps the draft). You write as a
   **person**: `busmon --as charlie` (or `AGENT_BUS_HUMAN`, or `agentbus identity set charlie`)
   shows `♙ Charlie [human]`; your entries carry `human=yes`, and agents see `"human": true`.
+- **Footer** — the keys of where you are (F1 lists them all). At its right end, for a few
+  seconds, a quiet line tells what happened by itself while you watched: a pause the dispatcher
+  or an agent set (`▲` for a quota pause), the project resumed, an agent's context cleared after
+  its hand-off, a reload begun, done (`✓`) or failed (`▲`), a role moved to a fallback profile or
+  back, a health check worsening (`▲`) or recovering (`✓`). One at a time, 4 s each (2 s while
+  others wait, and past five the rest in one `N more automatic actions (R: recap)` line); in true
+  colour it fades out. It never rings, marks or counts, and never shows your own act, a question
+  or a message for you: those stay in For you. What happened while busmon was closed is in the
+  recap (`R`).
 
 **Pages.** Each opens over the lower zone, Esc goes back:
 

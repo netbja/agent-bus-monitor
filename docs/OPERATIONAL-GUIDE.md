@@ -114,6 +114,11 @@ cd ~/agent-bus-monitor
   the agent starts without it, with a warning;
 - starts the Redis broker on `127.0.0.1:6380`.
 
+**Found it in herdr's plugin list?** Install it as above, not with `herdr plugin install`: the plugin
+needs the broker, the binaries and the skills that `./setup.sh` sets up, and setup links it into
+herdr for you. `herdr plugin install netbja/agent-bus-monitor` stops with the same advice and installs
+nothing.
+
 Make sure `~/.local/bin` is on your `PATH`; `install` warns when it is not, or when another copy
 shadows it.
 
@@ -250,6 +255,19 @@ Assume your target project is at `~/code/myapp`.
    `@agent` wakes that agent and `@all` wakes every agent. Plain text is a broadcast nobody
    reads, so busmon asks for a second Enter before sending it.
 
+**What a first run may tell you:**
+- `agentbus up MyApp …` is refused: a project name is lowercase (a letter, then letters, digits,
+  `-` or `_`, 32 at most), and the message gives the lowercase command to run instead.
+- The client's own trust dialog: when Claude Code or Codex has never opened the folder, `up`
+  starts that client's first agent alone and names the pane where the dialog waits; answer it
+  there, and the client's other agents start.
+- `busmon` started without a project says to pass `--project <p>` and points to `busmon --list`
+  and `busmon --pick`.
+- `agentbus --project myapp agents` before any agent has joined says so instead of printing nothing.
+- From a shell, `agentbus` writes as `AGENT_BUS_AGENT`, and as `anonymous` when it is unset. Inside
+  a herdr pane with it unset, a command that writes is refused with the fix, so an agent never posts
+  under the wrong name. In busmon you write as a person (`--as`).
+
 ---
 
 ### Scenario B: Resuming an EXISTING Project
@@ -305,6 +323,14 @@ agent names, no project template):
   the port bind and the container's last log lines. F5 shows the project's
   health, `R` a recap of what happened while you were away (unread first), `P` the batch's
   plan, `U` the tokens. F1 lists every key; `t` there replays the first-launch tour.
+- **The notice line.** At the right end of the footer, for a few seconds, busmon tells what
+  happened by itself while you watched: a pause the dispatcher or an agent set (a quota pause
+  with `▲`), the project resumed, an agent's context cleared after its hand-off, a reload begun,
+  done or failed, a role moved to a fallback profile or back, a health check worsening or
+  recovering (after a fail, sentinel's note on it when it wrote one). One at a time, 4 s each, 2 s
+  while others wait; past five, the rest in one `N more automatic actions (R: recap)` line. It never
+  rings or counts, never shows your own act, a question or a message for you (those are in For
+  you), and a flash or a dialog holds it back. What happened while busmon was closed is in `R`.
 - **For you.** The For you panel, next to Agents, holds what only you can settle: an agent's
   open questions (`ask`), an agent waiting for your decision (`wait`), a 4-eyes gate you opened
   or that holds you (`gate`), and messages to you that you have not opened (`unread`). The
@@ -595,6 +621,10 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
    the services keep one after you unset it in your shell, until the next `up` without it. The
    escalation target and the reload setting stay even then, until `--escalate-to` or `--reload`
    changes them.
+6. **Pull requests go to GitHub today**: the bus and the missions conductor need only Git (the
+   conductor merges and tests on local branches and never pushes), but delivery to a forge is
+   GitHub: the docs agent opens its pull request with the `gh` CLI.
+   GitLab, Bitbucket and a local mode with no forge are planned for v0.26.
 
 ---
 
