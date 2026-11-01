@@ -29,7 +29,7 @@ func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Run
 	cfg.Log = stderr
 	cfg.Observe = dispatch.ObserveEvery
 	if paths, err := service.PathsFrom(os.Getenv); err == nil {
-		cfg.Health = realHealthConfig(b, rt, paths)
+		cfg.Health = realHealthConfig(b, rt, paths, cfg.Clear, &cfg.EscalateTo)
 	}
 	status := false
 	usage := func(msg string) int {

@@ -386,6 +386,9 @@ func splitStreamID(id string) (ms, seq int64, ok bool) {
 	return ms, seq, err1 == nil && err2 == nil
 }
 
+// StreamIDLess orders stream ids; a malformed id sorts first.
+func StreamIDLess(a, b string) bool { return streamIDLess(a, b) }
+
 // streamIDLess orders stream ids; a malformed id sorts first.
 func streamIDLess(a, b string) bool {
 	am, as, aok := splitStreamID(a)

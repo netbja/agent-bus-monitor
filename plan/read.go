@@ -33,8 +33,19 @@ func Load(ctx context.Context, b *bus.Bus) (Active, bool, error) {
 // verdict ledger in one read, the missions of the plan's changes. A failed
 // read leaves its OK flag false and is returned.
 func Read(ctx context.Context, b *bus.Bus, f File) (Inputs, []error) {
+	all, err := b.Verdicts(ctx, "")
+	if err != nil {
+		in, errs := ReadWithVerdicts(ctx, b, f, nil, false)
+		return in, append(errs, fmt.Errorf("verdicts: %w", err))
+	}
+	return ReadWithVerdicts(ctx, b, f, BySubject(all, nil), true)
+}
+
+// ReadWithVerdicts is Read with the verdicts given by the caller (a poller
+// that reads the ledger forward keeps its own), ok false when it has none.
+func ReadWithVerdicts(ctx context.Context, b *bus.Bus, f File, verdicts map[string][]bus.Verdict, ok bool) (Inputs, []error) {
 	var errs []error
-	in := Inputs{Missions: map[string]mission.State{}}
+	in := Inputs{Missions: map[string]mission.State{}, Verdicts: verdicts, VerdictsOK: ok}
 	var err error
 	if in.Facts, err = b.PlanFacts(ctx); err == nil {
 		in.FactsOK = true
@@ -45,11 +56,6 @@ func Read(ctx context.Context, b *bus.Bus, f File) (Inputs, []error) {
 		in.BoardOK = true
 	} else {
 		errs = append(errs, fmt.Errorf("board: %w", err))
-	}
-	if all, err := b.Verdicts(ctx, ""); err == nil {
-		in.Verdicts, in.VerdictsOK = BySubject(all, nil), true
-	} else {
-		errs = append(errs, fmt.Errorf("verdicts: %w", err))
 	}
 	if in.Asks, err = b.Asks(ctx); err == nil {
 		in.AsksOK = true

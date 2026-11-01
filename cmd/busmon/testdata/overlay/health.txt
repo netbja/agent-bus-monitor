@@ -22,4 +22,7 @@
   ? Client updates                   no current measurement                                         
   ? Redis version                    no current measurement                                         
   ? GitHub reachable                 no current measurement                                         
+  ? Team stall                       no current measurement                                         
+  ? Clear after hand-off             no current measurement                                         
+  ? Quiet agent                      no current measurement                                         
   ── fine · 1  (a shows them) ──

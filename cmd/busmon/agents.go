@@ -287,7 +287,7 @@ const updatedBarCells = 10
 // dormantAfter: an agent silent this long, not listening, not the pilot and
 // owed nothing is left out of the Agents panel and of @all (a shows it). Its
 // declared state is never rewritten: it is hidden, not called offline.
-const dormantAfter = 24 * time.Hour
+const dormantAfter = bus.DormantAfter
 
 func dormant(a *agentState, isPilot bool, now time.Time) bool {
 	return !isPilot && !a.armed && a.waiting == 0 && !waitsForPerson(a) && !a.lastSeen.IsZero() && now.Sub(a.lastSeen) > dormantAfter
