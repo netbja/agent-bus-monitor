@@ -323,3 +323,38 @@ func TestClearPassFailsClosedWhenTheStatusHistoryWasTrimmed(t *testing.T) {
 		t.Fatalf("cmds %q", got)
 	}
 }
+
+// A deferred clear says why: the clear pass keeps its last reason per agent
+// (read by the clear-stall health check) and logs it once per change, never
+// once per pass (stall guard, the 2026-11-01 silent hand-off).
+func TestClearPassRecordsAndLogsWhyItDefers(t *testing.T) {
+	w := newClearWorld(t, true)
+	var log strings.Builder
+	w.l.cfg.Log = &log
+	w.l.cfg.Clear.Decisions = NewClearDecisions()
+	w.rt.script = func(string, int) Inspection { in := readyIn(); in.Focused = true; return in }
+	w.pass()
+	w.pass()
+	if got := w.l.cfg.Clear.Decisions.Last("coder"); got != "the pane is focused" {
+		t.Fatalf("last decision %q", got)
+	}
+	if n := strings.Count(log.String(), `"clear-deferred"`); n != 1 {
+		t.Fatalf("%d clear-deferred lines over two passes:\n%s", n, log.String())
+	}
+	if !strings.Contains(log.String(), `"reason":"the pane is focused"`) {
+		t.Fatalf("the log does not say why:\n%s", log.String())
+	}
+	w.rt.script = func(string, int) Inspection { return readyIn() }
+	w.pass() // unfocused: cleared, and the record says so
+	if w.clears() != 1 || w.l.cfg.Clear.Decisions.Last("coder") != "cleared" {
+		t.Fatalf("clears %d, last %q", w.clears(), w.l.cfg.Clear.Decisions.Last("coder"))
+	}
+}
+
+// Nil decisions (tests, the foreground dispatcher) are safe.
+func TestClearDecisionsNilIsSafe(t *testing.T) {
+	var d *ClearDecisions
+	if d.note("coder", "x") || d.Last("coder") != "" {
+		t.Fatal("a nil ClearDecisions records something")
+	}
+}

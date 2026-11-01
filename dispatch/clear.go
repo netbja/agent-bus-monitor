@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -99,6 +100,43 @@ type ClearConfig struct {
 	On     bool          // AGENT_BUS_AUTO_CLEAR=1
 	Proof  time.Duration // how long the new session may take to be proved (30 s)
 	Notify func(ctx context.Context, title, body string) error
+	// Decisions keeps each agent's last clear decision, for the clear-stall
+	// health check (stall guard); nil keeps none.
+	Decisions *ClearDecisions
+}
+
+// ClearDecisions is the clear pass's last reason per agent ("cleared" once
+// it typed /clear), in memory only: a deferred clear used to leave no trace.
+type ClearDecisions struct {
+	mu sync.Mutex
+	m  map[string]string
+}
+
+// NewClearDecisions is an empty record.
+func NewClearDecisions() *ClearDecisions { return &ClearDecisions{m: map[string]string{}} }
+
+// note records agent's reason and reports whether it changed.
+func (c *ClearDecisions) note(agent, reason string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m[agent] == reason {
+		return false
+	}
+	c.m[agent] = reason
+	return true
+}
+
+// Last is agent's last recorded reason, "" when none yet.
+func (c *ClearDecisions) Last(agent string) string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.m[agent]
 }
 
 // clearEnd and clearNote are the {p}:quota once-marks of a clear's outcome:
@@ -182,8 +220,12 @@ func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 // and types /clear.
 func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus.AgentSnapshot, asks []bus.Ask, armed map[string]string) error {
 	f := ClearFacts{On: true, Record: rec, Snap: snap, Held: l.heldBy(&snap)}
-	if void, _ := rec.VoidFor(snap, true); void || !clearClients[snap.Client] {
-		return nil // judged by DecideClear's cheap rules without reading the pane
+	if void, _ := rec.VoidFor(snap, true); void {
+		return nil // no longer a hand-off: nothing to clear, nothing to say
+	}
+	if !clearClients[snap.Client] {
+		l.deferClear(a, DecideClear(f).Reason) // judged by DecideClear's cheap rules without reading the pane
+		return nil
 	}
 	var err error
 	if f.Swapping, err = l.b.Swapping(ctx, a); err != nil {
@@ -204,9 +246,11 @@ func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus
 	f.Inspection = l.rt.Inspect(ctx, snap.Pane)
 	d := DecideClear(f)
 	if len(d.WaitGates) > 0 {
+		l.deferClear(a, d.Reason)
 		return l.clearWaits(ctx, a, rec, d.WaitGates)
 	}
 	if !d.Clear {
+		l.deferClear(a, d.Reason)
 		return nil
 	}
 	at, ok, err := l.b.FencedReserveClear(ctx, l.token, a, rec)
@@ -223,8 +267,20 @@ func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus
 	if err := l.rt.Clear(ctx, snap.Pane); err != nil {
 		return err // typed or not, unknown: the proof settles it, or escalates once
 	}
+	l.cfg.Clear.Decisions.note(a, "cleared")
 	l.log(map[string]any{"agent": a, "action": "clear", "session": rec.Session, "reserved_at": at})
 	return nil
+}
+
+// deferClear records why a hand-off was not cleared this pass and logs it
+// once per change of reason, never once per pass (stall guard).
+func (l *loop) deferClear(agent, reason string) {
+	if l.cfg.Clear.Decisions == nil {
+		return
+	}
+	if l.cfg.Clear.Decisions.note(agent, reason) {
+		l.log(map[string]any{"agent": agent, "action": "clear-deferred", "reason": reason})
+	}
 }
 
 // clearWaits tells the escalation target, once per record, which gates hold
