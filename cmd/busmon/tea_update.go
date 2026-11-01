@@ -22,7 +22,7 @@ func (m *Model) mode() Mode {
 		return ModeTour
 	case m.ui.compose != nil:
 		return ModeCompose
-	case m.ui.line == lineFilter:
+	case m.ui.line == lineFilter || m.ui.line == lineHistFilter:
 		return ModeFilter
 	case m.ui.line == lineMessage:
 		return ModeInput
@@ -338,6 +338,12 @@ func movesSelection(act Action) bool {
 // typed characters edit.
 func (m *Model) editFilter(act Action, k Key) {
 	switch {
+	case act == ActSend && m.ui.line == lineHistFilter:
+		if p := m.rd.top(); p != nil && p.kind == ovHistory {
+			p.histFilter, p.sel, p.dirty = parseFilter(m.ui.edit), 0, true
+		}
+		m.leaveLine(false)
+		m.refresh()
 	case act == ActSend:
 		m.ui.filter = parseFilter(m.ui.edit)
 		m.leaveLine(false)

@@ -536,7 +536,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | `R` | the recap: "where was I?", built from what the bus retains, unread first |
 | `P` | the plan |
 | `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |
-| `H` | history: re-read the past, the archive on this host then the live streams, newest first by day (enter opens an entry, `o` loads three days more) |
+| `H` | history: re-read the past, the archive on this host then the live streams, newest first by day (enter opens an entry and `n`/`p` step, `o` loads three days more, `/` filters, `t` keeps the selected entry's thread) |
 
 **Responsive.** At 120 columns and more, For you and Agents side by side above the tabs. From
 80 to 119 they are stacked. Under 80, one view at a time (`1 For you` … `6 Plan`), with health

@@ -62,7 +62,9 @@ type page struct {
 	recapAll  recapModel // ovRecap: the recap as built, unfiltered
 	recapLine int        // ovRecap: the body line of the cursor's row
 
-	hist   *histView  // ovHistory: what the load read
+	hist       *histView  // ovHistory: what the load read
+	histFilter feedFilter // ovHistory: / and t narrow it
+	fromHist   bool       // ovMessage opened from History: n/p step through it
 	hrows  []histItem // ovHistory: its selectable rows (sel: the selected one)
 }
 
@@ -483,6 +485,7 @@ func (m *Model) buildPage() bool {
 		if p.hist != nil {
 			v = *p.hist
 		}
+		v.entries, v.filter = historyFiltered(v.entries, p.histFilter), p.histFilter.raw
 		p.title, p.body, p.hrows = historyBody(v, p.sel, time.Local, width)
 		p.sel = clamp(p.sel, 0, max(0, len(p.hrows)-1))
 	case ovTokens:
@@ -721,6 +724,12 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 	}
 	if p.kind == ovHistory {
 		switch {
+		case act == ActFilter:
+			m.openLine(lineHistFilter, p.histFilter.raw)
+			return nil
+		case act == ActTour:
+			m.historyThread(p)
+			return nil
 		case act == ActOlder:
 			return m.historyOlder(p)
 		case k.Code == keyEnter:
@@ -1050,6 +1059,9 @@ func (m Model) drawReader(g *grid) {
 // opening an unread For you line reads it and its row leaves the list, which
 // would shift the selection under the page (reviewer-codex).
 func (m *Model) readerStep(p *page, next bool) tea.Cmd {
+	if p.fromHist {
+		return m.historyStep(next)
+	}
 	if !p.fromList {
 		return nil
 	}
@@ -1184,7 +1196,7 @@ func (m Model) pageOffers(act Action) bool {
 		return ok && p.kind == ovPlanTask
 	case ActShowAll:
 		return p.kind == ovHealth || p.kind == ovTokens
-	case ActOlder:
+	case ActOlder, ActFilter:
 		return p.kind == ovHistory
 	}
 	return false

@@ -292,7 +292,8 @@ var (
 		{Keys: "n p " + GlyphArrowL + GlyphArrowR, Hint: "next/prev", Help: "the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)", Act: ActNextItem, match: either(runeIs('n'), keyIs(keyRight))},
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions (w with none open: write to master)", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
-		{Keys: "t", Help: "in the help: the first-launch tour again", Act: ActTour, match: runeIs('t')},
+		{Keys: "t", Help: "in the help: the first-launch tour again; in History (H): the selected entry's thread", Act: ActTour, match: runeIs('t')},
+		{Keys: "/", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words", Act: ActFilter, OnPage: true, match: runeIs('/')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before", Act: ActOlder, OnPage: true, match: runeIs('o')},

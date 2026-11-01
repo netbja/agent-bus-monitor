@@ -34,6 +34,7 @@ type histView struct {
 	noArchive bool   // no archive directory on this host
 	liveErr   string // the live streams could not be read
 	err       string // the archive could not be read
+	filter    string // the filter as typed, for the title
 }
 
 // histItem is one selectable row: its body line and its entry.
@@ -58,6 +59,9 @@ func historyBody(v histView, sel int, loc *time.Location, width int) (string, []
 		}
 	}
 	title := fmt.Sprintf("History %s %d days %s %d entries", GlyphNone, v.days, GlyphNone, n)
+	if v.filter != "" {
+		title += " " + GlyphNone + " filter: " + v.filter
+	}
 	var body []Line
 	muted := func(s string) { body = append(body, Line{S(RoleMuted, "  "+s)}) }
 	if v.noArchive {
@@ -227,7 +231,7 @@ func (m *Model) openHistoryEntry(p *page) tea.Cmd {
 	}
 	e := p.hrows[p.sel].e
 	ev := bus.ParseEntry(bus.StreamKey(m.cfg.project, e.Stream), e.ID, e.F)
-	return m.push(page{kind: ovMessage, key: ev.ID, ev: ev, at: history.At(e)})
+	return m.push(page{kind: ovMessage, key: ev.ID, ev: ev, at: history.At(e), fromHist: true})
 }
 
 func histLines(p *page) func() []int {
@@ -238,4 +242,60 @@ func histLines(p *page) func() []int {
 		}
 		return lines
 	}
+}
+
+// historyFiltered keeps the entries the page's filter passes: @agent, a thread
+// id and words, as Activity's filter reads them.
+func historyFiltered(es []history.Entry, f feedFilter) []history.Entry {
+	if f.empty() {
+		return es
+	}
+	hf := history.Filter{Agent: f.agent, Thread: f.thread, Grep: f.text}
+	var out []history.Entry
+	for _, e := range es {
+		if hf.Match(e) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// historyThread narrows the page to the selected entry's thread (t): its ref,
+// else its own id.
+func (m *Model) historyThread(p *page) {
+	if p.sel < 0 || p.sel >= len(p.hrows) {
+		return
+	}
+	e := p.hrows[p.sel].e
+	id := e.F["ref"]
+	if id == "" {
+		id = e.ID
+	}
+	p.histFilter, p.sel, p.dirty = parseFilter(id), 0, true
+	m.refresh()
+}
+
+// historyStep is n/p on an entry opened from History: the page's next or
+// previous row, in its place.
+func (m *Model) historyStep(next bool) tea.Cmd {
+	if len(m.rd.pages) < 2 || m.rd.pages[len(m.rd.pages)-2].kind != ovHistory {
+		return nil
+	}
+	hp := &m.rd.pages[len(m.rd.pages)-2]
+	to := hp.sel - 1
+	if next {
+		to = hp.sel + 1
+	}
+	if to < 0 || to >= len(hp.hrows) {
+		m.ui.flash, m.ui.flashErr = "no previous item", false
+		if next {
+			m.ui.flash = "no next item"
+		}
+		return nil
+	}
+	m.pop()
+	hp = m.rd.top()
+	hp.sel, hp.dirty = to, true
+	m.refresh()
+	return m.openHistoryEntry(hp)
 }

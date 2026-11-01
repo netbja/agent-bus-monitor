@@ -154,3 +154,60 @@ func TestHistoryPageGoldens(t *testing.T) {
 		})
 	}
 }
+
+func loadedHistory(t *testing.T, es []history.Entry) Model {
+	t.Helper()
+	m := fixtureShell(t, 120, 40)
+	m, _ = pressCmd(t, m, 'H')
+	next, _ := m.Update(historyMsg{serial: m.rd.top().serial, v: histView{entries: es, days: 3, loaded: true}})
+	return next.(Model)
+}
+
+// / filters the page as Activity's filter reads it; t narrows it to the
+// selected entry's thread; an empty filter shows everything again.
+func TestHistoryPageFilterAndThread(t *testing.T) {
+	es := histFixture()
+	root := es[2]
+	es = append(es, history.Entry{Stream: "cmd", ID: histID(history.At(root).Add(5 * time.Minute)),
+		F: map[string]string{"from": "coder", "target": "master", "type": "reply", "ref": root.ID, "command": "done with it"}})
+	m := loadedHistory(t, es)
+	m, _ = pressCmd(t, m, '/')
+	m = typeText(t, m, "@foureyes")
+	m, _ = pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+	if p := m.rd.top(); p.kind != ovHistory || len(p.hrows) != 1 || p.hrows[0].e.Stream != "verdicts" || !strings.Contains(p.title, "filter: @foureyes") {
+		t.Fatalf("filtered: %q %+v", p.title, p.hrows)
+	}
+	m, _ = pressCmd(t, m, '/')
+	for range len("@foureyes") {
+		m, _ = pressCmd(t, m, tea.Key{Code: tea.KeyBackspace})
+	}
+	m, _ = pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+	if n := len(m.rd.top().hrows); n != 4 {
+		t.Fatalf("an empty filter shows all: %d", n)
+	}
+	// The newest row is the reply; t keeps its thread: the directive and the reply.
+	m, _ = pressCmd(t, m, 't')
+	p := m.rd.top()
+	if len(p.hrows) != 2 || p.hrows[1].e.ID != root.ID {
+		t.Fatalf("thread: %+v", p.hrows)
+	}
+}
+
+// n/p on an entry opened from History step through the page's rows.
+func TestHistoryEntryNextPrevious(t *testing.T) {
+	m := loadedHistory(t, histFixture())
+	m, _ = pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+	first := m.rd.top().ev.ID
+	m, _ = pressCmd(t, m, 'n')
+	if top := m.rd.top(); top.kind != ovMessage || top.ev.ID == first || len(m.rd.pages) != 2 {
+		t.Fatalf("n: %v %q (pages %d)", top.kind, top.ev.ID, len(m.rd.pages))
+	}
+	m, _ = pressCmd(t, m, 'p')
+	if m.rd.top().ev.ID != first {
+		t.Fatalf("p went back to %q", m.rd.top().ev.ID)
+	}
+	m, _ = pressCmd(t, m, 'p')
+	if m.ui.flash != "no previous item" {
+		t.Fatalf("flash %q", m.ui.flash)
+	}
+}
