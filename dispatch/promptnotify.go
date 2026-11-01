@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 // The prompt notification (prompt-notify, the person, 2026-10-27 "Bureau"): an
@@ -34,17 +34,10 @@ type PromptConfig struct {
 // not ring, one left alone rings well before the turn is lost.
 const PromptGraceDefault = 30 * time.Second
 
-// PromptGrace reads AGENT_BUS_PROMPT_GRACE (seconds, 0 = off), else the default.
+// PromptGrace is dispatch.prompt_grace: AGENT_BUS_PROMPT_GRACE (whole seconds
+// 0-3600, 0 = off), else config.toml, else PromptGraceDefault.
 func PromptGrace(getenv func(string) string) time.Duration {
-	v := getenv("AGENT_BUS_PROMPT_GRACE")
-	if v == "" {
-		return PromptGraceDefault
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 || n > 3600 {
-		return PromptGraceDefault
-	}
-	return time.Duration(n) * time.Second
+	return config.Machine(getenv).Duration("dispatch.prompt_grace")
 }
 
 // promptMark is agent's {p}:quota field; its value is the episode, pid:since.

@@ -29,6 +29,7 @@ type serviceRunDeps struct {
 	RunDispatch func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int
 	RunMissions func(ctx context.Context, b *bus.Bus, cfg mission.RunConfig) error
 	Now         func() time.Time
+	Settings    func() []string // the settings files' warnings, logged once at start (nil = none)
 }
 
 // lastError keeps the last line that reports an error, so a failed service
@@ -147,6 +148,11 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	p := b.Project()
 	logf := func(format string, a ...any) {
 		fmt.Fprintf(logw, time.Now().Format("2006-01-02 15:04:05 ")+"service: "+format+"\n", a...)
+	}
+	if d.Settings != nil { // a bad value falls back, never stops a service: it is logged once
+		for _, w := range d.Settings() {
+			logf("settings: %s", w)
+		}
 	}
 	budget := service.Budget{Path: d.Paths.BudgetFile(p, kind)}
 	rec := func(state, detail, errText string) bus.ServiceRecord {

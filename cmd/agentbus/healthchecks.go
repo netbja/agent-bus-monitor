@@ -22,6 +22,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -663,36 +664,25 @@ func contextTokenCount(value string) (int, bool) {
 }
 
 func runawayThresholdsFromEnv(getenv func(string) string) (health.RunawayThresholds, bool) {
-	t := health.DefaultRunawayThresholds()
-	valid := true
-	parseDuration := func(key string, dst *time.Duration) {
-		value := getenv(key)
-		if value == "" {
-			return
-		}
-		d, err := time.ParseDuration(value)
-		if err != nil || d <= 0 {
+	// The env first (an invalid value makes the check unknown, as always), then
+	// config.toml: up never copies these into the services' env file.
+	settings := config.Machine(getenv)
+	t, valid := health.DefaultRunawayThresholds(), true
+	for _, x := range []struct {
+		key string
+		set func(any)
+	}{
+		{"health.runaway.silent_after", func(v any) { t.SilentAfter = v.(time.Duration) }},
+		{"health.runaway.context_growth", func(v any) { t.FastGrowth = v.(int) }},
+		{"health.runaway.growth_span", func(v any) { t.GrowthSpan = v.(time.Duration) }},
+		{"health.runaway.screen_repeats", func(v any) { t.RepeatedScreens = v.(int) }},
+	} {
+		if r := settings.Get(x.key); r.Invalid {
 			valid = false
-			return
+		} else {
+			x.set(r.Value)
 		}
-		*dst = d
 	}
-	parseInt := func(key string, dst *int) {
-		value := getenv(key)
-		if value == "" {
-			return
-		}
-		n, err := strconv.Atoi(value)
-		if err != nil || n <= 0 {
-			valid = false
-			return
-		}
-		*dst = n
-	}
-	parseDuration("AGENTBUS_HEALTH_RUNAWAY_SILENT_AFTER", &t.SilentAfter)
-	parseInt("AGENTBUS_HEALTH_RUNAWAY_CONTEXT_GROWTH", &t.FastGrowth)
-	parseDuration("AGENTBUS_HEALTH_RUNAWAY_GROWTH_SPAN", &t.GrowthSpan)
-	parseInt("AGENTBUS_HEALTH_RUNAWAY_SCREEN_REPEATS", &t.RepeatedScreens)
 	return t, valid
 }
 

@@ -3,9 +3,9 @@ package bus
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -30,13 +30,11 @@ const ContextAlertDefault = 80.0
 // and reads unknown (no alert, no display, no health verdict).
 const ContextMaxAge = 30 * time.Minute
 
-// ContextAlert reads AGENT_BUS_CONTEXT_ALERT: a percent in 0-100 (0 = off);
-// empty or invalid keeps ContextAlertDefault.
+// ContextAlert is dispatch.context_alert for the process whose environment is
+// getenv: AGENT_BUS_CONTEXT_ALERT (a percent in 0-100, 0 = off; empty or
+// invalid is skipped), else its config.toml, else ContextAlertDefault.
 func ContextAlert(getenv func(string) string) float64 {
-	if n, err := strconv.ParseFloat(getenv("AGENT_BUS_CONTEXT_ALERT"), 64); err == nil && n >= 0 && n <= 100 {
-		return n
-	}
-	return ContextAlertDefault
+	return config.Machine(getenv).Float("dispatch.context_alert")
 }
 
 // Known: the fill names its session and was at most ContextMaxAge old when

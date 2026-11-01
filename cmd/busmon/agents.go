@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -378,7 +377,7 @@ func cell(segs []Seg, n int) Line {
 
 // ctxAlert is the threshold for a fill whose dispatcher did not publish its
 // own (AGENT_BUS_CONTEXT_ALERT, read once at start; 0 = off).
-var ctxAlert = bus.ContextAlert(os.Getenv)
+var ctxAlert = bus.ContextAlertDefault // set in main from the environment and config.toml
 
 // knownFill is the agent's context fill when published and not aged, and
 // the threshold it is judged against (0 = the alert is off).

@@ -45,6 +45,26 @@ func (r Resolver) Get(name string) Resolved {
 	return Resolved{Key: k, Value: k.Default, Source: "default"}
 }
 
+// Machine is the resolver of a process whose environment is getenv: the env,
+// then that environment's config.toml, then busmon.toml (its keys only).
+func Machine(getenv func(string) string) Resolver {
+	return Resolver{Getenv: getenv, Files: []*File{
+		Load(Path(getenv), "config.toml"),
+		LoadLegacy(LegacyPath(getenv), "busmon.toml"),
+	}}
+}
+
+// Warnings are the problems of every file the resolver reads, in order.
+func (r Resolver) Warnings() []Warning {
+	var out []Warning
+	for _, f := range r.Files {
+		if f != nil {
+			out = append(out, f.Warnings...)
+		}
+	}
+	return out
+}
+
 // EnvName is a key's environment variable, for a reader that keeps its own
 // raw rule; an unknown name panics (a programming error).
 func EnvName(name string) string {

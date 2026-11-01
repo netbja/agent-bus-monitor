@@ -6,6 +6,14 @@ release exists.
 
 ## Unreleased
 
+- The project services and the writers read `config.toml` too, below the environment, each with its
+  own rule unchanged: `[dispatch]` `context_alert`, `prompt_grace`, `quota`, `quota_warn`, `quota_hold`,
+  `quota_max_age`, `quota_long_hold`, `tokens`, `auto_clear`; `[bus]` `report_max`, `report_full_max`,
+  `verdict_max` (per writer); `[health.runaway]` `silent_after`, `context_growth`, `growth_span`,
+  `screen_repeats`, which a service could never get from the shell (`agentbus up` does not copy them).
+  A service reads the `config.toml` of the `XDG_CONFIG_HOME` its env file names, at its next start.
+  A bad value falls back to the next source and is said once: in the service's log at its start, on
+  stderr for an `agentbus` command (never the value; a service never stops over it).
 - `agentbus identity set <name>` records the name in `config.toml` (append-only, as before), and a
   name already in `busmon.toml` no longer refuses it: the new one wins, and the command says the old one
   is shadowed. `agentbus identity` and `agentbus up`'s default `--as` read `config.toml`, then

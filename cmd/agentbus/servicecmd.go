@@ -417,6 +417,7 @@ func mainServiceRun(project, host string, args []string) int {
 	hostname, _ := os.Hostname()
 	deps := serviceRunDeps{
 		Paths: paths, Host: hostname, Heartbeat: 5 * time.Second, Standby: 15 * time.Second, HerdrPing: h.Ping, Now: time.Now,
+		Settings: func() []string { return settingsWarnings(os.Getenv) },
 		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
 			cfg := dispatchBaseConfig()
 			cfg.Log, cfg.OnLease = log, onLease

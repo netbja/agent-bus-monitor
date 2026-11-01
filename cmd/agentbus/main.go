@@ -148,6 +148,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "agentbus: "+err.Error())
 		os.Exit(2)
 	}
+	if args[0] != "service" { // a service logs its own at start
+		printSettingsWarnings(os.Getenv, os.Stderr)
+	}
 
 	client, err := bus.Connect(host)
 	if err != nil {
