@@ -49,3 +49,9 @@ Answer on the bus, never only in your pane: `agentbus reply --ref <id> <from> "<
 a question, `agentbus report ui-grok --to master "<report>"` for a proposal (a summary line,
 `## Proposal`, `## Open questions`). Then `agentbus status ui-grok idle "<what you finished>"`
 and stop. You do not retire yourself: master does, once the discussion is over.
+
+**Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
+reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
+hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even
+after a `working` you declared. You still declare `waiting`, `blocked` and `done` yourself, and only
+you lift `waiting`: declare `working` once the person has answered.

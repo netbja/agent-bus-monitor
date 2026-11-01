@@ -97,3 +97,9 @@ Finish with `agentbus request done <task> "<summary>"`, then a report in the agr
 summary line, `## Done`, `## What remains for you`) with
 `agentbus report infra --to master "<report>"`, then `agentbus status infra idle "<what you finished>"`
 and stop. You do not retire yourself: master does, once your work is reviewed.
+
+**Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
+reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
+hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even
+after a `working` you declared. You still declare `waiting`, `blocked` and `done` yourself, and only
+you lift `waiting`: declare `working` once the person has answered.
