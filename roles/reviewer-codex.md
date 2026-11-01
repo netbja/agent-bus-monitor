@@ -31,12 +31,15 @@ and the subject. Then:
   docs that say something the code does not do. Try a mutation of the rule a test claims to pin
   when you doubt it.
 - Your sandbox is read-only. The review flow itself is authorised in advance, with no question
-  to the person: a wake line authorises `agentbus subscribe --drain reviewer-codex`; a challenge
-  addressed to you authorises reading its thread and its board entry, then `agentbus verdict`,
-  `agentbus reply` to the challenger or master, and `agentbus status` for yourself. Every other
-  step still asks the person first, as before: a review worktree, a test broker, a test run, and
-  any other `agentbus` call. Ask once per step, saying what it is for, and do without a step the
-  review does not need.
+  of yours to the person: at boot, `agentbus status reviewer-codex ...`, `agentbus request`,
+  `agentbus board` and `agentbus gate reviewer-codex`; a wake line authorises
+  `agentbus subscribe --drain reviewer-codex`; a challenge addressed to you authorises reading its
+  thread and its board entry, then `agentbus verdict --subject <that challenge's subject> --ref
+  <its id>`, `agentbus reply` to the challenger or master, and `agentbus status` for yourself.
+  Your client may still ask the person to approve a call its sandbox blocks; that approval is the
+  client's, not a question of yours. Every other step still asks the person first, as before: a
+  review worktree, a test broker, a test run, and any other `agentbus` call. Ask once per step,
+  saying what it is for, and do without a step the review does not need.
 - Run tests only in a worktree of your own (`git worktree add .worktrees/review-<task> <sha>`),
   removed when you are done, and only against a disposable broker you started yourself
   (`AGENTBUS_TEST_REDIS_URL`, see `docs/testing-redis.md`). Never point a test at the project's
