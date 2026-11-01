@@ -18,7 +18,7 @@ destination** with a proposed default; simple and fast.
 ```
 agentbus backup  [--project <p>]... [--dir <d>] [--secrets] [--dry-run]
 agentbus backup list [--dir <d>]
-agentbus restore <archive> [--project <p>]... [--redis-only | --files-only] [--dry-run] [--force]
+agentbus restore <archive> [--project <p>]... [--redis-only | --files-only] [--with-runtime] [--dry-run] [--force]
 ```
 
 Both sit above the project-required exit (they name their projects, or all). `backup` with no
