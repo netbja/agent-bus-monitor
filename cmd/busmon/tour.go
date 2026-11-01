@@ -177,9 +177,9 @@ func pillRow(pill func(self string) Line, what ...tourPart) tourRow {
 // tourBudget is the header page's account window fixture.
 var tourBudget = bus.BudgetSnapshot{SessionPct: 62, WeeklyPct: 40}
 
-// tourGuardian is the header page's health fixture: two problems.
+// tourGuardian is the header page's health fixture: two checks to do, one in hand.
 func tourGuardian() guardianSummary {
-	return guardianSummary{Unhealthy: 2, Problems: 2, Total: len(guardian.Definitions()), Worst: guardian.Warn}
+	return guardianSummary{ToDo: 2, InHand: 1, Fine: len(guardian.Definitions()) - 3, Total: len(guardian.Definitions())}
 }
 
 var tourBook = []tourPage{
@@ -223,7 +223,7 @@ var tourBook = []tourPage{
 		rows(pillRow(func(string) Line { return healthSeg(health{ok: true}, time.Time{}, false) }, tx("busmon reads the bus")),
 			pillRow(func(string) Line { return dispatchSeg("up", false) }, tx("the service that wakes idle agents runs")),
 			pillRow(func(string) Line { return missionsSeg("up", false) }, tx("the conductor runs")),
-			pillRow(func(string) Line { return guardianSeg(tourGuardian(), false) }, tx("two health problems;"), ky(ModeShell, ActHealth), tx("says which")),
+			pillRow(func(string) Line { return guardianSeg(tourGuardian(), 100) }, tx("two checks only you can fix;"), ky(ModeShell, ActHealth), tx("says which")),
 			pillRow(func(string) Line { return budgetSeg("claude", tourBudget, TierNarrow, barView{}) }, tx("your account's windows, shared by every agent")),
 			pillRow(func(self string) Line { return Line{{Text: Preview(humanLabel(self, "")), Role: RoleText}} }, tx("you, as the agents see you"))),
 		para(tx("That is all."), ky(ModeShell, ActHelp), tx("then"), ky(ModeOverlay, ActTour), tx("shows these pages again.")),

@@ -8,7 +8,7 @@
 │  ●│   ● bus ok           busmon reads the bus                            │ 8m│
 ╰───│   ● dispatch up      the service that wakes idle agents runs         │───╯
 ╭─ A│   ● missions up      the conductor runs                              │ …─╮
-│▶ ♙│   health !2          two health problems; F5 says which              │le ▲
+│▶ ♙│   health ▲2          two checks only you can fix; F5 says which      │le ▲
 │  ♙│   claude 62%/40%     your account's windows, shared by every agent   │   ┃
 │  ♙│   ♙ Charlie [human]  you, as the agents see you                      │   ▼
 ╰───│                                                                      │───╯

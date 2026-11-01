@@ -7,61 +7,73 @@ import (
 	guardian "github.com/netbja/agent-bus-monitor/health"
 )
 
+// guardianSummary counts the checks by their place (busmon pages, Health).
 type guardianSummary struct {
-	Unhealthy int // every check not ok, unknown included
-	Problems  int // fail and warn only: what the pill counts
-	Total     int
-	Worst     guardian.Status
+	ToDo       int  // only the person can fix: what the pill counts
+	ToDoFail   bool // one of them fails: the pill reads red
+	InHand     int  // something deals with it: never counted in the header
+	Fine       int
+	Unmeasured int // never fine
+	Total      int
 }
 
 func summarizeGuardian(records map[string]guardian.Record, now time.Time) guardianSummary {
-	s := guardianSummary{Total: len(guardian.Definitions()), Worst: guardian.OK}
+	s := guardianSummary{Total: len(guardian.Definitions())}
 	for _, d := range guardian.Definitions() {
-		rec, ok := records[d.ID]
-		status := guardian.Unknown
-		if ok {
-			status = guardian.EffectiveStatus(rec, now.UnixMilli(), d.Interval)
-		}
-		if status != guardian.OK {
-			s.Unhealthy++
-		}
-		if status == guardian.Fail || status == guardian.Warn {
-			s.Problems++
-		}
-		if status == guardian.Fail {
-			s.Worst = guardian.Fail
-		} else if status == guardian.Warn && s.Worst != guardian.Fail {
-			s.Worst = guardian.Warn
-		} else if status == guardian.Unknown && s.Worst == guardian.OK {
-			s.Worst = guardian.Unknown
+		status := checkStatus(d, records, now)
+		switch d.Place(status) {
+		case guardian.PlaceForYou:
+			s.ToDo++
+			s.ToDoFail = s.ToDoFail || status == guardian.Fail
+		case guardian.PlaceInHand:
+			s.InHand++
+		case guardian.PlaceFine:
+			s.Fine++
+		default:
+			s.Unmeasured++
 		}
 	}
 	return s
 }
 
-func guardianSeg(s guardianSummary, compact bool) Line {
+// checkStatus is d's status now: unknown without a current measurement.
+func checkStatus(d guardian.Definition, records map[string]guardian.Record, now time.Time) guardian.Status {
+	rec, ok := records[d.ID]
+	if !ok {
+		return guardian.Unknown
+	}
+	return guardian.EffectiveStatus(rec, now.UnixMilli(), d.Interval)
+}
+
+// guardianSeg is the header's health pill at width: what only the person can
+// fix ("health ▲ 2 to do (F5)", "health ▲2" below the wide tier, "▲2" in the
+// compact header), else the checks not measured ("?3", never the tick), else
+// a muted ● when something is only in hand (Bernard: not counted in the
+// header), else the tick: every check measured ok.
+func guardianSeg(s guardianSummary, width int) Line {
 	name := "health " // a bare "!4" read as noise (A6); the compact header keeps the short form
-	if compact {
+	if width < 80 {
 		name = ""
 	}
-	if s.Total == 0 {
+	switch {
+	case s.Total == 0:
 		return Line{{Text: name + GlyphNone, Role: RoleMuted}}
+	case s.ToDo > 0:
+		role := RoleAttention
+		if s.ToDoFail {
+			role = RoleError
+		}
+		label := fmt.Sprintf("%s%d", GlyphBlocked, s.ToDo)
+		if width >= wideMinWidth {
+			label = fmt.Sprintf("%s %d to do (%s)", GlyphBlocked, s.ToDo, tourKeys(tourRef{m: ModeShell, act: ActHealth}))
+		}
+		return Line{{Text: name + label, Role: role}}
+	case s.Unmeasured > 0: // not measured yet or unreadable, never shown as healthy
+		return Line{{Text: fmt.Sprintf("%s?%d", name, s.Unmeasured), Role: RoleMuted}}
+	case s.InHand > 0:
+		return Line{{Text: name + GlyphWorking, Role: RoleMuted}}
 	}
-	if s.Unhealthy == 0 {
-		return Line{{Text: name + GlyphDone, Role: RoleOK}}
-	}
-	role := RoleMuted
-	switch s.Worst {
-	case guardian.Fail:
-		role = RoleError
-	case guardian.Warn:
-		role = RoleAttention
-	}
-	label := fmt.Sprintf("!%d", s.Problems)
-	if s.Problems == 0 { // only unknown: not measured yet or unreadable, never shown as healthy
-		label = fmt.Sprintf("?%d", s.Unhealthy)
-	}
-	return Line{{Text: name + label, Role: role}}
+	return Line{{Text: name + GlyphDone, Role: RoleOK}}
 }
 
 func healthOverlayText(records map[string]guardian.Record, notes map[string]guardian.Note, now time.Time) []Line {

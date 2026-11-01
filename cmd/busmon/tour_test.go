@@ -357,7 +357,7 @@ func TestTourHeaderPageUsesTheHeaderPills(t *testing.T) {
 		got += l.text() + "\n"
 	}
 	for _, want := range []string{plain(healthSeg(health{ok: true}, shellNow, false)), plain(dispatchSeg("up", false)),
-		plain(missionsSeg("up", false)), plain(guardianSeg(tourGuardian(), false)), humanLabel("charlie", "")} {
+		plain(missionsSeg("up", false)), plain(guardianSeg(tourGuardian(), 100)), humanLabel("charlie", "")} {
 		if !strings.Contains(got, want) {
 			t.Errorf("header page lacks the pill %q:\n%s", want, got)
 		}

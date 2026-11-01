@@ -8,7 +8,7 @@
 [1m│[m  ●[1m│[m   ● bus ok           busmon reads the bus                            [1m│[m 8m[1m│[m
 [1m╰───[m[1m│[m   ● dispatch up      the service that wakes idle agents runs         [1m│[m[1m───╯[m
 ╭─ A[1m│[m   ● missions up      the conductor runs                              [1m│[m …─╮
-│[7m▶ [m[7m♙[m[1m│[m   health !2          two health problems;[1m F5[m says which              [1m│[m[7mle [m▲
+│[7m▶ [m[7m♙[m[1m│[m   health ▲2          two checks only you can fix;[1m F5[m says which      [1m│[m[7mle [m▲
 │  ♙[1m│[m   claude 62%/40%     your account's windows, shared by every agent   [1m│[m   ┃
 │  ♙[1m│[m   ♙ Charlie [human]  you, as the agents see you                      [1m│[m   ▼
 ╰───[1m│[m                                                                      [1m│[m───╯
