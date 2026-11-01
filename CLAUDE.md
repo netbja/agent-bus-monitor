@@ -316,7 +316,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   medium 80–119 / narrow), `listview.go` (`listState`, the one selectable scrolling list: For you,
   Agents, Activity, Board, Requests and the picker are all instances; selection and wheel anchor
   follow keys, tail mode for Activity), `agents.go` (attention sort, flags, ctx-token parser),
-  `activity.go` (event → row, pause cursor), `board.go`, `header.go`, `detail.go` +
+  `activity.go` (event → row, pause cursor; rows kept in `activityCache`, keyed by every input a row reads, so a
+  message that changes no line lays out none: the person's Backspace lag, 30-40 ms a message with a full feed), `board.go`, `header.go`, `detail.go` +
   `detail_agent.go` (page bodies; their `Label:  value` rows go through `fields.go`, busmon-detail-labels:
   label capitalised with a colon, a block's values in one column after its longest label, a long value
   wrapped under its value, never under the label; the plan task, board task, agent, message and

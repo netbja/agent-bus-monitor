@@ -97,7 +97,8 @@ type activityFeed struct {
 	feed    []feedLine
 	seq     int
 	lastDay string
-	unread  unreadState // the person's unread marks (unread.go)
+	unread  unreadState   // the person's unread marks (unread.go)
+	rows    activityCache // its rows as last laid out (the lag fix)
 }
 
 // add appends one event to the feed (with a day separator on a date

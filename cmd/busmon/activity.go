@@ -136,9 +136,56 @@ func activityRow(fl feedLine, tier Tier, width int) Line {
 	return activityRowAt(fl, tier, width, todayFunc())
 }
 
+// activityRowCalls counts the rows laid out (the lag test: a message that
+// changes no line lays out none).
+var activityRowCalls int
+
+// activityKey is every input activityRowAt reads, so a hit is never stale:
+// the event whole (comparable), its time, the fan-out's size, the mark, the
+// tier and width, and for a day separator the day it is judged on. Colours
+// are not in it: rows carry roles, painted at draw time.
+type activityKey struct {
+	ev    bus.Event
+	at    int64
+	sep   bool
+	to    int
+	mark  mark
+	tier  Tier
+	width int
+	day   string
+}
+
+// activityCache keeps the Activity rows laid out by the last fill (the
+// person's lag: every message laid out the whole feed again). Each fill keeps
+// only the rows it used, so it never outgrows the feed.
+type activityCache struct{ rows, next map[activityKey]Line }
+
+// row is activityRowAt, laid out only when one of its inputs changed.
+func (c *activityCache) row(fl feedLine, tier Tier, width int, today time.Time) Line {
+	k := activityKey{ev: fl.ev, at: fl.at.UnixNano(), sep: fl.sep, to: len(fl.to), mark: fl.mark, tier: tier, width: width}
+	if fl.sep {
+		k.day = today.Format("2006-01-02")
+	}
+	if c.next == nil {
+		c.next = map[activityKey]Line{}
+	}
+	l, ok := c.next[k]
+	if !ok {
+		if l, ok = c.rows[k]; !ok {
+			l = activityRowAt(fl, tier, width, today)
+		}
+		c.next[k] = l
+	}
+	return l
+}
+
+// sweep ends a fill: the rows it used are the cache.
+func (c *activityCache) sweep() { c.rows, c.next = c.next, nil }
+
 // activityRowAt is activityRow with "(today)" judged at today: the shell's
 // model time, so its rows never read the clock.
 func activityRowAt(fl feedLine, tier Tier, width int, today time.Time) Line {
+	activityRowCalls++
 	if fl.sep {
 		head := strings.Repeat(glyphHorizontal, 2) + " " + fl.at.Format("Mon 2006-01-02") + " "
 		l := Line{{Text: head, Role: RoleMuted}}
