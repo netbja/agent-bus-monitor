@@ -28,7 +28,7 @@ func keyOfTea(msg tea.KeyPressMsg) Key {
 		return Key{Code: keyBacktab, Alt: alt}
 	}
 	if c, ok := teaKeys[k.Code]; ok {
-		return Key{Code: c, Alt: alt}
+		return Key{Code: c, Alt: alt, Shift: k.Mod.Contains(tea.ModShift)}
 	}
 	if r := []rune(k.Text); len(r) == 1 {
 		return Key{Code: keyRune, Rune: r[0], Alt: alt}

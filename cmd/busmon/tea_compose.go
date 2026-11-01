@@ -22,10 +22,12 @@ import (
 // visual row shown. Its rows are wrapped once per change, in one pass, by
 // prepare on the update path; View reads them (rowsAt).
 type textArea struct {
-	text  []rune
-	cur   int
-	top   int
-	limit int
+	text   []rune
+	cur    int
+	top    int
+	limit  int
+	anchor int  // the selection's other end, while marking
+	mark   bool // a selection is being made (Shift with a move)
 
 	rev                int   // bumped by every change of text
 	cached             []row // the rows of revision cachedRev at width cachedW
@@ -39,9 +41,36 @@ func (t *textArea) value() string { return string(t.text) }
 
 func (t *textArea) changed() { t.rev++ }
 
+// selection is the selected runes [from, to); ok is false when none is.
+func (t *textArea) selection() (from, to int, ok bool) {
+	if !t.mark || t.anchor == t.cur {
+		return 0, 0, false
+	}
+	return min(t.anchor, t.cur), max(t.anchor, t.cur), true
+}
+
+// unmark ends the selection, the text kept.
+func (t *textArea) unmark() { t.mark = false }
+
+// cutSelection removes the selected runes and puts the cursor where they
+// were; it reports whether there was a selection.
+func (t *textArea) cutSelection() bool {
+	from, to, ok := t.selection()
+	t.mark = false
+	if !ok {
+		return false
+	}
+	t.text = append(t.text[:from:from], t.text[to:]...)
+	t.cur = from
+	t.changed()
+	return true
+}
+
 // insert puts s at the cursor, cut to what the limit leaves; it reports the
-// runes dropped. s is made displayable first: the measure is one method.
+// runes dropped; a selection is replaced. s is made displayable first: the
+// measure is one method.
 func (t *textArea) insert(s string) (dropped int) {
+	t.cutSelection()
 	s = agreeWidths(DetailText(strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\t", "    ")))
 	rs := []rune(s)
 	if room := t.limit - len(t.text); len(rs) > room {
@@ -57,7 +86,7 @@ func (t *textArea) insert(s string) (dropped int) {
 }
 
 func (t *textArea) set(s string) {
-	t.text, t.cur, t.top = nil, 0, 0
+	t.text, t.cur, t.top, t.mark = nil, 0, 0, false
 	t.changed()
 	t.insert(s)
 }
@@ -178,6 +207,9 @@ func (t *textArea) right(rs []row) {
 }
 
 func (t *textArea) backspace(rs []row) {
+	if t.cutSelection() {
+		return
+	}
 	end := t.cur
 	t.left(rs)
 	if t.cur < end {
@@ -187,6 +219,9 @@ func (t *textArea) backspace(rs []row) {
 }
 
 func (t *textArea) del(rs []row) {
+	if t.cutSelection() {
+		return
+	}
 	start := t.cur
 	t.right(rs)
 	if t.cur > start {
@@ -244,6 +279,7 @@ func (t *textArea) keepCursor(width, height int) {
 
 // clickAt puts the cursor at the cell (col, row) of the shown rows.
 func (t *textArea) clickAt(width, col, rowIdx int) {
+	t.mark = false
 	rs := t.prepare(width)
 	t.cur = t.colIn(rs[clamp(t.top+rowIdx, 0, len(rs)-1)], col)
 }
@@ -264,6 +300,15 @@ func (t *textArea) lines(width, height int, focused bool, placeholder string) []
 	}
 	rs := t.rowsAt(width)
 	ci, _ := t.cursorAt(rs)
+	if from, to, ok := t.selection(); ok && focused { // the selection reversed, the cursor its edge
+		for i := 0; i < height && t.top+i < len(rs); i++ {
+			r := rs[t.top+i]
+			a, b := clamp(from, r.from, r.to), clamp(to, r.from, r.to)
+			out[i] = Line{{Text: string(t.text[r.from:a]), Role: RoleText}, {Text: string(t.text[a:b]), Role: RoleText, Reverse: true},
+				{Text: string(t.text[b:r.to]), Role: RoleText}}
+		}
+		return out
+	}
 	for i := 0; i < height && t.top+i < len(rs); i++ {
 		r := rs[t.top+i]
 		if !focused || t.top+i != ci {
@@ -444,6 +489,8 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 	case ActSend:
 		return m.composeSend()
 	case ActComposeField:
+		c.area.unmark() // a selection belongs to the field it was made in: leaving it ends it
+		c.to.unmark()
 		switch {
 		case c.kind != composeMessage:
 		case !c.onTo && m.prefixToRecipient(c):
@@ -464,10 +511,25 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 		}
 		return nil
 	case ActClose:
+		_, _, inText := c.area.selection()
+		_, _, inTo := c.to.selection()
+		if inText || inTo { // Esc first clears a selection, in either field (the person, reviewer-codex)
+			c.area.unmark()
+			c.to.unmark()
+			return nil
+		}
 		m.closeCompose()
 		return nil
 	}
 	rs := field.prepare(width) // the rows the cursor moves on: wrapped once per change
+	switch k.Code {            // a move with Shift extends the selection from where it began; without, it ends it
+	case keyLeft, keyRight, keyUp, keyDown, keyHome, keyEnd, keyPgUp, keyPgDn:
+		if k.Shift && !field.mark {
+			field.anchor, field.mark = field.cur, true
+		} else if !k.Shift {
+			field.unmark()
+		}
+	}
 	switch {
 	case k.Code == keyEnter && field == &c.to: // the recipient is done: to the text
 		c.onTo = false
@@ -497,6 +559,12 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 		field.home(rs)
 	case k.Code == keyEnd:
 		field.end(rs)
+	case k.Code == keyPgUp: // a page of the window's rows
+		_, tr := m.composeRects()
+		field.vertical(rs, -max(1, tr.H))
+	case k.Code == keyPgDn:
+		_, tr := m.composeRects()
+		field.vertical(rs, max(1, tr.H))
 	}
 	m.layoutCompose()
 	return nil
@@ -584,8 +652,11 @@ func (m *Model) composeClick(x, y int) {
 		m.closeCompose()
 	case y == f.Y+1 && c.kind == composeMessage:
 		c.onTo = true
+		c.area.unmark() // a focus-changing click ends a selection in either field (reviewer-codex)
+		c.to.unmark()
 	case tr.contains(x, y):
 		c.onTo = false
+		c.to.unmark()
 		c.area.clickAt(tr.W, x-tr.X, y-tr.Y)
 	}
 }

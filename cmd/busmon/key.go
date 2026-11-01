@@ -4,9 +4,10 @@ package main
 // library (busmon Charm spec, step a): keyOfTea adapts bubbletea's keys. The
 // tables stay the one source of the handler, the footer and the help.
 type Key struct {
-	Code KeyCode
-	Rune rune // the character, for keyRune
-	Alt  bool
+	Code  KeyCode
+	Rune  rune // the character, for keyRune
+	Alt   bool
+	Shift bool // on a navigation key: the compose window extends its selection
 }
 
 // KeyCode names a key a table binds; keyNone is every other key.

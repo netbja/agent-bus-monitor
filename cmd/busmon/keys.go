@@ -130,6 +130,9 @@ func inTiers(ts []Tier, t Tier) bool {
 	return false
 }
 
+// never is a help-only row's match: the key is handled outside the table.
+func never(Key) bool { return false }
+
 func keyIs(ks ...KeyCode) func(Key) bool {
 	return func(ev Key) bool {
 		for _, k := range ks {
@@ -259,6 +262,9 @@ var (
 		{Keys: "tab", Hint: "recipient", Help: "recipient " + GlyphNone + " text; a text that is only @prefix becomes the recipient (completed, or its list opens)", Act: ActComposeField, match: keyIs(keyTab)},
 		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(keyCtrlT)},
 		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(keyEscape)},
+		// Help only: the window's own keys move and select (tea_compose.go), never through the table.
+		{Keys: "shift+" + arrows + GlyphArrowL + GlyphArrowR + " home end", Help: "select text: del or backspace removes it, typing replaces it, esc or a plain move clears it", match: never},
+		{Keys: "pgup pgdn", Help: "a page up or down (with shift: extend the selection)", match: never},
 	}
 	pickBindings = []binding{
 		{Keys: "type", Hint: "to filter", Act: ActPickType, match: keyIs(keyRune, keyBackspace, keyBackspace)},
