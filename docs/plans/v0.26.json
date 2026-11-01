@@ -17,6 +17,7 @@
     {"id": "stall-guard-spec", "title": "Spec: the stall guard (team-stall, clear-stall, quiet-agent), answered: 15 min, For-you notice only (#228)", "owner": "coder", "review": "stall-guard-spec", "merge": false},
     {"id": "stall-guard", "title": "Stall guard: the judgement and health wiring (#230), then busmon's For you rows", "owner": "coder", "review": "stall-guard-busmon", "after": ["stall-guard-spec"]},
     {"id": "history", "title": "History: the append-only archive (90 days, 256 MiB), agentbus history, the busmon page (key H)", "owner": "coder", "review": "history", "after": ["history-spec"]},
+    {"id": "auto-state", "title": "Automatic agent state from the clients' turn hooks (spec #234): Claude Code first, then Codex, Kimi, Grok", "owner": "coder", "review": "auto-state"},
     {"id": "settings-page", "title": "busmon settings page (C): editor core and safe write to config.toml, display keys hot", "owner": "coder", "review": "busmon-settings-page", "after": ["settings-spec"]},
     {"id": "config-followups", "title": "config-file follow-ups, if any (the registry learns llm.* before the local LLM peer)", "owner": "coder", "review": "config-followups"},
     {"id": "agentbus-start", "title": "agentbus start: one command from install to a running team", "owner": "coder", "review": "agentbus-start"},
@@ -26,6 +27,6 @@
     {"id": "auto-reload", "title": "Auto-reload setting for sentinel", "owner": "coder", "review": "auto-reload"},
     {"id": "notifications-order", "title": "Decide: notifications (Discord, ntfy), and where they come in the order", "owner": "person"},
     {"id": "notifications", "title": "Notifications to Discord or ntfy", "owner": "coder", "review": "notifications", "after": ["notifications-order"]},
-    {"id": "reinstall-tag", "title": "Reinstall and tag v0.26 when Bernard says", "owner": "person", "after": ["pages-4", "pages-5", "history-spec", "stall-guard", "history", "settings-page", "config-followups", "agentbus-start", "forge-delivery", "backup", "local-llm-peer", "auto-reload", "notifications"]}
+    {"id": "reinstall-tag", "title": "Reinstall and tag v0.26 when Bernard says", "owner": "person", "after": ["pages-4", "pages-5", "history-spec", "stall-guard", "history", "auto-state", "settings-page", "config-followups", "agentbus-start", "forge-delivery", "backup", "local-llm-peer", "auto-reload", "notifications"]}
   ]
 }
