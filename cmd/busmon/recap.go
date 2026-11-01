@@ -183,6 +183,26 @@ func firstRecapSelection(rows []recapRow) int {
 	return 0
 }
 
+// recapKeepCursor is the cursor on rows after a re-filter: the row it was on
+// (by key), else the first selectable row from where it was, else the first.
+func recapKeepCursor(old []recapRow, sel int, rows []recapRow) int {
+	if sel >= 0 && sel < len(old) {
+		if k := old[sel].Key; k != "" {
+			for i, row := range rows {
+				if row.Key == k {
+					return i
+				}
+			}
+		}
+		for i := min(sel, len(rows)); i < len(rows); i++ {
+			if rows[i].Selectable {
+				return i
+			}
+		}
+	}
+	return firstRecapSelection(rows)
+}
+
 // recapBody is the recap's text with the cursor on row cursor, and the line
 // that row is on (its reader page draws it).
 func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {

@@ -209,8 +209,8 @@ func (m *Model) maybeOpenRecap() {
 		return
 	}
 	s.recapPending = false
-	rec := recapForScreen(s.recap, m.layout.Tier != TierNarrow, forYouEmpty(m.snap, m.lists.reqView.count(secOwed))) // the panel is on screen beside the page in the wide and medium tiers
-	m.push(page{kind: ovRecap, title: "Where was I?", recap: rec, sel: firstRecapSelection(rec.Rows)})
+	m.push(page{kind: ovRecap, title: "Where was I?", recapAll: s.recap, sel: -1}) // buildPage filters it for the tier
+
 }
 
 // recapTarget is who the summary request goes to.

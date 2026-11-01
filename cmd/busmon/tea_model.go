@@ -96,7 +96,7 @@ type uiState struct {
 // copied by value through Update, the lists' selection rules are listState's.
 type shellLists struct {
 	forYou, agents, activity, board, requests, plan listState
-	reqView                                         reqView // the Requests view fillLists computed: the header reads its counts
+	reqView                                         reqView // the Requests view refresh computed: the layout, fillLists and the header read it
 }
 
 func (ls *shellLists) of(p PanelID) *listState {
@@ -320,6 +320,9 @@ func (m *Model) refresh() {
 	if m.width == 0 {
 		return
 	}
+	// One Requests view per refresh, before the layout: For you's empty state
+	// is sized and filled from the same owed count (reviewer-codex).
+	m.lists.reqView = requestGroups(m.requestInput())
 	m.layout = shellLayoutFor(m.width, m.height, m.counts(), m.ui.view, m.ui.tab)
 	m.fillLists()
 	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes

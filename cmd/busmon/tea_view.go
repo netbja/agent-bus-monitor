@@ -180,7 +180,7 @@ func (m *Model) fillLists() {
 		rows = append(rows, ListItem{Key: "more", Line: Line{{Text: fmt.Sprintf("+%d more", more), Role: RoleMuted}}, Selectable: true})
 	}
 	if len(rows) == 0 { // say what is expected, if anything, then what is in progress and the next decision
-		for _, l := range forYouEmpty(s, requestGroups(m.requestInput()).count(secOwed)) {
+		for _, l := range forYouEmpty(s, m.lists.reqView.count(secOwed)) {
 			rows = append(rows, ListItem{Line: l})
 		}
 	}
@@ -248,8 +248,7 @@ func (m *Model) fillLists() {
 	pl.SetFrame(m.lowerTitle(PanelPlan, pt), plabel)
 
 	rq := &m.lists.requests
-	rv := requestGroups(m.requestInput())
-	m.lists.reqView = rv
+	rv := m.lists.reqView // refresh computed it before the layout
 	rq.SetItems(requestRows(rv, m.ui.reqOpen, now, lower))
 	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: "Requests", Role: RoleText}}), requestsTitle(rv, lower))
 

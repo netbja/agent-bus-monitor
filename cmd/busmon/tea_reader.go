@@ -58,7 +58,8 @@ type page struct {
 	svc       *svcFacts  // ovServices: the facts the cards show (sel: the card selected)
 	svcBusy   bool       // ovServices, ovRedis: a refresh read is in flight
 	lead      string     // ovMessage, ovRequest: a first muted line (the Requests section's sentence)
-	recap     recapModel // ovRecap
+	recap     recapModel // ovRecap: the recap as shown, re-filtered at each build for the tier
+	recapAll  recapModel // ovRecap: the recap as built, unfiltered
 	recapLine int        // ovRecap: the body line of the cursor's row
 }
 
@@ -479,7 +480,10 @@ func (m *Model) buildPage() bool {
 		p.body = tokensPage(s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
-	case ovRecap:
+	case ovRecap: // the panel is on screen beside the page in the wide and medium tiers; a resize can change that (reviewer-codex)
+		rec := recapForScreen(p.recapAll, m.layout.Tier != TierNarrow, forYouEmpty(s, m.lists.reqView.count(secOwed)))
+		p.sel = recapKeepCursor(p.recap.Rows, p.sel, rec.Rows)
+		p.recap = rec
 		p.body, p.recapLine = recapBody(p.recap.Rows, p.sel)
 	case ovAsk:
 		a, ok := m.pageAsk(p)

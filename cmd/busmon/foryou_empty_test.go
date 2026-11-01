@@ -1,9 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -126,4 +130,99 @@ func TestRecapKeepsWhatThePanelDoesNotList(t *testing.T) {
 	if strings.Contains(got, "master asks") {
 		t.Errorf("an ask the panel lists shows twice:\n%s", got)
 	}
+}
+
+// One request owed reads in the singular (foureyes' nit: owed > 1 survived).
+func TestForYouEmptyOneRequestOwed(t *testing.T) {
+	text := plainOf(forYouEmpty(snapshot{}, 1))
+	if !strings.Contains(text, "Owed by you: 1 request (Requests)") || strings.Contains(text, "Nothing expected") {
+		t.Errorf("one request owed:\n%s", text)
+	}
+}
+
+// The recap page re-filters its For you section at every build for the
+// current tier: opened wide then narrowed, the section comes back; opened
+// narrow then widened beside the panel, it goes (reviewer-codex).
+func TestRecapRefiltersOnResize(t *testing.T) {
+	rec := recapModel{Rows: []recapRow{
+		{Section: recapForYou, Title: recapForYou},
+		{Key: "ask:1:q", Section: recapForYou, Title: "master asks · go?", Selectable: true},
+		{Section: "Agents", Title: "Agents"},
+		{Key: "agent:coder", Section: "Agents", Title: "coder · working", Selectable: true},
+	}}
+	open := func(w int) Model {
+		m := reqShell(t, w, 40, nil)
+		m.gotRecap(recapMsg{model: rec})
+		m.maybeOpenRecap()
+		if p := m.rd.top(); p == nil || p.kind != ovRecap {
+			t.Fatalf("recap page not open at %d columns", w)
+		}
+		return m
+	}
+	has := func(m Model) bool {
+		for _, row := range m.rd.top().recap.Rows {
+			if row.Key == "ask:1:q" {
+				return true
+			}
+		}
+		return false
+	}
+	m := open(140)
+	if has(m) {
+		t.Fatalf("wide: the recap repeats an ask the panel lists")
+	}
+	if m = step(t, m, tea.WindowSizeMsg{Width: 70, Height: 40}); m.layout.Tier != TierNarrow || !has(m) {
+		t.Errorf("wide then narrow (tier %v): the ask is missing from the recap", m.layout.Tier)
+	}
+	m = open(70)
+	if !has(m) {
+		t.Fatalf("narrow: the recap lost the ask")
+	}
+	m.rd.top().sel = 1 // the cursor on the ask
+	if m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40}); has(m) {
+		t.Errorf("narrow then wide: the ask shows twice")
+	}
+	if p := m.rd.top(); p.sel < 0 || p.sel >= len(p.recap.Rows) || !p.recap.Rows[p.sel].Selectable {
+		t.Errorf("the cursor left the selectable rows: %d", p.sel)
+	}
+	if m = step(t, m, tea.WindowSizeMsg{Width: 70, Height: 40}); !has(m) {
+		t.Errorf("wide again then narrow: the ask is missing")
+	}
+}
+
+// The For you frame is sized from the Requests view of this fill, never the
+// previous one: when the owed count changes, the empty state's rows and the
+// frame agree at once (reviewer-codex).
+func TestForYouSizedFromTheCurrentOwedCount(t *testing.T) {
+	m := reqShell(t, 100, 40, nil)
+	snap := m.snap
+	snap.planState.loaded = true
+	snap.planState.rows = []plan.Row{{Task: plan.Task{ID: "pick", Title: "Pick the order", Owner: plan.Person}, State: plan.Waiting}}
+	plain := snap.cmdHistory
+	owed := append(append([]bus.Event(nil), plain...), bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-0", shellNow.Add(-time.Minute).UnixMilli()),
+		Type: bus.CmdDirective, From: "master", Target: "charlie", Message: "pick one"})
+	check := func(label string) {
+		t.Helper()
+		if m.layout.Tier != TierMedium {
+			t.Fatalf("%s: tier %v", label, m.layout.Tier)
+		}
+		if want := strings.Contains(label, "owed"); (m.lists.reqView.count(secOwed) > 0) != want {
+			t.Fatalf("%s: owed count %d", label, m.lists.reqView.count(secOwed))
+		}
+		if n := len(m.lists.forYou.items); m.layout.ForYouRows != n {
+			t.Errorf("%s: frame sized for %d rows, the empty state has %d", label, m.layout.ForYouRows, n)
+		}
+		if screen := m.grid().plain(); !strings.Contains(screen, "Next for you:") { // owed and waiting: four lines, all drawn at the medium tier (foureyes)
+			t.Errorf("%s: the medium tier cuts the empty state:\n%s", label, screen)
+		}
+	}
+	snap.cmdHistory = owed
+	m = step(t, m, pollMsg{snap: snap, at: shellNow})
+	check("owed")
+	snap.cmdHistory = plain
+	m = step(t, m, pollMsg{snap: snap, at: shellNow})
+	check("nothing")
+	snap.cmdHistory = owed
+	m = step(t, m, pollMsg{snap: snap, at: shellNow})
+	check("owed again")
 }
