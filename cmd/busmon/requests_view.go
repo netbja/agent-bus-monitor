@@ -25,8 +25,12 @@ const (
 	secReviews                      // reviews still gated
 	secDirectives                   // directives between agents
 	secNotices                      // notices: nobody owes an answer
-	secFolded                       // answered, or older than 24 h
+	secFolded                       // answered, or older than reqFoldAfter
 )
+
+// reqFoldAfter: an unanswered thread older than this is folded (the person's
+// answer, busmon pages: 7 days, was the 24 h horizon).
+const reqFoldAfter = 7 * 24 * time.Hour
 
 // Kinds, as the KIND column shows them.
 const (
@@ -122,8 +126,16 @@ type reqInput struct {
 	delivery  map[string]reqDelivery       // target -> its cursor, when read
 	held      map[string]bool              // target -> its provider is held
 	questions int                          // open questions for the person (they stay in For you)
+	asks      []reqAsk                     // the open asks, one row each in owed by you
 	self      string
 	now       time.Time
+}
+
+// reqAsk is an open ask as the view lists it.
+type reqAsk struct {
+	ID, From, Title string
+	Open            int // its open questions
+	At              time.Time
 }
 
 // reqView is the computed view: the groups of each section and the folded threads.
@@ -131,6 +143,8 @@ type reqView struct {
 	groups    map[reqSection][]reqGroup
 	folded    []reqThread
 	questions int
+	asks      []reqAsk
+	self      string
 }
 
 // count is the number of threads of a section (the questions link counts in owed).
@@ -201,8 +215,8 @@ func reportSubject(msg string) (subject, id string, ok bool) {
 
 // requestGroups computes the view.
 func requestGroups(in reqInput) reqView {
-	v := reqView{groups: map[reqSection][]reqGroup{}, questions: in.questions}
-	horizon := in.now.Add(-bus.DefaultHorizon)
+	v := reqView{groups: map[reqSection][]reqGroup{}, questions: in.questions, asks: in.asks, self: in.self}
+	horizon := in.now.Add(-reqFoldAfter)
 	known := map[string]bool{}
 	var threads []reqThread
 	for i := range in.reqs {
@@ -392,4 +406,24 @@ func splitStreamID(id string) (ms, seq int64) {
 	fmt.Sscan(m, &ms)
 	fmt.Sscan(s, &seq)
 	return ms, seq
+}
+
+// reqSectionNote is the sentence a section's heading used to carry: the first
+// line of a thread's page now (busmon pages, Requests).
+func reqSectionNote(s reqSection) string {
+	switch s {
+	case secOwed:
+		return "Owed by you: the sender waits for your answer on this thread."
+	case secWait:
+		return "You wait on it: no reply on its thread yet."
+	case secTracked:
+		return "Tracked: the board records its acceptance and completion."
+	case secReviews:
+		return "Review still gated: the reviewer's gate stays open until a verdict."
+	case secDirectives:
+		return "Between agents: no reply on the thread yet. Untracked: the protocol records no acceptance for it."
+	case secNotices:
+		return "Notices: nobody owes an answer."
+	}
+	return "Answered, or older than 7 days."
 }

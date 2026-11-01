@@ -64,13 +64,13 @@ func reqFixture(now time.Time) reqInput {
 			add(bus.Event{ID: at(p.ago - time.Duration(i)*time.Minute), Type: bus.CmdDirective, From: p.from, Target: p.to, Message: p.from + " to " + p.to})
 		}
 	}
-	// Answered threads (a reply on their thread) and threads older than 24 h.
+	// Answered threads (a reply on their thread) and threads older than 7 days.
 	for i := 0; i < 70; i++ {
 		root := add(bus.Event{ID: at(time.Duration(3+i) * time.Hour / 4), Type: bus.CmdDirective, From: "master", Target: "coder", Message: "answered"})
 		add(bus.Event{ID: at(time.Duration(2+i) * time.Hour / 4), Type: bus.CmdReply, From: "coder", Target: "master", Ref: root.ID, Message: "done"})
 	}
 	for i := 0; i < 3; i++ {
-		add(bus.Event{ID: at(30*time.Hour + time.Duration(i)*time.Hour), Type: bus.CmdDirective, From: "master", Target: "foureyes", Message: "old"})
+		add(bus.Event{ID: at(8*24*time.Hour + time.Duration(i)*time.Hour), Type: bus.CmdDirective, From: "master", Target: "foureyes", Message: "old"})
 	}
 	reqs := []request{{Task: "busmon-group-a", Owner: "coder", State: "accepted", Tracked: true, ID: "req1", Thread: "req1", From: "master",
 		Target: "coder", Created: now.Add(-66 * time.Minute)}}
@@ -113,7 +113,7 @@ func TestRequestGroups(t *testing.T) {
 			t.Errorf("notices lack %q: %s", want, notices)
 		}
 	}
-	if len(v.folded) != 70+3+4 { // answered, older than 24 h, challenges whose gate closed
+	if len(v.folded) != 70+3+4 { // answered, older than 7 days, challenges whose gate closed
 		t.Errorf("folded %d, want 77", len(v.folded))
 	}
 	you, wait, agents := v.titleCounts()
@@ -273,5 +273,22 @@ func TestRequestDoneTrackedRequestIsFolded(t *testing.T) {
 	}
 	if v.count(secTracked) != 0 {
 		t.Error("a done request still waits")
+	}
+}
+
+// Unanswered threads fold after 7 days, no longer after 24 h (the person's
+// answer, busmon pages): a 3-day-old directive between agents is still listed.
+func TestRequestUnansweredFoldsAfterSevenDays(t *testing.T) {
+	now := time.Unix(10_000_000, 0)
+	in := reqInput{self: "charlie", now: now, cmds: []bus.Event{
+		{Kind: "cmd", ID: fmt.Sprintf("%d-1", now.Add(-3*24*time.Hour).UnixMilli()), Type: bus.CmdDirective, From: "master", Target: "coder", Message: "three days"},
+		{Kind: "cmd", ID: fmt.Sprintf("%d-1", now.Add(-8*24*time.Hour).UnixMilli()), Type: bus.CmdDirective, From: "master", Target: "foureyes", Message: "eight days"},
+	}}
+	v := requestGroups(in)
+	if got := groupsOf(v, secDirectives); len(got) != 1 || got[0] != "master>coder directive 1" {
+		t.Errorf("directives: %v", got)
+	}
+	if len(v.folded) != 1 || v.folded[0].Subject != "eight days" {
+		t.Errorf("folded: %+v", v.folded)
 	}
 }

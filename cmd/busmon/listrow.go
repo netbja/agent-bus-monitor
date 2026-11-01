@@ -30,7 +30,13 @@ const listAgeW = 4
 // the age right-aligned. A note that would leave the state under 8 cells is
 // dropped, never the state.
 func (r listRow) line(selected bool, width, nameW, noteW int) Line {
-	fixed := 2 + Width(r.Sym) + 1 + nameW + 2 + 2 + listAgeW
+	return append(planMark(selected), r.cells(width-2, nameW, noteW)...)
+}
+
+// cells is the row without its selection mark, for a list panel that draws
+// its own (listState's gutter).
+func (r listRow) cells(width, nameW, noteW int) Line {
+	fixed := Width(r.Sym) + 1 + nameW + 2 + 2 + listAgeW
 	if noteW > 0 && width-fixed-noteW-2 < 8 {
 		noteW = 0
 	}
@@ -38,8 +44,7 @@ func (r listRow) line(selected bool, width, nameW, noteW int) Line {
 	if noteW > 0 {
 		stateW -= noteW + 2
 	}
-	l := append(Line{}, planMark(selected)...)
-	l = append(l, S(r.Role, r.Sym), S(RoleText, " "+Fit(Preview(r.Name), nameW)+"  "))
+	l := Line{S(r.Role, r.Sym), S(RoleText, " "+Fit(Preview(r.Name), nameW)+"  ")}
 	l = append(l, S(RoleText, Fit(Preview(r.State), max(0, stateW))))
 	if noteW > 0 {
 		note := FitLine(r.Note, noteW)
