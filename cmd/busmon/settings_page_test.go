@@ -214,3 +214,61 @@ func TestSettingsPageChanges(t *testing.T) {
 		t.Fatal("Esc left the page open")
 	}
 }
+
+// foureyes on part 2: Esc in the line editor leaves the file byte for byte;
+// d is offered only where config.toml holds the key (● or a ▲ refused line),
+// never on a busmon.toml row; its confirmation names busmon.toml's value when
+// that is what applies next; a second Enter on an on/off while the first
+// write is in flight is ignored, so one Enter is one flip.
+func TestSettingsPageReviewFixes(t *testing.T) {
+	getenv := settingsEnv(t,
+		"# mine\n[waiting]\nsnooze = \"5m\" # short\nbell = false\npopup_after = \"nonsense\"\n",
+		"[waiting]\nsnooze = \"20m\"\nfade = false\n", nil)
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+
+	before := configText(t, getenv)
+	m = press(t, selectSetting(t, m, "waiting.snooze"), tea.Key{Code: tea.KeyEnter})
+	for range 2 {
+		m = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	}
+	for _, r := range "30m" { // a value the rule takes: only Esc keeps it out
+		m = press(t, m, r)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEscape})
+	if s := m.rd.top(); s == nil || s.kind != ovSettings || s.set.edit != "" || configText(t, getenv) != before {
+		t.Fatalf("Esc in the editor: page %v file %q", s, configText(t, getenv))
+	}
+
+	m = press(t, m, 'd')
+	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "busmon.toml's 20m will apply (y)") {
+		t.Fatalf("unset names busmon.toml's value:\n%s", body)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEscape})
+
+	m = press(t, selectSetting(t, m, "waiting.fade"), 'd')
+	if s := m.rd.top().set; s.confirm != "" || strings.Contains(tokLinesText(m.rd.top().body), "will apply (y)") {
+		t.Fatalf("d offered on a busmon.toml row: %q", s.confirm)
+	}
+	m = press(t, selectSetting(t, m, "waiting.popup_after"), 'd')
+	if s := m.rd.top().set; s.confirm != "waiting.popup_after" {
+		t.Fatalf("d not offered on a refused config.toml line: %q", s.confirm)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEscape})
+
+	m = selectSetting(t, m, "waiting.bell")
+	next, first := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	next, second := next.(Model).Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	if first == nil || second != nil {
+		t.Fatalf("enter while a write is in flight: first %v second %v", first != nil, second != nil)
+	}
+	next, _ = next.(Model).Update(first())
+	m = next.(Model)
+	if !strings.Contains(configText(t, getenv), "bell = true") {
+		t.Fatalf("one flip: %q", configText(t, getenv))
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "bell = false") {
+		t.Fatalf("keys after the write: %q", configText(t, getenv))
+	}
+}

@@ -29,6 +29,7 @@ type settingsPage struct {
 	choice  int    // display.theme: the option under the cursor
 	confirm string // the key a d waits a y for
 	err     string // the last refusal, in the rule's own words
+	busy    bool   // a write is in flight: keys wait for its rows
 }
 
 // themeChoices are display.theme's values, in the page's order.
@@ -66,6 +67,9 @@ func (m *Model) openSettings() tea.Cmd {
 // settingsCmd runs write (a config.Set, an Unset, or nothing) then reads the
 // rows again, in a command.
 func (m *Model) settingsCmd(write func() error, key string) tea.Cmd {
+	if p := m.settingsPageOpen(); p != nil && key != "" {
+		p.set.busy = true
+	}
 	getenv, flags := m.settingsGetenv(), m.cfg.flags
 	return func() tea.Msg {
 		err := write()
@@ -91,7 +95,7 @@ func (m *Model) gotSettings(msg settingsMsg) {
 		return
 	}
 	s := p.set
-	s.groups, s.loaded, p.dirty = msg.groups, true, true
+	s.groups, s.loaded, s.busy, p.dirty = msg.groups, true, false, true
 	var refused *config.RefusedError
 	switch {
 	case msg.err != nil && errors.As(msg.err, &refused):
@@ -133,7 +137,7 @@ func (m *Model) settingsKey(k Key) tea.Cmd {
 	p := m.rd.top()
 	s := p.set
 	rows := s.rows()
-	if !s.loaded || len(rows) == 0 {
+	if !s.loaded || s.busy || len(rows) == 0 { // a key waits for the rows a write reads again
 		if k.Code == keyEscape {
 			m.pop()
 		}
@@ -164,7 +168,7 @@ func (m *Model) settingsKey(k Key) tea.Cmd {
 	case k.Code == keyDown || k.Code == keyRune && k.Rune == 'j':
 		p.sel = clamp(p.sel+1, 0, len(rows)-1)
 		s.err = ""
-	case k.Code == keyRune && k.Rune == 'd' && row.Editable && row.Sym != GlyphIdle:
+	case k.Code == keyRune && k.Rune == 'd' && row.Editable && row.InFile:
 		s.confirm = row.Key
 	case (k.Code == keyEnter || k.Code == keyRune && k.Rune == ' ') && row.Editable:
 		key, _ := config.Lookup(row.Key)

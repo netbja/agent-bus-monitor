@@ -19,6 +19,7 @@ type settingRow struct {
 	Value    string // the value that applies, in the person's words
 	Source   string
 	Editable bool // the page may write it: nothing above config.toml sets it
+	InFile   bool // config.toml holds the key (● or a refused line): d may unset it
 	// AfterUnset is what applies once config.toml's line is gone ("busmon.toml's
 	// light", "the default auto"): d's confirmation names it (spec).
 	AfterUnset string
@@ -84,9 +85,9 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 			case res.Source != "default" && res.Source != "config.toml" && res.Source != "busmon.toml":
 				row.Sym, row.Source, row.Editable = GlyphNone, res.Source, false // the env: only unsetting it lets a file apply
 			case refused[k.Name] > 0:
-				row.Sym, row.Source = GlyphBlocked, fmt.Sprintf("config.toml line %d refused", refused[k.Name])
+				row.Sym, row.Source, row.InFile = GlyphBlocked, fmt.Sprintf("config.toml line %d refused", refused[k.Name]), true
 			case res.Source == "config.toml":
-				row.Sym, row.Source = GlyphWorking, "config.toml"
+				row.Sym, row.Source, row.InFile = GlyphWorking, "config.toml", true
 			case res.Source == "busmon.toml":
 				row.Sym, row.Source = GlyphNone, "busmon.toml (legacy)"
 			default:
