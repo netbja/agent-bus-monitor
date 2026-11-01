@@ -189,6 +189,31 @@ func TestQuietAgent(t *testing.T) {
 			in.Cmds = append(in.Cmds, QuietCmd{ID: idAt(20*time.Minute, 0), From: "master", Target: "coder", Type: "reply"})
 			in.Agents[0].LastDelivered = idAt(20*time.Minute, 0)
 		}, Warn, "directive from master 25m ago"},
+		{"a newer expired directive does not hide an older unanswered one (reviewer-codex)", func(in *QuietAgentInput) {
+			n := idAt(20*time.Minute, 0)
+			in.Cmds = append(in.Cmds, QuietCmd{ID: n, From: "master", Target: "coder", Type: "directive", Expired: true})
+			in.Agents[0].LastDelivered = n
+		}, Warn, "directive from master 25m ago"},
+		{"history trimmed past a silent agent (reviewer-codex)", func(in *QuietAgentInput) {
+			in.Cmds = nil // its directive is gone from the retained stream
+			in.OldestRetained = idAt(30*time.Minute, 0)
+			in.Agents[0].LastWrite = idAt(3*time.Hour, 0)
+		}, Unknown, "coder: silent since before the retained cmd history"},
+		{"history trimmed, the agent wrote within it", func(in *QuietAgentInput) {
+			in.Cmds = nil
+			in.OldestRetained = idAt(30*time.Minute, 0)
+			in.Agents[0].LastWrite = idAt(29*time.Minute, 0)
+		}, OK, ""},
+		{"history trimmed, never delivered anything", func(in *QuietAgentInput) {
+			in.Cmds = nil
+			in.OldestRetained = idAt(30*time.Minute, 0)
+			in.Agents[0].LastWrite, in.Agents[0].LastDelivered = idAt(3*time.Hour, 0), ""
+		}, OK, ""},
+		{"a dormant agent is not judged", func(in *QuietAgentInput) {
+			in.Cmds = nil
+			in.OldestRetained = idAt(30*time.Minute, 0)
+			in.Agents[0].LastWrite, in.Agents[0].Dormant = idAt(30*time.Hour, 0), true
+		}, OK, ""},
 		{"off", func(in *QuietAgentInput) { in.After = 0 }, Unknown, "off (quiet_after = 0)"},
 		{"a read failed", func(in *QuietAgentInput) { in.ReadErr = "cmd history unavailable" }, Unknown, "cmd history unavailable"},
 	} {

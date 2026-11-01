@@ -250,6 +250,7 @@ type QuietCmd struct {
 type QuietAgent struct {
 	Name, State   string
 	Held          bool
+	Dormant       bool     // silent past bus.DormantAfter: not judged
 	Pane          PaneSeen // PaneBusy: running a turn, never quiet
 	LastDelivered string   // its consumer group's cursor
 	Pending       []string // its group's pending ids
@@ -263,17 +264,22 @@ type QuietAgentInput struct {
 	ReadErr string
 	Master  string // the escalation target: its directives give work
 	Cmds    []QuietCmd
-	Agents  []QuietAgent
+	// OldestRetained is the cmd stream's oldest id: a directive older than it
+	// is gone, so an agent silent since before it cannot be judged.
+	OldestRetained string
+	Agents         []QuietAgent
 }
 
 // QuietDirectiveFor is the newest entry to agent that gives it work: a
 // directive or an escalation that wakes, from master, the person or the
-// dispatcher. Replies and verdicts never give work.
+// dispatcher, whose payload could be delivered. Replies and verdicts never
+// give work, and an expired request is skipped while choosing, so it never
+// hides an older one still unanswered (reviewer-codex).
 func QuietDirectiveFor(agent, master string, cmds []QuietCmd) (QuietCmd, bool) {
 	var best QuietCmd
 	found := false
 	for _, c := range cmds {
-		if c.Target != agent || c.NoWake || (c.Type != "directive" && c.Type != "escalation") {
+		if c.Target != agent || c.NoWake || c.Expired || (c.Type != "directive" && c.Type != "escalation") {
 			continue
 		}
 		if c.From != master && c.From != "dispatch" && !c.Human {
@@ -297,18 +303,24 @@ func EvaluateQuietAgent(in QuietAgentInput) Outcome {
 	}
 	var quiet []string
 	for _, a := range in.Agents {
-		if a.State == "working" || a.Held || a.Pane == PaneBusy {
+		if a.Dormant || a.State == "working" || a.Held || a.Pane == PaneBusy {
 			continue
 		}
 		d, ok := QuietDirectiveFor(a.Name, in.Master, in.Cmds)
 		if !ok {
+			// Nothing retained gives it work; but the history may have been
+			// trimmed past it: silent since before the oldest retained entry,
+			// with something delivered once, it cannot be judged (reviewer-codex).
+			if in.OldestRetained != "" && a.LastDelivered != "" && streamMillisBefore(a.LastWrite, in.OldestRetained) {
+				return Outcome{Status: Unknown, Detail: truncateDetail(a.Name + ": silent since before the retained cmd history")}
+			}
 			continue
 		}
 		if d.RequestUnknown {
 			return Outcome{Status: Unknown, Detail: truncateDetail(a.Name + ": request record unreadable")}
 		}
-		if d.Expired || streamIDLess(a.LastDelivered, d.ID) || contains(a.Pending, d.ID) {
-			continue // payload-less, not read yet, or still pending: not quiet
+		if streamIDLess(a.LastDelivered, d.ID) || contains(a.Pending, d.ID) {
+			continue // not read yet, or still pending: not quiet
 		}
 		if !streamMillisBefore(a.LastWrite, d.ID) { // wrote since, same millisecond included
 			continue
