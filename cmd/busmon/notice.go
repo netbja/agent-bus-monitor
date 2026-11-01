@@ -335,7 +335,7 @@ func (m Model) footerWithNotice(n Line) Line {
 	room := m.width / 2
 	n = FitLine(n, min(n.Width(), room))
 	nw := n.Width() + 1 // a blank column after it
-	hints := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, m.width-nw-2, m.pageOffers)
+	hints := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, m.width-nw-2, m.pageOffers, m.pageHint)
 	l := append(Line{}, hints...)
 	l = append(l, Seg{Text: strings.Repeat(" ", max(0, m.width-hints.Width()-nw))})
 	l = append(l, n...)
