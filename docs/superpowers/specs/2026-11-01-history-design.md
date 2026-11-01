@@ -66,6 +66,12 @@ once to collect them), so a restart writes no duplicate. Stream ids are unique w
 not across streams: a `cmd` and a `report` entry can share an id, and both are kept
 (reviewer-codex).
 
+**On start, every time.** First, a day file whose last byte is not a newline (a crash in the
+middle of an append) is truncated after its last newline: a torn line is never glued to the next
+append. Then each stream's position is **max(cursor, the highest id in the day files the stream
+spans)**, the files read once at start, whether `cursor.json` exists or not. So a crash between an
+append and the cursor's rename (the cursor behind the files) re-reads nothing twice (foureyes).
+
 **A deleted directory.** Deleting `history/` deletes `cursor.json` with it, so the next pass cannot
 know what was missed. A missing cursor with **no day file at all** writes one line first:
 `{"stream":"gap","id":"<now>","f":{"of":"*","from":"unknown","to":"<each stream's oldest id>"}}`,
@@ -76,15 +82,24 @@ present rebuilds the cursor from them, as above. So a lost archive is never sile
 the stream's reach), the chore writes one `gap` line, from the cursor to that entry, then goes on.
 A reader says "not archived: 14:20 to 18:05". A gap is never silent.
 
-**No secret.** The streams hold no secret by design; a report can still carry a pasted token.
-Each line's string fields go through the same credential shapes health already refuses
-(`health.sensitiveText`: `password=`, `token:`, private keys, `user:pass@` URLs, `sk-ant-`, `ghp_`,
-`xox?-`), replaced by `[redacted]` before the line is written. The pattern moves to a small
-exported `Redact` so health and the archive share it, and gains one rule it lacks today: an
-`authorization` value is the **rest of its line**, not its first word, and `Bearer <token>` /
-`Basic <token>` anywhere is redacted whole. Today `Authorization: Bearer abc123…` matches only
-`Authorization: Bearer` and would leave the token in the line (reviewer-codex). Health's
-`SafeText` refuses the same shapes, so it gains the rule too.
+**No secret, best effort.** The streams hold no secret by design; a report can still carry a
+pasted one, and the archive would keep it for 90 days instead of the stream's few. So each string
+field is checked before the line is written, and **on any hit the whole field value is replaced**
+by `[redacted]`, never just the matched span: health's `sensitiveText` was built to refuse a
+whole text, and used as a span replacer it leaves the secret (foureyes ran it on four inputs, all
+four kept their secret: a private key's body, the token after `Bearer`, `REDIS_PASSWORD="…"`,
+`redis://:p@host`). The shapes, in a new exported `Redact` that health's `SafeText` then uses too:
+
+- `password`, `token`, `secret`, `api_key`, `authorization` followed by `:` or `=`, as a word
+  **or as the end of an env-style name** (`REDIS_PASSWORD=`, `GH_TOKEN=`, `AWS_SECRET_ACCESS_KEY=`);
+- `Bearer <x>` and `Basic <x>` anywhere;
+- any URL scheme with userinfo, an empty user included (`https://u:p@`, `redis://:p@`,
+  `rediss://u:p@`);
+- `-----BEGIN … PRIVATE KEY-----`;
+- the known token prefixes (`sk-ant-`, `ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_`, `xox?-`).
+
+This is best effort: a secret in a shape not listed is archived as written. The person is told so
+in the spec's question 6 and in `agentbus history --help`.
 
 **Retention**, two keys in `config.toml` (`config/keys.go`, read by dispatch):
 
@@ -110,7 +125,8 @@ agentbus history [--agent A] [--thread T] [--kind K] [--since D] [--until D]
   archive, merged by (stream, id): the same entry from both is printed once, two streams' entries
   with the same id both print. With no broker it still reads the
   files, and says `broker unreachable: archive only`.
-- `--agent`: entries from or to it. `--thread`: the entry whose id or `ref` is T, as
+- `--agent`: entries from or to it (`from`, `target`), and its own reports and statuses (their
+  `agent` field). `--thread`: the entry whose id or `ref` is T, as
   `agentbus thread` does, across days. `--kind`: `directive`, `reply`, `verdict`, `report`,
   `status`, `notify`, `ask`, `health`, `swap`. `--since`/`--until`: a date, a time or a duration
   (`2026-10-30`, `3d`). `--grep`: a case-insensitive substring of the text. Default limit 200,
@@ -145,7 +161,9 @@ today), loaded in a command (file reads never in View):
 ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-- The last 3 days by default; `o` loads three more at a time, never the whole archive at once.
+- The last 3 days by default, capped at 8 MiB read (a busy day file is read from its end, and the
+  page says `older lines of Sat not loaded`); `o` loads three more days under the same cap, never
+  the whole archive at once.
 - `/` filters as Activity's filter does (agent, kind or text); Enter opens the entry in the
   reader's message page, `n`/`p` step through the list (A5's `readerStep`); `t` opens the
   selected entry's whole thread.
@@ -189,13 +207,16 @@ archive of the hashes, no upload anywhere.
   re-reads those entries and skips them by id; a stream trimmed past the cursor writes one `gap`
   line; a lost lease writes nothing; a second writer blocked by the `flock`; files 0600 in 0700;
   the 2 000-entry and 5 s bounds leave the rest for the next pass; a line with `token: abc...`,
-  a private key, `user:pass@` or `Authorization: Bearer <token>` is written `[redacted]`, the token
-  gone (and `SafeText` refuses the same line); a `cmd` and a `report` entry with the same id are
+  each of foureyes' four inputs (a private key with its body, `Authorization: Bearer <jwt>`,
+  `REDIS_PASSWORD="…"`, `redis://:p@host`) and `GH_TOKEN=…` leaves no secret: the whole field is
+  `[redacted]` (and `SafeText` refuses the same text); a field with no hit is written unchanged;
+  a torn last line is truncated on start; a stale `cursor.json` behind the files appends nothing
+  twice; a `cmd` and a `report` entry with the same id are
   both archived and both printed; the whole `history/` directory deleted, the next pass writes the
   "archive restarted" line before anything else.
 - Retention: older than `keep_days` deleted, today never; over `max_mb` the oldest go; `0` writes
   and prunes nothing.
-- `agentbus history`: each filter, the merge with the live streams by id (no duplicate), no
+- `agentbus history`: each filter (`--agent` matching a report's and a status's `agent`), the merge with the live streams by id (no duplicate), no
   broker (archive only, said), gaps printed, `--json` round-trips the archive's lines.
 - busmon: goldens of the page (wide, narrow), `o` loading three more days, the filter, Enter and
   `t`; no file read in View (the existing purity tests).
@@ -210,3 +231,6 @@ archive of the hashes, no upload anywhere.
    line as proposed for step 1?
 5. **Other hosts.** Is "the archive lives on the dispatcher's host" enough, or should
    `agentbus history` on the laptop reach it (through the SSH tunnel, as a file copy)?
+6. **Redaction is best effort.** A pasted secret in a shape the patterns do not know stays in the
+   archive for its retention. Acceptable, or should reports (the usual carrier) be archived only
+   as their one-line preview, never the `full` text?
