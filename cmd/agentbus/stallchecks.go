@@ -41,6 +41,11 @@ type stallReader struct {
 	mu       sync.Mutex
 	verdicts []bus.Verdict
 	lastID   string
+	// firstFail is the stall episode's first since (Redis ms): an unknown
+	// blip gives the next fail a new since, and the second-tier clock must
+	// not restart with it (foureyes). Memory only: a restart can make the
+	// notice later, never earlier.
+	firstFail int64
 }
 
 func newStallReader(b *bus.Bus, getenv func(string) string, clear dispatch.ClearConfig, master *string) *stallReader {
@@ -361,6 +366,7 @@ func (s *stallReader) stallNotify(ctx context.Context, token string, _ health.Re
 	_, told := marks[stallMark]
 	switch {
 	case rec.Status == health.OK || rec.Status == health.Warn:
+		s.setFirstFail(0)
 		if told { // the stall is over: the next one is a new episode
 			return s.b.FencedQuotaDel(ctx, token, stallMark)
 		}
@@ -370,6 +376,7 @@ func (s *stallReader) stallNotify(ctx context.Context, token string, _ health.Re
 	case told:
 		return nil // told this episode: a fail after an unknown has a new since, not a new stall
 	}
+	first := s.setFirstFail(rec.Since)
 	episode := strconv.FormatInt(rec.Since, 10)
 	target := s.escalateTo()
 	snaps, err := s.b.Agents(ctx)
@@ -392,7 +399,7 @@ func (s *stallReader) stallNotify(ctx context.Context, token string, _ health.Re
 		why = dispatch.CannotAct(target, held[snap.Provider], seen && o.State == "blocked")
 	}
 	var msg string
-	switch since := s.now().Sub(time.UnixMilli(rec.Since)); {
+	switch since := s.now().Sub(time.UnixMilli(first)); {
 	case why != "":
 		msg = fmt.Sprintf("Stall guard: the team is idle with work ready (%s), and %s cannot act (%s). Dispatch from busmon, or wait.", rec.Detail, target, why)
 	case since >= 2*readStallSettings(s.getenv).stall:
@@ -402,6 +409,17 @@ func (s *stallReader) stallNotify(ctx context.Context, token string, _ health.Re
 	}
 	_, err = s.b.FencedNotifyOnceForPerson(ctx, token, stallMark, episode, "dispatch", msg)
 	return err
+}
+
+// setFirstFail keeps the episode's first since: 0 ends the episode; a
+// since is kept only when none is held yet. It returns the one held.
+func (s *stallReader) setFirstFail(since int64) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if since == 0 || s.firstFail == 0 {
+		s.firstFail = since
+	}
+	return s.firstFail
 }
 
 // stallMark is the {p}:quota field of the stall guard's notice for the person.

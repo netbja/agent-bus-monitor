@@ -342,7 +342,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (role-tagged segments, never markup), measured in cells (`Width`; `Preview`/`DetailText` make
   every cluster measure the same under uniseg, lipgloss's grapheme width and wcwidth:
   `agreeWidths`); `drawLine`/`drawFrame` write the `grid`, lipgloss only styles spans, so a frame
-  never wraps by one cell. `forYou` ranks asks, waits, the person's gates and unread lines, and `decisions` is
+  never wraps by one cell. `forYou` ranks asks, the stall guard's rows for the person (`stallItems`, rank `rankHealth`: `team-stall` warn `waiting-person` and `clear-stall` warn `pane-focused`, while current; Enter opens F5), waits, the person's gates and unread lines, and `decisions` is
   its badge and reminder subset; with nothing for the person it says so, then what is in progress and the next
   decision (`forYouEmpty`: the agents declaring working, the plan's first open person task; no store), and the
   recap's For you section shows only when the For you panel is not on screen (`recapForScreen`); its keys are `ModeShell` (the panel table with the shell's tabs)
@@ -810,7 +810,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `pane-focused` is for you). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
   tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an
   unknown pass and deleted once the check reads ok or warn): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
-  `stall_after`. busmon shows the health pill, F5
+  `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
   not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check

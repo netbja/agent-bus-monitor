@@ -249,3 +249,31 @@ func TestStallNoticeSurvivesAnUnknownPass(t *testing.T) {
 		t.Fatalf("%d notices across fail, unknown, fail: %q", len(got), got)
 	}
 }
+
+// The second-tier clock is the episode's first since: an unknown blip (a new
+// since on the next fail) does not restart it (foureyes, step 3).
+func TestStallSecondTierClockSurvivesAnUnknownBlip(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	first := w.putStall()
+	w.s.now = func() time.Time { return time.UnixMilli(first.Since).Add(5 * time.Minute) }
+	if err := w.s.stallNotify(ctx, "stall-holder", first); err != nil {
+		t.Fatal(err)
+	}
+	unknown := health.Record{ID: "team-stall", Status: health.Unknown, Detail: "agents unavailable", Fingerprint: "u"}
+	if err := w.b.FencedHealthPut(ctx, "stall-holder", "master", unknown); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.s.stallNotify(ctx, "stall-holder", unknown); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	again := w.putStall()                                                                   // a new since after the blip
+	w.s.now = func() time.Time { return time.UnixMilli(first.Since).Add(30 * time.Minute) } // 2x from the first since
+	if err := w.s.stallNotify(ctx, "stall-holder", again); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.personNotices(); len(got) != 1 || !strings.Contains(got[0], "nothing moved") {
+		t.Fatalf("the clock restarted after the blip: %q", got)
+	}
+}

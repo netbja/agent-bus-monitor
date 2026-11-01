@@ -5,8 +5,10 @@ import (
 	"github.com/netbja/agent-bus-monitor/plan"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	guardian "github.com/netbja/agent-bus-monitor/health"
 )
 
 // For you (busmon Charm spec, decision 2): one list of what waits on the
@@ -15,6 +17,7 @@ import (
 
 const (
 	rankAsk    = iota // an open ask, one row per ask
+	rankHealth        // the stall guard: the team waits on the person, or the person's focus holds a hand-off
 	rankWait          // a waiting agent with no open ask, or its client's prompt
 	rankGate          // a pending verdict: an open 4-eyes gate
 	rankUnread        // an Activity line for the person not opened yet
@@ -49,6 +52,7 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 	if _, isAgent := s.agents[s.person]; !isAgent {
 		out = append(out, personGateItems(s.person, s.person, s.personGates)...)
 	}
+	out = append(out, stallItems(s.guardianHealth, s.guardianNow)...)
 	asks := map[string]int{} // an open ask's row, by ask id (the id of its Activity line)
 	for i, it := range out {
 		if it.Rank == rankAsk {
@@ -79,6 +83,28 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 		}
 		return a.Key < b.Key
 	})
+	return out
+}
+
+// stallItems are the stall guard's rows for the person (spec
+// 2026-11-01-stall-guard-design.md, busmon): team-stall waiting on the
+// person's own task, and clear-stall held by the person's focused pane. Only
+// a current warn with that reason; the key carries the episode's since, so a
+// new episode is a new row.
+func stallItems(records map[string]guardian.Record, now time.Time) []attentionItem {
+	var out []attentionItem
+	for _, c := range []struct{ id, reason, word string }{
+		{"team-stall", "waiting-person", "stall"},
+		{"clear-stall", "pane-focused", "clear"},
+	} {
+		d, ok := guardian.ByID(c.id)
+		rec, has := records[c.id]
+		if !ok || !has || rec.Reason != c.reason || guardian.EffectiveStatus(rec, now.UnixMilli(), d.Interval) != guardian.Warn {
+			continue
+		}
+		out = append(out, attentionItem{Rank: rankHealth, Key: fmt.Sprintf("health:%s:%d", c.id, rec.Since),
+			Agent: c.word, Text: rec.Detail, At: msTime(rec.Since)})
+	}
 	return out
 }
 
