@@ -63,13 +63,15 @@ message) and the loaded plan has a task ready for an agent. Your one job is to t
 4. Otherwise send master **one** ordinary directive, which wakes it (never `--no-wake`):
 
    ```bash
-   agentbus cmd master "Stall guard: every agent idle <N>m, nothing open. Next ready in the plan: <task> (<owner>) '<title>'. Dispatch it, or tell the person why the team waits."
+   agentbus cmd master "Stall guard: every agent idle <N>m, nothing open. Next ready in the plan: <task> (<owner>) '<title>'. Dispatch it; if the team waits on purpose, pause the project (agentbus pause --for <duration> <why>), or this repeats each time the team idles."
    ```
 
 5. Record `agentbus health note team-stall "sent master the next task: <task>"`.
 
 Never dispatch the task yourself, start work, type into a pane, or answer for master. If the stall
-lasts, the dispatcher tells the person; you do nothing more.
+lasts, the dispatcher tells the person; you do nothing more. A reply from master ends the episode,
+so a team that waits on purpose would be nudged again after each idle stretch: the directive names
+`agentbus pause` (a pause is open work) for that case (foureyes).
 
 ## Client update
 
