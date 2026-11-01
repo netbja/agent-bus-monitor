@@ -45,12 +45,17 @@ from Redis, the way health already measures everything else, and routes each to 
 |---|---|---|---|---|
 | `team-stall` | every registered agent idle for N with nothing open, and work ready | ok / warn / fail / unknown | warn `waiting-person` **for you**; fail **in hand** (sentinel) | sentinel |
 | `clear-stall` | a valid hand-off older than N with no `/clear` | ok / warn / unknown | in hand (dispatch) | dispatch |
-| `quiet-agent` | a directive delivered to an idle agent, nothing from it since, older than N | ok / warn / unknown | in hand (master) | master |
+| `quiet-agent` | a directive delivered to an idle agent, no activity from it since, older than N | ok / warn / unknown | in hand (master) | master |
 
 All three: `Interval` 1 min, `Deadline` 5 s, like `cmd-delivery`. Each record's detail names the
 agents and ages it judged from (bounded, `health.SafeText`), never message text.
 
 ### 1. `team-stall`
+
+**Plan reads.** `plan.Derive` needs the verdicts by subject. The check keeps the ledger in its own
+memory and reads it forward with `VerdictsAfter` from the last id seen, as busmon does: one full
+read at the dispatcher's start, then only new entries each minute. The plan itself (`{p}:plan`,
+`{p}:plan:facts`) and the board are small and read whole.
 
 **Inputs** (all already read by the dispatcher or one read away): `{p}:agents` (state, `TS`),
 `{p}:observed` (busy, fresh), `{p}:board`, `{p}:asks`, the gates (`OpenChallenges`), `{p}:pause`,
@@ -58,7 +63,8 @@ agents and ages it judged from (bounded, `health.SafeText`), never message text.
 derived with `plan.Derive` over the same inputs busmon uses.
 
 **Idle team**: every agent in `{p}:agents` that is not dormant (`dormantAfter`, as busmon hides
-them) has declared `idle` or `done` for at least N (`stall_after`), and no fresh observation shows
+them; the constant moves from `cmd/busmon/agents.go` to `bus.DormantAfter` so both read one value)
+has declared `idle` or `done` for at least N (`stall_after`), and no fresh observation shows
 its pane busy. An agent in `working`, `blocked` or `waiting` makes the team not idle: `blocked` and
 `waiting` already have their own circuits (blocked notices, For you).
 
@@ -67,10 +73,23 @@ its pane busy. An agent in `working`, `blocked` or `waiting` makes the team not 
   `quiet-agent`'s case, below);
 - no open ask, no open gate, no project pause, no swap or reload intent;
 - no agent with an obligation (pending or unread entries): the dispatcher already wakes or
-  escalates those, and a second signal would double the noise.
+  escalates those, and a second signal would double the noise;
+- no valid hand-off (`{p}:handoff`, `Handoff.VoidFor` false): an agent waiting for its `/clear` is
+  `clear-stall`'s case. Without this, 2026-11-01 itself would have made sentinel ask master to
+  dispatch the next task to the agent sitting at 90 % context (foureyes);
+- no quiet agent (`quiet-agent`'s case, below);
+- no mission attempt in progress for any agent (the conductor's, read as `swap`'s `openWork` reads
+  it, `missionsOf`).
+
+**Held agents.** An agent whose provider is held (`{p}:quota` hold marks) declares `idle` and the
+dispatcher neither prompts nor escalates it. A ready task whose owner is held is **not ready**: the
+long-hold notice (`longhold:<p>`) already speaks for it, and dispatching to a stopped provider helps
+nobody. If every ready task's owner is held, the check reads `ok` with the detail
+`ready work waits on a quota hold: pages-5 (coder, anthropic until 15:40)`.
 
 **Work ready**, read from the derived plan:
-- *agent-ready*: a row `Upcoming`, its owner an agent (not `person`), `WaitingOn` empty;
+- *agent-ready*: a row `Upcoming`, its owner an agent (not `person`) whose provider is not held,
+  `WaitingOn` empty;
 - *person-ready*: a row `Waiting` (the person's task, or a merge waiting for the person).
 
 | Idle team, nothing open | Plan | Status | Reason code | Detail |
@@ -107,7 +126,8 @@ the clear pass keeps `lastClear map[agent]{reason, at}` in the loop's memory, gu
 and `HealthConfig` gets a read function for it, as it has `UsageRefresh`. This is also the fix of
 the queued auto-clear task's first half: the same pass **logs** each deferral once per (agent,
 reason) change: `{"agent":"coder","action":"clear-deferred","reason":"the pane is focused"}`.
-Never once per pass.
+Never once per pass. This log stands on its own and can ship first, as the queued auto-clear task,
+before any check here (foureyes).
 
 Warn, not fail: a missed clear is the person's or the dispatcher's to fix, and sentinel can do
 nothing about it (it never types into a pane). When the agent's pane is the person's focused pane,
@@ -119,11 +139,17 @@ the reason itself says so, and For you shows it (see busmon below).
 agent's `Obligation.LastDelivered`, and the agent's last status `TS` and last report time.
 
 An agent is **quiet** when all of these hold:
-- the newest waking entry addressed to it (`directive`, `escalation`, `reply`; not `wake=no`, not
-  `verdict`), from master, the person or the dispatcher, is **delivered**: its id ≤ the group's
-  `LastDelivered`, and not pending;
-- the agent has declared no status and written no report since that entry's id;
-- the agent is `idle` or `done`, not seen busy, and the entry is older than N (`quiet_after`).
+- the newest entry addressed to it that asks for work, a `directive` or an `escalation` (not
+  `wake=no`), from master, the person or the dispatcher, is **delivered**: its id ≤ the group's
+  `LastDelivered`, and not pending. A `reply` or a `verdict` never counts: an informational reply
+  ("approved", "nothing more needed") rightly leads to nothing (foureyes);
+- the agent shows **no activity** since that entry, where activity is any of: a status (`TS`), a
+  report, any entry it wrote in `{p}:cmd` (`from` = the agent: a reply, a verdict, a challenge, a
+  directive), a board entry it owns with `Updated` after the entry, an ask it opened
+  (`CreatedAt`), or a hand-off it declared. All of these carry Redis time (stream ids, `TIME`), so
+  the comparison is with the entry's id;
+- the agent is `idle` or `done`, not seen busy, not held, and the entry is older than N
+  (`quiet_after`).
 
 That is "the queue was read by something, and nothing came of it": a plain `subscribe` that ACKed
 it unseen, a session that drained and died, a cleared session whose new context never saw it.
@@ -185,7 +211,9 @@ FencedNotifyOnceForPerson(mark "stall:<since>", episode "<since>",
 
 Fenced, once per episode (the episode is the fail's `since`, from Redis `TIME`), under the same
 `stall:<since>` mark as the cannot-act notice, so the person is told once per episode by either
-path. The mark goes when the episode ends, like `resumed:` marks. It is a `for=person` notice, so busmon marks it unread
+path. The mark has one field per project at most: the health pass deletes any `stall:*` field whose
+episode is not the current fail's (a fenced `HDEL`, in the same script family as the once-marks), on
+the first pass after the episode ends. So `{p}:quota` never grows by one field per episode. It is a `for=person` notice, so busmon marks it unread
 (●) and For you lists it. No bell beyond what an unread line already does.
 
 ## busmon
@@ -259,13 +287,15 @@ Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
 - `EvaluateTeamStall`: each row of the table above, plus one agent `working` (ok), one `waiting`
   (ok), one dormant agent ignored, a fresh busy observation on an idle agent (not idle), an aged
   observation ignored, each open-work kind (request, accepted task, ask, gate, pause, swap,
-  obligation, quiet agent), an agent-ready task with `WaitingOn` (not ready), the boundary at
-  exactly N.
+  obligation, quiet agent, valid hand-off, mission attempt), a void hand-off (not open), an
+  agent-ready task with `WaitingOn` (not ready), a ready task whose owner is held (not ready; the
+  quota-hold detail when it is the only one), the boundary at exactly N.
 - `EvaluateClearStall`: no hand-off, young, old with auto-clear off, old with each `DecideClear`
   reason, old with no recorded decision, a void hand-off (ok).
 - `EvaluateQuietAgent`: delivered and silent (warn), pending (ok: the dispatcher's case), `wake=no`
-  (ok), a status after the entry (ok), a report after the entry (ok), a `verdict` entry (ignored),
-  the boundary at N.
+  (ok), a held agent (ok), and each kind of activity after the entry (ok): a status, a report, a
+  reply, a verdict, a challenge, a board update, an ask, a hand-off. A `reply` or `verdict` as the
+  newest entry never makes an agent quiet. The boundary at N.
 
 Dispatcher (`dispatch/`, the fake runtime, Redis opt-in through `AGENTBUS_TEST_REDIS_URL`):
 
@@ -279,6 +309,10 @@ Dispatcher (`dispatch/`, the fake runtime, Redis opt-in through `AGENTBUS_TEST_R
 - master held or its tab blocked on the fail pass: one `for=person` notice at once, under the
   `stall:<since>` mark; the second tier then sends nothing more for that episode.
 - the cannot-act rule as a pure function: the reconciliation's escalation tests still pass on it.
+- the `stall:*` mark is deleted, fenced, on the first pass after its episode ends; with a lost lease
+  nothing is deleted.
+- the ledger is read forward: a second pass reads only entries after the last id (a fake reader
+  counts the calls).
 
 busmon: goldens of F5 with each record, the For you rows, and the alignment suite with long agent
 and task names. The sentinel skill's new section is reviewed as text (no skill test exists).
