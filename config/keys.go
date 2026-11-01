@@ -175,6 +175,10 @@ var Keys = []*Key{
 		env: envStallDuration, file: fileDuration(true)},
 	{Name: "dispatch.quiet_after", Env: "AGENT_BUS_QUIET_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",
 		env: envStallDuration, file: fileDuration(true)},
+	// The automatic state (spec 2026-11-01-auto-state-design.md): a turn's
+	// working seen ready this long reads idle for team-stall; 0 turns it off.
+	{Name: "dispatch.turn_stale_after", Env: "AGENT_BUS_TURN_STALE_AFTER", Kind: Duration, Default: 2 * time.Minute, ReadBy: "dispatch",
+		env: envStallDuration, file: fileDuration(true)},
 	// The history archive (spec 2026-11-01-history-design.md): days of day
 	// files kept (0 = no archive) and the directory's cap in MiB.
 	{Name: "history.keep_days", Env: "AGENT_BUS_HISTORY_DAYS", Kind: Int, Default: 90, ReadBy: "dispatch",

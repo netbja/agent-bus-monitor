@@ -64,7 +64,13 @@ func VerdictsKey(project string) string { return project + ":verdicts" }
 type AgentSnapshot struct {
 	State   string `json:"state"`
 	Message string `json:"message,omitempty"`
-	TS      int64  `json:"ts"`                // ms since epoch, from the status entry's stream id
+	TS      int64  `json:"ts"` // ms since epoch, from the status entry's stream id
+	// Auto is AutoTurn when the state was flipped by the client's turn hooks
+	// (TurnState), "" when the agent declared it.
+	Auto string `json:"auto,omitempty"`
+	// DeclTS is the last declaration's time while a flip holds the state (TS
+	// is then the flip's): readers of what the agent wrote use DeclaredTS.
+	DeclTS  int64  `json:"decl_ts,omitempty"`
 	Pane    string `json:"pane,omitempty"`    // HERDR_PANE_ID when the agent runs inside herdr
 	Session string `json:"session,omitempty"` // CLAUDE_CODE_SESSION_ID: locates the agent's transcript
 	// Process identity (§5.2): the agent's foreground pid in its pane and that

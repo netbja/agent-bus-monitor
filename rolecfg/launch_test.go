@@ -221,7 +221,7 @@ func TestLaunchResumeKeepsRoleSettingsAndRejectsOtherClients(t *testing.T) {
 
 // hookSettings is the --settings of a Claude launch without tool rules.
 func hookSettings(f *launchFixture) string {
-	s, err := settingsJSON(ToolRules{}, resumeHookCommand(newEnv(f.env)))
+	s, err := settingsJSON(ToolRules{}, launchHooks(newEnv(f.env)))
 	must(f.t, err)
 	return s
 }
