@@ -46,6 +46,7 @@ const (
 	ovServiceLog // a service's log tail, opened from its F3 card
 	ovRedis      // the Redis card's page (busmon-redis-detail), opened from F3
 	ovTokens     // tokens (U): account windows, projects side by side, the open project by agent
+	ovHistory    // history (H): the archive, then the live streams, newest first
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.
