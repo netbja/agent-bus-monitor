@@ -62,6 +62,9 @@ func TestTeamStallTable(t *testing.T) {
 		{"open work", func(in *TeamStallInput) { in.Open = TeamOpenWork{Gates: 1} }, OK, "", "work is open: 1 gate"},
 		{"quiet agent suppresses", func(in *TeamStallInput) { in.Quiet, in.QuietDetail = Warn, "coder: directive from master 25m ago" }, OK, "", "quiet agent: coder: directive from master 25m ago; see quiet-agent"},
 		{"quiet agent unmeasured", func(in *TeamStallInput) { in.Quiet = Unknown }, Unknown, "", "quiet-agent not measured"},
+		{"quiet-agent off does not turn team-stall off (foureyes)", func(in *TeamStallInput) {
+			in.Quiet, in.QuietOff = Unknown, true
+		}, Fail, "stalled", ""},
 		{"ready owner held", func(in *TeamStallInput) {
 			in.AgentReady[0].OwnerHeld, in.AgentReady[0].Hold = true, "anthropic until 15:40"
 			in.PersonReady = nil

@@ -89,6 +89,7 @@ type TeamStallInput struct {
 	Open         TeamOpenWork
 	Quiet        Status // the quiet-agent record's effective status
 	QuietDetail  string
+	QuietOff     bool // quiet_after = 0: its record says nothing, and team-stall judges without it
 	PlanLoaded   bool
 	AgentReady   []ReadyTask
 	PersonReady  []string // titles of the person's tasks Waiting
@@ -145,9 +146,9 @@ func EvaluateTeamStall(in TeamStallInput) Outcome {
 	if in.Open.Any() {
 		return ok("work is open: " + strings.Join(in.Open.items(), ", "))
 	}
-	switch in.Quiet {
-	case OK:
-	case Warn:
+	switch {
+	case in.QuietOff, in.Quiet == OK:
+	case in.Quiet == Warn:
 		return ok("quiet agent: " + in.QuietDetail + "; see quiet-agent")
 	default:
 		return unknown("quiet-agent not measured")
