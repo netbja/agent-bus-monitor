@@ -226,3 +226,24 @@ func TestForYouSizedFromTheCurrentOwedCount(t *testing.T) {
 	m = step(t, m, pollMsg{snap: snap, at: shellNow})
 	check("owed again")
 }
+
+// A resize keeps the cursor on its own row when a row before it is dropped
+// (foureyes: the key branch of recapKeepCursor was unpinned).
+func TestRecapCursorKeepsItsRowOnResize(t *testing.T) {
+	rec := recapModel{Rows: []recapRow{
+		{Section: recapForYou, Title: recapForYou},
+		{Key: "ask:1:q", Section: recapForYou, Title: "master asks · go?", Selectable: true},
+		{Key: "cmd:9-0", Section: recapForYou, Title: "master → charlie · 2h", Selectable: true},
+		{Section: "Agents", Title: "Agents"},
+		{Key: "agent:coder", Section: "Agents", Title: "coder · working", Selectable: true},
+	}}
+	m := reqShell(t, 70, 40, nil)
+	m.gotRecap(recapMsg{model: rec})
+	m.maybeOpenRecap()
+	p := m.rd.top()
+	p.sel = 2 // the owed directive, after the ask the panel will list
+	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
+	if p = m.rd.top(); p.recap.Rows[p.sel].Key != "cmd:9-0" {
+		t.Errorf("the cursor moved to %q", p.recap.Rows[p.sel].Key)
+	}
+}
