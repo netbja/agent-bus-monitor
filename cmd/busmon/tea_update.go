@@ -22,7 +22,7 @@ func (m *Model) mode() Mode {
 		return ModeTour
 	case m.ui.compose != nil:
 		return ModeCompose
-	case m.ui.line == lineFilter:
+	case m.ui.line == lineFilter || m.ui.line == lineHistFilter:
 		return ModeFilter
 	case m.ui.line == lineMessage:
 		return ModeInput
@@ -138,6 +138,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.pushPlan()
 	case ActTokens:
 		cmd = m.push(page{kind: ovTokens})
+	case ActHistory:
+		cmd = m.openHistory()
 	case ActAsk:
 		agent := ""
 		if sel := m.lists.agents.Selected(); m.ui.focus == PanelAgents && m.snap.agents[sel] != nil && m.snap.agents[sel].openAsk > 0 {
@@ -215,6 +217,12 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 		m.expand(p, key)
 	case PanelForYou:
+		if name, ok := strings.CutPrefix(key, "empty:agent:"); ok { // the empty state's rows
+			return m.pushAgent(name)
+		}
+		if task, ok := strings.CutPrefix(key, "empty:plan:"); ok {
+			return m.push(page{kind: ovPlanTask, key: task})
+		}
 		i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Key == key })
 		if i < 0 {
 			return nil
@@ -227,6 +235,8 @@ func (m *Model) open(p PanelID) tea.Cmd {
 			return m.pushAgent(it.Agent)
 		case rankHealth: // the stall guard: F5 says what and why
 			return m.push(page{kind: ovHealth})
+		case rankPlan: // its page carries the Action row (compose to master, prefilled)
+			return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(key, "plan:")})
 		case rankGate: // the challenge thread: its ref is the root
 			ref := strings.TrimPrefix(key, "gate:"+it.Agent+":")
 			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
@@ -338,6 +348,12 @@ func movesSelection(act Action) bool {
 // typed characters edit.
 func (m *Model) editFilter(act Action, k Key) {
 	switch {
+	case act == ActSend && m.ui.line == lineHistFilter:
+		if p := m.rd.top(); p != nil && p.kind == ovHistory {
+			p.histFilter, p.sel, p.dirty = parseFilter(m.ui.edit), 0, true
+		}
+		m.leaveLine(false)
+		m.refresh()
 	case act == ActSend:
 		m.ui.filter = parseFilter(m.ui.edit)
 		m.leaveLine(false)

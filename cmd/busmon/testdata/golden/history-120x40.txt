@@ -1,0 +1,40 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                       15:04:05 
+ paused · resumes in 1h52 (lunch)   claude 5h ███▏  62% │ 7d ████▏      41%   grok 5h █████ 100% held 15:44             
+╭─ For you ───────────── 4 for you · 2 unread ─╮╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ·…─╮
+│  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
+│  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
+│  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
+│  ◆ gate   coder     by charlie  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok ┃
+│  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…┃
+│                                              ││  ○ coder     paused    2m      —     88k 85%   gate 1 · d… busmon-ch…┃
+│                                              ││  ▲ docs      blocked   50m     —     —         armed · st… waiting f…┃
+│                                              ││  ▲ qa        blocked   11m     —     —         held        out of qu…┃
+│                                              ││  ○ ui-grok   quota     3m      —     —         swapping ·… reviewed  │
+│                                              ││  ● release   working   7m      —     —         fallback k… tagging   ▼
+╰──────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────╯
+╭─ History · 3 days · 3 entries ──────────────────────────────────────────────────────────────────────────── esc back ─╮
+│   Sun 2026-11-01                                                                                                     │
+│ ▶ 18:49  coder → master          reply           queued after step 4                                                 │
+│   18:47  master → coder          directive       New feature from the person                                         │
+│   ── not archived: 14:47 to 17:47 (status) ──                                                                        │
+│   Sat 2026-10-31                                                                                                     │
+│   23:58  foureyes → coder        verdict         approve busmon-notice: APPROVE                                      │
+│   o loads the 3 days before                                                                                          │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   / filter   o older   esc q close   F5 health                               

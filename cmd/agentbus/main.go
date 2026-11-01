@@ -157,6 +157,9 @@ func main() {
 		printSettingsWarnings(os.Getenv, os.Stderr)
 	}
 
+	if args[0] == "history" { // needs the project, not the broker: the archive is read without it
+		os.Exit(runHistory(args[1:], realHistoryDeps(host, project), os.Stdout, os.Stderr))
+	}
 	client, err := bus.Connect(host)
 	if err != nil {
 		die(fmt.Sprintf("Redis connection failed: %v", err))

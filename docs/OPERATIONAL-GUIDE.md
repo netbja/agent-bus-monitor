@@ -52,7 +52,7 @@ This practical guide complements the `README.md`. It provides a complete step-by
      - **For you**: the questions, decisions, gates and unread messages only you can settle.
      - **Agents**: declared state (`working`, `idle`, `blocked`, `waiting`, `done`), freshness, queue, context fill, flags in words.
      - **Activity · Board · Requests · Plan**: the live feed, the shared task board, who owes whom an answer, the batch's plan.
-     - **Pages**: services (F3), health (F5), recap (`R`), plan (`P`), tokens (`U`), help (F1).
+     - **Pages**: services (F3), health (F5), recap (`R`), plan (`P`), tokens (`U`), history (`H`), help (F1).
      - **Input**: `@coder ...` sends a directive that wakes the agent.
 
 4. **Event-Driven Dispatcher (`agentbus dispatch`)**
@@ -499,6 +499,16 @@ to watch a pane.
   `clear-stall` warns when a hand-off was not cleared, with the dispatcher's reason (when it is your
   focused pane, switch away). `quiet-agent` warns when an agent received work and wrote nothing
   since. Panes must be observed: where they are not (macOS), `team-stall` reads `unknown`.
+- **History archive.** The dispatch service appends every stream (`cmd`, `report`, `status`,
+  `notify`, `verdicts`, `health:log`, `swaps`) each minute to one JSONL file per UTC day in the
+  project's state directory, `history/YYYY-MM-DD.jsonl` (0600 in 0700), so a thread outlives the
+  stream's day and a half. `history.keep_days` (90, `0` = no archive) and `history.max_mb` (256)
+  in `config.toml`. A field that looks like a credential is written as `[redacted]`, whole; this
+  is best effort, so treat the directory as sensitive. A hole the dispatcher missed is a `gap`
+  line, never silent. You may delete the directory at any time.
+  `agentbus history` reads it, then the live streams: `--agent`, `--thread`, `--kind`, `--since`/`--until`
+  (`3d`, `2026-10-30`, `14:20`), `--grep`, `--limit` (200), `--json`. On another host it sees only the
+  live streams, and says so.
 - **GitHub reachable.** Health `github` runs every 15 minutes when the project's Git remote is on
   github.com: `ssh -o BatchMode=yes -T git@github.com` with the service's own SSH identities, and
   `git -c credential.helper= ls-remote` on the repository's HTTPS URL with no prompt. A probe is

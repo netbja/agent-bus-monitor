@@ -480,7 +480,7 @@ func main() {
 	// the model; the poll runs in its commands, the tail is fed in below.
 	shell := newShell(shellConfig{ctx: ctx, liveFrom: time.Now(), reader: b, w: b, st: st, project: project, self: self,
 		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour,
-		docker: realSvcRunner, brokerHost: opts.host})
+		docker: realSvcRunner, brokerHost: opts.host, histDir: historyDirOf(project)})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up

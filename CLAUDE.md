@@ -232,7 +232,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
-- **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
+- **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`history`/`challenge`/`reply`/
   `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`plan`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`config`/`version`. Parses args manually;
   trailing words are joined. Every command's usage, flags and examples are one table
   (`cmd/agentbus/commands.go`, types in `cli/`): `agentbus help [<cmd>]` and `<cmd> --help`
@@ -343,8 +343,13 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   every cluster measure the same under uniseg, lipgloss's grapheme width and wcwidth:
   `agreeWidths`); `drawLine`/`drawFrame` write the `grid`, lipgloss only styles spans, so a frame
   never wraps by one cell. `forYou` ranks asks, the stall guard's rows for the person (`stallItems`, rank `rankHealth`: `team-stall` warn `waiting-person` and `clear-stall` warn `pane-focused`, while current; Enter opens F5), waits, the person's gates and unread lines, and `decisions` is
-  its badge and reminder subset; with nothing for the person it says so, then what is in progress and the next
-  decision (`forYouEmpty`: the agents declaring working, the plan's first open person task; no store), and the
+  its badge and reminder subset; a plan task waiting for the person is an item of its own (`rankPlan`, `planItems`:
+  counted in the title and badge, Enter opens its page with the Action row, also from the reminder; it stays a standing
+  decision in the badge and the reminder until master records it done, even one with no `after`); with nothing for the person it says so, then
+  what is in progress and the next decision as selectable rows (`forYouEmptyRows`: one row per agent declaring working,
+  with its current task from the facts, `currentTask`: an accepted board task it owns, else its plan task in progress,
+  never its status message; keys `empty:agent:<name>` open the agent's page, `empty:plan:<task>` the plan task; no
+  store), and the
   recap's For you section shows only when the For you panel is not on screen (`recapForScreen`); its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`; A12: `▼` in the gutter, the text under the message column behind a
@@ -835,6 +840,28 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   destroys a forgotten agent's group). Scanner, canary, key
   inventory and project-defined checks belong to later releases (password rotation shipped as
   `./setup.sh rotate-redis-password`, the person's act); health is not a security boundary.
+- **History archive** (spec `docs/superpowers/specs/2026-11-01-history-design.md`, package `history/`): the
+  dispatch service's chore (`dispatch/history.go`, its own goroutine beside the reconciliation, 1 min, a 5 s
+  pass, 2000 entries shared a page per stream in turn, the round starting one stream further each pass) appends `history.Streams` to `<state>/history/YYYY-MM-DD.jsonl` (UTC day of the id;
+  `{"stream","id","f"}`), only while `HoldsDispatch` and under an flock on `history/.lock`; files only, no
+  Redis write, so nothing new is fenced. On start (and after a failed write or a deleted cursor) a torn last
+  line is truncated and each stream's position is max(`cursor.json`, the files' highest id); no cursor and no
+  day file writes the `archive restarted` gap line (`of=*`), a stream trimmed past its position one `gap` line. Every gap line is kept again in `gaps.jsonl` (`ReadGaps`; pruned with the days), and a gap matches time bounds by the stretch it covers (`from`..`to`), not its id, so `--until` never hides a hole.
+  Every field goes through `health.Redact` (whole field on any hit; `SafeText` shares `health.Sensitive`).
+  `history.keep_days` (90, 0 = off) and `history.max_mb` (256), pruned daily, never today's file. Bus reads:
+  `Bus.StreamAfter`/`StreamOldest`. `agentbus history` (`historycmd.go`, after the identity guard and before the
+  broker is dialled: it needs the project, not the broker) reads the day files (`history.ReadDays`), then the live
+  streams, `history.Merge` by (stream, id), `history.Filter` (`--agent` matches from/target/agent and a verdict's
+  author/reviewer; a gap line passes an agent or kind filter it may hide, never `--thread`/`--grep`), newest
+  `--limit` (200); says `broker unreachable: archive only` or `no archive on this host: live streams only`.
+  busmon's History page (`H`, `history_page.go`, `ovHistory`): loaded in a command (`historyLoadCmd`: the last 3 days
+  under an 8 MiB cap through `history.ReadBack`, which pages **by position** with a `Cursor` (day file, byte offset)
+  because a day file is not in id order; `ReadGaps`; the live streams through the writer's optional
+  `liveStreamReader`; the three sources kept apart in `histView` and windowed together, `window`), newest first
+  under day headings (`historyBody`, short kinds below 80 cells), Enter opens an entry in the message page (`n`/`p`
+  there step the page's rows, `historyStep`), `o` (`ActOlder`, OnPage) widens the window by three days (the archive read on from its cursor, the gaps read again, the live entries windowed again), `/` filters it with
+  Activity's syntax on its own line kind (`lineHistFilter`, `historyFiltered`), `t` narrows it to the selected
+  entry's thread.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

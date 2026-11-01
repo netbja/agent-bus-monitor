@@ -76,6 +76,21 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo cmd coder \"run the suite\"", "agentbus -p demo cmd -r 1792537337865-0 coder \"and the vet\""},
 	},
 	{
+		Name: "history", Usage: []string{"history [--agent A] [--thread T] [--kind K] [--since D] [--until D] [--grep TEXT] [--limit N] [--json]"},
+		Summary: "re-read the past: the archive on this host, then the live streams (redaction is best effort)",
+		Flags: []cli.Flag{
+			{Long: "agent", Short: 'a', Arg: "<agent>", Help: "entries from or to it, and its own reports and statuses"},
+			{Long: "thread", Short: 't', Arg: "<id>", Help: "the entry whose id or ref is <id>, across days"},
+			{Long: "kind", Short: 'k', Arg: "<kind>", Help: "directive, reply, verdict, report, status, notify, ask, health, swap"},
+			{Long: "since", Short: 's', Arg: "<when>", Help: "a duration back (3d, 90m), a date, a date and time, or a time today"},
+			{Long: "until", Short: 'u', Arg: "<when>", Help: "as --since; a date means its end"},
+			{Long: "grep", Short: 'g', Arg: "<text>", Help: "a case-insensitive substring of any field"},
+			{Long: "limit", Short: 'n', Arg: "<n>", Help: "the newest n (default 200, 0 = all)"},
+			fJSON,
+		},
+		Examples: []string{"agentbus -p demo history --thread 1793524064032-0", "agentbus -p demo history -a coder -s 3d"},
+	},
+	{
 		Name: "thread", Usage: []string{"thread <thread-id>"},
 		Summary:  "show every :cmd entry of one thread, oldest first",
 		Examples: []string{"agentbus -p demo thread 1792537337865-0"},

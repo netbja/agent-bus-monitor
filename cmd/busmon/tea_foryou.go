@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/netbja/agent-bus-monitor/plan"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -20,6 +19,7 @@ const (
 	rankHealth        // the stall guard: the team waits on the person, or the person's focus holds a hand-off
 	rankWait          // a waiting agent with no open ask, or its client's prompt
 	rankGate          // a pending verdict: an open 4-eyes gate
+	rankPlan          // a plan task waiting for the person: Enter opens its page and its Action row
 	rankUnread        // an Activity line for the person not opened yet
 )
 
@@ -53,6 +53,7 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 		out = append(out, personGateItems(s.person, s.person, s.personGates)...)
 	}
 	out = append(out, stallItems(s.guardianHealth, s.guardianNow)...)
+	out = append(out, planItems(s)...)
 	asks := map[string]int{} // an open ask's row, by ask id (the id of its Activity line)
 	for i, it := range out {
 		if it.Rank == rankAsk {
@@ -167,56 +168,107 @@ func unreadItems(items []attentionItem) int {
 // progress (the agents that declare working, with their status) and the next
 // decision to come (the plan's first person task Blocked or Upcoming), from
 // what busmon already reads. No store of its own.
+// planItems are the plan's tasks waiting for the person: a decision like any
+// other, counted in the title and the badge (the person: "0 for you" under a
+// "Waiting for you" line read as a contradiction).
+func planItems(s snapshot) []attentionItem {
+	if !s.planState.loaded {
+		return nil
+	}
+	var out []attentionItem
+	for _, r := range s.planState.rows {
+		if r.Task.Owner == plan.Person && r.State == plan.Waiting {
+			out = append(out, attentionItem{Rank: rankPlan, Key: "plan:" + r.Task.ID, Agent: "plan", Text: r.Task.Title})
+		}
+	}
+	return out
+}
+
+// emptyRow is one line of the empty state, selectable when it has a key:
+// empty:agent:<name> opens the agent's page, empty:plan:<task> the plan task.
+type emptyRow struct {
+	key  string
+	line Line
+}
+
+// forYouEmpty is the empty state's lines (the recap and the layout read them).
 func forYouEmpty(s snapshot, owed int) []Line {
-	var working []string
+	var out []Line
+	for _, r := range forYouEmptyRows(s, owed) {
+		out = append(out, r.line)
+	}
+	return out
+}
+
+// forYouEmptyRows: what is owed, else "Nothing expected", then what is in
+// progress, one row per agent declaring working with its current task from
+// the facts (an accepted board task it owns, else its plan task in progress),
+// never its status message, which may be stale; then the next decision.
+func forYouEmptyRows(s snapshot, owed int) []emptyRow {
 	names := make([]string, 0, len(s.agents))
 	for n := range s.agents {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	for _, n := range names {
-		if a := s.agents[n]; a.state == "working" {
-			w := n
-			if a.message != "" {
-				w += " " + GlyphNone + " " + a.message
-			}
-			working = append(working, w)
-		}
-	}
-	inProgress := "nobody declares working"
-	if len(working) > 0 {
-		inProgress = strings.Join(working, "; ")
-	}
-	waiting, next := "", "no decision planned"
-	if s.planState.loaded {
-		for _, r := range s.planState.rows {
-			if r.Task.Owner == plan.Person && r.State == plan.Waiting && waiting == "" {
-				waiting = r.Task.Title
-			}
-		}
-		for _, st := range []plan.State{plan.Blocked, plan.Upcoming} {
-			for _, r := range s.planState.rows {
-				if r.Task.Owner == plan.Person && r.State == st && next == "no decision planned" {
-					next = r.Task.Title
-				}
-			}
-		}
-	}
-	var lines []Line
+	var rows []emptyRow
 	if owed > 0 {
 		word := "requests"
 		if owed == 1 {
 			word = "request"
 		}
-		lines = append(lines, Line{{Text: fmt.Sprintf("Owed by you: %d %s (Requests)", owed, word), Role: RoleAttention}})
+		rows = append(rows, emptyRow{line: Line{{Text: fmt.Sprintf("Owed by you: %d %s (Requests)", owed, word), Role: RoleAttention}}})
+	} else {
+		rows = append(rows, emptyRow{line: Line{{Text: "Nothing expected from you.", Role: RoleOK}}})
 	}
-	if waiting != "" {
-		lines = append(lines, Line{{Text: "Waiting for you: ", Role: RoleAttention}, {Text: Preview(waiting), Role: RoleText}})
+	working := 0
+	for _, n := range names {
+		if s.agents[n].state != "working" {
+			continue
+		}
+		working++
+		w := n
+		if t := currentTask(s, n); t != "" {
+			w += " " + GlyphNone + " " + t
+		}
+		rows = append(rows, emptyRow{key: "empty:agent:" + n, line: Line{{Text: "In progress: ", Role: RoleMuted}, {Text: Preview(w), Role: RoleText}}})
 	}
-	if len(lines) == 0 {
-		lines = append(lines, Line{{Text: "Nothing expected from you.", Role: RoleOK}})
+	if working == 0 {
+		rows = append(rows, emptyRow{line: Line{{Text: "In progress: ", Role: RoleMuted}, {Text: "nobody declares working", Role: RoleText}}})
 	}
-	return append(lines,
-		Line{{Text: "In progress: ", Role: RoleMuted}, {Text: Preview(inProgress), Role: RoleText}},
-		Line{{Text: "Next for you: ", Role: RoleMuted}, {Text: Preview(next), Role: RoleText}})
+	next := emptyRow{line: Line{{Text: "Next for you: ", Role: RoleMuted}, {Text: "no decision planned", Role: RoleText}}}
+	if s.planState.loaded {
+	find:
+		for _, st := range []plan.State{plan.Blocked, plan.Upcoming} {
+			for _, r := range s.planState.rows {
+				if r.Task.Owner == plan.Person && r.State == st {
+					next = emptyRow{key: "empty:plan:" + r.Task.ID, line: Line{{Text: "Next for you: ", Role: RoleMuted}, {Text: Preview(r.Task.Title), Role: RoleText}}}
+					break find
+				}
+			}
+		}
+	}
+	return append(rows, next)
+}
+
+// currentTask is what an agent works on, from current facts only: an
+// accepted board task it owns, else a plan task of its in progress.
+func currentTask(s snapshot, agent string) string {
+	var tasks []string
+	for id, e := range s.board {
+		if e.Owner == agent && e.State == "accepted" {
+			tasks = append(tasks, id)
+		}
+	}
+	if len(tasks) > 0 {
+		sort.Strings(tasks)
+		return tasks[0]
+	}
+	if s.planState.loaded {
+		for _, r := range s.planState.rows {
+			if r.Task.Owner == agent && r.State == plan.InProgress {
+				return r.Task.ID
+			}
+		}
+	}
+	return ""
 }
