@@ -211,3 +211,61 @@ func TestHistoryEntryNextPrevious(t *testing.T) {
 		t.Fatalf("flash %q", m.ui.flash)
 	}
 }
+
+// After a cut, o appends the lines before the oldest loaded one (foureyes).
+func TestHistoryOlderAfterACutReachesOlderLines(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	var es []history.Entry
+	for i := 0; i < 30; i++ {
+		es = append(es, history.Entry{Stream: "cmd", ID: histID(now.Add(-time.Duration(30-i) * time.Minute)), F: map[string]string{"type": "directive", "command": fmt.Sprintf("line %02d %s", i, strings.Repeat("x", 60))}})
+	}
+	f, _ := os.Create(filepath.Join(dir, now.UTC().Format("2006-01-02")+".jsonl"))
+	for _, e := range es {
+		b, _ := json.Marshal(e)
+		f.Write(append(b, '\n'))
+	}
+	f.Close()
+	m := fixtureShell(t, 120, 40)
+	m.cfg.histDir = dir
+	m.histCap = 1200
+	m, cmd := pressCmd(t, m, 'H')
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	p := m.rd.top()
+	if !p.hist.cut || len(p.hist.entries) >= 30 {
+		t.Fatalf("the first load is cut: %d cut %v", len(p.hist.entries), p.hist.cut)
+	}
+	n := len(p.hist.entries)
+	m, cmd = pressCmd(t, m, 'o')
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if got := len(m.rd.top().hist.entries); got <= n {
+		t.Fatalf("o added nothing older: %d then %d", n, got)
+	}
+}
+
+// A failed read of gaps.jsonl is said, never silent (reviewer-codex).
+func TestHistoryPageSaysAFailedGapRead(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "gaps.jsonl"), 0o700); err != nil { // a directory: the read fails
+		t.Fatal(err)
+	}
+	m := fixtureShell(t, 120, 40)
+	m.cfg.histDir = dir
+	m, cmd := pressCmd(t, m, 'H')
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	if body := strings.Join(histTexts(m.rd.top().body), "\n"); !strings.Contains(body, "gaps could not be read") {
+		t.Fatalf("the failed gap read is not said:\n%s", body)
+	}
+}
+
+func TestHistoryGapAcrossMidnightCarriesItsDate(t *testing.T) {
+	from := time.Date(2026, 10, 31, 22, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 11, 1, 2, 0, 0, 0, time.UTC)
+	g := history.Entry{Stream: "gap", ID: histID(to), F: map[string]string{"of": "status", "from": histID(from), "to": histID(to)}}
+	if got := histGapText(g, time.UTC); !strings.Contains(got, "Sat 10-31 22:00 to Sun 11-01 02:00") {
+		t.Fatalf("%q", got)
+	}
+}

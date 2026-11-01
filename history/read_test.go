@@ -157,3 +157,32 @@ func TestGapMatchesByItsCoveredInterval(t *testing.T) {
 		t.Error("a window before the stretch shows it")
 	}
 }
+
+// After a cut, reading before the oldest loaded entry reaches older lines
+// under its own cap (foureyes: re-reading the window gave the same newest
+// lines).
+func TestReadDaysBeforeReachesOlderLines(t *testing.T) {
+	dir := t.TempDir()
+	day := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	var es []Entry
+	for i := 0; i < 40; i++ {
+		es = append(es, Entry{Stream: "cmd", ID: id(day.Add(time.Duration(i)*time.Minute), 0), F: map[string]string{"command": strings.Repeat("x", 50)}})
+	}
+	prev := Entry{Stream: "cmd", ID: id(day.Add(-time.Hour), 0), F: map[string]string{"command": "the day before"}}
+	writeDay(t, dir, "", append([]Entry{prev}, es...)...)
+	first, cut, err := ReadDays(dir, day, day.Add(time.Hour), 1000)
+	if err != nil || !cut || len(first) == 0 || len(first) == 40 {
+		t.Fatalf("the newest under the cap: %d cut %v %v", len(first), cut, err)
+	}
+	older, cut2, err := ReadDaysBefore(dir, day.AddDate(0, 0, -3), first[0].ID, 1000)
+	if err != nil || !cut2 || len(older) == 0 {
+		t.Fatalf("older: %d cut %v %v", len(older), cut2, err)
+	}
+	if !idLess(older[len(older)-1].ID, first[0].ID) {
+		t.Fatalf("not older than the first load: %s vs %s", older[len(older)-1].ID, first[0].ID)
+	}
+	all, cut3, _ := ReadDaysBefore(dir, day.AddDate(0, 0, -3), first[0].ID, 0)
+	if cut3 || all[0].F["command"] != "the day before" || all[len(all)-1].ID != es[39-len(first)].ID {
+		t.Fatalf("uncapped: from the day before up to the boundary: %d cut %v", len(all), cut3)
+	}
+}

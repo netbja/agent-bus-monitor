@@ -18,6 +18,17 @@ import (
 // that does not fit is read from its end, and cut reports it. A missing
 // directory is an empty archive.
 func ReadDays(dir string, from, to time.Time, maxBytes int64) (es []Entry, cut bool, err error) {
+	return readDays(dir, from, to, "", maxBytes)
+}
+
+// ReadDaysBefore is ReadDays for what precedes the entry before (an id): the
+// days from from up to before's day, that day only below before. A reader
+// that was cut asks for older lines with it, under a cap of its own.
+func ReadDaysBefore(dir string, from time.Time, before string, maxBytes int64) ([]Entry, bool, error) {
+	return readDays(dir, from, At(Entry{ID: before}), before, maxBytes)
+}
+
+func readDays(dir string, from, to time.Time, before string, maxBytes int64) (es []Entry, cut bool, err error) {
 	days, err := dayFiles(dir)
 	if err != nil {
 		return nil, false, err
@@ -28,6 +39,18 @@ func ReadDays(dir string, from, to time.Time, maxBytes int64) (es []Entry, cut b
 	for i := len(days) - 1; i >= 0; i-- {
 		name := days[i].day.Format(dayLayout)
 		if name < lo || name > hi {
+			continue
+		}
+		if before != "" && name == hi { // the boundary day: only below before, newest kept
+			part, used, dropped, err := readBelow(filepath.Join(dir, days[i].name), before, left, maxBytes > 0)
+			if err != nil {
+				return nil, false, err
+			}
+			chunks = append(chunks, part)
+			left -= used
+			if cut = dropped; cut {
+				break
+			}
 			continue
 		}
 		offset := int64(0)
@@ -54,6 +77,32 @@ func ReadDays(dir string, from, to time.Time, maxBytes int64) (es []Entry, cut b
 		es = append(es, chunks[i]...)
 	}
 	return es, cut, nil
+}
+
+// readBelow reads a day file's entries older than before, keeping the newest
+// within left bytes when capped: a sliding window, so memory stays under the
+// cap. used is what was kept; dropped, whether older ones were let go.
+func readBelow(path, before string, left int64, capped bool) (out []Entry, used int64, dropped bool, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	defer f.Close()
+	var sizes []int64
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), maxLine)
+	for sc.Scan() {
+		var e Entry
+		if json.Unmarshal(sc.Bytes(), &e) != nil || !validID(e.ID) || !idLess(e.ID, before) {
+			continue
+		}
+		n := int64(len(sc.Bytes()) + 1)
+		out, sizes, used = append(out, e), append(sizes, n), used+n
+		for capped && used > left && len(out) > 0 {
+			out, used, sizes, dropped = out[1:], used-sizes[0], sizes[1:], true
+		}
+	}
+	return out, used, dropped, sc.Err()
 }
 
 // readFile reads a day file from offset; a read that starts inside a line

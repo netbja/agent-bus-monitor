@@ -122,24 +122,25 @@ func (ls *shellLists) of(p PanelID) *listState {
 // Model is the shell. snap is a copy of shared (never shared.mu in View);
 // now comes from the last poll or tick, so View never reads the clock.
 type Model struct {
-	cfg    shellConfig
-	snap   snapshot
-	feed   *activityFeed
-	forYou []attentionItem
-	ui     uiState
-	lists  *shellLists
-	layout shellLayout
-	width  int
-	height int
-	now    time.Time
-	tick   int
-	gen    int // data generation: bumped by pollMsg and tailMsg only
-	paint  *painter
-	rd     *reader             // the reader's pages
-	cache  *viewCache          // rendered markdown
-	sig    *signalState        // bells, fade, recap, reminder (tea_signals.go)
-	bars   map[string]barSlide // the account gauges' slides (bars.go)
-	notice *noticeState        // the quiet line for automatic actions (notice.go)
+	cfg     shellConfig
+	histCap int64 // the History page's read cap; 0 = histReadCap (tests lower it)
+	snap    snapshot
+	feed    *activityFeed
+	forYou  []attentionItem
+	ui      uiState
+	lists   *shellLists
+	layout  shellLayout
+	width   int
+	height  int
+	now     time.Time
+	tick    int
+	gen     int // data generation: bumped by pollMsg and tailMsg only
+	paint   *painter
+	rd      *reader             // the reader's pages
+	cache   *viewCache          // rendered markdown
+	sig     *signalState        // bells, fade, recap, reminder (tea_signals.go)
+	bars    map[string]barSlide // the account gauges' slides (bars.go)
+	notice  *noticeState        // the quiet line for automatic actions (notice.go)
 }
 
 // newShell is the shell before its first poll and size.

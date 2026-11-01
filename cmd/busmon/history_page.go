@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -109,7 +110,7 @@ func historyBody(v histView, sel int, loc *time.Location, width int) (string, []
 		body = append(body, row)
 	}
 	if v.cut {
-		muted("older lines not loaded (" + humanBytes(histReadCap) + " read)")
+		muted("older lines not loaded: o reads before them")
 	}
 	muted(fmt.Sprintf("o loads the %d days before", histDaysStep))
 	return title, body, items
@@ -123,7 +124,11 @@ func histGapText(e history.Entry, loc *time.Location) string {
 		return fmt.Sprintf("%s archive restarted: nothing archived before %s %s", h, to.Format("Mon 15:04"), h)
 	}
 	from := history.At(history.Entry{ID: e.F["from"]}).In(loc)
-	return fmt.Sprintf("%s not archived: %s to %s (%s) %s", h, from.Format("15:04"), to.Format("15:04"), e.F["of"], h)
+	layout := "15:04"
+	if from.Format("2006-01-02") != to.Format("2006-01-02") { // across midnight: the dates too (foureyes)
+		layout = "Mon 01-02 15:04"
+	}
+	return fmt.Sprintf("%s not archived: %s to %s (%s) %s", h, from.Format(layout), to.Format(layout), e.F["of"], h)
 }
 
 // historyDirOf is the project's archive directory on this host ("" when the
@@ -156,7 +161,7 @@ func (m *Model) openHistory() tea.Cmd {
 // historyLoadCmd reads the last days of the archive (capped, gaps whatever
 // their days) and the live streams, merged by (stream, id).
 func (m *Model) historyLoadCmd(serial, days int) tea.Cmd {
-	dir, ctx := m.cfg.histDir, m.cfg.ctx
+	dir, ctx, readCap := m.cfg.histDir, m.cfg.ctx, m.historyCap()
 	live, _ := m.cfg.w.(liveStreamReader)
 	if ctx == nil {
 		ctx = context.Background()
@@ -169,10 +174,12 @@ func (m *Model) historyLoadCmd(serial, days int) tea.Cmd {
 			v.noArchive = true
 		} else {
 			var err error
-			if archive, v.cut, err = history.ReadDays(dir, now.AddDate(0, 0, -days), now, histReadCap); err != nil {
+			if archive, v.cut, err = history.ReadDays(dir, now.AddDate(0, 0, -days), now, readCap); err != nil {
 				v.err = err.Error()
 			}
-			gaps, _ = history.ReadGaps(dir)
+			if gaps, err = history.ReadGaps(dir); err != nil {
+				v.err = "its gaps could not be read: " + err.Error() // a hole is never hidden (reviewer-codex)
+			}
 		}
 		var fresh []history.Entry
 		if live == nil {
@@ -213,15 +220,47 @@ func (m *Model) gotHistory(msg historyMsg) {
 	m.refresh()
 }
 
-// historyOlder loads histDaysStep days more.
+// historyOlder loads the histDaysStep days before the oldest loaded entry,
+// under a cap of its own, and appends them: after a cut, a fresh window read
+// would only read the same newest lines again (foureyes).
 func (m *Model) historyOlder(p *page) tea.Cmd {
-	days := histDaysStep
-	if p.hist != nil {
-		days = p.hist.days + histDaysStep
-		p.hist.loaded, p.dirty = false, true
+	if p.hist == nil || !p.hist.loaded {
+		return nil
 	}
+	cur := *p.hist
+	p.hist.loaded, p.dirty = false, true
 	m.refresh()
-	return m.historyLoadCmd(p.serial, days)
+	dir, readCap, serial := m.cfg.histDir, m.historyCap(), p.serial
+	return func() tea.Msg {
+		v := cur
+		v.loaded, v.days = true, cur.days+histDaysStep
+		before := strconv.FormatInt(time.Now().AddDate(0, 0, -cur.days).UnixMilli(), 10) + "-0"
+		for _, e := range cur.entries {
+			if e.Stream != history.GapStream {
+				before = e.ID // the oldest loaded
+				break
+			}
+		}
+		if dir == "" || v.noArchive {
+			return historyMsg{serial: serial, v: v}
+		}
+		from := time.Now().AddDate(0, 0, -v.days) // the window grows by three days; only what precedes the oldest loaded is read
+		older, cut, err := history.ReadDaysBefore(dir, from, before, readCap)
+		if err != nil {
+			v.err = err.Error()
+		}
+		v.cut = cut
+		v.entries = history.Merge(older, cur.entries)
+		return historyMsg{serial: serial, v: v}
+	}
+}
+
+// historyCap is a load's archive cap (histReadCap; a test may lower it).
+func (m *Model) historyCap() int64 {
+	if m.histCap > 0 {
+		return m.histCap
+	}
+	return histReadCap
 }
 
 // openHistoryEntry opens the selected entry in the message page.
