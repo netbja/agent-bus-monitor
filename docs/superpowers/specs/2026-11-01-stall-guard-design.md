@@ -49,7 +49,7 @@ from Redis, the way health already measures everything else, and routes each to 
 |---|---|---|---|---|
 | `team-stall` | every registered agent idle for N with nothing open, and work ready | ok / warn / fail / unknown | warn `waiting-person` **for you**; fail **in hand** (sentinel) | sentinel |
 | `clear-stall` | a valid hand-off older than N with no `/clear` | ok / warn / unknown | in hand (dispatch) | dispatch |
-| `quiet-agent` | a directive delivered to an idle agent, no activity from it since, older than N | ok / warn / unknown | in hand (master) | master |
+| `quiet-agent` | a directive delivered to an agent not working, nothing written by it since, older than N | ok / warn / unknown | in hand (master) | master |
 
 All three: `Interval` 1 min, `Deadline` 5 s, like `cmd-delivery`. Each record's detail names the
 agents and ages it judged from (bounded, `health.SafeText`), never message text.
@@ -91,12 +91,11 @@ per-agent line (foureyes).
 - no valid hand-off (`{p}:handoff`, `Handoff.VoidFor` false): an agent waiting for its `/clear` is
   `clear-stall`'s case. Without this, 2026-11-01 itself would have made sentinel ask master to
   dispatch the next task to the agent sitting at 90 % context (foureyes);
-- no quiet agent: `team-stall` evaluates the same predicate as `quiet-agent`, from the same inputs
-  (the retained `{p}:cmd` history, each group's `LastDelivered`, the activity sources listed under
-  `quiet-agent`), through one pure function, `health.QuietAgents`, that both checks call. A
-  delivered directive is no longer an obligation, so without this shared evaluation `team-stall`
-  could fail while `quiet-agent` warns for the same fault (reviewer-codex). The `{p}:cmd` history
-  read (XREVRANGE, bounded to the stream's ~1000 entries) is added to `team-stall`'s inputs;
+- `quiet-agent` is `ok`: `team-stall` reads the `quiet-agent` record as an explicit input, and is
+  **suppressed** (reads `ok`, `quiet agent: coder; see quiet-agent`) while that record is `warn`,
+  and `unknown` while it is `unknown` or stale. A delivered directive is no longer an obligation, so
+  without this input `team-stall` could fail while `quiet-agent` warns for the same fault
+  (reviewer-codex); one fault, one signal, and master resends;
 - no mission attempt in progress for any agent (the conductor's, read as `swap`'s `openWork` reads
   it, `missionsOf`).
 
@@ -154,40 +153,59 @@ the reason itself says so, and For you shows it (see busmon below).
 
 ### 3. `quiet-agent`
 
-**Inputs**: the retained `{p}:cmd` stream (`cmdHistory`, as busmon's Requests view reads it), each
-agent's `Obligation.LastDelivered`, and the agent's last status `TS` and last report time.
+Master's ruling (2026-11-01, after the rounds on clocks): only stream ids, which are Redis time,
+decide. No board timestamp, no writer clock, no allowance.
 
 An agent is **quiet** when all of these hold:
 - the newest entry addressed to it that asks for work, a `directive` or an `escalation` (not
   `wake=no`), from master, the person or the dispatcher, is **delivered**: its id ≤ the group's
-  `LastDelivered`, and not pending. A `reply` or a `verdict` never counts: an informational reply
-  ("approved", "nothing more needed") rightly leads to nothing (foureyes);
-- the agent shows **no activity** since that entry, where activity is any of: a status (`TS`), a
-  report, any entry it wrote in `{p}:cmd` (`from` = the agent: a reply, a verdict, a challenge, a
-  directive), a board entry it owns with `Updated` after the entry, an ask it opened
-  (`CreatedAt`), or a hand-off it declared. Every one of these is compared in Redis time with
-  the entry's id. The board's `Updated` is the writer's own clock in Unix seconds today
-  (`time.Now().Unix()` passed into `boardMutation`), so a remote agent's slow clock could stamp a
-  real update before the directive (reviewer-codex, foureyes). Every script that writes the board
-  (`boardMutation` in `bus/board.go`, `publishRequest` and `requestTransition` in
-  `bus/requests.go`, the board writes in `bus/delivery.go` and `bus/conductorkeys.go`) therefore
-  also stamps `updated_ms` from Redis `TIME`, an additive field next to `updated`. `quiet-agent`
-  reads only `updated_ms`, and **ignores** an owned entry that has none. Board entries are never
-  pruned (44 on this project today, most of them coder's done tasks), so counting a legacy entry as
-  activity would blind the check forever for the very agent it exists for (foureyes). Every board
-  write after the change carries `updated_ms`, so a legacy entry is always older than any directive
-  delivered after the deploy; the only possible miss is one warn in the deploy window, in hand by
-  master, never a fail;
-- the agent is `idle` or `done`, not seen busy, not held, and the entry is older than N
+  `LastDelivered`, and not pending. A `reply` or a `verdict` addressed to it never counts: an
+  informational reply ("approved", "nothing more needed") rightly leads to nothing (foureyes);
+- the agent has written **nothing later** on any of three streams: `{p}:status` (a status),
+  `{p}:report` (a report), `{p}:cmd` (any entry `from` the agent: a reply, a verdict, a challenge,
+  a directive, an ask). Each is compared by stream id with the directive's id;
+- its snapshot is not `working`, it is not held, and the directive is older than N
   (`quiet_after`).
+
+The board does not count: an open (`accepted`) task is not activity, and a `done` one is ignored.
+An agent answers through the three streams; a board write alone is not an answer.
 
 That is "the queue was read by something, and nothing came of it": a plain `subscribe` that ACKed
 it unseen, a session that drained and died, a cleared session whose new context never saw it.
 
-Warn, in hand by master, detail `coder: directive from master 25m ago delivered, nothing since`.
-`quiet-agent` contributes to `team-stall`: a quiet agent counts as **open work** (so `team-stall`
-stays ok while `quiet-agent` warns, and master is the one to resend). This keeps one signal per
-fault.
+| Case | Status | Detail |
+|---|---|---|
+| no agent quiet | ok | |
+| an agent quiet | warn | `coder: directive from master 25m ago delivered, nothing written since` |
+| any input missing, stale or unread (below) | unknown | `cmd history unavailable` (and so on) |
+
+Warn, in hand by master: master is the one to resend or to ask.
+
+### Data paths
+
+Every input of the three checks, where it is read, and what its absence means. Missing, stale or
+unread is always `unknown`, never `ok` and never a fail.
+
+| Input | Read from | By | Fresh when | Used by |
+|---|---|---|---|---|
+| agents' declared state, `TS` | `{p}:agents` (`TS` = the status entry's id) | `Bus.Agents` | always (a snapshot) | all three |
+| pane busy | `{p}:observed` | `Bus.Observed` | `Observation.Fresh` (< 120 s) | team-stall |
+| quota holds | `{p}:quota` hold marks | the quota pass's reader | the mark exists | team-stall, quiet-agent |
+| pause, swap or reload | `{p}:pause`, `{p}:swap:*` | `Bus.Pause`, `Bus.SwapIntents` | always | team-stall |
+| open asks | `{p}:asks` | `Bus.Asks` | always | team-stall |
+| open gates | `{p}:gate:*` | `Bus.OpenChallenges` | always | team-stall |
+| board requests and tasks | `{p}:board` | `Bus.Board` | always | team-stall (open work only) |
+| obligations | the agents' consumer groups | `Bus.Obligation` | read this pass | team-stall, quiet-agent (`LastDelivered`, pending) |
+| hand-offs | `{p}:handoff` | `Bus.Handoffs`, `Handoff.VoidFor` | always | team-stall, clear-stall |
+| clear decision | the clear pass, in memory | `HealthConfig` read hook | set since the dispatcher started | clear-stall |
+| mission attempts | `{p}:missions:*` | `missionsOf` | always | team-stall |
+| plan | `{p}:plan`, `{p}:plan:facts`, verdicts forward (`VerdictsAfter`) | `plan.Derive` | loaded | team-stall |
+| directives to an agent, its cmd writes | `{p}:cmd` (XREVRANGE, the stream's ~1000) | the check | read this pass | quiet-agent |
+| its reports | `{p}:report` (XREVRANGE, the stream's ~1000) | the check | read this pass | quiet-agent |
+| quiet agents | `{p}:health`, the `quiet-agent` record | `Bus.Health`, `EffectiveStatus` | observed within 2 intervals | team-stall |
+
+A directive older than what the stream still holds cannot be judged and is never reported quiet:
+the cmd stream's trim is the horizon.
 
 ## Who is told, by whom
 
@@ -224,7 +242,8 @@ gains one section:
    person was told, record a note and stop. If a `team-stall` note of its own is newer than the
    record's `since`, this episode was already handled (a second wake, a daily review): stop. That
    note is what keeps sentinel's directive to one per episode.
-2. Send master **one** directive, then stop:
+2. Send master **one** directive, an ordinary `agentbus cmd` that wakes (never `--no-wake`: a
+   directive that does not wake is the fault this guard exists for), then stop:
 
    ```
    agentbus cmd master "Stall guard: every agent idle 18m, nothing open (no request, ask, gate,
@@ -329,17 +348,16 @@ Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
   obligation, quiet agent, valid hand-off, mission attempt), a void hand-off (not open), an
   agent-ready task with `WaitingOn` (not ready), a ready task whose owner is held (not ready; the
   quota-hold detail when it is the only one), an idle agent with no observation, an aged one, and
-  an unverified one (each `unknown`, never `fail`), a delivered directive with no activity after it
-  (open work through `QuietAgents`, so `team-stall` is ok while `quiet-agent` warns), the boundary
-  at exactly N.
+  an unverified one (each `unknown`, never `fail`), the `quiet-agent` record `warn` (suppressed,
+  `ok`), `unknown` or stale (`unknown`), the boundary at exactly N.
 - `EvaluateClearStall`: no hand-off, young, old with auto-clear off, old with each `DecideClear`
   reason, old with no recorded decision, a void hand-off (ok).
 - `EvaluateQuietAgent`: delivered and silent (warn), pending (ok: the dispatcher's case), `wake=no`
-  (ok), a held agent (ok), and each kind of activity after the entry (ok): a status, a report, a
-  reply, a verdict, a challenge, a board update by its `updated_ms`, an ask, a hand-off. An owned
-  board entry with no `updated_ms` is ignored (it neither counts as activity nor blocks a warn). Each board-writing script stamps `updated_ms`
-  from Redis `TIME` even when the caller passes a far-off `updated` (a fake clock in the test). A `reply` or `verdict` as the
-  newest entry never makes an agent quiet. The boundary at N.
+  (ok), a held agent (ok), a `working` snapshot (ok), and a later write by the agent on each of the
+  three streams (ok): a status, a report, a cmd entry from it (reply, verdict, challenge, ask). A
+  `reply` or `verdict` as the newest entry addressed to it never makes it quiet. An accepted or done
+  board task changes nothing. A directive older than the retained stream is not judged. The cmd or
+  report read failing reads `unknown`. The boundary at N.
 
 Dispatcher (`dispatch/`, the fake runtime, Redis opt-in through `AGENTBUS_TEST_REDIS_URL`):
 
