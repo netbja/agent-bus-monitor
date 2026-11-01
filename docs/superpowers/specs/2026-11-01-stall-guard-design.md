@@ -146,8 +146,11 @@ An agent is **quiet** when all of these hold:
 - the agent shows **no activity** since that entry, where activity is any of: a status (`TS`), a
   report, any entry it wrote in `{p}:cmd` (`from` = the agent: a reply, a verdict, a challenge, a
   directive), a board entry it owns with `Updated` after the entry, an ask it opened
-  (`CreatedAt`), or a hand-off it declared. All of these carry Redis time (stream ids, `TIME`), so
-  the comparison is with the entry's id;
+  (`CreatedAt`), or a hand-off it declared. All but one carry Redis time (stream ids, `TIME`) and
+  compare with the entry's id. The board's `Updated` is the writer's own clock in Unix seconds
+  (`bus/board.go`, `time.Now().Unix()`), so it compares in seconds with a 2-minute allowance
+  towards activity (`Updated >= entry_s - 120`): a skewed clock (an agent on another host, through
+  the tunnel) can only hide a warning, never raise one (foureyes);
 - the agent is `idle` or `done`, not seen busy, not held, and the entry is older than N
   (`quiet_after`).
 
@@ -294,7 +297,8 @@ Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
   reason, old with no recorded decision, a void hand-off (ok).
 - `EvaluateQuietAgent`: delivered and silent (warn), pending (ok: the dispatcher's case), `wake=no`
   (ok), a held agent (ok), and each kind of activity after the entry (ok): a status, a report, a
-  reply, a verdict, a challenge, a board update, an ask, a hand-off. A `reply` or `verdict` as the
+  reply, a verdict, a challenge, a board update (including one stamped up to 2 minutes before the
+  entry by a skewed clock), an ask, a hand-off. A `reply` or `verdict` as the
   newest entry never makes an agent quiet. The boundary at N.
 
 Dispatcher (`dispatch/`, the fake runtime, Redis opt-in through `AGENTBUS_TEST_REDIS_URL`):
