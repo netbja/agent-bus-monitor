@@ -344,7 +344,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `agreeWidths`); `drawLine`/`drawFrame` write the `grid`, lipgloss only styles spans, so a frame
   never wraps by one cell. `forYou` ranks asks, the stall guard's rows for the person (`stallItems`, rank `rankHealth`: `team-stall` warn `waiting-person` and `clear-stall` warn `pane-focused`, while current; Enter opens F5), waits, the person's gates and unread lines, and `decisions` is
   its badge and reminder subset; a plan task waiting for the person is an item of its own (`rankPlan`, `planItems`:
-  counted in the title and badge, Enter opens its page with the Action row); with nothing for the person it says so, then
+  counted in the title and badge, Enter opens its page with the Action row, also from the reminder; it stays a standing
+  decision in the badge and the reminder until master records it done, even one with no `after`); with nothing for the person it says so, then
   what is in progress and the next decision as selectable rows (`forYouEmptyRows`: one row per agent declaring working,
   with its current task from the facts, `currentTask`: an accepted board task it owns, else its plan task in progress,
   never its status message; keys `empty:agent:<name>` open the agent's page, `empty:plan:<task>` the plan task; no

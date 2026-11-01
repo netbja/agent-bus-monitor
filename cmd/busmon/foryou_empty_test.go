@@ -259,14 +259,23 @@ func TestRecapCursorKeepsItsRowOnResize(t *testing.T) {
 // agent works on; with none, only its name.
 func TestForYouEmptyInProgressFromFacts(t *testing.T) {
 	s := snapshot{agents: map[string]*agentState{"coder": {state: "working", message: "codex-review-auth: boot reads"}},
-		board: map[string]bus.BoardEntry{"history": {Owner: "coder", State: "accepted"}, "old": {Owner: "coder", State: "done"}}}
+		board: map[string]bus.BoardEntry{"history": {Owner: "coder", State: "accepted"}, "a-merged": {Owner: "coder", State: "done"}}}
 	text := plainOf(forYouEmpty(s, 0))
 	if !strings.Contains(text, "In progress: coder "+GlyphNone+" history") || strings.Contains(text, "codex-review-auth") {
 		t.Fatalf("in progress:\n%s", text)
 	}
-	s.board = nil
-	if text := plainOf(forYouEmpty(s, 0)); !strings.Contains(text, "In progress: coder\n") {
-		t.Fatalf("no task: %s", text)
+	// A finished board task is never in progress: the plan's task in progress
+	// is named, else only the agent.
+	for _, st := range []string{"done", "complete", "blocked"} {
+		s.board = map[string]bus.BoardEntry{"a-merged": {Owner: "coder", State: st}}
+		s.planState = planState{loaded: true, rows: []plan.Row{{Task: plan.Task{ID: "auto-state", Owner: "coder"}, State: plan.InProgress}}}
+		if text := plainOf(forYouEmpty(s, 0)); !strings.Contains(text, "In progress: coder "+GlyphNone+" auto-state") || strings.Contains(text, "a-merged") {
+			t.Fatalf("board %s:\n%s", st, text)
+		}
+		s.planState = planState{}
+		if text := plainOf(forYouEmpty(s, 0)); !strings.Contains(text, "In progress: coder\n") {
+			t.Fatalf("board %s, no plan: %s", st, text)
+		}
 	}
 }
 
@@ -299,4 +308,27 @@ func TestForYouEmptyRowsOpen(t *testing.T) {
 	if top := m.rd.top(); top == nil || top.kind != ovPlanTask || top.key != "tag" {
 		t.Errorf("the plan item opened %+v", top)
 	}
+	// From the reminder too: Enter opens the task's page, never a compose
+	// window to a recipient named after the item; i writes to nobody.
+	for _, it := range decisions(m.forYou) {
+		if it.Rank != rankPlan {
+			continue
+		}
+		n := m
+		n.rd = newReader()
+		n.ui.reminder = &reminderDialog{items: []attentionItem{it}}
+		n.reminderKey(Key{Code: keyEnter})
+		if top := n.rd.top(); top == nil || top.kind != ovPlanTask || top.key != "tag" || n.ui.compose != nil {
+			t.Errorf("reminder Enter opened %+v (compose %v)", top, n.ui.compose != nil)
+		}
+		n = m
+		n.rd = newReader()
+		n.ui.reminder = &reminderDialog{items: []attentionItem{it}}
+		n.reminderKey(Key{Code: keyRune, Rune: 'i'})
+		if n.ui.compose != nil {
+			t.Error("reminder i composed to a plan item")
+		}
+		return
+	}
+	t.Fatal("no plan item among the decisions")
 }
