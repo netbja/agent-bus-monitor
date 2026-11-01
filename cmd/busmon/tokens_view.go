@@ -161,27 +161,45 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	if len(provs) == 0 {
 		muted("  ? no account reading (no dispatch service collecting quotas)")
 	}
+	// One row per provider, its windows side by side in columns of one width,
+	// so the same window lines up down the zone: the richest form that fits
+	// (the 24-hour spark, then the reset), else one window per row.
+	most := 0
 	for _, p := range provs {
-		for _, w := range budgets[p].Windows {
-			b.text("  ").seg(providerRole(p, RoleText), Fit(Preview(p), 10)).text(" ").text(Fit(Preview(w.Name), 3)).text(" ")
-			if windowUnobserved(w) { // never observed: unknown, never 0%
-				b.seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10)).seg(RoleMuted, "    ?")
-			} else {
-				b.segs(bars.gauge(barKey(p, w.Name), w.UsedPct, 10, budgetRole(w.UsedPct))...)
-				b.text(fmt.Sprintf(" %3.0f%%", w.UsedPct))
-			}
-			if width >= 70 {
-				b.seg(RoleMuted, "  24h ").seg(RoleAccent, hourSpark(st.hist, p, w.Name, now))
-			}
-			if until, isHeld := held(holds, p, now); isHeld {
-				b.seg(RoleError, "  held "+compactDur(until.Sub(now)))
-			} else if w.ResetsAt > 0 {
-				if left := time.Unix(w.ResetsAt, 0).Sub(now); left > 0 {
-					b.seg(RoleMuted, "  resets "+compactDur(left))
-				}
-			}
-			b.text("\n")
+		most = max(most, len(budgets[p].Windows))
+	}
+	form := accountForms[len(accountForms)-1]
+	for _, f := range accountForms {
+		if 2+10+1+most*f.width()+(most-1)*3 <= width {
+			form = f
+			break
 		}
+	}
+	perRow := most
+	if 2+10+1+most*form.width()+(most-1)*3 > width {
+		perRow = 1
+	}
+	for _, p := range provs {
+		ws := budgets[p].Windows
+		for i, w := range ws {
+			if i%max(perRow, 1) == 0 {
+				if i > 0 {
+					b.text("\n")
+				}
+				b.text("  ").seg(providerRole(p, RoleText), Fit(Preview(p), 10)).text(" ")
+			} else {
+				b.text("   ")
+			}
+			cell := accountCell(form, st, p, w, holds, now, bars)
+			if i%max(perRow, 1) < perRow-1 && i < len(ws)-1 {
+				cell = append(cell, S(RoleText, strings.Repeat(" ", max(0, form.width()-cell.Width()))))
+			}
+			b.segs(cell...)
+		}
+		if until, isHeld := held(holds, p, now); isHeld && !form.reset { // a hold is never dropped for room
+			b.seg(RoleError, "  held "+compactDur(until.Sub(now)))
+		}
+		b.text("\n")
 	}
 
 	days := tokens.LastDays(now, time.Local, 7)
@@ -334,6 +352,54 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 		lines[i] = FitLine(lines[i], width)
 	}
 	return lines
+}
+
+// accountForm is how much of an account window a cell shows: its gauge and
+// figure always, then the 24-hour spark, then the reset or the hold.
+type accountForm struct{ spark, reset bool }
+
+var accountForms = []accountForm{{true, true}, {false, true}, {false, false}}
+
+// width is the cell's cells: name 3, gauge 10, figure 5, spark 6+24, reset 15.
+func (f accountForm) width() int {
+	w := 4 + 10 + 5
+	if f.spark {
+		w += 6 + 24
+	}
+	if f.reset {
+		w += 15
+	}
+	return w
+}
+
+// accountCell is one account window in a form: never observed reads ?,
+// never 0%.
+func accountCell(f accountForm, st tokState, p string, w bus.BudgetWindow, holds map[string]int64, now time.Time, bars barView) Line {
+	var c body
+	c.text(Fit(Preview(w.Name), 3)).text(" ")
+	if windowUnobserved(w) {
+		c.seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10)).seg(RoleMuted, "    ?")
+	} else {
+		c.segs(bars.gauge(barKey(p, w.Name), w.UsedPct, 10, budgetRole(w.UsedPct))...)
+		c.text(fmt.Sprintf(" %3.0f%%", w.UsedPct))
+	}
+	if f.spark {
+		c.seg(RoleMuted, "  24h ").seg(RoleAccent, Fit(hourSpark(st.hist, p, w.Name, now), 24))
+	}
+	if f.reset {
+		if until, isHeld := held(holds, p, now); isHeld {
+			c.seg(RoleError, Fit("  held "+compactDur(until.Sub(now)), 15))
+		} else if w.ResetsAt > 0 {
+			if left := time.Unix(w.ResetsAt, 0).Sub(now); left > 0 {
+				c.seg(RoleMuted, Fit("  resets "+compactDur(left), 15))
+			}
+		}
+	}
+	var l Line
+	for _, line := range c.Lines() {
+		l = append(l, line...)
+	}
+	return l
 }
 
 // shortTokReason is an unknown agent's reason as its row reads it: grey and

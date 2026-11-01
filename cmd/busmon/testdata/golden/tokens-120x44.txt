@@ -15,9 +15,8 @@
 ╰──────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────╯
 ╭─ Tokens · today · anthropic 62% 5h · xai held 40m ──────────────────────────────────────────────────────── esc back ─╮
 │ Accounts                                                                                                             │
-│   anthropic  5h  ██████▎     62%  24h  ▁  ▁  ▂  ▃  ▄  ▅  ▆  ▇   resets 2h00                                          │
-│   anthropic  7d  ████▏       41%  24h                           resets 72h00                                         │
-│   xai        5h  ██████████ 100%  24h                           held 40m                                             │
+│   anthropic  5h  ██████▎     62%  resets 2h00     7d  ████▏       41%  resets 72h00                                  │
+│   xai        5h  ██████████ 100%  held 40m                                                                           │
 │ Projects                     in      out  7 days                                                                     │
 │   agent-bus-monitor       ~1.5M    ~289k     ▃ █▆  ████████████████████     ~5.1M                                    │
 │   blog                        0        0   ▁       ▋                         170k                                    │
@@ -28,6 +27,7 @@
 │   9 more · no proved session  (a lists them)                                                                         │
 │                                                                                                                      │
 │ in = input + cache writes · out = output · ~ still counting · no cost, by rule                                       │
+│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
