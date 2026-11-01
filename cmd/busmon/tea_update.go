@@ -225,6 +225,8 @@ func (m *Model) open(p PanelID) tea.Cmd {
 			return m.pushAsk(it.AskID)
 		case rankWait:
 			return m.pushAgent(it.Agent)
+		case rankHealth: // the stall guard: F5 says what and why
+			return m.push(page{kind: ovHealth})
 		case rankGate: // the challenge thread: its ref is the root
 			ref := strings.TrimPrefix(key, "gate:"+it.Agent+":")
 			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
