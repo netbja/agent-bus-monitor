@@ -38,11 +38,14 @@ const ProtocolVersion = 1
 // restart. A test binary reads none, so the person's own file never changes a
 // test (TestCapsReadConfigTOML replaces it).
 var capFiles = func() []*config.File {
-	if testing.Testing() {
+	if inTestBinary() {
 		return nil
 	}
 	return []*config.File{config.Load(config.Path(os.Getenv), "config.toml")}
 }
+
+// inTestBinary is testing.Testing, a variable so a test can pin the real branch.
+var inTestBinary = testing.Testing
 
 // reportMaxLen resolves the report rune cap: AGENT_BUS_REPORT_MAX if it parses
 // to a positive int, else config.toml's bus.report_max, else 500. Read per call so it stays

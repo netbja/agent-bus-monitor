@@ -50,6 +50,11 @@ func TestRegistryRows(t *testing.T) {
 		if !k.Kind.holds(k.Default) {
 			t.Errorf("%s: default %#v is not a %v", k.Name, k.Default, k.Kind)
 		}
+		if k.env != nil {
+			if _, res := k.env("\x00junk"); (res == envInvalid) != (k.Invalid != "") {
+				t.Errorf("%s: an invalid env value and its consequence (%q) do not match", k.Name, k.Invalid)
+			}
+		}
 		if got, ok := Lookup(k.Name); !ok || got != k {
 			t.Errorf("Lookup(%s) does not return its row", k.Name)
 		}

@@ -6,6 +6,10 @@ release exists.
 
 ## Unreleased
 
+- `agentbus config [--project <p>] [--json]`: each setting's value and where it comes from (env,
+  `config.toml`, `busmon.toml`, default), the files found, the connection as facts only (never a
+  password or a URL) and every warning; `--project` adds what that project's services see, marking a
+  value frozen into its env file by `agentbus up`. Read-only, no broker.
 - The project services and the writers read `config.toml` too, below the environment, each with its
   own rule unchanged: `[dispatch]` `context_alert`, `prompt_grace`, `quota`, `quota_warn`, `quota_hold`,
   `quota_max_age`, `quota_long_hold`, `tokens`, `auto_clear`; `[bus]` `report_max`, `report_full_max`,

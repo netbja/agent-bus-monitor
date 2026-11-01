@@ -87,6 +87,11 @@ func main() {
 	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && (args[1] == "doctor" || args[1] == "adopt")) {
 		os.Exit(runRoles(args[1:], os.Environ(), os.Stdout, os.Stderr))
 	}
+	// config shows each setting's value and source (config-file): no project,
+	// no broker; --project, named on the command line, reads that project's env file.
+	if len(args) >= 1 && args[0] == "config" {
+		os.Exit(runConfig(args[1:], explicitProject, os.Getenv, os.Stdout, os.Stderr))
+	}
 	// identity is the person's name in config.toml, else the legacy busmon.toml: no project, no broker.
 	if len(args) >= 1 && args[0] == "identity" {
 		os.Exit(runIdentity(args[1:], os.Getenv, os.Stdout, os.Stderr))
