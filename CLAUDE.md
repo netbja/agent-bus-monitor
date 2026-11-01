@@ -263,8 +263,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `projectKinds`, ignored by `HasKeysBesidesDispatch`; any report and any non-idle status of the
   agent delete it in the same MULTI (`addVoidingHandoff`), so voiding never waits for a pass;
   `Handoff.VoidFor` — another process or session, or working since — is the rule the dispatcher's
-  fenced `handoffPass` deletes by and busmon's `handoff` flag shows by; `handoff` alone lists them, read-only for the identity guard, each with its report id and its exact time (RFC3339,
-  local) beside the age; the
+  fenced `handoffPass` deletes by and busmon's `handoff` flag shows by; `handoff` alone lists them, read-only for the identity guard, each with its report id and its exact time (RFC3339 to
+  the millisecond, local) beside the age; the
   context alert's directive now asks for both). `report` now retains the full
   text (newlines/tabs kept, ≤8000, `AGENT_BUS_REPORT_FULL_MAX`) in a `full` field **only when it
   differs from the one-line ≤500 preview**; `reports [--json]` lists recent reports (marking those

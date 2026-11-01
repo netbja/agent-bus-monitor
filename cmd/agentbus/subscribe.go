@@ -72,10 +72,10 @@ func emit(out io.Writer, ev subEvent) error {
 // [type ref task=… expires=… attempt=…]: body', the body's whole text on one
 // line (\\ and every line breaker escaped), a person's entry, a possible
 // duplicate and a stale one marked; an error or fatal event
-// is 'id error: msg'. Never JSON: the agent needs no jq.
+// is 'id error: msg', its message escaped too. Never JSON: the agent needs no jq.
 func briefLine(ev subEvent) string {
-	if ev.Event != "cmd" {
-		return strings.TrimSpace(ev.ID + " " + ev.Event + ": " + ev.Msg)
+	if ev.Event != "cmd" { // error and fatal alike: one escaped error line (reviewer-codex)
+		return strings.TrimSpace(ev.ID + " error: " + briefEscaper.Replace(ev.Msg))
 	}
 	from := ev.From
 	if ev.Human {

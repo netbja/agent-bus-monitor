@@ -464,6 +464,8 @@ func TestBriefLine(t *testing.T) {
 		// Every line breaker is escaped: one line per entry is the contract.
 		{subEvent{Event: "cmd", ID: "9-3", From: "a", Type: "reply", Body: "a\vb\fc\u0085d\u2028e\u2029f"}, `9-3 a [reply]: a\vb\fc\u0085d\u2028e\u2029f`},
 		{subEvent{Event: "error", Msg: "receiver busy"}, "error: receiver busy"},
+		// A fatal event is an error line too, its message escaped: still one line.
+		{subEvent{Event: "fatal", Msg: "invalid agent bad\nname"}, `error: invalid agent bad\nname`},
 	} {
 		if got := briefLine(c.ev); got != c.want {
 			t.Errorf("briefLine(%+v) = %q, want %q", c.ev, got, c.want)
