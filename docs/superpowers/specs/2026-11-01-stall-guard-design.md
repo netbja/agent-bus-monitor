@@ -321,8 +321,7 @@ a Go duration otherwise, `0` = off). `agentbus config` prints them; `up` writes 
 Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
 
 - `EvaluateTeamStall`: each row of the table above, plus one agent `working` (ok), one `waiting`
-  (ok), one dormant agent ignored, a fresh busy observation on an idle agent (not idle), an aged
-  observation ignored, each open-work kind (request, accepted task, ask, gate, pause, swap,
+  (ok), one dormant agent ignored, a fresh busy observation on an idle agent (not idle), each open-work kind (request, accepted task, ask, gate, pause, swap,
   obligation, quiet agent, valid hand-off, mission attempt), a void hand-off (not open), an
   agent-ready task with `WaitingOn` (not ready), a ready task whose owner is held (not ready; the
   quota-hold detail when it is the only one), an idle agent with no observation, an aged one, and
