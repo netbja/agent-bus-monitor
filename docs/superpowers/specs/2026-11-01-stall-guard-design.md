@@ -161,6 +161,12 @@ An agent is **quiet** when all of these hold:
   `wake=no`), from master, the person or the dispatcher, is **delivered**: its id ≤ the group's
   `LastDelivered`, and not pending. A `reply` or a `verdict` addressed to it never counts: an
   informational reply ("approved", "nothing more needed") rightly leads to nothing (foureyes);
+- its **payload was delivered**: an expired or payload-less ACK is not a directive (reviewer-codex,
+  master's call). `WatchCmdDelivery` ACKs a tracked request past its `ExpiresAt` as a payload-less
+  `expired` event, and a body gone from the stream as `missing`. So a directive whose tracked
+  request has an `ExpiresAt` already passed is not counted (its delivery may have been that
+  expired event), and one whose body the cmd read no longer holds is never judged. When it cannot
+  be told (the request record unreadable), the check reads `unknown`;
 - the agent has written **nothing later** on any of three streams: `{p}:status` (a status),
   `{p}:report` (a report), `{p}:cmd` (any entry `from` the agent: a reply, a verdict, a challenge,
   a directive, an ask). Each is compared by stream id with the directive's id;
@@ -355,7 +361,9 @@ Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
 - `EvaluateQuietAgent`: delivered and silent (warn), pending (ok: the dispatcher's case), `wake=no`
   (ok), a held agent (ok), a `working` snapshot (ok), and a later write by the agent on each of the
   three streams (ok): a status, a report, a cmd entry from it (reply, verdict, challenge, ask). A
-  `reply` or `verdict` as the newest entry addressed to it never makes it quiet. An accepted or done
+  `reply` or `verdict` as the newest entry addressed to it never makes it quiet. An expired directive
+  delivered and ACKed as the payload-less `expired` event (its request's `ExpiresAt` passed) is not
+  counted (ok); the request record unreadable reads `unknown`. An accepted or done
   board task changes nothing. A directive older than the retained stream is not judged. The cmd or
   report read failing reads `unknown`. The boundary at N.
 
