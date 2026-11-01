@@ -60,15 +60,22 @@ none). The source column uses `agentbus config`'s words.
 | `●` | set here: `config.toml` |
 | `○` | the default |
 | `·` | set elsewhere, read-only here: env, a flag, the project's env file, or `busmon.toml` (legacy) |
-| `▲` | invalid: the file or env value is refused by its rule, and the default is used (or busmon refuses to start, for `display.theme` and `identity.as`) |
+| `▲` | refused: a `config.toml` value its rule refuses (the warning's line); the reader skips it, so the value column shows what applies instead, `busmon.toml`'s or the default |
 
 The word in the source column always says which, so colour and symbol are never the only
 signal (`NO_COLOR`).
 
+A value refused **in the environment** is not a file matter and the page only reports it, per
+key as the registry's `Invalid` says: for `health.runaway.*` the runaway check reads unknown,
+and the row says so (`▲`, `env <NAME> refused: the runaway check reads unknown`); for
+`display.theme` and `identity.as` busmon refuses to start, so a running page never shows that
+case (`agentbus config` does). Every other key skips a refused env value to the next source, as
+its rule does today, and the row shows the source that applies.
+
 ## 140x40
 
 ```
-╭─ Settings ──────────────────── 4 set here · 2 elsewhere · 1 invalid · 18 default ─ esc back ─╮
+╭─ Settings ──────────────────── 4 set here · 2 elsewhere · 1 refused · 18 default ─ esc back ─╮
 │  Display                                                                                     │
 │ ▶ ● Theme                     dark                        config.toml                        │
 │   ● Fade and slide            off                         config.toml                        │
@@ -79,13 +86,13 @@ signal (`NO_COLOR`).
 │   ● Your name                 charlie                     config.toml                        │
 │  Services (agent-bus-monitor)                                                                │
 │   · Context alert at          75 %                        env file (frozen at up)            │
-│   ▲ Quota hold at             95 %                        config.toml line 12: invalid       │
+│   ▲ Quota hold at             95 %                        config.toml line 12 refused        │
 │   ── 18 at their default  (a shows them) ──                                                  │
 │                                                                                              │
 │  Connection   as agentbus config prints it: which variables are set, never a value           │
 │  Changes      busmon's own: next start of busmon · services: agentbus service restart        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ select   enter change   d default   a all   / filter   esc back
+ ↑↓ select   enter change   d unset   a all   / filter   esc back
 ```
 
 Defaults are folded like the fine checks on F5: the page leads with what someone chose, and
@@ -107,7 +114,7 @@ Enter on a row opens it in place, as on F5:
 
 ```
  agent-bus-monitor  ● bus  ● disp  health ▲2                              15:04
-╭─ Settings ────────────────────── 4 here · 2 elsewhere · 1 invalid ─╮
+╭─ Settings ────────────────────── 4 here · 2 elsewhere · 1 refused ─╮
 │ Display                                                            │
 │▶● Theme              dark          config.toml                     │
 │ ● Fade and slide     off           config.toml                     │
@@ -118,10 +125,10 @@ Enter on a row opens it in place, as on F5:
 │ ● Your name          charlie       config.toml                     │
 │ Services                                                           │
 │ · Context alert at   75 %          env file                        │
-│ ▲ Quota hold at      95 %          config.toml: invalid            │
+│ ▲ Quota hold at      95 %          config.toml refused             │
 │ ── 18 at their default  (a shows them) ──                          │
 ╰────────────────────────────────────────────────────────────────────╯
- ↑↓ select  enter change  d default  a all  esc back
+ ↑↓ select  enter change  d unset  a all  esc back
 ```
 
 At 80 the source keeps its first word; the variable's name is in the detail (Enter).
@@ -142,8 +149,12 @@ rule on every Enter, and nothing is written until Enter. Esc leaves the file unt
 | name | `identity.as` | `charlie` | the editor; the rule is `ValidName` |
 | colour | none today | — | the theme is the only colour setting, and it is a choice of three names: the page shows no swatch, so it needs no glyph outside the set and reads the same in 16 colours and none |
 
-`d` puts a key back to its default: it **removes the key's line** from `config.toml` (a default
-is the absence of a value, not a copy of it), after one `y`.
+`d` **unsets** a key here: it removes the key's line from `config.toml`, after one `y`. What
+applies next is the next source, not always the default: for a busmon key still in the legacy
+`busmon.toml`, that file's value (the page never writes `busmon.toml`). So the confirmation names
+the value and source that will apply, from the resolver run without that line: `unset theme here?
+busmon.toml's light will apply (y)` or `… the default auto will apply (y)`. Writing the default's
+value instead would hide the legacy file from the person; naming it lets them decide.
 
 `on/off` uses the words, not a switch glyph: `●`/`○` already say *where the value comes from*,
 and one symbol must not mean two things on one row.
@@ -157,8 +168,9 @@ prints), nothing written:
 │ ▶ ● Quota hold at   [ 150 ]   want a number above 0, up to 100                               │
 ```
 
-A value already invalid in the file (a hand edit) shows `▲` with its line, and the default is
-what runs; the page offers to fix it (Enter) or remove it (`d`), and never rewrites it unasked.
+A value already refused in the file (a hand edit) shows `▲` with its line, and the next source's
+value is what runs (`busmon.toml`'s or the default); the page offers to fix it (Enter) or unset it
+(`d`), and never rewrites it unasked.
 
 ## Where and how a change is written
 
