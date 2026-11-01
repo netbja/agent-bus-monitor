@@ -810,7 +810,20 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (major -> newest release, 0600; a failed fetch moves only `checked_at`, silently); warn when behind
   in its major; a newer major is never a warning, only named in the detail (changing major is the
   person's decision); unknown when the broker is unread, no release of its major is found or no check
-  succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `github`
+  succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `disk` (disk-check,
+  `health/disk.go` pure, `cmd/agentbus/diskcheck.go` the reader behind injected `diskDeps`, so no test touches a real disk;
+  5 min): the filesystems agent-bus depends on (docker's root from `docker info` when docker is on PATH and the daemon runs
+  on this host (`dockerNotLocal`: the endpoint Docker itself reports, `docker context inspect` with no name, which resolves
+  `DOCKER_CONTEXT` and `DOCKER_HOST` in its own order (checked on Docker 29; never reimplemented), a local `unix://` socket): not
+  measured when docker is absent, the daemon remote or its endpoint unreadable (the note names the scheme, never the host),
+  or its root in a VM, on macOS or Docker Desktop, never a host path of that name; `HOME`; `go env GOCACHE` when go is on PATH, a failed or empty answer not measured, `off` no path; the
+  services' working directory, the repository, and its
+  `.worktrees`; `os.TempDir()`), each device once (`st_dev`), judged by statfs's free-to-unprivileged bytes and %: warn under
+  `health.disk_warn_pct`/`_gib` (10 %, 5 GiB), fail under `health.disk_fail_pct`/`_gib` (2 %, 1 GiB); the detail names each
+  path, its `major:minor` and free space, the worst first; a path not measured (or a filesystem reporting no size) is
+  said, unknown only when nothing was. For you on warn and fail with a command that only looks (`du -sh
+  ~/.cache/go-build ~/.npm ~/.cache/pip`); `go clean -cache` is named in the detail as the person's choice
+  (`DiskCleanChoice`, kept whole: the paths are cut to leave it room within the 300-rune detail), never in the copyable line; a fail wakes sentinel, which never deletes anything. `github`
   (busmon-github-check, `health/github.go` pure, `cmd/agentbus/githubcheck.go` the runner; 15 min, 10 s) runs only
   when a remote is on github.com (origin first): `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` and
   `git -c credential.helper= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
