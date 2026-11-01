@@ -23,7 +23,7 @@ func TestHealthLoopRunsChecksSeriallyAndStopsOnCancellation(t *testing.T) {
 	d, _ := health.ByID("services")
 	d.Interval = 10 * time.Millisecond
 	var active, maximum, calls atomic.Int32
-	check := HealthCheck{Definition: d, Run: func(ctx context.Context) (health.Status, string, error) {
+	check := HealthCheck{Definition: d, Run: func(ctx context.Context) (health.Outcome, error) {
 		n := active.Add(1)
 		for old := maximum.Load(); n > old && !maximum.CompareAndSwap(old, n); old = maximum.Load() {
 		}
@@ -31,9 +31,9 @@ func TestHealthLoopRunsChecksSeriallyAndStopsOnCancellation(t *testing.T) {
 		defer active.Add(-1)
 		select {
 		case <-ctx.Done():
-			return health.Unknown, "", ctx.Err()
+			return health.Outcome{Status: health.Unknown}, ctx.Err()
 		case <-time.After(35 * time.Millisecond):
-			return health.OK, "service check complete", nil
+			return health.Outcome{Status: health.OK, Detail: "service check complete"}, nil
 		}
 	}}
 	l := &loop{b: b, token: "health-holder", cfg: Config{EscalateTo: "master", Log: io.Discard, Health: HealthConfig{Checks: []HealthCheck{check}, Tick: time.Millisecond, PassBudget: time.Second}}}
@@ -68,7 +68,9 @@ func TestHealthLoopStopsWritingAfterLeaseLoss(t *testing.T) {
 		t.Fatal(err)
 	}
 	d, _ := health.ByID("services")
-	l := &loop{b: b, token: "stale-holder", cfg: Config{EscalateTo: "master", Log: io.Discard, Health: HealthConfig{Checks: []HealthCheck{{Definition: d, Run: func(context.Context) (health.Status, string, error) { return health.OK, "ok", nil }}}}}}
+	l := &loop{b: b, token: "stale-holder", cfg: Config{EscalateTo: "master", Log: io.Discard, Health: HealthConfig{Checks: []HealthCheck{{Definition: d, Run: func(context.Context) (health.Outcome, error) {
+		return health.Outcome{Status: health.OK, Detail: "ok"}, nil
+	}}}}}}
 	if err := l.healthLoop(ctx); err != ErrLeaseLost {
 		t.Fatalf("healthLoop = %v", err)
 	}
@@ -95,9 +97,9 @@ func TestHealthLoopRunsRedisRefreshDaily(t *testing.T) {
 	d, _ := health.ByID("services")
 	d.Interval = time.Millisecond
 	var refreshes, checks atomic.Int32
-	check := HealthCheck{Definition: d, Run: func(context.Context) (health.Status, string, error) {
+	check := HealthCheck{Definition: d, Run: func(context.Context) (health.Outcome, error) {
 		checks.Add(1)
-		return health.OK, "service check complete", nil
+		return health.Outcome{Status: health.OK, Detail: "service check complete"}, nil
 	}}
 	refresh := func(context.Context) error { refreshes.Add(1); return io.ErrUnexpectedEOF }
 	l := &loop{b: b, token: "health-holder", cfg: Config{EscalateTo: "master", Log: io.Discard,
@@ -113,5 +115,46 @@ func TestHealthLoopRunsRedisRefreshDaily(t *testing.T) {
 	}
 	if checks.Load() < 3 {
 		t.Fatalf("a failed refresh stopped the checks: %d calls", checks.Load())
+	}
+}
+
+// The evaluator's Person reaches the stored record for a warn or fail only: a
+// spent restart budget is for the person (reviewer-codex), and an error or an
+// unsafe detail, read as unknown, never carries it.
+func TestHealthLoopStoresThePersonsOutcome(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "health-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if err := b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}, Manager: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		out  health.Outcome
+		err  error
+		want bool
+	}{
+		{health.Outcome{Status: health.Fail, Detail: "service restart budget is spent", Person: true}, nil, true},
+		{health.Outcome{Status: health.OK, Detail: "installed services are active", Person: true}, nil, false},
+		{health.Outcome{Status: health.Fail, Detail: "service restart budget is spent", Person: true}, io.ErrUnexpectedEOF, false},
+		{health.Outcome{Status: health.Fail, Detail: "token: sk-ant-0123456789abcdef", Person: true}, nil, false},
+	} {
+		d, _ := health.ByID("services")
+		d.Interval = time.Hour
+		out, runErr := c.out, c.err
+		check := HealthCheck{Definition: d, Run: func(context.Context) (health.Outcome, error) { return out, runErr }}
+		l := &loop{b: b, token: "health-holder", cfg: Config{EscalateTo: "master", Log: io.Discard,
+			Health: HealthConfig{Checks: []HealthCheck{check}, Tick: time.Millisecond, PassBudget: time.Second}}}
+		runCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		_ = l.healthLoop(runCtx)
+		cancel()
+		recs, err := b.Health(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := recs["services"].Person; got != c.want {
+			t.Errorf("%+v (err %v): stored person %v, want %v", c.out, c.err, got, c.want)
+		}
 	}
 }

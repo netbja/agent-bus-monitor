@@ -18,7 +18,7 @@ const healthPassBudget = 30 * time.Second
 // bounded, non-secret detail; an error is stored as unknown without its text.
 type HealthCheck struct {
 	Definition health.Definition
-	Run        func(context.Context) (health.Status, string, error)
+	Run        func(context.Context) (health.Outcome, error)
 }
 
 type HealthConfig struct {
@@ -101,7 +101,8 @@ func (l *loop) healthLoop(ctx context.Context) error {
 				deadline = remaining
 			}
 			checkCtx, checkCancel := context.WithTimeout(passCtx, deadline)
-			status, detail, err := check.Run(checkCtx)
+			out, err := check.Run(checkCtx)
+			status, detail := out.Status, out.Detail
 			checkCancel()
 			if ctx.Err() != nil {
 				cancel()
@@ -117,7 +118,10 @@ func (l *loop) healthLoop(ctx context.Context) error {
 			if !health.SafeText(detail) {
 				status, detail = health.Unknown, "unsafe check detail suppressed"
 			}
-			rec := health.Record{ID: check.Definition.ID, Status: status, Detail: detail}
+			// Person only for the evaluator's own warn or fail: an error or an
+			// unsafe detail, read as unknown above, drops it.
+			person := out.Person && status == out.Status && detail == out.Detail && (status == health.Warn || status == health.Fail)
+			rec := health.Record{ID: check.Definition.ID, Status: status, Detail: detail, Person: person}
 			rec.Fingerprint = healthFingerprint(status, detail)
 			wctx, wcancel := context.WithTimeout(passCtx, 2*time.Second)
 			err = l.b.FencedHealthPut(wctx, l.token, l.cfg.EscalateTo, rec)
@@ -172,5 +176,8 @@ func healthTask(id string, run func(context.Context) (health.Status, string, err
 	if !ok {
 		return HealthCheck{}, fmt.Errorf("unknown health check %q", id)
 	}
-	return HealthCheck{Definition: d, Run: run}, nil
+	return HealthCheck{Definition: d, Run: func(ctx context.Context) (health.Outcome, error) {
+		status, detail, err := run(ctx)
+		return health.Outcome{Status: status, Detail: detail}, err
+	}}, nil
 }

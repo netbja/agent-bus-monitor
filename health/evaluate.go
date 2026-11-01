@@ -26,6 +26,10 @@ const (
 type Outcome struct {
 	Status Status
 	Detail string
+	// Person: only the person can fix this warn or fail, whatever the check's
+	// usual place (Definition.PlaceOf). Set by the evaluator, never read from
+	// the detail.
+	Person bool
 }
 
 type RunawayThresholds struct {
@@ -49,24 +53,24 @@ type ServiceEvidence struct {
 
 func EvaluateServices(e ServiceEvidence) Outcome {
 	if !e.Known {
-		return Outcome{Unknown, "service manager or state unavailable"}
+		return Outcome{Status: Unknown, Detail: "service manager or state unavailable"}
 	}
 	if !e.Installed {
-		return Outcome{OK, "no managed services installed"}
+		return Outcome{Status: OK, Detail: "no managed services installed"}
 	}
 	if !e.Active {
-		return Outcome{Fail, "an installed service is inactive or failed"}
+		return Outcome{Status: Fail, Detail: "an installed service is inactive or failed"}
 	}
 	if e.RecentFailures >= 5 {
-		return Outcome{Fail, "service restart budget is spent"}
+		return Outcome{Status: Fail, Detail: "service restart budget is spent", Person: true} // sentinel restarts within the same budget: only the person can
 	}
 	if e.RecentFailures >= 4 || e.RecentError {
-		return Outcome{Warn, "service had a recent error or restart budget is low"}
+		return Outcome{Status: Warn, Detail: "service had a recent error or restart budget is low"}
 	}
 	if e.WaitingGit {
-		return Outcome{Warn, "missions waits for a Git repository in the project directory"}
+		return Outcome{Status: Warn, Detail: "missions waits for a Git repository in the project directory"}
 	}
-	return Outcome{OK, "installed services are active"}
+	return Outcome{Status: OK, Detail: "installed services are active"}
 }
 
 type IdentityEvidence struct {
@@ -75,18 +79,18 @@ type IdentityEvidence struct {
 
 func EvaluateIdentity(e IdentityEvidence) Outcome {
 	if e.Contradiction {
-		return Outcome{Fail, "verified process identity conflicts with its pane"}
+		return Outcome{Status: Fail, Detail: "verified process identity conflicts with its pane"}
 	}
 	if !e.Known {
-		return Outcome{Unknown, "agent identity could not be checked"}
+		return Outcome{Status: Unknown, Detail: "agent identity could not be checked"}
 	}
 	if !e.Active {
-		return Outcome{OK, "no active identity conflict"}
+		return Outcome{Status: OK, Detail: "no active identity conflict"}
 	}
 	if !e.Verified {
-		return Outcome{Warn, "active agent identity is not fully verified"}
+		return Outcome{Status: Warn, Detail: "active agent identity is not fully verified"}
 	}
-	return Outcome{OK, "active agent identity is verified"}
+	return Outcome{Status: OK, Detail: "active agent identity is verified"}
 }
 
 type LaunchEvidence struct {
@@ -95,31 +99,31 @@ type LaunchEvidence struct {
 
 func EvaluateLaunch(e LaunchEvidence) Outcome {
 	if !e.Known {
-		return Outcome{Unknown, "client or role could not be established"}
+		return Outcome{Status: Unknown, Detail: "client or role could not be established"}
 	}
 	if !e.Launcher || !e.RequiredSettings || !e.NamedIdentity {
-		return Outcome{Warn, "launcher, required settings, or named identity evidence is missing"}
+		return Outcome{Status: Warn, Detail: "launcher, required settings, or named identity evidence is missing"}
 	}
-	return Outcome{OK, "launcher and identity evidence is present"}
+	return Outcome{Status: OK, Detail: "launcher and identity evidence is present"}
 }
 
 func EvaluateModelDrift(verdicts []string, known bool) Outcome {
 	if !known {
-		return Outcome{Unknown, "model catalogue or doctor result unavailable"}
+		return Outcome{Status: Unknown, Detail: "model catalogue or doctor result unavailable"}
 	}
 	incomplete := false
 	for _, v := range verdicts {
 		switch v {
 		case "drift", "unknown model", "gone", "newer":
-			return Outcome{Warn, "roles doctor reports model drift"}
+			return Outcome{Status: Warn, Detail: "roles doctor reports model drift"}
 		case "not reported", "unknown":
 			incomplete = true
 		}
 	}
 	if incomplete {
-		return Outcome{Unknown, "roles doctor could not verify every launched model"}
+		return Outcome{Status: Unknown, Detail: "roles doctor could not verify every launched model"}
 	}
-	return Outcome{OK, "no model drift reported"}
+	return Outcome{Status: OK, Detail: "no model drift reported"}
 }
 
 func EvaluateRunaway(silent time.Duration, contextGrowth int, growthSpan time.Duration, repeatedScreens int) Outcome {
@@ -132,15 +136,15 @@ func EvaluateRunawayKnown(silent time.Duration, contextGrowth int, growthSpan ti
 
 func EvaluateRunawayWithThresholds(silent time.Duration, contextGrowth int, growthSpan time.Duration, repeatedScreens int, known bool, thresholds RunawayThresholds) Outcome {
 	if !known {
-		return Outcome{Unknown, "working agent progress evidence is incomplete"}
+		return Outcome{Status: Unknown, Detail: "working agent progress evidence is incomplete"}
 	}
 	if thresholds.SilentAfter <= 0 || thresholds.FastGrowth <= 0 || thresholds.GrowthSpan <= 0 || thresholds.RepeatedScreens <= 0 {
-		return Outcome{Unknown, "runaway thresholds are invalid"}
+		return Outcome{Status: Unknown, Detail: "runaway thresholds are invalid"}
 	}
 	if silent >= thresholds.SilentAfter || (contextGrowth >= thresholds.FastGrowth && growthSpan <= thresholds.GrowthSpan && repeatedScreens >= thresholds.RepeatedScreens) {
-		return Outcome{Warn, "working agent has little visible progress"}
+		return Outcome{Status: Warn, Detail: "working agent has little visible progress"}
 	}
-	return Outcome{OK, "working agents show recent progress"}
+	return Outcome{Status: OK, Detail: "working agents show recent progress"}
 }
 
 type DeliveryEvidence struct {
@@ -152,28 +156,28 @@ type DeliveryEvidence struct {
 
 func EvaluateDelivery(e DeliveryEvidence) Outcome {
 	if !e.Known {
-		return Outcome{Unknown, "consumer-group delivery state unavailable"}
+		return Outcome{Status: Unknown, Detail: "consumer-group delivery state unavailable"}
 	}
 	if e.HasPending && e.Pending >= PendingFailAfter || e.Lag >= LagFailAt {
-		return Outcome{Fail, "cmd delivery has a long-pending entry or high lag"}
+		return Outcome{Status: Fail, Detail: "cmd delivery has a long-pending entry or high lag"}
 	}
 	if e.HasPending && e.Pending >= PendingWarnAfter || e.Lag >= LagWarnAt {
-		return Outcome{Warn, "cmd delivery has an aged pending entry or elevated lag"}
+		return Outcome{Status: Warn, Detail: "cmd delivery has an aged pending entry or elevated lag"}
 	}
-	return Outcome{OK, "cmd delivery is within thresholds"}
+	return Outcome{Status: OK, Detail: "cmd delivery is within thresholds"}
 }
 
 func EvaluateQuotaFreshness(expected bool, known bool, observedAt int64, now time.Time) Outcome {
 	if !expected {
-		return Outcome{OK, "no quota provider is configured"}
+		return Outcome{Status: OK, Detail: "no quota provider is configured"}
 	}
 	if !known || observedAt <= 0 {
-		return Outcome{Unknown, "quota reading is unavailable"}
+		return Outcome{Status: Unknown, Detail: "quota reading is unavailable"}
 	}
 	if now.Sub(time.UnixMilli(observedAt)) > QuotaStaleAfter {
-		return Outcome{Warn, "quota reading is older than 30 minutes"}
+		return Outcome{Status: Warn, Detail: "quota reading is older than 30 minutes"}
 	}
-	return Outcome{OK, "quota reading is fresh"}
+	return Outcome{Status: OK, Detail: "quota reading is fresh"}
 }
 
 type SecretPath struct{ Path, Kind string }
@@ -204,67 +208,67 @@ func IsSecretLikePath(path string) (string, bool) {
 
 func EvaluateSecretPaths(paths []string, known bool) Outcome {
 	if !known {
-		return Outcome{Unknown, "tracked file paths could not be read"}
+		return Outcome{Status: Unknown, Detail: "tracked file paths could not be read"}
 	}
 	for _, path := range paths {
 		if kind, ok := IsSecretLikePath(path); ok {
-			return Outcome{Fail, fmt.Sprintf("tracked %s path: %s", kind, filepath.ToSlash(path))}
+			return Outcome{Status: Fail, Detail: fmt.Sprintf("tracked %s path: %s", kind, filepath.ToSlash(path))}
 		}
 	}
-	return Outcome{OK, "no tracked secret-like path found"}
+	return Outcome{Status: OK, Detail: "no tracked secret-like path found"}
 }
 
 func EvaluateRedis(local, legacy bool) Outcome {
 	if !local {
-		return Outcome{Unknown, "Redis binding or credential source is not locally verifiable"}
+		return Outcome{Status: Unknown, Detail: "Redis binding or credential source is not locally verifiable"}
 	}
 	if legacy { // a warning: the person rotates (./setup.sh rotate-redis-password), never sentinel
-		return Outcome{Warn, "Redis still uses the historical default password"}
+		return Outcome{Status: Warn, Detail: "Redis still uses the historical default password"}
 	}
-	return Outcome{OK, "Redis is loopback-bound and uses an explicit credential source"}
+	return Outcome{Status: OK, Detail: "Redis is loopback-bound and uses an explicit credential source"}
 }
 
 func EvaluateFileMode(path string, statErr error, mode os.FileMode) Outcome {
 	if statErr != nil {
 		if os.IsNotExist(statErr) {
-			return Outcome{Fail, "installed service environment file is missing"}
+			return Outcome{Status: Fail, Detail: "installed service environment file is missing"}
 		}
-		return Outcome{Unknown, "service environment permissions could not be checked"}
+		return Outcome{Status: Unknown, Detail: "service environment permissions could not be checked"}
 	}
 	if mode.Perm() != 0o600 {
-		return Outcome{Fail, "service environment file mode is not 0600"}
+		return Outcome{Status: Fail, Detail: "service environment file mode is not 0600"}
 	}
 	parent, err := os.Stat(filepath.Dir(path))
 	if err != nil {
-		return Outcome{Unknown, "service environment directory permissions could not be checked"}
+		return Outcome{Status: Unknown, Detail: "service environment directory permissions could not be checked"}
 	}
 	if parent.Mode().Perm() != 0o700 {
-		return Outcome{Fail, "service environment directory mode is not 0700"}
+		return Outcome{Status: Fail, Detail: "service environment directory mode is not 0700"}
 	}
-	return Outcome{OK, "service environment permissions are private"}
+	return Outcome{Status: OK, Detail: "service environment permissions are private"}
 }
 
 func EvaluateVersions(known bool, problems int) Outcome {
 	if !known {
-		return Outcome{Unknown, "version inventory is incomplete"}
+		return Outcome{Status: Unknown, Detail: "version inventory is incomplete"}
 	}
 	if problems > 0 {
-		return Outcome{Warn, "one or more installed components need review"}
+		return Outcome{Status: Warn, Detail: "one or more installed components need review"}
 	}
-	return Outcome{OK, "installed versions and skill links are current"}
+	return Outcome{Status: OK, Detail: "installed versions and skill links are current"}
 }
 
 func EvaluateHerdrProbe(available, parseable bool, consecutiveFailures int) Outcome {
 	if !available || !parseable {
-		return Outcome{Unknown, "herdr probe is unavailable or unparseable"}
+		return Outcome{Status: Unknown, Detail: "herdr probe is unavailable or unparseable"}
 	}
 	if consecutiveFailures >= HerdrProbeFailAfter {
-		return Outcome{Fail, "herdr command probe repeatedly failed"}
+		return Outcome{Status: Fail, Detail: "herdr command probe repeatedly failed"}
 	}
 	if consecutiveFailures > 0 {
-		return Outcome{Warn, "herdr command probe failed once; retrying"}
+		return Outcome{Status: Warn, Detail: "herdr command probe failed once; retrying"}
 	}
-	return Outcome{OK, "herdr command probe succeeded"}
+	return Outcome{Status: OK, Detail: "herdr command probe succeeded"}
 }
 
 // ClientEvidence is one verified agent's client, as the dispatcher last
@@ -301,7 +305,7 @@ func EvaluateClientUpdates(ev []ClientEvidence) Outcome {
 		}
 	}
 	if len(fresh) == 0 {
-		return Outcome{Unknown, "no fresh pane observation (the dispatch service observes)"}
+		return Outcome{Status: Unknown, Detail: "no fresh pane observation (the dispatch service observes)"}
 	}
 	if len(keys) > 0 {
 		sort.Strings(keys)
@@ -309,13 +313,13 @@ func EvaluateClientUpdates(ev []ClientEvidence) Outcome {
 		for _, k := range keys {
 			parts = append(parts, fmt.Sprintf("%d agent(s): %s", byVersion[k], k))
 		}
-		return Outcome{Warn, strings.Join(parts, "; ")}
+		return Outcome{Status: Warn, Detail: strings.Join(parts, "; ")}
 	}
 	if len(unjudged) > 0 {
 		sort.Strings(unjudged)
-		return Outcome{Unknown, "cannot tell the client version of: " + strings.Join(unjudged, ", ")}
+		return Outcome{Status: Unknown, Detail: "cannot tell the client version of: " + strings.Join(unjudged, ", ")}
 	}
-	return Outcome{OK, "every observed agent runs its installed client"}
+	return Outcome{Status: OK, Detail: "every observed agent runs its installed client"}
 }
 
 // ContextEvidence is one verified agent's context fill as the dispatcher last
@@ -332,7 +336,7 @@ type ContextEvidence struct {
 // below it, unknown when none is known. threshold 0 (the alert off) is ok.
 func EvaluateContext(ev []ContextEvidence, threshold float64) Outcome {
 	if threshold <= 0 {
-		return Outcome{OK, "context alert off (AGENT_BUS_CONTEXT_ALERT=0)"}
+		return Outcome{Status: OK, Detail: "context alert off (AGENT_BUS_CONTEXT_ALERT=0)"}
 	}
 	known := 0
 	var high []ContextEvidence
@@ -346,17 +350,17 @@ func EvaluateContext(ev []ContextEvidence, threshold float64) Outcome {
 		}
 	}
 	if known == 0 {
-		return Outcome{Unknown, "no context fill read (Claude Code agents, through the dispatch service)"}
+		return Outcome{Status: Unknown, Detail: "no context fill read (Claude Code agents, through the dispatch service)"}
 	}
 	if len(high) == 0 {
-		return Outcome{OK, fmt.Sprintf("%d agent(s) below %.0f%%", known, threshold)}
+		return Outcome{Status: OK, Detail: fmt.Sprintf("%d agent(s) below %.0f%%", known, threshold)}
 	}
 	sort.Slice(high, func(i, j int) bool { return high[i].Agent < high[j].Agent })
 	parts := make([]string, 0, len(high))
 	for _, e := range high {
 		parts = append(parts, fmt.Sprintf("%s %.0f%%", e.Agent, e.Pct))
 	}
-	return Outcome{Warn, truncateDetail(fmt.Sprintf("at or above %.0f%%: %s", threshold, strings.Join(parts, ", ")))}
+	return Outcome{Status: Warn, Detail: truncateDetail(fmt.Sprintf("at or above %.0f%%: %s", threshold, strings.Join(parts, ", ")))}
 }
 
 // truncateDetail keeps a detail within SafeText's bound.
@@ -382,15 +386,15 @@ var redisVersionPattern = regexp.MustCompile(`^v?([0-9]+)\.([0-9]+)\.([0-9]+)$`)
 func EvaluateRedisVersion(running string, latest map[int]string, foundAt, now time.Time) Outcome {
 	have, ok := parseRedisVersion(running)
 	if !ok {
-		return Outcome{Unknown, "broker version unavailable"}
+		return Outcome{Status: Unknown, Detail: "broker version unavailable"}
 	}
 	if foundAt.IsZero() || now.Sub(foundAt) > RedisLatestMaxAge || foundAt.After(now.Add(5*time.Minute)) {
-		return Outcome{Unknown, "latest Redis release not checked in the last 48 hours"}
+		return Outcome{Status: Unknown, Detail: "latest Redis release not checked in the last 48 hours"}
 	}
 	top, newest := 0, ""
 	for major, v := range latest {
 		if _, ok := parseRedisVersion(v); !ok {
-			return Outcome{Unknown, "latest Redis release unreadable"}
+			return Outcome{Status: Unknown, Detail: "latest Redis release unreadable"}
 		}
 		if major > top {
 			top, newest = major, v
@@ -398,7 +402,7 @@ func EvaluateRedisVersion(running string, latest map[int]string, foundAt, now ti
 	}
 	same, ok := latest[have[0]]
 	if !ok {
-		return Outcome{Unknown, fmt.Sprintf("no recent release of Redis %d found", have[0])}
+		return Outcome{Status: Unknown, Detail: fmt.Sprintf("no recent release of Redis %d found", have[0])}
 	}
 	want, _ := parseRedisVersion(same)
 	newer := ""
@@ -406,12 +410,12 @@ func EvaluateRedisVersion(running string, latest map[int]string, foundAt, now ti
 		newer = fmt.Sprintf("; Redis %s is out; this broker runs %d.x; changing major is your decision", newest, have[0])
 	}
 	if versionBelow(have, want) {
-		return Outcome{Warn, fmt.Sprintf("Redis %s runs; %s is the latest %d.x%s", running, same, have[0], newer)}
+		return Outcome{Status: Warn, Detail: fmt.Sprintf("Redis %s runs; %s is the latest %d.x%s", running, same, have[0], newer)}
 	}
 	if have == want {
-		return Outcome{OK, fmt.Sprintf("Redis %s is the latest %d.x%s", running, have[0], newer)}
+		return Outcome{Status: OK, Detail: fmt.Sprintf("Redis %s is the latest %d.x%s", running, have[0], newer)}
 	}
-	return Outcome{OK, fmt.Sprintf("Redis %s is not behind the latest %d.x (%s)%s", running, have[0], same, newer)}
+	return Outcome{Status: OK, Detail: fmt.Sprintf("Redis %s is not behind the latest %d.x (%s)%s", running, have[0], same, newer)}
 }
 
 func versionBelow(a, b [3]int) bool {

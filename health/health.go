@@ -46,6 +46,16 @@ const (
 	PlaceNotMeasured Place = "not measured" // no current measurement: never fine
 )
 
+// PlaceOf is the place of rec read as status s (its effective status): a
+// warn or fail the evaluator marked as the person's is for you, whatever the
+// check's usual place.
+func (d Definition) PlaceOf(rec Record, s Status) Place {
+	if rec.Person && (s == Warn || s == Fail) {
+		return PlaceForYou
+	}
+	return d.Place(s)
+}
+
 // Place is the place of status s for this check.
 func (d Definition) Place(s Status) Place {
 	switch s {
@@ -66,7 +76,7 @@ func (d Definition) Place(s Status) Place {
 // such as the canary, scanner and project-defined commands are deliberately
 // not registered here.
 var Catalogue = []Definition{
-	{ID: "services", Title: "Services", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Inspect the service log; restart only when its restart budget allows. Missions waiting for Git: run git init in the project directory.", Order: 1, Handler: "sentinel"},
+	{ID: "services", Title: "Services", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Inspect the service log; restart only when its restart budget allows. Missions waiting for Git: run git init in the project directory.", Order: 1, Command: "agentbus --project <project> service restart", Handler: "sentinel"},
 	{ID: "agent-identity", Title: "Agent identity", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Re-check agentbus agents and herdr; ask the person before acting on an identity conflict.", Order: 2, Handler: "master"},
 	{ID: "agent-launch", Title: "Agent launch and identity", Interval: 5 * time.Minute, Deadline: 5 * time.Second, Remediation: "Relaunch through agentbus with the configured role; do not edit a live pane.", Order: 3, Handler: "master"},
 	{ID: "model-drift", Title: "Model drift", Interval: 24 * time.Hour, Deadline: 30 * time.Second, Remediation: "Review the result with agentbus roles doctor before changing roles.toml.", Order: 4, Person: []Status{Warn, Fail}, Command: "agentbus roles doctor"},
@@ -108,6 +118,7 @@ type Record struct {
 	ObservedAt  int64  `json:"observed_at"`
 	Since       int64  `json:"since"`
 	Fingerprint string `json:"fingerprint"`
+	Person      bool   `json:"person,omitempty"` // the evaluator's Outcome.Person
 }
 
 type Transition struct {

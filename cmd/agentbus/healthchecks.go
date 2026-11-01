@@ -48,6 +48,15 @@ func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths) disp
 }
 
 func healthTask(id string, run func(context.Context) (health.Status, string, error)) dispatch.HealthCheck {
+	return healthOutcomeTask(id, func(ctx context.Context) (health.Outcome, error) {
+		status, detail, err := run(ctx)
+		return health.Outcome{Status: status, Detail: detail}, err
+	})
+}
+
+// healthOutcomeTask is a check whose evaluator's whole outcome is stored,
+// Person included (services: a spent restart budget is the person's).
+func healthOutcomeTask(id string, run func(context.Context) (health.Outcome, error)) dispatch.HealthCheck {
 	d, ok := health.ByID(id)
 	if !ok {
 		panic("missing health definition: " + id)
@@ -62,39 +71,39 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 	var probeMu sync.Mutex
 	probeFailures := 0
 	return []dispatch.HealthCheck{
-		healthTask("services", func(ctx context.Context) (health.Status, string, error) {
+		healthOutcomeTask("services", func(ctx context.Context) (health.Outcome, error) {
 			installed, err := b.ServicesInstalled(ctx)
 			if err != nil {
-				return health.Unknown, "service installation state unavailable", err
+				return health.Outcome{Status: health.Unknown, Detail: "service installation state unavailable"}, err
 			}
 			inst, records, err := b.ServiceStates(ctx)
 			if err != nil {
-				return health.Unknown, "service state unavailable", err
+				return health.Outcome{Status: health.Unknown, Detail: "service state unavailable"}, err
 			}
 			redisNow, err := b.ServerTime(ctx)
 			if err != nil {
-				return health.Unknown, "server time unavailable", err
+				return health.Outcome{Status: health.Unknown, Detail: "server time unavailable"}, err
 			}
 			if !installed || inst == nil || len(inst.Kinds) == 0 {
 				out := health.EvaluateServices(health.ServiceEvidence{Known: true})
-				return out.Status, out.Detail, nil
+				return out, nil
 			}
 			if manager == nil {
-				return health.Unknown, "service manager unavailable", errors.New("service manager unavailable")
+				return health.Outcome{Status: health.Unknown, Detail: "service manager unavailable"}, errors.New("service manager unavailable")
 			}
 			active, failures, recentError, waitingGit := true, 0, false, false
 			for _, kind := range inst.Kinds {
 				if !service.ValidKind(kind) {
-					return health.Unknown, "service registry contains an unsupported kind", errors.New("unsupported service kind")
+					return health.Outcome{Status: health.Unknown, Detail: "service registry contains an unsupported kind"}, errors.New("unsupported service kind")
 				}
 				state, err := manager.State(b.Project(), kind)
 				if err != nil {
-					return health.Unknown, "service manager state unavailable", err
+					return health.Outcome{Status: health.Unknown, Detail: "service manager state unavailable"}, err
 				}
 				active = active && state.Installed && state.Active
 				count, err := (service.Budget{Path: paths.BudgetFile(b.Project(), kind)}).FailureCountChecked(time.Now())
 				if err != nil {
-					return health.Unknown, "service restart budget unavailable", err
+					return health.Outcome{Status: health.Unknown, Detail: "service restart budget unavailable"}, err
 				}
 				failures += count
 				if rec := records[kind]; rec.Error != "" && rec.At > 0 && redisNow.Sub(time.UnixMilli(rec.At)) <= time.Hour {
@@ -106,7 +115,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			}
 			out := health.EvaluateServices(health.ServiceEvidence{Known: true, Installed: true, Active: active,
 				RecentFailures: failures, RecentError: recentError, WaitingGit: waitingGit})
-			return out.Status, out.Detail, nil
+			return out, nil
 		}),
 		healthTask("agent-identity", func(ctx context.Context) (health.Status, string, error) {
 			snaps, err := b.Agents(ctx)

@@ -22,7 +22,7 @@ func summarizeGuardian(records map[string]guardian.Record, now time.Time) guardi
 	s := guardianSummary{Total: len(guardian.Definitions())}
 	for _, d := range guardian.Definitions() {
 		status := checkStatus(d, records, now)
-		switch d.Place(status) {
+		switch d.PlaceOf(records[d.ID], status) {
 		case guardian.PlaceForYou:
 			s.ToDo++
 			s.ToDoFail = s.ToDoFail || status == guardian.Fail
@@ -111,7 +111,8 @@ func healthPage(records map[string]guardian.Record, notes map[string]guardian.No
 	for _, d := range guardian.Definitions() {
 		rec, has := records[d.ID]
 		st := checkStatus(d, records, now)
-		byPlace[d.Place(st)] = append(byPlace[d.Place(st)], row{d, rec, has, st})
+		place := d.PlaceOf(rec, st)
+		byPlace[place] = append(byPlace[place], row{d, rec, has, st})
 	}
 	unmeasured := "not measured"
 	if width < healthWide {

@@ -144,3 +144,23 @@ func TestHealthPageWithoutReadings(t *testing.T) {
 		t.Errorf("rows: %s", healthPageText(body))
 	}
 }
+
+// A service whose restart budget is spent is for the person, with the
+// command that restarts it; an inactive one stays in hand (sentinel).
+func TestHealthPageSpentBudgetIsForYou(t *testing.T) {
+	now := time.Unix(10_000_000, 0)
+	recs := allOK(now)
+	recs["services"] = guardian.Record{ID: "services", Status: guardian.Fail, Person: true, Detail: "service restart budget is spent", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
+	if s := summarizeGuardian(recs, now); s.ToDo != 1 || !s.ToDoFail {
+		t.Fatalf("summary %+v", s)
+	}
+	_, body, items, plain := healthPage(recs, nil, now, "demo", healthView{}, 136)
+	if !strings.HasPrefix(healthPageText(body), "  For you") || plain != "agentbus --project demo service restart" {
+		t.Errorf("spent budget: plain %q\n%s", plain, healthPageText(body))
+	}
+	_ = items
+	recs["services"] = guardian.Record{ID: "services", Status: guardian.Fail, Detail: "an installed service is inactive or failed", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
+	if s := summarizeGuardian(recs, now); s.ToDo != 0 || s.InHand != 1 {
+		t.Fatalf("inactive: summary %+v", s)
+	}
+}

@@ -58,3 +58,35 @@ func TestPlacesOfTheNamedChecks(t *testing.T) {
 		}
 	}
 }
+
+// A spent restart budget fails like an inactive service, but only the person
+// can restart it (sentinel's budget is the same one): the evaluator says so in
+// the outcome, never in its detail, and the record carries it to busmon
+// (reviewer-codex).
+func TestSpentBudgetIsForThePerson(t *testing.T) {
+	spent := EvaluateServices(ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 5})
+	inactive := EvaluateServices(ServiceEvidence{Known: true, Installed: true, Active: false})
+	if spent.Status != Fail || !spent.Person || inactive.Status != Fail || inactive.Person {
+		t.Fatalf("spent %+v, inactive %+v", spent, inactive)
+	}
+	d, _ := ByID("services")
+	if got := d.PlaceOf(Record{Status: Fail, Person: true}, Fail); got != PlaceForYou || d.Command == "" {
+		t.Errorf("spent budget: place %q, command %q", got, d.Command)
+	}
+	if got := d.PlaceOf(Record{Status: Fail}, Fail); got != PlaceInHand {
+		t.Errorf("inactive service: place %q", got)
+	}
+	// The flag never moves an ok or unknown check, whatever a record says.
+	for _, s := range []Status{OK, Unknown} {
+		if got := d.PlaceOf(Record{Status: s, Person: true}, s); got != d.Place(s) {
+			t.Errorf("%s with person: place %q", s, got)
+		}
+	}
+	// Only the person's outcomes carry it.
+	for _, o := range []Outcome{EvaluateServices(ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 4}),
+		EvaluateServices(ServiceEvidence{Known: true, Installed: true, Active: true, WaitingGit: true})} {
+		if o.Person {
+			t.Errorf("%+v carries person", o)
+		}
+	}
+}
