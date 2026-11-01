@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -46,6 +47,10 @@ type stallReader struct {
 	// not restart with it (foureyes). Memory only: a restart can make the
 	// notice later, never earlier.
 	firstFail int64
+	// lastClear and lastQuiet are the inputs clear-stall and quiet-agent last
+	// judged, for the wakes the health loop asks for right after storing them.
+	lastClear *health.ClearStallInput
+	lastQuiet *health.QuietAgentInput
 }
 
 func newStallReader(b *bus.Bus, getenv func(string) string, clear dispatch.ClearConfig, master *string) *stallReader {
@@ -87,6 +92,7 @@ func dormantAt(snap bus.AgentSnapshot, now time.Time) bool {
 // clearStall reads the valid hand-offs and the clear pass's last decisions.
 func (s *stallReader) clearStall(ctx context.Context) (health.Outcome, error) {
 	in := health.ClearStallInput{Now: s.now(), After: readStallSettings(s.getenv).clear, AutoClear: s.clear.On}
+	defer s.keep(func() { s.lastClear = &in }) // every return, an off or failed read included: never a stale wake
 	if in.After <= 0 {
 		return health.EvaluateClearStall(in), nil
 	}
@@ -114,6 +120,7 @@ func (s *stallReader) clearStall(ctx context.Context) (health.Outcome, error) {
 func (s *stallReader) quietAgent(ctx context.Context) (health.Outcome, error) {
 	now := s.now()
 	in := health.QuietAgentInput{Now: now, After: readStallSettings(s.getenv).quiet, Master: s.escalateTo()}
+	defer s.keep(func() { s.lastQuiet = &in })
 	if in.After <= 0 {
 		return health.EvaluateQuietAgent(in), nil
 	}
@@ -420,6 +427,37 @@ func (s *stallReader) setFirstFail(since int64) int64 {
 		s.firstFail = since
 	}
 	return s.firstFail
+}
+
+// keep runs set under the reader's lock.
+func (s *stallReader) keep(set func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	set()
+}
+
+// stallWake is the health loop's hook after a stored clear-stall or
+// quiet-agent record (HealthConfig.StallWake): each wake the judged input
+// owes is one waking directive from the dispatcher, once per episode under
+// its {p}:quota mark (chain-reliability: a warning alone woke nobody). A
+// target being swapped is skipped; the next pass sends it.
+func (s *stallReader) stallWake(ctx context.Context, token, check string) error {
+	var wakes []health.StallWake
+	s.mu.Lock()
+	switch {
+	case check == "clear-stall" && s.lastClear != nil:
+		wakes = health.ClearStallWakes(*s.lastClear, s.escalateTo())
+	case check == "quiet-agent" && s.lastQuiet != nil:
+		wakes = health.QuietAgentWakes(*s.lastQuiet)
+	}
+	s.mu.Unlock()
+	for _, w := range wakes {
+		_, err := s.b.FencedCmdOnce(ctx, token, w.Mark, w.Episode, "dispatch", w.Target, bus.CmdDirective, w.Text, false)
+		if err != nil && !errors.Is(err, bus.ErrSwapInProgress) {
+			return err
+		}
+	}
+	return nil
 }
 
 // stallMark is the {p}:quota field of the stall guard's notice for the person.

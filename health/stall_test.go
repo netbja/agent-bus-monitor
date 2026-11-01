@@ -2,6 +2,7 @@ package health
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -267,5 +268,61 @@ func TestQuietAgentUnjudgedNeverHidesAWarning(t *testing.T) {
 	in.Agents = []QuietAgent{unjudged}
 	if out := EvaluateQuietAgent(in); out.Status != Unknown || !strings.Contains(out.Detail, "not judged: architect") {
 		t.Errorf("nobody quiet, one unjudged: %s %q", out.Status, out.Detail)
+	}
+}
+
+// A stalled hand-off wakes whoever can act, once per hand-off and target
+// (chain-reliability): the agent itself, with the command, when it only has to
+// declare idle; master for any other reason; nobody while it is young or void.
+func TestClearStallWakes(t *testing.T) {
+	at := ago(22 * time.Minute)
+	for _, c := range []struct {
+		name   string
+		mod    func(*ClearStallInput)
+		target string
+		text   string
+	}{
+		{"not idle since: the agent", func(in *ClearStallInput) { in.Handoffs[0].Decision = NotIdleReason }, "coder", `agentbus status coder idle`},
+		{"another reason: master", func(in *ClearStallInput) { in.Handoffs[0].Decision = "it has an open ask" }, "master", "it has an open ask"},
+		{"focused: master", func(*ClearStallInput) {}, "master", "the pane is focused"},
+		{"auto-clear off: master", func(in *ClearStallInput) { in.AutoClear = false }, "master", "clear its pane by hand"},
+		{"young: nobody", func(in *ClearStallInput) { in.Handoffs[0].At = ago(6 * time.Minute) }, "", ""},
+		{"void: nobody", func(in *ClearStallInput) { in.Handoffs[0].Void = true }, "", ""},
+		{"off: nobody", func(in *ClearStallInput) { in.After = 0 }, "", ""},
+		{"read failed: nobody", func(in *ClearStallInput) { in.ReadErr = "x" }, "", ""},
+	} {
+		in := clearIn()
+		c.mod(&in)
+		ws := ClearStallWakes(in, "master")
+		if c.target == "" {
+			if len(ws) != 0 {
+				t.Errorf("%s: woke %+v", c.name, ws)
+			}
+			continue
+		}
+		if len(ws) != 1 || ws[0].Target != c.target || !strings.Contains(ws[0].Text, c.text) || ws[0].Mark != "stall-clear:coder" ||
+			ws[0].Episode != strconv.FormatInt(at.UnixMilli(), 10)+"|"+c.target {
+			t.Errorf("%s: %+v", c.name, ws)
+		}
+	}
+}
+
+// A quiet agent wakes master once per directive it went quiet on.
+func TestQuietAgentWakes(t *testing.T) {
+	d := idAt(25*time.Minute, 0)
+	ws := QuietAgentWakes(quietIn())
+	if len(ws) != 1 || ws[0].Target != "master" || ws[0].Mark != "stall-quiet:coder" || ws[0].Episode != d ||
+		!strings.Contains(ws[0].Text, "coder") || !strings.Contains(ws[0].Text, d) {
+		t.Fatalf("wakes %+v", ws)
+	}
+	in := quietIn()
+	in.Agents[0].Pending = []string{d}
+	if ws := QuietAgentWakes(in); len(ws) != 0 {
+		t.Fatalf("not quiet, woke %+v", ws)
+	}
+	in = quietIn()
+	in.After = 0
+	if ws := QuietAgentWakes(in); len(ws) != 0 {
+		t.Fatalf("off, woke %+v", ws)
 	}
 }

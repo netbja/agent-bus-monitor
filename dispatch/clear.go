@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/health"
 )
 
 // Auto-clear (lifecycle spec, part B): after an agent declared its hand-off
@@ -71,7 +72,7 @@ func DecideClear(f ClearFacts) ClearDecision {
 	case len(f.Gates) > 0:
 		return ClearDecision{Reason: "a review gate is open", WaitGates: f.Gates}
 	case f.Snap.State != "idle" || f.Snap.TS < f.Record.At: // the declaration itself is an idle at At
-		return no("not idle since its hand-off")
+		return no(health.NotIdleReason) // the agent's own to fix: the stall guard tells it how
 	case f.Armed:
 		return no("armed")
 	case f.WakeState == "prompting":

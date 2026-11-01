@@ -45,7 +45,7 @@ func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths, clea
 	manager, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
 	stall := newStallReader(b, os.Getenv, clear, escalateTo)
 	checks := append(realHealthChecks(b, rt, manager, paths), stallChecks(stall)...)
-	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify,
+	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify, StallWake: stall.stallWake,
 		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(b), RedisRefresh: redisRefresh(b)}
 }
 
