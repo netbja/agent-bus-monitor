@@ -53,6 +53,18 @@ func TestAgentPageReplyWithoutNeedQuotesNothing(t *testing.T) {
 	if m = keys(t, m, 'i'); m.ui.compose == nil || m.ui.compose.area.value() != "" {
 		t.Fatalf("a quote for an agent that needs nothing: %+v", m.ui.compose)
 	}
+	// Waiting with an open question set: its page shows the questions, not
+	// "What … needs from you", so i quotes nothing (foureyes).
+	m = keys(t, m, kEsc)
+	m.ui.msgCompose = composeDraft{}
+	if a := m.snap.agents["master"]; a == nil || a.state != "waiting" || a.openAsk == 0 {
+		t.Fatalf("fixture: master should wait with an open ask: %+v", a)
+	}
+	m.feed.feed = append(m.feed.feed, feedLine{ev: bus.Event{Kind: "report", Agent: "master", ID: "9-1", Message: "see my ask"}, at: shellNow})
+	m.pushAgent("master")
+	if m = keys(t, m, 'i'); m.ui.compose == nil || m.ui.compose.area.value() != "" {
+		t.Fatalf("a quote under an open ask: %q", m.ui.compose.area.value())
+	}
 }
 
 // The quote is short: at most three lines, each cut, and a long line ends in …
