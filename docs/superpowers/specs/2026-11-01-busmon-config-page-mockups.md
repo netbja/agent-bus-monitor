@@ -30,8 +30,10 @@ changes now. Everything below assumes yes; with no, the page is the same list, r
 
 ## Groups
 
-The registry's keys, by theme. The group is the key's first segment, so the page needs no
-second table.
+The registry's keys, by theme. The theme is not always the key's first segment (`waiting.fade`
+is Display, `recap.*` and `updates.*` are Attention, `dispatch.*` is Services), so each row of
+`config.Keys` gains one field, `Group`, and the page reads it; a test fails on a key without
+one, as `TestNoEnvLiteralOutsideTheRegistry` does for an env name.
 
 | Group | Keys | Read by |
 |---|---|---|
@@ -98,6 +100,9 @@ its rule does today, and the row shows the source that applies.
 Defaults are folded like the fine checks on F5: the page leads with what someone chose, and
 `a` lists every key, the defaults in their groups. The Services group reads what the open project's services see (`agentbus config
 --project`): the env file comes first there, so a value frozen at `up` shows `·`, read-only.
+`dispatch.context_alert` is also read by busmon itself (the ctx cell and health), from busmon's
+own environment: the row shows the services' value, and when busmon's resolves otherwise the
+detail (Enter) shows both, each with its source.
 
 Enter on a row opens it in place, as on F5:
 
@@ -140,9 +145,10 @@ rule on every Enter, and nothing is written until Enter. Esc leaves the file unt
 
 | Kind | Keys | Shown | Change |
 |---|---|---|---|
-| on/off | `waiting.bell`, `waiting.fade`, `updates.check`, `dispatch.quota`, `dispatch.tokens`, `dispatch.auto_clear` | `on` / `off` | Enter or space flips it and writes at once (one key, one meaning: no confirm) |
+| on/off | `waiting.bell`, `waiting.fade`, `updates.check`, `dispatch.quota`, `dispatch.tokens`, `dispatch.auto_clear` | `on` / `off` | Enter or space flips it and writes at once (one key, one meaning: no confirm), except `dispatch.auto_clear` |
+| on/off, confirmed | `dispatch.auto_clear` | `on` / `off` | the one setting that lets the dispatcher type `/clear` into a pane, off by default until the lifecycle decision's live checks pass: turning it on asks `y` and says so; turning it off writes at once |
 | choice | `display.theme` | the value; the detail lists the others | Enter opens the choice: `←→` move along `auto · dark · light`, Enter writes |
-| number | `display.limit`, `bus.*`, `health.runaway.context_growth`, `screen_repeats` | `25` | Enter opens the line editor on the value (the same editor as the input line); Enter writes |
+| number | `display.limit`, `bus.*`, `health.runaway.context_growth`, `screen_repeats` | `25` | Enter opens the line editor on the value (the same editor as the input line); Enter writes; `display.limit` `0` reads `all` (all history) |
 | percent | `dispatch.context_alert`, `quota_warn`, `quota_hold` | `85 %` | as a number; `0` where the key allows it reads `off` |
 | duration | `waiting.popup_after`, `waiting.snooze`, `recap.auto_after`, `dispatch.quota_max_age`, `dispatch.quota_long_hold`, `health.runaway.silent_after`, `growth_span` | `humanAge` (`5m`, `8h`) | the editor takes the file's form (`"90s"`, `"5m"`, `"2h"`); `0` where the key allows it reads `off` |
 | seconds | `dispatch.prompt_grace` | `30s` | the file holds whole seconds (0 to 3600), so the editor takes a number; `0` reads `off` |
