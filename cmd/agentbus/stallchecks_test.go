@@ -121,3 +121,96 @@ func TestQuietAgentReadsALiveProject(t *testing.T) {
 		t.Fatalf("after a report: %+v", out)
 	}
 }
+
+// putStall stores a team-stall fail, as the health loop does.
+func (w *stallWorld) putStall() health.Record {
+	w.t.Helper()
+	ctx := context.Background()
+	if err := w.b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}, Manager: "test"}); err != nil {
+		w.t.Fatal(err)
+	}
+	rec := health.Record{ID: "team-stall", Status: health.Fail, Detail: "team idle 18m, nothing open; next ready: t1 (coder)", Fingerprint: "f"}
+	if err := w.b.FencedHealthPut(ctx, "stall-holder", "master", rec); err != nil {
+		w.t.Fatal(err)
+	}
+	recs, err := w.b.Health(ctx)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return recs["team-stall"]
+}
+
+func (w *stallWorld) personNotices() []string {
+	w.t.Helper()
+	evs, _, err := w.b.Recent(context.Background(), []string{"notify"}, 100)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	var out []string
+	for _, e := range evs {
+		if e.For == bus.ForPerson {
+			out = append(out, e.Message)
+		}
+	}
+	return out
+}
+
+// Master held: the person is told at once, once per episode.
+func TestStallNoticeWhenMasterCannotAct(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	rec := w.putStall()
+	w.s.now = func() time.Time { return time.UnixMilli(rec.Since).Add(time.Minute) }
+	if err := w.b.FencedQuotaSet(ctx, "stall-holder", "hold:anthropic", "1"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := w.s.stallNotify(ctx, "stall-holder", rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := w.personNotices()
+	if len(got) != 1 || !strings.Contains(got[0], "master cannot act (master is held by its provider's limit)") {
+		t.Fatalf("notices %q", got)
+	}
+}
+
+// Master can act: nothing before twice the threshold, one notice after it,
+// and the mark goes once the fail ends.
+func TestStallNoticeSecondTier(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	rec := w.putStall()
+	w.s.now = func() time.Time { return time.UnixMilli(rec.Since).Add(29 * time.Minute) }
+	if err := w.s.stallNotify(ctx, "stall-holder", rec); err != nil || len(w.personNotices()) != 0 {
+		t.Fatalf("before 2xN: err %v, notices %q", err, w.personNotices())
+	}
+	w.s.now = func() time.Time { return time.UnixMilli(rec.Since).Add(30 * time.Minute) }
+	if err := w.s.stallNotify(ctx, "stall-holder", rec); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.personNotices(); len(got) != 1 || !strings.Contains(got[0], "master was told and nothing moved") {
+		t.Fatalf("at 2xN: %q", got)
+	}
+	ok := health.Record{ID: "team-stall", Status: health.OK, Detail: "coder working", Fingerprint: "g"}
+	if err := w.b.FencedHealthPut(ctx, "stall-holder", "master", ok); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.s.stallNotify(ctx, "stall-holder", ok); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := w.b.QuotaMarks(ctx); m["stall"] != "" {
+		t.Fatalf("the mark outlived its episode: %q", m["stall"])
+	}
+}
+
+// A lost lease writes nothing.
+func TestStallNoticeWithoutTheLease(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	rec := w.putStall()
+	w.s.now = func() time.Time { return time.UnixMilli(rec.Since).Add(time.Hour) }
+	if err := w.s.stallNotify(ctx, "not-the-holder", rec); err == nil || len(w.personNotices()) != 0 {
+		t.Fatalf("err %v, notices %q", err, w.personNotices())
+	}
+}

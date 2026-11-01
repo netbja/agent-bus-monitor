@@ -729,11 +729,21 @@ func (l *loop) recipientCannotAct(agent string) string {
 	if agent == t {
 		return "the escalation recipient itself is stuck"
 	}
-	if s, ok := l.snaps[t]; ok && l.heldBy(&s) {
-		return t + " is held by its provider's limit"
-	}
-	if o, ok := l.obs[t]; ok && o.State == "blocked" {
-		return t + "'s own tab is blocked"
+	s, ok := l.snaps[t]
+	o, seen := l.obs[t]
+	return CannotAct(t, ok && l.heldBy(&s), seen && o.State == "blocked")
+}
+
+// CannotAct is the escalation target's reason it cannot act, or "": its
+// provider is held, or its own tab was last seen blocked. Pure, so the
+// health loop's stall guard applies the same rule without sharing the
+// reconciliation's state.
+func CannotAct(target string, held, blocked bool) string {
+	switch {
+	case held:
+		return target + " is held by its provider's limit"
+	case blocked:
+		return target + "'s own tab is blocked"
 	}
 	return ""
 }

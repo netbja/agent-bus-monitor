@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -340,6 +341,68 @@ func (s *stallReader) readOpenWork(ctx context.Context, team map[string]bus.Agen
 	sortStrings(open.Swapping, open.Obligations, open.Handoffs, open.Missions)
 	return "", nil
 }
+
+// stallNotify is the health loop's hook after each stored team-stall record
+// (HealthConfig.StallNotify): while the fail lasts, the person is told once
+// per episode, at once when master cannot act (dispatch.CannotAct, the
+// escalation rule), else once the fail has lasted twice stall_after. The
+// mark "stall" holds the episode (the record's since, Redis time), so
+// {p}:quota keeps one field; it is deleted once the fail ends.
+func (s *stallReader) stallNotify(ctx context.Context, token string, _ health.Record) error {
+	recs, err := s.b.Health(ctx)
+	if err != nil {
+		return err
+	}
+	marks, err := s.b.QuotaMarks(ctx)
+	if err != nil {
+		return err
+	}
+	rec := recs["team-stall"]
+	if rec.Status != health.Fail || rec.Since == 0 {
+		if _, ok := marks[stallMark]; ok {
+			return s.b.FencedQuotaDel(ctx, token, stallMark)
+		}
+		return nil
+	}
+	episode := strconv.FormatInt(rec.Since, 10)
+	if marks[stallMark] == episode {
+		return nil // told this episode
+	}
+	target := s.escalateTo()
+	snaps, err := s.b.Agents(ctx)
+	if err != nil {
+		return err
+	}
+	obs, err := s.b.Observed(ctx)
+	if err != nil {
+		return err
+	}
+	held := map[string]bool{}
+	for k := range marks {
+		if p, ok := strings.CutPrefix(k, "hold:"); ok {
+			held[p] = true
+		}
+	}
+	why := target + " is not registered"
+	if snap, ok := snaps[target]; ok {
+		o, seen := obs[target]
+		why = dispatch.CannotAct(target, held[snap.Provider], seen && o.State == "blocked")
+	}
+	var msg string
+	switch since := s.now().Sub(time.UnixMilli(rec.Since)); {
+	case why != "":
+		msg = fmt.Sprintf("Stall guard: the team is idle with work ready (%s), and %s cannot act (%s). Dispatch from busmon, or wait.", rec.Detail, target, why)
+	case since >= 2*readStallSettings(s.getenv).stall:
+		msg = fmt.Sprintf("Stall guard: the team is still idle with work ready (%s); %s was told and nothing moved. Look at %s's pane, or dispatch from busmon.", rec.Detail, target, target)
+	default:
+		return nil
+	}
+	_, err = s.b.FencedNotifyOnceForPerson(ctx, token, stallMark, episode, "dispatch", msg)
+	return err
+}
+
+// stallMark is the {p}:quota field of the stall guard's notice for the person.
+const stallMark = "stall"
 
 // stallChecks are the three health checks of the stall guard.
 func stallChecks(s *stallReader) []dispatch.HealthCheck {
