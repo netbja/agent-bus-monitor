@@ -61,8 +61,16 @@ what is left waits for the next pass.
 0600), is replaced by a rename after each pass's `fsync`, so it never claims more than the files
 hold. A stream that writes rarely (`notify`, two a day here) keeps its cursor all the same. A
 missing or unreadable cursor starts from each stream's oldest entry; lines already in the day
-files are then skipped by id (the files of the days the stream still spans are read once to
-collect their ids), so a restart writes no duplicate.
+files are then skipped by **(stream, id)** (the files of the days the stream still spans are read
+once to collect them), so a restart writes no duplicate. Stream ids are unique within a stream,
+not across streams: a `cmd` and a `report` entry can share an id, and both are kept
+(reviewer-codex).
+
+**A deleted directory.** Deleting `history/` deletes `cursor.json` with it, so the next pass cannot
+know what was missed. A missing cursor with **no day file at all** writes one line first:
+`{"stream":"gap","id":"<now>","f":{"of":"*","from":"unknown","to":"<each stream's oldest id>"}}`,
+read as `-- archive restarted: nothing archived before <date> --`. A missing cursor with day files
+present rebuilds the cursor from them, as above. So a lost archive is never silent either.
 
 **Gaps.** If a stream's oldest entry is newer than its cursor (the dispatcher was down longer than
 the stream's reach), the chore writes one `gap` line, from the cursor to that entry, then goes on.
@@ -72,7 +80,11 @@ A reader says "not archived: 14:20 to 18:05". A gap is never silent.
 Each line's string fields go through the same credential shapes health already refuses
 (`health.sensitiveText`: `password=`, `token:`, private keys, `user:pass@` URLs, `sk-ant-`, `ghp_`,
 `xox?-`), replaced by `[redacted]` before the line is written. The pattern moves to a small
-exported `Redact` so health and the archive share it.
+exported `Redact` so health and the archive share it, and gains one rule it lacks today: an
+`authorization` value is the **rest of its line**, not its first word, and `Bearer <token>` /
+`Basic <token>` anywhere is redacted whole. Today `Authorization: Bearer abc123…` matches only
+`Authorization: Bearer` and would leave the token in the line (reviewer-codex). Health's
+`SafeText` refuses the same shapes, so it gains the rule too.
 
 **Retention**, two keys in `config.toml` (`config/keys.go`, read by dispatch):
 
@@ -95,7 +107,8 @@ agentbus history [--agent A] [--thread T] [--kind K] [--since D] [--until D]
 ```
 
 - Reads the archive files of the project, then the live streams for what is newer than the
-  archive, merged by stream id (a duplicate id is printed once). With no broker it still reads the
+  archive, merged by (stream, id): the same entry from both is printed once, two streams' entries
+  with the same id both print. With no broker it still reads the
   files, and says `broker unreachable: archive only`.
 - `--agent`: entries from or to it. `--thread`: the entry whose id or `ref` is T, as
   `agentbus thread` does, across days. `--kind`: `directive`, `reply`, `verdict`, `report`,
@@ -176,7 +189,10 @@ archive of the hashes, no upload anywhere.
   re-reads those entries and skips them by id; a stream trimmed past the cursor writes one `gap`
   line; a lost lease writes nothing; a second writer blocked by the `flock`; files 0600 in 0700;
   the 2 000-entry and 5 s bounds leave the rest for the next pass; a line with `token: abc...`,
-  a private key or `user:pass@` is written `[redacted]`.
+  a private key, `user:pass@` or `Authorization: Bearer <token>` is written `[redacted]`, the token
+  gone (and `SafeText` refuses the same line); a `cmd` and a `report` entry with the same id are
+  both archived and both printed; the whole `history/` directory deleted, the next pass writes the
+  "archive restarted" line before anything else.
 - Retention: older than `keep_days` deleted, today never; over `max_mb` the oldest go; `0` writes
   and prunes nothing.
 - `agentbus history`: each filter, the merge with the live streams by id (no duplicate), no
