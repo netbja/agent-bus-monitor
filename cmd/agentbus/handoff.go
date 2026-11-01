@@ -99,11 +99,16 @@ func listHandoffs(ctx context.Context, d handoffDeps, asJSON bool, stdout, stder
 		if r.Void {
 			state = "void: " + r.Reason
 		}
-		age := d.Now().Sub(time.UnixMilli(r.At)).Round(time.Minute)
-		fmt.Fprintf(stdout, "%-12s report %s  %s ago  %s\n", r.Agent, r.Report, shortAge(age), state)
+		now := d.Now()
+		at := time.UnixMilli(r.At).In(now.Location()) // the exact time beside the age (agent-brief), local
+		age := now.Sub(at).Round(time.Minute)
+		fmt.Fprintf(stdout, "%-12s report %s  %s (%s ago)  %s\n", r.Agent, r.Report, at.Format(rfc3339Milli), shortAge(age), state)
 	}
 	return 0
 }
+
+// rfc3339Milli is RFC 3339 to the millisecond a record's at holds (reviewer-codex).
+const rfc3339Milli = "2006-01-02T15:04:05.000Z07:00"
 
 // shortAge is a duration as the list prints it: 3m, 2h5m, 1d4h.
 func shortAge(d time.Duration) string {

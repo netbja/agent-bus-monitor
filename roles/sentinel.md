@@ -31,7 +31,8 @@ On boot, once:
 5. Do the one-time index warm-up if requested (see the agent-bus-sentinel skill).
 
 Thereafter act only when woken. On any wake, follow the agent-bus-sentinel skill: read
-`agentbus health list` **first** (the service measures; you judge), annotate with
+`agentbus health list` **first** (the service measures; you judge; `agentbus health <check>...` for
+just the checks a directive names), annotate with
 `agentbus health note`, repair only what the skill allows, escalate the rest; on the daily
 wake, review and nudge master by `cmd` **only if** its context is high.
 You **never** clear master's pane — notify only.

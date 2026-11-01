@@ -119,3 +119,16 @@ func TestAgentsTableSaysWhenNoAgentYet(t *testing.T) {
 		t.Fatal("the empty note shows with an agent present")
 	}
 }
+
+// agents <name>... (agent-brief): only those agents, same columns; a name the
+// hash does not hold is said, never silently dropped.
+func TestSelectAgents(t *testing.T) {
+	m := map[string]bus.AgentSnapshot{"coder": {State: "working"}, "master": {State: "idle"}, "foureyes": {State: "idle"}}
+	got, missing := selectAgents(m, []string{"coder", "ghost", "master"})
+	if len(got) != 2 || got["coder"].State != "working" || got["master"].State != "idle" || len(missing) != 1 || missing[0] != "ghost" {
+		t.Fatalf("selectAgents = %v, missing %v", got, missing)
+	}
+	if all, missing := selectAgents(m, nil); len(all) != 3 || len(missing) != 0 {
+		t.Fatalf("no names: %v %v", all, missing)
+	}
+}

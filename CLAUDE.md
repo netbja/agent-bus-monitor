@@ -253,8 +253,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   as `--since <id>` on re-arm; omitting `--since` starts at "now" (no backlog replay); `--since 0`
   = at-least-once replay of whatever the group still holds — once `status` has created the group
   at the horizon floor (v0.8, `EnsureGroup`), entries older than that floor are never replayed. Re-arm iff `rearm` is true. "Staying subscribed" is re-arming after
-  each fire, **not** a long-lived loop (which would never wake a terminal session). `agents [--json]`
-  lists every peer's current state. `watch` is the legacy alias of `subscribe` (same handler).
+  each fire, **not** a long-lived loop (which would never wake a terminal session). `agents [<name>...] [--json]`
+  lists every peer's current state, or only the ones named (`selectAgents`; a name with no snapshot is said, exit 1).
+  `health <check>...` prints only those checks, each its status then `reason:`/`detail:` lines (`healthChecks`). `watch` is the legacy alias of `subscribe` (same handler).
   `listen` tails all four streams via `Bus.Tail` for debugging. `report` prints its entry id on
   stdout (lifecycle-2), the id `handoff <self> --report <id>` declares (`bus/handoff.go`:
   `{p}:handoff`, agent → report, session, pid, pid_start, `at` from Redis `TIME`, written in one
@@ -262,7 +263,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `projectKinds`, ignored by `HasKeysBesidesDispatch`; any report and any non-idle status of the
   agent delete it in the same MULTI (`addVoidingHandoff`), so voiding never waits for a pass;
   `Handoff.VoidFor` — another process or session, or working since — is the rule the dispatcher's
-  fenced `handoffPass` deletes by and busmon's `handoff` flag shows by; `handoff` alone lists them, read-only for the identity guard; the
+  fenced `handoffPass` deletes by and busmon's `handoff` flag shows by; `handoff` alone lists them, read-only for the identity guard, each with its report id and its exact time (RFC3339 to
+  the millisecond, local) beside the age; the
   context alert's directive now asks for both). `report` now retains the full
   text (newlines/tabs kept, ≤8000, `AGENT_BUS_REPORT_FULL_MAX`) in a `full` field **only when it
   differs from the one-line ≤500 preview**; `reports [--json]` lists recent reports (marking those
@@ -289,7 +291,10 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `subscribe --drain <agent>` (`Bus.DrainCmd`) empties the agent's queue — PEL first, then unread,
   **no floor**, ACK after output — as JSONL (one `"v":1` object per entry, with `age_s` on every
   entry and `stale` only for entries older than the 24h horizon) and exits 0 (output), 64 (empty) or 75 (error, e.g. the
-  receiver lease is held). It is what a woken agent runs. `cmd --no-wake` writes `wake=no`
+  receiver lease is held). It is what a woken agent runs; `--brief` (agent-brief, `briefLine`) prints one line per
+  entry instead, `id from [type ref task=… expires=… attempt=…]: body` (each only when present, the deadline in
+  local RFC3339, attempt above 1), the whole body on it (`\\` and every line breaker escaped), `(person)`,
+  `(duplicate?)` and `(stale)` marked, same exit codes, so an agent reads the bus without `jq`. `cmd --no-wake` writes `wake=no`
   (`Bus.CmdNoWake`; `shutdown` uses it). `dispatch [--horizon 24h] [--escalate-after 10m]
   [--escalate-to master]` runs `dispatch.Run` in the foreground (JSON decision log on stderr; a
   second dispatcher for the same project exits 0; one whose lease lapsed re-acquires while the

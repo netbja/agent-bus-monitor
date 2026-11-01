@@ -32,7 +32,7 @@ func (f *fakeHandoffs) deps(self string) handoffDeps {
 		},
 		List:   func(context.Context) (map[string]bus.Handoff, error) { return f.records, nil },
 		Agents: func(context.Context) (map[string]bus.AgentSnapshot, error) { return f.snaps, nil },
-		Now:    func() time.Time { return time.UnixMilli(61000) },
+		Now:    func() time.Time { return time.UnixMilli(61000).In(time.FixedZone("CET", 3600)) },
 	}
 }
 
@@ -65,7 +65,7 @@ func TestHandoffDeclaresTheCallersOwn(t *testing.T) {
 func TestHandoffListsPendingAndVoidRecords(t *testing.T) {
 	f := &fakeHandoffs{
 		records: map[string]bus.Handoff{
-			"coder":    {Report: "1793-0", Session: "session-0001", PID: 42, PIDStart: 7, At: 1000},
+			"coder":    {Report: "1793-0", Session: "session-0001", PID: 42, PIDStart: 7, At: 1001},
 			"foureyes": {Report: "1794-0", Session: "session-0002", PID: 50, PIDStart: 9, At: 1000},
 		},
 		snaps: map[string]bus.AgentSnapshot{
@@ -76,7 +76,7 @@ func TestHandoffListsPendingAndVoidRecords(t *testing.T) {
 	code, out, _ := runHandoffT(f, "master")
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if code != 0 || len(lines) != 2 ||
-		!strings.HasPrefix(lines[0], "coder") || !strings.Contains(lines[0], "1793-0") || !strings.Contains(lines[0], "pending") || !strings.Contains(lines[0], "1m ago") ||
+		!strings.HasPrefix(lines[0], "coder") || !strings.Contains(lines[0], "1793-0") || !strings.Contains(lines[0], "pending") || !strings.Contains(lines[0], "1970-01-01T01:00:01.001+01:00 (1m ago)") ||
 		!strings.HasPrefix(lines[1], "foureyes") || !strings.Contains(lines[1], "void: another session") {
 		t.Fatalf("list %d:\n%s", code, out)
 	}

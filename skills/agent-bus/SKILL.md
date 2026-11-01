@@ -88,9 +88,13 @@ you at start, and otherwise master runs `agentbus bind <you> --pane <pane> --pid
 later `status` keeps that identity. Do not hand-edit `HERDR_*` variables to work around it. On
 a line that starts with `[agentbus#`:
 
-1. **Run `agentbus --project <p> subscribe --drain <self>` first.** It prints one JSON
-   object per waiting entry (your pending entries, then the unread ones), acknowledges each
-   only after printing it, and exits: 0 if it printed something, 64 if nothing was waiting.
+1. **Run `agentbus --project <p> subscribe --drain --brief <self>` first.** It prints one line
+   per waiting entry, `id from [type ref]: body` (your pending entries, then the unread ones;
+   the whole body on that line, newlines written `\n`, a person's entry `(person)`, a stale one
+   `(stale)`), acknowledges each only after printing it, and exits: 0 if it printed something,
+   64 if nothing was waiting. Without `--brief` it prints the same entries as JSON objects. No
+   `jq`, `grep` or `cut` is needed to read the bus: `agentbus agents <name>...` shows only the
+   peers you ask about, `agentbus health <check>...` only those checks (status, reason, detail).
    **Never answer a wake line with a plain `subscribe`**: with no `--since` it floors at
    "now" and acknowledges every older entry **unseen** — exactly the ones you were woken for
    (since v0.14.2 a person's waking entries are the exception: they are still delivered).
@@ -336,6 +340,11 @@ don't recognise** and never treat a missing one as false.
   before redoing the work.
 - **`expires_at`** is omitted when it is zero, so an absent field means no deadline was
   expressed. Never invent one.
+
+Under `--drain --brief` the same facts are on the line: `[directive <ref> task=<t>
+expires=<RFC3339> attempt=<n>]` (each only when present; `attempt` only above 1), and
+`(duplicate?)` after the body for `duplicate_possible`. A `task=` makes it a tracked request
+(`agentbus request accept <t>`), and the deadline is the one you must not accept past.
 
 ## Persist your cursor — a floor is not a filter, it discards
 

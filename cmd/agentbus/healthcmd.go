@@ -13,7 +13,7 @@ import (
 
 func runHealth(ctx context.Context, b *bus.Bus, self string, args []string, out, errw io.Writer) int {
 	usage := func() int {
-		fmt.Fprintln(errw, "usage: health [list | detail <id> | log [<after-stream-id>] | note <id> <text...>]")
+		fmt.Fprintln(errw, "usage: health [list | <check>... | detail <id> | log [<after-stream-id>] | note <id> <text...>]")
 		return 2
 	}
 	if len(args) == 0 || args[0] == "list" {
@@ -110,6 +110,47 @@ func runHealth(ctx context.Context, b *bus.Bus, self string, args []string, out,
 		fmt.Fprintln(out, "health note saved")
 		return 0
 	default:
+		if _, ok := health.ByID(args[0]); ok {
+			return healthChecks(ctx, b, args, out, errw)
+		}
 		return usage()
 	}
+}
+
+// healthChecks prints only the named checks (agent-brief), each as its id and
+// effective status, then its reason (when the record has one) and detail
+// lines: what an agent needs, without list's titles or detail's remediation.
+func healthChecks(ctx context.Context, b *bus.Bus, ids []string, out, errw io.Writer) int {
+	for _, id := range ids {
+		if _, ok := health.ByID(id); !ok {
+			fmt.Fprintf(errw, "health: unknown check %q\n", id)
+			return 2
+		}
+	}
+	records, err := b.Health(ctx)
+	if err != nil {
+		fmt.Fprintln(errw, "health: could not read health records")
+		return 1
+	}
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		fmt.Fprintln(errw, "health: server time unavailable")
+		return 1
+	}
+	for _, id := range ids {
+		d, _ := health.ByID(id)
+		rec, ok := records[id]
+		if !ok {
+			fmt.Fprintf(out, "%s %s\n  detail: no current measurement\n", id, health.Unknown)
+			continue
+		}
+		fmt.Fprintf(out, "%s %s\n", id, health.EffectiveStatus(rec, now.UnixMilli(), d.Interval))
+		if rec.Reason != "" {
+			fmt.Fprintf(out, "  reason: %s\n", rec.Reason)
+		}
+		if rec.Detail != "" {
+			fmt.Fprintf(out, "  detail: %s\n", rec.Detail)
+		}
+	}
+	return 0
 }

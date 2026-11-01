@@ -102,14 +102,15 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "subscribe", Aliases: []string{"watch"},
-		Usage:   []string{"subscribe [--loop] [--since <cursor>] <agent> [idle_secs]", "subscribe --drain <agent>"},
+		Usage:   []string{"subscribe [--loop] [--since <cursor>] <agent> [idle_secs]", "subscribe --drain [--brief] <agent>"},
 		Summary: "wait for one addressed command, print it as JSON, exit; --drain empties the queue",
 		Flags: []cli.Flag{
 			{Long: "since", Short: 's', Arg: "<cursor>", Help: "floor: the id of the last event handled (0 = all retained)"},
 			{Long: "drain", Short: 'd', Help: "print every waiting entry as JSONL and exit (what a woken agent runs)"},
+			{Long: "brief", Short: 'b', Help: "with --drain: one line per entry, 'id from [type ref]: body', no JSON"},
 			{Long: "loop", Short: 'l', Help: "keep reading (headless use)"},
 		},
-		Examples: []string{"agentbus -p demo subscribe --drain coder", "agentbus -p demo subscribe -s 1792537337865-0 coder 300"},
+		Examples: []string{"agentbus -p demo subscribe --drain coder", "agentbus -p demo subscribe --drain --brief coder", "agentbus -p demo subscribe -s 1792537337865-0 coder 300"},
 	},
 
 	// --- 4-eyes
@@ -171,13 +172,13 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo pilot status", "agentbus -p demo pilot claim -t 5m"},
 	},
 	{
-		Name: "agents", Usage: []string{"agents [--json]", "agents forget <agent>... [--force]",
+		Name: "agents", Usage: []string{"agents [<agent>...] [--json]", "agents forget <agent>... [--force]",
 			"agents wait <agent> [--since <unix-ms>] [--timeout <dur>]"},
-		Summary: "every agent's declared state; forget retires gone agents; wait for an agent's first status",
+		Summary: "every agent's declared state (or only the agents named); forget retires gone agents; wait for an agent's first status",
 		Flags: []cli.Flag{fJSON, fForce,
 			{Long: "since", Arg: "<unix-ms>", Help: "wait: only a status at or after this time counts"},
 			{Long: "timeout", Arg: "<dur>", Help: "wait: how long to wait (default 30s)"}},
-		Examples: []string{"agentbus -p demo agents", "agentbus -p demo agents forget old-coder"},
+		Examples: []string{"agentbus -p demo agents", "agentbus -p demo agents coder foureyes", "agentbus -p demo agents forget old-coder"},
 	},
 	{
 		Name: "pane", Usage: []string{"pane <agent>"},
@@ -243,9 +244,9 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo refresh -q"},
 	},
 	{
-		Name: "health", Text: true, Usage: []string{"health [list | detail <id> | log [<after-id>] | note <id> <text...>]"},
-		Summary:  "the project's measured health and its notes",
-		Examples: []string{"agentbus -p demo health", "agentbus -p demo health detail services"},
+		Name: "health", Text: true, Usage: []string{"health [list | <check>... | detail <id> | log [<after-id>] | note <id> <text...>]"},
+		Summary:  "the project's measured health and its notes; named checks: status, reason and detail only",
+		Examples: []string{"agentbus -p demo health", "agentbus -p demo health team-stall clear-stall", "agentbus -p demo health detail services"},
 	},
 	{
 		Name: "pause", Text: true, Usage: []string{"pause --for <dur> | --until <HH:MM> | --until-reset [--to <agent>] [reason...]", "pause --status"},
