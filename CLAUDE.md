@@ -349,7 +349,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   the filter's, busmon-input-cursor: `lineedit.go`, a pure editor on cluster boundaries, the cursor kept as
   `ui.tail`, the bytes after it, so a text set whole has it at the end; drawn reversed, kept in view with a
   quarter of the room after it) and the
-  compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells)
+  compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells; a
+  selection from Shift with a move, `Key.Shift` on navigation keys only, removed by Backspace/Del, replaced by typing or a
+  paste, ended by a plain move, a click or a first Esc; PageUp/PageDown a page of the window's rows)
   send through `send.go` (`planSend` decides, `exec` makes the bus calls in a command, `outcome`
   reads them; recipient and body are fields, never an `@name body` line); the pause popup
   (`drawPausePopup`), the reminder, the recap summary's confirmation and d/y are in
