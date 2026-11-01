@@ -337,6 +337,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		a.registered = true // in {p}:agents: an agent, not a service that only reports
 		if ts := time.UnixMilli(s.TS); s.TS != 0 && ts.After(a.stateAt) {
 			declare(a, s.State, s.Message, st.person)
+			a.auto = s.Auto != ""
 			a.stateAt = ts
 			if ts.After(a.lastSeen) {
 				a.lastSeen = ts

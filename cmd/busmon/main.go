@@ -263,33 +263,35 @@ type agentState struct {
 	gap        bool              // entries may have been trimmed unread (detail only)
 	wake       *bus.WakeRecord   // the dispatcher's wake record, nil when none
 
-	pid          int                 // AgentSnapshot.PID (0 = not recorded)
-	pidStart     uint64              // AgentSnapshot.PIDStart
-	queueKnown   bool                // an Obligation read has succeeded at least once
-	queueFailed  bool                // the latest attempted Obligation read failed (or the broker is down)
-	queueAt      time.Time           // time of the last successful Obligation read
-	ctxRaw       string              // UsageSnapshot.Ctx exactly as read
-	ctxFill      *bus.ContextFill    // {p}:context, nil when not published (unknown)
-	registered   bool                // listed in {p}:agents (the conductor only reports: not an @all target)
-	provider     string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
-	client       string              // its client (claude, codex, kimi…), from the launcher
-	identSession string              // the session proved with its process (the U page: counted or not)
-	held         bool                // its provider is held by the dispatcher (quota)
-	openAsk      int                 // unanswered questions of its open ask
-	askID        string              // that ask's id
-	paused       bool                // the project is paused ({p}:pause holds a record)
-	obsBusy      bool                // the dispatcher saw its pane running a turn ({p}:observed)
-	obsState     string              // herdr's status of the pane at that inspection
-	obsAt        time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
-	clientUpdate *bus.ClientUpdate   // a newer client installed than this process runs ({p}:observed update)
-	obsSince     time.Time           // first reading of that state (an episode, v0.15)
-	obsPrompt    bool                // its pane was seen blocked, fresh: its client asks something
-	swapping     bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
-	reloading    bool                // agentbus reload holds the same intent, kind reload (lifecycle part C)
-	handoff      bool                // a pending declared hand-off ({p}:handoff, lifecycle part A)
-	fallback     *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
-	model        *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
-	judgedAt     time.Time           // the shell's snapshot time (clock); zero in shared's own state
+	pid           int                 // AgentSnapshot.PID (0 = not recorded)
+	pidStart      uint64              // AgentSnapshot.PIDStart
+	queueKnown    bool                // an Obligation read has succeeded at least once
+	queueFailed   bool                // the latest attempted Obligation read failed (or the broker is down)
+	queueAt       time.Time           // time of the last successful Obligation read
+	ctxRaw        string              // UsageSnapshot.Ctx exactly as read
+	ctxFill       *bus.ContextFill    // {p}:context, nil when not published (unknown)
+	registered    bool                // listed in {p}:agents (the conductor only reports: not an @all target)
+	provider      string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
+	client        string              // its client (claude, codex, kimi…), from the launcher
+	identSession  string              // the session proved with its process (the U page: counted or not)
+	held          bool                // its provider is held by the dispatcher (quota)
+	openAsk       int                 // unanswered questions of its open ask
+	askID         string              // that ask's id
+	paused        bool                // the project is paused ({p}:pause holds a record)
+	obsBusy       bool                // the dispatcher saw its pane running a turn ({p}:observed)
+	auto          bool                // its state was flipped by its client's turn hooks, not declared (auto-state)
+	idleHintAfter time.Duration       // display.idle_hint_after: idle? after this long seen ready (0 = off)
+	obsState      string              // herdr's status of the pane at that inspection
+	obsAt         time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
+	clientUpdate  *bus.ClientUpdate   // a newer client installed than this process runs ({p}:observed update)
+	obsSince      time.Time           // first reading of that state (an episode, v0.15)
+	obsPrompt     bool                // its pane was seen blocked, fresh: its client asks something
+	swapping      bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
+	reloading     bool                // agentbus reload holds the same intent, kind reload (lifecycle part C)
+	handoff       bool                // a pending declared hand-off ({p}:handoff, lifecycle part A)
+	fallback      *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
+	model         *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
+	judgedAt      time.Time           // the shell's snapshot time (clock); zero in shared's own state
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.
@@ -324,18 +326,19 @@ type shared struct {
 	health         health       // the MONITOR's own link to the broker
 	guardianHealth map[string]guardian.Record
 	guardianNotes  map[string]guardian.Note
-	guardianNow    time.Time   // Redis TIME at the last good read
-	guardianNowAt  time.Time   // the local clock at that read: guardianNow advances from it
-	configNote     string      // non-fatal user configuration issue
-	cmdHistory     []bus.Event // bounded retained cmd sample used for waiting/reply correlation
-	cmdOldest      time.Time   // oldest event in the retained sample; zero when none
-	cmdHistoryOK   bool        // last bounded cmd read succeeded
-	lastPollAt     time.Time   // last fully successful snapshot tick
-	plan           planState   // the batch's plan (P), derived in pollOnce
-	tok            tokState    // the U page's tokens and account history (tokens_view.go)
-	tokOpen        bool        // the U page is open: only then are they read (a keyspace SCAN per read)
-	tokWasOpen     bool        // it was open at the last poll: a read is due on each opening
-	tokAttempt     int         // the tick of the last read attempt, success or not
+	guardianNow    time.Time     // Redis TIME at the last good read
+	guardianNowAt  time.Time     // the local clock at that read: guardianNow advances from it
+	configNote     string        // non-fatal user configuration issue
+	idleHint       time.Duration // display.idle_hint_after, for every agent's idle? flag (auto-state)
+	cmdHistory     []bus.Event   // bounded retained cmd sample used for waiting/reply correlation
+	cmdOldest      time.Time     // oldest event in the retained sample; zero when none
+	cmdHistoryOK   bool          // last bounded cmd read succeeded
+	lastPollAt     time.Time     // last fully successful snapshot tick
+	plan           planState     // the batch's plan (P), derived in pollOnce
+	tok            tokState      // the U page's tokens and account history (tokens_view.go)
+	tokOpen        bool          // the U page is open: only then are they read (a keyspace SCAN per read)
+	tokWasOpen     bool          // it was open at the last poll: a read is due on each opening
+	tokAttempt     int           // the tick of the last read attempt, success or not
 }
 
 func main() {
@@ -454,6 +457,7 @@ func main() {
 		board:      map[string]bus.BoardEntry{},
 		health:     health{ok: true, since: time.Now()},
 		configNote: settings.Note,
+		idleHint:   settings.IdleHint,
 	}
 	cachePath := busmonCachePath(project)
 	cache, cacheErr := loadBusmonCache(cachePath, project)

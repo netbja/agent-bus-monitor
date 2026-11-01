@@ -124,6 +124,7 @@ STATES
   waking               the dispatcher reserved a wake and is typing the line.
   woken                the nonce was echoed on the agent's screen - not proof it read or accepted anything.
   busy                 the dispatcher saw the pane running a turn while the agent does not declare working (observed, not declared).
+  idle?                the agent reads working, but the dispatcher has seen its pane ready for a while (display.idle_hint_after; a hint).
   update               a newer client is installed than this agent runs: sentinel proposes a reload (/exit, then agentbus up --resume).
   pilot                holds the pilot lease (the master).
   armed                a receiver lease is live: something subscribes for this agent. A lease, not a state.

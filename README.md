@@ -483,7 +483,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   (freshness, not liveness), the wake-eligible **queue**, its **context** (raw tokens, plus the
   fill when Claude Code reports it: `88k 85%`), up to two **flags** in words (`escalated`,
   `gate 1`, `deferred`, `armed`, `pilot`, `prompt` when its pane waits on the client's own
-  prompt, `busy` when the pane runs a turn it did not declare, `handoff`, `held`, `swapping`,
+  prompt, `busy` when the pane runs a turn it did not declare, `idle?` when it reads working but its pane has been seen ready for `display.idle_hint_after` (10 min), `handoff`, `held`, `swapping`,
   `reloading`, `fallback <profile>`, `update`, `model≠`…) and its message. An agent silent for
   more than a day is hidden (`a` shows it; `d` then `y` forgets it). Enter opens its page:
   status, pane and pid, models (configured, launched, used), queue, wake record, gates, context,

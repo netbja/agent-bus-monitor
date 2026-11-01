@@ -99,6 +99,10 @@ var Keys = []*Key{
 			return nil, envSkip
 		},
 		file: fileInt(func(int) bool { return true }, "")},
+	// The automatic state (spec 2026-11-01-auto-state-design.md): busmon's idle?
+	// hint after a working agent's pane is seen ready this long; 0 turns it off.
+	{Name: "display.idle_hint_after", Env: "AGENT_BUS_IDLE_HINT_AFTER", Kind: Duration, Default: 10 * time.Minute, ReadBy: "busmon",
+		env: envStallDuration, file: fileDuration(true)},
 	{Name: "identity.as", Env: "AGENT_BUS_HUMAN", Kind: String, Default: "", ReadBy: "busmon, agentbus identity, ask, plugin", Legacy: true,
 		Flag: "busmon --as", Invalid: "busmon refuses to start",
 		env: func(raw string) (any, envResult) {
