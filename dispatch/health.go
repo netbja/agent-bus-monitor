@@ -29,6 +29,10 @@ type HealthConfig struct {
 	UsageRefresh  func(context.Context, string) error
 	ModelsRefresh func(context.Context) error
 	RedisRefresh  func(context.Context) error // redis-watch: the daily latest-release check
+	// StallNotify runs right after each stored team-stall record, with the
+	// lease token: the stall guard's fenced notices for the person (a check's
+	// Run gets no token and never writes).
+	StallNotify func(ctx context.Context, token string, rec health.Record) error
 }
 
 func (c HealthConfig) filled() HealthConfig {
@@ -142,6 +146,18 @@ func (l *loop) healthLoop(ctx context.Context) error {
 				l.logError("", "health "+check.Definition.ID, err)
 			} else {
 				next[check.Definition.ID] = time.Now().Add(check.Definition.Interval)
+				if cfg.StallNotify != nil && check.Definition.ID == "team-stall" {
+					hctx, hcancel := context.WithTimeout(passCtx, 2*time.Second)
+					err := cfg.StallNotify(hctx, l.token, rec)
+					hcancel()
+					if errors.Is(err, bus.ErrNotHolder) {
+						cancel()
+						return ErrLeaseLost
+					}
+					if err != nil {
+						l.logError("", "health team-stall notice", err)
+					}
+				}
 			}
 		}
 		if cfg.DailyWake && time.Since(lastDaily) >= 24*time.Hour && passCtx.Err() == nil {

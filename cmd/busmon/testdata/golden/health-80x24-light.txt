@@ -11,7 +11,7 @@
 │  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
 │  ✓ architect done     40m  —   escalating  spec merged                       ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─ Health · 2 to do · 1 in hand · 13 fine · 1 ? ─────────── y copy · esc back ─╮
+╭─ Health · 2 to do · 1 in hand · 16 fine · 1 ? ─────────── y copy · esc back ─╮
 │   For you                                                                    ▲
 │ ▶ ▲ Tracked secret-li…  tracked private-key path: deploy/id_ed25519       3h ┃
 │     git rm --cached <path>                                                   ┃

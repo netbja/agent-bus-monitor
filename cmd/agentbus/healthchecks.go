@@ -41,9 +41,11 @@ type usageBaseline struct {
 
 // realHealthConfig builds read-only checks for one dispatcher. The scheduler
 // runs these outside reconciliation and fences every resulting write.
-func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths) dispatch.HealthConfig {
+func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths, clear dispatch.ClearConfig, escalateTo *string) dispatch.HealthConfig {
 	manager, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
-	return dispatch.HealthConfig{Checks: realHealthChecks(b, rt, manager, paths), DailyWake: true,
+	stall := newStallReader(b, os.Getenv, clear, escalateTo)
+	checks := append(realHealthChecks(b, rt, manager, paths), stallChecks(stall)...)
+	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify,
 		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(b), RedisRefresh: redisRefresh(b)}
 }
 

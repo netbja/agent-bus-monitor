@@ -160,3 +160,39 @@ func TestHealthLoopStoresTheReason(t *testing.T) {
 		}
 	}
 }
+
+// The stall guard's notice hook runs after a stored team-stall record only,
+// with the lease token, on every status (it clears its own mark when the
+// fail ends); never for another check.
+func TestHealthLoopCallsTheStallHookAfterTeamStall(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "health-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if err := b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}, Manager: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	stall, _ := health.ByID("team-stall")
+	other, _ := health.ByID("services")
+	stall.Interval, other.Interval = time.Hour, time.Hour
+	var calls []string
+	l := &loop{b: b, token: "health-holder", cfg: Config{EscalateTo: "master", Log: io.Discard,
+		Health: HealthConfig{Tick: time.Millisecond, PassBudget: time.Second,
+			Checks: []HealthCheck{
+				{Definition: other, Run: func(context.Context) (health.Outcome, error) { return health.Outcome{Status: health.OK}, nil }},
+				{Definition: stall, Run: func(context.Context) (health.Outcome, error) {
+					return health.Outcome{Status: health.Fail, Detail: "team idle 18m"}, nil
+				}},
+			},
+			StallNotify: func(_ context.Context, token string, rec health.Record) error {
+				calls = append(calls, token+"|"+rec.ID+"|"+string(rec.Status))
+				return nil
+			}}}}
+	runCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	_ = l.healthLoop(runCtx)
+	cancel()
+	if len(calls) != 1 || calls[0] != "health-holder|team-stall|fail" {
+		t.Fatalf("hook calls %v", calls)
+	}
+}

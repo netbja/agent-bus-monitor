@@ -11,6 +11,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// DormantAfter: an agent silent this long is dormant. busmon hides it (when
+// not listening, not the pilot and owed nothing) and the stall guard leaves it
+// out of the team: one value for both.
+const DormantAfter = 24 * time.Hour
+
 // DefaultHorizon is the age beyond which a cmd entry never triggers a wake on
 // its own (spec section 3.1).
 const DefaultHorizon = 24 * time.Hour

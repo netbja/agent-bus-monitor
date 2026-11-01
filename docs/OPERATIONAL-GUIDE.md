@@ -490,6 +490,15 @@ to watch a pane.
   its own major, read once a day from GitHub's release list. Behind in its major is a warning; a
   newer major is only named, since changing major is your decision. No check for 48 hours reads
   `unknown`. You update the broker yourself; sentinel never restarts or upgrades it.
+- **Stall guard.** Three health checks, each after 15 minutes (`dispatch.stall_after`,
+  `clear_stall_after`, `quiet_after` in `config.toml`; `0` turns one off). `team-stall` fails when every
+  agent is idle, nothing is open (request, accepted task, ask, gate, pause, swap, hand-off, mission,
+  waiting message) and the plan has a task ready for an agent: sentinel sends master one directive
+  naming it. When only your own tasks are ready it is a warning for you. You get one notice if
+  master cannot act (held, or blocked on a prompt), or if the stall lasts twice the threshold.
+  `clear-stall` warns when a hand-off was not cleared, with the dispatcher's reason (when it is your
+  focused pane, switch away). `quiet-agent` warns when an agent received work and wrote nothing
+  since. Panes must be observed: where they are not (macOS), `team-stall` reads `unknown`.
 - **GitHub reachable.** Health `github` runs every 15 minutes when the project's Git remote is on
   github.com: `ssh -o BatchMode=yes -T git@github.com` with the service's own SSH identities, and
   `git -c credential.helper= ls-remote` on the repository's HTTPS URL with no prompt. A probe is

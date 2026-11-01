@@ -167,6 +167,14 @@ var Keys = []*Key{
 	{Name: "dispatch.auto_clear", Env: "AGENT_BUS_AUTO_CLEAR", Kind: Bool, Default: false, ReadBy: "dispatch",
 		env:  func(raw string) (any, envResult) { return raw == "1", envUse }, // only 1 turns it on
 		file: fileBool},
+	// The stall guard (spec 2026-11-01-stall-guard-design.md): how long before
+	// each check judges a stall; 0 turns the check off.
+	{Name: "dispatch.stall_after", Env: "AGENT_BUS_STALL_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",
+		env: envStallDuration, file: fileDuration(true)},
+	{Name: "dispatch.clear_stall_after", Env: "AGENT_BUS_CLEAR_STALL_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",
+		env: envStallDuration, file: fileDuration(true)},
+	{Name: "dispatch.quiet_after", Env: "AGENT_BUS_QUIET_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",
+		env: envStallDuration, file: fileDuration(true)},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
@@ -194,6 +202,18 @@ func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" 
 
 // envPositiveFloat: today a value <= 0 (or none that parses) is the
 // dispatcher's default, never a setting.
+// envStallDuration: whole seconds (as prompt_grace) or a Go duration, 0 = off,
+// at most a day; anything else falls back to the next source.
+func envStallDuration(raw string) (any, envResult) {
+	if n, err := strconv.Atoi(raw); err == nil && n >= 0 && n <= 86400 {
+		return time.Duration(n) * time.Second, envUse
+	}
+	if d, err := time.ParseDuration(raw); err == nil && d >= 0 && d <= 24*time.Hour {
+		return d, envUse
+	}
+	return nil, envSkip
+}
+
 func envPositiveFloat(raw string) (any, envResult) {
 	if f, err := strconv.ParseFloat(raw, 64); err == nil && f > 0 {
 		return f, envUse
