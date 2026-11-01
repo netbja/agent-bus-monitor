@@ -172,6 +172,11 @@ func TestComposeClickEndsSelectionsInBothFields(t *testing.T) {
 		t.Fatal("a click into the text kept the recipient's selection")
 	}
 	m.ui.compose.area.anchor, m.ui.compose.area.cur, m.ui.compose.area.mark = 0, 4, true // "body" selected
+	m.composeClick(tr.X+1, tr.Y)
+	if _, _, ok := m.ui.compose.area.selection(); ok {
+		t.Fatal("a click into the text kept the text's own selection (foureyes)")
+	}
+	m.ui.compose.area.anchor, m.ui.compose.area.cur, m.ui.compose.area.mark = 0, 4, true // "body" selected
 	m.ui.compose.to.anchor, m.ui.compose.to.mark = 0, true
 	m.composeClick(f.X+2, f.Y+1) // the recipient row
 	if _, _, ok := m.ui.compose.to.selection(); ok {
