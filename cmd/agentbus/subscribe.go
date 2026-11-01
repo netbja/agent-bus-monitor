@@ -69,8 +69,9 @@ func emit(out io.Writer, ev subEvent) error {
 }
 
 // briefLine is one drained entry for an agent to read (agent-brief): 'id from
-// [type ref]: body', the body's whole text on one line (\n, \t and \\
-// escaped), a person's entry and a stale one marked; an error or fatal event
+// [type ref task=… expires=… attempt=…]: body', the body's whole text on one
+// line (\\ and every line breaker escaped), a person's entry, a possible
+// duplicate and a stale one marked; an error or fatal event
 // is 'id error: msg'. Never JSON: the agent needs no jq.
 func briefLine(ev subEvent) string {
 	if ev.Event != "cmd" {
@@ -84,14 +85,29 @@ func briefLine(ev subEvent) string {
 	if ev.Ref != "" {
 		kind += " " + ev.Ref
 	}
+	// A tracked request reads as one (foureyes): its task to accept, its
+	// deadline (never accept past it), a redelivery's attempt.
+	if ev.Task != "" {
+		kind += " task=" + ev.Task
+	}
+	if ev.ExpiresAt > 0 {
+		kind += " expires=" + time.UnixMilli(ev.ExpiresAt).Format(time.RFC3339)
+	}
+	if ev.Attempt > 1 {
+		kind += fmt.Sprintf(" attempt=%d", ev.Attempt)
+	}
 	line := ev.ID + " " + from + " [" + kind + "]: " + briefEscaper.Replace(ev.Body)
+	if ev.DuplicatePossible {
+		line += " (duplicate?)" // check agentbus request before redoing it
+	}
 	if ev.Stale {
 		line += " (stale)"
 	}
 	return line
 }
 
-var briefEscaper = strings.NewReplacer(`\`, `\\`, "\r\n", `\n`, "\n", `\n`, "\r", `\n`, "\t", `\t`)
+var briefEscaper = strings.NewReplacer(`\`, `\\`, "\r\n", `\n`, "\n", `\n`, "\r", `\n`, "\t", `\t`,
+	"\v", `\v`, "\f", `\f`, "\u0085", `\u0085`, "\u2028", `\u2028`, "\u2029", `\u2029`) // every line breaker
 
 // emitBrief writes ev as one briefLine.
 func emitBrief(out io.Writer, ev subEvent) error {

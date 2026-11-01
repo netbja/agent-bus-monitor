@@ -341,6 +341,11 @@ don't recognise** and never treat a missing one as false.
 - **`expires_at`** is omitted when it is zero, so an absent field means no deadline was
   expressed. Never invent one.
 
+Under `--drain --brief` the same facts are on the line: `[directive <ref> task=<t>
+expires=<RFC3339> attempt=<n>]` (each only when present; `attempt` only above 1), and
+`(duplicate?)` after the body for `duplicate_possible`. A `task=` makes it a tracked request
+(`agentbus request accept <t>`), and the deadline is the one you must not accept past.
+
 ## Persist your cursor — a floor is not a filter, it discards
 
 Pending entries are recovered before new ones, and **recovery respects your `--since`

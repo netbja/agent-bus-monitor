@@ -292,8 +292,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   **no floor**, ACK after output — as JSONL (one `"v":1` object per entry, with `age_s` on every
   entry and `stale` only for entries older than the 24h horizon) and exits 0 (output), 64 (empty) or 75 (error, e.g. the
   receiver lease is held). It is what a woken agent runs; `--brief` (agent-brief, `briefLine`) prints one line per
-  entry instead, `id from [type ref]: body`, the whole body on it (`\n`, `\t`, `\\` escaped), `(person)` and
-  `(stale)` marked, same exit codes, so an agent reads the bus without `jq`. `cmd --no-wake` writes `wake=no`
+  entry instead, `id from [type ref task=… expires=… attempt=…]: body` (each only when present, the deadline in
+  local RFC3339, attempt above 1), the whole body on it (`\\` and every line breaker escaped), `(person)`,
+  `(duplicate?)` and `(stale)` marked, same exit codes, so an agent reads the bus without `jq`. `cmd --no-wake` writes `wake=no`
   (`Bus.CmdNoWake`; `shutdown` uses it). `dispatch [--horizon 24h] [--escalate-after 10m]
   [--escalate-to master]` runs `dispatch.Run` in the foreground (JSON decision log on stderr; a
   second dispatcher for the same project exits 0; one whose lease lapsed re-acquires while the

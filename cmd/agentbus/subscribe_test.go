@@ -455,6 +455,14 @@ func TestBriefLine(t *testing.T) {
 		{subEvent{Event: "cmd", ID: "6-0", From: "foureyes", Type: "verdict", Ref: "dmk1", Body: "approve: a\nb\\c\tz"}, `6-0 foureyes [verdict dmk1]: approve: a\nb\\c\tz`},
 		{subEvent{Event: "cmd", ID: "7-0", From: "charlie", Type: "directive", Body: "go", Human: true, Stale: true}, "7-0 charlie (person) [directive]: go (stale)"},
 		{subEvent{Event: "error", ID: "8-0", Msg: "command missing; no actionable payload"}, "8-0 error: command missing; no actionable payload"},
+		// A tracked request: its task, its deadline (local RFC3339) and a
+		// possible duplicate are on the line, or it reads like a directive.
+		{subEvent{Event: "cmd", ID: "9-0", From: "master", Type: "directive", Task: "agent-brief", Body: "do it"}, "9-0 master [directive task=agent-brief]: do it"},
+		{subEvent{Event: "cmd", ID: "9-1", From: "master", Type: "directive", Ref: "r1", Task: "t", ExpiresAt: 61000, Body: "x"},
+			"9-1 master [directive r1 task=t expires=" + time.UnixMilli(61000).Format(time.RFC3339) + "]: x"},
+		{subEvent{Event: "cmd", ID: "9-2", From: "master", Type: "directive", Body: "x", DuplicatePossible: true, Attempt: 2}, "9-2 master [directive attempt=2]: x (duplicate?)"},
+		// Every line breaker is escaped: one line per entry is the contract.
+		{subEvent{Event: "cmd", ID: "9-3", From: "a", Type: "reply", Body: "a\vb\fc\u0085d\u2028e\u2029f"}, `9-3 a [reply]: a\vb\fc\u0085d\u2028e\u2029f`},
 		{subEvent{Event: "error", Msg: "receiver busy"}, "error: receiver busy"},
 	} {
 		if got := briefLine(c.ev); got != c.want {
