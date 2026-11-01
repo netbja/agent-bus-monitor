@@ -108,7 +108,7 @@ func TestExpiredShutdownDrainsAsPayloadlessError(t *testing.T) {
 	}
 	time.Sleep(5 * time.Millisecond)
 	var out bytes.Buffer
-	if code := runDrain(ctx, b, "dev", "host-1", &out); code != 0 {
+	if code := runDrain(ctx, b, "dev", "host-1", &out, false); code != 0 {
 		t.Fatalf("drain exit = %d, out=%s", code, out.String())
 	}
 	var ev map[string]any

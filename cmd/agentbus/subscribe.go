@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -67,6 +68,53 @@ func emit(out io.Writer, ev subEvent) error {
 	return err
 }
 
+// briefLine is one drained entry for an agent to read (agent-brief): 'id from
+// [type ref task=… expires=… attempt=…]: body', the body's whole text on one
+// line (\\ and every line breaker escaped), a person's entry, a possible
+// duplicate and a stale one marked; an error or fatal event
+// is 'id error: msg', its message escaped too. Never JSON: the agent needs no jq.
+func briefLine(ev subEvent) string {
+	if ev.Event != "cmd" { // error and fatal alike: one escaped error line (reviewer-codex)
+		return strings.TrimSpace(ev.ID + " error: " + briefEscaper.Replace(ev.Msg))
+	}
+	from := ev.From
+	if ev.Human {
+		from += " (person)"
+	}
+	kind := ev.Type
+	if ev.Ref != "" {
+		kind += " " + ev.Ref
+	}
+	// A tracked request reads as one (foureyes): its task to accept, its
+	// deadline (never accept past it), a redelivery's attempt.
+	if ev.Task != "" {
+		kind += " task=" + ev.Task
+	}
+	if ev.ExpiresAt > 0 {
+		kind += " expires=" + time.UnixMilli(ev.ExpiresAt).Format(time.RFC3339)
+	}
+	if ev.Attempt > 1 {
+		kind += fmt.Sprintf(" attempt=%d", ev.Attempt)
+	}
+	line := ev.ID + " " + from + " [" + kind + "]: " + briefEscaper.Replace(ev.Body)
+	if ev.DuplicatePossible {
+		line += " (duplicate?)" // check agentbus request before redoing it
+	}
+	if ev.Stale {
+		line += " (stale)"
+	}
+	return line
+}
+
+var briefEscaper = strings.NewReplacer(`\`, `\\`, "\r\n", `\n`, "\n", `\n`, "\r", `\n`, "\t", `\t`,
+	"\v", `\v`, "\f", `\f`, "\u0085", `\u0085`, "\u2028", `\u2028`, "\u2029", `\u2029`) // every line breaker
+
+// emitBrief writes ev as one briefLine.
+func emitBrief(out io.Writer, ev subEvent) error {
+	_, err := fmt.Fprintln(out, briefLine(ev))
+	return err
+}
+
 // runSubscribe performs one subscribe tick (or a continuous --loop) and returns
 // the process exit code. floor is the stream-id floor passed to WatchCmd ("" or
 // "0" = no floor). WatchCmdDelivery owns the receiver lease and output/ACK
@@ -122,14 +170,14 @@ func runSubscribe(ctx context.Context, b *bus.Bus, agent, consumer string, idle 
 // now-24h, and entries older than it are delivered flagged stale.
 const drainHorizon = bus.DefaultHorizon
 
-const subscribeUsage = "usage: subscribe [--loop] [--since <cursor>] <agent> [idle_seconds] | subscribe --drain <agent>"
+const subscribeUsage = "usage: subscribe [--loop] [--since <cursor>] <agent> [idle_seconds] | subscribe --drain [--brief] <agent>"
 
 // errDrainUsage: --drain takes no cursor, no loop and no idle window (exit 2).
-var errDrainUsage = errors.New("--drain cannot be combined with --since, --loop or idle_seconds")
+var errDrainUsage = errors.New("--drain cannot be combined with --since, --loop or idle_seconds; --brief needs --drain")
 
 type subscribeArgs struct {
 	agent, idle, since string
-	loop, drain        bool
+	loop, drain, brief bool
 }
 
 // parseSubscribeArgs splits the subscribe/watch flags. A missing agent is a
@@ -137,9 +185,10 @@ type subscribeArgs struct {
 func parseSubscribeArgs(rest []string) (subscribeArgs, error) {
 	var a subscribeArgs
 	rest, a.drain = extractBool(rest, "--drain")
+	rest, a.brief = extractBool(rest, "--brief")
 	rest, a.loop = extractBool(rest, "--loop")
 	rest, a.since = extractFlag(rest, "--since")
-	if a.drain && (a.loop || a.since != "" || len(rest) > 1) {
+	if a.drain && (a.loop || a.since != "" || len(rest) > 1) || a.brief && !a.drain {
 		return a, errDrainUsage
 	}
 	if len(rest) < 1 {
@@ -153,29 +202,33 @@ func parseSubscribeArgs(rest []string) (subscribeArgs, error) {
 }
 
 // runDrain empties the agent's queue: one JSON line per entry (no rearm field),
-// then exits — 0 if anything was output, 64 if the queue was empty, 75 on any
+// or with brief one briefLine per entry (agent-brief), then exits — 0 if anything was output, 64 if the queue was empty, 75 on any
 // error. An error after output (e.g. a failed ACK) is reported through the exit
 // code only; the emitted lines already say delivery is uncertain.
-func runDrain(ctx context.Context, b *bus.Bus, agent, consumer string, out io.Writer) int {
+func runDrain(ctx context.Context, b *bus.Bus, agent, consumer string, out io.Writer, brief bool) int {
+	write := emit
+	if brief {
+		write = emitBrief
+	}
 	if !bus.ValidName(agent) {
-		emit(out, subEvent{Event: "fatal", Rearm: boolPtr(false), Msg: "invalid agent " + agent})
+		write(out, subEvent{Event: "fatal", Rearm: boolPtr(false), Msg: "invalid agent " + agent})
 		return 1
 	}
 	emitted := 0
 	_, err := b.DrainCmd(ctx, agent, consumer, drainHorizon, func(e bus.Event) error {
 		emitted++ // even a partial write counts: never follow it with an error line
-		return emit(out, cmdEvent(e, nil))
+		return write(out, cmdEvent(e, nil))
 	})
-	return drainExit(out, emitted, err)
+	return drainExit(out, emitted, err, write)
 }
 
-func drainExit(out io.Writer, emitted int, err error) int {
+func drainExit(out io.Writer, emitted int, err error, write func(io.Writer, subEvent) error) int {
 	switch {
 	case err != nil && emitted > 0:
 		return 75
 	case err != nil:
 		// Includes bus.ErrReceiverBusy: nothing was read, output or acknowledged.
-		emit(out, subEvent{Event: "error", Msg: err.Error()})
+		write(out, subEvent{Event: "error", Msg: err.Error()})
 		return 75
 	case emitted > 0:
 		return 0

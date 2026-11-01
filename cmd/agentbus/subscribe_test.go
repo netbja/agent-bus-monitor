@@ -224,7 +224,7 @@ func TestSubscribeDrainJSONLAndExitCodes(t *testing.T) {
 	t.Cleanup(func() { r.Del(context.Background(), bus.ReceiverKey(b.Project(), "dev")) })
 
 	var empty bytes.Buffer
-	if code := runDrain(ctx, b, "dev", "host-1", &empty); code != 64 {
+	if code := runDrain(ctx, b, "dev", "host-1", &empty, false); code != 64 {
 		t.Fatalf("empty drain exit = %d, want 64", code)
 	}
 	if empty.Len() != 0 {
@@ -237,7 +237,7 @@ func TestSubscribeDrainJSONLAndExitCodes(t *testing.T) {
 		}
 	}
 	var buf bytes.Buffer
-	if code := runDrain(ctx, b, "dev", "host-1", &buf); code != 0 {
+	if code := runDrain(ctx, b, "dev", "host-1", &buf, false); code != 0 {
 		t.Fatalf("drain exit = %d, want 0 (output %q)", code, buf.String())
 	}
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
@@ -260,7 +260,7 @@ func TestSubscribeDrainJSONLAndExitCodes(t *testing.T) {
 		}
 	}
 	var again bytes.Buffer
-	if code := runDrain(ctx, b, "dev", "host-1", &again); code != 64 || again.Len() != 0 {
+	if code := runDrain(ctx, b, "dev", "host-1", &again, false); code != 64 || again.Len() != 0 {
 		t.Fatalf("second drain exit=%d out=%q, want 64 and nothing (queue emptied)", code, again.String())
 	}
 }
@@ -330,7 +330,7 @@ func TestSubscribeDrainOutputThenAckFailureExit75(t *testing.T) {
 		}
 	}
 	w := &leaseStealer{r: r, key: bus.ReceiverKey(b.Project(), "dev")}
-	if code := runDrain(ctx, b, "dev", "host-1", w); code != 75 {
+	if code := runDrain(ctx, b, "dev", "host-1", w, false); code != 75 {
 		t.Fatalf("exit = %d, want 75 (ACK failed after output)", code)
 	}
 	if w.lines != 1 || strings.Count(w.buf.String(), "\n") != 1 || !strings.Contains(w.buf.String(), `"body":"one"`) {
@@ -346,7 +346,7 @@ func TestSubscribeDrainReceiverBusyExit75(t *testing.T) {
 	// The bus test covers the bounded wait; here the CLI mapping:
 	// ErrReceiverBusy → one error line without rearm, zero cmd lines, exit 75.
 	var buf bytes.Buffer
-	code := drainExit(&buf, 0, bus.ErrReceiverBusy)
+	code := drainExit(&buf, 0, bus.ErrReceiverBusy, emit)
 	if code != 75 {
 		t.Fatalf("exit = %d, want 75", code)
 	}
@@ -441,5 +441,61 @@ func TestRunSubscribeFromNowKeepsAPersonsEntry(t *testing.T) {
 	buf.Reset()
 	if code := runSubscribe(ctx, b, "dev", "host-1", time.Second, id, false, false, &buf); code != 64 {
 		t.Fatalf("--since past a person's entry: exit %d, want 64: %s", code, buf.String())
+	}
+}
+
+// --brief (agent-brief): one line per entry, 'id from [type ref]: body', the
+// body on one line with its whole text (newlines written \n), no JSON.
+func TestBriefLine(t *testing.T) {
+	for _, c := range []struct {
+		ev   subEvent
+		want string
+	}{
+		{subEvent{Event: "cmd", ID: "5-0", From: "master", Type: "directive", Body: "do x"}, "5-0 master [directive]: do x"},
+		{subEvent{Event: "cmd", ID: "6-0", From: "foureyes", Type: "verdict", Ref: "dmk1", Body: "approve: a\nb\\c\tz"}, `6-0 foureyes [verdict dmk1]: approve: a\nb\\c\tz`},
+		{subEvent{Event: "cmd", ID: "7-0", From: "charlie", Type: "directive", Body: "go", Human: true, Stale: true}, "7-0 charlie (person) [directive]: go (stale)"},
+		{subEvent{Event: "error", ID: "8-0", Msg: "command missing; no actionable payload"}, "8-0 error: command missing; no actionable payload"},
+		// A tracked request: its task, its deadline (local RFC3339) and a
+		// possible duplicate are on the line, or it reads like a directive.
+		{subEvent{Event: "cmd", ID: "9-0", From: "master", Type: "directive", Task: "agent-brief", Body: "do it"}, "9-0 master [directive task=agent-brief]: do it"},
+		{subEvent{Event: "cmd", ID: "9-1", From: "master", Type: "directive", Ref: "r1", Task: "t", ExpiresAt: 61000, Body: "x"},
+			"9-1 master [directive r1 task=t expires=" + time.UnixMilli(61000).Format(time.RFC3339) + "]: x"},
+		{subEvent{Event: "cmd", ID: "9-2", From: "master", Type: "directive", Body: "x", DuplicatePossible: true, Attempt: 2}, "9-2 master [directive attempt=2]: x (duplicate?)"},
+		// Every line breaker is escaped: one line per entry is the contract.
+		{subEvent{Event: "cmd", ID: "9-3", From: "a", Type: "reply", Body: "a\vb\fc\u0085d\u2028e\u2029f"}, `9-3 a [reply]: a\vb\fc\u0085d\u2028e\u2029f`},
+		{subEvent{Event: "error", Msg: "receiver busy"}, "error: receiver busy"},
+		// A fatal event is an error line too, its message escaped: still one line.
+		{subEvent{Event: "fatal", Msg: "invalid agent bad\nname"}, `error: invalid agent bad\nname`},
+	} {
+		if got := briefLine(c.ev); got != c.want {
+			t.Errorf("briefLine(%+v) = %q, want %q", c.ev, got, c.want)
+		}
+	}
+}
+
+func TestSubscribeDrainBrief(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(context.Background(), bus.ReceiverKey(b.Project(), "dev")) })
+	var empty bytes.Buffer
+	if code := runDrain(ctx, b, "dev", "host-1", &empty, true); code != 64 || empty.Len() != 0 {
+		t.Fatalf("empty brief drain exit=%d out=%q", code, empty.String())
+	}
+	id, err := b.Cmd(ctx, "helper", "dev", bus.CmdDirective, "", "line one\nline two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if code := runDrain(ctx, b, "dev", "host-1", &buf, true); code != 0 {
+		t.Fatalf("brief drain exit = %d (%q)", code, buf.String())
+	}
+	if got := buf.String(); got != id+` helper [directive]: line one\nline two`+"\n" {
+		t.Fatalf("brief drain wrote %q", got)
+	}
+	if args, err := parseSubscribeArgs([]string{"--drain", "--brief", "dev"}); err != nil || !args.brief || !args.drain {
+		t.Fatalf("parse --drain --brief: %+v %v", args, err)
+	}
+	if _, err := parseSubscribeArgs([]string{"--brief", "dev"}); err == nil {
+		t.Fatal("--brief without --drain accepted")
 	}
 }

@@ -33,7 +33,8 @@ and the subject. Then:
 - Your sandbox is read-only. The review flow itself is authorised in advance, with no question
   of yours to the person: at boot, `agentbus status reviewer-codex ...`, `agentbus request`,
   `agentbus board` and `agentbus gate reviewer-codex`; a wake line authorises
-  `agentbus subscribe --drain reviewer-codex`; a challenge addressed to you authorises reading its
+  `agentbus subscribe --drain --brief reviewer-codex` (one line per entry; without `--brief`,
+  JSON); a challenge addressed to you authorises reading its
   thread and its board entry, then `agentbus verdict --subject <that challenge's subject> --ref
   <its id>`, `agentbus reply` to the challenger or master, and `agentbus status` for yourself.
   Your client may still ask the person to approve a call its sandbox blocks; that approval is the

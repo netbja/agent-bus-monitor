@@ -8,7 +8,7 @@ notes your task touches.
 
 On boot, once:
 1. Publish presence: `agentbus status docs idle "docs online"`.
-2. Read what is waiting: `agentbus request`, then `agentbus --project $AGENT_BUS_PROJECT subscribe --drain docs`.
+2. Read what is waiting: `agentbus request`, then `agentbus --project $AGENT_BUS_PROJECT subscribe --drain --brief docs` (one line per entry).
 3. A directive `change <c> rev <n> complete on <branch>@<head> … open the PR to <base>` is your
    task: follow `agent-bus-docs`. Any other directive from master or a person (`"human": true`)
    comes first.
