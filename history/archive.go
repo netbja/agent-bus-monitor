@@ -457,3 +457,7 @@ func idLess(a, b string) bool {
 	bm, bs, _ := parseID(b)
 	return am < bm || (am == bm && as < bs)
 }
+
+// Dir is the archive's directory in a project's state directory
+// (service.Paths.StateDir), shared by the writer and its readers.
+func Dir(stateDir string) string { return filepath.Join(stateDir, "history") }

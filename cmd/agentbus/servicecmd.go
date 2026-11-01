@@ -424,6 +424,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg.Quota = serviceQuota(os.Getenv, log)
 			cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
 			cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)            // proved sessions and their tokens (tokens)
+			cfg.History = serviceHistory(os.Getenv, paths.StateDir(project)) // the streams archived to day files (history)
 			cfg.Observe = dispatch.ObserveEvery
 			cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, runQuiet) // a pane blocked on its client's prompt (prompt-notify)
 			cfg.Clear = serviceClear(os.Getenv, exec.LookPath, runQuiet)   // /clear after a declared hand-off (lifecycle part B)

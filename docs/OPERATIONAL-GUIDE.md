@@ -499,6 +499,13 @@ to watch a pane.
   `clear-stall` warns when a hand-off was not cleared, with the dispatcher's reason (when it is your
   focused pane, switch away). `quiet-agent` warns when an agent received work and wrote nothing
   since. Panes must be observed: where they are not (macOS), `team-stall` reads `unknown`.
+- **History archive.** The dispatch service appends every stream (`cmd`, `report`, `status`,
+  `notify`, `verdicts`, `health:log`, `swaps`) each minute to one JSONL file per UTC day in the
+  project's state directory, `history/YYYY-MM-DD.jsonl` (0600 in 0700), so a thread outlives the
+  stream's day and a half. `history.keep_days` (90, `0` = no archive) and `history.max_mb` (256)
+  in `config.toml`. A field that looks like a credential is written as `[redacted]`, whole; this
+  is best effort, so treat the directory as sensitive. A hole the dispatcher missed is a `gap`
+  line, never silent. You may delete the directory at any time.
 - **GitHub reachable.** Health `github` runs every 15 minutes when the project's Git remote is on
   github.com: `ssh -o BatchMode=yes -T git@github.com` with the service's own SSH identities, and
   `git -c credential.helper= ls-remote` on the repository's HTTPS URL with no prompt. A probe is

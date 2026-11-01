@@ -175,6 +175,11 @@ var Keys = []*Key{
 		env: envStallDuration, file: fileDuration(true)},
 	{Name: "dispatch.quiet_after", Env: "AGENT_BUS_QUIET_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",
 		env: envStallDuration, file: fileDuration(true)},
+	// The history archive (spec 2026-11-01-history-design.md): days of day
+	// files kept (0 = no archive) and the directory's cap in MiB.
+	{Name: "history.keep_days", Env: "AGENT_BUS_HISTORY_DAYS", Kind: Int, Default: 90, ReadBy: "dispatch",
+		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 for no archive")},
+	{Name: "history.max_mb", Env: "AGENT_BUS_HISTORY_MAX_MB", Kind: Int, Default: 256, ReadBy: "dispatch", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
@@ -217,6 +222,13 @@ func envStallDuration(raw string) (any, envResult) {
 func envPositiveFloat(raw string) (any, envResult) {
 	if f, err := strconv.ParseFloat(raw, 64); err == nil && f > 0 {
 		return f, envUse
+	}
+	return nil, envSkip
+}
+
+func envNonNegativeInt(raw string) (any, envResult) {
+	if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+		return n, envUse
 	}
 	return nil, envSkip
 }

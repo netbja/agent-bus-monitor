@@ -532,6 +532,13 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   dispatcher (si c'est votre panneau actif, changez de panneau). `quiet-agent` avertit quand un agent
   a reçu du travail et n'a rien écrit depuis. Les panneaux doivent être observés : là où ils ne le
   sont pas (macOS), `team-stall` reste `unknown`.
+- **Archive de l'historique.** Le service dispatch ajoute chaque minute tous les flux (`cmd`,
+  `report`, `status`, `notify`, `verdicts`, `health:log`, `swaps`) à un fichier JSONL par jour UTC
+  dans le répertoire d'état du projet, `history/AAAA-MM-JJ.jsonl` (0600 dans 0700) : un fil survit
+  ainsi au jour et demi du flux. `history.keep_days` (90, `0` = pas d'archive) et `history.max_mb`
+  (256) dans `config.toml`. Un champ qui ressemble à un secret est écrit `[redacted]`, en entier ;
+  c'est au mieux, traitez donc le répertoire comme sensible. Un trou que le dispatcher a manqué est
+  une ligne `gap`, jamais silencieux. Vous pouvez supprimer le répertoire à tout moment.
 - **GitHub joignable.** La vérification `github` tourne toutes les 15 minutes quand le dépôt
   distant du projet est sur github.com : `ssh -o BatchMode=yes -T git@github.com` avec les
   identités SSH du service, et `git -c credential.helper= ls-remote` sur l'URL HTTPS du dépôt,

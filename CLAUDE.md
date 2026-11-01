@@ -824,6 +824,16 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   destroys a forgotten agent's group). Scanner, canary, key
   inventory and project-defined checks belong to later releases (password rotation shipped as
   `./setup.sh rotate-redis-password`, the person's act); health is not a security boundary.
+- **History archive** (spec `docs/superpowers/specs/2026-11-01-history-design.md`, package `history/`): the
+  dispatch service's chore (`dispatch/history.go`, its own goroutine beside the reconciliation, 1 min, a 5 s
+  pass, 2000 entries) appends `history.Streams` to `<state>/history/YYYY-MM-DD.jsonl` (UTC day of the id;
+  `{"stream","id","f"}`), only while `HoldsDispatch` and under an flock on `history/.lock`; files only, no
+  Redis write, so nothing new is fenced. On start (and after a failed write or a deleted cursor) a torn last
+  line is truncated and each stream's position is max(`cursor.json`, the files' highest id); no cursor and no
+  day file writes the `archive restarted` gap line (`of=*`), a stream trimmed past its position one `gap` line.
+  Every field goes through `health.Redact` (whole field on any hit; `SafeText` shares `health.Sensitive`).
+  `history.keep_days` (90, 0 = off) and `history.max_mb` (256), pruned daily, never today's file. Bus reads:
+  `Bus.StreamAfter`/`StreamOldest`.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each
