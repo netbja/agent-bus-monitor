@@ -55,7 +55,7 @@ func TestDiskPaths(t *testing.T) {
 		"/data/p": {300 * g, 900 * g, 2051}, "/data/p/.worktrees": {300 * g, 900 * g, 2051}, "/tmp": {7 * g, 8 * g, 40},
 	}
 	d := fakeDisks(disks, map[string]bool{"docker": true, "go": true}, map[string]string{
-		"docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Fedora Linux 44\n", "go env GOCACHE": "/home/u/.cache/go-build\n"})
+		"docker context inspect --format {{.Endpoints.docker.Host}}": "unix:///var/run/docker.sock\n", "docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Fedora Linux 44\n", "go env GOCACHE": "/home/u/.cache/go-build\n"})
 	var got []string
 	for _, p := range diskPaths(context.Background(), d) {
 		got = append(got, p.Label+"="+p.Path)
@@ -109,14 +109,14 @@ func TestDiskPathsUnmeasured(t *testing.T) {
 		return "", false
 	}
 	tools := map[string]bool{"docker": true, "go": true}
-	d := fakeDisks(disks, tools, map[string]string{"docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Docker Desktop\n"})
+	d := fakeDisks(disks, tools, map[string]string{"docker context inspect --format {{.Endpoints.docker.Host}}": "unix:///var/run/docker.sock\n", "docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Docker Desktop\n"})
 	if n, ok := note(d, "go cache"); !ok || n == "" {
 		t.Fatalf("go env failed: go cache %q %v", n, ok)
 	}
 	if n, ok := note(d, "broker data"); !ok || !strings.Contains(n, "Docker Desktop") {
 		t.Fatalf("Docker Desktop on Linux: broker data %q %v", n, ok)
 	}
-	d = fakeDisks(disks, tools, map[string]string{"docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Ubuntu\n", "go env GOCACHE": "\n"})
+	d = fakeDisks(disks, tools, map[string]string{"docker context inspect --format {{.Endpoints.docker.Host}}": "unix:///var/run/docker.sock\n", "docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Ubuntu\n", "go env GOCACHE": "\n"})
 	d.GOOS = "darwin"
 	if n, _ := note(d, "broker data"); !strings.Contains(n, "VM") {
 		t.Fatalf("macOS: broker data %q", n)
@@ -124,8 +124,51 @@ func TestDiskPathsUnmeasured(t *testing.T) {
 	if n, ok := note(d, "go cache"); !ok || n == "" {
 		t.Fatalf("empty GOCACHE: go cache %q %v", n, ok)
 	}
-	d = fakeDisks(disks, tools, map[string]string{"docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Ubuntu\n", "go env GOCACHE": "off\n"})
+	d = fakeDisks(disks, tools, map[string]string{"docker context inspect --format {{.Endpoints.docker.Host}}": "unix:///var/run/docker.sock\n", "docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Ubuntu\n", "go env GOCACHE": "off\n"})
 	if _, ok := note(d, "go cache"); ok {
 		t.Fatal("GOCACHE=off is no cache, yet a path")
+	}
+}
+
+// A daemon that is not on this host keeps its root out of the host's reach
+// (reviewer-codex): DOCKER_HOST or the current context's endpoint other than a
+// local unix socket, or an endpoint that cannot be read, is not measured;
+// the note names the scheme only, never the host.
+func TestDiskPathsRemoteDocker(t *testing.T) {
+	g := uint64(1) << 30
+	disks := map[string][3]uint64{"/var/lib/docker": {1 * g, 2 * g, 1}, "/home/u": {50 * g, 500 * g, 2}, "/data/p": {50 * g, 500 * g, 2}, "/tmp": {50 * g, 500 * g, 2}}
+	info := "docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}"
+	inspect := "docker context inspect --format {{.Endpoints.docker.Host}}"
+	broker := func(d diskDeps) health.DiskPath {
+		for _, p := range diskPaths(context.Background(), d) {
+			if p.Label == "broker data" {
+				return p
+			}
+		}
+		t.Fatal("no broker data path")
+		return health.DiskPath{}
+	}
+	for name, c := range map[string]struct {
+		env      string
+		endpoint string
+		measured bool
+		note     string
+	}{
+		"local socket":          {"", "unix:///var/run/docker.sock", true, ""},
+		"DOCKER_HOST tcp":       {"tcp://build.example:2376", "unix:///var/run/docker.sock", false, "remote (tcp)"},
+		"DOCKER_HOST unix":      {"unix:///run/user/1000/docker.sock", "ssh://u@far", true, ""},
+		"an ssh context":        {"", "ssh://u@far", false, "remote (ssh)"},
+		"endpoint not readable": {"", "", false, "endpoint unknown"},
+	} {
+		out := map[string]string{info: "/var/lib/docker|Fedora Linux 44\n"}
+		if c.endpoint != "" {
+			out[inspect] = c.endpoint + "\n"
+		}
+		d := fakeDisks(disks, map[string]bool{"docker": true}, out)
+		d.Getenv = func(k string) string { return map[string]string{"HOME": "/home/u", "DOCKER_HOST": c.env}[k] }
+		p := broker(d)
+		if p.Known != c.measured || !strings.Contains(p.Note, c.note) || strings.Contains(p.Note, "far") || strings.Contains(p.Note, "build.example") {
+			t.Errorf("%s: known %v note %q", name, p.Known, p.Note)
+		}
 	}
 }

@@ -81,10 +81,16 @@ func EvaluateDisk(paths []DiskPath, th DiskThresholds) Outcome {
 			float64(d.p.Free)/bytesPerGiB, float64(d.p.Total)/bytesPerGiB, pct))
 	}
 	detail := strings.Join(append(parts, unmeasured...), "; ")
-	if devs[0].status != OK { // the person's choice, named here, never in the copyable command
-		detail += DiskCleanChoice
+	if devs[0].status == OK {
+		return Outcome{Status: OK, Detail: truncateDetail(detail)}
 	}
-	return Outcome{Status: devs[0].status, Detail: truncateDetail(detail)}
+	// The person's choice, named here, never in the copyable command; the
+	// paths are cut to leave room for it within the detail's bound (foureyes).
+	room := detailMax - len([]rune(DiskCleanChoice))
+	if r := []rune(detail); len(r) > room {
+		detail = string(r[:room-3]) + "..."
+	}
+	return Outcome{Status: devs[0].status, Detail: detail + DiskCleanChoice}
 }
 
 func diskStatus(p DiskPath, th DiskThresholds) Status {

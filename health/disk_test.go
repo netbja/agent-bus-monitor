@@ -62,3 +62,16 @@ func TestDiskCommandOnlyLooks(t *testing.T) {
 		t.Fatalf("an ok detail names a cleanup: %q", out.Detail)
 	}
 }
+
+// The person's choice survives the detail's bound (foureyes): the paths are
+// cut to leave room for it.
+func TestDiskChoiceSurvivesTheCap(t *testing.T) {
+	var paths []DiskPath
+	for i, l := range []string{"repository", "home", "temp", "worktrees", "go cache"} {
+		paths = append(paths, DiskPath{Label: l, Path: "/a/rather/long/path/to/" + l + "/somewhere/deep", Dev: uint64(i + 1), DevName: "259:3", Free: 4 * gib, Total: 900 * gib, Known: true})
+	}
+	out := EvaluateDisk(paths, diskTh())
+	if r := []rune(out.Detail); len(r) > 300 || !strings.HasSuffix(out.Detail, DiskCleanChoice) {
+		t.Fatalf("%d runes: %q", len(r), out.Detail)
+	}
+}

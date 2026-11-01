@@ -81,6 +81,8 @@ func diskPaths(ctx context.Context, d diskDeps) []health.DiskPath {
 	// (reviewer-codex).
 	if _, err := d.LookPath("docker"); err != nil {
 		out = append(out, health.DiskPath{Label: "broker data", Note: "docker not on PATH"})
+	} else if why := dockerNotLocal(ctx, d); why != "" {
+		out = append(out, health.DiskPath{Label: "broker data", Note: why})
 	} else if info, err := d.Output(ctx, "docker", "info", "-f", "{{.DockerRootDir}}|{{.OperatingSystem}}"); err != nil {
 		out = append(out, health.DiskPath{Label: "broker data", Note: "docker info failed"})
 	} else if root, osName, _ := strings.Cut(strings.TrimSpace(info), "|"); root == "" {
@@ -116,6 +118,29 @@ func diskPaths(ctx context.Context, d diskDeps) []health.DiskPath {
 	}
 	measure("temp", d.TempDir(), false)
 	return out
+}
+
+// dockerNotLocal says why the selected daemon is not on this host (""
+// when it is): DOCKER_HOST, else the current context's endpoint, must be a
+// local unix socket, or its root is another machine's (reviewer-codex). The
+// note names the scheme only, never the host.
+func dockerNotLocal(ctx context.Context, d diskDeps) string {
+	endpoint := strings.TrimSpace(d.Getenv("DOCKER_HOST"))
+	if endpoint == "" {
+		out, err := d.Output(ctx, "docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
+		if err != nil || strings.TrimSpace(out) == "" {
+			return "docker endpoint unknown: not measured from this host"
+		}
+		endpoint = strings.TrimSpace(out)
+	}
+	if strings.HasPrefix(endpoint, "unix://") {
+		return ""
+	}
+	scheme, _, ok := strings.Cut(endpoint, "://")
+	if !ok || scheme == "" {
+		scheme = "unknown scheme"
+	}
+	return "docker daemon is remote (" + scheme + "): not measured from this host"
 }
 
 // diskThresholds are the disk check's bounds from the registry (env, then
