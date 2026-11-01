@@ -63,7 +63,7 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		b.seg(RoleAccent, head).seg(RoleMuted, " "+GlyphNone+" "+ago(at)).text("\n")
 		b.join(renderMarkdown(rep, mdWidth)).text("\n")
 		if a.state == "waiting" && !asking {
-			b.seg(RoleMuted, "Answer: i (reply to @"+Preview(name)+")").text("\n")
+			b.seg(RoleMuted, "Answer: i (reply to @"+Preview(name)+", its first lines quoted)").text("\n")
 		}
 		b.text("\n")
 	} else if a.state == "waiting" {

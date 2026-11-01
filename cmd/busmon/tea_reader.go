@@ -739,8 +739,19 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 	case ActComposeOpen: // in an agent's page: write to that agent
 		if p.kind == ovAgent {
 			agent := p.key
+			quote := m.needQuote(agent)
+			// Only into a new window: any saved draft, a recipient alone included,
+			// is the person's and is kept as it was (reviewer-codex).
+			if d := m.ui.msgCompose; d.to != "" || d.body != "" {
+				quote = ""
+			}
 			m.closeReader()
 			m.openMessageCompose("", agent)
+			if c := m.ui.compose; quote != "" && c != nil {
+				c.area.set(quote)
+				c.onTo = false
+				m.layoutCompose()
+			}
 		}
 		return nil
 	case ActAsk:
@@ -1168,4 +1179,51 @@ func or(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// replyQuoteLines and replyQuoteMax keep a reply's quote short: the person
+// recalls the question, the agent has the rest.
+const (
+	replyQuoteLines = 3
+	replyQuoteMax   = 120 // runes a quoted line keeps
+)
+
+// needQuote is the start of what agent needs from the person, quoted, when
+// its page shows that section (waiting, no open question): "" otherwise.
+func (m *Model) needQuote(agent string) string {
+	a := m.snap.agents[agent]
+	if a == nil || a.state != "waiting" || a.openAsk > 0 {
+		return ""
+	}
+	rep, _, ok := lastReport(agent, m.feed.feed)
+	if !ok {
+		return ""
+	}
+	return replyQuote(rep)
+}
+
+// replyQuote is text's first non-empty lines as "> " quote lines, at most
+// replyQuoteLines of replyQuoteMax runes (a cut line ends in …), then a blank
+// line for the answer; "" for an empty text. It is plain text in the window:
+// the person edits or deletes it.
+func replyQuote(text string) string {
+	var b strings.Builder
+	n := 0
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if r := []rune(line); len(r) > replyQuoteMax {
+			line = strings.TrimSpace(string(r[:replyQuoteMax])) + GlyphEllipsis
+		}
+		b.WriteString("> " + line + "\n")
+		if n++; n == replyQuoteLines {
+			break
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	return b.String() + "\n"
 }
