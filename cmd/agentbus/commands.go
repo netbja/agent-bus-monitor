@@ -244,9 +244,9 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo refresh -q"},
 	},
 	{
-		Name: "health", Text: true, Usage: []string{"health [list | detail <id> | log [<after-id>] | note <id> <text...>]"},
-		Summary:  "the project's measured health and its notes",
-		Examples: []string{"agentbus -p demo health", "agentbus -p demo health detail services"},
+		Name: "health", Text: true, Usage: []string{"health [list | <check>... | detail <id> | log [<after-id>] | note <id> <text...>]"},
+		Summary:  "the project's measured health and its notes; named checks: status, reason and detail only",
+		Examples: []string{"agentbus -p demo health", "agentbus -p demo health team-stall clear-stall", "agentbus -p demo health detail services"},
 	},
 	{
 		Name: "pause", Text: true, Usage: []string{"pause --for <dur> | --until <HH:MM> | --until-reset [--to <agent>] [reason...]", "pause --status"},
