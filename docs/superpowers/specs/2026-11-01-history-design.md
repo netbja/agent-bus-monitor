@@ -175,8 +175,10 @@ today), loaded in a command (file reads never in View):
 
 - **Backup.** The archive is part of what the backup task saves (plan task `backup`: the config
   directory, secrets optionally encrypted): it adds `$XDG_STATE_HOME/agentbus/<project>/history/`
-  to its list. The archive holds no secret (redacted), so it needs no encryption, but it holds the
-  team's discussions: the backup's destination should be as private as the config's.
+  to its list. **Treat it as potentially sensitive**: redaction is best effort, so a pasted secret
+  in a shape it does not know may be in it, besides the team's discussions. The backup handles it
+  like the secrets it already carries: encrypted when the backup encrypts secrets, and never
+  copied to a destination less private than the config's (reviewer-codex).
 - **Audit.** The verdict ledger stays the audit source of truth. The archive is a reading aid: a
   plain file on one host, not tamper-evident, never consulted to decide "was this approved?".
   `verdicts` lines in it are copies, for reading a decision with its discussion.
