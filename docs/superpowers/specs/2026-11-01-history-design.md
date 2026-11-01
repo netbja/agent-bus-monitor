@@ -92,7 +92,9 @@ four kept their secret: a private key's body, the token after `Bearer`, `REDIS_P
 
 - `password`, `token`, `secret`, `api_key`, `authorization` followed by `:` or `=`, as a word
   **or as the end of an env-style name** (`REDIS_PASSWORD=`, `GH_TOKEN=`, `AWS_SECRET_ACCESS_KEY=`);
-- `Bearer <x>` and `Basic <x>` anywhere;
+- `Bearer` or `Basic` followed by an actual token (`[A-Za-z0-9._~+/=-]{8,}`) anywhere, so prose
+  such as "the Bearer token" or "Basic auth" in a health detail or a sentinel note is not refused
+  by `SafeText` (foureyes);
 - any URL scheme with userinfo, an empty user included (`https://u:p@`, `redis://:p@`,
   `rediss://u:p@`);
 - `-----BEGIN … PRIVATE KEY-----`;
@@ -216,7 +218,7 @@ archive of the hashes, no upload anywhere.
   "archive restarted" line before anything else.
 - Retention: older than `keep_days` deleted, today never; over `max_mb` the oldest go; `0` writes
   and prunes nothing.
-- `agentbus history`: each filter (`--agent` matching a report's and a status's `agent`), the merge with the live streams by id (no duplicate), no
+- `agentbus history`: each filter (`--agent` matching a report's and a status's `agent`), the merge with the live streams by (stream, id) (no duplicate), no
   broker (archive only, said), gaps printed, `--json` round-trips the archive's lines.
 - busmon: goldens of the page (wide, narrow), `o` loading three more days, the filter, Enter and
   `t`; no file read in View (the existing purity tests).
