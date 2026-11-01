@@ -335,7 +335,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		}
 		// TS 0: launched and bound, no status declared yet (not 1970).
 		a.registered = true // in {p}:agents: an agent, not a service that only reports
-		if ts := time.UnixMilli(s.TS); s.TS != 0 && ts.After(a.stateAt) {
+		if ts := time.UnixMilli(s.TS); s.TS != 0 && snapshotNews(a, s, ts) {
 			declare(a, s.State, s.Message, st.person)
 			a.auto = s.Auto != ""
 			a.stateAt = ts
@@ -492,4 +492,20 @@ func missionsFact(ctx context.Context, b busReader) (string, error) {
 		return "down", nil
 	}
 	return "", nil
+}
+
+// snapshotNews says whether the poll applies an agent's snapshot: a newer one;
+// a declaration replacing the flip shown, whatever its ts (mergeSnapshot lets
+// any declaration win over a flip); or one of the same ms that says something
+// else (a flip keeps the ts it replaces when the clock is behind it).
+func snapshotNews(a *agentState, s bus.AgentSnapshot, ts time.Time) bool {
+	switch {
+	case ts.After(a.stateAt):
+		return true
+	case a.auto && s.Auto == "":
+		return true
+	case ts.Equal(a.stateAt):
+		return s.State != a.state || s.Message != a.message || (s.Auto != "") != a.auto
+	}
+	return false
 }
