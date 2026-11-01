@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ▲2  ● disp  ● miss  ♙ 3  ● 2     
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ 1 For you  2 Agents  3 Act  4 Board  5 Requests  6 Plan    
+╭─ Health · 2 to do · 1 in hand · 12 fine · 1 ? ─ y copy …─╮
+│   For you                                                ▲
+│ ▶ ▲ Tracked secret-li…  tracked private-key path:…    3h ┃
+│     git rm --cached <path>                               ┃
+│     │ Since:       2026-10-26 12:04                      ┃
+│     │ Status:      fail                                  ┃
+│     │ Detail:      tracked private-key path:             ┃
+│     │              deploy/id_ed25519                     ┃
+│     │ What to do:  Remove the path from version control  ┃
+│     │              and rotate any credential that may    ┃
+│     │              have been committed.                  ┃
+│   ▲ Service environme…  service environment file …    2h │
+│     agentbus up agent-bus-monitor                        │
+│   In hand                                                │
+│   ● Context fill        at or above 80%: coder 85%   12m ▼
+╰──────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   Y copy thread   a all             

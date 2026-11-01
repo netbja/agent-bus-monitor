@@ -39,7 +39,7 @@ func allOK(now time.Time) map[string]guardian.Record {
 	return rows
 }
 
-// The header counts only what the person must do (Bernard: "in hand" is not
+// The header counts only what the person must do (the person: "in hand" is not
 // counted there): to do first, then not measured, then in hand without a
 // number, and the tick only when every check is measured ok.
 func TestHealthPillSaysWhatThePersonMustDo(t *testing.T) {
@@ -78,13 +78,10 @@ func TestHealthPillSaysWhatThePersonMustDo(t *testing.T) {
 	}
 }
 
-func TestHealthOverlayShowsGuidanceAndEscapesText(t *testing.T) {
+func TestHealthPageEscapesText(t *testing.T) {
 	now := time.Unix(10_000_000, 0)
-	body := healthOverlayText(map[string]guardian.Record{"tracked-secrets": {ID: "tracked-secrets", Status: guardian.Fail, Detail: "tracked private-key path: [candidate]", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}},
-		map[string]guardian.Note{"tracked-secrets": {ID: "tracked-secrets", Author: "sentinel", Text: "removed from tracking"}}, now)
-	if !strings.Contains(plainOf(body), "Tracked secret-like files") || !strings.Contains(plainOf(body), "remediation:") || !strings.Contains(plainOf(body), "removed from tracking") {
-		t.Fatalf("health overlay missing fields: %q", plainOf(body))
-	}
+	_, body, _, _ := healthPage(map[string]guardian.Record{"tracked-secrets": {ID: "tracked-secrets", Status: guardian.Fail, Detail: "tracked private-key path: [candidate]", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}},
+		nil, now, "demo", healthView{open: map[string]bool{"tracked-secrets": true}}, 120)
 	if !strings.Contains(drawnText(body), "[candidate]") {
 		t.Fatalf("health detail injected a tview tag: %q", drawnText(body))
 	}

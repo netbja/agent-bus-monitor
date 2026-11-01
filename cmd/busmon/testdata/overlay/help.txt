@@ -59,6 +59,7 @@ KEYS
   enter ! w            answer the agent's open questions (w with none open: write to master)
   t                    in the help: the first-launch tour again
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
+  a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
   ^C                   quit (everywhere)

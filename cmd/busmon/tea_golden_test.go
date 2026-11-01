@@ -1,6 +1,7 @@
 package main
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"flag"
 	"fmt"
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -57,7 +58,7 @@ func checkGolden(t *testing.T, name, got string) {
 // goldenStates are the screens the goldens draw (busmon Charm spec, step b
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
-var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice"}
+var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health"}
 
 // reportID is the fixture's report, whose fenced code is longer than any width.
 var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
@@ -74,6 +75,12 @@ func inState(t testing.TB, m Model, state string) Model {
 			a.judgedAt = shellNow
 		}
 		return step(t, m, pollMsg{snap: snap, at: shellNow, swaps: []bus.SwapEvent{{Role: "coder", Event: bus.SwapReloaded, Kind: bus.SwapKindReload, By: "sentinel"}}})
+	case "health": // F5 (busmon pages): two checks to do, one in hand, one not measured; the first open
+		snap := shellFixture(shellNow)
+		snap.guardianHealth, snap.guardianNow = healthFixture(shellNow), shellNow
+		snap.guardian = summarizeGuardian(snap.guardianHealth, shellNow)
+		m = step(t, m, pollMsg{snap: snap, at: shellNow})
+		return keys(t, keys(t, m, tea.Key{Code: tea.KeyF5}), kEnter)
 	case "compose": // a directive to coder, two lines written
 		m = typeText(t, keys(t, m, 'I'), "@cod")
 		m = typeText(t, keys(t, m, kTab), "Review lot 1 please: the reader, the ask mode and the cache.")
