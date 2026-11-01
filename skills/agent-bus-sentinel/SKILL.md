@@ -49,6 +49,13 @@ never a warning, only a line in its detail: changing major is the person's decis
 mention it to master for the person, once per daily review. Never restart, pull, recreate or
 upgrade the broker yourself.
 
+`disk` warns when a filesystem agent-bus depends on (the broker's data, home, the Go cache, the
+repository and its worktrees, the temp dir) has under 10 % or 5 GiB free, and fails under 2 % or
+1 GiB (`health.disk_*` in the config). A fail wakes you as any fail does. It is the person's to
+act on: tell master which path and how much is free (`agentbus health disk`), with the command the
+check names (`du -sh ~/.cache/go-build ~/.npm ~/.cache/pip`, then `go clean -cache`). **You never
+delete anything**: no cache, no log, no worktree, no file, whatever the space left.
+
 ## Team stall
 
 `team-stall` enters `fail` when every agent has been idle for `stall_after` (15 min by default) with

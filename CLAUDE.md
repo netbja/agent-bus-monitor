@@ -810,7 +810,15 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (major -> newest release, 0600; a failed fetch moves only `checked_at`, silently); warn when behind
   in its major; a newer major is never a warning, only named in the detail (changing major is the
   person's decision); unknown when the broker is unread, no release of its major is found or no check
-  succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `github`
+  succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `disk` (disk-check,
+  `health/disk.go` pure, `cmd/agentbus/diskcheck.go` the reader behind injected `diskDeps`, so no test touches a real disk;
+  5 min): the filesystems agent-bus depends on (docker's root from `docker info` when docker is on PATH, else that one not
+  measured; `HOME`; `go env GOCACHE` when go is on PATH; the services' working directory, the repository, and its
+  `.worktrees`; `os.TempDir()`), each device once (`st_dev`), judged by statfs's free-to-unprivileged bytes and %: warn under
+  `health.disk_warn_pct`/`_gib` (10 %, 5 GiB), fail under `health.disk_fail_pct`/`_gib` (2 %, 1 GiB); the detail names each
+  path, its `major:minor` and free space, the worst first; a path not measured is said, unknown only when nothing was. For
+  you on warn and fail (`du -sh ~/.cache/go-build ~/.npm ~/.cache/pip; go clean -cache`); a fail wakes sentinel, which never
+  deletes anything. `github`
   (busmon-github-check, `health/github.go` pure, `cmd/agentbus/githubcheck.go` the runner; 15 min, 10 s) runs only
   when a remote is on github.com (origin first): `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` and
   `git -c credential.helper= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command

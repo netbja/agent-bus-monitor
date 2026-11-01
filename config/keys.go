@@ -191,6 +191,12 @@ var Keys = []*Key{
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
+	// The disk check (disk-check): a device warns under either warn bound and
+	// fails under either fail bound (its free percentage, its free GiB).
+	{Name: "health.disk_warn_pct", Env: "AGENT_BUS_DISK_WARN_PCT", Kind: Float, Default: 10.0, ReadBy: "dispatch (health)", env: envPositiveFloat, file: filePositivePercent},
+	{Name: "health.disk_warn_gib", Env: "AGENT_BUS_DISK_WARN_GIB", Kind: Int, Default: 5, ReadBy: "dispatch (health)", env: envPositiveInt, file: filePositiveInt},
+	{Name: "health.disk_fail_pct", Env: "AGENT_BUS_DISK_FAIL_PCT", Kind: Float, Default: 2.0, ReadBy: "dispatch (health)", env: envPositiveFloat, file: filePositivePercent},
+	{Name: "health.disk_fail_gib", Env: "AGENT_BUS_DISK_FAIL_GIB", Kind: Int, Default: 1, ReadBy: "dispatch (health)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "health.runaway.silent_after", Env: "AGENTBUS_HEALTH_RUNAWAY_SILENT_AFTER", Kind: Duration, Default: 30 * time.Minute, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayDuration, file: filePositiveDuration},
 	{Name: "health.runaway.context_growth", Env: "AGENTBUS_HEALTH_RUNAWAY_CONTEXT_GROWTH", Kind: Int, Default: 100000, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayInt, file: filePositiveInt},
 	{Name: "health.runaway.growth_span", Env: "AGENTBUS_HEALTH_RUNAWAY_GROWTH_SPAN", Kind: Duration, Default: 10 * time.Minute, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayDuration, file: filePositiveDuration},

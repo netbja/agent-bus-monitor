@@ -190,7 +190,7 @@ func TestConfigJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, out)
 	}
-	if len(doc.Rows) != 32 { // the registry, stall guard, auto-state, idle hint and history keys included
+	if len(doc.Rows) != 36 { // the registry, stall guard, auto-state, idle hint, history and disk keys included
 		t.Errorf("%d rows", len(doc.Rows))
 	}
 	for _, r := range doc.Rows {
