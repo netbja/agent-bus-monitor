@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -215,5 +216,63 @@ func TestRecapForYouReportGone(t *testing.T) {
 	body := tokLinesText(m.rd.top().body)
 	if !strings.Contains(body, "no longer retained") || !strings.Contains(body, "Migration C is in PR") || strings.Contains(body, "full text: agentbus") {
 		t.Fatalf("Enter on a report gone:\n%s", body)
+	}
+}
+
+// Opening an unread item reads it (foureyes): the notice's own id, and every
+// merged member's, never only the report the page shows; its dot goes.
+func TestRecapForYouEnterReadsTheItem(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	in := recapNotices(now)
+	b, c := in.Commands[2], in.Commands[3] // the merged pair "The mock-ups are in PR 212"
+	in.Unread = []bus.Event{b, c}
+	m := reqShell(t, 70, 40, nil)
+	m.feed.unread.forPerson[b.ID], m.feed.unread.forPerson[c.ID] = true, true
+	m.gotRecap(recapMsg{model: buildRecap(in)})
+	m.maybeOpenRecap()
+	p := m.rd.top()
+	for i, r := range p.recap.Rows {
+		if strings.Contains(r.Text, "mock-ups") {
+			p.sel = i
+		}
+	}
+	m = keys(t, m, kEnter)
+	if !m.feed.unread.read[b.ID] || !m.feed.unread.read[c.ID] {
+		t.Fatalf("read: %v", m.feed.unread.read)
+	}
+	m = keys(t, m, kEsc)
+	for _, l := range m.rd.top().body {
+		if s := l.text(); strings.Contains(s, "mock-ups") && strings.Contains(s, GlyphDotFull) {
+			t.Fatalf("the dot stayed: %q", s)
+		}
+	}
+}
+
+// A report that could not be read is not a report no longer retained
+// (reviewer-codex): the page and Y say the read failed.
+func TestRecapForYouReportReadFailed(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	in := recapNotices(now)
+	in.Reports = nil
+	in.Errors = map[string]error{"report": errors.New("broker away")}
+	m := reqShell(t, 70, 40, nil)
+	m.gotRecap(recapMsg{model: buildRecap(in)})
+	m.maybeOpenRecap()
+	p := m.rd.top()
+	for i, r := range p.recap.Rows {
+		if strings.Contains(r.Text, "Migration C") {
+			p.sel = i
+		}
+	}
+	p.dirty = true
+	m.refresh()
+	m = keys(t, m, 'Y')
+	if !strings.Contains(m.ui.flash, "could not be read") || strings.Contains(m.ui.flash, "no longer retained") {
+		t.Fatalf("Y: %q", m.ui.flash)
+	}
+	m = keys(t, m, kEnter)
+	body := tokLinesText(m.rd.top().body)
+	if !strings.Contains(body, "could not be read") || strings.Contains(body, "no longer retained") || !strings.Contains(body, "Migration C is in PR") {
+		t.Fatalf("Enter:\n%s", body)
 	}
 }

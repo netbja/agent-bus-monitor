@@ -363,8 +363,10 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   envelope nor the id; what was sent to the person newest first (the unread rows with no item, asks, waits and blocked
   agents keep their own order around them), identical items (sender and text) merged with `(N)` and the newest's report,
   an unread entry that is such an item marked on it, never a second row; items older than a day folded behind
-  `+ N older` by `recapFold` until `o`; Enter opens the report's full text, `Y` copies it; a report no longer retained
-  keeps its preview, Enter says it is gone and `Y` copies nothing, never the envelope); its keys are `ModeShell` (the panel table with the shell's tabs)
+  `+ N older` by `recapFold` until `o`; Enter reads every entry the item stands for (`recapRow.IDs`, a merged item's
+  members, `readRecapRow`: the notices, never only the report shown) and opens the report's full text, `Y` copies it; a
+  report not at hand keeps its preview, Enter and `Y` say why (`reportGone`: no longer retained, or could not be read when
+  the report stream's read failed, `ReportUnread`) and copy nothing, never the envelope); its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`; A12: `▼` in the gutter, the text under the message column behind a
   muted `│` guide, a last muted `↵ full text` line), then opens it in the reader, a stack of pages over the lower zone, one

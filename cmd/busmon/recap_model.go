@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -25,16 +26,18 @@ type recapRow struct {
 	// A For you item in the list format (recap-foryou): its sender in the
 	// sender's colour, its text, its age at the right edge; Count identical
 	// items merged; Older (past a day) folded behind '+ N older'.
-	Name     string
-	NameRole Role
-	Text     string
-	Age      string
-	At       time.Time
-	Count    int
-	Older    bool
-	ReportID string    // a report notice's report
-	Report   bus.Event // that report, when retained: Enter opens it, Y copies it
-	Unread   bool      // not opened yet: marked on its own line, never a second row
+	Name         string
+	NameRole     Role
+	Text         string
+	Age          string
+	At           time.Time
+	Count        int
+	Older        bool
+	ReportID     string    // a report notice's report
+	Report       bus.Event // that report, when retained: Enter opens it, Y copies it
+	Unread       bool      // not opened yet: marked on its own line, never a second row
+	IDs          []string  // every entry the row stands for (a merged item's members): opening it reads them all
+	ReportUnread bool      // the report stream could not be read: its report is unknown, not gone
 }
 
 type recapModel struct {
@@ -163,14 +166,15 @@ func buildRecap(in recapInput) recapModel {
 		row := recapRow{Key: "cmd:" + e.ID, Section: recapForYou, Title: e.From + " " + GlyphArrowR + " " + e.Target + " " + GlyphNone + " " + ageOf(at),
 			Detail: e.Message, Kind: "thread", Agent: e.From, Ref: thread, Event: e, Selectable: true,
 			Name: e.From, NameRole: nameRole(e.From), Text: text, Age: ageOf(at), At: at, Count: 1,
-			Older: in.Now.Sub(at) > bus.DefaultHorizon, ReportID: rid, Report: reports[rid], Unread: unread[e.ID]}
+			Older: in.Now.Sub(at) > bus.DefaultHorizon, ReportID: rid, Report: reports[rid], Unread: unread[e.ID],
+			IDs: []string{e.ID}, ReportUnread: in.Errors["report"] != nil}
 		k := e.From + "\x00" + text
 		if i, ok := same[k]; ok {
-			count, isUnread := list[i].Count+1, row.Unread || list[i].Unread
+			count, isUnread, ids := list[i].Count+1, row.Unread || list[i].Unread, append(slices.Clone(list[i].IDs), e.ID)
 			if at.Before(list[i].At) { // keep the newest's time, report and key
 				row = list[i]
 			}
-			row.Count, row.Unread = count, isUnread
+			row.Count, row.Unread, row.IDs = count, isUnread, ids
 			list[i] = row
 			continue
 		}
