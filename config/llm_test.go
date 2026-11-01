@@ -126,3 +126,32 @@ func TestEndpointsOnlyInConfigToml(t *testing.T) {
 		t.Fatal("a nil file has endpoints")
 	}
 }
+
+// One warning per problem (reviewer-codex): an endpoint missing both url and
+// model says both, and a refused url is said even when the model is missing.
+func TestEndpointWarnsEveryProblem(t *testing.T) {
+	for name, c := range map[string]struct {
+		body string
+		want []string
+	}{
+		"neither":                  {"[llm.a]\nremote = true\n", []string{"llm.a: no url", "llm.a: no model"}},
+		"a bad url, no model":      {"[llm.a]\nurl = \"http://10.0.0.5/v1\"\n", []string{"llm.a.url: not loopback", "llm.a: no model"}},
+		"an unknown key, no model": {"[llm.a]\nurl = \"http://127.0.0.1/v1\"\nctx = 4096\n", []string{"llm.a.ctx: unknown key", "llm.a: no model"}},
+		// remote unread: the url is not judged against a remote = false nobody wrote
+		"a bad remote, a remote url": {"[llm.a]\nurl = \"http://gpu.lan/v1\"\nmodel = \"m\"\nremote = \"yes\"\n", []string{"llm.a.remote: want true or false"}},
+	} {
+		f := Load(writeFile(t, "config.toml", c.body), "config.toml")
+		got := ""
+		for _, w := range f.Warnings {
+			got += w.String() + "\n"
+		}
+		for _, w := range c.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("%s: missing %q in:\n%s", name, w, got)
+			}
+		}
+		if len(f.Warnings) != len(c.want) || len(f.Endpoints()) != 0 {
+			t.Errorf("%s: %d warnings, endpoints %+v:\n%s", name, len(f.Warnings), f.Endpoints(), got)
+		}
+	}
+}

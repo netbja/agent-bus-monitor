@@ -61,7 +61,6 @@ func (f *File) loadEndpoints(leaves map[string]any, lines map[string]int, header
 	}
 	tables := map[string]*table{}
 	var names []string
-	bad := map[string]bool{}
 	warn := func(key string, line int, why string) {
 		f.Warnings = append(f.Warnings, Warning{File: f.Label, Line: line, Key: key, Msg: why + "; endpoint ignored"})
 	}
@@ -92,6 +91,7 @@ func (f *File) loadEndpoints(leaves map[string]any, lines map[string]int, header
 			continue
 		}
 		e := Endpoint{Name: name, Line: header}
+		bad := map[string]bool{} // the keys refused, so every problem is said once
 		keys := make([]string, 0, len(t.keys))
 		for k := range t.keys {
 			keys = append(keys, k)
@@ -104,7 +104,7 @@ func (f *File) loadEndpoints(leaves map[string]any, lines map[string]int, header
 				s, ok := v.(string)
 				if !ok {
 					warn(at+".url", line, "want a string")
-					bad[name] = true
+					bad[k] = true
 					continue
 				}
 				e.URL = s
@@ -112,7 +112,7 @@ func (f *File) loadEndpoints(leaves map[string]any, lines map[string]int, header
 				s, ok := v.(string)
 				if !ok || strings.TrimSpace(s) == "" || strings.ContainsAny(s, "\r\n") || s != strings.TrimSpace(s) {
 					warn(at+".model", line, "want a one-line name")
-					bad[name] = true
+					bad[k] = true
 					continue
 				}
 				e.Model = s
@@ -120,7 +120,7 @@ func (f *File) loadEndpoints(leaves map[string]any, lines map[string]int, header
 				b, ok := v.(bool)
 				if !ok {
 					warn(at+".remote", line, "want true or false")
-					bad[name] = true
+					bad[k] = true
 					continue
 				}
 				e.Remote = b
@@ -130,25 +130,26 @@ func (f *File) loadEndpoints(leaves map[string]any, lines map[string]int, header
 					msg += "; a secret does not belong in this file"
 				}
 				warn(at+"."+k, line, msg)
-				bad[name] = true
+				bad[k] = true
 			}
 		}
-		if bad[name] {
-			continue
-		}
-		switch {
-		case e.URL == "":
+		if e.URL == "" && !bad["url"] {
 			warn(at, header, "no url")
-			continue
-		case e.Model == "":
+			bad["url"] = true
+		}
+		if e.Model == "" && !bad["model"] {
 			warn(at, header, "no model")
-			continue
+			bad["model"] = true
 		}
-		if why := endpointURL(e.URL, e.Remote); why != "" {
-			warn(at+".url", lines[at+".url"], why)
-			continue
+		if !bad["url"] && !bad["remote"] {
+			if why := endpointURL(e.URL, e.Remote); why != "" {
+				warn(at+".url", lines[at+".url"], why)
+				bad["url"] = true
+			}
 		}
-		f.endpoints = append(f.endpoints, e)
+		if len(bad) == 0 {
+			f.endpoints = append(f.endpoints, e)
+		}
 	}
 }
 
