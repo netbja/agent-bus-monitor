@@ -254,7 +254,7 @@ func (f Filter) Match(e Entry) bool {
 		e.F["author"] != f.Agent && e.F["reviewer"] != f.Agent {
 		return false
 	}
-	if f.Thread != "" && e.ID != f.Thread && e.F["ref"] != f.Thread {
+	if f.Thread != "" && !inThread(e, f.Thread) {
 		return false
 	}
 	if f.Kind != "" && Kind(e) != f.Kind {
@@ -276,6 +276,18 @@ func (f Filter) Match(e Entry) bool {
 		}
 	}
 	return true
+}
+
+// inThread: the entry's id or ref is t; a bare millisecond cursor (no "-")
+// stands for every id of that millisecond, as agentbus thread reads it.
+func inThread(e Entry, t string) bool {
+	if e.ID == t || e.F["ref"] == t {
+		return true
+	}
+	if strings.Contains(t, "-") {
+		return false
+	}
+	return strings.HasPrefix(e.ID, t+"-") || strings.HasPrefix(e.F["ref"], t+"-")
 }
 
 // gapStretch is what a gap covers: from its from id (the beginning of time

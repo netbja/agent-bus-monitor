@@ -186,3 +186,15 @@ func TestReadDaysBeforeReachesOlderLines(t *testing.T) {
 		t.Fatalf("uncapped: from the day before up to the boundary: %d cut %v", len(all), cut3)
 	}
 }
+
+// A bare millisecond cursor matches the entries whose id (or ref) starts
+// with it, as Activity's filter and agentbus thread read it (reviewer-codex).
+func TestFilterThreadTakesABareCursor(t *testing.T) {
+	e := Entry{Stream: "cmd", ID: "1793553996000-0", F: map[string]string{"type": "directive"}}
+	r := Entry{Stream: "cmd", ID: "1793553997000-0", F: map[string]string{"type": "reply", "ref": "1793553996000-0"}}
+	other := Entry{Stream: "cmd", ID: "1793553996001-0", F: map[string]string{"type": "directive"}}
+	f := Filter{Thread: "1793553996000"}
+	if !f.Match(e) || !f.Match(r) || f.Match(other) {
+		t.Fatalf("bare cursor: root %v reply %v other %v", f.Match(e), f.Match(r), f.Match(other))
+	}
+}
