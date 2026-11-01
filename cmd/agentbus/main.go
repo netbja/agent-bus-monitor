@@ -530,17 +530,22 @@ func main() {
 				return ok, err
 			}, Forget: b.ForgetAgent, Now: time.Now}, rest[1:], os.Stdout, os.Stderr))
 		}
-		_, asJSON := extractBool(rest, "--json")
-		m, err := b.Agents(ctx)
+		names, asJSON := extractBool(rest, "--json")
+		all, err := b.Agents(ctx)
 		if err != nil {
 			die(err.Error())
 		}
+		m, missing := selectAgents(all, names)
 		if asJSON {
 			out, _ := json.MarshalIndent(m, "", "  ")
 			fmt.Println(string(out))
-			return
+		} else {
+			fmt.Print(agentsTable(m, time.Now()))
 		}
-		fmt.Print(agentsTable(m, time.Now()))
+		if len(missing) > 0 {
+			fmt.Fprintln(os.Stderr, "agents: no snapshot for "+strings.Join(missing, ", "))
+			os.Exit(1)
+		}
 
 	case "pane":
 		if len(rest) < 1 {

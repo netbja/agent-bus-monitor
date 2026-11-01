@@ -172,13 +172,13 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo pilot status", "agentbus -p demo pilot claim -t 5m"},
 	},
 	{
-		Name: "agents", Usage: []string{"agents [--json]", "agents forget <agent>... [--force]",
+		Name: "agents", Usage: []string{"agents [<agent>...] [--json]", "agents forget <agent>... [--force]",
 			"agents wait <agent> [--since <unix-ms>] [--timeout <dur>]"},
-		Summary: "every agent's declared state; forget retires gone agents; wait for an agent's first status",
+		Summary: "every agent's declared state (or only the agents named); forget retires gone agents; wait for an agent's first status",
 		Flags: []cli.Flag{fJSON, fForce,
 			{Long: "since", Arg: "<unix-ms>", Help: "wait: only a status at or after this time counts"},
 			{Long: "timeout", Arg: "<dur>", Help: "wait: how long to wait (default 30s)"}},
-		Examples: []string{"agentbus -p demo agents", "agentbus -p demo agents forget old-coder"},
+		Examples: []string{"agentbus -p demo agents", "agentbus -p demo agents coder foureyes", "agentbus -p demo agents forget old-coder"},
 	},
 	{
 		Name: "pane", Usage: []string{"pane <agent>"},
