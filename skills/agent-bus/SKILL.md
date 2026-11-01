@@ -182,6 +182,12 @@ until you correct it. While armed and waiting you are **`idle`, never `blocked`*
 (usually master does); waiting for a peer is `idle`. Need the person? Tell master, who asks them;
 never declare `waiting` yourself without an open ask.
 
+**Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
+reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
+hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even
+after a `working` you declared. You still declare `waiting`, `blocked` and `done` yourself, and only
+you lift `waiting`: declare `working` once the person has answered.
+
 ## Gating risky actions (the 4-eyes money-path)
 `blocked` is reserved for an **open 4-eyes gate**. Before proceeding or marking done:
 ```bash

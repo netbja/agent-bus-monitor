@@ -69,3 +69,9 @@ and the subject. Then:
 
 After each verdict, `agentbus status reviewer-codex idle "<what you reviewed>"` and stop. You do
 not retire yourself: master does, once the reviews are over.
+
+**Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
+reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
+hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even
+after a `working` you declared. You still declare `waiting`, `blocked` and `done` yourself, and only
+you lift `waiting`: declare `working` once the person has answered.

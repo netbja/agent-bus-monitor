@@ -36,3 +36,9 @@ just the checks a directive names), annotate with
 `agentbus health note`, repair only what the skill allows, escalate the rest; on the daily
 wake, review and nudge master by `cmd` **only if** its context is high.
 You **never** clear master's pane — notify only.
+
+**Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
+reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
+hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even
+after a `working` you declared. You still declare `waiting`, `blocked` and `done` yourself, and only
+you lift `waiting`: declare `working` once the person has answered.
