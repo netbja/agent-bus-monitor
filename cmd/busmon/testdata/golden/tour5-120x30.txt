@@ -11,7 +11,7 @@
 ╭─  1 Activity  2 Boar│   ● bus ok           busmon reads the bus                                │ents · filter: none ─╮
 │    time   from      │   ● dispatch up      the service that wakes idle agents runs             │                     │
 │  ── Mon 2026-10-26 -│   ● missions up      the conductor runs                                  │─────────────────────│
-│    14:24  architect │   health !2          two health problems; F5 says which                  │                     │
+│    14:24  architect │   health ▲2          two checks only you can fix; F5 says which          │                     │
 │    14:50  ♙ Charlie │   claude 62%/40%     your account's windows, shared by every agent       │                     │
 │    14:51  coder     │   ♙ Charlie [human]  you, as the agents see you                          │                     │
 │  ○ 14:52  master    │                                                                          │                     │

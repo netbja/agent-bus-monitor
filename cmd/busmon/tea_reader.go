@@ -50,6 +50,9 @@ type page struct {
 	fromKey  string   // the list item this page shows
 	fromKeys []string // that list's selectable keys, in order, when the walk began
 
+	health healthView   // ovHealth: its rows open in place and a (sel: the selected row)
+	hitems []healthItem // ovHealth: its selectable rows
+
 	svc       *svcFacts  // ovServices: the facts the cards show (sel: the card selected)
 	svcBusy   bool       // ovServices, ovRedis: a refresh read is in flight
 	recap     recapModel // ovRecap
@@ -425,7 +428,22 @@ func (m *Model) buildPage() bool {
 		if gnow.IsZero() {
 			gnow = now
 		}
-		p.title, p.body = "Project health", healthOverlayText(s.guardianHealth, s.guardianNotes, gnow)
+		v := p.health
+		v.sel = p.sel
+		p.title, p.body, p.hitems, p.plain = healthPage(s.guardianHealth, s.guardianNotes, gnow, m.cfg.project, v, width)
+		p.sel = clamp(p.sel, 0, max(0, len(p.hitems)-1))
+		for i, it := range p.hitems {
+			if it.id == v.selID {
+				p.sel = i
+			}
+		}
+		if p.sel != v.sel && v.selID == "" { // clamped: drawn again with the mark where it is
+			v.sel = p.sel
+			p.title, p.body, p.hitems, p.plain = healthPage(s.guardianHealth, s.guardianNotes, gnow, m.cfg.project, v, width)
+		}
+		if p.sel < len(p.hitems) {
+			p.health.selID = p.hitems[p.sel].id
+		}
 	case ovHelp:
 		p.title, p.body = helpTitle(), helpText()
 	case ovPlan:
@@ -664,6 +682,21 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return m.serviceLogCmd(svcCardKinds[p.sel])
 		}
 	}
+	if p.kind == ovHealth {
+		switch {
+		case act == ActShowAll:
+			p.health.all, p.dirty = !p.health.all, true
+			m.refresh()
+			return nil
+		case k.Code == keyEnter:
+			m.toggleHealthRow(p)
+			return nil
+		case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
+			p.health.selID = "" // the keys move by index; the rebuild records the new check
+			m.moveSel(p, act, m.readerRows(), healthLines(p))
+			return nil
+		}
+	}
 	rows := m.readerRows()
 	switch act {
 	case ActClose:
@@ -774,7 +807,47 @@ func (m *Model) askKey(act Action, k Key) tea.Cmd {
 
 // movePlan moves the plan's selection and keeps it in view.
 func (m *Model) movePlan(p *page, act Action, rows int) {
-	n := len(p.items)
+	m.moveSel(p, act, rows, func() []int {
+		lines := make([]int, len(p.items))
+		for i, it := range p.items {
+			lines[i] = it.line
+		}
+		return lines
+	})
+}
+
+// healthLines are the F5 rows' body lines, read from the page when called
+// (after a rebuild).
+func healthLines(p *page) func() []int {
+	return func() []int {
+		lines := make([]int, len(p.hitems))
+		for i, it := range p.hitems {
+			lines[i] = it.line
+		}
+		return lines
+	}
+}
+
+// toggleHealthRow opens the selected F5 row in place, or closes it.
+func (m *Model) toggleHealthRow(p *page) {
+	if p.sel >= len(p.hitems) {
+		return
+	}
+	id := p.hitems[p.sel].id
+	open := map[string]bool{}
+	for k, v := range p.health.open {
+		open[k] = v
+	}
+	open[id] = !open[id]
+	p.health.open, p.dirty = open, true
+	m.refresh()
+}
+
+// moveSel moves a list page's selection among its rows and keeps the
+// selected row in view; lines gives the rows' body lines once the page is
+// rebuilt for the new selection.
+func (m *Model) moveSel(p *page, act Action, rows int, lines func() []int) {
+	n := len(lines())
 	if n == 0 {
 		return
 	}
@@ -795,8 +868,8 @@ func (m *Model) movePlan(p *page, act Action, rows int) {
 	p.sel = clamp(p.sel, 0, n-1)
 	p.dirty = true
 	m.refresh()
-	if p.sel < len(p.items) {
-		if line := p.items[p.sel].line; line < p.top || line >= p.top+rows {
+	if ls := lines(); p.sel < len(ls) {
+		if line := ls[p.sel]; line < p.top || line >= p.top+rows {
 			p.top = max(0, line-3)
 			m.clampPage(p)
 		}
@@ -862,6 +935,17 @@ func (m *Model) readerClick(x, y int) tea.Cmd {
 					return m.openPlanItem(p)
 				}
 				p.sel, p.dirty = i, true
+				m.refresh()
+			}
+		}
+	case ovHealth:
+		for i, it := range p.hitems {
+			if it.line == line {
+				if i == p.sel {
+					m.toggleHealthRow(p)
+					return nil
+				}
+				p.sel, p.dirty, p.health.selID = i, true, ""
 				m.refresh()
 			}
 		}
@@ -1033,6 +1117,8 @@ func (m Model) pageOffers(act Action) bool {
 	case ActPlanStart:
 		_, ok := planStartable(m.snap.planState, p.key)
 		return ok && p.kind == ovPlanTask
+	case ActShowAll:
+		return p.kind == ovHealth
 	}
 	return false
 }

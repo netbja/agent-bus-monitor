@@ -95,9 +95,11 @@ func overlayCaptures(t *testing.T) map[string]string {
 		"dispatch": {State: "failed", Detail: "restarting", Error: "broker went away", At: capNow.Add(-5 * time.Second).UnixMilli(), PID: 7, Host: "here", Log: "/nowhere/dispatch.log"},
 		"missions": {State: "idle", Detail: "waiting for missions", At: capNow.UnixMilli(), Host: "elsewhere", Log: "/far/missions.log"},
 	}
-	health := healthOverlayText(map[string]guardian.Record{
+	_, health, _, _ := healthPage(map[string]guardian.Record{
 		"tracked-secrets": {ID: "tracked-secrets", Status: guardian.Fail, Detail: "tracked private-key path: [candidate]", ObservedAt: capNow.UnixMilli(), Since: capNow.UnixMilli()},
-	}, map[string]guardian.Note{}, capNow)
+		"context":         {ID: "context", Status: guardian.Warn, Detail: "at or above 80%: coder 85%", ObservedAt: capNow.UnixMilli(), Since: capNow.Add(-12 * time.Minute).UnixMilli()},
+		"services":        {ID: "services", Status: guardian.OK, ObservedAt: capNow.UnixMilli(), Since: capNow.Add(-time.Hour).UnixMilli()},
+	}, map[string]guardian.Note{}, capNow, "demo", healthView{open: map[string]bool{"tracked-secrets": true}}, 100)
 
 	out := map[string]string{
 		"message-report":    plainOf(detailText(report, capNow.Add(-time.Minute), capNow, threadState{})),

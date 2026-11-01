@@ -1,79 +1,24 @@
-Services  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Inspect the service log; restart only when its restart budget allows. Missions waiting for Git: run git init in the project directory.
-
-Agent identity  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Re-check agentbus agents and herdr; ask the person before acting on an identity conflict.
-
-Agent launch and identity  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Relaunch through agentbus with the configured role; do not edit a live pane.
-
-Model drift  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Review the result with agentbus roles doctor before changing roles.toml.
-
-Runaway work  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Inspect the pane read-only and ask master or the person; never interrupt for this warning.
-
-Cmd delivery  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Inspect the named consumer group; recover delivery only through its normal consumer.
-
-Cmd targets  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Correct the target through the normal sender; do not replay or delete entries automatically.
-
-Quota freshness  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Check provider connectivity; leave hold and release decisions to dispatch.
-
-Tracked secret-like files  fail
-  since: 2026-10-26T18:00:00Z
-  detail: tracked private-key path: [candidate]
-  remediation: Remove the path from version control and rotate any credential that may have been committed.
-
-Redis exposure and password  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Restrict Redis to loopback. The historical default password is replaced by the person, when it suits them, with ./setup.sh rotate-redis-password (an install on a fresh broker already gets a random one); an exported REDIS_PASSWORD or REDIS_URL overrides the password file. Sentinel never rotates it.
-
-Service environment permissions  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Recreate the environment file with agentbus up and verify its permissions without printing it.
-
-Installed versions  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Review the documented update path and upgrade only to a known-good version.
-
-herdr command probe  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Check herdr status; restart it only through its documented service command.
-
-Client updates  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Propose a reload to the person through master (agent-bus-sentinel skill, Client update); never restart a client or type into a pane.
-
-Context fill  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: The dispatcher told the agent to commit WIP and send master a hand-off; let it reach a stopping point, then the person reloads it (/clear or a new session). Never type into its pane.
-
-Redis version  unknown
-  since: never measured
-  detail: no current measurement
-  remediation: Behind in its major: the person updates the broker when it suits them (docker compose pull redis, then docker compose up -d redis), to the latest release of the same major. A newer major is never a warning: changing major is the person's decision after reading its release notes. Sentinel never restarts or upgrades the broker, it only reports.
+  For you
+▶ ▲ Tracked secret-like files        tracked private-key path: [candi…  git rm --cached <path>    0s
+    │ Since:       2026-10-26 18:00
+    │ Status:      fail
+    │ Detail:      tracked private-key path: [candidate]
+    │ What to do:  Remove the path from version control and rotate any credential that may have been
+    │              committed.
+  In hand
+  ● Context fill                     at or above 80%: coder 85%         (dispatch)               12m
+  Not measured
+  ? Agent identity                   no current measurement                                         
+  ? Agent launch and identity        no current measurement                                         
+  ? Model drift                      no current measurement                                         
+  ? Runaway work                     no current measurement                                         
+  ? Cmd delivery                     no current measurement                                         
+  ? Cmd targets                      no current measurement                                         
+  ? Quota freshness                  no current measurement                                         
+  ? Redis exposure and password      no current measurement                                         
+  ? Service environment permissions  no current measurement                                         
+  ? Installed versions               no current measurement                                         
+  ? herdr command probe              no current measurement                                         
+  ? Client updates                   no current measurement                                         
+  ? Redis version                    no current measurement                                         
+  ── fine · 1  (a shows them) ──

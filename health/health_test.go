@@ -62,8 +62,8 @@ func TestEvaluatorsCoverBoundariesAndUnknownEvidence(t *testing.T) {
 			{"unavailable", ServiceEvidence{}, Unknown},
 			{"uninstalled", ServiceEvidence{Known: true}, OK},
 			{"inactive", ServiceEvidence{Known: true, Installed: true}, Fail},
-			{"budget warning", ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 4}, Warn},
-			{"budget spent", ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 5}, Fail},
+			{"budget warning", ServiceEvidence{Known: true, Installed: true, Active: true, Failures: map[string]int{"dispatch": 4}}, Warn},
+			{"budget spent", ServiceEvidence{Known: true, Installed: true, Active: true, Failures: map[string]int{"missions": 5}}, Fail},
 			{"missions waits for git", ServiceEvidence{Known: true, Installed: true, Active: true, WaitingGit: true}, Warn},
 			{"inactive beats waiting", ServiceEvidence{Known: true, Installed: true, WaitingGit: true}, Fail},
 		} {

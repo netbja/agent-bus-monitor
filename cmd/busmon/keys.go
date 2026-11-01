@@ -285,6 +285,7 @@ var (
 		{Keys: "enter ! w", Help: "answer the agent's open questions (w with none open: write to master)", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "t", Help: "in the help: the first-launch tour again", Act: ActTour, match: runeIs('t')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
+		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
