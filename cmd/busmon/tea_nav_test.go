@@ -408,7 +408,9 @@ func TestShellClickTabsAndTitles(t *testing.T) {
 // herdr-style tabs (busmon-tabs, Charlie): every tab a block followed by one
 // blank column; the active one a bold pill in its panel's colour, dimmed
 // (faded) when the panel has not the focus; the others grey on the tab
-// background. The labels keep their old widths, so the click spans stay.
+// background. Each block has one blank cell on each side, in its own colour
+// (busmon-tab-pad, the person: the pill ended on its last letter), so a tab is
+// one column wider than before; the click spans are the same segments.
 func TestTabsAreHerdrBlocks(t *testing.T) {
 	for _, focused := range []bool{true, false} {
 		l := tabBar(lowerTabs, PanelBoard, 200, focused)
@@ -420,7 +422,8 @@ func TestTabsAreHerdrBlocks(t *testing.T) {
 			if gap.Text != " " || !gap.Tab || gap.Off || gap.Pill {
 				t.Errorf("tab %d's separator %+v", i+1, gap)
 			}
-			if !block.Tab || strings.HasPrefix(block.Text, "  ") || strings.HasSuffix(block.Text, " ") {
+			inner := strings.TrimPrefix(strings.TrimSuffix(block.Text, " "), " ")
+			if !block.Tab || inner != strings.TrimSpace(block.Text) || inner == "" || len(block.Text) != len(inner)+2 {
 				t.Errorf("tab %d's block %+v", i+1, block)
 			}
 			if p == PanelBoard {
@@ -435,8 +438,8 @@ func TestTabsAreHerdrBlocks(t *testing.T) {
 				t.Errorf("inactive tab %d %+v", i+1, block)
 			}
 		}
-		if got, want := l.Width(), Width(" 1 Activity  2 Board  3 Requests  4 Plan "); got != want {
-			t.Errorf("bar is %d cells, want the old %d", got, want)
+		if got, want := l.Width(), Width(" 1 Activity   2 Board   3 Requests   4 Plan  "); got != want {
+			t.Errorf("bar is %d cells, want %d (a padded block and a gap per tab)", got, want)
 		}
 	}
 	// frameTitle leaves the tabs alone: no pill borrowed, nothing recoloured.

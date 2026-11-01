@@ -8,7 +8,7 @@
 │  ● unread dispatch  ╭─ Welcome to busmon ──────────────────────────────────────────────── 1/5 ─╮scalating… spec merg…│
 │                     │                                                                          │ate 1 · d… busmon-ch…▼
 ╰─────────────────────│ busmon shows what your agents are doing and what waits for you. A few    │─────────────────────╯
-╭─  1 Activity  2 Boar│ short pages; esc skips, and F1 then t brings them back.                  │ents · filter: none ─╮
+╭─  1 Activity   2 Boa│ short pages; esc skips, and F1 then t brings them back.                  │ents · filter: none ─╮
 │    time   from      │                                                                          │                     │
 │  ── Mon 2026-10-26 -│   For you     what needs you: questions, waits, unread lines             │─────────────────────│
 │    14:24  architect │   Agents      each agent, its state and how fresh it is                  │                     │

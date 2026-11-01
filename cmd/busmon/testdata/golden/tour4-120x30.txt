@@ -8,7 +8,7 @@
 │  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
 │                     ╭─ Useful keys ────────────────────────────────────────────────────── 4/5 ─╮ate 1 · d… busmon-ch…▼
 ╰─────────────────────│                                                                          │─────────────────────╯
-╭─  1 Activity  2 Boar│   enter  open a line (once: in place; twice: the full text)              │ents · filter: none ─╮
+╭─  1 Activity   2 Boa│   enter  open a line (once: in place; twice: the full text)              │ents · filter: none ─╮
 │    time   from      │   u      the next unread line for you                                    │                     │
 │  ── Mon 2026-10-26 -│   R      where was I? the recap since your last visit                    │─────────────────────│
 │    14:24  architect │   P      the batch's plan                                                │                     │

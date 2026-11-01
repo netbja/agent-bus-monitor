@@ -9,7 +9,7 @@
 │                                      ││  ○ sentinel  idle      0s      —        —                                    │
 │                                      ││  ○ ui-kimi   idle      0s      —        —                                    │
 ╰──────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity  2 Board  3 Requests  4 Plan  ─────────────────── 22 waiting · 1 tracked · 9 gated · 11 between agents ─╮
+╭─  1 Activity   2 Board   3 Requests   4 Plan   ─────────────── 22 waiting · 1 tracked · 9 gated · 11 between agents ─╮
 │  You wait on                                                                                                         │
 │  ○ you → master              directive message 21 from the person                                                  5m│
 │  ○ you → master              directive message 20 from the person                                                 10m│

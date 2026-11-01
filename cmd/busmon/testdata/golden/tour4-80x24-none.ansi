@@ -12,7 +12,7 @@
 │  ♙[1m│[m   [1m/[m      filter Activity                                             [1m│[m   ┃
 │  ♙[1m│[m   [1mF1 ?[m   help, every key                                             [1m│[m   ▼
 ╰───[1m│[m   [1mF2[m [1mF3[m  requests, services                                          [1m│[m───╯
-╭─ [1;7m [m[1m│[m   [1mF5[m     project health                                              [1m│[ml…─╮
+╭─ [1;7m [m[1m│[m   [1mF5[m     project health                                              [1m│[m·…─╮
 │   [1m│[m   [1mq[m      quit                                                        [1m│[m   ▲
 │   [1m│[m                                                                      [1m│[m   │
 │  ○[1m│[m ○ ○ ○ ● ○   [1menter[m next · [1m←[m back · [1mesc[m skip                           [1m│[m   │

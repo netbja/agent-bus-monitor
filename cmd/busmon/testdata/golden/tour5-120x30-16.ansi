@@ -8,7 +8,7 @@
 [38;5;3m│[m  [38;5;6m● unread [mdispatch  project paused until …[38;5;7m 8m[m[38;5;3m│[m[38;5;8m│[m  [38;5;12m✓ [marchitect [38;5;12mdone      [m[38;5;7m40m    [m [38;5;7m—    [m [38;5;7m—        [m [38;5;9mescalating[m[38;5;7m…[m spec merg…[38;5;8m│[m
 [38;5;3m│[m                     [38;5;6m╭─[m[1;7;38;5;6m The header [m[38;5;6m───────────────────────────────────────────────────────[m [38;5;7m5/5[m [38;5;6m─╮[m[38;5;9mate 1[m[38;5;7m · [m[38;5;3md…[m busmon-ch…[38;5;8m▼[m
 [38;5;3m╰─────────────────────[m[38;5;6m│[m                                                                          [38;5;6m│[m[38;5;8m─────────────────────╯[m
-[38;5;8m╭─[m [1;7;38;5;2m 1 Activity[m [38;5;7m 2 Boar[m[38;5;6m│[m   [38;5;2m● bus ok[m           busmon reads the bus                                [38;5;6m│[m[38;5;7ments · filter: none[m [38;5;8m─╮[m
+[38;5;8m╭─[m [1;7;38;5;2m 1 Activity [m [38;5;7m 2 Boa[m[38;5;6m│[m   [38;5;2m● bus ok[m           busmon reads the bus                                [38;5;6m│[m[38;5;7ments · filter: none[m [38;5;8m─╮[m
 [38;5;8m│[m  [38;5;8m  time   from      [m[38;5;6m│[m   [38;5;2m● dispatch up[m      the service that wakes idle agents runs             [38;5;6m│[m[38;5;8m                     [m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m── Mon 2026-10-26 -[m[38;5;6m│[m   [38;5;2m● missions up[m      the conductor runs                                  [38;5;6m│[m[38;5;7m─────────────────────[m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m  14:24  [marchitect [38;5;6m│[m   [38;5;3mhealth ▲2[m          two checks only you can fix;[1;38;5;6m F5[m says which          [38;5;6m│[m                     [38;5;8m│[m

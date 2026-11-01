@@ -12,7 +12,7 @@
 │  ♙│   i     the line: @coder please rebase                               │   ┃
 │  ♙│   I ^O  the compose window, several lines; ^S sends                  │   ▼
 ╰───│                                                                      │───╯
-╭─  │ Text without @name is a broadcast nobody reads: busmon asks for a    │l…─╮
+╭─  │ Text without @name is a broadcast nobody reads: busmon asks for a    │·…─╮
 │   │ second enter before it sends one.                                    │   ▲
 │   │                                                                      │   │
 │  ○│ ○ ● ○ ○ ○   enter next · ← back · esc skip                           │   │

@@ -8,7 +8,7 @@
 │  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
 │                     ╭─ Answering a question ───────────────────────────────────────────── 3/5 ─╮ate 1 · d… busmon-ch…▼
 ╰─────────────────────│                                                                          │─────────────────────╯
-╭─  1 Activity  2 Boar│ An agent that needs your decision asks a question. It shows in For you   │ents · filter: none ─╮
+╭─  1 Activity   2 Boa│ An agent that needs your decision asks a question. It shows in For you   │ents · filter: none ─╮
 │    time   from      │ with ●, and the agent reads waiting.                                     │                     │
 │  ── Mon 2026-10-26 -│                                                                          │─────────────────────│
 │    14:24  architect │   ! F4  open its questions                                               │                     │

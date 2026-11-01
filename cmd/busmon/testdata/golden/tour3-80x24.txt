@@ -12,7 +12,7 @@
 │  ♙│   1-9   pick an answer                                               │   ┃
 │  ♙│   o     Other: write your own answer in the compose window           │   ▼
 ╰───│                                                                      │───╯
-╭─  │ Your answer wakes the agent; nothing else is needed.                 │l…─╮
+╭─  │ Your answer wakes the agent; nothing else is needed.                 │·…─╮
 │   │                                                                      │   ▲
 │   │ ○ ○ ● ○ ○   enter next · ← back · esc skip                           │   │
 │  ○╰──────────────────────────────────────────────────────────────────────╯   │

@@ -1,6 +1,6 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙ 4  ● 2         
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
- 1 For you  2 Agents  3 Act  4 Board  5 Requests  6 Plan    
+ 1 For you   2 Agents   3 Act   4 Board   5 Req   6 Plan    
 ╭─ Activity  auto-scroll on ───── 7 events · filter: none ─╮
 │    14:50 ♙ Charl… directive → coder review lot 1         ▲
 │▼   14:51 coder    report    Lot 1 delivered (+197)       │

@@ -12,7 +12,7 @@
 │  ♙│   1 Activity  everything said on the bus, live                       │   ┃
 │  ♙│   2 Board     who owns which task                                    │   ▼
 ╰───│   3 Requests  who owes whom an answer                                │───╯
-╭─  │   4 Plan      the batch's tasks by state                             │l…─╮
+╭─  │   4 Plan      the batch's tasks by state                             │·…─╮
 │   │                                                                      │   ▲
 │   │ tab moves the focus between panels; 1-4 pick one of the tabs.        │   │
 │  ○│                                                                      │   │
