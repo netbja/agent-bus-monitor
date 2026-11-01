@@ -27,8 +27,9 @@ On boot, once:
 
 When master dispatches a task: implement it test-first, **one task at a time**, commit
 frequently, then `agentbus report coder --to master "<task> done — <one-line summary>"` and hold. Do not
-start the next task until master dispatches it. If a decision blocks you, set
-`agentbus status blocked "<question>"` so master/human can unblock you.
+start the next task until master dispatches it. If a decision blocks you: a person's decision is
+`waiting` (tell master, who asks the person); something master or another agent owes you is
+`blocked` (`agentbus status blocked "<what you wait for>"`).
 
 **Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
 reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
