@@ -145,10 +145,10 @@ rule on every Enter, and nothing is written until Enter. Esc leaves the file unt
 
 | Kind | Keys | Shown | Change |
 |---|---|---|---|
-| on/off | `waiting.bell`, `waiting.fade`, `updates.check`, `dispatch.quota`, `dispatch.tokens`, `dispatch.auto_clear` | `on` / `off` | Enter or space flips it and writes at once (one key, one meaning: no confirm), except `dispatch.auto_clear` |
+| on/off | `waiting.bell`, `waiting.fade`, `updates.check`, `dispatch.quota`, `dispatch.tokens` | `on` / `off` | Enter or space flips it and writes at once (one key, one meaning: no confirm) |
 | on/off, confirmed | `dispatch.auto_clear` | `on` / `off` | the one setting that lets the dispatcher type `/clear` into a pane, off by default until the lifecycle decision's live checks pass: turning it on asks `y` and says so; turning it off writes at once |
 | choice | `display.theme` | the value; the detail lists the others | Enter opens the choice: `←→` move along `auto · dark · light`, Enter writes |
-| number | `display.limit`, `bus.*`, `health.runaway.context_growth`, `screen_repeats` | `25` | Enter opens the line editor on the value (the same editor as the input line); Enter writes; `display.limit` `0` reads `all` (all history) |
+| number | `display.limit`, `bus.*`, `health.runaway.context_growth`, `screen_repeats` | `25` | Enter opens the line editor on the value (the same editor as the input line); Enter writes; `display.limit`: every value at or below `0` reads `all` (busmon's backfill replays all history for `limit <= 0`, `cmd/busmon/main.go`; the registry rule accepts any integer), and the editor writes `0` for any of them, so a negative never reaches the file from the page; a hand-edited negative stays valid and reads `all` |
 | percent | `dispatch.context_alert`, `quota_warn`, `quota_hold` | `85 %` | as a number; `0` where the key allows it reads `off` |
 | duration | `waiting.popup_after`, `waiting.snooze`, `recap.auto_after`, `dispatch.quota_max_age`, `dispatch.quota_long_hold`, `health.runaway.silent_after`, `growth_span` | `humanAge` (`5m`, `8h`) | the editor takes the file's form (`"90s"`, `"5m"`, `"2h"`); `0` where the key allows it reads `off` |
 | seconds | `dispatch.prompt_grace` | `30s` | the file holds whole seconds (0 to 3600), so the editor takes a number; `0` reads `off` |
