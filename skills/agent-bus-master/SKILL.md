@@ -33,6 +33,7 @@ automatic merge gate.
 Each peer registers its pane (`HERDR_PANE_ID`) via its `agentbus status` heartbeat:
 ```bash
 agentbus agents --json          # {"claude1":{"state":...,"pane":"w1:p1"},...}
+agentbus agents coder foureyes  # only those agents, same columns (--json too); unknown name: exit 1
 agentbus pane claude1           # just the pane id; non-zero exit if none
 ```
 herdr pane ids are NOT durable. Before acting, confirm the stored id is still live with

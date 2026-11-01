@@ -453,7 +453,7 @@ func TestBriefLine(t *testing.T) {
 	}{
 		{subEvent{Event: "cmd", ID: "5-0", From: "master", Type: "directive", Body: "do x"}, "5-0 master [directive]: do x"},
 		{subEvent{Event: "cmd", ID: "6-0", From: "foureyes", Type: "verdict", Ref: "dmk1", Body: "approve: a\nb\\c\tz"}, `6-0 foureyes [verdict dmk1]: approve: a\nb\\c\tz`},
-		{subEvent{Event: "cmd", ID: "7-0", From: "bernard", Type: "directive", Body: "go", Human: true, Stale: true}, "7-0 bernard (person) [directive]: go (stale)"},
+		{subEvent{Event: "cmd", ID: "7-0", From: "charlie", Type: "directive", Body: "go", Human: true, Stale: true}, "7-0 charlie (person) [directive]: go (stale)"},
 		{subEvent{Event: "error", ID: "8-0", Msg: "command missing; no actionable payload"}, "8-0 error: command missing; no actionable payload"},
 		{subEvent{Event: "error", Msg: "receiver busy"}, "error: receiver busy"},
 	} {

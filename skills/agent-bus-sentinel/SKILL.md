@@ -15,6 +15,7 @@ Read the current record and transition history before acting:
 
 ```bash
 agentbus health list
+agentbus health <check-id>...       # only those checks: status, reason and detail lines
 agentbus health detail <check-id>
 agentbus health log
 ```
@@ -139,7 +140,8 @@ fi
 
 ## Drain and stop
 
-After the duty, drain addressed entries with `agentbus subscribe --drain sentinel`; never use a
+After the duty, drain addressed entries with `agentbus subscribe --drain --brief sentinel` (one
+line per entry; drop `--brief` for JSON); never use a
 plain subscribe cursor that could skip waiting entries. Handle only live, addressed entries, then
 stop. A sentinel without the dispatcher is not a caretaker; report that to the person rather than
 starting another service.
