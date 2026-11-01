@@ -178,29 +178,8 @@ func historyLine(e history.Entry, loc *time.Location) string {
 		}
 		return fmt.Sprintf("-- not archived: %s to %s (%s) --", stamp(from), end, e.F["of"])
 	}
-	who, text := historyWhoText(e)
+	who, text := history.WhoText(e)
 	return fmt.Sprintf("%s  %s  %s  %s", stamp(history.At(e)), who, history.Kind(e), strings.Join(strings.Fields(text), " "))
-}
-
-func historyWhoText(e history.Entry) (who, text string) {
-	f := e.F
-	switch e.Stream {
-	case "cmd":
-		return f["from"] + " → " + f["target"], f["command"]
-	case "report":
-		return f["agent"], f["message"]
-	case "status":
-		return f["agent"], f["state"] + ": " + f["message"]
-	case "notify":
-		return f["from"], f["message"]
-	case "verdicts":
-		return f["reviewer"] + " → " + f["author"], f["decision"] + " " + f["subject"] + ": " + f["message"]
-	case "health:log":
-		return f["check"], f["previous"] + " → " + f["status"]
-	case "swaps":
-		return f["role"], f["event"]
-	}
-	return e.Stream, ""
 }
 
 func idTime(id string) time.Time {

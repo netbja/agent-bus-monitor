@@ -146,6 +146,29 @@ func Kind(e Entry) string {
 	return e.Stream
 }
 
+// WhoText is who an entry is from (and to), and its text, as listen and the
+// readers print it.
+func WhoText(e Entry) (who, text string) {
+	f := e.F
+	switch e.Stream {
+	case "cmd":
+		return f["from"] + " → " + f["target"], f["command"]
+	case "report":
+		return f["agent"], f["message"]
+	case "status":
+		return f["agent"], f["state"] + ": " + f["message"]
+	case "notify":
+		return f["from"], f["message"]
+	case "verdicts":
+		return f["reviewer"] + " → " + f["author"], f["decision"] + " " + f["subject"] + ": " + f["message"]
+	case "health:log":
+		return f["check"], f["previous"] + " → " + f["status"]
+	case "swaps":
+		return f["role"], f["event"]
+	}
+	return e.Stream, ""
+}
+
 // At is the entry's time, from its id.
 func At(e Entry) time.Time {
 	ms, _, _ := parseID(e.ID)

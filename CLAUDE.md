@@ -838,6 +838,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   streams, `history.Merge` by (stream, id), `history.Filter` (`--agent` matches from/target/agent and a verdict's
   author/reviewer; a gap line passes an agent or kind filter it may hide, never `--thread`/`--grep`), newest
   `--limit` (200); says `broker unreachable: archive only` or `no archive on this host: live streams only`.
+  busmon's History page (`H`, `history_page.go`, `ovHistory`): loaded in a command (`historyLoadCmd`: the last 3 days
+  under an 8 MiB cap, `ReadGaps`, the live streams through the writer's optional `liveStreamReader`), newest first
+  under day headings (`historyBody`, short kinds below 80 cells), Enter opens an entry in the message page, `o`
+  (`ActOlder`, OnPage) loads three days more.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

@@ -30,6 +30,7 @@ KEYS
   R                    where was I? open the project recap
   P                    the batch's plan: its tasks by state (enter opens one, or expands done)
   U                    tokens: the account windows, every project side by side, this project by agent
+  H                    history: re-read the past, the archive on this host then the live streams (enter opens an entry)
   F1 ?                 help
   q                    quit
   ^C                   quit (everywhere)
@@ -60,6 +61,7 @@ KEYS
   t                    in the help: the first-launch tour again
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
+  o                    History (H): load the three days before
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
   ^C                   quit (everywhere)

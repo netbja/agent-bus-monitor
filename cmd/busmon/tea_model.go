@@ -54,6 +54,8 @@ type shellConfig struct {
 	// liveFrom is busmon's start: a tail event older than it is history,
 	// never a notice (the --limit 0 replay comes through the live tail).
 	liveFrom time.Time
+	// histDir is the history archive on this host ("" = none: live streams only).
+	histDir string
 }
 
 // uiState is the person's place on the screen.
@@ -210,6 +212,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.scheduleFade()
 	case threadMsg:
 		m.gotThread(msg)
+	case historyMsg:
+		m.gotHistory(msg)
 	case servicesMsg:
 		return m.gotServices(msg)
 	case svcTickMsg:

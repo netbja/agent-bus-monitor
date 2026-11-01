@@ -52,7 +52,7 @@ Ce guide pratique est conçu en complément du [README](../README.fr.md) (la ré
      - **For you** : les questions, décisions, verrous et messages non lus que vous seul pouvez régler.
      - **Agents** : état déclaré (`working`, `idle`, `blocked`, `waiting`, `done`), fraîcheur, file d'attente, remplissage du contexte, signaux en toutes lettres.
      - **Activity · Board · Requests · Plan** : le flux en direct, le tableau des tâches, qui doit une réponse à qui, le plan du lot.
-     - **Pages** : services (F3), santé (F5), récapitulatif (`R`), plan (`P`), tokens (`U`), aide (F1).
+     - **Pages** : services (F3), santé (F5), récapitulatif (`R`), plan (`P`), tokens (`U`), historique (`H`), aide (F1).
      - **Saisie** : `@coder ...` envoie une directive qui réveille l'agent.
 
 4. **L'Event-Driven Dispatcher (`agentbus dispatch`)**

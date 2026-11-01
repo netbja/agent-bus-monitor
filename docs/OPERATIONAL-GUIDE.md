@@ -52,7 +52,7 @@ This practical guide complements the `README.md`. It provides a complete step-by
      - **For you**: the questions, decisions, gates and unread messages only you can settle.
      - **Agents**: declared state (`working`, `idle`, `blocked`, `waiting`, `done`), freshness, queue, context fill, flags in words.
      - **Activity · Board · Requests · Plan**: the live feed, the shared task board, who owes whom an answer, the batch's plan.
-     - **Pages**: services (F3), health (F5), recap (`R`), plan (`P`), tokens (`U`), help (F1).
+     - **Pages**: services (F3), health (F5), recap (`R`), plan (`P`), tokens (`U`), history (`H`), help (F1).
      - **Input**: `@coder ...` sends a directive that wakes the agent.
 
 4. **Event-Driven Dispatcher (`agentbus dispatch`)**

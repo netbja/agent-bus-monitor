@@ -1,0 +1,40 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙ 4  ● 2          15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62%   
+ 1 For you   2 Agents   3 Activity   4 Board   5 Requests   6 Plan    
+╭─ History · 3 days · 3 entries ────────────────────────── esc back ─╮
+│   Sun 2026-11-01                                                   │
+│ ▶ 18:49  coder → master  rep  queued after step 4                  │
+│   18:47  master → coder  dir  New feature from the person          │
+│   ── not archived: 14:47 to 17:47 (status) ──                      │
+│   Sat 2026-10-31                                                   │
+│   23:58  foureyes → co…  ver  approve busmon-notice: APPROVE       │
+│   o loads the 3 days before                                        │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+╰────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   o older   esc q close    

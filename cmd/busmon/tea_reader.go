@@ -61,6 +61,9 @@ type page struct {
 	recap     recapModel // ovRecap: the recap as shown, re-filtered at each build for the tier
 	recapAll  recapModel // ovRecap: the recap as built, unfiltered
 	recapLine int        // ovRecap: the body line of the cursor's row
+
+	hist   *histView  // ovHistory: what the load read
+	hrows  []histItem // ovHistory: its selectable rows (sel: the selected one)
 }
 
 // pageStamp is what a body was built for.
@@ -475,6 +478,13 @@ func (m *Model) buildPage() bool {
 		if s.plan != nil {
 			p.title += " " + GlyphNone + " " + strings.TrimPrefix(planSeg(*s.plan, now).text(), "plan ")
 		}
+	case ovHistory:
+		v := histView{days: histDaysStep}
+		if p.hist != nil {
+			v = *p.hist
+		}
+		p.title, p.body, p.hrows = historyBody(v, p.sel, time.Local, width)
+		p.sel = clamp(p.sel, 0, max(0, len(p.hrows)-1))
 	case ovTokens:
 		p.title = tokensTitle(s.budgets, s.holds, now)
 		p.body = tokensPage(s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
@@ -708,6 +718,17 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		p.health.all, p.dirty = !p.health.all, true
 		m.refresh()
 		return nil
+	}
+	if p.kind == ovHistory {
+		switch {
+		case act == ActOlder:
+			return m.historyOlder(p)
+		case k.Code == keyEnter:
+			return m.openHistoryEntry(p)
+		case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
+			m.moveSel(p, act, m.readerRows(), histLines(p))
+			return nil
+		}
 	}
 	if p.kind == ovHealth {
 		switch {
@@ -1163,6 +1184,8 @@ func (m Model) pageOffers(act Action) bool {
 		return ok && p.kind == ovPlanTask
 	case ActShowAll:
 		return p.kind == ovHealth || p.kind == ovTokens
+	case ActOlder:
+		return p.kind == ovHistory
 	}
 	return false
 }
