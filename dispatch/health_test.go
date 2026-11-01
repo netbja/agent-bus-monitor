@@ -136,9 +136,9 @@ func TestHealthLoopStoresTheReason(t *testing.T) {
 		err  error
 		want string
 	}{
-		{health.Outcome{Status: health.Fail, Detail: "service restart budget is spent", Reason: health.ReasonBudgetSpent}, nil, health.ReasonBudgetSpent},
+		{health.Outcome{Status: health.Fail, Detail: "restart budget spent: dispatch", Reason: health.ReasonBudgetSpentDispatch}, nil, health.ReasonBudgetSpentDispatch},
 		{health.Outcome{Status: health.OK, Detail: "installed services are active", Reason: health.ReasonBudgetSpent}, nil, ""},
-		{health.Outcome{Status: health.Fail, Detail: "service restart budget is spent", Reason: health.ReasonBudgetSpent}, io.ErrUnexpectedEOF, ""},
+		{health.Outcome{Status: health.Fail, Detail: "restart budget spent: dispatch", Reason: health.ReasonBudgetSpentDispatch}, io.ErrUnexpectedEOF, ""},
 		{health.Outcome{Status: health.Fail, Detail: "token: sk-ant-0123456789abcdef", Reason: health.ReasonBudgetSpent}, nil, ""},
 		{health.Outcome{Status: health.Fail, Detail: "an installed service is inactive or failed", Reason: "made-up"}, nil, ""},
 	} {

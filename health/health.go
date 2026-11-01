@@ -87,7 +87,11 @@ func (d Definition) Place(s Status) Place {
 // not registered here.
 var Catalogue = []Definition{
 	{ID: "services", Title: "Services", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Inspect the service log; restart only when its restart budget allows. Missions waiting for Git: run git init in the project directory.", Order: 1, Handler: "sentinel",
-		Reasons: map[string]string{ReasonBudgetSpent: "agentbus --project <project> service restart", ReasonWaitingGit: "git init"}},
+		Reasons: map[string]string{ // a spent kind has given up: restarting it interrupts nothing
+			ReasonBudgetSpent:         "agentbus --project <project> service restart",
+			ReasonBudgetSpentDispatch: "agentbus --project <project> service restart dispatch",
+			ReasonBudgetSpentMissions: "agentbus --project <project> service restart missions",
+			ReasonWaitingGit:          "git init"}},
 	{ID: "agent-identity", Title: "Agent identity", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Re-check agentbus agents and herdr; ask the person before acting on an identity conflict.", Order: 2, Handler: "master"},
 	{ID: "agent-launch", Title: "Agent launch and identity", Interval: 5 * time.Minute, Deadline: 5 * time.Second, Remediation: "Relaunch through agentbus with the configured role; do not edit a live pane.", Order: 3, Handler: "master"},
 	{ID: "model-drift", Title: "Model drift", Interval: 24 * time.Hour, Deadline: 30 * time.Second, Remediation: "Review the result with agentbus roles doctor before changing roles.toml.", Order: 4, Person: []Status{Warn, Fail}, Command: "agentbus roles doctor"},

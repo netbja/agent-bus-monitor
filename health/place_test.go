@@ -62,25 +62,32 @@ func TestPlacesOfTheNamedChecks(t *testing.T) {
 // A spent restart budget fails like an inactive service, and a Git wait warns
 // like a recent error, but only the person can fix the first of each: the
 // evaluator says so with a fixed reason code, never in its detail, and the
-// check names that code's command (reviewer-codex, foureyes).
+// check names that code's command (reviewer-codex, foureyes). Budgets are per
+// kind: a spent one gives up and exits, so its service reads inactive, and it
+// is still the budget that speaks; failures of two kinds never add up; the
+// command restarts only the spent kind (reviewer-codex).
 func TestServicesReasonsAreForThePerson(t *testing.T) {
 	d, _ := ByID("services")
-	for _, c := range []struct {
+	restart := "agentbus --project <project> service restart"
+	for name, c := range map[string]struct {
 		ev      ServiceEvidence
 		status  Status
 		place   Place
 		command string
 	}{
-		{ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 5}, Fail, PlaceForYou, "agentbus --project <project> service restart"},
-		{ServiceEvidence{Known: true, Installed: true, Active: true, WaitingGit: true}, Warn, PlaceForYou, "git init"},
-		{ServiceEvidence{Known: true, Installed: true, Active: false}, Fail, PlaceInHand, ""},
-		{ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 4}, Warn, PlaceInHand, ""},
-		{ServiceEvidence{Known: true, Installed: true, Active: true, RecentError: true}, Warn, PlaceInHand, ""},
+		"dispatch spent, so inactive": {ServiceEvidence{Known: true, Installed: true, Active: false, Failures: map[string]int{"dispatch": 5, "missions": 1}}, Fail, PlaceForYou, restart + " dispatch"},
+		"missions spent":              {ServiceEvidence{Known: true, Installed: true, Active: false, Failures: map[string]int{"missions": 6}}, Fail, PlaceForYou, restart + " missions"},
+		"both spent":                  {ServiceEvidence{Known: true, Installed: true, Active: false, Failures: map[string]int{"dispatch": 5, "missions": 5}}, Fail, PlaceForYou, restart},
+		"3 + 2 is no spent budget":    {ServiceEvidence{Known: true, Installed: true, Active: true, Failures: map[string]int{"dispatch": 3, "missions": 2}}, OK, PlaceFine, ""},
+		"one budget low":              {ServiceEvidence{Known: true, Installed: true, Active: true, Failures: map[string]int{"dispatch": 4}}, Warn, PlaceInHand, ""},
+		"git wait":                    {ServiceEvidence{Known: true, Installed: true, Active: true, WaitingGit: true}, Warn, PlaceForYou, "git init"},
+		"inactive":                    {ServiceEvidence{Known: true, Installed: true, Active: false, Failures: map[string]int{"dispatch": 2}}, Fail, PlaceInHand, ""},
+		"recent error":                {ServiceEvidence{Known: true, Installed: true, Active: true, RecentError: true}, Warn, PlaceInHand, ""},
 	} {
 		o := EvaluateServices(c.ev)
 		rec := Record{Status: o.Status, Reason: o.Reason}
 		if o.Status != c.status || d.PlaceOf(rec, o.Status) != c.place || d.CommandOf(rec) != c.command {
-			t.Errorf("%+v: %+v, place %q, command %q", c.ev, o, d.PlaceOf(rec, o.Status), d.CommandOf(rec))
+			t.Errorf("%s: %+v, place %q, command %q", name, o, d.PlaceOf(rec, o.Status), d.CommandOf(rec))
 		}
 	}
 	// A reason never moves an ok or unknown check, nor does a code the check

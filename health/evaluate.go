@@ -46,16 +46,23 @@ func DefaultRunawayThresholds() RunawayThresholds {
 
 type ServiceEvidence struct {
 	Known, Installed, Active bool
-	RecentFailures           int
+	Failures                 map[string]int // per kind: its failed runs in its own budget's window
 	RecentError              bool
 	WaitingGit               bool // missions runs but waits for its directory to become a Git repository
 }
 
+// ServiceBudgetStarts is service.BudgetStarts (held equal by a test): this
+// many failures in the window spend a kind's restart budget, and it gives up.
+const ServiceBudgetStarts = 5
+
 // The services check's person-only cases (foureyes, reviewer-codex): an
-// inactive service or a recent error is sentinel's, these two are not.
+// inactive service or a recent error is sentinel's, these are not. A spent
+// budget is per kind, so its code names the kind its command restarts.
 const (
-	ReasonBudgetSpent = "budget-spent" // sentinel's restarts draw on the same budget
-	ReasonWaitingGit  = "waiting-git"  // only the person runs git init
+	ReasonBudgetSpent         = "budget-spent"          // every kind's: restart them all
+	ReasonBudgetSpentDispatch = "budget-spent-dispatch" // sentinel's restarts draw on the same budget
+	ReasonBudgetSpentMissions = "budget-spent-missions"
+	ReasonWaitingGit          = "waiting-git" // only the person runs git init
 )
 
 func EvaluateServices(e ServiceEvidence) Outcome {
@@ -65,13 +72,29 @@ func EvaluateServices(e ServiceEvidence) Outcome {
 	if !e.Installed {
 		return Outcome{Status: OK, Detail: "no managed services installed"}
 	}
+	// A spent budget first: its service gave up and exits, so it also reads
+	// inactive (reviewer-codex). Each kind against its own budget, never a sum.
+	var spent []string
+	most := 0
+	for _, kind := range []string{"dispatch", "missions"} {
+		n := e.Failures[kind]
+		most = max(most, n)
+		if n >= ServiceBudgetStarts {
+			spent = append(spent, kind)
+		}
+	}
+	switch {
+	case len(spent) == 2:
+		return Outcome{Status: Fail, Detail: "restart budget spent: dispatch, missions", Reason: ReasonBudgetSpent}
+	case len(spent) == 1 && spent[0] == "dispatch":
+		return Outcome{Status: Fail, Detail: "restart budget spent: dispatch", Reason: ReasonBudgetSpentDispatch}
+	case len(spent) == 1:
+		return Outcome{Status: Fail, Detail: "restart budget spent: missions", Reason: ReasonBudgetSpentMissions}
+	}
 	if !e.Active {
 		return Outcome{Status: Fail, Detail: "an installed service is inactive or failed"}
 	}
-	if e.RecentFailures >= 5 {
-		return Outcome{Status: Fail, Detail: "service restart budget is spent", Reason: ReasonBudgetSpent} // sentinel restarts within the same budget: only the person can
-	}
-	if e.RecentFailures >= 4 || e.RecentError {
+	if most >= ServiceBudgetStarts-1 || e.RecentError {
 		return Outcome{Status: Warn, Detail: "service had a recent error or restart budget is low"}
 	}
 	if e.WaitingGit {

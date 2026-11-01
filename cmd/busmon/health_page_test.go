@@ -151,12 +151,12 @@ func TestHealthPageWithoutReadings(t *testing.T) {
 func TestHealthPageSpentBudgetIsForYou(t *testing.T) {
 	now := time.Unix(10_000_000, 0)
 	recs := allOK(now)
-	recs["services"] = guardian.Record{ID: "services", Status: guardian.Fail, Reason: guardian.ReasonBudgetSpent, Detail: "service restart budget is spent", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
+	recs["services"] = guardian.Record{ID: "services", Status: guardian.Fail, Reason: guardian.ReasonBudgetSpentDispatch, Detail: "restart budget spent: dispatch", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
 	if s := summarizeGuardian(recs, now); s.ToDo != 1 || !s.ToDoFail {
 		t.Fatalf("summary %+v", s)
 	}
 	_, body, items, plain := healthPage(recs, nil, now, "demo", healthView{}, 136)
-	if !strings.HasPrefix(healthPageText(body), "  For you") || plain != "agentbus --project demo service restart" {
+	if !strings.HasPrefix(healthPageText(body), "  For you") || plain != "agentbus --project demo service restart dispatch" {
 		t.Errorf("spent budget: plain %q\n%s", plain, healthPageText(body))
 	}
 	_ = items
