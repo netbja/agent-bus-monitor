@@ -324,7 +324,8 @@ type shared struct {
 	health         health       // the MONITOR's own link to the broker
 	guardianHealth map[string]guardian.Record
 	guardianNotes  map[string]guardian.Note
-	guardianNow    time.Time
+	guardianNow    time.Time   // Redis TIME at the last good read
+	guardianNowAt  time.Time   // the local clock at that read: guardianNow advances from it
 	configNote     string      // non-fatal user configuration issue
 	cmdHistory     []bus.Event // bounded retained cmd sample used for waiting/reply correlation
 	cmdOldest      time.Time   // oldest event in the retained sample; zero when none

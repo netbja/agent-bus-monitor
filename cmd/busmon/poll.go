@@ -241,6 +241,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	var guardNotes map[string]guardian.Note
 	var guardNow time.Time
 	guardRecordsOK, guardNotesOK, guardNowOK := false, false, false
+	var guardNowAt time.Time
 	if gr, ok := b.(guardianReader); ok {
 		if rows, err := gr.Health(pollCtx); err == nil {
 			guardRecords, guardRecordsOK = rows, true
@@ -249,7 +250,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			guardNotes, guardNotesOK = rows, true
 		}
 		if now, err := gr.ServerTime(pollCtx); err == nil {
-			guardNow, guardNowOK = now, true
+			guardNow, guardNowOK, guardNowAt = now, true, time.Now()
 		}
 	}
 
@@ -263,7 +264,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		st.guardianNotes = guardNotes
 	}
 	if guardNowOK {
-		st.guardianNow = guardNow
+		st.guardianNow, st.guardianNowAt = guardNow, guardNowAt
 	}
 	st.pauseFailed = pauseErr != nil
 	if pauseErr == nil {

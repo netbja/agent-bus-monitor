@@ -47,6 +47,10 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 	guardNow := st.guardianNow
 	if guardNow.IsZero() {
 		guardNow = now
+	} else if !st.guardianNowAt.IsZero() && now.After(st.guardianNowAt) {
+		// The server's clock as of now: a failed time read never freezes the
+		// age reference, so a cached record still goes stale.
+		guardNow = guardNow.Add(now.Sub(st.guardianNowAt))
 	}
 	s := snapshot{
 		person: st.person, pilot: st.pilot, update: st.update, configNote: st.configNote,
