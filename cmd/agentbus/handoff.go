@@ -99,8 +99,10 @@ func listHandoffs(ctx context.Context, d handoffDeps, asJSON bool, stdout, stder
 		if r.Void {
 			state = "void: " + r.Reason
 		}
-		age := d.Now().Sub(time.UnixMilli(r.At)).Round(time.Minute)
-		fmt.Fprintf(stdout, "%-12s report %s  %s ago  %s\n", r.Agent, r.Report, shortAge(age), state)
+		now := d.Now()
+		at := time.UnixMilli(r.At).In(now.Location()) // the exact time beside the age (agent-brief), local
+		age := now.Sub(at).Round(time.Minute)
+		fmt.Fprintf(stdout, "%-12s report %s  %s (%s ago)  %s\n", r.Agent, r.Report, at.Format(time.RFC3339), shortAge(age), state)
 	}
 	return 0
 }
