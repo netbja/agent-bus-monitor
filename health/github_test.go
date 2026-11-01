@@ -91,6 +91,11 @@ func TestClassifyHTTPS(t *testing.T) {
 		{"deadline", true, true, -1, "", ProbeFailed, "timed out"},
 		{"not run", false, false, -1, "", ProbeNotRun, "could not run"},
 		{"unclassified", true, false, 128, "fatal: something new", ProbeNotRun, "unrecognised"},
+		// An answer quoting a repository whose name holds ssl or tls is still an answer (foureyes).
+		{"not found, rustls", true, false, 128, "remote: Repository not found.\nfatal: repository 'https://github.com/rustls/rustls-x/' not found", ProbeReached, "not found"},
+		{"auth, openssl owner", true, false, 128, "fatal: could not read Username for 'https://github.com/openssl': terminal prompts disabled", ProbeReached, "authentication unknown"},
+		{"gnutls", true, false, 128, "fatal: unable to access 'https://github.com/o/r/': gnutls_handshake() failed: The TLS connection was non-properly terminated.", ProbeFailed, "TLS"},
+		{"ssl_connect", true, false, 128, "fatal: unable to access 'https://github.com/o/r/': OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to github.com:443", ProbeFailed, "TLS"},
 	} {
 		p := ClassifyHTTPS(c.ran, c.timedOut, c.exit, c.out)
 		if p.Result != c.want || !strings.Contains(p.Note, c.note) {

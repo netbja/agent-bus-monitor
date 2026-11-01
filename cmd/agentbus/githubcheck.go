@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,11 @@ type githubCheck struct {
 	neither time.Time // when both transports began failing; zero otherwise
 }
 
+// probeEnv makes every command the check runs speak English whatever the
+// service's locale (LC_ALL overrides LANG and, for gettext, LANGUAGE): the
+// probes' answers are read by their English messages (foureyes).
+var probeEnv = []string{"LC_ALL=C"}
+
 func newGitHubCheck() *githubCheck { return &githubCheck{run: runProbe, now: time.Now} }
 
 // outcome runs both probes in parallel within ctx, when the project's remote
@@ -51,13 +57,13 @@ func (c *githubCheck) outcome(ctx context.Context) health.Outcome {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		r := c.run(ctx, nil, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-T", "git@github.com")
+		r := c.run(ctx, probeEnv, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-T", "git@github.com")
 		ssh = health.ClassifySSH(r.ran, r.timedOut, r.exit, r.out)
 	}()
 	go func() {
 		defer wg.Done()
 		// No credential helper and no prompt: a reachability probe only.
-		r := c.run(ctx, []string{"GIT_TERMINAL_PROMPT=0"}, "git", "-c", "credential.helper=", "ls-remote", "https://github.com/"+repo)
+		r := c.run(ctx, slices.Concat(probeEnv, []string{"GIT_TERMINAL_PROMPT=0"}), "git", "-c", "credential.helper=", "ls-remote", "https://github.com/"+repo)
 		https = health.ClassifyHTTPS(r.ran, r.timedOut, r.exit, r.out)
 	}()
 	wg.Wait()
@@ -79,7 +85,7 @@ func (c *githubCheck) outcome(ctx context.Context) health.Outcome {
 // repo is the owner/repo of the project's GitHub remote: origin's when it is
 // on github.com, else the first remote that is, else "".
 func (c *githubCheck) repo(ctx context.Context) string {
-	r := c.run(ctx, nil, "git", "config", "--get-regexp", `^remote\..*\.url$`)
+	r := c.run(ctx, probeEnv, "git", "config", "--get-regexp", `^remote\..*\.url$`)
 	if !r.ran {
 		return ""
 	}

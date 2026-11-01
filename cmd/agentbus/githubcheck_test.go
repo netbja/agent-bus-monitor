@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -67,6 +69,11 @@ func TestGitHubCheckRunsTheSpecProbes(t *testing.T) {
 			}
 		}
 	}
+	for i, cmd := range f.commands { // English messages, whatever the service's locale (foureyes)
+		if !slices.Contains(f.envs[i], "LC_ALL=C") {
+			t.Errorf("%v runs in the service's locale: env %v", cmd, f.envs[i])
+		}
+	}
 	if !sawSSH || !sawHTTPS {
 		t.Errorf("probes not run as specified: %v", f.commands)
 	}
@@ -129,5 +136,26 @@ func TestGitHubCheckNotRunAndNoCredential(t *testing.T) {
 		if strings.Contains(strings.Join(cmd, " "), "secret-token") {
 			t.Errorf("a probe carries the remote's credential: %v", cmd)
 		}
+	}
+}
+
+// The remote read with the real git: the exact pattern finds origin in a
+// repository's config (reviewer-codex asked for the pattern to be pinned).
+func TestGitHubCheckReadsTheRemoteWithRealGit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@github.com:netbja/agent-bus-monitor.git"}, {"remote", "add", "other", "https://gitlab.com/x/y.git"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	t.Chdir(dir)
+	c := &githubCheck{run: runProbe, now: time.Now}
+	if got := c.repo(context.Background()); got != "netbja/agent-bus-monitor" {
+		t.Errorf("repo() = %q with the real git config", got)
 	}
 }

@@ -62,19 +62,32 @@ var sshPatterns = []probePattern{
 	{"connection closed", ProbeFailed, "connection reset"},
 }
 
+// GitHub's answers come first: an answer proves GitHub was reached, and it
+// may quote the repository's URL, whose name can hold any of the network
+// words below (foureyes: rustls). The TLS errors are matched by their own
+// phrases, never by a bare "ssl" or "tls". The probes run with LC_ALL=C, so
+// these are git's and curl's English messages.
 var httpsPatterns = []probePattern{
+	{"could not read username", ProbeReached, "answered, authentication unknown (no credential helper, no prompt)"},
+	{"authentication failed", ProbeReached, "answered, authentication unknown (no credential helper, no prompt)"},
+	{"repository not found", ProbeReached, "answered: repository not found (a wrong or renamed path, or private)"},
+	{"' not found", ProbeReached, "answered: repository not found (a wrong or renamed path, or private)"},
+	{"returned error", ProbeReached, "answered with an HTTP error"},
 	{"could not resolve host", ProbeFailed, "name not resolved"},
 	{"timed out", ProbeFailed, "connection timed out"},
 	{"failed to connect", ProbeFailed, "could not connect"},
 	{"couldn't connect", ProbeFailed, "could not connect"},
 	{"connection refused", ProbeFailed, "could not connect"},
 	{"connection reset", ProbeFailed, "connection reset"},
-	{"ssl", ProbeFailed, "TLS failure"},
-	{"tls", ProbeFailed, "TLS failure"},
-	{"could not read username", ProbeReached, "answered, authentication unknown (no credential helper, no prompt)"},
-	{"authentication failed", ProbeReached, "answered, authentication unknown (no credential helper, no prompt)"},
-	{"not found", ProbeReached, "answered: repository not found (a wrong or renamed path, or private)"},
-	{"returned error", ProbeReached, "answered with an HTTP error"},
+	{"ssl certificate problem", ProbeFailed, "TLS failure"},
+	{"ssl_connect", ProbeFailed, "TLS failure"},
+	{"ssl_error", ProbeFailed, "TLS failure"},
+	{"ssl routines", ProbeFailed, "TLS failure"},
+	{"gnutls", ProbeFailed, "TLS failure"},
+	{"tls handshake", ProbeFailed, "TLS failure"},
+	{"tls connection", ProbeFailed, "TLS failure"},
+	{"schannel", ProbeFailed, "TLS failure"},
+	{"secure transport", ProbeFailed, "TLS failure"},
 }
 
 func classify(ran, timedOut bool, out string, patterns []probePattern) Probe {
