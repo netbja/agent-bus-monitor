@@ -64,7 +64,7 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 	// first, then writes the snapshot with its entry's time, and a flip landing
 	// between the two carries a later TIME (auto-state spec, foureyes).
 	if old == nil || next.TS >= old.TS || old.Auto != "" {
-		out.State, out.Message, out.TS, out.Auto = next.State, next.Message, next.TS, ""
+		out.State, out.Message, out.TS, out.Auto, out.DeclTS = next.State, next.Message, next.TS, "", 0
 	}
 	if next.Session != "" {
 		out.Session = next.Session

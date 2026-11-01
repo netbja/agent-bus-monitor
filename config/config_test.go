@@ -28,7 +28,7 @@ func TestRegistryRows(t *testing.T) {
 		"display.theme", "display.limit", "identity.as", "updates.check",
 		"dispatch.context_alert", "dispatch.prompt_grace", "dispatch.quota", "dispatch.quota_warn",
 		"dispatch.quota_hold", "dispatch.quota_max_age", "dispatch.quota_long_hold", "dispatch.tokens",
-		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "bus.report_max", "bus.report_full_max", "bus.verdict_max",
+		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "dispatch.turn_stale_after", "bus.report_max", "bus.report_full_max", "bus.verdict_max",
 		"health.runaway.silent_after", "health.runaway.context_growth", "health.runaway.growth_span",
 		"health.runaway.screen_repeats",
 	}

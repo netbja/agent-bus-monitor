@@ -22,11 +22,12 @@ import (
 // unknown, never ok and never a stall.
 
 // stallSettings are the three thresholds, read once per pass (0 = off).
-type stallSettings struct{ stall, clear, quiet time.Duration }
+type stallSettings struct{ stall, clear, quiet, turnStale time.Duration }
 
 func readStallSettings(getenv func(string) string) stallSettings {
 	r := config.Machine(getenv)
-	return stallSettings{r.Duration("dispatch.stall_after"), r.Duration("dispatch.clear_stall_after"), r.Duration("dispatch.quiet_after")}
+	return stallSettings{r.Duration("dispatch.stall_after"), r.Duration("dispatch.clear_stall_after"), r.Duration("dispatch.quiet_after"),
+		r.Duration("dispatch.turn_stale_after")}
 }
 
 // stallReader holds what the checks keep between passes: the verdict ledger,
@@ -159,7 +160,7 @@ func (s *stallReader) quietAgent(ctx context.Context) (health.Outcome, error) {
 		wrote(e.Agent, e.ID)
 	}
 	for name, snap := range snaps {
-		wrote(name, fmt.Sprintf("%d-0", snap.TS)) // the status entry's millisecond
+		wrote(name, fmt.Sprintf("%d-0", snap.DeclaredTS())) // the status entry's millisecond; a turn flip is no write
 		o, err := s.b.Obligation(ctx, name, bus.DefaultHorizon)
 		if err != nil { // a cursor not read is never "not read yet" (foureyes)
 			return fail("delivery cursors unavailable")
@@ -223,7 +224,14 @@ func (s *stallReader) teamStall(ctx context.Context) (health.Outcome, error) {
 		if snap.PID > 0 {
 			in.NoIdentities = false
 		}
-		a := health.StallAgent{Name: name, State: snap.State, DeclaredAt: time.UnixMilli(snap.TS), Dormant: dormantAt(snap, now)}
+		var seen *bus.Observation
+		if ob, ok := obs[name]; ok {
+			seen = &ob
+		}
+		// A turn's working left stuck (no Stop) reads idle once the pane is
+		// seen ready for turn_stale_after (bus.EffectiveState, auto-state).
+		state, since := bus.EffectiveState(snap, seen, now.UnixMilli(), set.turnStale.Milliseconds())
+		a := health.StallAgent{Name: name, State: state, DeclaredAt: time.UnixMilli(since), Dormant: dormantAt(snap, now)}
 		if ob, ok := obs[name]; ok && ob.Fresh(now.UnixMilli()) {
 			a.Pane = health.PaneIdle
 			if ob.Busy {

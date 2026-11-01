@@ -699,7 +699,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   snapshot only, never a status entry (`auto: "turn"`, the message kept, only from idle or working, only for the stored
   verified pid and start); a declaration clears `auto` and wins over a flip whatever their times (`mergeSnapshot`).
   `bus.EffectiveState` reads a flip's working as idle once a fresh observation has seen the pane ready for `staleAfter`,
-  since `max(flip ts, the ready since)`; nothing is rewritten.
+  since `max(flip ts, the ready since)`, ready meaning herdr's `idle` or `done` with the pane not busy (`unknown` proves
+  nothing); nothing is rewritten. A flip keeps the last declaration's time in `DeclTS` (`AgentSnapshot.DeclaredTS`):
+  quiet-agent counts that as the agent's last write, never a flip, and `team-stall` reads each agent through
+  `EffectiveState` with `dispatch.turn_stale_after` (2 min, `0` = off).
 - **Settings: one registry, `config/keys.go`** (config-file, spec
   `docs/superpowers/specs/2026-10-29-config-file-design.md`): every tunable's file key, env name,
   default, today's env rule (use, skip to the next source, or invalid) and typed file rule; per key, env

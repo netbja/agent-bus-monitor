@@ -43,7 +43,20 @@ func (b *Bus) TurnState(ctx context.Context, agent, state string, who AgentIdent
 			return AgentSnapshot{}, ErrNoFlip
 		}
 		out := *old
+		if old.Auto == "" {
+			out.DeclTS = old.TS // the declaration's time, kept under the flips
+		}
 		out.State, out.TS, out.Auto = state, max(now.UnixMilli(), old.TS), AutoTurn
 		return out, nil
 	})
+}
+
+// DeclaredTS is when the agent last declared its state: TS, or under a turn
+// flip the declaration's time kept in DeclTS. A flip is no write of the
+// agent's (quiet-agent reads this).
+func (s AgentSnapshot) DeclaredTS() int64 {
+	if s.Auto != "" && s.DeclTS > 0 {
+		return s.DeclTS
+	}
+	return s.TS
 }
