@@ -19,7 +19,7 @@
     {"id": "agentbus-start", "title": "agentbus start: one command from install to a running team", "owner": "coder", "review": "agentbus-start"},
     {"id": "forge-delivery", "title": "Forge support: the delivery setting and agentbus deliver", "owner": "coder", "review": "forge-delivery"},
     {"id": "backup", "title": "Backup: the config directory, secrets optionally encrypted", "owner": "coder", "review": "backup"},
-    {"id": "local-llm-peer", "title": "Local LLM peer, per its spec", "owner": "coder", "review": "local-llm-peer", "after": ["config-followups"]},
+    {"id": "local-llm-peer", "title": "Local LLM peer, per its spec", "owner": "coder", "review": "local-llm-peer-code", "after": ["config-followups"]},
     {"id": "auto-reload", "title": "Auto-reload setting for sentinel", "owner": "coder", "review": "auto-reload"},
     {"id": "notifications-order", "title": "Decide: notifications (Discord, ntfy), and where they come in the order", "owner": "person"},
     {"id": "notifications", "title": "Notifications to Discord or ntfy", "owner": "coder", "review": "notifications", "after": ["notifications-order"]},
