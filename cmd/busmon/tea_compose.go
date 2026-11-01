@@ -489,6 +489,8 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 	case ActSend:
 		return m.composeSend()
 	case ActComposeField:
+		c.area.unmark() // a selection belongs to the field it was made in: leaving it ends it
+		c.to.unmark()
 		switch {
 		case c.kind != composeMessage:
 		case !c.onTo && m.prefixToRecipient(c):
@@ -509,8 +511,11 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 		}
 		return nil
 	case ActClose:
-		if _, _, ok := field.selection(); ok { // Esc first clears a selection (the person)
-			field.unmark()
+		_, _, inText := c.area.selection()
+		_, _, inTo := c.to.selection()
+		if inText || inTo { // Esc first clears a selection, in either field (the person, reviewer-codex)
+			c.area.unmark()
+			c.to.unmark()
 			return nil
 		}
 		m.closeCompose()
@@ -647,6 +652,7 @@ func (m *Model) composeClick(x, y int) {
 		m.closeCompose()
 	case y == f.Y+1 && c.kind == composeMessage:
 		c.onTo = true
+		c.area.unmark() // a click elsewhere ends a selection (clickAt does it in the text)
 	case tr.contains(x, y):
 		c.onTo = false
 		c.area.clickAt(tr.W, x-tr.X, y-tr.Y)

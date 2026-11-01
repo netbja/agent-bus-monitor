@@ -133,3 +133,27 @@ func TestComposePageUpDown(t *testing.T) {
 		t.Fatalf("shift+up selected %q", got)
 	}
 }
+
+// A selection belongs to its field: switching fields (Tab) ends it, so the
+// first Esc after one never closes a window that still showed a selection
+// elsewhere (reviewer-codex); and Esc clears a selection in either field.
+func TestComposeSelectionAcrossFields(t *testing.T) {
+	m := composeWith(t, "body text")
+	m = keys(t, m, kShiftLeft, kShiftLeft, kTab)
+	if _, _, ok := m.ui.compose.area.selection(); ok {
+		t.Fatal("tab to the recipient kept the body's selection")
+	}
+	if m = keys(t, m, kEsc); m.ui.compose != nil {
+		t.Fatal("esc with no selection left did not close the window")
+	}
+	// Esc clears a selection wherever it is, even with the focus on the other field.
+	m = composeWith(t, "body text")
+	m = keys(t, m, kShiftLeft)
+	m.ui.compose.onTo = true // the focus moved without the key handler (as a click on the recipient row does)
+	if m = keys(t, m, kEsc); m.ui.compose == nil {
+		t.Fatal("esc closed the window while the body held a selection")
+	}
+	if _, _, ok := m.ui.compose.area.selection(); ok {
+		t.Fatal("esc did not clear the body's selection")
+	}
+}
