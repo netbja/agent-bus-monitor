@@ -34,6 +34,7 @@ type recapRow struct {
 	Older    bool
 	ReportID string    // a report notice's report
 	Report   bus.Event // that report, when retained: Enter opens it, Y copies it
+	Unread   bool      // not opened yet: marked on its own line, never a second row
 }
 
 type recapModel struct {
@@ -94,7 +95,29 @@ func buildRecap(in recapInput) recapModel {
 		}
 		return humanAge(max(0, in.Now.Sub(at)))
 	}
+	threadReplies := make(map[string]bool)
+	for _, e := range in.Commands {
+		if e.Type == bus.CmdReply && e.Ref != "" && e.Human {
+			threadReplies[e.Ref] = true
+		}
+	}
+	// sentToPerson: a command the person is owed an answer to, a For you item.
+	sentToPerson := func(e bus.Event) bool {
+		return (e.Target == bus.PeopleTarget || in.Human != "" && e.Target == in.Human) && !e.Human &&
+			(e.Type == bus.CmdDirective || e.Type == bus.CmdEscalation) && !threadReplies[threadID(e)]
+	}
+	items := map[string]bool{}
+	for _, e := range in.Commands {
+		if sentToPerson(e) {
+			items[e.ID] = true
+		}
+	}
+	unread := map[string]bool{}
 	for _, e := range in.Unread { // the unread marks first (busmon UX item 8)
+		unread[e.ID] = true
+		if items[e.ID] { // that item, marked unread (foureyes): one line
+			continue
+		}
 		text, _ := reportText(e.Message)
 		at := eventTimestamp(e.ID)
 		add(recapRow{Key: "unread:" + e.ID, Section: recapForYou,
@@ -106,7 +129,8 @@ func buildRecap(in recapInput) recapModel {
 			if q.Answer == nil {
 				add(recapRow{Key: "ask:" + a.ID + ":" + q.ID, Section: recapForYou, Title: a.From + " asks " + GlyphNone + " " + q.Header,
 					Detail: q.Question, Kind: "ask", Agent: a.From, Ref: a.ID, Selectable: true,
-					Name: a.From, NameRole: nameRole(a.From), Text: "asks: " + q.Header + ": " + q.Question})
+					Name: a.From, NameRole: nameRole(a.From), Text: "asks: " + q.Header + ": " + q.Question,
+					Age: ageOf(askTime(a)), At: askTime(a)})
 			}
 		}
 	}
@@ -119,12 +143,6 @@ func buildRecap(in recapInput) recapModel {
 				Name: n, NameRole: nameRole(n), Text: "waiting: " + a.message, Age: ageOf(a.stateAt), At: a.stateAt})
 		}
 	}
-	threadReplies := make(map[string]bool)
-	for _, e := range in.Commands {
-		if e.Type == bus.CmdReply && e.Ref != "" && e.Human {
-			threadReplies[e.Ref] = true
-		}
-	}
 	reports := make(map[string]bus.Event, len(in.Reports))
 	for _, r := range in.Reports {
 		reports[r.ID] = r
@@ -133,44 +151,42 @@ func buildRecap(in recapInput) recapModel {
 	// notice reads as its report's own preview, identical items (same sender,
 	// same text) are one row with their count and the newest's report, newest
 	// first; past a day (the Requests window) an item is kept but folded.
-	var items []recapRow
+	var list []recapRow
 	same := map[string]int{}
 	for _, e := range in.Commands {
-		if e.Target != bus.PeopleTarget && (in.Human == "" || e.Target != in.Human) || e.Human || e.Type != bus.CmdDirective && e.Type != bus.CmdEscalation {
+		if !sentToPerson(e) {
 			continue
 		}
 		thread := threadID(e)
-		if threadReplies[thread] {
-			continue
-		}
 		text, rid := reportText(e.Message)
 		at := eventTimestamp(e.ID)
 		row := recapRow{Key: "cmd:" + e.ID, Section: recapForYou, Title: e.From + " " + GlyphArrowR + " " + e.Target + " " + GlyphNone + " " + ageOf(at),
 			Detail: e.Message, Kind: "thread", Agent: e.From, Ref: thread, Event: e, Selectable: true,
 			Name: e.From, NameRole: nameRole(e.From), Text: text, Age: ageOf(at), At: at, Count: 1,
-			Older: in.Now.Sub(at) > bus.DefaultHorizon, ReportID: rid, Report: reports[rid]}
+			Older: in.Now.Sub(at) > bus.DefaultHorizon, ReportID: rid, Report: reports[rid], Unread: unread[e.ID]}
 		k := e.From + "\x00" + text
 		if i, ok := same[k]; ok {
-			count := items[i].Count + 1
-			if at.Before(items[i].At) { // keep the newest's time, report and key
-				row = items[i]
+			count, isUnread := list[i].Count+1, row.Unread || list[i].Unread
+			if at.Before(list[i].At) { // keep the newest's time, report and key
+				row = list[i]
 			}
-			row.Count = count
-			items[i] = row
+			row.Count, row.Unread = count, isUnread
+			list[i] = row
 			continue
 		}
-		same[k] = len(items)
-		items = append(items, row)
+		same[k] = len(list)
+		list = append(list, row)
 	}
-	sort.SliceStable(items, func(i, j int) bool { return items[i].At.After(items[j].At) })
-	for _, r := range items {
+	sort.SliceStable(list, func(i, j int) bool { return list[i].At.After(list[j].At) })
+	for _, r := range list {
 		add(r)
 	}
 	for _, n := range names {
 		a := in.Agents[n]
 		if a.state == "blocked" {
 			add(recapRow{Key: "blocked:" + n, Section: recapForYou, Title: n + " blocked", Detail: a.message,
-				Kind: "agent", Agent: n, Selectable: true, Name: n, NameRole: nameRole(n), Text: "blocked: " + a.message})
+				Kind: "agent", Agent: n, Selectable: true, Name: n, NameRole: nameRole(n), Text: "blocked: " + a.message,
+				Age: ageOf(a.stateAt), At: a.stateAt})
 		}
 	}
 	planRecapExpected(in, add)
@@ -380,6 +396,14 @@ func buildRecap(in recapInput) recapModel {
 	m.Rows = append(m.Rows, recapRow{Key: "summary", Section: "Ask master", Title: "Ask " + m.Target + " for a summary",
 		Detail: recapSummaryStatus(m), Kind: "summary", Selectable: m.SummaryDisabled == ""})
 	return m
+}
+
+// askTime is when an ask was created (zero: unknown, no age shown).
+func askTime(a bus.Ask) time.Time {
+	if a.CreatedAt <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(a.CreatedAt)
 }
 
 // reportText is what a For you line says for msg: a report notice's own

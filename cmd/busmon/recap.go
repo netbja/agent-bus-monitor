@@ -240,17 +240,22 @@ func recapHasOlder(r recapModel) bool {
 	return false
 }
 
-// recapItemLine is a For you item in the list format: the sender in its
-// colour, its text with (N) when merged, the age right-aligned and muted.
+// recapItemLine is a For you item in the list format: its unread mark, the
+// sender in its colour, its text with (N) when merged, the age right-aligned
+// and muted.
 func recapItemLine(row recapRow, width int) Line {
 	const nameW = 12
-	textW := max(8, width-2-nameW-2-2-listAgeW)
+	textW := max(8, width-2-2-nameW-2-2-listAgeW)
 	text := Preview(row.Text)
 	if row.Count > 1 {
 		text += fmt.Sprintf(" (%d)", row.Count)
 	}
 	age := Truncate(row.Age, listAgeW)
-	return Line{S(row.NameRole, Fit(Preview(row.Name), nameW)), S(RoleText, "  "+Fit(text, textW)+"  "),
+	m := markNone
+	if row.Unread {
+		m = markUnread
+	}
+	return Line{markCell(m), S(row.NameRole, Fit(Preview(row.Name), nameW)), S(RoleText, "  "+Fit(text, textW)+"  "),
 		S(RoleText, strings.Repeat(" ", listAgeW-Width(age))), S(RoleMuted, age)}
 }
 

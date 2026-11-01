@@ -1,7 +1,7 @@
 ── For you ──
-  coder         asks: Review: Approve this?                                                         
-  coder         waiting: review [red]this[-]                                                     30m
-  coder         Need a decision                                                                  10s
+    coder         asks: Review: Approve this?                                                       
+    coder         waiting: review [red]this[-]                                                   30m
+    coder         Need a decision                                                                10s
 
 ── Agents ──
   coder · waiting · 30m

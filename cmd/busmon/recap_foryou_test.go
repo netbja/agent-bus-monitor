@@ -89,7 +89,7 @@ func TestRecapForYouLines(t *testing.T) {
 			t.Errorf("line of %d cells: %q", l.Width(), l.text())
 		}
 	}
-	if !strings.HasPrefix(mock, "  master") || !strings.Contains(mock, "The mock-ups are in PR 212 (2)") || !strings.HasSuffix(mock, "21h") || Width(mock) != 100 {
+	if !strings.HasPrefix(mock, "    master") || !strings.Contains(mock, "The mock-ups are in PR 212 (2)") || !strings.HasSuffix(mock, "21h") || Width(mock) != 100 {
 		t.Fatalf("item line %q", mock)
 	}
 	if text := tokLinesText(recapBodyLines(recapFold(rec, true).Rows)); !strings.Contains(text, "an old one") || strings.Contains(text, "older") {
@@ -138,5 +138,82 @@ func TestRecapForYouKeys(t *testing.T) {
 	m = keys(t, m, kEnter)
 	if top := m.rd.top(); top == nil || top.kind == ovRecap || !strings.Contains(tokLinesText(top.body), "all pages") {
 		t.Fatalf("Enter did not open the report's full text: %+v", top)
+	}
+}
+
+// An unread entry that is also a For you item is that item, marked unread
+// (foureyes): one line, never a second 'unread:' row; an unread entry with no
+// item (a notice for the person) keeps its own row.
+func TestRecapForYouUnreadOnce(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	in := recapNotices(now)
+	direct := in.Commands[4] // coder -> charlie "Need a decision"
+	notice := bus.Event{ID: fmt.Sprintf("%d-0", now.Add(-time.Minute).UnixMilli()), Kind: "notify", From: "dispatch", For: bus.ForPerson, Message: "the dispatcher wants you"}
+	in.Unread = []bus.Event{direct, notice}
+	rec := buildRecap(in)
+	lines, _ := recapBody(recapFold(rec, false).Rows, -1, 100)
+	text := tokLinesText(lines)
+	if n := strings.Count(text, "Need a decision"); n != 1 {
+		t.Fatalf("the unread directive shows %d times:\n%s", n, text)
+	}
+	if !strings.Contains(text, "the dispatcher wants you") {
+		t.Fatalf("an unread entry with no item lost its row:\n%s", text)
+	}
+	for _, l := range lines {
+		if s := l.text(); strings.Contains(s, "Need a decision") && !strings.HasPrefix(s, "  "+GlyphDotFull+" coder") {
+			t.Fatalf("the item is not marked unread: %q", s)
+		}
+		if s := l.text(); strings.Contains(s, "Migration C") && strings.Contains(s, GlyphDotFull) {
+			t.Fatalf("a read item is marked unread: %q", s)
+		}
+	}
+}
+
+// Every item has its age (reviewer-codex): an ask from its creation, a
+// blocked agent from its declaration.
+func TestRecapForYouAges(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	in := recapNotices(now)
+	in.Asks = []bus.Ask{{ID: "a1", From: "coder", State: "open", CreatedAt: now.Add(-2 * time.Hour).UnixMilli(),
+		Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "q1", Header: "Review", Question: "Approve?"}}}}}
+	in.Agents["coder"] = &agentState{state: "blocked", message: "tests fail", stateAt: now.Add(-5 * time.Minute), registered: true}
+	lines, _ := recapBody(buildRecap(in).Rows, -1, 100)
+	for _, l := range lines {
+		s := l.text()
+		if strings.Contains(s, "asks:") && !strings.HasSuffix(s, " 2h") || strings.Contains(s, "blocked:") && !strings.HasSuffix(s, " 5m") {
+			t.Errorf("no age: %q", s)
+		}
+	}
+}
+
+// A report notice whose report is no longer retained keeps its preview;
+// Enter says the report is gone, never the notice's envelope, and Y copies
+// nothing (reviewer-codex).
+func TestRecapForYouReportGone(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	in := recapNotices(now)
+	in.Reports = nil
+	m := reqShell(t, 70, 40, nil)
+	m.gotRecap(recapMsg{model: buildRecap(in)})
+	m.maybeOpenRecap()
+	p := m.rd.top()
+	for i, r := range p.recap.Rows {
+		if strings.Contains(r.Text, "Migration C") {
+			p.sel = i
+		}
+	}
+	p.dirty = true
+	m.refresh()
+	if m.pageOffers(ActCopyThread) {
+		t.Fatal("Y offered for a report no longer retained")
+	}
+	m = keys(t, m, 'Y')
+	if strings.Contains(m.ui.flash, "copied") || !strings.Contains(m.ui.flash, "no longer retained") {
+		t.Fatalf("Y: %q", m.ui.flash)
+	}
+	m = keys(t, m, kEnter)
+	body := tokLinesText(m.rd.top().body)
+	if !strings.Contains(body, "no longer retained") || !strings.Contains(body, "Migration C is in PR") || strings.Contains(body, "full text: agentbus") {
+		t.Fatalf("Enter on a report gone:\n%s", body)
 	}
 }

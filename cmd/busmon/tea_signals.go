@@ -234,6 +234,11 @@ func (m *Model) recapKey(k Key) tea.Cmd {
 		p.recapOlder, p.dirty = !p.recapOlder, true
 		m.refresh()
 	case k.Code == keyRune && k.Rune == 'Y':
+		if r, ok := recapSelected(p); ok && r.ReportID != "" && r.Report.ID == "" { // never the envelope (reviewer-codex)
+			m.ui.flash, m.ui.flashErr = "report "+r.ReportID+" no longer retained: nothing to copy", true
+			m.refresh()
+			return nil
+		}
 		return m.copy(p.threadPlain, "report")
 	}
 	return nil
@@ -254,6 +259,14 @@ func (m *Model) moveRecap(p *page, step int) {
 			return
 		}
 	}
+}
+
+// recapSelected is the recap row under the cursor.
+func recapSelected(p *page) (recapRow, bool) {
+	if p == nil || p.sel < 0 || p.sel >= len(p.recap.Rows) {
+		return recapRow{}, false
+	}
+	return p.recap.Rows[p.sel], true
 }
 
 // activateRecapRow opens what a recap row names, over the recap.
@@ -278,6 +291,11 @@ func (m *Model) activateRecapRow(p *page) tea.Cmd {
 	case "thread":
 		if r.Report.ID != "" { // a report notice opens its report's full text
 			return m.pushMessage(r.Report, eventTimestamp(r.Report.ID))
+		}
+		if r.ReportID != "" { // its report is trimmed or unread: say so, keep the preview, never the envelope
+			var b body
+			b.seg(RoleMuted, "This report is no longer retained (the report stream keeps about the last 1000).").text("\n\n").text(Preview(r.Text))
+			return m.push(page{kind: ovMessage, title: "Report " + r.ReportID, body: b.Lines(), fixed: true})
 		}
 		return m.pushMessage(r.Event, eventTimestamp(r.Event.ID))
 	case "verdict":
