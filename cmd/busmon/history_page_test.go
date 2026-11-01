@@ -70,7 +70,7 @@ func TestHistoryPageSaysWhatIsMissing(t *testing.T) {
 	v := histView{entries: histFixture(), days: 3, loaded: true, cut: true, noArchive: true, liveErr: "dial: refused"}
 	_, body, _ := historyBody(v, 0, time.UTC, 100)
 	got := strings.Join(histTexts(body), "\n")
-	for _, w := range []string{"older lines not loaded", "no archive on this host", "broker unreachable"} {
+	for _, w := range []string{"more archive lines not read", "no archive on this host", "broker unreachable"} {
 		if !strings.Contains(got, w) {
 			t.Errorf("lacks %q:\n%s", w, got)
 		}
@@ -310,5 +310,39 @@ func TestHistoryOlderWindowsGapsAndLiveAgain(t *testing.T) {
 	m = next.(Model)
 	if !strings.Contains(strings.Join(histTexts(m.rd.top().body), "\n"), "four days ago") {
 		t.Fatal("o does not window the live entries again")
+	}
+}
+
+// A capped first read keeps the file's tail, in write order: what is left may
+// hold newer entries than the oldest shown, and the page says so, never "older
+// lines" (reviewer-codex).
+func TestHistoryCutNoticeSaysLinesMayBeNewer(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	var es []history.Entry
+	for i := 10; i < 20; i++ { // cmd's page first, newer ids
+		es = append(es, history.Entry{Stream: "cmd", ID: histID(now.Add(-time.Hour + time.Duration(i)*time.Second)), F: map[string]string{"type": "directive", "command": "newer " + strings.Repeat("c", 40)}})
+	}
+	for i := 0; i < 10; i++ { // then status's page, older ids
+		es = append(es, history.Entry{Stream: "status", ID: histID(now.Add(-time.Hour + time.Duration(i)*time.Second)), F: map[string]string{"agent": "coder", "state": "idle", "message": strings.Repeat("s", 40)}})
+	}
+	f, _ := os.Create(filepath.Join(dir, now.UTC().Format("2006-01-02")+".jsonl"))
+	for _, e := range es {
+		b, _ := json.Marshal(e)
+		f.Write(append(b, '\n'))
+	}
+	f.Close()
+	m := fixtureShell(t, 120, 40)
+	m.cfg.histDir = dir
+	m.histCap = 700 // the status block's tail only
+	m, cmd := pressCmd(t, m, 'H')
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	body := strings.Join(histTexts(m.rd.top().body), "\n")
+	if strings.Contains(body, "newer cccc") {
+		t.Fatalf("the fixture should leave the cmd block unread:\n%s", body)
+	}
+	if !strings.Contains(body, "more archive lines not read (in write order, some may be newer): o reads them") {
+		t.Fatalf("the notice:\n%s", body)
 	}
 }

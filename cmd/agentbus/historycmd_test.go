@@ -162,13 +162,13 @@ func TestHistoryCapsTheArchiveWithoutSince(t *testing.T) {
 		Live: func(context.Context) ([]history.Entry, error) { return nil, nil }}
 	var out, errb bytes.Buffer
 	runHistory(nil, d, &out, &errb)
-	if strings.Contains(out.String(), "old") || !strings.Contains(errb.String(), "older archive not read") {
+	if strings.Contains(out.String(), "old") || !strings.Contains(errb.String(), "more archive lines not read") {
 		t.Fatalf("capped:\n%s\n%s", out.String(), errb.String())
 	}
 	out.Reset()
 	errb.Reset()
 	runHistory([]string{"--since", "60d"}, d, &out, &errb)
-	if !strings.Contains(out.String(), "old") || strings.Contains(errb.String(), "older archive") {
+	if !strings.Contains(out.String(), "old") || strings.Contains(errb.String(), "more archive lines") {
 		t.Fatalf("--since reads it all:\n%s\n%s", out.String(), errb.String())
 	}
 }

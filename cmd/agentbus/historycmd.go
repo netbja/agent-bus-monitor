@@ -128,7 +128,7 @@ func runHistory(args []string, d historyDeps, stdout, stderr io.Writer) int {
 		if archive, cut, err = history.ReadDays(d.Dir, f.Since, until, capBytes); err != nil {
 			fmt.Fprintf(stderr, "history: reading the archive: %v\n", err)
 		} else if cut {
-			fmt.Fprintf(stderr, "older archive not read (%d MiB read); use --since to reach further back\n", capBytes>>20)
+			fmt.Fprintf(stderr, "more archive lines not read (%d MiB read, in write order: some may be newer than the oldest shown); use --since to read them\n", capBytes>>20)
 		}
 		gaps, err := history.ReadGaps(d.Dir) // every hole, whatever days were read (reviewer-codex)
 		if err != nil {

@@ -113,7 +113,9 @@ func historyBody(v histView, sel int, loc *time.Location, width int) (string, []
 		body = append(body, row)
 	}
 	if v.cut {
-		muted("older lines not loaded: o reads before them")
+		// The archive is paged by position, in write order, not by id: what is
+		// left may hold newer entries than the oldest shown (reviewer-codex).
+		muted("more archive lines not read (in write order, some may be newer): o reads them")
 	}
 	muted(fmt.Sprintf("o loads the %d days before", histDaysStep))
 	return title, body, items
