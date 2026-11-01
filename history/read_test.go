@@ -113,6 +113,17 @@ func TestFilterMatches(t *testing.T) {
 			}
 		}
 	}
+	// The cmd copy of a verdict is a notice; the ledger's entry is the verdict
+	// (foureyes: --kind verdict printed each twice).
+	vcmd := Entry{Stream: "cmd", ID: id(at, 5), F: map[string]string{"from": "foureyes", "target": "coder", "type": "verdict", "command": "approve"}}
+	vled := Entry{Stream: "verdicts", ID: id(at, 6), F: map[string]string{"reviewer": "foureyes", "author": "coder", "decision": "approve"}}
+	if (Filter{Kind: "verdict"}).Match(vcmd) || !(Filter{Kind: "verdict"}).Match(vled) || Kind(vcmd) != "verdict-notice" {
+		t.Error("--kind verdict is the ledger's entry only")
+	}
+	// --grep reads the text, not the names (foureyes).
+	if (Filter{Grep: "master"}).Match(dir) || !(Filter{Grep: "history"}).Match(dir) {
+		t.Error("--grep matched a name field, or missed the text")
+	}
 	gap := Entry{Stream: GapStream, ID: id(at, 9), F: map[string]string{"of": "status", "from": "1-0", "to": id(at, 9)}}
 	if !(Filter{Kind: "status"}).Match(gap) || (Filter{Kind: "report"}).Match(gap) || (Filter{Thread: "x"}).Match(gap) {
 		t.Error("a gap shows for its own stream's kind, never under a thread or a grep")

@@ -145,3 +145,30 @@ func TestHistoryRefusesAnUnknownFlag(t *testing.T) {
 		t.Fatalf("exit %d", code)
 	}
 }
+
+// Without --since the archive is read newest first under a cap, and a cut is
+// said (foureyes); --since lifts the cap.
+func TestHistoryCapsTheArchiveWithoutSince(t *testing.T) {
+	at := time.Date(2026, 11, 1, 17, 47, 0, 0, time.UTC)
+	dir := filepath.Join(t.TempDir(), "history")
+	archiveFixture(t, dir, at)
+	old := filepath.Join(dir, "2026-10-01.jsonl")
+	os.WriteFile(old, []byte(`{"stream":"cmd","id":"`+hid(at.AddDate(0, -1, 0))+`","f":{"command":"old"}}`+"\n"), 0o600)
+	st, err := os.Stat(filepath.Join(dir, "2026-11-01.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := historyDeps{Dir: dir, Now: func() time.Time { return at.Add(time.Hour) }, Loc: time.UTC, Cap: st.Size(), // today's file only
+		Live: func(context.Context) ([]history.Entry, error) { return nil, nil }}
+	var out, errb bytes.Buffer
+	runHistory(nil, d, &out, &errb)
+	if strings.Contains(out.String(), "old") || !strings.Contains(errb.String(), "older archive not read") {
+		t.Fatalf("capped:\n%s\n%s", out.String(), errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	runHistory([]string{"--since", "60d"}, d, &out, &errb)
+	if !strings.Contains(out.String(), "old") || strings.Contains(errb.String(), "older archive") {
+		t.Fatalf("--since reads it all:\n%s\n%s", out.String(), errb.String())
+	}
+}

@@ -24,6 +24,9 @@ type historyDeps struct {
 	Live func(ctx context.Context) ([]history.Entry, error)
 	Now  func() time.Time
 	Loc  *time.Location
+	// Cap bounds the archive read when no --since narrows it (64 MiB when 0):
+	// the newest days first, so 200 lines never read 256 MiB (foureyes).
+	Cap int64
 }
 
 func realHistoryDeps(host, project string) historyDeps {
@@ -114,9 +117,18 @@ func runHistory(args []string, d historyDeps, stdout, stderr io.Writer) int {
 		if until.IsZero() {
 			until = now
 		}
+		capBytes := int64(0)
+		if f.Since.IsZero() {
+			if capBytes = d.Cap; capBytes <= 0 {
+				capBytes = 64 << 20
+			}
+		}
 		var err error
-		if archive, _, err = history.ReadDays(d.Dir, f.Since, until, 0); err != nil {
+		var cut bool
+		if archive, cut, err = history.ReadDays(d.Dir, f.Since, until, capBytes); err != nil {
 			fmt.Fprintf(stderr, "history: reading the archive: %v\n", err)
+		} else if cut {
+			fmt.Fprintf(stderr, "older archive not read (%d MiB read); use --since to reach further back\n", capBytes>>20)
 		}
 	}
 	if _, err := os.Stat(d.Dir); d.Dir == "" || errors.Is(err, os.ErrNotExist) {

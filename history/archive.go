@@ -125,29 +125,39 @@ func (w *Writer) Pass(ctx context.Context, src Source, nowMS int64) (int, error)
 			return fail(err)
 		}
 	}
-	n := 0
+	// First, a gap line for each stream trimmed past its position.
 	for _, s := range Streams {
-		if n >= budget || ctx.Err() != nil {
-			break
-		}
 		pos := w.pos[s]
-		if pos != "" {
-			oldest, ok, err := src.Oldest(ctx, s)
-			if err != nil {
-				if ctx.Err() != nil {
-					break
-				}
+		if pos == "" || ctx.Err() != nil {
+			continue
+		}
+		oldest, ok, err := src.Oldest(ctx, s)
+		if err != nil {
+			if ctx.Err() != nil {
+				break
+			}
+			return fail(err)
+		}
+		if ok && idLess(pos, oldest) && w.gaps[s] != oldest {
+			if err := out.write(Entry{Stream: GapStream, ID: oldest,
+				F: map[string]string{"of": s, "from": pos, "to": oldest}}); err != nil {
 				return fail(err)
 			}
-			if ok && idLess(pos, oldest) && w.gaps[s] != oldest {
-				if err := out.write(Entry{Stream: GapStream, ID: oldest,
-					F: map[string]string{"of": s, "from": pos, "to": oldest}}); err != nil {
-					return fail(err)
-				}
-				w.gaps[s] = oldest
-			}
+			w.gaps[s] = oldest
 		}
-		for n < budget && ctx.Err() == nil {
+	}
+	// Then a page per stream in turn, so a flood on one never starves the
+	// others (reviewer-codex), until the budget is spent or every stream is
+	// read to its end.
+	n := 0
+	open := append([]string(nil), Streams...)
+	for len(open) > 0 && n < budget && ctx.Err() == nil {
+		var next []string
+		for _, s := range open {
+			if n >= budget || ctx.Err() != nil {
+				break
+			}
+			pos := w.pos[s]
 			es, err := src.After(ctx, s, pos, min(page, int64(budget-n)))
 			if err != nil {
 				if ctx.Err() != nil {
@@ -165,10 +175,11 @@ func (w *Writer) Pass(ctx context.Context, src Source, nowMS int64) (int, error)
 				n++
 			}
 			w.pos[s] = pos
-			if int64(len(es)) < page {
-				break
+			if int64(len(es)) == page {
+				next = append(next, s) // more may wait
 			}
 		}
+		open = next
 	}
 	if err := out.sync(); err != nil {
 		return fail(err)

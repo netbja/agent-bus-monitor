@@ -394,3 +394,21 @@ func TestPruneWaitsForTheWritersLock(t *testing.T) {
 		t.Fatal("Prune created the directory")
 	}
 }
+
+// A sustained flood on cmd never starves the streams read after it
+// (reviewer-codex): the budget is shared out a page at a time, in turn.
+func TestTheBudgetIsSharedAcrossStreams(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "history")
+	src := newSource()
+	for i := 0; i < 50; i++ {
+		src.add("cmd", ms(time.Duration(i)*time.Millisecond), map[string]string{"command": "flood"})
+	}
+	src.add("status", ms(0), map[string]string{"state": "idle"})
+	src.add("swaps", ms(0), map[string]string{"event": "done"})
+	w := &Writer{Dir: dir, Budget: 10, Page: 4}
+	pass(t, w, src, ms(time.Minute))
+	es := lines(t, dir)
+	if count(es, "status") != 1 || count(es, "swaps") != 1 || count(es, "cmd") != 8 {
+		t.Fatalf("each stream gets its turn: cmd %d status %d swaps %d", count(es, "cmd"), count(es, "status"), count(es, "swaps"))
+	}
+}

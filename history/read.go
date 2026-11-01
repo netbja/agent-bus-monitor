@@ -121,6 +121,9 @@ func Merge(lists ...[]Entry) []Entry {
 func Kind(e Entry) string {
 	switch e.Stream {
 	case "cmd":
+		if e.F["type"] == "verdict" {
+			return "verdict-notice" // the ledger's entry is the verdict
+		}
 		return e.F["type"]
 	case "verdicts":
 		return "verdict"
@@ -145,7 +148,7 @@ type Filter struct {
 	Kind   string
 	Since  time.Time
 	Until  time.Time
-	Grep   string // case-insensitive, in any field
+	Grep   string // case-insensitive, in the text fields (not the names)
 }
 
 // Match reports whether e passes f. A gap line passes the time bounds, and
@@ -171,7 +174,10 @@ func (f Filter) Match(e Entry) bool {
 	}
 	if f.Grep != "" {
 		needle, found := strings.ToLower(f.Grep), false
-		for _, v := range e.F {
+		for k, v := range e.F {
+			if nameFields[k] {
+				continue
+			}
 			if strings.Contains(strings.ToLower(v), needle) {
 				found = true
 				break
@@ -183,6 +189,11 @@ func (f Filter) Match(e Entry) bool {
 	}
 	return true
 }
+
+// nameFields are who and what an entry is about, not its text: --grep skips
+// them.
+var nameFields = map[string]bool{"from": true, "target": true, "agent": true, "author": true, "reviewer": true,
+	"role": true, "ref": true, "type": true, "kind": true, "human": true, "wake": true, "for": true}
 
 // gapCovers: could a gap in stream of hide entries of kind?
 func gapCovers(of, kind string) bool {
@@ -197,7 +208,7 @@ func gapCovers(of, kind string) bool {
 	case "swap":
 		return of == "swaps"
 	case "verdict":
-		return of == "verdicts" || of == "cmd"
+		return of == "verdicts"
 	}
 	return of == "cmd"
 }
