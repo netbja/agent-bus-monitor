@@ -453,3 +453,24 @@ func TestTabsAreHerdrBlocks(t *testing.T) {
 		t.Error("frameTitle changed the bar's width")
 	}
 }
+
+// The lower panel's title is its tab bar then its own suffix (Activity's
+// auto-scroll state): the tabs are fitted to what the suffix leaves, so a
+// name shortens rather than being cut by the frame (reviewer-codex).
+func TestLowerTitleReservesTheSuffix(t *testing.T) {
+	suffix := Line{{Text: "Activity", Role: RoleText}, {Text: "  auto-scroll paused", Role: RoleMuted}}
+	short := tabBar(lowerTabs, PanelActivity, 0, true).Width() // every name at its short form
+	m := Model{}
+	m.layout.Tier = TierMedium
+	m.layout.Lower.W = 4 + short + suffix[1:].Width() + 2 // full names fit alone, not with the suffix
+	if full := tabBar(lowerTabs, PanelActivity, 1000, true).Width(); full > m.layout.Lower.W-4 {
+		t.Fatalf("fixture: the full names (%d) do not fit alone in %d", full, m.layout.Lower.W-4)
+	}
+	title := m.lowerTitle(PanelActivity, suffix)
+	if title.Width() > m.layout.Lower.W-4 {
+		t.Errorf("title is %d cells in a budget of %d: the frame will cut a tab", title.Width(), m.layout.Lower.W-4)
+	}
+	if !strings.Contains(title.text(), "auto-scroll paused") {
+		t.Errorf("the suffix is lost: %q", title.text())
+	}
+}

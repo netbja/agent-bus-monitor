@@ -265,11 +265,14 @@ func (m *Model) lowerTitle(p PanelID, own Line) Line {
 	if m.layout.Tier == TierNarrow {
 		return own
 	}
-	t := tabBar(lowerTabs, p, m.layout.Lower.W-4, m.ui.focus == p)
+	var suffix Line
 	if len(own) > 1 {
-		t = append(t, own[1:]...)
+		suffix = own[1:]
 	}
-	return t
+	// The tabs get what the suffix leaves, so a name shortens rather than
+	// being cut by the frame (reviewer-codex).
+	t := tabBar(lowerTabs, p, m.layout.Lower.W-4-suffix.Width(), m.ui.focus == p)
+	return append(t, suffix...)
 }
 
 // forYouKinds are the For you row's mark and word by rank.
