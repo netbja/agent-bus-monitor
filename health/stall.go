@@ -182,6 +182,7 @@ type ClearHandoff struct {
 	At       time.Time // the hand-off's time (Redis)
 	Void     bool      // Handoff.VoidFor: no longer a hand-off
 	Decision string    // the clear pass's last reason; "" = none yet
+	Report   string    // the report that carries it: what the agent re-declares
 }
 
 // ClearStallInput is everything clear-stall judges from.
@@ -196,6 +197,53 @@ type ClearStallInput struct {
 // FocusedReason is DecideClear's reason when the person's focus holds the
 // pane: only the person can release it.
 const FocusedReason = "the pane is focused"
+
+// NotIdleReason is DecideClear's reason when the agent has not declared idle
+// since its hand-off: the one the agent fixes itself.
+const NotIdleReason = "not idle since its hand-off"
+
+// StallWake is one waking directive the stall guard owes (chain-reliability):
+// to Target, once per Episode under its {p}:quota Mark.
+type StallWake struct {
+	Mark, Episode, Target, Text string
+}
+
+// ClearStallWakes: each hand-off clear-stall warns about wakes whoever can
+// act, once per hand-off and target: the agent itself, with the exact
+// command (re-declare its report), when it is only not idle since; master for
+// any other reason, or when the report is unknown.
+func ClearStallWakes(in ClearStallInput, master string) []StallWake {
+	if in.After <= 0 || in.ReadErr != "" {
+		return nil
+	}
+	var out []StallWake
+	for _, h := range in.Handoffs {
+		age := in.Now.Sub(h.At)
+		if h.Void || age < in.After {
+			continue
+		}
+		w := StallWake{Mark: "stall-clear:" + h.Agent, Target: master}
+		switch {
+		case !in.AutoClear:
+			w.Text = fmt.Sprintf("Stall guard: %s handed off %s ago and auto-clear is off: clear its pane by hand, or ask the person to.", h.Agent, minutes(age))
+		case h.Decision == NotIdleReason && h.Report != "":
+			// A re-declaration, never a status: this wake is a prompt, and the
+			// turn it starts (auto-state) voids the record as working since;
+			// a new declaration is newer than that flip (foureyes).
+			w.Target = h.Agent
+			w.Text = fmt.Sprintf("Stall guard: your hand-off waits %s for its /clear because you are not idle since it. Run: agentbus handoff %s --report %s and nothing after it.", minutes(age), h.Agent, h.Report)
+		default:
+			d := h.Decision
+			if d == "" {
+				d = "no decision yet"
+			}
+			w.Text = fmt.Sprintf("Stall guard: %s's hand-off waits %s for its /clear: %s. Unblock it, or tell the person.", h.Agent, minutes(age), d)
+		}
+		w.Episode = strconv.FormatInt(h.At.UnixMilli(), 10) + "|" + w.Target
+		out = append(out, w)
+	}
+	return out
+}
 
 // EvaluateClearStall: a valid hand-off older than After that was not cleared
 // warns, naming the clear pass's own reason. Reason "pane-focused" when the
@@ -304,7 +352,46 @@ func EvaluateQuietAgent(in QuietAgentInput) Outcome {
 	}
 	// Collected per agent: one that cannot be judged never hides another's
 	// warning (foureyes); unknown only when nobody is quiet.
-	var quiet, unjudged []string
+	hits, unjudged := quietHits(in)
+	var quiet []string
+	for _, h := range hits {
+		state := ""
+		if h.State != "idle" && h.State != "" {
+			state = " (" + h.State + ")"
+		}
+		quiet = append(quiet, fmt.Sprintf("%s%s: %s from %s %s ago delivered, nothing written since", h.Name, state, h.D.Type, h.D.From, minutes(h.Age)))
+	}
+	sort.Strings(quiet) // a stable detail, so its fingerprint moves only when the facts do
+	sort.Strings(unjudged)
+	notJudged := ""
+	if len(unjudged) > 0 {
+		notJudged = "not judged: " + strings.Join(unjudged, ", ")
+	}
+	switch {
+	case len(quiet) > 0:
+		d := strings.Join(quiet, "; ")
+		if notJudged != "" {
+			d += "; " + notJudged
+		}
+		return Outcome{Status: Warn, Detail: truncateDetail(d)}
+	case notJudged != "":
+		return Outcome{Status: Unknown, Detail: truncateDetail(notJudged)}
+	}
+	return Outcome{Status: OK}
+}
+
+// quietHit is one quiet agent: the directive it went quiet on, and how long.
+type quietHit struct {
+	QuietAgent
+	D   QuietCmd
+	Age time.Duration
+}
+
+// quietHits is EvaluateQuietAgent's judgement per agent: the quiet ones, and
+// those that cannot be judged.
+func quietHits(in QuietAgentInput) ([]quietHit, []string) {
+	var hits []quietHit
+	var unjudged []string
 	for _, a := range in.Agents {
 		if a.Dormant || a.State == "working" || a.Held || a.Pane == PaneBusy {
 			continue
@@ -333,29 +420,25 @@ func EvaluateQuietAgent(in QuietAgentInput) Outcome {
 		if age < in.After {
 			continue
 		}
-		state := ""
-		if a.State != "idle" && a.State != "" {
-			state = " (" + a.State + ")"
-		}
-		quiet = append(quiet, fmt.Sprintf("%s%s: %s from %s %s ago delivered, nothing written since", a.Name, state, d.Type, d.From, minutes(age)))
+		hits = append(hits, quietHit{QuietAgent: a, D: d, Age: age})
 	}
-	sort.Strings(quiet) // a stable detail, so its fingerprint moves only when the facts do
-	sort.Strings(unjudged)
-	notJudged := ""
-	if len(unjudged) > 0 {
-		notJudged = "not judged: " + strings.Join(unjudged, ", ")
+	return hits, unjudged
+}
+
+// QuietAgentWakes: each agent quiet-agent warns about wakes master once per
+// directive it went quiet on (chain-reliability): a warning alone woke nobody.
+func QuietAgentWakes(in QuietAgentInput) []StallWake {
+	if in.After <= 0 || in.ReadErr != "" {
+		return nil
 	}
-	switch {
-	case len(quiet) > 0:
-		d := strings.Join(quiet, "; ")
-		if notJudged != "" {
-			d += "; " + notJudged
-		}
-		return Outcome{Status: Warn, Detail: truncateDetail(d)}
-	case notJudged != "":
-		return Outcome{Status: Unknown, Detail: truncateDetail(notJudged)}
+	hits, _ := quietHits(in)
+	out := make([]StallWake, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, StallWake{Mark: "stall-quiet:" + h.Name, Episode: h.D.ID, Target: in.Master,
+			Text: fmt.Sprintf("Stall guard: %s read %s %s from %s %s ago and has written nothing since. Look at its pane, or send it again.",
+				h.Name, h.D.Type, h.D.ID, h.D.From, minutes(h.Age))})
 	}
-	return Outcome{Status: OK}
+	return out
 }
 
 func contains(xs []string, s string) bool {

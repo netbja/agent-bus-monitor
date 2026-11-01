@@ -795,7 +795,7 @@ handles each with a rule you can read, never a guess:
   busmon shows it (`88k 85%`). At 80 % (`AGENT_BUS_CONTEXT_ALERT`, `0` = off) the agent gets one
   directive to commit its work and hand off, master one notice, your desktop one notification.
 - **Hand-off.** The agent publishes its hand-off as a report and declares it
-  (`agentbus handoff <self> --report <id>`); busmon flags it `handoff` until the agent works
+  (`agentbus handoff <self> --report <id>`, which also declares it idle); busmon flags it `handoff` until the agent works
   again. You then type `/clear` in its pane and point the fresh session at that report.
   The dispatcher can type that `/clear` itself, once per session, when the agent is idle, has
   no open question or review and its pane is ready (`AGENT_BUS_AUTO_CLEAR=1`, Claude Code only); it is **off by

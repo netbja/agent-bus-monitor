@@ -33,6 +33,10 @@ type HealthConfig struct {
 	// lease token: the stall guard's fenced notices for the person (a check's
 	// Run gets no token and never writes).
 	StallNotify func(ctx context.Context, token string, rec health.Record) error
+	// StallWake runs right after each stored clear-stall or quiet-agent
+	// record, with the lease token and the check's id: the stall guard's
+	// fenced waking directives (chain-reliability: a warning alone woke nobody).
+	StallWake func(ctx context.Context, token, check string) error
 }
 
 func (c HealthConfig) filled() HealthConfig {
@@ -156,6 +160,18 @@ func (l *loop) healthLoop(ctx context.Context) error {
 					}
 					if err != nil {
 						l.logError("", "health team-stall notice", err)
+					}
+				}
+				if id := check.Definition.ID; cfg.StallWake != nil && (id == "clear-stall" || id == "quiet-agent") {
+					hctx, hcancel := context.WithTimeout(passCtx, 2*time.Second)
+					err := cfg.StallWake(hctx, l.token, id)
+					hcancel()
+					if errors.Is(err, bus.ErrNotHolder) {
+						cancel()
+						return ErrLeaseLost
+					}
+					if err != nil {
+						l.logError("", "health "+id+" wake", err)
 					}
 				}
 			}

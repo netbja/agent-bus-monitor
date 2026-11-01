@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/health"
 )
 
 // clearWorld: coder, a verified Claude Code agent in pane w1:p2, has
@@ -356,5 +357,127 @@ func TestClearDecisionsNilIsSafe(t *testing.T) {
 	var d *ClearDecisions
 	if d.note("coder", "x") || d.Last("coder") != "" {
 		t.Fatal("a nil ClearDecisions records something")
+	}
+}
+
+// The whole chain end to end (chain-reliability): an agent that declared idle
+// just before its hand-off, and nothing after it (the person unblocked this by
+// hand three times), is cleared, proved, told to resume, and drains the
+// resume directive; nothing is left owed and nothing is typed twice.
+func TestHandoffClearResumeDrainEndToEnd(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "clear-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	who := bus.AgentIdent{Pane: coderPane, PID: testPID, PIDStart: testStart, Session: "session-0001", Client: "claude-code", Provider: "anthropic"}
+	if err := b.ProveSession(ctx, "coder", testPID, testStart, "session-0001", 100); err == nil {
+		t.Fatal("proved a session with no snapshot")
+	}
+	if _, err := b.Status(ctx, "coder", "idle", "all committed", who); err != nil { // idle BEFORE the hand-off
+		t.Fatal(err)
+	}
+	if err := b.ProveSession(ctx, "coder", testPID, testStart, "session-0001", 100); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := b.Report(ctx, "coder", bus.ReportNote, "hand-off: all committed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.DeclareHandoff(ctx, "coder", rep, who); err != nil { // and no status after it
+		t.Fatal(err)
+	}
+	rt := newFakeRT(func(string, int) Inspection { return readyIn() })
+	rt.reserved = func(string) bool {
+		m, _ := b.QuotaMarks(context.Background())
+		_, ok := bus.ParseClearMark(m[bus.ClearMark("coder")])
+		return ok
+	}
+	l := &loop{b: b, rt: rt, token: "clear-holder", last: map[string]string{},
+		cfg: Config{EscalateTo: "master", Log: io.Discard, Clear: ClearConfig{On: true, Proof: 30 * time.Second}}}
+	pass := func() {
+		t.Helper()
+		snaps, err := b.Agents(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := l.clearPass(ctx, snaps); err != nil {
+			t.Fatalf("clearPass: %v", err)
+		}
+	}
+	clears := func() int {
+		n := 0
+		for _, p := range rt.Prompts() {
+			if p.Text == ClearText {
+				n++
+			}
+		}
+		return n
+	}
+	pass()
+	if clears() != 1 {
+		t.Fatalf("not cleared: %d clears", clears())
+	}
+	// The new session starts (SessionStart's prove-session), then the resume.
+	if err := b.ProveSession(ctx, "coder", testPID, testStart, "session-0002", time.Now().UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	pass()
+	var got []string
+	if _, err := b.DrainCmd(ctx, "coder", "test", bus.DefaultHorizon, func(e bus.Event) error {
+		got = append(got, e.From+": "+e.Message)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !strings.HasPrefix(got[0], dispatchFrom+": context cleared: re-run your boot steps") || !strings.Contains(got[0], "agentbus reports "+rep) {
+		t.Fatalf("drained %q", got)
+	}
+	if o, err := b.Obligation(ctx, "coder", bus.DefaultHorizon); err != nil || o.Wakes() {
+		t.Fatalf("still owed after the drain: %+v %v", o, err)
+	}
+	pass()
+	pass()
+	if clears() != 1 || len(entries(t, r, b, "cmd")) != 1 {
+		t.Fatalf("after: %d clears, %d cmd entries", clears(), len(entries(t, r, b, "cmd")))
+	}
+	if m, _ := b.Handoffs(ctx); len(m) != 0 {
+		t.Fatalf("the record stayed: %v", m)
+	}
+}
+
+// The stall guard's wake to an agent not idle since its hand-off is a prompt:
+// auto-state's turn-start flip makes it working since, which voids the record
+// (foureyes). The command the wake gives, a re-declaration of the same
+// report, makes a new record newer than the flip, and the clear goes on, once.
+func TestStallWakeRedeclareSurvivesTheTurnFlip(t *testing.T) {
+	w := newClearWorld(t, true)
+	ctx := context.Background()
+	who := bus.AgentIdent{Pane: coderPane, PID: testPID, PIDStart: testStart, Session: "session-0001", Client: "claude-code", Provider: "anthropic"}
+	time.Sleep(2 * time.Millisecond)
+	if err := w.b.TurnState(ctx, "coder", "working", who); err != nil { // the wake's prompt
+		t.Fatal(err)
+	}
+	snaps, err := w.b.Agents(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recs, _ := w.b.Handoffs(ctx)
+	if void, why := recs["coder"].VoidFor(snaps["coder"], true); !void {
+		t.Fatalf("the turn flip did not void the record (%s): the case this guards is gone", why)
+	}
+	wakes := health.ClearStallWakes(health.ClearStallInput{Now: time.Now(), After: time.Minute, AutoClear: true,
+		Handoffs: []health.ClearHandoff{{Agent: "coder", At: time.Now().Add(-time.Hour), Report: w.rep, Decision: health.NotIdleReason}}}, "master")
+	if len(wakes) != 1 || wakes[0].Target != "coder" || !strings.Contains(wakes[0].Text, "agentbus handoff coder --report "+w.rep) {
+		t.Fatalf("wake %+v", wakes)
+	}
+	time.Sleep(2 * time.Millisecond)
+	if _, err := w.b.DeclareHandoff(ctx, "coder", w.rep, who); err != nil { // what the agent runs
+		t.Fatal(err)
+	}
+	w.pass()
+	w.pass()
+	if w.clears() != 1 {
+		t.Fatalf("clears %d, want 1 after the re-declaration", w.clears())
 	}
 }

@@ -733,3 +733,36 @@ func TestRunStillWakesARegisteredAgentNamedLikeAHuman(t *testing.T) {
 	start(t, b, rt, fastConfig())
 	waitFor(t, 3*time.Second, "a prompt to coder", func() bool { return len(rt.Prompts()) >= 1 })
 }
+
+// The escalation latch (chain-reliability): the escalation records the high id
+// it was for; a new message for the agent, with no progress, re-opens the wake
+// instead of "already escalated" forever, and is escalated once in its turn.
+func TestRunNewMessageAfterEscalationReopens(t *testing.T) {
+	b, r := dialRun(t)
+	register(t, b, "coder", "p-coder")
+	first := send(t, b, "coder", "one")
+	rt := newFakeRT(errIn)
+	cfg := fastConfig()
+	cfg.EscalateAfter = 100 * time.Millisecond
+	start(t, b, rt, cfg)
+	waitFor(t, 3*time.Second, "first escalation", func() bool {
+		w, _ := wakeOf(t, b, "coder")
+		return w.Escalated == "true"
+	})
+	if w, _ := wakeOf(t, b, "coder"); w.HighID != first {
+		t.Fatalf("escalation recorded high id %q, want %q", w.HighID, first)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if n := len(escalations(t, r, b, "coder")); n != 1 {
+		t.Fatalf("escalations = %d before the new message, want 1", n)
+	}
+	second := send(t, b, "coder", "two")
+	waitFor(t, 3*time.Second, "second escalation", func() bool { return len(escalations(t, r, b, "coder")) == 2 })
+	time.Sleep(300 * time.Millisecond)
+	if n := len(escalations(t, r, b, "coder")); n != 2 {
+		t.Fatalf("escalations = %d, want 2 (one per high id)", n)
+	}
+	if w, _ := wakeOf(t, b, "coder"); w.HighID != second {
+		t.Fatalf("second escalation recorded high id %q, want %q", w.HighID, second)
+	}
+}

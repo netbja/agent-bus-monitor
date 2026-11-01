@@ -258,8 +258,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `health <check>...` prints only those checks, each its status then `reason:`/`detail:` lines (`healthChecks`). `watch` is the legacy alias of `subscribe` (same handler).
   `listen` tails all four streams via `Bus.Tail` for debugging. `report` prints its entry id on
   stdout (lifecycle-2), the id `handoff <self> --report <id>` declares (`bus/handoff.go`:
-  `{p}:handoff`, agent → report, session, pid, pid_start, `at` from Redis `TIME`, written in one
-  script only for the agent's own report from its verified process in its proved session; not in
+  `{p}:handoff`, agent → report, session, pid, pid_start, `at`, written in one
+  script only for the agent's own report from its verified process in its proved session, with the agent's
+  `idle` status entry in the same script and `at` that entry's millisecond (chain-reliability: the declaration is
+  the idle, so `DecideClear`'s "idle since its hand-off", `Snap.TS >= Record.At`, holds without another status; the
+  snapshot follows through `putSnapshot`, a failure said, not ignored); not in
   `projectKinds`, ignored by `HasKeysBesidesDispatch`; any report and any non-idle status of the
   agent delete it in the same MULTI (`addVoidingHandoff`), so voiding never waits for a pass;
   `Handoff.VoidFor` — another process or session, or working since — is the rule the dispatcher's
@@ -830,7 +833,15 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   and nothing written since by the agent on status, report or cmd (same millisecond = written), not working, held or
   seen busy; silent since before the retained cmd history = not judged; collected per agent. `clear-stall` warns on
   a valid hand-off older than its threshold, naming the clear pass's last reason (`dispatch.ClearDecisions`; reason
-  `pane-focused` is for you). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
+  `pane-focused` is for you). A warning alone woke nobody (chain-reliability): after each stored `clear-stall` or
+  `quiet-agent` record the health loop's `StallWake` hook (lease token) sends the wakes the judged input owes
+  (`health.ClearStallWakes`/`QuietAgentWakes`), each one waking directive from `dispatch` under `FencedCmdOnce`:
+  a stalled hand-off whose reason is `health.NotIdleReason` wakes the agent with the exact command to re-declare it,
+  `agentbus handoff <a> --report <id>` (never `status idle`: the wake is a prompt, and auto-state's turn-start flip
+  voids the record as working since, while a new declaration is newer than that flip; `ClearHandoff.Report`), with
+  no report known, or any other reason (auto-clear off included), master, once per hand-off and target (mark `stall-clear:<a>`,
+  episode `<at>|<target>`); a quiet agent wakes master once per directive it went quiet on (mark `stall-quiet:<a>`,
+  episode the directive's id). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
   tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an
   unknown pass and deleted once the check reads ok or warn): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
   `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). busmon shows the health pill, F5
@@ -1062,7 +1073,9 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   goes to master, which helps nobody when master is the one lost. An escalation caused by the pane's state (rules
   7-8, `Decision.Cause` → wake `esc_cause`, or read from the reason of an older record) is
   re-armed once the pane is ready: the loop inspects such a record before `Decide`, tries clear
-  and `at` stays. When the escalation target cannot act (it is the agent, its provider is held,
+  and `at` stays. An escalation records the obligation's high id it was for (`WakeRecord.HighID`, chain-reliability):
+  a newer message for the agent re-opens the wake with fresh tries (`Decide`'s reset, "new message since the
+  escalation") instead of "already escalated" until progress; still one escalation per high id. When the escalation target cannot act (it is the agent, its provider is held,
   its tab is blocked), the escalation is a `notify` for the person only (`recipientCannotAct`).
 - **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`
   writes `{p}:pause` (`bus/pause.go`); the dispatcher's `paused` check at the top of each pass

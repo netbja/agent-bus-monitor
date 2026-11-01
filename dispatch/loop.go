@@ -699,8 +699,9 @@ func (l *loop) escalate(ctx context.Context, s *step, d Decision) error {
 		r.State = "deferred"
 	}
 	r.Escalated, r.Reason = "pending", d.Reason
-	if d.Rule != 3 { // a replay keeps the cause recorded with the first attempt
+	if d.Rule != 3 { // a replay keeps the cause and the high id recorded with the first attempt
 		r.EscCause = d.Cause
+		r.HighID = s.o.HighID // the obligation escalated, once: a newer message re-opens the wake
 	}
 
 	if !s.exists || r != s.w {

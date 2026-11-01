@@ -315,3 +315,26 @@ func TestResumeTextIsBounded(t *testing.T) {
 		t.Fatalf("no-task text = %q", got)
 	}
 }
+
+// The escalation latch (chain-reliability): after "tries exhausted" the record
+// says escalated; a new message for the agent (a high id past the one the
+// escalation was for) re-opens the wake with fresh tries, while the same
+// obligation stays escalated once.
+func TestNewMessageReopensAnEscalatedWake(t *testing.T) {
+	esc := mark(3, "true", 1)
+	esc.HighID = "1000-0"
+	x := Input{Obligation: owed(), Snap: snap(), In: ready(), Wake: esc, SinceWake: 2 * time.Minute, OldestAge: 30 * time.Minute}
+	if d := Decide(testPolicy, x); d.Action != ActNone || d.Rule != 3 {
+		t.Fatalf("same obligation: %+v, want none by rule 3", d)
+	}
+	x.Obligation.HighID, x.Obligation.Unread = "2000-0", 2
+	d := Decide(testPolicy, x)
+	if d.Action != ActPrompt || !d.ResetTries || !strings.Contains(d.Reason, "new message") {
+		t.Fatalf("new message: %+v, want a prompt with tries reset", d)
+	}
+	// Without a recorded high id there is nothing to compare: the latch holds.
+	x.Wake = mark(3, "true", 1)
+	if d := Decide(testPolicy, x); d.Action != ActNone || d.Rule != 3 {
+		t.Fatalf("no high id recorded: %+v", d)
+	}
+}
