@@ -66,7 +66,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		t.Fatalf("master's rules %+v, want %+v", r2, want)
 	}
 	settings := func(r ToolRules) string {
-		s, err := settingsJSON(r, resumeHookCommand(newEnv(env)))
+		s, err := settingsJSON(r, launchHooks(newEnv(env)))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -18,6 +18,11 @@ import (
 // (AGENTBUS_BIN, else this binary) and the repository's agent-launch, quoted
 // for the shell Claude Code runs hooks in.
 func resumeHookCommand(e *envMap) string {
+	return ShellJoin([]string{hookBin(e), "roles", "report-resume", filepath.Join(repoRoot(e), "scripts", "agent-launch")})
+}
+
+// hookBin is the agentbus a hook runs: AGENTBUS_BIN, else this binary.
+func hookBin(e *envMap) string {
 	bin, ok := e.get("AGENTBUS_BIN")
 	if !ok || bin == "" {
 		bin = "agentbus"
@@ -25,7 +30,20 @@ func resumeHookCommand(e *envMap) string {
 			bin = absResolved(exe)
 		}
 	}
-	return ShellJoin([]string{bin, "roles", "report-resume", filepath.Join(repoRoot(e), "scripts", "agent-launch")})
+	return bin
+}
+
+// claudeHooks are the hooks every Claude Code launch carries: the resume
+// report, and the turn hooks the state follows (auto-state spec): turn start
+// on UserPromptSubmit, turn end on Stop and on a new session.
+type claudeHooks struct{ Resume, TurnStart, TurnEnd string }
+
+// launchHooks builds them with the same agentbus as the resume hook.
+func launchHooks(e *envMap) claudeHooks {
+	bin := hookBin(e)
+	return claudeHooks{Resume: resumeHookCommand(e),
+		TurnStart: ShellJoin([]string{bin, "roles", "turn", "start"}),
+		TurnEnd:   ShellJoin([]string{bin, "roles", "turn", "end"})}
 }
 
 // ResumeArgv is the command herdr runs to resume a session: the template's
