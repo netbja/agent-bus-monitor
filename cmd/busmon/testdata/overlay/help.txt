@@ -55,14 +55,14 @@ KEYS
   home g               first row
   end G                last row
   y                    copy
-  Y                    copy the whole thread (a message's page) or the whole report (an agent's page)
+  Y                    copy the whole thread (a message's page) or the whole report (an agent's page, a recap item's)
   n p ←→               the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)
   enter ! w            answer the agent's open questions (w with none open: write to master)
   t                    in the help: the first-launch tour again; in History (H): the selected entry's thread
   /                    History (H): filter by @agent, a thread id or words
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
-  o                    History (H): load the three days before
+  o                    History (H): load the three days before; the recap (R): show For you's items older than a day
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
   ^C                   quit (everywhere)

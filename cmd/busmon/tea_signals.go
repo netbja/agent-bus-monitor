@@ -217,7 +217,8 @@ func (m *Model) maybeOpenRecap() {
 func (m *Model) recapTarget() string { return m.sig.recap.Target }
 
 // recapKey: arrows (and Tab) move along the selectable rows, Enter opens one
-// over the recap (Esc returns to it), Esc closes.
+// over the recap (Esc returns to it), o shows or folds the For you items older
+// than a day, Y copies the selected item's report, Esc closes.
 func (m *Model) recapKey(k Key) tea.Cmd {
 	p := m.rd.top()
 	switch {
@@ -229,6 +230,16 @@ func (m *Model) recapKey(k Key) tea.Cmd {
 		m.moveRecap(p, 1)
 	case k.Code == keyEnter:
 		return m.activateRecapRow(p)
+	case k.Code == keyRune && k.Rune == 'o':
+		p.recapOlder, p.dirty = !p.recapOlder, true
+		m.refresh()
+	case k.Code == keyRune && k.Rune == 'Y':
+		if r, ok := recapSelected(p); ok && r.ReportID != "" && r.Report.ID == "" { // never the envelope (reviewer-codex)
+			m.ui.flash, m.ui.flashErr = "report "+r.ReportID+" "+reportGone(r)+": nothing to copy", true
+			m.refresh()
+			return nil
+		}
+		return m.copy(p.threadPlain, "report")
 	}
 	return nil
 }
@@ -248,6 +259,42 @@ func (m *Model) moveRecap(p *page, step int) {
 			return
 		}
 	}
+}
+
+// reportGone says why a report notice's report is not at hand: the read
+// failed, or the stream no longer keeps it (reviewer-codex).
+func reportGone(r recapRow) string {
+	if r.ReportUnread {
+		return "could not be read"
+	}
+	return "no longer retained"
+}
+
+// readRecapRow reads every entry r stands for and clears its dot on the page
+// (the recap was built before; its rows carry the dot they had then).
+func (m *Model) readRecapRow(p *page, r recapRow) {
+	if !r.Unread {
+		return
+	}
+	for _, id := range r.IDs {
+		m.markRead(id)
+	}
+	for _, rows := range [][]recapRow{p.recapAll.Rows, p.recap.Rows} {
+		for i := range rows {
+			if rows[i].Key == r.Key {
+				rows[i].Unread = false
+			}
+		}
+	}
+	p.dirty = true
+}
+
+// recapSelected is the recap row under the cursor.
+func recapSelected(p *page) (recapRow, bool) {
+	if p == nil || p.sel < 0 || p.sel >= len(p.recap.Rows) {
+		return recapRow{}, false
+	}
+	return p.recap.Rows[p.sel], true
 }
 
 // activateRecapRow opens what a recap row names, over the recap.
@@ -270,6 +317,19 @@ func (m *Model) activateRecapRow(p *page) tea.Cmd {
 			return m.push(page{kind: ovTask, key: r.Task})
 		}
 	case "thread":
+		m.readRecapRow(p, r) // the notices themselves, every merged one: never only the report shown (foureyes)
+		if r.Report.ID != "" { // a report notice opens its report's full text
+			return m.pushMessage(r.Report, eventTimestamp(r.Report.ID))
+		}
+		if r.ReportID != "" { // its report is trimmed or unread: say so, keep the preview, never the envelope
+			var b body
+			why := "This report is no longer retained (the report stream keeps about the last 1000)."
+			if r.ReportUnread {
+				why = "This report could not be read (the report stream was unavailable); try again later."
+			}
+			b.seg(RoleMuted, why).text("\n\n").text(Preview(r.Text))
+			return m.push(page{kind: ovMessage, title: "Report " + r.ReportID, body: b.Lines(), fixed: true})
+		}
 		return m.pushMessage(r.Event, eventTimestamp(r.Event.ID))
 	case "verdict":
 		if v := r.Verdict; v != nil {

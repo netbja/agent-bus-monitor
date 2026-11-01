@@ -357,7 +357,16 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   with its current task from the facts, `currentTask`: an accepted board task it owns, else its plan task in progress,
   never its status message; keys `empty:agent:<name>` open the agent's page, `empty:plan:<task>` the plan task; no
   store), and the
-  recap's For you section shows only when the For you panel is not on screen (`recapForScreen`); its keys are `ModeShell` (the panel table with the shell's tabs)
+  recap's For you section shows only when the For you panel is not on screen (`recapForScreen`), in the list format
+  (recap-foryou: `recapItemLine`, one line per item, the sender in its provider's colour, its text, the age at the
+  right edge, an unread one marked `●`; a report notice reads as its report's own preview, `reportText`, never the
+  envelope nor the id; what was sent to the person newest first (the unread rows with no item, asks, waits and blocked
+  agents keep their own order around them), identical items (sender and text) merged with `(N)` and the newest's report,
+  an unread entry that is such an item marked on it, never a second row; items older than a day folded behind
+  `+ N older` by `recapFold` until `o`; Enter reads every entry the item stands for (`recapRow.IDs`, a merged item's
+  members, `readRecapRow`: the notices, never only the report shown) and opens the report's full text, `Y` copies it; a
+  report not at hand keeps its preview, Enter and `Y` say why (`reportGone`: no longer retained, or could not be read when
+  the report stream's read failed, `ReportUnread`) and copy nothing, never the envelope); its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`; A12: `▼` in the gutter, the text under the message column behind a
   muted `│` guide, a last muted `↵ full text` line), then opens it in the reader, a stack of pages over the lower zone, one
