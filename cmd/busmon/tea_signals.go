@@ -134,6 +134,7 @@ func (m *Model) afterUpdate() tea.Cmd {
 		m.sig.readDirty = false
 		save = m.saveCache("local busmon cache not saved")
 	}
+	m.pruneReminder()
 	return tea.Batch(save, m.maybeReminder(), frames)
 }
 

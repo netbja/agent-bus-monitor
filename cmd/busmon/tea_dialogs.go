@@ -329,6 +329,42 @@ func (m *Model) maybeReminder() tea.Cmd {
 	return m.snooze(items)
 }
 
+// pruneReminder keeps the open reminder to what still waits for the person:
+// an item the poll no longer lists as a decision (an ask answered, from here
+// or elsewhere; a wait answered) leaves it at once, the selection stays on
+// its item while it remains, and with none left the reminder closes. Nothing
+// new joins an open reminder: what falls due later opens the next one.
+func (m *Model) pruneReminder() {
+	d := m.ui.reminder
+	if d == nil {
+		return
+	}
+	still := map[string]bool{}
+	for _, it := range decisions(m.forYou) {
+		still[it.Key] = true
+	}
+	selected := ""
+	if d.sel < len(d.items) {
+		selected = d.items[d.sel].Key
+	}
+	kept := d.items[:0:0]
+	for _, it := range d.items {
+		if still[it.Key] {
+			kept = append(kept, it)
+		}
+	}
+	if len(kept) == 0 {
+		m.ui.reminder = nil
+		return
+	}
+	d.items, d.sel = kept, 0
+	for i, it := range kept {
+		if it.Key == selected {
+			d.sel = i
+		}
+	}
+}
+
 // cache_ is the local cache the shell keeps (snoozes, last visit).
 func (m *Model) cache_() *busmonCache {
 	if m.sig.cache == nil {

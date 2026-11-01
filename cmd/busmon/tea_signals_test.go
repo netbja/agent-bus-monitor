@@ -212,3 +212,45 @@ func TestShellFadeRingsNothing(t *testing.T) {
 		t.Fatalf("fade frames rang %d", m.sig.bells-before)
 	}
 }
+
+// An open reminder follows the poll (the person's bug: an ask answered
+// elsewhere stayed until a key was pressed): an item that is no longer a
+// decision leaves it at once, the selection stays on a remaining item, and
+// with none left it closes without snoozing anything new.
+func TestShellReminderDropsWhatIsNoLongerWaiting(t *testing.T) {
+	pinLocal(t)
+	set := busmonSettings{PopupAfter: 5 * time.Minute, Snooze: 15 * time.Minute}
+	m := shellWith(t, 140, 40, shellConfig{settings: set}, false)
+	at := shellNow.Add(16 * time.Minute)
+	m = keys(t, m, kEsc)
+	m = pollAgain(t, m, shellFixture(shellNow), at)
+	d := m.ui.reminder
+	if d == nil || len(d.items) != 2 {
+		t.Fatalf("setup: reminder %+v", d)
+	}
+	for d.items[d.sel].Rank != rankAsk {
+		m = keys(t, m, kDown)
+		d = m.ui.reminder
+	}
+	// The ask is answered: the poll no longer lists it.
+	snap := shellFixture(shellNow)
+	for i := range snap.asks {
+		snap.asks[i].State = "answered"
+	}
+	m = pollAgain(t, m, snap, at.Add(time.Second))
+	if d = m.ui.reminder; d == nil || len(d.items) != 1 || d.items[0].Rank == rankAsk || d.sel != 0 {
+		t.Fatalf("after the answer: reminder %+v", d)
+	}
+	if !strings.Contains(m.grid().plain(), "Waiting for you "+GlyphNone+" 1") {
+		t.Fatalf("the popup still counts the answered ask:\n%s", m.grid().plain())
+	}
+	// foureyes answered too: nothing left, the popup goes.
+	snap = shellFixture(shellNow)
+	for i := range snap.asks {
+		snap.asks[i].State = "answered"
+	}
+	snap.agents["foureyes"].state = "idle"
+	if m = pollAgain(t, m, snap, at.Add(2*time.Second)); m.ui.reminder != nil {
+		t.Fatalf("nothing waits any more, the reminder is still open: %+v", m.ui.reminder)
+	}
+}
