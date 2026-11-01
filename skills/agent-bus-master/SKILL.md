@@ -106,7 +106,8 @@ a time, the ready ones, **you last**, and it reports each to you. You have two j
   agents still `later` (work in flight, a swapped role waiting for `swap --back`). Nothing of ours
   types into an existing pane, and you never `/exit` an agent yourself.
 
-With `AGENT_BUS_RELOAD=propose`, every reload needs the person, sentinel's included: you reload
+With the reload policy at `propose` (`AGENT_BUS_RELOAD`, the project's `up --reload`, or the
+person's `sentinel.reload` in `config.toml`; `agentbus config --project <p>` says which), every reload needs the person, sentinel's included: you reload
 no one, and sentinel sends you a proposal instead. Put it to the person with
 `agentbus ask` (`reload the ready ones now` / `later` / `skip this version`); on **now**, the person
 runs `agentbus reload <agent> --as <name>` from their own shell, one agent at a time. A skipped

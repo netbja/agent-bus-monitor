@@ -188,6 +188,23 @@ var Keys = []*Key{
 	{Name: "history.keep_days", Env: "AGENT_BUS_HISTORY_DAYS", Kind: Int, Default: 90, ReadBy: "dispatch",
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 for no archive")},
 	{Name: "history.max_mb", Env: "AGENT_BUS_HISTORY_MAX_MB", Kind: Int, Default: 256, ReadBy: "dispatch", env: envPositiveInt, file: filePositiveInt},
+	// The reload policy (lifecycle part C, auto-reload): on, propose or off.
+	// AGENT_BUS_RELOAD's rule is today's: propose and off are themselves, any
+	// other set value reads on. agentbus reload puts the project's env file
+	// (up --reload) between the env and config.toml.
+	{Name: "sentinel.reload", Env: "AGENT_BUS_RELOAD", Kind: String, Default: "on", ReadBy: "agentbus reload, sentinel",
+		env: func(raw string) (any, envResult) {
+			if raw == "propose" || raw == "off" {
+				return raw, envUse
+			}
+			return "on", envUse
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "on" || s == "propose" || s == "off") {
+				return s, ""
+			}
+			return nil, "want on, propose or off"
+		}},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},

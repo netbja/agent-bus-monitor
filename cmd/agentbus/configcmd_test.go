@@ -190,7 +190,7 @@ func TestConfigJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, out)
 	}
-	if len(doc.Rows) != 32 { // the registry, stall guard, auto-state, idle hint and history keys included
+	if len(doc.Rows) != 33 { // the registry, stall guard, auto-state, idle hint and history keys included
 		t.Errorf("%d rows", len(doc.Rows))
 	}
 	for _, r := range doc.Rows {
@@ -266,5 +266,23 @@ func TestConfigServiceFileWarningsAndSkippedEnv(t *testing.T) {
 	out, _, _ = f2.run(t, "demo")
 	if strings.Count(out, "dispatch.prompt_grace:") != 1 {
 		t.Errorf("the shared file warned twice:\n%s", out)
+	}
+}
+
+// The project's reload fact (auto-reload): the env file's, else what
+// agentbus reload would read next, config.toml's sentinel.reload.
+func TestConfigProjectReloadFromConfigToml(t *testing.T) {
+	f := newConfigFixture(t)
+	f.write(t, "config.toml", "[sentinel]\nreload = \"off\"\n")
+	f.write(t, "services/demo.env", "XDG_CONFIG_HOME=\""+f.xdg+"\"\n")
+	out, errw, code := f.run(t, "demo")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errw)
+	}
+	if !strings.Contains(out, "reload off (config.toml)") {
+		t.Errorf("project facts:\n%s", out)
+	}
+	if row := strings.Join(rowOf(t, out, "sentinel.reload"), " "); !strings.Contains(row, "off config.toml") {
+		t.Errorf("sentinel.reload row %q", row)
 	}
 }

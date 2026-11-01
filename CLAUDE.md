@@ -978,8 +978,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   Lifecycle-3b, `agentbus reload <role> [--fresh] [--dry-run] [--reason] [--as <person>]`
   (`cmd/agentbus/reload.go`): who may (sentinel any role but itself on an observed update, master
   last and only with no other pilot driver; master only sentinel; a person anyone by an explicit
-  `--as`, which also passes the identity guard), `AGENT_BUS_RELOAD` (caller's env, else the
-  project's env file; `up --reload on|propose|off`; `propose` and `off` leave only a person's `--as`), a preflight that changes nothing (verified live
+  `--as`, which also passes the identity guard), `AGENT_BUS_RELOAD`, the registry's `sentinel.reload` (auto-reload, `reloadPolicy`: caller's env, else the
+  project's env file, per project so above the machine's file, else `config.toml`, else `on`; an unknown env value reads on, as always; `up --reload on|propose|off`; `propose` and `off` leave only a person's `--as`), a preflight that changes nothing (verified live
   identity, not its own pane, not on a fallback, `reloadOpenWork` = swap's `openWork` plus an
   `accepted` board task and, only with `--fresh`, its own open ask (a resume keeps the conversation and
   the ask is in Redis), declared idle, no wake typing, a proved Claude Code session unless `--fresh`,

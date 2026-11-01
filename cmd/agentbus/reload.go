@@ -17,6 +17,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/clientfp"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -56,16 +57,15 @@ type reloadDeps struct {
 func realReloadDeps(env []string, project string, stdout, stderr io.Writer) reloadDeps {
 	paths, _ := service.PathsFrom(os.Getenv)
 	return reloadDeps{
-		// The policy comes from the caller's environment, else the project's
-		// env file, where up --reload records it for the services.
+		// The policy: the caller's environment, the project's env file (up
+		// --reload), then config.toml (reloadPolicy).
 		Env: func(k string) string {
-			v := os.Getenv(k)
-			if v == "" && k == service.ReloadEnv {
-				if env, err := service.LoadEnvFile(paths.EnvFile(project)); err == nil {
-					v = env[k]
-				}
+			if k == service.ReloadEnv {
+				envFile, _ := service.LoadEnvFile(paths.EnvFile(project))
+				mode, _ := reloadPolicy(os.Getenv, envFile)
+				return mode
 			}
-			return v
+			return os.Getenv(k)
 		},
 		Manifest: func() (*rolecfg.Manifest, error) {
 			path, err := manifestPath(env)
@@ -603,4 +603,23 @@ func spawnPop(ctx context.Context, d upDeps, project, role, session string, stdo
 	}
 	fmt.Fprintf(stdout, "%s: relaunched (new tab, agent-spawn)\n", role)
 	return nil
+}
+
+// reloadPolicy is the project's reload policy and where it comes from: the
+// caller's environment, then the project's env file (up --reload: per
+// project, so above the machine's file), then config.toml's sentinel.reload,
+// then on. The env file's value follows the env rule, as it always has.
+func reloadPolicy(getenv func(string) string, envFile map[string]string) (mode, source string) {
+	layered := func(k string) string {
+		if v := getenv(k); v != "" || k != service.ReloadEnv {
+			return v
+		}
+		return envFile[k]
+	}
+	r := config.Machine(layered).Get("sentinel.reload")
+	mode, source = r.Value.(string), r.Source
+	if getenv(service.ReloadEnv) == "" && envFile[service.ReloadEnv] != "" {
+		source = "env file"
+	}
+	return mode, source
 }
