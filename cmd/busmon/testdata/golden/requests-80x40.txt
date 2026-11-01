@@ -19,7 +19,7 @@
 │  Tracked                                                                     │
 │  ◆ master → coder      req  busmon-group-a · accepted                      1h│
 │  Reviews gated                                                               │
-│  ◆ coder → reviewer-…  chal lifecycle-spec · gate-subject-close · a-pe…    1h│
+│  ● coder → reviewer-…  chal lifecycle-spec · gate-subject-close · a-pe…    1h│
 │  Between agents                                                              │
 │  ● coder → ui-kimi     dir  coder to ui-kimi                              12h│
 │  ○ master → sentinel   dir  master to sentinel (+1)                       14h│

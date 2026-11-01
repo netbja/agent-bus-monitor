@@ -66,15 +66,16 @@ func (c reqLayout) row(sym Seg, from, target, self, kind, subject string, at, no
 	return r.cells(c.width, c.nameW, 0)
 }
 
-// reqSym is a row's symbol: what the person or a reviewer owes is ◆; a
-// message's delivery to its target is ● unread or ○ read (held quota ● in
-// the error colour); · when its cursor was not read.
+// reqSym is a row's symbol: a target held by its quota first, ● in the
+// error colour (it explains the silence, whatever is owed: reviewer-codex);
+// then what the person or a reviewer owes is ◆; a message's delivery to its
+// target is ● unread or ○ read; · when its cursor was not read.
 func reqSym(sec reqSection, kind, state string) Seg {
 	switch {
-	case sec == secOwed || sec == secTracked || kind == kindChallenge:
-		return S(RoleAttention, GlyphGate)
 	case state == "held quota":
 		return S(RoleError, GlyphDotFull)
+	case sec == secOwed || sec == secTracked || kind == kindChallenge:
+		return S(RoleAttention, GlyphGate)
 	case state == "unread":
 		return S(RoleAttention, GlyphDotFull)
 	case state == "read":
@@ -124,10 +125,10 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 		out = append(out, ListItem{Line: fit(Line{{Text: reqSectionNames[s], Role: RoleText, Bold: true}})})
 	}
 	threadRow := func(th reqThread, indent bool) ListItem {
-		sym := reqSym(th.Section, th.Kind, th.State)
+		sym := reqSym(th.Section, th.Kind, th.State) // an expanded thread keeps its own marker (reviewer-codex)
 		subject := reqSubject(th)
 		if indent {
-			sym, subject = S(RoleMuted, " "), "  "+subject
+			subject = "  " + subject
 		}
 		return ListItem{Key: threadKey(th), Selectable: true, Line: fit(c.row(sym, th.From, th.Target, v.self, th.Kind, Preview(subject), th.At, now))}
 	}

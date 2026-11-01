@@ -17,7 +17,7 @@
 │  Tracked                                                                                                                                                                                   │
 │  ◆ master → coder            request   busmon-group-a · accepted                                                                                                                         1h│
 │  Reviews gated                                                                                                                                                                             │
-│  ◆ coder → reviewer-codex    challenge lifecycle-spec · gate-subject-close · a-pending-pane ×3 · a-identity · a-health · a-nav ×2 (+8)                                                   1h│
+│  ● coder → reviewer-codex    challenge lifecycle-spec · gate-subject-close · a-pending-pane ×3 · a-identity · a-health · a-nav ×2 (+8)                                                   1h│
 │  Between agents                                                                                                                                                                            │
 │  ● coder → ui-kimi           directive coder to ui-kimi                                                                                                                                 12h│
 │  ○ master → sentinel         directive master to sentinel (+1)                                                                                                                          14h│

@@ -57,9 +57,9 @@ func TestRequestRowsInTheListPattern(t *testing.T) {
 			if !strings.HasPrefix(line, GlyphDotEmpty+" ") || !strings.Contains(line, "(+5)") {
 				t.Errorf("read group row %q", line)
 			}
-		case strings.Contains(line, "reviewer-codex") && !strings.Contains(line, "older"):
-			if !strings.HasPrefix(line, GlyphGate+" ") {
-				t.Errorf("gated review row %q", line)
+		case strings.Contains(line, "reviewer-codex"): // held by its quota: that first, in red (reviewer-codex)
+			if !strings.HasPrefix(line, GlyphDotFull+" ") || it.Line[0].Role != RoleError {
+				t.Errorf("held gated review row %q", line)
 			}
 		}
 	}
@@ -114,5 +114,43 @@ func TestRequestPageLeadsWithItsSection(t *testing.T) {
 	m = keys(t, m, kEnter)
 	if got := m.rd.top().body[0].text(); got != reqSectionNote(secTracked) {
 		t.Errorf("request page's first line %q", got)
+	}
+}
+
+// An expanded group's threads keep their own markers: one unread among read.
+func TestRequestRowsExpandedThreadsKeepTheirMarkers(t *testing.T) {
+	now := time.Unix(10_000_000, 0)
+	in := reqFixture(now)
+	var last string
+	for _, e := range in.cmds {
+		if e.From == "sentinel" && e.Target == "master" {
+			last = e.ID
+		}
+	}
+	d := in.delivery["master"]
+	d.pending = map[string]bool{last: true} // the newest sentinel → master entry is unread
+	in.delivery["master"] = d
+	v := requestGroups(in)
+	var key string
+	for _, g := range v.groups[secDirectives] {
+		if g.From == "sentinel" {
+			key = g.Key()
+		}
+	}
+	items := requestRows(v, reqOpen{groups: map[string]bool{key: true}}, now, 136)
+	unread, read := 0, 0
+	for _, it := range items {
+		if !strings.HasPrefix(it.Key, "thr:") || !strings.Contains(it.Line.text(), "sentinel "+GlyphArrowR+" master") {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(it.Line.text(), GlyphDotFull+" "):
+			unread++
+		case strings.HasPrefix(it.Line.text(), GlyphDotEmpty+" "):
+			read++
+		}
+	}
+	if unread != 1 || read != 5 {
+		t.Errorf("expanded threads: %d unread, %d read; want 1 and 5", unread, read)
 	}
 }
