@@ -95,7 +95,11 @@ func (l *loop) historyPass(ctx context.Context) {
 	}
 	l.historyErr("history archive", err)
 	if s.prunedAt.IsZero() || time.Since(s.prunedAt) >= 24*time.Hour {
-		l.historyErr("history prune", history.Prune(c.Dir, c.KeepDays, c.MaxBytes, now))
+		err := history.Prune(c.Dir, c.KeepDays, c.MaxBytes, now)
+		if errors.Is(err, history.ErrLocked) {
+			return // another writer holds it: prune on a later pass
+		}
+		l.historyErr("history prune", err)
 		s.prunedAt = time.Now()
 	}
 }

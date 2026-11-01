@@ -401,9 +401,17 @@ func dayFiles(dir string) ([]dayFile, error) {
 }
 
 // Prune deletes day files older than keepDays, then the oldest until the
-// directory's day files fit maxBytes (0 = no cap). Today's file is never
-// deleted.
+// directory's day files fit maxBytes (0 = no cap), under the writer's lock
+// (ErrLocked when it is held). Today's file is never deleted.
 func Prune(dir string, keepDays int, maxBytes int64, now time.Time) error {
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		return nil // no archive: nothing to prune, nothing created
+	}
+	unlock, err := lockDir(dir)
+	if err != nil {
+		return err // ErrLocked: a writer appends; the next day's prune runs
+	}
+	defer unlock()
 	days, err := dayFiles(dir)
 	if err != nil {
 		return err

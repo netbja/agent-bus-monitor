@@ -368,3 +368,29 @@ func TestPrunedDaysWithACursorWriteNoRestartLine(t *testing.T) {
 		t.Fatalf("only the new entry: %+v", es)
 	}
 }
+
+// Prune takes the writer's lock: it deletes nothing while a writer appends
+// (foureyes).
+func TestPruneWaitsForTheWritersLock(t *testing.T) {
+	dir := t.TempDir()
+	today := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	old := filepath.Join(dir, "2026-01-01.jsonl")
+	os.WriteFile(old, []byte("x\n"), 0o600)
+	unlock, err := lockDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Prune(dir, 4, 0, today); err != ErrLocked {
+		t.Fatalf("a locked directory: %v, want ErrLocked", err)
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Fatal("pruned under a writer's lock")
+	}
+	unlock()
+	if err := Prune(filepath.Join(dir, "none"), 4, 0, today); err != nil {
+		t.Fatalf("no archive: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "none")); err == nil {
+		t.Fatal("Prune created the directory")
+	}
+}
