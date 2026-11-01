@@ -44,6 +44,9 @@ var (
 var streamIDPattern = regexp.MustCompile(`^[0-9]{1,20}-[0-9]{1,20}$`)
 
 // handoffDeclare: 'report' or 'ident' on a refusal, else the record written.
+// The declaration is the agent's idle (chain-reliability): its idle status
+// entry is added in the same script, and the record's time is that entry's,
+// so the clear's "idle since its hand-off" never waits for another status.
 // The record is built from validated ARGV (digits, a stream id, a session id),
 // never cjson.encode, which would rewrite a large pid_start as a float.
 var handoffDeclare = redis.NewScript(`
@@ -57,8 +60,8 @@ if not raw then return 'ident' end
 local ok, s = pcall(cjson.decode, raw)
 if not ok or type(s) ~= 'table' then return 'ident' end
 if s['pid'] ~= tonumber(ARGV[3]) or s['pid_start'] ~= tonumber(ARGV[4]) or s['ident_session'] ~= ARGV[5] then return 'ident' end
-local t = redis.call('TIME')
-local at = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+local id = redis.call('XADD', KEYS[4], 'MAXLEN', '~', ARGV[6], '*', 'agent', ARGV[1], 'state', 'idle', 'message', ARGV[7])
+local at = tonumber(string.match(id, '^(%d+)-'))
 local rec = '{"report":"' .. ARGV[2] .. '","session":"' .. ARGV[5] .. '","pid":' .. ARGV[3] .. ',"pid_start":' .. ARGV[4] .. ',"at":' .. at .. '}'
 redis.call('HSET', KEYS[3], ARGV[1], rec)
 return rec`)
@@ -78,8 +81,9 @@ func (b *Bus) DeclareHandoff(ctx context.Context, agent, reportID string, who Ag
 		return Handoff{}, ErrHandoffNotVerified
 	}
 	res, err := handoffDeclare.Run(ctx, b.r,
-		[]string{StreamKey(b.project, "report"), AgentsKey(b.project), HandoffKey(b.project)},
-		agent, reportID, strconv.Itoa(who.PID), strconv.FormatUint(who.PIDStart, 10), who.Session).Text()
+		[]string{StreamKey(b.project, "report"), AgentsKey(b.project), HandoffKey(b.project), StreamKey(b.project, "status")},
+		agent, reportID, strconv.Itoa(who.PID), strconv.FormatUint(who.PIDStart, 10), who.Session,
+		streamMaxLen, handoffIdleMessage(reportID)).Text()
 	if err != nil {
 		return Handoff{}, err
 	}
@@ -93,8 +97,18 @@ func (b *Bus) DeclareHandoff(ctx context.Context, agent, reportID string, who Ag
 	if err := json.Unmarshal([]byte(res), &h); err != nil {
 		return Handoff{}, err
 	}
+	// The snapshot follows the status entry, as Status's does, but here a
+	// failure is said: without it the clear waits for an idle status.
+	snap := AgentSnapshot{State: "idle", Message: handoffIdleMessage(reportID), TS: h.At, Pane: who.Pane, Session: who.Session,
+		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP}
+	if err := b.putSnapshot(ctx, agent, snap, false); err != nil {
+		return h, fmt.Errorf("handoff: recorded, but the idle snapshot failed (%w): run agentbus status %s idle", err, agent)
+	}
 	return h, nil
 }
+
+// handoffIdleMessage is the idle status a hand-off declares.
+func handoffIdleMessage(reportID string) string { return "hand-off declared (report " + reportID + ")" }
 
 // Handoffs is every declared hand-off, void ones included; an unreadable
 // field is skipped.

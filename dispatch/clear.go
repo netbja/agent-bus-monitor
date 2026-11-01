@@ -70,7 +70,7 @@ func DecideClear(f ClearFacts) ClearDecision {
 		return no("it has an open ask")
 	case len(f.Gates) > 0:
 		return ClearDecision{Reason: "a review gate is open", WaitGates: f.Gates}
-	case f.Snap.State != "idle" || f.Snap.TS <= f.Record.At:
+	case f.Snap.State != "idle" || f.Snap.TS < f.Record.At: // the declaration itself is an idle at At
 		return no("not idle since its hand-off")
 	case f.Armed:
 		return no("armed")
