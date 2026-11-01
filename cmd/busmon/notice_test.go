@@ -368,7 +368,7 @@ func TestNoticeFade(t *testing.T) {
 	// blends (foureyes).
 	held := quiet(t, true) // its own model: a copy shares the notice state
 	held = step(t, held, pollMsg{snap: shellFixture(shellNow), at: t0, swaps: reload})
-	held.ui.reminder = &reminderDialog{}
+	held.ui.reminder = &reminderDialog{items: decisions(held.forYou)[:1]} // a real item: an empty reminder is pruned at once
 	held = step(t, held, fadeMsg(t0.Add(3500*time.Millisecond)))
 	held = step(t, held, fadeMsg(t0.Add(9*time.Second)))
 	if f := held.noticeLine(30)[0].Fade; noticeText(held) == "" || f < 40 || f > 60 {
