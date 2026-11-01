@@ -220,9 +220,10 @@ func (m *Model) fillLists() {
 	admitted, events := admittedEvents(m.feed.feed, m.ui.filter)
 	for _, fl := range m.feed.feed {
 		if m.ui.filter.match(fl) {
-			feedItems = append(feedItems, ListItem{Key: fl.id, Line: activityRowAt(fl, l.Tier, lower, now), Selectable: !fl.sep})
+			feedItems = append(feedItems, ListItem{Key: fl.id, Line: m.feed.rows.row(fl, l.Tier, lower, now), Selectable: !fl.sep})
 		}
 	}
+	m.feed.rows.sweep()
 	act.SetHeader(activityHeader(l.Tier, lower))
 	act.SetItems(m.withExpansion(PanelActivity, feedItems, lower))
 	m.ui.pause.Recount(admitted)
