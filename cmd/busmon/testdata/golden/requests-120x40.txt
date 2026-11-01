@@ -24,7 +24,7 @@
 │  ○ master → foureyes         directive master to foureyes                                                         12h│
 │  ○ master → coder            directive master to coder                                                            11h│
 │  ○ sentinel → master         directive sentinel to master (+5)                                                    48m│
-│  ── notices · 22, nobody owes an answer  (enter lists them) ──                                                       │
+│  ── notices · 22, nobody owes an answer  (enter shows them) ──                                                       │
 │  ── done or answered · 77, older than 7 d folded  (o shows them) ──                                                  │
 │                                                                                                                      │
 │                                                                                                                      │

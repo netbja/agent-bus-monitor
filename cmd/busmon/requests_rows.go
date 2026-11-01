@@ -195,7 +195,22 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 		}
 	}
 	if n := v.count(secNotices); n > 0 {
-		out = append(out, ListItem{Key: reqNoticesKey, Selectable: true, Line: fit(reqFold(fmt.Sprintf("notices%s%d, nobody owes an answer  (enter lists them)", sep, n)))})
+		label := fmt.Sprintf("notices%s%d, nobody owes an answer  (enter shows them)", sep, n)
+		if open.groups[reqNoticesKey] {
+			label = fmt.Sprintf("notices%s%d, nobody owes an answer  (enter folds them)", sep, n)
+		}
+		out = append(out, ListItem{Key: reqNoticesKey, Selectable: true, Expanded: open.groups[reqNoticesKey], Line: fit(reqFold(label))})
+		if open.groups[reqNoticesKey] { // in place, one row per from → to as before the fold (foureyes)
+			for _, g := range v.groups[secNotices] {
+				if len(g.Threads) == 1 { // an only notice opens itself (a report notice its report)
+					out = append(out, threadRow(g.Threads[0], false))
+					continue
+				}
+				subject := fmt.Sprintf("%s (+%d)", Preview(g.Threads[len(g.Threads)-1].Subject), len(g.Threads)-1)
+				out = append(out, ListItem{Key: "ntc:" + g.Key(), Selectable: true,
+					Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))})
+			}
+		}
 	}
 	if len(v.folded) > 0 {
 		label := fmt.Sprintf("done or answered%s%d, older than 7 d folded  (o shows them)", sep, len(v.folded))
@@ -212,7 +227,8 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 	return out
 }
 
-// reqNoticesKey is the one line every notice folds into.
+// reqNoticesKey is the one line every notice folds into; Enter shows their
+// groups in place, each opened or closed (d) as a group.
 const reqNoticesKey = "ntc:all"
 
 // reqFold is a folded line of the list (listFold's look, its own words).
@@ -349,7 +365,7 @@ func (m *Model) openRequestRow(key string) tea.Cmd {
 		o.folded = !o.folded
 	case strings.HasPrefix(key, "req:"):
 		return m.push(page{kind: ovRequest, key: key, lead: reqSectionNote(secTracked)})
-	case strings.HasPrefix(key, "grp:"), strings.HasPrefix(key, "older:"):
+	case key == reqNoticesKey, strings.HasPrefix(key, "grp:"), strings.HasPrefix(key, "older:"):
 		if o.groups == nil {
 			o.groups = map[string]bool{}
 		}

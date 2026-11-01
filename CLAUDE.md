@@ -410,7 +410,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (`o`; `reqFoldAfter`, the person's answer, was 24 h). Since busmon pages step 2 it is the one list pattern: short
   section names, one line per group (`◆` owed or gated, `●`/`○` unread/read, `you` for the person, the kind short
   below 106 cells, `(+N)` for a group), the title a counter summary, one row per open ask (`ask:<id>`), the notices
-  in one line (`ntc:all`, never closed by `d`), and the sentence a heading carried as the first line of the page a
+  in one line (`ntc:all`: Enter shows their groups in place, each opened or closed by `d` as before; `d` on the line
+  itself closes nothing), and the sentence a heading carried as the first line of the page a
   row opens (`reqSectionNote`, `page.lead`). A challenge is owed iff its gate is open now, never from its thread; unread/read come from the
   target's cursor (`Obligation.LastDelivered`, `PendingIDs`, read with the dispatcher facts); the title's
   numbers are the sums of their sections. The header reads the same view (`fillLists` keeps it in

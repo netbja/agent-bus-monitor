@@ -28,7 +28,7 @@ func TestRequestRowsInTheListPattern(t *testing.T) {
 	items := requestRows(v, reqOpen{}, now, 136)
 	text := reqRowsText(items)
 	order := []string{"You wait on", "you " + GlyphArrowR + " master", "Tracked", "busmon-group-a " + GlyphNone + " accepted",
-		"Reviews gated", "Between agents", "notices" + sep + "22, nobody owes an answer  (enter lists them)",
+		"Reviews gated", "Between agents", "notices" + sep + "22, nobody owes an answer  (enter shows them)",
 		"done or answered" + sep + "77, older than 7 d folded  (o shows them)"}
 	at := -1
 	for _, w := range order {

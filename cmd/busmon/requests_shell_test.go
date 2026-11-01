@@ -100,11 +100,23 @@ func TestRequestsEnter(t *testing.T) {
 		t.Errorf("o showed %d rows, want %d", len(rowKeys(m)), n+77)
 	}
 	m = keys(t, m, 'o')
-	m.lists.requests.Select(hasKey(m, "ntc:"))
+	m.lists.requests.Select(reqNoticesKey) // the one notices line expands in place (foureyes)
+	if m = keys(t, m, kEnter); m.rd.open() || len(rowKeys(m)) <= n {
+		t.Fatalf("the notices line opened a page or expanded nothing: %d rows", len(rowKeys(m)))
+	}
+	group := ""
+	for _, k := range rowKeys(m) {
+		if strings.HasPrefix(k, "ntc:grp:") {
+			group = k
+		}
+	}
+	m.lists.requests.Select(group)
 	if m = keys(t, m, kEnter); !m.rd.open() || m.rd.top().kind != ovNotices || len(m.rd.top().body) < 1 {
 		t.Fatalf("a notice group opened %v", m.rd.open())
 	}
 	m.closeReader()
+	m.lists.requests.Select(reqNoticesKey)
+	m = keys(t, m, kEnter)
 	m.lists.requests.Select("req:busmon-group-a")
 	if m = keys(t, m, kEnter); !m.rd.open() || m.rd.top().kind != ovRequest {
 		t.Fatal("the tracked request opened no request page")
@@ -134,5 +146,29 @@ func TestRequestsDeleteClosesEachThreadOfAGroup(t *testing.T) {
 		if strings.Contains(k, "|sentinel|master|") {
 			t.Error("the closed group is still listed")
 		}
+	}
+}
+
+// d on the notices line closes nothing (every notice at once); d on one
+// notice group, shown by Enter on the line, closes that group's threads.
+func TestRequestsDeleteNotices(t *testing.T) {
+	fw := &fakeWriter{}
+	m := reqShell(t, 120, 40, fw)
+	m.lists.requests.Select(reqNoticesKey)
+	m, cmd := pressCmd(t, keys(t, m, 'd'), 'y')
+	m = run(t, m, cmd)
+	if got := strings.Count(sentBy(fw), "close "); got != 0 {
+		t.Fatalf("d on the notices line closed %d threads", got)
+	}
+	m = keys(t, m, kEnter) // shows the groups
+	for _, k := range rowKeys(m) {
+		if strings.HasPrefix(k, "ntc:grp:") && strings.Contains(k, "|dispatch|sentinel|") {
+			m.lists.requests.Select(k)
+		}
+	}
+	m, cmd = pressCmd(t, keys(t, m, 'd'), 'y')
+	m = run(t, m, cmd)
+	if got := strings.Count(sentBy(fw), "close "); got != 6 {
+		t.Fatalf("d on dispatch → sentinel's notices closed %d threads, want 6: %s", got, sentBy(fw))
 	}
 }
