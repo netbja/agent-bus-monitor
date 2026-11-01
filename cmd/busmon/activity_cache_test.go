@@ -79,3 +79,30 @@ func TestActivityRowCacheFollowsEveryInput(t *testing.T) {
 }
 
 var _ = tea.KeyPressMsg{}
+
+// An ask's row also reads the ask's current state (title, open questions):
+// an unchanged ask event across changed snapshots is laid out again
+// (reviewer-codex).
+func TestActivityRowCacheFollowsTheAsk(t *testing.T) {
+	saved := currentAsks
+	defer func() { currentAsks = saved }()
+	var c activityCache
+	q := func(id string) bus.AskQuestionState {
+		return bus.AskQuestionState{AskQuestion: bus.AskQuestion{ID: id, Question: id, Options: []bus.AskOption{{Label: "yes"}}}}
+	}
+	ev := bus.Event{Kind: "cmd", Type: bus.CmdAsk, From: "master", Target: "people", ID: "5-0", Message: "review?"}
+	fl := feedLine{id: "5-0", ev: ev, at: shellNow}
+	currentAsks = map[string]bus.Ask{"5-0": {ID: "5-0", Title: "review lot 1?", State: "open", Questions: []bus.AskQuestionState{q("a"), q("b")}}}
+	open2 := c.row(fl, TierWide, 120, shellNow).text()
+	answered := q("a")
+	answered.Answer = &bus.AskAnswer{Choice: "yes"}
+	currentAsks = map[string]bus.Ask{"5-0": {ID: "5-0", Title: "review lot 1?", State: "open", Questions: []bus.AskQuestionState{answered, q("b")}}}
+	open1 := c.row(fl, TierWide, 120, shellNow).text()
+	if open1 == open2 || !strings.Contains(open1, "1 open") {
+		t.Fatalf("an answered question kept the row: %q then %q", open2, open1)
+	}
+	currentAsks = map[string]bus.Ask{}
+	if gone := c.row(fl, TierWide, 120, shellNow).text(); gone == open1 {
+		t.Fatalf("an ask gone from the snapshot kept its row: %q", gone)
+	}
+}

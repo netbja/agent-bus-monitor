@@ -153,6 +153,7 @@ type activityKey struct {
 	tier  Tier
 	width int
 	day   string
+	ask   string // an ask's row reads the ask's current state (reviewer-codex): askRowInput
 }
 
 // activityCache keeps the Activity rows laid out by the last fill (the
@@ -162,7 +163,7 @@ type activityCache struct{ rows, next map[activityKey]Line }
 
 // row is activityRowAt, laid out only when one of its inputs changed.
 func (c *activityCache) row(fl feedLine, tier Tier, width int, today time.Time) Line {
-	k := activityKey{ev: fl.ev, at: fl.at.UnixNano(), sep: fl.sep, to: len(fl.to), mark: fl.mark, tier: tier, width: width}
+	k := activityKey{ev: fl.ev, at: fl.at.UnixNano(), sep: fl.sep, to: len(fl.to), mark: fl.mark, tier: tier, width: width, ask: askRowInput(fl.ev)}
 	if fl.sep {
 		k.day = today.Format("2006-01-02")
 	}
@@ -177,6 +178,20 @@ func (c *activityCache) row(fl feedLine, tier Tier, width int, today time.Time) 
 		c.next[k] = l
 	}
 	return l
+}
+
+// askRowInput is what lookEvent reads of an ask beside its event: the
+// ask's title, questions and open count while the snapshot holds it; ""
+// for any other event.
+func askRowInput(e bus.Event) string {
+	if e.Kind != "cmd" || e.Type != bus.CmdAsk {
+		return ""
+	}
+	a, ok := currentAsks[e.ID]
+	if !ok {
+		return "absent"
+	}
+	return fmt.Sprintf("%s\x00%d\x00%d", a.Title, len(a.Questions), a.Open())
 }
 
 // sweep ends a fill: the rows it used are the cache.
