@@ -352,7 +352,12 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   with its current task from the facts, `currentTask`: an accepted board task it owns, else its plan task in progress,
   never its status message; keys `empty:agent:<name>` open the agent's page, `empty:plan:<task>` the plan task; no
   store), and the
-  recap's For you section shows only when the For you panel is not on screen (`recapForScreen`); its keys are `ModeShell` (the panel table with the shell's tabs)
+  recap's For you section shows only when the For you panel is not on screen (`recapForScreen`), in the list format
+  (recap-foryou: `recapItemLine`, one line per item, the sender in its provider's colour, its text, the age at the
+  right edge; a report notice reads as its report's own preview, `reportText`, never the envelope nor the id; what was
+  sent to the person newest first, identical items (sender and text) merged with `(N)` and the newest's report; items
+  older than a day folded behind `+ N older` by `recapFold` until `o`; Enter opens the report's full text, `Y` copies
+  it); its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`; A12: `▼` in the gutter, the text under the message column behind a
   muted `│` guide, a last muted `↵ full text` line), then opens it in the reader, a stack of pages over the lower zone, one

@@ -217,7 +217,8 @@ func (m *Model) maybeOpenRecap() {
 func (m *Model) recapTarget() string { return m.sig.recap.Target }
 
 // recapKey: arrows (and Tab) move along the selectable rows, Enter opens one
-// over the recap (Esc returns to it), Esc closes.
+// over the recap (Esc returns to it), o shows or folds the For you items older
+// than a day, Y copies the selected item's report, Esc closes.
 func (m *Model) recapKey(k Key) tea.Cmd {
 	p := m.rd.top()
 	switch {
@@ -229,6 +230,11 @@ func (m *Model) recapKey(k Key) tea.Cmd {
 		m.moveRecap(p, 1)
 	case k.Code == keyEnter:
 		return m.activateRecapRow(p)
+	case k.Code == keyRune && k.Rune == 'o':
+		p.recapOlder, p.dirty = !p.recapOlder, true
+		m.refresh()
+	case k.Code == keyRune && k.Rune == 'Y':
+		return m.copy(p.threadPlain, "report")
 	}
 	return nil
 }
@@ -270,6 +276,9 @@ func (m *Model) activateRecapRow(p *page) tea.Cmd {
 			return m.push(page{kind: ovTask, key: r.Task})
 		}
 	case "thread":
+		if r.Report.ID != "" { // a report notice opens its report's full text
+			return m.pushMessage(r.Report, eventTimestamp(r.Report.ID))
+		}
 		return m.pushMessage(r.Event, eventTimestamp(r.Event.ID))
 	case "verdict":
 		if v := r.Verdict; v != nil {

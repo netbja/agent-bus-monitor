@@ -22,6 +22,18 @@ type recapRow struct {
 	Verdict                     *bus.Verdict
 	Swap                        *bus.SwapEvent
 	Selectable                  bool
+	// A For you item in the list format (recap-foryou): its sender in the
+	// sender's colour, its text, its age at the right edge; Count identical
+	// items merged; Older (past a day) folded behind '+ N older'.
+	Name     string
+	NameRole Role
+	Text     string
+	Age      string
+	At       time.Time
+	Count    int
+	Older    bool
+	ReportID string    // a report notice's report
+	Report   bus.Event // that report, when retained: Enter opens it, Y copies it
 }
 
 type recapModel struct {
@@ -70,16 +82,31 @@ func buildRecap(in recapInput) recapModel {
 	}
 	sort.Strings(names)
 	section(recapForYou)
+	nameRole := func(name string) Role {
+		if a := in.Agents[name]; a != nil {
+			return providerRole(a.provider, RoleText)
+		}
+		return RoleText
+	}
+	ageOf := func(at time.Time) string {
+		if at.IsZero() {
+			return ""
+		}
+		return humanAge(max(0, in.Now.Sub(at)))
+	}
 	for _, e := range in.Unread { // the unread marks first (busmon UX item 8)
+		text, _ := reportText(e.Message)
+		at := eventTimestamp(e.ID)
 		add(recapRow{Key: "unread:" + e.ID, Section: recapForYou,
-			Title:  sender(e) + " " + GlyphNone + " unread " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(eventTimestamp(e.ID)))),
-			Detail: e.Message})
+			Title:  sender(e) + " " + GlyphNone + " unread " + GlyphNone + " " + ageOf(at),
+			Detail: e.Message, Name: sender(e), NameRole: nameRole(sender(e)), Text: "unread: " + text, Age: ageOf(at), At: at})
 	}
 	for _, a := range openAsks(in.Asks) {
 		for _, q := range a.Questions {
 			if q.Answer == nil {
 				add(recapRow{Key: "ask:" + a.ID + ":" + q.ID, Section: recapForYou, Title: a.From + " asks " + GlyphNone + " " + q.Header,
-					Detail: q.Question, Kind: "ask", Agent: a.From, Ref: a.ID, Selectable: true})
+					Detail: q.Question, Kind: "ask", Agent: a.From, Ref: a.ID, Selectable: true,
+					Name: a.From, NameRole: nameRole(a.From), Text: "asks: " + q.Header + ": " + q.Question})
 			}
 		}
 	}
@@ -88,7 +115,8 @@ func buildRecap(in recapInput) recapModel {
 		if a.state == "waiting" && !answered(a) {
 			add(recapRow{Key: fmt.Sprintf("wait:%s:%d", n, a.stateAt.UnixMilli()), Section: recapForYou,
 				Title: n + " waiting " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(a.stateAt))), Detail: a.message,
-				Kind: "agent", Agent: n, Selectable: true})
+				Kind: "agent", Agent: n, Selectable: true,
+				Name: n, NameRole: nameRole(n), Text: "waiting: " + a.message, Age: ageOf(a.stateAt), At: a.stateAt})
 		}
 	}
 	threadReplies := make(map[string]bool)
@@ -97,22 +125,52 @@ func buildRecap(in recapInput) recapModel {
 			threadReplies[e.Ref] = true
 		}
 	}
+	reports := make(map[string]bus.Event, len(in.Reports))
+	for _, r := range in.Reports {
+		reports[r.ID] = r
+	}
+	// What was sent to the person, in the list format (recap-foryou): a report
+	// notice reads as its report's own preview, identical items (same sender,
+	// same text) are one row with their count and the newest's report, newest
+	// first; past a day (the Requests window) an item is kept but folded.
+	var items []recapRow
+	same := map[string]int{}
 	for _, e := range in.Commands {
 		if e.Target != bus.PeopleTarget && (in.Human == "" || e.Target != in.Human) || e.Human || e.Type != bus.CmdDirective && e.Type != bus.CmdEscalation {
 			continue
 		}
 		thread := threadID(e)
-		if threadReplies[thread] || in.Now.Sub(eventTimestamp(e.ID)) > bus.DefaultHorizon { // same window as the Requests count
+		if threadReplies[thread] {
 			continue
 		}
-		add(recapRow{Key: "cmd:" + e.ID, Section: recapForYou, Title: e.From + " " + GlyphArrowR + " " + e.Target + " " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(eventTimestamp(e.ID)))),
-			Detail: e.Message, Kind: "thread", Agent: e.From, Ref: thread, Event: e, Selectable: true})
+		text, rid := reportText(e.Message)
+		at := eventTimestamp(e.ID)
+		row := recapRow{Key: "cmd:" + e.ID, Section: recapForYou, Title: e.From + " " + GlyphArrowR + " " + e.Target + " " + GlyphNone + " " + ageOf(at),
+			Detail: e.Message, Kind: "thread", Agent: e.From, Ref: thread, Event: e, Selectable: true,
+			Name: e.From, NameRole: nameRole(e.From), Text: text, Age: ageOf(at), At: at, Count: 1,
+			Older: in.Now.Sub(at) > bus.DefaultHorizon, ReportID: rid, Report: reports[rid]}
+		k := e.From + "\x00" + text
+		if i, ok := same[k]; ok {
+			count := items[i].Count + 1
+			if at.Before(items[i].At) { // keep the newest's time, report and key
+				row = items[i]
+			}
+			row.Count = count
+			items[i] = row
+			continue
+		}
+		same[k] = len(items)
+		items = append(items, row)
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].At.After(items[j].At) })
+	for _, r := range items {
+		add(r)
 	}
 	for _, n := range names {
 		a := in.Agents[n]
 		if a.state == "blocked" {
 			add(recapRow{Key: "blocked:" + n, Section: recapForYou, Title: n + " blocked", Detail: a.message,
-				Kind: "agent", Agent: n, Selectable: true})
+				Kind: "agent", Agent: n, Selectable: true, Name: n, NameRole: nameRole(n), Text: "blocked: " + a.message})
 		}
 	}
 	planRecapExpected(in, add)
@@ -322,6 +380,15 @@ func buildRecap(in recapInput) recapModel {
 	m.Rows = append(m.Rows, recapRow{Key: "summary", Section: "Ask master", Title: "Ask " + m.Target + " for a summary",
 		Detail: recapSummaryStatus(m), Kind: "summary", Selectable: m.SummaryDisabled == ""})
 	return m
+}
+
+// reportText is what a For you line says for msg: a report notice's own
+// preview and its report id, never the notice's envelope; else msg, on one line.
+func reportText(msg string) (text, reportID string) {
+	if s, id, ok := reportSubject(msg); ok {
+		return oneLine(s), id
+	}
+	return oneLine(msg), ""
 }
 
 func recapTarget(cmds []bus.Event) string {
