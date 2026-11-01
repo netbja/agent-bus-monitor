@@ -27,7 +27,7 @@ func tokAccounts(width int, holds map[string]int64) []string {
 	}
 	budgets := map[string]bus.BudgetSnapshot{
 		"anthropic": {Windows: []bus.BudgetWindow{w("5h", 2, 4*3600), w("7d", 55, 43*3600)}},
-		"openai":    {Windows: []bus.BudgetWindow{w("5h", 5, 4*3600), w("7d", 23, 61*3600)}},
+		"openai":    {Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 5, ObservedAt: at}, w("7d", 23, 61*3600)}}, // no reset: a shorter cell, padded to its column
 		"xai":       {Windows: []bus.BudgetWindow{w("weekly", 34, 48*3600)}},
 	}
 	var out []string
@@ -77,6 +77,25 @@ func TestTokensAccountsOneRowPerProvider(t *testing.T) {
 				t.Errorf("%d: %s", c.width, r)
 			}
 		}
+	}
+	// Below the bare form's width: one window per row, the provider named on
+	// each, nothing cut.
+	rows := tokAccounts(50, nil)
+	var anthropic []string
+	for _, r := range rows {
+		if strings.HasPrefix(r, "TOO WIDE") {
+			t.Errorf("50: %q", r)
+		}
+		if strings.HasPrefix(strings.TrimSpace(r), "anthropic") {
+			if strings.Contains(r, GlyphEllipsis) { // a long window name is fitted to its column; a 5h/7d row is never cut
+				t.Errorf("50: cut %q", r)
+			}
+			anthropic = append(anthropic, r)
+		}
+	}
+	if len(anthropic) != 2 || !strings.Contains(anthropic[0], "5h") || !strings.Contains(anthropic[0], "2%") ||
+		!strings.Contains(anthropic[1], "7d") || !strings.Contains(anthropic[1], "55%") {
+		t.Errorf("50: anthropic rows %q", anthropic)
 	}
 }
 
