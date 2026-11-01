@@ -157,3 +157,27 @@ func TestComposeSelectionAcrossFields(t *testing.T) {
 		t.Fatal("esc did not clear the body's selection")
 	}
 }
+
+// A click that moves the focus ends a selection in either field: one made in
+// the recipient no longer catches the next keys (reviewer-codex).
+func TestComposeClickEndsSelectionsInBothFields(t *testing.T) {
+	m := composeWith(t, "body")
+	c := m.ui.compose
+	c.onTo = true
+	c.to.set("coder")
+	c.to.anchor, c.to.mark = 0, true // "coder" selected in the recipient
+	f, tr := m.composeRects()
+	m.composeClick(tr.X, tr.Y) // into the text
+	if _, _, ok := m.ui.compose.to.selection(); ok {
+		t.Fatal("a click into the text kept the recipient's selection")
+	}
+	m.ui.compose.area.anchor, m.ui.compose.area.cur, m.ui.compose.area.mark = 0, 4, true // "body" selected
+	m.ui.compose.to.anchor, m.ui.compose.to.mark = 0, true
+	m.composeClick(f.X+2, f.Y+1) // the recipient row
+	if _, _, ok := m.ui.compose.to.selection(); ok {
+		t.Fatal("a click on the recipient row kept its selection")
+	}
+	if _, _, ok := m.ui.compose.area.selection(); ok {
+		t.Fatal("a click on the recipient row kept the body's selection")
+	}
+}

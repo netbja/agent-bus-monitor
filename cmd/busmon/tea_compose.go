@@ -652,9 +652,11 @@ func (m *Model) composeClick(x, y int) {
 		m.closeCompose()
 	case y == f.Y+1 && c.kind == composeMessage:
 		c.onTo = true
-		c.area.unmark() // a click elsewhere ends a selection (clickAt does it in the text)
+		c.area.unmark() // a focus-changing click ends a selection in either field (reviewer-codex)
+		c.to.unmark()
 	case tr.contains(x, y):
 		c.onTo = false
+		c.to.unmark()
 		c.area.clickAt(tr.W, x-tr.X, y-tr.Y)
 	}
 }
