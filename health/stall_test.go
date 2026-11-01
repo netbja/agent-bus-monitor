@@ -118,7 +118,7 @@ func TestTeamOpenWorkItems(t *testing.T) {
 
 func clearIn() ClearStallInput {
 	return ClearStallInput{Now: stallNow, After: 15 * time.Minute, AutoClear: true,
-		Handoffs: []ClearHandoff{{Agent: "coder", At: ago(22 * time.Minute), Decision: "the pane is focused"}}}
+		Handoffs: []ClearHandoff{{Agent: "coder", At: ago(22 * time.Minute), Report: "1793-0", Decision: "the pane is focused"}}}
 }
 
 func TestClearStall(t *testing.T) {
@@ -282,7 +282,10 @@ func TestClearStallWakes(t *testing.T) {
 		target string
 		text   string
 	}{
-		{"not idle since: the agent", func(in *ClearStallInput) { in.Handoffs[0].Decision = NotIdleReason }, "coder", `agentbus status coder idle`},
+		{"not idle since: the agent re-declares", func(in *ClearStallInput) { in.Handoffs[0].Decision = NotIdleReason }, "coder", `agentbus handoff coder --report 1793-0`},
+		{"not idle, report unknown: master", func(in *ClearStallInput) {
+			in.Handoffs[0].Decision, in.Handoffs[0].Report = NotIdleReason, ""
+		}, "master", NotIdleReason},
 		{"another reason: master", func(in *ClearStallInput) { in.Handoffs[0].Decision = "it has an open ask" }, "master", "it has an open ask"},
 		{"focused: master", func(*ClearStallInput) {}, "master", "the pane is focused"},
 		{"auto-clear off: master", func(in *ClearStallInput) { in.AutoClear = false }, "master", "clear its pane by hand"},

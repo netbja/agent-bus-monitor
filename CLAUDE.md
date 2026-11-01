@@ -831,8 +831,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `pane-focused` is for you). A warning alone woke nobody (chain-reliability): after each stored `clear-stall` or
   `quiet-agent` record the health loop's `StallWake` hook (lease token) sends the wakes the judged input owes
   (`health.ClearStallWakes`/`QuietAgentWakes`), each one waking directive from `dispatch` under `FencedCmdOnce`:
-  a stalled hand-off whose reason is `health.NotIdleReason` wakes the agent with the exact `agentbus status <a> idle`
-  command, any other reason (auto-clear off included) master, once per hand-off and target (mark `stall-clear:<a>`,
+  a stalled hand-off whose reason is `health.NotIdleReason` wakes the agent with the exact command to re-declare it,
+  `agentbus handoff <a> --report <id>` (never `status idle`: the wake is a prompt, and auto-state's turn-start flip
+  voids the record as working since, while a new declaration is newer than that flip; `ClearHandoff.Report`), with
+  no report known, or any other reason (auto-clear off included), master, once per hand-off and target (mark `stall-clear:<a>`,
   episode `<at>|<target>`); a quiet agent wakes master once per directive it went quiet on (mark `stall-quiet:<a>`,
   episode the directive's id). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
   tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an

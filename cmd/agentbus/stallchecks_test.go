@@ -368,14 +368,14 @@ func TestStallWakeSendsOnce(t *testing.T) {
 	at := time.Now().Add(-30 * time.Minute)
 	w.s.mu.Lock()
 	w.s.lastClear = &health.ClearStallInput{Now: time.Now(), After: 15 * time.Minute, AutoClear: true,
-		Handoffs: []health.ClearHandoff{{Agent: "coder", At: at, Decision: health.NotIdleReason}}}
+		Handoffs: []health.ClearHandoff{{Agent: "coder", At: at, Decision: health.NotIdleReason, Report: "1793-0"}}}
 	w.s.mu.Unlock()
 	for i := 0; i < 2; i++ {
 		if err := w.s.stallWake(ctx, "stall-holder", "clear-stall"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if got := w.dispatchDirectives("coder"); len(got) != 1 || !strings.Contains(got[0], "agentbus status coder idle") {
+	if got := w.dispatchDirectives("coder"); len(got) != 1 || !strings.Contains(got[0], "agentbus handoff coder --report 1793-0") {
 		t.Fatalf("coder woken %q", got)
 	}
 	if err := w.s.stallWake(ctx, "not-the-holder", "quiet-agent"); err == nil {

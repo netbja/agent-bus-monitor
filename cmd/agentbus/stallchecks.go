@@ -111,7 +111,7 @@ func (s *stallReader) clearStall(ctx context.Context) (health.Outcome, error) {
 		snap, ok := snaps[a]
 		void, _ := rec.VoidFor(snap, ok)
 		in.Handoffs = append(in.Handoffs, health.ClearHandoff{Agent: a, At: time.UnixMilli(rec.At), Void: void,
-			Decision: s.clear.Decisions.Last(a)})
+			Decision: s.clear.Decisions.Last(a), Report: rec.Report})
 	}
 	return health.EvaluateClearStall(in), nil
 }

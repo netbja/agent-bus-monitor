@@ -182,6 +182,7 @@ type ClearHandoff struct {
 	At       time.Time // the hand-off's time (Redis)
 	Void     bool      // Handoff.VoidFor: no longer a hand-off
 	Decision string    // the clear pass's last reason; "" = none yet
+	Report   string    // the report that carries it: what the agent re-declares
 }
 
 // ClearStallInput is everything clear-stall judges from.
@@ -209,7 +210,8 @@ type StallWake struct {
 
 // ClearStallWakes: each hand-off clear-stall warns about wakes whoever can
 // act, once per hand-off and target: the agent itself, with the exact
-// command, when it only has to declare idle; master for any other reason.
+// command (re-declare its report), when it is only not idle since; master for
+// any other reason, or when the report is unknown.
 func ClearStallWakes(in ClearStallInput, master string) []StallWake {
 	if in.After <= 0 || in.ReadErr != "" {
 		return nil
@@ -224,9 +226,12 @@ func ClearStallWakes(in ClearStallInput, master string) []StallWake {
 		switch {
 		case !in.AutoClear:
 			w.Text = fmt.Sprintf("Stall guard: %s handed off %s ago and auto-clear is off: clear its pane by hand, or ask the person to.", h.Agent, minutes(age))
-		case h.Decision == NotIdleReason:
+		case h.Decision == NotIdleReason && h.Report != "":
+			// A re-declaration, never a status: this wake is a prompt, and the
+			// turn it starts (auto-state) voids the record as working since;
+			// a new declaration is newer than that flip (foureyes).
 			w.Target = h.Agent
-			w.Text = fmt.Sprintf("Stall guard: your hand-off waits %s for its /clear because you are not idle since it. Run: agentbus status %s idle \"hand-off declared\" and nothing after it.", minutes(age), h.Agent)
+			w.Text = fmt.Sprintf("Stall guard: your hand-off waits %s for its /clear because you are not idle since it. Run: agentbus handoff %s --report %s and nothing after it.", minutes(age), h.Agent, h.Report)
 		default:
 			d := h.Decision
 			if d == "" {

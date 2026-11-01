@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/health"
 )
 
 // clearWorld: coder, a verified Claude Code agent in pane w1:p2, has
@@ -442,5 +443,41 @@ func TestHandoffClearResumeDrainEndToEnd(t *testing.T) {
 	}
 	if m, _ := b.Handoffs(ctx); len(m) != 0 {
 		t.Fatalf("the record stayed: %v", m)
+	}
+}
+
+// The stall guard's wake to an agent not idle since its hand-off is a prompt:
+// auto-state's turn-start flip makes it working since, which voids the record
+// (foureyes). The command the wake gives, a re-declaration of the same
+// report, makes a new record newer than the flip, and the clear goes on, once.
+func TestStallWakeRedeclareSurvivesTheTurnFlip(t *testing.T) {
+	w := newClearWorld(t, true)
+	ctx := context.Background()
+	who := bus.AgentIdent{Pane: coderPane, PID: testPID, PIDStart: testStart, Session: "session-0001", Client: "claude-code", Provider: "anthropic"}
+	time.Sleep(2 * time.Millisecond)
+	if err := w.b.TurnState(ctx, "coder", "working", who); err != nil { // the wake's prompt
+		t.Fatal(err)
+	}
+	snaps, err := w.b.Agents(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recs, _ := w.b.Handoffs(ctx)
+	if void, why := recs["coder"].VoidFor(snaps["coder"], true); !void {
+		t.Fatalf("the turn flip did not void the record (%s): the case this guards is gone", why)
+	}
+	wakes := health.ClearStallWakes(health.ClearStallInput{Now: time.Now(), After: time.Minute, AutoClear: true,
+		Handoffs: []health.ClearHandoff{{Agent: "coder", At: time.Now().Add(-time.Hour), Report: w.rep, Decision: health.NotIdleReason}}}, "master")
+	if len(wakes) != 1 || wakes[0].Target != "coder" || !strings.Contains(wakes[0].Text, "agentbus handoff coder --report "+w.rep) {
+		t.Fatalf("wake %+v", wakes)
+	}
+	time.Sleep(2 * time.Millisecond)
+	if _, err := w.b.DeclareHandoff(ctx, "coder", w.rep, who); err != nil { // what the agent runs
+		t.Fatal(err)
+	}
+	w.pass()
+	w.pass()
+	if w.clears() != 1 {
+		t.Fatalf("clears %d, want 1 after the re-declaration", w.clears())
 	}
 }
