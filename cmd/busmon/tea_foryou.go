@@ -133,12 +133,15 @@ func unreadItems(items []attentionItem) int {
 	return n
 }
 
-// forYouEmpty is For you when nothing is expected from the person (the
-// person: "I must always know what is expected"): it says so, then what is
-// in progress (the agents that declare working, with their status) and the
-// next decision to come (the plan's first open task of the person's), from
+// forYouEmpty is For you when its list is empty (the person: "I must always
+// know what is expected"). It says "Nothing expected from you." only when
+// nothing else is owed either: no request owed to the person (owed, the
+// Requests view's count, as the header's orange item) and no plan task of the
+// person's waiting; otherwise it names those (foureyes). Then what is in
+// progress (the agents that declare working, with their status) and the next
+// decision to come (the plan's first person task Blocked or Upcoming), from
 // what busmon already reads. No store of its own.
-func forYouEmpty(s snapshot) []Line {
+func forYouEmpty(s snapshot, owed int) []Line {
 	var working []string
 	names := make([]string, 0, len(s.agents))
 	for n := range s.agents {
@@ -158,9 +161,14 @@ func forYouEmpty(s snapshot) []Line {
 	if len(working) > 0 {
 		inProgress = strings.Join(working, "; ")
 	}
-	next := "no decision planned"
+	waiting, next := "", "no decision planned"
 	if s.planState.loaded {
-		for _, st := range []plan.State{plan.Waiting, plan.Blocked, plan.Upcoming} {
+		for _, r := range s.planState.rows {
+			if r.Task.Owner == plan.Person && r.State == plan.Waiting && waiting == "" {
+				waiting = r.Task.Title
+			}
+		}
+		for _, st := range []plan.State{plan.Blocked, plan.Upcoming} {
 			for _, r := range s.planState.rows {
 				if r.Task.Owner == plan.Person && r.State == st && next == "no decision planned" {
 					next = r.Task.Title
@@ -168,9 +176,21 @@ func forYouEmpty(s snapshot) []Line {
 			}
 		}
 	}
-	return []Line{
-		{{Text: "Nothing expected from you.", Role: RoleOK}},
-		{{Text: "In progress: ", Role: RoleMuted}, {Text: Preview(inProgress), Role: RoleText}},
-		{{Text: "Next for you: ", Role: RoleMuted}, {Text: Preview(next), Role: RoleText}},
+	var lines []Line
+	if owed > 0 {
+		word := "requests"
+		if owed == 1 {
+			word = "request"
+		}
+		lines = append(lines, Line{{Text: fmt.Sprintf("Owed by you: %d %s (Requests)", owed, word), Role: RoleAttention}})
 	}
+	if waiting != "" {
+		lines = append(lines, Line{{Text: "Waiting for you: ", Role: RoleAttention}, {Text: Preview(waiting), Role: RoleText}})
+	}
+	if len(lines) == 0 {
+		lines = append(lines, Line{{Text: "Nothing expected from you.", Role: RoleOK}})
+	}
+	return append(lines,
+		Line{{Text: "In progress: ", Role: RoleMuted}, {Text: Preview(inProgress), Role: RoleText}},
+		Line{{Text: "Next for you: ", Role: RoleMuted}, {Text: Preview(next), Role: RoleText}})
 }

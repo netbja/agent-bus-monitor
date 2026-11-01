@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -227,13 +228,30 @@ func recapForScreen(r recapModel, forYouShown bool, empty []Line) recapModel {
 			out.Rows = append(out.Rows, row)
 			continue
 		}
-		if forYouShown {
+		if forYouShown && recapInPanel(row) { // only what the panel itself lists (foureyes)
 			continue
 		}
 		if row.Key != "" || row.Title != row.Section {
 			items++
 		}
 		out.Rows = append(out.Rows, row)
+	}
+	if forYouShown { // a heading left alone, its rows all in the panel, goes too
+		kept := 0
+		for _, row := range out.Rows {
+			if row.Section == recapForYou && (row.Key != "" || row.Title != row.Section) {
+				kept++
+			}
+		}
+		if kept == 0 {
+			var rows []recapRow
+			for _, row := range out.Rows {
+				if row.Section != recapForYou {
+					rows = append(rows, row)
+				}
+			}
+			out.Rows = rows
+		}
 	}
 	if !forYouShown && items == 0 { // the empty state, right under the section's heading
 		var rows []recapRow
@@ -248,4 +266,16 @@ func recapForScreen(r recapModel, forYouShown bool, empty []Line) recapModel {
 		out.Rows = rows
 	}
 	return out
+}
+
+// recapInPanel: a For-you row the For you panel also lists (its unread lines,
+// asks and waits); directives owed, blocked agents, plan tasks and read
+// errors are only in the recap and always stay.
+func recapInPanel(row recapRow) bool {
+	for _, p := range []string{"unread:", "ask:", "wait:"} {
+		if strings.HasPrefix(row.Key, p) {
+			return true
+		}
+	}
+	return false
 }

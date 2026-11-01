@@ -179,8 +179,8 @@ func (m *Model) fillLists() {
 	if more > 0 {
 		rows = append(rows, ListItem{Key: "more", Line: Line{{Text: fmt.Sprintf("+%d more", more), Role: RoleMuted}}, Selectable: true})
 	}
-	if len(rows) == 0 { // nothing expected: say so, and what is in progress and the next decision
-		for _, l := range forYouEmpty(s) {
+	if len(rows) == 0 { // say what is expected, if anything, then what is in progress and the next decision
+		for _, l := range forYouEmpty(s, requestGroups(m.requestInput()).count(secOwed)) {
 			rows = append(rows, ListItem{Line: l})
 		}
 	}

@@ -299,7 +299,7 @@ func (m *Model) counts() shellCounts {
 	}
 	fy := len(m.forYou)
 	if fy == 0 { // the empty state's lines, shown whole, as wide as they need (capped by the layout)
-		empty := forYouEmpty(m.snap)
+		empty := forYouEmpty(m.snap, m.lists.reqView.count(secOwed))
 		fy = len(empty)
 		for _, l := range empty {
 			w = max(w, l.Width())
