@@ -808,8 +808,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   seen busy; silent since before the retained cmd history = not judged; collected per agent. `clear-stall` warns on
   a valid hand-off older than its threshold, naming the clear pass's last reason (`dispatch.ClearDecisions`; reason
   `pane-focused` is for you). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
-  tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, deleted when
-  the fail ends): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
+  tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an
+  unknown pass and deleted once the check reads ok or warn): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
   `stall_after`. busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown

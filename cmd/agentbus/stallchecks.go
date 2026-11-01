@@ -358,16 +358,19 @@ func (s *stallReader) stallNotify(ctx context.Context, token string, _ health.Re
 		return err
 	}
 	rec := recs["team-stall"]
-	if rec.Status != health.Fail || rec.Since == 0 {
-		if _, ok := marks[stallMark]; ok {
+	_, told := marks[stallMark]
+	switch {
+	case rec.Status == health.OK || rec.Status == health.Warn:
+		if told { // the stall is over: the next one is a new episode
 			return s.b.FencedQuotaDel(ctx, token, stallMark)
 		}
 		return nil
+	case rec.Status != health.Fail || rec.Since == 0:
+		return nil // unknown (a failed read) keeps the episode and its mark (reviewer-codex)
+	case told:
+		return nil // told this episode: a fail after an unknown has a new since, not a new stall
 	}
 	episode := strconv.FormatInt(rec.Since, 10)
-	if marks[stallMark] == episode {
-		return nil // told this episode
-	}
 	target := s.escalateTo()
 	snaps, err := s.b.Agents(ctx)
 	if err != nil {

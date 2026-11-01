@@ -214,3 +214,38 @@ func TestStallNoticeWithoutTheLease(t *testing.T) {
 		t.Fatalf("err %v, notices %q", err, w.personNotices())
 	}
 }
+
+// A failed read in the middle of a stall (fail, unknown, fail) is still one
+// episode: the person is told once, and the mark survives the unknown
+// (reviewer-codex).
+func TestStallNoticeSurvivesAnUnknownPass(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	if err := w.b.FencedQuotaSet(ctx, "stall-holder", "hold:anthropic", "1"); err != nil {
+		t.Fatal(err)
+	}
+	rec := w.putStall()
+	w.s.now = func() time.Time { return time.UnixMilli(rec.Since).Add(time.Minute) }
+	if err := w.s.stallNotify(ctx, "stall-holder", rec); err != nil {
+		t.Fatal(err)
+	}
+	unknown := health.Record{ID: "team-stall", Status: health.Unknown, Detail: "agents unavailable", Fingerprint: "u"}
+	if err := w.b.FencedHealthPut(ctx, "stall-holder", "master", unknown); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.s.stallNotify(ctx, "stall-holder", unknown); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := w.b.QuotaMarks(ctx); m["stall"] == "" {
+		t.Fatal("an unknown pass ended the episode's mark")
+	}
+	time.Sleep(2 * time.Millisecond)
+	again := w.putStall() // a new since, the same stall
+	w.s.now = func() time.Time { return time.UnixMilli(again.Since).Add(time.Minute) }
+	if err := w.s.stallNotify(ctx, "stall-holder", again); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.personNotices(); len(got) != 1 {
+		t.Fatalf("%d notices across fail, unknown, fail: %q", len(got), got)
+	}
+}
