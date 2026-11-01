@@ -35,6 +35,14 @@ func TestAgentPageReplyQuotesWhatItNeeds(t *testing.T) {
 	if m = keys(t, m, 'i'); m.ui.compose.area.value() != "my own words" {
 		t.Fatalf("the draft was replaced: %q", m.ui.compose.area.value())
 	}
+	// A draft with only a recipient, another agent, is kept too: no quote put
+	// under someone else's name (reviewer-codex).
+	m = keys(t, m, kEsc)
+	m.ui.msgCompose = composeDraft{to: "@master"}
+	m.pushAgent("foureyes")
+	if m = keys(t, m, 'i'); m.ui.compose.area.value() != "" || m.ui.compose.recipient() != "master" {
+		t.Fatalf("a recipient-only draft got the quote: to %q, body %q", m.ui.compose.recipient(), m.ui.compose.area.value())
+	}
 }
 
 // No quote where the page shows none: an agent that is not waiting.

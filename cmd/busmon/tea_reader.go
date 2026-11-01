@@ -731,7 +731,9 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			quote := m.needQuote(agent)
 			m.closeReader()
 			m.openMessageCompose("", agent)
-			if c := m.ui.compose; quote != "" && c != nil && c.area.value() == "" { // never over a draft
+			// Only into a new window to that agent: never over a draft, even one that
+			// names another recipient with no text yet (reviewer-codex).
+			if c := m.ui.compose; quote != "" && c != nil && c.area.value() == "" && c.recipient() == agent {
 				c.area.set(quote)
 				c.onTo = false
 				m.layoutCompose()
