@@ -172,8 +172,12 @@ An agent is **quiet** when all of these hold:
   (`boardMutation` in `bus/board.go`, `publishRequest` and `requestTransition` in
   `bus/requests.go`, the board writes in `bus/delivery.go` and `bus/conductorkeys.go`) therefore
   also stamps `updated_ms` from Redis `TIME`, an additive field next to `updated`. `quiet-agent`
-  reads only `updated_ms`. An entry the agent owns that has no `updated_ms` (written before the
-  change) counts as activity, so an unknown clock never makes an agent quiet;
+  reads only `updated_ms`, and **ignores** an owned entry that has none. Board entries are never
+  pruned (44 on this project today, most of them coder's done tasks), so counting a legacy entry as
+  activity would blind the check forever for the very agent it exists for (foureyes). Every board
+  write after the change carries `updated_ms`, so a legacy entry is always older than any directive
+  delivered after the deploy; the only possible miss is one warn in the deploy window, in hand by
+  master, never a fail;
 - the agent is `idle` or `done`, not seen busy, not held, and the entry is older than N
   (`quiet_after`).
 
@@ -333,7 +337,7 @@ Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
 - `EvaluateQuietAgent`: delivered and silent (warn), pending (ok: the dispatcher's case), `wake=no`
   (ok), a held agent (ok), and each kind of activity after the entry (ok): a status, a report, a
   reply, a verdict, a challenge, a board update by its `updated_ms`, an ask, a hand-off. An owned
-  board entry with no `updated_ms` is activity (ok). Each board-writing script stamps `updated_ms`
+  board entry with no `updated_ms` is ignored (it neither counts as activity nor blocks a warn). Each board-writing script stamps `updated_ms`
   from Redis `TIME` even when the caller passes a far-off `updated` (a fake clock in the test). A `reply` or `verdict` as the
   newest entry never makes an agent quiet. The boundary at N.
 
