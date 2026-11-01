@@ -55,6 +55,7 @@ type page struct {
 
 	svc       *svcFacts  // ovServices: the facts the cards show (sel: the card selected)
 	svcBusy   bool       // ovServices, ovRedis: a refresh read is in flight
+	lead      string     // ovMessage, ovRequest: a first muted line (the Requests section's sentence)
 	recap     recapModel // ovRecap
 	recapLine int        // ovRecap: the body line of the cursor's row
 }
@@ -322,6 +323,15 @@ func messagePage(e bus.Event, at time.Time) page {
 
 func (m *Model) pushMessage(e bus.Event, at time.Time) tea.Cmd { return m.push(messagePage(e, at)) }
 
+// withLead is body under a muted first line and a blank one; body itself
+// when there is no lead.
+func withLead(lead string, body []Line) []Line {
+	if lead == "" {
+		return body
+	}
+	return append([]Line{{S(RoleMuted, lead)}, nil}, body...)
+}
+
 func (m *Model) pushAgent(name string) tea.Cmd {
 	if m.snap.agents[name] == nil {
 		return nil
@@ -383,7 +393,7 @@ func (m *Model) buildPage() bool {
 	switch p.kind {
 	case ovMessage:
 		p.title = detailTitle(p.ev)
-		p.body = detailText(p.ev, p.at, now, p.thread)
+		p.body = withLead(p.lead, detailText(p.ev, p.at, now, p.thread))
 		p.plain, p.threadPlain = detailPlain(p.ev), threadPlain(p.ev, p.thread)
 	case ovAgent:
 		a := s.agents[p.key]
@@ -414,6 +424,7 @@ func (m *Model) buildPage() bool {
 		for _, r := range s.requests {
 			if r.Task == task {
 				p.title, p.body, p.plain = requestDetail(r, now)
+				p.body = withLead(p.lead, p.body)
 			}
 		}
 	case ovRequests:

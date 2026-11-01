@@ -20,7 +20,7 @@ KEYS
   w                    answer the open question, or with none open write to master
   d del                remove
   a                    show or hide the agents silent for more than a day
-  o                    Requests: show or hide the answered threads and those older than 24 h
+  o                    Requests: show or hide the answered threads and those older than 7 days
   /                    filter
   i :                  write
   I                    write in the compose window (several lines, Ctrl+S sends)

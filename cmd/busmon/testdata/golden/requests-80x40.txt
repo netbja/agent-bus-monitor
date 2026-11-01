@@ -11,29 +11,29 @@
 │  ○ sentinel  idle     0s   —                                                 │
 │  ○ ui-kimi   idle     0s   —                                                 │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity  2 Board  3 Requests  4 Plan  ──────────── wait 22 · agents 21 ─╮
-│    FROM→TO            SUBJECT                                          N  AGE│
-│  owed by you · 0                                                             │
-│  you wait on master · 22, no reply on their thread  (oldest 1h)              │
-│  ○ charlie→master     message 21 from the person                       1   5m│
-│  ○ charlie→master     message 20 from the person                       1  10m│
-│    charlie→master     + 20 older  (enter expands)                     20   1h│
-│  tracked requests · 1 waiting                                                │
-│    master→coder       busmon-group-a                                   1   1h│
-│  reviews still gated · 1 reviewer, 9 open gates                              │
-│  ● coder→reviewer-co… lifecycle-spec · gate-subject-close · a-pendi…   9   1h│
-│  directives between agents, no reply on the thread · 11 in 5 pairs           │
-│  ● coder→ui-kimi      coder to ui-kimi                                 1  12h│
-│  ○ master→sentinel    master to sentinel                               2  14h│
-│  ○ master→foureyes    master to foureyes                               1  12h│
-│  ○ master→coder       master to coder                                  1  11h│
-│  ○ sentinel→master    sentinel to master                               6  48m│
-│  notices · folded, nobody owes an answer  (enter lists them)                 │
-│  · dispatch→sentinel  dispatcher notice for sentinel                   6  45m│
-│  · dispatch→master    dispatcher notice for master                     5  44m│
-│  · dispatch→coder     dispatcher notice for coder                      1  40m│
-│  · coder→master       report 9 first line                             10  10m│
-│  answered or older than 24 h · 77 folded  (o shows them)                     │
+╭─  1 Activity  2 Board  3 Requests  4 Plan  ─ 22 waiting · 1 tracked · 9 gat…─╮
+│  You wait on                                                                 │
+│  ○ you → master        dir  message 21 from the person                     5m│
+│  ○ you → master        dir  message 20 from the person                    10m│
+│    you → master        dir  + 20 older  (enter shows them)                 1h│
+│  Tracked                                                                     │
+│  ◆ master → coder      req  busmon-group-a · accepted                      1h│
+│  Reviews gated                                                               │
+│  ● coder → reviewer-…  chal lifecycle-spec · gate-subject-close · a-pe…    1h│
+│  Between agents                                                              │
+│  ● coder → ui-kimi     dir  coder to ui-kimi                              12h│
+│  ○ master → sentinel   dir  master to sentinel (+1)                       14h│
+│  ○ master → foureyes   dir  master to foureyes                            12h│
+│  ○ master → coder      dir  master to coder                               11h│
+│  ○ sentinel → master   dir  sentinel to master (+5)                       48m│
+│  ── notices · 22, nobody owes an answer  (enter shows them) ──               │
+│  ── done or answered · 77, older than 7 d folded  (o shows them) ──          │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               

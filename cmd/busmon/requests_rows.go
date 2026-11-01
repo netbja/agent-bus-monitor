@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // The Requests view's rows: a column header, then each section's header and
@@ -13,9 +15,8 @@ import (
 // (≥ reqStateWidth; below, the state is the row's marker), SUBJECT, N, AGE.
 
 const (
-	reqKindWidth  = 106 // the row width from which KIND has a column (a 120-column screen)
-	reqStateWidth = 150 // and STATE (a 160-column screen)
-	reqWaitShown  = 2   // "you wait on": the person's newest messages shown before "+ N older"
+	reqKindWidth = 106 // the row width from which the kind is spelled out (a 120-column screen)
+	reqWaitShown = 2   // "you wait on": the person's newest messages shown before "+ N older"
 )
 
 // reqOpen is what the person opened in the view: groups expanded, the folded
@@ -25,90 +26,62 @@ type reqOpen struct {
 	folded bool
 }
 
-type reqCols struct {
-	width, fromTo, kind, state, n, subject int
-	arrow                                  string
+// reqKindShort: the kind below reqKindWidth (busmon pages, Requests at 80).
+var reqKindShort = map[string]string{kindRequest: "req", kindChallenge: "chal", kindDirective: "dir", kindReports: "rep", kindNotices: "ntc", "ask": "ask"}
+
+// reqLayout is the row's columns at a width: the one list row (listrow.go),
+// "from → to" as its name, the kind and subject as its state.
+type reqLayout struct {
+	width, nameW, kindW int
+	short               bool
 }
 
-func reqColumns(width int) reqCols {
-	c := reqCols{width: width, fromTo: 18, n: 3, arrow: GlyphArrowR}
+func reqLayoutFor(width int) reqLayout {
 	if width >= reqKindWidth {
-		c.fromTo, c.kind = 22, 9
+		return reqLayout{width: width, nameW: 24, kindW: 10}
 	}
-	if width >= reqStateWidth {
-		c.fromTo, c.state, c.n, c.arrow = 26, 11, 5, " "+GlyphArrowR+" "
-	}
-	// marker 2, from→to, kind, state, subject, " N", " AGE"
-	c.subject = max(4, width-2-c.fromTo-1-c.kind-c.state-c.n-1-4-1)
-	if c.kind > 0 {
-		c.subject--
-	}
-	if c.state > 0 {
-		c.subject--
-	}
-	return c
+	return reqLayout{width: width, nameW: 18, kindW: 5, short: true}
 }
 
-func (c reqCols) header() Line {
-	l := Line{S(RoleMuted, "  "+Fit("FROM"+c.arrow+"TO", c.fromTo)+" ")}
-	if c.kind > 0 {
-		l = append(l, S(RoleMuted, Fit("KIND", c.kind)+" "))
+// who is a name as a row reads it: the person is `you` (the header names them).
+func (c reqLayout) who(name, self string) string {
+	if name == self && self != "" {
+		return "you"
 	}
-	if c.state > 0 {
-		l = append(l, S(RoleMuted, Fit("STATE", c.state)+" "))
-	}
-	subj := "SUBJECT"
-	if c.kind > 0 {
-		subj = "SUBJECT / FIRST LINE"
-	}
-	return append(l, S(RoleMuted, Fit(subj, c.subject)+" "+padLeft("N", c.n)+" "+padLeft("AGE", 4)))
+	return name
 }
 
-// row lays out one row: marker, from → to, kind, state, subject, n, age.
-func (c reqCols) row(marker Seg, from, target, kind, state string, subject Line, n int, at, now time.Time) Line {
-	ft := Preview(from) + c.arrow + Preview(target)
-	l := Line{marker, S(RoleText, Fit(ft, c.fromTo)+" ")}
-	if c.kind > 0 {
-		l = append(l, S(RoleMuted, Fit(kind, c.kind)+" "))
+// row lays out one row: symbol, from → to, kind, subject, age.
+func (c reqLayout) row(sym Seg, from, target, self, kind, subject string, at, now time.Time) Line {
+	if c.short {
+		if k, ok := reqKindShort[kind]; ok {
+			kind = k
+		}
 	}
-	if c.state > 0 {
-		l = append(l, S(reqStateRole(state), Fit(state, c.state)+" "))
-	}
-	l = append(l, FitLine(subject, c.subject)...) // padded to the column
-	age := ""
+	r := listRow{Sym: sym.Text, Role: sym.Role, Name: c.who(from, self) + " " + GlyphArrowR + " " + c.who(target, self),
+		State: Fit(kind, c.kindW) + subject}
 	if !at.IsZero() {
-		age = humanAge(now.Sub(at))
+		r.Age = humanAge(now.Sub(at))
 	}
-	return append(l, S(RoleMuted, " "+padLeft(fmt.Sprint(n), c.n)+" "+padLeft(age, 4)))
+	return r.cells(c.width, c.nameW, 0)
 }
 
-func reqStateRole(state string) Role {
-	switch state {
-	case "unread", "blocked":
-		return RoleAttention
-	case "held quota":
-		return RoleError
-	case "accepted":
-		return RoleOK
-	}
-	return RoleMuted
-}
-
-// reqMarker is the state as the row's marker (below the STATE column's width).
-func reqMarker(c reqCols, state string, notice bool) Seg {
+// reqSym is a row's symbol: a target held by its quota first, ● in the
+// error colour (it explains the silence, whatever is owed: reviewer-codex);
+// then what the person or a reviewer owes is ◆; a message's delivery to its
+// target is ● unread or ○ read; · when its cursor was not read.
+func reqSym(sec reqSection, kind, state string) Seg {
 	switch {
-	case notice:
-		return S(RoleMuted, GlyphNone+" ")
-	case c.state > 0:
-		return S(RoleText, "  ")
-	case state == "unread":
-		return S(RoleAttention, GlyphDotFull+" ")
-	case state == "read":
-		return S(RoleMuted, GlyphDotEmpty+" ")
 	case state == "held quota":
-		return S(RoleError, GlyphDotFull+" ")
+		return S(RoleError, GlyphDotFull)
+	case sec == secOwed || sec == secTracked || kind == kindChallenge:
+		return S(RoleAttention, GlyphGate)
+	case state == "unread":
+		return S(RoleAttention, GlyphDotFull)
+	case state == "read":
+		return S(RoleMuted, GlyphDotEmpty)
 	}
-	return S(RoleText, "  ")
+	return S(RoleMuted, GlyphNone)
 }
 
 func padLeft(s string, n int) string {
@@ -126,37 +99,52 @@ func threadKey(th reqThread) string {
 	return "thr:" + th.ID
 }
 
-// requestRows are the view's list items.
+// reqSubject is a thread's subject as its row reads it: a tracked request
+// carries its state, the one word that is the state itself.
+func reqSubject(th reqThread) string {
+	if th.Request != nil && th.State != "" {
+		return th.Subject + " " + GlyphNone + " " + th.State
+	}
+	return th.Subject
+}
+
+// reqSectionNames are the sections' headings; the sentences that explained
+// them are the first line of a thread's page (reqSectionNote).
+var reqSectionNames = map[reqSection]string{secOwed: "Owed by you", secWait: "You wait on", secTracked: "Tracked",
+	secReviews: "Reviews gated", secDirectives: "Between agents"}
+
+// requestRows are the view's list items in the one list pattern (busmon
+// pages, Requests): a heading per section with something in it, one line
+// per group, the notices and the done threads each folded into one line.
 func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
-	c := reqColumns(width)
+	c := reqLayoutFor(width)
 	fit := func(l Line) Line { return FitLine(l, width) }
-	head := func(text string) ListItem { return ListItem{Line: fit(Line{S(RoleDim, text)})} }
 	sep := " " + GlyphNone + " "
-	out := []ListItem{{Line: fit(c.header())}}
+	var out []ListItem
+	head := func(s reqSection) {
+		out = append(out, ListItem{Line: fit(Line{{Text: reqSectionNames[s], Role: RoleText, Bold: true}})})
+	}
 	threadRow := func(th reqThread, indent bool) ListItem {
-		marker := reqMarker(c, th.State, th.Kind == kindReports || th.Kind == kindNotices)
+		sym := reqSym(th.Section, th.Kind, th.State) // an expanded thread keeps its own marker (reviewer-codex)
+		subject := reqSubject(th)
 		if indent {
-			marker = S(RoleMuted, "  ")
+			subject = "  " + subject
 		}
-		return ListItem{Key: threadKey(th), Selectable: true,
-			Line: fit(c.row(marker, th.From, th.Target, th.Kind, th.State, Line{S(RoleText, Preview(th.Subject))}, 1, th.At, now))}
+		return ListItem{Key: threadKey(th), Selectable: true, Line: fit(c.row(sym, th.From, th.Target, v.self, th.Kind, Preview(subject), th.At, now))}
 	}
 	groupRow := func(g reqGroup) []ListItem {
 		if len(g.Threads) == 1 {
 			return []ListItem{threadRow(g.Threads[0], false)}
 		}
-		subject := Line{S(RoleText, Preview(g.Threads[len(g.Threads)-1].Subject))}
+		subject := g.Threads[len(g.Threads)-1].Subject
 		if g.Kind == kindChallenge {
-			subject = Line{S(RoleText, Preview(g.Subjects()))}
+			subject = g.Subjects()
 		}
+		subject = fmt.Sprintf("%s (+%d)", Preview(subject), len(g.Threads)-1)
 		key := g.Key()
-		notice := g.Kind == kindReports || g.Kind == kindNotices
-		if notice {
-			key = "ntc:" + key
-		}
 		items := []ListItem{{Key: key, Selectable: true, Expanded: open.groups[key],
-			Line: fit(c.row(reqMarker(c, g.State(), notice), g.From, g.Target, g.Kind, g.State(), subject, len(g.Threads), g.Oldest(), now))}}
-		if open.groups[key] && !notice {
+			Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))}}
+		if open.groups[key] {
 			for _, th := range g.Threads {
 				items = append(items, threadRow(th, true))
 			}
@@ -164,31 +152,22 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 		return items
 	}
 
-	owed := v.count(secOwed)
-	out = append(out, head(fmt.Sprintf("owed by you%s%d", sep, owed)))
-	if v.questions > 0 {
-		word := "questions wait"
-		if v.questions == 1 {
-			word = "question waits"
-		}
-		out = append(out, ListItem{Key: "asks", Selectable: true, Line: fit(Line{S(RoleAttention, GlyphDotFull+" "),
-			S(RoleAttention, fmt.Sprintf("%d open %s for you in For you (enter answers)", v.questions, word))})})
-	}
-	for _, g := range v.groups[secOwed] {
-		out = append(out, groupRow(g)...)
-	}
-
-	if gs := v.groups[secWait]; len(gs) > 0 {
-		var to []string
-		oldest := gs[0].Oldest()
-		for _, g := range gs {
-			to = append(to, Preview(g.Target))
-			if g.Oldest().Before(oldest) {
-				oldest = g.Oldest()
+	if len(v.asks) > 0 || len(v.groups[secOwed]) > 0 {
+		head(secOwed)
+		for _, a := range v.asks {
+			word := "questions"
+			if a.Open == 1 {
+				word = "question"
 			}
+			out = append(out, ListItem{Key: "ask:" + a.ID, Selectable: true,
+				Line: fit(c.row(S(RoleAttention, GlyphGate), a.From, v.self, v.self, "ask", fmt.Sprintf("%s (%d %s)", Preview(a.Title), a.Open, word), a.At, now))})
 		}
-		out = append(out, head(fmt.Sprintf("you wait on %s%s%d, no reply on their thread  (oldest %s)", strings.Join(to, ", "), sep,
-			v.count(secWait), humanAge(now.Sub(oldest)))))
+		for _, g := range v.groups[secOwed] {
+			out = append(out, groupRow(g)...)
+		}
+	}
+	if gs := v.groups[secWait]; len(gs) > 0 {
+		head(secWait)
 		for _, g := range gs {
 			for i, th := range g.Threads {
 				if i < reqWaitShown || open.groups[olderKey(g)] {
@@ -198,54 +177,47 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 			if rest := g.Threads[min(reqWaitShown, len(g.Threads)):]; len(rest) > 0 {
 				key := olderKey(g)
 				older := reqGroup{Threads: rest}
-				label := fmt.Sprintf("+ %d older  (enter expands)", len(rest))
+				label := fmt.Sprintf("+ %d older  (enter shows them)", len(rest))
 				if open.groups[key] {
-					label = fmt.Sprintf("%d older shown  (enter folds)", len(rest))
+					label = fmt.Sprintf("%d older shown  (enter folds them)", len(rest))
 				}
 				out = append(out, ListItem{Key: key, Selectable: true, Expanded: open.groups[key],
-					Line: fit(c.row(S(RoleText, "  "), g.From, g.Target, g.Kind, older.State(), Line{S(RoleMuted, label)}, len(rest), older.Oldest(), now))})
+					Line: fit(c.row(S(RoleMuted, " "), g.From, g.Target, v.self, g.Kind, label, older.Oldest(), now))})
 			}
 		}
 	}
-
-	if gs := v.groups[secTracked]; len(gs) > 0 {
-		out = append(out, head(fmt.Sprintf("tracked requests%s%d waiting", sep, v.count(secTracked))))
-		for _, g := range gs {
-			out = append(out, groupRow(g)...)
+	for _, s := range []reqSection{secTracked, secReviews, secDirectives} {
+		if gs := v.groups[s]; len(gs) > 0 {
+			head(s)
+			for _, g := range gs {
+				out = append(out, groupRow(g)...)
+			}
 		}
 	}
-	if gs := v.groups[secReviews]; len(gs) > 0 {
-		reviewers := map[string]bool{}
-		for _, g := range gs {
-			reviewers[g.Target] = true
+	if n := v.count(secNotices); n > 0 {
+		label := fmt.Sprintf("notices%s%d, nobody owes an answer  (enter shows them)", sep, n)
+		if open.groups[reqNoticesKey] {
+			label = fmt.Sprintf("notices%s%d, nobody owes an answer  (enter folds them)", sep, n)
 		}
-		word := "reviewers"
-		if len(reviewers) == 1 {
-			word = "reviewer"
-		}
-		out = append(out, head(fmt.Sprintf("reviews still gated%s%d %s, %d open gates", sep, len(reviewers), word, v.count(secReviews))))
-		for _, g := range gs {
-			out = append(out, groupRow(g)...)
-		}
-	}
-	if gs := v.groups[secDirectives]; len(gs) > 0 {
-		out = append(out, head(fmt.Sprintf("directives between agents, no reply on the thread%s%d in %d pairs", sep, v.count(secDirectives), len(gs))))
-		for _, g := range gs {
-			out = append(out, groupRow(g)...)
-		}
-	}
-	if gs := v.groups[secNotices]; len(gs) > 0 {
-		out = append(out, head("notices"+sep+"folded, nobody owes an answer  (enter lists them)"))
-		for _, g := range gs {
-			out = append(out, groupRow(g)...)
+		out = append(out, ListItem{Key: reqNoticesKey, Selectable: true, Expanded: open.groups[reqNoticesKey], Line: fit(reqFold(label))})
+		if open.groups[reqNoticesKey] { // in place, one row per from → to as before the fold (foureyes)
+			for _, g := range v.groups[secNotices] {
+				if len(g.Threads) == 1 { // an only notice opens itself (a report notice its report)
+					out = append(out, threadRow(g.Threads[0], false))
+					continue
+				}
+				subject := fmt.Sprintf("%s (+%d)", Preview(g.Threads[len(g.Threads)-1].Subject), len(g.Threads)-1)
+				out = append(out, ListItem{Key: "ntc:" + g.Key(), Selectable: true,
+					Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))})
+			}
 		}
 	}
 	if len(v.folded) > 0 {
-		label := fmt.Sprintf("answered or older than 24 h%s%d folded  (o shows them)", sep, len(v.folded))
+		label := fmt.Sprintf("done or answered%s%d, older than 7 d folded  (o shows them)", sep, len(v.folded))
 		if open.folded {
-			label = fmt.Sprintf("answered or older than 24 h%s%d  (o folds them)", sep, len(v.folded))
+			label = fmt.Sprintf("done or answered%s%d, older than 7 d  (o folds them)", sep, len(v.folded))
 		}
-		out = append(out, ListItem{Key: "fold", Selectable: true, Expanded: open.folded, Line: fit(Line{S(RoleDim, label)})})
+		out = append(out, ListItem{Key: "fold", Selectable: true, Expanded: open.folded, Line: fit(reqFold(label))})
 		if open.folded {
 			for _, th := range v.folded {
 				out = append(out, threadRow(th, true))
@@ -255,45 +227,42 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 	return out
 }
 
-// requestsTitle is the panel's title count: the sums of its sections. The
-// long labels shorten under 100 cells, never to bare numbers.
+// reqNoticesKey is the one line every notice folds into; Enter shows their
+// groups in place, each opened or closed (d) as a group.
+const reqNoticesKey = "ntc:all"
+
+// reqFold is a folded line of the list (listFold's look, its own words).
+func reqFold(label string) Line {
+	h := strings.Repeat(glyphHorizontal, 2)
+	return Line{S(RoleMuted, h+" "+label+" "+h)}
+}
+
+// requestsTitle is the panel's counter summary (the list pattern): the
+// sections' sums in their own words, the ones at 0 left out; shorter words
+// under 100 cells.
 func requestsTitle(v reqView, width int) Line {
-	you, wait, agents := v.titleCounts()
-	sep := Seg{Text: " " + GlyphNone + " ", Role: RoleMuted}
-	youRole := RoleMuted
-	if you > 0 {
-		youRole = RoleAttention
+	owed, wait := "owed by you", "waiting"
+	agents := "between agents"
+	if width < 100 {
+		owed, agents = "owed", "agents"
 	}
-	if width >= 100 {
-		return Line{{Text: fmt.Sprintf("%d for you", you), Role: youRole}, sep,
-			{Text: fmt.Sprintf("you wait on %d", wait), Role: RoleMuted}, sep,
-			{Text: fmt.Sprintf("%d between agents", agents), Role: RoleMuted}}
-	}
-	var l Line
-	for _, p := range []struct {
-		word string
-		n    int
-		role Role
-	}{{"you", you, youRole}, {"wait", wait, RoleMuted}, {"agents", agents, RoleMuted}} {
-		if p.n == 0 {
-			continue
-		}
-		if l != nil {
-			l = append(l, sep)
-		}
-		l = append(l, Seg{Text: fmt.Sprintf("%s %d", p.word, p.n), Role: p.role})
-	}
-	if l == nil {
+	sum := listSummary(listCount{v.count(secOwed), owed}, listCount{v.count(secWait), wait}, listCount{v.count(secTracked), "tracked"},
+		listCount{v.count(secReviews), "gated"}, listCount{v.count(secDirectives), agents})
+	if sum == "" {
 		return Line{{Text: "nothing waiting", Role: RoleMuted}}
 	}
-	return l
+	role := RoleMuted
+	if v.count(secOwed) > 0 {
+		role = RoleAttention // orange = what is owed to you (busmon-req-header)
+	}
+	return Line{{Text: sum, Role: role}}
 }
 
 // requestInput is the view's facts from the snapshot: the retained cmd
 // stream, the board, every open gate, each agent's delivery cursor and hold.
 func (m *Model) requestInput() reqInput {
 	s := m.snap
-	in := reqInput{cmds: s.cmdHistory, reqs: s.requests, questions: openQuestionCount(s.asks), self: m.cfg.self, now: m.now,
+	in := reqInput{cmds: s.cmdHistory, reqs: s.requests, questions: openQuestionCount(s.asks), asks: reqAsks(s.asks), self: m.cfg.self, now: m.now,
 		gates: map[string]map[string]string{}, delivery: map[string]reqDelivery{}, held: map[string]bool{}}
 	for n, a := range s.agents {
 		if len(a.gates) > 0 {
@@ -312,6 +281,15 @@ func (m *Model) requestInput() reqInput {
 	return in
 }
 
+// reqAsks are the open asks as the view lists them, owed by the person.
+func reqAsks(asks []bus.Ask) []reqAsk {
+	var out []reqAsk
+	for _, a := range openAsks(asks) {
+		out = append(out, reqAsk{ID: a.ID, From: a.From, Title: a.Title, Open: a.Open(), At: time.UnixMilli(a.CreatedAt)})
+	}
+	return out
+}
+
 // olderKey is a "you wait on" group's "+ N older" row: the group's whole
 // identity, so two groups to one recipient (directives, challenges) never share it.
 func olderKey(g reqGroup) string { return "older:" + g.Key() }
@@ -328,6 +306,9 @@ func olderThreads(v reqView, key string) []reqThread {
 
 // reqRowKey is a Requests row that stands for threads.
 func reqRowKey(key string) bool {
+	if key == reqNoticesKey { // every notice at once: d never closes them all
+		return false
+	}
 	for _, p := range []string{"thr:", "grp:", "ntc:", "older:"} {
 		if strings.HasPrefix(key, p) {
 			return true
@@ -343,6 +324,12 @@ func (m *Model) reqThreadsOf(key string) []reqThread {
 		return olderThreads(v, key)
 	}
 	var out []reqThread
+	if key == reqNoticesKey {
+		for _, g := range v.groups[secNotices] {
+			out = append(out, g.Threads...)
+		}
+		return out
+	}
 	for s := secOwed; s < secFolded; s++ {
 		for _, g := range v.groups[s] {
 			if key == g.Key() || key == "ntc:"+g.Key() {
@@ -372,11 +359,13 @@ func (m *Model) openRequestRow(key string) tea.Cmd {
 	switch {
 	case key == "asks":
 		return m.pushAskOf("")
+	case strings.HasPrefix(key, "ask:"):
+		return m.pushAsk(strings.TrimPrefix(key, "ask:"))
 	case key == "fold":
 		o.folded = !o.folded
 	case strings.HasPrefix(key, "req:"):
-		return m.push(page{kind: ovRequest, key: key})
-	case strings.HasPrefix(key, "grp:"), strings.HasPrefix(key, "older:"):
+		return m.push(page{kind: ovRequest, key: key, lead: reqSectionNote(secTracked)})
+	case key == reqNoticesKey, strings.HasPrefix(key, "grp:"), strings.HasPrefix(key, "older:"):
 		if o.groups == nil {
 			o.groups = map[string]bool{}
 		}
@@ -387,12 +376,11 @@ func (m *Model) openRequestRow(key string) tea.Cmd {
 			return nil
 		}
 		var b body
+		b.seg(RoleMuted, reqSectionNote(secNotices)).text("\n\n")
 		for _, th := range ths {
-			b.seg(RoleMuted, padLeft(humanAge(m.now.Sub(th.At)), 4)+"  ").text(Preview(th.Subject)).text("\n")
+			b.seg(RoleMuted, padLeft(humanAge(m.now.Sub(th.At)), 4)+"  ").text(Preview(th.From) + " " + GlyphArrowR + " " + Preview(th.Target) + "  ").text(Preview(th.Subject)).text("\n")
 		}
-		t := ths[0]
-		return m.push(page{kind: ovNotices, title: fmt.Sprintf("%s %s %s %s %d %s", Preview(t.From), GlyphArrowR, Preview(t.Target), GlyphNone, len(ths), t.Kind),
-			body: b.Lines(), fixed: true})
+		return m.push(page{kind: ovNotices, title: fmt.Sprintf("notices %s %d", GlyphNone, len(ths)), body: b.Lines(), fixed: true})
 	case strings.HasPrefix(key, "thr:"):
 		ths := m.reqThreadsOf(key)
 		if len(ths) == 0 {
@@ -406,7 +394,9 @@ func (m *Model) openRequestRow(key string) tea.Cmd {
 				}
 			}
 		}
-		return m.pushMessage(th.Root, th.At)
+		pg := messagePage(th.Root, th.At)
+		pg.lead = reqSectionNote(th.Section)
+		return m.push(pg)
 	}
 	m.refresh()
 	return nil
