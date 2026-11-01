@@ -131,52 +131,42 @@ func TestDiskPathsUnmeasured(t *testing.T) {
 }
 
 // A daemon that is not on this host keeps its root out of the host's reach
-// (reviewer-codex): DOCKER_HOST or the current context's endpoint other than a
-// local unix socket, or an endpoint that cannot be read, is not measured;
-// the note names the scheme only, never the host.
+// (reviewer-codex): the endpoint Docker itself reports for the current
+// context (it resolves DOCKER_CONTEXT and DOCKER_HOST, so the check reads no
+// variable: master) must be a local unix socket; anything else, or none read,
+// is not measured, the note naming the scheme only, never the host.
 func TestDiskPathsRemoteDocker(t *testing.T) {
 	g := uint64(1) << 30
 	disks := map[string][3]uint64{"/var/lib/docker": {1 * g, 2 * g, 1}, "/home/u": {50 * g, 500 * g, 2}, "/data/p": {50 * g, 500 * g, 2}, "/tmp": {50 * g, 500 * g, 2}}
 	info := "docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}"
 	inspect := "docker context inspect --format {{.Endpoints.docker.Host}}"
-	broker := func(d diskDeps) health.DiskPath {
-		for _, p := range diskPaths(context.Background(), d) {
-			if p.Label == "broker data" {
-				return p
-			}
-		}
-		t.Fatal("no broker data path")
-		return health.DiskPath{}
-	}
 	for name, c := range map[string]struct {
-		env, ctxEnv string // DOCKER_HOST, DOCKER_CONTEXT
-		endpoint    string // the configured current context's
-		named       string // the DOCKER_CONTEXT context's
-		measured    bool
-		note        string
+		endpoint string // what docker reports; "" = the inspect fails
+		measured bool
+		note     string
 	}{
-		"local socket":          {"", "", "unix:///var/run/docker.sock", "", true, ""},
-		"DOCKER_HOST tcp":       {"tcp://build.example:2376", "", "unix:///var/run/docker.sock", "", false, "remote (tcp)"},
-		"DOCKER_HOST unix":      {"unix:///run/user/1000/docker.sock", "", "ssh://u@far", "", true, ""},
-		"an ssh context":        {"", "", "ssh://u@far", "", false, "remote (ssh)"},
-		"endpoint not readable": {"", "", "", "", false, "endpoint unknown"},
-		// Docker's own order: DOCKER_CONTEXT over DOCKER_HOST (reviewer-codex).
-		"DOCKER_CONTEXT remote over a local DOCKER_HOST": {"unix:///var/run/docker.sock", "far", "unix:///var/run/docker.sock", "ssh://u@far", false, "remote (ssh)"},
-		"DOCKER_CONTEXT local over a remote DOCKER_HOST": {"tcp://build.example:2376", "here", "ssh://u@far", "unix:///var/run/docker.sock", true, ""},
-		"DOCKER_CONTEXT not readable":                    {"", "gone", "unix:///var/run/docker.sock", "", false, "endpoint unknown"},
+		"local socket":          {"unix:///var/run/docker.sock", true, ""},
+		"a rootless socket":     {"unix:///run/user/1000/docker.sock", true, ""},
+		"tcp":                   {"tcp://build.example:2376", false, "remote (tcp)"},
+		"ssh":                   {"ssh://u@far", false, "remote (ssh)"},
+		"endpoint not readable": {"", false, "endpoint unknown"},
 	} {
 		out := map[string]string{info: "/var/lib/docker|Fedora Linux 44\n"}
 		if c.endpoint != "" {
 			out[inspect] = c.endpoint + "\n"
 		}
-		if c.named != "" {
-			out["docker context inspect --format {{.Endpoints.docker.Host}} "+c.ctxEnv] = c.named + "\n"
-		}
 		d := fakeDisks(disks, map[string]bool{"docker": true}, out)
+		// The variables are docker's to resolve: set to a conflicting pair, they
+		// change nothing in what the check asks.
 		d.Getenv = func(k string) string {
-			return map[string]string{"HOME": "/home/u", "DOCKER_HOST": c.env, "DOCKER_CONTEXT": c.ctxEnv}[k]
+			return map[string]string{"HOME": "/home/u", "DOCKER_HOST": "unix:///var/run/docker.sock", "DOCKER_CONTEXT": "far"}[k]
 		}
-		p := broker(d)
+		var p health.DiskPath
+		for _, x := range diskPaths(context.Background(), d) {
+			if x.Label == "broker data" {
+				p = x
+			}
+		}
 		if p.Known != c.measured || !strings.Contains(p.Note, c.note) || strings.Contains(p.Note, "far") || strings.Contains(p.Note, "build.example") {
 			t.Errorf("%s: known %v note %q", name, p.Known, p.Note)
 		}

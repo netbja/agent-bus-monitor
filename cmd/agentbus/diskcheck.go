@@ -121,26 +121,17 @@ func diskPaths(ctx context.Context, d diskDeps) []health.DiskPath {
 }
 
 // dockerNotLocal says why the selected daemon is not on this host (""
-// when it is): its endpoint, resolved in Docker's own order (DOCKER_CONTEXT's
-// context, then DOCKER_HOST, then the configured current context), must be a
-// local unix socket, or its root is another machine's (reviewer-codex). The
-// note names the scheme only, never the host.
+// when it is). Docker itself names the endpoint it uses: 'docker context
+// inspect' with no name resolves the current one after DOCKER_CONTEXT and
+// DOCKER_HOST, in its own order (checked on Docker 29; master: never
+// reimplement that precedence). Only a local unix socket is this host's; any
+// other endpoint, or none read, means its root is not measured from here
+// (reviewer-codex). The note names the scheme only, never the host.
 func dockerNotLocal(ctx context.Context, d diskDeps) string {
-	inspect := func(args ...string) string {
-		out, err := d.Output(ctx, "docker", append([]string{"context", "inspect", "--format", "{{.Endpoints.docker.Host}}"}, args...)...)
-		if err != nil {
-			return ""
-		}
-		return strings.TrimSpace(out)
-	}
-	var endpoint string
-	switch name, host := strings.TrimSpace(d.Getenv("DOCKER_CONTEXT")), strings.TrimSpace(d.Getenv("DOCKER_HOST")); {
-	case name != "":
-		endpoint = inspect(name)
-	case host != "":
-		endpoint = host
-	default:
-		endpoint = inspect()
+	out, err := d.Output(ctx, "docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
+	endpoint := strings.TrimSpace(out)
+	if err != nil {
+		endpoint = ""
 	}
 	if endpoint == "" {
 		return "docker endpoint unknown: not measured from this host"
