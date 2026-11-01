@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,9 +53,20 @@ type configProject struct {
 	ReloadSource     string `json:"reload_source"`
 }
 
+// configLLM is one of config.toml's [llm.<name>] endpoints: host and port
+// only, never the URL (the rule above).
+type configLLM struct {
+	Name   string `json:"name"`
+	Model  string `json:"model"`
+	Host   string `json:"host"`
+	Remote bool   `json:"remote,omitempty"`
+	Line   int    `json:"line"`
+}
+
 type configDoc struct {
 	Rows       []configRow    `json:"rows"`
 	Files      []configFile   `json:"files"`
+	LLM        []configLLM    `json:"llm"`
 	Connection []string       `json:"connection"`
 	Warnings   []string       `json:"warnings"`
 	Project    *configProject `json:"project,omitempty"`
@@ -175,6 +187,14 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 		}
 	}
 	doc.Warnings = append(fileWarnings, doc.Warnings...)
+	doc.LLM = []configLLM{}
+	for _, e := range cfg.Endpoints() {
+		host := "?"
+		if u, err := url.Parse(e.URL); err == nil {
+			host = u.Host
+		}
+		doc.LLM = append(doc.LLM, configLLM{Name: e.Name, Model: e.Model, Host: host, Remote: e.Remote, Line: e.Line})
+	}
 	doc.Connection = connectionFacts(getenv)
 	return doc, nil
 }
@@ -315,6 +335,19 @@ func printConfigDoc(out io.Writer, doc configDoc) {
 	}
 	fmt.Fprintln(out, "files: "+strings.Join(files, " · "))
 	fmt.Fprintln(out, "connection: "+strings.Join(doc.Connection, ", "))
+	llm := "none"
+	if len(doc.LLM) > 0 {
+		var eps []string
+		for _, e := range doc.LLM {
+			where := "loopback"
+			if e.Remote {
+				where = "remote"
+			}
+			eps = append(eps, fmt.Sprintf("%s %s %s (%s)", e.Name, e.Model, e.Host, where))
+		}
+		llm = strings.Join(eps, " · ")
+	}
+	fmt.Fprintln(out, "llm endpoints: "+llm)
 	var flags []string
 	for _, r := range doc.Rows {
 		if r.Flag != "" {

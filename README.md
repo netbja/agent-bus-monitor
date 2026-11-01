@@ -983,16 +983,19 @@ and the bus carries nothing back to it.
 
 ## Planned
 
-Two specs are written and reviewed, not built:
+One spec is written and reviewed, not built:
 
 - [Feedback loop](docs/superpowers/specs/2026-10-29-feedback-loop-design.md): `agentbus feedback`,
   read-only statistics over the reviews the bus retains, and a skill change proposed as a pull
   request only after your yes to an ask.
-- [Config file](docs/superpowers/specs/2026-10-29-config-file-design.md): one `config.toml` for the
-  preferences now spread over environment variables and files, and `agentbus config` to show each
-  setting's value and where it comes from.
 
 ## Tuning
+
+Your preferences live in one file, `~/.config/agentbus/config.toml` (or under `$XDG_CONFIG_HOME`;
+[spec](docs/superpowers/specs/2026-10-29-config-file-design.md)), below the environment and above
+the defaults; `agentbus config` shows each setting's value and where it comes from, every warning,
+and the local model endpoints (`[llm.<name>]`: `url`, `model`, and `remote = true` for a host that
+is not loopback; never a key or token). No secret and no broker connection go in that file.
 
 The freshness bar of the Agents table empties over `staleAfter` (10m), a constant at the top
 of `cmd/busmon/main.go`.

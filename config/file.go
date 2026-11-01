@@ -53,11 +53,12 @@ func (w Warning) String() string {
 // File is a loaded settings file: the registry values it sets, valid ones
 // only, and its warnings.
 type File struct {
-	Label    string
-	Path     string
-	Exists   bool
-	Warnings []Warning
-	values   map[string]fileValue
+	Label     string
+	Path      string
+	Exists    bool
+	Warnings  []Warning
+	values    map[string]fileValue
+	endpoints []Endpoint // config.toml's [llm.<name>] tables (llm.go)
 }
 
 type fileValue struct {
@@ -122,7 +123,13 @@ func load(path, label string, legacy bool) *File {
 		}
 		return names[i] < names[j]
 	})
+	if !legacy {
+		f.loadEndpoints(leaves, lines, tableLines(string(data)))
+	}
 	for _, name := range names {
+		if !legacy && strings.HasPrefix(name, "llm.") {
+			continue // an endpoint, read above
+		}
 		k, known := Lookup(name)
 		if known && legacy && !k.Legacy {
 			known = false

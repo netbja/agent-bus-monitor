@@ -734,7 +734,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   so `ValidName` is repeated there, held equal by a test. `agentbus config`
   (`configcmd.go`, above the project-required exit, no broker) prints each value and its source;
   `--project` reads that project's env file for what its services see (only registry keys and the two
-  per-project facts, never another line).
+  per-project facts, never another line). The local LLM peer's endpoints are not registry keys:
+  `[llm.<name>]` tables of `config.toml` only (`config/llm.go`, `File.Endpoints`; `url`, `model`,
+  `remote`), each taken whole or dropped with a warning (a secret, user info, a query, an unknown
+  key; a host other than `127.0.0.1`, `::1` or `localhost` without `remote = true`); `agentbus
+  config` lists them by host and port, never the URL.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
