@@ -1,6 +1,7 @@
 package main
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"strconv"
 	"strings"
 	"testing"
@@ -150,7 +151,7 @@ func TestHealthPageWithoutReadings(t *testing.T) {
 func TestHealthPageSpentBudgetIsForYou(t *testing.T) {
 	now := time.Unix(10_000_000, 0)
 	recs := allOK(now)
-	recs["services"] = guardian.Record{ID: "services", Status: guardian.Fail, Person: true, Detail: "service restart budget is spent", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
+	recs["services"] = guardian.Record{ID: "services", Status: guardian.Fail, Reason: guardian.ReasonBudgetSpent, Detail: "service restart budget is spent", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
 	if s := summarizeGuardian(recs, now); s.ToDo != 1 || !s.ToDoFail {
 		t.Fatalf("summary %+v", s)
 	}
@@ -162,5 +163,42 @@ func TestHealthPageSpentBudgetIsForYou(t *testing.T) {
 	recs["services"] = guardian.Record{ID: "services", Status: guardian.Fail, Detail: "an installed service is inactive or failed", ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
 	if s := summarizeGuardian(recs, now); s.ToDo != 0 || s.InHand != 1 {
 		t.Fatalf("inactive: summary %+v", s)
+	}
+}
+
+// The selection follows its check, not its index (foureyes): a poll that
+// moves another check out of the list keeps the cursor, and y, on the same one.
+func TestHealthPageSelectionFollowsItsCheck(t *testing.T) {
+	now := time.Unix(10_000_000, 0)
+	recs := healthFixture(now)
+	_, body, items, _ := healthPage(recs, nil, now, "demo", healthView{selID: "service-env"}, 136)
+	if !strings.HasPrefix(body[items[1].line].text(), GlyphSelect) {
+		t.Fatalf("service-env not selected:\n%s", healthPageText(body))
+	}
+	recs["tracked-secrets"] = guardian.Record{ID: "tracked-secrets", Status: guardian.OK, ObservedAt: now.UnixMilli()}
+	_, body, items, plain := healthPage(recs, nil, now, "demo", healthView{sel: 1, selID: "service-env"}, 136)
+	if !strings.HasPrefix(body[items[0].line].text(), GlyphSelect) || plain != "agentbus up demo" {
+		t.Errorf("the cursor left service-env: plain %q\n%s", plain, healthPageText(body))
+	}
+}
+
+// Through the shell: ↓ selects the next check, and a poll that drops the
+// check above keeps the cursor on the one chosen.
+func TestHealthPageCursorSurvivesAPoll(t *testing.T) {
+	pinLocal(t)
+	m := fixtureShell(t, 140, 40)
+	snap := shellFixture(shellNow)
+	snap.guardianHealth, snap.guardianNow = healthFixture(shellNow), shellNow
+	m = pollAgain(t, m, snap, shellNow)
+	m = keys(t, keys(t, m, tea.Key{Code: tea.KeyF5}), kDown)
+	if p := m.rd.top(); p == nil || p.hitems[p.sel].id != "service-env" {
+		t.Fatalf("↓ did not select service-env: %+v", p)
+	}
+	snap = shellFixture(shellNow)
+	snap.guardianHealth, snap.guardianNow = healthFixture(shellNow), shellNow
+	snap.guardianHealth["tracked-secrets"] = guardian.Record{ID: "tracked-secrets", Status: guardian.OK, ObservedAt: shellNow.UnixMilli()}
+	m = pollAgain(t, m, snap, shellNow.Add(time.Second))
+	if p := m.rd.top(); p.hitems[p.sel].id != "service-env" || p.plain != "agentbus up agent-bus-monitor" {
+		t.Fatalf("after the poll the cursor is on %s (plain %q)", p.hitems[p.sel].id, p.plain)
 	}
 }

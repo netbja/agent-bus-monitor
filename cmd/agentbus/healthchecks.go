@@ -55,7 +55,7 @@ func healthTask(id string, run func(context.Context) (health.Status, string, err
 }
 
 // healthOutcomeTask is a check whose evaluator's whole outcome is stored,
-// Person included (services: a spent restart budget is the person's).
+// its Reason included (services: a spent budget or a Git wait is the person's).
 func healthOutcomeTask(id string, run func(context.Context) (health.Outcome, error)) dispatch.HealthCheck {
 	d, ok := health.ByID(id)
 	if !ok {

@@ -26,10 +26,10 @@ const (
 type Outcome struct {
 	Status Status
 	Detail string
-	// Person: only the person can fix this warn or fail, whatever the check's
-	// usual place (Definition.PlaceOf). Set by the evaluator, never read from
-	// the detail.
-	Person bool
+	// Reason is a fixed code for the case, set by the evaluator, never read
+	// from the detail: a warn or fail whose code is in the check's Reasons is
+	// the person's (Definition.PlaceOf), with that code's command.
+	Reason string
 }
 
 type RunawayThresholds struct {
@@ -51,6 +51,13 @@ type ServiceEvidence struct {
 	WaitingGit               bool // missions runs but waits for its directory to become a Git repository
 }
 
+// The services check's person-only cases (foureyes, reviewer-codex): an
+// inactive service or a recent error is sentinel's, these two are not.
+const (
+	ReasonBudgetSpent = "budget-spent" // sentinel's restarts draw on the same budget
+	ReasonWaitingGit  = "waiting-git"  // only the person runs git init
+)
+
 func EvaluateServices(e ServiceEvidence) Outcome {
 	if !e.Known {
 		return Outcome{Status: Unknown, Detail: "service manager or state unavailable"}
@@ -62,13 +69,13 @@ func EvaluateServices(e ServiceEvidence) Outcome {
 		return Outcome{Status: Fail, Detail: "an installed service is inactive or failed"}
 	}
 	if e.RecentFailures >= 5 {
-		return Outcome{Status: Fail, Detail: "service restart budget is spent", Person: true} // sentinel restarts within the same budget: only the person can
+		return Outcome{Status: Fail, Detail: "service restart budget is spent", Reason: ReasonBudgetSpent} // sentinel restarts within the same budget: only the person can
 	}
 	if e.RecentFailures >= 4 || e.RecentError {
 		return Outcome{Status: Warn, Detail: "service had a recent error or restart budget is low"}
 	}
 	if e.WaitingGit {
-		return Outcome{Status: Warn, Detail: "missions waits for a Git repository in the project directory"}
+		return Outcome{Status: Warn, Detail: "missions waits for a Git repository in the project directory", Reason: ReasonWaitingGit}
 	}
 	return Outcome{Status: OK, Detail: "installed services are active"}
 }

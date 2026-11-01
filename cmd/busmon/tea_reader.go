@@ -431,10 +431,18 @@ func (m *Model) buildPage() bool {
 		v := p.health
 		v.sel = p.sel
 		p.title, p.body, p.hitems, p.plain = healthPage(s.guardianHealth, s.guardianNotes, gnow, m.cfg.project, v, width)
-		if n := len(p.hitems); p.sel >= n && n > 0 {
-			p.sel = n - 1
+		p.sel = clamp(p.sel, 0, max(0, len(p.hitems)-1))
+		for i, it := range p.hitems {
+			if it.id == v.selID {
+				p.sel = i
+			}
+		}
+		if p.sel != v.sel && v.selID == "" { // clamped: drawn again with the mark where it is
 			v.sel = p.sel
 			p.title, p.body, p.hitems, p.plain = healthPage(s.guardianHealth, s.guardianNotes, gnow, m.cfg.project, v, width)
+		}
+		if p.sel < len(p.hitems) {
+			p.health.selID = p.hitems[p.sel].id
 		}
 	case ovHelp:
 		p.title, p.body = helpTitle(), helpText()
@@ -684,6 +692,7 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			m.toggleHealthRow(p)
 			return nil
 		case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
+			p.health.selID = "" // the keys move by index; the rebuild records the new check
 			m.moveSel(p, act, m.readerRows(), healthLines(p))
 			return nil
 		}
@@ -936,7 +945,7 @@ func (m *Model) readerClick(x, y int) tea.Cmd {
 					m.toggleHealthRow(p)
 					return nil
 				}
-				p.sel, p.dirty = i, true
+				p.sel, p.dirty, p.health.selID = i, true, ""
 				m.refresh()
 			}
 		}

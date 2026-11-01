@@ -80,9 +80,10 @@ func guardianSeg(s guardianSummary, width int) Line {
 // healthView is the F5 page's own state: the selected row, the rows open
 // in place, and a (the fine checks listed too).
 type healthView struct {
-	sel  int
-	open map[string]bool
-	all  bool
+	sel   int
+	selID string // the selected check: it wins over sel while it is listed (foureyes)
+	open  map[string]bool
+	all   bool
 }
 
 // healthItem is a selectable row of the page: its check and body line.
@@ -101,6 +102,15 @@ const healthWide = 100
 // Not measured, the fine ones folded unless all), Enter's facts under an open
 // row, and plain: the selected For-you row's command, what y copies.
 func healthPage(records map[string]guardian.Record, notes map[string]guardian.Note, now time.Time, project string, v healthView, width int) (title string, body []Line, items []healthItem, plain string) {
+	if v.selID != "" { // a poll may have moved other checks: the cursor stays on its own
+		_, _, listed, _ := healthPage(records, notes, now, project, healthView{open: v.open, all: v.all}, width)
+		for i, it := range listed {
+			if it.id == v.selID {
+				v.sel = i
+			}
+		}
+		v.selID = ""
+	}
 	type row struct {
 		d      guardian.Definition
 		rec    guardian.Record
@@ -123,7 +133,9 @@ func healthPage(records map[string]guardian.Record, notes map[string]guardian.No
 		listCount{len(byPlace[guardian.PlaceFine]), "fine"}, listCount{len(byPlace[guardian.PlaceNotMeasured]), unmeasured}); sum != "" {
 		title += " " + GlyphNone + " " + sum
 	}
-	command := func(d guardian.Definition) string { return strings.ReplaceAll(d.Command, "<project>", project) }
+	command := func(d guardian.Definition, rec guardian.Record) string {
+		return strings.ReplaceAll(d.CommandOf(rec), "<project>", project)
+	}
 	nameW, noteW := 18, 0
 	if width >= healthWide { // the columns as wide as what they hold, so the state keeps the rest
 		nameW = 0
@@ -134,7 +146,7 @@ func healthPage(records map[string]guardian.Record, notes map[string]guardian.No
 			for _, r := range rows {
 				switch place {
 				case guardian.PlaceForYou:
-					noteW = max(noteW, Width(command(r.d)))
+					noteW = max(noteW, Width(command(r.d, r.rec)))
 				case guardian.PlaceInHand:
 					noteW = max(noteW, Width(r.d.Handler)+2)
 				}
@@ -161,7 +173,7 @@ func healthPage(records map[string]guardian.Record, notes map[string]guardian.No
 			}
 			switch sec.place {
 			case guardian.PlaceForYou:
-				lr.Sym, lr.Role, lr.Note = GlyphBlocked, RoleAttention, Line{S(RoleAccent, command(r.d))}
+				lr.Sym, lr.Role, lr.Note = GlyphBlocked, RoleAttention, Line{S(RoleAccent, command(r.d, r.rec))}
 				if r.status == guardian.Fail {
 					lr.Role = RoleError
 				}
@@ -174,12 +186,12 @@ func healthPage(records map[string]guardian.Record, notes map[string]guardian.No
 			}
 			selected := len(items) == v.sel
 			if selected && sec.place == guardian.PlaceForYou {
-				plain = command(r.d)
+				plain = command(r.d, r.rec)
 			}
 			items = append(items, healthItem{id: r.d.ID, line: len(body)})
 			body = append(body, lr.line(selected, width, nameW, noteW))
 			if sec.place == guardian.PlaceForYou && noteW == 0 {
-				body = append(body, FitLine(Line{S(RoleText, "    "), S(RoleAccent, command(r.d))}, width))
+				body = append(body, FitLine(Line{S(RoleText, "    "), S(RoleAccent, command(r.d, r.rec))}, width))
 			}
 			if v.open[r.d.ID] {
 				body = append(body, healthFacts(r.d, r.rec, r.has, r.status, notes, width)...)

@@ -775,11 +775,12 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
-  not measured; `PlaceOf` adds the evaluator's `Outcome.Person`, stored as `Record.Person`, for a warn or fail only the
-  person can fix whatever the check's usual place: a spent restart budget, reviewer-codex); busmon pages spec `docs/superpowers/specs/2026-10-31-busmon-pages-mockups.md`): the pill counts only
+  not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check
+  declares it in `Reasons` (code → the person's command, `CommandOf`): services' `budget-spent` and `waiting-git` are for
+  you, an inactive service or a recent error in hand, reviewer-codex and foureyes); busmon pages spec `docs/superpowers/specs/2026-10-31-busmon-pages-mockups.md`): the pill counts only
   what is for you (`health ▲ 2 to do (F5)`, `▲2` below the wide tier), else `?N`, else a muted `●` for in hand, else
   `✓`; F5 is the one list pattern (`listrow.go`: one line per check by place, the fine ones folded, `a` lists them,
-  Enter opens a row in place, `y` copies a For-you row's command). Runaway is warning-only. `cmd-delivery` judges only the consumer groups of agents registered in
+  Enter opens a row in place, `y` copies a For-you row's command; the selection follows its check across polls). Runaway is warning-only. `cmd-delivery` judges only the consumer groups of agents registered in
   `{p}:agents` (A9, `deliveryEvidence`: a dead group's lag tripped `fail` for nobody; `agents forget`
   destroys a forgotten agent's group). Scanner, canary, key
   inventory and project-defined checks belong to later releases (password rotation shipped as

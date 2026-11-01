@@ -28,11 +28,13 @@ type Definition struct {
 	Order       int
 	// Where a measured problem goes on busmon's F5 (busmon pages, Health):
 	// Person are the statuses only the person can fix, with Command the one
-	// command they run; every other warn or fail is in hand, dealt with by
-	// Handler. A fixed property of the check and its status, never read
-	// from its detail.
+	// command they run; Reasons the evaluator's codes (Outcome.Reason) that
+	// are the person's whatever the status, each with its command; every
+	// other warn or fail is in hand, dealt with by Handler. A fixed property
+	// of the check, its status and its code, never read from its detail.
 	Person  []Status
 	Command string
+	Reasons map[string]string
 	Handler string
 }
 
@@ -47,13 +49,21 @@ const (
 )
 
 // PlaceOf is the place of rec read as status s (its effective status): a
-// warn or fail the evaluator marked as the person's is for you, whatever the
-// check's usual place.
+// warn or fail whose reason is one of the check's Reasons is for you,
+// whatever the check's usual place.
 func (d Definition) PlaceOf(rec Record, s Status) Place {
-	if rec.Person && (s == Warn || s == Fail) {
+	if _, ok := d.Reasons[rec.Reason]; ok && rec.Reason != "" && (s == Warn || s == Fail) {
 		return PlaceForYou
 	}
 	return d.Place(s)
+}
+
+// CommandOf is the person's command for rec: its reason's, else the check's.
+func (d Definition) CommandOf(rec Record) string {
+	if c, ok := d.Reasons[rec.Reason]; ok && rec.Reason != "" {
+		return c
+	}
+	return d.Command
 }
 
 // Place is the place of status s for this check.
@@ -76,7 +86,8 @@ func (d Definition) Place(s Status) Place {
 // such as the canary, scanner and project-defined commands are deliberately
 // not registered here.
 var Catalogue = []Definition{
-	{ID: "services", Title: "Services", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Inspect the service log; restart only when its restart budget allows. Missions waiting for Git: run git init in the project directory.", Order: 1, Command: "agentbus --project <project> service restart", Handler: "sentinel"},
+	{ID: "services", Title: "Services", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Inspect the service log; restart only when its restart budget allows. Missions waiting for Git: run git init in the project directory.", Order: 1, Handler: "sentinel",
+		Reasons: map[string]string{ReasonBudgetSpent: "agentbus --project <project> service restart", ReasonWaitingGit: "git init"}},
 	{ID: "agent-identity", Title: "Agent identity", Interval: time.Minute, Deadline: 5 * time.Second, Remediation: "Re-check agentbus agents and herdr; ask the person before acting on an identity conflict.", Order: 2, Handler: "master"},
 	{ID: "agent-launch", Title: "Agent launch and identity", Interval: 5 * time.Minute, Deadline: 5 * time.Second, Remediation: "Relaunch through agentbus with the configured role; do not edit a live pane.", Order: 3, Handler: "master"},
 	{ID: "model-drift", Title: "Model drift", Interval: 24 * time.Hour, Deadline: 30 * time.Second, Remediation: "Review the result with agentbus roles doctor before changing roles.toml.", Order: 4, Person: []Status{Warn, Fail}, Command: "agentbus roles doctor"},
@@ -118,7 +129,7 @@ type Record struct {
 	ObservedAt  int64  `json:"observed_at"`
 	Since       int64  `json:"since"`
 	Fingerprint string `json:"fingerprint"`
-	Person      bool   `json:"person,omitempty"` // the evaluator's Outcome.Person
+	Reason      string `json:"reason,omitempty"` // the evaluator's Outcome.Reason, one of the check's Reasons
 }
 
 type Transition struct {

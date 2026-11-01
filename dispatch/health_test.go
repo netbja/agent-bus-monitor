@@ -118,10 +118,11 @@ func TestHealthLoopRunsRedisRefreshDaily(t *testing.T) {
 	}
 }
 
-// The evaluator's Person reaches the stored record for a warn or fail only: a
-// spent restart budget is for the person (reviewer-codex), and an error or an
-// unsafe detail, read as unknown, never carries it.
-func TestHealthLoopStoresThePersonsOutcome(t *testing.T) {
+// The evaluator's reason reaches the stored record for a warn or fail only,
+// and only a code the check declares: a spent restart budget is for the
+// person (reviewer-codex), and an error or an unsafe detail, read as unknown,
+// never carries it.
+func TestHealthLoopStoresTheReason(t *testing.T) {
 	b, _ := dialRun(t)
 	ctx := context.Background()
 	if ok, err := b.AcquireDispatch(ctx, "health-holder", time.Minute); err != nil || !ok {
@@ -133,12 +134,13 @@ func TestHealthLoopStoresThePersonsOutcome(t *testing.T) {
 	for _, c := range []struct {
 		out  health.Outcome
 		err  error
-		want bool
+		want string
 	}{
-		{health.Outcome{Status: health.Fail, Detail: "service restart budget is spent", Person: true}, nil, true},
-		{health.Outcome{Status: health.OK, Detail: "installed services are active", Person: true}, nil, false},
-		{health.Outcome{Status: health.Fail, Detail: "service restart budget is spent", Person: true}, io.ErrUnexpectedEOF, false},
-		{health.Outcome{Status: health.Fail, Detail: "token: sk-ant-0123456789abcdef", Person: true}, nil, false},
+		{health.Outcome{Status: health.Fail, Detail: "service restart budget is spent", Reason: health.ReasonBudgetSpent}, nil, health.ReasonBudgetSpent},
+		{health.Outcome{Status: health.OK, Detail: "installed services are active", Reason: health.ReasonBudgetSpent}, nil, ""},
+		{health.Outcome{Status: health.Fail, Detail: "service restart budget is spent", Reason: health.ReasonBudgetSpent}, io.ErrUnexpectedEOF, ""},
+		{health.Outcome{Status: health.Fail, Detail: "token: sk-ant-0123456789abcdef", Reason: health.ReasonBudgetSpent}, nil, ""},
+		{health.Outcome{Status: health.Fail, Detail: "an installed service is inactive or failed", Reason: "made-up"}, nil, ""},
 	} {
 		d, _ := health.ByID("services")
 		d.Interval = time.Hour
@@ -153,8 +155,8 @@ func TestHealthLoopStoresThePersonsOutcome(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := recs["services"].Person; got != c.want {
-			t.Errorf("%+v (err %v): stored person %v, want %v", c.out, c.err, got, c.want)
+		if got := recs["services"].Reason; got != c.want {
+			t.Errorf("%+v (err %v): stored reason %q, want %q", c.out, c.err, got, c.want)
 		}
 	}
 }

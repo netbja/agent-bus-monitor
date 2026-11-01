@@ -59,34 +59,49 @@ func TestPlacesOfTheNamedChecks(t *testing.T) {
 	}
 }
 
-// A spent restart budget fails like an inactive service, but only the person
-// can restart it (sentinel's budget is the same one): the evaluator says so in
-// the outcome, never in its detail, and the record carries it to busmon
-// (reviewer-codex).
-func TestSpentBudgetIsForThePerson(t *testing.T) {
-	spent := EvaluateServices(ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 5})
-	inactive := EvaluateServices(ServiceEvidence{Known: true, Installed: true, Active: false})
-	if spent.Status != Fail || !spent.Person || inactive.Status != Fail || inactive.Person {
-		t.Fatalf("spent %+v, inactive %+v", spent, inactive)
-	}
+// A spent restart budget fails like an inactive service, and a Git wait warns
+// like a recent error, but only the person can fix the first of each: the
+// evaluator says so with a fixed reason code, never in its detail, and the
+// check names that code's command (reviewer-codex, foureyes).
+func TestServicesReasonsAreForThePerson(t *testing.T) {
 	d, _ := ByID("services")
-	if got := d.PlaceOf(Record{Status: Fail, Person: true}, Fail); got != PlaceForYou || d.Command == "" {
-		t.Errorf("spent budget: place %q, command %q", got, d.Command)
-	}
-	if got := d.PlaceOf(Record{Status: Fail}, Fail); got != PlaceInHand {
-		t.Errorf("inactive service: place %q", got)
-	}
-	// The flag never moves an ok or unknown check, whatever a record says.
-	for _, s := range []Status{OK, Unknown} {
-		if got := d.PlaceOf(Record{Status: s, Person: true}, s); got != d.Place(s) {
-			t.Errorf("%s with person: place %q", s, got)
+	for _, c := range []struct {
+		ev      ServiceEvidence
+		status  Status
+		place   Place
+		command string
+	}{
+		{ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 5}, Fail, PlaceForYou, "agentbus --project <project> service restart"},
+		{ServiceEvidence{Known: true, Installed: true, Active: true, WaitingGit: true}, Warn, PlaceForYou, "git init"},
+		{ServiceEvidence{Known: true, Installed: true, Active: false}, Fail, PlaceInHand, ""},
+		{ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 4}, Warn, PlaceInHand, ""},
+		{ServiceEvidence{Known: true, Installed: true, Active: true, RecentError: true}, Warn, PlaceInHand, ""},
+	} {
+		o := EvaluateServices(c.ev)
+		rec := Record{Status: o.Status, Reason: o.Reason}
+		if o.Status != c.status || d.PlaceOf(rec, o.Status) != c.place || d.CommandOf(rec) != c.command {
+			t.Errorf("%+v: %+v, place %q, command %q", c.ev, o, d.PlaceOf(rec, o.Status), d.CommandOf(rec))
 		}
 	}
-	// Only the person's outcomes carry it.
-	for _, o := range []Outcome{EvaluateServices(ServiceEvidence{Known: true, Installed: true, Active: true, RecentFailures: 4}),
-		EvaluateServices(ServiceEvidence{Known: true, Installed: true, Active: true, WaitingGit: true})} {
-		if o.Person {
-			t.Errorf("%+v carries person", o)
+	// A reason never moves an ok or unknown check, nor does a code the check
+	// does not declare.
+	for _, s := range []Status{OK, Unknown} {
+		if got := d.PlaceOf(Record{Status: s, Reason: ReasonBudgetSpent}, s); got != d.Place(s) {
+			t.Errorf("%s with a reason: place %q", s, got)
+		}
+	}
+	if got := d.PlaceOf(Record{Status: Fail, Reason: "made-up"}, Fail); got != PlaceInHand {
+		t.Errorf("an undeclared reason: place %q", got)
+	}
+}
+
+// Every declared reason names its command.
+func TestEveryReasonNamesItsCommand(t *testing.T) {
+	for _, d := range Definitions() {
+		for code, cmd := range d.Reasons {
+			if code == "" || cmd == "" {
+				t.Errorf("%s: reason %q command %q", d.ID, code, cmd)
+			}
 		}
 	}
 }

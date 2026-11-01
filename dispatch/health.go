@@ -118,10 +118,14 @@ func (l *loop) healthLoop(ctx context.Context) error {
 			if !health.SafeText(detail) {
 				status, detail = health.Unknown, "unsafe check detail suppressed"
 			}
-			// Person only for the evaluator's own warn or fail: an error or an
-			// unsafe detail, read as unknown above, drops it.
-			person := out.Person && status == out.Status && detail == out.Detail && (status == health.Warn || status == health.Fail)
-			rec := health.Record{ID: check.Definition.ID, Status: status, Detail: detail, Person: person}
+			// The reason only for the evaluator's own warn or fail, and only a
+			// code the check declares: an error or an unsafe detail, read as
+			// unknown above, drops it.
+			reason := ""
+			if _, ok := check.Definition.Reasons[out.Reason]; ok && status == out.Status && detail == out.Detail && (status == health.Warn || status == health.Fail) {
+				reason = out.Reason
+			}
+			rec := health.Record{ID: check.Definition.ID, Status: status, Detail: detail, Reason: reason}
 			rec.Fingerprint = healthFingerprint(status, detail)
 			wctx, wcancel := context.WithTimeout(passCtx, 2*time.Second)
 			err = l.b.FencedHealthPut(wctx, l.token, l.cfg.EscalateTo, rec)
