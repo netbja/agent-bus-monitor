@@ -478,7 +478,8 @@ message; master's manual pane injection remains the fallback while no dispatcher
 exception (lifecycle-4, `docs/memory/decisions/2026-10-28-agent-lifecycle.md`): after an agent's
 own declared hand-off, the literal `/clear` (`Runtime.Clear`, `ClearText`, no text parameter) under
 `DecideClear`'s rule, a fenced once-per-session reservation (`clear:<agent>` in `{p}:quota`) and a
-proof before the resume directive (`dispatch/clear.go`); `AGENT_BUS_AUTO_CLEAR=1` turns it on, off
+proof before the resume directive (`dispatch/clear.go`; a deferred clear records its reason in `ClearConfig.Decisions`
+and logs `clear-deferred` once per change of reason, so a hand-off never waits silently); `AGENT_BUS_AUTO_CLEAR=1` turns it on, off
 by default until the spec's live checks pass. The fake runtime enforces `dispatchTypes` in every
 dispatch test: a prompt that is not a wake line, or a `/clear` without its reservation, panics. The wake
 line is fixed — `[agentbus#<nonce>] <project>: <n> message(s) waiting for <agent>. Run: agentbus
@@ -793,7 +794,23 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   under `LC_ALL=C` (the answers are read by git's English messages); any answer from GitHub is reached (auth unknown),
   matched before the network errors since it may quote a repository named like one (TLS by its own phrases), only a network error failed, an unrecognised answer or a missing binary not
   judged. Both reached ok, one warn (for you), neither unknown then warn after `GitHubNeitherWarnAfter` (1 h, tracked
-  in the check's memory: a restart starts it over); never fail, so it never wakes sentinel. busmon shows the health pill, F5
+  in the check's memory: a restart starts it over); never fail, so it never wakes sentinel. The stall guard (spec
+  `docs/superpowers/specs/2026-11-01-stall-guard-design.md`; judgement pure in `health/stall.go`, readers in
+  `cmd/agentbus/stallchecks.go`; `dispatch.stall_after`/`clear_stall_after`/`quiet_after`, 15 min, 0 = off):
+  `team-stall` fails (waking sentinel, which sends master one waking directive with the next ready task) when every
+  non-dormant agent (`bus.DormantAfter`) is idle that long, each pane seen not busy by a fresh observation (none =
+  unknown), nothing is open (request, accepted task, ask, gate, pause, swap, obligation, valid hand-off, mission) and
+  the plan has an agent task ready whose owner is not held; person tasks only = warn `waiting-person` (for you); it
+  reads `quiet-agent`'s record (warn suppresses it, unknown is unknown, `QuietOff` when quiet_after = 0). The plan's
+  verdicts are read forward (`plan.ReadWithVerdicts`). `quiet-agent` warns (master) on a waking directive or
+  escalation from master, the dispatcher or a person, delivered with its payload (an expired request never counts),
+  and nothing written since by the agent on status, report or cmd (same millisecond = written), not working, held or
+  seen busy; silent since before the retained cmd history = not judged; collected per agent. `clear-stall` warns on
+  a valid hand-off older than its threshold, naming the clear pass's last reason (`dispatch.ClearDecisions`; reason
+  `pane-focused` is for you). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
+  tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, deleted when
+  the fail ends): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
+  `stall_after`. busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
   not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check

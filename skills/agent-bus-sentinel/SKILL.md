@@ -48,6 +48,29 @@ never a warning, only a line in its detail: changing major is the person's decis
 mention it to master for the person, once per daily review. Never restart, pull, recreate or
 upgrade the broker yourself.
 
+## Team stall
+
+`team-stall` enters `fail` when every agent has been idle for `stall_after` (15 min by default) with
+nothing open (no request, accepted task, ask, gate, pause, swap, hand-off, mission or waiting
+message) and the loaded plan has a task ready for an agent. Your one job is to tell master:
+
+1. Read `agentbus health detail team-stall` and `agentbus plan`. If the check is no longer `fail`,
+   record a note and stop.
+2. If a `team-stall` note of yours is newer than the record's `since`, this episode is handled:
+   stop. That note is what keeps you to one directive per episode.
+3. If master cannot act (its provider is held, or its pane is blocked on a prompt), the dispatcher
+   has already told the person: record a note saying so and stop.
+4. Otherwise send master **one** ordinary directive, which wakes it (never `--no-wake`):
+
+   ```bash
+   agentbus cmd master "Stall guard: every agent idle <N>m, nothing open. Next ready in the plan: <task> (<owner>) '<title>'. Dispatch it, or tell the person why the team waits."
+   ```
+
+5. Record `agentbus health note team-stall "sent master the next task: <task>"`.
+
+Never dispatch the task yourself, start work, type into a pane, or answer for master. If the stall
+lasts, the dispatcher tells the person; you do nothing more.
+
 ## Client update
 
 The dispatcher wakes you once per update of a client (a directive starting `client update:`): a

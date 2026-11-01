@@ -521,6 +521,17 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   seulement nommée, car changer de majeure est votre décision. Sans vérification réussie depuis
   48 heures, elle est `unknown`. Vous mettez le broker à jour vous-même ; sentinel ne le redémarre
   ni ne le met à jour jamais.
+- **Garde contre l'arrêt.** Trois vérifications, chacune après 15 minutes (`dispatch.stall_after`,
+  `clear_stall_after`, `quiet_after` dans `config.toml` ; `0` en coupe une). `team-stall` échoue
+  quand tous les agents sont inactifs, que rien n'est ouvert (demande, tâche acceptée, question,
+  revue, pause, échange, passation, mission, message en attente) et que le plan a une tâche prête
+  pour un agent : sentinel envoie à master une directive qui la nomme. Quand seules vos propres
+  tâches sont prêtes, c'est un avertissement pour vous. Vous recevez un avis si master ne peut pas
+  agir (bloqué par son quota ou par une invite), ou si l'arrêt dure deux fois le seuil.
+  `clear-stall` avertit quand une passation n'a pas été suivie d'un `/clear`, avec la raison du
+  dispatcher (si c'est votre panneau actif, changez de panneau). `quiet-agent` avertit quand un agent
+  a reçu du travail et n'a rien écrit depuis. Les panneaux doivent être observés : là où ils ne le
+  sont pas (macOS), `team-stall` reste `unknown`.
 - **GitHub joignable.** La vérification `github` tourne toutes les 15 minutes quand le dépôt
   distant du projet est sur github.com : `ssh -o BatchMode=yes -T git@github.com` avec les
   identités SSH du service, et `git -c credential.helper= ls-remote` sur l'URL HTTPS du dépôt,

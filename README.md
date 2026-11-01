@@ -825,7 +825,10 @@ handles each with a rule you can read, never a guess:
   your decision; you update the broker, nothing else does. `github` (every 15 minutes, only
   when the project's remote is on github.com) says whether the services reach GitHub by SSH and
   by HTTPS: one transport only is a warning for you, both down a warning after an hour, never a
-  failure; it judges reachability, not your credentials, and makes no claim about pushing. A new failure
+  failure; it judges reachability, not your credentials, and makes no claim about pushing. The stall guard
+  (`team-stall`, `clear-stall`, `quiet-agent`, 15 minutes each in `config.toml`, 0 = off) notices a team that
+  stopped with work ready, a hand-off that was not cleared and an agent that received work and wrote nothing:
+  sentinel tells master the next task, and you are told when master cannot act or nothing moves. A new failure
   wakes sentinel once, which may restart a failed service or refresh the model table and
   escalates the rest.
 - **Tokens.** Tokens per project, agent and day, counted from the Claude Code transcripts of the
