@@ -1,6 +1,6 @@
 # Automatic agent state from the client's lifecycle (design, spec only)
 
-Status: spec for review, revision 2 (foureyes' review of bd805f3); no code yet.
+Status: spec for review, revision 3 (foureyes on bd805f3, reviewer-codex on 09a7faf); no code yet.
 Task: master's directive of 2026-11-01 (`1793552718736-0`), from Bernard: the "declare working" rule must
 hold for every agent, and its root cause must be fixed, not just reminded.
 
@@ -84,6 +84,11 @@ stored state is ever rewritten:
   `idle` once a fresh observation (120 s) has seen the pane ready, not blocked, for `turn_stale_after`
   (2 min). A declared `working` (no `auto`) is never read that way.
   - The stall guard's `team-stall` uses the effective state for its "every agent idle".
+  - **Its time** (revision 3, reviewer-codex): an effective `idle` carries its own since, the
+    observation's ready `since`, bounded below by the flip's `ts`: `max(snap.TS, observation.Since)`.
+    The idle clock starts when the pane was first seen ready, never at the turn's start. For example, a
+    turn flipped at 09:00, killed at 10:00 and seen ready from 10:00 reads `idle` at 10:02, idle since
+    10:00. It is 2 minutes idle, not 62, so team-stall cannot fail on it before its threshold.
   - The dispatcher's `Decide` needs nothing: it already judges the pane through herdr's inspection
     (`in.State`), never the declared state, so a stuck declared `working` never delays a wake.
 - **A new session:** the `SessionStart` hook (already on every Claude Code launch) also runs
@@ -124,7 +129,9 @@ A test keeps the sentence in every role prompt.
 ## Steps (code, each reviewed)
 
 1. `Bus.TurnState` (compare-and-set on `idle`/`working`, message kept, snapshot only, `auto: "turn"`,
-   no-op when equal), `bus.EffectiveState`, and `agentbus roles turn start|end` (stdin, silent, exit 0,
+   no-op when equal; a declaration overrides an `auto` snapshot whatever their `ts`, foureyes:
+   `Status` XADDs, then writes the snapshot with the entry's time, so a flip landing between the two
+   with a later `TIME` must not win), `bus.EffectiveState`, and `agentbus roles turn start|end` (stdin, silent, exit 0,
    2 s with the dial, identity proved, `/` prompts and subagents ignored). Claude Code's `--settings`
    gains `UserPromptSubmit` and `Stop`, and `SessionStart` also runs `turn end`. Launch dry runs are
    updated byte for byte.
@@ -143,11 +150,15 @@ A test keeps the sentence in every role prompt.
   - equal states write nothing;
   - a declaration between read and write wins (WATCH);
   - a declaration clears `auto`;
+  - a declaration overrides an `auto` snapshot even when the flip's `ts` is later (the race between
+    `Status`'s XADD and its snapshot write);
   - an unverified caller writes nothing.
 - `EffectiveState`:
   - a flipped `working` with a fresh ready observation over 2 min reads `idle`;
   - a declared `working` never does;
-  - a stale observation, a blocked pane, or a busy one keep `working`.
+  - a stale observation, a blocked pane, or a busy one keep `working`;
+  - its since is `max(snap.TS, observation.Since)`: a long turn killed after an hour, then seen ready,
+    reads idle since the ready observation, and team-stall stays under its threshold.
 - `roles turn`:
   - prints nothing on stdout;
   - exits 0 with no broker (within 2 s, the dial bounded), bad JSON or a subagent's event;
