@@ -209,7 +209,8 @@ func (m *Model) maybeOpenRecap() {
 		return
 	}
 	s.recapPending = false
-	m.push(page{kind: ovRecap, title: "Where was I?", recap: s.recap, sel: firstRecapSelection(s.recap.Rows)})
+	m.push(page{kind: ovRecap, title: "Where was I?", recapAll: s.recap, sel: -1}) // buildPage filters it for the tier
+
 }
 
 // recapTarget is who the summary request goes to.

@@ -1,7 +1,9 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up             15:04:05 
  ♙ Charlie [human]  claude 5h 62% │ 7d 41%  grok 5h 100% held 15:44             
 ╭─ For you ───────────────────────────────────────────── 0 for you · 0 unread ─╮
-│  nothing waits for you                                                       │
+│  Nothing expected from you.                                                  │
+│  In progress: nobody declares working                                        │
+│  Next for you: no decision planned                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Agents ────────────────────────────────── 6 agents · 0 working · 0 blocked ─╮
 │▶ ○ coder     idle     0s   —                                                 │
@@ -28,8 +30,6 @@
 │  ○ sentinel → master   dir  sentinel to master (+5)                       48m│
 │  ── notices · 22, nobody owes an answer  (enter shows them) ──               │
 │  ── done or answered · 77, older than 7 d folded  (o shows them) ──          │
-│                                                                              │
-│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │

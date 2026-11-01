@@ -475,7 +475,7 @@ func short7(s string) string {
 }
 
 // planRecapExpected adds the plan's tasks waiting for the person to
-// "Expected from you"; one waiting on an open ask the recap already lists
+// recapForYou; one waiting on an open ask the recap already lists
 // is not listed twice.
 func planRecapExpected(in recapInput, add func(recapRow)) {
 	if in.Plan == nil || !in.Plan.loaded {
@@ -489,7 +489,7 @@ func planRecapExpected(in recapInput, add func(recapRow)) {
 		if r.State != plan.Waiting || (r.Ask != "" && listed[r.Ask]) {
 			continue
 		}
-		add(recapRow{Key: "plan:" + r.Task.ID, Section: "Expected from you", Title: "plan " + r.Task.ID + " " + GlyphNone + " " + plan.Label(r.State),
+		add(recapRow{Key: "plan:" + r.Task.ID, Section: recapForYou, Title: "plan " + r.Task.ID + " " + GlyphNone + " " + plan.Label(r.State),
 			Detail: Preview(r.Task.Title) + " " + GlyphNone + " " + planRowDetails(r, in.Now)})
 	}
 }

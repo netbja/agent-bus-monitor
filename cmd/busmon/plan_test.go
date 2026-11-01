@@ -269,7 +269,7 @@ func TestRecapPlanSection(t *testing.T) {
 	if !strings.Contains(planRows, "2/8?") {
 		t.Fatalf("the plan line with its count and the kept-value mark:\n%s", planRows)
 	}
-	expected := strings.Join(recapTitles(m, "Expected from you"), "\n")
+	expected := strings.Join(recapTitles(m, "For you"), "\n")
 	if !strings.Contains(expected, p.rows[0].Task.ID) {
 		t.Fatalf("a plan task waiting for the person is expected from them:\n%s", expected)
 	}

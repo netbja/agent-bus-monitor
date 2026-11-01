@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -182,6 +183,26 @@ func firstRecapSelection(rows []recapRow) int {
 	return 0
 }
 
+// recapKeepCursor is the cursor on rows after a re-filter: the row it was on
+// (by key), else the first selectable row from where it was, else the first.
+func recapKeepCursor(old []recapRow, sel int, rows []recapRow) int {
+	if sel >= 0 && sel < len(old) {
+		if k := old[sel].Key; k != "" {
+			for i, row := range rows {
+				if row.Key == k {
+					return i
+				}
+			}
+		}
+		for i := min(sel, len(rows)); i < len(rows); i++ {
+			if rows[i].Selectable {
+				return i
+			}
+		}
+	}
+	return firstRecapSelection(rows)
+}
+
 // recapBody is the recap's text with the cursor on row cursor, and the line
 // that row is on (its reader page draws it).
 func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {
@@ -213,4 +234,68 @@ func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {
 		}
 	}
 	return trimEnd(b.Lines()), cursorLine
+}
+
+// recapForScreen is the recap as its page shows it: the For you section only
+// when the For you panel is not on screen (the person's answer, busmon pages);
+// shown and empty, it says what For you says when nothing is expected.
+func recapForScreen(r recapModel, forYouShown bool, empty []Line) recapModel {
+	out := r
+	out.Rows = nil
+	items := 0
+	for _, row := range r.Rows {
+		if row.Section != recapForYou {
+			out.Rows = append(out.Rows, row)
+			continue
+		}
+		if forYouShown && recapInPanel(row) { // only what the panel itself lists (foureyes)
+			continue
+		}
+		if row.Key != "" || row.Title != row.Section {
+			items++
+		}
+		out.Rows = append(out.Rows, row)
+	}
+	if forYouShown { // a heading left alone, its rows all in the panel, goes too
+		kept := 0
+		for _, row := range out.Rows {
+			if row.Section == recapForYou && (row.Key != "" || row.Title != row.Section) {
+				kept++
+			}
+		}
+		if kept == 0 {
+			var rows []recapRow
+			for _, row := range out.Rows {
+				if row.Section != recapForYou {
+					rows = append(rows, row)
+				}
+			}
+			out.Rows = rows
+		}
+	}
+	if !forYouShown && items == 0 { // the empty state, right under the section's heading
+		var rows []recapRow
+		for _, row := range out.Rows {
+			rows = append(rows, row)
+			if row.Section == recapForYou && row.Title == row.Section {
+				for _, l := range empty {
+					rows = append(rows, recapRow{Section: recapForYou, Title: l.text()})
+				}
+			}
+		}
+		out.Rows = rows
+	}
+	return out
+}
+
+// recapInPanel: a For-you row the For you panel also lists (its unread lines,
+// asks and waits); directives owed, blocked agents, plan tasks and read
+// errors are only in the recap and always stay.
+func recapInPanel(row recapRow) bool {
+	for _, p := range []string{"unread:", "ask:", "wait:"} {
+		if strings.HasPrefix(row.Key, p) {
+			return true
+		}
+	}
+	return false
 }

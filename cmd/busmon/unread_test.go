@@ -77,13 +77,13 @@ func headerText(d headerData) string {
 	return sb.String()
 }
 
-// The recap lists unread entries first, under "Expected from you".
+// The recap lists unread entries first, under "For you".
 func TestRecapListsUnreadFirst(t *testing.T) {
 	now := time.Now()
 	m := buildRecap(recapInput{Now: now, Human: "charlie", Agents: map[string]*agentState{},
 		Unread: []bus.Event{{ID: fmt.Sprintf("%d-0", now.Add(-time.Minute).UnixMilli()), Kind: "cmd", From: "master", Target: "charlie", Message: "lot 1 is yours"}},
 		Asks:   []bus.Ask{{ID: "a1", From: "coder", State: "open", Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "q", Header: "Go?"}}}}}})
-	if len(m.Rows) < 3 || m.Rows[0].Title != "Expected from you" || !strings.Contains(m.Rows[1].Title, "unread") || !strings.Contains(m.Rows[1].Detail, "lot 1 is yours") {
+	if len(m.Rows) < 3 || m.Rows[0].Title != "For you" || !strings.Contains(m.Rows[1].Title, "unread") || !strings.Contains(m.Rows[1].Detail, "lot 1 is yours") {
 		var got []string
 		for _, r := range m.Rows {
 			got = append(got, r.Title)

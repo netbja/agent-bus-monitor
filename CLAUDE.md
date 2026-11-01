@@ -343,7 +343,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   every cluster measure the same under uniseg, lipgloss's grapheme width and wcwidth:
   `agreeWidths`); `drawLine`/`drawFrame` write the `grid`, lipgloss only styles spans, so a frame
   never wraps by one cell. `forYou` ranks asks, waits, the person's gates and unread lines, and `decisions` is
-  its badge and reminder subset; its keys are `ModeShell` (the panel table with the shell's tabs)
+  its badge and reminder subset; with nothing for the person it says so, then what is in progress and the next
+  decision (`forYouEmpty`: the agents declaring working, the plan's first open person task; no store), and the
+  recap's For you section shows only when the For you panel is not on screen (`recapForScreen`); its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`; A12: `▼` in the gutter, the text under the message column behind a
   muted `│` guide, a last muted `↵ full text` line), then opens it in the reader, a stack of pages over the lower zone, one

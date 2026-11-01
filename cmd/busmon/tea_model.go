@@ -96,7 +96,7 @@ type uiState struct {
 // copied by value through Update, the lists' selection rules are listState's.
 type shellLists struct {
 	forYou, agents, activity, board, requests, plan listState
-	reqView                                         reqView // the Requests view fillLists computed: the header reads its counts
+	reqView                                         reqView // the Requests view refresh computed: the layout, fillLists and the header read it
 }
 
 func (ls *shellLists) of(p PanelID) *listState {
@@ -297,7 +297,15 @@ func (m *Model) counts() shellCounts {
 	for _, it := range m.forYou {
 		w = max(w, forYouNatural(it))
 	}
-	return shellCounts{ForYou: len(m.forYou), Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.line != lineNone}
+	fy := len(m.forYou)
+	if fy == 0 { // the empty state's lines, shown whole, as wide as they need (capped by the layout)
+		empty := forYouEmpty(m.snap, m.lists.reqView.count(secOwed))
+		fy = len(empty)
+		for _, l := range empty {
+			w = max(w, l.Width())
+		}
+	}
+	return shellCounts{ForYou: fy, Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.line != lineNone}
 }
 
 // refresh recomputes the marks, the For you list, the layout and every list's
@@ -312,6 +320,9 @@ func (m *Model) refresh() {
 	if m.width == 0 {
 		return
 	}
+	// One Requests view per refresh, before the layout: For you's empty state
+	// is sized and filled from the same owed count (reviewer-codex).
+	m.lists.reqView = requestGroups(m.requestInput())
 	m.layout = shellLayoutFor(m.width, m.height, m.counts(), m.ui.view, m.ui.tab)
 	m.fillLists()
 	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes
