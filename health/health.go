@@ -5,6 +5,7 @@ package health
 import (
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 	"unicode"
 )
@@ -160,14 +161,53 @@ type Note struct {
 	Text   string `json:"text"`
 }
 
-var sensitiveText = regexp.MustCompile(`(?i)(\b(?:password|token|secret|api[_-]?key|authorization)\b\s*[:=]\s*\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----|https?://[^/\s:@]+:[^/\s@]+@|\b(?:sk-ant-|gh[pousr]_|xox[baprs]-)[A-Za-z0-9_-]{12,})`)
+// sensitiveText: a credential-looking name followed by a value (as a word, or
+// as the end of an env-style name such as REDIS_PASSWORD or AWS_SECRET_ACCESS_KEY),
+// any URL scheme with userinfo, a private key block, the known token prefixes.
+var sensitiveText = regexp.MustCompile(`(?i)(\b(?:[a-z0-9]+_)*(?:password|passwd|token|secret|api[_-]?key|authorization)\b["']?\s*[:=]\s*\S+|\b[a-z0-9]+(?:_[a-z0-9]+)*_key\b["']?\s*[:=]\s*\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b[a-z][a-z0-9+.-]*://[^/\s:@]*:[^/\s@]+@|\b(?:sk-ant-|gh[pousr]_|xox[baprs]-)[A-Za-z0-9_-]{12,})`)
+
+// authScheme finds Bearer or Basic with a candidate token after it; the token
+// counts only if it reads as one (bearerToken), so prose passes.
+var authScheme = regexp.MustCompile(`(?i)\b(?:bearer|basic)\s+([A-Za-z0-9._~+/=-]{8,})`)
+
+// bearerToken: a digit or a symbol in it, or 16 letters or more. "Basic
+// authentication" is prose; "dXNlcjpwYXNzd29yZA==" is a credential.
+func bearerToken(tok string) bool {
+	return len(tok) >= 16 || strings.ContainsAny(tok, "0123456789._~+/=-")
+}
+
+// Sensitive reports whether s carries a common credential shape. Best effort:
+// a secret in a shape not listed passes.
+func Sensitive(s string) bool {
+	if sensitiveText.MatchString(s) {
+		return true
+	}
+	for _, m := range authScheme.FindAllStringSubmatch(s, -1) {
+		if bearerToken(m[1]) {
+			return true
+		}
+	}
+	return false
+}
+
+// Redacted replaces a whole field that Redact judges sensitive.
+const Redacted = "[redacted]"
+
+// Redact returns s unchanged, or Redacted on any credential shape: the whole
+// field, never the matched span, which would leave the rest of the secret.
+func Redact(s string) string {
+	if Sensitive(s) {
+		return Redacted
+	}
+	return s
+}
 
 // SafeText rejects control characters, oversized text and common credential
 // shapes before details or notes are persisted or displayed. Callers should
 // prefer fixed diagnostic phrases and never pass command output or file data.
 func SafeText(s string) bool {
 	runes := []rune(s)
-	if len(runes) > 600 || sensitiveText.MatchString(s) {
+	if len(runes) > 600 || Sensitive(s) {
 		return false
 	}
 	for _, r := range runes {
