@@ -702,13 +702,14 @@ l'exécute étape par étape.
   adopté depuis le brouillon relu de `examples/drafts/infra/`, dont le README décrit l'adoption
   pour un autre projet : master vous pose la question, puis
   `agentbus --project myapp roles adopt infra --ask <id> --from examples/drafts`.
-- **Deux spécifications, non construites.** La
+- **Une spécification, non construite.** La
   [boucle de feedback](superpowers/specs/2026-10-29-feedback-loop-design.md) (`agentbus feedback` :
   des statistiques en lecture seule sur les revues que le bus retient ; une modification de skill
-  proposée en pull request seulement après votre oui) et le
-  [fichier de configuration](superpowers/specs/2026-10-29-config-file-design.md) (un seul
-  `config.toml` pour vos préférences, et `agentbus config` pour montrer la valeur de chaque réglage
-  et sa provenance).
+  proposée en pull request seulement après votre oui). Le
+  [fichier de configuration](superpowers/specs/2026-10-29-config-file-design.md) est construit : un
+  seul `config.toml` pour vos préférences, `agentbus config` pour montrer la valeur de chaque réglage
+  et sa provenance, et les points d'accès des modèles locaux (`[llm.<nom>]` : `url`, `model`,
+  `remote = true` pour un hôte qui n'est pas la boucle locale ; une clé ou un jeton est refusé).
 
 ---
 

@@ -59,10 +59,12 @@ model = "qwen2.5-coder:3b"            # the default model of this endpoint
   the code to another host.
 - `url` must be `http` or `https`, with no user info and no query. `model` is a non-empty
   one-line string.
-- The config file is not built yet. Until it is, the peer reads only its `[llm.*]` tables from
-  that path with a small reader (unknown keys refused); when the config registry lands, the
-  table moves under it unchanged. Like the rest of that file, it is the person's preference, not
-  a per-project fact.
+- The config file reads these tables (config-followups, `config/llm.go`: `File.Endpoints`,
+  `File.Endpoint`): only in `config.toml`, never `busmon.toml`; each endpoint is taken whole or
+  dropped with a warning per problem at its line, never quoting a value (an unknown key, a secret,
+  a name that is not a valid name, a missing `url` or `model`, a wrong type); `agentbus config`
+  lists them as name, model, host and port, loopback or remote, never the URL. Like the rest of
+  that file, it is the person's preference, not a per-project fact.
 
 ### The role: `roles.toml`
 

@@ -268,3 +268,41 @@ func TestConfigServiceFileWarningsAndSkippedEnv(t *testing.T) {
 		t.Errorf("the shared file warned twice:\n%s", out)
 	}
 }
+
+// The local LLM peer's endpoints (config-followups): one line each with its
+// model, host and port and whether it is loopback, never the URL's path; a
+// refused one is a warning, never echoed; --json carries the same.
+func TestConfigListsTheEndpoints(t *testing.T) {
+	f := newConfigFixture(t)
+	f.write(t, "config.toml", "[llm.local]\nurl = \"http://127.0.0.1:11434/v1-PATH\"\nmodel = \"qwen2.5-coder:3b\"\n\n[llm.box]\nurl = \"https://gpu.lan:8080/v1-PATH\"\nmodel = \"big\"\nremote = true\n\n[llm.bad]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"m\"\ntoken = \"tok-SECRET\"\n")
+	out, errw, code := f.run(t, "")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errw)
+	}
+	for _, want := range []string{
+		"llm endpoints: box big gpu.lan:8080 (remote) · local qwen2.5-coder:3b 127.0.0.1:11434 (loopback)",
+		"config.toml:13: llm.bad.token: unknown key; a secret does not belong in this file; endpoint ignored",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	jsonOut, _, _ := f.run(t, "", "--json")
+	for _, leak := range []string{"SECRET", "PATH"} {
+		if strings.Contains(out+jsonOut, leak) {
+			t.Errorf("output echoes %s:\n%s\n%s", leak, out, jsonOut)
+		}
+	}
+	var doc configDoc
+	if err := json.Unmarshal([]byte(jsonOut), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.LLM) != 2 || doc.LLM[1] != (configLLM{Name: "local", Model: "qwen2.5-coder:3b", Host: "127.0.0.1:11434", Line: 1}) {
+		t.Errorf("json endpoints %+v", doc.LLM)
+	}
+
+	f2 := newConfigFixture(t)
+	if out, _, _ := f2.run(t, ""); !strings.Contains(out, "llm endpoints: none") {
+		t.Errorf("no endpoint:\n%s", out)
+	}
+}
