@@ -54,6 +54,7 @@ var ErrLocked = errors.New("history: another writer holds the archive")
 
 const (
 	cursorFile = "cursor.json"
+	gapsFile   = "gaps.jsonl" // every gap line again: readers find them whatever days they read
 	lockFile   = ".lock"
 	dayLayout  = "2006-01-02"
 	// maxLine bounds a line read back at start: a report's full text is at
@@ -73,6 +74,7 @@ type Writer struct {
 	pos     map[string]string // stream -> last archived id
 	restart bool              // no cursor and no day file: write the restart line
 	gaps    map[string]string // stream -> the oldest id a gap line was written for
+	turn    int               // the stream a pass's round starts at, moved on each pass
 }
 
 // Pass appends what the streams hold beyond each position, up to the budget
@@ -150,7 +152,9 @@ func (w *Writer) Pass(ctx context.Context, src Source, nowMS int64) (int, error)
 	// others (reviewer-codex), until the budget is spent or every stream is
 	// read to its end.
 	n := 0
-	open := append([]string(nil), Streams...)
+	start := w.turn % len(Streams)
+	w.turn++
+	open := append(append([]string(nil), Streams[start:]...), Streams[:start]...)
 	for len(open) > 0 && n < budget && ctx.Err() == nil {
 		var next []string
 		for _, s := range open {
@@ -209,6 +213,9 @@ func (w *Writer) recover() error {
 	}
 	days, err := dayFiles(w.Dir)
 	if err != nil {
+		return err
+	}
+	if err := truncateTorn(filepath.Join(w.Dir, gapsFile)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	for _, d := range days {
@@ -338,7 +345,24 @@ func (a *appender) write(e Entry) error {
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(append(b, '\n'))
+	if _, err = f.Write(append(b, '\n')); err != nil || e.Stream != GapStream {
+		return err
+	}
+	return a.writeTo(gapsFile, append(b, '\n'))
+}
+
+// writeTo appends a line to a file of the pass that is not a day file.
+func (a *appender) writeTo(name string, line []byte) error {
+	f := a.files[name]
+	if f == nil {
+		var err error
+		f, err = os.OpenFile(filepath.Join(a.dir, name), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		a.files[name] = f
+	}
+	_, err := f.Write(line)
 	return err
 }
 
@@ -442,6 +466,9 @@ func Prune(dir string, keepDays int, maxBytes int64, now time.Time) error {
 		total += d.size
 		kept = append(kept, d)
 	}
+	if err := pruneGaps(dir, cutoff); err != nil {
+		return err
+	}
 	for _, d := range kept {
 		if maxBytes <= 0 || total <= maxBytes {
 			break
@@ -455,6 +482,41 @@ func Prune(dir string, keepDays int, maxBytes int64, now time.Time) error {
 		total -= d.size
 	}
 	return nil
+}
+
+// pruneGaps drops the gap lines whose stretch ended on or before cutoff (a
+// day, as Prune's), rewriting gaps.jsonl by a rename. Called under the lock.
+func pruneGaps(dir, cutoff string) error {
+	p := filepath.Join(dir, gapsFile)
+	es, err := readFile(p, 0)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var keep bytes.Buffer
+	dropped := false
+	for _, e := range es {
+		_, to := gapStretch(e)
+		if to.UTC().Format(dayLayout) <= cutoff {
+			dropped = true
+			continue
+		}
+		b, err := json.Marshal(e)
+		if err != nil {
+			return err
+		}
+		keep.Write(append(b, '\n'))
+	}
+	if !dropped {
+		return nil
+	}
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, keep.Bytes(), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
 }
 
 // parseID splits a stream id "<ms>-<seq>".

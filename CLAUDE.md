@@ -826,11 +826,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `./setup.sh rotate-redis-password`, the person's act); health is not a security boundary.
 - **History archive** (spec `docs/superpowers/specs/2026-11-01-history-design.md`, package `history/`): the
   dispatch service's chore (`dispatch/history.go`, its own goroutine beside the reconciliation, 1 min, a 5 s
-  pass, 2000 entries shared a page per stream in turn) appends `history.Streams` to `<state>/history/YYYY-MM-DD.jsonl` (UTC day of the id;
+  pass, 2000 entries shared a page per stream in turn, the round starting one stream further each pass) appends `history.Streams` to `<state>/history/YYYY-MM-DD.jsonl` (UTC day of the id;
   `{"stream","id","f"}`), only while `HoldsDispatch` and under an flock on `history/.lock`; files only, no
   Redis write, so nothing new is fenced. On start (and after a failed write or a deleted cursor) a torn last
   line is truncated and each stream's position is max(`cursor.json`, the files' highest id); no cursor and no
-  day file writes the `archive restarted` gap line (`of=*`), a stream trimmed past its position one `gap` line.
+  day file writes the `archive restarted` gap line (`of=*`), a stream trimmed past its position one `gap` line. Every gap line is kept again in `gaps.jsonl` (`ReadGaps`; pruned with the days), and a gap matches time bounds by the stretch it covers (`from`..`to`), not its id, so `--until` never hides a hole.
   Every field goes through `health.Redact` (whole field on any hit; `SafeText` shares `health.Sensitive`).
   `history.keep_days` (90, 0 = off) and `history.max_mb` (256), pruned daily, never today's file. Bus reads:
   `Bus.StreamAfter`/`StreamOldest`. `agentbus history` (`historycmd.go`, after the identity guard and before the

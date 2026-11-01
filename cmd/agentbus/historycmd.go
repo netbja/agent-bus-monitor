@@ -130,6 +130,11 @@ func runHistory(args []string, d historyDeps, stdout, stderr io.Writer) int {
 		} else if cut {
 			fmt.Fprintf(stderr, "older archive not read (%d MiB read); use --since to reach further back\n", capBytes>>20)
 		}
+		gaps, err := history.ReadGaps(d.Dir) // every hole, whatever days were read (reviewer-codex)
+		if err != nil {
+			fmt.Fprintf(stderr, "history: reading the archive's gaps: %v\n", err)
+		}
+		archive = history.Merge(archive, gaps)
 	}
 	if _, err := os.Stat(d.Dir); d.Dir == "" || errors.Is(err, os.ErrNotExist) {
 		fmt.Fprintln(stderr, "no archive on this host: live streams only")

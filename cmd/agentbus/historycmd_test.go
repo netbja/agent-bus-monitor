@@ -172,3 +172,21 @@ func TestHistoryCapsTheArchiveWithoutSince(t *testing.T) {
 		t.Fatalf("--since reads it all:\n%s\n%s", out.String(), errb.String())
 	}
 }
+
+// A restart line written today for history before yesterday shows under
+// --until yesterday (reviewer-codex).
+func TestHistoryShowsAGapWrittenAfterTheQueriedDays(t *testing.T) {
+	now := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	dir := filepath.Join(t.TempDir(), "history")
+	os.MkdirAll(dir, 0o700)
+	line := `{"stream":"gap","id":"` + hid(now) + `","f":{"of":"*","from":"unknown","to":"` + hid(now.Add(-36*time.Hour)) + `"}}` + "\n"
+	os.WriteFile(filepath.Join(dir, "2026-11-01.jsonl"), []byte(line), 0o600)
+	os.WriteFile(filepath.Join(dir, "gaps.jsonl"), []byte(line), 0o600)
+	d := historyDeps{Dir: dir, Now: func() time.Time { return now }, Loc: time.UTC,
+		Live: func(context.Context) ([]history.Entry, error) { return nil, nil }}
+	var out, errb bytes.Buffer
+	runHistory([]string{"--until", "2026-10-30"}, d, &out, &errb)
+	if !strings.Contains(out.String(), "archive restarted: nothing archived before") {
+		t.Fatalf("the restart line is hidden:\n%s\n%s", out.String(), errb.String())
+	}
+}

@@ -134,3 +134,26 @@ func TestFilterMatches(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// A gap matches the time bounds by the stretch it covers, not by when it was
+// written (reviewer-codex: a restart line written on Nov 1 for history before
+// Oct 31 hid under --until Oct 31).
+func TestGapMatchesByItsCoveredInterval(t *testing.T) {
+	written := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	restart := Entry{Stream: GapStream, ID: id(written, 0), F: map[string]string{"of": "*", "from": "unknown", "to": id(to, 0)}}
+	if !(Filter{Until: time.Date(2026, 10, 31, 23, 59, 0, 0, time.UTC)}).Match(restart) {
+		t.Error("--until inside the unarchived stretch hides the restart line")
+	}
+	if (Filter{Since: written.Add(time.Hour)}).Match(restart) {
+		t.Error("--since after the stretch shows it")
+	}
+	from := time.Date(2026, 10, 30, 8, 0, 0, 0, time.UTC)
+	trim := Entry{Stream: GapStream, ID: id(to, 0), F: map[string]string{"of": "status", "from": id(from, 0), "to": id(to, 0)}}
+	if !(Filter{Since: from.Add(time.Hour), Until: from.Add(2 * time.Hour)}).Match(trim) {
+		t.Error("a window inside a trim's stretch hides it")
+	}
+	if (Filter{Until: from.Add(-time.Hour)}).Match(trim) {
+		t.Error("a window before the stretch shows it")
+	}
+}

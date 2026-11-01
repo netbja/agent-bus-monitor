@@ -68,7 +68,7 @@ func newSource() *fakeSource { return &fakeSource{streams: map[string][]Entry{}}
 // lines reads every archived line, in file order (days ascending).
 func lines(t *testing.T, dir string) []Entry {
 	t.Helper()
-	files, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	files, _ := filepath.Glob(filepath.Join(dir, "????-??-??.jsonl")) // day files only, not gaps.jsonl
 	sort.Strings(files)
 	var out []Entry
 	for _, p := range files {
@@ -411,4 +411,67 @@ func TestTheBudgetIsSharedAcrossStreams(t *testing.T) {
 	if count(es, "status") != 1 || count(es, "swaps") != 1 || count(es, "cmd") != 8 {
 		t.Fatalf("each stream gets its turn: cmd %d status %d swaps %d", count(es, "cmd"), count(es, "status"), count(es, "swaps"))
 	}
+}
+
+// Several sustained backlogs: each pass starts the round at the next stream,
+// so the last streams are reached too (reviewer-codex).
+func TestTheRoundStartsAtTheNextStreamEachPass(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "history")
+	src := newSource()
+	for _, s := range []string{"cmd", "report", "status", "notify"} {
+		for i := 0; i < 40; i++ {
+			src.add(s, ms(time.Duration(i)*time.Millisecond), map[string]string{"x": "flood"})
+		}
+	}
+	src.add("swaps", ms(0), map[string]string{"event": "done"})
+	w := &Writer{Dir: dir, Budget: 8, Page: 2}
+	for i := 0; i < len(Streams); i++ {
+		pass(t, w, src, ms(time.Minute))
+	}
+	if es := lines(t, dir); count(es, "swaps") != 1 {
+		t.Fatalf("the last stream never got a turn: %d", count(es, "swaps"))
+	}
+}
+
+// Every gap line is also kept in gaps.jsonl, so a reader finds it whatever
+// days it reads.
+func TestGapLinesAreKeptInTheGapsFile(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "history")
+	src := newSource()
+	src.add("cmd", ms(0), map[string]string{"command": "a"})
+	pass(t, &Writer{Dir: dir}, src, ms(48*time.Hour)) // the restart line, two days on
+	gaps, err := ReadGaps(dir)
+	if err != nil || len(gaps) != 1 || gaps[0].F["of"] != "*" {
+		t.Fatalf("gaps %+v %v", gaps, err)
+	}
+	if es := lines(t, dir); count(es, "gap") != 1 {
+		t.Fatalf("the day files hold it once (gaps.jsonl is not a day file): %+v", es)
+	}
+}
+
+func TestPruneDropsGapsOlderThanTheKeptDays(t *testing.T) {
+	dir := t.TempDir()
+	today := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	old := Entry{Stream: GapStream, ID: "1-0", F: map[string]string{"of": "status", "from": "1-0", "to": fmt.Sprintf("%d-0", today.AddDate(0, 0, -10).UnixMilli())}}
+	recent := Entry{Stream: GapStream, ID: "2-0", F: map[string]string{"of": "*", "from": "unknown", "to": fmt.Sprintf("%d-0", today.AddDate(0, 0, -1).UnixMilli())}}
+	a := newAppender(dir)
+	a.writeTo(gapsFile, mustLine(t, old))
+	a.writeTo(gapsFile, mustLine(t, recent))
+	a.close()
+	if err := Prune(dir, 4, 0, today); err != nil {
+		t.Fatal(err)
+	}
+	gaps, _ := ReadGaps(dir)
+	if len(gaps) != 1 || gaps[0].ID != "2-0" {
+		t.Fatalf("kept %+v", gaps)
+	}
+}
+
+func mustLine(t *testing.T, e Entry) []byte {
+	t.Helper()
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return append(b, '\n')
 }

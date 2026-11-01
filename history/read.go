@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -89,6 +90,16 @@ func readFile(path string, offset int64) ([]Entry, error) {
 	return out, sc.Err()
 }
 
+// ReadGaps reads every gap line kept in gaps.jsonl: a reader adds them to the
+// days it read, so a hole is said whatever the query's days (reviewer-codex).
+func ReadGaps(dir string) ([]Entry, error) {
+	es, err := readFile(filepath.Join(dir, gapsFile), 0)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return es, err
+}
+
 // key identifies an entry across sources: stream ids are unique within a
 // stream only, and a gap line by the stream it covers.
 func key(e Entry) string {
@@ -155,12 +166,17 @@ type Filter struct {
 // passes an agent or kind filter when it may hide such entries; never a
 // thread or a text search.
 func (f Filter) Match(e Entry) bool {
+	if e.Stream == GapStream {
+		// The stretch it covers, not when it was written, meets the bounds.
+		from, to := gapStretch(e)
+		if !f.Since.IsZero() && to.Before(f.Since) || !f.Until.IsZero() && from.After(f.Until) {
+			return false
+		}
+		return f.Thread == "" && f.Grep == "" && (f.Kind == "" || gapCovers(e.F["of"], f.Kind))
+	}
 	at := At(e)
 	if !f.Since.IsZero() && at.Before(f.Since) || !f.Until.IsZero() && at.After(f.Until) {
 		return false
-	}
-	if e.Stream == GapStream {
-		return f.Thread == "" && f.Grep == "" && (f.Kind == "" || gapCovers(e.F["of"], f.Kind))
 	}
 	if f.Agent != "" && e.F["from"] != f.Agent && e.F["target"] != f.Agent && e.F["agent"] != f.Agent &&
 		e.F["author"] != f.Agent && e.F["reviewer"] != f.Agent {
@@ -188,6 +204,19 @@ func (f Filter) Match(e Entry) bool {
 		}
 	}
 	return true
+}
+
+// gapStretch is what a gap covers: from its from id (the beginning of time
+// when unknown) to its to id.
+func gapStretch(e Entry) (from, to time.Time) {
+	to = At(Entry{ID: e.F["to"]})
+	if validID(e.F["from"]) {
+		from = At(Entry{ID: e.F["from"]})
+	}
+	if !validID(e.F["to"]) {
+		to = At(e)
+	}
+	return from, to
 }
 
 // nameFields are who and what an entry is about, not its text: --grep skips
