@@ -212,8 +212,10 @@ it silently never fired.
   `--json`; `--unattributed` is the person's host scan (1 GiB budget) of what no project's record names.
   busmon's `U` page (`tokens_view.go`, `ovTokens`; since busmon pages step 3 the list pattern: zones Accounts, Projects,
   Agents, bars against the zone's largest row, its top consumer bold, unknown agents folded by short reason and listed by
-  `a`, the title `tokensTitle`'s summary): the account windows with a 24-hour sparkline from
-  `{p}:quota:hist` (one cell per hour, its last sample), every project side by side (`ProjectNames`,
+  `a`, the title `tokensTitle`'s summary): the account windows, one row per provider with its windows side by side in
+  columns of one width (`accountCell`: the richest `accountForms` entry that fits, gauge always, then the reset or hold,
+  then a 24-hour sparkline from `{p}:quota:hist`, one cell per hour, its last sample; a hold is never dropped for room;
+  one window per row only when bare cells do not fit), every project side by side (`ProjectNames`,
   `TokensOf`, read every `requestPoll` tick through the optional `tokensReader`; the open project first,
   7-day bars scaled across projects, `~` while partial, no key = one `no data` line), the open project by
   agent today (`tokens.AgentRows`, shared with the CLI: `?` with its reason, 0 only for a proved session).
