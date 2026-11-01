@@ -8,7 +8,7 @@
 [38;5;3m│[m  [38;5;6m● unread [mdispatch  [38;5;6m╭─[m[1;7;38;5;6m Welcome to busmon [m[38;5;6m────────────────────────────────────────────────[m [38;5;7m1/5[m [38;5;6m─╮[m[38;5;9mscalating[m[38;5;7m…[m spec merg…[38;5;8m│[m
 [38;5;3m│[m                     [38;5;6m│[m                                                                          [38;5;6m│[m[38;5;9mate 1[m[38;5;7m · [m[38;5;3md…[m busmon-ch…[38;5;8m▼[m
 [38;5;3m╰─────────────────────[m[38;5;6m│[m busmon shows what your agents are doing and what waits for you. A few    [38;5;6m│[m[38;5;8m─────────────────────╯[m
-[38;5;8m╭─[m [1;7;38;5;2m 1 Activity[m [38;5;7m 2 Boar[m[38;5;6m│[m short pages;[1;38;5;6m esc[m skips, and[1;38;5;6m F1[m then[1;38;5;6m t[m brings them back.                  [38;5;6m│[m[38;5;7ments · filter: none[m [38;5;8m─╮[m
+[38;5;8m╭─[m [1;7;38;5;2m 1 Activity [m [38;5;7m 2 Boa[m[38;5;6m│[m short pages;[1;38;5;6m esc[m skips, and[1;38;5;6m F1[m then[1;38;5;6m t[m brings them back.                  [38;5;6m│[m[38;5;7ments · filter: none[m [38;5;8m─╮[m
 [38;5;8m│[m  [38;5;8m  time   from      [m[38;5;6m│[m                                                                          [38;5;6m│[m[38;5;8m                     [m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m── Mon 2026-10-26 -[m[38;5;6m│[m   [38;5;3mFor you[m     what needs you: questions, waits, unread lines             [38;5;6m│[m[38;5;7m─────────────────────[m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m  14:24  [marchitect [38;5;6m│[m   [38;5;6mAgents[m      each agent, its state and how fresh it is                  [38;5;6m│[m                     [38;5;8m│[m

@@ -12,7 +12,7 @@
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
 │                   ╭─ Compose ────────────────────────────────────────────────────────────────────────────────────────╮i-alt   tagging    ▼
 ╰───────────────────│ to: @coder                                                                           · directive │───────────────────╯
-╭─  1 Activity  2 Bo│ Review lot 1 please: the reader, the ask mode and the cache.                                     │ts · filter: none ─╮
+╭─  1 Activity   2 B│ Review lot 1 please: the reader, the ask mode and the cache.                                     │ts · filter: none ─╮
 │    time   from    │ Thanks                                                                                           │                   │
 │  ── Mon 2026-10-26│                                                                                                  │───────────────────│
 │    14:24  architec│                                                                                                  │                   │

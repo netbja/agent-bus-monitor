@@ -8,7 +8,7 @@
 │  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
 │                     ╭─ Writing to an agent ────────────────────────────────────────────── 2/5 ─╮ate 1 · d… busmon-ch…▼
 ╰─────────────────────│                                                                          │─────────────────────╯
-╭─  1 Activity  2 Boar│ i opens the line at the bottom. Type @name then your text: that agent is │ents · filter: none ─╮
+╭─  1 Activity   2 Boa│ i opens the line at the bottom. Type @name then your text: that agent is │ents · filter: none ─╮
 │    time   from      │ woken and reads it. @all reaches every agent; tab completes a name.      │                     │
 │  ── Mon 2026-10-26 -│                                                                          │─────────────────────│
 │    14:24  architect │   i     the line: @coder please rebase                                   │                     │

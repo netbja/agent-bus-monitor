@@ -408,7 +408,9 @@ func TestShellClickTabsAndTitles(t *testing.T) {
 // herdr-style tabs (busmon-tabs, Charlie): every tab a block followed by one
 // blank column; the active one a bold pill in its panel's colour, dimmed
 // (faded) when the panel has not the focus; the others grey on the tab
-// background. The labels keep their old widths, so the click spans stay.
+// background. Each block has one blank cell on each side, in its own colour
+// (busmon-tab-pad, the person: the pill ended on its last letter), so a tab is
+// one column wider than before; the click spans are the same segments.
 func TestTabsAreHerdrBlocks(t *testing.T) {
 	for _, focused := range []bool{true, false} {
 		l := tabBar(lowerTabs, PanelBoard, 200, focused)
@@ -420,7 +422,8 @@ func TestTabsAreHerdrBlocks(t *testing.T) {
 			if gap.Text != " " || !gap.Tab || gap.Off || gap.Pill {
 				t.Errorf("tab %d's separator %+v", i+1, gap)
 			}
-			if !block.Tab || strings.HasPrefix(block.Text, "  ") || strings.HasSuffix(block.Text, " ") {
+			inner := strings.TrimPrefix(strings.TrimSuffix(block.Text, " "), " ")
+			if !block.Tab || inner != strings.TrimSpace(block.Text) || inner == "" || len(block.Text) != len(inner)+2 {
 				t.Errorf("tab %d's block %+v", i+1, block)
 			}
 			if p == PanelBoard {
@@ -435,8 +438,8 @@ func TestTabsAreHerdrBlocks(t *testing.T) {
 				t.Errorf("inactive tab %d %+v", i+1, block)
 			}
 		}
-		if got, want := l.Width(), Width(" 1 Activity  2 Board  3 Requests  4 Plan "); got != want {
-			t.Errorf("bar is %d cells, want the old %d", got, want)
+		if got, want := l.Width(), Width(" 1 Activity   2 Board   3 Requests   4 Plan  "); got != want {
+			t.Errorf("bar is %d cells, want %d (a padded block and a gap per tab)", got, want)
 		}
 	}
 	// frameTitle leaves the tabs alone: no pill borrowed, nothing recoloured.
@@ -448,5 +451,26 @@ func TestTabsAreHerdrBlocks(t *testing.T) {
 	}
 	if frameTitle(tabBar(lowerTabs, PanelBoard, 200, true), RoleOK, true).Width() != tabBar(lowerTabs, PanelBoard, 200, true).Width()+2 {
 		t.Error("frameTitle changed the bar's width")
+	}
+}
+
+// The lower panel's title is its tab bar then its own suffix (Activity's
+// auto-scroll state): the tabs are fitted to what the suffix leaves, so a
+// name shortens rather than being cut by the frame (reviewer-codex).
+func TestLowerTitleReservesTheSuffix(t *testing.T) {
+	suffix := Line{{Text: "Activity", Role: RoleText}, {Text: "  auto-scroll paused", Role: RoleMuted}}
+	short := tabBar(lowerTabs, PanelActivity, 0, true).Width() // every name at its short form
+	m := Model{}
+	m.layout.Tier = TierMedium
+	m.layout.Lower.W = 4 + short + suffix[1:].Width() + 2 // full names fit alone, not with the suffix
+	if full := tabBar(lowerTabs, PanelActivity, 1000, true).Width(); full > m.layout.Lower.W-4 {
+		t.Fatalf("fixture: the full names (%d) do not fit alone in %d", full, m.layout.Lower.W-4)
+	}
+	title := m.lowerTitle(PanelActivity, suffix)
+	if title.Width() > m.layout.Lower.W-4 {
+		t.Errorf("title is %d cells in a budget of %d: the frame will cut a tab", title.Width(), m.layout.Lower.W-4)
+	}
+	if !strings.Contains(title.text(), "auto-scroll paused") {
+		t.Errorf("the suffix is lost: %q", title.text())
 	}
 }

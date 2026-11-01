@@ -8,7 +8,7 @@
 │  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
 │                     ╭─ The header ─────────────────────────────────────────────────────── 5/5 ─╮ate 1 · d… busmon-ch…▼
 ╰─────────────────────│                                                                          │─────────────────────╯
-╭─  1 Activity  2 Boar│   ● bus ok           busmon reads the bus                                │ents · filter: none ─╮
+╭─  1 Activity   2 Boa│   ● bus ok           busmon reads the bus                                │ents · filter: none ─╮
 │    time   from      │   ● dispatch up      the service that wakes idle agents runs             │                     │
 │  ── Mon 2026-10-26 -│   ● missions up      the conductor runs                                  │─────────────────────│
 │    14:24  architect │   health ▲2          two checks only you can fix; F5 says which          │                     │

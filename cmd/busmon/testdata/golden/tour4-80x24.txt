@@ -12,7 +12,7 @@
 │  ♙│   /      filter Activity                                             │   ┃
 │  ♙│   F1 ?   help, every key                                             │   ▼
 ╰───│   F2 F3  requests, services                                          │───╯
-╭─  │   F5     project health                                              │l…─╮
+╭─  │   F5     project health                                              │·…─╮
 │   │   q      quit                                                        │   ▲
 │   │                                                                      │   │
 │  ○│ ○ ○ ○ ● ○   enter next · ← back · esc skip                           │   │

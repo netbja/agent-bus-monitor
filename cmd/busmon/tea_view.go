@@ -101,11 +101,11 @@ func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
 	for i, p := range tabs {
 		names[i] = panelLabel(p)
 	}
-	label := func(i int) string { return fmt.Sprintf(" %d %s ", i+1, names[i]) }
+	label := func(i int) string { return fmt.Sprintf(" %d %s ", i+1, names[i]) } // the block, a blank cell each side
 	total := func() int {
 		n := 0
 		for i := range tabs {
-			n += Width(label(i))
+			n += Width(label(i)) + 1 // and the blank column after it
 		}
 		return n
 	}
@@ -123,14 +123,14 @@ func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
 		}
 		names[longest] = short[tabs[longest]]
 	}
-	// herdr-style blocks: each label " 1 Activity " is a block " 1 Activity"
-	// and one blank column before the next, so the widths (and the click
-	// spans) never change. The active tab is a pill in its panel's colour,
+	// herdr-style blocks: each label " 1 Activity " is a block, padded by a
+	// blank cell on each side in its own colour (busmon-tab-pad, the person),
+	// then one blank column before the next. The active tab is a pill in its panel's colour,
 	// dimmed like the frame when the panel has not the focus; an inactive
 	// one is grey on the tab background (plain text without true colour).
 	var l Line
 	for i, p := range tabs {
-		block := strings.TrimSuffix(label(i), " ")
+		block := label(i)
 		if p == active {
 			fade := 0
 			if !focused {
@@ -265,11 +265,14 @@ func (m *Model) lowerTitle(p PanelID, own Line) Line {
 	if m.layout.Tier == TierNarrow {
 		return own
 	}
-	t := tabBar(lowerTabs, p, m.layout.Lower.W-4, m.ui.focus == p)
+	var suffix Line
 	if len(own) > 1 {
-		t = append(t, own[1:]...)
+		suffix = own[1:]
 	}
-	return t
+	// The tabs get what the suffix leaves, so a name shortens rather than
+	// being cut by the frame (reviewer-codex).
+	t := tabBar(lowerTabs, p, m.layout.Lower.W-4-suffix.Width(), m.ui.focus == p)
+	return append(t, suffix...)
 }
 
 // forYouKinds are the For you row's mark and word by rank.
