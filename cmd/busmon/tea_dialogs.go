@@ -426,13 +426,15 @@ func (m *Model) reminderKey(k Key) tea.Cmd {
 			return m.pushAsk(it.AskID)
 		case rankHealth:
 			return m.push(page{kind: ovHealth})
+		case rankPlan:
+			return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(it.Key, "plan:")})
 		case rankGate:
 			ref := strings.TrimPrefix(it.Key, "gate:"+it.Agent+":")
 			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
 		}
 		m.openMessageCompose("", it.Agent) // a declared wait: Enter answers it like i
 	case k.Code == keyRune && k.Rune == 'i':
-		if it := d.items[d.sel]; it.Rank != rankAsk && it.Rank != rankHealth { // a health row names a check, no agent to write to
+		if it := d.items[d.sel]; it.Rank != rankAsk && it.Rank != rankHealth && it.Rank != rankPlan { // a health row names a check, no agent to write to
 			m.ui.reminder = nil
 			m.openMessageCompose("", it.Agent)
 		}

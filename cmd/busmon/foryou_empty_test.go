@@ -25,7 +25,9 @@ func TestForYouEmptyState(t *testing.T) {
 		{Task: plan.Task{ID: "notifications-order", Title: "Decide: notifications order", Owner: plan.Person}, State: plan.Upcoming},
 	}
 	text := plainOf(forYouEmpty(s, 0))
-	for _, w := range []string{"Nothing expected from you.", "In progress: coder " + GlyphNone + " pages step 4: recap", "Next for you: Decide: notifications order"} {
+	// In progress names the agent and its current task from the facts (its plan
+	// task in progress), never its status message (the person saw a merged task).
+	for _, w := range []string{"Nothing expected from you.", "In progress: coder " + GlyphNone + " pages-4", "Next for you: Decide: notifications order"} {
 		if !strings.Contains(text, w) {
 			t.Errorf("empty state lacks %q:\n%s", w, text)
 		}
@@ -96,7 +98,12 @@ func TestForYouEmptyNamesWhatIsOwed(t *testing.T) {
 		{Task: plan.Task{ID: "tag", Title: "Reinstall and tag", Owner: plan.Person}, State: plan.Upcoming},
 	}
 	text := plainOf(forYouEmpty(s, 2))
-	for _, w := range []string{"Owed by you: 2 requests (Requests)", "Waiting for you: Pick the notifications order", "Next for you: Reinstall and tag"} {
+	// The waiting plan task is a For you item of its own (rankPlan), counted in
+	// the title, not an empty-state line.
+	if items := forYou(s, nil); len(items) != 1 || items[0].Rank != rankPlan || items[0].Key != "plan:pick" || len(decisions(items)) != 1 {
+		t.Errorf("the waiting plan task as an item: %+v", items)
+	}
+	for _, w := range []string{"Owed by you: 2 requests (Requests)", "Next for you: Reinstall and tag"} {
 		if !strings.Contains(text, w) {
 			t.Errorf("lacks %q:\n%s", w, text)
 		}
@@ -197,7 +204,7 @@ func TestForYouSizedFromTheCurrentOwedCount(t *testing.T) {
 	m := reqShell(t, 100, 40, nil)
 	snap := m.snap
 	snap.planState.loaded = true
-	snap.planState.rows = []plan.Row{{Task: plan.Task{ID: "pick", Title: "Pick the order", Owner: plan.Person}, State: plan.Waiting}}
+	snap.planState.rows = []plan.Row{{Task: plan.Task{ID: "pick", Title: "Pick the order", Owner: plan.Person}, State: plan.Upcoming}} // a waiting one is a For you item now
 	plain := snap.cmdHistory
 	owed := append(append([]bus.Event(nil), plain...), bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-0", shellNow.Add(-time.Minute).UnixMilli()),
 		Type: bus.CmdDirective, From: "master", Target: "charlie", Message: "pick one"})
@@ -246,4 +253,82 @@ func TestRecapCursorKeepsItsRowOnResize(t *testing.T) {
 	if p = m.rd.top(); p.recap.Rows[p.sel].Key != "cmd:9-0" {
 		t.Errorf("the cursor moved to %q", p.recap.Rows[p.sel].Key)
 	}
+}
+
+// The facts win over a stale message: an accepted board task names what an
+// agent works on; with none, only its name.
+func TestForYouEmptyInProgressFromFacts(t *testing.T) {
+	s := snapshot{agents: map[string]*agentState{"coder": {state: "working", message: "codex-review-auth: boot reads"}},
+		board: map[string]bus.BoardEntry{"history": {Owner: "coder", State: "accepted"}, "a-merged": {Owner: "coder", State: "done"}}}
+	text := plainOf(forYouEmpty(s, 0))
+	if !strings.Contains(text, "In progress: coder "+GlyphNone+" history") || strings.Contains(text, "codex-review-auth") {
+		t.Fatalf("in progress:\n%s", text)
+	}
+	// A finished board task is never in progress: the plan's task in progress
+	// is named, else only the agent.
+	for _, st := range []string{"done", "complete", "blocked"} {
+		s.board = map[string]bus.BoardEntry{"a-merged": {Owner: "coder", State: st}}
+		s.planState = planState{loaded: true, rows: []plan.Row{{Task: plan.Task{ID: "auto-state", Owner: "coder"}, State: plan.InProgress}}}
+		if text := plainOf(forYouEmpty(s, 0)); !strings.Contains(text, "In progress: coder "+GlyphNone+" auto-state") || strings.Contains(text, "a-merged") {
+			t.Fatalf("board %s:\n%s", st, text)
+		}
+		s.planState = planState{}
+		if text := plainOf(forYouEmpty(s, 0)); !strings.Contains(text, "In progress: coder\n") {
+			t.Fatalf("board %s, no plan: %s", st, text)
+		}
+	}
+}
+
+// Every empty-state line that names something opens it: the agent's page, the
+// plan task's page; a waiting plan task item opens its page too.
+func TestForYouEmptyRowsOpen(t *testing.T) {
+	m := reqShell(t, 120, 40, nil)
+	snap := m.snap
+	snap.agents["coder"].state = "working"
+	snap.planState.loaded = true
+	snap.planState.rows = []plan.Row{{Task: plan.Task{ID: "tag", Title: "Reinstall and tag", Owner: plan.Person}, State: plan.Upcoming}}
+	m = step(t, m, pollMsg{snap: snap, at: shellNow})
+	for key, want := range map[string]overlayKind{"empty:agent:coder": ovAgent, "empty:plan:tag": ovPlanTask} {
+		n := m
+		n.focusPanel(PanelForYou)
+		n.lists.forYou.Select(key)
+		if n.lists.forYou.Selected() != key {
+			t.Fatalf("%s is not a selectable row", key)
+		}
+		n.open(PanelForYou)
+		if top := n.rd.top(); top == nil || top.kind != want {
+			t.Errorf("%s opened %+v", key, top)
+		}
+	}
+	snap.planState.rows[0].State = plan.Waiting
+	m = step(t, m, pollMsg{snap: snap, at: shellNow})
+	m.focusPanel(PanelForYou)
+	m.lists.forYou.Select("plan:tag")
+	m.open(PanelForYou)
+	if top := m.rd.top(); top == nil || top.kind != ovPlanTask || top.key != "tag" {
+		t.Errorf("the plan item opened %+v", top)
+	}
+	// From the reminder too: Enter opens the task's page, never a compose
+	// window to a recipient named after the item; i writes to nobody.
+	for _, it := range decisions(m.forYou) {
+		if it.Rank != rankPlan {
+			continue
+		}
+		n := m
+		n.rd = newReader()
+		n.ui.reminder = &reminderDialog{items: []attentionItem{it}}
+		n.reminderKey(Key{Code: keyEnter})
+		if top := n.rd.top(); top == nil || top.kind != ovPlanTask || top.key != "tag" || n.ui.compose != nil {
+			t.Errorf("reminder Enter opened %+v (compose %v)", top, n.ui.compose != nil)
+		}
+		n = m
+		n.rd = newReader()
+		n.ui.reminder = &reminderDialog{items: []attentionItem{it}}
+		n.reminderKey(Key{Code: keyRune, Rune: 'i'})
+		if n.ui.compose != nil {
+			t.Error("reminder i composed to a plan item")
+		}
+		return
+	}
+	t.Fatal("no plan item among the decisions")
 }
