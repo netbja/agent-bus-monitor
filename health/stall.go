@@ -2,6 +2,7 @@ package health
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -301,7 +302,9 @@ func EvaluateQuietAgent(in QuietAgentInput) Outcome {
 	case in.ReadErr != "":
 		return Outcome{Status: Unknown, Detail: truncateDetail(in.ReadErr)}
 	}
-	var quiet []string
+	// Collected per agent: one that cannot be judged never hides another's
+	// warning (foureyes); unknown only when nobody is quiet.
+	var quiet, unjudged []string
 	for _, a := range in.Agents {
 		if a.Dormant || a.State == "working" || a.Held || a.Pane == PaneBusy {
 			continue
@@ -312,12 +315,13 @@ func EvaluateQuietAgent(in QuietAgentInput) Outcome {
 			// trimmed past it: silent since before the oldest retained entry,
 			// with something delivered once, it cannot be judged (reviewer-codex).
 			if in.OldestRetained != "" && a.LastDelivered != "" && streamMillisBefore(a.LastWrite, in.OldestRetained) {
-				return Outcome{Status: Unknown, Detail: truncateDetail(a.Name + ": silent since before the retained cmd history")}
+				unjudged = append(unjudged, a.Name+" (silent since before the retained cmd history)")
 			}
 			continue
 		}
 		if d.RequestUnknown {
-			return Outcome{Status: Unknown, Detail: truncateDetail(a.Name + ": request record unreadable")}
+			unjudged = append(unjudged, a.Name+" (request record unreadable)")
+			continue
 		}
 		if streamIDLess(a.LastDelivered, d.ID) || contains(a.Pending, d.ID) {
 			continue // not read yet, or still pending: not quiet
@@ -335,8 +339,21 @@ func EvaluateQuietAgent(in QuietAgentInput) Outcome {
 		}
 		quiet = append(quiet, fmt.Sprintf("%s%s: %s from %s %s ago delivered, nothing written since", a.Name, state, d.Type, d.From, minutes(age)))
 	}
-	if len(quiet) > 0 {
-		return Outcome{Status: Warn, Detail: truncateDetail(strings.Join(quiet, "; "))}
+	sort.Strings(quiet) // a stable detail, so its fingerprint moves only when the facts do
+	sort.Strings(unjudged)
+	notJudged := ""
+	if len(unjudged) > 0 {
+		notJudged = "not judged: " + strings.Join(unjudged, ", ")
+	}
+	switch {
+	case len(quiet) > 0:
+		d := strings.Join(quiet, "; ")
+		if notJudged != "" {
+			d += "; " + notJudged
+		}
+		return Outcome{Status: Warn, Detail: truncateDetail(d)}
+	case notJudged != "":
+		return Outcome{Status: Unknown, Detail: truncateDetail(notJudged)}
 	}
 	return Outcome{Status: OK}
 }

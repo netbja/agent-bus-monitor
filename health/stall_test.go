@@ -184,7 +184,7 @@ func TestQuietAgent(t *testing.T) {
 			in.Cmds[0].ID, in.Agents[0].LastDelivered = y, y
 		}, OK, ""},
 		{"expired request", func(in *QuietAgentInput) { in.Cmds[0].Expired = true }, OK, ""},
-		{"request unreadable", func(in *QuietAgentInput) { in.Cmds[0].RequestUnknown = true }, Unknown, "request record unreadable"},
+		{"request unreadable", func(in *QuietAgentInput) { in.Cmds[0].RequestUnknown = true }, Unknown, "not judged: coder (request record unreadable)"},
 		{"a newer reply does not hide an older directive", func(in *QuietAgentInput) {
 			in.Cmds = append(in.Cmds, QuietCmd{ID: idAt(20*time.Minute, 0), From: "master", Target: "coder", Type: "reply"})
 			in.Agents[0].LastDelivered = idAt(20*time.Minute, 0)
@@ -198,7 +198,7 @@ func TestQuietAgent(t *testing.T) {
 			in.Cmds = nil // its directive is gone from the retained stream
 			in.OldestRetained = idAt(30*time.Minute, 0)
 			in.Agents[0].LastWrite = idAt(3*time.Hour, 0)
-		}, Unknown, "coder: silent since before the retained cmd history"},
+		}, Unknown, "not judged: coder (silent since before the retained cmd history)"},
 		{"history trimmed, the agent wrote within it", func(in *QuietAgentInput) {
 			in.Cmds = nil
 			in.OldestRetained = idAt(30*time.Minute, 0)
@@ -242,5 +242,30 @@ func TestStreamIDOrder(t *testing.T) {
 		if got := streamIDLess(c.a, c.b); got != c.less {
 			t.Errorf("streamIDLess(%q, %q) = %v", c.a, c.b, got)
 		}
+	}
+}
+
+// One agent that cannot be judged never hides another's quiet warning, in
+// either order; unknown only when nobody is quiet (foureyes).
+func TestQuietAgentUnjudgedNeverHidesAWarning(t *testing.T) {
+	quiet := quietIn().Agents[0]
+	unjudged := QuietAgent{Name: "architect", State: "idle", LastDelivered: idAt(12*time.Hour, 0), LastWrite: idAt(12*time.Hour, 0)}
+	unreadable := QuietAgent{Name: "docs", State: "idle", LastDelivered: idAt(20*time.Minute, 0), LastWrite: idAt(40*time.Minute, 0)}
+	for _, agents := range [][]QuietAgent{{quiet, unjudged, unreadable}, {unreadable, unjudged, quiet}} {
+		in := quietIn()
+		in.OldestRetained = idAt(10*time.Hour, 0)
+		in.Agents = agents
+		in.Cmds = append(in.Cmds, QuietCmd{ID: idAt(20*time.Minute, 0), From: "master", Target: "docs", Type: "directive", RequestUnknown: true})
+		out := EvaluateQuietAgent(in)
+		if out.Status != Warn || !strings.Contains(out.Detail, "coder: directive from master 25m ago") ||
+			!strings.Contains(out.Detail, "not judged: architect (silent since before the retained cmd history), docs (request record unreadable)") {
+			t.Errorf("order %s first: %s %q", agents[0].Name, out.Status, out.Detail)
+		}
+	}
+	in := quietIn()
+	in.OldestRetained = idAt(10*time.Hour, 0)
+	in.Agents = []QuietAgent{unjudged}
+	if out := EvaluateQuietAgent(in); out.Status != Unknown || !strings.Contains(out.Detail, "not judged: architect") {
+		t.Errorf("nobody quiet, one unjudged: %s %q", out.Status, out.Detail)
 	}
 }
