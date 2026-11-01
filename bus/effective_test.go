@@ -27,6 +27,9 @@ func TestEffectiveStateReadsAStuckFlipAsIdle(t *testing.T) {
 		{"stale observation", flipped, &Observation{At: now - ObservedTTL - 1, Since: now - 30*min, State: "idle"}},
 		{"busy", flipped, &Observation{At: now - 5_000, Since: now - 30*min, Busy: true, State: "working"}},
 		{"blocked", flipped, &Observation{At: now - 5_000, Since: now - 30*min, State: "blocked"}},
+		// Readiness must be proved: an uninspected client reads unknown (reviewer-codex).
+		{"unknown", flipped, &Observation{At: now - 5_000, Since: now - 30*min, State: "unknown"}},
+		{"no state", flipped, &Observation{At: now - 5_000, Since: now - 30*min}},
 		{"no observation", flipped, nil},
 		{"0 = off", flipped, ready},
 	}
