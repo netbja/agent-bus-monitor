@@ -506,6 +506,9 @@ to watch a pane.
   in `config.toml`. A field that looks like a credential is written as `[redacted]`, whole; this
   is best effort, so treat the directory as sensitive. A hole the dispatcher missed is a `gap`
   line, never silent. You may delete the directory at any time.
+  `agentbus history` reads it, then the live streams: `--agent`, `--thread`, `--kind`, `--since`/`--until`
+  (`3d`, `2026-10-30`, `14:20`), `--grep`, `--limit` (200), `--json`. On another host it sees only the
+  live streams, and says so.
 - **GitHub reachable.** Health `github` runs every 15 minutes when the project's Git remote is on
   github.com: `ssh -o BatchMode=yes -T git@github.com` with the service's own SSH identities, and
   `git -c credential.helper= ls-remote` on the repository's HTTPS URL with no prompt. A probe is

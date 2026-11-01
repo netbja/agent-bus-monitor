@@ -278,6 +278,7 @@ agentbus status claude1 working "plan 10 shipped"  # trailing words are joined
 agentbus notify "soak 24h started"
 agentbus cmd [--ref T] claude2 run the suite       # directive; prints the entry id (thread root)
 agentbus thread 1782588072942-0                    # show the :cmd thread (ref or id == arg), chronological
+agentbus history --thread 1782588072942-0 -s 30d   # the same thread from the archive (dispatch host), then the live streams
 agentbus report claude1 "bug fixed"                # curated report (note kind)
 agentbus report claude1 --auto "soak 24h done"     # auto = Stop-hook safety net
 agentbus reports                                   # list recent reports ((+N) = full text retained)

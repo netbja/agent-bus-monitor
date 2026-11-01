@@ -232,7 +232,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
-- **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`challenge`/`reply`/
+- **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`history`/`challenge`/`reply`/
   `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`plan`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`config`/`version`. Parses args manually;
   trailing words are joined. Every command's usage, flags and examples are one table
   (`cmd/agentbus/commands.go`, types in `cli/`): `agentbus help [<cmd>]` and `<cmd> --help`
@@ -833,7 +833,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   day file writes the `archive restarted` gap line (`of=*`), a stream trimmed past its position one `gap` line.
   Every field goes through `health.Redact` (whole field on any hit; `SafeText` shares `health.Sensitive`).
   `history.keep_days` (90, 0 = off) and `history.max_mb` (256), pruned daily, never today's file. Bus reads:
-  `Bus.StreamAfter`/`StreamOldest`.
+  `Bus.StreamAfter`/`StreamOldest`. `agentbus history` (`historycmd.go`, after the identity guard and before the
+  broker is dialled: it needs the project, not the broker) reads the day files (`history.ReadDays`), then the live
+  streams, `history.Merge` by (stream, id), `history.Filter` (`--agent` matches from/target/agent and a verdict's
+  author/reviewer; a gap line passes an agent or kind filter it may hide, never `--thread`/`--grep`), newest
+  `--limit` (200); says `broker unreachable: archive only` or `no archive on this host: live streams only`.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

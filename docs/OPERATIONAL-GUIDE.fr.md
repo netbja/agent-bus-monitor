@@ -539,6 +539,9 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   (256) dans `config.toml`. Un champ qui ressemble à un secret est écrit `[redacted]`, en entier ;
   c'est au mieux, traitez donc le répertoire comme sensible. Un trou que le dispatcher a manqué est
   une ligne `gap`, jamais silencieux. Vous pouvez supprimer le répertoire à tout moment.
+  `agentbus history` la lit, puis les flux vivants : `--agent`, `--thread`, `--kind`, `--since`/`--until`
+  (`3d`, `2026-10-30`, `14:20`), `--grep`, `--limit` (200), `--json`. Sur une autre machine, il ne voit
+  que les flux vivants, et le dit.
 - **GitHub joignable.** La vérification `github` tourne toutes les 15 minutes quand le dépôt
   distant du projet est sur github.com : `ssh -o BatchMode=yes -T git@github.com` avec les
   identités SSH du service, et `git -c credential.helper= ls-remote` sur l'URL HTTPS du dépôt,
