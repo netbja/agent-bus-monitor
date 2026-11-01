@@ -180,8 +180,8 @@ func (m *Model) fillLists() {
 		rows = append(rows, ListItem{Key: "more", Line: Line{{Text: fmt.Sprintf("+%d more", more), Role: RoleMuted}}, Selectable: true})
 	}
 	if len(rows) == 0 { // say what is expected, if anything, then what is in progress and the next decision
-		for _, l := range forYouEmpty(s, m.lists.reqView.count(secOwed)) {
-			rows = append(rows, ListItem{Line: l})
+		for _, r := range forYouEmptyRows(s, m.lists.reqView.count(secOwed)) {
+			rows = append(rows, ListItem{Key: r.key, Line: r.line, Selectable: r.key != ""})
 		}
 	}
 	fy.SetItems(m.withExpansion(PanelForYou, rows, rowW(l.ForYou)))
@@ -284,6 +284,7 @@ var forYouKinds = map[int]struct {
 	rankHealth: {GlyphBlocked, "health", RoleAttention},
 	rankWait:   {GlyphHuman, "wait", RoleAttention},
 	rankGate:   {GlyphGate, "gate", RoleDispatch},
+	rankPlan:   {GlyphHuman, "plan", RoleAttention},
 	rankUnread: {GlyphDotFull, "unread", RoleAccent},
 }
 

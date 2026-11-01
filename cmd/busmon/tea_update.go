@@ -217,6 +217,12 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 		m.expand(p, key)
 	case PanelForYou:
+		if name, ok := strings.CutPrefix(key, "empty:agent:"); ok { // the empty state's rows
+			return m.pushAgent(name)
+		}
+		if task, ok := strings.CutPrefix(key, "empty:plan:"); ok {
+			return m.push(page{kind: ovPlanTask, key: task})
+		}
 		i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Key == key })
 		if i < 0 {
 			return nil
@@ -229,6 +235,8 @@ func (m *Model) open(p PanelID) tea.Cmd {
 			return m.pushAgent(it.Agent)
 		case rankHealth: // the stall guard: F5 says what and why
 			return m.push(page{kind: ovHealth})
+		case rankPlan: // its page carries the Action row (compose to master, prefilled)
+			return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(key, "plan:")})
 		case rankGate: // the challenge thread: its ref is the root
 			ref := strings.TrimPrefix(key, "gate:"+it.Agent+":")
 			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
