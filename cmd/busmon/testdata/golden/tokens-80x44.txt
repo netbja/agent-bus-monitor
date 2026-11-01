@@ -41,4 +41,4 @@
 │   security                           ?        ?  no session proved with its… │
 │   sentinel                           ?        ?  no session proved with its… ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k scroll   y copy   Y copy thread   n p ←→ next/prev   esc q close        
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   esc q close   F5 health            

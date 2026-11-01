@@ -54,7 +54,7 @@ KEYS
   home g               first row
   end G                last row
   y                    copy
-  Y                    copy thread
+  Y                    copy the whole thread (a message's page) or the whole report (an agent's page)
   n p ←→               the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)
   enter ! w            answer the agent's open questions (w with none open: write to master)
   t                    in the help: the first-launch tour again

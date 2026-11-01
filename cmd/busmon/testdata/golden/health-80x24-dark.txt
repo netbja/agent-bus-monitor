@@ -21,4 +21,4 @@
 │     │ What to do:  Remove the path from version control and rotate any       │
 │     │              credential that may have been committed.                  ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k scroll   y copy   Y copy thread   n p ←→ next/prev   a all              
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   a all   esc q close   F5 health    

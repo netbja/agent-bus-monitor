@@ -18,7 +18,7 @@ func TestFooterMatchesBindings(t *testing.T) {
 						if strings.Contains(shown, b.Keys+" "+b.Hint) {
 							t.Errorf("mode %v: footer advertises %q with no page offering it", m, b.Keys+" "+b.Hint)
 						}
-						on := footerHintsOn(m, p, tier, 400, func(a Action) bool { return a == b.Act }).text()
+						on := footerHintsOn(m, p, tier, 400, func(a Action) bool { return a == b.Act }, nil).text()
 						if !strings.Contains(on, b.Keys+" "+b.Hint) {
 							t.Errorf("mode %v: footer on a page offering it lacks %q: %q", m, b.Keys+" "+b.Hint, on)
 						}

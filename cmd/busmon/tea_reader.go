@@ -34,6 +34,8 @@ type page struct {
 	dirty       bool // its own state changed since the build (cursor, thread)
 	fixed       bool // its body was given at open (services, a verdict): never rebuilt
 
+	plainWhat, threadWhat string // what y and Y copy, as the frame and the footer name it ("" = text, thread)
+
 	ev     bus.Event // ovMessage
 	at     time.Time
 	thread threadState
@@ -415,6 +417,10 @@ func (m *Model) buildPage() bool {
 		until, isHeld := held(s.holds, a.provider, now)
 		b.join(detail).join(quotaDetail(a.provider, snap, has, until, isHeld, now))
 		p.title, p.body, p.plain = title, b.Lines(), agentDetailPlain(a)
+		p.plainWhat, p.threadWhat, p.threadPlain = "status", "report", ""
+		if rep, _, ok := lastReport(p.key, m.feed.feed); ok { // the report the page shows, whole (the person)
+			p.threadPlain = CopyText(rep)
+		}
 	case ovTask:
 		if e, ok := s.board[p.key]; ok {
 			p.title, p.body, p.plain = taskDetail(e, p.key, now)
@@ -714,9 +720,9 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		m.pop()
 		return nil
 	case ActCopy:
-		return m.copy(p.plain, "text")
+		return m.copy(p.plain, or(p.plainWhat, "text"))
 	case ActCopyThread:
-		return m.copy(p.threadPlain, "thread")
+		return m.copy(p.threadPlain, or(p.threadWhat, "thread"))
 	case ActNextItem, ActPrevItem:
 		return m.readerStep(p, act == ActNextItem)
 	case ActHealth:
@@ -974,10 +980,14 @@ func (m Model) drawReader(g *grid) {
 	rows := r.H - 2
 	hints := "esc back"
 	if p.plain != "" {
-		hints = "y copy " + GlyphNone + " " + hints
+		y := "y copy"
+		if p.plainWhat != "" {
+			y += " " + p.plainWhat
+		}
+		hints = y + " " + GlyphNone + " " + hints
 	}
 	if p.threadPlain != "" {
-		hints = "Y copy thread " + GlyphNone + " " + hints
+		hints = "Y copy " + or(p.threadWhat, "thread") + " " + GlyphNone + " " + hints
 	}
 	drawFrame(g, r.X, r.Y, r.W, r.H, Frame{Title: Line{{Text: Preview(p.title), Role: RoleText}},
 		Label: Line{{Text: hints, Role: RoleMuted}}, Focused: true,
@@ -1125,6 +1135,8 @@ func (m Model) pageOffers(act Action) bool {
 		return false
 	}
 	switch act {
+	case ActCopyThread:
+		return p.threadPlain != ""
 	case ActPlanStart:
 		_, ok := planStartable(m.snap.planState, p.key)
 		return ok && p.kind == ovPlanTask
@@ -1132,4 +1144,28 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovHealth
 	}
 	return false
+}
+
+// pageHint is the footer's word for act on the top page: what its y and Y
+// copy ("" keeps the binding's own).
+func (m Model) pageHint(act Action) string {
+	p := m.rd.top()
+	if p == nil {
+		return ""
+	}
+	switch {
+	case act == ActCopyThread && p.threadWhat != "":
+		return "copy " + p.threadWhat
+	case act == ActCopy && p.plainWhat != "":
+		return "copy " + p.plainWhat
+	}
+	return ""
+}
+
+// or is s, or def when s is empty.
+func or(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
 }

@@ -17,4 +17,4 @@
 │   In hand                                                │
 │   ● Context fill        at or above 80%: coder 85%   12m ▼
 ╰──────────────────────────────────────────────────────────╯
- ↑↓ j k scroll   y copy   Y copy thread   a all             
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   a all          

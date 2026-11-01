@@ -279,7 +279,7 @@ var (
 		{Keys: "home g", Help: "first row", Act: ActFirst, match: either(keyIs(keyHome), runeIs('g'))},
 		{Keys: "end G", Help: "last row", Act: ActLast, match: either(keyIs(keyEnd), runeIs('G'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
-		{Keys: "Y", Hint: "copy thread", Act: ActCopyThread, match: runeIs('Y')},
+		{Keys: "Y", Hint: "copy thread", Help: "copy the whole thread (a message's page) or the whole report (an agent's page)", Act: ActCopyThread, OnPage: true, match: runeIs('Y')},
 		{Keys: "n p " + GlyphArrowL + GlyphArrowR, Hint: "next/prev", Help: "the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)", Act: ActNextItem, match: either(runeIs('n'), keyIs(keyRight))},
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions (w with none open: write to master)", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
@@ -373,12 +373,13 @@ func lookup(m Mode, p PanelID, t Tier, ev Key) Action {
 // with the function keys grouped last in ascending order (A7), as whole
 // "keys hint" pairs; a pair that does not fit is left out, never cut.
 func footerHints(m Mode, p PanelID, t Tier, width int) Line {
-	return footerHintsOn(m, p, t, width, nil)
+	return footerHintsOn(m, p, t, width, nil, nil)
 }
 
 // footerHintsOn is footerHints on a page: a binding marked OnPage is
-// advertised only when offers says the page offers its action (nil: none is).
-func footerHintsOn(m Mode, p PanelID, t Tier, width int, offers func(Action) bool) Line {
+// advertised only when offers says the page offers its action (nil: none is),
+// under the word hint gives for it on that page ("" or nil: its own).
+func footerHintsOn(m Mode, p PanelID, t Tier, width int, offers func(Action) bool, hint func(Action) string) Line {
 	var shown, fkeys []binding
 	for _, b := range bindings(m) {
 		if b.Hint == "" || !b.applies(p, t) || b.OnPage && (offers == nil || !offers(b.Act)) {
@@ -392,7 +393,13 @@ func footerHintsOn(m Mode, p PanelID, t Tier, width int, offers func(Action) boo
 	}
 	sort.SliceStable(fkeys, func(i, j int) bool { return fkeyNumber(fkeys[i].Keys) < fkeyNumber(fkeys[j].Keys) })
 	pair := func(b binding) Line {
-		return Line{{Text: "   "}, {Text: b.Keys, Role: RoleAccent, Bold: true}, {Text: " " + b.Hint, Role: RoleMuted}}
+		word := b.Hint
+		if hint != nil {
+			if w := hint(b.Act); w != "" {
+				word = w
+			}
+		}
+		return Line{{Text: "   "}, {Text: b.Keys, Role: RoleAccent, Bold: true}, {Text: " " + word, Role: RoleMuted}}
 	}
 	// Where the footer offers F1 help (the main screen), room is kept for it
 	// and for F5 health (the header's health pill points to it), so a narrow
