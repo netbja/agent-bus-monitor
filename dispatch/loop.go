@@ -63,6 +63,9 @@ type Config struct {
 	// Health runs deterministic checks in a separate bounded goroutine. Nil
 	// Checks leaves the scheduler disabled for callers that do not configure it.
 	Health HealthConfig
+	// History archives the streams to day files (history.go); off unless
+	// Dir and KeepDays are set.
+	History HistoryConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -227,6 +230,14 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 		}()
 	}
 
+	if cfg.History.on() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.historyLoop(inner)
+		}()
+	}
+
 	signal := make(chan struct{}, 1)
 	go func() { // XREAD BLOCK on {p}:cmd from "$": a latency signal only
 		defer wg.Done()
@@ -288,12 +299,13 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 }
 
 type loop struct {
-	b      *bus.Bus
-	rt     Runtime
-	cfg    Config
-	token  string
-	policy Policy
-	h      hooks
+	b       *bus.Bus
+	rt      Runtime
+	cfg     Config
+	token   string
+	policy  Policy
+	history historyState // the archive chore's writer (history.go)
+	h       hooks
 
 	logMu sync.Mutex
 	last  map[string]string // agent → last logged decision, so a steady state logs once

@@ -54,6 +54,8 @@ type shellConfig struct {
 	// liveFrom is busmon's start: a tail event older than it is history,
 	// never a notice (the --limit 0 replay comes through the live tail).
 	liveFrom time.Time
+	// histDir is the history archive on this host ("" = none: live streams only).
+	histDir string
 }
 
 // uiState is the person's place on the screen.
@@ -120,24 +122,25 @@ func (ls *shellLists) of(p PanelID) *listState {
 // Model is the shell. snap is a copy of shared (never shared.mu in View);
 // now comes from the last poll or tick, so View never reads the clock.
 type Model struct {
-	cfg    shellConfig
-	snap   snapshot
-	feed   *activityFeed
-	forYou []attentionItem
-	ui     uiState
-	lists  *shellLists
-	layout shellLayout
-	width  int
-	height int
-	now    time.Time
-	tick   int
-	gen    int // data generation: bumped by pollMsg and tailMsg only
-	paint  *painter
-	rd     *reader             // the reader's pages
-	cache  *viewCache          // rendered markdown
-	sig    *signalState        // bells, fade, recap, reminder (tea_signals.go)
-	bars   map[string]barSlide // the account gauges' slides (bars.go)
-	notice *noticeState        // the quiet line for automatic actions (notice.go)
+	cfg     shellConfig
+	histCap int64 // the History page's read cap; 0 = histReadCap (tests lower it)
+	snap    snapshot
+	feed    *activityFeed
+	forYou  []attentionItem
+	ui      uiState
+	lists   *shellLists
+	layout  shellLayout
+	width   int
+	height  int
+	now     time.Time
+	tick    int
+	gen     int // data generation: bumped by pollMsg and tailMsg only
+	paint   *painter
+	rd      *reader             // the reader's pages
+	cache   *viewCache          // rendered markdown
+	sig     *signalState        // bells, fade, recap, reminder (tea_signals.go)
+	bars    map[string]barSlide // the account gauges' slides (bars.go)
+	notice  *noticeState        // the quiet line for automatic actions (notice.go)
 }
 
 // newShell is the shell before its first poll and size.
@@ -210,6 +213,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.scheduleFade()
 	case threadMsg:
 		m.gotThread(msg)
+	case historyMsg:
+		m.gotHistory(msg)
 	case servicesMsg:
 		return m.gotServices(msg)
 	case svcTickMsg:

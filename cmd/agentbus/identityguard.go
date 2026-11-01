@@ -32,7 +32,7 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		}
 	}
 	switch cmd {
-	case "reports", "thread", "verdicts", "asks", "swaps", "agents", "pane", "usage", "budget", "listen",
+	case "reports", "thread", "history", "verdicts", "asks", "swaps", "agents", "pane", "usage", "budget", "listen",
 		"subscribe", "watch", // the agent is named on the command line
 		"bind", "dispatch", "missions", // the launcher's and the services' own identities
 		"answer", // a person (--as, AGENT_BUS_HUMAN), never the agent

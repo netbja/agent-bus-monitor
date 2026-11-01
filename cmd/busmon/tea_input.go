@@ -21,6 +21,7 @@ const (
 	lineNone    lineKind = iota
 	lineMessage          // a message: "@agent body", "@all body" or a broadcast
 	lineFilter           // Activity's filter
+	lineHistFilter       // the History page's filter (/ on that page)
 )
 
 // sendResultMsg is one send's outcome: the plan and its calls' errors.
@@ -99,7 +100,7 @@ func (m *Model) names(showAll bool) []string {
 
 // lineKey is a key while the line has the keyboard (ModeInput, ModeFilter).
 func (m *Model) lineKey(act Action, k Key) tea.Cmd {
-	if m.ui.line == lineFilter {
+	if m.ui.line == lineFilter || m.ui.line == lineHistFilter {
 		m.editFilter(act, k)
 		return nil
 	}
@@ -304,7 +305,7 @@ func (m *Model) answerPrefilled(agent, text string) tea.Cmd {
 // cells.
 func (m *Model) inputRow(width int) Line {
 	label := GlyphPrompt + " "
-	if m.ui.line == lineFilter {
+	if m.ui.line == lineFilter || m.ui.line == lineHistFilter {
 		label = "filter" + GlyphPrompt + " "
 	}
 	l := Line{{Text: label, Role: RoleAccent}}
