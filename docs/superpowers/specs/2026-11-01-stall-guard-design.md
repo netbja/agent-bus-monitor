@@ -165,8 +165,9 @@ An agent is **quiet** when all of these hold:
   (`CreatedAt`), or a hand-off it declared. All but one carry Redis time (stream ids, `TIME`) and
   compare with the entry's id. The board's `Updated` is the writer's own clock in Unix seconds
   (`bus/board.go`, `time.Now().Unix()`), so it compares in seconds with a 2-minute allowance
-  towards activity (`Updated >= entry_s - 120`): a skewed clock (an agent on another host, through
-  the tunnel) can only hide a warning, never raise one (foureyes);
+  towards activity (`Updated >= entry_s - 120`): it tolerates up to 2 minutes of skew in the
+  writer's clock (an agent on another host, through the tunnel). A clock slower than that can
+  still raise a false warning; a warn, in hand by master, never a fail (foureyes);
 - the agent is `idle` or `done`, not seen busy, not held, and the entry is older than N
   (`quiet_after`).
 
