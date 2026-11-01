@@ -209,7 +209,8 @@ func (m *Model) maybeOpenRecap() {
 		return
 	}
 	s.recapPending = false
-	m.push(page{kind: ovRecap, title: "Where was I?", recap: s.recap, sel: firstRecapSelection(s.recap.Rows)})
+	rec := recapForScreen(s.recap, m.layout.Tier != TierNarrow, forYouEmpty(m.snap)) // the panel is on screen beside the page in the wide and medium tiers
+	m.push(page{kind: ovRecap, title: "Where was I?", recap: rec, sel: firstRecapSelection(rec.Rows)})
 }
 
 // recapTarget is who the summary request goes to.

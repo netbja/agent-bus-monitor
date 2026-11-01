@@ -179,8 +179,10 @@ func (m *Model) fillLists() {
 	if more > 0 {
 		rows = append(rows, ListItem{Key: "more", Line: Line{{Text: fmt.Sprintf("+%d more", more), Role: RoleMuted}}, Selectable: true})
 	}
-	if len(rows) == 0 {
-		rows = []ListItem{{Line: Line{{Text: "nothing waits for you", Role: RoleMuted}}}}
+	if len(rows) == 0 { // nothing expected: say so, and what is in progress and the next decision
+		for _, l := range forYouEmpty(s) {
+			rows = append(rows, ListItem{Line: l})
+		}
 	}
 	fy.SetItems(m.withExpansion(PanelForYou, rows, rowW(l.ForYou)))
 	n := len(decisions(m.forYou))

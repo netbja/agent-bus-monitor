@@ -1,14 +1,14 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up                                                                                                                        15:04:05 
  ♙ Charlie [human]   pilot master   21 between agents   claude 5h ███▏  62% │ 7d ████▏      41%   grok 5h █████ 100% held 15:44                                                               
-╭─ For you ─ 0 for you · 0 unread ─╮╭─ Agents ──────────────────────────────────────────────────────────────────────────────────────────────────────────── 6 agents · 0 working · 0 blocked ─╮
-│  nothing waits for you           ││    agent     state     updated             queue    ctx       flags               message                                                              │
-│                                  ││▶ ○ coder     idle      ●●●●●●●●●● 0s       —        —                                                                                                  │
-│                                  ││  ○ foureyes  idle      ●●●●●●●●●● 0s       —        —                                                                                                  │
-│                                  ││  ○ master    idle      ●●●●●●●●●● 0s       —        —         pilot                                                                                    │
-│                                  ││  ○ reviewer… quota     ●●●●●●●●●● 0s       —        —                                                                                                  │
-│                                  ││  ○ sentinel  idle      ●●●●●●●●●● 0s       —        —                                                                                                  │
-│                                  ││  ○ ui-kimi   idle      ●●●●●●●●●● 0s       —        —                                                                                                  │
-╰──────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ For you ───── 0 for you · 0 unread ─╮╭─ Agents ──────────────────────────────────────────────────────────────────────────────────────────────────────── 6 agents · 0 working · 0 blocked ─╮
+│  Nothing expected from you.          ││    agent     state     updated             queue    ctx       flags               message                                                          │
+│  In progress: nobody declares working││▶ ○ coder     idle      ●●●●●●●●●● 0s       —        —                                                                                              │
+│  Next for you: no decision planned   ││  ○ foureyes  idle      ●●●●●●●●●● 0s       —        —                                                                                              │
+│                                      ││  ○ master    idle      ●●●●●●●●●● 0s       —        —         pilot                                                                                │
+│                                      ││  ○ reviewer… quota     ●●●●●●●●●● 0s       —        —                                                                                              │
+│                                      ││  ○ sentinel  idle      ●●●●●●●●●● 0s       —        —                                                                                              │
+│                                      ││  ○ ui-kimi   idle      ●●●●●●●●●● 0s       —        —                                                                                              │
+╰──────────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity  2 Board  3 Requests  4 Plan  ───────────────────────────────────────────────────────────────────────────────────────── 22 waiting · 1 tracked · 9 gated · 11 between agents ─╮
 │  You wait on                                                                                                                                                                               │
 │  ○ you → master              directive message 21 from the person                                                                                                                        5m│

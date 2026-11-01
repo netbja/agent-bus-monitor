@@ -10,6 +10,11 @@ import (
 	guardian "github.com/netbja/agent-bus-monitor/health"
 )
 
+// recapForYou is the recap's section for the person: shown only when the
+// For you panel is not on screen (the person's answer, busmon pages), so
+// nothing shows twice (recapForScreen).
+const recapForYou = "For you"
+
 type recapRow struct {
 	Key, Section, Title, Detail string
 	Kind, Agent, Ref, Task      string
@@ -64,16 +69,16 @@ func buildRecap(in recapInput) recapModel {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	section("Expected from you")
+	section(recapForYou)
 	for _, e := range in.Unread { // the unread marks first (busmon UX item 8)
-		add(recapRow{Key: "unread:" + e.ID, Section: "Expected from you",
+		add(recapRow{Key: "unread:" + e.ID, Section: recapForYou,
 			Title:  sender(e) + " " + GlyphNone + " unread " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(eventTimestamp(e.ID)))),
 			Detail: e.Message})
 	}
 	for _, a := range openAsks(in.Asks) {
 		for _, q := range a.Questions {
 			if q.Answer == nil {
-				add(recapRow{Key: "ask:" + a.ID + ":" + q.ID, Section: "Expected from you", Title: a.From + " asks " + GlyphNone + " " + q.Header,
+				add(recapRow{Key: "ask:" + a.ID + ":" + q.ID, Section: recapForYou, Title: a.From + " asks " + GlyphNone + " " + q.Header,
 					Detail: q.Question, Kind: "ask", Agent: a.From, Ref: a.ID, Selectable: true})
 			}
 		}
@@ -81,7 +86,7 @@ func buildRecap(in recapInput) recapModel {
 	for _, n := range names {
 		a := in.Agents[n]
 		if a.state == "waiting" && !answered(a) {
-			add(recapRow{Key: fmt.Sprintf("wait:%s:%d", n, a.stateAt.UnixMilli()), Section: "Expected from you",
+			add(recapRow{Key: fmt.Sprintf("wait:%s:%d", n, a.stateAt.UnixMilli()), Section: recapForYou,
 				Title: n + " waiting " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(a.stateAt))), Detail: a.message,
 				Kind: "agent", Agent: n, Selectable: true})
 		}
@@ -100,22 +105,22 @@ func buildRecap(in recapInput) recapModel {
 		if threadReplies[thread] || in.Now.Sub(eventTimestamp(e.ID)) > bus.DefaultHorizon { // same window as the Requests count
 			continue
 		}
-		add(recapRow{Key: "cmd:" + e.ID, Section: "Expected from you", Title: e.From + " " + GlyphArrowR + " " + e.Target + " " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(eventTimestamp(e.ID)))),
+		add(recapRow{Key: "cmd:" + e.ID, Section: recapForYou, Title: e.From + " " + GlyphArrowR + " " + e.Target + " " + GlyphNone + " " + humanAge(max(0, in.Now.Sub(eventTimestamp(e.ID)))),
 			Detail: e.Message, Kind: "thread", Agent: e.From, Ref: thread, Event: e, Selectable: true})
 	}
 	for _, n := range names {
 		a := in.Agents[n]
 		if a.state == "blocked" {
-			add(recapRow{Key: "blocked:" + n, Section: "Expected from you", Title: n + " blocked", Detail: a.message,
+			add(recapRow{Key: "blocked:" + n, Section: recapForYou, Title: n + " blocked", Detail: a.message,
 				Kind: "agent", Agent: n, Selectable: true})
 		}
 	}
 	planRecapExpected(in, add)
 	if err := in.Errors["Open asks"]; err != nil {
-		add(recapRow{Section: "Expected from you", Title: "Open asks unavailable", Detail: Preview(err.Error())})
+		add(recapRow{Section: recapForYou, Title: "Open asks unavailable", Detail: Preview(err.Error())})
 	}
 	if err := in.Errors["Agent snapshot"]; err != nil {
-		add(recapRow{Section: "Expected from you", Title: "Agent status unavailable", Detail: Preview(err.Error())})
+		add(recapRow{Section: recapForYou, Title: "Agent status unavailable", Detail: Preview(err.Error())})
 	}
 	planRecapSection(in, add, section)
 	section("Agents")

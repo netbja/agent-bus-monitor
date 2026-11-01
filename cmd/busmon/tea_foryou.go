@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/plan"
 	"sort"
+	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -129,4 +131,46 @@ func unreadItems(items []attentionItem) int {
 		}
 	}
 	return n
+}
+
+// forYouEmpty is For you when nothing is expected from the person (the
+// person: "I must always know what is expected"): it says so, then what is
+// in progress (the agents that declare working, with their status) and the
+// next decision to come (the plan's first open task of the person's), from
+// what busmon already reads. No store of its own.
+func forYouEmpty(s snapshot) []Line {
+	var working []string
+	names := make([]string, 0, len(s.agents))
+	for n := range s.agents {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if a := s.agents[n]; a.state == "working" {
+			w := n
+			if a.message != "" {
+				w += " " + GlyphNone + " " + a.message
+			}
+			working = append(working, w)
+		}
+	}
+	inProgress := "nobody declares working"
+	if len(working) > 0 {
+		inProgress = strings.Join(working, "; ")
+	}
+	next := "no decision planned"
+	if s.planState.loaded {
+		for _, st := range []plan.State{plan.Waiting, plan.Blocked, plan.Upcoming} {
+			for _, r := range s.planState.rows {
+				if r.Task.Owner == plan.Person && r.State == st && next == "no decision planned" {
+					next = r.Task.Title
+				}
+			}
+		}
+	}
+	return []Line{
+		{{Text: "Nothing expected from you.", Role: RoleOK}},
+		{{Text: "In progress: ", Role: RoleMuted}, {Text: Preview(inProgress), Role: RoleText}},
+		{{Text: "Next for you: ", Role: RoleMuted}, {Text: Preview(next), Role: RoleText}},
+	}
 }

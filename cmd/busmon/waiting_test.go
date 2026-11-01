@@ -175,7 +175,7 @@ func TestRecapListsDirectivesToThePerson(t *testing.T) {
 	cmds := []bus.Event{{Kind: "cmd", ID: id(-time.Hour), From: "master", Target: "charlie", Type: bus.CmdDirective, Message: "pick a window"}}
 	m := buildRecap(recapInput{Now: now, Human: "charlie", Commands: cmds, Agents: map[string]*agentState{}})
 	if !recapHas(m, "pick a window") {
-		t.Fatal("a directive to the person is missing from Expected from you")
+		t.Fatal("a directive to the person is missing from For you")
 	}
 	cmds = append(cmds, bus.Event{Kind: "cmd", ID: id(-time.Minute), From: "charlie", Target: "master", Type: bus.CmdReply, Ref: cmds[0].ID, Human: true})
 	m = buildRecap(recapInput{Now: now, Human: "charlie", Commands: cmds, Agents: map[string]*agentState{}})
@@ -186,7 +186,7 @@ func TestRecapListsDirectivesToThePerson(t *testing.T) {
 
 func recapHas(m recapModel, detail string) bool {
 	for _, r := range m.Rows {
-		if r.Section == "Expected from you" && r.Detail == detail {
+		if r.Section == "For you" && r.Detail == detail {
 			return true
 		}
 	}

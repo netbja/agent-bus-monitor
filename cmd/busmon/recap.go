@@ -214,3 +214,38 @@ func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {
 	}
 	return trimEnd(b.Lines()), cursorLine
 }
+
+// recapForScreen is the recap as its page shows it: the For you section only
+// when the For you panel is not on screen (the person's answer, busmon pages);
+// shown and empty, it says what For you says when nothing is expected.
+func recapForScreen(r recapModel, forYouShown bool, empty []Line) recapModel {
+	out := r
+	out.Rows = nil
+	items := 0
+	for _, row := range r.Rows {
+		if row.Section != recapForYou {
+			out.Rows = append(out.Rows, row)
+			continue
+		}
+		if forYouShown {
+			continue
+		}
+		if row.Key != "" || row.Title != row.Section {
+			items++
+		}
+		out.Rows = append(out.Rows, row)
+	}
+	if !forYouShown && items == 0 { // the empty state, right under the section's heading
+		var rows []recapRow
+		for _, row := range out.Rows {
+			rows = append(rows, row)
+			if row.Section == recapForYou && row.Title == row.Section {
+				for _, l := range empty {
+					rows = append(rows, recapRow{Section: recapForYou, Title: l.text()})
+				}
+			}
+		}
+		out.Rows = rows
+	}
+	return out
+}

@@ -297,7 +297,15 @@ func (m *Model) counts() shellCounts {
 	for _, it := range m.forYou {
 		w = max(w, forYouNatural(it))
 	}
-	return shellCounts{ForYou: len(m.forYou), Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.line != lineNone}
+	fy := len(m.forYou)
+	if fy == 0 { // the empty state's lines, shown whole, as wide as they need (capped by the layout)
+		empty := forYouEmpty(m.snap)
+		fy = len(empty)
+		for _, l := range empty {
+			w = max(w, l.Width())
+		}
+	}
+	return shellCounts{ForYou: fy, Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.line != lineNone}
 }
 
 // refresh recomputes the marks, the For you list, the layout and every list's
