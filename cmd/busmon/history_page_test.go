@@ -269,3 +269,46 @@ func TestHistoryGapAcrossMidnightCarriesItsDate(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// o windows again what was already read: a restart gap whose stretch ends 5
+// days ago, and live entries older than 3 days with no archive on this host
+// (reviewer-codex).
+func TestHistoryOlderWindowsGapsAndLiveAgain(t *testing.T) {
+	now := time.Now()
+	dir := t.TempDir()
+	gap := history.Entry{Stream: "gap", ID: histID(now.Add(-time.Hour)), F: map[string]string{"of": "*", "from": "unknown", "to": histID(now.AddDate(0, 0, -5))}}
+	b, _ := json.Marshal(gap)
+	os.WriteFile(filepath.Join(dir, "gaps.jsonl"), append(b, '\n'), 0o600)
+	os.WriteFile(filepath.Join(dir, now.UTC().Format("2006-01-02")+".jsonl"), append(b, '\n'), 0o600)
+	m := fixtureShell(t, 120, 40)
+	m.cfg.histDir = dir
+	m, cmd := pressCmd(t, m, 'H')
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	if strings.Contains(strings.Join(histTexts(m.rd.top().body), "\n"), "archive restarted") {
+		t.Fatal("a gap ending 5 days ago shows in the 3-day window")
+	}
+	m, cmd = pressCmd(t, m, 'o')
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if !strings.Contains(strings.Join(histTexts(m.rd.top().body), "\n"), "archive restarted") {
+		t.Fatal("o does not show the gap its wider window covers")
+	}
+
+	// No archive: the live read at open holds a 4-day-old entry; o shows it.
+	old := history.Entry{Stream: "cmd", ID: histID(now.AddDate(0, 0, -4)), F: map[string]string{"type": "directive", "command": "four days ago"}}
+	m = fixtureShell(t, 120, 40)
+	m, _ = pressCmd(t, m, 'H')
+	next, _ = m.Update(historyMsg{serial: m.rd.top().serial, v: func() histView {
+		v := histView{days: 3, loaded: true, noArchive: true, live: []history.Entry{old}}
+		v.window(now)
+		return v
+	}()})
+	m = next.(Model)
+	m, cmd = pressCmd(t, m, 'o')
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if !strings.Contains(strings.Join(histTexts(m.rd.top().body), "\n"), "four days ago") {
+		t.Fatal("o does not window the live entries again")
+	}
+}

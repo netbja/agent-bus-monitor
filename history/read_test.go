@@ -158,32 +158,40 @@ func TestGapMatchesByItsCoveredInterval(t *testing.T) {
 	}
 }
 
-// After a cut, reading before the oldest loaded entry reaches older lines
-// under its own cap (foureyes: re-reading the window gave the same newest
-// lines).
-func TestReadDaysBeforeReachesOlderLines(t *testing.T) {
+// A day file is not in id order: a pass writes one stream's page, then the
+// next. A capped read followed by older reads by position shows every line
+// once (foureyes: reading below the oldest id lost the newer-id head).
+func TestReadBackByPositionLosesNothing(t *testing.T) {
 	dir := t.TempDir()
-	day := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	day := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
 	var es []Entry
-	for i := 0; i < 40; i++ {
-		es = append(es, Entry{Stream: "cmd", ID: id(day.Add(time.Duration(i)*time.Minute), 0), F: map[string]string{"command": strings.Repeat("x", 50)}})
+	for i := 10; i < 20; i++ { // cmd's page first, newer ids
+		es = append(es, Entry{Stream: "cmd", ID: id(day.Add(time.Duration(i)*time.Second), 0), F: map[string]string{"command": strings.Repeat("c", 40)}})
 	}
-	prev := Entry{Stream: "cmd", ID: id(day.Add(-time.Hour), 0), F: map[string]string{"command": "the day before"}}
-	writeDay(t, dir, "", append([]Entry{prev}, es...)...)
-	first, cut, err := ReadDays(dir, day, day.Add(time.Hour), 1000)
-	if err != nil || !cut || len(first) == 0 || len(first) == 40 {
-		t.Fatalf("the newest under the cap: %d cut %v %v", len(first), cut, err)
+	for i := 0; i < 10; i++ { // then status's page, older ids
+		es = append(es, Entry{Stream: "status", ID: id(day.Add(time.Duration(i)*time.Second), 0), F: map[string]string{"state": strings.Repeat("s", 40)}})
 	}
-	older, cut2, err := ReadDaysBefore(dir, day.AddDate(0, 0, -3), first[0].ID, 1000)
-	if err != nil || !cut2 || len(older) == 0 {
-		t.Fatalf("older: %d cut %v %v", len(older), cut2, err)
+	prev := Entry{Stream: "cmd", ID: id(day.Add(-24*time.Hour), 0), F: map[string]string{"command": "the day before"}}
+	writeDay(t, dir, "", prev)
+	writeDay(t, dir, "", es...)
+	seen := map[string]int{}
+	got, cur, cut, err := ReadBack(dir, day.AddDate(0, 0, -3), Cursor{Day: "2026-11-01", Offset: -1}, 600)
+	for rounds := 0; ; rounds++ {
+		if err != nil || rounds > 20 {
+			t.Fatalf("round %d: %v", rounds, err)
+		}
+		for _, e := range got {
+			seen[key(e)]++
+		}
+		if !cut && cur.Offset == 0 && cur.Day == "2026-10-31" {
+			break
+		}
+		got, cur, cut, err = ReadBack(dir, day.AddDate(0, 0, -3), cur, 600)
 	}
-	if !idLess(older[len(older)-1].ID, first[0].ID) {
-		t.Fatalf("not older than the first load: %s vs %s", older[len(older)-1].ID, first[0].ID)
-	}
-	all, cut3, _ := ReadDaysBefore(dir, day.AddDate(0, 0, -3), first[0].ID, 0)
-	if cut3 || all[0].F["command"] != "the day before" || all[len(all)-1].ID != es[39-len(first)].ID {
-		t.Fatalf("uncapped: from the day before up to the boundary: %d cut %v", len(all), cut3)
+	for _, e := range append(es, prev) {
+		if seen[key(e)] != 1 {
+			t.Errorf("%s seen %d times", key(e), seen[key(e)])
+		}
 	}
 }
 
