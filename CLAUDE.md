@@ -813,7 +813,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `disk` (disk-check,
   `health/disk.go` pure, `cmd/agentbus/diskcheck.go` the reader behind injected `diskDeps`, so no test touches a real disk;
   5 min): the filesystems agent-bus depends on (docker's root from `docker info` when docker is on PATH and the daemon runs
-  on this host (`dockerNotLocal`: `DOCKER_HOST`, else the current context's endpoint, a local `unix://` socket): not
+  on this host (`dockerNotLocal`: the endpoint in Docker's own order, `DOCKER_CONTEXT`'s context, then `DOCKER_HOST`, then the
+  configured current context, a local `unix://` socket): not
   measured when docker is absent, the daemon remote or its endpoint unreadable (the note names the scheme, never the host),
   or its root in a VM, on macOS or Docker Desktop, never a host path of that name; `HOME`; `go env GOCACHE` when go is on PATH, a failed or empty answer not measured, `off` no path; the
   services' working directory, the repository, and its

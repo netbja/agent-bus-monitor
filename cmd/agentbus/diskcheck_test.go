@@ -149,23 +149,33 @@ func TestDiskPathsRemoteDocker(t *testing.T) {
 		return health.DiskPath{}
 	}
 	for name, c := range map[string]struct {
-		env      string
-		endpoint string
-		measured bool
-		note     string
+		env, ctxEnv string // DOCKER_HOST, DOCKER_CONTEXT
+		endpoint    string // the configured current context's
+		named       string // the DOCKER_CONTEXT context's
+		measured    bool
+		note        string
 	}{
-		"local socket":          {"", "unix:///var/run/docker.sock", true, ""},
-		"DOCKER_HOST tcp":       {"tcp://build.example:2376", "unix:///var/run/docker.sock", false, "remote (tcp)"},
-		"DOCKER_HOST unix":      {"unix:///run/user/1000/docker.sock", "ssh://u@far", true, ""},
-		"an ssh context":        {"", "ssh://u@far", false, "remote (ssh)"},
-		"endpoint not readable": {"", "", false, "endpoint unknown"},
+		"local socket":          {"", "", "unix:///var/run/docker.sock", "", true, ""},
+		"DOCKER_HOST tcp":       {"tcp://build.example:2376", "", "unix:///var/run/docker.sock", "", false, "remote (tcp)"},
+		"DOCKER_HOST unix":      {"unix:///run/user/1000/docker.sock", "", "ssh://u@far", "", true, ""},
+		"an ssh context":        {"", "", "ssh://u@far", "", false, "remote (ssh)"},
+		"endpoint not readable": {"", "", "", "", false, "endpoint unknown"},
+		// Docker's own order: DOCKER_CONTEXT over DOCKER_HOST (reviewer-codex).
+		"DOCKER_CONTEXT remote over a local DOCKER_HOST": {"unix:///var/run/docker.sock", "far", "unix:///var/run/docker.sock", "ssh://u@far", false, "remote (ssh)"},
+		"DOCKER_CONTEXT local over a remote DOCKER_HOST": {"tcp://build.example:2376", "here", "ssh://u@far", "unix:///var/run/docker.sock", true, ""},
+		"DOCKER_CONTEXT not readable":                    {"", "gone", "unix:///var/run/docker.sock", "", false, "endpoint unknown"},
 	} {
 		out := map[string]string{info: "/var/lib/docker|Fedora Linux 44\n"}
 		if c.endpoint != "" {
 			out[inspect] = c.endpoint + "\n"
 		}
+		if c.named != "" {
+			out["docker context inspect --format {{.Endpoints.docker.Host}} "+c.ctxEnv] = c.named + "\n"
+		}
 		d := fakeDisks(disks, map[string]bool{"docker": true}, out)
-		d.Getenv = func(k string) string { return map[string]string{"HOME": "/home/u", "DOCKER_HOST": c.env}[k] }
+		d.Getenv = func(k string) string {
+			return map[string]string{"HOME": "/home/u", "DOCKER_HOST": c.env, "DOCKER_CONTEXT": c.ctxEnv}[k]
+		}
 		p := broker(d)
 		if p.Known != c.measured || !strings.Contains(p.Note, c.note) || strings.Contains(p.Note, "far") || strings.Contains(p.Note, "build.example") {
 			t.Errorf("%s: known %v note %q", name, p.Known, p.Note)
