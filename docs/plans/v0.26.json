@@ -23,6 +23,6 @@
     {"id": "auto-reload", "title": "Auto-reload setting for sentinel", "owner": "coder", "review": "auto-reload"},
     {"id": "notifications-order", "title": "Decide: notifications (Discord, ntfy), and where they come in the order", "owner": "person"},
     {"id": "notifications", "title": "Notifications to Discord or ntfy", "owner": "coder", "review": "notifications", "after": ["notifications-order"]},
-    {"id": "reinstall-tag", "title": "Reinstall and tag v0.26 when Bernard says", "owner": "person", "after": ["pages-4", "pages-5", "settings-page"]}
+    {"id": "reinstall-tag", "title": "Reinstall and tag v0.26 when Bernard says", "owner": "person", "after": ["pages-4", "pages-5", "history-spec", "settings-page", "config-followups", "agentbus-start", "forge-delivery", "backup", "local-llm-peer", "auto-reload", "notifications"]}
   ]
 }
