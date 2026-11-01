@@ -162,18 +162,20 @@ type Note struct {
 }
 
 // sensitiveText: a credential-looking name followed by a value (as a word, or
-// as the end of an env-style name such as REDIS_PASSWORD or AWS_SECRET_ACCESS_KEY),
+// glued to a prefix as in REDIS_PASSWORD or PGPASSWORD, or an env-style name
+// ending in _KEY, _PASS or _PWD),
 // any URL scheme with userinfo, a private key block, the known token prefixes.
-var sensitiveText = regexp.MustCompile(`(?i)(\b(?:[a-z0-9]+_)*(?:password|passwd|token|secret|api[_-]?key|authorization)\b["']?\s*[:=]\s*\S+|\b[a-z0-9]+(?:_[a-z0-9]+)*_key\b["']?\s*[:=]\s*\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b[a-z][a-z0-9+.-]*://[^/\s:@]*:[^/\s@]+@|\b(?:sk-ant-|gh[pousr]_|xox[baprs]-)[A-Za-z0-9_-]{12,})`)
+var sensitiveText = regexp.MustCompile(`(?i)(\b[a-z0-9_]*(?:password|passwd|token|secret|api[_-]?key|authorization)\b["']?\s*[:=]\s*\S+|\b[a-z0-9]+(?:_[a-z0-9]+)*_(?:key|pass|pwd)\b["']?\s*[:=]\s*\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b[a-z][a-z0-9+.-]*://[^/\s:@]*:[^/\s@]+@|\b(?:sk-ant-|gh[pousr]_|github_pat_|xox[baprs]-)[A-Za-z0-9_-]{12,})`)
 
 // authScheme finds Bearer or Basic with a candidate token after it; the token
 // counts only if it reads as one (bearerToken), so prose passes.
 var authScheme = regexp.MustCompile(`(?i)\b(?:bearer|basic)\s+([A-Za-z0-9._~+/=-]{8,})`)
 
-// bearerToken: a digit or a symbol in it, or 16 letters or more. "Basic
-// authentication" is prose; "dXNlcjpwYXNzd29yZA==" is a credential.
+// bearerToken: 16 characters or more, or a digit or one of ._~+= in it.
+// "Basic authentication" and "basic end-to-end" (letters joined by - or /)
+// are prose; "dXNlcjpwYXNzd29yZA==" is a credential.
 func bearerToken(tok string) bool {
-	return len(tok) >= 16 || strings.ContainsAny(tok, "0123456789._~+/=-")
+	return len(tok) >= 16 || strings.ContainsAny(tok, "0123456789._~+=")
 }
 
 // Sensitive reports whether s carries a common credential shape. Best effort:
