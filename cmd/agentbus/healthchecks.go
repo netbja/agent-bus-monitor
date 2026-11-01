@@ -66,6 +66,7 @@ func healthOutcomeTask(id string, run func(context.Context) (health.Outcome, err
 
 func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, paths service.Paths) []dispatch.HealthCheck {
 	var usageMu sync.Mutex
+	github := newGitHubCheck()
 	baselines := map[string]usageBaseline{}
 	runawayThresholds, runawayThresholdsOK := runawayThresholdsFromEnv(os.Getenv)
 	var probeMu sync.Mutex
@@ -499,6 +500,9 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			}
 			outcome := health.EvaluateRedis(local, bus.LegacyPasswordInUse(os.Getenv))
 			return outcome.Status, outcome.Detail, nil
+		}),
+		healthOutcomeTask("github", func(ctx context.Context) (health.Outcome, error) {
+			return github.outcome(ctx), nil
 		}),
 		healthTask("redis-version", func(ctx context.Context) (health.Status, string, error) {
 			info, runErr := b.RedisInfo(ctx)

@@ -521,6 +521,15 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   seulement nommée, car changer de majeure est votre décision. Sans vérification réussie depuis
   48 heures, elle est `unknown`. Vous mettez le broker à jour vous-même ; sentinel ne le redémarre
   ni ne le met à jour jamais.
+- **GitHub joignable.** La vérification `github` tourne toutes les 15 minutes quand le dépôt
+  distant du projet est sur github.com : `ssh -o BatchMode=yes -T git@github.com` avec les
+  identités SSH du service, et `git -c credential.helper= ls-remote` sur l'URL HTTPS du dépôt,
+  sans invite. Une sonde est joignable quand GitHub répond, même par « permission denied » ou
+  « authentication required » (l'authentification reste alors inconnue) ; seule une erreur réseau
+  est un échec. Les deux joignables : `ok` ; une seule : un avertissement pour vous (`Check your
+  git remote and credentials; try: git ls-remote <your remote URL>`) ; aucune : `unknown` pendant
+  une heure, puis un avertissement. Elle n'échoue jamais, ne réveille jamais sentinel et ne dit
+  rien de la possibilité de pousser. Un redémarrage du dispatcher fait repartir l'heure.
 - **Tokens.** `agentbus tokens` montre les tokens dépensés par projet, côte à côte, sur 7 jours ;
   `--project myapp --by agent` (aujourd'hui) ou `--by day` resserre la vue, `--json` pour les
   scripts. Ils sont comptés toutes les 5 minutes dans les transcriptions Claude Code des sessions
