@@ -229,14 +229,16 @@ When the dispatcher tells you `context N%: ... publish your hand-off ...`, finis
 flight, commit your WIP, then:
 ```bash
 id=$(agentbus report <you> --to master "<hand-off: branches and heads, reviews open, next step>")
-agentbus handoff <you> --report "$id"     # declares it: only your own report, from your own client
-agentbus status <you> idle "hand-off declared"
+agentbus handoff <you> --report "$id"     # declares it, and declares you idle: nothing after it
 ```
 `report` prints the entry id; `handoff` refuses another agent's report and any caller that is not
-your verified client in its current session. The record is what lets a fresh session (after
-`/clear`) resume from that report. Any report or any status other than `idle` you write after
-it deletes it (busmon's `handoff` flag goes), and so does a change of session or process. So
-declare it last, declare `idle`, and do not start new work after it. `agentbus handoff` lists every record, pending or void.
+your verified client in its current session. The declaration is your idle: it writes your `idle`
+status in the same step, so no separate `status` is needed (one written before it no longer counts
+against the `/clear`). The record is what lets a fresh session (after `/clear`) resume from that
+report. Any report or any status other than `idle` you write after it deletes it (busmon's
+`handoff` flag goes), and so does a change of session or process. So declare it last and do not
+start new work after it. `agentbus handoff` lists every record, pending or void. If the stall
+guard wakes you because your hand-off is not cleared, run exactly the command it gives you.
 
 ## The board — who owns what, check it before you start
 `{project}:board` is the shared ownership registry (task → owner → state → branch). Read it

@@ -358,3 +358,89 @@ func TestClearDecisionsNilIsSafe(t *testing.T) {
 		t.Fatal("a nil ClearDecisions records something")
 	}
 }
+
+// The whole chain end to end (chain-reliability): an agent that declared idle
+// just before its hand-off, and nothing after it (the person unblocked this by
+// hand three times), is cleared, proved, told to resume, and drains the
+// resume directive; nothing is left owed and nothing is typed twice.
+func TestHandoffClearResumeDrainEndToEnd(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "clear-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	who := bus.AgentIdent{Pane: coderPane, PID: testPID, PIDStart: testStart, Session: "session-0001", Client: "claude-code", Provider: "anthropic"}
+	if err := b.ProveSession(ctx, "coder", testPID, testStart, "session-0001", 100); err == nil {
+		t.Fatal("proved a session with no snapshot")
+	}
+	if _, err := b.Status(ctx, "coder", "idle", "all committed", who); err != nil { // idle BEFORE the hand-off
+		t.Fatal(err)
+	}
+	if err := b.ProveSession(ctx, "coder", testPID, testStart, "session-0001", 100); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := b.Report(ctx, "coder", bus.ReportNote, "hand-off: all committed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.DeclareHandoff(ctx, "coder", rep, who); err != nil { // and no status after it
+		t.Fatal(err)
+	}
+	rt := newFakeRT(func(string, int) Inspection { return readyIn() })
+	rt.reserved = func(string) bool {
+		m, _ := b.QuotaMarks(context.Background())
+		_, ok := bus.ParseClearMark(m[bus.ClearMark("coder")])
+		return ok
+	}
+	l := &loop{b: b, rt: rt, token: "clear-holder", last: map[string]string{},
+		cfg: Config{EscalateTo: "master", Log: io.Discard, Clear: ClearConfig{On: true, Proof: 30 * time.Second}}}
+	pass := func() {
+		t.Helper()
+		snaps, err := b.Agents(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := l.clearPass(ctx, snaps); err != nil {
+			t.Fatalf("clearPass: %v", err)
+		}
+	}
+	clears := func() int {
+		n := 0
+		for _, p := range rt.Prompts() {
+			if p.Text == ClearText {
+				n++
+			}
+		}
+		return n
+	}
+	pass()
+	if clears() != 1 {
+		t.Fatalf("not cleared: %d clears", clears())
+	}
+	// The new session starts (SessionStart's prove-session), then the resume.
+	if err := b.ProveSession(ctx, "coder", testPID, testStart, "session-0002", time.Now().UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	pass()
+	var got []string
+	if _, err := b.DrainCmd(ctx, "coder", "test", bus.DefaultHorizon, func(e bus.Event) error {
+		got = append(got, e.From+": "+e.Message)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !strings.HasPrefix(got[0], dispatchFrom+": context cleared: re-run your boot steps") || !strings.Contains(got[0], "agentbus reports "+rep) {
+		t.Fatalf("drained %q", got)
+	}
+	if o, err := b.Obligation(ctx, "coder", bus.DefaultHorizon); err != nil || o.Wakes() {
+		t.Fatalf("still owed after the drain: %+v %v", o, err)
+	}
+	pass()
+	pass()
+	if clears() != 1 || len(entries(t, r, b, "cmd")) != 1 {
+		t.Fatalf("after: %d clears, %d cmd entries", clears(), len(entries(t, r, b, "cmd")))
+	}
+	if m, _ := b.Handoffs(ctx); len(m) != 0 {
+		t.Fatalf("the record stayed: %v", m)
+	}
+}
