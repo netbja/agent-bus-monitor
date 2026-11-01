@@ -77,7 +77,10 @@ An idle-declared agent with **no fresh observation** (none recorded, aged out, a
 past its grace, an unverified identity the observe pass skips, or the observe pass off) cannot be
 judged: the check reads `unknown`, `cannot see coder's pane (no fresh observation)`, never `fail`
 (reviewer-codex). A team whose panes are not observed is therefore never declared stalled; that is
-the honest cost of measuring rather than guessing.
+the honest cost of measuring rather than guessing. Verified identities, and so observations, are
+Linux-only (`/proc`): **on macOS `team-stall` always reads `unknown`**, and the guard is blind there.
+The F5 detail says so (`cannot see panes on this host: no verified identities`) rather than a
+per-agent line (foureyes).
 
 **Nothing open**, else `ok` ("work is open: <what>"):
 - no board entry `requested` or `accepted` (an accepted task whose owner sleeps is
@@ -370,3 +373,5 @@ task, see sentinel's one directive to master; stop master, see the second-tier n
 5. **Sentinel's directive.** Name only the next ready task (proposed), or every ready task?
 6. **For you rows.** Only `team-stall` waiting for you and a clear blocked by the focused pane
    (proposed), or every health check that is for you?
+7. **macOS.** The guard is blind there (no verified identities, so no observations). Accept it, or
+   allow `team-stall` on declared states alone on hosts without `/proc`, with a longer threshold?
