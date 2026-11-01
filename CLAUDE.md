@@ -210,7 +210,9 @@ it silently never fired.
   project-required exit, read-only) prints every project side by side unless `--project` names one on
   the command line (the ambient `AGENT_BUS_PROJECT` never narrows it), `--by agent|day`, `--days`,
   `--json`; `--unattributed` is the person's host scan (1 GiB budget) of what no project's record names.
-  busmon's `U` page (`tokens_view.go`, `ovTokens`): the account windows with a 24-hour sparkline from
+  busmon's `U` page (`tokens_view.go`, `ovTokens`; since busmon pages step 3 the list pattern: zones Accounts, Projects,
+  Agents, bars against the zone's largest row, its top consumer bold, unknown agents folded by short reason and listed by
+  `a`, the title `tokensTitle`'s summary): the account windows with a 24-hour sparkline from
   `{p}:quota:hist` (one cell per hour, its last sample), every project side by side (`ProjectNames`,
   `TokensOf`, read every `requestPoll` tick through the optional `tokensReader`; the open project first,
   7-day bars scaled across projects, `~` while partial, no key = one `no data` line), the open project by

@@ -475,7 +475,8 @@ func (m *Model) buildPage() bool {
 			p.title += " " + GlyphNone + " " + strings.TrimPrefix(planSeg(*s.plan, now).text(), "plan ")
 		}
 	case ovTokens:
-		p.title, p.body = "Tokens", tokensPage(s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView())
+		p.title = tokensTitle(s.budgets, s.holds, now)
+		p.body = tokensPage(s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
 	case ovRecap:
@@ -698,6 +699,11 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		case act == ActServiceLog || k.Code == keyEnter:
 			return m.serviceLogCmd(svcCardKinds[p.sel])
 		}
+	}
+	if p.kind == ovTokens && act == ActShowAll { // a lists the agents folded by their reason
+		p.health.all, p.dirty = !p.health.all, true
+		m.refresh()
+		return nil
 	}
 	if p.kind == ovHealth {
 		switch {
@@ -1152,7 +1158,7 @@ func (m Model) pageOffers(act Action) bool {
 		_, ok := planStartable(m.snap.planState, p.key)
 		return ok && p.kind == ovPlanTask
 	case ActShowAll:
-		return p.kind == ovHealth
+		return p.kind == ovHealth || p.kind == ovTokens
 	}
 	return false
 }
