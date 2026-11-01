@@ -25,17 +25,21 @@ from Redis, the way health already measures everything else, and routes each to 
 ## Principles
 
 1. **Measure, never infer from silence alone.** Idle means *declared* `idle`/`done` for longer
-   than the threshold **and** not seen busy by the observe pass. A missing reading is `unknown`,
-   never `ok`, and never a stall.
+   than the threshold **and** seen not busy by a fresh observation of its pane. A missing or stale
+   reading is `unknown`, never `ok`, and never a stall.
 2. **Use what exists.** Three new health checks in the dispatcher's health loop (`realHealthChecks`):
    no new daemon, no new stream, no new key except the once-marks below. The fail wake to sentinel
    is the existing `FencedHealthPut` episode: one wake per fail episode.
 3. **Nothing typed but the wake line.** Sentinel restarts work only by sending master one
    directive through `agentbus cmd`. The dispatcher wakes master with its usual wake line. Nobody
    starts work that needs the person's approval.
-4. **Every write fenced.** The health records go through `FencedHealthPut`, the notices for the
-   person through `FencedNotifyOnceForPerson` (`bus/once.go`) under a mark in `{p}:quota`. Only the
-   dispatcher writes a `for=person` notice: agents have no such flag, and this spec adds none.
+4. **Every dispatcher write fenced.** The health records go through `FencedHealthPut`, the notices
+   for the person through `FencedNotifyOnceForPerson` (`bus/once.go`) under a mark in `{p}:quota`,
+   both with the lease token, which only the health loop holds: a check's `Run` gets a context and
+   no token, so a check never writes; it returns its outcome, and the loop acts on it (see "Who is
+   told"). Only the dispatcher writes a `for=person` notice: agents have no such flag, and this spec
+   adds none. Sentinel's one directive to master is an agent's ordinary `agentbus cmd`, not fenced
+   (no agent write is); it is kept to one per episode by sentinel's own note (below).
 5. **Off is one setting.** Each threshold is a `config.toml` key; `0` turns its check off. It then
    reads `unknown` with the detail `off (stall_after = 0)`: not measured, never `ok`.
 
@@ -64,9 +68,16 @@ derived with `plan.Derive` over the same inputs busmon uses.
 
 **Idle team**: every agent in `{p}:agents` that is not dormant (`dormantAfter`, as busmon hides
 them; the constant moves from `cmd/busmon/agents.go` to `bus.DormantAfter` so both read one value)
-has declared `idle` or `done` for at least N (`stall_after`), and no fresh observation shows
-its pane busy. An agent in `working`, `blocked` or `waiting` makes the team not idle: `blocked` and
-`waiting` already have their own circuits (blocked notices, For you).
+has declared `idle` or `done` for at least N (`stall_after`), and a **fresh** observation of its
+pane (`{p}:observed`, `Observation.Fresh`, under 120 s) shows it not busy. An agent in `working`,
+`blocked` or `waiting` makes the team not idle: `blocked` and `waiting` already have their own
+circuits (blocked notices, For you).
+
+An idle-declared agent with **no fresh observation** (none recorded, aged out, a failed inspection
+past its grace, an unverified identity the observe pass skips, or the observe pass off) cannot be
+judged: the check reads `unknown`, `cannot see coder's pane (no fresh observation)`, never `fail`
+(reviewer-codex). A team whose panes are not observed is therefore never declared stalled; that is
+the honest cost of measuring rather than guessing.
 
 **Nothing open**, else `ok` ("work is open: <what>"):
 - no board entry `requested` or `accepted` (an accepted task whose owner sleeps is
@@ -77,7 +88,12 @@ its pane busy. An agent in `working`, `blocked` or `waiting` makes the team not 
 - no valid hand-off (`{p}:handoff`, `Handoff.VoidFor` false): an agent waiting for its `/clear` is
   `clear-stall`'s case. Without this, 2026-11-01 itself would have made sentinel ask master to
   dispatch the next task to the agent sitting at 90 % context (foureyes);
-- no quiet agent (`quiet-agent`'s case, below);
+- no quiet agent: `team-stall` evaluates the same predicate as `quiet-agent`, from the same inputs
+  (the retained `{p}:cmd` history, each group's `LastDelivered`, the activity sources listed under
+  `quiet-agent`), through one pure function, `health.QuietAgents`, that both checks call. A
+  delivered directive is no longer an obligation, so without this shared evaluation `team-stall`
+  could fail while `quiet-agent` warns for the same fault (reviewer-codex). The `{p}:cmd` history
+  read (XREVRANGE, bounded to the stream's ~1000 entries) is added to `team-stall`'s inputs;
 - no mission attempt in progress for any agent (the conductor's, read as `swap`'s `openWork` reads
   it, `missionsOf`).
 
@@ -164,8 +180,16 @@ fault.
 
 ## Who is told, by whom
 
+**How the loop acts.** A check returns an outcome; it never writes. The health loop gains one
+hook beside `UsageRefresh`: `HealthConfig.StallNotify func(ctx context.Context, token string, rec
+health.Record) error`, called by the loop right after a successful `FencedHealthPut` of
+`team-stall`, with the lease token. The hook decides from the stored record (its status, reason
+and `since`) and the current snapshots whether a notice for the person is due, and writes it with
+`FencedNotifyOnceForPerson`. A lost lease returns `bus.ErrNotHolder`, which the loop already turns
+into `ErrLeaseLost`.
+
 **When master cannot act, the dispatcher tells the person at once.** On the pass that enters the
-`team-stall` fail, the health pass applies the dispatcher's own rule for "the escalation target
+`team-stall` fail, the `StallNotify` hook applies the dispatcher's own rule for "the escalation target
 cannot act" (`recipientCannotAct`, `dispatch/loop.go`: its provider is held, or its own tab was last
 seen blocked), made a pure function of the target's snapshot, its hold and its observation so the
 health pass and the reconciliation share it without sharing state. If master cannot act, the pass
@@ -186,7 +210,9 @@ gains one section:
 
 1. Read `agentbus health detail team-stall` and `agentbus plan`. Re-check that it still holds (the
    fail may have ended since the wake); if not, record a note and stop. If the detail says the
-   person was told, record a note and stop.
+   person was told, record a note and stop. If a `team-stall` note of its own is newer than the
+   record's `since`, this episode was already handled (a second wake, a daily review): stop. That
+   note is what keeps sentinel's directive to one per episode.
 2. Send master **one** directive, then stop:
 
    ```
@@ -203,8 +229,8 @@ line, as for any directive.
 
 ### Second tier: master did not move
 
-The `team-stall` check also tracks its own fail episode (`Record.Since`). When the fail has lasted
-`2 × stall_after` with nothing changed, the health pass sends **one** notice for the person:
+The `StallNotify` hook also reads the fail episode (`Record.Since`, Redis time). When the fail has
+lasted `2 × stall_after` with nothing changed, it sends **one** notice for the person:
 
 ```
 FencedNotifyOnceForPerson(mark "stall:<since>", episode "<since>",
@@ -292,7 +318,10 @@ Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
   observation ignored, each open-work kind (request, accepted task, ask, gate, pause, swap,
   obligation, quiet agent, valid hand-off, mission attempt), a void hand-off (not open), an
   agent-ready task with `WaitingOn` (not ready), a ready task whose owner is held (not ready; the
-  quota-hold detail when it is the only one), the boundary at exactly N.
+  quota-hold detail when it is the only one), an idle agent with no observation, an aged one, and
+  an unverified one (each `unknown`, never `fail`), a delivered directive with no activity after it
+  (open work through `QuietAgents`, so `team-stall` is ok while `quiet-agent` warns), the boundary
+  at exactly N.
 - `EvaluateClearStall`: no hand-off, young, old with auto-clear off, old with each `DecideClear`
   reason, old with no recorded decision, a void hand-off (ok).
 - `EvaluateQuietAgent`: delivered and silent (warn), pending (ok: the dispatcher's case), `wake=no`
@@ -303,6 +332,8 @@ Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
 
 Dispatcher (`dispatch/`, the fake runtime, Redis opt-in through `AGENTBUS_TEST_REDIS_URL`):
 
+- the `StallNotify` hook is called only after a successful put of `team-stall`, with the token; a
+  check's `Run` has no way to write (it receives no token);
 - a `team-stall` fail wakes sentinel once; a second pass in the same episode wakes nobody; an
   `unknown` pass between two fails keeps the episode.
 - the second tier sends one `for=person` notice at `2 × stall_after`, none before, none twice, and
