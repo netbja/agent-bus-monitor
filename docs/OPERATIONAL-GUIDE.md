@@ -490,6 +490,14 @@ to watch a pane.
   its own major, read once a day from GitHub's release list. Behind in its major is a warning; a
   newer major is only named, since changing major is your decision. No check for 48 hours reads
   `unknown`. You update the broker yourself; sentinel never restarts or upgrades it.
+- **GitHub reachable.** Health `github` runs every 15 minutes when the project's Git remote is on
+  github.com: `ssh -o BatchMode=yes -T git@github.com` with the service's own SSH identities, and
+  `git -c credential.helper= ls-remote` on the repository's HTTPS URL with no prompt. A probe is
+  reached when GitHub answers, even with "permission denied" or "authentication required" (the
+  authentication is then unknown); only a network error is a failure. Both reached is `ok`, one
+  only a warning for you (`Check your git remote and credentials; try: git ls-remote <your remote
+  URL>`), both down `unknown` for an hour, then a warning. It never fails and never wakes sentinel,
+  and it makes no claim about pushing. A dispatcher restart starts the hour over.
 - **Tokens.** `agentbus tokens` shows the tokens spent per project, side by side, over 7 days;
   `--project myapp --by agent` (today) or `--by day` narrows it, `--json` for scripts. They are
   counted from the Claude Code transcripts of the sessions the bus has proved, every 5 minutes.

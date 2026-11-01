@@ -116,6 +116,7 @@ var foreignFlags = []string{
 	"--git-dir", "--interactive", "--label", "--login", "--name", "--no-focus", "--plugin",
 	"--settings", "--target-pane", "--version", "--workspace", "--model",
 	"--source", "--agent", "--seq", // herdr pane report-agent-session
+	"--get-regexp", // git config, the github check's remote read
 }
 
 // Every flag an agentbus command reads (a "--x" literal in a non-test file of
