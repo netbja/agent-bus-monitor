@@ -9,7 +9,7 @@
     {"id": "agent-copy", "title": "Agent page: y copies the status, Y the whole report (#218)", "owner": "coder", "review": "busmon-agent-copy"},
     {"id": "reply-quote", "title": "Agent page: i quotes the start of what the agent needs (#221)", "owner": "coder", "review": "busmon-reply-quote", "after": ["agent-copy"]},
     {"id": "reminder-fix", "title": "The 'Waiting for you' popup drops what is no longer waiting (#214)", "owner": "coder", "review": "busmon-reminder-answered"},
-    {"id": "settings-spec", "title": "Settings page mock-ups; the person's answers: busmon writes config.toml, Display/Attention/Identity first, display keys hot, key C (#216)", "owner": "coder", "review": "busmon-config-page", "merge": false},
+    {"id": "settings-spec", "title": "Settings page mock-ups, answered: busmon writes config.toml, 3 groups first, display keys hot, key C (#216)", "owner": "coder", "review": "busmon-config-page", "merge": false},
     {"id": "backspace-lag", "title": "Backspace lag: Activity rows laid out only when they change (#220)", "owner": "coder", "review": "busmon-activity-rows"},
     {"id": "pages-4", "title": "Recap and For you; For you says when nothing is expected, what is in progress and the next decision", "owner": "coder", "review": "busmon-recap-foryou", "after": ["pages-1"]},
     {"id": "pages-5", "title": "GitHub-reachable health check (SSH and HTTPS; warn after 1 h with both down, never fail)", "owner": "coder", "review": "busmon-github-check", "after": ["pages-1"]},
