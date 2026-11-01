@@ -41,6 +41,6 @@ func nameRune(r rune) bool {
 // declare records an agent's declared state and message, and the hint that
 // goes with them. Callers hold st.mu.
 func declare(a *agentState, state, message, person string) {
-	a.state, a.message = state, message
+	a.state, a.message, a.auto = state, message, false // a declaration; the poll sets auto from the snapshot
 	a.forYou = forYouHint(state, message, person)
 }

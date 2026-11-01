@@ -709,7 +709,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   since `max(flip ts, the ready since)`, ready meaning herdr's `idle` or `done` with the pane not busy (`unknown` proves
   nothing); nothing is rewritten. A flip keeps the last declaration's time in `DeclTS` (`AgentSnapshot.DeclaredTS`):
   quiet-agent counts that as the agent's last write, never a flip, and `team-stall` reads each agent through
-  `EffectiveState` with `dispatch.turn_stale_after` (2 min, `0` = off).
+  `EffectiveState` with `dispatch.turn_stale_after` (2 min, `0` = off). busmon carries `auto` on each agent (`agentState.auto`, set by the poll, cleared by `declare`): the row's message reads muted with `(turn)`, the agent's page says so, and the flag `idle?` (`idleHint`) shows a working agent whose pane a fresh observation has seen ready (`idle`/`done`, not busy) for `display.idle_hint_after` (10 min, `0` = off, `shared.idleHint` copied to each agent by `takeSnapshot`).
 - **Settings: one registry, `config/keys.go`** (config-file, spec
   `docs/superpowers/specs/2026-10-29-config-file-design.md`): every tunable's file key, env name,
   default, today's env rule (use, skip to the next source, or invalid) and typed file rule; per key, env
