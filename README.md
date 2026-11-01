@@ -822,7 +822,10 @@ handles each with a rule you can read, never a guess:
   models, versions, secret-like files tracked in Git…); `agentbus health` and busmon's F5 show it.
   `redis-version` compares the broker with the latest Redis release of its own major, checked
   once a day on GitHub: behind is a warning, a newer major only a note, since changing major is
-  your decision; you update the broker, nothing else does. A new failure
+  your decision; you update the broker, nothing else does. `github` (every 15 minutes, only
+  when the project's remote is on github.com) says whether the services reach GitHub by SSH and
+  by HTTPS: one transport only is a warning for you, both down a warning after an hour, never a
+  failure; it judges reachability, not your credentials, and makes no claim about pushing. A new failure
   wakes sentinel once, which may restart a failed service or refresh the model table and
   escalates the rest.
 - **Tokens.** Tokens per project, agent and day, counted from the Claude Code transcripts of the

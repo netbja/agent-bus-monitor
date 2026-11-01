@@ -21,4 +21,5 @@
   ? herdr command probe              no current measurement                                         
   ? Client updates                   no current measurement                                         
   ? Redis version                    no current measurement                                         
+  ? GitHub reachable                 no current measurement                                         
   ── fine · 1  (a shows them) ──

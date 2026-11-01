@@ -786,7 +786,14 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (major -> newest release, 0600; a failed fetch moves only `checked_at`, silently); warn when behind
   in its major; a newer major is never a warning, only named in the detail (changing major is the
   person's decision); unknown when the broker is unread, no release of its major is found or no check
-  succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. busmon shows the health pill, F5
+  succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `github`
+  (busmon-github-check, `health/github.go` pure, `cmd/agentbus/githubcheck.go` the runner; 15 min, 10 s) runs only
+  when a remote is on github.com (origin first): `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` and
+  `git -c credential.helper= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
+  under `LC_ALL=C` (the answers are read by git's English messages); any answer from GitHub is reached (auth unknown),
+  matched before the network errors since it may quote a repository named like one (TLS by its own phrases), only a network error failed, an unrecognised answer or a missing binary not
+  judged. Both reached ok, one warn (for you), neither unknown then warn after `GitHubNeitherWarnAfter` (1 h, tracked
+  in the check's memory: a restart starts it over); never fail, so it never wakes sentinel. busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
   not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check
