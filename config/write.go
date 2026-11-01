@@ -257,8 +257,10 @@ func setLine(text, name, lit string) string {
 	if at, ok := sc.key[name]; ok {
 		line := lines[at]
 		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-		keyText := strings.TrimSpace(strings.TrimSpace(line)[:strings.Index(strings.TrimSpace(line), "=")])
-		lines[at] = indent + keyText + " = " + lit + "\n"
+		body := strings.TrimSpace(line)
+		eq := strings.Index(body, "=")
+		keyText := strings.TrimSpace(body[:eq])
+		lines[at] = indent + keyText + " = " + lit + trailingComment(body[eq+1:]) + "\n"
 		return strings.Join(lines, "")
 	}
 	dot := strings.LastIndex(name, ".")
@@ -284,9 +286,57 @@ func setLine(text, name, lit string) string {
 	return out + "[" + table + "]\n" + leaf + " = " + lit + "\n"
 }
 
-// writeAtomic writes text to path through a temporary file in the same
-// directory, renamed over it: a crash leaves the old file or the new one.
+// trailingComment is the comment after a value, with the blanks before it
+// ("" when none): the first '#' outside a basic or literal string.
+func trailingComment(value string) string {
+	var quote byte
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		switch {
+		case quote == '"' && c == '\\':
+			i++
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '#':
+			j := i
+			for j > 0 && (value[j-1] == ' ' || value[j-1] == '\t') {
+				j--
+			}
+			return strings.TrimRight(value[j:], "\r\n")
+		}
+	}
+	return ""
+}
+
+// target is the file an edit of path writes: a symlinked config.toml
+// (dotfiles) is followed so the link stays one; an absent file is path
+// itself, and a dangling link is refused rather than replaced.
+func target(path string) (string, error) {
+	real, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return real, nil
+	}
+	if fi, lerr := os.Lstat(path); lerr == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("config.toml is a symlink to a missing file: fix the link by hand first")
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return path, nil
+	}
+	return "", errors.New("config.toml cannot be read")
+}
+
+// writeAtomic writes text to path (its symlink's target) through a temporary
+// file in the same directory, renamed over it: a crash leaves the old file or
+// the new one.
 func writeAtomic(path, text string) error {
+	path, err := target(path)
+	if err != nil {
+		return err
+	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return errors.New("the config directory cannot be created")

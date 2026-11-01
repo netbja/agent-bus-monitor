@@ -43,7 +43,7 @@ func TestSetSmallestEdit(t *testing.T) {
 		v    any
 		want string
 	}{
-		"a line replaced": {"display.theme", "dark", "# my settings\n[display]\ntheme = \"dark\"\nlimit = 40\n\n# attention\n[waiting]\nbell = false\n"},
+		"a line replaced, its comment kept": {"display.theme", "dark", "# my settings\n[display]\ntheme = \"dark\"  # was dark\nlimit = 40\n\n# attention\n[waiting]\nbell = false\n"},
 		"added under its table": {"waiting.snooze", 10 * time.Minute,
 			"# my settings\n[display]\ntheme = \"light\"  # was dark\nlimit = 40\n\n# attention\n[waiting]\nbell = false\nsnooze = \"10m\"\n"},
 		"added before the next table": {"display.limit", 0, "# my settings\n[display]\ntheme = \"light\"  # was dark\nlimit = 0\n\n# attention\n[waiting]\nbell = false\n"},
@@ -154,5 +154,88 @@ func TestUnset(t *testing.T) {
 	}
 	if err := Unset(filepath.Join(t.TempDir(), "none.toml"), "display.theme"); err != nil {
 		t.Fatalf("unset with no file: %v", err)
+	}
+}
+
+// A trailing comment on the edited line stays after the new value, and a '#'
+// inside the old string value is not taken for one (foureyes, part 1).
+func TestSetKeepsTheTrailingComment(t *testing.T) {
+	for name, c := range map[string]struct {
+		before, key string
+		v           any
+		want        string
+	}{
+		"after a number": {"[display]\nlimit = 40 # lines\n", "display.limit", 10, "[display]\nlimit = 10 # lines\n"},
+		"a hash in the old string": {"[identity]\nas = \"a#b\"\t# me\n", "identity.as", "carol", "[identity]\nas = \"carol\"\t# me\n"},
+		"an escaped quote in the old string": {"[identity]\nas = \"a\\\"#b\" # me\n", "identity.as", "carol", "[identity]\nas = \"carol\" # me\n"},
+		"a literal string": {"[identity]\nas = 'a#b' # me\n", "identity.as", "carol", "[identity]\nas = \"carol\" # me\n"},
+		"no comment": {"[identity]\nas = \"a#b\"\n", "identity.as", "carol", "[identity]\nas = \"carol\"\n"},
+	} {
+		p := tomlFile(t, c.before)
+		if err := Set(p, c.key, c.v); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := read(t, p); got != c.want {
+			t.Errorf("%s:\n%q\nwant\n%q", name, got, c.want)
+		}
+	}
+}
+
+// A config.toml that is a symlink (dotfiles) stays one: the target is
+// edited, the link kept; Unset alike. A dangling link is refused, never
+// replaced by a plain file.
+func TestSetFollowsASymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "dotfiles", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("[display]\nlimit = 40\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	isLink := func() {
+		t.Helper()
+		fi, err := os.Lstat(link)
+		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("config.toml is no longer a symlink: %v %v", fi, err)
+		}
+	}
+	if err := Set(link, "display.limit", 10); err != nil {
+		t.Fatal(err)
+	}
+	isLink()
+	if got := read(t, target); got != "[display]\nlimit = 10\n" {
+		t.Fatalf("target: %q", got)
+	}
+	if err := Unset(link, "display.limit"); err != nil {
+		t.Fatal(err)
+	}
+	isLink()
+	if got := read(t, target); got != "[display]\n" {
+		t.Fatalf("target after unset: %q", got)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, "*", ".config.toml.*")); len(left) != 0 {
+		t.Fatalf("temporary left: %v", left)
+	}
+
+	dangling := filepath.Join(dir, "other", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(dangling), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "nowhere", "config.toml"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	if err := Set(dangling, "display.limit", 10); err == nil {
+		t.Fatal("a dangling symlink was written through")
+	}
+	if fi, err := os.Lstat(dangling); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("the dangling symlink was replaced")
 	}
 }
