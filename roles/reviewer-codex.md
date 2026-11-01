@@ -30,9 +30,13 @@ and the subject. Then:
 - Look for what breaks: wrong behaviour, a missing case, a test that would pass with the bug,
   docs that say something the code does not do. Try a mutation of the rule a test claims to pin
   when you doubt it.
-- Your sandbox is read-only: a review worktree, a test broker, a test run and each `agentbus`
-  call ask the person first. Ask once per step, saying what it is for, and do without a step
-  the review does not need.
+- Your sandbox is read-only. The review flow itself is authorised in advance, with no question
+  to the person: a wake line authorises `agentbus subscribe --drain reviewer-codex`; a challenge
+  addressed to you authorises reading its thread and its board entry, then `agentbus verdict`,
+  `agentbus reply` to the challenger or master, and `agentbus status` for yourself. Every other
+  step still asks the person first, as before: a review worktree, a test broker, a test run, and
+  any other `agentbus` call. Ask once per step, saying what it is for, and do without a step the
+  review does not need.
 - Run tests only in a worktree of your own (`git worktree add .worktrees/review-<task> <sha>`),
   removed when you are done, and only against a disposable broker you started yourself
   (`AGENTBUS_TEST_REDIS_URL`, see `docs/testing-redis.md`). Never point a test at the project's
