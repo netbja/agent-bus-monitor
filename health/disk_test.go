@@ -29,6 +29,11 @@ func TestEvaluateDisk(t *testing.T) {
 		{"under 1 GiB fails", []DiskPath{ok, {Label: "gocache", Path: "/c", Dev: 4, Free: gib / 2, Total: 4 * gib, Known: true}}, Fail, []string{"gocache /c", "0.5 GiB free"}},
 		{"a path not measured is said", []DiskPath{ok, {Label: "docker root", Note: "docker not on PATH"}}, OK, []string{"docker root: not measured (docker not on PATH)"}},
 		{"nothing measured", []DiskPath{{Label: "home", Note: "statfs failed"}}, Unknown, []string{"home: not measured (statfs failed)"}},
+		// A filesystem that reports no size (some FUSE, autofs) is not measured,
+		// never a fail at 0 GiB (foureyes).
+		{"no size reported", []DiskPath{ok, {Label: "worktrees", Path: "/w", Dev: 9, Free: 0, Total: 0, Known: true}}, OK, []string{"worktrees: not measured (no size reported)"}},
+		// A warn or fail names the person's choice, never in the command.
+		{"the choice in the detail", []DiskPath{{Label: "tmp", Path: "/tmp", Dev: 2, Free: 4 * gib, Total: 20 * gib, Known: true}}, Warn, []string{"go clean -cache"}},
 	} {
 		out := EvaluateDisk(c.paths, diskTh())
 		if out.Status != c.want {
@@ -44,5 +49,16 @@ func TestEvaluateDisk(t *testing.T) {
 	out := EvaluateDisk([]DiskPath{ok, {Label: "tmp", Path: "/tmp", Dev: 2, Free: gib / 2, Total: 4 * gib, Known: true}}, diskTh())
 	if !strings.HasPrefix(out.Detail, "tmp /tmp") {
 		t.Fatalf("worst first: %q", out.Detail)
+	}
+}
+
+// The For you command only looks: go clean is never in the copyable line.
+func TestDiskCommandOnlyLooks(t *testing.T) {
+	d, _ := ByID("disk")
+	if !strings.HasPrefix(d.Command, "du -sh") || strings.Contains(d.Command, "clean") {
+		t.Fatalf("command %q", d.Command)
+	}
+	if out := EvaluateDisk([]DiskPath{{Label: "home", Path: "/h", Dev: 1, Free: 200 * gib, Total: 500 * gib, Known: true}}, diskTh()); strings.Contains(out.Detail, "go clean") {
+		t.Fatalf("an ok detail names a cleanup: %q", out.Detail)
 	}
 }

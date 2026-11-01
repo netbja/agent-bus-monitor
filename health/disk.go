@@ -30,6 +30,10 @@ type DiskThresholds struct {
 
 const bytesPerGiB = 1 << 30
 
+// DiskCleanChoice ends a warn or fail's detail: the cleanup is the person's
+// choice once they have looked (the command only looks, du).
+const DiskCleanChoice = ". Your choice once you have looked: go clean -cache empties the Go build cache, which rebuilds itself"
+
 // EvaluateDisk judges each device once by the worse of its free percentage
 // and its free GiB; the check is the worst device's status. A path not
 // measured is named in the detail, never read as ok; only when nothing was
@@ -44,6 +48,9 @@ func EvaluateDisk(paths []DiskPath, th DiskThresholds) Outcome {
 	byDev := map[uint64]*device{}
 	var unmeasured []string
 	for _, p := range paths {
+		if p.Known && p.Total == 0 { // some FUSE or autofs report no size: never a fail at 0 GiB (foureyes)
+			p.Known, p.Note = false, "no size reported"
+		}
 		if !p.Known {
 			unmeasured = append(unmeasured, fmt.Sprintf("%s: not measured (%s)", p.Label, p.Note))
 			continue
@@ -73,7 +80,11 @@ func EvaluateDisk(paths []DiskPath, th DiskThresholds) Outcome {
 		parts = append(parts, fmt.Sprintf("%s %s%s: %.1f GiB free of %.1f GiB (%.0f%%)", strings.Join(d.labels, ", "), d.p.Path, name,
 			float64(d.p.Free)/bytesPerGiB, float64(d.p.Total)/bytesPerGiB, pct))
 	}
-	return Outcome{Status: devs[0].status, Detail: truncateDetail(strings.Join(append(parts, unmeasured...), "; "))}
+	detail := strings.Join(append(parts, unmeasured...), "; ")
+	if devs[0].status != OK { // the person's choice, named here, never in the copyable command
+		detail += DiskCleanChoice
+	}
+	return Outcome{Status: devs[0].status, Detail: truncateDetail(detail)}
 }
 
 func diskStatus(p DiskPath, th DiskThresholds) Status {

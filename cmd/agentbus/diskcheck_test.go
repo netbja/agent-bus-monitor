@@ -39,6 +39,7 @@ func fakeDisks(fs map[string][3]uint64, path map[string]bool, out map[string]str
 		Getenv:  func(k string) string { return map[string]string{"HOME": "/home/u"}[k] },
 		Getwd:   func() (string, error) { return "/data/p", nil },
 		TempDir: func() string { return "/tmp" },
+		GOOS:    "linux",
 	}
 }
 
@@ -54,7 +55,7 @@ func TestDiskPaths(t *testing.T) {
 		"/data/p": {300 * g, 900 * g, 2051}, "/data/p/.worktrees": {300 * g, 900 * g, 2051}, "/tmp": {7 * g, 8 * g, 40},
 	}
 	d := fakeDisks(disks, map[string]bool{"docker": true, "go": true}, map[string]string{
-		"docker info -f {{.DockerRootDir}}": "/var/lib/docker\n", "go env GOCACHE": "/home/u/.cache/go-build\n"})
+		"docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Fedora Linux 44\n", "go env GOCACHE": "/home/u/.cache/go-build\n"})
 	var got []string
 	for _, p := range diskPaths(context.Background(), d) {
 		got = append(got, p.Label+"="+p.Path)
@@ -89,5 +90,42 @@ func TestDiskThresholds(t *testing.T) {
 	})
 	if th.WarnPct != 15 || th.WarnGiB != 5 || th.FailPct != 2 || th.FailGiB != 3 {
 		t.Fatalf("thresholds %+v", th)
+	}
+}
+
+// Never a silent omission, never a host path for a VM (reviewer-codex): go on
+// PATH whose GOCACHE cannot be read is a path not measured; Docker Desktop
+// (a VM on macOS, or its own VM on Linux) keeps its root out of the host's
+// reach; GOCACHE=off is no cache, rightly no path.
+func TestDiskPathsUnmeasured(t *testing.T) {
+	g := uint64(1) << 30
+	disks := map[string][3]uint64{"/var/lib/docker": {1 * g, 2 * g, 1}, "/home/u": {50 * g, 500 * g, 2}, "/data/p": {50 * g, 500 * g, 2}, "/tmp": {50 * g, 500 * g, 2}}
+	note := func(d diskDeps, label string) (string, bool) {
+		for _, p := range diskPaths(context.Background(), d) {
+			if p.Label == label {
+				return p.Note, true
+			}
+		}
+		return "", false
+	}
+	tools := map[string]bool{"docker": true, "go": true}
+	d := fakeDisks(disks, tools, map[string]string{"docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Docker Desktop\n"})
+	if n, ok := note(d, "go cache"); !ok || n == "" {
+		t.Fatalf("go env failed: go cache %q %v", n, ok)
+	}
+	if n, ok := note(d, "broker data"); !ok || !strings.Contains(n, "Docker Desktop") {
+		t.Fatalf("Docker Desktop on Linux: broker data %q %v", n, ok)
+	}
+	d = fakeDisks(disks, tools, map[string]string{"docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Ubuntu\n", "go env GOCACHE": "\n"})
+	d.GOOS = "darwin"
+	if n, _ := note(d, "broker data"); !strings.Contains(n, "VM") {
+		t.Fatalf("macOS: broker data %q", n)
+	}
+	if n, ok := note(d, "go cache"); !ok || n == "" {
+		t.Fatalf("empty GOCACHE: go cache %q %v", n, ok)
+	}
+	d = fakeDisks(disks, tools, map[string]string{"docker info -f {{.DockerRootDir}}|{{.OperatingSystem}}": "/var/lib/docker|Ubuntu\n", "go env GOCACHE": "off\n"})
+	if _, ok := note(d, "go cache"); ok {
+		t.Fatal("GOCACHE=off is no cache, yet a path")
 	}
 }

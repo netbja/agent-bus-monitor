@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -26,10 +27,11 @@ type diskDeps struct {
 	Getenv   func(string) string
 	Getwd    func() (string, error)
 	TempDir  func() string
+	GOOS     string // runtime.GOOS: on macOS docker's root is inside its VM
 }
 
 func realDiskDeps() diskDeps {
-	return diskDeps{Statfs: realStatfs, LookPath: exec.LookPath, Getenv: os.Getenv, Getwd: os.Getwd, TempDir: os.TempDir,
+	return diskDeps{Statfs: realStatfs, LookPath: exec.LookPath, Getenv: os.Getenv, Getwd: os.Getwd, TempDir: os.TempDir, GOOS: runtime.GOOS,
 		Output: func(ctx context.Context, name string, args ...string) (string, error) {
 			ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
@@ -73,20 +75,36 @@ func diskPaths(ctx context.Context, d diskDeps) []health.DiskPath {
 		}
 		out = append(out, p)
 	}
+	// The broker's data: docker's root, measured from the host only when the
+	// daemon runs on it. Docker Desktop keeps it in its own VM (on macOS, and
+	// on Linux when it says so): not measured, never a host path of that name
+	// (reviewer-codex).
 	if _, err := d.LookPath("docker"); err != nil {
 		out = append(out, health.DiskPath{Label: "broker data", Note: "docker not on PATH"})
-	} else if root, err := d.Output(ctx, "docker", "info", "-f", "{{.DockerRootDir}}"); err != nil || strings.TrimSpace(root) == "" {
+	} else if info, err := d.Output(ctx, "docker", "info", "-f", "{{.DockerRootDir}}|{{.OperatingSystem}}"); err != nil {
 		out = append(out, health.DiskPath{Label: "broker data", Note: "docker info failed"})
+	} else if root, osName, _ := strings.Cut(strings.TrimSpace(info), "|"); root == "" {
+		out = append(out, health.DiskPath{Label: "broker data", Note: "docker info failed"})
+	} else if d.GOOS != "linux" {
+		out = append(out, health.DiskPath{Label: "broker data", Note: "docker's root is inside its VM on " + d.GOOS + ": not measured from the host"})
+	} else if strings.Contains(osName, "Docker Desktop") {
+		out = append(out, health.DiskPath{Label: "broker data", Note: "Docker Desktop keeps its root inside its VM: not measured from the host"})
 	} else {
-		measure("broker data", strings.TrimSpace(root), false)
+		measure("broker data", root, false)
 	}
 	if home := d.Getenv("HOME"); home != "" {
 		measure("home", home, false)
 	} else {
 		out = append(out, health.DiskPath{Label: "home", Note: "HOME unset"})
 	}
-	if _, err := d.LookPath("go"); err == nil {
-		if c, err := d.Output(ctx, "go", "env", "GOCACHE"); err == nil && strings.TrimSpace(c) != "" && strings.TrimSpace(c) != "off" {
+	if _, err := d.LookPath("go"); err == nil { // go on PATH: its cache is measured, or said not measured
+		switch c, err := d.Output(ctx, "go", "env", "GOCACHE"); {
+		case err != nil:
+			out = append(out, health.DiskPath{Label: "go cache", Note: "go env GOCACHE failed"})
+		case strings.TrimSpace(c) == "":
+			out = append(out, health.DiskPath{Label: "go cache", Note: "go env GOCACHE empty"})
+		case strings.TrimSpace(c) == "off": // no build cache: nothing to measure
+		default:
 			measure("go cache", strings.TrimSpace(c), true)
 		}
 	}

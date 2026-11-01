@@ -53,8 +53,10 @@ upgrade the broker yourself.
 repository and its worktrees, the temp dir) has under 10 % or 5 GiB free, and fails under 2 % or
 1 GiB (`health.disk_*` in the config). A fail wakes you as any fail does. It is the person's to
 act on: tell master which path and how much is free (`agentbus health disk`), with the command the
-check names (`du -sh ~/.cache/go-build ~/.npm ~/.cache/pip`, then `go clean -cache`). **You never
-delete anything**: no cache, no log, no worktree, no file, whatever the space left.
+check names, which only looks (`du -sh ~/.cache/go-build ~/.npm ~/.cache/pip`); emptying a cache
+(`go clean -cache`) is the person's choice afterwards. A path the check could not measure (docker's
+root inside Docker Desktop's VM, a failed `go env`) is said as such: never guess its space. **You
+never delete anything**: no cache, no log, no worktree, no file, whatever the space left.
 
 ## Team stall
 
