@@ -19,6 +19,9 @@ type settingRow struct {
 	Value    string // the value that applies, in the person's words
 	Source   string
 	Editable bool // the page may write it: nothing above config.toml sets it
+	// AfterUnset is what applies once config.toml's line is gone ("busmon.toml's
+	// light", "the default auto"): d's confirmation names it (spec).
+	AfterUnset string
 }
 
 // settingGroup is one group's rows, in the registry's order.
@@ -43,7 +46,8 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 	cfg := config.Load(config.Path(getenv), "config.toml")
 	legacy := config.LoadLegacy(config.LegacyPath(getenv), "busmon.toml")
 	r := config.Resolver{Getenv: getenv, Files: []*config.File{cfg, legacy}}
-	refused := map[string]int{} // config.toml's refused lines, by key
+	below := config.Resolver{Getenv: getenv, Files: []*config.File{legacy}} // without config.toml
+	refused := map[string]int{}                                             // config.toml's refused lines, by key
 	for _, w := range cfg.Warnings {
 		if w.Key != "" {
 			refused[w.Key] = w.Line
@@ -89,6 +93,14 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 				row.Sym, row.Source = GlyphIdle, "default"
 			}
 			row.Value = settingValue(k, value)
+			switch after := below.Get(k.Name); after.Source {
+			case "default":
+				row.AfterUnset = "the default " + settingValue(k, after.Value)
+			case "busmon.toml":
+				row.AfterUnset = "busmon.toml's " + settingValue(k, after.Value)
+			default:
+				row.AfterUnset = after.Source + "'s " + settingValue(k, after.Value)
+			}
 			sg.Rows = append(sg.Rows, row)
 		}
 		out = append(out, sg)

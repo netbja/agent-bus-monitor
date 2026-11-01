@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/config"
 )
@@ -85,5 +88,129 @@ func TestSettingsRows(t *testing.T) {
 				t.Errorf("%s: label %q", r.Key, r.Label)
 			}
 		}
+	}
+}
+
+// settingsShell is a shell whose settings page reads and writes the config
+// directory of getenv, its theme applied by a stub that records the name.
+func settingsShell(t *testing.T, getenv func(string) string, themed *string) Model {
+	t.Helper()
+	return shellWith(t, 120, 40, shellConfig{getenv: getenv, retheme: func(name string) (*Theme, error) {
+		*themed = name
+		return th, nil
+	}}, false)
+}
+
+// press sends a key and runs what it returns until the settings are read.
+func press(t *testing.T, m Model, k any) Model {
+	t.Helper()
+	var msg tea.Msg
+	switch k := k.(type) {
+	case rune:
+		msg = tea.KeyPressMsg(tea.Key{Code: k, Text: string(k)})
+	case tea.Key:
+		msg = tea.KeyPressMsg(k)
+	}
+	next, cmd := m.Update(msg)
+	for cmd != nil {
+		out := cmd()
+		sm, ok := out.(settingsMsg)
+		if !ok {
+			break
+		}
+		next, cmd = next.(Model).Update(sm)
+	}
+	return next.(Model)
+}
+
+func selectSetting(t *testing.T, m Model, key string) Model {
+	t.Helper()
+	p := m.rd.top()
+	for i, r := range p.set.rows() {
+		if r.Key == key {
+			p.sel, p.dirty = i, true
+			m.refresh()
+			return m
+		}
+	}
+	t.Fatalf("no row %s", key)
+	return m
+}
+
+func configText(t *testing.T, getenv func(string) string) string {
+	t.Helper()
+	b, err := os.ReadFile(config.Path(getenv))
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// C opens the page; an on/off key flips and writes at once and applies at
+// once; the theme is chosen with ←→ and applied; a number goes through the
+// editor, its kind and its rule, nothing written on a refusal; d asks y,
+// naming what applies next; a value from the env is read-only.
+func TestSettingsPageChanges(t *testing.T) {
+	getenv := settingsEnv(t, "# mine\n[display]\ntheme = \"dark\"\n[waiting]\nbell = false\n", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	p := m.rd.top()
+	if p == nil || p.kind != ovSettings || !p.set.loaded {
+		t.Fatalf("C opened %+v", p)
+	}
+	if !strings.Contains(p.title, "2 set here") || !strings.Contains(tokLinesText(p.body), "Theme") {
+		t.Fatalf("page %q:\n%s", p.title, tokLinesText(p.body))
+	}
+
+	m = press(t, selectSetting(t, m, "waiting.bell"), tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "bell = true") || !m.cfg.settings.Bell || !strings.Contains(m.ui.flash, "applied") {
+		t.Fatalf("bell: %q %v %q", configText(t, getenv), m.cfg.settings.Bell, m.ui.flash)
+	}
+
+	m = selectSetting(t, m, "display.theme")
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "theme = \"light\"") || themed != "light" || !strings.Contains(m.ui.flash, "theme applied") {
+		t.Fatalf("theme: %q %q %q", configText(t, getenv), themed, m.ui.flash)
+	}
+
+	before := configText(t, getenv)
+	m = selectSetting(t, m, "waiting.snooze")
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	for range 5 {
+		m = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	}
+	m = press(t, m, '0')
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if s := m.rd.top().set; s.edit != "waiting.snooze" || !strings.Contains(s.err, "above 0") || configText(t, getenv) != before {
+		t.Fatalf("refused snooze: edit %q err %q file %q", s.edit, s.err, configText(t, getenv))
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	for _, r := range "20m" {
+		m = press(t, m, r)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "snooze = \"20m\"") || m.cfg.settings.Snooze != 20*time.Minute || m.rd.top().set.edit != "" {
+		t.Fatalf("snooze: %q %v", configText(t, getenv), m.cfg.settings.Snooze)
+	}
+
+	m = selectSetting(t, m, "display.theme")
+	m = press(t, m, 'd')
+	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "the default auto will apply (y)") {
+		t.Fatalf("unset confirmation:\n%s", body)
+	}
+	m = press(t, m, 'y')
+	if strings.Contains(configText(t, getenv), "theme") || !strings.HasPrefix(configText(t, getenv), "# mine\n") {
+		t.Fatalf("unset: %q", configText(t, getenv))
+	}
+
+	before = configText(t, getenv)
+	m = press(t, selectSetting(t, m, "updates.check"), tea.Key{Code: tea.KeyEnter})
+	if configText(t, getenv) != before || !strings.Contains(m.ui.flash, "env AGENT_BUS_NO_UPDATE_CHECK") {
+		t.Fatalf("env row: %q %q", configText(t, getenv), m.ui.flash)
+	}
+	if m = press(t, m, tea.Key{Code: tea.KeyEscape}); m.rd.top() != nil && m.rd.top().kind == ovSettings {
+		t.Fatal("Esc left the page open")
 	}
 }

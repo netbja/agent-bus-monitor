@@ -731,7 +731,17 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `config.Path` reads `XDG_CONFIG_HOME`/`HOME` through
   the injected getenv only, absolute paths only, so a test's environment never reaches the real home;
   `config` does not import `bus` (bus will read its caps through it),
-  so `ValidName` is repeated there, held equal by a test. `agentbus config`
+  so `ValidName` is repeated there, held equal by a test. busmon writes `config.toml` from its settings page
+  (`C`, `ovSettings`, spec `docs/superpowers/specs/2026-11-01-busmon-config-page-mockups.md`, the person's answers:
+  Display, Attention and Identity first, busmon's own display keys applied at once): `config.Set`/`Unset`
+  (`config/write.go`: the key's own file rule, the smallest edit, its line replaced or added under its table or the
+  table appended, the edited text read back as exactly that change, refused when the file does not parse, a temporary
+  file renamed, 0600 in 0700), each key's `Group` (`config/group.go`, held by a test), the rows (`settingsGroups` in
+  `settings_page.go`: `●` config.toml, `○` default, `·` a flag, the env or busmon.toml, read-only but busmon.toml's,
+  `▲` refused, the source in `agentbus config`'s words) and the interaction (`settings_ui.go`, reads and writes in
+  commands: Enter flips an on/off at once, chooses the theme with ←→, or opens a line editor checked by the kind then
+  the rule; `d` asks `y`, naming what applies next; theme, fade, bell and the reminder and recap timings apply at once
+  through `applySettings` and `shellConfig.retheme`, the rest at busmon's next start). `agentbus config`
   (`configcmd.go`, above the project-required exit, no broker) prints each value and its source;
   `--project` reads that project's env file for what its services see (only registry keys and the two
   per-project facts, never another line).

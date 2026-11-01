@@ -84,6 +84,7 @@ const (
 	ActServiceLog   // Services (F3): the selected service's log
 	ActPlanStart    // a plan task waiting for the person: write to master that they start it
 	ActTokens       // open the tokens page (U)
+	ActSettings     // open the settings page (C)
 	ActHistory      // open the history page (H)
 	ActOlder        // History: load the days before
 	ActLineEdit     // the line: move its cursor or delete at it (the field does it)
@@ -213,6 +214,7 @@ var (
 		{Keys: "R", Help: "where was I? open the project recap", Act: ActRecap, match: runeIs('R')},
 		{Keys: "P", Help: "the batch's plan: its tasks by state (enter opens one, or expands done)", Act: ActPlan, match: runeIs('P')},
 		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
+		{Keys: "C", Help: "settings: display, attention and your name, changed in config.toml", Act: ActSettings, match: runeIs('C')},
 		{Keys: "H", Help: "history: re-read the past, the archive on this host then the live streams (enter opens an entry)", Act: ActHistory, match: runeIs('H')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},

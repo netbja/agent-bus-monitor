@@ -47,6 +47,7 @@ const (
 	ovRedis      // the Redis card's page (busmon-redis-detail), opened from F3
 	ovTokens     // tokens (U): account windows, projects side by side, the open project by agent
 	ovHistory    // history (H): the archive, then the live streams, newest first
+	ovSettings   // settings (C): the registry's keys by group, changed in place (settings_ui.go)
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.

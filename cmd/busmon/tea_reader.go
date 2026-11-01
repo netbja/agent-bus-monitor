@@ -66,6 +66,8 @@ type page struct {
 	histFilter feedFilter // ovHistory: / and t narrow it
 	fromHist   bool       // ovMessage opened from History: n/p step through it
 	hrows  []histItem // ovHistory: its selectable rows (sel: the selected one)
+
+	set *settingsPage // ovSettings: its rows and the change in progress (sel: the selected row)
 }
 
 // pageStamp is what a body was built for.
@@ -488,6 +490,8 @@ func (m *Model) buildPage() bool {
 		v.entries, v.filter = historyFiltered(v.entries, p.histFilter), p.histFilter.raw
 		p.title, p.body, p.hrows = historyBody(v, p.sel, time.Local, width)
 		p.sel = clamp(p.sel, 0, max(0, len(p.hrows)-1))
+	case ovSettings:
+		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
 	case ovTokens:
 		p.title = tokensTitle(s.budgets, s.holds, now)
 		p.body = tokensPage(s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
@@ -693,6 +697,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.askKey(act, k)
 	case ovRecap:
 		return m.recapKey(k)
+	case ovSettings:
+		return m.settingsKey(k)
 	}
 	if p.kind == ovServices && p.svc != nil { // the cards: arrows choose, enter or l opens the log
 		// Side by side the cards are a row, so ←/→ move between them too;
