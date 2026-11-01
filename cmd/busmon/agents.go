@@ -73,6 +73,14 @@ func clientOutdated(a *agentState, now time.Time) bool {
 	return a.clientUpdate != nil && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
 }
 
+// idleHint (auto-state): the agent reads working, declared or flipped, but a
+// fresh observation has seen its pane ready (herdr's idle or done, not busy)
+// for display.idle_hint_after. A hint: it never relabels, rings or counts.
+func idleHint(a *agentState, now time.Time) bool {
+	return a.state == "working" && a.idleHintAfter > 0 && !a.obsBusy && (a.obsState == "idle" || a.obsState == "done") &&
+		!a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh && !a.obsSince.IsZero() && now.Sub(a.obsSince) >= a.idleHintAfter
+}
+
 func busyUndeclared(a *agentState, now time.Time) bool {
 	return a.obsBusy && a.state != "working" && !a.obsAt.IsZero() && now.Sub(a.obsAt) <= observedFresh
 }
@@ -153,6 +161,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	}
 	if busyUndeclared(a, a.clock()) {
 		add("busy", RoleOK, 3, 2)
+	}
+	if idleHint(a, a.clock()) {
+		add("idle?", RoleMuted, 4, 2)
 	}
 	if clientOutdated(a, a.clock()) {
 		add("update", RoleAttention, 5, 0)
@@ -461,7 +472,11 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 	} else if len(flags) > 0 {
 		l = append(l, append(flags, Seg{Text: " "})...)
 	}
-	l = append(l, Seg{Text: Preview(a.message), Role: RoleText})
+	if a.auto { // a turn flip keeps the agent's last message: not its word now (auto-state)
+		l = append(l, Seg{Text: Preview(a.message) + " (turn)", Role: RoleMuted})
+	} else {
+		l = append(l, Seg{Text: Preview(a.message), Role: RoleText})
+	}
 	return FitLine(l, width)
 }
 

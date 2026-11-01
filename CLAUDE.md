@@ -212,8 +212,10 @@ it silently never fired.
   `--json`; `--unattributed` is the person's host scan (1 GiB budget) of what no project's record names.
   busmon's `U` page (`tokens_view.go`, `ovTokens`; since busmon pages step 3 the list pattern: zones Accounts, Projects,
   Agents, bars against the zone's largest row, its top consumer bold, unknown agents folded by short reason and listed by
-  `a`, the title `tokensTitle`'s summary): the account windows with a 24-hour sparkline from
-  `{p}:quota:hist` (one cell per hour, its last sample), every project side by side (`ProjectNames`,
+  `a`, the title `tokensTitle`'s summary): the account windows, one row per provider with its windows side by side in
+  columns of one width (`accountCell`: the richest `accountForms` entry that fits, gauge always, then the reset or hold,
+  then a 24-hour sparkline from `{p}:quota:hist`, one cell per hour, its last sample; a hold is never dropped for room;
+  one window per row only when bare cells do not fit), every project side by side (`ProjectNames`,
   `TokensOf`, read every `requestPoll` tick through the optional `tokensReader`; the open project first,
   7-day bars scaled across projects, `~` while partial, no key = one `no data` line), the open project by
   agent today (`tokens.AgentRows`, shared with the CLI: `?` with its reason, 0 only for a proved session).
@@ -699,7 +701,18 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   resolve back to this repository's scripts, and uninstall removes only links to these exact files.
   Resume Claude Code with `agent-launch <role> <project> [--profile <p>] --resume <session-id>` to
   retain role settings and identity; never use `claude --resume` by hand. Every Claude launch passes
-  `--settings` (the resume hook, plus tool rules when there are any). Other clients currently refuse resume.
+  `--settings` (the resume hook, the turn hooks, plus tool rules when there are any). Other clients currently refuse resume.
+  **Automatic state** (spec `docs/superpowers/specs/2026-11-01-auto-state-design.md`): the launch's `--settings`
+  (`launchHooks`) also runs `agentbus roles turn start` on `UserPromptSubmit` and `roles turn end` on `Stop` and on
+  `SessionStart` (`cmd/agentbus/turnhook.go`: silent on stdout, always exit 0, 2 s with the dial, a prompt starting with
+  `/` and a subagent's events ignored). `Bus.TurnState` (`bus/turnstate.go`) flips idle/working in the `{p}:agents`
+  snapshot only, never a status entry (`auto: "turn"`, the message kept, only from idle or working, only for the stored
+  verified pid and start); a declaration clears `auto` and wins over a flip whatever their times (`mergeSnapshot`).
+  `bus.EffectiveState` reads a flip's working as idle once a fresh observation has seen the pane ready for `staleAfter`,
+  since `max(flip ts, the ready since)`, ready meaning herdr's `idle` or `done` with the pane not busy (`unknown` proves
+  nothing); nothing is rewritten. A flip keeps the last declaration's time in `DeclTS` (`AgentSnapshot.DeclaredTS`):
+  quiet-agent counts that as the agent's last write, never a flip, and `team-stall` reads each agent through
+  `EffectiveState` with `dispatch.turn_stale_after` (2 min, `0` = off). busmon carries `auto` on each agent (`agentState.auto`, set by the poll, cleared by `declare`): the row's message reads muted with `(turn)`, the agent's page says so, and the flag `idle?` (`idleHint`) shows a working agent whose pane a fresh observation has seen ready (`idle`/`done`, not busy) for `display.idle_hint_after` (10 min, `0` = off, `shared.idleHint` copied to each agent by `takeSnapshot`).
 - **Settings: one registry, `config/keys.go`** (config-file, spec
   `docs/superpowers/specs/2026-10-29-config-file-design.md`): every tunable's file key, env name,
   default, today's env rule (use, skip to the next source, or invalid) and typed file rule; per key, env

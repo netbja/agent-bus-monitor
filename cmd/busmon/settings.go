@@ -19,6 +19,7 @@ type busmonSettings struct {
 	Limit       int
 	Identity    string
 	UpdateCheck bool
+	IdleHint    time.Duration // display.idle_hint_after (auto-state; 0 = off)
 	Note        string
 }
 
@@ -43,7 +44,7 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 	s := busmonSettings{
 		PopupAfter: r.Duration("waiting.popup_after"), Snooze: r.Duration("waiting.snooze"),
 		Bell: r.Bool("waiting.bell"), Fade: r.Bool("waiting.fade"), AutoAfter: r.Duration("recap.auto_after"),
-		Limit: r.Int("display.limit"), UpdateCheck: r.Bool("updates.check"),
+		Limit: r.Int("display.limit"), UpdateCheck: r.Bool("updates.check"), IdleHint: r.Duration("display.idle_hint_after"),
 	}
 	raw := func(name string) string { k, _ := config.Lookup(name); return getenv(k.Env) }
 	if t := r.Get("display.theme"); t.Invalid {

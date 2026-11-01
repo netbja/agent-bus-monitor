@@ -104,6 +104,9 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 	case "prove-session":
 		proveSessionSend(rest, openProver, dispatch.ProcStart)
 		return nil
+	case "turn": // the turn hooks: the state follows the client's turns (auto-state)
+		turnHook(rest, env, os.Stdin, stdout, realTurnFlip)
+		return nil
 	}
 	if action == "check-toml" {
 		if len(rest) != 1 {

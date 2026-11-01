@@ -53,7 +53,7 @@ func TestLaunchSettingsCarryTheResumeHook(t *testing.T) {
 	if _, e, err := f.launch(m, "coder", "AGENTBUS_BIN=/opt/ab/agentbus", "AGENTBUS_REPO=/opt/ab"); err != nil {
 		t.Fatal(err, e)
 	}
-	hook := `{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "/opt/ab/agentbus roles report-resume /opt/ab/scripts/agent-launch"}]}]}}`
+	hook := `{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "/opt/ab/agentbus roles report-resume /opt/ab/scripts/agent-launch"}, {"type": "command", "command": "/opt/ab/agentbus roles turn end"}]}], "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/opt/ab/agentbus roles turn start"}]}], "Stop": [{"hooks": [{"type": "command", "command": "/opt/ab/agentbus roles turn end"}]}]}}`
 	args := f.execed[1:]
 	i := indexOf(args, "--settings")
 	if i < 0 || args[i+1] != hook {

@@ -28,7 +28,7 @@ func TestHistoryPassWritesOnlyWithTheLease(t *testing.T) {
 		t.Fatalf("acquire: %v %v", ok, err)
 	}
 	l.historyPass(ctx)
-	files, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	files, _ := filepath.Glob(filepath.Join(dir, "????-??-??.jsonl")) // the day file; gaps.jsonl holds the first start's gap
 	if len(files) != 1 {
 		t.Fatalf("one day file: %v (log %s)", files, log)
 	}

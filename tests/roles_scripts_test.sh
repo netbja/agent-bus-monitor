@@ -150,6 +150,8 @@ assert_contains "$out" '"deny": ["Read(**/.env)", "Edit(**/.env)"]' "shared rule
 config claude-code
 out="$(AGENT_LAUNCH_DRYRUN=1 "$L" coder demo 2>&1)"
 assert_contains "$out" "report-resume $REPO/scripts/agent-launch" "a Claude launch carries the resume hook"
+assert_contains "$out" "roles turn start" "a Claude launch carries the turn-start hook (auto-state)"
+assert_contains "$out" "roles turn end" "and the turn-end hook"
 # The hook returns at once and prints nothing; a detached sender reports to a fake herdr.
 printf '#!/usr/bin/env bash\nsleep 2\necho "$*" > "%s/herdr.calls"\necho %s\n' "$T" "'{\"result\":{}}'" > "$T/herdr"
 chmod +x "$T/herdr"

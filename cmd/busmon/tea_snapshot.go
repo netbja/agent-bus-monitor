@@ -64,7 +64,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 	}
 	for n, a := range st.agents {
 		c := *a
-		c.judgedAt = now
+		c.judgedAt, c.idleHintAfter = now, st.idleHint
 		s.agents[n] = &c
 	}
 	if sum, ok := st.plan.summary(now); ok {

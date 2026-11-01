@@ -47,6 +47,9 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		b.seg(RoleMuted, "no status message").text("\n")
 	} else {
 		b.join(renderMarkdown(a.message, mdWidth)).text("\n")
+		if a.auto { // the state follows the client's turns; the message is the agent's last word (auto-state)
+			b.seg(RoleMuted, "(turn: the state follows the client's turns; this is the agent's last message)").text("\n")
+		}
 		if a.forYou {
 			b.seg(RoleMuted, "It names you but declared idle: no question is open.").text("\n")
 		}

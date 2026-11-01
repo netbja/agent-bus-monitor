@@ -289,7 +289,7 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 		if perm := opts["permission"]; perm != "" && perm != "default" {
 			cmd = append(cmd, "--permission-mode", perm)
 		}
-		settings, err := settingsJSON(rules, resumeHookCommand(newEnv(env)))
+		settings, err := settingsJSON(rules, launchHooks(newEnv(env)))
 		if err != nil {
 			return nil, err
 		}
@@ -621,7 +621,7 @@ func sortedKeys(m map[string]string) []string {
 // with empty lists left out (no permissions without rules), then the
 // SessionStart hook that reports the resume command (resume.go), in
 // Python's json.dumps form like every other generated JSON here.
-func settingsJSON(r ToolRules, hook string) (string, error) {
+func settingsJSON(r ToolRules, h claudeHooks) (string, error) {
 	root := newOrdered()
 	if !r.Empty() {
 		perms := newOrdered()
@@ -635,13 +635,22 @@ func settingsJSON(r ToolRules, hook string) (string, error) {
 		}
 		root.set("permissions", perms)
 	}
-	command := newOrdered()
-	command.set("type", "command")
-	command.set("command", hook)
-	matcher := newOrdered()
-	matcher.set("hooks", []interface{}{command})
+	matcher := func(commands ...string) []interface{} {
+		var list []interface{}
+		for _, c := range commands {
+			cmd := newOrdered()
+			cmd.set("type", "command")
+			cmd.set("command", c)
+			list = append(list, cmd)
+		}
+		m := newOrdered()
+		m.set("hooks", list)
+		return []interface{}{m}
+	}
 	hooks := newOrdered()
-	hooks.set("SessionStart", []interface{}{matcher})
+	hooks.set("SessionStart", matcher(h.Resume, h.TurnEnd)) // a new session ends a turn left stuck
+	hooks.set("UserPromptSubmit", matcher(h.TurnStart))
+	hooks.set("Stop", matcher(h.TurnEnd))
 	root.set("hooks", hooks)
 	return pyJSON(root)
 }

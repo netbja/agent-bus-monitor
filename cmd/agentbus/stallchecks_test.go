@@ -278,6 +278,53 @@ func TestStallSecondTierClockSurvivesAnUnknownBlip(t *testing.T) {
 	}
 }
 
+// A woken hooked agent whose turn flipped working then idle, and that wrote
+// nothing, is still quiet: a flip is not activity (auto-state, foureyes).
+func TestQuietAgentIgnoresTurnFlips(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	time.Sleep(2 * time.Millisecond)
+	if _, err := w.b.Cmd(ctx, "master", "coder", bus.CmdDirective, "", "do the next task"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.b.DrainCmd(ctx, "coder", "test", bus.DefaultHorizon, func(bus.Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	who := bus.AgentIdent{PID: os.Getpid()}
+	time.Sleep(2 * time.Millisecond)
+	for _, st := range []string{"working", "idle"} {
+		if err := w.b.TurnState(ctx, "coder", st, who); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out := w.run(w.s.quietAgent); out.Status != health.Warn || !strings.Contains(out.Detail, "coder: directive from master") {
+		t.Fatalf("flips counted as activity: %+v", out)
+	}
+}
+
+// A turn's working left stuck (no Stop), its pane seen ready for long: team-
+// stall reads it idle through the effective state (auto-state step 2).
+func TestTeamStallReadsAStuckFlipAsIdle(t *testing.T) {
+	w := newStallWorld(t)
+	w.env["AGENT_BUS_QUIET_AFTER"] = "0"
+	ctx := context.Background()
+	if err := w.b.TurnState(ctx, "coder", "working", bus.AgentIdent{PID: os.Getpid()}); err != nil {
+		t.Fatal(err)
+	}
+	later := w.s.now()
+	seen := bus.Observation{State: "idle", At: later.UnixMilli(), Since: time.Now().Add(time.Second).UnixMilli()}
+	if err := w.b.FencedPutObserved(ctx, "stall-holder", map[string]bus.Observation{"master": seen, "coder": seen}); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.teamStall); out.Status != health.Fail || out.Reason != "stalled" {
+		t.Fatalf("a stuck flip blinds team-stall: %+v", out)
+	}
+	w.env["AGENT_BUS_TURN_STALE_AFTER"] = "0" // off: the flip's working stands
+	if out := w.run(w.s.teamStall); out.Status == health.Fail {
+		t.Fatalf("turn_stale_after = 0 still reads it idle: %+v", out)
+	}
+}
+
 // dispatchDirectives is every waking directive from the dispatcher to target.
 func (w *stallWorld) dispatchDirectives(target string) []string {
 	w.t.Helper()
