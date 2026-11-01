@@ -165,12 +165,15 @@ An agent is **quiet** when all of these hold:
 - the agent shows **no activity** since that entry, where activity is any of: a status (`TS`), a
   report, any entry it wrote in `{p}:cmd` (`from` = the agent: a reply, a verdict, a challenge, a
   directive), a board entry it owns with `Updated` after the entry, an ask it opened
-  (`CreatedAt`), or a hand-off it declared. All but one carry Redis time (stream ids, `TIME`) and
-  compare with the entry's id. The board's `Updated` is the writer's own clock in Unix seconds
-  (`bus/board.go`, `time.Now().Unix()`), so it compares in seconds with a 2-minute allowance
-  towards activity (`Updated >= entry_s - 120`): it tolerates up to 2 minutes of skew in the
-  writer's clock (an agent on another host, through the tunnel). A clock slower than that can
-  still raise a false warning; a warn, in hand by master, never a fail (foureyes);
+  (`CreatedAt`), or a hand-off it declared. Every one of these is compared in Redis time with
+  the entry's id. The board's `Updated` is the writer's own clock in Unix seconds today
+  (`time.Now().Unix()` passed into `boardMutation`), so a remote agent's slow clock could stamp a
+  real update before the directive (reviewer-codex, foureyes). Every script that writes the board
+  (`boardMutation` in `bus/board.go`, `publishRequest` and `requestTransition` in
+  `bus/requests.go`, the board writes in `bus/delivery.go` and `bus/conductorkeys.go`) therefore
+  also stamps `updated_ms` from Redis `TIME`, an additive field next to `updated`. `quiet-agent`
+  reads only `updated_ms`. An entry the agent owns that has no `updated_ms` (written before the
+  change) counts as activity, so an unknown clock never makes an agent quiet;
 - the agent is `idle` or `done`, not seen busy, not held, and the entry is older than N
   (`quiet_after`).
 
@@ -330,8 +333,9 @@ Pure evaluators in `health/stall.go`, table-driven like `EvaluateGitHub`:
   reason, old with no recorded decision, a void hand-off (ok).
 - `EvaluateQuietAgent`: delivered and silent (warn), pending (ok: the dispatcher's case), `wake=no`
   (ok), a held agent (ok), and each kind of activity after the entry (ok): a status, a report, a
-  reply, a verdict, a challenge, a board update (including one stamped up to 2 minutes before the
-  entry by a skewed clock), an ask, a hand-off. A `reply` or `verdict` as the
+  reply, a verdict, a challenge, a board update by its `updated_ms`, an ask, a hand-off. An owned
+  board entry with no `updated_ms` is activity (ok). Each board-writing script stamps `updated_ms`
+  from Redis `TIME` even when the caller passes a far-off `updated` (a fake clock in the test). A `reply` or `verdict` as the
   newest entry never makes an agent quiet. The boundary at N.
 
 Dispatcher (`dispatch/`, the fake runtime, Redis opt-in through `AGENTBUS_TEST_REDIS_URL`):
