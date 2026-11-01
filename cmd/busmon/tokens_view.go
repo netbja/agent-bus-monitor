@@ -372,11 +372,26 @@ func (f accountForm) width() int {
 	return w
 }
 
+// accountWindowName is a window's name in the 3-cell column: a window named
+// in words (xai's billing periods) gets a short label, so weekly reads wk,
+// not a cut "we…"; any other name is shown as it is, fitted.
+func accountWindowName(name string) string {
+	switch name {
+	case "weekly":
+		return "wk"
+	case "monthly":
+		return "mo"
+	case "daily":
+		return "day"
+	}
+	return name
+}
+
 // accountCell is one account window in a form: never observed reads ?,
 // never 0%.
 func accountCell(f accountForm, st tokState, p string, w bus.BudgetWindow, holds map[string]int64, now time.Time, bars barView) Line {
 	var c body
-	c.text(Fit(Preview(w.Name), 3)).text(" ")
+	c.text(Fit(Preview(accountWindowName(w.Name)), 3)).text(" ")
 	if windowUnobserved(w) {
 		c.seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10)).seg(RoleMuted, "    ?")
 	} else {

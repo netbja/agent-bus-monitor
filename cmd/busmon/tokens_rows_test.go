@@ -144,3 +144,24 @@ func TestTokensAgentBarTrackStopsAtTheBar(t *testing.T) {
 		t.Fatal("no coder row on the page")
 	}
 }
+
+// A window named in words gets a short label of its own for the 3-cell name
+// column (xai's weekly read "we…"): wk, mo, day; 5h and 7d unchanged.
+func TestTokensAccountsShortWindowLabels(t *testing.T) {
+	for _, width := range []int{190, 80, 50} {
+		var xai string
+		for _, r := range tokAccounts(width, nil) {
+			if strings.HasPrefix(strings.TrimSpace(r), "xai") {
+				xai = r
+			}
+		}
+		if !strings.Contains(xai, "wk ") || strings.Contains(xai, "we"+GlyphEllipsis) {
+			t.Errorf("%d: xai row %q", width, xai)
+		}
+	}
+	for name, want := range map[string]string{"weekly": "wk", "monthly": "mo", "daily": "day", "5h": "5h", "7d": "7d", "spend-monthly": "spend-monthly"} {
+		if got := accountWindowName(name); got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+}
