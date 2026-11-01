@@ -102,14 +102,15 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "subscribe", Aliases: []string{"watch"},
-		Usage:   []string{"subscribe [--loop] [--since <cursor>] <agent> [idle_secs]", "subscribe --drain <agent>"},
+		Usage:   []string{"subscribe [--loop] [--since <cursor>] <agent> [idle_secs]", "subscribe --drain [--brief] <agent>"},
 		Summary: "wait for one addressed command, print it as JSON, exit; --drain empties the queue",
 		Flags: []cli.Flag{
 			{Long: "since", Short: 's', Arg: "<cursor>", Help: "floor: the id of the last event handled (0 = all retained)"},
 			{Long: "drain", Short: 'd', Help: "print every waiting entry as JSONL and exit (what a woken agent runs)"},
+			{Long: "brief", Short: 'b', Help: "with --drain: one line per entry, 'id from [type ref]: body', no JSON"},
 			{Long: "loop", Short: 'l', Help: "keep reading (headless use)"},
 		},
-		Examples: []string{"agentbus -p demo subscribe --drain coder", "agentbus -p demo subscribe -s 1792537337865-0 coder 300"},
+		Examples: []string{"agentbus -p demo subscribe --drain coder", "agentbus -p demo subscribe --drain --brief coder", "agentbus -p demo subscribe -s 1792537337865-0 coder 300"},
 	},
 
 	// --- 4-eyes

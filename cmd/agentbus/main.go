@@ -739,7 +739,7 @@ func main() {
 			consumer = self
 		}
 		if sa.drain {
-			os.Exit(runDrain(ctx, b, agent, consumer, os.Stdout))
+			os.Exit(runDrain(ctx, b, agent, consumer, os.Stdout, sa.brief))
 		}
 		idle := heartbeat
 		if sa.idle != "" {
