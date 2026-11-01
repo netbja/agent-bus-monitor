@@ -20,7 +20,7 @@ func TestWaitingAgentDetailShowsWhatItNeeds(t *testing.T) {
 	body := plainOf(lines)
 	status := strings.Index(body, "Status message")
 	need := strings.Index(body, "What master needs from you")
-	if status < 0 || need < status || !strings.Contains(body, "1. opening date T") || !strings.Contains(body, "Answer: i (reply to @master)") {
+	if status < 0 || need < status || !strings.Contains(body, "1. opening date T") || !strings.Contains(body, "Answer: i (reply to @master, its first lines quoted)") {
 		t.Fatalf("body:\n%s", body)
 	}
 	section := body[need:]
