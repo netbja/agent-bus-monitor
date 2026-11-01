@@ -130,7 +130,7 @@ func tokCount(n int64) string {
 
 // tokensPage is the U page's body at width cells.
 func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[string]int64, agents map[string]*agentState,
-	project string, now time.Time, width int, pending bool, bars barView) []Line {
+	project string, now time.Time, width int, pending bool, bars barView, all bool) []Line {
 	var b body
 	// pending: the first reading is on its way (tokensSkeleton): a shimmering
 	// skeleton row stands where the open project's numbers will be.
@@ -139,10 +139,20 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 			segs(Seg{Text: strings.Repeat(GlyphBarEmpty, 24), Role: RoleMuted, Fade: fadeLevel(now)}).
 			seg(RoleMuted, "  first reading pending").text("\n")
 	}
-	head := func(s string) { b.seg(RoleAccent, s).text("\n") }
+	head := func(s string) { b.segs(Seg{Text: s, Role: RoleText, Bold: true}).text("\n") }
 	muted := func(s string) { b.seg(RoleMuted, s).text("\n") }
+	barW := 20 // a zone's bars, against its largest row (busmon pages, Tokens)
+	if width < 100 {
+		barW = 8
+	}
+	relBar := func(v, max int64) Line {
+		if max <= 0 {
+			return Line{S(RoleDim, strings.Repeat(" ", barW))}
+		}
+		return gaugeSegs(float64(v)*100/float64(max), barW, RoleOK, false)
+	}
 
-	head("Account windows")
+	head("Accounts")
 	provs := make([]string, 0, len(budgets))
 	for p := range budgets {
 		provs = append(provs, p)
@@ -173,11 +183,15 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 			b.text("\n")
 		}
 	}
-	b.text("\n")
 
 	days := tokens.LastDays(now, time.Local, 7)
 	today := days[len(days)-1]
-	head("Projects, today and 7 days")
+	joined := width < 90 // one in+out column
+	cols := fmt.Sprintf(" %8s %8s", "in", "out")
+	if joined {
+		cols = fmt.Sprintf(" %8s", "in+out")
+	}
+	b.segs(Seg{Text: "Projects", Role: RoleText, Bold: true}).seg(RoleMuted, strings.Repeat(" ", 22-Width("Projects"))+cols+"  7 days").text("\n")
 	// unknownRow keeps the open project visible, unknown, with its reason,
 	// once no reading is pending any more (never folded, never 0).
 	unknownRow := func(reason string) {
@@ -188,8 +202,6 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	} else if !st.polled {
 		unknownRow("not read yet")
 	} else {
-		cache := width >= 110
-		joined := width < 90 // one in+out column
 		ps := append([]tokProject(nil), st.projects...)
 		sort.SliceStable(ps, func(i, j int) bool {
 			if (ps[i].name == project) != (ps[j].name == project) {
@@ -198,25 +210,21 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 			a, c := ps[i].days[today], ps[j].days[today]
 			return a.In+a.Write+a.Out > c.In+c.Write+c.Out
 		})
-		var max int64
+		var maxDay, maxTotal, maxToday int64
+		top := ""
 		for _, p := range ps {
+			var total int64
 			for _, d := range days {
 				u := p.days[d]
-				if t := u.In + u.Write + u.Out; t > max {
-					max = t
-				}
+				t := u.In + u.Write + u.Out
+				total += t
+				maxDay = max(maxDay, t)
+			}
+			maxTotal = max(maxTotal, total)
+			if u := p.days[today]; p.known && u.In+u.Write+u.Out > maxToday {
+				maxToday, top = u.In+u.Write+u.Out, p.name
 			}
 		}
-		hdr := "  " + Fit("PROJECT", 20)
-		if joined {
-			hdr += fmt.Sprintf(" %8s", "IN+OUT")
-		} else {
-			hdr += fmt.Sprintf(" %8s %8s", "IN", "OUT")
-		}
-		if cache {
-			hdr += fmt.Sprintf(" %10s", "CACHE RD")
-		}
-		muted(hdr + "  7 DAYS   7D TOTAL")
 		var none []string
 		for _, p := range ps {
 			if !p.known && p.name == project {
@@ -240,31 +248,30 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 			if p.name == project {
 				role = RoleAccent
 			}
+			num := func(s string) Seg { return Seg{Text: s, Role: RoleText, Bold: p.name == top} } // the zone's top consumer
 			b.text("  ").seg(role, Fit(Preview(p.name), 20))
 			if joined {
-				b.text(fmt.Sprintf(" %8s", mark+tokCount(u.In+u.Write+u.Out)))
+				b.segs(num(fmt.Sprintf(" %8s", mark+tokCount(u.In+u.Write+u.Out))))
 			} else {
-				b.text(fmt.Sprintf(" %8s %8s", mark+tokCount(u.In+u.Write), mark+tokCount(u.Out)))
-			}
-			if cache {
-				b.seg(RoleMuted, fmt.Sprintf(" %10s", mark+tokCount(u.Read)))
+				b.segs(num(fmt.Sprintf(" %8s", mark+tokCount(u.In+u.Write)))).text(fmt.Sprintf(" %8s", mark+tokCount(u.Out)))
 			}
 			b.text("  ")
 			var total int64
 			for _, d := range days {
 				v := p.days[d]
 				total += v.In + v.Write + v.Out
-				b.seg(RoleOK, sparkOf(float64(v.In+v.Write+v.Out), float64(max)))
+				b.seg(RoleOK, sparkOf(float64(v.In+v.Write+v.Out), float64(maxDay)))
 			}
-			b.text(fmt.Sprintf("  %8s\n", mark+tokCount(total)))
+			b.text("  ").segs(relBar(total, maxTotal)...).text(fmt.Sprintf("  %8s\n", mark+tokCount(total)))
 		}
 		if len(none) > 0 {
 			b.text("  ").seg(RoleMuted, Preview(strings.Join(none, " "))+"  no data (no dispatch service counting tokens)").text("\n")
 		}
 	}
-	b.text("\n")
 
-	head(Preview(project) + " by agent, today")
+	agentsHead := "Agents, " + Preview(project)
+	b.segs(Seg{Text: agentsHead, Role: RoleText, Bold: true}). // the columns over in and out: name 16, provider 10
+									seg(RoleMuted, strings.Repeat(" ", max(1, 2+16+1+10-Width(agentsHead)))+fmt.Sprintf(" %8s %8s", "in", "out")).text("\n")
 	var open tokProject
 	for _, p := range st.projects {
 		if p.name == project {
@@ -284,22 +291,89 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	if pending {
 		reason = "first reading pending"
 	}
-	for _, r := range tokens.AgentRows(open.rows, open.known, reason, snaps, today) {
-		b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ").seg(providerRole(r.Provider, RoleMuted), Fit(Preview(r.Provider), 10))
+	rows := tokens.AgentRows(open.rows, open.known, reason, snaps, today)
+	var maxAgent int64
+	top := ""
+	for _, r := range rows {
+		if r.In != nil && *r.In+*r.Out > maxAgent {
+			maxAgent, top = *r.In+*r.Out, r.Agent
+		}
+	}
+	var folded []string // the short reasons of the rows a folds, in order
+	foldedN := map[string]int{}
+	for _, r := range rows {
 		if r.In == nil {
-			b.seg(RoleMuted, fmt.Sprintf(" %8s %8s  ", "?", "?")).seg(RoleMuted, Preview(r.Reason)).text("\n")
+			why := shortTokReason(r.Reason)
+			if !all {
+				if foldedN[why] == 0 {
+					folded = append(folded, why)
+				}
+				foldedN[why]++
+				continue
+			}
+			b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ").seg(providerRole(r.Provider, RoleMuted), Fit(Preview(r.Provider), 10)).
+				seg(RoleMuted, fmt.Sprintf(" %8s %8s  ", "?", "?")).seg(RoleMuted, Preview(why)).text("\n")
 			continue
 		}
-		b.text(fmt.Sprintf(" %8s %8s", tokCount(*r.In), tokCount(*r.Out))).text("\n")
+		bold := r.Agent == top
+		b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ").seg(providerRole(r.Provider, RoleMuted), Fit(Preview(r.Provider), 10)).
+			segs(Seg{Text: fmt.Sprintf(" %8s", tokCount(*r.In)), Role: RoleText, Bold: bold}).text(fmt.Sprintf(" %8s", tokCount(*r.Out))).
+			text("  ").segs(relBar(*r.In+*r.Out, maxAgent)...).text("\n")
+	}
+	for _, why := range folded {
+		muted(fmt.Sprintf("  %d more %s %s  (a lists them)", foldedN[why], GlyphNone, why))
 	}
 	b.text("\n")
-	muted("IN = input + cache writes, OUT = output; cache reads apart; ~ still counting; no cost, by rule.")
-	muted("not attributed to any project: agentbus tokens --unattributed")
+	if width < 100 {
+		muted("in: input + cache writes " + GlyphNone + " ~ counting " + GlyphNone + " no cost")
+	} else {
+		muted("in = input + cache writes " + GlyphNone + " out = output " + GlyphNone + " ~ still counting " + GlyphNone + " no cost, by rule")
+	}
 	lines := b.Lines()
 	for i := range lines {
 		lines[i] = FitLine(lines[i], width)
 	}
 	return lines
+}
+
+// shortTokReason is an unknown agent's reason as its row reads it: grey and
+// short, the long sentence in the CLI (agentbus tokens).
+func shortTokReason(r string) string {
+	if r == "no session proved with its process" {
+		return "no proved session"
+	}
+	return r
+}
+
+// tokensTitle is the U page's counter summary: the period, the fullest
+// window of a provider not held, and each held provider with its time left.
+func tokensTitle(budgets map[string]bus.BudgetSnapshot, holds map[string]int64, now time.Time) string {
+	parts := []string{"Tokens", "today"}
+	provs := make([]string, 0, len(budgets))
+	for p := range budgets {
+		provs = append(provs, p)
+	}
+	sort.Strings(provs)
+	best, bestPct := "", -1.0
+	for _, p := range provs {
+		if _, isHeld := held(holds, p, now); isHeld {
+			continue
+		}
+		for _, w := range budgets[p].Windows {
+			if !windowUnobserved(w) && w.UsedPct > bestPct {
+				best, bestPct = fmt.Sprintf("%s %.0f%% %s", p, w.UsedPct, w.Name), w.UsedPct
+			}
+		}
+	}
+	if best != "" {
+		parts = append(parts, best)
+	}
+	for _, p := range provs {
+		if until, isHeld := held(holds, p, now); isHeld {
+			parts = append(parts, p+" held "+compactDur(until.Sub(now)))
+		}
+	}
+	return strings.Join(parts, " "+GlyphNone+" ")
 }
 
 // tokensOpen: the U page is on the reader's stack.

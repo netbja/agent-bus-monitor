@@ -13,33 +13,33 @@
 │                                                      ││  ● release   working   ●●●○○○○○○○ 7m       —        —         fallback kimi-alt   tagging                                          │
 │                                                      ││  ○ ui-kimi   paused    ●○○○○○○○○○ 9m       —        —         for you             charlie: your call on the tabs                   │
 ╰──────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Tokens ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── esc back ─╮
-│ Account windows                                                                                                                                                                            │
+╭─ Tokens · today · anthropic 62% 5h · xai held 40m ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── esc back ─╮
+│ Accounts                                                                                                                                                                                   │
 │   anthropic  5h  ██████▎     62%  24h  ▁  ▁  ▂  ▃  ▄  ▅  ▆  ▇   resets 2h00                                                                                                                │
 │   anthropic  7d  ████▏       41%  24h                           resets 72h00                                                                                                               │
 │   xai        5h  ██████████ 100%  24h                           held 40m                                                                                                                   │
-│                                                                                                                                                                                            │
-│ Projects, today and 7 days                                                                                                                                                                 │
-│   PROJECT                    IN      OUT   CACHE RD  7 DAYS   7D TOTAL                                                                                                                     │
-│   agent-bus-monitor       ~1.5M    ~289k    ~500.0M     ▃ █▆     ~5.1M                                                                                                                     │
-│   blog                        0        0          0   ▁           170k                                                                                                                     │
+│ Projects                     in      out  7 days                                                                                                                                           │
+│   agent-bus-monitor       ~1.5M    ~289k     ▃ █▆  ████████████████████     ~5.1M                                                                                                          │
+│   blog                        0        0   ▁       ▋                         170k                                                                                                          │
 │   wiki  no data (no dispatch service counting tokens)                                                                                                                                      │
+│ Agents, agent-bus-monitor           in      out                                                                                                                                            │
+│   foureyes         anthropic      1.2M     206k  ████████████████████                                                                                                                      │
+│   coder            anthropic      345k      83k  ██████▏                                                                                                                                   │
+│   9 more · no proved session  (a lists them)                                                                                                                                               │
 │                                                                                                                                                                                            │
-│ agent-bus-monitor by agent, today                                                                                                                                                          │
-│   foureyes         anthropic      1.2M     206k                                                                                                                                            │
-│   coder            anthropic      345k      83k                                                                                                                                            │
-│   architect                          ?        ?  no session proved with its process                                                                                                        │
-│   docs                               ?        ?  no session proved with its process                                                                                                        │
-│   master                             ?        ?  no session proved with its process                                                                                                        │
-│   qa               xai               ?        ?  no session proved with its process                                                                                                        │
-│   release                            ?        ?  no session proved with its process                                                                                                        │
-│   security                           ?        ?  no session proved with its process                                                                                                        │
-│   sentinel                           ?        ?  no session proved with its process                                                                                                        │
-│   ui-grok          xai               ?        ?  no session proved with its process                                                                                                        │
-│   ui-kimi                            ?        ?  no session proved with its process                                                                                                        │
+│ in = input + cache writes · out = output · ~ still counting · no cost, by rule                                                                                                             │
 │                                                                                                                                                                                            │
-│ IN = input + cache writes, OUT = output; cache reads apart; ~ still counting; no cost, by rule.                                                                                            │
-│ not attributed to any project: agentbus tokens --unattributed                                                                                                                              │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
+│                                                                                                                                                                                            │
 │                                                                                                                                                                                            │
 │                                                                                                                                                                                            │
 │                                                                                                                                                                                            │
@@ -47,4 +47,4 @@
 │                                                                                                                                                                                            │
 │                                                                                                                                                                                            │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k scroll   y copy   n p ←→ next/prev   esc q close   F5 health                                                                                                                          
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   a all   esc q close   F5 health                                                                                                                  
