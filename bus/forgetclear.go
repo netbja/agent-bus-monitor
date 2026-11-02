@@ -38,6 +38,11 @@ func (b *Bus) SwapIntentRaw(ctx context.Context, role string) (string, error) {
 	return v, err
 }
 
+// PopDoneMark is the {p}:quota mark of the dispatcher's pop-end directive
+// (pop-auto-retire §3); its value is the episode it was sent for, which
+// busmon reads to flag the pop done.
+func PopDoneMark(agent string) string { return "popdone:" + agent }
+
 // BoardOwes reports whether a board task in state still owes work: any
 // state but done (the board's states are free words, only done is special;
 // foureyes on pop-auto-retire-code), so an unknown word fails closed.

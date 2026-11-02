@@ -27,10 +27,6 @@ type PopRetireConfig struct {
 	Missions func(ctx context.Context, agent string) ([]string, error)
 }
 
-// PopDoneMark is the {p}:quota mark of a pop's end directive; its value is
-// the episode it was sent for.
-func PopDoneMark(agent string) string { return "popdone:" + agent }
-
 // PopRetireText is the directive master gets for a done pop.
 func PopRetireText(role string, episode int64, idle time.Duration) string {
 	return fmt.Sprintf("%s has finished: no task, gate, ask or message left, idle %s. End it: agentbus retire %s --forget --episode %d --reason \"work done\"",
@@ -67,7 +63,7 @@ func (l *loop) popRetirePass(ctx context.Context, snaps map[string]bus.AgentSnap
 		// The cheap part of §2 first, from the snapshot alone: a pop, declared
 		// idle or done long enough, not already told for this episode.
 		if s.Tier != "pop" || s.Auto != "" || (s.State != "idle" && s.State != "done") ||
-			now.Sub(time.UnixMilli(s.TS)) < c.After || marks[PopDoneMark(a)] == strconv.FormatInt(PopEpisode(&s), 10) {
+			now.Sub(time.UnixMilli(s.TS)) < c.After || marks[bus.PopDoneMark(a)] == strconv.FormatInt(PopEpisode(&s), 10) {
 			continue
 		}
 		names = append(names, a)
@@ -104,7 +100,7 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 	}
 	episode := PopEpisode(f.Snap)
 	text := PopRetireText(a, episode, now.Sub(time.UnixMilli(episode)))
-	sent, err := l.b.FencedCmdOnce(ctx, l.token, PopDoneMark(a), strconv.FormatInt(episode, 10), dispatchFrom,
+	sent, err := l.b.FencedCmdOnce(ctx, l.token, bus.PopDoneMark(a), strconv.FormatInt(episode, 10), dispatchFrom,
 		l.cfg.EscalateTo, bus.CmdDirective, text, false)
 	if err != nil {
 		return err

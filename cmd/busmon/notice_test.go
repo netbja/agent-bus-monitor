@@ -171,6 +171,9 @@ func TestNoticeSwaps(t *testing.T) {
 		{"a swap back", bus.SwapEvent{Role: "coder", Event: bus.SwapBack, By: "master"}, GlyphDone + " coder back on its own profile"},
 		{"the person's reload", bus.SwapEvent{Role: "coder", Event: bus.SwapBegin, Kind: bus.SwapKindReload, By: "charlie"}, ""},
 		{"a swap's begin", bus.SwapEvent{Role: "coder", Event: bus.SwapBegin, By: "master"}, ""},
+		// pop-auto-retire §7: a pop's end, or a pop closed but kept registered.
+		{"a pop retired", bus.SwapEvent{Role: "security", Event: bus.SwapRetire, By: "master", Reason: "work done", Forgot: "true"}, GlyphDone + " security retired: work done"},
+		{"a pop kept", bus.SwapEvent{Role: "security", Event: bus.SwapRetire, By: "master", Forgot: "false", Error: "kept: unread 1-0"}, GlyphBlocked + " security closed, its registration kept (agentbus swaps)"},
 	} {
 		m := quiet(t, false)
 		if m = step(t, m, pollMsg{snap: shellFixture(shellNow), at: shellNow.Add(time.Second), swaps: []bus.SwapEvent{c.ev}}); noticeText(m) != c.want {
