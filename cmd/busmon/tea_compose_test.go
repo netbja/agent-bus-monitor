@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -453,4 +454,27 @@ func TestOrphanAnswerKeepsAnEarlierMessageDraft(t *testing.T) {
 			t.Fatalf("the orphan's text does not open next: %+v", c)
 		}
 	})
+}
+
+// A question carried unchanged through any number of replacements is still
+// open on the last ask: followAsk walks the whole chain (reviewer-codex: it
+// stopped after 8 hops), and stops on a cycle, which a snapshot may hold.
+func TestFollowAskWalksTheWholeChain(t *testing.T) {
+	q := bus.AskQuestionState{AskQuestion: bus.AskQuestion{ID: "go", Header: "Go?", Question: "Merge lot 1?"}}
+	var asks []bus.Ask
+	for i := range 12 {
+		a := bus.Ask{ID: fmt.Sprintf("%d-0", 100+i), From: "master", State: "replaced", ReplacedBy: fmt.Sprintf("%d-0", 101+i),
+			Questions: []bus.AskQuestionState{q}}
+		if i == 11 {
+			a.State, a.ReplacedBy = "open", ""
+		}
+		asks = append(asks, a)
+	}
+	if a, _, ok := followAsk(asks, "100-0", "go"); !ok || a.ID != "111-0" {
+		t.Fatalf("11 replacements: got %q, ok %v", a.ID, ok)
+	}
+	asks[11].State, asks[11].ReplacedBy = "replaced", "100-0" // a cycle, never open
+	if _, _, ok := followAsk(asks, "100-0", "go"); ok {
+		t.Fatal("a cycle reads as open")
+	}
 }

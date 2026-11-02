@@ -43,7 +43,7 @@ func findAsk(asks []bus.Ask, id string) (bus.Ask, bool) {
 
 // followAsk is the ask and question to answer now for question qid of ask id:
 // following replaced_by while the question is carried unchanged
-// (bus.SameQuestion, the bus's own rule; at most 8 hops), to an ask still
+// (bus.SameQuestion, the bus's own rule; the whole chain), to an ask still
 // open. ok is false when the question changed or left in a replacement, or
 // its ask is no longer open (answered, withdrawn, expired, gone).
 func followAsk(asks []bus.Ask, id, qid string) (bus.Ask, bus.AskQuestionState, bool) {
@@ -60,7 +60,9 @@ func followAsk(asks []bus.Ask, id, qid string) (bus.Ask, bus.AskQuestionState, b
 		return bus.Ask{}, bus.AskQuestionState{}, false
 	}
 	q, ok := question(a)
-	for hops := 0; ok && hops < 8; hops++ {
+	seen := map[string]bool{} // the whole chain, however long; a cycle (never written by the bus, but data) ends it
+	for ok && !seen[a.ID] {
+		seen[a.ID] = true
 		if a.State == "open" {
 			return a, q, true
 		}
