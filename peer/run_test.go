@@ -298,3 +298,61 @@ func TestRunnerKeepsARequestOnAServerError(t *testing.T) {
 		t.Fatalf("board = %+v after %d accepts, want done after a retry", board["t-loading"], tries.Load())
 	}
 }
+
+// An error that does not heal (here an accept that always fails with a
+// server error) leaves the entry pending and backs the peer off, never a hot
+// loop of re-drains (foureyes).
+func TestRunnerBacksOffAfterAnError(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 200, answerJSON })
+	var tries atomic.Int32
+	r := &Runner{Bus: b, Agent: "local", Consumer: "test", Turn: newTurn(t, srv, time.Minute), RetryEvery: 20 * time.Millisecond, LeaseWait: time.Second, Out: &syncBuf{},
+		accept: func(context.Context, string, string) error {
+			tries.Add(1)
+			return errors.New("ERR something persistent")
+		}}
+	if _, err := b.Request(ctx, "t-stuck", "master", "local", "", "q", 0); err != nil {
+		t.Fatal(err)
+	}
+	rctx, cancel := context.WithTimeout(ctx, 2500*time.Millisecond)
+	defer cancel()
+	if err := r.Run(rctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := tries.Load(); n < 1 || n > 3 {
+		t.Fatalf("%d tries in 2.5 s, want a backoff (1 s, then 2 s)", n)
+	}
+	if board, _ := b.Board(ctx); board["t-stuck"].State != "requested" {
+		t.Fatalf("board = %+v, want the request still pending", board["t-stuck"])
+	}
+}
+
+// A request already completed and delivered again is acknowledged without a
+// turn and without a second reply (foureyes).
+func TestRunnerAcknowledgesADoneRequest(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	id, err := b.Request(ctx, "t-done", "master", "local", "", "q", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.AcceptRequest(ctx, "t-done", "local"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.CompleteRequest(ctx, "t-done", "local", "answered before"); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { calls.Add(1); return 200, answerJSON })
+	_, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	last, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, last, 2) // in order: the done request was handled before
+	stop()
+	if evs, _ := b.Thread(ctx, id); len(evs) != 2 || calls.Load() != 1 {
+		t.Fatalf("thread = %d entries, %d turns: want the first response only and one turn (the next directive)", len(evs), calls.Load())
+	}
+}

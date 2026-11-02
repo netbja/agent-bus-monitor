@@ -32,7 +32,9 @@ type Runner struct {
 
 // Run holds the lease until ctx ends. A lease held by another peer is an
 // error (two peers under one name); a lost lease is taken again, and the
-// queue drained again, before receiving.
+// queue drained again, before receiving. Every retry backs off (1 s doubling
+// to 30 s, back to 1 s after a lease held a minute), so an error that does
+// not heal idles the peer instead of spinning it.
 func (r *Runner) Run(ctx context.Context) error {
 	r.Turn.Log = func(s string) { r.say("  " + s) }
 	backoff := time.Second
@@ -51,7 +53,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			backoff = min(2*backoff, 30*time.Second)
 			continue
 		}
-		backoff = time.Second
+		held := time.Now()
 		r.status(ctx, "idle", "local-llm peer: listening")
 		_, err = rc.Drain(bus.DefaultHorizon, func(e bus.Event) error { return r.handle(ctx, rc.Context(), e) })
 		if err == nil {
@@ -61,7 +63,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		r.say("receiver lease lost (" + err.Error() + "); taking it again")
+		if time.Since(held) > time.Minute {
+			backoff = time.Second
+		}
+		r.say(fmt.Sprintf("receiver lease lost (%v); taking it again in %s", err, backoff))
+		if !sleep(ctx, backoff) {
+			return nil
+		}
+		backoff = min(2*backoff, 30*time.Second)
 	}
 }
 

@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"errors"
+	"regexp"
 	"testing"
 )
 
@@ -32,5 +33,20 @@ func TestRequestRefusalsAreTyped(t *testing.T) {
 	loading := errors.New("LOADING Redis is loading the dataset in memory")
 	if errors.Is(requestError(loading), ErrRequestRefused) {
 		t.Fatal("LOADING reads as a refusal")
+	}
+}
+
+// Every error_reply of the request script is a refusal: a new one added to
+// the script cannot drift past requestRefusals (foureyes).
+func TestEveryScriptRefusalIsListed(t *testing.T) {
+	re := regexp.MustCompile(`error_reply\('([^']*)'\)`)
+	found := re.FindAllStringSubmatch(requestTransitionSrc, -1)
+	if len(found) < 8 {
+		t.Fatalf("only %d error replies found in the script", len(found))
+	}
+	for _, m := range found {
+		if err := requestError(errors.New(m[1])); !errors.Is(err, ErrRequestRefused) || err.Error() != m[1] {
+			t.Errorf("the script's %q is not a refusal (%v)", m[1], err)
+		}
 	}
 }

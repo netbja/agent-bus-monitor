@@ -135,7 +135,11 @@ func requestError(err error) error {
 	return err
 }
 
-var requestTransition = redis.NewScript(`
+var requestTransition = redis.NewScript(requestTransitionSrc)
+
+// requestTransitionSrc is the script's source: its error_reply literals are
+// the refusals requestError marks (a test holds the list to them).
+const requestTransitionSrc = `
 local raw=redis.call('HGET',KEYS[1],ARGV[1]);if not raw then return redis.error_reply('unknown request') end
 local e=cjson.decode(raw);local r=e.request
 if not r then return redis.error_reply('board task is not a tracked request') end
@@ -168,7 +172,7 @@ else
 end
 e.updated=math.floor(now/1000)
 redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(e))
-return result`)
+return result`
 
 func (b *Bus) requestAvailability(ctx context.Context, entries map[string]BoardEntry) error {
 	pipe := b.r.Pipeline()
