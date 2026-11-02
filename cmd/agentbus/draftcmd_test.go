@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -65,6 +66,12 @@ func TestRolesDraft(t *testing.T) {
 	snip, err := os.ReadFile(filepath.Join(out, "writer", "roles.toml"))
 	if err != nil || !strings.Contains(string(snip), "[roles.writer]") {
 		t.Fatalf("snippet %q %v", snip, err)
+	}
+	// A drafted role never delivers (forge-delivery): both denies in its own rules.
+	for _, rule := range rolecfg.DeliverDeny {
+		if !strings.Contains(string(snip), fmt.Sprintf("%q", rule)) {
+			t.Errorf("the draft lacks the deny %s:\n%s", rule, snip)
+		}
 	}
 	if prompt, err := os.ReadFile(filepath.Join(out, "writer", "writer.md")); err != nil || !strings.Contains(string(prompt), "documentation current") {
 		t.Fatalf("prompt %v", err)
@@ -243,5 +250,67 @@ func TestAdoptRefusesAnExtraTable(t *testing.T) {
 	}
 	if err := draftEntryOnly("# a comment\n[roles.writer]\nprofile = \"x\"\ntier = \"pop\"\napproval = \"person\"\nskills = [\"agent-bus\"]\n", "writer"); err != nil {
 		t.Fatalf("refused a plain entry: %v", err)
+	}
+}
+
+// A role adopted without the deliver denies could push and open requests
+// (forge-delivery answer 3): refused, unless the question the person answered
+// named it a delivering role.
+func TestRolesAdoptRefusesARoleThatMayDeliver(t *testing.T) {
+	testredis.Configure(t)
+	r, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := bus.Open(r, "adoptdlv"+strconv.FormatInt(time.Now().UnixNano(), 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = bus.DeleteProject(ctx, r, b.Project()); _ = r.Close() })
+
+	env, manifest, _, out := draftEnv(t)
+	var stdout, errw bytes.Buffer
+	if code := runRoles([]string{"draft", "relay", "--task", "documentation", "--out", out}, env, &stdout, &errw); code != 0 {
+		t.Fatalf("draft: %s", errw.String())
+	}
+	// The draft edited to drop its tool rules, before any ask.
+	snipPath := filepath.Join(out, "relay", "roles.toml")
+	snip, _ := os.ReadFile(snipPath)
+	cut := string(snip)
+	if i := strings.Index(cut, "[roles.relay.tool_rules]"); i >= 0 {
+		cut = cut[:i]
+	}
+	if err := os.WriteFile(snipPath, []byte(cut), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prompt, _ := os.ReadFile(filepath.Join(out, "relay", "relay.md"))
+	qid := draftQuestionID("relay", []byte(cut), prompt)
+	answered := func(text string) string {
+		id, _, err := b.Ask(ctx, bus.AskDef{From: "master", Title: "Adopt the drafted role?", Questions: []bus.AskQuestion{{
+			ID: qid, Header: "Role", Question: text,
+			Options: []bus.AskOption{{Label: "adopt"}, {Label: "discard"}}}}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := b.Answer(ctx, id, qid, "charlie", "adopt", ""); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	plain := answered("Adopt the drafted role relay (" + qid + ")?")
+	errw.Reset()
+	if runAdopt(ctx, b, "master", []string{"relay", "--ask", plain, "--from", out}, env, &stdout, &errw) == 0 {
+		t.Fatal("adopted a role without the deliver denies")
+	}
+	if !strings.Contains(errw.String(), "relay") || !strings.Contains(errw.String(), "agentbus deliver") {
+		t.Errorf("refusal %q", errw.String())
+	}
+	if body, _ := os.ReadFile(manifest); strings.Contains(string(body), "[roles.relay]") {
+		t.Fatal("the manifest changed")
+	}
+	named := answered("Adopt the drafted role relay (" + qid + ") as a delivering role?")
+	if code := runAdopt(ctx, b, "master", []string{"relay", "--ask", named, "--from", out}, env, &stdout, &errw); code != 0 {
+		t.Fatalf("adopt as a delivering role = %d: %s", code, errw.String())
 	}
 }

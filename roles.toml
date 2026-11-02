@@ -120,17 +120,27 @@ skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 [roles.master.tool_rules]
 # Lifecycle part C: master reloads sentinel, and only sentinel.
 allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
-  "Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)"]
+  "Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)",
+  # forge-delivery: master delivers (push included) once the 4-eyes proof names the head.
+  "Bash(agentbus deliver *)"]
 
 [roles.coder]
 profile = "claude-opus"
 tier = "boot"
 skills = ["agent-bus", "tdd", "implement"]
+# Only master and docs deliver (forge-delivery, the person's answer 3): every
+# other role denies both spellings in its own rules, never in the shared
+# [tool_rules], which would deny master and docs too. Defence in depth, not a
+# boundary: the client matches command text.
+[roles.coder.tool_rules]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 [roles.foureyes]
 profile = "claude-opus"
 tier = "boot"
 skills = ["agent-bus", "code-review", "diagnosing-bugs"]
+[roles.foureyes.tool_rules]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 [roles.sentinel]
 profile = "claude-haiku"
@@ -142,27 +152,38 @@ skills = ["agent-bus", "agent-bus-sentinel"]
 # This allow only spares the prompt.
 [roles.sentinel.tool_rules]
 allow = ["Bash(agentbus reload *)"]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 [roles.architect]
 profile = "claude-opus-fallback"
 tier = "pop"
 skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
+[roles.architect.tool_rules]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 [roles.deploy]
 profile = "claude-sonnet"
 tier = "pop"
 approval = "person"
 skills = ["agent-bus", "diagnosing-bugs"]
+[roles.deploy.tool_rules]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 [roles.security]
 profile = "claude-opus-manual"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-security"]
+[roles.security.tool_rules]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 [roles.docs]
 profile = "claude-sonnet-edits"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-docs"]
+# forge-delivery: docs delivers its pr/<change> branch (push included) once the
+# 4-eyes proof names the head.
+[roles.docs.tool_rules]
+allow = ["Bash(agentbus deliver *)"]
 
 # Interface advisors from other makers: they discuss busmon's next interface with the person
 # and master, read-only, and never code.
@@ -170,11 +191,15 @@ skills = ["agent-bus", "agent-bus-docs"]
 profile = "grok"
 tier = "pop"
 skills = ["agent-bus"]
+[roles.ui-grok.tool_rules]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 [roles.ui-kimi]
 profile = "kimi"
 tier = "pop"
 skills = ["agent-bus"]
+[roles.ui-kimi.tool_rules]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 # A second independent reviewer from another maker, popped when another 4-eyes is needed.
 # Never codes; read-only on the repository.
@@ -182,6 +207,8 @@ skills = ["agent-bus"]
 profile = "codex-review"
 tier = "pop"
 skills = ["agent-bus"]
+[roles.reviewer-codex.tool_rules]
+deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
 
 # Drafted by master for: infrastructure as code and IT automation: Ansible playbooks and roles, Terraform and OpenTofu plans, linting, drift checks, IT support; check plan diff lint freely, apply or destroy only after the person says yes, never secrets
 [roles.infra]
@@ -245,4 +272,6 @@ deny = [
   "Bash(terraform *plan*-out*)", "Bash(tofu *plan*-out*)",
   "Bash(terraform *workspace new*-state*)", "Bash(tofu *workspace new*-state*)",
   "Bash(printenv*)", "Bash(env)", "Bash(env *)",
+  # Only master and docs deliver (forge-delivery).
+  "Bash(agentbus deliver *)", "Bash(agentbus * deliver *)",
 ]

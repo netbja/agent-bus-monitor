@@ -2,6 +2,7 @@ package rolecfg
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -152,7 +153,7 @@ tier = "boot"
 
 func TestToolRulesRejections(t *testing.T) {
 	long := "Read(" + strings.Repeat("x", 196) + ")"
-	many := make([]string, 41)
+	many := make([]string, maxRules+1)
 	for i := range many {
 		many[i] = `"Read"`
 	}
@@ -213,7 +214,7 @@ var reloadAsDeny = []string{"Bash(agentbus reload *--as*)", "Bash(agentbus * rel
 // 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
 // exact reload of sentinel, nothing broader.
 var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
-	"Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)"}
+	"Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)", "Bash(agentbus deliver *)"}
 
 func TestShippedManifestRules(t *testing.T) {
 	m, err := Load(repoPath(t, "roles.toml"))
@@ -276,6 +277,31 @@ func TestShippedManifestRules(t *testing.T) {
 			t.Fatalf("shared deny %v lacks %s", m.SharedToolRules.Deny, rule)
 		}
 	}
+	// Only master and docs deliver (forge-delivery answer 3): their own allow,
+	// and both denies in every other role's own rules, never in the shared
+	// ones, which would deny master and docs too.
+	for _, rule := range DeliverDeny {
+		if slices.Contains(m.SharedToolRules.Deny, rule) {
+			t.Fatalf("shared deny holds %s", rule)
+		}
+	}
+	for _, role := range m.roleOrder {
+		lr, err := m.LaunchRules(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := "agentbus --project agent-bus-monitor deliver coder/x --task t1"
+		switch role {
+		case "master", "docs":
+			if !slices.Contains(lr.Allow, "Bash(agentbus deliver *)") || slices.ContainsFunc(DeliverDeny, func(r string) bool { return slices.Contains(lr.Deny, r) }) {
+				t.Errorf("%s does not deliver: %+v", role, lr)
+			}
+		default:
+			if !HoldsDeliverDeny(lr) || decide(lr, cmd) != "deny" || decide(lr, "agentbus deliver coder/x") != "deny" {
+				t.Errorf("%s may deliver: deny %v", role, lr.Deny)
+			}
+		}
+	}
 	// Sentinel reloads agents (lifecycle part C): that one command, nothing else.
 	s, err := m.LaunchRules("sentinel")
 	if err != nil {
@@ -283,5 +309,36 @@ func TestShippedManifestRules(t *testing.T) {
 	}
 	if !reflect.DeepEqual(s.Allow, []string{"Bash(agentbus reload *)"}) || len(s.Ask) != 0 {
 		t.Fatalf("sentinel rules = %+v", s)
+	}
+}
+
+// The example manifests follow the shipped rule (forge-delivery): only master
+// and docs deliver, every other role carries both denies.
+func TestExampleManifestsDeliverRules(t *testing.T) {
+	base, err := os.ReadFile(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	add, err := os.ReadFile(repoPath(t, "examples/roles.specialists.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The specialists are appended to a manifest like this repository's.
+	specialists := writeConfig(t, string(base)+"\n"+string(add))
+	for file, path := range map[string]string{"examples/roles.mixed.toml": repoPath(t, "examples/roles.mixed.toml"),
+		"roles.toml + examples/roles.specialists.toml": specialists} {
+		m, err := Load(path)
+		if err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		for _, role := range m.roleOrder {
+			lr, err := m.LaunchRules(role)
+			if err != nil {
+				t.Fatalf("%s %s: %v", file, role, err)
+			}
+			if delivers := role == "master" || role == "docs"; delivers == HoldsDeliverDeny(lr) {
+				t.Errorf("%s: %s deny %v", file, role, lr.Deny)
+			}
+		}
 	}
 }

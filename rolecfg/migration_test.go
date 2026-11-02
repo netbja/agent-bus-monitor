@@ -77,14 +77,15 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 	s2, _ := v2.LaunchRules("sentinel")
 	wantS := s1
 	wantS.Allow = append(append([]string{}, s1.Allow...), "Bash(agentbus reload *)")
-	wantS.Deny = append(append([]string{}, s1.Deny...), reloadAsDeny...)
+	wantS.Deny = append(append(append([]string{}, s1.Deny...), reloadAsDeny...), DeliverDeny...)
 	if !reflect.DeepEqual(wantS, s2) {
 		t.Fatalf("sentinel's rules %+v, want %+v", s2, wantS)
 	}
 	for _, role := range v1.roleOrder {
 		a, b := dry(v1, role), dry(v2, role)
-		// Every role gains exactly the shared --as deny (busmon-reload-deny);
-		// master and sentinel also their checked allows above.
+		// Every role gains exactly the shared --as deny (busmon-reload-deny)
+		// and, but docs, the deliver denies (forge-delivery); docs the deliver
+		// allow; master and sentinel also their checked rules above.
 		o1, _ := v1.LaunchRules(role)
 		o2, _ := v2.LaunchRules(role)
 		switch role {
@@ -92,6 +93,11 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		default:
 			wantO := o1
 			wantO.Deny = append(append([]string{}, o1.Deny...), reloadAsDeny...)
+			if role == "docs" {
+				wantO.Allow = append(append([]string{}, o1.Allow...), "Bash(agentbus deliver *)")
+			} else {
+				wantO.Deny = append(wantO.Deny, DeliverDeny...)
+			}
 			if !reflect.DeepEqual(wantO, o2) {
 				t.Fatalf("%s's rules %+v, want %+v", role, o2, wantO)
 			}

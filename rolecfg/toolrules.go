@@ -3,6 +3,7 @@ package rolecfg
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -18,9 +19,26 @@ type ToolRules struct {
 // Empty reports whether no rule is set.
 func (r ToolRules) Empty() bool { return len(r.Allow)+len(r.Ask)+len(r.Deny) == 0 }
 
+// DeliverDeny are the denies every role but master and docs carries in its
+// own rules (forge-delivery answer 3: only they push and open requests),
+// never in the shared ones, which would deny them too. The second covers the
+// global-flag spelling (agentbus --project p deliver). Defence in depth, not
+// a boundary: the client matches command text.
+var DeliverDeny = []string{"Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"}
+
+// HoldsDeliverDeny: r denies both spellings of agentbus deliver.
+func HoldsDeliverDeny(r ToolRules) bool {
+	for _, d := range DeliverDeny {
+		if !slices.Contains(r.Deny, d) {
+			return false
+		}
+	}
+	return true
+}
+
 const (
 	maxRuleBytes = 200
-	maxRules     = 40 // v0.17.3 shared rules need Read and Edit forms of each deny.
+	maxRules     = 64 // v0.17.3 shared rules need Read and Edit forms of each deny; forge-delivery adds two to infra's 40.
 )
 
 var (
