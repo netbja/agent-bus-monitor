@@ -1,6 +1,7 @@
 # Backup and restore: the state before a disaster
 
-Status: spec, not built. Plan v0.26 task `backup`, review subject `backup-spec`.
+Status: spec, not built. Plan v0.26 task `backup`, review subject `backup-spec`. Bernard's answers
+to the four open questions recorded 2026-11-02 (subject `backup-answers`, see "Answers" at the end).
 
 ## Why
 
@@ -84,7 +85,8 @@ it is added.
 
 The `DUMP` payload carries the RDB version, which changes within a major (7.0, 7.2, 7.4): a
 restore onto a broker **older than the manifest's version**, by any part of it, is refused
-before any write (see open question 3).
+before any write. That is the accepted cost of `DUMP` (answer 3): bringing a backup to an older
+broker means upgrading that broker first.
 
 ## Secrets: only with `--secrets`, only encrypted
 
@@ -93,7 +95,8 @@ The secrets are the password file (`redis.env`) and the services' env files
 listed as left out, never read.
 
 With `--secrets`, they are encrypted with **age** to a recipient, the public half of a key the
-person holds:
+person holds (answer 4: a recipient key, no passphrase; `age -p` is not offered, since it
+prompts and cannot run unattended):
 
 - `age` must be on PATH; without it `--secrets` refuses before anything is written.
 - The recipient is `backup.age_recipient` in `config.toml` (an `age1…` public key: not a secret)
@@ -147,14 +150,63 @@ rest not: a second `restore` finishes it (written ones read identical and are sk
 
 ## Destination and retention
 
-`backup.dir` in `config.toml`, default `$XDG_DATA_HOME/agentbus/backups` (else
-`~/.local/share/agentbus/backups`), created 0700. The guide says plainly that a backup on the
-same disk does not survive the disk, and how to point `backup.dir` at another one (a mount, a
-synced folder).
+`backup.dir` in `config.toml` (answer 2), default `$XDG_DATA_HOME/agentbus/backups` (else
+`~/.local/share/agentbus/backups`), created 0700. `--dir` overrides it for one run. The guide says
+plainly that a backup on the same disk does not survive the disk, and how to point `backup.dir` at
+another one (a mount, a synced folder). Bernard's own machine sets `backup.dir =
+"/data/backups/agentbus"` in its `config.toml`; that is his setting, not the default.
 
 `backup.keep` (default 7): after a successful backup, the oldest archives of this host beyond
 that count are removed; `0` keeps every one. Only files matching the archive name pattern are
 ever removed.
+
+## Schedule: by hand by default, daily when the person asks
+
+Answer 1: backups are made by hand by default, with the health reminder after 7 days (below). The
+person can make them automatic in one setting:
+
+`backup.schedule = off | daily` (default `off`).
+
+- **`off`**: nothing runs a backup but the person's `agentbus backup`.
+- **`daily`**: the dispatch service runs one. This is a chore on its own goroutine, beside the
+  reconciliation, as the history archive's is. It runs only while the service holds its dispatch
+  lease (`HoldsDispatch`).
+  - **When:** the chore checks once an hour. It runs when the newest archive of this host in
+    `backup.dir` is 24 h old or older, or there is none. A backup the person made by hand
+    therefore counts, and no clock time needs configuring.
+  - **One per host:** it takes a host-local flock, `<state>/backup.lock`, as the model and
+    Redis-release refreshes do. Every project's dispatch service runs the chore, but only one
+    backup is made at a time, and the next check finds that archive fresh.
+  - **What it runs:** the same code as `agentbus backup` with no `--project`, so every project of
+    this host, followed by the retention (`backup.keep`).
+  - **Secrets:** never unattended unless an age recipient is configured. The chore includes the
+    secrets only when `backup.age_recipient` is set: encryption to a recipient needs no private key
+    and no prompt. With no recipient, the secrets are left out and listed as left out in the
+    manifest. With a recipient but no `age` on the service's PATH, the archive is still written
+    without the secrets, and the run records the error. A backup without its secrets beats no
+    backup, and the error does not go unseen (health, below).
+  - **Record:** the run's outcome goes to `<state>/backup-last.json`, 0600, never a secret. It
+    holds `at`, `scheduled`, the archive's name or the error, the projects, and the `EXEC` time per
+    project. The service log carries the same line.
+  - **Settings:** read through `config.Machine`: the environment, then that environment's
+    `config.toml`.
+
+What the person accepts with `daily`: a service now writes outside its state directory, into
+`backup.dir`. Once a day the broker serves nobody else for each project's `EXEC` (see "Redis"
+above); its length is in the record. Restore is never scheduled: only the person runs it.
+
+## Settings
+
+All of them are in the registry (`config/keys.go`), group Backup, read by `agentbus backup` and the
+dispatch service:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `backup.schedule` | `off` | `off` or `daily` (above) |
+| `backup.dir` | `$XDG_DATA_HOME/agentbus/backups` | where archives go |
+| `backup.keep` | `7` | archives of this host kept; `0` keeps every one |
+| `backup.warn_after` | `7d` | the health reminder; `0` = off |
+| `backup.age_recipient` | none | an `age1…` public key: not a secret |
 
 ## Speed
 
@@ -167,9 +219,11 @@ is small. No step waits on the network.
 A health check `backup`: **warn** when the newest archive in `backup.dir` is older than
 `backup.warn_after` (default 7 days; `0` = off) or there is none, **ok** otherwise, **unknown**
 when the directory cannot be read. Its place is **for you**, with the command `agentbus
-backup`: only the person decides to run one (it reads secrets with `--secrets`, and it writes to
-a place the person chose). Sentinel only relays it as any warn; it never runs a backup or a
-restore. See open question 1.
+backup`. With `backup.schedule = off`, the person is the one who runs backups. With `daily`, a
+stale archive means the scheduled run failed, and the detail names the error from
+`backup-last.json`. A scheduled run that left out secrets because `age` was missing also warns
+until a run includes them. Sentinel only relays it as any warn; it never runs a backup or a
+restore.
 
 ## What it never does
 
@@ -181,6 +235,8 @@ restore. See open question 1.
 - Bring back a runtime key (the `installed` marker, old pids, wake records, holds) without
   `--with-runtime`.
 - Stop, restart or reconfigure the broker; write a service unit or the `installed` marker.
+- Run a backup unattended unless `backup.schedule = daily`; include secrets in an unattended run
+  without `backup.age_recipient`; run a restore unattended, ever.
 
 ## Tests (a disposable Redis only)
 
@@ -212,19 +268,32 @@ Through `AGENTBUS_TEST_REDIS_URL`, never the person's broker:
   writing.
 - **Retention**: `keep = 2` with four archives and one foreign file: the two oldest archives
   removed, the foreign file kept.
-- **Health**: none, old, fresh, unreadable → warn, warn, ok, unknown.
+- **Health**: none, old, fresh, unreadable → warn, warn, ok, unknown. A failed scheduled run's
+  error is in the detail, and so is a run that left out the secrets for want of `age`.
+- **Schedule** (a fake clock, a temporary `backup.dir`, a fake bus): `off` never runs;
+  - `daily` runs when the newest archive is 24 h old or older, or there is none, and does not
+    run when it is fresher (an archive made by hand counts);
+  - not without the dispatch lease;
+  - two chores (two projects' services) under one host lock make one archive;
+  - without `backup.age_recipient`, no secret file is opened (the fake file system records the
+    opens);
+  - with one and a fake `age`, the secrets are in `secrets.age` only;
+  - with one and no `age`, the archive is written, the error recorded and the health check warns;
+  - `backup-last.json` is 0600 and holds no secret.
 
-## Open questions for Bernard
+## Answers (Bernard, 2026-11-02)
 
-1. **Automatic backups?** Proposed: only by hand, with the health reminder after 7 days. The
-   alternative is a daily backup by the dispatch service (without `--secrets`), at the cost of a
-   service that writes outside its state directory.
-2. **The default destination.** `~/.local/share/agentbus/backups` is on the same disk; is there a
-   folder you want as the default instead (a synced folder, another mount)?
-3. **`DUMP` or a portable export?** `DUMP`/`RESTORE` is exact and fast but tied to the Redis
-   version (a restore onto any older broker is refused). A logical export (streams by `XRANGE`,
-   hashes by `HGETALL`, groups rebuilt) survives any version but is more code and slower.
-   `DUMP` is proposed.
-4. **Secrets by key or by passphrase?** Proposed: an age recipient key (no prompt, scriptable).
-   `age -p` (a passphrase typed at each backup and restore) needs no key file but cannot run
-   unattended.
+The four questions this spec left open, as Bernard answered them. The text above is written to
+match.
+
+1. **Automatic backups?** By hand by default, with the 7-day health reminder, but everything is
+   configurable to become automatic. Hence `backup.schedule = off | daily`, default `off`. `daily`
+   is run by the dispatch service, never with secrets unattended unless an age recipient is
+   configured. See "Schedule".
+2. **The default destination.** `~/.local/share/agentbus/backups` (`$XDG_DATA_HOME/agentbus/backups`),
+   configurable with `backup.dir`. On Bernard's machine, `backup.dir = "/data/backups/agentbus"` is
+   set in `config.toml`.
+3. **`DUMP` or a portable export?** `DUMP`/`RESTORE`. A restore onto an older broker stays
+   refused; upgrading that broker first is the way through.
+4. **Secrets by key or by passphrase?** An age recipient key, with no prompt (`backup.age_recipient`
+   or `--recipient`). No passphrase mode.
