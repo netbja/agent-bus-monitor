@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -39,6 +40,10 @@ type swapDeps struct {
 	PIDGone   time.Duration // wait for the old process (15 s)
 	Proof     time.Duration // wait for the new identity (60 s)
 	Recent    time.Duration // a working declaration this recent is a running turn (2 min)
+	// Runtime inspects a pane live and PopRetireAfter is condition 9's
+	// delay, for retire --forget's re-judgements (pop-auto-retire §4).
+	Runtime        dispatch.Runtime
+	PopRetireAfter time.Duration
 }
 
 func realSwapDeps(env []string) swapDeps {
@@ -51,8 +56,10 @@ func realSwapDeps(env []string) swapDeps {
 			}
 			return rolecfg.Load(path)
 		},
-		LookPath:  exec.LookPath,
-		ProcStart: dispatch.ProcStart,
+		LookPath:       exec.LookPath,
+		ProcStart:      dispatch.ProcStart,
+		Runtime:        dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")},
+		PopRetireAfter: config.Machine(os.Getenv).Duration("dispatch.pop_retire_after"),
 		ClosePane: func(ctx context.Context, pane string) error {
 			out, err := exec.CommandContext(ctx, "herdr", "pane", "close", pane).CombinedOutput()
 			if err != nil {

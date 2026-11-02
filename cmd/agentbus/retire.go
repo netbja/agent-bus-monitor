@@ -5,25 +5,44 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 )
 
 // `agentbus retire <role> [--reason <text>] [--now]` (v0.15.1 §11.1): close
 // one agent's tab, with the swap's checks and ledger, and launch nothing.
 // `agentbus shutdown` is the team-wide stop; this is for one role, such as
 // architect once its recommendation is delivered.
+//
+// `--forget --episode <ms>` (spec 2026-11-03-pop-auto-retire-design.md §4) is
+// a pop's end: the whole of PopDone judged before the begin, after it and
+// right before the close, then ForgetIfClear unregisters it in one script,
+// keeping its consumer group, or keeps it when anything arrived.
 
-const retireUsage = "usage: agentbus retire <role> [--reason <text>] [--now]"
+const retireUsage = "usage: agentbus retire <role> [--reason <text>] [--now] | retire <role> --forget --episode <ms> [--reason <text>]"
 
 func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []string, out, errw io.Writer) int {
 	args, now := extractBool(args, "--now")
 	args, reason := extractFlag(args, "--reason")
+	args, forget := extractBool(args, "--forget")
+	args, episodeArg := extractFlag(args, "--episode")
 	if len(args) != 1 || !bus.ValidName(args[0]) {
 		fmt.Fprintln(errw, retireUsage)
 		return 2
+	}
+	var episode int64
+	if forget || episodeArg != "" {
+		n, err := strconv.ParseInt(episodeArg, 10, 64)
+		if !forget || err != nil || n <= 0 || now {
+			fmt.Fprintln(errw, "retire: --forget needs --episode <ms> (the declaration the dispatcher judged) and refuses --now")
+			fmt.Fprintln(errw, retireUsage)
+			return 2
+		}
+		episode = n
 	}
 	role := args[0]
 	fail := func(format string, a ...any) int {
@@ -47,6 +66,18 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	if code := openWork(ctx, b, role, fail); code != 0 {
 		return code
 	}
+	// popDone re-judges the whole of §2 (pop-auto-retire); own is retire's
+	// own intent once written, "" before.
+	popDone := func(own string) (bool, string) {
+		return dispatch.PopDone(dispatch.ReadPopFacts(ctx, b, d.Runtime, role, dispatch.PopReadOptions{
+			Now: d.Now(), RetireAfter: d.PopRetireAfter, OwnIntent: own, Episode: episode,
+			Missions: func(ctx context.Context, agent string) ([]string, error) { return missionsOf(ctx, b, agent) }}))
+	}
+	if forget {
+		if done, why := popDone(""); !done {
+			return fail("retire-refused: not done: %s; nothing closed", why)
+		}
+	}
 	if !now {
 		obs, err := b.Observed(ctx)
 		if err != nil {
@@ -60,7 +91,12 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 		}
 	}
 	closeInterrupted(ctx, b, role, self)
-	if err := b.BeginSwap(ctx, role, bus.SwapIntent{By: self, OldPID: snap.PID, OldStart: snap.PIDStart},
+	intent := bus.SwapIntent{By: self, OldPID: snap.PID, OldStart: snap.PIDStart}
+	if forget {
+		intent.Kind, intent.Nonce = bus.SwapKindRetire, bus.NewIntentNonce()
+	}
+	own := intent.Encode()
+	if err := b.BeginSwap(ctx, role, intent,
 		bus.SwapEvent{FromProvider: snap.Provider, By: self, Reason: reason, OldPID: snap.PID, OldPane: snap.Pane}); err != nil {
 		return fail("%v", err)
 	}
@@ -78,6 +114,11 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	if code := openWork(ctx, b, role, func(f string, a ...any) int { return failed("open work", f, a...) }); code != 0 {
 		return code
 	}
+	if forget {
+		if done, why := popDone(own); !done {
+			return failed("popdone", "not done any more: %s; nothing was closed", why)
+		}
+	}
 	for deadline := d.Now().Add(10 * time.Second); ; d.Sleep(200 * time.Millisecond) {
 		w, ok, err := b.Wake(ctx, role)
 		if err != nil {
@@ -88,6 +129,11 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 		}
 		if d.Now().After(deadline) {
 			return failed("wake in progress", "a wake is still being typed into its pane; retry in a minute")
+		}
+	}
+	if forget {
+		if done, why := popDone(own); !done {
+			return failed("popdone", "not done any more: %s; nothing was closed", why)
 		}
 	}
 	if err := d.ClosePane(ctx, snap.Pane); err != nil {
@@ -101,10 +147,33 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 			return failed("old process", "pane %s closed but pid %d is still running after %s", snap.Pane, snap.PID, d.PIDGone)
 		}
 	}
-	if err := b.RetireSwap(ctx, bus.SwapEvent{Role: role, FromProvider: snap.Provider, By: self, Reason: reason,
-		OldPID: snap.PID, OldPane: snap.Pane}); err != nil {
+	ev := bus.SwapEvent{Role: role, FromProvider: snap.Provider, By: self, Reason: reason, OldPID: snap.PID, OldPane: snap.Pane}
+	var kept []string
+	if forget {
+		res, err := b.ForgetIfClear(ctx, role, own)
+		switch {
+		case err != nil:
+			ev.Forgot, ev.Error = "false", "forget: "+err.Error()
+			kept = []string{err.Error()}
+		case res.Forgot:
+			ev.Forgot = "true"
+		default:
+			ev.Forgot, ev.Error = "false", "kept: "+strings.Join(res.Held, "; ")
+			kept = res.Held
+		}
+	}
+	if err := b.RetireSwap(ctx, ev); err != nil {
 		keepIntent = true // the begin reads as interrupted; the next swap or retire records it
 		return fail("closed (pane %s), but the ledger was not written: %v; check agentbus swaps", snap.Pane, err)
+	}
+	if len(kept) > 0 {
+		return fail("closed (pane %s, pid %d gone), but its registration is kept: %s; "+
+			"the dispatcher escalates what waits and a new spawn of %s reads it from its kept group "+
+			"(agentbus agents forget %s --force ends it by hand)", snap.Pane, snap.PID, strings.Join(kept, "; "), role, role)
+	}
+	if forget {
+		fmt.Fprintf(out, "retired %s: pane %s closed, pid %d gone, unregistered (its consumer group kept)\n", role, snap.Pane, snap.PID)
+		return 0
 	}
 	fmt.Fprintf(out, "retired %s: pane %s closed, pid %d gone\n", role, snap.Pane, snap.PID)
 	return 0
@@ -169,6 +238,12 @@ func runSwaps(ctx context.Context, b *bus.Bus, args []string, out, errw io.Write
 		}
 		if e.Kind != "" {
 			line += "  [" + e.Kind + "]"
+		}
+		switch e.Forgot {
+		case "true":
+			line += "  forgot"
+		case "false":
+			line += "  kept"
 		}
 		fmt.Fprintln(out, line)
 	}

@@ -346,13 +346,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo swap coder -P codex"},
 	},
 	{
-		Name: "retire", Usage: []string{"retire <role> [--reason <text>] [--now]"},
-		Summary: "close one role's tab, with the swap checks",
+		Name: "retire", Usage: []string{"retire <role> [--reason <text>] [--now]", "retire <role> --forget --episode <ms> [--reason <text>]"},
+		Summary: "close one role's tab, with the swap checks; --forget ends a finished pop and unregisters it",
 		Flags: []cli.Flag{
 			{Long: "reason", Short: 'r', Arg: "<text>", Help: "recorded in the ledger"},
 			{Long: "now", Short: 'n', Help: "even during a running turn"},
+			{Long: "forget", Help: "a pop's end: re-judge it done, close it, then unregister it (its consumer group kept)"},
+			{Long: "episode", Arg: "<ms>", Help: "with --forget: the idle declaration the dispatcher judged"},
 		},
-		Examples: []string{"agentbus -p demo retire architect"},
+		Examples: []string{"agentbus -p demo retire architect", "agentbus -p demo retire security --forget --episode 1793647000000 --reason \"work done\""},
 	},
 	{
 		Name: "plan", Text: true, Usage: []string{
