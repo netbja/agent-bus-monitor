@@ -40,9 +40,14 @@ type startDeps struct {
 	HerdrOnPath   func() bool                                                            // nil: not checked
 	Herdr         func(session string, tty io.ReadWriter) (wait func() error, err error) // herdr --session on that terminal
 	SessionSocket func(session string) (string, error)                                   // herdr session list --json, until running
-	UpInSession   func(args []string, session, socket string, log io.Writer) int
-	Trusted       func(client, dir string) bool // nil: no trust line
-	LogPath       func(project string) (string, error)
+	UpInSession   func(args []string, session, socket, ignoreWorkspace string, log io.Writer) int
+	// start-tabs: herdr's first workspace of a session start created (one bare
+	// shell tab) is not the project's. nil SessionRunning: never touched.
+	SessionRunning   func(session string) (bool, error)
+	InitialWorkspace func(socket string) (string, error)
+	CloseInitial     func(socket, ws string) (string, error)
+	Trusted          func(client, dir string) bool // nil: no trust line
+	LogPath          func(project string) (string, error)
 }
 
 // realStartDeps runs up's own code path, reads the manifest as the role
@@ -83,15 +88,29 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			return cmd.Wait, nil
 		},
 		SessionSocket: herdrSessionSocket,
-		UpInSession: func(args []string, session, socket string, log io.Writer) int {
+		UpInSession: func(args []string, session, socket, ignoreWorkspace string, log io.Writer) int {
 			// up opens a workspace only inside herdr: the three a herdr pane
 			// gives a plugin, set for this process and the herdr calls it makes.
 			for k, v := range map[string]string{"HERDR_ENV": "1", "HERDR_SESSION": session, "HERDR_SOCKET_PATH": socket} {
 				_ = os.Setenv(k, v)
 			}
-			return runUp(args, realUpDepsIn(nil, log, log), log, log) // no terminal for bootstrap: herdr owns it
+			deps := realUpDepsIn(nil, log, log) // no terminal for bootstrap: herdr owns it
+			deps.IgnoreWorkspace = ignoreWorkspace
+			return runUp(args, deps, log, log)
 		},
-		Trusted: clientTrusted(os.Getenv),
+		SessionRunning: herdrSessionRunning,
+		InitialWorkspace: func(socket string) (string, error) {
+			deadline := time.Now().Add(3 * time.Second) // herdr makes it as it starts
+			for {
+				ws, err := initialWorkspace(herdrIn(socket))
+				if ws != "" || time.Now().After(deadline) {
+					return ws, err
+				}
+				time.Sleep(250 * time.Millisecond)
+			}
+		},
+		CloseInitial: func(socket, ws string) (string, error) { return closeInitialWorkspace(herdrIn(socket), ws) },
+		Trusted:      clientTrusted(os.Getenv),
 		LogPath: func(project string) (string, error) {
 			paths, err := service.PathsFrom(os.Getenv)
 			if err != nil {
@@ -156,6 +175,125 @@ func herdrSessionSocket(session string) (string, error) {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+}
+
+// herdrSessionRunning reads once whether herdr lists the session running.
+func herdrSessionRunning(session string) (bool, error) {
+	out, err := exec.Command(herdrBin(os.Getenv), "session", "list", "--json").Output()
+	if err != nil {
+		return false, err
+	}
+	var list struct {
+		Sessions []struct {
+			Name    string `json:"name"`
+			Running bool   `json:"running"`
+		} `json:"sessions"`
+	}
+	if err := json.Unmarshal(out, &list); err != nil {
+		return false, err
+	}
+	for _, s := range list.Sessions {
+		if s.Name == session {
+			return s.Running, nil
+		}
+	}
+	return false, nil
+}
+
+// herdrIn runs herdr against one session's socket.
+func herdrIn(socket string) func(args ...string) ([]byte, error) {
+	return func(args ...string) ([]byte, error) {
+		cmd := exec.Command(herdrBin(os.Getenv), args...)
+		cmd.Env = append(os.Environ(), "HERDR_SOCKET_PATH="+socket)
+		return cmd.Output()
+	}
+}
+
+type herdrWorkspace struct {
+	Label       string `json:"label"`
+	WorkspaceID string `json:"workspace_id"`
+	TabCount    int    `json:"tab_count"`
+	PaneCount   int    `json:"pane_count"`
+}
+
+func herdrWorkspaces(herdr func(args ...string) ([]byte, error)) ([]herdrWorkspace, error) {
+	out, err := herdr("workspace", "list")
+	if err != nil {
+		return nil, fmt.Errorf("herdr workspace list: %w", err)
+	}
+	var v struct {
+		Result struct {
+			Workspaces []herdrWorkspace `json:"workspaces"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil {
+		return nil, fmt.Errorf("herdr workspace list: %w", err)
+	}
+	return v.Result.Workspaces, nil
+}
+
+// initialWorkspace is the first workspace herdr made for a new session: the
+// session's only workspace, with one tab and one pane; else "".
+func initialWorkspace(herdr func(args ...string) ([]byte, error)) (string, error) {
+	ws, err := herdrWorkspaces(herdr)
+	if err != nil || len(ws) != 1 || ws[0].TabCount != 1 || ws[0].PaneCount != 1 {
+		return "", err
+	}
+	return ws[0].WorkspaceID, nil
+}
+
+// closeInitialWorkspace closes herdr's first workspace ws only while it is
+// still untouched, read again right before: one tab, one pane, a plain shell
+// in it (paneShell, argv only). It never types into the pane; anything else
+// keeps it and the note says why.
+func closeInitialWorkspace(herdr func(args ...string) ([]byte, error), ws string) (string, error) {
+	all, err := herdrWorkspaces(herdr)
+	if err != nil {
+		return "", err
+	}
+	var w *herdrWorkspace
+	for i := range all {
+		if all[i].WorkspaceID == ws {
+			w = &all[i]
+		}
+	}
+	switch {
+	case w == nil:
+		return fmt.Sprintf("herdr's first workspace %s is gone already", ws), nil
+	case w.TabCount != 1 || w.PaneCount != 1:
+		return fmt.Sprintf("kept herdr's first workspace %s: it has %d tabs and %d panes now", ws, w.TabCount, w.PaneCount), nil
+	}
+	out, err := herdr("pane", "list")
+	if err != nil {
+		return "", fmt.Errorf("herdr pane list: %w", err)
+	}
+	var panes struct {
+		Result struct {
+			Panes []struct {
+				PaneID      string `json:"pane_id"`
+				WorkspaceID string `json:"workspace_id"`
+			} `json:"panes"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out, &panes); err != nil {
+		return "", fmt.Errorf("herdr pane list: %w", err)
+	}
+	pane := ""
+	for _, p := range panes.Result.Panes {
+		if p.WorkspaceID == ws {
+			pane = p.PaneID
+		}
+	}
+	if pane == "" {
+		return fmt.Sprintf("kept herdr's first workspace %s: its pane is not listed", ws), nil
+	}
+	if plain, err := paneShell(herdr, pane); err != nil || !plain {
+		return fmt.Sprintf("kept herdr's first workspace %s: something runs in it, or it could not be read", ws), nil
+	}
+	if _, err := herdr("workspace", "close", ws); err != nil {
+		return "", fmt.Errorf("herdr workspace close %s: %w", ws, err)
+	}
+	return fmt.Sprintf("closed herdr's first workspace %s (a bare shell): busmon's tab is the first", ws), nil
 }
 
 // startUsage is start's line in the help table.
@@ -366,6 +504,13 @@ func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string
 			c.Close()
 		}
 	}
+	// A session that already ran has no first workspace of ours to set aside;
+	// unknown counts as running, so nothing is ever closed on a guess.
+	fresh := false
+	if d.SessionRunning != nil {
+		running, err := d.SessionRunning(p.Project)
+		fresh = err == nil && !running
+	}
 	wait, err := d.Herdr(p.Project, tty) // the terminal start opened, never its own stdio (reviewer-codex)
 	if err != nil {
 		closeTTY()
@@ -388,7 +533,20 @@ func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string
 		code := 1
 		if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
 			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-				code = d.UpInSession(upArgs, p.Project, socket, f)
+				initial := ""
+				if fresh && d.InitialWorkspace != nil {
+					initial, _ = d.InitialWorkspace(socket)
+				}
+				code = d.UpInSession(upArgs, p.Project, socket, initial, f)
+				// Once the team is open, herdr's first workspace (a bare shell
+				// tab) goes, if it is still untouched; never typed into.
+				if code == 0 && initial != "" && d.CloseInitial != nil {
+					note, err := d.CloseInitial(socket, initial)
+					if err != nil {
+						note = fmt.Sprintf("kept herdr's first workspace %s: %v", initial, err)
+					}
+					fmt.Fprintln(f, note)
+				}
 				f.Close()
 			}
 		}
