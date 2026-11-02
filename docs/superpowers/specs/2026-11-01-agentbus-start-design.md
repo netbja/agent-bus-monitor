@@ -18,7 +18,7 @@ Bernard's decisions (2026-10-31):
 - **The default team is the complete one**: master, coder, foureyes, sentinel (the shipped
   `roles.toml`'s `boot` roles).
 
-Bernard's answers to the open questions (2026-11-02):
+Bernard's answers to the questions this spec left open (2026-11-02):
 
 - **Outside herdr, start launches herdr itself** (`herdr --session <project>`), and the team
   opens inside it ("Outside herdr" below).
@@ -26,6 +26,8 @@ Bernard's answers to the open questions (2026-11-02):
   not only keeps or drops roles ("The assistant").
 - **A reduced team is kept in the project's template and as the default team for future
   projects** in `config.toml`, the registry key `start.team` ("What is written").
+- **The name is a new command, `agentbus start`**; `agentbus up` stays as it is, strict and
+  scriptable: a project argument still required, no assistant, no deduction.
 
 ## What start is, and is not
 
@@ -424,15 +426,16 @@ herdr: it provisions, prints today's `herdr --session <project>` line, and exits
 
 ## Questions for Bernard
 
-Answered 2026-11-02 (recorded at the top and in the sections above):
+All answered 2026-11-02 (recorded at the top and in the sections above); none is open.
 
 1. **Outside herdr**: start launches herdr itself (`herdr --session <project>`), the team opens
    inside it.
 2. **The team line**: it also changes a role's client, chosen from its `fallback_profiles`.
 3. **A reduced team**: kept in the project's template and as the default team for future
    projects, `start.team` in `config.toml`.
-
-Still open:
-
-4. **The name**: a new `agentbus start`, or `agentbus up` with no project argument doing it?
-   `start` is proposed, so `up`'s strict, scriptable form stays as it is.
+4. **The name**: a new command, `agentbus start`. `agentbus up` keeps its command line and
+   its behaviour: `up` with no project argument is still the usage error it is today, never the
+   assistant. What `up` gains from this spec is only what a template written by start needs:
+   `ownProfile` for a tab's `--profile`, and the abort on one that does not resolve ("A role's
+   own profile in a project"); a template without `--profile`, as bootstrap writes today, runs
+   exactly as before.
