@@ -66,6 +66,9 @@ type Config struct {
 	// History archives the streams to day files (history.go); off unless
 	// Dir and KeepDays are set.
 	History HistoryConfig
+	// PopRetire tells the escalation target when a pop's work is done
+	// (popretire.go); off unless On.
+	PopRetire PopRetireConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -370,6 +373,13 @@ func (l *loop) reconcile(ctx context.Context) error {
 			return err
 		}
 		l.logError("", "clear", err)
+	}
+	// A paused project ends no pop (condition 11).
+	if err := l.popRetirePass(ctx, snaps); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "pop retire", err)
 	}
 	// A paused project alerts nobody: the fills wait, still published.
 	if err := l.contextAlerts(ctx); err != nil {
