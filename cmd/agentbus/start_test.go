@@ -335,6 +335,7 @@ type outsideWorld struct {
 
 	// start-tabs: the session's first workspace.
 	running bool     // the session ran before start launched herdr
+	runErr  error    // SessionRunning's error: unknown whether it ran
 	initial string   // what InitialWorkspace finds ("" = none)
 	asked   int      // InitialWorkspace calls
 	ignored []string // the workspace each up was told to ignore
@@ -364,7 +365,7 @@ func (w *startWorld) outside(o *outsideWorld) startDeps {
 		}
 		return o.socket, nil
 	}
-	d.SessionRunning = func(session string) (bool, error) { return o.running, nil }
+	d.SessionRunning = func(session string) (bool, error) { return o.running, o.runErr }
 	d.InitialWorkspace = func(socket string) (string, error) {
 		o.mu.Lock()
 		o.asked++
@@ -576,6 +577,14 @@ func TestStartClosesHerdrsFirstWorkspace(t *testing.T) {
 	run(o)
 	if o.asked != 0 || len(o.ignored) != 1 || o.ignored[0] != "" || len(o.closed) != 0 {
 		t.Fatalf("a running session: asked %d, ignored %q, closed %q", o.asked, o.ignored, o.closed)
+	}
+
+	// Unknown whether the session ran: its first workspace may be the
+	// person's, so it is neither looked for nor closed.
+	o = &outsideWorld{socket: "/s.sock", initial: "w1", runErr: errors.New("herdr session list: timeout")}
+	run(o)
+	if o.asked != 0 || len(o.ignored) != 1 || o.ignored[0] != "" || len(o.closed) != 0 {
+		t.Fatalf("an unread session: asked %d, ignored %q, closed %q", o.asked, o.ignored, o.closed)
 	}
 
 	o = &outsideWorld{socket: "/s.sock", initial: "w1", upCode: 1}
