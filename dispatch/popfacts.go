@@ -42,7 +42,7 @@ func ReadPopFacts(ctx context.Context, b *bus.Bus, rt Runtime, role string, o Po
 	}
 	if board, err := b.Board(ctx); !unknown("board", err) {
 		for task, e := range board {
-			if e.Owner == role && bus.BoardOpenStates[e.State] {
+			if e.Owner == role && bus.BoardOwes(e.State) {
 				f.OwnedTasks = append(f.OwnedTasks, fmt.Sprintf("%s (%s)", task, e.State))
 			}
 		}

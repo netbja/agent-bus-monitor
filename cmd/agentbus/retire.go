@@ -150,7 +150,7 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	ev := bus.SwapEvent{Role: role, FromProvider: snap.Provider, By: self, Reason: reason, OldPID: snap.PID, OldPane: snap.Pane}
 	var kept []string
 	if forget {
-		res, err := b.ForgetIfClear(ctx, role, own)
+		res, err := b.ForgetIfClear(ctx, role, own, bus.RetiredAs{PID: snap.PID, PIDStart: snap.PIDStart, Episode: episode})
 		switch {
 		case err != nil:
 			ev.Forgot, ev.Error = "false", "forget: "+err.Error()

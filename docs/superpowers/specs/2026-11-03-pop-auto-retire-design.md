@@ -31,11 +31,11 @@ A pop is **done** when every one of these holds, read by the dispatch service on
 | # | Condition | Read from |
 |---|---|---|
 | 1 | It is a pop: its verified identity records `tier = pop` | `AgentSnapshot.Tier`, new, set by the launcher with the identity (§6) |
-| 2 | It owns no board task in a state other than `done` | `{p}:board` |
+| 2 | It owns no board task in a state other than `done` (the board's states are free words: any other, `review` or a team's own, holds it) | `{p}:board` |
 | 3 | No gate holds it, and no gate it opened is open | `Bus.ReviewsOf` (as `openWork`) |
 | 4 | No mission attempt is in progress on it | `missionsOf` (as `openWork`) |
 | 5 | It has no open ask | `{p}:asks` `open:<agent>` |
-| 6 | Nothing waits for it on the bus: no pending and no unread entry | `Obligation` (pending + lag) |
+| 6 | Nothing waits for it on the bus: no pending and no unread waking entry, older than the 24 h horizon included (the forget script reads with no floor, so the judgement does too) | `Obligation` (pending, unread and stale) |
 | 7 | It is not armed, and no wake is being typed into its pane | `{p}:armed:<agent>`, `{p}:wake:<agent>` |
 | 8 | No swap or reload intent holds it, and no valid hand-off waits for a `/clear` | `{p}:swap:<role>`, `{p}:handoff` |
 | 9 | It declared `idle` or `done` at least `dispatch.pop_retire_after` ago (default 15 min), and declared nothing since | `{p}:agents` (the declared state and its time, never a turn flip: `DeclTS`) |
@@ -118,10 +118,13 @@ can be stale by the time master acts):
 3. **After the pid is proven gone**: the forget is **one Lua script**, `Bus.ForgetIfClear(role)`,
    never a read followed by a delete, because work can arrive between any read and the delete. In
    one script it checks that `{p}:swap:<role>` still holds retire's own intent, byte-equal to
-   `OwnIntent` (else it changes nothing), then reads, for the role: the consumer group's pending count (`XPENDING`),
+   `OwnIntent`, and that the stored registration is still the process retire closed (its pid and
+   start) in the episode it was told (its `ts`): a respawn between the close and the forget, or a
+   new declaration, is another registration, kept whole (reviewer-codex on code steps 1-5); else
+   it changes nothing, then reads, for the role: the consumer group's pending count (`XPENDING`),
    the addressed waking entries after its `last-delivered-id` (`XRANGE` from there,
    `target == role` and `wake != no`, the rule `Obligation` uses), its open ask (`open:<role>` in
-   `{p}:asks`), a board task it owns not `done` (`{p}:board`), and its gate key. If all are empty
+   `{p}:asks`), a board task it owns in any state but `done` (`{p}:board`), and its gate key. If all are empty
    it deletes the **registration** (snapshot, usage, wake, armed, receiver and gate keys) in the
    same script; if any is not, it changes nothing and returns what it found.
 

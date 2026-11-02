@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -37,9 +38,18 @@ func (b *Bus) SwapIntentRaw(ctx context.Context, role string) (string, error) {
 	return v, err
 }
 
-// BoardOpenStates are the board states that still owe work (a request not
-// answered, accepted, working or blocked); done and superseded do not.
-var BoardOpenStates = map[string]bool{"requested": true, "accepted": true, "working": true, "blocked": true}
+// BoardOwes reports whether a board task in state still owes work: any
+// state but done (the board's states are free words, only done is special;
+// foureyes on pop-auto-retire-code), so an unknown word fails closed.
+func BoardOwes(state string) bool { return state != "done" }
+
+// RetiredAs is the registration retire --forget judged and closed: the old
+// process and the episode it was told. ForgetIfClear deletes only that one.
+type RetiredAs struct {
+	PID      int
+	PIDStart uint64
+	Episode  int64 // the snapshot's declaration time (dispatch.PopEpisode)
+}
 
 // ForgetResult is what ForgetIfClear did: Forgot, or Held with what it found.
 type ForgetResult struct {
@@ -48,15 +58,26 @@ type ForgetResult struct {
 }
 
 // forgetIfClear: KEYS = swap, cmd, asks, board, gate, agents, usage, wake,
-// armed, receiver; ARGV = own intent, role. Changes nothing unless the
-// stored intent is byte-equal to ARGV[1] and nothing waits for the role;
-// then deletes its registration and keeps its consumer group.
+// armed, receiver; ARGV = own intent, role, pid, pid_start, episode. Changes
+// nothing unless the stored intent is byte-equal to ARGV[1], the stored
+// registration is still that process in that episode, and nothing waits for
+// the role; then deletes its registration and keeps its consumer group.
 var forgetIfClear = redis.NewScript(`
 local held = {}
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then
   return {'its retire intent no longer holds'}
 end
 local role = ARGV[2]
+local raw = redis.call('HGET', KEYS[6], role)
+if not raw then return {'no registration'} end
+local okj, snap = pcall(cjson.decode, raw)
+if not okj or type(snap) ~= 'table' then return {'an unreadable registration'} end
+if tostring(snap['pid']) ~= ARGV[3] or tostring(snap['pid_start']) ~= ARGV[4] then
+  return {'another process is registered (a respawn): kept'}
+end
+if tostring(snap['ts']) ~= ARGV[5] then
+  return {'another episode (declared again since): kept'}
+end
 local ok, groups = pcall(redis.call, 'XINFO', 'GROUPS', KEYS[2])
 local last = nil
 if ok then
@@ -88,11 +109,8 @@ end
 local board = redis.call('HGETALL', KEYS[4])
 for i = 1, #board, 2 do
   local okj, e = pcall(cjson.decode, board[i + 1])
-  if okj and type(e) == 'table' and e['owner'] == role then
-    local s = e['state']
-    if s == 'requested' or s == 'accepted' or s == 'working' or s == 'blocked' then
-      table.insert(held, 'board task ' .. board[i] .. ' (' .. s .. ')')
-    end
+  if okj and type(e) == 'table' and e['owner'] == role and e['state'] ~= 'done' then
+    table.insert(held, 'board task ' .. board[i] .. ' (' .. tostring(e['state']) .. ')')
   end
 end
 if redis.call('HLEN', KEYS[5]) > 0 then
@@ -105,18 +123,21 @@ redis.call('DEL', KEYS[8], KEYS[9], KEYS[10])
 return {}`)
 
 // ForgetIfClear unregisters a retired pop in one script (pop-auto-retire §4
-// step 3): only while own is still its stored intent and nothing waits for
-// it (pending or unread waking entries, an open ask, an owned open board
-// task, a gate). It deletes what ForgetAgent deletes but the consumer group,
-// whose cursor a later spawn reads on from.
-func (b *Bus) ForgetIfClear(ctx context.Context, role, own string) (ForgetResult, error) {
+// step 3): only while own is still its stored intent, the registration is
+// still the one retired (was: a respawn's is kept whole, reviewer-codex), and
+// nothing waits for it (pending or unread waking entries with no floor, an
+// open ask, an owned board task not done, a gate). It deletes what
+// ForgetAgent deletes but the consumer group, whose cursor a later spawn
+// reads on from.
+func (b *Bus) ForgetIfClear(ctx context.Context, role, own string, was RetiredAs) (ForgetResult, error) {
 	if !ValidName(role) {
 		return ForgetResult{}, fmt.Errorf("invalid agent %q", role)
 	}
 	p := b.project
 	keys := []string{SwapKey(p, role), StreamKey(p, "cmd"), AsksKey(p), BoardKey(p), GateKey(p, role),
 		AgentsKey(p), UsageKey(p), WakeKey(p, role), ArmedKey(p, role), ReceiverKey(p, role)}
-	held, err := forgetIfClear.Run(ctx, b.r, keys, own, role).StringSlice()
+	held, err := forgetIfClear.Run(ctx, b.r, keys, own, role,
+		strconv.Itoa(was.PID), strconv.FormatUint(was.PIDStart, 10), strconv.FormatInt(was.Episode, 10)).StringSlice()
 	if err != nil {
 		return ForgetResult{}, err
 	}

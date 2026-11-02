@@ -17,7 +17,7 @@ type PopFacts struct {
 	// Unknown names each read that failed: any one makes the pop not done.
 	Unknown    []string
 	Snap       *bus.AgentSnapshot
-	OwnedTasks []string // board tasks it owns in a state other than done
+	OwnedTasks []string // board tasks it owns in a state other than done (bus.BoardOwes)
 	Gates      []string // gates holding it or opened by it (Bus.ReviewsOf)
 	Missions   []string // mission attempts in progress on it
 	OpenAsk    bool
@@ -60,8 +60,10 @@ func PopDone(f PopFacts) (bool, string) {
 		return no("a mission attempt is in progress: %s", strings.Join(f.Missions, ", "))
 	case f.OpenAsk:
 		return no("it has an open ask")
-	case f.Obligation.Wakes():
-		return no("messages wait for it (%d)", f.Obligation.Size())
+	case f.Obligation.Wakes() || f.Obligation.Stale > 0:
+		// Older than the horizon still waits: the forget script reads with no
+		// floor, so the judgement does too (foureyes).
+		return no("messages wait for it (%d)", f.Obligation.Size()+int64(f.Obligation.Stale))
 	case f.Armed:
 		return no("it is armed")
 	case f.WakeState == "prompting":

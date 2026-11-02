@@ -37,6 +37,16 @@ func TestReadPopFacts(t *testing.T) {
 	if done, why := PopDone(ReadPopFacts(ctx, b, rt, "security", opt)); done || !strings.Contains(why, "messages wait") {
 		t.Fatalf("a directive after the judgement: done=%v why=%q", done, why)
 	}
+	// A task in any state but done holds it (foureyes: the board's states are free).
+	if err := b.BoardClaim(ctx, "t-review", "security", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BoardState(ctx, "t-review", "review"); err != nil {
+		t.Fatal(err)
+	}
+	if done, why := PopDone(ReadPopFacts(ctx, b, rt, "security", opt)); done || !strings.Contains(why, "t-review (review)") {
+		t.Fatalf("a task in review: done=%v why=%q", done, why)
+	}
 	// A failed reader is unknown, never done.
 	opt.Missions = func(context.Context, string) ([]string, error) { return nil, errors.New("down") }
 	if done, why := PopDone(ReadPopFacts(ctx, b, rt, "security", opt)); done || !strings.Contains(why, "unknown: missions") {

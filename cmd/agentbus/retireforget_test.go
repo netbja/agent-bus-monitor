@@ -240,3 +240,24 @@ func TestRetireForgetKeepsWhatArrivesAfterTheKill(t *testing.T) {
 		t.Fatalf("the kept group gave %q", got)
 	}
 }
+
+// A respawn between the close and the forget (reviewer-codex): the new
+// process's registration is kept whole, and retire says so.
+func TestRetireForgetKeepsARespawn(t *testing.T) {
+	w, d, _, afterClose := newPopWorld(t)
+	ctx := context.Background()
+	*afterClose = func() {
+		w.mu.Lock()
+		w.procs[7171] = 71
+		w.mu.Unlock()
+		w.b.Status(ctx, "security", "idle", "respawned", bus.AgentIdent{Pane: "p-sec2", PID: 7171, PIDStart: 71, Tier: "pop"})
+	}
+	code, out := w.retireForget(d, w.episode(t))
+	if code != 1 || !strings.Contains(out, "another process") {
+		t.Fatalf("code %d: %s", code, out)
+	}
+	snaps, _ := w.b.Agents(ctx)
+	if s := snaps["security"]; s.PID != 7171 || s.Pane != "p-sec2" {
+		t.Fatalf("the respawn's registration = %+v", s)
+	}
+}

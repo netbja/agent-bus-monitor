@@ -41,6 +41,9 @@ func TestPopDone(t *testing.T) {
 		{"ask", "an open ask", func(f *PopFacts) { f.OpenAsk = true }},
 		{"pending", "messages wait for it", func(f *PopFacts) { f.Obligation.Pending = 1 }},
 		{"unread", "messages wait for it", func(f *PopFacts) { f.Obligation.Unread = 2 }},
+		// Older than the horizon still waits (foureyes): the forget script
+		// reads with no floor, so the judgement does too.
+		{"stale", "messages wait for it", func(f *PopFacts) { f.Obligation.Stale = 1 }},
 		{"armed", "armed", func(f *PopFacts) { f.Armed = true }},
 		{"wake typed", "a wake is being typed", func(f *PopFacts) { f.WakeState = "prompting" }},
 		{"swap intent", "a swap or reload holds it", func(f *PopFacts) { f.Intent = `{"kind":"reload"}` }},
