@@ -23,7 +23,8 @@ const turnHookBudget = 2 * time.Second
 // model's context) and always exits 0 (a Stop hook exiting 2 blocks the
 // stop). A prompt beginning with "/" starts no model turn and flips nothing:
 // the typed /clear must neither void a hand-off nor read as a turn, and a
-// local command gets no Stop. A subagent's events are not the agent's.
+// local command gets no Stop. A subagent's events are not the agent's:
+// Claude Code marks them with agent_id, Grok with subagentType.
 func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
 	flip func(ctx context.Context, project, agent, state string) error) int {
 	if len(args) != 1 || (args[0] != "start" && args[0] != "end") {
@@ -35,11 +36,12 @@ func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
 		return 0
 	}
 	var in struct {
-		Prompt  string `json:"prompt"`
-		AgentID string `json:"agent_id"`
+		Prompt       string `json:"prompt"`
+		AgentID      string `json:"agent_id"`
+		SubagentType string `json:"subagentType"`
 	}
 	raw, _ := io.ReadAll(io.LimitReader(stdin, 1<<20))
-	if json.Unmarshal(raw, &in) != nil || in.AgentID != "" {
+	if json.Unmarshal(raw, &in) != nil || in.AgentID != "" || in.SubagentType != "" {
 		return 0
 	}
 	state := "idle"

@@ -19,8 +19,8 @@ Every client we launch has turn hooks. Read from the installed binaries on 2026-
 |---|---|---|---|---|
 | Claude Code | (installed) | `UserPromptSubmit` | `Stop` | `--settings` JSON, already passed on every launch (it carries the `SessionStart` resume hook) |
 | Codex | 0.164.0 | `UserPromptSubmit` | `Stop` | hooks are a feature (`hooks`, stable and on by default in 0.164.0; `hooks.json`), behind a one-time trust dialog (`screens/codex-hooks.txt`); `-c` overrides per launch, verified 2026-11-02 with a throwaway `CODEX_HOME`: `app-server`'s `hooks/list` reads both from source `sessionFlags`, enabled, `untrusted` until trusted, the hash the same on every launch (route a, chosen) |
-| Kimi Code | 2.2.0 | `UserPromptSubmit` | `Stop` | hook events present in the binary; the config route is to verify |
-| Grok | 1.0.70 | `UserPromptSubmit` | `Stop` | `.grok/hooks`, `hooks.json` (per directory); to verify |
+| Kimi Code | 2.2.0 | `UserPromptSubmit` | `Stop` | hook events present in the binary; **no hooks** (Bernard, 2026-11-02): its state stays declared |
+| Grok | 1.0.70 | `UserPromptSubmit` | `Stop`, `StopFailure` | project hook files `<project>/.grok/hooks/*.json` (route b, chosen): the launch writes `agentbus.json` in the folder Grok starts in; verified 2026-11-02, see "Grok" below |
 
 **Rule.** At turn start the state becomes `working`; at turn end it becomes `idle`. Each flip happens only
 when the stored state is `idle` or `working`:
@@ -139,7 +139,46 @@ A test keeps the sentence in every role prompt.
 3. busmon: the `idle?` flag and its setting, and the `(turn)` mark.
 4. The rule in the skill and the role prompts, with its test.
 5. Per client, after its trial (hook route, `/clear` firing, failure event, Codex's app-server chain):
-   Codex, then Kimi and Grok.
+   Codex (route a), then Grok (route b, below). No Kimi hooks (Bernard).
+
+### Grok (step 5, route b)
+
+Read from Grok 1.0.70's own guide (embedded in the binary) and checked live on 2026-11-02, in a throwaway
+folder outside any repository with `GROK_FOLDER_TRUST=0` for that one probe only (no Grok file written):
+- **Where:** project hook files are `<project>/.grok/hooks/*.json`, where `<project>` is the repository
+  root and each folder down to the one Grok starts in (outside a repository, that folder only). Grok
+  loads none in the home folder, a filesystem root or a shared temporary folder.
+- **Format:** `{"hooks": {"<Event>": [{"hooks": [{"type": "command", "command": "…", "timeout": N}]}]}}`.
+- **Trust:** project hooks run only in a trusted folder. Grok asks itself at startup ("Do you trust the
+  contents of this directory?", `y`/`n`), records the answer in `~/.grok/trusted_folders.toml`, and the
+  trust covers the repository's subfolders. The launch never passes `--trust` nor `GROK_FOLDER_TRUST=0`:
+  the person answers once, in the pane.
+- **Events:** turn start is `UserPromptSubmit`; a turn ends with exactly one of `Stop` (a genuine
+  completion), `StopFailure` (an API error) or `StopCancelled` (an interrupt, a declined permission,
+  `max_turns`). A builtin slash command raises no `UserPromptSubmit` at all. A `Stop` also fires at session
+  end (`reason: shutdown`), which settles the agent idle.
+- **Process chain:** on both routes tried, the interactive TUI and `grok -p`, each hook ran as a direct child
+  of the `grok` process (the pid the launcher execs into, so the bound pid), with its environment: the
+  launcher's variables reach the hook and `roles turn` proves the agent as `status` does. (Unlike Codex's
+  shared app-server.) Grok also has a shared "leader" process; on this machine no hook ran under it.
+- **Subagents:** a subagent's events carry `subagentType`; `roles turn` ignores them, as it ignores Claude
+  Code's `agent_id`.
+
+The file the launch writes, `<folder>/.grok/hooks/agentbus.json`:
+- `UserPromptSubmit` runs `roles turn start`; `Stop` and `StopFailure` run `roles turn end`; each with
+  `timeout: 5` (`Stop` sits on the turn's critical path, Grok's default there being 600 s).
+- **`StopCancelled` is not registered.** Grok sends it off the command loop, so it can arrive after the next
+  turn's `UserPromptSubmit` and would flip a running turn idle. An interrupted turn stays a flipped
+  `working` until its pane is seen ready, when `bus.EffectiveState` reads it idle (section 2).
+- It is written only when absent, or when it is the file agentbus wrote last, unedited: the hash of what it
+  wrote is kept in the launch cache (`grok-hooks/<hash of the path>`). Any other file is the person's and
+  stays; a lost record makes ours unprovable, so it stays too, and the launch says so.
+- Never the home folder (that `.grok` is the person's own hooks and trust store), never through a link (a
+  `.grok`, `hooks` or `agentbus.json` that is a symlink or not a plain file is refused), never `~/.grok`.
+- A file it cannot write never stops the agent: it starts without turn hooks and stderr says why. A
+  written file is named on stderr with the trust to give.
+- Dry runs are unchanged and write nothing; the argv is unchanged.
+- The file shows as untracked in the project's Git status; the person decides whether to ignore it.
 
 ## Tests (plan)
 
@@ -171,7 +210,9 @@ A test keeps the sentence in every role prompt.
 - Launch:
   - Claude Code's `--settings` holds `SessionStart` (resume, then `turn end`), `UserPromptSubmit` and
     `Stop`;
-  - other clients are unchanged until their trial;
+  - Codex carries its `-c` hooks; a Grok launch writes `.grok/hooks/agentbus.json` (`UserPromptSubmit`,
+    `Stop`, `StopFailure`), only when absent or ours unedited, never the home folder, never through a link,
+    and a FIFO is never read; Kimi is unchanged;
   - the dry runs are updated.
 - busmon:
   - `idle?` only after N of a fresh ready observation under `working`, hooked or not;

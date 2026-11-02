@@ -52,6 +52,10 @@ func TestTurnHookIgnores(t *testing.T) {
 		{[]string{"start"}, `{"hook_event_name":"UserPromptSubmit","prompt":"/clear"}`, env},
 		{[]string{"start"}, `{"hook_event_name":"UserPromptSubmit","prompt":"  /compact keep the plan"}`, env},
 		{[]string{"start"}, `{"hook_event_name":"UserPromptSubmit","prompt":"go","agent_id":"sub-1"}`, env},
+		// Grok marks a subagent's events with subagentType (auto-state step 5).
+		{[]string{"start"}, `{"hook_event_name":"UserPromptSubmit","prompt":"go","subagentType":"explore"}`, env},
+		{[]string{"end"}, `{"hook_event_name":"Stop","reason":"end_turn","subagentType":"explore"}`, env},
+		{[]string{"end"}, `{"hook_event_name":"StopFailure","error":"rate_limit","subagentType":"general"}`, env},
 		{[]string{"start"}, `not json`, env},
 		{[]string{"sideways"}, `{"hook_event_name":"Stop"}`, env},
 		{nil, `{"hook_event_name":"Stop"}`, env},
