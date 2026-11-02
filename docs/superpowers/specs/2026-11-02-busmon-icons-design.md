@@ -47,9 +47,17 @@ The `Herdr Agent Icons Max` codepoints come from herdr-radar's `lib/logos.js` (p
 
 ### 3.1 By client, then by provider
 
-An agent's icon comes from its snapshot: the `client` first (it tells the tool, e.g. Codex vs
-another OpenAI client), else its `provider`, else no icon. The names are fixed table keys; an
-icon is never read from bus text.
+An agent's icon comes from its snapshot, keyed differently in each mode, from fixed table keys;
+an icon is never read from bus text:
+
+- **`agent-font`**: the `client` first (the logo is the tool's: Codex, Claude Code), else the
+  `provider`, else no icon.
+- **`nerd`**: the `provider` only. The lettered box names the provider, so the client is not
+  read.
+
+The two can differ for a client served by a provider other than its usual one. For example, a
+`codex` client on provider `local` draws `U+E1A1` (codex) under `agent-font` and `U+F0B13`
+(the `L` box) under `nerd`. `TestIconTables` pins this row (§5).
 
 | Client (`rolecfg.Clients`) | Provider | `agent-font` | `nerd` |
 |---|---|---|---|
@@ -112,11 +120,16 @@ agent font's advance is not documented. So:
 1. **An icon is always followed by one blank cell that busmon writes**: the pair is one unit,
    measured 2. A wide drawing spills into that blank, never into a letter, a border or the
    scrollbar.
-2. **The pair is all or nothing.** When room is short, `Fit` drops the pair before any text. An
-   icon is never cut, never the last cell before a frame's border, and never alone without its
-   blank.
-3. **A row with no icon gets two blank cells** in an icon column (Agents, the U page), so names
-   stay aligned.
+2. **The pair is all or nothing.** An icon is never cut, never the last cell before a frame's
+   border, and never alone without its blank. How room is found depends on the place:
+   - **Icon columns** are the Agents rows, the U page's Accounts rows and the U page's Agents
+     zone. They exist at 80 cells and wider (the medium and wide tiers). There, the column is
+     kept and the flexible column pays: the message on Agents rows, the trailing room on the
+     U page. Below 80 cells (the narrow tier) these places have no icon column, and their rows
+     are as today.
+   - **Inline places** are the header gauges. There, `Fit` drops each pair before any text when
+     room is short. In practice the pairs show only in the wide tier (§7.2).
+3. **A row with no icon gets two blank cells** in an icon column, so names stay aligned.
 4. **Colour:** the icon takes the provider's role (`providerRole(p, fallback)`). In 16 colours
    it takes the provider's ANSI name; with no colour it is plain.
 
@@ -125,7 +138,9 @@ agent font's advance is not documented. So:
 - `TestIconsAreSingleCell`: each `IconGlyphs` entry is one rune in a Private Use range
   (`E000–F8FF` or `F0000–FFFFD`), `Width == 1`, `widthsAgree`, and unique.
   `TestGlyphsAreSingleCell` keeps its exact count for `UIGlyphs`.
-- `TestIconTables`: the §3.1 tables pinned row by row. Every provider in `providerHues` has a
+- `TestIconTables`: the §3.1 tables pinned row by row, with each mode's key, including the
+  mismatched row (`codex` on `local`: `agent-font` codex, `nerd` the `L` box). Also: no icon
+  column below 80 cells. Every provider in `providerHues` has a
   `nerd` icon. `TestEveryQuotaProviderHasItsColour`'s walk over `quota.Builtins` is extended:
   every built-in provider has a `nerd` icon, or is listed as knowingly without one.
 - `TestIconsOffIsToday`: with `display.icons = off`, every existing golden is unchanged. These are
@@ -147,7 +162,7 @@ help line draws one sample per mode **in that mode**:
 
 ```
   ○ Icons                      off                    default
-    off · nerd A O K X G · agent-font A O K X       (what your terminal draws is what you get)
+    off · nerd A O K X G · agent-font A O K X G     (what your terminal draws is what you get)
 ```
 
 In the real row, the letters after `nerd` and `agent-font` are the §3.1 glyphs themselves, each
@@ -289,9 +304,9 @@ text. The word stays in every tier, so the icon never replaces the text.
 │   coder            A anthropic      345k      83k  ██████▏                                                           │
 ```
 
-On the U page the icon is **by provider** (an account window belongs to the subscription, not a
-client), so an account row shows the provider's glyph. In the Agents zone, the agent's client is
-used when known.
+On the U page an Accounts row is keyed **by provider** in both modes (an account window belongs
+to the subscription, not a client). The Agents zone follows §3.1: under `agent-font`, the client
+then the provider; under `nerd`, the provider.
 
 ### 7.4 For you kinds: not in v1
 
