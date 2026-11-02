@@ -93,9 +93,7 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 	defer stop()
 	c := peer.Client{URL: settings.URL, Model: settings.Model, MaxTokens: settings.MaxTokens}
 	fmt.Fprintf(out, "local-llm peer %s on %s, model %s, root %s\n", agent, endpointHost(settings.URL), settings.Model, root)
-	if err := c.CheckModel(ctx); err != nil {
-		fmt.Fprintln(out, "endpoint not ready yet:", err)
-	}
+	peerStartCheck(ctx, c, out)
 	host, _ := os.Hostname()
 	r := &peer.Runner{Bus: b, Agent: agent, Consumer: fmt.Sprintf("%s:%d", host, os.Getpid()), Ident: statusIdent(ctx),
 		Turn: peer.Turn{Client: c, Prompt: spec.Prompt, MaxCalls: 8, Timeout: settings.TurnTimeout,
@@ -106,6 +104,20 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 		return 1
 	}
 	return 0
+}
+
+// startCheck bounds the model check at start (R2): it runs before the
+// receiver lease, and the client has no timeout of its own.
+var startCheck = 5 * time.Second
+
+// peerStartCheck says whether the endpoint serves the model yet; a fault is
+// only said, the peer starts anyway and retries per entry.
+func peerStartCheck(ctx context.Context, c peer.Client, out io.Writer) {
+	ctx, cancel := context.WithTimeout(ctx, startCheck)
+	defer cancel()
+	if err := c.CheckModel(ctx); err != nil {
+		fmt.Fprintln(out, "endpoint not ready yet:", err)
+	}
 }
 
 // peerRoot is the folder the peer's tools read under (SEC-LLM-3): the

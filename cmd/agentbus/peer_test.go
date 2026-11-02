@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/netbja/agent-bus-monitor/peer"
 )
 
 func modelsServer(t *testing.T, models ...string) *httptest.Server {
@@ -170,5 +174,25 @@ func TestPeerRefusesHomeAsRoot(t *testing.T) {
 	var out, errw bytes.Buffer
 	if code := runPeer([]string{"--spec-file", spec}, getenv, &out, &errw); code != 1 || !strings.Contains(errw.String(), "the home directory") {
 		t.Fatalf("from $HOME = %d %q", code, errw.String())
+	}
+}
+
+// The start's model check is bounded: an endpoint that accepts and never
+// answers delays the peer by startCheck at most, then it says so and goes on
+// to take its receiver lease (R2: it used to hang there, unarmed).
+func TestPeerStartCheckIsBounded(t *testing.T) {
+	hang := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-hang }))
+	t.Cleanup(func() { close(hang); srv.Close() })
+	defer func(d time.Duration) { startCheck = d }(startCheck)
+	startCheck = 200 * time.Millisecond
+	var out bytes.Buffer
+	begin := time.Now()
+	peerStartCheck(context.Background(), peer.Client{URL: srv.URL + "/v1", Model: "m"}, &out)
+	if took := time.Since(begin); took > 2*time.Second {
+		t.Fatalf("the start check took %s", took)
+	}
+	if !strings.Contains(out.String(), "endpoint not ready yet") {
+		t.Fatalf("not said: %q", out.String())
 	}
 }
