@@ -76,6 +76,9 @@ func verdictsReport(subject string, vs []bus.Verdict, now time.Time) (string, in
 		if v.Ref != "" {
 			fmt.Fprintf(&sb, "  ref=%s", v.Ref)
 		}
+		if v.Head != "" {
+			fmt.Fprintf(&sb, "  head=%s", v.Head[:12])
+		}
 		switch {
 		case v.Reviewer == v.Author:
 			fmt.Fprintf(&sb, "  (author=%s, ignored)", v.Author)

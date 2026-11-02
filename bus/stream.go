@@ -167,6 +167,23 @@ type Verdict struct {
 	// only to say "same provider"; the roll-up ignores them.
 	AuthorProvider   string `json:"author_provider,omitempty"`
 	ReviewerProvider string `json:"reviewer_provider,omitempty"`
+	// Head (forge-delivery, additive) is the full commit SHA the reviewer
+	// read (verdict --head); empty when not named. The roll-up ignores it;
+	// only agentbus deliver requires it, on its newest independent approve.
+	Head string `json:"head,omitempty"`
+}
+
+// ValidHead: a full commit SHA, lower hex, 40 (SHA-1) or 64 (SHA-256) characters.
+func ValidHead(h string) bool {
+	if len(h) != 40 && len(h) != 64 {
+		return false
+	}
+	for _, c := range h {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // UsageKey is the per-project hash of latest agent usage snapshots ({agent} →
@@ -469,16 +486,23 @@ func (b *Bus) AppendVerdict(ctx context.Context, v Verdict) (string, error) {
 	if err := ValidateText(v.Message, reportFullMax()); err != nil {
 		return "", err
 	}
+	if v.Head != "" && !ValidHead(v.Head) {
+		return "", fmt.Errorf("verdict head must be a full commit SHA (40 or 64 lower-case hex characters)")
+	}
+	values := map[string]interface{}{
+		"subject": v.Subject, "author": v.Author, "reviewer": v.Reviewer,
+		"decision": v.Decision, "message": SanitizeReportMessage(v.Message), "ref": v.Ref,
+		"full": v.Message, "text_complete": "yes",
+		"author_provider": v.AuthorProvider, "reviewer_provider": v.ReviewerProvider,
+	}
+	if v.Head != "" {
+		values["head"] = v.Head
+	}
 	return b.r.XAdd(ctx, &redis.XAddArgs{
 		Stream: VerdictsKey(b.project),
 		MaxLen: int64(verdictMaxLen()),
 		Approx: true,
-		Values: map[string]interface{}{
-			"subject": v.Subject, "author": v.Author, "reviewer": v.Reviewer,
-			"decision": v.Decision, "message": SanitizeReportMessage(v.Message), "ref": v.Ref,
-			"full": v.Message, "text_complete": "yes",
-			"author_provider": v.AuthorProvider, "reviewer_provider": v.ReviewerProvider,
-		},
+		Values: values,
 	}).Result()
 }
 
@@ -501,7 +525,7 @@ func (b *Bus) Verdicts(ctx context.Context, subject string) ([]Verdict, error) {
 			ID: m.ID, Subject: f["subject"], Author: f["author"],
 			Reviewer: f["reviewer"], Decision: f["decision"],
 			Message: f["message"], Full: f["full"], TextComplete: f["text_complete"], Ref: f["ref"], TS: ms,
-			AuthorProvider: f["author_provider"], ReviewerProvider: f["reviewer_provider"],
+			AuthorProvider: f["author_provider"], ReviewerProvider: f["reviewer_provider"], Head: f["head"],
 		})
 	}
 	return out, nil
@@ -524,7 +548,7 @@ func (b *Bus) VerdictsAfter(ctx context.Context, after string, count int64) ([]V
 		f := toStringMap(m.Values)
 		ms, _ := splitID(m.ID)
 		out = append(out, Verdict{ID: m.ID, Subject: f["subject"], Author: f["author"], Reviewer: f["reviewer"],
-			Decision: f["decision"], Message: f["message"], Ref: f["ref"], TS: ms})
+			Decision: f["decision"], Message: f["message"], Ref: f["ref"], TS: ms, Head: f["head"]})
 	}
 	return out, nil
 }

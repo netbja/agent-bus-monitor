@@ -129,14 +129,16 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo reply -r 1792537337865-0 master \"yes, on main\""},
 	},
 	{
-		Name: "verdict", Text: true, Usage: []string{"verdict (--pr <n> | --subject <s>) [--ref <id>] <author> <approve|reject> [message...]"},
+		Name: "verdict", Text: true, Usage: []string{"verdict (--pr <n> | --subject <s>) [--ref <id>] [--head <sha>] <author> <approve|reject> [message...]"},
 		Summary: "record a 4-eyes verdict in the ledger (resolves a matching gate)",
 		Flags: []cli.Flag{
 			{Long: "pr", Short: 'P', Arg: "<n>", Help: "the pull request number"},
 			{Long: "subject", Short: 's', Arg: "<s>", Help: "any other subject"},
 			fRef,
+			{Long: "head", Arg: "<sha>", Help: "the full commit SHA you read: only such a verdict authorises agentbus deliver"},
 		},
-		Examples: []string{"agentbus -p demo verdict -P 12 coder approve \"tests cover the edge\""},
+		Examples: []string{"agentbus -p demo verdict -P 12 coder approve \"tests cover the edge\"",
+			"agentbus -p demo verdict -s my-task --head $(git rev-parse HEAD) coder approve \"read at that commit\""},
 	},
 	{
 		Name: "verdicts", Usage: []string{"verdicts [--json] [--pr <n> | --subject <s>]"},
