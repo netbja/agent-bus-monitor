@@ -102,6 +102,21 @@ func LoadConfig(path string, lookPath func(string) (string, error)) (map[string]
 	return cfg, nil
 }
 
+// FileProviders is the providers quota.toml names, kind "off" included: what
+// the person configured, as against a built-in. A missing or unreadable file
+// names none.
+func FileProviders(path string) map[string]bool {
+	var file Config
+	if _, err := toml.DecodeFile(path, &file); err != nil {
+		return nil
+	}
+	out := make(map[string]bool, len(file.Providers))
+	for name := range file.Providers {
+		out[name] = true
+	}
+	return out
+}
+
 // Readers builds the readers of a configuration.
 func Readers(cfg map[string]ProviderConfig, now func() time.Time) []Reader {
 	home, _ := os.UserHomeDir()

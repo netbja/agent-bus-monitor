@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ func TestReceiverBoundaryKeepsRuleTwo(t *testing.T) {
 	stop := make(chan struct{})
 	var mu sync.Mutex
 	var samples, unarmed, waiting int
+	var sent atomic.Bool // the boundary entry is in the stream
 	var bad []Decision
 	done := make(chan struct{})
 	go func() {
@@ -38,6 +40,7 @@ func TestReceiverBoundaryKeepsRuleTwo(t *testing.T) {
 				return
 			default:
 			}
+			after := sent.Load() // read first: a sample begun after the send sees the entry
 			armed, err1 := b.Armed(ctx, "local")
 			o, err2 := b.Obligation(ctx, "local", bus.DefaultHorizon)
 			if err1 == nil && err2 == nil {
@@ -47,11 +50,11 @@ func TestReceiverBoundaryKeepsRuleTwo(t *testing.T) {
 				if !armed {
 					unarmed++
 				}
-				if o.Wakes() {
-					waiting++
-					if d.Rule != 2 {
-						bad = append(bad, d)
-					}
+				if o.Wakes() && d.Rule != 2 {
+					bad = append(bad, d)
+				}
+				if after && o.Wakes() {
+					waiting++ // the boundary entry, judged while it waits
 				}
 				mu.Unlock()
 			}
@@ -66,6 +69,7 @@ func TestReceiverBoundaryKeepsRuleTwo(t *testing.T) {
 	if _, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "at the boundary"); err != nil {
 		t.Fatal(err)
 	}
+	sent.Store(true)
 	// Delivery waits until the poller has judged the waiting entry (no fixed
 	// sleep: a loaded machine only makes this slower).
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {

@@ -28,7 +28,7 @@ func runQuota(args []string, out, errw io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(errw, "quota: %v\n", err)
 	}
-	cfg = quotaListed(cfg, config.Load(config.Path(os.Getenv), "config.toml"))
+	cfg = quotaListed(cfg, config.Load(config.Path(os.Getenv), "config.toml"), quota.FileProviders(quota.ConfigPath()))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	rs := quota.ReadAll(ctx, quota.Readers(cfg, time.Now))
@@ -278,9 +278,10 @@ func runQuiet(ctx context.Context, bin string, args ...string) error {
 
 // quotaListed drops the local-llm peer's built-in provider where no peer can
 // run (no [llm.<name>] endpoint in config.toml): it is always unlimited, and
-// listing it on every host hid "no quota reader configured".
-func quotaListed(cfg map[string]quota.ProviderConfig, file *config.File) map[string]quota.ProviderConfig {
-	if _, ok := cfg["local"]; !ok || len(file.Endpoints()) > 0 {
+// listing it on every host hid "no quota reader configured". A local reader
+// quota.toml names (explicit) is the person's own and always kept.
+func quotaListed(cfg map[string]quota.ProviderConfig, file *config.File, explicit map[string]bool) map[string]quota.ProviderConfig {
+	if _, ok := cfg["local"]; !ok || explicit["local"] || len(file.Endpoints()) > 0 {
 		return cfg
 	}
 	out := make(map[string]quota.ProviderConfig, len(cfg))
