@@ -61,6 +61,5 @@ deny = [
   "Bash(terraform *workspace new*-state*)", "Bash(tofu *workspace new*-state*)",
   "Bash(printenv*)", "Bash(env)", "Bash(env *)",
   # Only master and docs deliver (forge-delivery).
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+  "Bash(agentbus deliver *)",
 ]

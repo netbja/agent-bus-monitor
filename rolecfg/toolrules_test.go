@@ -342,21 +342,25 @@ func TestExampleManifestsDeliverRules(t *testing.T) {
 	}
 }
 
-// The deliver denies catch every spelling of the command (the global flags
-// that may precede it, as expandArgs reads them) and leave the word in a
-// message alone (foureyes on step 6): deliver is everyday prose on the bus.
+// The deliver denies catch the command and its spellings after the project's
+// own global flag, rendered at launch with the project's name, and leave the
+// word in a message alone, flag or not (foureyes on step 6): deliver is
+// everyday prose on the bus, and agents write --project <p> as a rule.
 func TestDeliverDenyMatchesTheCommandNotProse(t *testing.T) {
-	r := ToolRules{Deny: DeliverDeny}
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := m.ProjectLaunchRules("coder", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, cmd := range []string{
 		"agentbus deliver coder/x",
 		"agentbus deliver coder/x --task t1",
 		"agentbus --project p deliver b",
 		"agentbus --project=p deliver b",
 		"agentbus -p p deliver b",
-		"agentbus --host h deliver b",
-		"agentbus --host=h deliver b",
-		"agentbus -H h deliver b",
-		"agentbus -p p -H h deliver b",
 	} {
 		if decide(r, cmd) != "deny" {
 			t.Errorf("not denied: %s", cmd)
@@ -364,14 +368,24 @@ func TestDeliverDenyMatchesTheCommandNotProse(t *testing.T) {
 	}
 	for _, cmd := range []string{
 		`agentbus report coder "we deliver it next"`,
-		`agentbus report coder --to master "deliver step 5"`,
-		`agentbus reply --ref 1-0 master the PR to deliver is ready`,
-		`agentbus --project p verdict --subject s coder approve "ok to deliver"`,
-		`agentbus -p p challenge foureyes "review before we deliver"`,
+		`agentbus --project p report coder "we deliver it next"`,
+		`agentbus --project=p report coder --to master "deliver step 5"`,
+		`agentbus -p p verdict --subject s coder approve "ok to deliver"`,
+		`agentbus -p p reply --ref 1-0 master the PR to deliver is ready`,
 		`agentbus --project p plan link t1 --ref coder/deliver@abc`,
 	} {
 		if decide(r, cmd) == "deny" {
 			t.Errorf("prose denied: %s", cmd)
+		}
+	}
+	// master and docs deliver: no project form is derived for them.
+	for _, role := range []string{"master", "docs"} {
+		mr, err := m.ProjectLaunchRules(role, "p")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if decide(mr, "agentbus --project p deliver b") == "deny" || decide(mr, "agentbus deliver b") == "deny" {
+			t.Errorf("%s may not deliver: deny %v", role, mr.Deny)
 		}
 	}
 }

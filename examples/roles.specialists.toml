@@ -32,10 +32,7 @@ profile = "claude-sonnet-edits"
 tier = "pop"
 skills = ["agent-bus", "diagnosing-bugs", "implement"]
 [roles.support.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.dba]
 profile = "claude-opus-manual"
@@ -43,30 +40,21 @@ tier = "pop"
 approval = "person"
 skills = ["agent-bus", "diagnosing-bugs", "codebase-design"]
 [roles.dba.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.web-design]
 profile = "claude-opus-edits"
 tier = "pop"
 skills = ["agent-bus", "implement", "tdd"]
 [roles.web-design.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.backend]
 profile = "claude-opus"
 tier = "pop"
 skills = ["agent-bus", "tdd", "implement", "codebase-design"]
 [roles.backend.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.os-expert]
 profile = "claude-sonnet-manual"
@@ -74,10 +62,7 @@ tier = "pop"
 approval = "person"
 skills = ["agent-bus", "diagnosing-bugs"]
 [roles.os-expert.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.cicd]
 profile = "claude-sonnet-edits"
@@ -85,7 +70,4 @@ tier = "pop"
 approval = "person"
 skills = ["agent-bus", "diagnosing-bugs", "tdd"]
 [roles.cicd.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]

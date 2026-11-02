@@ -19,21 +19,27 @@ type ToolRules struct {
 // Empty reports whether no rule is set.
 func (r ToolRules) Empty() bool { return len(r.Allow)+len(r.Ask)+len(r.Deny) == 0 }
 
-// DeliverDeny are the denies every role but master and docs carries in its
-// own rules (forge-delivery answer 3: only they push and open requests),
-// never in the shared ones, which would deny them too: the command, and the
-// command after each global flag that may precede it (-p/--project,
-// -H/--host, as expandArgs reads them). Never "agentbus * deliver *", which
-// would deny the word in any message (foureyes). Residual: a message with
-// " deliver " after a leading global flag is denied too. Defence in depth,
-// not a boundary: the client matches command text.
-var DeliverDeny = []string{
-	"Bash(agentbus deliver *)",
-	"Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-	"Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+// DeliverDeny is the deny every role but master and docs carries in its own
+// rules (forge-delivery answer 3: only they push and open requests), never in
+// the shared ones, which would deny them too. The spellings after the
+// project's global flag are rendered at launch with its name
+// (ProjectLaunchRules): a wildcard there would swallow "report coder ..." and
+// deny the word deliver in any message (foureyes). Defence in depth, not a
+// boundary: the client matches command text.
+var DeliverDeny = []string{"Bash(agentbus deliver *)"}
+
+// DeliverProjectDenies are agentbus deliver after project's own global flag,
+// each spelling expandArgs reads before a command. Another project's name, or
+// -H/--host before it, is not covered: a residual, as is any wrapper.
+func DeliverProjectDenies(project string) []string {
+	return []string{
+		"Bash(agentbus --project " + project + " deliver *)",
+		"Bash(agentbus --project=" + project + " deliver *)",
+		"Bash(agentbus -p " + project + " deliver *)",
+	}
 }
 
-// HoldsDeliverDeny: r denies every spelling of agentbus deliver.
+// HoldsDeliverDeny: r denies agentbus deliver.
 func HoldsDeliverDeny(r ToolRules) bool {
 	for _, d := range DeliverDeny {
 		if !slices.Contains(r.Deny, d) {
@@ -219,4 +225,20 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 	}
 	out = merged
 	return out, nil
+}
+
+// ProjectLaunchRules are LaunchRules for a launch in project: a role that
+// denies agentbus deliver also denies it after the project's global flag,
+// with the project's name (DeliverProjectDenies).
+func (m *Manifest) ProjectLaunchRules(role, project string) (ToolRules, error) {
+	r, err := m.LaunchRules(role)
+	if err != nil || !HoldsDeliverDeny(r) {
+		return r, err
+	}
+	for _, d := range DeliverProjectDenies(project) {
+		if !slices.Contains(r.Deny, d) {
+			r.Deny = append(r.Deny, d)
+		}
+	}
+	return r, nil
 }

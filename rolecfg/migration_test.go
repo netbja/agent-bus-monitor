@@ -87,7 +87,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		// and, but docs, the deliver denies (forge-delivery); docs the deliver
 		// allow; master and sentinel also their checked rules above.
 		o1, _ := v1.LaunchRules(role)
-		o2, _ := v2.LaunchRules(role)
+		o2, _ := v2.ProjectLaunchRules(role, "demo") // what the dry launch in demo carries
 		switch role {
 		case "master", "sentinel":
 		default:
@@ -96,7 +96,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 			if role == "docs" {
 				wantO.Allow = append(append([]string{}, o1.Allow...), "Bash(agentbus deliver *)")
 			} else {
-				wantO.Deny = append(wantO.Deny, DeliverDeny...)
+				wantO.Deny = append(append(wantO.Deny, DeliverDeny...), DeliverProjectDenies("demo")...)
 			}
 			if !reflect.DeepEqual(wantO, o2) {
 				t.Fatalf("%s's rules %+v, want %+v", role, o2, wantO)

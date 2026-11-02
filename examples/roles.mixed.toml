@@ -42,10 +42,7 @@ skills = ["agent-bus", "tdd", "implement"]
 # At most 3, each on another provider; `agentbus roles fallbacks coder` lists them.
 # fallback_profiles = ["review"]
 [roles.coder.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.foureyes]
 profile = "review"
@@ -53,48 +50,33 @@ tier = "boot"
 skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 # fallback_profiles = ["kimi"]   # on claude it would share coder's provider: less diversity
 [roles.foureyes.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.sentinel]
 profile = "kimi"
 tier = "boot"
 skills = ["agent-bus", "agent-bus-sentinel"]
 [roles.sentinel.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.architect]
 tier = "pop"
 skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
 [roles.architect.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.deploy]
 tier = "pop"
 skills = ["agent-bus", "diagnosing-bugs"]
 [roles.deploy.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.security]
 profile = "review"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-security"]
 [roles.security.tool_rules]
-deny = [
-  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
-  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
-]
+deny = ["Bash(agentbus deliver *)"]
 
 [roles.docs]
 tier = "pop"

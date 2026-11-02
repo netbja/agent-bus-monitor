@@ -171,7 +171,7 @@ func DraftRole(m *Manifest, role, task string, skills []ScoredSkill) (snippet, p
 	for i, d := range DeliverDeny {
 		quoted[i] = fmt.Sprintf("%q", d)
 	}
-	fmt.Fprintf(&sb, "[roles.%s.tool_rules]\ndeny = [\n  %s,\n]\n", role, strings.Join(quoted, ", "))
+	fmt.Fprintf(&sb, "[roles.%s.tool_rules]\ndeny = [%s]\n", role, strings.Join(quoted, ", "))
 	var skillList []string
 	for _, s := range skills {
 		skillList = append(skillList, "`"+s.Name+"`")
