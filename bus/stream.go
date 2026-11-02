@@ -110,6 +110,10 @@ type AgentSnapshot struct {
 	// profile's options.endpoint: the endpoint health llm-endpoint probes for
 	// it (R4). Set like Client, by the peer's own status; empty for others.
 	Endpoint string `json:"endpoint,omitempty"`
+	// EndpointFP fingerprints the URL the peer resolved for Endpoint
+	// (peer.EndpointFP), set with it: health says when config.toml changed
+	// that URL since the launch.
+	EndpointFP string `json:"endpoint_fp,omitempty"`
 }
 
 // clientProviders is the fallback when the launcher set no provider: the
@@ -130,16 +134,17 @@ func ProviderFor(client, provider string) string {
 // (rather than more positional params) because this list grows: each new field
 // is one more thing a reader can learn about an agent for free.
 type AgentIdent struct {
-	Pane     string // HERDR_PANE_ID
-	Session  string // CLAUDE_CODE_SESSION_ID
-	PID      int    // agent's foreground pid in its herdr pane (0 = unknown)
-	PIDStart uint64 // that pid's start time, /proc/<pid>/stat field 22
-	Terminal string // herdr terminal id, display only
-	Client   string // AGENT_BUS_CLIENT
-	Provider string // AGENT_BUS_PROVIDER
-	Model    string // AGENT_BUS_MODEL (v0.15.1)
-	ClientFP string // AGENT_BUS_CLIENT_FP (client reload spec)
-	Endpoint string // a local-llm peer's resolved endpoint name
+	Pane       string // HERDR_PANE_ID
+	Session    string // CLAUDE_CODE_SESSION_ID
+	PID        int    // agent's foreground pid in its herdr pane (0 = unknown)
+	PIDStart   uint64 // that pid's start time, /proc/<pid>/stat field 22
+	Terminal   string // herdr terminal id, display only
+	Client     string // AGENT_BUS_CLIENT
+	Provider   string // AGENT_BUS_PROVIDER
+	Model      string // AGENT_BUS_MODEL (v0.15.1)
+	ClientFP   string // AGENT_BUS_CLIENT_FP (client reload spec)
+	Endpoint   string // a local-llm peer's resolved endpoint name
+	EndpointFP string // and its URL's fingerprint
 }
 
 // Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
@@ -359,7 +364,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
-		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Endpoint: who.Endpoint}
+		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Endpoint: who.Endpoint, EndpointFP: who.EndpointFP}
 	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.

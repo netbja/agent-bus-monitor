@@ -87,6 +87,10 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 			case !ok:
 				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (endpoint %s)", p, s.Endpoint))
 				continue
+			case s.EndpointFP != "" && s.EndpointFP != peer.EndpointFP(ep.URL):
+				// The peer still calls the URL it started with; this probe
+				// reaches the new one only.
+				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s ([llm.%s]'s URL changed since its launch)", p, ep.Name))
 			case s.Model != "" && s.Model != ep.Model:
 				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (runs %s; [llm.%s] now names %s)", p, s.Model, ep.Name, ep.Model))
 				ep.Model = s.Model

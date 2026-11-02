@@ -14,6 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/peer"
 )
 
 func llmConfig(t *testing.T, body string) *config.File {
@@ -189,5 +190,23 @@ func TestLLMEndpointCheckJudgesThePeersRunningModel(t *testing.T) {
 	out, err := llmEndpointCheck(llmDeps(snaps, cfg))(context.Background())
 	if err != nil || out.Status != health.Warn || !strings.Contains(out.Detail, "answers without qwen") || !strings.Contains(out.Detail, "local (runs qwen; [llm.used] now names phi)") {
 		t.Fatalf("config changed under a running peer = %s %q %v", out.Status, out.Detail, err)
+	}
+}
+
+// The peer keeps the URL it resolved for its whole life: an endpoint whose
+// URL config.toml changed since is said, even when the new server answers
+// (reviewer-codex), by a fingerprint, never the URL.
+func TestLLMEndpointCheckSaysAURLChangedSinceTheLaunch(t *testing.T) {
+	srv := modelsServer(t, "qwen")
+	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"qwen\"\n")
+	snap := func(fp string) map[string]bus.AgentSnapshot {
+		return map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used", EndpointFP: fp}}
+	}
+	if out, _ := llmEndpointCheck(llmDeps(snap(peer.EndpointFP(srv.URL+"/v1")), cfg))(context.Background()); out.Status != health.OK {
+		t.Fatalf("same URL = %s %q", out.Status, out.Detail)
+	}
+	out, _ := llmEndpointCheck(llmDeps(snap(peer.EndpointFP("http://127.0.0.1:1/v1")), cfg))(context.Background())
+	if out.Status != health.Warn || !strings.Contains(out.Detail, "local ([llm.used]'s URL changed since its launch)") || strings.Contains(out.Detail, "127.0.0.1:1") {
+		t.Fatalf("URL changed = %s %q", out.Status, out.Detail)
 	}
 }

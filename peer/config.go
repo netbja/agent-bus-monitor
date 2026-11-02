@@ -6,6 +6,8 @@
 package peer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -54,6 +56,16 @@ const (
 	defaultTurnTimeout = 10 * time.Minute
 	defaultMaxTokens   = 1024
 )
+
+// EndpointFP is a short fingerprint of an endpoint's URL: what the peer
+// records of the URL it resolved, so health can tell that config.toml has
+// changed it since, without the URL (its path) ever reaching the bus. Not a
+// secret: the bus is no boundary against the local user, who reads
+// config.toml anyway.
+func EndpointFP(url string) string {
+	sum := sha256.Sum256([]byte(url))
+	return hex.EncodeToString(sum[:6])
+}
 
 // Resolve joins the spec with config.toml's endpoint it names. The profile's
 // model must be the endpoint's: the one name is written twice but checked,

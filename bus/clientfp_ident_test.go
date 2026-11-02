@@ -29,14 +29,14 @@ func TestMergeSnapshotClientFP(t *testing.T) {
 // does not name one (a bind, a turn flip, a status from elsewhere) leaves
 // it; a new one replaces it (R4: health probes that endpoint).
 func TestMergeSnapshotEndpoint(t *testing.T) {
-	st := mergeSnapshot(nil, AgentSnapshot{State: "idle", TS: 10, Client: "local-llm", Endpoint: "used"}, false)
-	if st.Endpoint != "used" {
+	st := mergeSnapshot(nil, AgentSnapshot{State: "idle", TS: 10, Client: "local-llm", Endpoint: "used", EndpointFP: "fp1"}, false)
+	if st.Endpoint != "used" || st.EndpointFP != "fp1" {
 		t.Fatalf("first status = %q", st.Endpoint)
 	}
 	st = mergeSnapshot(&st, AgentSnapshot{State: "working", TS: 20}, false)
 	st = mergeSnapshot(&st, AgentSnapshot{Pane: "p", PID: 7, PIDStart: 70, IdentTS: 30}, true)
-	if st.Endpoint != "used" {
-		t.Fatalf("after a status and a bind without one = %q", st.Endpoint)
+	if st.Endpoint != "used" || st.EndpointFP != "fp1" {
+		t.Fatalf("after a status and a bind without one = %q %q", st.Endpoint, st.EndpointFP)
 	}
 	if st = mergeSnapshot(&st, AgentSnapshot{State: "idle", TS: 40, Endpoint: "other"}, false); st.Endpoint != "other" {
 		t.Fatalf("a new endpoint = %q", st.Endpoint)
