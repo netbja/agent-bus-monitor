@@ -27,7 +27,7 @@ var groups = map[string]Group{
 	"dispatch.context_alert": GroupServices, "dispatch.prompt_grace": GroupServices, "dispatch.quota": GroupServices,
 	"dispatch.quota_warn": GroupServices, "dispatch.quota_hold": GroupServices, "dispatch.quota_max_age": GroupServices,
 	"dispatch.quota_long_hold": GroupServices, "dispatch.tokens": GroupServices, "dispatch.auto_clear": GroupServices,
-	"dispatch.stall_after": GroupServices, "dispatch.clear_stall_after": GroupServices, "dispatch.quiet_after": GroupServices,
+	"dispatch.pop_retire": GroupServices, "dispatch.pop_retire_after": GroupServices, "dispatch.stall_after": GroupServices, "dispatch.clear_stall_after": GroupServices, "dispatch.quiet_after": GroupServices,
 	"dispatch.turn_stale_after": GroupServices, "history.keep_days": GroupServices, "history.max_mb": GroupServices, "sentinel.reload": GroupServices,
 	"delivery.forge": GroupServices, "delivery.base": GroupServices,
 	"health.disk_warn_pct": GroupHealth, "health.disk_warn_gib": GroupHealth, "health.disk_fail_pct": GroupHealth,

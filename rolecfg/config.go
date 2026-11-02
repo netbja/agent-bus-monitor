@@ -541,6 +541,14 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 	return resolved, nil
 }
 
+// RoleTier is the role's tier in the manifest ("boot" or "pop"; Load
+// validated it), "" for an unknown role.
+func (m *Manifest) RoleTier(role string) string {
+	info, _ := asTable(m.Roles[role])
+	tier, _ := info["tier"].(string)
+	return tier
+}
+
 // RolesByTier returns roles in their original manifest order.
 func (m *Manifest) RolesByTier(tier string) []string {
 	roles := make([]string, 0)

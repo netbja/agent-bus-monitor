@@ -47,7 +47,12 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 	r1, _ := v1.LaunchRules("master")
 	r2, _ := v2.LaunchRules("master")
 	want := r1
-	want.Allow = append([]string{}, r1.Allow...)
+	want.Allow = nil
+	for _, rule := range r1.Allow { // the spawn rules; the retire rules follow them all
+		if strings.HasPrefix(rule, "Bash(agent-spawn ") {
+			want.Allow = append(want.Allow, rule)
+		}
+	}
 	want.Ask = append([]string{}, r1.Ask...)
 	for _, role := range v2.roleOrder[len(v1.roleOrder):] {
 		p, err := v2.Resolve(role)
@@ -58,6 +63,11 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 			want.Ask = append(want.Ask, "Bash(agent-spawn "+role+" *)")
 		} else {
 			want.Allow = append(want.Allow, "Bash(agent-spawn "+role+" *)")
+		}
+	}
+	for _, role := range v2.roleOrder { // a pop's end for every pop (pop-auto-retire §6)
+		if role != "master" && v2.RoleTier(role) == "pop" {
+			want.Allow = append(want.Allow, RetireRule(role))
 		}
 	}
 	want.Allow = append(want.Allow, masterUpRules...)

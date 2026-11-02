@@ -430,6 +430,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg.Clear = serviceClear(os.Getenv, exec.LookPath, runQuiet)   // /clear after a declared hand-off (lifecycle part B)
 			cfg.Clear.Decisions = dispatch.NewClearDecisions()             // why a clear waits: logged, and read by clear-stall
 			cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &cfg.EscalateTo)
+			cfg.PopRetire = servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) })
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
 			}

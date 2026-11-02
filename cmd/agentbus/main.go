@@ -831,6 +831,7 @@ func statusIdent(ctx context.Context) bus.AgentIdent {
 		Provider: bus.ProviderFor(os.Getenv("AGENT_BUS_CLIENT"), os.Getenv("AGENT_BUS_PROVIDER")),
 		Model:    os.Getenv("AGENT_BUS_MODEL"),
 		ClientFP: os.Getenv("AGENT_BUS_CLIENT_FP"),
+		Tier:     os.Getenv("AGENT_BUS_TIER"),
 	}
 	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
 		return who

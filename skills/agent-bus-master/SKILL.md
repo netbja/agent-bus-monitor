@@ -57,6 +57,8 @@ which).
   team. The same goes for security (pop for a review, retire after the verdict) and docs.
 - `agentbus retire <role>` refuses while the agent takes part in an open review or mission or runs
   a turn (`--now` takes the turn); it closes its tab and records it in `agentbus swaps`.
+- **A pop's end is mostly automatic** (see "A pop has finished" below): the dispatcher tells you
+  when a pop is done, and you run the one command it gives.
 
 ## When the model drifts
 
@@ -134,10 +136,13 @@ A project can add specialist roles from `examples/roles.specialists.toml` (spec
 - **One specialist at a time**, unless the person asks for more.
 - **Cost:** check `agentbus quota` first. Pop nothing at 75 % or more of the window the role's
   provider uses, unless the person asks.
-- **Retire** it with `agentbus retire <role>` once its request is `done` and its review is approved.
-  Retire refuses while it is busy or under review, so a busy specialist is not closed.
-- sentinel's daily review lists popped roles idle for more than 2 h with no accepted task: retire
-  them or ask the person.
+- **Retire** it once its request is `done` and its review is approved: the dispatcher sends you
+  the command when it judges the pop done ("A pop has finished" below); by hand it is
+  `agentbus retire <role>`. Retire refuses while it is busy or under review, so a busy specialist
+  is not closed.
+- sentinel's daily review lists popped roles idle for more than 2 h with no accepted task, which
+  the automatic end did not reach (it was off, or the pop launched before it shipped): retire them
+  or ask the person.
 
 ## Draft a role
 
@@ -459,6 +464,32 @@ Both arrive as `cmd` events addressed to you; their `type` field tells them apar
 - **`blocked`** (`from:` the peer) — the peer ran `request block <task> <reason>` on a request
   you sent; in the JSON event `body` is the reason, `ref` the thread, `task` the request. Decide: answer on
   the thread, re-scope, or reassign. It is sent once per new reason, not on every repeat.
+
+### A pop has finished: run the command it gives
+
+A `directive` from `dispatch` that starts `<role> has finished:` (spec
+`docs/superpowers/specs/2026-11-03-pop-auto-retire-design.md`) means the dispatcher judged a pop
+done: no board task, gate, mission, ask or message left, idle 15 min (`dispatch.pop_retire_after`),
+its pane ready and not focused, no pause, no hold. It ends with the one command to run:
+
+```
+agentbus retire security --forget --episode 1793647000000 --reason "work done"
+```
+
+- **Run it as given**, with no other flag (your rules allow exactly this form for each pop role,
+  deploy and infra included: the person's yes to pop covers the end). Never add `--now`.
+- `retire --forget` judges the pop again before it closes anything, then once more after it, and
+  right before the close. If anything changed (a message, a task, an ask, the person focused the
+  pane, it declared again), it refuses and says why: **leave it**, the dispatcher tells you again
+  at its next idle episode.
+- After the close, it unregisters the pop in one step that keeps its message queue. If something
+  arrived in between, it exits 1 with `registration is kept` and the entry ids: the pop is closed
+  but still registered, the dispatcher escalates what waits to you, and a new `agent-spawn` of the
+  role reads it. Spawn it when the work needs it.
+- **To keep a pop** (the person wants it): do not run the command; say so with `agentbus report`
+  so the person sees why. The directive does not come back until the pop works and idles again.
+- busmon flags such a pop `done Nm` until the end, and `retiring` while it runs; health `pop-done`
+  warns (in hand: yours) when a pop stays long after you were told.
 
 ## Peers disconnect when idle — bringing one back is YOUR job (when no dispatcher runs)
 

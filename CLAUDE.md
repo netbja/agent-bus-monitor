@@ -1096,7 +1096,18 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `failed`/`warning` on every failure path, a `begin` without end and without intent read as
   interrupted and closed by the next swap); `swap --back` returns a role to its own profile and
   model (refused only when profile, client, provider and launched model all match); `agentbus
-  retire <role>` closes one role's tab with the same checks (not `shutdown`, which is team-wide);
+  retire <role>` closes one role's tab with the same checks (not `shutdown`, which is team-wide;
+  pop-auto-retire, spec `docs/superpowers/specs/2026-11-03-pop-auto-retire-design.md`: the dispatch
+  pass `popRetirePass` judges every pop (`AgentSnapshot.Tier` from the launcher's `AGENT_BUS_TIER`,
+  set only with a proof) with the pure `dispatch.PopDone` over `ReadPopFacts`, and sends master one
+  waking directive per idle episode (mark `popdone:<a>` = the declaration's `ts`); master runs
+  `retire <role> --forget --episode <ms>`, which re-judges the whole predicate before its `begin`,
+  after it and before the close, holds a `kind=retire` intent with a nonce (only that exact intent
+  passes), then `Bus.ForgetIfClear`: one script that unregisters the pop only if the stored
+  registration is still that pid, start and episode and nothing waits (pending, unread with no
+  floor, open ask, owned board task not `done`, gate), and keeps its consumer group so a respawn
+  reads on; `dispatch.pop_retire`/`pop_retire_after` (on, 15 min), busmon `done Nm`/`retiring`,
+  health `pop-done`);
   `agentbus swaps` lists the ledger (a reload's entries tagged `[reload]`). Lifecycle-3a: a reload
   (`agentbus reload`, part C) holds the same intent with `kind=reload` (`SwapIntent.Kind`,
   `SwapKindReload`), so every swap rule of the dispatcher applies unchanged; its `begin` carries the

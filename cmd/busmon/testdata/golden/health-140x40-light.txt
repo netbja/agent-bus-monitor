@@ -1,5 +1,5 @@
  agent-bus-monitor   ● bus ok   health ▲ 2 to do (F5)   ● dispatch up   ● missions up   ♙ 3 for you   ● 2 unread                   15:04:05 
- paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ███▏  62% │ 7d ████▏      41%   grok 5h █████ 100% held 15:44             
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
 ╭─ For you ───────────────────── 3 for you · 2 unread ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
 │  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
 │  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
@@ -12,7 +12,7 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
 │                                                      ││  ○ sentinel  paused    30m     —        —         model≠              health ok  ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Health · 2 to do · 1 in hand · 18 fine · 1 not measured ──────────────────────────────────────────────────────────── y copy · esc back ─╮
+╭─ Health · 2 to do · 1 in hand · 19 fine · 1 not measured ──────────────────────────────────────────────────────────── y copy · esc back ─╮
 │   For you                                                                                                                                │
 │ ▶ ▲ Tracked secret-like files        tracked private-key path: deploy/id_ed25519                     git rm --cached <path>           3h │
 │     │ Since:       2026-10-26 12:04                                                                                                      │
@@ -24,7 +24,7 @@
 │   ● Context fill                     at or above 80%: coder 85%                                      (dispatch)                      12m │
 │   Not measured                                                                                                                           │
 │   ? Model drift                      no current measurement                                                                              │
-│   ── fine · 18  (a shows them) ──                                                                                                        │
+│   ── fine · 19  (a shows them) ──                                                                                                        │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

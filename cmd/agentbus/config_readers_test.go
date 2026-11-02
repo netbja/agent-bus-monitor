@@ -161,3 +161,24 @@ func TestServiceRunLogsSettingsWarnings(t *testing.T) {
 		t.Errorf("log:\n%s", log.String())
 	}
 }
+
+// The pop's end (pop-auto-retire §8): on with no setting, after 15 minutes;
+// off by the file's false, the env's 0, or a delay of 0.
+func TestServicePopRetire(t *testing.T) {
+	missions := func(context.Context, string) ([]string, error) { return nil, nil }
+	if c := servicePopRetire(withConfig(t, "", nil), missions); !c.On || c.After != 15*time.Minute || c.Missions == nil {
+		t.Errorf("default = %+v", c)
+	}
+	if c := servicePopRetire(withConfig(t, "[dispatch]\npop_retire = false\n", nil), missions); c.On {
+		t.Error("pop_retire = false did not turn it off")
+	}
+	if c := servicePopRetire(withConfig(t, "", map[string]string{"AGENT_BUS_POP_RETIRE": "0"}), missions); c.On {
+		t.Error("AGENT_BUS_POP_RETIRE=0 did not turn it off")
+	}
+	if c := servicePopRetire(withConfig(t, "[dispatch]\npop_retire_after = \"0\"\n", nil), missions); c.On {
+		t.Error("pop_retire_after = 0 did not turn it off")
+	}
+	if c := servicePopRetire(withConfig(t, "[dispatch]\npop_retire_after = \"30m\"\n", nil), missions); !c.On || c.After != 30*time.Minute {
+		t.Errorf("30m = %+v", c)
+	}
+}

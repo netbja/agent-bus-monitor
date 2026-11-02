@@ -565,7 +565,7 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 	}
 	for k, v := range map[string]string{"AGENT_BUS_PROJECT": project, "AGENT_BUS_AGENT": role,
 		"AGENT_BUS_CLIENT": p.Client, "AGENT_BUS_PROVIDER": p.Provider, "AGENT_BUS_MODEL": p.Model, "AGENT_BUS_MODEL_TIER": p.Tier,
-		"AGENT_BUS_PROFILE": p.Profile, "AGENT_BUS_REASONING": p.Reasoning, "ROLES_TOML": p.Manifest} {
+		"AGENT_BUS_PROFILE": p.Profile, "AGENT_BUS_REASONING": p.Reasoning, "AGENT_BUS_TIER": m.RoleTier(role), "ROLES_TOML": p.Manifest} {
 		e.set(k, v)
 	}
 	// A child session must never publish the parent Claude session's transcript as its own.

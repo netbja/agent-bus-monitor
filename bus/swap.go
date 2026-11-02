@@ -32,6 +32,9 @@ type SwapIntent struct {
 	// spec, part C): the same intent, so the dispatcher's rules for a swap
 	// (no prompt, escalation, resume or clear) apply to a reload unchanged.
 	Kind string `json:"kind,omitempty"`
+	// Nonce (pop-auto-retire) is drawn by each retire --forget run, so its
+	// re-checks recognise its own intent and no other.
+	Nonce string `json:"nonce,omitempty"`
 }
 
 // SwapKindReload marks a reload's intent and ledger entries.

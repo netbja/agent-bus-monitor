@@ -106,6 +106,10 @@ type AgentSnapshot struct {
 	// only with a proof like Model: what the dispatcher compares with the
 	// client installed now (client reload spec).
 	ClientFP string `json:"client_fp,omitempty"`
+	// Tier is the launched role's tier in roles.toml ("boot" or "pop",
+	// AGENT_BUS_TIER), set only with a proof like Model: what the dispatcher
+	// reads to judge a pop's end (pop-auto-retire §6). Empty = never judged.
+	Tier string `json:"tier,omitempty"`
 	// Endpoint is the [llm.<name>] a local-llm peer resolved from its
 	// profile's options.endpoint: the endpoint health llm-endpoint probes for
 	// it (R4). Set like Client, by the peer's own status; empty for others.
@@ -143,6 +147,7 @@ type AgentIdent struct {
 	Provider   string // AGENT_BUS_PROVIDER
 	Model      string // AGENT_BUS_MODEL (v0.15.1)
 	ClientFP   string // AGENT_BUS_CLIENT_FP (client reload spec)
+	Tier       string // AGENT_BUS_TIER (pop-auto-retire)
 	Endpoint   string // a local-llm peer's resolved endpoint name
 	EndpointFP string // and its URL's fingerprint
 }
@@ -381,7 +386,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
-		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Endpoint: who.Endpoint, EndpointFP: who.EndpointFP}
+		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier, Endpoint: who.Endpoint, EndpointFP: who.EndpointFP}
 	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.

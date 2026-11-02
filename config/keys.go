@@ -204,6 +204,15 @@ var Keys = []*Key{
 	// working seen ready this long reads idle for team-stall; 0 turns it off.
 	{Name: "dispatch.turn_stale_after", Env: "AGENT_BUS_TURN_STALE_AFTER", Kind: Duration, Default: 2 * time.Minute, ReadBy: "dispatch",
 		env: envStallDuration, file: fileDuration(true)},
+	// A pop's end (spec 2026-11-03-pop-auto-retire-design.md): the dispatcher
+	// judges idle pops and asks master to end them (on by default, the
+	// person's answer; 0 off, 1 on, any other value skipped), once a pop has
+	// declared idle this long (0 turns it off); retire --forget re-judges it.
+	{Name: "dispatch.pop_retire", Env: "AGENT_BUS_POP_RETIRE", Kind: Bool, Default: true, ReadBy: "dispatch, agentbus retire",
+		env:  envZeroOne,
+		file: fileBool},
+	{Name: "dispatch.pop_retire_after", Env: "AGENT_BUS_POP_RETIRE_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch, agentbus retire",
+		env: envStallDuration, file: fileDuration(true)},
 	// The history archive (spec 2026-11-01-history-design.md): days of day
 	// files kept (0 = no archive) and the directory's cap in MiB.
 	{Name: "history.keep_days", Env: "AGENT_BUS_HISTORY_DAYS", Kind: Int, Default: 90, ReadBy: "dispatch",

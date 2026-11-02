@@ -210,9 +210,18 @@ func (m *Manifest) Approval(role string) string {
 	return approval
 }
 
+// RetireRule is the one form of a pop's end a popping role may run without
+// a prompt: the dispatcher's directive, word for word but its values.
+func RetireRule(role string) string {
+	return "Bash(agentbus retire " + role + " --forget --episode * --reason *)"
+}
+
 // LaunchRules are the rules role's session starts with: for a role that pops
 // others, one spawn rule per other role in manifest order (allow, or ask when
-// that role needs approval), then the role's declared rules.
+// that role needs approval), then one retire rule per pop role (allow,
+// whatever its approval: pop-auto-retire §6, the person's yes to pop covers
+// the end; the exact --forget form only, never --now), then the role's
+// declared rules.
 func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 	p, err := m.Resolve(role)
 	if err != nil {
@@ -229,6 +238,11 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 				derived.Ask = append(derived.Ask, rule)
 			} else {
 				derived.Allow = append(derived.Allow, rule)
+			}
+		}
+		for _, other := range m.roleOrder {
+			if other != role && m.RoleTier(other) == "pop" {
+				derived.Allow = append(derived.Allow, RetireRule(other))
 			}
 		}
 	}

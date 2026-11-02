@@ -243,6 +243,10 @@ func swapNotice(e bus.SwapEvent) (notice, bool) {
 		return notice{text: role + " now runs on " + Preview(e.ToProfile) + reason, level: noticeInfo}, true
 	case !reload && e.Event == bus.SwapBack:
 		return notice{text: role + " back on its own profile", level: noticeDone}, true
+	case e.Event == bus.SwapRetire && e.Forgot == "false":
+		return notice{text: role + " closed, its registration kept (agentbus swaps)", level: noticeAttention}, true
+	case e.Event == bus.SwapRetire:
+		return notice{text: role + " retired" + reason, level: noticeDone}, true
 	}
 	return notice{}, false
 }
