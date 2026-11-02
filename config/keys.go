@@ -168,9 +168,11 @@ var Keys = []*Key{
 	{Name: "dispatch.tokens", Env: "AGENT_BUS_TOKENS", Kind: Bool, Default: true, ReadBy: "dispatch",
 		env:  func(raw string) (any, envResult) { return raw != "0", envUse }, // 0 turns it off
 		file: fileBool},
-	// On by default (autoclear-default, the person's decision); 0 is the off switch.
+	// On by default (autoclear-default, the person's decision); 0 is the off
+	// switch, 1 on, and any other value is skipped (the next source applies),
+	// so true or yes never turns it off.
 	{Name: "dispatch.auto_clear", Env: "AGENT_BUS_AUTO_CLEAR", Kind: Bool, Default: true, ReadBy: "dispatch",
-		env:  func(raw string) (any, envResult) { return raw == "1", envUse }, // a set value: only 1 is on
+		env:  envZeroOne,
 		file: fileBool},
 	// The stall guard (spec 2026-11-01-stall-guard-design.md): how long before
 	// each check judges a stall; 0 turns the check off.
@@ -271,6 +273,17 @@ func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" 
 // dispatcher's default, never a setting.
 // envStallDuration: whole seconds (as prompt_grace) or a Go duration, 0 = off,
 // at most a day; anything else falls back to the next source.
+// envZeroOne takes 1 (on) and 0 (off) only; anything else is skipped.
+func envZeroOne(raw string) (any, envResult) {
+	switch raw {
+	case "1":
+		return true, envUse
+	case "0":
+		return false, envUse
+	}
+	return nil, envSkip
+}
+
 func envStallDuration(raw string) (any, envResult) {
 	if n, err := strconv.Atoi(raw); err == nil && n >= 0 && n <= 86400 {
 		return time.Duration(n) * time.Second, envUse

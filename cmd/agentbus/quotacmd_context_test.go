@@ -93,12 +93,12 @@ func TestServicePrompt(t *testing.T) {
 }
 
 // AGENT_BUS_AUTO_CLEAR (lifecycle part B; autoclear-default): on by default,
-// unset included; 0 is the off switch, and any value but 1 stays off, as the
-// env rule always read it.
+// unset included; 0 is the off switch and 1 is on; any other value is not
+// taken (the next source applies, here the default), never read as off.
 func TestServiceClear(t *testing.T) {
 	found := func(string) (string, error) { return "/usr/bin/notify-send", nil }
 	run := func(context.Context, string, ...string) error { return nil }
-	for env, want := range map[string]bool{"": true, "0": false, "1": true, "yes": false, "true": false} {
+	for env, want := range map[string]bool{"": true, "0": false, "1": true, "yes": true, "true": true, "garbage": true, "false": true} {
 		cfg := serviceClear(func(k string) string {
 			if k == "AGENT_BUS_AUTO_CLEAR" {
 				return env

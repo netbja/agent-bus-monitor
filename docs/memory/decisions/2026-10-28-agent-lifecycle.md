@@ -41,8 +41,9 @@ person at the keyboard, once per agent.
   It was off by default until then, pending live checks on this machine: Claude Code's `/clear` keeps
   the pid, argv and environment and fires `SessionStart` with a new session id; `/clear` typed with
   the slash menu open submits `/clear`; `--resume` after SIGTERM restores the conversation. The off
-  switch stays: `AGENT_BUS_AUTO_CLEAR=0` (any set value but `1` reads off) or `dispatch.auto_clear =
-  false` in `config.toml`.
+  switch stays: `AGENT_BUS_AUTO_CLEAR=0` or `dispatch.auto_clear = false` in `config.toml`. An env
+  value other than `0` or `1` is skipped with a warning naming the variable (never the value), so
+  `true` or `yes` can never turn it off by surprise.
 
 ## When it applies
 

@@ -12,8 +12,19 @@ import (
 // back to the next source, and says so here.
 func settingsWarnings(getenv func(string) string) []string {
 	var out []string
-	for _, w := range config.Machine(getenv).Warnings() {
+	r := config.Machine(getenv)
+	for _, w := range r.Warnings() {
 		out = append(out, w.String())
+	}
+	// An env value its rule skips: named by its variable, never its value,
+	// with the source that applies instead (as agentbus config says it).
+	for _, k := range config.Keys {
+		if k.Env == "" || getenv(k.Env) == "" {
+			continue
+		}
+		if g := r.Get(k.Name); !g.Invalid && g.Source != "env "+k.Env {
+			out = append(out, fmt.Sprintf("env %s: set but not a value its rule takes; %s applies", k.Env, g.Source))
+		}
 	}
 	return out
 }

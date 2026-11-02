@@ -55,7 +55,7 @@ func TestServiceReadersReadConfigTOML(t *testing.T) {
 		t.Errorf("context alert = %v", a)
 	}
 	// The env still wins, by its own rule.
-	getenv = withConfig(t, file, map[string]string{"AGENT_BUS_QUOTA_WARN": "75", "AGENT_BUS_TOKENS": "1", "AGENT_BUS_AUTO_CLEAR": "yes", "AGENT_BUS_PROMPT_GRACE": "0"})
+	getenv = withConfig(t, file, map[string]string{"AGENT_BUS_QUOTA_WARN": "75", "AGENT_BUS_TOKENS": "1", "AGENT_BUS_AUTO_CLEAR": "0", "AGENT_BUS_PROMPT_GRACE": "0"})
 	if q := serviceQuota(getenv, io.Discard); q.WarnPct != 75 || q.HoldPct != 90 {
 		t.Errorf("env over file: %+v", q)
 	}
@@ -63,7 +63,7 @@ func TestServiceReadersReadConfigTOML(t *testing.T) {
 		t.Error("AGENT_BUS_TOKENS=1 did not win over tokens = false")
 	}
 	if serviceClear(getenv, noLook, nil).On {
-		t.Error("AGENT_BUS_AUTO_CLEAR=yes is off by today's rule, whatever the file says")
+		t.Error("AGENT_BUS_AUTO_CLEAR=0 did not win over auto_clear = true")
 	}
 	if g := dispatch.PromptGrace(getenv); g != 0 {
 		t.Errorf("AGENT_BUS_PROMPT_GRACE=0 = %v, want off", g)
@@ -78,6 +78,10 @@ func TestServiceReadersReadConfigTOML(t *testing.T) {
 	}
 	if serviceClear(withConfig(t, "[dispatch]\nauto_clear = true\n", map[string]string{"AGENT_BUS_AUTO_CLEAR": "0"}), noLook, nil).On {
 		t.Error("AGENT_BUS_AUTO_CLEAR=0 did not turn it off over the file")
+	}
+	// A value the rule does not take is skipped: the file's false still applies.
+	if serviceClear(withConfig(t, "[dispatch]\nauto_clear = false\n", map[string]string{"AGENT_BUS_AUTO_CLEAR": "true"}), noLook, nil).On {
+		t.Error("AGENT_BUS_AUTO_CLEAR=true overrode auto_clear = false; it must be skipped")
 	}
 	// quota off in the file.
 	if q := serviceQuota(withConfig(t, "[dispatch]\nquota = false\n", nil), io.Discard); q.Read != nil {

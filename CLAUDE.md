@@ -504,7 +504,7 @@ own declared hand-off, the literal `/clear` (`Runtime.Clear`, `ClearText`, no te
 `DecideClear`'s rule, a fenced once-per-session reservation (`clear:<agent>` in `{p}:quota`) and a
 proof before the resume directive (`dispatch/clear.go`; a deferred clear records its reason in `ClearConfig.Decisions`
 and logs `clear-deferred` once per change of reason, so a hand-off never waits silently); on by default since autoclear-default
-(the person's decision), `AGENT_BUS_AUTO_CLEAR=0` (any set value but `1`) or `dispatch.auto_clear = false` turns it off. The fake runtime enforces `dispatchTypes` in every
+(the person's decision), `AGENT_BUS_AUTO_CLEAR=0` or `dispatch.auto_clear = false` turns it off (any env value but `0`/`1` is skipped with a warning naming the variable). The fake runtime enforces `dispatchTypes` in every
 dispatch test: a prompt that is not a wake line, or a `/clear` without its reservation, panics. The wake
 line is fixed — `[agentbus#<nonce>] <project>: <n> message(s) waiting for <agent>. Run: agentbus
 --project <project> subscribe --drain <agent>` — and the agent then drains through Redis. The
