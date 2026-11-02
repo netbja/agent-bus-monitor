@@ -58,7 +58,9 @@ func ConfigPath() string {
 // file, Codex, Kimi Code's session logs, agy's CLI logs, and Grok's billing line — each when its CLI is on PATH, or (for
 // the file readers) when its local source exists.
 func Builtins(lookPath func(string) (string, error)) map[string]ProviderConfig {
-	out := map[string]ProviderConfig{}
+	// The local-llm peer's endpoint bills nobody (local-llm-peer): always
+	// unlimited, published only for a project whose agent uses it.
+	out := map[string]ProviderConfig{"local": {Kind: "unlimited"}}
 	if _, err := lookPath("claude"); err == nil || exists(ClaudeCachePath()) {
 		out["anthropic"] = ProviderConfig{Kind: "claude"}
 	}
