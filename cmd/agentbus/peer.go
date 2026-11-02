@@ -140,7 +140,7 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 	if rows, err := projlist.Templates(rolecfg.ProjectsDir(getenv)); err == nil {
 		for _, r := range rows {
 			if r.Name == project && r.WorkingDir != "" {
-				root = os.ExpandEnv(strings.Replace(r.WorkingDir, "~", getenv("HOME"), 1))
+				root = os.ExpandEnv(strings.Replace(r.WorkingDir, "~", home, 1)) // the home the checks use
 			}
 		}
 	}

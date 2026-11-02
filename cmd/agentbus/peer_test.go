@@ -270,3 +270,24 @@ func TestPeerIdentRecordsItsEndpoint(t *testing.T) {
 		t.Fatalf("no key: ident = %+v, note %q", id, note)
 	}
 }
+
+// A template's ~ is the home the checks use: with HOME unset, the passwd
+// entry's (foureyes).
+func TestPeerRootExpandsTildeWithTheSameHome(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "src", "shop")
+	if err := os.MkdirAll(repo, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	projects := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projects, "shop.toml"), []byte("name = \"shop\"\nworking_dir = \"~/src/shop\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	defer func(f func() (string, error)) { userHome = f }(userHome)
+	userHome = func() (string, error) { return home, nil }
+	env := map[string]string{"HOME": "", "AGENTBUS_PROJECTS_DIR": projects}
+	want, _ := filepath.EvalSymlinks(repo)
+	if root, err := peerRoot("shop", t.TempDir(), func(k string) string { return env[k] }); err != nil || root != want {
+		t.Fatalf("root = %q, %v; want %q", root, err, want)
+	}
+}
