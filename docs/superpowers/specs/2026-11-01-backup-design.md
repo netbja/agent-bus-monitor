@@ -1,6 +1,7 @@
 # Backup and restore: the state before a disaster
 
-Status: spec, not built. Plan v0.26 task `backup`, review subject `backup-spec`.
+Status: spec, not built. Plan v0.26 task `backup`, review subject `backup-spec`. Bernard's answers
+to the four open questions recorded 2026-11-02 (subject `backup-answers`, see "Answers" at the end).
 
 ## Why
 
@@ -32,19 +33,39 @@ temporary name in the destination and renamed when complete (a crash leaves no h
 under the final name):
 
 ```
-manifest.json
+coverage.json                  first: format, created_at, host, the projects in scope
 redis/<project>.jsonl          one line per key
 config/config.toml             (and busmon.toml, quota.toml, models.toml when present)
 config/projects/<project>.toml the template
 roles/<project>/roles.toml     the manifest the template's ROLES_TOML names, and its roles/*.md
 state/<project>/history/...    the archive's day files, gaps.jsonl, cursor.json
 secrets.age                    only with --secrets
+manifest.json                  last: every other member's size and SHA-256
 ```
 
 `manifest.json`: format version, `created_at` (UTC), host, agentbus version, the broker's Redis
 version, the projects, and one row per member (path, size, SHA-256, mode). It also lists what
 was **left out** and why (`services/<p>.env: secret (use --secrets)`, `redis.env: secret`), so
 a restore says what it cannot bring back.
+
+`manifest.json` is the archive's **last member**: the members are streamed into the tar as
+they are read (see "Speed"), hashed on the way, and the manifest is written once all of them are.
+Restore therefore reads the archive twice. The first pass reads to the end, takes the manifest
+and checks every member's hash. Only then does the second pass write; nothing is written before
+the first pass ends.
+
+`coverage.json` is the **first member**: format version, `created_at` (UTC), host and the
+projects in the run's scope. It holds no hash, so it can be written before anything else, and a
+reader learns what an archive covers from its first bytes without unpacking the rest. The
+manifest lists `coverage.json` with its SHA-256 like any member, so restore verifies it too.
+
+**Coverage**: an archive *covers* a project when its `coverage.json` lists that project.
+`coverage.json` lists **every** project in the run's scope (all of the host's for a run with no
+`--project`, the named ones otherwise), including a project that contributes nothing: one with no
+key on the broker, or no template. Otherwise a project with nothing to save would never read as
+covered, and `daily` would make a full archive every hour. Only a complete archive (final name,
+after the rename) counts. Freshness is always judged **per project**: the newest archive that covers it. An archive
+of `--project A` says nothing about `B`.
 
 **Not included**: logs and restart budgets (`<state>/<p>/*.log`, `*.restarts`), the cache
 (`~/.cache/agentbus`: rebuilt), the clients' own files, and the repository (Git).
@@ -84,7 +105,8 @@ it is added.
 
 The `DUMP` payload carries the RDB version, which changes within a major (7.0, 7.2, 7.4): a
 restore onto a broker **older than the manifest's version**, by any part of it, is refused
-before any write (see open question 3).
+before any write. That is the accepted cost of `DUMP` (answer 3): bringing a backup to an older
+broker means upgrading that broker first.
 
 ## Secrets: only with `--secrets`, only encrypted
 
@@ -93,7 +115,8 @@ The secrets are the password file (`redis.env`) and the services' env files
 listed as left out, never read.
 
 With `--secrets`, they are encrypted with **age** to a recipient, the public half of a key the
-person holds:
+person holds (answer 4: a recipient key, no passphrase; `age -p` is not offered, since it
+prompts and cannot run unattended):
 
 - `age` must be on PATH; without it `--secrets` refuses before anything is written.
 - The recipient is `backup.age_recipient` in `config.toml` (an `age1…` public key: not a secret)
@@ -147,14 +170,76 @@ rest not: a second `restore` finishes it (written ones read identical and are sk
 
 ## Destination and retention
 
-`backup.dir` in `config.toml`, default `$XDG_DATA_HOME/agentbus/backups` (else
-`~/.local/share/agentbus/backups`), created 0700. The guide says plainly that a backup on the
-same disk does not survive the disk, and how to point `backup.dir` at another one (a mount, a
-synced folder).
+`backup.dir` in `config.toml` (answer 2), default `$XDG_DATA_HOME/agentbus/backups` (else
+`~/.local/share/agentbus/backups`), created 0700. `--dir` overrides it for one run. The guide says
+plainly that a backup on the same disk does not survive the disk, and how to point `backup.dir` at
+another one (a mount, a synced folder). Bernard's own machine sets `backup.dir =
+"/data/backups/agentbus"` in its `config.toml`; that is his setting, not the default.
 
 `backup.keep` (default 7): after a successful backup, the oldest archives of this host beyond
 that count are removed; `0` keeps every one. Only files matching the archive name pattern are
-ever removed.
+ever removed. An archive that is the newest covering some project is never removed, whatever the
+count: a run of `--project A` archives cannot push out the only archive of `B`.
+
+## Schedule: by hand by default, daily when the person asks
+
+Answer 1: backups are made by hand by default, with the health reminder after 7 days (below). The
+person can make them automatic in one setting:
+
+`backup.schedule = off | daily` (default `off`).
+
+- **`off`**: nothing runs a backup but the person's `agentbus backup`.
+- **`daily`**: the dispatch service runs one. This is a chore on its own goroutine, beside the
+  reconciliation, as the history archive's is. It runs only while the service holds its dispatch
+  lease (`HoldsDispatch`).
+  - **When:** the chore checks once an hour. It runs when **any** project of this host (the
+    broker's and the templates', as `backup` with no `--project` takes them) has no archive
+    covering it that is younger than 24 h. A backup made by hand counts for the projects it
+    covers, and only those: repeated `--project A` archives never hold back the run while `B`
+    goes stale. No clock time needs configuring. A failed run is tried again at the next hourly
+    check.
+  - **One per host:** it takes a host-local flock, `<state>/backup.lock`, as the model and
+    Redis-release refreshes do (`refreshModelsUnderLock`). The lock is a try-lock (`LOCK_NB`):
+    when another chore holds it, this one skips its turn. After taking the lock, it judges the
+    coverage again, so a chore that waited behind another's backup finds every project covered
+    and makes none.
+    Every project's dispatch service runs the chore, but only one backup is made.
+  - **What it runs:** the same code as `agentbus backup` with no `--project`, so every project of
+    this host, followed by the retention (`backup.keep`).
+  - **Secrets:** never unattended unless an age recipient is configured. The chore includes the
+    secrets only when `backup.age_recipient` is set: encryption to a recipient needs no private key
+    and no prompt. With no recipient, the secrets are left out and listed as left out in the
+    manifest. With a recipient but no `age` on the service's PATH, the archive is still written
+    without the secrets, and the run records the error. A backup without its secrets beats no
+    backup, and the error does not go unseen (health, below).
+  - **Record:** the run's outcome goes to `<state>/backup-last.json`, 0600, never a secret. It
+    holds `at`, `scheduled`, the archive's name or the error, the projects, and the `EXEC` time per
+    project. The service log carries the same line.
+  - **Settings:** read through `config.Machine`: the environment, then that environment's
+    `config.toml`. The service's environment is not the person's shell, so a default that
+    depends on `XDG_DATA_HOME` can resolve to another folder there. Archives made by hand would
+    then land in one folder, while scheduled ones, and the health check, would use another. So
+    with `daily`:
+    - the guide asks for `backup.dir` set explicitly in `config.toml`;
+    - `agentbus backup` warns when `backup.dir` comes from the default while `daily` is on;
+    - the health check's detail always names the folder it read.
+
+What the person accepts with `daily`: a service now writes outside its state directory, into
+`backup.dir`. Once a day the broker serves nobody else for each project's `EXEC` (see "Redis"
+above); its length is in the record. Restore is never scheduled: only the person runs it.
+
+## Settings
+
+All of them are in the registry (`config/keys.go`), group Backup, read by `agentbus backup` and the
+dispatch service:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `backup.schedule` | `off` | `off` or `daily` (above) |
+| `backup.dir` | `$XDG_DATA_HOME/agentbus/backups` | where archives go |
+| `backup.keep` | `7` | archives of this host kept; `0` keeps every one |
+| `backup.warn_after` | `7d` | the health reminder; `0` = off |
+| `backup.age_recipient` | none | an `age1…` public key: not a secret |
 
 ## Speed
 
@@ -164,12 +249,26 @@ is small. No step waits on the network.
 
 ## Sentinel and health
 
-A health check `backup`: **warn** when the newest archive in `backup.dir` is older than
-`backup.warn_after` (default 7 days; `0` = off) or there is none, **ok** otherwise, **unknown**
-when the directory cannot be read. Its place is **for you**, with the command `agentbus
-backup`: only the person decides to run one (it reads secrets with `--secrets`, and it writes to
-a place the person chose). Sentinel only relays it as any warn; it never runs a backup or a
-restore. See open question 1.
+A health check `backup`. It runs in each project's health loop and judges **that project**, from
+two independent facts:
+
+- **Age:** **warn** when the newest archive covering the project is older than
+  `backup.warn_after` (default 7 days), or there is none. `backup.warn_after = 0` turns off this
+  reminder only.
+- **Failure** (only while `backup.schedule = daily`): **warn** when the latest scheduled attempt
+  whose scope included the project failed, whatever the age of older archives. A successful
+  backup yesterday followed by a failed run today warns today. A run that left out the secrets
+  because `age` was missing (with a recipient set) counts as failed for this purpose. The
+  warning clears when a newer attempt or archive succeeds for the project: a later scheduled run
+  that succeeds, or a complete archive covering the project created after the failed attempt,
+  including one made by hand. For the `age` case, that newer archive must hold `secrets.age`.
+  `warn_after = 0` never silences a failure. With `schedule = off`, the attempt record is not
+  read: a failure from an earlier `daily` period no longer warns.
+
+**Ok** when neither warns; **unknown** when the directory or the record cannot be read. The
+detail names the folder read (always), the age of the covering archive, and the failed attempt's
+time and error. Its place is **for you**, with the command `agentbus backup`. Sentinel only relays
+it as any warn; it never runs a backup or a restore.
 
 ## What it never does
 
@@ -181,6 +280,8 @@ restore. See open question 1.
 - Bring back a runtime key (the `installed` marker, old pids, wake records, holds) without
   `--with-runtime`.
 - Stop, restart or reconfigure the broker; write a service unit or the `installed` marker.
+- Run a backup unattended unless `backup.schedule = daily`; include secrets in an unattended run
+  without `backup.age_recipient`; run a restore unattended, ever.
 
 ## Tests (a disposable Redis only)
 
@@ -212,19 +313,49 @@ Through `AGENTBUS_TEST_REDIS_URL`, never the person's broker:
   writing.
 - **Retention**: `keep = 2` with four archives and one foreign file: the two oldest archives
   removed, the foreign file kept.
-- **Health**: none, old, fresh, unreadable → warn, warn, ok, unknown.
+- **Retention by coverage**: `keep = 2`, an old A+B archive then three newer `--project A` ones:
+  the A+B archive is kept (the newest covering B), only the oldest A-only archive is removed.
+- **Health**: none, old, fresh, unreadable → warn, warn, ok, unknown (per project, by
+  coverage). Failure, independently of age:
+  - a fresh earlier success plus a failed scheduled attempt: warn;
+  - a newer success (scheduled, or by hand covering the project): ok;
+  - an `age`-missing run: warn until an archive with `secrets.age`;
+  - `warn_after = 0` with a failed attempt: still warn;
+  - `schedule = off` with an old failed record: ok.
+- **Schedule** (a fake clock, a temporary `backup.dir`, a fake bus): `off` never runs;
+  - `daily` runs when a project has no covering archive younger than 24 h, or none at all, and
+    does not run when every project is covered (an archive made by hand covers its projects);
+  - with projects A and B, a fresh `--project A` archive and B stale or never backed up: it runs;
+  - a `coverage.json` that is not the first member, or an unfinished archive under its temporary
+    name, covers nothing;
+  - a project in scope with no key and no template is listed in `coverage.json` and reads as
+    covered, so the next hourly check makes no archive;
+  - `manifest.json` is the last member, its hashes match every member including
+    `coverage.json`, and a changed `coverage.json` fails restore's verification;
+  - not without the dispatch lease;
+  - two chores (two projects' services) under one host lock make one archive: the second either
+    skips while the lock is held, or judges the coverage again after taking it;
+  - the health detail names the folder read, and `agentbus backup` warns about a defaulted
+    `backup.dir` while `daily` is on;
+  - without `backup.age_recipient`, no secret file is opened (the fake file system records the
+    opens);
+  - with one and a fake `age`, the secrets are in `secrets.age` only;
+  - with one and no `age`, the archive is written, the error recorded and the health check warns;
+  - `backup-last.json` is 0600 and holds no secret.
 
-## Open questions for Bernard
+## Answers (Bernard, 2026-11-02)
 
-1. **Automatic backups?** Proposed: only by hand, with the health reminder after 7 days. The
-   alternative is a daily backup by the dispatch service (without `--secrets`), at the cost of a
-   service that writes outside its state directory.
-2. **The default destination.** `~/.local/share/agentbus/backups` is on the same disk; is there a
-   folder you want as the default instead (a synced folder, another mount)?
-3. **`DUMP` or a portable export?** `DUMP`/`RESTORE` is exact and fast but tied to the Redis
-   version (a restore onto any older broker is refused). A logical export (streams by `XRANGE`,
-   hashes by `HGETALL`, groups rebuilt) survives any version but is more code and slower.
-   `DUMP` is proposed.
-4. **Secrets by key or by passphrase?** Proposed: an age recipient key (no prompt, scriptable).
-   `age -p` (a passphrase typed at each backup and restore) needs no key file but cannot run
-   unattended.
+The four questions this spec left open, as Bernard answered them. The text above is written to
+match.
+
+1. **Automatic backups?** By hand by default, with the 7-day health reminder, but everything is
+   configurable to become automatic. Hence `backup.schedule = off | daily`, default `off`. `daily`
+   is run by the dispatch service, never with secrets unattended unless an age recipient is
+   configured. See "Schedule".
+2. **The default destination.** `~/.local/share/agentbus/backups` (`$XDG_DATA_HOME/agentbus/backups`),
+   configurable with `backup.dir`. On Bernard's machine, `backup.dir = "/data/backups/agentbus"` is
+   set in `config.toml`.
+3. **`DUMP` or a portable export?** `DUMP`/`RESTORE`. A restore onto an older broker stays
+   refused; upgrading that broker first is the way through.
+4. **Secrets by key or by passphrase?** An age recipient key, with no prompt (`backup.age_recipient`
+   or `--recipient`). No passphrase mode.
