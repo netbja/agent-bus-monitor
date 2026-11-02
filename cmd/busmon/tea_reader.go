@@ -55,17 +55,18 @@ type page struct {
 	health healthView   // ovHealth: its rows open in place and a (sel: the selected row)
 	hitems []healthItem // ovHealth: its selectable rows
 
-	svc       *svcFacts  // ovServices: the facts the cards show (sel: the card selected)
-	svcBusy   bool       // ovServices, ovRedis: a refresh read is in flight
-	lead      string     // ovMessage, ovRequest: a first muted line (the Requests section's sentence)
-	recap     recapModel // ovRecap: the recap as shown, re-filtered at each build for the tier
-	recapAll  recapModel // ovRecap: the recap as built, unfiltered
-	recapLine int        // ovRecap: the body line of the cursor's row
+	svc        *svcFacts  // ovServices: the facts the cards show (sel: the card selected)
+	svcBusy    bool       // ovServices, ovRedis: a refresh read is in flight
+	lead       string     // ovMessage, ovRequest: a first muted line (the Requests section's sentence)
+	recap      recapModel // ovRecap: the recap as shown, re-filtered at each build for the tier
+	recapAll   recapModel // ovRecap: the recap as built, unfiltered
+	recapLine  int        // ovRecap: the body line of the cursor's row
+	recapOlder bool       // ovRecap: o shows the For you items older than a day
 
 	hist       *histView  // ovHistory: what the load read
 	histFilter feedFilter // ovHistory: / and t narrow it
 	fromHist   bool       // ovMessage opened from History: n/p step through it
-	hrows  []histItem // ovHistory: its selectable rows (sel: the selected one)
+	hrows      []histItem // ovHistory: its selectable rows (sel: the selected one)
 }
 
 // pageStamp is what a body was built for.
@@ -494,10 +495,14 @@ func (m *Model) buildPage() bool {
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
 	case ovRecap: // the panel is on screen beside the page in the wide and medium tiers; a resize can change that (reviewer-codex)
-		rec := recapForScreen(p.recapAll, m.layout.Tier != TierNarrow, forYouEmpty(s, m.lists.reqView.count(secOwed)))
+		rec := recapFold(recapForScreen(p.recapAll, m.layout.Tier != TierNarrow, forYouEmpty(s, m.lists.reqView.count(secOwed))), p.recapOlder)
 		p.sel = recapKeepCursor(p.recap.Rows, p.sel, rec.Rows)
 		p.recap = rec
-		p.body, p.recapLine = recapBody(p.recap.Rows, p.sel)
+		p.body, p.recapLine = recapBody(p.recap.Rows, p.sel, width)
+		p.threadPlain, p.threadWhat = "", "" // Y copies the selected item's report, its full text
+		if p.sel >= 0 && p.sel < len(rec.Rows) && rec.Rows[p.sel].Report.ID != "" {
+			p.threadPlain, p.threadWhat = or(rec.Rows[p.sel].Report.Full, rec.Rows[p.sel].Report.Message), "report"
+		}
 	case ovAsk:
 		a, ok := m.pageAsk(p)
 		if !ok || (a.Open() == 0 && a.State != "open") {
@@ -1196,7 +1201,9 @@ func (m Model) pageOffers(act Action) bool {
 		return ok && p.kind == ovPlanTask
 	case ActShowAll:
 		return p.kind == ovHealth || p.kind == ovTokens
-	case ActOlder, ActFilter:
+	case ActOlder:
+		return p.kind == ovHistory || p.kind == ovRecap && recapHasOlder(p.recapAll)
+	case ActFilter:
 		return p.kind == ovHistory
 	}
 	return false
