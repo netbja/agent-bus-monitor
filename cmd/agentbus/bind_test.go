@@ -84,3 +84,19 @@ func TestBindNeedsAPaneOutsideHerdr(t *testing.T) {
 		t.Fatal("bind with no agent succeeded")
 	}
 }
+
+// bind records the launcher's AGENT_BUS_TIER with the proof (pop-auto-retire §6).
+func TestBindRecordsTier(t *testing.T) {
+	f := &fakeBind{}
+	d := f.deps(codexProcs, map[int]uint64{1930926: 42})
+	d.Env = func(k string) string {
+		return map[string]string{"HERDR_ENV": "1", "HERDR_PANE_ID": "w2:p1", "AGENT_BUS_TIER": "pop"}[k]
+	}
+	var out, errw bytes.Buffer
+	if code := runBind(context.Background(), d, []string{"codex", "--pid", "1930926"}, &out, &errw); code != 0 {
+		t.Fatalf("code=%d err=%q", code, errw.String())
+	}
+	if f.who == nil || f.who.Tier != "pop" {
+		t.Fatalf("recorded %+v, want tier pop", f.who)
+	}
+}

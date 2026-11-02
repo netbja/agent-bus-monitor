@@ -728,3 +728,19 @@ func claudePermission(client, options string) string {
 	}
 	return options + "\npermission = \"manual\""
 }
+
+// The launcher exports the role's tier (pop-auto-retire §6), which status and
+// bind record with the proof: what the dispatcher reads to judge a pop's end.
+func TestLaunchExportsRoleTier(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("claude-code", "", "[roles.security]\ntier = \"pop\"\nskills = [\"test-skill\"]\n", "")
+	must(t, os.WriteFile(filepath.Join(f.root, "security.md"), []byte("SECURITY\n"), 0o644))
+	for role, want := range map[string]string{"coder": "boot", "security": "pop"} {
+		if _, e, err := f.launch(m, role, "AGENT_BUS_TIER=forged"); err != nil {
+			t.Fatal(err, e)
+		}
+		if v, _ := envOf(f.execEnv, "AGENT_BUS_TIER"); v != want {
+			t.Fatalf("%s: AGENT_BUS_TIER=%q, want %q", role, v, want)
+		}
+	}
+}
