@@ -764,7 +764,14 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `list_dir`, `grep` under the project root (no `..`, symlinks re-checked, regular files only, the role's
   effective `Read(…)` denies with Claude Code's glob meaning, a bare `Read` denying everything, fail closed),
   `bus_thread`, `bus_agents`; no shell, no write, no verdict. `--check <endpoint>` asks its `/models`. Provider
-  `local` is a built-in unlimited quota reader (listed by `agentbus quota` only with an endpoint).
+  `local` is a built-in unlimited quota reader (listed by `agentbus quota` only with an endpoint). Health
+  `llm-endpoint` (step 2; `health/llmendpoint.go` pure, `cmd/agentbus/llmcheck.go` the reader, every minute) probes
+  only the endpoints the registered `local-llm` agents use (the one whose model is the agent's), `GET /models`
+  through `peer.Client` (no redirect, no proxy) within 2 s each, side by side: fail on no answer or an error
+  status, warn when one answers without its model or a peer has no endpoint, ok when all list theirs; unknown
+  with no such agent, an unreadable config.toml or no endpoint at all; for you on warn and fail
+  (`agentbus peer --check <endpoint>`); the detail names host and port, never the URL's path; sentinel
+  restarts nothing.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of

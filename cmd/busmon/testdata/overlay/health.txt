@@ -26,4 +26,5 @@
   ? Clear after hand-off             no current measurement                                         
   ? Quiet agent                      no current measurement                                         
   ? Disk space                       no current measurement                                         
+  ? Local model endpoint             no current measurement                                         
   ── fine · 1  (a shows them) ──
