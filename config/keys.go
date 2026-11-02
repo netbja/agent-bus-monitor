@@ -192,6 +192,11 @@ var Keys = []*Key{
 	// AGENT_BUS_RELOAD's rule is today's: propose and off are themselves, any
 	// other set value reads on. agentbus reload puts the project's env file
 	// (up --reload) between the env and config.toml.
+	// agentbus start's default team for new projects (agentbus-start spec):
+	// the --roles syntax, written when the person confirms a reduced team.
+	// No env: a person's choice kept in a file. roles.toml is checked by start
+	// at use (config imports no rolecfg).
+	{Name: "start.team", Kind: String, Default: "", ReadBy: "agentbus start", file: fileTeam},
 	{Name: "sentinel.reload", Env: "AGENT_BUS_RELOAD", Kind: String, Default: "on", ReadBy: "agentbus reload, sentinel",
 		env: func(raw string) (any, envResult) {
 			if raw == "propose" || raw == "off" {
@@ -218,6 +223,31 @@ var Keys = []*Key{
 	{Name: "health.runaway.context_growth", Env: "AGENTBUS_HEALTH_RUNAWAY_CONTEXT_GROWTH", Kind: Int, Default: 100000, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayInt, file: filePositiveInt},
 	{Name: "health.runaway.growth_span", Env: "AGENTBUS_HEALTH_RUNAWAY_GROWTH_SPAN", Kind: Duration, Default: 10 * time.Minute, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayDuration, file: filePositiveDuration},
 	{Name: "health.runaway.screen_repeats", Env: "AGENTBUS_HEALTH_RUNAWAY_SCREEN_REPEATS", Kind: Int, Default: 4, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayInt, file: filePositiveInt},
+}
+
+// fileTeam is start.team's rule: "" or role[:profile] items, comma-separated,
+// each a name, no role twice.
+func fileTeam(v any) (any, string) {
+	const want = "want role or role:profile, comma-separated"
+	s, ok := v.(string)
+	if !ok {
+		return nil, want
+	}
+	if strings.TrimSpace(s) == "" {
+		return s, ""
+	}
+	seen := map[string]bool{}
+	for _, item := range strings.Split(s, ",") {
+		role, profile, hasProfile := strings.Cut(strings.TrimSpace(item), ":")
+		if !validName(role) || (hasProfile && !validName(profile)) {
+			return nil, want
+		}
+		if seen[role] {
+			return nil, role + " twice"
+		}
+		seen[role] = true
+	}
+	return s, ""
 }
 
 // Lookup is the row of a file key.
