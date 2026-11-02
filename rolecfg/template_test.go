@@ -131,6 +131,7 @@ func TestParseTeam(t *testing.T) {
 		"master,coder:review":  "review is not coder's own profile nor one of its fallback_profiles",
 		"master,foureyes:nope": "nope is not foureyes's own profile nor one of its fallback_profiles",
 		"master,a:b:c":         "a:b:c",
+		"master:":              "master:: want role or role:profile",
 		"master,,coder":        "an empty role",
 		"":                     "an empty role",
 	} {

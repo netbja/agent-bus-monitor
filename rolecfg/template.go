@@ -23,8 +23,8 @@ func (m *Manifest) ParseTeam(spec string) ([]TeamRole, error) {
 		if item == "" {
 			return nil, fmt.Errorf("an empty role in %q", spec)
 		}
-		role, profile, _ := strings.Cut(item, ":")
-		if strings.Contains(profile, ":") {
+		role, profile, colon := strings.Cut(item, ":")
+		if strings.Contains(profile, ":") || (colon && profile == "") { // "master:" is no choice (reviewer-codex)
 			return nil, fmt.Errorf("%s: want role or role:profile", item)
 		}
 		if !slices.Contains(m.RolesByTier("boot"), role) {
