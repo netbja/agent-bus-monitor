@@ -68,20 +68,31 @@ func TestServiceReadersReadConfigTOML(t *testing.T) {
 	if g := dispatch.PromptGrace(getenv); g != 0 {
 		t.Errorf("AGENT_BUS_PROMPT_GRACE=0 = %v, want off", g)
 	}
+	// auto-clear: on with no file at all, off by the file's false, and the
+	// env's 0 wins over a file that turns it on.
+	if !serviceClear(withConfig(t, "", nil), noLook, nil).On {
+		t.Error("auto-clear is off with no setting; the default is on")
+	}
+	if serviceClear(withConfig(t, "[dispatch]\nauto_clear = false\n", nil), noLook, nil).On {
+		t.Error("auto_clear = false did not turn it off")
+	}
+	if serviceClear(withConfig(t, "[dispatch]\nauto_clear = true\n", map[string]string{"AGENT_BUS_AUTO_CLEAR": "0"}), noLook, nil).On {
+		t.Error("AGENT_BUS_AUTO_CLEAR=0 did not turn it off over the file")
+	}
 	// quota off in the file.
 	if q := serviceQuota(withConfig(t, "[dispatch]\nquota = false\n", nil), io.Discard); q.Read != nil {
 		t.Error("quota = false did not turn the policy off")
 	}
 }
 
-// No file: today's results, unchanged.
+// No file: the registry's defaults (auto-clear on since autoclear-default).
 func TestServiceReadersWithoutAFile(t *testing.T) {
 	getenv := func(string) string { return "" }
 	q := serviceQuota(getenv, io.Discard)
 	if q.Read == nil || q.WarnPct != 85 || q.HoldPct != 95 || q.MaxAge != 30*time.Minute || q.LongHold != 2*time.Hour {
 		t.Errorf("default quota = %+v", q)
 	}
-	if serviceClear(getenv, noLook, nil).On || dispatch.PromptGrace(getenv) != 30*time.Second || bus.ContextAlert(getenv) != 80 {
+	if !serviceClear(getenv, noLook, nil).On || dispatch.PromptGrace(getenv) != 30*time.Second || bus.ContextAlert(getenv) != 80 {
 		t.Error("a default changed")
 	}
 }

@@ -118,6 +118,7 @@ func TestEnvRulesUnchanged(t *testing.T) {
 		{"dispatch.tokens", "false", true, "use"},
 		{"dispatch.auto_clear", "1", true, "use"},
 		{"dispatch.auto_clear", "true", false, "use"},
+		{"dispatch.auto_clear", "0", false, "use"},
 		{"bus.report_max", "200", 200, "use"},
 		{"bus.report_max", "0", nil, "skip"},
 		{"bus.report_full_max", "-3", nil, "skip"},

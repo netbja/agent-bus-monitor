@@ -446,18 +446,17 @@ to watch a pane.
   `agentbus --project myapp handoff` lists them. Any later report or non-idle status from the
   agent voids it. Then clear the agent: type `/clear` in its pane and point the fresh session at
   the report (`agentbus --project myapp reports <id>`).
-- **Automatic `/clear` (off by default).** With `AGENT_BUS_AUTO_CLEAR=1` exported before
-  `agentbus up`, the dispatcher types that `/clear` itself, once per session, for a Claude Code
+- **Automatic `/clear` (on by default).** The dispatcher types that `/clear` itself, once per session, for a Claude Code
   agent whose hand-off stands, that is idle, with no open question or review, in a ready pane;
-  then it proves the new session and tells the agent to read its hand-off. It stays off until
-  its live checks have been run on this release. Set it on the `up` line
-  (`AGENT_BUS_AUTO_CLEAR=1 agentbus up myapp`). `up` builds the services' env file,
+  then it proves the new session and tells the agent to read its hand-off. To turn it off for every
+  project, set `auto_clear = false` under `[dispatch]` in `~/.config/agentbus/config.toml`; for one
+  project, set it on the `up` line (`AGENT_BUS_AUTO_CLEAR=0 agentbus up myapp`). `up` builds the services' env file,
   `~/.config/agentbus/services/myapp.env`, from its shell: the `AGENT_BUS_*` variables except the
   project and agent names, plus the escalation target and the reload setting, which it keeps from
   the old file unless you change them (`--escalate-to`, `--reload`). When the result differs from
   the file it replaces it, so any other line added by hand is lost at the next `up`. Its lines are
-  `KEY="value"`; an unquoted one stops the dispatcher on an invalid configuration. To turn it off,
-  run `up` again without the variable.
+  `KEY="value"`; an unquoted one stops the dispatcher on an invalid configuration. To turn it back on
+  for that project, run `up` again without the variable.
 - **Client updates.** When a client is updated under a running agent, busmon flags the agent
   `update`, health `client-updates` warns, and sentinel gets one directive. sentinel restarts
   each outdated agent on its role and profile, resuming its conversation:

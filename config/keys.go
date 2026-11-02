@@ -168,8 +168,9 @@ var Keys = []*Key{
 	{Name: "dispatch.tokens", Env: "AGENT_BUS_TOKENS", Kind: Bool, Default: true, ReadBy: "dispatch",
 		env:  func(raw string) (any, envResult) { return raw != "0", envUse }, // 0 turns it off
 		file: fileBool},
-	{Name: "dispatch.auto_clear", Env: "AGENT_BUS_AUTO_CLEAR", Kind: Bool, Default: false, ReadBy: "dispatch",
-		env:  func(raw string) (any, envResult) { return raw == "1", envUse }, // only 1 turns it on
+	// On by default (autoclear-default, the person's decision); 0 is the off switch.
+	{Name: "dispatch.auto_clear", Env: "AGENT_BUS_AUTO_CLEAR", Kind: Bool, Default: true, ReadBy: "dispatch",
+		env:  func(raw string) (any, envResult) { return raw == "1", envUse }, // a set value: only 1 is on
 		file: fileBool},
 	// The stall guard (spec 2026-11-01-stall-guard-design.md): how long before
 	// each check judges a stall; 0 turns the check off.

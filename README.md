@@ -798,9 +798,9 @@ handles each with a rule you can read, never a guess:
   (`agentbus handoff <self> --report <id>`, which also declares it idle); busmon flags it `handoff` until the agent works
   again. You then type `/clear` in its pane and point the fresh session at that report.
   The dispatcher can type that `/clear` itself, once per session, when the agent is idle, has
-  no open question or review and its pane is ready (`AGENT_BUS_AUTO_CLEAR=1`, Claude Code only); it is **off by
-  default** until its live checks have been run. Turn it on with
-  `AGENT_BUS_AUTO_CLEAR=1 agentbus up <p>`. `up` builds the services' env file
+  no open question or review and its pane is ready (Claude Code only); it is **on by
+  default**. Turn it off with `dispatch.auto_clear = false` in `~/.config/agentbus/config.toml`, or
+  `AGENT_BUS_AUTO_CLEAR=0 agentbus up <p>` for one project. `up` builds the services' env file
   (`~/.config/agentbus/services/<p>.env`, `KEY="value"` lines) from its shell: the `AGENT_BUS_*`
   variables except the project and agent names, plus the escalation target and the reload setting,
   which it keeps from the old file unless you change them. When the result differs from the file it

@@ -248,10 +248,10 @@ func servicePrompt(getenv func(string) string, lookPath func(string) (string, er
 	return dispatch.PromptConfig{Grace: dispatch.PromptGrace(getenv), Notify: desktopNotify(lookPath, run)}
 }
 
-// serviceClear is the dispatch service's auto-clear (lifecycle part B):
-// AGENT_BUS_AUTO_CLEAR=1 turns it on; anything else leaves it off, the
-// default until the spec's live checks pass on this machine. An escalated
-// clear rings the desktop through the context alert's runner.
+// serviceClear is the dispatch service's auto-clear (lifecycle part B): on by
+// default; AGENT_BUS_AUTO_CLEAR=0 (any set value but 1) or auto_clear = false
+// in config.toml turns it off. An escalated clear rings the desktop through
+// the context alert's runner.
 func serviceClear(getenv func(string) string, lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) dispatch.ClearConfig {
 	return dispatch.ClearConfig{On: config.Machine(getenv).Bool("dispatch.auto_clear"), Proof: 30 * time.Second, Notify: desktopNotify(lookPath, run)}

@@ -5,7 +5,7 @@ scope: project
 kind: decision
 status: active
 created: 2026-10-28
-last_verified: 2026-10-28
+last_verified: 2026-11-02
 author: coder
 confidence: verified
 ---
@@ -37,10 +37,12 @@ person at the keyboard, once per agent.
   wake follows. A turn that wrote around the clear gets a rebuild directive instead (plus a notice
   to the escalation target). No proof in 30 s escalates once (and rings the desktop), with no retry
   for that session.
-- **Off by default for now.** `AGENT_BUS_AUTO_CLEAR=1` turns it on. The spec's default is on, after
-  live checks on this machine: Claude Code's `/clear` keeps the pid, argv and environment and fires
-  `SessionStart` with a new session id; `/clear` typed with the slash menu open submits `/clear`;
-  `--resume` after SIGTERM restores the conversation. Until those pass, it stays off.
+- **On by default since 2026-11-02** (autoclear-default; Bernard: "cela doit être automatique").
+  It was off by default until then, pending live checks on this machine: Claude Code's `/clear` keeps
+  the pid, argv and environment and fires `SessionStart` with a new session id; `/clear` typed with
+  the slash menu open submits `/clear`; `--resume` after SIGTERM restores the conversation. The off
+  switch stays: `AGENT_BUS_AUTO_CLEAR=0` (any set value but `1` reads off) or `dispatch.auto_clear =
+  false` in `config.toml`.
 
 ## When it applies
 
