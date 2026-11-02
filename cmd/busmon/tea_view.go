@@ -196,7 +196,7 @@ func (m *Model) fillLists() {
 	working, blocked := 0, 0
 	for _, name := range names {
 		a := s.agents[name]
-		agentItems = append(agentItems, ListItem{Key: name, Line: agentRow(name, a, name == s.pilot, l.Tier, rowW(l.Agents), now), Selectable: true})
+		agentItems = append(agentItems, ListItem{Key: name, Line: agentRow(m.cfg.settings.Icons, name, a, name == s.pilot, l.Tier, rowW(l.Agents), now), Selectable: true})
 		switch _, word, _, _ := stateLook(a); word {
 		case "working":
 			working++
@@ -207,7 +207,7 @@ func (m *Model) fillLists() {
 	if len(agentItems) == 0 {
 		agentItems = []ListItem{{Line: Line{{Text: "no agent has published yet", Role: RoleMuted}}}}
 	}
-	ag.SetHeader(agentHeader(l.Tier, rowW(l.Agents)))
+	ag.SetHeader(agentHeader(m.cfg.settings.Icons, l.Tier, rowW(l.Agents)))
 	ag.SetItems(agentItems)
 	if !m.ui.agentsTouched && len(names) > 0 {
 		ag.First() // the top (most urgent) agent, until the person moves

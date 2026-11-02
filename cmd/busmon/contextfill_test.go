@@ -84,7 +84,7 @@ func TestAgentRowShowsTheContextFill(t *testing.T) {
 		if Line(cell).text() != c.want || cell[len(cell)-1].Role != c.role {
 			t.Errorf("%+v %q: %q", c.fill, c.raw, Line(cell).text())
 		}
-		row := agentRow("coder", a, false, TierWide, 160, now).text()
+		row := agentRow(iconsOff, "coder", a, false, TierWide, 160, now).text()
 		if !strings.Contains(row, c.want) {
 			t.Errorf("row lacks %q: %q", c.want, row)
 		}

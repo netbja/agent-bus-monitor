@@ -48,7 +48,7 @@ func askShared(now time.Time) *shared {
 func TestAskRowFadesWhateverTheAgentDeclared(t *testing.T) {
 	now := time.Now()
 	st := askShared(now)
-	row := agentRow("master", st.agents["master"], false, TierWide, 120, now)
+	row := agentRow(iconsOff, "master", st.agents["master"], false, TierWide, 120, now)
 	found := false
 	for _, s := range row {
 		found = found || (strings.Contains(s.Text, "waiting") && s.Fade > 0)

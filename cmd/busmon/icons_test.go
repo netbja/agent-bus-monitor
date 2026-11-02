@@ -1,7 +1,15 @@
 package main
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/netbja/agent-bus-monitor/quota"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -86,6 +94,123 @@ func TestIconTables(t *testing.T) {
 			if g != "" && !in[g] {
 				t.Errorf("icon %q not in IconGlyphs", g)
 			}
+		}
+	}
+}
+
+// busmon-icons §7.1: an Agents row carries the icon pair between the state
+// glyph and the name at 80 cells and wider, the message paying for it; a row
+// with no icon gets two blank cells so names stay in one column; below 80
+// there is no icon column; off draws today's row.
+func TestAgentRowIconColumn(t *testing.T) {
+	now := time.Now()
+	agent := func(client, provider string) *agentState {
+		return &agentState{state: "idle", stateAt: now, message: "a message long enough to be cut at any width we draw here", client: client, provider: provider}
+	}
+	for _, c := range []struct {
+		tier  Tier
+		width int
+	}{{TierMedium, 80}, {TierMedium, 100}, {TierWide, 120}, {TierWide, 160}} {
+		for _, mode := range []string{iconsNerd, iconsFont} {
+			row := agentRow(mode, "coder", agent("claude-code", "anthropic"), false, c.tier, c.width, now)
+			icon := agentIcon(mode, "claude-code", "anthropic")
+			if row.Width() != c.width || !strings.Contains(row.text(), icon+" coder") {
+				t.Fatalf("%v/%d %s: %q (width %d)", c.tier, c.width, mode, row.text(), row.Width())
+			}
+			for _, s := range row {
+				if strings.HasPrefix(s.Text, icon) && s.Role != providerRole("anthropic", RoleText) {
+					t.Errorf("the icon is %v, not the provider's colour", s.Role)
+				}
+			}
+			off := agentRow(iconsOff, "coder", agent("claude-code", "anthropic"), false, c.tier, c.width, now).text()
+			blank := agentRow(mode, "coder", agent("", "someone"), false, c.tier, c.width, now).text()
+			if strings.Index(blank, "coder") != strings.Index(off, "coder")+2 || strings.Index(blank, "coder") != strings.Index(row.text(), "coder")-len(icon)+1 {
+				t.Errorf("%v/%d %s: names not aligned:\n%q\n%q\n%q", c.tier, c.width, mode, off, row.text(), blank)
+			}
+			if h := agentHeader(mode, c.tier, c.width); c.tier == TierWide && (h.Width() != c.width || strings.Index(h.text(), "agent") != strings.Index(agentHeader(iconsOff, c.tier, c.width).text(), "agent")+2) {
+				t.Errorf("%v/%d %s: header %q", c.tier, c.width, mode, h.text())
+			}
+		}
+	}
+	nar := agentRow(iconsNerd, "coder", agent("claude-code", "anthropic"), false, TierNarrow, 60, now).text()
+	if nar != agentRow(iconsOff, "coder", agent("claude-code", "anthropic"), false, TierNarrow, 60, now).text() {
+		t.Errorf("an icon below 80 cells: %q", nar)
+	}
+}
+
+// iconTeam is the fixture's team with its clients and providers (a mixed
+// team, spec §7.1): the off goldens keep the fixture as it is.
+var iconTeam = map[string][2]string{
+	"master": {"claude-code", "anthropic"}, "coder": {"claude-code", "anthropic"}, "sentinel": {"claude-code", "anthropic"},
+	"foureyes": {"codex", "openai"}, "architect": {"codex", "openai"}, "ui-grok": {"grok", "xai"}, "qa": {"grok", "xai"},
+	"ui-kimi": {"kimi-cli", "moonshot"}, "release": {"kimi-cli", "moonshot"}, "docs": {"", "google"},
+}
+
+// iconShell is the fixture shell at w x h with icons in mode.
+func iconShell(t testing.TB, w, h int, mode string) Model {
+	t.Helper()
+	m := newShell(shellConfig{project: "agent-bus-monitor", self: "charlie"})
+	m.cfg.settings.Icons = mode
+	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
+	m = step(t, m, tailMsg{events: shellEvents(shellNow)})
+	snap := shellFixture(shellNow)
+	for name, a := range snap.agents {
+		a.judgedAt = shellNow
+		if cp, ok := iconTeam[name]; ok {
+			a.client, a.provider = cp[0], cp[1]
+		}
+	}
+	return step(t, m, pollMsg{snap: snap, at: shellNow})
+}
+
+// busmon-icons §5: the dashboard in each mode, at the medium and wide tiers.
+func TestIconGoldens(t *testing.T) {
+	pinLocal(t)
+	for _, mode := range []string{iconsNerd, iconsFont} {
+		for _, size := range [][2]int{{80, 24}, {120, 30}} {
+			t.Run(fmt.Sprintf("%s-%dx%d", mode, size[0], size[1]), func(t *testing.T) {
+				withPalette(t, "dark", false, 1<<24)
+				m := iconShell(t, size[0], size[1], mode)
+				m.paint = newPainter(th)
+				content := m.View().Content
+				plain := m.grid().plain()
+				for _, method := range []ansi.Method{ansi.WcWidth, ansi.GraphemeWidth} {
+					if got := placed(content, size[0], size[1], method); got != plain {
+						t.Fatalf("width method %v places the View otherwise:\n%s\nwant:\n%s", method, got, plain)
+					}
+				}
+				base := fmt.Sprintf("dashboard-%dx%d-dark-%s", size[0], size[1], mode)
+				checkGolden(t, base+".txt", plain+"\n")
+				checkGolden(t, base+".ansi", content+"\n")
+			})
+		}
+	}
+}
+
+// busmon-icons §5: off is today, byte for byte. The same model drawn in nerd,
+// then switched to off as the C page does, draws the off goldens as they are.
+func TestIconsOffIsToday(t *testing.T) {
+	pinLocal(t)
+	for _, size := range [][2]int{{80, 24}, {140, 40}} {
+		withPalette(t, "dark", false, 1<<24)
+		m := iconShell(t, size[0], size[1], iconsNerd)
+		m.paint = newPainter(th)
+		if nerd := m.grid().plain(); !strings.Contains(nerd, nfAlphaA+" ") {
+			t.Fatalf("%dx%d: nerd drew no icon", size[0], size[1])
+		}
+		m.cfg.settings.Icons = iconsOff
+		m.refresh()
+		base := fmt.Sprintf("dashboard-%dx%d-dark", size[0], size[1])
+		want, err := os.ReadFile(filepath.Join("testdata", "golden", base+".txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := m.grid().plain() + "\n"; got != string(want) {
+			t.Errorf("%s: off after nerd differs from today's golden:\n%s", base, got)
+		}
+		wantANSI, _ := os.ReadFile(filepath.Join("testdata", "golden", base+".ansi"))
+		if got := m.View().Content + "\n"; got != string(wantANSI) {
+			t.Errorf("%s: off after nerd: the ANSI differs from today's golden", base)
 		}
 	}
 }

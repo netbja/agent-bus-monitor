@@ -21,7 +21,7 @@ func TestWaitingAgentComesFirstWithThePersonGlyph(t *testing.T) {
 	if names := sortedAgentNames(st.agents, ""); names[0] != "master" {
 		t.Fatalf("order %v: a waiting agent must come first", names)
 	}
-	row := agentRow("master", st.agents["master"], false, TierWide, 120, now).text()
+	row := agentRow(iconsOff, "master", st.agents["master"], false, TierWide, 120, now).text()
 	if !strings.Contains(row, GlyphHuman) || !strings.Contains(row, "waiting") {
 		t.Fatalf("row %q", row)
 	}
@@ -45,7 +45,7 @@ func TestFadeBreathesBetweenTwentyAndFullOverThreeSeconds(t *testing.T) {
 func TestOnlyTheWaitingWordFades(t *testing.T) {
 	now := time.Now()
 	st := waitingShared(now)
-	row := agentRow("master", st.agents["master"], false, TierWide, 120, now)
+	row := agentRow(iconsOff, "master", st.agents["master"], false, TierWide, 120, now)
 	faded := 0
 	for _, s := range row {
 		if s.Fade > 0 {
@@ -122,7 +122,7 @@ func TestAnsweredWaitingIsDisplayOnlyAndDoesNotRingOrCount(t *testing.T) {
 	if len(asksFor(map[string]*agentState{"master": a})) != 0 {
 		t.Fatal("answered wait is still in bell list")
 	}
-	row := agentRow("master", a, false, TierWide, 120, now)
+	row := agentRow(iconsOff, "master", a, false, TierWide, 120, now)
 	for _, seg := range row {
 		if seg.Fade > 0 {
 			t.Fatalf("answered row fades: %+v", seg)

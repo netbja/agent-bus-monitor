@@ -235,7 +235,7 @@ func TestPulseNeedsWorkingAndBusy(t *testing.T) {
 		want  bool
 	}{{"working", true, true}, {"working", false, false}, {"idle", true, false}} {
 		a := &agentState{state: tc.state, obsBusy: tc.busy, obsAt: now.Add(-5 * time.Second), stateAt: now, judgedAt: now}
-		row := agentRow("coder", a, false, TierWide, 140, now)
+		row := agentRow(iconsOff, "coder", a, false, TierWide, 140, now)
 		if got := row[0].Fade > 0; got != tc.want {
 			t.Errorf("%s busy=%v: glyph fade %d, want pulsing %v", tc.state, tc.busy, row[0].Fade, tc.want)
 		}
