@@ -145,6 +145,13 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 		}
 		root = strings.TrimSpace(string(out))
 	}
+	// A relative folder would resolve against wherever the peer was launched,
+	// and stay relative through EvalSymlinks, past the home checks below and
+	// past every absolute deny pattern (reviewer-codex): refused. bootstrap
+	// writes an absolute working_dir; git answers an absolute top-level.
+	if !filepath.IsAbs(root) {
+		return "", fmt.Errorf("the project's folder %q is not an absolute path: refused", root)
+	}
 	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return "", err

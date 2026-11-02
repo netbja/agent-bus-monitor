@@ -125,6 +125,9 @@ func TestPeerRoot(t *testing.T) {
 	tpl("shop", "~/src/shop")
 	tpl("slash", "/")
 	tpl("above", filepath.Dir(home))
+	tpl("relup", "../..") // from repo/sub: the home's parent, by a relative path (reviewer-codex)
+	tpl("reldot", ".")    // from $HOME: $HOME itself
+	tpl("tilde", "~")
 	env := map[string]string{"HOME": home, "AGENTBUS_PROJECTS_DIR": projects}
 	getenv := func(k string) string { return env[k] }
 	real := func(p string) string { r, _ := filepath.EvalSymlinks(p); return r }
@@ -137,6 +140,9 @@ func TestPeerRoot(t *testing.T) {
 		{"$HOME", "other", home, "", "the home directory"},
 		{"/", "slash", repo, "", "the filesystem root"},
 		{"an ancestor of $HOME", "above", repo, "", "holds the home directory"},
+		{"a relative working_dir", "relup", filepath.Join(repo, "sub"), "", "not an absolute path"},
+		{"a relative alias of $HOME", "reldot", home, "", "not an absolute path"},
+		{"~ alone", "tilde", repo, "", "the home directory"},
 	} {
 		if c.name == "$HOME" {
 			gitInit(t, home) // a dotfiles repository: its top-level is $HOME
