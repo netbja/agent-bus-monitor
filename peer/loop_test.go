@@ -128,8 +128,10 @@ func TestTurnFailures(t *testing.T) {
 	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) {
 		return 400, `{"error":"the request exceeds the available context size"}`
 	})
+	// The refusal fails the turn with its status; the server's words stay out
+	// of the reply, which goes on the bus (R3).
 	res, err := newTurn(t, srv, time.Minute).Run(context.Background(), entry, "")
-	if err != nil || !strings.Contains(res.Text, "exceeds the available context size") {
+	if err != nil || !strings.Contains(res.Text, "refused the request: status 400") || strings.Contains(res.Text, "context size") {
 		t.Fatalf("refused = %+v %v", res, err)
 	}
 }

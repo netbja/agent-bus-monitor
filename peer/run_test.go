@@ -469,5 +469,52 @@ func TestRunnerPaneCarriesNoTerminalControl(t *testing.T) {
 	if !strings.Contains(out.String(), "f\tg") || strings.Count(out.String(), "\n") != 2 {
 		t.Fatalf("the layout is not kept: %q", out)
 	}
-	paneSafe(t, "oneLine", oneLine([]byte(hostile)))
+}
+
+// An endpoint's error body never reaches the bus: it can echo a configured
+// URL path or a request detail. The blocked status and the refusal reply
+// carry fixed words and the status only (R3).
+func TestRunnerPublishesNoEndpointBody(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	const leak = "LEAK /v1/tenant-7f3a/secret-path"
+	var calls atomic.Int32
+	srv, _ := fakeEndpoint(t, nil, func(req chatRequest) (int, string) {
+		switch n := calls.Add(1); {
+		case n <= 2:
+			return 500, leak // blocked, then healed
+		case strings.Contains(req.Messages[1].Content, "refuse me"):
+			return 400, leak
+		}
+		return 200, answerJSON
+	})
+	_, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	first, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, first, 2)
+	second, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "refuse me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs := waitThread(t, b, second, 2)
+	stop()
+	if !strings.Contains(evs[1].Message, "400") {
+		t.Fatalf("the refusal does not give its status: %q", evs[1].Message)
+	}
+	all, _, err := b.Recent(ctx, []string{"status", "cmd", "report"}, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked := false
+	for _, e := range all {
+		blocked = blocked || e.State == "blocked"
+		if strings.Contains(e.Message, "LEAK") || strings.Contains(e.Message, "secret-path") {
+			t.Errorf("entry %s carries the body: %q", e.ID, e.Message)
+		}
+	}
+	if !blocked {
+		t.Fatal("the 500 never declared blocked")
+	}
 }

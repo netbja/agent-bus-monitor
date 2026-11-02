@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 )
 
 // Message is one OpenAI chat message.
@@ -71,14 +70,15 @@ var (
 	ErrRequestRefused = errors.New("the endpoint refused the request")
 )
 
-// refused is ErrRequestRefused with the status and the endpoint's reason.
+// refused is ErrRequestRefused with the status. The endpoint's body is never
+// kept: it reaches replies and statuses on the bus, and can echo a URL path
+// (R3).
 type refused struct {
 	status int
-	reason string
 }
 
 func (r *refused) Error() string {
-	return fmt.Sprintf("%v: status %d: %s", ErrRequestRefused, r.status, r.reason)
+	return fmt.Sprintf("%v: status %d", ErrRequestRefused, r.status)
 }
 func (r *refused) Is(target error) bool { return target == ErrRequestRefused }
 
@@ -99,13 +99,13 @@ func StatusOf(err error) int {
 
 // statusError classes a non-200: only what can heal is an EndpointError
 // (retried, the entry kept): 5xx, 408, 429, and 404 (Ollama's model not
-// found, which the spec maps to blocked). Any other is refused.
-func statusError(what string, status int, body []byte) error {
-	reason := oneLine(body)
+// found, which the spec maps to blocked). Any other is refused. Either says
+// the status only, never the body (R3).
+func statusError(what string, status int) error {
 	if status >= 500 || status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusNotFound {
-		return &EndpointError{Err: fmt.Errorf("%sstatus %d: %s", what, status, reason), Status: status}
+		return &EndpointError{Err: fmt.Errorf("%sstatus %d", what, status), Status: status}
 	}
-	return &refused{status: status, reason: reason}
+	return &refused{status: status}
 }
 
 // EndpointError is a fault of the endpoint itself (unreachable, or a server
@@ -173,7 +173,7 @@ func (c Client) Chat(ctx context.Context, msgs []Message, tools []ToolSpec) (Mes
 		return Message{}, Usage{}, ErrToolsUnsupported
 	}
 	if status != http.StatusOK {
-		return Message{}, Usage{}, statusError("", status, data)
+		return Message{}, Usage{}, statusError("", status)
 	}
 	var resp chatResponse
 	if err := json.Unmarshal(data, &resp); err != nil || len(resp.Choices) == 0 {
@@ -201,7 +201,7 @@ func (c Client) CheckModel(ctx context.Context) error {
 		return err
 	}
 	if status != http.StatusOK {
-		return statusError("models: ", status, data)
+		return statusError("models: ", status)
 	}
 	var list struct {
 		Data []struct {
@@ -242,17 +242,4 @@ func (c Client) do(req *http.Request) ([]byte, int, error) {
 		return nil, 0, &EndpointError{Err: errors.New("answer cut short")}
 	}
 	return data, resp.StatusCode, nil
-}
-
-// oneLine is the start of an error body, on one line.
-func oneLine(b []byte) string {
-	s := strings.Join(strings.Fields(paneText(strings.ToValidUTF8(string(b), "?"))), " ")
-	if len(s) > 200 {
-		cut := 200
-		for cut > 0 && !utf8.RuneStart(s[cut]) {
-			cut--
-		}
-		s = s[:cut]
-	}
-	return s
 }
