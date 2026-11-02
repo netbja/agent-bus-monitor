@@ -171,9 +171,12 @@ func runStart(args []string, d startDeps) int {
 	// A team change on an existing project: its template must be the one
 	// bootstrap wrote (a rewrite would erase a hand edit), and no live agent
 	// may lose its tab or change its client (up's relaunch never closes one).
+	// The template as written decides: a stale profile or a removed role's
+	// tab is a change to write, even when the chosen team reads the same
+	// once normalised (reviewer-codex).
 	var onDisk []rolecfg.TeamRole
 	if p.Existing {
-		if onDisk, _, err = templateTeam(p.Template, m); err != nil {
+		if onDisk, err = rawTeam(p.Template); err != nil {
 			return fail("%v", err)
 		}
 	}
@@ -263,16 +266,21 @@ func checkTeamChange(d startDeps, m *rolecfg.Manifest, p startPlan) error {
 	if err != nil {
 		return fmt.Errorf("cannot tell which agents of %s are live (%v): nothing changed", p.Project, err)
 	}
-	onDisk, _, err := templateTeam(p.Template, m)
+	onDisk, err := rawTeam(p.Template) // every agent tab, a removed role's too
 	if err != nil {
 		return err
 	}
 	for _, old := range onDisk {
 		i := slices.IndexFunc(p.Team, func(r rolecfg.TeamRole) bool { return r.Role == old.Role })
-		if live[old.Role] != lifeAlive || (i >= 0 && p.Team[i].Profile == old.Profile) {
+		state, known := live[old.Role]
+		if !known || state == lifeDead || (i >= 0 && p.Team[i].Profile == old.Profile) {
 			continue
 		}
-		return fmt.Errorf("%s is live: run agentbus retire %s first (up never closes a running agent's tab)", old.Role, old.Role)
+		why := "is live"
+		if state != lifeAlive { // snapLife proves nothing off Linux (foureyes)
+			why = "may still run (its process cannot be checked)"
+		}
+		return fmt.Errorf("%s %s: run agentbus retire %s first (up never closes a running agent's tab)", old.Role, why, old.Role)
 	}
 	return nil
 }
@@ -303,13 +311,27 @@ func regenerate(m *rolecfg.Manifest, p startPlan, tpl upTemplate, repo string) s
 			}
 		}
 	}
+	return rolecfg.TemplateTeam(m, manifest, p.Project, tpl.WorkingDir, scripts, repo, as, dispatch, missions, tabsTeam(tpl))
+}
+
+// rawTeam is a template's agent tabs as written: every role, known to
+// roles.toml or not, on the --profile its tab names, allowed or not.
+func rawTeam(path string) ([]rolecfg.TeamRole, error) {
+	var tpl upTemplate
+	if _, err := toml.DecodeFile(path, &tpl); err != nil {
+		return nil, fmt.Errorf("reading %s: %v", path, err)
+	}
+	return tabsTeam(tpl), nil
+}
+
+func tabsTeam(tpl upTemplate) []rolecfg.TeamRole {
 	var team []rolecfg.TeamRole
-	for _, t := range tpl.Tabs { // the tabs as written, stale profiles included
+	for _, t := range tpl.Tabs {
 		if _, role, profile := tabLaunch(t.Command); role != "" {
 			team = append(team, rolecfg.TeamRole{Role: role, Profile: profile})
 		}
 	}
-	return rolecfg.TemplateTeam(m, manifest, p.Project, tpl.WorkingDir, scripts, repo, as, dispatch, missions, team)
+	return team
 }
 
 // completeTeam is every boot role on its own profile.

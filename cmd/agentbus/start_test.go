@@ -276,3 +276,42 @@ func TestStartAssistant(t *testing.T) {
 		t.Fatalf("no client:\n%s", screen)
 	}
 }
+
+// A recorded name is never replaced by --as: it is used for this up only
+// (foureyes).
+func TestStartNeverReplacesARecordedName(t *testing.T) {
+	w := newStartWorld(t)
+	write(t, w.config, "[identity]\nas = \"alice\"\n")
+	before := w.snapshot()
+	if code := w.start(w.folder, "--yes", "--as", "bob"); code != 0 || w.snapshot() != before || !strings.Contains(strings.Join(w.ups[0], " "), "--as bob") {
+		t.Fatalf("--as over a recorded name = %d, ups %q, or config.toml changed", code, w.ups)
+	}
+}
+
+// The template as written decides a team change and the live guard: a stale
+// profile is rewritten by --roles naming the role's own (reviewer-codex); a
+// tab for a role roles.toml no longer has is a live agent all the same
+// (reviewer-codex); an agent whose liveness cannot be proved counts as live
+// (foureyes: macOS reads every agent unknown).
+func TestStartJudgesTheTemplateAsWritten(t *testing.T) {
+	w := newStartWorld(t)
+	write(t, w.config, "[identity]\nas = \"charlie\"\n")
+	w.writeTemplate("shop", []rolecfg.TeamRole{{Role: "master"}, {Role: "foureyes", Profile: "other"}})
+	if code := w.start(w.folder, "--yes", "--roles", "master,foureyes"); code != 0 || !strings.Contains(strings.Join(w.ups[0], " "), "new --roles master,foureyes") {
+		t.Fatalf("stale profile repaired = %d %q, ups %q", code, w.err.String(), w.ups)
+	}
+
+	w = newStartWorld(t)
+	w.writeTemplate("shop", []rolecfg.TeamRole{{Role: "master"}, {Role: "ghost"}})
+	w.live["ghost"] = lifeAlive
+	if code := w.start(w.folder, "--yes", "--roles", "master"); code == 0 || !strings.Contains(w.err.String(), "agentbus retire ghost") || len(w.ups) != 0 {
+		t.Fatalf("a live removed role dropped = %d %q", code, w.err.String())
+	}
+
+	w = newStartWorld(t)
+	w.writeTemplate("shop", nil)
+	w.live["coder"] = lifeUnknown
+	if code := w.start(w.folder, "--yes", "--roles", "master,foureyes"); code == 0 || !strings.Contains(w.err.String(), "agentbus retire coder") {
+		t.Fatalf("an unknown liveness dropped = %d %q", code, w.err.String())
+	}
+}
