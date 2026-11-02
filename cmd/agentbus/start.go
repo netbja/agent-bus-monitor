@@ -214,8 +214,16 @@ func runStart(args []string, d startDeps) int {
 	for _, n := range p.Notes {
 		fmt.Fprintln(d.Out, n)
 	}
+	// The person's terminal is opened once: the assistant's handle is the
+	// one herdr gets, and whoever ends with it closes it (foureyes).
+	var tty io.ReadWriter
+	handed := false
+	defer func() {
+		if c, ok := tty.(io.Closer); ok && !handed {
+			c.Close()
+		}
+	}()
 	if !yes {
-		var tty io.ReadWriter
 		if d.TTY != nil {
 			tty = d.TTY()
 		}
@@ -279,12 +287,12 @@ func runStart(args []string, d startDeps) int {
 	}
 	// Outside herdr with a terminal, start runs herdr on it: where up's
 	// output will go is settled before anything is written (foureyes).
-	var tty io.ReadWriter
 	logPath := ""
-	if outside && d.TTY != nil && d.Herdr != nil {
+	runHerdr := outside && d.TTY != nil && d.Herdr != nil
+	if runHerdr && tty == nil {
 		tty = d.TTY()
 	}
-	if tty != nil {
+	if runHerdr && tty != nil {
 		if logPath, err = d.LogPath(p.Project); err != nil {
 			return fail("where to log the team's opening: %v", err)
 		}
@@ -317,13 +325,14 @@ func runStart(args []string, d startDeps) int {
 	case !p.Existing && !complete:
 		upArgs = append(upArgs, "--roles", teamSpec(p.Team))
 	}
-	if tty == nil { // inside herdr up opens the team; without a terminal it provisions and says how to open it
+	if !runHerdr || tty == nil { // inside herdr up opens the team; without a terminal it provisions and says how to open it
 		return d.Up(upArgs)
 	}
 	if code := d.Up(upArgs); code != 0 { // provisioned as up does outside herdr
 		return code
 	}
 	fmt.Fprintf(d.Out, "starting herdr --session %s now: the team opens inside it\n", p.Project)
+	handed = true // startInHerdr closes it once herdr exits
 	return startInHerdr(d, m, p, upArgs, tty, logPath)
 }
 
@@ -352,8 +361,14 @@ func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string
 			fmt.Fprintf(d.Out, "%s does not trust %s yet: answer its dialog in the %s tab\n", clientLabel(prof.Client), p.Folder, r.Role)
 		}
 	}
+	closeTTY := func() {
+		if c, ok := tty.(io.Closer); ok {
+			c.Close()
+		}
+	}
 	wait, err := d.Herdr(p.Project, tty) // the terminal start opened, never its own stdio (reviewer-codex)
 	if err != nil {
+		closeTTY()
 		fmt.Fprintf(d.Err, "agentbus start: starting herdr --session %s: %v\n", p.Project, err)
 		return 1
 	}
@@ -380,9 +395,7 @@ func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string
 		done <- opened{code, nil}
 	}()
 	herdrErr := wait()
-	if c, ok := tty.(io.Closer); ok {
-		c.Close()
-	}
+	closeTTY()
 	var r opened
 	select {
 	case r = <-done:

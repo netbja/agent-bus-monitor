@@ -492,3 +492,37 @@ func TestStartOutsideHerdrTerminalAndTiming(t *testing.T) {
 		t.Fatalf("no log path = %d, launched %q, %q", code, o.launched, w.err.String())
 	}
 }
+
+// closingTTY counts its closes.
+type closingTTY struct {
+	fakeTTY
+	closed int
+}
+
+func (c *closingTTY) Close() error { c.closed++; return nil }
+
+// The terminal is opened once: the assistant's handle is the one herdr gets,
+// closed after it; a run that never reaches herdr closes it too (foureyes).
+func TestStartOpensTheTerminalOnce(t *testing.T) {
+	w := newStartWorld(t)
+	o := &outsideWorld{socket: "/s.sock"}
+	d := w.outside(o)
+	opens, tty := 0, &closingTTY{fakeTTY: fakeTTY{Reader: strings.NewReader("\n")}}
+	d.TTY = func() io.ReadWriter { opens++; return tty }
+	if code := runStart([]string{w.folder}, d); code != 0 {
+		t.Fatalf("start = %d: %s", code, w.err.String())
+	}
+	if opens != 1 || o.tty != io.ReadWriter(tty) || tty.closed != 1 {
+		t.Fatalf("opened %d, herdr given the assistant's handle %v, closed %d", opens, o.tty == io.ReadWriter(tty), tty.closed)
+	}
+
+	// Inside herdr: the assistant's handle is closed once up is run.
+	w = newStartWorld(t)
+	w.env["HERDR_ENV"] = "1"
+	d = w.outside(&outsideWorld{})
+	tty = &closingTTY{fakeTTY: fakeTTY{Reader: strings.NewReader("\n")}}
+	d.TTY = func() io.ReadWriter { return tty }
+	if code := runStart([]string{w.folder}, d); code != 0 || tty.closed != 1 {
+		t.Fatalf("inside herdr = %d, closed %d", code, tty.closed)
+	}
+}
