@@ -27,6 +27,7 @@ type Runner struct {
 	Out        io.Writer     // the pane's transcript
 
 	report func(ctx context.Context, agent, kind, msg string) (string, error) // Bus.Report; a test's
+	accept func(ctx context.Context, task, agent string) error                // Bus.AcceptRequest; a test's
 }
 
 // Run holds the lease until ctx ends. A lease held by another peer is an
@@ -80,8 +81,12 @@ func (r *Runner) handle(ctx, turnCtx context.Context, e bus.Event) error {
 	}
 	tracked := e.Type == bus.CmdDirective && e.Task != ""
 	if tracked {
-		if err := r.Bus.AcceptRequest(ctx, e.Task, r.Agent); err != nil {
-			if !refusedByBus(err) {
+		accept := r.accept
+		if accept == nil {
+			accept = r.Bus.AcceptRequest
+		}
+		if err := accept(ctx, e.Task, r.Agent); err != nil {
+			if !errors.Is(err, bus.ErrRequestRefused) {
 				return err // the broker: the entry stays pending
 			}
 			r.say(fmt.Sprintf("%s request %s: %v; not answered", e.ID, e.Task, err))
@@ -154,13 +159,6 @@ func (r *Runner) handle(ctx, turnCtx context.Context, e bus.Event) error {
 func (r *Runner) isPeer(ctx context.Context, agent string) bool {
 	snaps, err := r.Bus.Agents(ctx)
 	return err == nil && snaps[agent].Client == "local-llm"
-}
-
-// refusedByBus is an answer of the broker's own script (expired, already
-// completed, not the target), as against a connection fault.
-func refusedByBus(err error) bool {
-	var re interface{ RedisError() }
-	return errors.As(err, &re)
 }
 
 // status declares the peer's state with its own identity; a failure is said

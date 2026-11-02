@@ -3,6 +3,7 @@ package peer
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -264,5 +265,36 @@ func TestRunnerAnswersOnceWhenTheReportFails(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "report") {
 		t.Fatalf("the failed report is not said:\n%s", out)
+	}
+}
+
+// A server error on accept (LOADING while Redis reloads) is no refusal: the
+// request stays pending and is answered once the broker serves again
+// (reviewer-codex).
+func TestRunnerKeepsARequestOnAServerError(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 200, answerJSON })
+	var tries atomic.Int32
+	r := &Runner{Bus: b, Agent: "local", Consumer: "test", Turn: newTurn(t, srv, time.Minute), RetryEvery: 20 * time.Millisecond, LeaseWait: time.Second, Out: &syncBuf{},
+		accept: func(ctx context.Context, task, agent string) error {
+			if tries.Add(1) == 1 {
+				return errors.New("LOADING Redis is loading the dataset in memory")
+			}
+			return b.AcceptRequest(ctx, task, agent)
+		}}
+	rctx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- r.Run(rctx) }()
+	id, err := b.Request(ctx, "t-loading", "master", "local", "", "Explain bus/board.go", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, id, 2)
+	cancel()
+	<-done
+	board, _ := b.Board(ctx)
+	if board["t-loading"].State != "done" || tries.Load() < 2 {
+		t.Fatalf("board = %+v after %d accepts, want done after a retry", board["t-loading"], tries.Load())
 	}
 }

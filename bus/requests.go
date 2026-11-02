@@ -2,7 +2,9 @@ package bus
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -101,7 +103,36 @@ func (b *Bus) transitionRequest(ctx context.Context, task, agent, op, body strin
 	if err := ValidateText(body, CmdMaxRunes); err != nil {
 		return "", err
 	}
-	return requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, op, body, streamMaxLen, commit, branch).Text()
+	out, err := requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, op, body, streamMaxLen, commit, branch).Text()
+	return out, requestError(err)
+}
+
+// ErrRequestRefused: the request's own state refuses the transition (unknown,
+// not a tracked request, another target, done, expired, its body gone, not
+// accepted, blocked). Retrying changes nothing; any other error may heal.
+var ErrRequestRefused = errors.New("request refused")
+
+// requestRefusals are the request script's own error replies.
+var requestRefusals = []string{"unknown request", "board task is not a tracked request", "only the target agent may",
+	"request already completed", "request expired", "request body missing", "request must be explicitly accepted", "blocked request"}
+
+// refusal is a script refusal, its message unchanged.
+type refusal struct{ msg string }
+
+func (r refusal) Error() string        { return r.msg }
+func (r refusal) Is(target error) bool { return target == ErrRequestRefused }
+
+// requestError marks the script's own refusals as ErrRequestRefused.
+func requestError(err error) error {
+	if err == nil {
+		return nil
+	}
+	for _, p := range requestRefusals {
+		if strings.HasPrefix(err.Error(), p) {
+			return refusal{msg: err.Error()}
+		}
+	}
+	return err
 }
 
 var requestTransition = redis.NewScript(`
