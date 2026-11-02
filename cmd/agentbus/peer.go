@@ -6,14 +6,17 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/peer"
+	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
@@ -47,6 +50,19 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 		fmt.Fprintln(errw, "peer:", err)
 		return 1
 	}
+	project := spec.Project
+	if project == "" {
+		project = getenv("AGENT_BUS_PROJECT")
+	}
+	cwd, err := os.Getwd()
+	root := ""
+	if err == nil {
+		root, err = peerRoot(project, cwd, getenv)
+	}
+	if err != nil {
+		fmt.Fprintln(errw, "peer: the project root:", err)
+		return 1
+	}
 	// The role's effective Read denies, or no start at all (fail closed).
 	manifest, err := rolecfg.Load(spec.Manifest)
 	if err != nil {
@@ -58,22 +74,10 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 		fmt.Fprintln(errw, "peer: the role's deny rules cannot be read:", err)
 		return 1
 	}
-	root, err := os.Getwd()
-	if err == nil {
-		root, err = filepath.EvalSymlinks(root)
-	}
-	if err != nil {
-		fmt.Fprintln(errw, "peer: the project root:", err)
-		return 1
-	}
 	deny, err := peer.NewDenyMatcher(denies, root, getenv("HOME"))
 	if err != nil {
 		fmt.Fprintln(errw, "peer: the role's deny rules cannot be read:", err)
 		return 1
-	}
-	project := spec.Project
-	if project == "" {
-		project = getenv("AGENT_BUS_PROJECT")
 	}
 	client, err := bus.Connect("")
 	if err != nil {
@@ -102,6 +106,48 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 		return 1
 	}
 	return 0
+}
+
+// peerRoot is the folder the peer's tools read under (SEC-LLM-3): the
+// project's path, its template's working_dir, else the Git top-level of the
+// launch folder; never the launch folder itself, which agent-spawn takes from
+// its caller. The filesystem root, the home directory and a folder holding
+// it are refused: read_file and grep would reach every credential in it.
+func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
+	root := ""
+	if rows, err := projlist.Templates(rolecfg.ProjectsDir(getenv)); err == nil {
+		for _, r := range rows {
+			if r.Name == project && r.WorkingDir != "" {
+				root = os.ExpandEnv(strings.Replace(r.WorkingDir, "~", getenv("HOME"), 1))
+			}
+		}
+	}
+	if root == "" {
+		cmd := exec.Command("git", "-C", cwd, "rev-parse", "--show-toplevel")
+		cmd.Env = append(os.Environ(), "LC_ALL=C")
+		out, err := cmd.Output()
+		if err != nil {
+			return "", fmt.Errorf("no template for %s names its folder, and %s is not in a Git repository", project, cwd)
+		}
+		root = strings.TrimSpace(string(out))
+	}
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	home := getenv("HOME")
+	if h, err := filepath.EvalSymlinks(home); err == nil {
+		home = h
+	}
+	switch {
+	case root == "/":
+		return "", fmt.Errorf("%s is the filesystem root: refused", root)
+	case home != "" && root == home:
+		return "", fmt.Errorf("%s is the home directory: refused (launch the peer from the project's folder)", root)
+	case home != "" && strings.HasPrefix(home, root+string(filepath.Separator)):
+		return "", fmt.Errorf("%s holds the home directory: refused", root)
+	}
+	return root, nil
 }
 
 // peerCheck asks one endpoint for its models: 0 when it serves its model.

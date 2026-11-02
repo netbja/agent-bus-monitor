@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,5 +91,84 @@ func TestPeerRefusesToStart(t *testing.T) {
 		if code := runPeer([]string{"--spec-file", spec}, c.getenv, &out, &errw); code != 1 || !strings.Contains(errw.String(), c.want) {
 			t.Errorf("%s = %d %q, want %q", name, code, errw.String(), c.want)
 		}
+	}
+}
+
+func gitInit(t *testing.T, dir string) {
+	t.Helper()
+	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+}
+
+// The read root is the project's path (its template's working_dir), else the
+// Git top-level of the launch folder, never the folder itself; / , $HOME and
+// an ancestor of $HOME are refused (SEC-LLM-3: read_file and grep would cover
+// redis.env, ~/.claude.json, ~/.codex/auth.json).
+func TestPeerRoot(t *testing.T) {
+	home := t.TempDir()
+	projects := t.TempDir()
+	repo := filepath.Join(home, "src", "shop")
+	if err := os.MkdirAll(filepath.Join(repo, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gitInit(t, repo)
+	tpl := func(project, dir string) {
+		if err := os.WriteFile(filepath.Join(projects, project+".toml"), []byte("name = \""+project+"\"\nworking_dir = \""+dir+"\"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tpl("shop", "~/src/shop")
+	tpl("slash", "/")
+	tpl("above", filepath.Dir(home))
+	env := map[string]string{"HOME": home, "AGENTBUS_PROJECTS_DIR": projects}
+	getenv := func(k string) string { return env[k] }
+	real := func(p string) string { r, _ := filepath.EvalSymlinks(p); return r }
+	for _, c := range []struct {
+		name, project, cwd, want, refused string
+	}{
+		{"the template's folder, wherever the launch", "shop", home, real(repo), ""},
+		{"no template: the Git top-level", "other", filepath.Join(repo, "sub"), real(repo), ""},
+		{"no template, no Git", "other", t.TempDir(), "", "not in a Git repository"},
+		{"$HOME", "other", home, "", "the home directory"},
+		{"/", "slash", repo, "", "the filesystem root"},
+		{"an ancestor of $HOME", "above", repo, "", "holds the home directory"},
+	} {
+		if c.name == "$HOME" {
+			gitInit(t, home) // a dotfiles repository: its top-level is $HOME
+		}
+		got, err := peerRoot(c.project, c.cwd, getenv)
+		switch {
+		case c.refused == "" && (err != nil || got != c.want):
+			t.Errorf("%s: root = %q, %v; want %q", c.name, got, err, c.want)
+		case c.refused != "" && (err == nil || !strings.Contains(err.Error(), c.refused)):
+			t.Errorf("%s: root = %q, %v; want a refusal naming %q", c.name, got, err, c.refused)
+		}
+	}
+}
+
+// Launched from $HOME, the peer exits 1 with the reason, before the bus.
+func TestPeerRefusesHomeAsRoot(t *testing.T) {
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "launch.json")
+	if err := os.WriteFile(spec, []byte(`{"model":"m","options":{"endpoint":"local"},"role":"local","project":"llmtest","manifest":"`+filepath.Join(dir, "missing.toml")+`","prompt":"p"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := peerEnv(t, "[llm.local]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"m\"\n")
+	home := env("HOME")
+	gitInit(t, home)
+	t.Chdir(home)
+	getenv := func(k string) string {
+		switch k {
+		case "AGENT_BUS_AGENT":
+			return "local"
+		case "AGENTBUS_PROJECTS_DIR":
+			return filepath.Join(dir, "projects")
+		}
+		return env(k)
+	}
+	var out, errw bytes.Buffer
+	if code := runPeer([]string{"--spec-file", spec}, getenv, &out, &errw); code != 1 || !strings.Contains(errw.String(), "the home directory") {
+		t.Fatalf("from $HOME = %d %q", code, errw.String())
 	}
 }
