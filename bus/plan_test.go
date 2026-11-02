@@ -1,8 +1,8 @@
 package bus
 
 import (
-	"strings"
 	"context"
+	"strings"
 	"testing"
 )
 
