@@ -70,7 +70,7 @@ func TestPaceIsAnEstimateFromWhatBusmonSaw(t *testing.T) {
 	var p paceTracker
 	p.observe(snap(50, now), now)
 	p.observe(snap(60, now.Add(10*time.Minute)), now.Add(10*time.Minute)) // 1 %/min → 40 min left
-	key := "anthropic|5h|" + strconv.FormatInt(reset, 10)
+	key := quotaWindowKey("anthropic", bus.BudgetWindow{Name: "5h", ResetsAt: reset})
 	if got := p.last[key]; got != "~40m" {
 		t.Fatalf("pace %q", got)
 	}
@@ -208,5 +208,52 @@ func TestQuotaGaugeBar(t *testing.T) {
 	}
 	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierNarrow, barView{}).text(); got != "claude 5h 80%" {
 		t.Fatalf("no bar in narrow: %q", got)
+	}
+}
+
+// The hold recorded at R, the window read with its reset a second off: it is
+// still the held window, marked in place in the header and the detail, never
+// a separate trailing "held" (quota-repeat).
+func TestHeldWindowUnderAJitteredReset(t *testing.T) {
+	now := time.Now()
+	R := now.Add(2 * time.Hour).Truncate(time.Second)
+	b := bus.BudgetSnapshot{ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{
+		{Name: "5h", UsedPct: 96, ResetsAt: R.Unix() + 1, Minutes: 300, ObservedAt: now.UnixMilli()},
+		{Name: "7d", UsedPct: 40, ResetsAt: now.Add(72 * time.Hour).Unix(), Minutes: 10080, ObservedAt: now.UnixMilli()}}}
+	held := " held " + R.Local().Format("15:04")
+	got := quotaSeg("openai", b, R, true, nil, now, TierMedium, barView{})
+	if !strings.HasPrefix(got.text(), "codex 5h 96%"+held+" │") || strings.Count(got.text(), "held") != 1 {
+		t.Fatalf("header %q: the held window is not marked in place", got.text())
+	}
+	for _, s := range got {
+		if s.Text == "96%" && s.Role != RoleError {
+			t.Fatalf("the held window's figure is %v, not the hold's colour", s.Role)
+		}
+	}
+	if d := plainOf(quotaDetail("openai", b, true, R, true, now)); !strings.Contains(d, "5h 96% (resets") || !strings.Contains(d, ") held") {
+		t.Fatalf("detail does not mark the held window:\n%s", d)
+	}
+}
+
+// The pace estimate survives a reset read a second off: it is the same window.
+func TestPaceSurvivesAJitteredReset(t *testing.T) {
+	now := time.Now()
+	reset := now.Add(4 * time.Hour).Unix()
+	snap := func(pct float64, at time.Time, r int64) map[string]bus.BudgetSnapshot {
+		return map[string]bus.BudgetSnapshot{"anthropic": {ObservedAt: at.UnixMilli(), Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: pct, ResetsAt: r, Minutes: 300}}}}
+	}
+	var p paceTracker
+	p.observe(snap(50, now, reset), now)
+	later := now.Add(10 * time.Minute)
+	w := bus.BudgetWindow{Name: "5h", ResetsAt: reset + 1}
+	p.observe(snap(60, later, reset+1), later)
+	if got := p.last[quotaWindowKey("anthropic", w)]; got != "~40m" {
+		t.Fatalf("pace %q after a reset read a second off", got)
+	}
+	// The next window (its reset hours later) starts over, even read higher.
+	next := later.Add(time.Minute)
+	p.observe(snap(70, next, reset+5*3600), next)
+	if got, ok := p.last[quotaWindowKey("anthropic", w)]; ok {
+		t.Fatalf("pace %q carried into the next window", got)
 	}
 }
