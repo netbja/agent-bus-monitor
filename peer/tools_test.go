@@ -485,3 +485,29 @@ func TestDenyMatcherNeedsAnAbsoluteHome(t *testing.T) {
 		t.Errorf("a pattern that needs no home: %v", err)
 	}
 }
+
+// A named pipe under the root is refused by its type before any open: no
+// tool opens it, not even non-blocking (foureyes).
+func TestToolsNeverOpenAPipe(t *testing.T) {
+	tl := toolsFixture(t)
+	pipe := filepath.Join(tl.Root, "sub", "pipe")
+	if err := syscall.Mkfifo(pipe, 0o644); err != nil {
+		t.Skip("no mkfifo:", err)
+	}
+	var seen []string
+	opened = func(p string) { seen = append(seen, p) }
+	defer func() { opened = nil }()
+	if out := run(t, tl, "read_file", map[string]any{"path": "sub/pipe"}); out != "error: not a regular file" {
+		t.Fatalf("read_file = %q", out)
+	}
+	run(t, tl, "grep", map[string]any{"pattern": "board", "path": "sub"})
+	run(t, tl, "list_dir", map[string]any{"path": "sub/pipe"})
+	for _, p := range seen {
+		if strings.HasSuffix(p, "pipe") {
+			t.Fatalf("the pipe was opened: %v", seen)
+		}
+	}
+	if len(seen) == 0 {
+		t.Fatal("the hook saw no open at all")
+	}
+}

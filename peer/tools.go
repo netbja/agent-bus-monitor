@@ -216,7 +216,7 @@ func (t Tools) listDir(rel string) string {
 	}
 	// The last component without O_DIRECTORY: a link there is ELOOP, where
 	// O_DIRECTORY would make it ENOTDIR, like a plain file.
-	d, err := openBeneath(t.Root, p, unix.O_NONBLOCK)
+	d, err := openBeneath(t.Root, p, unix.O_NONBLOCK, unix.S_IFDIR)
 	switch {
 	case errors.Is(err, unix.ELOOP), errors.Is(err, unix.ENOTDIR):
 		return refusedSwap
@@ -285,7 +285,7 @@ func (t Tools) grep(ctx context.Context, pattern, rel string) string {
 		}
 		f, msg := openRegular(t.Root, real)
 		if msg != "" {
-			return nil // a pipe, a device, a socket: never opened
+			return nil // a pipe, a device, a socket: refused by its type, never opened
 		}
 		defer f.Close()
 		data, _ := io.ReadAll(io.LimitReader(f, budget))
@@ -387,8 +387,12 @@ const refusedSwap = "refused: the path changed after it was checked (a link appe
 // component at a time from root, following no link (O_NOFOLLOW on each):
 // a component swapped for a link after the checks fails with ELOOP instead
 // of leading outside the root or onto a denied file (R1). It holds on Linux
-// and macOS alike, needing no openat2.
-func openBeneath(root, p string, flags int) (*os.File, error) {
+// and macOS alike, needing no openat2. With kinds (S_IFREG, S_IFDIR, ...),
+// the last component's type is read first (fstatat, no link followed) and
+// any other type is errWrongType, never opened: a pipe, a device or a socket
+// under the root is refused before an open could act on it (foureyes). The
+// caller's fstat after the open still covers a swap between the two.
+func openBeneath(root, p string, flags int, kinds ...uint32) (*os.File, error) {
 	rel, err := filepath.Rel(root, p)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
 		return nil, fmt.Errorf("not under the root")
@@ -405,6 +409,10 @@ func openBeneath(root, p string, flags int) (*os.File, error) {
 		fl := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_DIRECTORY
 		if i == len(parts)-1 {
 			fl = unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | flags
+			if err := typeBeneath(fd, part, kinds); err != nil {
+				unix.Close(fd)
+				return nil, err
+			}
 		}
 		next, err := unix.Openat(fd, part, fl, 0)
 		unix.Close(fd)
@@ -413,7 +421,38 @@ func openBeneath(root, p string, flags int) (*os.File, error) {
 		}
 		fd = next
 	}
+	if opened != nil {
+		opened(p)
+	}
 	return os.NewFile(uintptr(fd), p), nil
+}
+
+// opened, a test's hook, sees every path openBeneath opened.
+var opened func(p string)
+
+// errWrongType: the path is not of a type the caller opens.
+var errWrongType = errors.New("not of the type asked")
+
+// typeBeneath reads name's type in the directory fd without following a
+// link: a link is ELOOP, a type not in kinds errWrongType; no kinds, any.
+func typeBeneath(fd int, name string, kinds []uint32) error {
+	if len(kinds) == 0 {
+		return nil
+	}
+	var st unix.Stat_t
+	if err := unix.Fstatat(fd, name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	t := uint32(st.Mode) & unix.S_IFMT
+	if t == unix.S_IFLNK {
+		return unix.ELOOP
+	}
+	for _, k := range kinds {
+		if t == k {
+			return nil
+		}
+	}
+	return errWrongType
 }
 
 // openRegular opens a regular file only, beneath root (openBeneath). A named
@@ -424,8 +463,10 @@ func openRegular(root, p string) (*os.File, string) {
 	if beforeOpen != nil {
 		beforeOpen()
 	}
-	f, err := openBeneath(root, p, unix.O_NONBLOCK)
+	f, err := openBeneath(root, p, unix.O_NONBLOCK, unix.S_IFREG, unix.S_IFDIR)
 	switch {
+	case errors.Is(err, errWrongType):
+		return nil, "error: not a regular file"
 	case errors.Is(err, unix.ELOOP):
 		return nil, refusedSwap
 	case errors.Is(err, unix.ENOTDIR):
@@ -464,7 +505,7 @@ func (t Tools) walk(p string, dir bool, visit func(p string, dir bool) error) er
 		}
 		return err
 	}
-	d, err := openBeneath(t.Root, p, unix.O_NONBLOCK)
+	d, err := openBeneath(t.Root, p, unix.O_NONBLOCK, unix.S_IFDIR)
 	if err != nil {
 		return nil
 	}
