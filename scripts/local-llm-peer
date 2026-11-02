@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Adapter for the local-llm peer (spec docs/superpowers/specs/2026-10-31-local-llm-peer-design.md):
+# agent-launch calls it with --spec-file <launch.json>; exec keeps the bound pid,
+# so the peer's status carries the identity the launcher bound.
+set -euo pipefail
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  TARGET="$(readlink "$SOURCE")"
+  [[ "$TARGET" == /* ]] && SOURCE="$TARGET" || SOURCE="$SOURCE_DIR/$TARGET"
+done
+REPO="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+AGENTBUS_BIN="${AGENTBUS_BIN:-$REPO/agentbus}"
+[[ -x "$AGENTBUS_BIN" ]] || { echo "local-llm-peer: $AGENTBUS_BIN not built (run ./setup.sh install or: go build -o agentbus ./cmd/agentbus)" >&2; exit 1; }
+exec "$AGENTBUS_BIN" peer "$@"

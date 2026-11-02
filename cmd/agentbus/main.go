@@ -137,6 +137,12 @@ func main() {
 	if len(args) >= 1 && args[0] == "quota" {
 		os.Exit(runQuota(args[1:], os.Stdout, os.Stderr))
 	}
+	// peer is the local-llm peer (local-llm-peer): --check needs no project and
+	// no broker; the peer reads its project from the launcher's spec file and
+	// connects itself.
+	if len(args) >= 1 && args[0] == "peer" {
+		os.Exit(runPeer(args[1:], os.Getenv, os.Stdout, os.Stderr))
+	}
 	if len(args) >= 1 && args[0] == "statusline" {
 		os.Exit(runStatusline(args[1:], os.Stdin, os.Stdout))
 	}
