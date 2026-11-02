@@ -138,6 +138,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.pushPlan()
 	case ActTokens:
 		cmd = m.push(page{kind: ovTokens})
+	case ActSettings:
+		cmd = m.openSettings()
 	case ActHistory:
 		cmd = m.openHistory()
 	case ActAsk:
