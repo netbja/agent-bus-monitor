@@ -530,6 +530,10 @@ func main() {
 		wd, _ := os.Getwd()
 		os.Exit(runPlan(ctx, b, wd, rest, os.Stdout, os.Stderr))
 
+	case "deliver":
+		wd, _ := os.Getwd()
+		os.Exit(runDeliver(ctx, realDeliverDeps(b, self, wd), self, rest, os.Stdout, os.Stderr))
+
 	case "pause", "resume":
 		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv}
 		if cmd == "pause" {
