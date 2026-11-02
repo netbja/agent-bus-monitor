@@ -33,13 +33,14 @@ temporary name in the destination and renamed when complete (a crash leaves no h
 under the final name):
 
 ```
-manifest.json
+coverage.json                  first: format, created_at, host, the projects in scope
 redis/<project>.jsonl          one line per key
 config/config.toml             (and busmon.toml, quota.toml, models.toml when present)
 config/projects/<project>.toml the template
 roles/<project>/roles.toml     the manifest the template's ROLES_TOML names, and its roles/*.md
 state/<project>/history/...    the archive's day files, gaps.jsonl, cursor.json
 secrets.age                    only with --secrets
+manifest.json                  last: every other member's size and SHA-256
 ```
 
 `manifest.json`: format version, `created_at` (UTC), host, agentbus version, the broker's Redis
@@ -47,10 +48,23 @@ version, the projects, and one row per member (path, size, SHA-256, mode). It al
 was **left out** and why (`services/<p>.env: secret (use --secrets)`, `redis.env: secret`), so
 a restore says what it cannot bring back.
 
-`manifest.json` is the archive's **first member**, so a reader learns what an archive covers by
-reading its first bytes without unpacking the rest. **Coverage**: an archive *covers* a project
-when its manifest lists that project. Only a complete archive (final name, after the rename)
-counts. Freshness is always judged **per project**: the newest archive that covers it. An archive
+`manifest.json` is the archive's **last member**: the members are streamed into the tar as
+they are read (see "Speed"), hashed on the way, and the manifest is written once all of them are.
+Restore therefore reads the archive twice. The first pass reads to the end, takes the manifest
+and checks every member's hash. Only then does the second pass write; nothing is written before
+the first pass ends.
+
+`coverage.json` is the **first member**: format version, `created_at` (UTC), host and the
+projects in the run's scope. It holds no hash, so it can be written before anything else, and a
+reader learns what an archive covers from its first bytes without unpacking the rest. The
+manifest lists `coverage.json` with its SHA-256 like any member, so restore verifies it too.
+
+**Coverage**: an archive *covers* a project when its `coverage.json` lists that project.
+`coverage.json` lists **every** project in the run's scope (all of the host's for a run with no
+`--project`, the named ones otherwise), including a project that contributes nothing: one with no
+key on the broker, or no template. Otherwise a project with nothing to save would never read as
+covered, and `daily` would make a full archive every hour. Only a complete archive (final name,
+after the rename) counts. Freshness is always judged **per project**: the newest archive that covers it. An archive
 of `--project A` says nothing about `B`.
 
 **Not included**: logs and restart budgets (`<state>/<p>/*.log`, `*.restarts`), the cache
@@ -312,8 +326,12 @@ Through `AGENTBUS_TEST_REDIS_URL`, never the person's broker:
   - `daily` runs when a project has no covering archive younger than 24 h, or none at all, and
     does not run when every project is covered (an archive made by hand covers its projects);
   - with projects A and B, a fresh `--project A` archive and B stale or never backed up: it runs;
-  - a manifest that is not the first member, or an unfinished archive under its temporary name,
-    covers nothing;
+  - a `coverage.json` that is not the first member, or an unfinished archive under its temporary
+    name, covers nothing;
+  - a project in scope with no key and no template is listed in `coverage.json` and reads as
+    covered, so the next hourly check makes no archive;
+  - `manifest.json` is the last member, its hashes match every member including
+    `coverage.json`, and a changed `coverage.json` fails restore's verification;
   - not without the dispatch lease;
   - two chores (two projects' services) under one host lock make one archive: the second either
     skips while the lock is held, or judges the coverage again after taking it;
