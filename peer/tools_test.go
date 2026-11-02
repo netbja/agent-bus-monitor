@@ -398,3 +398,44 @@ func TestGrepStopsWithTheTurnAndAtItsEntryCap(t *testing.T) {
 		t.Fatalf("grep past its entry cap = %q", out)
 	}
 }
+
+// A file or a directory swapped for a link between the checks and the open
+// (another local writer) is refused, never followed: the open walks the
+// checked path from the root without following any link (R1).
+func TestToolsRefuseAPathSwappedForALink(t *testing.T) {
+	defer func() { beforeOpen = nil }()
+	for _, c := range []struct{ name, path, swap, target, leak string }{
+		{"a file onto a file outside", "sub/b.txt", "sub/b.txt", "outside/secret.txt", "board outside"},
+		{"a file onto a denied one", "sub/b.txt", "sub/b.txt", "proj/.env", "hunter2"},
+		{"a directory onto one outside", "sub/b.txt", "sub", "outside", "board outside"},
+	} {
+		tl := toolsFixture(t)
+		base := filepath.Dir(tl.Root)
+		if err := os.WriteFile(filepath.Join(base, "outside", "b.txt"), []byte("board outside\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		beforeOpen = func() {
+			p := filepath.Join(tl.Root, c.swap)
+			if err := os.RemoveAll(p); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(base, c.target), p); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out := run(t, tl, "read_file", map[string]any{"path": c.path})
+		if strings.Contains(out, c.leak) || !strings.HasPrefix(out, "refused:") {
+			t.Errorf("%s: read_file = %q, want refused", c.name, out)
+		}
+	}
+	// list_dir too: a directory swapped for a link lists nothing outside.
+	tl := toolsFixture(t)
+	beforeOpen = func() {
+		p := filepath.Join(tl.Root, "sub")
+		_ = os.RemoveAll(p)
+		_ = os.Symlink(filepath.Join(filepath.Dir(tl.Root), "outside"), p)
+	}
+	if out := run(t, tl, "list_dir", map[string]any{"path": "sub"}); strings.Contains(out, "secret.txt") || !strings.HasPrefix(out, "refused:") {
+		t.Errorf("list_dir after the swap = %q, want refused", out)
+	}
+}

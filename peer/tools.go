@@ -14,8 +14,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"unicode/utf8"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -164,7 +165,7 @@ func (t Tools) readFile(rel string, offset, limit int64) string {
 	if msg != "" {
 		return msg
 	}
-	f, msg := openRegular(p)
+	f, msg := openRegular(t.Root, p)
 	if msg != "" {
 		return msg
 	}
@@ -192,10 +193,27 @@ func (t Tools) listDir(rel string) string {
 	if msg != "" {
 		return msg
 	}
-	entries, err := os.ReadDir(p)
+	if beforeOpen != nil {
+		beforeOpen()
+	}
+	// The last component without O_DIRECTORY: a link there is ELOOP, where
+	// O_DIRECTORY would make it ENOTDIR, like a plain file.
+	d, err := openBeneath(t.Root, p, unix.O_NONBLOCK)
+	switch {
+	case errors.Is(err, unix.ELOOP), errors.Is(err, unix.ENOTDIR):
+		return refusedSwap
+	case err != nil:
+		return "error: not a directory"
+	}
+	defer d.Close()
+	if fi, err := d.Stat(); err != nil || !fi.IsDir() {
+		return "error: not a directory"
+	}
+	entries, err := d.ReadDir(-1)
 	if err != nil {
 		return "error: not a directory"
 	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	var b strings.Builder
 	for i, e := range entries {
 		if i == listCap {
@@ -247,7 +265,7 @@ func (t Tools) grep(ctx context.Context, pattern, rel string) string {
 		if msg != "" {
 			return nil
 		}
-		f, msg := openRegular(real)
+		f, msg := openRegular(t.Root, real)
 		if msg != "" {
 			return nil // a pipe, a device, a socket: never opened
 		}
@@ -340,23 +358,72 @@ func (t Tools) busAgents(ctx context.Context) string {
 	return b.String()
 }
 
-// openRegular opens a regular file only. A named pipe would block the open
-// until a writer comes, past the turn's clock and with the receiver lease
-// held: the type is checked before opening (p is resolved, so Lstat sees the
-// file itself), the open never blocks (O_NONBLOCK), and the open file is
-// checked again.
-func openRegular(p string) (*os.File, string) {
-	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
-		if err == nil && fi.IsDir() {
-			return nil, "error: a directory (use list_dir)"
-		}
-		return nil, "error: not a regular file"
+// beforeOpen runs between a path's checks and its open: a test's hook to
+// swap the path for a link there (R1).
+var beforeOpen func()
+
+// refusedSwap is a path that became a link after it was checked.
+const refusedSwap = "refused: the path changed after it was checked (a link appeared)"
+
+// openBeneath opens p, a path under root that resolve has checked, one
+// component at a time from root, following no link (O_NOFOLLOW on each):
+// a component swapped for a link after the checks fails with ELOOP instead
+// of leading outside the root or onto a denied file (R1). It holds on Linux
+// and macOS alike, needing no openat2.
+func openBeneath(root, p string, flags int) (*os.File, error) {
+	rel, err := filepath.Rel(root, p)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+		return nil, fmt.Errorf("not under the root")
 	}
-	f, err := os.OpenFile(p, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	fd, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
+		return nil, err
+	}
+	parts := split(filepath.ToSlash(rel))
+	if rel == "." {
+		parts = nil
+	}
+	for i, part := range parts {
+		fl := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_DIRECTORY
+		if i == len(parts)-1 {
+			fl = unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | flags
+		}
+		next, err := unix.Openat(fd, part, fl, 0)
+		unix.Close(fd)
+		if err != nil {
+			return nil, err
+		}
+		fd = next
+	}
+	return os.NewFile(uintptr(fd), p), nil
+}
+
+// openRegular opens a regular file only, beneath root (openBeneath). A named
+// pipe would block the open until a writer comes, past the turn's clock and
+// with the receiver lease held: the open never blocks (O_NONBLOCK) and the
+// open file's type is checked.
+func openRegular(root, p string) (*os.File, string) {
+	if beforeOpen != nil {
+		beforeOpen()
+	}
+	f, err := openBeneath(root, p, unix.O_NONBLOCK)
+	switch {
+	case errors.Is(err, unix.ELOOP):
+		return nil, refusedSwap
+	case errors.Is(err, unix.ENOTDIR):
+		return nil, refusedSwap // a directory on the path is no longer one
+	case err != nil:
 		return nil, "error: cannot open it"
 	}
-	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+	fi, err := f.Stat()
+	switch {
+	case err != nil:
+		f.Close()
+		return nil, "error: not a regular file"
+	case fi.IsDir():
+		f.Close()
+		return nil, "error: a directory (use list_dir)"
+	case !fi.Mode().IsRegular():
 		f.Close()
 		return nil, "error: not a regular file"
 	}
