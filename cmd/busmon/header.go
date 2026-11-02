@@ -147,16 +147,20 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	var pairs []iconAt // the gauges' icon pairs, leftmost first
 	for i, n := range names {
 		b := d.budgets[n]
+		var l Line
 		if len(b.Windows) == 0 && !b.Unknown && !b.Unlimited {
-			add(budgetSeg(n, b, tier, d.bars), gaugePrio+i, second) // a legacy snapshot (no dispatcher): the old gauge
+			l = budgetSeg(n, b, tier, d.bars) // a legacy snapshot (no dispatcher): the old gauge
+		} else {
+			until, isHeld := held(d.holds, n, d.now)
+			l = quotaSeg(n, b, until, isHeld, d.pace, d.now, tier, d.bars)
+		}
+		if l == nil {
 			continue
 		}
-		until, isHeld := held(d.holds, n, d.now)
-		if l := quotaSeg(n, b, until, isHeld, d.pace, d.now, tier, d.bars); l != nil {
-			add(l, gaugePrio+i, second)                                           // the rightmost provider has the lowest priority
-			if icon := providerIcon(d.icons, n); icon != "" && tier == TierWide { // spec §7.2: the wide tier only
-				pairs = append(pairs, iconAt{len(items) - 1, iconPair(icon, n)})
-			}
+		add(l, gaugePrio+i, second) // the rightmost provider has the lowest priority
+		// spec §7.2: either gauge carries its provider's pair, in the wide tier only (reviewer-codex)
+		if icon := providerIcon(d.icons, n); icon != "" && tier == TierWide {
+			pairs = append(pairs, iconAt{len(items) - 1, iconPair(icon, n)})
 		}
 	}
 	if d.update != "" { // a newer release: the first item to go when space is short

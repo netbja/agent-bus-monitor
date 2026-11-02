@@ -226,9 +226,10 @@ func TestHeaderGaugeIcons(t *testing.T) {
 		"anthropic": {ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 62, ResetsAt: now.Add(2 * time.Hour).Unix(), Minutes: 300, ObservedAt: now.UnixMilli()}}},
 		"xai":       {ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 40, ResetsAt: now.Add(2 * time.Hour).Unix(), Minutes: 300, ObservedAt: now.UnixMilli()}}},
 	}
+	b["openai"] = bus.BudgetSnapshot{SessionPct: 30, WeeklyPct: 12} // a legacy snapshot (no dispatcher): the old gauge, its icon too (reviewer-codex)
 	d := headerData{project: "agent-bus-monitor", health: health{ok: true}, budgets: b, now: now, icons: iconsNerd}
-	wide := headerText(d)
-	if !strings.Contains(wide, nfAlphaA+" claude") || !strings.Contains(wide, nfAlphaX+" grok") {
+	wide := headerLines(d, 220, TierWide)[0].text() // room for every pair
+	if !strings.Contains(wide, nfAlphaA+" claude") || !strings.Contains(wide, nfAlphaX+" grok") || !strings.Contains(wide, nfAlphaO+" openai used") {
 		t.Fatalf("wide header without its icons:\n%s", wide)
 	}
 	for _, w := range []int{80, 100} {
@@ -246,7 +247,7 @@ func TestHeaderGaugeIcons(t *testing.T) {
 	for w := 60; w <= 160; w++ {
 		with, without := headerLines(d, w, TierWide), headerLines(headerData{project: d.project, health: d.health, budgets: b, now: now}, w, TierWide)
 		for i := range with {
-			strip := strings.NewReplacer(nfAlphaA+" ", "", nfAlphaX+" ", "").Replace(with[i].text())
+			strip := strings.NewReplacer(nfAlphaA+" ", "", nfAlphaX+" ", "", nfAlphaO+" ", "").Replace(with[i].text())
 			if !slices.Equal(strings.Fields(strip), strings.Fields(without[i].text())) { // the words; the clock's padding may shrink
 				t.Fatalf("width %d: an icon cost text:\n%q\n%q", w, with[i].text(), without[i].text())
 			}
