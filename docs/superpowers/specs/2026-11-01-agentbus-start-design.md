@@ -214,7 +214,7 @@ Every reader that today takes a role's own profile from `m.Resolve(role)` reads 
 
 | Reader | What it does with the own profile |
 |---|---|
-| `tabProfile` (`trust.go`), so `tabExecutable`, `checkClients` and the trust gate | the client a tab launches: `foureyes:review` is checked as codex and opens codex's trust gate, not claude's |
+| `tabProfile` (`trust.go`), so `tabExecutable`, `checkClients` and the trust gate (`trustPlan`) | the client a tab launches: `foureyes:review` is checked as codex and opens codex's trust gate, not claude's; an `ownProfile` error aborts `up` (below) |
 | `roles doctor` | the configured model, so a client chosen at start is never `model≠` drift |
 | `swap`: own profile and target set | the targets are the manifest's own profile plus its `fallback_profiles`, minus the current own; so with foureyes on `review`, `swap foureyes --profile default` is allowed without `--force` |
 | `swap`: provider rule | `checkFallbacks` checks "another provider" against the manifest's profile at load; swap also refuses a target on the current own profile's provider, since it would be held with it |
@@ -222,6 +222,22 @@ Every reader that today takes a role's own profile from `m.Resolve(role)` reads 
 | `swap`'s recovery line | `agent-spawn <role> <p> --profile <own>` when own differs from the manifest's, so a recovery respawns on the project's profile |
 | `reload` preflight and proof | the client executable checked before the kill and the client/provider `replaced` proves against: the relaunch runs the template's command, so the proof must expect the template's client, or a sentinel reload of a role whose client was chosen at start would kill it and then fail |
 | `reload`'s recovery lines | as swap's |
+
+**A profile that does not resolve stops `up`, it is never skipped.** Today `tabProfile` returns
+`false` for a tab it cannot resolve, `tabExecutable` then returns `""`, `checkClients` skips the
+tab and `trustPlan` treats it as ungated: for a profile, that would open a pane with neither
+check. So `tabProfile` returns an error alongside its result, and an `ownProfile` error (the
+template unreadable or unparsable, or a tab's `--profile` that `roles.toml` no longer defines, or
+that is neither the role's own profile nor one of its `fallback_profiles`) aborts `up` in
+`checkClients`, before any service is started, any workspace or tab opened and any pane
+launched, with the tab and the profile named: `agentbus up: tab foureyes: profile review is not
+in roles.toml (its own profile or fallback_profiles): run agentbus start to choose again, or edit
+<template>`. Exit 1. The same error refuses the trust gate's plan, so no path launches past it.
+Tabs that launch no agent (busmon, dispatch, missions) and a role name `roles.toml` does not have
+keep today's behaviour (skipped by the checks; agent-launch refuses the role itself): only a
+profile the template names is new, so only it is new to check. start's Team row reads the same
+error and shows that role `✗ profile review no longer allowed`, asks for its client, and with
+`--yes` refuses, naming it.
 
 `resumeProfile` (the resume hook) needs no change: it already adds `--profile` for a running
 profile that differs from the manifest's. A choice made at start is the project's configuration,
@@ -317,6 +333,7 @@ herdr: it provisions, prints today's `herdr --session <project>` line, and exits
 | Outside herdr, the session is not listed `running` within 15 s | herdr keeps the terminal; once it exits, start prints `herdr session <project> did not start` and `agentbus up <project>` to run inside it; exits 1 |
 | Outside herdr, `up` fails inside the launched session | after herdr exits, the error and `<state>/start.log`; exits 1 |
 | A `start.team` role or profile the manifest no longer allows | dropped or back to the role's own profile, said on the screen; never refused |
+| A template tab's `--profile` no longer allowed by `roles.toml` (removed, or no longer a fallback), or the template unreadable | `up` (and so start) exits 1 before any service, tab or pane, naming the tab and the profile; start's Team row asks for that role's client again, `--yes` refuses |
 | A client change for a role whose agent is live | refused, pointing at `agentbus retire <role>` (or `swap` for a temporary change) |
 | No terminal and no `--yes` | prints the deduced values, says `--yes` takes them, exits 2; writes nothing |
 | Folder name gives no valid project | asks; with `--yes`, refuses with the rule and `--name` |
@@ -371,7 +388,12 @@ herdr: it provisions, prints today's `herdr --session <project>` line, and exits
   still pass.
 - **Own profile** (`ownProfile`, a table: no template, a tab without `--profile`, a tab with
   one, a pop with no tab, an unreadable template), then one test per reader of the table above:
-  `tabProfile`/`checkClients`/trust gate check codex for `foureyes:review`; doctor reports no
+  `tabProfile`/`checkClients`/trust gate check codex for `foureyes:review`; a syntactically
+  valid template whose tab names a profile `roles.toml` no longer defines, one that is no longer
+  among the role's fallbacks, and an unparsable template each make `up` exit 1 with the tab and
+  profile named, before the fake service manager, herdr or any launch records a call (no
+  workspace, tab or pane; `trustPlan` never reached with an empty client); a busmon or dispatch
+  tab and an unknown role keep today's skip; doctor reports no
   drift; swap's target set includes the manifest's own profile and excludes the current own,
   refuses a target on the current own's provider, and its recovery line carries `--profile`;
   `swap --back` and the `{p}:fallback` record use the template's profile and provider; reload's
