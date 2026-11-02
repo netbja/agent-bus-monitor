@@ -1130,7 +1130,9 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). The answer window
   (ask-replaced-answer) follows `replaced_by` as the bus does, for a question carried unchanged (`followAsk`,
   `bus.SameQuestion`), its draft too (`answerDraft`); a question changed, dropped or closed keeps the text, says so,
-  and a second send makes it a message to the asking agent (`answerToMessage`); the master skill forbids replacing an
+  and a second send makes it a message to the asking agent (`answerToMessage`), as does closing it (Esc keeps it as a
+  message draft to that agent); a message draft is never overwritten, a second one held after it (`heldDrafts`, each
+  opening once the one before is sent or emptied); the master skill forbids replacing an
   ask the person may be answering. busmon: the reader's ask page (`tea_reader.go`, `ModeShellAsk`, `!`/`w`/F4; `w` with no ask open
   opens the compose window to master, `ActAskOrWrite`, busmon-keys; Enter on a For you ask or in the agent's page; `askpanel.go`'s bodies), counts and fade follow open
   questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,

@@ -86,6 +86,7 @@ type uiState struct {
 	reqOpen        reqOpen           // the Requests view's expanded groups and folded section
 	compose        *composeState     // the compose window, when open (tea_compose.go)
 	msgCompose     composeDraft      // the window's message draft while it is closed
+	heldDrafts     []composeDraft    // message drafts kept after msgCompose, each opening in turn
 	askDrafts      map[string]string // free answers being written, by ask|question
 	askDraft       string            // a directive held once: its recipient has an open ask
 	broadcastDraft string            // a broadcast warned about once: the next send sends it

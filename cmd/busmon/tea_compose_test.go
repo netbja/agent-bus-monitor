@@ -338,3 +338,103 @@ func TestAnswerDraftFollowsAReplacedAsk(t *testing.T) {
 		t.Fatalf("the draft did not follow: %+v", c)
 	}
 }
+
+// orphanAnswer is the window after a free answer was typed and its question
+// closed meanwhile: the first send left it an orphan, the text in it.
+func orphanAnswer(t *testing.T, fw *fakeWriter) (Model, string) {
+	t.Helper()
+	m := keys(t, shellWith(t, 140, 40, shellConfig{w: fw}, false), '!', 'o')
+	m = typeText(t, m, "a long considered answer")
+	a := m.snap.asks[0]
+	a.State = "withdrawn"
+	m.snap.asks = append([]bus.Ask{a}, m.snap.asks[1:]...)
+	m, cmd := pressCmd(t, m, kCtrlS)
+	m = run(t, m, cmd)
+	if c := m.ui.compose; c == nil || !c.orphan {
+		t.Fatalf("not an orphan: %+v", c)
+	}
+	return m, a.From
+}
+
+// escapeAll closes the window and every page with Esc.
+func escapeAll(t *testing.T, m Model) Model {
+	t.Helper()
+	for range 5 {
+		if m.ui.compose == nil && m.rd.top() == nil {
+			return m
+		}
+		m = keys(t, m, kEsc)
+	}
+	t.Fatal("Esc does not close the window and the pages")
+	return m
+}
+
+// Esc on an orphan answer keeps its text where the person finds it again: a
+// message draft to the asking agent, which the message window opens on.
+func TestOrphanAnswerEscKeepsAMessageDraft(t *testing.T) {
+	pinLocal(t)
+	m, from := orphanAnswer(t, &fakeWriter{left: 1})
+	m = escapeAll(t, m)
+	if !m.composeHasDraft() {
+		t.Fatal("the orphan's text is no draft")
+	}
+	m = keys(t, m, 'I')
+	if c := m.ui.compose; c == nil || c.kind != composeMessage || c.recipient() != from || c.area.value() != "a long considered answer" {
+		t.Fatalf("the message window did not open on the orphan's text: %+v", c)
+	}
+}
+
+// An earlier message draft is never overwritten: neither when the orphan
+// becomes a message (second send) nor when it is closed (Esc); each draft
+// opens in turn, the earlier one again once the other is sent.
+func TestOrphanAnswerKeepsAnEarlierMessageDraft(t *testing.T) {
+	pinLocal(t)
+	earlier := composeDraft{to: "@docs", body: "an earlier draft"}
+	t.Run("converted", func(t *testing.T) {
+		fw := &fakeWriter{left: 1}
+		m, from := orphanAnswer(t, fw)
+		m.ui.msgCompose = earlier
+		m, cmd := pressCmd(t, m, kCtrlS)
+		m = run(t, m, cmd)
+		if c := m.ui.compose; c == nil || c.kind != composeMessage || c.recipient() != from {
+			t.Fatalf("not converted: %+v", c)
+		}
+		if !strings.Contains(m.ui.flash, "earlier") {
+			t.Errorf("the flash does not say the earlier draft is kept: %q", m.ui.flash)
+		}
+		if c := m.ui.compose; c != nil {
+			text := c.area.value()
+			c.area.set("")
+			if !m.composeHasDraft() {
+				t.Error("the earlier draft does not count while the converted window is empty")
+			}
+			c.area.set(text)
+		}
+		for range 2 { // master's other open ask holds the first send once
+			m, cmd = pressCmd(t, m, kCtrlS)
+			m = run(t, m, cmd)
+		}
+		if !slices.Equal(fw.sent, []string{"cmd " + from + " a long considered answer"}) || m.ui.msgCompose != earlier {
+			t.Fatalf("sent %q, draft %+v, flash %q, open %v", fw.sent, m.ui.msgCompose, m.ui.flash, m.ui.compose != nil)
+		}
+	})
+	t.Run("closed", func(t *testing.T) {
+		fw := &fakeWriter{left: 1}
+		m, from := orphanAnswer(t, fw)
+		m.ui.msgCompose = earlier
+		m = escapeAll(t, m)
+		m = keys(t, m, 'I')
+		if c := m.ui.compose; c == nil || c.area.value() != earlier.body {
+			t.Fatalf("the earlier draft does not open first: %+v", c)
+		}
+		m, cmd := pressCmd(t, m, kCtrlS)
+		m = run(t, m, cmd)
+		if !slices.Equal(fw.sent, []string{"cmd docs an earlier draft"}) {
+			t.Fatalf("sent %q", fw.sent)
+		}
+		m = keys(t, m, 'I')
+		if c := m.ui.compose; c == nil || c.recipient() != from || c.area.value() != "a long considered answer" {
+			t.Fatalf("the orphan's text does not open next: %+v", c)
+		}
+	})
+}
