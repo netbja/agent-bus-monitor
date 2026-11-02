@@ -169,3 +169,100 @@ func TestRunnerRefusesASecondPeer(t *testing.T) {
 		t.Fatalf("Run = %v, want refused: another peer holds the lease", err)
 	}
 }
+
+// A tracked request (a directive with a task) is accepted, answered and
+// completed: the board entry is done and the response is on its thread
+// (reviewer-codex).
+func TestRunnerCompletesATrackedRequest(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 200, answerJSON })
+	_, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	id, err := b.Request(ctx, "explain-board", "master", "local", "", "Explain bus/board.go", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs := waitThread(t, b, id, 2)
+	stop()
+	if evs[1].Type != bus.CmdReply || evs[1].Message != "board.go holds the board." {
+		t.Fatalf("response = %+v", evs[1])
+	}
+	board, err := b.Board(ctx)
+	if err != nil || board["explain-board"].State != "done" {
+		t.Fatalf("board = %+v %v, want the request done", board["explain-board"], err)
+	}
+	if len(evs) != 2 {
+		t.Fatalf("thread = %d entries, want the request and one response", len(evs))
+	}
+}
+
+// A wake=no entry is a notice (a gate closed without a verdict, a person's
+// close): acknowledged, no turn, no reply (foureyes). A reply from another
+// local-llm peer gets no turn either, so two peers never answer each other
+// forever.
+func TestRunnerTurnsOnlyOnWhatAsksForOne(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "other", "idle", "", bus.AgentIdent{Client: "local-llm"}); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { calls.Add(1); return 200, answerJSON })
+	_, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	notice, err := b.CmdNoWake(ctx, "master", "local", bus.CmdReply, "9-0", "gate dmk closed without a verdict")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromPeer, err := b.Cmd(ctx, "other", "local", bus.CmdReply, "8-0", "what do you think?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, last, 2) // entries are handled in order: the two before are done
+	stop()
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("%d turns, want only the directive's", n)
+	}
+	for _, id := range []string{"9-0", "8-0"} {
+		if evs, _ := b.Thread(ctx, id); len(evs) != 1 {
+			t.Errorf("thread %s = %d entries, want no reply (notice %s, peer %s)", id, len(evs), notice, fromPeer)
+		}
+	}
+}
+
+// Once the reply is sent, a failed report is logged, never a reason to
+// answer again (foureyes).
+func TestRunnerAnswersOnceWhenTheReportFails(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 200, answerJSON })
+	var fails atomic.Int32
+	out := &syncBuf{}
+	r := &Runner{Bus: b, Agent: "local", Consumer: "test", Turn: newTurn(t, srv, time.Minute), RetryEvery: 20 * time.Millisecond, LeaseWait: time.Second, Out: out,
+		report: func(ctx context.Context, agent, kind, msg string) (string, error) {
+			if fails.Add(1) == 1 {
+				return "", context.DeadlineExceeded
+			}
+			return b.Report(ctx, agent, kind, msg)
+		}}
+	rctx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- r.Run(rctx) }()
+	id, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, id, 2)
+	time.Sleep(300 * time.Millisecond) // a second answer would come now
+	cancel()
+	<-done
+	if evs, _ := b.Thread(ctx, id); len(evs) != 2 {
+		t.Fatalf("thread = %d entries, want one reply", len(evs))
+	}
+	if !strings.Contains(out.String(), "report") {
+		t.Fatalf("the failed report is not said:\n%s", out)
+	}
+}

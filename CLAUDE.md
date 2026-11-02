@@ -755,8 +755,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   the adapter `scripts/local-llm-peer --spec-file <launch.json>`; the profile's `model` must equal its
   endpoint's (`Resolve`); one receiver lease from before the drain to its exit (`Bus.TakeReceiver`, then
   `Receiver.Drain` and `Deliver` under it, so the dispatcher sees rule 2 throughout); per entry (directive,
-  challenge, reply) a fresh turn (`Turn.Run`: the role prompt `roles/local.md`, the entry and its thread, at most
-  8 tool calls, `turn_timeout`), the reply on the entry's thread, a report, its own `working`/`blocked`/`idle`.
+  challenge, reply; never a `wake=no` notice nor a reply from another local-llm peer; a tracked request
+  accepted, then completed with the answer) a fresh turn (`Turn.Run`: the role prompt `roles/local.md`, the entry and its thread, at most
+  8 tool calls, `turn_timeout`), the reply on the entry's thread, a report, its own `working`/`blocked`/`idle`;
+  once the reply is sent, a failed report or status is logged, never answered again.
   The client follows no redirect and uses no proxy; only transport errors, 5xx, 408, 429 and 404 are retried
   (`blocked`, the entry kept, every 30 s), any other refusal fails the turn with a reply. Tools: `read_file`,
   `list_dir`, `grep` under the project root (no `..`, symlinks re-checked, regular files only, the role's
