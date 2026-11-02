@@ -2,6 +2,8 @@
 
 Status: spec, not built. Plan v0.26 task `backup`, review subject `backup-spec`. Bernard's answers
 to the four open questions recorded 2026-11-02 (subject `backup-answers`, see "Answers" at the end).
+Bernard's second round (subject `backup-zstd`): Zstandard instead of gzip, a command run after each
+archive, remote targets later (see "Answers" at the end).
 
 ## Why
 
@@ -28,9 +30,14 @@ in the projects directory. `--dry-run` prints what would be read or written and 
 
 ## What an archive holds
 
-One file, `agentbus-backup-<host>-<UTC yyyymmddThhmmssZ>.tar.gz`, mode 0600, written to a
+One file, `agentbus-backup-<host>-<UTC yyyymmddThhmmssZ>.tar.zst`, mode 0600, written to a
 temporary name in the destination and renamed when complete (a crash leaves no half archive
-under the final name):
+under the final name). It is a tar stream compressed with **Zstandard** (answer 5), written by
+`github.com/klauspost/compress/zstd` at **v1.20.3** (pure Go, BSD-3-Clause, released 2026-10-12; a new
+dependency of the module): its default level (`SpeedDefault`, zstd level 3), one encoder goroutine
+(`WithEncoderConcurrency(1)`, so a backup never takes every core), the frame's checksum on. Any
+`zstd -d` or `tar --zstd` reads it. Restore reads the same format only; there is no `.tar.gz` to read,
+since nothing was ever written in it:
 
 ```
 coverage.json                  first: format, created_at, host, the projects in scope
@@ -228,6 +235,52 @@ What the person accepts with `daily`: a service now writes outside its state dir
 `backup.dir`. Once a day the broker serves nobody else for each project's `EXEC` (see "Redis"
 above); its length is in the record. Restore is never scheduled: only the person runs it.
 
+## After the archive: `backup.after_command`
+
+Answer 6: a command of the person's own, run after each complete archive, to send it somewhere else
+(`restic backup /data/backups/agentbus`, an `rclone copy`, an `rsync`). Empty by default: nothing runs.
+
+- **When:** after the archive is renamed to its final name and before the retention, for a backup by
+  hand and a scheduled one alike. A run that wrote no archive (refused, failed) runs nothing.
+  `--dry-run` prints the command it would run and runs nothing.
+- **How it is run:** the value is one command line, split into words as a shell would split them
+  (quotes kept, no expansion), and started directly: no shell, so nothing in the archive's name or
+  the environment can be read as shell syntax. A person who wants a pipe or `&&` writes
+  `sh -c '…'` themselves. Its working folder is `backup.dir`; stdin is empty.
+- **What it receives:** the archive by environment, never as an argument, so a command like
+  `restic backup /data/backups/agentbus` needs no change:
+  - `AGENTBUS_BACKUP_ARCHIVE`: the archive's absolute path;
+  - `AGENTBUS_BACKUP_DIR`: `backup.dir`;
+  - `AGENTBUS_BACKUP_PROJECTS`: the projects it covers, comma-separated;
+  - `AGENTBUS_BACKUP_SCHEDULED`: `1` for a scheduled run, `0` by hand.
+- **Never a secret:** the command starts from the backup process's environment minus everything that
+  can carry the broker's or a client's secret: `REDIS_PASSWORD`, `REDIS_URL`, `REDISCLI_AUTH`, every
+  variable whose name contains `PASSWORD`, `PASSWD`, `TOKEN` or `SECRET` or ends in `_KEY`, `_PASS` or
+  `_PWD` (any case), and every one whose `NAME=value` `health.Sensitive` flags (a best-effort detector of
+  credential shapes), except the ones the person names in `backup.after_env` (a list of variable names, for example
+  `["RESTIC_PASSWORD_FILE", "RESTIC_REPOSITORY"]`). It is never given the age identity, which agentbus
+  never holds. `secrets.age` stays encrypted inside the archive.
+- **Timeout:** `backup.after_timeout` (default `30m`). The command runs in its own process group; at
+  the timeout the group gets SIGTERM, then SIGKILL 10 s later.
+- **Output:** stdout and stderr go to the backup's log (the service log for a scheduled run, stderr by
+  hand), at most 64 KiB kept, each line through `health.Redact`.
+- **Failure:** a non-zero exit, a timeout or a command that cannot start is recorded in
+  `backup-last.json` (`after`: the exit code or `timeout` or `not started`, and the time, never the
+  output). It is a **health warning** (below), never an error of the backup: the archive is complete
+  and stays, the retention still runs, and **nothing ever deletes or changes the archive because of
+  the command**. The next archive runs it again.
+- **A person's setting only:** `backup.after_command`, `backup.after_env` and `backup.after_timeout`
+  are read from the person's `config.toml` alone:
+  - no environment variable (an agent's or a service's environment cannot set them);
+  - refused from a project's services env file;
+  - never written by agentbus: busmon's C page (the one writer of `config.toml` with
+    `agentbus identity set`) shows them read-only with "edit config.toml yourself";
+  - new with this step, the shipped tool rules deny every role `Edit`/`Write` of
+    `~/.config/agentbus/config.toml` (defence in depth: an agent with a shell could still write the
+    file; that is the bus's general limit against the local user, not new here).
+
+  The command runs with the person's own rights; with `backup.schedule = daily` it runs unattended.
+
 ## Settings
 
 All of them are in the registry (`config/keys.go`), group Backup, read by `agentbus backup` and the
@@ -240,17 +293,20 @@ dispatch service:
 | `backup.keep` | `7` | archives of this host kept; `0` keeps every one |
 | `backup.warn_after` | `7d` | the health reminder; `0` = off |
 | `backup.age_recipient` | none | an `age1…` public key: not a secret |
+| `backup.after_command` | empty | run after each archive (above); `config.toml` only |
+| `backup.after_env` | `[]` | variable names passed to it despite looking secret; `config.toml` only |
+| `backup.after_timeout` | `30m` | its bound; `config.toml` only |
 
 ## Speed
 
-One `MULTI` per project, files streamed into the tar as they are read, gzip at its default
-level. The history archive dominates (capped by `history.max_mb`, 256 MiB by default); the rest
+One `MULTI` per project, files streamed into the tar as they are read, zstd at its default
+level (faster than gzip for a smaller file). The history archive dominates (capped by `history.max_mb`, 256 MiB by default); the rest
 is small. No step waits on the network.
 
 ## Sentinel and health
 
 A health check `backup`. It runs in each project's health loop and judges **that project**, from
-two independent facts:
+three independent facts:
 
 - **Age:** **warn** when the newest archive covering the project is older than
   `backup.warn_after` (default 7 days), or there is none. `backup.warn_after = 0` turns off this
@@ -265,7 +321,12 @@ two independent facts:
   `warn_after = 0` never silences a failure. With `schedule = off`, the attempt record is not
   read: a failure from an earlier `daily` period no longer warns.
 
-**Ok** when neither warns; **unknown** when the directory or the record cannot be read. The
+- **After command:** **warn** when the latest run of `backup.after_command` for an archive covering
+  the project failed (exit, timeout, not started), whatever the archive's age; it clears when a later
+  archive's command succeeds, or when `backup.after_command` is emptied. `warn_after = 0` never
+  silences it. The detail names the exit or the timeout, never the command's output.
+
+**Ok** when none warns; **unknown** when the directory or the record cannot be read. The
 detail names the folder read (always), the age of the covering archive, and the failed attempt's
 time and error. Its place is **for you**, with the command `agentbus backup`. Sentinel only relays
 it as any warn; it never runs a backup or a restore.
@@ -282,6 +343,16 @@ it as any warn; it never runs a backup or a restore.
 - Stop, restart or reconfigure the broker; write a service unit or the `installed` marker.
 - Run a backup unattended unless `backup.schedule = daily`; include secrets in an unattended run
   without `backup.age_recipient`; run a restore unattended, ever.
+- Delete or change an archive because `backup.after_command` failed; give that command a secret,
+  the archive as an argument, or a shell; take it from anywhere but the person's `config.toml`.
+
+## Later: remote targets
+
+Answer 7: sending archives to a remote target (`sftp`, `https`, `s3`, `nfs`) is a later step, with
+its own spec. Until then `backup.dir` on a mounted folder (an NFS mount included) or
+`backup.after_command` (restic, rclone, rsync) covers it. That later step will have to keep the rules
+here: no secret in clear on the way, the credentials the person's own and never in `config.toml`, and
+the local archive kept until the remote copy is confirmed.
 
 ## Tests (a disposable Redis only)
 
@@ -342,10 +413,30 @@ Through `AGENTBUS_TEST_REDIS_URL`, never the person's broker:
   - with one and a fake `age`, the secrets are in `secrets.age` only;
   - with one and no `age`, the archive is written, the error recorded and the health check warns;
   - `backup-last.json` is 0600 and holds no secret.
+- **Zstandard**: an archive is a valid zstd frame with its checksum (`zstd -t` on the test file); a
+  round trip through the module reads every member back byte for byte; a truncated or corrupted
+  `.tar.zst` fails restore's verification before any write; retention and coverage match only the
+  `.tar.zst` name pattern.
+- **After command** (a fake command on a temporary PATH):
+  - empty: nothing runs;
+  - it runs once per complete archive, after the rename and before the retention, in `backup.dir`,
+    with `AGENTBUS_BACKUP_ARCHIVE` set to the archive and no argument added;
+  - a refused or failed backup runs nothing; `--dry-run` prints it and runs nothing;
+  - quotes are split as a shell would, and `$HOME`, `;`, `|` in the value reach the command as
+    literal text (no shell);
+  - its environment holds no `REDIS_PASSWORD`, `REDIS_URL`, `REDISCLI_AUTH` nor a variable named like
+    a secret, except one listed in `backup.after_env`;
+  - an exit 3, a timeout (a sleep killed with its children) and a missing binary each leave the
+    archive byte for byte, record the failure and make the health check warn; a later success clears
+    it;
+  - set in the environment or a services env file: not read (the warning names the key); busmon's C
+    page shows the three keys read-only and offers no edit;
+  - the shipped manifest denies every role `Edit`/`Write` of `~/.config/agentbus/config.toml`.
 
 ## Answers (Bernard, 2026-11-02)
 
-The four questions this spec left open, as Bernard answered them. The text above is written to
+The questions this spec left open, as Bernard answered them (1 to 4 on 2026-11-02, 5 to 7 in a
+second round the same day). The text above is written to
 match.
 
 1. **Automatic backups?** By hand by default, with the 7-day health reminder, but everything is
@@ -359,3 +450,8 @@ match.
    refused; upgrading that broker first is the way through.
 4. **Secrets by key or by passphrase?** An age recipient key, with no prompt (`backup.age_recipient`
    or `--recipient`). No passphrase mode.
+5. **Compression?** Zstandard instead of gzip: `.tar.zst`, through `klauspost/compress/zstd` v1.20.3.
+6. **A command after each archive?** Yes: `backup.after_command`, empty by default, the person's own
+   setting in `config.toml` only (for example `restic backup /data/backups/agentbus`); its failure is a
+   health warning and never touches the archive. See "After the archive".
+7. **Remote targets (sftp, https, s3, nfs)?** Later, a step of its own. See "Later: remote targets".
