@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/quota"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -211,6 +213,43 @@ func TestIconsOffIsToday(t *testing.T) {
 		wantANSI, _ := os.ReadFile(filepath.Join("testdata", "golden", base+".ansi"))
 		if got := m.View().Content + "\n"; got != string(wantANSI) {
 			t.Errorf("%s: off after nerd: the ANSI differs from today's golden", base)
+		}
+	}
+}
+
+// busmon-icons §7.2: the header's gauges carry their provider's icon pair in
+// the wide tier only, and only as far as no text is lost: the pairs are the
+// first thing to go for room.
+func TestHeaderGaugeIcons(t *testing.T) {
+	now := time.Now()
+	b := map[string]bus.BudgetSnapshot{
+		"anthropic": {ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 62, ResetsAt: now.Add(2 * time.Hour).Unix(), Minutes: 300, ObservedAt: now.UnixMilli()}}},
+		"xai":       {ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 40, ResetsAt: now.Add(2 * time.Hour).Unix(), Minutes: 300, ObservedAt: now.UnixMilli()}}},
+	}
+	d := headerData{project: "agent-bus-monitor", health: health{ok: true}, budgets: b, now: now, icons: iconsNerd}
+	wide := headerText(d)
+	if !strings.Contains(wide, nfAlphaA+" claude") || !strings.Contains(wide, nfAlphaX+" grok") {
+		t.Fatalf("wide header without its icons:\n%s", wide)
+	}
+	for _, w := range []int{80, 100} {
+		lines := headerLines(d, w, TierMedium)
+		off := d
+		off.icons = iconsOff
+		want := headerLines(off, w, TierMedium)
+		for i := range lines {
+			if lines[i].text() != want[i].text() {
+				t.Errorf("medium %d: icons in the header:\n%q\n%q", w, lines[i].text(), want[i].text())
+			}
+		}
+	}
+	// Short of room in the wide tier: the pairs go, the text stays.
+	for w := 60; w <= 160; w++ {
+		with, without := headerLines(d, w, TierWide), headerLines(headerData{project: d.project, health: d.health, budgets: b, now: now}, w, TierWide)
+		for i := range with {
+			strip := strings.NewReplacer(nfAlphaA+" ", "", nfAlphaX+" ", "").Replace(with[i].text())
+			if !slices.Equal(strings.Fields(strip), strings.Fields(without[i].text())) { // the words; the clock's padding may shrink
+				t.Fatalf("width %d: an icon cost text:\n%q\n%q", w, with[i].text(), without[i].text())
+			}
 		}
 	}
 }

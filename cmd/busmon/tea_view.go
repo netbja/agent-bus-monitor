@@ -85,7 +85,7 @@ func (m Model) grid() *grid {
 func (m Model) headerData() headerData {
 	s := m.snap
 	_, _, between := m.lists.reqView.titleCounts()
-	return headerData{project: m.cfg.project, health: s.health, guardian: s.guardian, dispatch: s.dispatch,
+	return headerData{icons: m.cfg.settings.Icons, project: m.cfg.project, health: s.health, guardian: s.guardian, dispatch: s.dispatch,
 		missions: s.missions, pilot: s.pilot, self: m.cfg.self, update: s.update, note: s.configNote,
 		waiting: owedText(m.lists.reqView, m.now), between: between, forYou: len(decisions(m.forYou)),
 		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets, bars: m.barView(),
