@@ -1,5 +1,5 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                       15:04:05 
- paused · resumes in 1h52 (lunch)   claude 5h ███▏  62% │ 7d ████▏      41%   grok 5h █████ 100% held 15:44             
+ paused · resumes in 1h52 (lunch)   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━│ 100% held 15:44             
 ╭─ For you ───────────── 4 for you · 2 unread ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ─╮
 │  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   │
 │  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…│
@@ -16,6 +16,7 @@
 ╭─ Tokens · today · anthropic 62% 5h · xai held 40m ──────────────────────────────────────────────────────── esc back ─╮
 │ Accounts                                                                                                             │
 │   anthropic  5h  ██████▎     62%  resets 2h00     7d  ████▏       41%  resets 72h00                                  │
+│                                                                                                                      │
 │   xai        5h  ██████████ 100%  held 40m                                                                           │
 │ Projects                     in      out  7 days                                                                     │
 │   agent-bus-monitor       ~1.5M    ~289k     ▃ █▆  ████████████████████     ~5.1M                                    │
@@ -27,7 +28,6 @@
 │   9 more · no proved session  (a lists them)                                                                         │
 │                                                                                                                      │
 │ in = input + cache writes · out = output · ~ still counting · no cost, by rule                                       │
-│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

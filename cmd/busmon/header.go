@@ -313,7 +313,7 @@ func budgetSeg(name string, b bus.BudgetSnapshot, tier Tier, bars barView) Line 
 	l := Line{{Text: name, Role: pr}, {Text: " used" + sep, Role: RoleMuted}}
 	gauge := func(label, window string, pct float64) {
 		l = append(l, Seg{Text: label + " ", Role: RoleMuted})
-		l = append(l, bars.gauge(barKey(key, window), pct, cells, budgetRole(pct))...)
+		l = append(l, bars.thin(barKey(key, window), pct, -1, cells, budgetRole(pct))...) // a legacy snapshot has no reset: no pace mark
 		l = append(l, Seg{Text: fmt.Sprintf(" %.0f%%", pct), Role: RoleText})
 	}
 	gauge("session", "session", b.SessionPct)

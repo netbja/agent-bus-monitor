@@ -24,8 +24,15 @@ func TestQuotaGauges(t *testing.T) {
 	}
 	aged := fresh
 	aged.ObservedAt = now.Add(-time.Hour).UnixMilli()
-	if got := quotaSeg("xai", aged, time.Time{}, false, nil, now, TierNarrow, barView{}).text(); got != "grok 5h 82% ?" {
+	// usage-bars: an aged reading keeps its level colour and says its age.
+	agedLine := quotaSeg("xai", aged, time.Time{}, false, nil, now, TierNarrow, barView{})
+	if got := agedLine.text(); got != "grok 5h 82% "+GlyphNone+" 1h" {
 		t.Fatalf("aged %q", got)
+	}
+	for _, s := range agedLine {
+		if s.Text == "82%" && s.Role != budgetRole(82) {
+			t.Fatalf("aged figure role %v, want its level", s.Role)
+		}
 	}
 	if got := quotaSeg("moonshot", bus.BudgetSnapshot{Unknown: true}, time.Time{}, false, nil, now, TierNarrow, barView{}).text(); got != "kimi ?" {
 		t.Fatalf("unknown %q", got)
@@ -41,18 +48,20 @@ func TestQuotaShowsBothWindowsByTierAndAttachesMarkers(t *testing.T) {
 	long := bus.BudgetWindow{Name: "7d", UsedPct: 96, ResetsAt: now.Add(48 * time.Hour).Unix(), Minutes: 10080, ObservedAt: now.Add(-time.Hour).UnixMilli()}
 	b := bus.BudgetSnapshot{Windows: []bus.BudgetWindow{long, short}, ObservedAt: now.UnixMilli()}
 	medium := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierMedium, barView{})
-	if got, want := medium.text(), "claude 5h 88% │ 7d 96% ?"; got != want {
+	if got, want := medium.text(), "claude 5h 88% │ 7d 96% "+GlyphNone+" 1h"; got != want {
 		t.Fatalf("medium %q want %q", got, want)
 	}
-	if medium[0].Role != RoleProvAnthropic || medium[3].Role != RoleAttention || medium[6].Role != RoleMuted { // the label in the provider's colour, then each window's
+	if medium[0].Role != RoleProvAnthropic || medium[3].Role != RoleAttention || medium[6].Role != RoleError { // the label in the provider's colour, then each window's, aged or not
 		t.Fatalf("medium colours not attached to each window: %+v", medium)
 	}
 	wide := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide, barView{})
-	if got := wide.text(); !strings.HasPrefix(got, "claude 5h "+strings.Repeat(GlyphBarFull, 4)+GlyphEighth3+" 88% │ 7d ") || !strings.Contains(got, "96% ?") {
+	// The thin line (usage-bars): 88 % fills 4 of 5 cells, and 4 of the 5 hours
+	// are gone, so the pace mark takes the fifth.
+	if got := wide.text(); !strings.HasPrefix(got, "claude 5h "+strings.Repeat(GlyphThinBar, 4)+glyphVertical+" 88% │ 7d ") || !strings.Contains(got, "96% "+GlyphNone+" 1h") {
 		t.Fatalf("wide %q", got)
 	}
-	withPalette(t, "dark", false, 16) // whole steps without true colour
-	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide, barView{}).text(); !strings.HasPrefix(got, "claude 5h "+strings.Repeat(GlyphGauge, 4)+GlyphBarEmpty+" 88% │ 7d ") {
+	withPalette(t, "dark", false, 16) // the light track without true colour
+	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide, barView{}).text(); !strings.Contains(got, " 7d "+strings.Repeat(GlyphThinBar, 7)+glyphVertical+GlyphThinBar+glyphHorizontal) { // 96 % = 9 cells, 5 of 7 days gone
 		t.Fatalf("wide, 16 colours %q", got)
 	}
 	heldLine := quotaSeg("anthropic", b, time.Unix(short.ResetsAt, 0), true, nil, now, TierMedium, barView{})
@@ -155,7 +164,7 @@ func TestHeaderPrefersFreshWindowsAndShowsAStickyHold(t *testing.T) {
 	b := bus.BudgetSnapshot{Windows: []bus.BudgetWindow{
 		{Name: "7d", UsedPct: 97, ResetsAt: now.Add(72 * time.Hour).Unix(), ObservedAt: now.Add(-5 * time.Hour).UnixMilli()},
 		{Name: "5h", UsedPct: 10, ResetsAt: now.Add(time.Hour).Unix(), ObservedAt: now.UnixMilli()}}}
-	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierMedium, barView{}).text(); got != "claude 5h 10% │ 7d 97% ?" {
+	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierMedium, barView{}).text(); got != "claude 5h 10% │ 7d 97% "+GlyphNone+" 5h" { // usage-bars: the aged reading says its age
 		t.Fatalf("header %q: fresh/stale windows not independently displayed", got)
 	}
 	unknown := bus.BudgetSnapshot{Unknown: true}
@@ -197,12 +206,14 @@ func TestQuotaGaugeBar(t *testing.T) {
 	b := bus.BudgetSnapshot{ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{
 		{Name: "5h", UsedPct: 80, ResetsAt: now.Add(time.Hour).Unix()}}}
 	pace := map[string]string{quotaWindowKey("anthropic", b.Windows[0]): "~25m"}
-	want := "claude 5h " + strings.Repeat(GlyphBarFull, 4) + "  80% ~25m" // one track cell, then the space before the figure
+	// The thin line (usage-bars): 80 % fills 4 of 5 cells, 4 of the 5 hours are
+	// gone, so the pace mark takes the fifth.
+	want := "claude 5h " + strings.Repeat(GlyphThinBar, 4) + glyphVertical + " 80% ~25m"
 	if got := quotaSeg("anthropic", b, time.Time{}, false, pace, now, TierWide, barView{}).text(); got != want {
 		t.Fatalf("bar %q, want %q", got, want)
 	}
 	withPalette(t, "dark", false, 16)
-	want = "claude 5h " + strings.Repeat(GlyphGauge, 4) + GlyphBarEmpty + " 80% ~25m"
+	want = "claude 5h " + strings.Repeat(GlyphThinBar, 4) + glyphVertical + " 80% ~25m" // the same cells, the light track unseen here
 	if got := quotaSeg("anthropic", b, time.Time{}, false, pace, now, TierWide, barView{}).text(); got != want {
 		t.Fatalf("bar, 16 colours %q, want %q", got, want)
 	}

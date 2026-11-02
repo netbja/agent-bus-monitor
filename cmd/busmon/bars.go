@@ -64,6 +64,84 @@ func gaugeSegs(pct float64, cells int, role Role, lead bool) Line {
 	return append(l, Seg{Text: strings.Repeat(" ", cells-used), Role: RoleDim, Track: true})
 }
 
+// thinGauge is the header's account gauge (usage-bars, Bernard's A4): one
+// GlyphThinBar per cell, the filled ones in role, the rest the track (the
+// line colour in true colour; a light ─ without it, so filled and empty
+// differ without colour), and a pace mark │ in the text colour at pace %
+// of the cells (the share of the window gone; < 0 none). Whole cells: a
+// non-zero value fills one, a value under 100 never fills all. lead lifts
+// the leading filled cell (the bar is sliding).
+func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
+	filled := clamp(int(math.Round(pct*float64(cells)/100)), 0, cells)
+	if pct > 0 && filled == 0 {
+		filled = 1
+	}
+	if pct < 100 && filled == cells {
+		filled = cells - 1
+	}
+	mark := -1
+	if pace >= 0 {
+		mark = clamp(int(math.Round(pace*float64(cells)/100)), 0, cells-1)
+	}
+	track, trackRole := GlyphThinBar, RoleLine
+	if !th.Animated() {
+		track, trackRole = glyphHorizontal, RoleDim
+	}
+	var l Line
+	add := func(s Seg) {
+		if n := len(l); n > 0 && l[n-1].Role == s.Role && l[n-1].Lift == s.Lift {
+			l[n-1].Text += s.Text
+			return
+		}
+		l = append(l, s)
+	}
+	for i := 0; i < cells; i++ {
+		switch {
+		case i == mark:
+			add(Seg{Text: glyphVertical, Role: RoleText})
+		case i < filled:
+			s := Seg{Text: GlyphThinBar, Role: role}
+			if lead && i == filled-1 {
+				s.Lift = barLift
+			}
+			add(s)
+		default:
+			add(Seg{Text: track, Role: trackRole})
+		}
+	}
+	return l
+}
+
+// windowMinutes is a window's length: its own, else the one its name says.
+func windowMinutes(w bus.BudgetWindow) int {
+	if w.Minutes > 0 {
+		return w.Minutes
+	}
+	switch windowLabel(w) {
+	case "5h":
+		return 300
+	case "7d", "7d-opus", "7d-sonnet", "7d-overage":
+		return 7 * 24 * 60
+	}
+	return 0
+}
+
+// windowElapsedPct is how much of the window is gone at now, from its reset
+// and its length; -1 when either is unknown or the reset is not within one
+// length ahead (then the reading is not this window's).
+func windowElapsedPct(w bus.BudgetWindow, now time.Time) float64 {
+	minutes := windowMinutes(w)
+	if minutes == 0 || w.ResetsAt == 0 {
+		return -1
+	}
+	left := time.Unix(w.ResetsAt, 0).Sub(now)
+	length := time.Duration(minutes) * time.Minute
+	if left <= 0 || left > length {
+		return -1
+	}
+	return 100 * float64(length-left) / float64(length)
+}
+
 // barSlide is one bar's way from one value to the next, started at at.
 type barSlide struct {
 	from, to float64
@@ -146,6 +224,13 @@ func (v barView) moving() bool {
 		}
 	}
 	return false
+}
+
+// thin is the header's thin bar for key at pct, as it is drawn now, with
+// its pace mark.
+func (v barView) thin(key string, pct, pace float64, cells int, role Role) Line {
+	shown, moving := v.at(key, pct)
+	return thinGauge(shown, pace, cells, role, moving)
 }
 
 // gauge is the bar for key at pct, as it is drawn now.

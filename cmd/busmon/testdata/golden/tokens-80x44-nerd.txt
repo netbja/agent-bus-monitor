@@ -21,6 +21,7 @@
 ╭─ Tokens · today · anthropic 62% 5h · xai held 40m ──────────────── esc back ─╮
 │ Accounts                                                                     │
 │   󰬈 anthropic  5h  ██████▎     62%   7d  ████▏       41%                     │
+│                                                                              │
 │   󰬟 xai        5h  ██████████ 100%  held 40m                                 │
 │ Projects                 in+out  7 days                                      │
 │   agent-bus-monitor       ~1.8M     ▃ █▆  ████████     ~5.1M                 │
@@ -34,7 +35,6 @@
 │   2 more · Kimi logs give no token counts  (a lists them)                    │
 │                                                                              │
 │ in: input + cache writes · ~ counting · no cost                              │
-│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
