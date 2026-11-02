@@ -562,6 +562,16 @@ func TestDeliverRoleCheckReadsTheManifest(t *testing.T) {
 			t.Errorf("%v: %v", env, err)
 		}
 	}
+	// A manifest that exists but cannot be read refuses too.
+	unreadable := filepath.Join(dir, "unreadable.toml")
+	if err := os.WriteFile(unreadable, []byte("[roles.master]\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.ReadFile(unreadable); err == nil {
+		t.Log("running as a user who reads mode 0000: the unreadable case is not checked")
+	} else if err := deliverRoleCheck([]string{"ROLES_TOML=" + unreadable})("coder"); err == nil || !strings.Contains(err.Error(), "cannot read") {
+		t.Errorf("unreadable manifest: %v", err)
+	}
 	// None configured nor found: an agent in a herdr pane is refused; a
 	// person outside the panes may.
 	bin := t.TempDir() // a binary with no roles.toml beside it
