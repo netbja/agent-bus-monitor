@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -74,6 +75,7 @@ func (t Turn) Run(ctx context.Context, e bus.Event, thread string) (Result, erro
 			if res.NoTools {
 				res.Text += "\n\n(Answered without tools: the endpoint refuses tool calls for this model.)"
 			}
+			res.Text = capAnswer(res.Text)
 			return res, nil
 		}
 		msgs = append(msgs, Message{Role: "assistant", Content: m.Content, ToolCalls: m.ToolCalls})
@@ -87,6 +89,26 @@ func (t Turn) Run(ctx context.Context, e bus.Event, thread string) (Result, erro
 			msgs = append(msgs, Message{Role: "tool", ToolCallID: call.ID, Content: out})
 		}
 	}
+}
+
+// capAnswer keeps an answer within what one bus entry holds (CmdMaxRunes):
+// max_tokens is only a request to the server, so a longer answer is cut, on a
+// rune, with a note saying where (SEC-LLM-1).
+func capAnswer(s string) string {
+	s = strings.ToValidUTF8(s, "\uFFFD")
+	if utf8.RuneCountInString(s) <= bus.CmdMaxRunes {
+		return s
+	}
+	keep := bus.CmdMaxRunes - 64 // room for the note
+	cut, n := 0, 0
+	for i := range s {
+		if n == keep {
+			cut = i
+			break
+		}
+		n++
+	}
+	return s[:cut] + fmt.Sprintf("\n\n[answer cut at %d runes]", keep)
 }
 
 func (t Turn) log(s string) {

@@ -220,3 +220,33 @@ func TestTurnClockHoldsThroughTools(t *testing.T) {
 		t.Fatal("a named pipe held the turn")
 	}
 }
+
+// longAnswer is a chat completion whose text is n runes of 'é' (two bytes
+// each): what an endpoint ignoring max_tokens sends (SEC-LLM-1).
+func longAnswer(n int) string {
+	return fmt.Sprintf(`{"choices":[{"message":{"role":"assistant","content":%q}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`, strings.Repeat("é", n))
+}
+
+// An answer longer than a bus entry holds is cut, on a rune, under
+// CmdMaxRunes, with a note saying where: it can always be published.
+func TestTurnCutsAnAnswerTheBusCannotHold(t *testing.T) {
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 200, longAnswer(70000) })
+	res, err := newTurn(t, srv, time.Minute).Run(context.Background(), entry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.ValidateText(res.Text, bus.CmdMaxRunes); err != nil {
+		t.Fatalf("the answer cannot be published: %v", err)
+	}
+	if !strings.HasSuffix(res.Text, "runes]") || !strings.Contains(res.Text, "[answer cut at ") {
+		t.Fatalf("no cut note at the end: ...%s", res.Text[len(res.Text)-60:])
+	}
+	if !strings.HasPrefix(res.Text, strings.Repeat("é", 60000)) {
+		t.Fatal("the answer's start is not kept")
+	}
+	// An answer that fits is left whole.
+	srv, _ = fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 200, longAnswer(1000) })
+	if res, _ := newTurn(t, srv, time.Minute).Run(context.Background(), entry, ""); res.Text != strings.Repeat("é", 1000) {
+		t.Fatalf("a short answer was changed: %d runes", len([]rune(res.Text)))
+	}
+}

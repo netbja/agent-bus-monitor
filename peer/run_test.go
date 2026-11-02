@@ -13,6 +13,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
+	"github.com/redis/go-redis/v9"
 )
 
 func runnerBus(t *testing.T) *bus.Bus {
@@ -371,5 +372,75 @@ func TestRunnerAcknowledgesADoneRequest(t *testing.T) {
 	stop()
 	if evs, _ := b.Thread(ctx, id); len(evs) != 2 || calls.Load() != 1 {
 		t.Fatalf("thread = %d entries, %d turns: want the first response only and one turn (the next directive)", len(evs), calls.Load())
+	}
+}
+
+// An endpoint answering more than a bus entry holds gets one reply (cut),
+// and the entry is acknowledged: the next one is answered, and no turn is
+// run twice (SEC-LLM-1: the refusal used to leave it pending, retried forever).
+func TestRunnerAnswersAnOversizedAnswerOnce(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	var calls atomic.Int32
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { calls.Add(1); return 200, longAnswer(70000) })
+	_, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	first, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "write me a novel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs := waitThread(t, b, first, 2)
+	if !strings.Contains(evs[1].Message, "[answer cut at ") {
+		t.Fatalf("the reply is not the cut answer: ...%s", evs[1].Message[max(0, len(evs[1].Message)-60):])
+	}
+	second, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, second, 2)
+	time.Sleep(200 * time.Millisecond) // a retried first entry would turn again now
+	stop()
+	if evs, _ := b.Thread(ctx, first); len(evs) != 2 || calls.Load() != 2 {
+		t.Fatalf("thread = %d entries, %d turns: want one reply and one turn per entry", len(evs), calls.Load())
+	}
+}
+
+// An entry whose reply the bus refuses for good (here a sender that is no
+// agent name, which only raw Redis can write) is said, reported and
+// acknowledged: one turn, never retried, the next entry answered.
+func TestRunnerAcknowledgesAReplyTheBusRefuses(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	raw, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	if err := raw.XAdd(ctx, &redis.XAddArgs{Stream: b.Project() + ":cmd", Values: map[string]any{
+		"from": "Not A Name", "target": "local", "type": bus.CmdDirective, "ref": "", "command": "q", "text_complete": "yes"}}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { calls.Add(1); return 200, answerJSON })
+	out, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	next, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, next, 2)
+	time.Sleep(200 * time.Millisecond)
+	stop()
+	if calls.Load() != 2 {
+		t.Fatalf("%d turns, want 2: the refused reply was retried", calls.Load())
+	}
+	if !strings.Contains(out.String(), "cannot be sent") {
+		t.Fatalf("the refusal is not said:\n%s", out)
+	}
+	reports, _, err := b.Recent(ctx, []string{"report"}, 10)
+	found := false
+	for _, r := range reports {
+		found = found || strings.Contains(r.Message, "could not send")
+	}
+	if err != nil || !found {
+		t.Fatalf("no report of the unsent answer: %+v %v", reports, err)
 	}
 }
