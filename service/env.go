@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 // envKeys are copied from the shell that runs `agentbus up` into the
@@ -29,9 +31,10 @@ var envKeys = []string{
 const EscalateEnv = "AGENT_BUS_ESCALATE_TO"
 
 // ReloadEnv is the project's reload policy (lifecycle part C): unset (on),
-// propose or off. `agentbus up --reload` records it; `agentbus reload` reads
-// it from the caller's environment, else from this file.
-const ReloadEnv = "AGENT_BUS_RELOAD"
+// propose or off, the registry's sentinel.reload. `agentbus up --reload`
+// records it; `agentbus reload` reads the caller's environment, then this
+// file, then config.toml.
+var ReloadEnv = config.EnvName("sentinel.reload")
 
 // envPrefixes are copied whole, except the names below.
 var envPrefixes = []string{"AGENT_BUS_"}

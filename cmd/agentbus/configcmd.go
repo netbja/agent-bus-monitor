@@ -133,6 +133,10 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 		services = &config.Resolver{Getenv: svcEnv, Files: []*config.File{config.Load(config.Path(svcPath), "config.toml")}}
 	}
 
+	if proj != nil && proj.ReloadSource == "default" { // no env file value: what agentbus reload reads next
+		r := shell.Get("sentinel.reload")
+		proj.Reload, proj.ReloadSource = config.Format(r.Value), r.Source
+	}
 	doc := configDoc{Project: proj}
 	legacyUsed := 0
 	for _, k := range config.Keys {

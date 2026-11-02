@@ -111,7 +111,9 @@ run `swap` or `retire`.
    who waits and why. Then `agentbus health note client-updates "<one line>"`. The agents still
    later are retried on your next wake.
 
-**When the project's policy is not the default** (`agentbus reload` says so):
+**When the project's policy is not the default** (`agentbus reload` says so; the policy is
+`AGENT_BUS_RELOAD` in the caller's environment, else the project's env file from `agentbus up
+--reload`, else `sentinel.reload` in `config.toml`, else `on`):
 - `AGENT_BUS_RELOAD=propose`: do not reload. Send master **one** directive with the ready and later
   lists, and the command for each, which the person runs from their own shell:
   `agentbus reload <agent> --as <person>`. Master asks the person (`agentbus ask`) and acts only on
