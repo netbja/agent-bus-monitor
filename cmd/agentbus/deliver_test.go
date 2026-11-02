@@ -110,6 +110,7 @@ func newDeliverWorld(t *testing.T, origin string) *deliverWorld {
 		cmds: map[string]dlvOut{
 			"git rev-parse --verify --quiet refs/heads/coder/x^{commit}":            {out: dlvH + "\n"},
 			"git remote get-url origin":                                             {out: origin + "\n"},
+			"git remote get-url --push origin":                                      {out: origin + "\n"},
 			"git fetch origin +refs/heads/main:refs/remotes/origin/main":            {},
 			"git rev-list --count refs/remotes/origin/main.." + dlvH:                {out: "2\n"},
 			"git log --reverse --format=%H%x09%s refs/remotes/origin/main.." + dlvH: {out: "aaaaaaaa1\tfirst change\n" + dlvH + "\tsecond change\n"},
@@ -156,6 +157,7 @@ func TestDeliverGitHubOpensAPullRequestOnTheApprovedHead(t *testing.T) {
 	want := []string{
 		"git rev-parse --verify --quiet refs/heads/coder/x^{commit}",
 		"git remote get-url origin",
+		"git remote get-url --push origin",
 		"git fetch origin +refs/heads/main:refs/remotes/origin/main",
 		"git rev-list --count refs/remotes/origin/main.." + dlvH,
 		"git log --reverse --format=%H%x09%s refs/remotes/origin/main.." + dlvH,
@@ -495,5 +497,35 @@ func TestDeliverSaysWhenThePageIsUnknown(t *testing.T) {
 	code, out, errw := w.run("master", "coder/x")
 	if code != 0 || strings.Contains(out, "github.com//") || !strings.Contains(out, "page unknown") {
 		t.Fatalf("exit %d: %q %q", code, out, errw)
+	}
+}
+
+// A push URL elsewhere than origin's fetch URL would push to one place and
+// open the request on another (reviewer-codex): refused before the fetch.
+func TestDeliverRefusesAPushURLOnAnotherRepository(t *testing.T) {
+	for name, push := range map[string]string{
+		"another forge":      "git@gitlab.com:o/r.git",
+		"another repository": "git@github.com:o/other.git",
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newDeliverWorld(t, "git@github.com:o/r.git")
+			w.r.cmds["git remote get-url --push origin"] = dlvOut{out: push + "\n"}
+			code, _, errw := w.run("master", "coder/x")
+			if code != 1 || !strings.Contains(errw, "pushurl") {
+				t.Fatalf("exit %d: %q", code, errw)
+			}
+			if w.r.did("git fetch") || w.r.did("git push") {
+				t.Errorf("ran %v", w.r.ran)
+			}
+		})
+	}
+}
+
+// The same repository written another way (https vs scp) is the same target.
+func TestDeliverAcceptsAPushURLOnTheSameRepository(t *testing.T) {
+	w := newDeliverWorld(t, "https://github.com/o/r.git")
+	w.r.cmds["git remote get-url --push origin"] = dlvOut{out: "git@github.com:o/r.git\n"}
+	if code, _, errw := w.run("master", "coder/x"); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw)
 	}
 }

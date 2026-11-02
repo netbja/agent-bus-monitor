@@ -152,6 +152,22 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	if f.Note != "" {
 		fmt.Fprintln(errw, f.Note)
 	}
+	// git push origin honours remote.origin.pushurl: a push target that is
+	// not origin's repository would push to one place and open the request
+	// on another (reviewer-codex). Compared as host/owner/repo, never printed
+	// with user info.
+	if f.Kind != forge.Local {
+		pushURL, err := git("remote", "get-url", "--push", "origin")
+		if err != nil {
+			return fail(1, "cannot read origin's push URL")
+		}
+		fetchAt := forge.Resolve("auto", strings.TrimSpace(originURL), true)
+		pushAt := forge.Resolve("auto", strings.TrimSpace(pushURL), true)
+		if fetchAt.Host != pushAt.Host || fetchAt.Owner != pushAt.Owner || fetchAt.Repo != pushAt.Repo {
+			return fail(1, "origin fetches from %s but pushes to %s (remote.origin.pushurl): deliver cannot tell which forge the request belongs on; make them the same repository",
+				placeOf(fetchAt), placeOf(pushAt))
+		}
+	}
 
 	// 2. Ahead of the base: origin's, fetched, in a forge mode; the local one in local mode.
 	baseRef := "refs/heads/" + o.base
@@ -296,6 +312,15 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	fmt.Fprintf(out, "pushed %s@%s; open the request at\n  %s\n", o.branch, h, page)
 	tell(fmt.Sprintf("pushed %s@%s; the request is to open at %s", o.branch, h, page))
 	return code
+}
+
+// placeOf names a remote's repository for a message: host/owner/repo, never
+// the URL (it may hold user info).
+func placeOf(f forge.Forge) string {
+	if f.Host == "" {
+		return "a local path"
+	}
+	return f.Host + "/" + f.Owner + "/" + f.Repo
 }
 
 // approvalsOn is every independent approve naming h, oldest first.

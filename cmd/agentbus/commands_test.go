@@ -119,8 +119,8 @@ var foreignFlags = []string{
 	"--get-regexp",        // git config, the github check's remote read
 	"--show-toplevel",     // git rev-parse, the local-llm peer's read root
 	"--verify", "--quiet", // git rev-parse, verdict --head's commit check (forge-delivery)
-	"--roles",              // roles template's team, the argv bootstrap builds (agentbus-start)
-	"--count", "--reverse", // git rev-list and git log (deliver)
+	"--roles",                        // roles template's team, the argv bootstrap builds (agentbus-start)
+	"--count", "--reverse", "--push", // git rev-list, git log and git remote get-url (deliver)
 	"--body-file", "--output", "--source-branch", "--target-branch", "--description", // gh and glab (deliver)
 }
 
