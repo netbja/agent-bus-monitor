@@ -67,10 +67,11 @@ func gaugeSegs(pct float64, cells int, role Role, lead bool) Line {
 // thinGauge is the header's account gauge (usage-bars, Bernard's A4): one
 // GlyphThinBar per cell, the filled ones in role, the rest the track (the
 // line colour in true colour; a light ─ without it, so filled and empty
-// differ without colour), and a pace mark │ in the text colour at pace %
-// of the cells (the share of the window gone; < 0 none). Whole cells: a
-// non-zero value fills one, a value under 100 never fills all. lead lifts
-// the leading filled cell (the bar is sliding).
+// differ without colour), and a pace mark at pace % of the cells (the share
+// of the window gone; < 0 none): │ in the text colour on the track, ╋ in the
+// fill's role inside the fill, so the mark never hides a filled cell. Whole
+// cells: a non-zero value fills one, a value under 100 never fills all. lead
+// lifts the leading filled cell (the bar is sliding).
 func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
 	filled := clamp(int(math.Round(pct*float64(cells)/100)), 0, cells)
 	if pct > 0 && filled == 0 {
@@ -97,10 +98,13 @@ func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
 	}
 	for i := 0; i < cells; i++ {
 		switch {
-		case i == mark:
+		case i == mark && i >= filled:
 			add(Seg{Text: glyphVertical, Role: RoleText})
 		case i < filled:
 			s := Seg{Text: GlyphThinBar, Role: role}
+			if i == mark {
+				s.Text = GlyphThinMark
+			}
 			if lead && i == filled-1 {
 				s.Lift = barLift
 			}

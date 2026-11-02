@@ -60,9 +60,9 @@ func TestQuotaShowsBothWindowsByTierAndAttachesMarkers(t *testing.T) {
 	if got := wide.text(); !strings.HasPrefix(got, "claude 5h "+strings.Repeat(GlyphThinBar, 4)+glyphVertical+" 88% │ 7d ") || !strings.Contains(got, "96% "+GlyphNone+" 1h") {
 		t.Fatalf("wide %q", got)
 	}
-	// The light track without true colour: 96 % fills 9 cells, 5 of the 7 days are gone.
+	// The light track without true colour: 96 % fills 9 cells, 5 of the 7 days are gone, so the mark crosses the fill.
 	withPalette(t, "dark", false, 16)
-	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide, barView{}).text(); !strings.Contains(got, " 7d "+strings.Repeat(GlyphThinBar, 7)+glyphVertical+GlyphThinBar+glyphHorizontal) {
+	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide, barView{}).text(); !strings.Contains(got, " 7d "+strings.Repeat(GlyphThinBar, 7)+GlyphThinMark+GlyphThinBar+glyphHorizontal) {
 		t.Fatalf("wide, 16 colours %q", got)
 	}
 	heldLine := quotaSeg("anthropic", b, time.Unix(short.ResetsAt, 0), true, nil, now, TierMedium, barView{})

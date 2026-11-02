@@ -333,6 +333,9 @@ const (
 	// the level colour on itself in the track colour; ─ is its track without
 	// colour.
 	GlyphThinBar = "━"
+	// The pace mark where it falls inside the fill: the line crossed, so the
+	// cell still reads filled without colour (foureyes on usage-bars).
+	GlyphThinMark = "╋"
 	// The updated column's freshness gauge: the same two dots as working/idle.
 	GlyphDotFull     = GlyphWorking
 	GlyphDotEmpty    = GlyphIdle
@@ -417,5 +420,5 @@ var UIGlyphs = []string{
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
 	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6,
-	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar,
+	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark,
 }
