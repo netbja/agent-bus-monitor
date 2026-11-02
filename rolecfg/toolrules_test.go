@@ -196,7 +196,7 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 		// included (pop-auto-retire §6), then the role's own.
 		Allow: []string{"Bash(agent-spawn coder *)", "Bash(agent-spawn architect *)",
 			"Bash(agentbus retire deploy --forget --episode * --reason *)", "Bash(agentbus retire architect --forget --episode * --reason *)", "Read"},
-		Ask:   []string{"Bash(agent-spawn deploy *)"},
+		Ask: []string{"Bash(agent-spawn deploy *)"},
 	}
 	if !reflect.DeepEqual(r, want) {
 		t.Fatalf("LaunchRules(master) = %+v, want %+v", r, want)
