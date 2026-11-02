@@ -113,10 +113,7 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 		aged := windowAged(w, b, now)
 		holdsWindow := isHeld && quota.SameReset(w.ResetsAt, holdUntil.Unix()) // a reset read a few seconds off is the held window
 		matchedHold = matchedHold || holdsWindow
-		role := budgetRole(w.UsedPct)
-		if aged {
-			role = RoleMuted
-		}
+		role := budgetRole(w.UsedPct) // an aged reading keeps its level colour and says its age (usage-bars)
 		if holdsWindow {
 			role = RoleError
 		}
@@ -130,12 +127,12 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 		}
 		if tier == TierWide {
 			cells := quotaBarCells(w)
-			l = append(l, bars.gauge(barKey(provider, w.Name), w.UsedPct, cells, role)...)
+			l = append(l, bars.thin(barKey(provider, w.Name), w.UsedPct, windowElapsedPct(w, now), cells, role)...)
 			l = append(l, Seg{Text: " "})
 		}
 		l = append(l, Seg{Text: fmt.Sprintf("%.0f%%", w.UsedPct), Role: role})
 		if aged {
-			l = append(l, Seg{Text: " ?", Role: RoleMuted})
+			l = append(l, Seg{Text: " " + GlyphNone + " " + windowAge(w, b, now), Role: RoleMuted})
 		}
 		if holdsWindow {
 			l = append(l, Seg{Text: " held " + holdUntil.Local().Format("15:04"), Role: RoleError})
@@ -161,16 +158,7 @@ func windowLabel(w bus.BudgetWindow) string {
 }
 
 func quotaBarCells(w bus.BudgetWindow) int {
-	minutes := w.Minutes
-	if minutes == 0 {
-		switch windowLabel(w) {
-		case "5h":
-			minutes = 300
-		case "7d", "7d-opus", "7d-sonnet", "7d-overage":
-			minutes = 7 * 24 * 60
-		}
-	}
-	if minutes > 0 && minutes <= 6*60 {
+	if minutes := windowMinutes(w); minutes > 0 && minutes <= 6*60 {
 		return 5
 	}
 	return 10
@@ -271,6 +259,18 @@ func (p *paceTracker) observe(budgets map[string]bus.BudgetSnapshot, now time.Ti
 // is unknown, never 0 %: the header and the U page show `?`, and it has no
 // bar to slide (barTargets).
 func windowUnobserved(w bus.BudgetWindow) bool { return w.ObservedAt == 0 && w.UsedPct == 0 }
+
+// windowAge is how old an aged window's reading is, "?" when it has none.
+func windowAge(w bus.BudgetWindow, b bus.BudgetSnapshot, now time.Time) string {
+	obs := w.ObservedAt
+	if obs == 0 {
+		obs = b.ObservedAt
+	}
+	if obs == 0 {
+		return "?"
+	}
+	return humanAge(now.Sub(time.UnixMilli(obs)))
+}
 
 func windowAged(w bus.BudgetWindow, b bus.BudgetSnapshot, now time.Time) bool {
 	obs := w.ObservedAt

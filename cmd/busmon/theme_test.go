@@ -12,7 +12,7 @@ import (
 )
 
 func TestGlyphsAreSingleCell(t *testing.T) {
-	if len(UIGlyphs) != 42 {
+	if len(UIGlyphs) != 44 { // GlyphThinBar and GlyphThinMark joined (usage-bars)
 		t.Fatal(len(UIGlyphs))
 	}
 	seen := map[string]bool{}
