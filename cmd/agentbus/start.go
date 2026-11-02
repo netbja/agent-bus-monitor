@@ -135,12 +135,20 @@ func runStart(args []string, d startDeps) int {
 		return fail("%s: give the project's name with --name", p.ProjectAsk)
 	case p.NameAsk != "":
 		return fail("%s: give yours with --as", p.NameAsk)
+	case p.TeamAsk != "" && roles == "":
+		return fail("%s: give the team with --roles", p.TeamAsk)
 	}
 
 	// A team change on an existing project: its template must be the one
 	// bootstrap wrote (a rewrite would erase a hand edit), and no live agent
 	// may lose its tab or change its client (up's relaunch never closes one).
-	change := p.Existing && teamKey(p.Team) != teamKey(templateTeam(p.Template))
+	var onDisk []rolecfg.TeamRole
+	if p.Existing {
+		if onDisk, _, err = templateTeam(p.Template, m); err != nil {
+			return fail("%v", err)
+		}
+	}
+	change := p.Existing && teamKey(p.Team) != teamKey(onDisk)
 	if change {
 		if err := checkTeamChange(d, m, p); err != nil {
 			return fail("%v", err)
@@ -196,7 +204,7 @@ func (p *startPlan) setProject(name string, env func(string) string) error {
 		if r.Name != name {
 			continue
 		}
-		if expandHome(r.WorkingDir, env("HOME")) != p.Folder {
+		if dir, ok := canonDir(expandHome(r.WorkingDir, env("HOME"))); !ok || dir != p.Folder {
 			return fmt.Errorf("%s is the project of %s: choose another name", name, r.WorkingDir)
 		}
 		p.Existing = true
@@ -226,7 +234,11 @@ func checkTeamChange(d startDeps, m *rolecfg.Manifest, p startPlan) error {
 	if err != nil {
 		return fmt.Errorf("cannot tell which agents of %s are live (%v): nothing changed", p.Project, err)
 	}
-	for _, old := range templateTeam(p.Template) {
+	onDisk, _, err := templateTeam(p.Template, m)
+	if err != nil {
+		return err
+	}
+	for _, old := range onDisk {
 		i := slices.IndexFunc(p.Team, func(r rolecfg.TeamRole) bool { return r.Role == old.Role })
 		if live[old.Role] != lifeAlive || (i >= 0 && p.Team[i].Profile == old.Profile) {
 			continue
@@ -262,7 +274,13 @@ func regenerate(m *rolecfg.Manifest, p startPlan, tpl upTemplate, repo string) s
 			}
 		}
 	}
-	return rolecfg.TemplateTeam(m, manifest, p.Project, tpl.WorkingDir, scripts, repo, as, dispatch, missions, templateTeam(p.Template))
+	var team []rolecfg.TeamRole
+	for _, t := range tpl.Tabs { // the tabs as written, stale profiles included
+		if _, role, profile := tabLaunch(t.Command); role != "" {
+			team = append(team, rolecfg.TeamRole{Role: role, Profile: profile})
+		}
+	}
+	return rolecfg.TemplateTeam(m, manifest, p.Project, tpl.WorkingDir, scripts, repo, as, dispatch, missions, team)
 }
 
 // completeTeam is every boot role on its own profile.
@@ -314,4 +332,7 @@ func (p startPlan) print(out io.Writer, m *rolecfg.Manifest) {
 	fmt.Fprintf(out, "  Folder    %s\n", p.Folder)
 	fmt.Fprintf(out, "  You       %s%s\n", name, why(p.NameWhy))
 	fmt.Fprintf(out, "  Team      %s%s\n", strings.ReplaceAll(teamSpec(p.Team), ",", " "), why(p.TeamWhy))
+	if p.TeamAsk != "" {
+		fmt.Fprintf(out, "            ? %s\n", p.TeamAsk)
+	}
 }

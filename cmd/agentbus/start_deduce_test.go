@@ -167,3 +167,52 @@ func teamNames(team []rolecfg.TeamRole) string {
 func hasNote(notes []string, word string) bool {
 	return slices.ContainsFunc(notes, func(n string) bool { return strings.Contains(n, word) })
 }
+
+// A template whose working_dir reaches the folder through a symlink (bootstrap
+// records cd ... && pwd, the logical path) is that folder's project, not a
+// second one (foureyes, reviewer-codex).
+func TestDeduceStartThroughASymlink(t *testing.T) {
+	m, projects, _, env := deduceFixture(t)
+	real := filepath.Join(t.TempDir(), "shop")
+	if out, err := exec.Command("git", "init", "-q", real).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	links := t.TempDir()
+	if err := os.Symlink(filepath.Dir(real), filepath.Join(links, "src")); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(links, "src", "shop")
+	write(t, filepath.Join(projects, "shop.toml"), "name = \"shop\"\nworking_dir = \""+alias+"\"\n\n[[tabs]]\nname = \"master\"\ncommand = \"/r/scripts/agent-launch master shop\"\n")
+	for _, from := range []string{alias, real} {
+		p, err := deduceStart(from, func(k string) string { return env[k] }, m)
+		if err != nil || p.Project != "shop" || !p.Existing {
+			t.Fatalf("from %s: %+v %v", from, p, err)
+		}
+	}
+	// --name on that alias is this folder's project too.
+	p, _ := deduceStart(real, func(k string) string { return env[k] }, m)
+	if err := p.setProject("shop", func(k string) string { return env[k] }); err != nil || !p.Existing {
+		t.Fatalf("--name through the alias: %v %+v", err, p)
+	}
+}
+
+// An existing template that cannot be read is an error, never an empty team;
+// a tab whose --profile roles.toml no longer allows is asked again (foureyes).
+func TestDeduceStartChecksTheTemplatesTeam(t *testing.T) {
+	m, projects, _, env := deduceFixture(t)
+	folder := filepath.Join(t.TempDir(), "shop")
+	if out, err := exec.Command("git", "init", "-q", folder).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	folder, _ = filepath.EvalSymlinks(folder)
+	head := "name = \"shop\"\nworking_dir = \"" + folder + "\"\n"
+	write(t, filepath.Join(projects, "shop.toml"), head+"\n[[tabs]]\nname = \"foureyes\"\ncommand = \"/r/scripts/agent-launch foureyes shop --profile other\"\n")
+	p, err := deduceStart(folder, func(k string) string { return env[k] }, m)
+	if err != nil || !strings.Contains(p.TeamAsk, "foureyes") || !strings.Contains(p.TeamAsk, "other") {
+		t.Fatalf("a profile no longer allowed: %+v %v", p, err)
+	}
+	write(t, filepath.Join(projects, "shop.toml"), head+"\n[[tabs]\nbroken")
+	if _, err := deduceStart(folder, func(k string) string { return env[k] }, m); err == nil {
+		t.Fatal("an unreadable template deduced")
+	}
+}

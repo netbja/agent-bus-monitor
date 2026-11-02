@@ -33,6 +33,7 @@ type startPlan struct {
 
 	Team    []rolecfg.TeamRole
 	TeamWhy string
+	TeamAsk string // why the team must be asked again (a profile no longer allowed)
 
 	Notes []string // what the screen says of a choice start made for the person
 }
@@ -67,17 +68,14 @@ func startProjectName(base string) string {
 // an error: anything else unsettled is asked.
 func deduceStart(path string, getenv func(string) string, m *rolecfg.Manifest) (startPlan, error) {
 	var p startPlan
-	abs, err := filepath.Abs(path)
-	if err == nil {
-		abs, err = filepath.EvalSymlinks(abs)
-	}
-	if err != nil {
-		return p, fmt.Errorf("the folder %s: %v", path, err)
-	}
-	if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
+	if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
 		return p, fmt.Errorf("%s is not a directory", path)
 	}
-	p.Folder, _ = trustKey(abs) // the Git root; a linked worktree's main checkout
+	folder, ok := canonDir(path)
+	if !ok {
+		return p, fmt.Errorf("the folder %s cannot be resolved", path)
+	}
+	p.Folder = folder // the Git root; a linked worktree's main checkout
 	rows, _ := projlist.Templates(rolecfg.ProjectsDir(getenv))
 
 	// The project: a template on this folder, else the folder's base name.
@@ -85,7 +83,7 @@ func deduceStart(path string, getenv func(string) string, m *rolecfg.Manifest) (
 	taken := map[string]bool{}
 	for _, r := range rows {
 		taken[r.Name] = true
-		if dir := expandHome(r.WorkingDir, getenv("HOME")); dir == p.Folder {
+		if dir, ok := canonDir(expandHome(r.WorkingDir, getenv("HOME"))); ok && dir == p.Folder {
 			here = append(here, r)
 		}
 	}
@@ -114,6 +112,13 @@ func deduceStart(path string, getenv func(string) string, m *rolecfg.Manifest) (
 			}
 		}
 		p.Template = filepath.Join(rolecfg.ProjectsDir(getenv), p.Project+".toml")
+		// projlist skips a template it cannot read: never write over one.
+		if _, err := os.Stat(p.Template); err == nil {
+			var tpl upTemplate
+			if _, err := toml.DecodeFile(p.Template, &tpl); err != nil {
+				return p, fmt.Errorf("reading %s: %v", p.Template, err)
+			}
+		}
 	default:
 		var names []string
 		for _, r := range here {
@@ -135,7 +140,14 @@ func deduceStart(path string, getenv func(string) string, m *rolecfg.Manifest) (
 	// role on its own profile.
 	switch {
 	case p.Existing:
-		p.Team, p.TeamWhy = templateTeam(p.Template), "its template"
+		team, stale, err := templateTeam(p.Template, m)
+		if err != nil {
+			return p, err
+		}
+		p.Team, p.TeamWhy = team, "its template"
+		if len(stale) > 0 {
+			p.TeamAsk = strings.Join(stale, ", ") + ": no longer allowed by roles.toml"
+		}
 	default:
 		r := config.Resolver{Files: []*config.File{config.Load(config.Path(getenv), "config.toml")}}
 		if spec, _ := r.Get("start.team").Value.(string); strings.TrimSpace(spec) != "" {
@@ -152,19 +164,43 @@ func deduceStart(path string, getenv func(string) string, m *rolecfg.Manifest) (
 }
 
 // templateTeam is a template's agent tabs, in its order, each on the
-// --profile it names.
-func templateTeam(path string) []rolecfg.TeamRole {
+// --profile it names; a role roles.toml does not have is left out (up skips
+// it too). stale names each tab whose profile roles.toml no longer allows
+// (launchProfile): that role is in the team on its own profile, to be asked
+// again. A template that cannot be read is an error, never an empty team.
+func templateTeam(path string, m *rolecfg.Manifest) (team []rolecfg.TeamRole, stale []string, err error) {
 	var tpl upTemplate
 	if _, err := toml.DecodeFile(path, &tpl); err != nil {
-		return nil
+		return nil, nil, fmt.Errorf("reading %s: %v", path, err)
 	}
-	var team []rolecfg.TeamRole
 	for _, t := range tpl.Tabs {
-		if _, role, profile := tabLaunch(t.Command); role != "" {
-			team = append(team, rolecfg.TeamRole{Role: role, Profile: profile})
+		_, role, profile := tabLaunch(t.Command)
+		if _, known := m.Roles[role]; !known {
+			continue
 		}
+		if _, err := launchProfile(m, role, profile); err != nil {
+			stale = append(stale, fmt.Sprintf("%s's profile %s", role, profile))
+			profile = ""
+		}
+		team = append(team, rolecfg.TeamRole{Role: role, Profile: profile})
 	}
-	return team
+	return team, stale, nil
+}
+
+// canonDir is a folder as start compares folders: absolute, its symlinks
+// resolved, then its Git root (a linked worktree's main checkout). bootstrap
+// records the logical path (cd ... && pwd), which may be a link's (foureyes,
+// reviewer-codex). false for a folder that no longer exists.
+func canonDir(dir string) (string, bool) {
+	abs, err := filepath.Abs(dir)
+	if err == nil {
+		abs, err = filepath.EvalSymlinks(abs)
+	}
+	if err != nil {
+		return "", false
+	}
+	root, _ := trustKey(abs)
+	return root, true
 }
 
 // defaultTeam reads start.team item by item against roles.toml: a role that
