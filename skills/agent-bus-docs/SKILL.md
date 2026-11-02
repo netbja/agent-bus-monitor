@@ -44,8 +44,10 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    (its body: your description, each line screened for credentials, then the verdicts and the
    footer; without `--body-file`, only the commits' subjects), or prints the page to open (link mode: no CLI, or
    Bitbucket), or in local mode pushes nothing and prints the merge for the person; it reports
-   the URL or the ref to master itself. Exit 3 means the approval does not name your head: ask
-   for a verdict on it. Never work around it by `git push`, by merging, or by pushing to `<base>`.
+   the URL or the ref to master itself. Exit 3 means no current APPROVED verdict names your head:
+   the review is pending or rejected, or the approval names another commit or none. Read its
+   message; answer a rejection first (fix, commit, ask again), then get an approval with `--head`
+   on the final SHA. Never work around it by `git push`, by merging, or by pushing to `<base>`.
    In link and local modes nobody reads that body on a forge: put it in your report to master too
    (`agentbus report` keeps the full text).
 

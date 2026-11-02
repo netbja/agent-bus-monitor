@@ -631,8 +631,10 @@ line screened for credentials), followed by the verdicts; without it, the commit
 
 - **The 4-eyes check is deliver's own.** It resolves the branch head `H` once and goes on only
   when the subject's roll-up is APPROVED **and** its newest independent approve names `H`
-  (`verdict --head`). Otherwise it exits 3 and names the subject, the head approved (or none) and
-  `H`: ask the reviewer for a verdict with `--head` on that SHA; never work around it.
+  (`verdict --head`). Otherwise it exits 3: no current APPROVED verdict names `H` (the roll-up is
+  PENDING or REJECTED, or the approval names another commit or none). Its message names the
+  subject, the state, the head approved (or none) and `H`. Answer a rejection first, then get an
+  approval with `--head` on the final SHA; never work around it.
 - **Per forge** (`delivery.forge` in the person's `config.toml`, `auto` reads `origin`): on GitHub
   or GitLab it pushes `H` and opens the request with `gh`/`glab` (or reuses the open one); without
   the CLI, logged out, or on Bitbucket it pushes and prints the page to open (link mode): give the
