@@ -98,7 +98,7 @@ func DecideClear(f ClearFacts) ClearDecision {
 
 // ClearConfig is the auto-clear's switch and bounds.
 type ClearConfig struct {
-	On     bool          // AGENT_BUS_AUTO_CLEAR=1
+	On     bool          // dispatch.auto_clear: on by default, AGENT_BUS_AUTO_CLEAR=0 turns it off
 	Proof  time.Duration // how long the new session may take to be proved (30 s)
 	Notify func(ctx context.Context, title, body string) error
 	// Decisions keeps each agent's last clear decision, for the clear-stall

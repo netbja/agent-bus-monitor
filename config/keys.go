@@ -168,8 +168,11 @@ var Keys = []*Key{
 	{Name: "dispatch.tokens", Env: "AGENT_BUS_TOKENS", Kind: Bool, Default: true, ReadBy: "dispatch",
 		env:  func(raw string) (any, envResult) { return raw != "0", envUse }, // 0 turns it off
 		file: fileBool},
-	{Name: "dispatch.auto_clear", Env: "AGENT_BUS_AUTO_CLEAR", Kind: Bool, Default: false, ReadBy: "dispatch",
-		env:  func(raw string) (any, envResult) { return raw == "1", envUse }, // only 1 turns it on
+	// On by default (autoclear-default, the person's decision); 0 is the off
+	// switch, 1 on, and any other value is skipped (the next source applies),
+	// so true or yes never turns it off.
+	{Name: "dispatch.auto_clear", Env: "AGENT_BUS_AUTO_CLEAR", Kind: Bool, Default: true, ReadBy: "dispatch",
+		env:  envZeroOne,
 		file: fileBool},
 	// The stall guard (spec 2026-11-01-stall-guard-design.md): how long before
 	// each check judges a stall; 0 turns the check off.
@@ -266,8 +269,17 @@ var validName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString
 
 func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" }
 
-// envPositiveFloat: today a value <= 0 (or none that parses) is the
-// dispatcher's default, never a setting.
+// envZeroOne takes 1 (on) and 0 (off) only; anything else is skipped.
+func envZeroOne(raw string) (any, envResult) {
+	switch raw {
+	case "1":
+		return true, envUse
+	case "0":
+		return false, envUse
+	}
+	return nil, envSkip
+}
+
 // envStallDuration: whole seconds (as prompt_grace) or a Go duration, 0 = off,
 // at most a day; anything else falls back to the next source.
 func envStallDuration(raw string) (any, envResult) {
@@ -280,6 +292,8 @@ func envStallDuration(raw string) (any, envResult) {
 	return nil, envSkip
 }
 
+// envPositiveFloat: today a value <= 0 (or none that parses) is the
+// dispatcher's default, never a setting.
 func envPositiveFloat(raw string) (any, envResult) {
 	if f, err := strconv.ParseFloat(raw, 64); err == nil && f > 0 {
 		return f, envUse

@@ -473,20 +473,19 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   `agentbus --project myapp handoff` les liste. Tout rapport ou état non idle ultérieur de l'agent
   l'annule. Videz ensuite l'agent : tapez `/clear` dans son volet et indiquez le rapport à la
   nouvelle session (`agentbus --project myapp reports <id>`).
-- **`/clear` automatique (désactivé par défaut).** Avec `AGENT_BUS_AUTO_CLEAR=1` exporté avant
-  `agentbus up`, le dispatcher tape ce `/clear` lui-même, une fois par session, pour un agent
+- **`/clear` automatique (activé par défaut).** Le dispatcher tape ce `/clear` lui-même, une fois par session, pour un agent
   Claude Code dont la passation tient, au repos, sans question ni revue
   ouverte, dans un volet prêt ; puis il prouve la nouvelle session et dit à l'agent de lire sa
-  passation. Il reste désactivé tant que ses vérifications en conditions réelles n'ont pas été
-  faites sur cette version. Activez-le sur la ligne `up` (`AGENT_BUS_AUTO_CLEAR=1 agentbus up
-  myapp`). `up` construit le fichier d'environnement des services,
+  passation. Pour le désactiver pour tous les projets, mettez `auto_clear = false` sous
+  `[dispatch]` dans `~/.config/agentbus/config.toml` ; pour un projet, sur la ligne `up`
+  (`AGENT_BUS_AUTO_CLEAR=0 agentbus up myapp`). `up` construit le fichier d'environnement des services,
   `~/.config/agentbus/services/myapp.env`, à partir de son shell : les variables `AGENT_BUS_*` sauf
   les noms du projet et de l'agent, plus la cible d'escalade et le réglage de rechargement, qu'il
   garde de l'ancien fichier tant que vous ne les changez pas (`--escalate-to`, `--reload`). Quand
   le résultat diffère du fichier, il le remplace, si bien que toute autre ligne ajoutée à la main
   est perdue au `up` suivant. Ses lignes sont au format `KEY="value"` ; une ligne sans guillemets
-  arrête le dispatcher pour configuration invalide. Pour le désactiver, relancez `up` sans la
-  variable.
+  arrête le dispatcher pour configuration invalide. Pour le réactiver sur ce projet, relancez `up` sans
+  la variable.
 - **Mises à jour des clients.** Quand un client est mis à jour sous un agent en cours, busmon
   signale l'agent `update`, la santé `client-updates` avertit, et sentinel reçoit une directive.
   sentinel redémarre chaque agent périmé sur son rôle et son profil, en reprenant sa
