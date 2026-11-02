@@ -381,7 +381,9 @@ herdr: it provisions, prints today's `herdr --session <project>` line, and exits
 - **Outside herdr** (fake herdr): start runs `herdr --session <p>` with its terminal; polls
   `herdr session list --json` until the session is `running`; the `up` run gets `HERDR_ENV=1`,
   `HERDR_SESSION=<p>` and `HERDR_SOCKET_PATH` equal to the listed `socket_path` (recorded by the
-  fake `upDeps`), opens the workspace, and writes its output only to `start.log`; start returns
+  fake `upDeps`), and reaches `openWorkspace`: the fake herdr records the workspace list, the
+  workspace and tab creation and the focus, each call made with that `HERDR_SOCKET_PATH` (not
+  `up`'s provisioning-only hint); its output goes only to `start.log`; start returns
   herdr's exit status; a session never listed running ends as the failure table says; the
   missing-client and untrusted-folder lines are on the screen before herdr starts; without a
   terminal it prints the command and launches nothing.
