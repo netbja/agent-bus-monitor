@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -196,5 +198,81 @@ func TestStartWithoutConsent(t *testing.T) {
 	}
 	if code := w.start(digits, "--yes", "--name", "game"); code != 0 || !strings.Contains(strings.Join(w.ups[len(w.ups)-1], " "), "game ") {
 		t.Fatalf("--name = %d %q %q", code, w.err.String(), w.ups)
+	}
+}
+
+// fakeTTY is the person's terminal: what they type, what the screen shows.
+type fakeTTY struct {
+	io.Reader
+	screen bytes.Buffer
+}
+
+func (f *fakeTTY) Write(p []byte) (int, error) { return f.screen.Write(p) }
+
+// ask runs start on a terminal where the person types typed.
+func (w *startWorld) ask(typed string, absent ...string) (int, string) {
+	tty := &fakeTTY{Reader: strings.NewReader(typed)}
+	d := w.deps()
+	d.TTY = func() io.ReadWriter { return tty }
+	d.Look = func(exe string) (string, error) {
+		if slices.Contains(absent, exe) {
+			return "", errCLIAbsent
+		}
+		return "/bin/" + exe, nil
+	}
+	w.out.Reset()
+	w.err.Reset()
+	code := runStart([]string{w.folder}, d)
+	return code, tty.screen.String()
+}
+
+// The assistant (agentbus-start spec): Enter starts with the deduced values;
+// a line is changed by its number, checked by the same rule; master stays;
+// a role's client is chosen among its own profile and fallbacks, one not
+// installed never; q and the end of input write nothing.
+func TestStartAssistant(t *testing.T) {
+	w := newStartWorld(t)
+	if code, screen := w.ask("\n"); code != 0 || len(w.ups) != 1 || !strings.Contains(screen, "Enter: start the team") {
+		t.Fatalf("Enter = %d, ups %q\n%s", code, w.ups, screen)
+	}
+
+	w = newStartWorld(t)
+	code, screen := w.ask("1\nShop!\nshop-api\n\n")
+	if code != 0 || !strings.Contains(screen, "a lowercase letter") || w.ups[0][0] != "shop-api" {
+		t.Fatalf("project = %d %q\n%s", code, w.ups, screen)
+	}
+
+	w = newStartWorld(t)
+	code, screen = w.ask("4\n1\n3\nc2\n2\n\n\n")
+	if code != 0 || !strings.Contains(screen, "master cannot be removed") || !strings.Contains(screen, "This team becomes the default") {
+		t.Fatalf("team = %d\n%s", code, screen)
+	}
+	if got := strings.Join(w.ups[0], " "); !strings.Contains(got, "--roles master,foureyes:review") {
+		t.Fatalf("up = %q", got)
+	}
+	if data, _ := os.ReadFile(w.config); !strings.Contains(string(data), `team = "master,foureyes:review"`) {
+		t.Fatalf("start.team:\n%s", data)
+	}
+
+	w = newStartWorld(t)
+	if _, screen := w.ask("4\nc1\n\nq\n"); !strings.Contains(screen, "no other client configured for master") {
+		t.Fatalf("no fallback:\n%s", screen)
+	}
+	w = newStartWorld(t)
+	if _, screen := w.ask("4\nc2\n2\n\nq\n", "codex"); !strings.Contains(screen, "not one to choose") || len(w.ups) != 0 {
+		t.Fatalf("an absent client chosen:\n%s", screen)
+	}
+
+	for _, typed := range []string{"q\n", "4\n3\n", ""} {
+		w = newStartWorld(t)
+		before := w.snapshot()
+		if code, _ := w.ask(typed); code != 0 || len(w.ups) != 0 || w.snapshot() != before {
+			t.Fatalf("quit %q = %d, ups %q, or a file changed", typed, code, w.ups)
+		}
+	}
+
+	w = newStartWorld(t)
+	if _, screen := w.ask("\nq\n", "claude", "codex"); !strings.Contains(screen, "no agent CLI of this team is installed") || !strings.Contains(screen, "claude ✗ not found: https://code.claude.com/docs/en/setup") || len(w.ups) != 0 {
+		t.Fatalf("no client:\n%s", screen)
 	}
 }

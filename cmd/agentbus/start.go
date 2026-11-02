@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
+	"github.com/netbja/agent-bus-monitor/setup"
 )
 
 // startDeps is what agentbus start touches, injected: a test runs no up,
@@ -25,6 +27,8 @@ type startDeps struct {
 	Up       func(args []string) int // up's own code path
 	Live     func(project string) (map[string]life, error)
 	Repo     func() (string, error) // the checkout bootstrap writes templates from
+	TTY      func() io.ReadWriter   // the person's terminal; nil when there is none
+	Look     func(exe string) (string, error)
 	Out, Err io.Writer
 }
 
@@ -42,6 +46,13 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 		},
 		Up:   func(args []string) int { return runUp(args, realUpDeps(stdout, stderr), stdout, stderr) },
 		Repo: func() (string, error) { return repoDir(os.Getenv) },
+		TTY: func() io.ReadWriter {
+			if t := setup.OpenTTY(); t != nil {
+				return t
+			}
+			return nil
+		},
+		Look: realUpDeps(stdout, stderr).LookPath,
 		Live: func(project string) (map[string]life, error) {
 			client, err := bus.Connect("")
 			if err != nil {
@@ -126,9 +137,27 @@ func runStart(args []string, d startDeps) int {
 		fmt.Fprintln(d.Out, n)
 	}
 	if !yes {
-		p.print(d.Out, m)
-		fmt.Fprintln(d.Out, "\nNo terminal to ask on: run agentbus start again with --yes to take these values, or with --name, --as and --roles to change them.")
-		return 2
+		var tty io.ReadWriter
+		if d.TTY != nil {
+			tty = d.TTY()
+		}
+		if tty == nil {
+			p.print(d.Out, m)
+			fmt.Fprintln(d.Out, "\nNo terminal to ask on: run agentbus start again with --yes to take these values, or with --name, --as and --roles to change them.")
+			return 2
+		}
+		a := &asker{in: bufio.NewReader(tty), out: tty, m: m, env: d.Env, look: d.Look}
+		if a.look == nil {
+			a.look = func(exe string) (string, error) { return exe, nil }
+		}
+		if p.Existing {
+			a.live, _ = d.Live(p.Project) // unknown leaves the running line out
+		}
+		if err := a.run(&p); err != nil {
+			fmt.Fprintln(d.Out, "nothing written")
+			return 0
+		}
+		chosenTeam = chosenTeam || a.chosenTeam
 	}
 	switch {
 	case p.ProjectAsk != "":
