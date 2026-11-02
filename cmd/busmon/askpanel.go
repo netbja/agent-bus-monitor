@@ -41,6 +41,45 @@ func findAsk(asks []bus.Ask, id string) (bus.Ask, bool) {
 	return bus.Ask{}, false
 }
 
+// followAsk is the ask and question to answer now for question qid of ask id:
+// following replaced_by while the question is carried unchanged
+// (bus.SameQuestion, the bus's own rule; at most 8 hops), to an ask still
+// open. ok is false when the question changed or left in a replacement, or
+// its ask is no longer open (answered, withdrawn, expired, gone).
+func followAsk(asks []bus.Ask, id, qid string) (bus.Ask, bus.AskQuestionState, bool) {
+	question := func(a bus.Ask) (bus.AskQuestionState, bool) {
+		for _, q := range a.Questions {
+			if q.ID == qid {
+				return q, true
+			}
+		}
+		return bus.AskQuestionState{}, false
+	}
+	a, ok := findAsk(asks, id)
+	if !ok {
+		return bus.Ask{}, bus.AskQuestionState{}, false
+	}
+	q, ok := question(a)
+	for hops := 0; ok && hops < 8; hops++ {
+		if a.State == "open" {
+			return a, q, true
+		}
+		if a.State != "replaced" || a.ReplacedBy == "" {
+			break
+		}
+		next, found := findAsk(asks, a.ReplacedBy)
+		if !found {
+			break
+		}
+		nq, has := question(next)
+		if !has || !bus.SameQuestion(q.AskQuestion, nq.AskQuestion) {
+			break
+		}
+		a, q = next, nq
+	}
+	return bus.Ask{}, bus.AskQuestionState{}, false
+}
+
 // firstOpenQuestion is the index of the first unanswered question from i
 // (wrapping), or -1.
 func firstOpenQuestion(a bus.Ask, from int) int {

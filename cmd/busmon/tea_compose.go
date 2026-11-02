@@ -341,6 +341,7 @@ type composeState struct {
 	pick               int    // the highlighted recipient completion
 	agent              string // composeAnswer: whose question
 	askID, qid, header string
+	orphan             bool // composeAnswer: its question changed or closed; the next send makes it a message
 }
 
 // composeDraft is the message window's draft, kept while it is closed or
@@ -383,14 +384,37 @@ func (m *Model) openAnswerCompose(a bus.Ask, q bus.AskQuestionState, text string
 	if c := m.ui.compose; c != nil && c.kind == composeMessage {
 		m.saveMessageCompose()
 	}
-	key := a.ID + "|" + q.ID
 	if text == "" {
-		text = m.ui.askDrafts[key]
+		text = m.answerDraft(a.ID, q.ID)
 	}
 	m.ui.compose = &composeState{kind: composeAnswer, area: newField(cutRunes(text, answerMaxRunes), answerMaxRunes),
 		agent: a.From, askID: a.ID, qid: q.ID, header: q.Header}
 	m.ui.askDraft, m.ui.broadcastDraft = "", ""
 	m.layoutCompose()
+}
+
+// answerDraft is the draft of question qid of ask id, or of the same question
+// in an ask it replaced, unchanged (a draft left before an ask --replace); the
+// draft found moves to id.
+func (m *Model) answerDraft(id, qid string) string {
+	if d, ok := m.ui.askDrafts[id+"|"+qid]; ok {
+		return d
+	}
+	for _, a := range m.snap.asks {
+		if a.State != "replaced" || a.ReplacedBy == "" {
+			continue
+		}
+		d, ok := m.ui.askDrafts[a.ID+"|"+qid]
+		if !ok {
+			continue
+		}
+		if to, _, open := followAsk(m.snap.asks, a.ID, qid); open && to.ID == id {
+			delete(m.ui.askDrafts, a.ID+"|"+qid)
+			m.ui.askDrafts[id+"|"+qid] = d
+			return d
+		}
+	}
+	return ""
 }
 
 func (m *Model) saveMessageCompose() {
@@ -614,12 +638,22 @@ func (m *Model) composeSend() tea.Cmd {
 			m.ui.flash, m.ui.flashErr = "nothing to send", true
 			return nil
 		}
-		a, ok := findAsk(m.snap.asks, c.askID)
+		if c.orphan {
+			m.answerToMessage(c)
+			return nil
+		}
+		// The question may have moved to a replacing ask (ask --replace):
+		// follow it as the bus does, while it is unchanged.
+		a, _, ok := followAsk(m.snap.asks, c.askID, c.qid)
 		if ok {
 			a = m.withLocalAnswers(a)
 		}
 		for _, q := range a.Questions {
-			if ok && q.ID == c.qid && q.Answer == nil && a.State == "open" {
+			if ok && q.ID == c.qid && q.Answer == nil {
+				if a.ID != c.askID { // the text now answers the new ask: its draft follows
+					delete(m.ui.askDrafts, c.askID+"|"+c.qid)
+					c.askID = a.ID
+				}
 				if m.pauseGate("answer|"+c.askID+"|"+c.qid+"|"+body, pauseRetry{kind: retryCompose}) {
 					return nil
 				}
@@ -631,7 +665,8 @@ func (m *Model) composeSend() tea.Cmd {
 				return m.answerCmd(a, q, "", body)
 			}
 		}
-		m.ui.flash, m.ui.flashErr = "this question is no longer open", true
+		c.orphan = true
+		m.ui.flash, m.ui.flashErr = "this question changed or closed: your text is kept; send again to make it a message to "+c.agent, true
 		return nil
 	}
 	tgt := c.recipient()
@@ -639,6 +674,17 @@ func (m *Model) composeSend() tea.Cmd {
 		return nil
 	}
 	return m.send(tgt, body, tgt != "", true)
+}
+
+// answerToMessage turns an answer whose question changed or closed into a
+// message to the agent who asked, the text kept whole, for the person to read
+// and send: a typed answer is never lost.
+func (m *Model) answerToMessage(c *composeState) {
+	delete(m.ui.askDrafts, c.askID+"|"+c.qid)
+	m.ui.compose = &composeState{kind: composeMessage, to: newField("@"+c.agent, 64), area: newField(c.area.value(), bus.CmdMaxRunes)}
+	m.ui.askDraft, m.ui.broadcastDraft = "", ""
+	m.layoutCompose()
+	m.ui.flash, m.ui.flashErr = "now a message to "+c.agent+": send it when ready", false
 }
 
 // composeClick: on the recipient row it focuses the field, in the text it

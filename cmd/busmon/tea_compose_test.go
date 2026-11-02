@@ -246,3 +246,95 @@ func TestShellWrapRowsFit(t *testing.T) {
 		check([]rune(b.String()), 1+n%10)
 	}
 }
+
+// replaceAsk is the snapshot after the asking agent replaced its first ask
+// (ask --replace): the old ask reads replaced, pointing at the new id, and
+// edit changes the new ask's questions.
+func replaceAsk(m Model, newID string, edit func(qs []bus.AskQuestionState)) (Model, bus.Ask) {
+	old := m.snap.asks[0]
+	nw := old
+	nw.ID, nw.State = newID, "open"
+	nw.Questions = slices.Clone(old.Questions)
+	if edit != nil {
+		edit(nw.Questions)
+	}
+	old.State, old.ReplacedBy = "replaced", newID
+	m.snap.asks = append([]bus.Ask{old, nw}, m.snap.asks[1:]...)
+	return m, old
+}
+
+// The person's case (ask-replaced-answer): they type a free answer, the agent
+// replaces the ask meanwhile with that question word for word, and their send
+// goes to the new ask, as the bus itself follows replaced_by.
+func TestComposeAnswerFollowsAReplacedAsk(t *testing.T) {
+	pinLocal(t)
+	fw := &fakeWriter{left: 1}
+	m := keys(t, shellWith(t, 140, 40, shellConfig{w: fw}, false), '!', 'o')
+	m = typeText(t, m, "a long considered answer")
+	m, _ = replaceAsk(m, "900-0", nil)
+	m, cmd := pressCmd(t, m, kCtrlS)
+	if m = run(t, m, cmd); !slices.Equal(fw.sent, []string{"answer 900-0 go a long considered answer"}) || m.ui.compose != nil {
+		t.Fatalf("sent %q, window open %v, flash %q", fw.sent, m.ui.compose != nil, m.ui.flash)
+	}
+}
+
+// The question changed in the replacement, or the ask closed: nothing is
+// sent, the text stays, the flash says so and where it can go; a second send
+// turns it into a message to the asking agent, the text kept, for the person
+// to read before sending.
+func TestComposeAnswerKeepsTheTextWhenTheQuestionIsGone(t *testing.T) {
+	pinLocal(t)
+	for name, change := range map[string]func(Model) (Model, bus.Ask){
+		"reworded": func(m Model) (Model, bus.Ask) {
+			return replaceAsk(m, "900-0", func(qs []bus.AskQuestionState) { qs[0].Question = "Merge lot 1 tomorrow?" })
+		},
+		"dropped": func(m Model) (Model, bus.Ask) {
+			return replaceAsk(m, "900-0", func(qs []bus.AskQuestionState) { qs[0].ID = "later" })
+		},
+		"closed": func(m Model) (Model, bus.Ask) {
+			a := m.snap.asks[0]
+			a.State = "withdrawn"
+			m.snap.asks = append([]bus.Ask{a}, m.snap.asks[1:]...)
+			return m, a
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fw := &fakeWriter{left: 1}
+			m := keys(t, shellWith(t, 140, 40, shellConfig{w: fw}, false), '!', 'o')
+			m = typeText(t, m, "a long considered answer")
+			m, old := change(m)
+			m, cmd := pressCmd(t, m, kCtrlS)
+			m = run(t, m, cmd)
+			c := m.ui.compose
+			if len(fw.sent) != 0 || c == nil || c.kind != composeAnswer || c.area.value() != "a long considered answer" {
+				t.Fatalf("first send: sent %q, window %+v", fw.sent, c)
+			}
+			if !strings.Contains(m.ui.flash, "kept") || !strings.Contains(m.ui.flash, old.From) {
+				t.Errorf("the flash does not say the text is kept and where it can go: %q", m.ui.flash)
+			}
+			m, cmd = pressCmd(t, m, kCtrlS)
+			m = run(t, m, cmd)
+			c = m.ui.compose
+			if len(fw.sent) != 0 || c == nil || c.kind != composeMessage || c.recipient() != old.From || c.area.value() != "a long considered answer" {
+				t.Fatalf("second send: sent %q, window %+v", fw.sent, c)
+			}
+		})
+	}
+}
+
+// A draft left in the window (Esc) before the replacement comes back when the
+// same, unchanged question of the new ask is answered.
+func TestAnswerDraftFollowsAReplacedAsk(t *testing.T) {
+	pinLocal(t)
+	m := keys(t, shellWith(t, 140, 40, shellConfig{w: &fakeWriter{left: 1}}, false), '!', 'o')
+	m = typeText(t, m, "half written")
+	m = keys(t, m, kEsc)
+	if m.ui.compose != nil {
+		m = keys(t, m, kEsc)
+	}
+	m, _ = replaceAsk(m, "900-0", nil)
+	m = keys(t, m, kEsc, kEsc, '!', 'o')
+	if c := m.ui.compose; c == nil || c.askID != "900-0" || c.area.value() != "half written" {
+		t.Fatalf("the draft did not follow: %+v", c)
+	}
+}

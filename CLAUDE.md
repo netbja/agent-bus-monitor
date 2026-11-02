@@ -1127,7 +1127,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   open ask per agent; each answer is a `reply` (ref = ask id, `human=yes`) that wakes the agent. Client
   JSON never carries answers. v0.15.1: `ask <agent> --withdraw <id> --question <qid> --note …` closes one
   question (`AskAnswer.Withdrawn`), the ask ends with the last one; a directive typed to an agent with an
-  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). busmon: the reader's ask page (`tea_reader.go`, `ModeShellAsk`, `!`/`w`/F4; `w` with no ask open
+  open ask is held once with a hint (Enter sends, Tab opens its panel prefilled). The answer window
+  (ask-replaced-answer) follows `replaced_by` as the bus does, for a question carried unchanged (`followAsk`,
+  `bus.SameQuestion`), its draft too (`answerDraft`); a question changed, dropped or closed keeps the text, says so,
+  and a second send makes it a message to the asking agent (`answerToMessage`); the master skill forbids replacing an
+  ask the person may be answering. busmon: the reader's ask page (`tea_reader.go`, `ModeShellAsk`, `!`/`w`/F4; `w` with no ask open
   opens the compose window to master, `ActAskOrWrite`, busmon-keys; Enter on a For you ask or in the agent's page; `askpanel.go`'s bodies), counts and fade follow open
   questions (`waitingQuestions`), bell per ask id; `markdown.go` renders long texts (`renderMarkdown`,
   overlay bodies only; rows stay on `Preview`).
