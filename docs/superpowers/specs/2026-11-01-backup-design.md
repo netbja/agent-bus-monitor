@@ -175,8 +175,10 @@ person can make them automatic in one setting:
     `backup.dir` is 24 h old or older, or there is none. A backup the person made by hand
     therefore counts, and no clock time needs configuring.
   - **One per host:** it takes a host-local flock, `<state>/backup.lock`, as the model and
-    Redis-release refreshes do. Every project's dispatch service runs the chore, but only one
-    backup is made at a time, and the next check finds that archive fresh.
+    Redis-release refreshes do (`refreshModelsUnderLock`). The lock is a try-lock (`LOCK_NB`):
+    when another chore holds it, this one skips its turn. After taking the lock, it re-reads the
+    newest archive, so a chore that waited behind another's backup finds it fresh and makes none.
+    Every project's dispatch service runs the chore, but only one backup is made.
   - **What it runs:** the same code as `agentbus backup` with no `--project`, so every project of
     this host, followed by the retention (`backup.keep`).
   - **Secrets:** never unattended unless an age recipient is configured. The chore includes the
@@ -189,7 +191,13 @@ person can make them automatic in one setting:
     holds `at`, `scheduled`, the archive's name or the error, the projects, and the `EXEC` time per
     project. The service log carries the same line.
   - **Settings:** read through `config.Machine`: the environment, then that environment's
-    `config.toml`.
+    `config.toml`. The service's environment is not the person's shell, so a default that
+    depends on `XDG_DATA_HOME` can resolve to another folder there. Archives made by hand would
+    then land in one folder, while scheduled ones, and the health check, would use another. So
+    with `daily`:
+    - the guide asks for `backup.dir` set explicitly in `config.toml`;
+    - `agentbus backup` warns when `backup.dir` comes from the default while `daily` is on;
+    - the health check's detail always names the folder it read.
 
 What the person accepts with `daily`: a service now writes outside its state directory, into
 `backup.dir`. Once a day the broker serves nobody else for each project's `EXEC` (see "Redis"
@@ -274,7 +282,10 @@ Through `AGENTBUS_TEST_REDIS_URL`, never the person's broker:
   - `daily` runs when the newest archive is 24 h old or older, or there is none, and does not
     run when it is fresher (an archive made by hand counts);
   - not without the dispatch lease;
-  - two chores (two projects' services) under one host lock make one archive;
+  - two chores (two projects' services) under one host lock make one archive: the second either
+    skips while the lock is held, or re-reads the newest archive after taking it;
+  - the health detail names the folder read, and `agentbus backup` warns about a defaulted
+    `backup.dir` while `daily` is on;
   - without `backup.age_recipient`, no secret file is opened (the fake file system records the
     opens);
   - with one and a fake `age`, the secrets are in `secrets.age` only;
