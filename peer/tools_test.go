@@ -472,3 +472,16 @@ func TestToolsReadAHugeDirectoryInBatches(t *testing.T) {
 		t.Fatalf("list_dir read %d names and printed %d lines", read, strings.Count(out, "\n"))
 	}
 }
+
+// A ~/ deny with no absolute home to anchor it is an error, never a pattern
+// relative to the process's folder that matches nothing (reviewer-codex).
+func TestDenyMatcherNeedsAnAbsoluteHome(t *testing.T) {
+	for _, home := range []string{"", "rel"} {
+		if _, err := NewDenyMatcher([]string{"~/.ssh/**"}, "/work/proj", home); err == nil {
+			t.Errorf("home %q: no error", home)
+		}
+	}
+	if _, err := NewDenyMatcher([]string{"*.pem"}, "/work/proj", ""); err != nil {
+		t.Errorf("a pattern that needs no home: %v", err)
+	}
+}

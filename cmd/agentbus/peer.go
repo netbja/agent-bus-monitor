@@ -96,7 +96,8 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 	peerStartCheck(ctx, c, out)
 	host, _ := os.Hostname()
 	ident := statusIdent(ctx)
-	ident.Endpoint = settings.Endpoint // what health llm-endpoint probes for it (R4)
+	ident.Endpoint = settings.Endpoint               // what health llm-endpoint probes for it (R4)
+	ident.EndpointFP = peer.EndpointFP(settings.URL) // the URL it keeps for its life, never shown
 	r := &peer.Runner{Bus: b, Agent: agent, Consumer: fmt.Sprintf("%s:%d", host, os.Getpid()), Ident: ident,
 		Turn: peer.Turn{Client: c, Prompt: spec.Prompt, MaxCalls: 8, Timeout: settings.TurnTimeout,
 			Tools: peer.Tools{Root: root, Deny: deny, Thread: b.Thread, Agents: b.Agents}},
@@ -128,6 +129,12 @@ func peerStartCheck(ctx context.Context, c peer.Client, out io.Writer) {
 // its caller. The filesystem root, the home directory and a folder holding
 // it are refused: read_file and grep would reach every credential in it.
 func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
+	home := getenv("HOME")
+	if !filepath.IsAbs(home) {
+		// Without it the home checks below cannot run, and the ~/ denies
+		// would anchor nowhere (reviewer-codex): fail closed.
+		return "", fmt.Errorf("HOME is not set to an absolute path: refused")
+	}
 	root := ""
 	if rows, err := projlist.Templates(rolecfg.ProjectsDir(getenv)); err == nil {
 		for _, r := range rows {
@@ -156,16 +163,15 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	home := getenv("HOME")
 	if h, err := filepath.EvalSymlinks(home); err == nil {
 		home = h
 	}
 	switch {
 	case root == "/":
 		return "", fmt.Errorf("%s is the filesystem root: refused", root)
-	case home != "" && root == home:
+	case root == home:
 		return "", fmt.Errorf("%s is the home directory: refused (launch the peer from the project's folder)", root)
-	case home != "" && strings.HasPrefix(home, root+string(filepath.Separator)):
+	case strings.HasPrefix(home, root+string(filepath.Separator)):
 		return "", fmt.Errorf("%s holds the home directory: refused", root)
 	}
 	return root, nil

@@ -202,3 +202,16 @@ func TestPeerStartCheckIsBounded(t *testing.T) {
 		t.Fatalf("not said: %q", out.String())
 	}
 }
+
+// With HOME unset or relative the home checks cannot run: the peer refuses,
+// never reads a repository rooted at the real home (reviewer-codex).
+func TestPeerRootNeedsAnAbsoluteHome(t *testing.T) {
+	repo := t.TempDir()
+	gitInit(t, repo)
+	for _, home := range []string{"", "relative/home"} {
+		env := map[string]string{"HOME": home, "AGENTBUS_PROJECTS_DIR": t.TempDir()}
+		if root, err := peerRoot("other", repo, func(k string) string { return env[k] }); err == nil || !strings.Contains(err.Error(), "HOME") {
+			t.Errorf("HOME=%q: root = %q, %v; want a refusal naming HOME", home, root, err)
+		}
+	}
+}

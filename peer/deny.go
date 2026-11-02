@@ -52,6 +52,7 @@ func NewDenyMatcher(patterns []string, root, home string) (DenyMatcher, error) {
 	if h, err := filepath.EvalSymlinks(home); err == nil && h != home {
 		homes = append(homes, h)
 	}
+	homeOK := filepath.IsAbs(home)
 	for _, p := range patterns {
 		var abs []string
 		switch {
@@ -59,6 +60,10 @@ func NewDenyMatcher(patterns []string, root, home string) (DenyMatcher, error) {
 			return m, fmt.Errorf("an empty deny rule")
 		case strings.HasPrefix(p, "**"):
 			abs = []string{"/" + p}
+		case strings.HasPrefix(p, "~/") && !homeOK:
+			// Joined to an empty or relative home it would match nothing
+			// under the root's absolute paths (reviewer-codex): fail closed.
+			return m, fmt.Errorf("deny rule %q needs the home directory, and HOME is not an absolute path", p)
 		case strings.HasPrefix(p, "~/"):
 			for _, h := range homes {
 				abs = append(abs, filepath.Join(h, p[2:]))
