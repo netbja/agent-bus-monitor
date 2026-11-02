@@ -90,6 +90,8 @@ func (p startPlan) unsettled() string {
 		return "3 You: " + p.NameAsk
 	case p.TeamAsk != "":
 		return "4 Team: " + p.TeamAsk
+	case !hasMaster(p.Team):
+		return "4 Team: master is required (the escalation target and the pilot)"
 	}
 	return ""
 }
@@ -180,7 +182,7 @@ func (a *asker) askProject(p *startPlan) error {
 		if err != nil || in == "" && p.Project != "" {
 			return err
 		}
-		if err := p.setProject(in, a.env); err != nil {
+		if err := p.setProject(in, "typed here", a.env, a.m); err != nil {
 			fmt.Fprintln(a.out, "    a lowercase letter, then lowercase letters, digits, - or _, up to 32; not another folder's project")
 			continue
 		}
@@ -231,6 +233,7 @@ func (a *asker) askTeam(p *startPlan) error {
 			continue
 		}
 		role := roles[n-1]
+		before := slices.Clone(p.Team)
 		at := slices.IndexFunc(p.Team, func(r rolecfg.TeamRole) bool { return r.Role == role })
 		switch {
 		case client:
@@ -247,8 +250,13 @@ func (a *asker) askTeam(p *startPlan) error {
 		default:
 			p.Team = append(p.Team, rolecfg.TeamRole{Role: role})
 		}
-		p.Team, _ = a.m.ParseTeam(teamSpec(p.Team)) // back in the manifest's order
-		p.TeamWhy, p.TeamAsk, a.chosenTeam = "chosen here", "", true
+		team, err := a.m.ParseTeam(teamSpec(p.Team)) // back in the manifest's order
+		if err != nil {                              // a role of the template the toggles cannot keep (foureyes)
+			p.Team = before
+			fmt.Fprintf(a.out, "    %v: the team is left as it was; give it with agentbus start --roles\n", err)
+			continue
+		}
+		p.Team, p.TeamWhy, p.TeamAsk, a.chosenTeam = team, "chosen here", "", true
 	}
 }
 

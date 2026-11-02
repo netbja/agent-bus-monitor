@@ -409,3 +409,36 @@ func TestStartOutsideHerdr(t *testing.T) {
 		t.Fatalf("no herdr = %d %q", code, w.err.String())
 	}
 }
+
+// A refused project name is never kept (foureyes); choosing an existing
+// project takes its template's team (reviewer-codex); master missing from a
+// template is added in the assistant, and starting without it is refused
+// (reviewer-codex); a team holding a role the toggles cannot keep is left as
+// it was and the reason said (foureyes).
+func TestStartAssistantProjectAndTeam(t *testing.T) {
+	w := newStartWorld(t)
+	other := t.TempDir()
+	write(t, filepath.Join(w.projects, "taken.toml"), "name = \"taken\"\nworking_dir = \""+other+"\"\n")
+	if code, screen := w.ask("1\ntaken\n\n\n"); code != 0 || len(w.ups) != 1 || w.ups[0][0] != "shop" || !strings.Contains(screen, "not another folder's project") {
+		t.Fatalf("a refused name kept = %d %q\n%s", code, w.ups, screen)
+	}
+
+	w = newStartWorld(t)
+	w.writeTemplate("shop", []rolecfg.TeamRole{{Role: "master"}, {Role: "foureyes"}})
+	write(t, filepath.Join(w.projects, "shop-b.toml"), "name = \"shop-b\"\nworking_dir = \""+w.folder+"\"\n")
+	if code, _ := w.ask("1\nshop\n\n"); code != 0 || strings.Join(w.ups[0], " ") != "shop "+w.folder+" --as root-admin" {
+		t.Fatalf("choosing shop = %d %q", code, w.ups)
+	}
+
+	w = newStartWorld(t)
+	w.writeTemplate("shop", []rolecfg.TeamRole{{Role: "coder"}})
+	if code, screen := w.ask("\n4\n1\n\n\n"); code != 0 || !strings.Contains(screen, "master is required") || !strings.Contains(strings.Join(w.ups[0], " "), "new --roles master,coder") {
+		t.Fatalf("master added = %d %q\n%s", code, w.ups, screen)
+	}
+
+	w = newStartWorld(t)
+	w.writeTemplate("shop", []rolecfg.TeamRole{{Role: "master"}, {Role: "docs"}})
+	if _, screen := w.ask("4\n3\n\nq\n"); !strings.Contains(screen, "docs is not a boot role") || len(w.ups) != 0 {
+		t.Fatalf("a team the toggles cannot keep:\n%s", screen)
+	}
+}

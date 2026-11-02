@@ -183,7 +183,7 @@ func runStart(args []string, d startDeps) int {
 	// The flags pre-answer the assistant, checked by the same rules.
 	chosenTeam := false
 	if name != "" {
-		if err := p.setProject(name, d.Env); err != nil {
+		if err := p.setProject(name, "--name", d.Env, m); err != nil {
 			return fail("--name: %v", err)
 		}
 	}
@@ -199,9 +199,6 @@ func runStart(args []string, d startDeps) int {
 			return fail("--roles: %v", err)
 		}
 		p.Team, p.TeamWhy, chosenTeam = team, "--roles", true
-	}
-	if !slices.ContainsFunc(p.Team, func(r rolecfg.TeamRole) bool { return r.Role == "master" }) {
-		return fail("master cannot be removed: it is the escalation target and the pilot")
 	}
 	for _, n := range p.Notes {
 		fmt.Fprintln(d.Out, n)
@@ -236,6 +233,8 @@ func runStart(args []string, d startDeps) int {
 		return fail("%s: give yours with --as", p.NameAsk)
 	case p.TeamAsk != "" && roles == "":
 		return fail("%s: give the team with --roles", p.TeamAsk)
+	case !hasMaster(p.Team): // after the assistant, which can add it (reviewer-codex)
+		return fail("master cannot be removed: it is the escalation target and the pilot")
 	}
 
 	// A team change on an existing project: its template must be the one
@@ -368,14 +367,14 @@ func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string
 }
 
 // setProject takes a name the person gave: valid, and never another folder's
-// project.
-func (p *startPlan) setProject(name string, env func(string) string) error {
+// project; nothing changes on a refusal (foureyes). An existing project of
+// this folder brings its template's team (reviewer-codex).
+func (p *startPlan) setProject(name, why string, env func(string) string, m *rolecfg.Manifest) error {
 	if !bus.ValidName(name) {
 		return fmt.Errorf("%q is not a project name: a lowercase letter, then lowercase letters, digits, - or _, up to 32", name)
 	}
 	rows, _ := projlist.Templates(rolecfg.ProjectsDir(env))
-	p.Project, p.ProjectWhy, p.ProjectAsk, p.Existing = name, "--name", "", false
-	p.Template = filepath.Join(rolecfg.ProjectsDir(env), name+".toml")
+	existing := false
 	for _, r := range rows {
 		if r.Name != name {
 			continue
@@ -383,9 +382,26 @@ func (p *startPlan) setProject(name string, env func(string) string) error {
 		if dir, ok := canonDir(expandHome(r.WorkingDir, env("HOME"))); !ok || dir != p.Folder {
 			return fmt.Errorf("%s is the project of %s: choose another name", name, r.WorkingDir)
 		}
-		p.Existing = true
+		existing = true
 	}
+	template := filepath.Join(rolecfg.ProjectsDir(env), name+".toml")
+	if existing {
+		team, stale, err := templateTeam(template, m)
+		if err != nil {
+			return err
+		}
+		p.Team, p.TeamWhy, p.TeamAsk = team, "its template", ""
+		if len(stale) > 0 {
+			p.TeamAsk = strings.Join(stale, ", ") + ": no longer allowed by roles.toml"
+		}
+	}
+	p.Project, p.ProjectWhy, p.ProjectAsk, p.Existing, p.Template = name, why, "", existing, template
 	return nil
+}
+
+// hasMaster: a team must hold master, the escalation target and the pilot.
+func hasMaster(team []rolecfg.TeamRole) bool {
+	return slices.ContainsFunc(team, func(r rolecfg.TeamRole) bool { return r.Role == "master" })
 }
 
 // checkTeamChange refuses a team change on a template edited by hand, and

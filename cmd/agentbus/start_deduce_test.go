@@ -191,7 +191,7 @@ func TestDeduceStartThroughASymlink(t *testing.T) {
 	}
 	// --name on that alias is this folder's project too.
 	p, _ := deduceStart(real, func(k string) string { return env[k] }, m)
-	if err := p.setProject("shop", func(k string) string { return env[k] }); err != nil || !p.Existing {
+	if err := p.setProject("shop", "--name", func(k string) string { return env[k] }, m); err != nil || !p.Existing {
 		t.Fatalf("--name through the alias: %v %+v", err, p)
 	}
 }
