@@ -98,13 +98,13 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 			case s.EndpointFP != "" && fpKey == nil:
 				// The peer may call another URL than this probe reaches: never
 				// ok on that (reviewer-codex).
-				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (its URL not compared: no fingerprint key)", p))
+				in.Unverified = append(in.Unverified, p)
 			case s.EndpointFP != "" && s.EndpointFP != peer.EndpointFP(fpKey, ep.URL):
 				// The peer still calls the URL it started with; this probe
 				// reaches the new one only.
-				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s ([llm.%s]'s URL changed since its launch)", p, ep.Name))
+				in.Changed = append(in.Changed, fmt.Sprintf("%s ([llm.%s]'s URL changed since its launch)", p, ep.Name))
 			case s.Model != "" && s.Model != ep.Model:
-				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (runs %s; [llm.%s] now names %s)", p, s.Model, ep.Name, ep.Model))
+				in.Changed = append(in.Changed, fmt.Sprintf("%s (runs %s; [llm.%s] now names %s)", p, s.Model, ep.Name, ep.Model))
 				ep.Model = s.Model
 			}
 			probe(ep)

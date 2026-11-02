@@ -216,15 +216,15 @@ func TestLLMEndpointCheckSaysAURLChangedSinceTheLaunch(t *testing.T) {
 }
 
 // A peer that recorded a fingerprint, checked on a host whose key cannot be
-// read, is not ok: the URL could not be compared, and that is said
-// (reviewer-codex).
+// read, is unknown, never ok: the URL could not be compared, and that is said
+// (reviewer-codex, master).
 func TestLLMEndpointCheckSaysAnUnreadableKey(t *testing.T) {
 	srv := modelsServer(t, "qwen")
 	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"qwen\"\n")
 	d := llmDeps(map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used", EndpointFP: "00112233aabbccdd"}}, cfg)
 	d.FPKey = func() ([]byte, error) { return nil, errors.New("permission denied") }
 	out, _ := llmEndpointCheck(d)(context.Background())
-	if out.Status == health.OK || !strings.Contains(out.Detail, "local (its URL not compared: no fingerprint key)") {
+	if out.Status != health.Unknown || !strings.Contains(out.Detail, "URL not compared for local") {
 		t.Fatalf("unreadable key = %s %q", out.Status, out.Detail)
 	}
 }
