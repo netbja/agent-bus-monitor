@@ -199,13 +199,34 @@ and busmon's settings page lists it:
 | File rule | each item a valid name, optionally `:` and a valid name, no duplicate role; the manifest is not read here (`config` imports no `rolecfg`), so start checks the roles and profiles at use, as the Team row says |
 | Group | `Identity` (who you are and the team you start with); `TestEveryKeyHasItsGroup` holds it |
 
-The configured profile of a role is then the template's when its tab names one. Three readers
-compare against a role's own profile and must read it through one function (the template's
-`--profile`, else `roles.toml`'s): `roles doctor`'s configured model (so a client chosen at start
-is never `model≠` drift), `swap`'s check that the target is not the role's own profile, and
-`swap --back`, which returns the role to the template's profile, not `roles.toml`'s. A choice made
-at start is the project's configuration, not a fallback: it writes no `{p}:fallback` record,
-busmon shows no `fallback` flag, and no `back:` notice follows.
+### A role's own profile in a project
+
+The configured profile of a role is then the template's when its tab names one. One function,
+`ownProfile(m, project, role)`, answers it: the `--profile` of the role's tab in the project's
+template (`rolecfg.ProjectsDir`/`<project>.toml`, split as `tabProfile` splits it) resolved with
+`m.ResolveWith`, else `m.Resolve(role)` (no template, no tab for the role, as for a pop, or a tab
+without `--profile`). A template that exists but cannot be read or parsed is an error, never a
+silent fall back to `roles.toml`: a reader that acts (swap, reload) refuses with it, a reader that
+reports (doctor) shows `?`.
+
+Every reader that today takes a role's own profile from `m.Resolve(role)` reads it through
+`ownProfile` instead:
+
+| Reader | What it does with the own profile |
+|---|---|
+| `tabProfile` (`trust.go`), so `tabExecutable`, `checkClients` and the trust gate | the client a tab launches: `foureyes:review` is checked as codex and opens codex's trust gate, not claude's |
+| `roles doctor` | the configured model, so a client chosen at start is never `model≠` drift |
+| `swap`: own profile and target set | the targets are the manifest's own profile plus its `fallback_profiles`, minus the current own; so with foureyes on `review`, `swap foureyes --profile default` is allowed without `--force` |
+| `swap`: provider rule | `checkFallbacks` checks "another provider" against the manifest's profile at load; swap also refuses a target on the current own profile's provider, since it would be held with it |
+| `swap --back`, the `{p}:fallback` record (`OwnProfile`, `OwnProvider`), the `hold:<provider>` mark it reads | back to the template's profile, and the own provider watched is the template's |
+| `swap`'s recovery line | `agent-spawn <role> <p> --profile <own>` when own differs from the manifest's, so a recovery respawns on the project's profile |
+| `reload` preflight and proof | the client executable checked before the kill and the client/provider `replaced` proves against: the relaunch runs the template's command, so the proof must expect the template's client, or a sentinel reload of a role whose client was chosen at start would kill it and then fail |
+| `reload`'s recovery lines | as swap's |
+
+`resumeProfile` (the resume hook) needs no change: it already adds `--profile` for a running
+profile that differs from the manifest's. A choice made at start is the project's configuration,
+not a fallback: it writes no `{p}:fallback` record, busmon shows no `fallback` flag, and no
+`back:` notice follows.
 
 A team change on an **existing** project:
 
@@ -261,14 +282,26 @@ herdr itself, so the team opens inside it:
 2. It runs `herdr --session <project>` as a child that inherits start's terminal (stdin, stdout,
    stderr), the same process a person typing that command would get; herdr launches the session,
    or attaches to it when one of that name already runs.
-3. In parallel it waits for that session's socket (`…/sessions/<project>/herdr.sock`, or
-   `…/herdr/herdr.sock` for a project named `default`: the paths `herdrSession` already reads) to
-   answer, bounded at 15 s, then runs `up`'s code path with
-   `--session <project>`, which opens the workspace and its tabs through the socket, as `up
-   --session` does today. That run's output goes to `<state>/start.log` (0600), never to the
-   terminal herdr now draws.
-4. start waits for herdr to exit and returns its exit status. If step 3 failed, it then prints
-   the error and the log's path; the session and its workspace stay (they are herdr's).
+3. In parallel it asks herdr where that session lives: `herdr session list --json` (herdr's own
+   answer: `name`, `running`, `socket_path`), every 250 ms until the session is listed `running`,
+   bounded at 15 s. agentbus never computes herdr's config directory: `herdrSession` and
+   `sessionFromSocket` only parse a path they are given.
+4. It then runs `up`'s code path (`runUp`) with `--session <project>` and an environment that
+   says it is inside that session, since `up` opens a workspace only when `HERDR_ENV=1`
+   (`up.go`; outside herdr it provisions and prints the hint, `--session` or not):
+   `HERDR_ENV=1`, `HERDR_SESSION=<project>`, `HERDR_SOCKET_PATH=<socket_path>` from step 3, on
+   top of start's own environment (the same three a herdr pane gives a plugin). Its herdr calls
+   reach the session through that socket. That run's output goes to `<state>/start.log` (0600),
+   never to the terminal herdr now draws.
+5. start waits for herdr to exit and returns its exit status. If step 3 or 4 failed, it then
+   prints the error and the log's path; the session and its workspace stay (they are herdr's).
+
+What `up` would say on the terminal goes to `start.log` while herdr draws, so start says the two
+lines a person needs **before** handing the terminal over, on the assistant's screen: the clients
+`checkClients` finds missing (the Team line already shows them) and, for each client whose trust
+reader says the folder is not trusted yet, `codex does not trust ~/src/shop yet: answer its dialog
+in the foureyes tab`. Once herdr draws, that dialog is visible in its pane, and the dispatcher's
+existing `prompt` flag and desktop ring (A10) cover a dialog left unanswered.
 
 start does not own the terminal beyond that: it hands it to herdr for herdr's whole run and never
 writes to it meanwhile. Without a terminal (a script with `--yes`), start cannot hand one to
@@ -281,7 +314,7 @@ herdr: it provisions, prints today's `herdr --session <project>` line, and exits
 |---|---|
 | `agentbus` installed but no broker (docker down, compose never run) | bootstrap's own error, plus `./setup.sh status` to see why |
 | herdr not on PATH | says herdr is needed and where to get it (setup's step 2 text); writes nothing |
-| Outside herdr, the session's socket never answers (15 s) | herdr keeps the terminal; once it exits, start prints `herdr --session <project> did not answer` and `agentbus up <project>` to run inside it; exits 1 |
+| Outside herdr, the session is not listed `running` within 15 s | herdr keeps the terminal; once it exits, start prints `herdr session <project> did not start` and `agentbus up <project>` to run inside it; exits 1 |
 | Outside herdr, `up` fails inside the launched session | after herdr exits, the error and `<state>/start.log`; exits 1 |
 | A `start.team` role or profile the manifest no longer allows | dropped or back to the role's own profile, said on the screen; never refused |
 | A client change for a role whose agent is live | refused, pointing at `agentbus retire <role>` (or `swap` for a temporary change) |
@@ -336,13 +369,22 @@ herdr: it provisions, prints today's `herdr --session <project>` line, and exits
   back with a line; master added back when missing; the key's file rule refuses `a:b:c`,
   `Coder` and a duplicate role; `TestEveryKeyHasItsGroup` and `TestNoEnvLiteralOutsideTheRegistry`
   still pass.
-- **Own profile**: `roles doctor`, `swap` and `swap --back` read a role's own profile from its
-  template's `--profile` (doctor reports no drift for a chosen client; `swap --back` returns to
-  the template's profile); a choice at start writes no `{p}:fallback`.
-- **Outside herdr** (fake herdr and socket): start runs `herdr --session <p>` with its terminal,
-  runs `up --session <p>` once the socket answers, writes `up`'s output only to `start.log`, and
-  returns herdr's exit status; a socket that never answers ends as the failure table says;
-  without a terminal it prints the command and launches nothing.
+- **Own profile** (`ownProfile`, a table: no template, a tab without `--profile`, a tab with
+  one, a pop with no tab, an unreadable template), then one test per reader of the table above:
+  `tabProfile`/`checkClients`/trust gate check codex for `foureyes:review`; doctor reports no
+  drift; swap's target set includes the manifest's own profile and excludes the current own,
+  refuses a target on the current own's provider, and its recovery line carries `--profile`;
+  `swap --back` and the `{p}:fallback` record use the template's profile and provider; reload's
+  preflight checks the template's client executable and its proof accepts the template's
+  client/provider, and refuses on an unreadable template before any kill; a choice at start
+  writes no `{p}:fallback`.
+- **Outside herdr** (fake herdr): start runs `herdr --session <p>` with its terminal; polls
+  `herdr session list --json` until the session is `running`; the `up` run gets `HERDR_ENV=1`,
+  `HERDR_SESSION=<p>` and `HERDR_SOCKET_PATH` equal to the listed `socket_path` (recorded by the
+  fake `upDeps`), opens the workspace, and writes its output only to `start.log`; start returns
+  herdr's exit status; a session never listed running ends as the failure table says; the
+  missing-client and untrusted-folder lines are on the screen before herdr starts; without a
+  terminal it prints the command and launches nothing.
 - **Folder**: a linked worktree resolves to its main checkout; two templates on one folder
   asked, and refused with `--yes`.
 - **Idempotence**: start twice through `upDeps` fakes on a running workspace, every agent
