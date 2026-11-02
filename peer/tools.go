@@ -68,6 +68,10 @@ const (
 	threadCap   = 20
 )
 
+// grepEntries bounds the entries one grep walks (SEC-LLM-5): the byte budget
+// alone let a tree of many small or skipped files run past turn_timeout.
+var grepEntries = 20000
+
 // Tools runs the peer's read-only tools. Root is the project root with its
 // symlinks resolved; Deny the role's effective Read denies; Thread and Agents
 // read the bus.
@@ -99,7 +103,7 @@ func (t Tools) Run(ctx context.Context, name, args string) string {
 	case "list_dir":
 		return t.listDir(a.Path)
 	case "grep":
-		return t.grep(a.Pattern, a.Path)
+		return t.grep(ctx, a.Pattern, a.Path)
 	case "bus_thread":
 		return t.busThread(ctx, a.ID)
 	case "bus_agents":
@@ -207,7 +211,7 @@ func (t Tools) listDir(rel string) string {
 	return b.String()
 }
 
-func (t Tools) grep(pattern, rel string) string {
+func (t Tools) grep(ctx context.Context, pattern, rel string) string {
 	if pattern == "" {
 		return "error: pattern is required"
 	}
@@ -220,9 +224,15 @@ func (t Tools) grep(pattern, rel string) string {
 		return msg
 	}
 	var b strings.Builder
-	matches, budget := 0, int64(grepBudget)
-	stop := errors.New("stop")
+	matches, budget, entries := 0, int64(grepBudget), 0
+	stop, tooMany := errors.New("stop"), errors.New("entries")
 	walkErr := filepath.WalkDir(start, func(p string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err() // the turn's clock: the lease is held meanwhile
+		}
+		if entries++; entries > grepEntries {
+			return tooMany
+		}
 		if err != nil {
 			return nil
 		}
@@ -262,6 +272,10 @@ func (t Tools) grep(pattern, rel string) string {
 		return nil
 	})
 	switch {
+	case ctx.Err() != nil:
+		b.WriteString("[stopped: the turn ended]\n")
+	case errors.Is(walkErr, tooMany):
+		fmt.Fprintf(&b, "[stopped after %d entries]\n", grepEntries)
 	case errors.Is(walkErr, stop) && matches == grepMatches:
 		fmt.Fprintf(&b, "[stopped at %d matches]\n", grepMatches)
 	case errors.Is(walkErr, stop):

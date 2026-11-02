@@ -380,3 +380,21 @@ func TestToolsRefuseTheGitDirectory(t *testing.T) {
 		t.Fatalf("the root no longer lists: %q", out)
 	}
 }
+
+// grep stops with the turn's clock and after a bounded number of entries, so
+// a large root (node_modules, .worktrees) never holds the receiver lease past
+// turn_timeout (SEC-LLM-5); each stop is said.
+func TestGrepStopsWithTheTurnAndAtItsEntryCap(t *testing.T) {
+	tl := toolsFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	b, _ := json.Marshal(map[string]any{"pattern": "board"})
+	if out := tl.Run(ctx, "grep", string(b)); !strings.Contains(out, "[stopped: the turn ended]") || strings.Contains(out, "main.go:3:") {
+		t.Fatalf("grep after the turn ended = %q", out)
+	}
+	defer func(n int) { grepEntries = n }(grepEntries)
+	grepEntries = 3
+	if out := run(t, tl, "grep", map[string]any{"pattern": "zzz-none"}); !strings.Contains(out, "[stopped after 3 entries]") {
+		t.Fatalf("grep past its entry cap = %q", out)
+	}
+}
