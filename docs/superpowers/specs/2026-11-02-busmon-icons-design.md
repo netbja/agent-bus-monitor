@@ -1,6 +1,6 @@
 # busmon icons — design (spec and text mock-ups, no code)
 
-Status: proposed, 2026-11-02. Branch `spec/busmon-icons`. Request: Bernard, "donner un peu de
+Status: accepted, 2026-11-02 (answers in §9). Branch `spec/busmon-icons`. Request: Bernard, "donner un peu de
 couleur". Constraints from master's directive: no new Go dependency (a few constants, not
 gonerdfonts); one setting `display.icons = off | nerd | agent-font`, default `off`, hot like the
 other display keys and on the C page; icons join `theme.go`'s closed glyph set, their cell width
@@ -312,8 +312,8 @@ then the provider; under `nerd`, the provider.
 
 For you's kind column already uses glyphs with a meaning (`● ask`, `♙ wait`, `◆ gate`,
 `● unread`). An icon there would compete with them. Putting the *sender's* icon before its name
-(For you, Activity, Requests) is a possible v2 (open question 1). In v1 these lists are
-unchanged.
+(For you, Activity, Requests) was asked (open question 1) and declined: these lists stay
+unchanged in every mode.
 
 ## 8. What does not change
 
@@ -332,3 +332,12 @@ unchanged.
 3. Ghostty: the `font-codepoint-map` line for `U+E1A0–E1BA,U+E1C0–E1C5` is no longer in
    `~/.config/ghostty/config`. Put it back, or check that Ghostty's fallback draws the agent font
    without it? The C page sample (§6) answers this on screen.
+
+### Answers (2026-11-02, relayed by master)
+
+1. **Sender's icon in For you, Activity and Requests: never.** Not a v2: these lists keep their
+   `from` column as it is in every mode, and §7.4 stays the rule.
+2. **`nerd` stays.** The setting keeps its three values, `off | nerd | agent-font`.
+3. **Ghostty: look at the C page sample first.** busmon writes nothing to the terminal's
+   configuration; if the `agent-font` sample shows boxes or tofu, the person puts the
+   `font-codepoint-map` line back in their Ghostty config themselves.

@@ -15,7 +15,7 @@ func tokPage(all bool, width int) []Line {
 	}
 	agents["foureyes"].pid, agents["foureyes"].identSession = 1, "s-foureyes"
 	agents["coder"].pid, agents["coder"].identSession = 2, "s-coder"
-	return tokensPage(tokFixtureState(shellNow), nil, nil, agents, "agent-bus-monitor", shellNow, width, false, barView{}, all)
+	return tokensPage(iconsOff, tokFixtureState(shellNow), nil, nil, agents, "agent-bus-monitor", shellNow, width, false, barView{}, all)
 }
 
 func tokLinesText(ls []Line) string {

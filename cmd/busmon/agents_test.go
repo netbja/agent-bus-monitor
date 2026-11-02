@@ -166,18 +166,18 @@ func TestAgentRowWidth(t *testing.T) {
 	for _, tier := range []Tier{TierWide, TierMedium, TierNarrow} {
 		for w := 1; w <= 200; w++ {
 			for _, a := range []*agentState{hostileAgent(now), {}} {
-				if got := agentRow(name, a, true, tier, w, now).Width(); got != w {
+				if got := agentRow(iconsOff, name, a, true, tier, w, now).Width(); got != w {
 					t.Fatalf("tier %d width %d: row %d cells", tier, w, got)
 				}
 			}
-			if h := agentHeader(tier, w); tier == TierWide && h.Width() != w {
+			if h := agentHeader(iconsOff, tier, w); tier == TierWide && h.Width() != w {
 				t.Fatalf("wide header %d at %d", h.Width(), w)
 			} else if tier != TierWide && h != nil {
 				t.Fatalf("tier %d has a header", tier)
 			}
 		}
 	}
-	row := agentRow("grok", hostileAgent(now), false, TierWide, 160, now).text()
+	row := agentRow(iconsOff, "grok", hostileAgent(now), false, TierWide, 160, now).text()
 	for _, want := range []string{GlyphBlocked + " grok", "blocked", "6m", "12 msg", "608k", "gate 1", "deferred", "needs review"} {
 		if !strings.Contains(row, want) {
 			t.Errorf("wide row lacks %q: %q", want, row)
@@ -188,11 +188,11 @@ func TestAgentRowWidth(t *testing.T) {
 			t.Errorf("wide row keeps %q", bad)
 		}
 	}
-	nar := agentRow("grok", hostileAgent(now), false, TierNarrow, 40, now).text()
+	nar := agentRow(iconsOff, "grok", hostileAgent(now), false, TierNarrow, 40, now).text()
 	if !strings.Contains(nar, "gate 1 日") {
 		t.Errorf("narrow row must fold the flag into the message: %q", nar)
 	}
-	med := agentRow("grok", hostileAgent(now), false, TierMedium, 100, now).text()
+	med := agentRow(iconsOff, "grok", hostileAgent(now), false, TierMedium, 100, now).text()
 	if strings.Contains(med, "608k") || strings.Contains(med, GlyphDotFull) || !strings.Contains(med, "gate 1") || strings.Contains(med, "deferred") {
 		t.Errorf("medium row must drop bar and ctx and keep one flag: %q", med)
 	}

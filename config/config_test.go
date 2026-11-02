@@ -25,7 +25,7 @@ func writeFile(t *testing.T, name, body string) string {
 func TestRegistryRows(t *testing.T) {
 	want := []string{
 		"waiting.popup_after", "waiting.snooze", "waiting.bell", "waiting.fade", "recap.auto_after",
-		"display.theme", "display.limit", "display.idle_hint_after", "identity.as", "updates.check",
+		"display.theme", "display.icons", "display.limit", "display.idle_hint_after", "identity.as", "updates.check",
 		"dispatch.context_alert", "dispatch.prompt_grace", "dispatch.quota", "dispatch.quota_warn",
 		"dispatch.quota_hold", "dispatch.quota_max_age", "dispatch.quota_long_hold", "dispatch.tokens",
 		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "dispatch.turn_stale_after", "history.keep_days", "history.max_mb", "start.team", "sentinel.reload", "bus.report_max", "bus.report_full_max", "bus.verdict_max",
@@ -79,6 +79,9 @@ func TestEnvRulesUnchanged(t *testing.T) {
 	cases := []c{
 		{"display.theme", "dark", "dark", "use"},
 		{"display.theme", "blue", nil, "invalid"},
+		{"display.icons", "nerd", "nerd", "use"},
+		{"display.icons", "agent-font", "agent-font", "use"},
+		{"display.icons", "emoji", nil, "skip"}, // busmon-icons: a wrong value never breaks the screen
 		{"display.limit", " -1 ", -1, "use"},
 		{"display.limit", "0", 0, "use"},
 		{"display.limit", "abc", nil, "skip"},

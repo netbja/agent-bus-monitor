@@ -347,6 +347,66 @@ const (
 	glyphBottomRight = "╯"
 )
 
+// Icons (busmon-icons, spec docs/superpowers/specs/2026-11-02-busmon-icons-design.md):
+// drawn only when display.icons asks for them, from fixed tables keyed by
+// client and provider; never read from bus text. Each is one Private Use rune,
+// one cell, always followed by a blank cell busmon writes (iconPair).
+const (
+	iconsOff  = "off"
+	iconsNerd = "nerd"
+	iconsFont = "agent-font"
+
+	// The agent font (Herdr Agent Icons Max): the makers' logos.
+	fontClaude   = "\ue1a0"
+	fontCodex    = "\ue1a1"
+	fontKimi     = "\ue1a6"
+	fontDeepSeek = "\ue1ad"
+	fontGemini   = "\ue1ae"
+	fontGrok     = "\ue1b1"
+	fontAgy      = "\ue1b2"
+
+	// Nerd Fonts has no makers' logos: a lettered box per provider (Material Design).
+	nfAlphaA = "\U000f0b08"
+	nfAlphaD = "\U000f0b0b"
+	nfAlphaG = "\U000f0b0e"
+	nfAlphaK = "\U000f0b12"
+	nfAlphaL = "\U000f0b13"
+	nfAlphaM = "\U000f0b14"
+	nfAlphaO = "\U000f0b16"
+	nfAlphaX = "\U000f0b1f"
+)
+
+// IconGlyphs is every icon, beside UIGlyphs in the closed set.
+var IconGlyphs = []string{fontClaude, fontCodex, fontKimi, fontDeepSeek, fontGemini, fontGrok, fontAgy,
+	nfAlphaA, nfAlphaD, nfAlphaG, nfAlphaK, nfAlphaL, nfAlphaM, nfAlphaO, nfAlphaX}
+
+var (
+	fontByClient   = map[string]string{"claude-code": fontClaude, "codex": fontCodex, "kimi-cli": fontKimi, "grok": fontGrok, "agy": fontAgy}
+	fontByProvider = map[string]string{"anthropic": fontClaude, "openai": fontCodex, "moonshot": fontKimi, "xai": fontGrok,
+		"google": fontGemini, "deepseek": fontDeepSeek}
+	nerdByProvider = map[string]string{"anthropic": nfAlphaA, "openai": nfAlphaO, "moonshot": nfAlphaK, "xai": nfAlphaX,
+		"google": nfAlphaG, "deepseek": nfAlphaD, "xiaomi": nfAlphaM, "local": nfAlphaL}
+)
+
+// agentIcon is an agent's icon in mode: agent-font the client's logo, else the
+// provider's; nerd the provider's box only; "" for off or none known.
+func agentIcon(mode, client, provider string) string {
+	switch mode {
+	case iconsFont:
+		if g, ok := fontByClient[client]; ok {
+			return g
+		}
+		return fontByProvider[provider]
+	case iconsNerd:
+		return nerdByProvider[provider]
+	}
+	return ""
+}
+
+// providerIcon is an account's icon: keyed by provider in every mode (a window
+// belongs to the subscription, not a client).
+func providerIcon(mode, provider string) string { return agentIcon(mode, "", provider) }
+
 var UIGlyphs = []string{
 	GlyphWorking, GlyphIdle, GlyphBlocked, GlyphDown, GlyphDone, GlyphNone,
 	GlyphSelect, GlyphArrowR, GlyphArrowL, GlyphUp, GlyphDownArrow, GlyphEllipsis,

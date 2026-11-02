@@ -272,3 +272,36 @@ func TestSettingsPageReviewFixes(t *testing.T) {
 		t.Fatalf("keys after the write: %q", configText(t, getenv))
 	}
 }
+
+// busmon-icons §6: Icons is a Display row chosen with ←→ like the theme,
+// applied at once; its sample line draws each mode's glyphs in that mode, so
+// the person sees what the terminal draws.
+func TestSettingsPageIcons(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	body := tokLinesText(m.rd.top().body)
+	if !strings.Contains(body, "Icons") {
+		t.Fatalf("no Icons row:\n%s", body)
+	}
+	for _, g := range []string{nfAlphaA, nfAlphaO, nfAlphaK, nfAlphaX, nfAlphaG, fontClaude, fontCodex, fontKimi, fontGrok, fontGemini} {
+		if !strings.Contains(body, g+" ") {
+			t.Errorf("the sample lacks %q followed by its blank cell", g)
+		}
+	}
+	m = selectSetting(t, m, "display.icons")
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "icons = \"nerd\"") || m.cfg.settings.Icons != "nerd" || !strings.Contains(m.ui.flash, "applied") {
+		t.Fatalf("icons: %q %q %q", configText(t, getenv), m.cfg.settings.Icons, m.ui.flash)
+	}
+	m = selectSetting(t, m, "display.icons")
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyLeft})
+	m = press(t, m, tea.Key{Code: tea.KeyLeft})
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "icons = \"agent-font\"") || m.cfg.settings.Icons != "agent-font" {
+		t.Fatalf("icons back: %q %q", configText(t, getenv), m.cfg.settings.Icons)
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ type headerData struct {
 	budgets  map[string]bus.BudgetSnapshot
 	bars     barView      // the gauges as they slide
 	plan     *planSummary // the batch's plan (P); nil when none is loaded
+	icons    string       // display.icons: a gauge's provider icon, the first thing to go for room (busmon-icons)
 	now      time.Time
 }
 
@@ -142,15 +144,23 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 		names = append(names, n)
 	}
 	sort.Strings(names)
+	var pairs []iconAt // the gauges' icon pairs, leftmost first
 	for i, n := range names {
 		b := d.budgets[n]
+		var l Line
 		if len(b.Windows) == 0 && !b.Unknown && !b.Unlimited {
-			add(budgetSeg(n, b, tier, d.bars), gaugePrio+i, second) // a legacy snapshot (no dispatcher): the old gauge
+			l = budgetSeg(n, b, tier, d.bars) // a legacy snapshot (no dispatcher): the old gauge
+		} else {
+			until, isHeld := held(d.holds, n, d.now)
+			l = quotaSeg(n, b, until, isHeld, d.pace, d.now, tier, d.bars)
+		}
+		if l == nil {
 			continue
 		}
-		until, isHeld := held(d.holds, n, d.now)
-		if l := quotaSeg(n, b, until, isHeld, d.pace, d.now, tier, d.bars); l != nil {
-			add(l, gaugePrio+i, second) // the rightmost provider has the lowest priority
+		add(l, gaugePrio+i, second) // the rightmost provider has the lowest priority
+		// spec §7.2: either gauge carries its provider's pair, in the wide tier only (reviewer-codex)
+		if icon := providerIcon(d.icons, n); icon != "" && tier == TierWide {
+			pairs = append(pairs, iconAt{len(items) - 1, iconPair(icon, n)})
 		}
 	}
 	if d.update != "" { // a newer release: the first item to go when space is short
@@ -162,36 +172,19 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	clock := add(Line{{Text: d.now.Format("15:04:05"), Role: RoleMuted}}, 100, 0)
 	clock.right = true
 
-	// Admission: cheapest-first by priority, per row. Each row starts with a
-	// 1-cell margin; every admitted element after the first costs a gap.
-	used := make([]int, rows)
-	count := make([]int, rows)
-	admitted := make([]bool, len(items))
-	cut := make([]int, len(items)) // truncation width, 0 = whole
-	idx := make([]int, len(items))
-	for i := range idx {
-		idx[i] = i
-	}
-	sort.SliceStable(idx, func(a, b int) bool { return items[idx[a]].prio < items[idx[b]].prio })
-	for _, i := range idx {
-		it := items[i]
-		r := min(it.row, rows-1)
-		cost := it.line.Width()
-		g := 0
-		if count[r] > 0 {
-			g = gap
+	admitted, cut := admitHeader(items, rows, width, gap)
+	// busmon-icons §4: the gauges' icon pairs are the first thing to go for
+	// room, before any text: the most pairs, leftmost provider first, that
+	// leave every item admitted and cut exactly as without them.
+	for k := len(pairs); k > 0; k-- {
+		with := slices.Clone(items)
+		for _, p := range pairs[:k] {
+			with[p.item].line = append(Line{p.pair}, with[p.item].line...)
 		}
-		room := width - 1 - used[r] - g
-		switch {
-		case cost <= room:
-		case it.trunc && room >= minProject:
-			cut[i], cost = room, room
-		default:
-			continue
+		if a, c := admitHeader(with, rows, width, gap); slices.Equal(a, admitted) && slices.Equal(c, cut) {
+			items = with
+			break
 		}
-		admitted[i] = true
-		used[r] += g + cost
-		count[r]++
 	}
 
 	out := make([]Line, rows)
@@ -225,6 +218,49 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 		out[r] = FitLine(left, width)
 	}
 	return out
+}
+
+// iconAt is a header item's icon pair (busmon-icons).
+type iconAt struct {
+	item int
+	pair Seg
+}
+
+// admitHeader is the header's admission: items cheapest-first by priority,
+// per row. Each row starts with a 1-cell margin; every admitted element after
+// the first costs a gap. It returns what is admitted and each item's
+// truncation width (0 = whole).
+func admitHeader(items []hItem, rows, width, gap int) (admitted []bool, cut []int) {
+	used := make([]int, rows)
+	count := make([]int, rows)
+	admitted = make([]bool, len(items))
+	cut = make([]int, len(items)) // truncation width, 0 = whole
+	idx := make([]int, len(items))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return items[idx[a]].prio < items[idx[b]].prio })
+	for _, i := range idx {
+		it := items[i]
+		r := min(it.row, rows-1)
+		cost := it.line.Width()
+		g := 0
+		if count[r] > 0 {
+			g = gap
+		}
+		room := width - 1 - used[r] - g
+		switch {
+		case cost <= room:
+		case it.trunc && room >= minProject:
+			cut[i], cost = room, room
+		default:
+			continue
+		}
+		admitted[i] = true
+		used[r] += g + cost
+		count[r]++
+	}
+	return admitted, cut
 }
 
 func healthSeg(h health, now time.Time, compact bool) Line {

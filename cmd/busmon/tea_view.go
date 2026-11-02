@@ -85,7 +85,7 @@ func (m Model) grid() *grid {
 func (m Model) headerData() headerData {
 	s := m.snap
 	_, _, between := m.lists.reqView.titleCounts()
-	return headerData{project: m.cfg.project, health: s.health, guardian: s.guardian, dispatch: s.dispatch,
+	return headerData{icons: m.cfg.settings.Icons, project: m.cfg.project, health: s.health, guardian: s.guardian, dispatch: s.dispatch,
 		missions: s.missions, pilot: s.pilot, self: m.cfg.self, update: s.update, note: s.configNote,
 		waiting: owedText(m.lists.reqView, m.now), between: between, forYou: len(decisions(m.forYou)),
 		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets, bars: m.barView(),
@@ -196,7 +196,7 @@ func (m *Model) fillLists() {
 	working, blocked := 0, 0
 	for _, name := range names {
 		a := s.agents[name]
-		agentItems = append(agentItems, ListItem{Key: name, Line: agentRow(name, a, name == s.pilot, l.Tier, rowW(l.Agents), now), Selectable: true})
+		agentItems = append(agentItems, ListItem{Key: name, Line: agentRow(m.cfg.settings.Icons, name, a, name == s.pilot, l.Tier, rowW(l.Agents), now), Selectable: true})
 		switch _, word, _, _ := stateLook(a); word {
 		case "working":
 			working++
@@ -207,7 +207,7 @@ func (m *Model) fillLists() {
 	if len(agentItems) == 0 {
 		agentItems = []ListItem{{Line: Line{{Text: "no agent has published yet", Role: RoleMuted}}}}
 	}
-	ag.SetHeader(agentHeader(l.Tier, rowW(l.Agents)))
+	ag.SetHeader(agentHeader(m.cfg.settings.Icons, l.Tier, rowW(l.Agents)))
 	ag.SetItems(agentItems)
 	if !m.ui.agentsTouched && len(names) > 0 {
 		ag.First() // the top (most urgent) agent, until the person moves

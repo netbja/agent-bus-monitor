@@ -347,7 +347,7 @@ func updatedCell(a *agentState, tier Tier, now time.Time) []Seg {
 
 // agentCols are the column widths per tier (trailing gap included); the
 // message takes the rest.
-type agentCols struct{ glyph, name, state, updated, queue, ctx, flags int }
+type agentCols struct{ glyph, icon, name, state, updated, queue, ctx, flags int }
 
 func agentColsFor(tier Tier) agentCols {
 	switch tier {
@@ -365,9 +365,14 @@ func agentColsFor(tier Tier) agentCols {
 const wideBarRow = 110
 
 // agentColsFit is agentColsFor for a row of width cells, and the tier the
-// updated cell is drawn for (the bar only on a wide, wide-enough row).
-func agentColsFit(tier Tier, width int) (agentCols, Tier) {
+// updated cell is drawn for (the bar only on a wide, wide-enough row). With
+// icons on (busmon-icons §4), the medium and wide tiers keep a two-cell icon
+// column; the message, the one flexible column, pays for it.
+func agentColsFit(icons string, tier Tier, width int) (agentCols, Tier) {
 	c := agentColsFor(tier)
+	if icons != iconsOff && icons != "" && tier != TierNarrow {
+		c.icon = 2
+	}
 	if tier == TierWide && width < wideBarRow {
 		c.updated = 8              // "updated" and its gap
 		if width < wideBarRow-35 { // narrower still: the queue and flags take their medium widths
@@ -424,20 +429,24 @@ func ctxCell(a *agentState) []Seg {
 }
 
 // agentHeader is the column header row, wide only.
-func agentHeader(tier Tier, width int) Line {
+func agentHeader(icons string, tier Tier, width int) Line {
 	if tier != TierWide {
 		return nil
 	}
-	c, _ := agentColsFit(tier, width)
-	l := Line{col("", c.glyph, RoleDim), col("agent", c.name, RoleDim), col("state", c.state, RoleDim),
+	c, _ := agentColsFit(icons, tier, width)
+	l := Line{col("", c.glyph, RoleDim)}
+	if c.icon > 0 {
+		l = append(l, col("", c.icon, RoleDim))
+	}
+	l = append(l, col("agent", c.name, RoleDim), col("state", c.state, RoleDim),
 		col("updated", c.updated, RoleDim), col("queue", c.queue, RoleDim), col("ctx", c.ctx, RoleDim),
-		col("flags", c.flags, RoleDim), {Text: "message", Role: RoleDim}}
+		col("flags", c.flags, RoleDim), Seg{Text: "message", Role: RoleDim})
 	return FitLine(l, width)
 }
 
 // agentRow is one agent in exactly width cells (the list adds its gutter).
-func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now time.Time) Line {
-	c, barTier := agentColsFit(tier, width)
+func agentRow(icons, name string, a *agentState, pilot bool, tier Tier, width int, now time.Time) Line {
+	c, barTier := agentColsFit(icons, tier, width)
 	glyph, word, role, _ := stateLook(a)
 	w := col(word, c.state, role)
 	if waitsForPerson(a) {
@@ -447,7 +456,11 @@ func agentRow(name string, a *agentState, pilot bool, tier Tier, width int, now 
 	if pulsing(a, now) {
 		g.Fade = fadeLevel(now) // working, and its pane seen running a turn: both facts, or it stays still
 	}
-	l := Line{g, col(Preview(name), c.name, RoleText), w}
+	l := Line{g}
+	if c.icon > 0 {
+		l = append(l, iconPair(agentIcon(icons, a.client, a.provider), a.provider))
+	}
+	l = append(l, col(Preview(name), c.name, RoleText), w)
 	l = append(l, cell(updatedCell(a, barTier, now), c.updated)...)
 	l = append(l, cell([]Seg{queueCell(a, tier)}, c.queue)...)
 	if c.ctx > 0 {
@@ -535,4 +548,14 @@ func openQuestionCount(asks []bus.Ask) int {
 		n += a.Open()
 	}
 	return n
+}
+
+// iconPair is an icon and the blank cell busmon writes after it, one unit two
+// cells wide in the provider's colour (busmon-icons §4); no icon is two blank
+// cells, so names stay in one column.
+func iconPair(icon, provider string) Seg {
+	if icon == "" {
+		return Seg{Text: "  "}
+	}
+	return Seg{Text: icon + " ", Role: providerRole(provider, RoleText)}
 }

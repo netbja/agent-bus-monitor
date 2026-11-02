@@ -50,12 +50,12 @@ func TestIdleHintFlag(t *testing.T) {
 // row and on the agent's page.
 func TestTurnMarkOnAFlippedState(t *testing.T) {
 	a := &agentState{state: "working", message: "approved; nothing pending", auto: true}
-	row := agentRow("coder", a, false, TierWide, 200, time.Now()).text()
+	row := agentRow(iconsOff, "coder", a, false, TierWide, 200, time.Now()).text()
 	if !strings.Contains(row, "approved; nothing pending (turn)") {
 		t.Fatalf("row: %q", row)
 	}
 	a.auto = false
-	if strings.Contains(agentRow("coder", a, false, TierWide, 200, time.Now()).text(), "(turn)") {
+	if strings.Contains(agentRow(iconsOff, "coder", a, false, TierWide, 200, time.Now()).text(), "(turn)") {
 		t.Fatal("a declared state carries the mark")
 	}
 }
@@ -77,7 +77,7 @@ func TestPollAppliesFlipsAndDeclarations(t *testing.T) {
 	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
 	var seen time.Time
 	row := func() string {
-		return agentRow("coder", st.agents["coder"], false, TierWide, 200, time.Now()).text()
+		return agentRow(iconsOff, "coder", st.agents["coder"], false, TierWide, 200, time.Now()).text()
 	}
 	for i, c := range []struct {
 		name string

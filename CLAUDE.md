@@ -416,7 +416,15 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   provider (no two alike, none an alert role's colour nor the text roles' gray/silver/teal, openai the
   terminal's own foreground), no-colour none; an unknown provider keeps today's colour): the provider label
   of a header gauge (the fill keeps its 85/95 % roles), the model lines of an agent's page, and the U page's
-  account windows and per-agent provider column. `TestEveryQuotaProviderHasItsColour`
+  account windows and per-agent provider column. Icons (busmon-icons, spec
+  `docs/superpowers/specs/2026-11-02-busmon-icons-design.md`): `display.icons` = `off` (default, today's screen byte for
+  byte, `TestIconsOffIsToday`) | `nerd` (a lettered box per provider) | `agent-font` (the maker's logo, by client then
+  provider), env `AGENT_BUS_BUSMON_ICONS` (an unknown value skipped, never a broken screen), chosen on the C page with
+  arrows and applied at once, its row drawing each mode's sample; `theme.go`'s `IconGlyphs` (one Private Use rune, one
+  cell) through `agentIcon`/`providerIcon`, always as `iconPair` (the icon and a blank cell busmon writes, two blank
+  cells for none): the Agents rows and the U page's account and agent rows at 80 cells and wider (the message or the
+  trailing room pays), the header gauges in the wide tier only and only while no text is lost (`admitHeader` run with
+  and without the pairs); never the For you, Activity or Requests `from` column (the person's answer). `TestEveryQuotaProviderHasItsColour`
   walks `quota.Builtins`, so a new reader without a colour fails the suite. The account gauges (busmon-bars,
   `bars.go`, spec `docs/superpowers/specs/2026-10-29-busmon-bars-design.md`: the header's quota and legacy
   budget bars, the U page's windows) are one function, `gaugeSegs`: in true colour eight steps per cell
