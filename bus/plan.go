@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/netbja/agent-bus-monitor/config"
 	"strings"
 
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/redis/go-redis/v9"
 )
 
