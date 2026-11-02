@@ -35,6 +35,22 @@ func (w Window) Observed(r Reading) time.Time {
 // Reset is ResetsAt as a time.
 func (w Window) Reset() time.Time { return time.Unix(w.ResetsAt, 0) }
 
+// resetJitter is how far apart two readings of one window may report its
+// reset: a provider computes it from a moving "now" (OpenAI reports one 5h
+// window's reset as :34 and :35 from one reading to the next). The next
+// window of a name resets at least its own length later, hours, never within it.
+const resetJitter = 60
+
+// SameReset reports whether resets a and b (Unix seconds) are the same
+// window's: within resetJitter of each other. No reset (0) is no window.
+func SameReset(a, b int64) bool {
+	if a <= 0 || b <= 0 {
+		return false
+	}
+	d := a - b
+	return -resetJitter <= d && d <= resetJitter
+}
+
 // Reading is what one reader knows about one provider (spec §4).
 type Reading struct {
 	Provider    string   `json:"provider"`
