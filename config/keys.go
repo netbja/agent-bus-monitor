@@ -66,6 +66,9 @@ type Key struct {
 	Legacy  bool   // also read from busmon.toml
 	Flag    string // the flag above the env, for the command that has it
 	Invalid string // what an invalid env value does (only for rules that refuse one)
+	// MachineOnly keys are the machine's alone: a project's services env file
+	// is never read for them (forge-delivery answer 1).
+	MachineOnly bool
 
 	env  func(raw string) (any, envResult) // today's env rule, for a non-empty value
 	file func(v any) (any, string)         // a decoded file value: the setting, or why not
@@ -227,6 +230,35 @@ var Keys = []*Key{
 				return s, ""
 			}
 			return nil, "want on, propose or off"
+		}},
+	// Forge delivery (spec 2026-11-01-forge-delivery-design.md): the forge
+	// agentbus deliver uses (auto reads origin) and the branch it targets;
+	// one setting for the machine, never a project's.
+	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver", MachineOnly: true,
+		env: func(raw string) (any, envResult) {
+			if isForge(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && isForge(s) {
+				return s, ""
+			}
+			return nil, "want auto, github, gitlab, bitbucket or local"
+		}},
+	{Name: "delivery.base", Env: "AGENT_BUS_DELIVERY_BASE", Kind: String, Default: "main", ReadBy: "agentbus deliver", MachineOnly: true,
+		env: func(raw string) (any, envResult) {
+			if ValidBranchName(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && ValidBranchName(s) {
+				return s, ""
+			}
+			return nil, "want a Git branch name"
 		}},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
