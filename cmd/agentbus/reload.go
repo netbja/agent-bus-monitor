@@ -155,7 +155,14 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 	if _, ok := m.Roles[role]; !ok {
 		return fail("unknown role in ROLES_TOML")
 	}
-	own, err := m.Resolve(role)
+	// Its own profile is the project's (the template tab's --profile, else
+	// roles.toml's: ownProfile): the relaunch runs that tab, so the preflight
+	// checks that client and the proof expects it (spec, the reader table).
+	own, err := ownProfile(m, d.Env, b.Project(), role)
+	if err != nil {
+		return fail("%v", err)
+	}
+	manifestOwn, err := m.Resolve(role)
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -319,6 +326,9 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 
 	// Relaunch and proof.
 	recovery := fmt.Sprintf("agent-launch %s %s", role, b.Project())
+	if own.Profile != manifestOwn.Profile {
+		recovery += " --profile " + own.Profile
+	}
 	if session != "" {
 		recovery += " --resume " + session
 	}
