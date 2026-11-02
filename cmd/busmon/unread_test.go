@@ -126,3 +126,54 @@ func TestMarks(t *testing.T) {
 		t.Fatalf("unread count %d", n)
 	}
 }
+
+// A report notice (report --to the person) is content of its own: neither a
+// newer entry from its sender nor the person's later message to that sender
+// makes it moot; only opening it reads it (report-notice-unread).
+func TestReportNoticeStaysUnread(t *testing.T) {
+	now := time.Now()
+	at := func(m int) time.Time { return now.Add(time.Duration(m) * time.Minute) }
+	notice := line("notice", "cmd", "master", "charlie", bus.CmdDirective, at(-10))
+	notice.ev.Message = reportPrefix("1793628016492-0") + "Activity investigation: found"
+	other := line("other", "cmd", "master", "charlie", bus.CmdDirective, at(-8))
+	other.ev.Message = reportPrefix("1793628155022-0") + "an unrelated report"
+	answer := line("answer", "cmd", "charlie", "master", bus.CmdDirective, at(-9))
+	answer.ev.Human = true
+	for name, feed := range map[string][]feedLine{
+		"alone":              {notice},
+		"a newer report":     {notice, other},
+		"the person replies": {notice, answer},
+	} {
+		u := unreadState{forPerson: map[string]bool{}, read: map[string]bool{}, floor: at(-60).UnixMilli()}
+		for _, fl := range feed {
+			if fl.ev.Kind == "cmd" && !fl.ev.Human {
+				u.forPerson[fl.ev.ID] = true
+			}
+		}
+		if got := u.marks(feed, nil)[notice.ev.ID]; got != markUnread {
+			t.Errorf("%s: mark %v, want unread", name, got)
+		}
+		u.read[notice.ev.ID] = true
+		if got := u.marks(feed, nil)[notice.ev.ID]; got != markNone {
+			t.Errorf("%s, opened: mark %v, want none", name, got)
+		}
+	}
+}
+
+// Activity and For you show a report notice as its report's own first line,
+// never the envelope, as the recap does.
+func TestReportNoticeRowShowsTheReport(t *testing.T) {
+	fl := line("notice", "cmd", "master", "charlie", bus.CmdDirective, time.Now())
+	fl.ev.Message = reportPrefix("1793628016492-0") + "Activity investigation: found"
+	fl.mark = markUnread
+	for _, tier := range []Tier{TierWide, TierMedium, TierNarrow} {
+		row := activityRow(fl, tier, 160).text()
+		if !strings.Contains(row, "Activity investigation: found") || strings.Contains(row, "full text") {
+			t.Errorf("tier %v: %q", tier, row)
+		}
+	}
+	items := forYou(snapshot{}, []feedLine{fl})
+	if len(items) != 1 || items[0].Text != "Activity investigation: found" {
+		t.Fatalf("For you: %+v", items)
+	}
+}

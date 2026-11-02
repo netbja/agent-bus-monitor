@@ -461,7 +461,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   the flag `for you`: a hint, it never relabels, rings or counts. Activity entries for the person
   (an ask, a cmd to the person's name, a notify with `for=person`, an agent's newest report while it
   waits for the person) carry a mark column before the time (`unread.go`: ● unread, ○ superseded by a
-  newer one from the same sender, an answer or a closed ask); opening the line reads it, saved in the
+  newer one from the same sender, an answer or a closed ask; a report notice, `reportSubject`'s exact prefix, is never
+  superseded, and its Activity and For you rows read as its report's first line, never the envelope: report-notice-unread); opening the line reads it, saved in the
   local cache (`read`, only ids still retained), never on the bus; nothing older than `last_visit`
   is marked; the header counts `● N unread`, `u` jumps to the next, `R` lists them first. The line
   and the compose window share one `@` completion (`recipientCompletions`, `completionNames`: the
