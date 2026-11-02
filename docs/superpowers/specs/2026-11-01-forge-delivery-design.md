@@ -33,7 +33,11 @@ config` shows them. `base` must be a valid Git branch name (`git check-ref-forma
 per-project value. A project's services env file is not read for these two keys, and `up` writes
 neither there. Two projects on two forges need nothing as long as `auto` reads both remotes; a
 project whose remote `auto` cannot place is local until the person sets `forge` for the machine,
-and the line that says so names the key.
+and the line that says so names the key. The cost, said plainly (foureyes): a `forge` set for the
+machine wins over `auto` for **every** project on it, so setting `forge = "gitlab"` to place one
+project's self-hosted GitLab makes a GitHub project deliver as GitLab too. The fix for one
+unrecognised remote is a recognisable host name for it (a `gitlab.` first label, or the forge's
+own domain), not the machine's setting; deliver's line for an unknown host says both.
 
 **`auto`** (the default) decides per repository, from its `origin` remote at each delivery:
 
@@ -195,6 +199,11 @@ plan page shows `PR #12` or `ref coder/x@a1b2c3d`.
   busmon-reload-deny does for `reload --as`). Per role, never in the top-level `[tool_rules]`:
   a deny merged into every role would also deny master and docs. Defence in depth, not a
   boundary: the client matches command text, and a person's own shell has no such rule.
+  A role added later carries the deny too (foureyes): `roles draft` writes the two denies into
+  every draft's `tool_rules`, and `roles adopt` refuses a role that lacks them, with its name, unless
+  the person's answer to the adopt ask names it a delivering role (none but master and docs today).
+  A test on the draft and one on adopt hold it, since `TestShippedManifestRules` sees only the
+  shipped roles.
 - A decision note, `docs/memory/decisions/<date>-forge-delivery.md`, records answer 3 (who may
   push, and that the 4-eyes proof bound to the head is the condition), so master's skill can cite
   it.
@@ -253,7 +262,8 @@ same link: it changes nothing.
   remote runs no CLI (the fake runner records none), pushes `H`, prints the escaped new pull
   request page and records `plan link --ref`.
 - **Who may deliver** (answer 3): `TestShippedManifestRules` holds the allow on master and docs
-  and the two denies on every other shipped role, none in the top-level rules.
+  and the two denies on every other shipped role, none in the top-level rules; a `roles draft`
+  carries the two denies, and `roles adopt` refuses a role without them.
 - **Local mode** (answer 4): with an `origin` remote and `forge = "local"`, nothing is pushed or
   fetched (the fake runner records no `git push` and no `git fetch`).
 
