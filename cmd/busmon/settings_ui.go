@@ -26,7 +26,7 @@ type settingsPage struct {
 	loaded  bool
 	edit    string // the key being edited ("" = none)
 	text    string // the editor's text
-	choice  int    // display.theme: the option under the cursor
+	choice  int    // a key of settingChoices: the option under the cursor
 	confirm string // the key a d waits a y for
 	err     string // the last refusal, in the rule's own words
 	busy    bool   // a write is in flight: keys wait for its rows
@@ -34,6 +34,10 @@ type settingsPage struct {
 
 // themeChoices are display.theme's values, in the page's order.
 var themeChoices = []string{"auto", "dark", "light"}
+
+// settingChoices are the keys chosen with ←→ among their values, in the
+// page's order (busmon-icons: display.icons joins the theme).
+var settingChoices = map[string][]string{"display.theme": themeChoices, "display.icons": {iconsOff, iconsNerd, iconsFont}}
 
 // settingsMsg is the rows read again, after an open or a write.
 type settingsMsg struct {
@@ -126,6 +130,9 @@ func (m *Model) applySettings(key string) string {
 		}
 		th, cur.Theme, m.paint = t, ns.Theme, newPainter(t)
 		return "theme applied and saved"
+	case "display.icons": // busmon-icons: drawn from the next frame on
+		cur.Icons = ns.Icons
+		return "icons applied and saved"
 	case "waiting.bell", "waiting.fade", "waiting.popup_after", "waiting.snooze", "recap.auto_after":
 		return "applied and saved"
 	}
@@ -177,8 +184,8 @@ func (m *Model) settingsKey(k Key) tea.Cmd {
 			path := config.Path(m.settingsGetenv())
 			v := row.Value != "on"
 			return m.settingsCmd(func() error { return config.Set(path, row.Key, v) }, row.Key)
-		case row.Key == "display.theme":
-			s.edit, s.choice = row.Key, max(0, indexOf(themeChoices, row.Value))
+		case settingChoices[row.Key] != nil:
+			s.edit, s.choice = row.Key, max(0, indexOf(settingChoices[row.Key], row.Value))
 		default:
 			s.edit, s.text = row.Key, editText(key, row.Value)
 		}
@@ -198,14 +205,14 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 		s.edit, s.err = "", ""
 		return nil
 	}
-	if s.edit == "display.theme" {
+	if choices := settingChoices[s.edit]; choices != nil {
 		switch k.Code {
 		case keyLeft:
-			s.choice = (s.choice + len(themeChoices) - 1) % len(themeChoices)
+			s.choice = (s.choice + len(choices) - 1) % len(choices)
 		case keyRight:
-			s.choice = (s.choice + 1) % len(themeChoices)
+			s.choice = (s.choice + 1) % len(choices)
 		case keyEnter:
-			v := themeChoices[s.choice]
+			v := choices[s.choice]
 			return m.settingsCmd(func() error { return config.Set(path, row.Key, v) }, row.Key)
 		}
 		return nil
@@ -337,14 +344,17 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 			}
 			value := r.Value
 			if s.edit == r.Key {
-				if r.Key == "display.theme" {
-					value = GlyphArrowL + " " + themeChoices[s.choice] + " " + GlyphArrowR
+				if choices := settingChoices[r.Key]; choices != nil {
+					value = GlyphArrowL + " " + choices[s.choice] + " " + GlyphArrowR
 				} else {
 					value = "[ " + s.text + " ]"
 				}
 			}
 			b.segs(mark...).seg(role, r.Sym).text(" ").text(Fit(Preview(r.Label), labelW)+"  ").
 				text(Fit(Preview(value), valueW)+"  ").seg(RoleMuted, Preview(r.Source)).text("\n")
+			if r.Key == "display.icons" {
+				b.segs(iconSample()...).text("\n")
+			}
 			if i == sel && s.err != "" {
 				b.text("      ").seg(RoleAttention, Preview(s.err)).text("\n")
 			}
@@ -354,11 +364,30 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 			i++
 		}
 	}
-	b.text("\n").seg(RoleMuted, "  Changes   theme, fade, bell and reminder timings at once; the others at busmon's next start").text("\n")
+	b.text("\n").seg(RoleMuted, "  Changes   theme, icons, fade, bell and reminder timings at once; the others at busmon's next start").text("\n")
 	b.seg(RoleMuted, "  Written   config.toml only; a value from the environment or a flag is read-only here").text("\n")
 	lines := b.Lines()
 	for j := range lines {
 		lines[j] = FitLine(lines[j], width)
 	}
 	return lines
+}
+
+// iconSampleProviders are the sample's providers, in the spec's order.
+var iconSampleProviders = []string{"anthropic", "openai", "moonshot", "xai", "google"}
+
+// iconSample is the Icons row's help line (busmon-icons §6): each mode's
+// glyphs drawn in that mode, each with its blank cell, so the person sees
+// whether the terminal draws them; boxes or tofu there say keep off.
+func iconSample() Line {
+	l := Line{{Text: "    off " + GlyphNone + " nerd ", Role: RoleMuted}}
+	for _, mode := range []string{iconsNerd, iconsFont} {
+		if mode == iconsFont {
+			l = append(l, Seg{Text: GlyphNone + " agent-font ", Role: RoleMuted})
+		}
+		for _, p := range iconSampleProviders {
+			l = append(l, Seg{Text: providerIcon(mode, p) + " ", Role: providerRole(p, RoleText)})
+		}
+	}
+	return append(l, Seg{Text: "   (what your terminal draws is what you get)", Role: RoleMuted})
 }
