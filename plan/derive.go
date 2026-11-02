@@ -55,6 +55,7 @@ type Row struct {
 	State     State
 	Verdict   string // a label above, "" when the task has no review
 	PR        int
+	Ref       string // <branch>@<sha>: delivered with no PR (forge-delivery)
 	DoneAt    int64
 	Recorded  bool // done because master recorded it: a claim, shown with its age
 	Note      string
@@ -97,7 +98,8 @@ func Derive(f File, in Inputs) []Row {
 func derive(t Task, in Inputs, waitingOn []string) Row {
 	r := Row{Task: t, WaitingOn: waitingOn}
 	fact := in.Facts[t.ID]
-	r.PR, r.Note, r.LastFact = fact.PR, fact.Note, fact.At
+	r.PR, r.Ref, r.Note, r.LastFact = fact.PR, fact.Ref, fact.Note, fact.At
+	linked := fact.PR > 0 || fact.Ref != "" // a ref reads as a PR does; only a PR adds its pr:<n> subject
 	if t.Mission != "" {
 		return deriveMission(r, in)
 	}
@@ -114,7 +116,7 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		r.LastFact = max(r.LastFact, boardTime(e))
 	}
 	review, reviewed := rollUp(t, fact, in)
-	if t.Owner != Person && (reviewed || delivered(e) || e.State == "review" || fact.PR > 0) {
+	if t.Owner != Person && (reviewed || delivered(e) || e.State == "review" || linked) {
 		r.Verdict = review
 	}
 	for _, v := range subjectsVerdicts(t, fact, in) {
@@ -144,7 +146,7 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		if e.Request != nil {
 			r.Reason = e.Request.BlockedReason
 		}
-	case t.Owner != Person && (delivered(e) || e.State == "review" || fact.PR > 0):
+	case t.Owner != Person && (delivered(e) || e.State == "review" || linked):
 		r.State = InReview
 	case onBoard && (e.State == "accepted" || e.State == "working"):
 		r.State = InProgress

@@ -360,12 +360,13 @@ var commands = []cli.Command{
 		Name: "plan", Text: true, Usage: []string{
 			"plan [show] [--json]",
 			"plan load <path>@<commit>",
-			"plan link <task> --pr <n> | plan done <task> | plan note <task> <text...> | plan clear",
+			"plan link <task> (--pr <n> | --ref <branch>@<sha>) | plan done <task> | plan note <task> <text...> | plan clear",
 		},
 		Summary: "the batch's plan, as busmon's Plan view (P) shows it",
 		Flags: []cli.Flag{
 			fJSON,
 			{Long: "pr", Arg: "<n>", Help: "link: the task's pull request"},
+			{Long: "ref", Arg: "<branch>@<sha>", Help: "link: the delivered commit, when no pull request was opened (agentbus deliver)"},
 		},
 		Examples: []string{"agentbus -p demo plan load docs/plans/v0.22.json@HEAD", "agentbus -p demo plan link roles --pr 102", "agentbus -p demo plan done roles"},
 	},

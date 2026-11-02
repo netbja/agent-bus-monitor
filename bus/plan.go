@@ -31,6 +31,7 @@ type PlanRecord struct {
 // Redis TIME; At is the newest of them.
 type PlanFact struct {
 	PR     int    `json:"pr,omitempty"`
+	Ref    string `json:"ref,omitempty"` // <branch>@<sha>: a delivery with no PR (forge-delivery's link and local modes)
 	Linked int64  `json:"linked,omitempty"`
 	Done   int64  `json:"done,omitempty"`
 	Note   string `json:"note,omitempty"`
@@ -128,6 +129,17 @@ func (b *Bus) PlanLink(ctx context.Context, task string, pr int) error {
 	return b.planFact(ctx, task, "link", fmt.Sprint(pr))
 }
 
+// PlanLinkRef records a delivered ref of a task, <branch>@<full sha>, for
+// a delivery that opened no PR (forge-delivery: link and local modes); it
+// replaces a PR link, as a later PR link replaces it.
+func (b *Bus) PlanLinkRef(ctx context.Context, task, ref string) error {
+	branch, sha, ok := strings.Cut(ref, "@")
+	if !ok || branch == "" || len(branch) > 255 || strings.ContainsFunc(branch, func(r rune) bool { return r <= ' ' || r == 0x7f }) || !ValidHead(sha) {
+		return fmt.Errorf("a ref is <branch>@<full commit sha>, not %q", ref)
+	}
+	return b.planFact(ctx, task, "ref", ref)
+}
+
 // PlanDone records that the person merged the task (or did their step).
 func (b *Bus) PlanDone(ctx context.Context, task string) error {
 	return b.planFact(ctx, task, "done", "")
@@ -169,7 +181,8 @@ local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local f = {}
 local old = redis.call('HGET', KEYS[2], ARGV[1])
 if old then f = cjson.decode(old) end
-if ARGV[2] == 'link' then f.pr = tonumber(ARGV[3]); f.linked = now
+if ARGV[2] == 'link' then f.pr = tonumber(ARGV[3]); f.ref = nil; f.linked = now
+elseif ARGV[2] == 'ref' then f.ref = ARGV[3]; f.pr = nil; f.linked = now
 elseif ARGV[2] == 'done' then f.done = now
 elseif ARGV[2] == 'note' then f.note = ARGV[3] end
 f.at = now

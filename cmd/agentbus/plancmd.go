@@ -47,6 +47,17 @@ func runPlan(ctx context.Context, b *bus.Bus, repo string, args []string, out, e
 		return 0
 	case "link":
 		rest, pr := extractFlag(rest, "--pr")
+		rest, ref := extractFlag(rest, "--ref")
+		if ref != "" {
+			if pr != "" || len(rest) != 1 {
+				break
+			}
+			if err := b.PlanLinkRef(ctx, rest[0], ref); err != nil {
+				return fail(err)
+			}
+			fmt.Fprintf(out, "%s linked to %s\n", rest[0], ref)
+			return 0
+		}
 		n, err := strconv.Atoi(strings.TrimPrefix(pr, "#"))
 		if len(rest) != 1 || err != nil {
 			break
@@ -118,6 +129,14 @@ func planLoad(ctx context.Context, b *bus.Bus, repo, ref string) (string, error)
 	return fmt.Sprintf("loaded plan %s (%d tasks) from %s@%s", f.Plan, len(f.Tasks), path, commit[:7]), nil
 }
 
+// shortRef is <branch>@<sha> with the sha cut to 7, as git shows it.
+func shortRef(ref string) string {
+	if branch, sha, ok := strings.Cut(ref, "@"); ok && len(sha) > 7 {
+		return branch + "@" + sha[:7]
+	}
+	return ref
+}
+
 type planTaskJSON struct {
 	ID        string   `json:"id"`
 	Title     string   `json:"title"`
@@ -125,6 +144,7 @@ type planTaskJSON struct {
 	State     string   `json:"state"`
 	Label     string   `json:"label"`
 	PR        int      `json:"pr,omitempty"`
+	Ref       string   `json:"ref,omitempty"`
 	Verdict   string   `json:"verdict,omitempty"`
 	Note      string   `json:"note,omitempty"`
 	Reason    string   `json:"reason,omitempty"`
@@ -169,7 +189,7 @@ func planShow(ctx context.Context, b *bus.Bus, asJSON bool, now time.Time, out, 
 			LoadedAt: act.Record.LoadedAt, Stale: now.Sub(time.UnixMilli(act.Record.LoadedAt)) > plan.StaleAfter, Done: done, Total: total}
 		for _, r := range rows {
 			js.Tasks = append(js.Tasks, planTaskJSON{ID: r.Task.ID, Title: r.Task.Title, Owner: r.Task.Owner, State: string(r.State),
-				Label: rowLabel(r, now), PR: r.PR, Verdict: r.Verdict, Note: r.Note, Reason: r.Reason, WaitingOn: r.WaitingOn,
+				Label: rowLabel(r, now), PR: r.PR, Ref: r.Ref, Verdict: r.Verdict, Note: r.Note, Reason: r.Reason, WaitingOn: r.WaitingOn,
 				Ask: r.Ask, Quiet: plan.Quiet(r, now), LastFact: r.LastFact})
 		}
 		enc := json.NewEncoder(out)
@@ -213,6 +233,9 @@ func rowDetails(r plan.Row, now time.Time) string {
 	var parts []string
 	if r.PR > 0 {
 		parts = append(parts, fmt.Sprintf("#%d", r.PR))
+	}
+	if r.Ref != "" {
+		parts = append(parts, "ref "+shortRef(r.Ref))
 	}
 	if r.Verdict != "" && r.State != plan.Done {
 		parts = append(parts, r.Verdict)
