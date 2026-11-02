@@ -150,6 +150,56 @@ func (rc *receiver) mapErr(err error) error {
 	return err
 }
 
+// Receiver is a receiver lease held across calls (local-llm-peer): a
+// long-lived receiver drains and then receives under the same lease, so the
+// lease key never disappears between the two and the dispatcher never sees
+// the agent unarmed (Decide's rule 2). The lease's contract is
+// holdReceiver's: one token, renewed every third of its TTL, its loss
+// cancelling Context. DrainCmd and WatchCmdDelivery keep their own lease.
+type Receiver struct {
+	rc              *receiver
+	agent, consumer string
+}
+
+// TakeReceiver holds agent's receiver lease, waiting up to wait for a
+// contended one (ErrReceiverBusy after; wait <= 0 waits as long as ctx
+// allows). The group is created at the horizon floor when missing, as
+// DrainCmd does.
+func (b *Bus) TakeReceiver(ctx context.Context, agent, consumer string, horizon, wait time.Duration) (*Receiver, error) {
+	if !ValidName(agent) {
+		return nil, fmt.Errorf("invalid agent %q", agent)
+	}
+	if err := b.EnsureGroup(ctx, agent, horizon); err != nil {
+		return nil, err
+	}
+	rc, err := b.holdReceiver(ctx, agent, consumer, wait)
+	if err != nil {
+		return nil, err
+	}
+	return &Receiver{rc: rc, agent: agent, consumer: consumer}, nil
+}
+
+// Context is cancelled when the lease is lost or closed.
+func (r *Receiver) Context() context.Context { return r.rc.ctx }
+
+// Drain is DrainCmd under the held lease: the PEL, then every unread entry,
+// no floor, returning once both are empty.
+func (r *Receiver) Drain(horizon time.Duration, deliver func(Event) error) (int, error) {
+	return r.rc.drain(r.agent, r.consumer, horizon, deliver)
+}
+
+// Deliver is WatchCmdDelivery under the held lease, from floor ("0" after a
+// drain: whatever the group still holds), until deliver says done or errs.
+func (r *Receiver) Deliver(floor string, deliver func(Event) (bool, error)) error {
+	if floor != "" && floor != "0" && !validStreamID(floor) {
+		return fmt.Errorf("invalid cursor %q", floor)
+	}
+	return r.rc.deliver(r.agent, r.consumer, floor, false, deliver)
+}
+
+// Close releases the lease if this holder still owns it.
+func (r *Receiver) Close() { r.rc.close() }
+
 // WatchCmdDelivery recovers the PEL before new entries, one entry at a time.
 // Returning an error from deliver leaves the message pending. A nil callback
 // error permits XACK, which means complete output, NOT agent acceptance. A
@@ -182,7 +232,12 @@ func (b *Bus) watchCmdDelivery(ctx context.Context, agent, consumer, floor strin
 		return err
 	}
 	defer rc.close()
-	ctx = rc.ctx
+	return rc.deliver(agent, consumer, floor, keepHuman, deliver)
+}
+
+// deliver is watchCmdDelivery's loop under a lease already held.
+func (rc *receiver) deliver(agent, consumer, floor string, keepHuman bool, deliver func(Event) (bool, error)) error {
+	b, ctx := rc.b, rc.ctx
 	stream := StreamKey(b.project, "cmd")
 	createAt := floor
 	if createAt == "" {
@@ -236,7 +291,12 @@ func (b *Bus) DrainCmd(ctx context.Context, agent, consumer string, horizon time
 		return 0, err
 	}
 	defer rc.close()
-	ctx = rc.ctx
+	return rc.drain(agent, consumer, horizon, deliver)
+}
+
+// drain is DrainCmd's loop under a lease already held.
+func (rc *receiver) drain(agent, consumer string, horizon time.Duration, deliver func(Event) error) (int, error) {
+	b, ctx := rc.b, rc.ctx
 	now, err := b.ServerTime(ctx)
 	if err != nil {
 		return 0, rc.leaseError(err)

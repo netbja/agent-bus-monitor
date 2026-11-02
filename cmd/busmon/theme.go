@@ -29,6 +29,7 @@ const (
 	RoleProvXAI
 	RoleProvDeepSeek
 	RoleProvXiaomi
+	RoleProvLocal
 	roleCount
 )
 
@@ -51,6 +52,10 @@ var providerHues = []struct {
 	{"xai", RoleProvXAI, "#7B6FD6", "#7B6FD6", "fuchsia"},
 	{"deepseek", RoleProvDeepSeek, "#4D6BFE", "#4D6BFE", "aqua"},
 	{"xiaomi", RoleProvXiaomi, "#FF6900", "#FF6900", "lime"},
+	// The local-llm peer's endpoint on this machine: no maker's colour; purple
+	// is the one 16-colour name left that reads on dark and light and is no
+	// forbidden role's (it is RoleDispatch's too, as blue is RoleDone's).
+	{"local", RoleProvLocal, "#F472B6", "#DB2777", "purple"},
 }
 
 // providerRole is the provider's role, or fallback for one the table lacks
