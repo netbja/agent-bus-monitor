@@ -144,3 +144,31 @@ func TestUpRefusesATabProfileThatDoesNotResolve(t *testing.T) {
 		t.Fatalf("opened something, or judged the unknown role: %q %q", h.calls, errw.String())
 	}
 }
+
+// A tab for a role roles.toml no longer has keeps today's skip: up goes on
+// past checkProfiles and opens the team (foureyes: with only that odd tab,
+// the branch is held).
+func TestUpSkipsAnUnknownRolesTab(t *testing.T) {
+	work, templates, h, _, deps := upFixture(t)
+	_, manifest, _ := ownProfileFixture(t, "")
+	boot := deps.Bootstrap
+	deps.Bootstrap = func(args []string) error {
+		if err := boot(args); err != nil {
+			return err
+		}
+		f, err := os.OpenFile(filepath.Join(templates, "demo.toml"), os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = f.WriteString("\n[[tabs]]\nname = \"ghost\"\ncommand = \"env ROLES_TOML=" + manifest + " /r/scripts/agent-launch ghost demo\"\n")
+		return err
+	}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 || strings.Contains(errw.String(), "ghost") {
+		t.Fatalf("up = %d, %q", code, errw.String())
+	}
+	if !strings.Contains(strings.Join(h.calls, "\n"), "workspace create") {
+		t.Fatalf("the team was not opened: %q", h.calls)
+	}
+}
