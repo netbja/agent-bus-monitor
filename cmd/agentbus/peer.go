@@ -184,20 +184,20 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 // Without the host key no fingerprint is recorded, and note says so.
 func peerIdent(ident bus.AgentIdent, s peer.Settings, getenv func(string) string) (bus.AgentIdent, string) {
 	ident.Endpoint = s.Endpoint
-	key, err := endpointFPKey(getenv)
+	key, note, err := endpointFPKey(getenv)
 	if err != nil {
 		return ident, "no endpoint fingerprint key (" + err.Error() + "): health cannot tell if [llm." + s.Endpoint + "]'s URL changes"
 	}
 	ident.EndpointFP = peer.EndpointFP(key, s.URL)
-	return ident, ""
+	return ident, note
 }
 
 // endpointFPKey is the host's endpoint fingerprint key, beside config.toml;
 // with no configuration directory there is none (never one in the cwd).
-func endpointFPKey(getenv func(string) string) ([]byte, error) {
+func endpointFPKey(getenv func(string) string) ([]byte, string, error) {
 	p := config.Path(getenv)
 	if p == "" {
-		return nil, fmt.Errorf("no configuration directory")
+		return nil, "", fmt.Errorf("no configuration directory")
 	}
 	return peer.FPKey(filepath.Dir(p))
 }

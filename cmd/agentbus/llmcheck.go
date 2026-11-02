@@ -29,7 +29,7 @@ type llmCheckDeps struct {
 
 func realLLMCheckDeps(b *bus.Bus) llmCheckDeps {
 	return llmCheckDeps{Agents: b.Agents, Config: func() *config.File { return config.Load(config.Path(os.Getenv), "config.toml") },
-		FPKey: func() ([]byte, error) { return endpointFPKey(os.Getenv) }}
+		FPKey: func() ([]byte, error) { k, _, err := endpointFPKey(os.Getenv); return k, err }}
 }
 
 // llmEndpointCheck (local-llm-peer step 2) probes the endpoints the

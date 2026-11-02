@@ -82,43 +82,55 @@ const fpKeyFile = "endpoint-fp.key"
 // random bytes written whole to a temporary file (0600, in a 0700
 // directory), then linked to its name, which fails if the name exists. The
 // key is never visible half-written, and of two first callers one links, the
-// other reads the winner's (reviewer-codex).
-func FPKey(dir string) ([]byte, error) {
+// other reads the winner's (reviewer-codex, foureyes). A file of another
+// length (truncated, emptied by hand) is replaced by a new key, renamed over
+// it, and note says so (foureyes, master): refused, it would stop every
+// fingerprint for good. Peers that recorded the old one then read as
+// changed until they restart.
+func FPKey(dir string) (key []byte, note string, err error) {
 	path := filepath.Join(dir, fpKeyFile)
-	if key, err := os.ReadFile(path); err == nil && len(key) == 32 {
-		return key, nil
-	} else if err == nil {
-		return nil, fmt.Errorf("%s is not a fingerprint key", path)
+	old, err := os.ReadFile(path)
+	switch {
+	case err == nil && len(old) == 32:
+		return old, "", nil
+	case err != nil && !errors.Is(err, os.ErrNotExist):
+		return nil, "", err
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	key := make([]byte, 32)
+	key = make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	tmp, err := os.CreateTemp(dir, fpKeyFile+".*")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(key); err != nil {
 		tmp.Close()
-		return nil, err
+		return nil, "", err
 	}
 	if err := tmp.Close(); err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	if old != nil { // there, of the wrong length: replaced whole
+		if err := os.Rename(tmp.Name(), path); err != nil {
+			return nil, "", err
+		}
+		return key, fmt.Sprintf("%s held %d bytes, not a key: replaced", path, len(old)), nil
 	}
 	if err := os.Link(tmp.Name(), path); errors.Is(err, os.ErrExist) {
 		other, err := os.ReadFile(path)
 		if err != nil || len(other) != 32 {
-			return nil, fmt.Errorf("%s is not a fingerprint key", path)
+			return nil, "", fmt.Errorf("%s is not a fingerprint key", path)
 		}
-		return other, nil
+		return other, "", nil
 	} else if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return key, nil
+	return key, "", nil
 }
 
 // Resolve joins the spec with config.toml's endpoint it names. The profile's

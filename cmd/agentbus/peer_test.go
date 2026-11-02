@@ -234,14 +234,14 @@ func TestPeerRootFindsTheHomeWithoutHOME(t *testing.T) {
 func TestEndpointFPKeyNeedsTheConfigDir(t *testing.T) {
 	cwd := t.TempDir()
 	t.Chdir(cwd)
-	if _, err := endpointFPKey(func(string) string { return "" }); err == nil {
+	if _, _, err := endpointFPKey(func(string) string { return "" }); err == nil {
 		t.Fatal("a key with no configuration directory")
 	}
 	if entries, _ := os.ReadDir(cwd); len(entries) != 0 {
 		t.Fatalf("written in the cwd: %v", entries)
 	}
 	xdg := t.TempDir()
-	if key, err := endpointFPKey(func(k string) string { return map[string]string{"XDG_CONFIG_HOME": xdg}[k] }); err != nil || len(key) != 32 {
+	if key, _, err := endpointFPKey(func(k string) string { return map[string]string{"XDG_CONFIG_HOME": xdg}[k] }); err != nil || len(key) != 32 {
 		t.Fatalf("key = %d bytes, %v", len(key), err)
 	}
 	if _, err := os.Stat(filepath.Join(xdg, "agentbus", "endpoint-fp.key")); err != nil {
@@ -257,7 +257,7 @@ func TestPeerIdentRecordsItsEndpoint(t *testing.T) {
 	getenv := func(k string) string { return map[string]string{"XDG_CONFIG_HOME": xdg}[k] }
 	s := peer.Settings{Endpoint: "used", URL: "http://127.0.0.1:11434/v1", Model: "qwen"}
 	id, note := peerIdent(bus.AgentIdent{Client: "local-llm"}, s, getenv)
-	key, err := endpointFPKey(getenv)
+	key, _, err := endpointFPKey(getenv)
 	if err != nil {
 		t.Fatal(err)
 	}
