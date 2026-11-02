@@ -8,7 +8,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// usage-bars (Bernard's choice A4): the header's account gauge is a thin line,
+// usage-bars (the person's choice A4): the header's account gauge is a thin line,
 // ━ in the level colour on ━ in the track colour, a pace mark │ at the share
 // of the window already gone; 16 colours and no colour keep whole steps with
 // a light ─ track, so filled and empty differ without colour.

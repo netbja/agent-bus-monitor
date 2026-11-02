@@ -188,7 +188,7 @@ func tokensPage(icons string, st tokState, budgets map[string]bus.BudgetSnapshot
 	for n, p := range provs {
 		// A blank line between providers (usage-bars): a full-height gauge and
 		// a 24-hour spark of one row touched the next row's, and the two
-		// accounts read as one block (Bernard's screenshot). The blank keeps
+		// accounts read as one block (the person's screenshot). The blank keeps
 		// the bars full height, where the spark needs its height to be read.
 		if n > 0 {
 			b.text("\n")
