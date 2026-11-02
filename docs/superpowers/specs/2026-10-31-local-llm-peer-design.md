@@ -165,9 +165,23 @@ For each cmd entry addressed to it (directive, challenge, reply, request):
 |---|---|---|
 | `read_file(path, offset?, limit?)` | Text of a file under the project's root | Path resolved and kept under the root (symlinks resolved, `..` refused); 64 KiB per call; refuses what this role's **effective** `Read(…)` denies match: the shared `[tool_rules]` merged with the role's own `[roles.<role>.tool_rules]`, exactly as `LaunchRules` merges them for the role and manifest the launch names; if they cannot be loaded or validated, the peer refuses to start (fails closed). The shipped shared list names `.env`, `.env.local`, `.env.production`, … one by one, plus `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `~/.ssh/**`, …), read with Claude Code's glob meaning (`**` any depth, `*` within one segment, `~` the home directory) and tested against those same entries, so the peer's matcher cannot quietly differ |
 | `list_dir(path)` | Names under a directory of the root | 500 entries; same root rule |
-| `grep(pattern, path?)` | Matching lines under the root | Go regexp; 200 matches, 1 MiB read per call; skips `.git`, binaries and denied files |
+| `grep(pattern, path?)` | Matching lines under the root | Go regexp; 200 matches, 1 MiB read and 20000 entries walked per call, stopped with the turn's clock (each stop said); skips `.git`, binaries and denied files |
 | `bus_thread(id)` | A thread's entries | Read-only, 20 entries |
 | `bus_agents()` | Who is on the bus and their state | Read-only |
+
+The root (security review, SEC-LLM-3) is the project's folder: its template's `working_dir`,
+else the Git top-level of the folder the peer was launched from, never that folder itself
+(`agent-spawn` takes it from its caller). `/`, `$HOME` and a folder holding `$HOME` are refused
+at start, since the files tools would then reach every credential the person has. No tool reads
+`.git` (its config can hold a remote URL with a token), asked or reached through a link. A
+checked path is opened from the root one component at a time, following no link (`openat` with
+`O_NOFOLLOW`), so a file swapped for a link after the checks is refused, not followed. `~/`
+denies match the home both as given and resolved (`/home` → `/var/home`).
+
+`bus_thread` reads any thread of the project, not only the one the peer was asked on: that is
+the peer's job, as for any agent. With `remote = true` that text leaves the host too, like the
+prompt and every tool result: a project whose bus carries what must not leave the machine keeps
+its endpoint on loopback.
 
 No shell and no write to any file. Its only connections are the bus's Redis (as for every agent: `bus.Connect`'s usual resolution) and the configured endpoint URL; the peer opens no other, and no tool takes a URL. Its only bus writes are its
 own status, the reply on the thread it was asked on, and its report. **No verdict** in this
@@ -192,7 +206,9 @@ worst it can do is say something wrong on one thread.
 One check in the dispatcher's health loop, run only when a registered agent has client
 `local-llm`:
 
-- For each endpoint those agents use: `GET {url}/models`, 2 s deadline, every minute.
+- For each endpoint those agents use, the one each resolved from its profile's
+  `options.endpoint` and recorded in its snapshot (never another endpoint of the same model):
+  `GET {url}/models`, 2 s deadline, every minute.
 - **ok**: it answers and lists the model. **warn**: it answers without the model (not pulled, or
   another name). **fail**: no answer, or an error status. **unknown**: no config readable, or no
   such agent.
@@ -201,7 +217,8 @@ One check in the dispatcher's health loop, run only when a registered agent has 
   like any other.
 
 The peer checks the same thing itself before each turn: an endpoint down declares `blocked
-"llm endpoint: <reason>"`, retries every 30 s inside the delivery (the lease stays held), and
+"llm endpoint: <reason>"` (the transport's reason or the HTTP status, never the server's body,
+which can echo the URL's path), retries every 30 s inside the delivery (the lease stays held), and
 goes back to `idle` when it answers. busmon
 shows that without the health check; the check adds F5's history.
 
@@ -216,7 +233,9 @@ shows that without the health check; the check adds F5's history.
 | Path outside the root, denied file | Refused as the tool's result, with the rule; nothing read |
 | Turn longer than the wall clock | Stopped; reply "timed out after N min" with what was done; `idle` |
 | Context too small (Ollama's default context is small, and its OpenAI endpoint does not take `num_ctx`) | The server truncates silently; the test measures it; the remedy is server-side (`OLLAMA_CONTEXT_LENGTH`, `llama-server -c`), stated in the example's comments |
-| GPU out of memory | The server's error; `blocked` with it |
+| GPU out of memory | `blocked` with the server's status; its words stay out of the bus |
+| An answer longer than a bus entry holds (65536 runes) | Cut on a rune with a note `[answer cut at N runes]`; a reply the bus still refuses for good is said, reported and acknowledged, never turned again |
+| Control characters in the bus, the model's answer or the endpoint's reason | Turned into spaces in the pane (newline and tab kept): no escape sequence reaches the terminal |
 | Two peers under one name | The second cannot take the receiver lease, says so, and exits |
 | Broker down | Retries with backoff, as `subscribe` does; nothing lost (the cmd group keeps its entries) |
 
