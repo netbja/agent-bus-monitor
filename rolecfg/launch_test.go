@@ -58,6 +58,11 @@ func newLaunchFixture(t *testing.T) *launchFixture {
 		"HOME=" + root, "ROLES_DIR=" + root, "REPO_SKILLS=" + f.skills,
 		"POCOCK_SKILLS_ROOT=" + filepath.Join(root, "pocock"), "AGENT_LAUNCH_CACHE=" + filepath.Join(root, "cache"),
 	}
+	// A Grok launch writes its hook file where the client starts: never the
+	// package's own folder.
+	work := filepath.Join(root, "work")
+	must(t, os.MkdirAll(work, 0o755))
+	withLaunchDir(t, work)
 	return f
 }
 

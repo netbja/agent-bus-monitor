@@ -228,20 +228,9 @@ func promptFor(p Profile, repo string, e *envMap) (path, prompt string, missing 
 // cacheFile writes text once under the launch cache (0700), named by its
 // sha256, with an atomic rename, and returns its path.
 func cacheFile(env []string, text, suffix string) (string, error) {
-	e := newEnv(env)
-	root, ok := e.get("AGENT_LAUNCH_CACHE")
-	if !ok {
-		root = filepath.Join(e.or("XDG_CACHE_HOME", filepath.Join(homeDir(e), ".cache")), "agentbus/launch")
-	}
-	if err := os.MkdirAll(root, 0o700); err != nil {
+	root, err := launchCache(newEnv(env))
+	if err != nil {
 		return "", err
-	}
-	// The cached file becomes a client's prompt or spec: a directory others can
-	// write to would let them plant one.
-	if st, err := os.Stat(root); err != nil {
-		return "", err
-	} else if st.Mode().Perm()&0o022 != 0 {
-		return "", fmt.Errorf("launch cache %s is writable by others; use a private directory (chmod 700)", root)
 	}
 	sum := sha256.Sum256([]byte(text))
 	target := filepath.Join(root, hex.EncodeToString(sum[:])+suffix)
@@ -265,6 +254,25 @@ func cacheFile(env []string, text, suffix string) (string, error) {
 		return "", err
 	}
 	return target, os.Rename(tmp.Name(), target)
+}
+
+// launchCache is the launcher's private cache directory, made if absent.
+func launchCache(e *envMap) (string, error) {
+	root, ok := e.get("AGENT_LAUNCH_CACHE")
+	if !ok {
+		root = filepath.Join(e.or("XDG_CACHE_HOME", filepath.Join(homeDir(e), ".cache")), "agentbus/launch")
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return "", err
+	}
+	// The cached file becomes a client's prompt or spec: a directory others can
+	// write to would let them plant one.
+	if st, err := os.Stat(root); err != nil {
+		return "", err
+	} else if st.Mode().Perm()&0o022 != 0 {
+		return "", fmt.Errorf("launch cache %s is writable by others; use a private directory (chmod 700)", root)
+	}
+	return root, nil
 }
 
 // jsonString is Python's json.dumps of one string (codex -c values).
@@ -586,6 +594,9 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 		e.set("AGENT_BUS_CLIENT_FP", fp.Encode())
 	} else {
 		e.del("AGENT_BUS_CLIENT_FP") // never another launch's
+	}
+	if p.Client == "grok" && !p.Legacy { // its turn hooks live in a file Grok reads (auto-state step 5)
+		grokTurnHooks(newEnv(cfg.Env), cfg.Stderr)
 	}
 	if bind != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
