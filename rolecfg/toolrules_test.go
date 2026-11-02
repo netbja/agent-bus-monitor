@@ -290,14 +290,13 @@ func TestShippedManifestRules(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cmd := "agentbus --project agent-bus-monitor deliver coder/x --task t1"
 		switch role {
 		case "master", "docs":
 			if !slices.Contains(lr.Allow, "Bash(agentbus deliver *)") || slices.ContainsFunc(DeliverDeny, func(r string) bool { return slices.Contains(lr.Deny, r) }) {
 				t.Errorf("%s does not deliver: %+v", role, lr)
 			}
 		default:
-			if !HoldsDeliverDeny(lr) || decide(lr, cmd) != "deny" || decide(lr, "agentbus deliver coder/x") != "deny" {
+			if !HoldsDeliverDeny(lr) {
 				t.Errorf("%s may deliver: deny %v", role, lr.Deny)
 			}
 		}
@@ -339,6 +338,40 @@ func TestExampleManifestsDeliverRules(t *testing.T) {
 			if delivers := role == "master" || role == "docs"; delivers == HoldsDeliverDeny(lr) {
 				t.Errorf("%s: %s deny %v", file, role, lr.Deny)
 			}
+		}
+	}
+}
+
+// The deliver denies catch every spelling of the command (the global flags
+// that may precede it, as expandArgs reads them) and leave the word in a
+// message alone (foureyes on step 6): deliver is everyday prose on the bus.
+func TestDeliverDenyMatchesTheCommandNotProse(t *testing.T) {
+	r := ToolRules{Deny: DeliverDeny}
+	for _, cmd := range []string{
+		"agentbus deliver coder/x",
+		"agentbus deliver coder/x --task t1",
+		"agentbus --project p deliver b",
+		"agentbus --project=p deliver b",
+		"agentbus -p p deliver b",
+		"agentbus --host h deliver b",
+		"agentbus --host=h deliver b",
+		"agentbus -H h deliver b",
+		"agentbus -p p -H h deliver b",
+	} {
+		if decide(r, cmd) != "deny" {
+			t.Errorf("not denied: %s", cmd)
+		}
+	}
+	for _, cmd := range []string{
+		`agentbus report coder "we deliver it next"`,
+		`agentbus report coder --to master "deliver step 5"`,
+		`agentbus reply --ref 1-0 master the PR to deliver is ready`,
+		`agentbus --project p verdict --subject s coder approve "ok to deliver"`,
+		`agentbus -p p challenge foureyes "review before we deliver"`,
+		`agentbus --project p plan link t1 --ref coder/deliver@abc`,
+	} {
+		if decide(r, cmd) == "deny" {
+			t.Errorf("prose denied: %s", cmd)
 		}
 	}
 }

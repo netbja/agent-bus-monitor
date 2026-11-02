@@ -129,18 +129,26 @@ profile = "claude-opus"
 tier = "boot"
 skills = ["agent-bus", "tdd", "implement"]
 # Only master and docs deliver (forge-delivery, the person's answer 3): every
-# other role denies both spellings in its own rules, never in the shared
-# [tool_rules], which would deny master and docs too. Defence in depth, not a
-# boundary: the client matches command text.
+# other role denies the command, and the command after each global flag that
+# may precede it, in its own rules; never in the shared [tool_rules], which
+# would deny master and docs too, and never as "agentbus * deliver *", which
+# would deny the word in any message. Defence in depth, not a boundary: the
+# client matches command text.
 [roles.coder.tool_rules]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 [roles.foureyes]
 profile = "claude-opus"
 tier = "boot"
 skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 [roles.foureyes.tool_rules]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 [roles.sentinel]
 profile = "claude-haiku"
@@ -152,14 +160,20 @@ skills = ["agent-bus", "agent-bus-sentinel"]
 # This allow only spares the prompt.
 [roles.sentinel.tool_rules]
 allow = ["Bash(agentbus reload *)"]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 [roles.architect]
 profile = "claude-opus-fallback"
 tier = "pop"
 skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
 [roles.architect.tool_rules]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 [roles.deploy]
 profile = "claude-sonnet"
@@ -167,14 +181,20 @@ tier = "pop"
 approval = "person"
 skills = ["agent-bus", "diagnosing-bugs"]
 [roles.deploy.tool_rules]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 [roles.security]
 profile = "claude-opus-manual"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-security"]
 [roles.security.tool_rules]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 [roles.docs]
 profile = "claude-sonnet-edits"
@@ -192,14 +212,20 @@ profile = "grok"
 tier = "pop"
 skills = ["agent-bus"]
 [roles.ui-grok.tool_rules]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 [roles.ui-kimi]
 profile = "kimi"
 tier = "pop"
 skills = ["agent-bus"]
 [roles.ui-kimi.tool_rules]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 # A second independent reviewer from another maker, popped when another 4-eyes is needed.
 # Never codes; read-only on the repository.
@@ -208,7 +234,10 @@ profile = "codex-review"
 tier = "pop"
 skills = ["agent-bus"]
 [roles.reviewer-codex.tool_rules]
-deny = ["Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"]
+deny = [
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+]
 
 # Drafted by master for: infrastructure as code and IT automation: Ansible playbooks and roles, Terraform and OpenTofu plans, linting, drift checks, IT support; check plan diff lint freely, apply or destroy only after the person says yes, never secrets
 [roles.infra]
@@ -273,5 +302,6 @@ deny = [
   "Bash(terraform *workspace new*-state*)", "Bash(tofu *workspace new*-state*)",
   "Bash(printenv*)", "Bash(env)", "Bash(env *)",
   # Only master and docs deliver (forge-delivery).
-  "Bash(agentbus deliver *)", "Bash(agentbus * deliver *)",
+  "Bash(agentbus deliver *)", "Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+  "Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
 ]

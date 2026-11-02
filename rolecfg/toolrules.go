@@ -21,12 +21,19 @@ func (r ToolRules) Empty() bool { return len(r.Allow)+len(r.Ask)+len(r.Deny) == 
 
 // DeliverDeny are the denies every role but master and docs carries in its
 // own rules (forge-delivery answer 3: only they push and open requests),
-// never in the shared ones, which would deny them too. The second covers the
-// global-flag spelling (agentbus --project p deliver). Defence in depth, not
-// a boundary: the client matches command text.
-var DeliverDeny = []string{"Bash(agentbus deliver *)", "Bash(agentbus * deliver *)"}
+// never in the shared ones, which would deny them too: the command, and the
+// command after each global flag that may precede it (-p/--project,
+// -H/--host, as expandArgs reads them). Never "agentbus * deliver *", which
+// would deny the word in any message (foureyes). Residual: a message with
+// " deliver " after a leading global flag is denied too. Defence in depth,
+// not a boundary: the client matches command text.
+var DeliverDeny = []string{
+	"Bash(agentbus deliver *)",
+	"Bash(agentbus --project * deliver *)", "Bash(agentbus --project=* deliver *)", "Bash(agentbus -p * deliver *)",
+	"Bash(agentbus --host * deliver *)", "Bash(agentbus --host=* deliver *)", "Bash(agentbus -H * deliver *)",
+}
 
-// HoldsDeliverDeny: r denies both spellings of agentbus deliver.
+// HoldsDeliverDeny: r denies every spelling of agentbus deliver.
 func HoldsDeliverDeny(r ToolRules) bool {
 	for _, d := range DeliverDeny {
 		if !slices.Contains(r.Deny, d) {
