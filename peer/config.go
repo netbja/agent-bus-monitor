@@ -78,13 +78,17 @@ func EndpointFP(key []byte, url string) string {
 // as changed.
 const fpKeyFile = "endpoint-fp.key"
 
-// FPKey reads the host's fingerprint key from dir, creating it once (32
-// random bytes, 0600 in a 0700 directory, O_EXCL: of two first callers one
-// writes, the other reads it).
+// FPKey reads the host's fingerprint key from dir, creating it once: 32
+// random bytes written whole to a temporary file (0600, in a 0700
+// directory), then linked to its name, which fails if the name exists. The
+// key is never visible half-written, and of two first callers one links, the
+// other reads the winner's (reviewer-codex).
 func FPKey(dir string) ([]byte, error) {
 	path := filepath.Join(dir, fpKeyFile)
 	if key, err := os.ReadFile(path); err == nil && len(key) == 32 {
 		return key, nil
+	} else if err == nil {
+		return nil, fmt.Errorf("%s is not a fingerprint key", path)
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
@@ -93,21 +97,28 @@ func FPKey(dir string) ([]byte, error) {
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if errors.Is(err, os.ErrExist) {
-		if key, err := os.ReadFile(path); err == nil && len(key) == 32 {
-			return key, nil
-		}
-		return nil, fmt.Errorf("%s is not a fingerprint key", path)
-	}
+	tmp, err := os.CreateTemp(dir, fpKeyFile+".*")
 	if err != nil {
 		return nil, err
 	}
-	if _, err := f.Write(key); err != nil {
-		f.Close()
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(key); err != nil {
+		tmp.Close()
 		return nil, err
 	}
-	return key, f.Close()
+	if err := tmp.Close(); err != nil {
+		return nil, err
+	}
+	if err := os.Link(tmp.Name(), path); errors.Is(err, os.ErrExist) {
+		other, err := os.ReadFile(path)
+		if err != nil || len(other) != 32 {
+			return nil, fmt.Errorf("%s is not a fingerprint key", path)
+		}
+		return other, nil
+	} else if err != nil {
+		return nil, err
+	}
+	return key, nil
 }
 
 // Resolve joins the spec with config.toml's endpoint it names. The profile's

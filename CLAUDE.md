@@ -790,7 +790,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `llm-endpoint` (step 2; `health/llmendpoint.go` pure, `cmd/agentbus/llmcheck.go` the reader, every minute) probes
   only the endpoints the registered `local-llm` agents use (the one each peer resolved, `AgentSnapshot.Endpoint`, set by
   its own status with `EndpointFP`, its URL's fingerprint (HMAC under the host key `endpoint-fp.key` beside config.toml,
-  0600, made once: a bus reader cannot test a guessed path; no key, no fingerprint), probed for the model the peer runs, an endpoint whose
+  0600, made once and linked whole: a bus reader cannot test a guessed path; no key, no fingerprint; a recorded one
+  with an unreadable key is said, never ok), probed for the model the peer runs, an endpoint whose
   config.toml model or URL changed since the launch said; a snapshot
   without it matches by model), `GET /models`
   through `peer.Client` (no redirect, no proxy) within 2 s each, side by side: fail on no answer or an error

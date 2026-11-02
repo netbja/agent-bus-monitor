@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -101,6 +102,31 @@ func TestEndpointFPIsKeyed(t *testing.T) {
 	for _, guess := range []string{EndpointFP(other, url), EndpointFP(nil, url), hex.EncodeToString(sum[:6]), hex.EncodeToString(sum[:8])} {
 		if guess == fp {
 			t.Fatalf("a guess without the key verifies the URL: %s", guess)
+		}
+	}
+}
+
+// First callers racing on a host with no key all get the one key written,
+// never a half-written file (reviewer-codex: the file was visible before its
+// bytes were).
+func TestFPKeyConcurrentFirstCallers(t *testing.T) {
+	for round := 0; round < 20; round++ {
+		dir := filepath.Join(t.TempDir(), "agentbus")
+		const n = 16
+		keys, errs := make([][]byte, n), make([]error, n)
+		var wg sync.WaitGroup
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() { defer wg.Done(); keys[i], errs[i] = FPKey(dir) }()
+		}
+		wg.Wait()
+		for i := 0; i < n; i++ {
+			if errs[i] != nil || len(keys[i]) != 32 || string(keys[i]) != string(keys[0]) {
+				t.Fatalf("round %d caller %d: %d bytes, %v", round, i, len(keys[i]), errs[i])
+			}
+		}
+		if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+			t.Fatalf("round %d leaves %d files", round, len(entries))
 		}
 	}
 }
