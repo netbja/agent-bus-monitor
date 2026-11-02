@@ -382,3 +382,31 @@ func TestStallWakeSendsOnce(t *testing.T) {
 		t.Fatal("a dispatcher without the lease woke someone")
 	}
 }
+
+// clear-stall's reader carries the stored hand-off's report into the judged
+// input, so the directive to re-declare can name it (`--report <id>`).
+func TestClearStallReadsTheHandoffReport(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	who := bus.AgentIdent{PID: os.Getpid(), PIDStart: 777, Session: "session-0001", Provider: "anthropic"}
+	if _, err := w.b.Status(ctx, "coder", "idle", "", who); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := w.b.Report(ctx, "coder", bus.ReportNote, "hand-off")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := w.b.DeclareHandoff(ctx, "coder", rep, who)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.clearStall); out.Status != health.Warn {
+		t.Fatalf("clear-stall: %+v", out)
+	}
+	w.s.mu.Lock()
+	got := w.s.lastClear.Handoffs
+	w.s.mu.Unlock()
+	if len(got) != 1 || got[0].Agent != "coder" || got[0].Report != rep || got[0].Void || got[0].At.UnixMilli() != h.At {
+		t.Fatalf("judged hand-offs %+v, want coder's report %s at %d", got, rep, h.At)
+	}
+}
