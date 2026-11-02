@@ -200,7 +200,7 @@ func clientLabel(client string) string {
 // else the caller's. "" when the tab launches no agent or the role does not
 // resolve (no gate for it: today's behaviour).
 func tabClient(command string, env func(string) string) string {
-	p, ok := tabProfile(command, env)
+	p, ok, _ := tabProfile(command, env)
 	if !ok {
 		return ""
 	}
@@ -211,42 +211,39 @@ func tabClient(command string, env func(string) string) string {
 // client): the builtin client's binary or the adapter's executable, "" when
 // the tab launches no agent or the role does not resolve.
 func tabExecutable(command string, env func(string) string) string {
-	p, ok := tabProfile(command, env)
+	p, ok, _ := tabProfile(command, env)
 	if !ok {
 		return ""
 	}
 	return rolecfg.ClientExecutable(p)
 }
 
-// tabProfile resolves the role a tab's agent-launch names.
-func tabProfile(command string, env func(string) string) (rolecfg.Profile, bool) {
-	// The template quotes its words (rolecfg.ShellJoin): split them back as a
-	// shell would, so a path with a space stays one word (reviewer-codex).
-	words, err := rolecfg.ShellSplit(command)
-	if err != nil {
-		words = strings.Fields(strings.ReplaceAll(command, "'", ""))
-	}
-	manifest, role := env("ROLES_TOML"), ""
-	for i, w := range words {
-		if m, ok := strings.CutPrefix(w, "ROLES_TOML="); ok {
-			manifest = m
-		}
-		if filepath.Base(w) == "agent-launch" && i+1 < len(words) {
-			role = words[i+1]
-		}
+// tabProfile resolves the profile a tab's agent-launch runs: the role, on the
+// --profile the tab names (launchProfile), in the manifest the command names,
+// else the caller's. ok is false, with no error, when the tab launches no
+// agent, the manifest cannot be loaded or the role is unknown (today's skip);
+// a profile roles.toml does not allow for the role is an error (checkProfiles
+// stops up on it).
+func tabProfile(command string, env func(string) string) (rolecfg.Profile, bool, error) {
+	manifest, role, profile := tabLaunch(command)
+	if manifest == "" {
+		manifest = env("ROLES_TOML")
 	}
 	if role == "" || manifest == "" {
-		return rolecfg.Profile{}, false
+		return rolecfg.Profile{}, false, nil
 	}
 	m, err := rolecfg.Load(manifest)
 	if err != nil {
-		return rolecfg.Profile{}, false
+		return rolecfg.Profile{}, false, nil
 	}
-	p, err := m.Resolve(role)
+	if _, known := m.Roles[role]; !known {
+		return rolecfg.Profile{}, false, nil
+	}
+	p, err := launchProfile(m, role, profile)
 	if err != nil {
-		return rolecfg.Profile{}, false
+		return rolecfg.Profile{}, false, err
 	}
-	return p, true
+	return p, true, nil
 }
 
 // clientTrusted reads the trust of dir by client from its own file: Claude

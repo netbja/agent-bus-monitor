@@ -167,6 +167,9 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
 		return 1
 	}
+	if !checkProfiles(d, tpl, path, stderr) {
+		return 1
+	}
 	absent, ok := checkClients(d, project, tpl, stdout, stderr)
 	if !ok {
 		return 1
