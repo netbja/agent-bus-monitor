@@ -58,7 +58,8 @@ func sender(e bus.Event) string {
 
 // marks computes every entry's mark, by stream id. A newer entry for the
 // person from the same sender supersedes an older one, as does an answer from
-// the person (waitingAnswerAt) or, for an ask, its closing.
+// the person (waitingAnswerAt) or, for an ask, its closing. A report notice
+// is content of its own: only opening it reads it.
 func (s unreadState) marks(feed []feedLine, asks map[string]bus.Ask) map[string]mark {
 	out := map[string]mark{}
 	events := make([]bus.Event, 0, len(feed))
@@ -80,7 +81,10 @@ func (s unreadState) marks(feed []feedLine, asks map[string]bus.Ask) map[string]
 			continue
 		}
 		a, isAsk := asks[fl.ev.ID]
+		_, _, notice := reportSubject(fl.ev.Message)
 		switch {
+		case notice && fl.ev.Kind == "cmd":
+			out[fl.ev.ID] = markUnread
 		case superseded, isAsk && a.Open() == 0, !waitingAnswerAt(from, fl.at, events).IsZero():
 			out[fl.ev.ID] = markSuperseded
 		default:

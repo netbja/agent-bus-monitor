@@ -47,6 +47,9 @@ func lookEvent1(e bus.Event) eventLook {
 		return eventLook{From: e.From, Type: "notify", Role: RoleAttention, Text: e.Message}
 	case "cmd":
 		look := eventLook{From: e.From, To: e.Target, Type: e.Type, Role: RoleMuted, Text: e.Message}
+		if s, _, ok := reportSubject(e.Message); ok { // a report notice reads as its report, not its envelope
+			look.Text = s
+		}
 		switch e.Type {
 		case bus.CmdDirective:
 			look.Role = RoleAccent

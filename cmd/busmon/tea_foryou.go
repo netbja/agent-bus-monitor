@@ -68,8 +68,12 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 			out[i].Unread = true // listed once: the ask's row carries the mark
 			continue
 		}
+		text := fl.ev.Message
+		if s, _, ok := reportSubject(text); ok { // a report notice reads as its report
+			text = s
+		}
 		out = append(out, attentionItem{Rank: rankUnread, Key: "unread:" + fl.ev.ID, Agent: sender(fl.ev),
-			Text: fl.ev.Message, At: fl.at, EventID: fl.ev.ID})
+			Text: text, At: fl.at, EventID: fl.ev.ID})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
