@@ -48,6 +48,10 @@ type doctorDeps struct {
 	// a nil Table judges nothing against a catalogue.
 	Table  *models.Table
 	Config models.Config
+	// Env finds the project's template (rolecfg.ProjectsDir): a role's own
+	// profile is its tab's --profile there (ownProfile); nil reads roles.toml
+	// only.
+	Env func(string) string
 }
 
 func realDoctorDeps(env []string) doctorDeps {
@@ -56,6 +60,7 @@ func realDoctorDeps(env []string) doctorDeps {
 		root = filepath.Join(dir, "projects")
 	}
 	return doctorDeps{
+		Env: os.Getenv,
 		Manifest: func() (*rolecfg.Manifest, error) {
 			path, err := manifestPath(env)
 			if err != nil {
@@ -155,6 +160,9 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 		s := snaps[n]
 		r := doctorRow{Agent: n, PID: s.PID}
 		own, err := m.Resolve(n)
+		if d.Env != nil {
+			own, err = ownProfile(m, d.Env, b.Project(), n)
+		}
 		if err != nil {
 			r.Verdict, r.Why = "not reported", err.Error()
 			rows = append(rows, r)
