@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -72,6 +71,25 @@ const (
 // grepEntries bounds the entries one grep walks (SEC-LLM-5): the byte budget
 // alone let a tree of many small or skipped files run past turn_timeout.
 var grepEntries = 20000
+
+// dirBatch is how many names one directory read returns: a directory is read
+// in batches, each checked against the caps before the next (reviewer-codex:
+// ReadDir(-1) loaded a huge directory whole before any check).
+const dirBatch = 256
+
+// dirBatchRead, a test's hook, sees how many names each directory read
+// returned.
+var dirBatchRead func(n int)
+
+// readDirBatch reads up to n names of an open directory, sorted.
+func readDirBatch(d *os.File, n int) ([]os.DirEntry, error) {
+	batch, err := d.ReadDir(n)
+	if dirBatchRead != nil {
+		dirBatchRead(len(batch))
+	}
+	sort.Slice(batch, func(i, j int) bool { return batch[i].Name() < batch[j].Name() })
+	return batch, err
+}
 
 // Tools runs the peer's read-only tools. Root is the project root with its
 // symlinks resolved; Deny the role's effective Read denies; Thread and Agents
@@ -209,15 +227,14 @@ func (t Tools) listDir(rel string) string {
 	if fi, err := d.Stat(); err != nil || !fi.IsDir() {
 		return "error: not a directory"
 	}
-	entries, err := d.ReadDir(-1)
-	if err != nil {
+	entries, err := readDirBatch(d, listCap+1) // one past the cap: whether more exist
+	if err != nil && !errors.Is(err, io.EOF) {
 		return "error: not a directory"
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	var b strings.Builder
 	for i, e := range entries {
 		if i == listCap {
-			fmt.Fprintf(&b, "[%d more not listed]\n", len(entries)-listCap)
+			b.WriteString("[more not listed]\n")
 			break
 		}
 		b.WriteString(e.Name())
@@ -244,19 +261,20 @@ func (t Tools) grep(ctx context.Context, pattern, rel string) string {
 	var b strings.Builder
 	matches, budget, entries := 0, int64(grepBudget), 0
 	stop, tooMany := errors.New("stop"), errors.New("entries")
-	walkErr := filepath.WalkDir(start, func(p string, d fs.DirEntry, err error) error {
+	fi, err := os.Lstat(start)
+	if err != nil {
+		return "error: no such file or directory"
+	}
+	walkErr := t.walk(start, fi.IsDir(), func(p string, dir bool) error {
 		if ctx.Err() != nil {
 			return ctx.Err() // the turn's clock: the lease is held meanwhile
 		}
 		if entries++; entries > grepEntries {
 			return tooMany
 		}
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return filepath.SkipDir
+		if dir {
+			if filepath.Base(p) == ".git" {
+				return errSkipDir
 			}
 			return nil
 		}
@@ -428,6 +446,40 @@ func openRegular(root, p string) (*os.File, string) {
 		return nil, "error: not a regular file"
 	}
 	return f, ""
+}
+
+// errSkipDir, from walk's visit, leaves a directory unread.
+var errSkipDir = errors.New("skip")
+
+// walk visits p, then, for a directory, its entries depth first: each
+// directory opened beneath the root following no link (openBeneath, R1) and
+// read in batches of dirBatch, every entry visited before the next batch is
+// read, so visit's caps stop the walk inside one huge directory. A link is
+// visited as a file (never followed into), as WalkDir did; a directory that
+// cannot be opened is skipped.
+func (t Tools) walk(p string, dir bool, visit func(p string, dir bool) error) error {
+	if err := visit(p, dir); err != nil || !dir {
+		if errors.Is(err, errSkipDir) {
+			return nil
+		}
+		return err
+	}
+	d, err := openBeneath(t.Root, p, unix.O_NONBLOCK)
+	if err != nil {
+		return nil
+	}
+	defer d.Close()
+	for {
+		batch, err := readDirBatch(d, dirBatch)
+		for _, e := range batch {
+			if werr := t.walk(filepath.Join(p, e.Name()), e.IsDir(), visit); werr != nil {
+				return werr
+			}
+		}
+		if err != nil || len(batch) == 0 {
+			return nil // the end (io.EOF), or a directory that cannot be read on
+		}
+	}
 }
 
 // lineCap bounds one printed grep line: a minified file's one line never

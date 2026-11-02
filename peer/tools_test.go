@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -437,5 +438,37 @@ func TestToolsRefuseAPathSwappedForALink(t *testing.T) {
 	}
 	if out := run(t, tl, "list_dir", map[string]any{"path": "sub"}); strings.Contains(out, "secret.txt") || !strings.HasPrefix(out, "refused:") {
 		t.Errorf("list_dir after the swap = %q, want refused", out)
+	}
+}
+
+// One directory larger than the caps is read in bounded batches: grep stops
+// reading it at its entry cap, list_dir past its 500 names, instead of loading
+// every name first (reviewer-codex: WalkDir and ReadDir(-1) read a whole
+// directory before any check ran).
+func TestToolsReadAHugeDirectoryInBatches(t *testing.T) {
+	tl := toolsFixture(t)
+	huge := filepath.Join(tl.Root, "huge")
+	if err := os.MkdirAll(huge, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3000; i++ {
+		if err := os.WriteFile(filepath.Join(huge, "f"+strconv.Itoa(i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := 0
+	dirBatchRead = func(n int) { read += n }
+	defer func(n int) { dirBatchRead, grepEntries = nil, n }(grepEntries)
+	grepEntries = 10
+	if out := run(t, tl, "grep", map[string]any{"pattern": "x", "path": "huge"}); !strings.Contains(out, "[stopped after 10 entries]") {
+		t.Fatalf("grep = %q", out)
+	}
+	if read > grepEntries+dirBatch {
+		t.Fatalf("grep read %d names of a 3000-entry directory to stop at %d", read, grepEntries)
+	}
+	read = 0
+	out := run(t, tl, "list_dir", map[string]any{"path": "huge"})
+	if read > listCap+1 || strings.Count(out, "\n") != listCap+1 || !strings.Contains(out, "more not listed") {
+		t.Fatalf("list_dir read %d names and printed %d lines", read, strings.Count(out, "\n"))
 	}
 }
