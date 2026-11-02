@@ -27,6 +27,13 @@ func TestDecideClearEveryConditionVetoesAlone(t *testing.T) {
 	if d := DecideClear(clearFacts()); !d.Clear {
 		t.Fatalf("all conditions met, not cleared: %s", d.Reason)
 	}
+	// The declaration writes the agent idle at the record's own time: that
+	// idle is "since its hand-off" (chain-reliability).
+	f0 := clearFacts()
+	f0.Snap.TS = f0.Record.At
+	if d := DecideClear(f0); !d.Clear {
+		t.Fatalf("idle at the declaration, not cleared: %s", d.Reason)
+	}
 	for name, c := range map[string]func(*ClearFacts){
 		"switched off":             func(f *ClearFacts) { f.On = false },
 		"another client":           func(f *ClearFacts) { f.Snap.Client = "codex" },

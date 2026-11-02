@@ -110,15 +110,22 @@ func Decide(p Policy, x Input) Decision {
 	}
 	progressed := Progressed(x.Wake, o)
 	changed := IdentityChanged(x.Wake, x.Snap)
-	reset := progressed || changed
+	// A new message after an escalation is a new obligation (chain-reliability):
+	// the escalation was for the high id it recorded, once; past it the wake
+	// re-opens with fresh tries.
+	reopened := w.Escalated == "true" && w.HighID != "" && idAfter(o.HighID, w.HighID)
+	reset := progressed || changed || reopened
 	suffix := ""
 	if reset {
 		// A new stall: evaluate rules 3–5 as if nothing had been tried.
 		w.Tries, w.Escalated, w.At = 0, "", 0
-		if progressed {
+		switch {
+		case progressed:
 			suffix = "; tries reset (progress)"
-		} else {
+		case changed:
 			suffix = "; tries reset (identity change)"
+		default:
+			suffix = "; tries reset (new message since the escalation)"
 		}
 	}
 	d := func(a Action, rule int, reason string) Decision {

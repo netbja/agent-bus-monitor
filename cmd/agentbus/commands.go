@@ -54,7 +54,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "handoff", Usage: []string{"handoff [--json]", "handoff <self> --report <id>"},
-		Summary: "list declared hand-offs, or declare your own (its report id)",
+		Summary: "list declared hand-offs, or declare your own (its report id); declaring sets you idle",
 		Flags: []cli.Flag{
 			{Long: "report", Short: 'r', Arg: "<id>", Help: "the report that carries your hand-off"},
 			fJSON,
