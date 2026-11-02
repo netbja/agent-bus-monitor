@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
+	"unicode/utf8"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -121,7 +123,7 @@ func (t Tools) resolve(rel string) (string, string) {
 	asked := filepath.Join(t.Root, rel)
 	real, err := filepath.EvalSymlinks(asked)
 	if err != nil {
-		return "", "error: " + strings.Replace(err.Error(), t.Root+string(filepath.Separator), "", 1)
+		return "", "error: no such file or directory" // never a link's target
 	}
 	if real != t.Root && !strings.HasPrefix(real, t.Root+string(filepath.Separator)) {
 		return "", "refused: the path leads outside the project root"
@@ -140,14 +142,11 @@ func (t Tools) readFile(rel string, offset, limit int64) string {
 	if msg != "" {
 		return msg
 	}
-	f, err := os.Open(p)
-	if err != nil {
-		return "error: cannot open it"
+	f, msg := openRegular(p)
+	if msg != "" {
+		return msg
 	}
 	defer f.Close()
-	if st, err := f.Stat(); err != nil || st.IsDir() {
-		return "error: not a file (use list_dir)"
-	}
 	if offset < 0 {
 		offset = 0
 	}
@@ -220,9 +219,9 @@ func (t Tools) grep(pattern, rel string) string {
 		if msg != "" {
 			return nil
 		}
-		f, err := os.Open(real)
-		if err != nil {
-			return nil
+		f, msg := openRegular(real)
+		if msg != "" {
+			return nil // a pipe, a device, a socket: never opened
 		}
 		defer f.Close()
 		data, _ := io.ReadAll(io.LimitReader(f, budget))
@@ -236,7 +235,7 @@ func (t Tools) grep(pattern, rel string) string {
 					return stop
 				}
 				matches++
-				fmt.Fprintf(&b, "%s:%d: %s\n", filepath.ToSlash(relp), i+1, line)
+				fmt.Fprintf(&b, "%s:%d: %s\n", filepath.ToSlash(relp), i+1, cutLine(line))
 			}
 		}
 		if budget <= 0 {
@@ -307,4 +306,42 @@ func (t Tools) busAgents(ctx context.Context) string {
 		fmt.Fprintf(&b, "%s %s %s\n", n, s.State, msg)
 	}
 	return b.String()
+}
+
+// openRegular opens a regular file only. A named pipe would block the open
+// until a writer comes, past the turn's clock and with the receiver lease
+// held: the type is checked before opening (p is resolved, so Lstat sees the
+// file itself), the open never blocks (O_NONBLOCK), and the open file is
+// checked again.
+func openRegular(p string) (*os.File, string) {
+	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
+		if err == nil && fi.IsDir() {
+			return nil, "error: a directory (use list_dir)"
+		}
+		return nil, "error: not a regular file"
+	}
+	f, err := os.OpenFile(p, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, "error: cannot open it"
+	}
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		f.Close()
+		return nil, "error: not a regular file"
+	}
+	return f, ""
+}
+
+// lineCap bounds one printed grep line: a minified file's one line never
+// fills a result.
+const lineCap = 300
+
+func cutLine(s string) string {
+	if len(s) <= lineCap {
+		return s
+	}
+	cut := lineCap
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + " [line cut]"
 }

@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -215,5 +217,115 @@ func TestToolsLimitsAndBusTools(t *testing.T) {
 		if out := tl.Run(context.Background(), name, args); !strings.HasPrefix(out, "error:") {
 			t.Errorf("%s(%s) = %q, want an error for the model", name, args, out)
 		}
+	}
+}
+
+// A named pipe (or any non-regular file) is refused before it is opened:
+// opening one blocks until a writer comes, past the turn's clock, with the
+// receiver lease held. grep skips it too.
+func TestToolsRefuseSpecialFiles(t *testing.T) {
+	tl := toolsFixture(t)
+	if err := syscall.Mkfifo(filepath.Join(tl.Root, "pipe"), 0o644); err != nil {
+		t.Skip("no mkfifo:", err)
+	}
+	if err := os.Symlink("pipe", filepath.Join(tl.Root, "pipe-link")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan []string, 1)
+	go func() {
+		done <- []string{
+			run(t, tl, "read_file", map[string]any{"path": "pipe"}),
+			run(t, tl, "read_file", map[string]any{"path": "pipe-link"}),
+			run(t, tl, "grep", map[string]any{"pattern": "board"}),
+			run(t, tl, "grep", map[string]any{"pattern": "board", "path": "pipe"}),
+		}
+	}()
+	select {
+	case out := <-done:
+		for i, o := range out[:2] {
+			if o != "error: not a regular file" {
+				t.Errorf("read %d = %q, want not a regular file", i, o)
+			}
+		}
+		if !strings.Contains(out[2], "main.go:3:") {
+			t.Errorf("grep over a root with a pipe = %q", out[2])
+		}
+		if strings.Contains(out[3], "board") && !strings.HasPrefix(out[3], "no match") {
+			t.Errorf("grep on the pipe = %q", out[3])
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a tool blocked on a named pipe")
+	}
+}
+
+// A denied name is refused even when it is a link to a file no rule names
+// (.env -> config/shared-vals); a dangling link's error never names its target.
+func TestToolsDenyTheAskedName(t *testing.T) {
+	tl := toolsFixture(t)
+	if err := os.MkdirAll(filepath.Join(tl.Root, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tl.Root, "config", "shared-vals"), []byte("TOKEN=hunter2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../config/shared-vals", filepath.Join(tl.Root, "sub", ".env")); err != nil {
+		t.Fatal(err)
+	}
+	if out := run(t, tl, "read_file", map[string]any{"path": "sub/.env"}); !strings.HasPrefix(out, "refused:") {
+		t.Fatalf("read_file(sub/.env -> config/shared-vals) = %q, want refused", out)
+	}
+	if out := run(t, tl, "grep", map[string]any{"pattern": "hunter2", "path": "sub"}); strings.Contains(out, "hunter2") {
+		t.Fatalf("grep reached it: %q", out)
+	}
+	if err := os.Symlink("/very/secret/place", filepath.Join(tl.Root, "dangling")); err != nil {
+		t.Fatal(err)
+	}
+	if out := run(t, tl, "read_file", map[string]any{"path": "dangling"}); strings.Contains(out, "secret/place") {
+		t.Fatalf("the dangling link's target leaks: %q", out)
+	}
+}
+
+// A bare Read deny (or Read(**)) denies every read: the peer fails closed.
+// A pattern without a slash matches at any depth, as gitignore and Claude Code
+// read it.
+func TestDenyAllAndBareNames(t *testing.T) {
+	dir := t.TempDir()
+	manifest := filepath.Join(dir, "roles.toml")
+	body := "schema_version = 2\n[defaults]\nprofile = \"p\"\n[profiles.p]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m\"\n" +
+		"[roles.local]\ntier = \"pop\"\n[roles.local.tool_rules]\ndeny = [\"Read\"]\n"
+	if err := os.WriteFile(manifest, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := rolecfg.Load(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := ReadDenies(m, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dm, err := NewDenyMatcher(d, "/r", "/h")
+	if err != nil || !dm.Denied("/r/README.md") || !dm.Denied("/r/a/b/c.go") {
+		t.Fatalf("a bare Read deny = %v %v, want every read denied", d, err)
+	}
+	dm, err = NewDenyMatcher([]string{"*.pem", "secrets.txt"}, "/r", "/h")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]bool{"/r/a.pem": true, "/r/deep/b.pem": true, "/r/x/secrets.txt": true, "/r/pem.go": false} {
+		if dm.Denied(p) != want {
+			t.Errorf("%s denied = %v, want %v", p, !want, want)
+		}
+	}
+}
+
+// grep cuts a long matching line: one minified line never fills a result.
+func TestGrepCutsLongLines(t *testing.T) {
+	tl := toolsFixture(t)
+	if err := os.WriteFile(filepath.Join(tl.Root, "min.js"), []byte("board"+strings.Repeat("x", 100000)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out := run(t, tl, "grep", map[string]any{"pattern": "board", "path": "min.js"}); len(out) > 400 {
+		t.Fatalf("one line gave %d bytes", len(out))
 	}
 }

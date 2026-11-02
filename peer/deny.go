@@ -20,6 +20,10 @@ func ReadDenies(m *rolecfg.Manifest, role string) ([]string, error) {
 	}
 	var out []string
 	for _, r := range rules.Deny {
+		if r == "Read" {
+			out = append(out, "**") // a bare Read denies every read
+			continue
+		}
 		if !strings.HasPrefix(r, "Read(") {
 			continue
 		}
@@ -34,7 +38,8 @@ func ReadDenies(m *rolecfg.Manifest, role string) ([]string, error) {
 // DenyMatcher matches absolute paths against Read denies with Claude Code's
 // glob meaning: ** any number of segments, * and ? within one segment, ~/
 // the home directory, // an absolute path, any other path relative to the
-// project root, ** at the start anywhere.
+// project root, ** at the start anywhere, and a pattern without a slash
+// (*.pem) at any depth, as gitignore and Claude Code read it.
 type DenyMatcher struct{ patterns [][]string }
 
 // NewDenyMatcher compiles patterns; one it cannot read is an error.
@@ -51,6 +56,8 @@ func NewDenyMatcher(patterns []string, root, home string) (DenyMatcher, error) {
 			abs = filepath.Join(home, p[2:])
 		case strings.HasPrefix(p, "//"):
 			abs = p[1:]
+		case !strings.Contains(p, "/"):
+			abs = "/**/" + p
 		default:
 			abs = filepath.Join(root, strings.TrimPrefix(p, "/"))
 		}
