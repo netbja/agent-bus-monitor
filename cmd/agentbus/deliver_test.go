@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -661,5 +662,27 @@ func TestReadDescIsBounded(t *testing.T) {
 	}
 	if s, err := readDesc(strings.NewReader("ok\n")); err != nil || s != "ok\n" {
 		t.Errorf("%q %v", s, err)
+	}
+}
+
+// A record too long for the request keeps its newest approvals and the
+// footer, the oldest summed up in one line (reviewer-codex): never the newest
+// proof dropped.
+func TestDeliverBodyBoundsAnOversizedRecord(t *testing.T) {
+	var vs []bus.Verdict
+	for i := range 400 {
+		vs = append(vs, bus.Verdict{Reviewer: fmt.Sprintf("rev%03d", i), Author: "coder", Decision: "approve",
+			Message: strings.Repeat("é", 300), Ref: "r", TS: int64(i)})
+	}
+	vs[len(vs)-1].Reviewer = "newest"
+	b := deliverBody("title", nil, vs, dlvH, "desc")
+	if !strings.Contains(b, "approved by newest") || !strings.HasSuffix(b, "(`agentbus deliver`)\n") {
+		t.Errorf("newest approval or footer lost:\n...%s", b[max(0, len(b)-500):])
+	}
+	if !strings.Contains(b, "earlier approval") || strings.Contains(b, "approved by rev000") {
+		t.Errorf("the oldest are not summed up")
+	}
+	if n := utf8.RuneCountInString(b); n > deliverBodyMax || len(b) > glabDescMax {
+		t.Errorf("%d runes, %d bytes", n, len(b))
 	}
 }

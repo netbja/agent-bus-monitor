@@ -475,8 +475,11 @@ const deliverCut = "\n\n_(description cut to fit the request)_\n"
 
 // deliverBody is the request's description: the title, then the given
 // description (--body-file) or the commits' subjects, then the 4-eyes record
-// and the footer. The record is never cut (foureyes): the part before it is
-// shortened so the whole fits both GitHub's runes and glab's argv bytes.
+// and the footer. The part before the record is shortened so the whole fits
+// both GitHub's runes and glab's argv bytes (foureyes). The record keeps half
+// of each: past it, its oldest approvals are summed up in one line, never the
+// newest nor the footer (reviewer-codex); each line is one screened line, so
+// the newest always fits.
 func deliverBody(title string, commits [][2]string, approvals []bus.Verdict, h, desc string) string {
 	var head strings.Builder
 	head.WriteString(title + "\n\n")
@@ -493,26 +496,39 @@ func deliverBody(title string, commits [][2]string, approvals []bus.Verdict, h, 
 		}
 		fmt.Fprintf(&head, "- `%s` %s\n", short, safeLine(c[1]))
 	}
-	var rec strings.Builder
-	rec.WriteString("\n## 4-eyes\n")
-	for _, v := range approvals {
+	lines := make([]string, len(approvals))
+	for i, v := range approvals {
 		at := time.UnixMilli(v.TS).UTC().Format("2006-01-02 15:04")
 		ref := ""
 		if v.Ref != "" {
 			ref = " (`" + safeLine(v.Ref) + "`)"
 		}
-		fmt.Fprintf(&rec, "- approved by %s at %s on `%s`%s: %s\n", v.Reviewer, at, h, ref, safeLine(v.Message))
+		lines[i] = fmt.Sprintf("- approved by %s at %s on `%s`%s: %s\n", v.Reviewer, at, h, ref, safeLine(v.Message))
 	}
-	rec.WriteString("\n🤖 Generated with agent-bus (`agentbus deliver`)\n")
-	hs, rs := head.String(), rec.String()
+	record := func(drop int) string {
+		var rec strings.Builder
+		rec.WriteString("\n## 4-eyes\n")
+		if drop > 0 {
+			fmt.Fprintf(&rec, "- %d earlier approval(s) on this head: see agentbus verdicts\n", drop)
+		}
+		for _, l := range lines[drop:] {
+			rec.WriteString(l)
+		}
+		rec.WriteString("\n🤖 Generated with agent-bus (`agentbus deliver`)\n")
+		return rec.String()
+	}
+	drop := 0
+	rs := record(0)
+	for drop < len(lines)-1 && (utf8.RuneCountInString(rs) > deliverBodyMax/2 || len(rs) > glabDescMax/2) {
+		drop++
+		rs = record(drop)
+	}
+	hs := head.String()
 	if utf8.RuneCountInString(hs+rs) <= deliverBodyMax && len(hs+rs) <= glabDescMax {
 		return hs + rs
 	}
 	runes := deliverBodyMax - utf8.RuneCountInString(rs+deliverCut)
 	bytes := glabDescMax - len(rs+deliverCut)
-	if runes <= 0 || bytes <= 0 { // a record too long for any room: keep its start
-		return capBytes(string([]rune(rs)[:min(len([]rune(rs)), deliverBodyMax)]), glabDescMax)
-	}
 	if r := []rune(hs); len(r) > runes {
 		hs = string(r[:runes])
 	}
