@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -328,16 +329,27 @@ type outsideWorld struct {
 	upCode    int
 	herdrExit error
 	order     []string
+	tty       io.ReadWriter // what herdr was given
+	release   chan struct{} // up waits until herdr exits
+	mu        sync.Mutex    // up runs beside herdr's wait
 }
+
+func (o *outsideWorld) note(s string) { o.mu.Lock(); defer o.mu.Unlock(); o.order = append(o.order, s) }
 
 func (w *startWorld) outside(o *outsideWorld) startDeps {
 	d := w.deps()
-	d.Up = func(args []string) int { w.ups = append(w.ups, args); o.order = append(o.order, "provision"); return 0 }
+	d.Up = func(args []string) int { w.ups = append(w.ups, args); o.note("provision"); return 0 }
 	d.HerdrOnPath = func() bool { return true }
-	d.Herdr = func(session string) (func() error, error) {
-		o.launched = append(o.launched, session)
-		o.order = append(o.order, "herdr")
-		return func() error { o.order = append(o.order, "herdr exit"); return o.herdrExit }, nil
+	d.Herdr = func(session string, tty io.ReadWriter) (func() error, error) {
+		o.launched, o.tty = append(o.launched, session), tty
+		o.note("herdr")
+		return func() error {
+			o.note("herdr exit")
+			if o.release != nil {
+				close(o.release) // herdr gone while up still runs
+			}
+			return o.herdrExit
+		}, nil
 	}
 	d.SessionSocket = func(session string) (string, error) {
 		if o.socket == "" {
@@ -346,12 +358,17 @@ func (w *startWorld) outside(o *outsideWorld) startDeps {
 		return o.socket, nil
 	}
 	d.UpInSession = func(args []string, session, socket string, log io.Writer) int {
+		if o.release != nil {
+			<-o.release
+		}
+		o.mu.Lock()
 		o.inSession, o.inSock = append(o.inSession, args), socket
-		o.order = append(o.order, "up in "+session)
+		o.mu.Unlock()
+		o.note("up in " + session)
 		fmt.Fprintln(log, "opened")
 		return o.upCode
 	}
-	d.LogPath = func(project string) string { return filepath.Join(w.t.TempDir(), project, "start.log") }
+	d.LogPath = func(project string) (string, error) { return filepath.Join(w.t.TempDir(), project, "start.log"), nil }
 	return d
 }
 
@@ -367,7 +384,10 @@ func TestStartOutsideHerdr(t *testing.T) {
 	if code := runStart([]string{w.folder, "--yes"}, d); code != 0 {
 		t.Fatalf("start = %d: %s", code, w.err.String())
 	}
-	if strings.Join(o.order, ",") != "provision,herdr,up in shop,herdr exit" || len(o.launched) != 1 || o.launched[0] != "shop" || o.inSock != o.socket {
+	if !strings.Contains(w.out.String(), "starting herdr --session shop now") {
+		t.Fatalf("not said: %q", w.out.String())
+	}
+	if !strings.HasPrefix(strings.Join(o.order, ","), "provision,herdr,") || len(o.launched) != 1 || o.launched[0] != "shop" || o.inSock != o.socket {
 		t.Fatalf("order %q, launched %q, socket %q", o.order, o.launched, o.inSock)
 	}
 	if strings.Join(o.inSession[0], " ") != strings.Join(w.ups[0], " ") {
@@ -440,5 +460,35 @@ func TestStartAssistantProjectAndTeam(t *testing.T) {
 	w.writeTemplate("shop", []rolecfg.TeamRole{{Role: "master"}, {Role: "docs"}})
 	if _, screen := w.ask("4\n3\n\nq\n"); !strings.Contains(screen, "docs is not a boot role") || len(w.ups) != 0 {
 		t.Fatalf("a team the toggles cannot keep:\n%s", screen)
+	}
+}
+
+// herdr gets the very terminal start opened, never start's own stdio, which
+// may be redirected (reviewer-codex); herdr leaving while up still opens the
+// team is said, with the log (foureyes); a state directory that cannot be
+// told stops start before herdr (foureyes).
+func TestStartOutsideHerdrTerminalAndTiming(t *testing.T) {
+	w := newStartWorld(t)
+	o := &outsideWorld{socket: "/s.sock", release: make(chan struct{})}
+	d := w.outside(o)
+	tty := &fakeTTY{Reader: strings.NewReader("")}
+	d.TTY = func() io.ReadWriter { return tty }
+	if code := runStart([]string{w.folder, "--yes"}, d); code != 0 {
+		t.Fatalf("start = %d: %s", code, w.err.String())
+	}
+	if o.tty != tty {
+		t.Fatalf("herdr was given %v, not the terminal start opened", o.tty)
+	}
+	if !strings.Contains(w.err.String(), "still opening the team") || !strings.Contains(w.err.String(), "start.log") {
+		t.Fatalf("herdr left before up: %q", w.err.String())
+	}
+
+	w = newStartWorld(t)
+	o = &outsideWorld{socket: "/s.sock"}
+	d = w.outside(o)
+	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
+	d.LogPath = func(string) (string, error) { return "", errors.New("no state directory") }
+	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || len(o.launched) != 0 || !strings.Contains(w.err.String(), "no state directory") {
+		t.Fatalf("no log path = %d, launched %q, %q", code, o.launched, w.err.String())
 	}
 }

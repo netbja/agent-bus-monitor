@@ -37,12 +37,12 @@ type startDeps struct {
 	Out, Err io.Writer
 
 	// Outside herdr (spec "Outside herdr"): start launches the session itself.
-	HerdrOnPath   func() bool                                         // nil: not checked
-	Herdr         func(session string) (wait func() error, err error) // herdr --session on the terminal
-	SessionSocket func(session string) (string, error)                // herdr session list --json, until running
+	HerdrOnPath   func() bool                                                            // nil: not checked
+	Herdr         func(session string, tty io.ReadWriter) (wait func() error, err error) // herdr --session on that terminal
+	SessionSocket func(session string) (string, error)                                   // herdr session list --json, until running
 	UpInSession   func(args []string, session, socket string, log io.Writer) int
 	Trusted       func(client, dir string) bool // nil: no trust line
-	LogPath       func(project string) string
+	LogPath       func(project string) (string, error)
 }
 
 // realStartDeps runs up's own code path, reads the manifest as the role
@@ -70,9 +70,13 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			_, err := exec.LookPath(herdrBin(os.Getenv))
 			return err == nil
 		},
-		Herdr: func(session string) (func() error, error) {
+		Herdr: func(session string, tty io.ReadWriter) (func() error, error) {
+			f, ok := tty.(*os.File)
+			if !ok {
+				return nil, errors.New("no terminal to give herdr")
+			}
 			cmd := exec.Command(herdrBin(os.Getenv), "--session", session)
-			cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr // the person's terminal, for herdr's whole run
+			cmd.Stdin, cmd.Stdout, cmd.Stderr = f, f, f // the person's terminal, for herdr's whole run
 			if err := cmd.Start(); err != nil {
 				return nil, err
 			}
@@ -85,12 +89,19 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			for k, v := range map[string]string{"HERDR_ENV": "1", "HERDR_SESSION": session, "HERDR_SOCKET_PATH": socket} {
 				_ = os.Setenv(k, v)
 			}
-			return runUp(args, realUpDeps(log, log), log, log)
+			return runUp(args, realUpDepsIn(nil, log, log), log, log) // no terminal for bootstrap: herdr owns it
 		},
 		Trusted: clientTrusted(os.Getenv),
-		LogPath: func(project string) string {
-			paths, _ := service.PathsFrom(os.Getenv)
-			return filepath.Join(paths.StateDir(project), "start.log")
+		LogPath: func(project string) (string, error) {
+			paths, err := service.PathsFrom(os.Getenv)
+			if err != nil {
+				return "", err
+			}
+			dir := paths.StateDir(project)
+			if !filepath.IsAbs(dir) {
+				return "", fmt.Errorf("the state directory %q is not absolute", dir)
+			}
+			return filepath.Join(dir, "start.log"), nil
 		},
 		Live: func(project string) (map[string]life, error) {
 			client, err := bus.Connect("")
@@ -266,6 +277,18 @@ func runStart(args []string, d startDeps) int {
 	if outside && d.HerdrOnPath != nil && !d.HerdrOnPath() {
 		return fail("herdr is not on PATH: the team runs in it. Install it from https://herdr.dev (or ./setup.sh install --install-herdr), then run agentbus start again")
 	}
+	// Outside herdr with a terminal, start runs herdr on it: where up's
+	// output will go is settled before anything is written (foureyes).
+	var tty io.ReadWriter
+	logPath := ""
+	if outside && d.TTY != nil && d.Herdr != nil {
+		tty = d.TTY()
+	}
+	if tty != nil {
+		if logPath, err = d.LogPath(p.Project); err != nil {
+			return fail("where to log the team's opening: %v", err)
+		}
+	}
 
 	// start's own writes: the name when none is recorded, the default team
 	// when the person chose one.
@@ -294,24 +317,21 @@ func runStart(args []string, d startDeps) int {
 	case !p.Existing && !complete:
 		upArgs = append(upArgs, "--roles", teamSpec(p.Team))
 	}
-	var tty io.ReadWriter
-	if outside && d.TTY != nil && d.Herdr != nil {
-		tty = d.TTY()
-	}
 	if tty == nil { // inside herdr up opens the team; without a terminal it provisions and says how to open it
 		return d.Up(upArgs)
 	}
 	if code := d.Up(upArgs); code != 0 { // provisioned as up does outside herdr
 		return code
 	}
-	return startInHerdr(d, m, p, upArgs)
+	fmt.Fprintf(d.Out, "starting herdr --session %s now: the team opens inside it\n", p.Project)
+	return startInHerdr(d, m, p, upArgs, tty, logPath)
 }
 
 // startInHerdr hands the terminal to herdr --session <project> and opens the
 // team inside it through the session's socket (spec, "Outside herdr"). What
 // up would say goes to start.log while herdr draws, so the lines a person
 // needs are said before: the missing clients and the dialogs to answer.
-func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string) int {
+func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string, tty io.ReadWriter, logPath string) int {
 	a := &asker{m: m, look: d.Look}
 	if a.look == nil {
 		a.look = func(exe string) (string, error) { return exe, nil }
@@ -332,23 +352,45 @@ func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string
 			fmt.Fprintf(d.Out, "%s does not trust %s yet: answer its dialog in the %s tab\n", clientLabel(prof.Client), p.Folder, r.Role)
 		}
 	}
-	wait, err := d.Herdr(p.Project)
+	wait, err := d.Herdr(p.Project, tty) // the terminal start opened, never its own stdio (reviewer-codex)
 	if err != nil {
 		fmt.Fprintf(d.Err, "agentbus start: starting herdr --session %s: %v\n", p.Project, err)
 		return 1
 	}
-	socket, sockErr := d.SessionSocket(p.Project)
-	code, logPath := 0, d.LogPath(p.Project)
-	if sockErr == nil {
-		code = 1
+	// up opens the team beside herdr's run: herdr holds the terminal until
+	// it exits, and up may wait on a trust dialog meanwhile.
+	type opened struct {
+		code    int
+		sockErr error
+	}
+	done := make(chan opened, 1)
+	go func() {
+		socket, err := d.SessionSocket(p.Project)
+		if err != nil {
+			done <- opened{1, err}
+			return
+		}
+		code := 1
 		if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
 			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
 				code = d.UpInSession(upArgs, p.Project, socket, f)
 				f.Close()
 			}
 		}
+		done <- opened{code, nil}
+	}()
+	herdrErr := wait()
+	if c, ok := tty.(io.Closer); ok {
+		c.Close()
 	}
-	herdrErr := wait() // herdr holds the terminal until it exits
+	var r opened
+	select {
+	case r = <-done:
+	default: // herdr left first (foureyes): say why start still waits
+		fmt.Fprintf(d.Err, "agentbus start: herdr has exited; still opening the team: see %s\n", logPath)
+		r = <-done
+	}
+	code, sockErr := r.code, r.sockErr
 	switch {
 	case sockErr != nil:
 		fmt.Fprintf(d.Err, "agentbus start: %v; inside it, run: agentbus up %s\n", sockErr, p.Project)

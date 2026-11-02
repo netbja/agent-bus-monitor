@@ -562,7 +562,11 @@ func repoDir(env func(string) string) (string, error) {
 }
 
 // realUpDeps runs the real herdr and the repository's bootstrap.
-func realUpDeps(stdout, stderr io.Writer) upDeps {
+func realUpDeps(stdout, stderr io.Writer) upDeps { return realUpDepsIn(os.Stdin, stdout, stderr) }
+
+// realUpDepsIn is realUpDeps with bootstrap's stdin given: start's run inside
+// herdr gives none, herdr owning the terminal (foureyes).
+func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 	paths, _ := service.PathsFrom(os.Getenv)
 	host, _ := os.Hostname()
 	return upDeps{
@@ -577,7 +581,7 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 				return err
 			}
 			cmd := bootstrapCommand(repo, args)
-			cmd.Stdout, cmd.Stderr, cmd.Stdin = stdout, stderr, os.Stdin
+			cmd.Stdout, cmd.Stderr, cmd.Stdin = stdout, stderr, stdin
 			return cmd.Run()
 		},
 		Env: os.Getenv,
