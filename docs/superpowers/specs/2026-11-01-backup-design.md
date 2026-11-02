@@ -219,9 +219,12 @@ person can make them automatic in one setting:
     manifest. With a recipient but no `age` on the service's PATH, the archive is still written
     without the secrets, and the run records the error. A backup without its secrets beats no
     backup, and the error does not go unseen (health, below).
-  - **Record:** the run's outcome goes to `<state>/backup-last.json`, 0600, never a secret. It
-    holds `at`, `scheduled`, the archive's name or the error, the projects, and the `EXEC` time per
-    project. The service log carries the same line.
+  - **Record:** the run's outcome goes to `<state>/backup-last.json`, 0600, never a secret. Its
+    `scheduled` part holds the last scheduled run: `at`, the archive's name or the error, the
+    projects, and the `EXEC` time per project. The service log carries the same line. Only the
+    chore writes that part: a backup by hand never replaces it (a `--project A` run by hand must not
+    erase a failure that covered `B`). The file's other part, `after`, is written by hand too
+    (below).
   - **Settings:** read through `config.Machine`: the environment, then that environment's
     `config.toml`. The service's environment is not the person's shell, so a default that
     depends on `XDG_DATA_HOME` can resolve to another folder there. Archives made by hand would
@@ -266,7 +269,11 @@ Answer 6: a command of the person's own, run after each complete archive, to sen
   hand), at most 64 KiB kept, each line through `health.Redact`.
 - **Failure:** a non-zero exit, a timeout or a command that cannot start is recorded in
   `backup-last.json` (`after`: the exit code or `timeout` or `not started`, and the time, never the
-  output). It is a **health warning** (below), never an error of the backup: the archive is complete
+  output). Every run that runs the command records its outcome there, **a backup by hand as well as a
+  scheduled one** (the same `<state>` folder, the person's own state directory): `after` holds, per
+  project, the latest run of the command for an archive covering it, success included, since the
+  health check below reads it from this file and from nowhere else. A by-hand run updates only its
+  projects' entries, and only `after`, never the `scheduled` part. It is a **health warning** (below), never an error of the backup: the archive is complete
   and stays, the retention still runs, and **nothing ever deletes or changes the archive because of
   the command**. The next archive runs it again.
 - **A person's setting only:** `backup.after_command`, `backup.after_env` and `backup.after_timeout`
@@ -275,9 +282,15 @@ Answer 6: a command of the person's own, run after each complete archive, to sen
   - refused from a project's services env file;
   - never written by agentbus: busmon's C page (the one writer of `config.toml` with
     `agentbus identity set`) shows them read-only with "edit config.toml yourself";
-  - new with this step, the shipped tool rules deny every role `Edit`/`Write` of
-    `~/.config/agentbus/config.toml` (defence in depth: an agent with a shell could still write the
-    file; that is the bus's general limit against the local user, not new here).
+  - new with this step, the tool rules deny every role `Edit`/`Write` of the person's
+    `config.toml` (defence in depth: an agent with a shell could still write the file; that is the
+    bus's general limit against the local user, not new here). The file is where `config.Path`
+    finds it, `$XDG_CONFIG_HOME/agentbus/config.toml` when `XDG_CONFIG_HOME` is set, so a fixed
+    `~/.config/…` rule alone would miss it. Both are denied: the shipped manifest's
+    `~/.config/agentbus/config.toml`, and the path `config.Path` resolves in the launch's own
+    environment, which the launcher (`rolecfg/toolrules.go`) adds to every role's rules when it
+    differs. A path that cannot be resolved (no `HOME`, a relative `XDG_CONFIG_HOME`, which
+    `config.Path` refuses) adds nothing and the launch says so on stderr; the shipped rule stays.
 
   The command runs with the person's own rights; with `backup.schedule = daily` it runs unattended.
 
@@ -412,7 +425,10 @@ Through `AGENTBUS_TEST_REDIS_URL`, never the person's broker:
     opens);
   - with one and a fake `age`, the secrets are in `secrets.age` only;
   - with one and no `age`, the archive is written, the error recorded and the health check warns;
-  - `backup-last.json` is 0600 and holds no secret.
+  - `backup-last.json` is 0600 and holds no secret;
+  - a backup by hand records its command's outcome in `after` for its projects only and leaves the
+    `scheduled` part as it was: a scheduled failure covering `B` still warns after a by-hand
+    `--project A` run, and a failed command by hand warns until a later archive's command succeeds.
 - **Zstandard**: an archive is a valid zstd frame with its checksum (`zstd -t` on the test file); a
   round trip through the module reads every member back byte for byte; a truncated or corrupted
   `.tar.zst` fails restore's verification before any write; retention and coverage match only the
@@ -431,7 +447,10 @@ Through `AGENTBUS_TEST_REDIS_URL`, never the person's broker:
     it;
   - set in the environment or a services env file: not read (the warning names the key); busmon's C
     page shows the three keys read-only and offers no edit;
-  - the shipped manifest denies every role `Edit`/`Write` of `~/.config/agentbus/config.toml`.
+  - the shipped manifest denies every role `Edit`/`Write` of `~/.config/agentbus/config.toml`, and
+    a launch with `XDG_CONFIG_HOME=/x` adds the deny of `/x/agentbus/config.toml` (Claude Code's
+    absolute form, `//x/agentbus/config.toml`); with it unset, nothing is added twice; with a
+    relative one, nothing is added and stderr says so.
 
 ## Answers (Bernard, 2026-11-02)
 
