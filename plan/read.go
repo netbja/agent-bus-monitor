@@ -118,6 +118,8 @@ func Label(s State) string {
 	switch s {
 	case Waiting:
 		return "waiting for you"
+	case Answered:
+		return "answered, master to record"
 	case InReview:
 		return "in review"
 	case InProgress:

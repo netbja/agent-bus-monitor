@@ -501,8 +501,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     requests, reviews still gated, directives between agents, notices; answered threads and
     those older than 24 h are folded (`o`). Enter expands a group or opens a thread; `d` then `y`
     closes a thread with a reply from you.
-  - **Plan** — the batch's plan (`agentbus plan load`), its tasks by state: waiting for you, blocked,
-    in review, in progress, upcoming, done. Enter opens a task: its review, PR, asks and notes.
+  - **Plan** — the batch's plan (`agentbus plan load`), its tasks by state: waiting for you (a merge
+    only once its PR is linked), answered (master to record), blocked, in review, in progress,
+    upcoming, done. Enter opens a task: its review, PR, asks and notes.
     A task waiting for you has an `Action:` row: Enter or `s` opens the compose window to master,
     prefilled, to start it.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent

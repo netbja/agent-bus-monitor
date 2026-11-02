@@ -60,8 +60,13 @@ func TestDeriveTheTeamsRealCases(t *testing.T) {
 	}
 
 	in.Verdicts["roles-impl"] = []bus.Verdict{verdict("5-0", "roles-impl", "approve")}
-	if r := derive1(t, f, in, "roles"); r.State != Waiting || r.Verdict != Approved {
-		t.Fatalf("approved and not merged waits for the person: %+v", r)
+	if r := derive1(t, f, in, "roles"); r.State != InReview || r.Verdict != Approved {
+		t.Fatalf("approved with no PR linked is not yet the person's: %+v", r)
+	}
+	in.Facts["roles"] = Fact{PR: 101}
+	in.Verdicts["pr:101"] = []bus.Verdict{verdict("5-1", "pr:101", "approve")}
+	if r := derive1(t, f, in, "roles"); r.State != Waiting || r.Verdict != Approved || r.Reason != "merge PR 101" {
+		t.Fatalf("approved with its PR linked waits for the person to merge it: %+v", r)
 	}
 
 	in.Facts["roles"] = Fact{Done: 9000}
@@ -117,8 +122,12 @@ func TestDeriveOrder(t *testing.T) {
 		t.Fatalf("blocked: %+v", r)
 	}
 	in.Verdicts["roles-impl"] = []bus.Verdict{verdict("5-0", "roles-impl", "approve")}
+	if r := derive1(t, f, in, "roles"); r.State != Blocked {
+		t.Fatalf("approved with no PR and blocked: blocked, got %+v", r)
+	}
+	in.Facts["roles"] = Fact{PR: 7}
 	if r := derive1(t, f, in, "roles"); r.State != Waiting {
-		t.Fatalf("approved, unrecorded and also blocked: first match is waiting for you, got %+v", r)
+		t.Fatalf("approved, its PR linked, unrecorded and also blocked: first match is waiting for you, got %+v", r)
 	}
 }
 
@@ -225,5 +234,32 @@ func TestDeriveAReviewedTaskIsInReview(t *testing.T) {
 	in.Verdicts["a-impl"] = []bus.Verdict{verdict("5-0", "a-impl", "reject")}
 	if r := derive1(t, f, in, "a"); r.State != InReview || r.Verdict != ChangesAsked {
 		t.Fatalf("a task with a verdict and no board entry: %+v", r)
+	}
+}
+
+// A person task whose question was answered and nothing is open is master's
+// to record, no longer the person's (plan-view: "answered, master to record").
+func TestDerivePersonTaskAnswered(t *testing.T) {
+	f := File{Plan: "p", Tasks: []Task{task("order", person)}}
+	in := ok()
+	if r := derive1(t, f, in, "order"); r.State != Waiting {
+		t.Fatalf("a person task with no ask waits for the person: %+v", r)
+	}
+	in.Asks = []bus.Ask{{ID: "7-0", Task: "order", State: "withdrawn"}}
+	if r := derive1(t, f, in, "order"); r.State != Waiting {
+		t.Fatalf("a withdrawn ask answers nothing: %+v", r)
+	}
+	in.Asks = append(in.Asks, bus.Ask{ID: "8-0", Task: "order", State: "answered"})
+	if r := derive1(t, f, in, "order"); r.State != Answered || Label(r.State) != "answered, master to record" {
+		t.Fatalf("answered, nothing open: %+v", r)
+	}
+	in.Asks = append(in.Asks, bus.Ask{ID: "9-0", Task: "order", State: "open"})
+	if r := derive1(t, f, in, "order"); r.State != Waiting || r.Ask != "9-0" {
+		t.Fatalf("a newer open ask waits for the person again: %+v", r)
+	}
+	in.Asks = in.Asks[:2]
+	in.Facts["order"] = Fact{Done: 5}
+	if r := derive1(t, f, in, "order"); r.State != Done {
+		t.Fatalf("recorded: %+v", r)
 	}
 }

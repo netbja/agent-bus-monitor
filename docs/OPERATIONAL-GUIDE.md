@@ -410,8 +410,10 @@ agent names, no project template):
   in orange (`2 requests waiting · oldest 3h`), what agents owe each other muted
   (`4 between agents`), each absent at 0.
 - **The plan.** When master loads the batch's plan (`agentbus plan load docs/plans/<name>.json@<commit>`),
-  the Plan tab (`4`) and `P` show its tasks by state (waiting for you, blocked, in review, in
-  progress, upcoming, done), each with its review, PR and asks. A task waiting for you has an
+  the Plan tab (`4`) and `P` show its tasks by state (waiting for you, answered, blocked, in
+  review, in progress, upcoming, done), each with its review, PR and asks. A merge waits for you
+  only once its PR is linked ("merge PR N"); a question of yours you answered moves the task to
+  answered, master to record. A task waiting for you has an
   `Action:` row: Enter or `s` opens the compose window to master, prefilled, to start it. A task
   reads done only when
   master records it (`agentbus plan done <task>`) or it needs no merge and is delivered and

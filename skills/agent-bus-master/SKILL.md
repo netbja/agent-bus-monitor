@@ -298,7 +298,10 @@ The person cannot see the plan in your conversation; busmon shows it (`P`, the h
   (the board task it follows: also its review subject), `after`, and `"merge": false` for a task
   that ends without a merge of its own (a spec, a review), or `mission: "<change>/<id>"`.
 - States are derived, never typed: delivered (`request done`) reads **in review**; an approved
-  merge task reads **waiting for you** until you record the merge. Keep the facts true:
+  merge task reads **waiting for you** ("merge PR N") only once its PR is linked, and until you
+  record the merge (approved with no PR, it stays in review: open and link the PR); a person
+  task whose ask was answered, with nothing open, reads **answered, master to record**: yours
+  to act on and record, no longer the person's. Keep the facts true:
   `agentbus plan link <task> --pr <n>` when you open its PR, `agentbus plan done <task>` when the
   person says they merged it (or did their own step), `agentbus plan note <task> <text>` for a
   one-line note. A recorded done shows as `merged (recorded 2h ago)`: a claim with its age.
