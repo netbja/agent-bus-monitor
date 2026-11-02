@@ -97,12 +97,9 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 	fmt.Fprintf(out, "local-llm peer %s on %s, model %s, root %s\n", agent, endpointHost(settings.URL), settings.Model, root)
 	peerStartCheck(ctx, c, out)
 	host, _ := os.Hostname()
-	ident := statusIdent(ctx)
-	ident.Endpoint = settings.Endpoint // what health llm-endpoint probes for it (R4)
-	// The URL it keeps for its life, keyed so the bus can test no guess; with
-	// no key, none is recorded and health cannot say the URL changed.
-	if key, err := endpointFPKey(getenv); err == nil {
-		ident.EndpointFP = peer.EndpointFP(key, settings.URL)
+	ident, note := peerIdent(statusIdent(ctx), settings, getenv)
+	if note != "" {
+		fmt.Fprintln(out, note)
 	}
 	r := &peer.Runner{Bus: b, Agent: agent, Consumer: fmt.Sprintf("%s:%d", host, os.Getpid()), Ident: ident,
 		Turn: peer.Turn{Client: c, Prompt: spec.Prompt, MaxCalls: 8, Timeout: settings.TurnTimeout,
@@ -179,6 +176,20 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 		return "", fmt.Errorf("%s holds the home directory: refused", root)
 	}
 	return root, nil
+}
+
+// peerIdent adds to the peer's identity the endpoint it resolved, which
+// health llm-endpoint probes for it (R4), and its URL's keyed fingerprint,
+// the URL it keeps for its life (the bus can test no guess against it).
+// Without the host key no fingerprint is recorded, and note says so.
+func peerIdent(ident bus.AgentIdent, s peer.Settings, getenv func(string) string) (bus.AgentIdent, string) {
+	ident.Endpoint = s.Endpoint
+	key, err := endpointFPKey(getenv)
+	if err != nil {
+		return ident, "no endpoint fingerprint key (" + err.Error() + "): health cannot tell if [llm." + s.Endpoint + "]'s URL changes"
+	}
+	ident.EndpointFP = peer.EndpointFP(key, s.URL)
+	return ident, ""
 }
 
 // endpointFPKey is the host's endpoint fingerprint key, beside config.toml;

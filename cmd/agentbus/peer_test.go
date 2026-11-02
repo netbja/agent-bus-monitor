@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/peer"
 )
 
@@ -245,5 +246,27 @@ func TestEndpointFPKeyNeedsTheConfigDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(xdg, "agentbus", "endpoint-fp.key")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The peer's identity carries the endpoint it resolved and, with the host
+// key, its URL's keyed fingerprint: R4's wiring, without which llm-endpoint
+// falls back to matching by model and never sees a changed URL (foureyes).
+func TestPeerIdentRecordsItsEndpoint(t *testing.T) {
+	xdg := t.TempDir()
+	getenv := func(k string) string { return map[string]string{"XDG_CONFIG_HOME": xdg}[k] }
+	s := peer.Settings{Endpoint: "used", URL: "http://127.0.0.1:11434/v1", Model: "qwen"}
+	id, note := peerIdent(bus.AgentIdent{Client: "local-llm"}, s, getenv)
+	key, err := endpointFPKey(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Client != "local-llm" || id.Endpoint != "used" || id.EndpointFP != peer.EndpointFP(key, s.URL) || note != "" {
+		t.Fatalf("ident = %+v, note %q", id, note)
+	}
+	// No key: the endpoint still, no fingerprint, and it is said.
+	id, note = peerIdent(bus.AgentIdent{}, s, func(string) string { return "" })
+	if id.Endpoint != "used" || id.EndpointFP != "" || !strings.Contains(note, "fingerprint") {
+		t.Fatalf("no key: ident = %+v, note %q", id, note)
 	}
 }
