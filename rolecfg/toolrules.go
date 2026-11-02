@@ -227,6 +227,21 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 	return out, nil
 }
 
+// MayDeliver is the rule agentbus deliver reads itself, whatever the
+// command's spelling (reviewer-codex: no pattern covers every project name or
+// flag order): a role whose rules deny agentbus deliver may not; a name that
+// is no role (a person) may.
+func (m *Manifest) MayDeliver(role string) (bool, error) {
+	if _, ok := m.Roles[role]; !ok {
+		return true, nil
+	}
+	r, err := m.LaunchRules(role)
+	if err != nil {
+		return false, err
+	}
+	return !HoldsDeliverDeny(r), nil
+}
+
 // ProjectLaunchRules are LaunchRules for a launch in project: a role that
 // denies agentbus deliver also denies it after the project's global flag,
 // with the project's name (DeliverProjectDenies).

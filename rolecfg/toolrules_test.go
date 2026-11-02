@@ -389,3 +389,21 @@ func TestDeliverDenyMatchesTheCommandNotProse(t *testing.T) {
 		}
 	}
 }
+
+// MayDeliver is the same rule read by agentbus deliver itself, whatever the
+// command's spelling (reviewer-codex: a pattern cannot cover every project
+// name or flag order): a role whose rules deny deliver may not; master, docs
+// and a name that is no role (a person) may.
+func TestMayDeliver(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for role, want := range map[string]bool{"master": true, "docs": true, "charlie": true, "anonymous": true,
+		"coder": false, "foureyes": false, "reviewer-codex": false, "infra": false, "sentinel": false} {
+		got, err := m.MayDeliver(role)
+		if err != nil || got != want {
+			t.Errorf("MayDeliver(%s) = %v, %v; want %v", role, got, err, want)
+		}
+	}
+}

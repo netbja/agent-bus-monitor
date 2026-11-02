@@ -18,6 +18,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/forge"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/plan"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/setup"
 )
 
@@ -48,6 +49,8 @@ type deliverDeps struct {
 	LinkRef  func(ctx context.Context, task, ref string) error
 	// Report tells master what was delivered; nil when master itself runs it.
 	Report func(ctx context.Context, msg string) error
+	// MayDeliver refuses a caller whose role may not deliver; nil = no check.
+	MayDeliver func(self string) error
 }
 
 // gitEnvRunner is the real runner for deliver: execRunner without an
@@ -86,6 +89,7 @@ func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 			return f, err == nil, err
 		},
 		LinkPR: b.PlanLink, LinkRef: b.PlanLinkRef,
+		MayDeliver: deliverRoleCheck(os.Environ()),
 	}
 	if self != "master" {
 		d.Report = func(ctx context.Context, msg string) error {
@@ -104,7 +108,42 @@ type deliverOpts struct {
 	dry                                bool
 }
 
+// deliverRoleCheck reads the manifest the launcher used (ROLES_TOML, else
+// the repository's): only master and docs deliver (forge-delivery answer 3),
+// checked here whatever the command's spelling, beside the tool rules. No
+// manifest: no role holds the deny. A manifest that does not load refuses.
+// Defence in depth, not a boundary: AGENT_BUS_AGENT is the caller's word.
+func deliverRoleCheck(env []string) func(self string) error {
+	return func(self string) error {
+		path, err := manifestPath(env)
+		if err != nil {
+			return nil
+		}
+		if _, err := os.Stat(path); err != nil {
+			return nil
+		}
+		m, err := rolecfg.Load(path)
+		if err != nil {
+			return fmt.Errorf("cannot read %s to check who delivers: %v", path, err)
+		}
+		ok, err := m.MayDeliver(self)
+		if err != nil {
+			return fmt.Errorf("cannot read %s's rules in %s: %v", self, path, err)
+		}
+		if !ok {
+			return fmt.Errorf("%s may not deliver: only master and docs push and open requests (its tool_rules deny agentbus deliver)", self)
+		}
+		return nil
+	}
+}
+
 func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, out, errw io.Writer) int {
+	if d.MayDeliver != nil {
+		if err := d.MayDeliver(self); err != nil {
+			fmt.Fprintf(errw, "deliver: %v\n", err)
+			return 1
+		}
+	}
 	var o deliverOpts
 	args, o.task = extractFlag(args, "--task")
 	args, o.subject = extractFlag(args, "--subject")

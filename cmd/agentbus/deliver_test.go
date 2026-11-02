@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -527,5 +528,52 @@ func TestDeliverAcceptsAPushURLOnTheSameRepository(t *testing.T) {
 	w.r.cmds["git remote get-url --push origin"] = dlvOut{out: "git@github.com:o/r.git\n"}
 	if code, _, errw := w.run("master", "coder/x"); code != 0 {
 		t.Fatalf("exit %d: %s", code, errw)
+	}
+}
+
+// A role that may not deliver is refused by deliver itself, before any
+// command, whatever the spelling that reached it (reviewer-codex).
+func TestDeliverRefusesARoleThatMayNotDeliver(t *testing.T) {
+	w := newDeliverWorld(t, "git@github.com:o/r.git")
+	w.deps.MayDeliver = func(self string) error {
+		if self == "coder" {
+			return errors.New("coder may not deliver")
+		}
+		return nil
+	}
+	code, _, errw := w.run("coder", "coder/x")
+	if code != 1 || !strings.Contains(errw, "coder may not deliver") || len(w.r.ran) != 0 {
+		t.Fatalf("exit %d, ran %v: %q", code, w.r.ran, errw)
+	}
+	if code, _, errw := w.run("master", "coder/x"); code != 0 {
+		t.Fatalf("master refused: %d %s", code, errw)
+	}
+}
+
+// The real check reads the manifest: missing = no role holds the deny; one
+// that does not load refuses (fail closed).
+func TestDeliverRoleCheckReadsTheManifest(t *testing.T) {
+	dir := t.TempDir()
+	missing := deliverRoleCheck([]string{"ROLES_TOML=" + filepath.Join(dir, "none.toml")})
+	if err := missing("coder"); err != nil {
+		t.Errorf("no manifest: %v", err)
+	}
+	bad := filepath.Join(dir, "bad.toml")
+	if err := os.WriteFile(bad, []byte("[roles.x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := deliverRoleCheck([]string{"ROLES_TOML=" + bad})("coder"); err == nil {
+		t.Error("a broken manifest let coder deliver")
+	}
+	manifest, err := filepath.Abs("../../roles.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shipped := deliverRoleCheck([]string{"ROLES_TOML=" + manifest})
+	if err := shipped("coder"); err == nil || !strings.Contains(err.Error(), "master") {
+		t.Errorf("coder: %v", err)
+	}
+	if err := shipped("docs"); err != nil {
+		t.Errorf("docs: %v", err)
 	}
 }
