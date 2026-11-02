@@ -1043,7 +1043,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (code 429) … Resets in <d>` holds until that stated reset; agy logs no proof of an answer, so
   nothing voids it earlier, and the quota may be per model: `kind = "off"` is the escape. The dispatch service (`serviceQuota` → `dispatch.QuotaConfig`) collects every minute,
   publishes `{p}:budget` (`windows` etc., additive) and acts in `dispatch/quota.go`: warn once per
-  window and reset, hold a provider's agents (`{p}:quota` marks; no prompt, no escalation), pause
+  window and reset, hold a provider's agents (`{p}:quota` marks; no prompt, no escalation; quota-repeat: a reset read within
+  60 s of a mark's is the same window, `quota.SameReset`, since OpenAI reports one window's reset a second apart from
+  reading to reading, the stored value kept; the warn, hold, held-window and long-hold marks, the statusline merge and busmon's held-window mark and pace
+  sample use it), pause
   for the coordinator's provider (`FencedQuotaPause`, never replacing another pause). Agents carry
   `client`/`provider` from the launcher's env. Unknown or aged (>30 min) readings never act; every
   write is fenced. A hold ends only when the window that set it is read under the threshold, renewed or past its reset (v0.15.3: an aged reading of it is not set aside for another, lower window). A limit hit read from a transcript is void once the API has answered since

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/quota"
 )
 
 // Quota in busmon (v0.13, spec §8): one gauge per provider in the header, its
@@ -110,7 +111,7 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 			l = append(l, Seg{Text: " " + glyphVertical + " ", Role: RoleMuted})
 		}
 		aged := windowAged(w, b, now)
-		holdsWindow := isHeld && w.ResetsAt == holdUntil.Unix()
+		holdsWindow := isHeld && quota.SameReset(w.ResetsAt, holdUntil.Unix()) // a reset read a few seconds off is the held window
 		matchedHold = matchedHold || holdsWindow
 		role := budgetRole(w.UsedPct)
 		if aged {
@@ -198,21 +199,25 @@ func orderedQuotaWindows(ws []bus.BudgetWindow, now time.Time) []bus.BudgetWindo
 	return out
 }
 
+// quotaWindowKey is a provider window's key, without its reset: a reset read
+// a few seconds off is the same window (quota-repeat), so the pace sample
+// keeps the reset it started on and starts over on another window's.
 func quotaWindowKey(provider string, w bus.BudgetWindow) string {
-	return provider + "|" + w.Name + "|" + strconv.FormatInt(w.ResetsAt, 10)
+	return provider + "|" + w.Name
 }
 
-// paceTracker remembers, per provider window (and its reset), the first
-// reading busmon saw, to estimate the time left at the current pace. Display
-// only: the dispatcher never acts on it.
+// paceTracker remembers, per provider window, the first reading busmon saw,
+// to estimate the time left at the current pace. Display only: the
+// dispatcher never acts on it.
 type paceTracker struct {
 	first map[string]paceSample
-	last  map[string]string // provider|window|reset → "~25m"
+	last  map[string]string // provider|window → "~25m"
 }
 
 type paceSample struct {
-	pct float64
-	at  time.Time
+	pct   float64
+	at    time.Time
+	reset int64 // the window's reset when the sample was taken
 }
 
 func (p *paceTracker) observe(budgets map[string]bus.BudgetSnapshot, now time.Time) {
@@ -233,8 +238,8 @@ func (p *paceTracker) observe(budgets map[string]bus.BudgetSnapshot, now time.Ti
 			}
 			active[key] = true
 			f, seen := p.first[key]
-			if !seen || w.UsedPct < f.pct {
-				p.first[key] = paceSample{w.UsedPct, now}
+			if !seen || !quota.SameReset(f.reset, w.ResetsAt) || w.UsedPct < f.pct {
+				p.first[key] = paceSample{w.UsedPct, now, w.ResetsAt}
 				delete(p.last, key)
 				continue
 			}
@@ -322,7 +327,7 @@ func quotaDetail(provider string, b bus.BudgetSnapshot, has bool, holdUntil time
 		if windowAged(w, b, now) {
 			part += " ?"
 		}
-		if isHeld && w.ResetsAt == holdUntil.Unix() {
+		if isHeld && quota.SameReset(w.ResetsAt, holdUntil.Unix()) {
 			part += " held"
 			matchedHold = true
 		}

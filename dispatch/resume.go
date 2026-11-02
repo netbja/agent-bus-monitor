@@ -223,8 +223,8 @@ func (l *loop) longHold(ctx context.Context, p string, w quota.Window, now time.
 	if err != nil {
 		return err
 	}
-	if marks[longHoldMark(p)] == episode {
-		return nil
+	if marked, _ := strconv.ParseInt(marks[longHoldMark(p)], 10, 64); quota.SameReset(marked, w.ResetsAt) {
+		return nil // the same window, its reset read a few seconds off: asked already
 	}
 	until := w.Reset().Local().Format("Mon 02/01 15:04")
 	wait := fmt.Sprintf("%dh", int(w.Reset().Sub(now).Round(time.Hour).Hours()))

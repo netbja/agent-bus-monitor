@@ -105,8 +105,8 @@ func MergeWindows(stored map[string]storedWindow, in []Window, sourceAt, now tim
 	for _, w := range in {
 		old, ok := out[w.Name]
 		switch {
-		case !ok, w.ResetsAt > old.ResetsAt,
-			w.ResetsAt == old.ResetsAt && w.UsedPct != old.UsedPct && !sourceAt.IsZero() && sourceAt.UnixMilli() > old.ObservedAt:
+		case !ok, w.ResetsAt > old.ResetsAt && !SameReset(w.ResetsAt, old.ResetsAt),
+			SameReset(w.ResetsAt, old.ResetsAt) && w.UsedPct != old.UsedPct && !sourceAt.IsZero() && sourceAt.UnixMilli() > old.ObservedAt:
 			out[w.Name] = storedWindow{Window: w, ObservedAt: at.UnixMilli()}
 			changed = true
 		}

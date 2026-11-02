@@ -136,8 +136,8 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			}
 			field := "warn:" + p + ":" + w.Name
 			reset := strconv.FormatInt(w.ResetsAt, 10)
-			if marks[field] == reset {
-				continue
+			if marked, _ := strconv.ParseInt(marks[field], 10, 64); quota.SameReset(marked, w.ResetsAt) {
+				continue // the same window, its reset read a few seconds off: warned already
 			}
 			msg := fmt.Sprintf("Quota %s %.0f%% (%s, resets %s): finish what is in flight, start nothing new.",
 				p, w.UsedPct, w.Name, w.Reset().Local().Format("15:04"))
@@ -160,7 +160,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		heldOpen := heldKnown && !windowClear(usable, heldWin.Name, q.HoldPct)
 		switch {
 		case ok && tight.UsedPct >= q.HoldPct:
-			if recorded != tight.ResetsAt {
+			if quota.SameReset(recorded, tight.ResetsAt) {
+				tight.ResetsAt = recorded // the same window: its episode keeps the stored reset
+			} else {
 				if recorded == 0 { // a new episode: the last one's resume marks go
 					if err := l.clearEpisodeMarks(ctx, p, tight.ResetsAt, marks); err != nil {
 						return err
@@ -295,7 +297,7 @@ func windowAt(r quota.Reading, recorded int64) (quota.Window, bool) {
 		return quota.Window{}, false
 	}
 	for _, w := range r.Windows {
-		if w.ResetsAt == recorded {
+		if quota.SameReset(w.ResetsAt, recorded) { // its reset may be read a few seconds off
 			return w, true
 		}
 	}

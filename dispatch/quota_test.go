@@ -623,3 +623,113 @@ func TestRunQuotaHoldsDespiteAFailingHistory(t *testing.T) {
 		return marks["hold:openai"] != ""
 	})
 }
+
+// One window read with its reset a second off (OpenAI's 18:15:34Z, then :35,
+// then :34): one warning, one hold, one long-hold message for the window, its
+// stored reset kept; the next window (a window's length later) is warned and
+// held again (quota-repeat).
+func TestRunQuotaJitteredResetIsOneWindow(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "foureyes", "p-4", "openai")
+	R := time.Now().Add(61 * time.Hour).Unix()
+	week := func(p string, pct float64, reset int64) quota.Reading {
+		return quota.Reading{Provider: p, ObservedAt: time.Now().UnixMilli(),
+			Windows: []quota.Window{{Name: "7d", UsedPct: pct, ResetsAt: reset, Minutes: 10080}}}
+	}
+	count := func() (warns, longHolds int) {
+		for _, m := range entries(t, r, b, "cmd") {
+			cmd, _ := m.Values["command"].(string)
+			if m.Values["from"] != "dispatch" {
+				continue
+			}
+			if strings.HasPrefix(cmd, "Quota openai") {
+				warns++
+			}
+			if strings.HasPrefix(cmd, "openai is held until") {
+				longHolds++
+			}
+		}
+		return
+	}
+	f := &fakeQuota{}
+	f.set(week("anthropic", 10, R), week("openai", 96, R))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "the first warning and long hold", func() bool { w, l := count(); return w == 1 && l == 1 })
+	for _, jit := range []int64{1, -1, 59} {
+		f.set(week("anthropic", 10, R), week("openai", 96, R+jit))
+		time.Sleep(300 * time.Millisecond)
+		if w, l := count(); w != 1 || l != 1 {
+			t.Fatalf("reset R%+d: warnings %d, long holds %d: want one each", jit, w, l)
+		}
+		if m, _ := b.QuotaMarks(ctx); m["hold:openai"] != strconv.FormatInt(R, 10) || m["warn:openai:7d"] != strconv.FormatInt(R, 10) {
+			t.Fatalf("reset R%+d: the stored reset moved: %v", jit, m)
+		}
+	}
+	next := R + 7*24*3600
+	f.set(week("anthropic", 10, R), week("openai", 96, next))
+	waitFor(t, 3*time.Second, "the next window warned and asked again", func() bool { w, l := count(); return w == 2 && l == 2 })
+	if m, _ := b.QuotaMarks(ctx); m["hold:openai"] != strconv.FormatInt(next, 10) {
+		t.Fatalf("the next window's hold: %v", m)
+	}
+}
+
+// The held window read aged, its reset a second off, beside a low fresh 7d:
+// it is still the window that set the hold, so the hold and the pause stand
+// (v0.15.3's rule under quota-repeat's jitter).
+func TestRunQuotaAgedJitteredHeldWindowKeepsTheHold(t *testing.T) {
+	b, _ := dialRun(t)
+	cleanupQuota(t, b)
+	registerAs(t, b, "master", "p-master", "anthropic")
+	now := time.Now()
+	reset5h := now.Add(2 * time.Hour).Unix()
+	fresh := quota.Reading{Provider: "anthropic", ObservedAt: now.UnixMilli(), Windows: []quota.Window{
+		{Name: "5h", UsedPct: 100, ResetsAt: reset5h, Minutes: 300, ObservedAt: now.UnixMilli()},
+		{Name: "7d", UsedPct: 48, ResetsAt: now.Add(72 * time.Hour).Unix(), Minutes: 10080, ObservedAt: now.UnixMilli()}}}
+	f := &fakeQuota{}
+	f.set(fresh)
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "a quota pause", func() bool { p, _ := b.Pause(context.Background()); return p != nil })
+
+	aged := fresh
+	aged.Windows = []quota.Window{fresh.Windows[0], fresh.Windows[1]}
+	aged.Windows[0].ObservedAt = now.Add(-time.Hour).UnixMilli()
+	aged.Windows[0].ResetsAt = reset5h + 1
+	f.set(aged)
+	time.Sleep(300 * time.Millisecond)
+	if p, _ := b.Pause(context.Background()); p == nil {
+		t.Fatal("an aged 100 % read a second off, with a low 7d, ended the pause")
+	}
+	if marks, _ := b.QuotaMarks(context.Background()); marks["hold:anthropic"] != strconv.FormatInt(reset5h, 10) {
+		t.Fatalf("the hold was released or moved: %v", marks)
+	}
+}
+
+// Marks left a second apart by a dispatcher before quota-repeat (live:
+// hold …335, longhold …334) are the same window: no message is sent again.
+func TestRunQuotaMarksASecondApartSendNothingAgain(t *testing.T) {
+	b, r := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "foureyes", "p-4", "openai")
+	R := time.Now().Add(61 * time.Hour).Unix()
+	r.HSet(ctx, bus.QuotaKey(b.Project()), "hold:openai", strconv.FormatInt(R, 10),
+		"warn:openai:7d", strconv.FormatInt(R, 10), "longhold:openai", strconv.FormatInt(R-1, 10))
+	f := &fakeQuota{}
+	f.set(quota.Reading{Provider: "anthropic", ObservedAt: time.Now().UnixMilli(),
+		Windows: []quota.Window{{Name: "7d", UsedPct: 10, ResetsAt: R, Minutes: 10080}}},
+		quota.Reading{Provider: "openai", ObservedAt: time.Now().UnixMilli(),
+			Windows: []quota.Window{{Name: "7d", UsedPct: 96, ResetsAt: R, Minutes: 10080}}})
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	waitFor(t, 3*time.Second, "openai held", func() bool { m, _ := b.QuotaMarks(ctx); return m["hold:openai"] != "" })
+	time.Sleep(300 * time.Millisecond)
+	for _, m := range entries(t, r, b, "cmd") {
+		if cmd, _ := m.Values["command"].(string); m.Values["from"] == "dispatch" &&
+			(strings.HasPrefix(cmd, "openai is held until") || strings.HasPrefix(cmd, "Quota openai")) {
+			t.Fatalf("sent again: %q", cmd)
+		}
+	}
+}

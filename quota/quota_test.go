@@ -50,8 +50,8 @@ func TestMergeRule(t *testing.T) {
 	if out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 40, ResetsAt: r}}, later, later); ch || out["5h"].ObservedAt != t0.UnixMilli() {
 		t.Fatal("same value: must keep the observation time")
 	}
-	if out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 90, ResetsAt: r - 1}}, later, later); ch || out["5h"].UsedPct != 40 {
-		t.Fatal("an older reset replaced")
+	if out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 90, ResetsAt: r - 18000}}, later, later); ch || out["5h"].UsedPct != 40 {
+		t.Fatal("an older window's reset replaced") // a second apart is the same window (TestMergeWindowsSameResetJitter)
 	}
 	out, ch := MergeWindows(st, []Window{{Name: "5h", UsedPct: 12, ResetsAt: r}}, later, later)
 	if !ch || out["5h"].UsedPct != 12 || out["5h"].ObservedAt != later.UnixMilli() {
@@ -429,5 +429,38 @@ func TestStatuslineSourceTime(t *testing.T) {
 		if got := StatuslineSourceAt(stdin); !got.IsZero() {
 			t.Fatalf("%s: dated %v, want undated", name, got)
 		}
+	}
+}
+
+// A provider reports one window's reset a second apart from one reading to
+// the next (OpenAI: 18:15:34Z, then :35): within a minute it is the same
+// window; a window's length apart it is the next one (quota-repeat).
+func TestSameReset(t *testing.T) {
+	const r = int64(1793643335)
+	for _, c := range []struct {
+		b    int64
+		want bool
+	}{{r, true}, {r + 1, true}, {r - 1, true}, {r + 59, true}, {r - 60, true}, {r + 61, false}, {r + 5*3600, false}, {0, false}} {
+		if got := SameReset(r, c.b); got != c.want {
+			t.Errorf("SameReset(%d, %d) = %v, want %v", r, c.b, got, c.want)
+		}
+	}
+	if SameReset(0, 0) {
+		t.Error("no reset is no window")
+	}
+}
+
+// The statusline merge reads a jittered reset as the same window: an older or
+// undated reading of it changes nothing, a newer dated one updates its use.
+func TestMergeWindowsSameResetJitter(t *testing.T) {
+	now := time.Now()
+	r := now.Add(time.Hour).Unix()
+	stored := map[string]storedWindow{"5h": {Window: Window{Name: "5h", UsedPct: 60, ResetsAt: r}, ObservedAt: now.UnixMilli()}}
+	if _, changed := MergeWindows(stored, []Window{{Name: "5h", UsedPct: 40, ResetsAt: r + 1}}, time.Time{}, now); changed {
+		t.Error("an undated reading of the same window, its reset a second later, replaced the stored one")
+	}
+	out, changed := MergeWindows(stored, []Window{{Name: "5h", UsedPct: 70, ResetsAt: r - 1}}, now.Add(time.Second), now)
+	if !changed || out["5h"].UsedPct != 70 {
+		t.Errorf("a newer dated reading of the same window, its reset a second earlier, was dropped: %+v", out["5h"])
 	}
 }
