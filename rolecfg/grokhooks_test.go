@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -68,7 +69,8 @@ func (f *grokHooksFixture) file() string {
 }
 
 func (f *grokHooksFixture) install(dir, text string) (string, error) {
-	return installGrokHooks(newEnv(f.env), dir, text)
+	path, _, err := installGrokHooks(newEnv(f.env), dir, text)
+	return path, err
 }
 
 func (f *grokHooksFixture) read() string {
@@ -292,6 +294,89 @@ func TestOnlyGrokGetsTheHookFile(t *testing.T) {
 		if _, err := os.Lstat(filepath.Join(dir, ".grok")); !os.IsNotExist(err) {
 			t.Errorf("%s: .grok written", client)
 		}
+	}
+}
+
+// The hook file holds this machine's agentbus path: where the launch wrote it
+// in a Git checkout, the repository's own local exclude lists it (never a
+// .gitignore, which would be committed), once, at its path from the top, in
+// the common git dir for a linked worktree. Outside a checkout nothing else
+// is written; a person's file is never listed.
+func TestGrokHooksKeptOutOfGit(t *testing.T) {
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		c.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return string(out)
+	}
+	text := "{\"hooks\":1}\n"
+	f := newGrokHooksFixture(t)
+	git(f.project, "init", "-q")
+	sub := filepath.Join(f.project, "pkg")
+	must(t, os.MkdirAll(sub, 0o755))
+	for i := 0; i < 2; i++ { // the second launch adds no second line
+		if _, _, err := installGrokHooks(newEnv(f.env), f.project, text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := installGrokHooks(newEnv(f.env), sub, text); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(f.project, ".git", "info", "exclude"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"/.grok/hooks/agentbus.json", "/pkg/.grok/hooks/agentbus.json"} {
+		if n := strings.Count(string(b), "\n"+line+"\n"); n != 1 {
+			t.Errorf("exclude lists %s %d times:\n%s", line, n, b)
+		}
+	}
+	if st := git(f.project, "status", "--porcelain", "--untracked-files=all"); strings.Contains(st, ".grok") {
+		t.Errorf("git status still shows the hook file:\n%s", st)
+	}
+	if _, err := os.Lstat(filepath.Join(f.project, ".gitignore")); !os.IsNotExist(err) {
+		t.Errorf("a .gitignore was written: %v", err)
+	}
+
+	// A linked worktree: the exclude Git reads is the common one.
+	git(f.project, "commit", "-q", "--allow-empty", "-m", "c")
+	wt := filepath.Join(f.home, "wt")
+	git(f.project, "worktree", "add", "-q", wt)
+	if _, _, err := installGrokHooks(newEnv(f.env), wt, text); err != nil {
+		t.Fatal(err)
+	}
+	if st := git(wt, "status", "--porcelain", "--untracked-files=all"); strings.Contains(st, ".grok") {
+		t.Errorf("worktree: git status still shows the hook file:\n%s", st)
+	}
+
+	// Outside a checkout: written, nothing else.
+	g := newGrokHooksFixture(t)
+	if _, _, err := installGrokHooks(newEnv(g.env), g.project, text); err != nil {
+		t.Fatal(err)
+	}
+	// A person's file in a checkout: kept, and never listed.
+	h := newGrokHooksFixture(t)
+	git(h.project, "init", "-q")
+	must(t, os.MkdirAll(filepath.Dir(h.file()), 0o755))
+	must(t, os.WriteFile(h.file(), []byte("mine\n"), 0o644))
+	if _, _, err := installGrokHooks(newEnv(h.env), h.project, text); !errors.Is(err, errGrokHooksNotOurs) {
+		t.Fatalf("person's file: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(h.project, ".git", "info", "exclude")); strings.Contains(string(b), "agentbus.json") {
+		t.Errorf("a person's file was listed in the exclude:\n%s", b)
+	}
+	// Nor a person's file identical to ours: used, not ours, not listed.
+	must(t, os.WriteFile(h.file(), []byte(text), 0o644))
+	if _, ours, err := installGrokHooks(newEnv(h.env), h.project, text); err != nil || ours {
+		t.Fatalf("identical person's file: ours=%v %v", ours, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(h.project, ".git", "info", "exclude")); strings.Contains(string(b), "agentbus.json") {
+		t.Errorf("an identical person's file was listed in the exclude:\n%s", b)
 	}
 }
 
