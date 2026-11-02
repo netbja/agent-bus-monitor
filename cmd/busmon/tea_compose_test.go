@@ -418,6 +418,22 @@ func TestOrphanAnswerKeepsAnEarlierMessageDraft(t *testing.T) {
 			t.Fatalf("sent %q, draft %+v, flash %q, open %v", fw.sent, m.ui.msgCompose, m.ui.flash, m.ui.compose != nil)
 		}
 	})
+	t.Run("emptied", func(t *testing.T) { // the converted text cleared, then Esc: the earlier draft opens
+		m, _ := orphanAnswer(t, &fakeWriter{left: 1})
+		m.ui.msgCompose = earlier
+		m, cmd := pressCmd(t, m, kCtrlS)
+		m = run(t, m, cmd)
+		c := m.ui.compose
+		if c == nil || c.kind != composeMessage {
+			t.Fatalf("not converted: %+v", c)
+		}
+		c.area.set("")
+		m = escapeAll(t, m)
+		m = keys(t, m, 'I')
+		if c := m.ui.compose; c == nil || c.recipient() != "docs" || c.area.value() != earlier.body {
+			t.Fatalf("the earlier draft does not open after the emptied window: %+v", c)
+		}
+	})
 	t.Run("closed", func(t *testing.T) {
 		fw := &fakeWriter{left: 1}
 		m, from := orphanAnswer(t, fw)
