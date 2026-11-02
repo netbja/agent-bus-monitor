@@ -269,10 +269,6 @@ var validName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString
 
 func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" }
 
-// envPositiveFloat: today a value <= 0 (or none that parses) is the
-// dispatcher's default, never a setting.
-// envStallDuration: whole seconds (as prompt_grace) or a Go duration, 0 = off,
-// at most a day; anything else falls back to the next source.
 // envZeroOne takes 1 (on) and 0 (off) only; anything else is skipped.
 func envZeroOne(raw string) (any, envResult) {
 	switch raw {
@@ -284,6 +280,8 @@ func envZeroOne(raw string) (any, envResult) {
 	return nil, envSkip
 }
 
+// envStallDuration: whole seconds (as prompt_grace) or a Go duration, 0 = off,
+// at most a day; anything else falls back to the next source.
 func envStallDuration(raw string) (any, envResult) {
 	if n, err := strconv.Atoi(raw); err == nil && n >= 0 && n <= 86400 {
 		return time.Duration(n) * time.Second, envUse
@@ -294,6 +292,8 @@ func envStallDuration(raw string) (any, envResult) {
 	return nil, envSkip
 }
 
+// envPositiveFloat: today a value <= 0 (or none that parses) is the
+// dispatcher's default, never a setting.
 func envPositiveFloat(raw string) (any, envResult) {
 	if f, err := strconv.ParseFloat(raw, 64); err == nil && f > 0 {
 		return f, envUse
