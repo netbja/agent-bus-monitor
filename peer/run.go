@@ -236,19 +236,35 @@ func paneText(s string) string {
 	}, stripFormat(s))
 }
 
-// stripFormat drops the Unicode format runes (Cf: bidi overrides and
-// isolates, zero-width spaces, the byte order mark): text from a model or the
-// bus could otherwise show a line reversed or a name spoofed, in the pane and
-// in the answer put on the bus (PR 259 security re-check, residual a). The
-// zero-width joiner and non-joiner stay (foureyes): they carry meaning (an
-// emoji sequence, a Persian word's spelling) and reorder nothing.
+// stripFormat drops the runes that reorder or hide text (hidesText): text
+// from a model or the bus could otherwise show a line reversed or a name
+// spoofed, in the pane and in the answer put on the bus (PR 259 security
+// re-check, residual a).
 func stripFormat(s string) string {
 	return strings.Map(func(r rune) rune {
-		if r != '\u200c' && r != '\u200d' && unicode.Is(unicode.Cf, r) {
+		if hidesText(r) {
 			return -1
 		}
 		return r
 	}, s)
+}
+
+// hidesText: the bidi controls (the Arabic letter mark, the direction marks,
+// the embeddings, overrides and isolates) and the invisible runes that can
+// hide text (soft hyphen, Mongolian vowel separator, zero-width space, word
+// joiner and the invisible operators, byte order mark). Every other format
+// rune carries meaning and stays (foureyes, master): the zero-width joiner
+// and non-joiner (an emoji sequence, a Persian word's spelling), a
+// subdivision flag's tag characters, the Arabic number signs.
+func hidesText(r rune) bool {
+	switch {
+	case r == '\u00ad', r == '\u061c', r == '\u180e', r == '\u200b', r == '\ufeff':
+		return true
+	case r >= '\u200e' && r <= '\u200f', r >= '\u202a' && r <= '\u202e',
+		r >= '\u2060' && r <= '\u2064', r >= '\u2066' && r <= '\u2069':
+		return true
+	}
+	return false
 }
 
 // firstWords is a status line: the text's first words, on one line.

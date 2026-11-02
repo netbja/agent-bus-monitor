@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"unicode"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
@@ -530,7 +529,7 @@ func TestPaneAndAnswerCarryNoFormatRune(t *testing.T) {
 	(&Runner{Out: out}).say(spoof)
 	for _, s := range []string{out.String(), capAnswer(spoof)} {
 		for _, r := range s {
-			if unicode.Is(unicode.Cf, r) {
+			if hidesText(r) {
 				t.Fatalf("a format rune %U reached %q", r, s)
 			}
 		}
@@ -540,18 +539,21 @@ func TestPaneAndAnswerCarryNoFormatRune(t *testing.T) {
 	}
 }
 
-// foureyes on db88a3f: the zero-width joiner and non-joiner carry meaning (an
-// emoji family is one picture, a Persian word keeps its spelling), so they
-// stay; every other format rune still goes.
+// foureyes and master on db88a3f: only the runes that reorder or hide text
+// go; the zero-width joiner and non-joiner (an emoji family is one picture, a
+// Persian word keeps its spelling), the tag characters of a subdivision flag
+// and the Arabic number sign stay.
 func TestFormatStripKeepsJoiners(t *testing.T) {
 	const family = "\U0001F468\u200d\U0001F469\u200d\U0001F467"
 	const persian = "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645"
-	for _, s := range []string{family, persian} {
+	const england = "\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F" // tag characters (Cf)
+	const arabicNumber = "\u0600\u0661\u0662"                                                // the Arabic number sign (Cf) before its digits
+	for _, s := range []string{family, persian, england, arabicNumber} {
 		if got := stripFormat(s); got != s {
 			t.Errorf("stripFormat(%q) = %q: a joiner was dropped", s, got)
 		}
 	}
-	if got := stripFormat("a\u200bb\u2060c\u202ed"); got != "abcd" {
+	if got := stripFormat("a\u200bb\u2060c\u202ed\u061ce\u00adf\ufeffg\u2066h\u200fi\u180ej"); got != "abcdefghij" {
 		t.Errorf("the other format runes stay: %q", got)
 	}
 }

@@ -803,8 +803,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   once the reply is sent, a failed report or status is logged, never answered again.
   An answer is cut under `CmdMaxRunes` with a note, and a reply the bus refuses for good is said, reported and
   acked (never turned again); pane lines carry no control but newline and tab, and neither they nor the answer carry a
-  Unicode format rune (`stripFormat`: bidi overrides and isolates, zero-width spaces, every Cf but the zero-width joiner
-  and non-joiner, which carry meaning); errors carry the status, never the
+  rune that reorders or hides text (`stripFormat`/`hidesText`: the bidi controls, the zero-width space, word joiners, the
+  soft hyphen, the BOM; the joiners, tag characters and Arabic number signs, which carry meaning, stay); errors carry the status, never the
   endpoint's body; the start's `/models` check has 5 s.
   The client follows no redirect and uses no proxy; only transport errors, 5xx, 408, 429 and 404 are retried
   (`blocked`, the entry kept, every 30 s), any other refusal fails the turn with a reply. Tools: `read_file`,
