@@ -539,3 +539,31 @@ func TestGrepOpensDirectoriesBeneathTheRoot(t *testing.T) {
 		}
 	}
 }
+
+// Residual b of the PR 259 security re-check: on a case-insensitive volume
+// (macOS by default) ".GIT/config" or ".ENV" opens the real file, so the .git
+// check and the deny rules compare names case-insensitively everywhere. On a
+// case-sensitive volume this only refuses more: fail closed, and nothing has
+// to guess which volume it is on.
+func TestGitAndDeniesIgnoreCase(t *testing.T) {
+	for _, p := range []string{"/r/.GIT/config", "/r/.Git", "/r/sub/.gIt/HEAD"} {
+		if !inGit("/r", p) {
+			t.Errorf("%s is not seen as the repository's .git", p)
+		}
+	}
+	if inGit("/r", "/r/.github/workflows/ci.yml") || inGit("/r", "/r/git/notes") {
+		t.Error("a name that is not .git is refused")
+	}
+	m, err := NewDenyMatcher([]string{".env", "./secrets/*.json", "~/.ssh/**"}, "/r", "/h")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]bool{
+		"/r/.ENV": true, "/r/sub/.Env": true, "/r/Secrets/A.JSON": true, "/H/.SSH/id_ed25519": true, "/h/.SSH/id_ed25519": true,
+		"/r/env": false, "/r/secrets/a.txt": false,
+	} {
+		if m.Denied(p) != want {
+			t.Errorf("%s denied = %v, want %v", p, !want, want)
+		}
+	}
+}

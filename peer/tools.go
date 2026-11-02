@@ -168,7 +168,7 @@ func inGit(root, p string) bool {
 		return true
 	}
 	for _, s := range strings.Split(filepath.ToSlash(rel), "/") {
-		if s == ".git" {
+		if strings.EqualFold(s, ".git") { // .GIT is .git on a case-insensitive volume (residual b)
 			return true
 		}
 	}

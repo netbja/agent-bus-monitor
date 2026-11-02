@@ -291,3 +291,57 @@ func TestPeerRootExpandsTildeWithTheSameHome(t *testing.T) {
 		t.Fatalf("root = %q, %v; want %q", root, err, want)
 	}
 }
+
+// Residual c of the PR 259 security re-check: a Git repository at or under
+// the configuration base ($XDG_CONFIG_HOME, else ~/.config: a dotfiles
+// repository) or one holding agentbus's configuration directory (where
+// redis.env and endpoint-fp.key live) is never the peer's root.
+func TestPeerRootRefusesTheConfigurationDirectory(t *testing.T) {
+	home := t.TempDir()
+	dotconfig := filepath.Join(home, ".config")
+	nvim := filepath.Join(dotconfig, "nvim")
+	if err := os.MkdirAll(nvim, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gitInit(t, dotconfig)
+	outside := t.TempDir() // XDG_CONFIG_HOME outside the home, inside a repository
+	xdg := filepath.Join(outside, "cfg")
+	if err := os.MkdirAll(filepath.Join(xdg, "agentbus"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gitInit(t, outside)
+	emacs := filepath.Join(dotconfig, "emacs") // its own repository, under the base
+	tool := filepath.Join(xdg, "tool")         // its own repository, under an XDG base outside the home
+	for _, d := range []string{emacs, tool} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		gitInit(t, d)
+	}
+	plain := filepath.Join(home, "src", "shop")
+	if err := os.MkdirAll(plain, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gitInit(t, plain)
+	projects := t.TempDir()
+	for _, c := range []struct {
+		name, cwd, xdg, refused string
+	}{
+		{"~/.config, a dotfiles repository", dotconfig, "", "configuration directory"},
+		{"a folder under ~/.config", nvim, "", "configuration directory"},
+		{"a repository of its own under ~/.config", emacs, "", "configuration directory"},
+		{"a repository under $XDG_CONFIG_HOME", tool, xdg, "configuration directory"},
+		{"a repository holding $XDG_CONFIG_HOME/agentbus", outside, xdg, "configuration directory"},
+		{"a project's own repository", plain, "", ""},
+		{"a project's own repository, XDG elsewhere", plain, xdg, ""},
+	} {
+		env := map[string]string{"HOME": home, "AGENTBUS_PROJECTS_DIR": projects, "XDG_CONFIG_HOME": c.xdg}
+		got, err := peerRoot("other", c.cwd, func(k string) string { return env[k] })
+		switch {
+		case c.refused == "" && err != nil:
+			t.Errorf("%s: refused: %v", c.name, err)
+		case c.refused != "" && (err == nil || !strings.Contains(err.Error(), c.refused)):
+			t.Errorf("%s: root = %q, %v; want a refusal naming %q", c.name, got, err, c.refused)
+		}
+	}
+}

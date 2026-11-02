@@ -39,7 +39,10 @@ func ReadDenies(m *rolecfg.Manifest, role string) ([]string, error) {
 // glob meaning: ** any number of segments, * and ? within one segment, ~/
 // the home directory, // an absolute path, any other path relative to the
 // project root, ** at the start anywhere, and a pattern without a slash
-// (*.pem) at any depth, as gitignore and Claude Code read it.
+// (*.pem) at any depth, as gitignore and Claude Code read it. Names compare
+// case-insensitively: on a case-insensitive volume (macOS by default) .ENV
+// opens .env, and on a case-sensitive one this only denies more (PR 259
+// security re-check, residual b: fail closed, no guess about the volume).
 type DenyMatcher struct{ patterns [][]string }
 
 // NewDenyMatcher compiles patterns; one it cannot read is an error. A ~/
@@ -76,7 +79,7 @@ func NewDenyMatcher(patterns []string, root, home string) (DenyMatcher, error) {
 			abs = []string{filepath.Join(root, strings.TrimPrefix(p, "/"))}
 		}
 		for _, a := range abs {
-			segs := split(filepath.ToSlash(a))
+			segs := split(strings.ToLower(filepath.ToSlash(a)))
 			for _, s := range segs {
 				if _, err := path.Match(s, ""); err != nil {
 					return m, fmt.Errorf("deny rule %q: %v", p, err)
@@ -90,7 +93,7 @@ func NewDenyMatcher(patterns []string, root, home string) (DenyMatcher, error) {
 
 // Denied reports whether an absolute path is denied.
 func (m DenyMatcher) Denied(p string) bool {
-	segs := split(filepath.ToSlash(filepath.Clean(p)))
+	segs := split(strings.ToLower(filepath.ToSlash(filepath.Clean(p))))
 	for _, pat := range m.patterns {
 		if matchSegs(pat, segs) {
 			return true

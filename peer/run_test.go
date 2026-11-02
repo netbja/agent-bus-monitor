@@ -518,3 +518,48 @@ func TestRunnerPublishesNoEndpointBody(t *testing.T) {
 		t.Fatal("the 500 never declared blocked")
 	}
 }
+
+// Residual a of the PR 259 security re-check: Unicode format runes (bidi
+// overrides and isolates, zero-width characters, every other Cf) reach
+// neither the pane nor the answer put on the bus: display spoofing only, but
+// no reader should see a line reversed by one.
+func TestPaneAndAnswerCarryNoFormatRune(t *testing.T) {
+	const spoof = "ok\u202egnp.exe\u202c \u2066x\u2069 zero\u200bwidth soft\u00adhyphen\ufeffend\n\tkept"
+	out := &syncBuf{}
+	(&Runner{Out: out}).say(spoof)
+	for _, s := range []string{out.String(), capAnswer(spoof)} {
+		for _, r := range s {
+			if hidesText(r) {
+				t.Fatalf("a format rune %U reached %q", r, s)
+			}
+		}
+		if !strings.Contains(s, "\n\tkept") || !strings.Contains(s, "gnp.exe") {
+			t.Fatalf("the text or its layout was lost: %q", s)
+		}
+	}
+}
+
+// foureyes and master on db88a3f: only the runes that reorder or hide text
+// go; the zero-width joiner and non-joiner (an emoji family is one picture, a
+// Persian word keeps its spelling), the tag characters of a subdivision flag
+// and the Arabic number sign stay.
+func TestFormatStripKeepsJoiners(t *testing.T) {
+	const family = "\U0001F468\u200d\U0001F469\u200d\U0001F467"
+	const persian = "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645"
+	const england = "\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F" // tag characters (Cf)
+	const arabicNumber = "\u0600\u0661\u0662"                                                // the Arabic number sign (Cf) before its digits
+	for _, s := range []string{family, persian, england, arabicNumber} {
+		if got := stripFormat(s); got != s {
+			t.Errorf("stripFormat(%q) = %q: a joiner was dropped", s, got)
+		}
+	}
+	if got := stripFormat("a\u200bb\u2060c\u202ed\u061ce\u00adf\ufeffg\u2066h\u200fi\u180ej"); got != "abcdefghij" {
+		t.Errorf("the other format runes stay: %q", got)
+	}
+	// foureyes on ba39026: the deprecated format controls, the interlinear
+	// annotation marks, the shorthand and the musical format controls render
+	// invisibly too: each range's first and last go.
+	if got := stripFormat("a\u206ab\u206fc\ufff9d\ufffbe\U0001bca0f\U0001bca3g\U0001d173h\U0001d17ai"); got != "abcdefghi" {
+		t.Errorf("the other format runes stay: %q", got)
+	}
+}

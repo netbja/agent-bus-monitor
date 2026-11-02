@@ -93,9 +93,10 @@ func (t Turn) Run(ctx context.Context, e bus.Event, thread string) (Result, erro
 
 // capAnswer keeps an answer within what one bus entry holds (CmdMaxRunes):
 // max_tokens is only a request to the server, so a longer answer is cut, on a
-// rune, with a note saying where (SEC-LLM-1).
+// rune, with a note saying where (SEC-LLM-1). Its format runes are dropped
+// first (stripFormat).
 func capAnswer(s string) string {
-	s = strings.ToValidUTF8(s, "\uFFFD")
+	s = stripFormat(strings.ToValidUTF8(s, "\uFFFD"))
 	if utf8.RuneCountInString(s) <= bus.CmdMaxRunes {
 		return s
 	}

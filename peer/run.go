@@ -225,14 +225,53 @@ func (r *Runner) say(s string) {
 
 // paneText keeps newlines and tabs and turns every other control rune (C0,
 // DEL, C1: escape sequences, OSC 52, a bell) into a space, as
-// bus.SanitizeReportFull does: the terminal is never handed a control.
+// bus.SanitizeReportFull does: the terminal is never handed a control. Format
+// runes go too (stripFormat).
 func paneText(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r != '\n' && r != '\t' && unicode.IsControl(r) {
 			return ' '
 		}
 		return r
+	}, stripFormat(s))
+}
+
+// stripFormat drops the runes that reorder or hide text (hidesText): text
+// from a model or the bus could otherwise show a line reversed or a name
+// spoofed, in the pane and in the answer put on the bus (PR 259 security
+// re-check, residual a).
+func stripFormat(s string) string {
+	return strings.Map(func(r rune) rune {
+		if hidesText(r) {
+			return -1
+		}
+		return r
 	}, s)
+}
+
+// hidesText: the bidi controls (the Arabic letter mark, the direction marks,
+// the embeddings, overrides and isolates) and the invisible runes that can
+// hide text (soft hyphen, Mongolian vowel separator, zero-width space, word
+// joiner and the invisible operators, byte order mark, and the four ranges
+// below). Every other format
+// rune carries meaning and stays (foureyes, master): the zero-width joiner
+// and non-joiner (an emoji sequence, a Persian word's spelling), a
+// subdivision flag's tag characters, the Arabic number signs.
+func hidesText(r rune) bool {
+	switch {
+	case r == '\u00ad', r == '\u061c', r == '\u180e', r == '\u200b', r == '\ufeff':
+		return true
+	case r >= '\u200e' && r <= '\u200f', r >= '\u202a' && r <= '\u202e',
+		r >= '\u2060' && r <= '\u2064', r >= '\u2066' && r <= '\u2069':
+		return true
+	// foureyes on ba39026: also invisible when rendered: the deprecated format
+	// controls, the interlinear annotation marks (some renderers hide the
+	// annotated text), the shorthand and the musical format controls.
+	case r >= '\u206a' && r <= '\u206f', r >= '\ufff9' && r <= '\ufffb',
+		r >= 0x1bca0 && r <= 0x1bca3, r >= 0x1d173 && r <= 0x1d17a:
+		return true
+	}
+	return false
 }
 
 // firstWords is a status line: the text's first words, on one line.
