@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -93,26 +93,28 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 }
 
 // probeEndpoint is one GET {url}/models, read through the peer's client.
+// The probe keeps only a status and fixed words, never the server's own
+// text: a body or a redirect may echo the URL's path, which no health detail
+// shows (reviewer-codex).
 func probeEndpoint(ctx context.Context, ep config.Endpoint) health.EndpointProbe {
 	ctx, cancel := context.WithTimeout(ctx, llmProbeDeadline)
 	defer cancel()
 	p := health.EndpointProbe{Name: ep.Name, Host: endpointHost(ep.URL), Model: ep.Model}
 	err := (peer.Client{URL: ep.URL, Model: ep.Model}).CheckModel(ctx)
-	var ef *peer.EndpointError
-	switch {
+	switch status := peer.StatusOf(err); {
 	case err == nil:
 		p.Reached, p.Status, p.Listed = true, 200, true
 	case errors.Is(err, peer.ErrModelNotServed):
 		p.Reached, p.Status = true, 200
+	case status != 0:
+		p.Reached, p.Status = true, status
+	case errors.Is(err, peer.ErrBadResponse):
+		p.Reached, p.Err = true, "the answer is not a model list"
 	case errors.Is(err, context.DeadlineExceeded):
-		p.Err = "no answer within " + llmProbeDeadline.String()
-	case errors.Is(err, peer.ErrRequestRefused), errors.Is(err, peer.ErrBadResponse):
-		p.Reached, p.Err = true, err.Error()
-	case errors.As(err, &ef):
-		// A server error answered (models: status 5xx/404/...); anything else gave no answer.
-		p.Reached, p.Err = strings.HasPrefix(ef.Err.Error(), "models: status"), ef.Err.Error()
-	default:
-		p.Err = err.Error()
+		p.Err = "none within " + llmProbeDeadline.String()
+	case errors.Is(err, syscall.ECONNREFUSED):
+		p.Err = "connection refused"
+	default: // no answer, no reason worth naming
 	}
 	return p
 }

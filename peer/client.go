@@ -82,20 +82,38 @@ func (r *refused) Error() string {
 }
 func (r *refused) Is(target error) bool { return target == ErrRequestRefused }
 
+// StatusOf is the HTTP status an error of the client carries (a refusal, or
+// an endpoint fault the server answered), 0 when there is none: what a
+// caller may show without the server's own words (health details).
+func StatusOf(err error) int {
+	var r *refused
+	if errors.As(err, &r) {
+		return r.status
+	}
+	var ef *EndpointError
+	if errors.As(err, &ef) {
+		return ef.Status
+	}
+	return 0
+}
+
 // statusError classes a non-200: only what can heal is an EndpointError
 // (retried, the entry kept): 5xx, 408, 429, and 404 (Ollama's model not
 // found, which the spec maps to blocked). Any other is refused.
 func statusError(what string, status int, body []byte) error {
 	reason := oneLine(body)
 	if status >= 500 || status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusNotFound {
-		return &EndpointError{Err: fmt.Errorf("%sstatus %d: %s", what, status, reason)}
+		return &EndpointError{Err: fmt.Errorf("%sstatus %d: %s", what, status, reason), Status: status}
 	}
 	return &refused{status: status, reason: reason}
 }
 
 // EndpointError is a fault of the endpoint itself (unreachable, or a server
 // error): the peer declares blocked and retries, never acknowledging the entry.
-type EndpointError struct{ Err error }
+type EndpointError struct {
+	Err    error
+	Status int // the HTTP status when the server answered one; 0 when it gave no answer
+}
 
 func (e *EndpointError) Error() string { return "llm endpoint: " + e.Err.Error() }
 func (e *EndpointError) Unwrap() error { return e.Err }

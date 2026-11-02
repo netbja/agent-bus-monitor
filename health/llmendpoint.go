@@ -43,14 +43,13 @@ func EvaluateLLMEndpoint(in LLMEndpointInput) Outcome {
 		switch {
 		case !p.Reached || p.Err != "":
 			status = Fail
-			why := p.Err
-			if why == "" {
-				why = "no answer"
-			}
-			if p.Reached {
-				bad = append(bad, fmt.Sprintf("%s %s %s", p.Name, p.Host, why))
-			} else {
-				bad = append(bad, fmt.Sprintf("%s %s no answer: %s", p.Name, p.Host, why))
+			switch {
+			case p.Reached:
+				bad = append(bad, fmt.Sprintf("%s %s %s", p.Name, p.Host, p.Err))
+			case p.Err == "":
+				bad = append(bad, fmt.Sprintf("%s %s no answer", p.Name, p.Host))
+			default:
+				bad = append(bad, fmt.Sprintf("%s %s no answer: %s", p.Name, p.Host, p.Err))
 			}
 		case p.Status != 200:
 			status = Fail

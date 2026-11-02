@@ -117,3 +117,37 @@ func TestLLMEndpointCheckServerError(t *testing.T) {
 		t.Fatalf("503 = %+v", out)
 	}
 }
+
+// The detail is built from fixed words and a status, never from what the
+// server answered: a body or a redirect echoing the URL's path stays out of
+// the stored health detail (reviewer-codex).
+func TestLLMEndpointDetailNeverEchoesTheServer(t *testing.T) {
+	for name, h := range map[string]http.HandlerFunc{
+		"503 body": func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "failed at /tenant/private-prefix/v1/models", 503)
+		},
+		"redirect": func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "http://127.0.0.1:1/tenant/private-prefix/v1/models", http.StatusTemporaryRedirect)
+		},
+		"401 body": func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "no access to /tenant/private-prefix/v1", 401)
+		},
+		"bad list": func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("/tenant/private-prefix/v1 {")) },
+	} {
+		srv := httptest.NewServer(h)
+		cfg := llmConfig(t, "[llm.local]\nurl = \""+srv.URL+"/tenant/private-prefix/v1\"\nmodel = \"qwen\"\n")
+		out, _ := llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen"}}, cfg))(context.Background())
+		srv.Close()
+		if out.Status != health.Fail || strings.Contains(out.Detail, "private-prefix") || strings.Contains(out.Detail, "/v1") {
+			t.Errorf("%s = %+v, want fail with no path", name, out)
+		}
+	}
+	down := httptest.NewServer(http.NotFoundHandler())
+	url := down.URL
+	down.Close()
+	cfg := llmConfig(t, "[llm.local]\nurl = \""+url+"/tenant/private-prefix/v1\"\nmodel = \"qwen\"\n")
+	out, _ := llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen"}}, cfg))(context.Background())
+	if out.Status != health.Fail || !strings.Contains(out.Detail, "connection refused") || strings.Contains(out.Detail, "private-prefix") {
+		t.Errorf("down = %+v", out)
+	}
+}

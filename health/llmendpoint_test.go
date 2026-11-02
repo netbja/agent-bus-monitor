@@ -14,6 +14,7 @@ func TestEvaluateLLMEndpoint(t *testing.T) {
 	ok := EndpointProbe{Name: "local", Host: "127.0.0.1:11434", Model: "qwen", Reached: true, Status: 200, Listed: true}
 	missing := EndpointProbe{Name: "gpu", Host: "gpu.lan:8080", Model: "big", Reached: true, Status: 200}
 	down := EndpointProbe{Name: "box", Host: "127.0.0.1:8080", Model: "m", Err: "connection refused"}
+	silent := EndpointProbe{Name: "quiet", Host: "127.0.0.1:7000", Model: "m"}
 	errStatus := EndpointProbe{Name: "srv", Host: "127.0.0.1:9000", Model: "m", Reached: true, Status: 500}
 	for name, c := range map[string]struct {
 		in     LLMEndpointInput
@@ -26,6 +27,7 @@ func TestEvaluateLLMEndpoint(t *testing.T) {
 		"ok":               {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{ok}}, OK, []string{"local 127.0.0.1:11434 serves qwen"}},
 		"model missing":    {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{ok, missing}}, Warn, []string{"gpu gpu.lan:8080 answers without big"}},
 		"down":             {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{missing, down}}, Fail, []string{"box 127.0.0.1:8080 no answer: connection refused", "gpu"}},
+		"no reason":        {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{silent}}, Fail, []string{"quiet 127.0.0.1:7000 no answer"}},
 		"error status":     {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{errStatus}}, Fail, []string{"srv 127.0.0.1:9000 status 500"}},
 		"a peer unmatched": {LLMEndpointInput{Peers: []string{"local", "other"}, Probes: []EndpointProbe{ok}, Unmatched: []string{"other (model phi)"}}, Warn, []string{"no [llm.*] endpoint for other (model phi)"}},
 	} {
