@@ -274,7 +274,7 @@ func (t Tools) grep(ctx context.Context, pattern, rel string) string {
 		}
 		if dir {
 			if filepath.Base(p) == ".git" {
-				return errSkipDir
+				return errSkipDir // resolve refuses every path in it anyway: a speed-up
 			}
 			return nil
 		}

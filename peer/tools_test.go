@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -509,5 +510,32 @@ func TestToolsNeverOpenAPipe(t *testing.T) {
 	}
 	if len(seen) == 0 {
 		t.Fatal("the hook saw no open at all")
+	}
+}
+
+// A link inside .git onto a file outside it is refused by its asked path:
+// the inGit check on the asked path alone (foureyes).
+func TestToolsRefuseTheAskedGitPath(t *testing.T) {
+	tl := toolsFixture(t)
+	if err := os.Symlink("../sub/b.txt", filepath.Join(tl.Root, ".git", "link")); err != nil {
+		t.Fatal(err)
+	}
+	if out := run(t, tl, "read_file", map[string]any{"path": ".git/link"}); !strings.HasPrefix(out, "refused:") {
+		t.Fatalf("read_file(.git/link -> sub/b.txt) = %q", out)
+	}
+}
+
+// grep's walk opens each directory beneath the root (R1), as the hook sees,
+// never by its name (foureyes: os.Open in its place passed every test).
+func TestGrepOpensDirectoriesBeneathTheRoot(t *testing.T) {
+	tl := toolsFixture(t)
+	var seen []string
+	opened = func(p string) { seen = append(seen, p) }
+	defer func() { opened = nil }()
+	run(t, tl, "grep", map[string]any{"pattern": "board"})
+	for _, d := range []string{tl.Root, filepath.Join(tl.Root, "sub")} {
+		if !slices.Contains(seen, d) {
+			t.Fatalf("%s not opened beneath the root: %v", d, seen)
+		}
 	}
 }
