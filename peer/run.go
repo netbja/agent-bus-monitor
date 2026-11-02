@@ -236,13 +236,15 @@ func paneText(s string) string {
 	}, stripFormat(s))
 }
 
-// stripFormat drops every Unicode format rune (Cf: bidi overrides and
-// isolates, zero-width characters, the byte order mark): text from a model
-// or the bus could otherwise show a line reversed or a name spoofed, in the
-// pane and in the answer put on the bus (PR 259 security re-check, residual a).
+// stripFormat drops the Unicode format runes (Cf: bidi overrides and
+// isolates, zero-width spaces, the byte order mark): text from a model or the
+// bus could otherwise show a line reversed or a name spoofed, in the pane and
+// in the answer put on the bus (PR 259 security re-check, residual a). The
+// zero-width joiner and non-joiner stay (foureyes): they carry meaning (an
+// emoji sequence, a Persian word's spelling) and reorder nothing.
 func stripFormat(s string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.Is(unicode.Cf, r) {
+		if r != '\u200c' && r != '\u200d' && unicode.Is(unicode.Cf, r) {
 			return -1
 		}
 		return r

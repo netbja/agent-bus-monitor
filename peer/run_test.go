@@ -539,3 +539,19 @@ func TestPaneAndAnswerCarryNoFormatRune(t *testing.T) {
 		}
 	}
 }
+
+// foureyes on db88a3f: the zero-width joiner and non-joiner carry meaning (an
+// emoji family is one picture, a Persian word keeps its spelling), so they
+// stay; every other format rune still goes.
+func TestFormatStripKeepsJoiners(t *testing.T) {
+	const family = "\U0001F468\u200d\U0001F469\u200d\U0001F467"
+	const persian = "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645"
+	for _, s := range []string{family, persian} {
+		if got := stripFormat(s); got != s {
+			t.Errorf("stripFormat(%q) = %q: a joiner was dropped", s, got)
+		}
+	}
+	if got := stripFormat("a\u200bb\u2060c\u202ed"); got != "abcd" {
+		t.Errorf("the other format runes stay: %q", got)
+	}
+}
