@@ -11,7 +11,7 @@ func isForge(s string) bool {
 // ending in .lock, no "..", "@{", "//", control, space, or ~^:?*[\, not
 // "@", and no leading or trailing slash or trailing dot.
 func ValidBranchName(s string) bool {
-	if s == "" || s == "@" || strings.HasPrefix(s, "-") || strings.HasPrefix(s, "/") || strings.HasSuffix(s, "/") ||
+	if s == "" || s == "@" || s == "HEAD" || strings.HasPrefix(s, "-") || strings.HasPrefix(s, "/") || strings.HasSuffix(s, "/") ||
 		strings.HasSuffix(s, ".") || strings.Contains(s, "..") || strings.Contains(s, "@{") || strings.Contains(s, "//") {
 		return false
 	}

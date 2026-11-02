@@ -19,8 +19,15 @@ func TestResolve(t *testing.T) {
 		{"auto", "ssh://git@gitlab.com:2222/grp/sub/r.git", true, GitLab, "gitlab.com", "grp/sub", "r", ""},
 		{"auto", "git@gitlab.example.org:team/r.git", true, GitLab, "gitlab.example.org", "team", "r", ""},
 		{"auto", "https://bitbucket.org/ws/r.git", true, Bitbucket, "bitbucket.org", "ws", "r", ""},
-		{"auto", "git@git.example.org:team/r.git", true, Local, "git.example.org", "team", "r", "origin is on git.example.org: not a known forge; set delivery.forge"},
+		{"auto", "git@git.example.org:team/r.git", true, Local, "git.example.org", "team", "r", "origin is on git.example.org: not a known forge, so local mode; give it a recognisable host name (gitlab.<domain>, or the forge's own), or set delivery.forge, which applies to every project on this machine"},
 		{"auto", "", false, Local, "", "", "", ""},
+		// git's scp-like form with no user (an ssh config supplies it), foureyes
+		{"auto", "github.com:o/r.git", true, GitHub, "github.com", "o", "r", ""},
+		{"auto", "gitlab.example.org:team/r", true, GitLab, "gitlab.example.org", "team", "r", ""},
+		// a local path or file URL: local mode, said as a path
+		{"auto", "/srv/repo.git", true, Local, "", "", "", "origin is a local path: local mode (nothing pushed)"},
+		{"auto", "file:///srv/r.git", true, Local, "", "", "", "origin is a local path: local mode (nothing pushed)"},
+		{"auto", "../other", true, Local, "", "", "", "origin is a local path: local mode (nothing pushed)"},
 		{"gitlab", "git@git.example.org:team/r.git", true, GitLab, "git.example.org", "team", "r", ""},
 		{"local", "git@github.com:o/r.git", true, Local, "github.com", "o", "r", ""},
 		{"github", "", false, GitHub, "", "", "", ""},

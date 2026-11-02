@@ -51,3 +51,15 @@ func TestResolveVerdictHead(t *testing.T) {
 		}
 	}
 }
+
+// An inherited GIT_DIR or GIT_WORK_TREE never redirects the check to another
+// repository (foureyes): the head is read in the checkout named.
+func TestResolveVerdictHeadIgnoresInheritedGitDir(t *testing.T) {
+	dir, head := gitRepo(t)
+	other, _ := gitRepo(t)
+	t.Setenv("GIT_DIR", filepath.Join(other, ".git"))
+	t.Setenv("GIT_WORK_TREE", other)
+	if got, err := resolveVerdictHead(dir, head); err != nil || got != head {
+		t.Fatalf("with another GIT_DIR inherited = %q, %v", got, err)
+	}
+}

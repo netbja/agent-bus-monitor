@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -18,6 +19,12 @@ func resolveVerdictHead(dir, sha string) (string, error) {
 	}
 	c := exec.Command("git", "rev-parse", "--verify", "--quiet", sha+"^{commit}")
 	c.Dir = dir
+	// The checkout in dir, never one an inherited GIT_DIR or GIT_WORK_TREE names.
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "GIT_DIR=") && !strings.HasPrefix(kv, "GIT_WORK_TREE=") {
+			c.Env = append(c.Env, kv)
+		}
+	}
 	out, err := c.Output()
 	if err != nil {
 		return "", fmt.Errorf("--head %s is not a commit in this checkout", sha)

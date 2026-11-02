@@ -9,7 +9,7 @@ func TestValidBranchName(t *testing.T) {
 			t.Errorf("%q refused", ok)
 		}
 	}
-	for _, bad := range []string{"", "-main", "a..b", "a b", "a~b", "a^b", "a:b", "a?b", "a*b", "a[b", "a\\b", "a/", "/a", "a.lock", "a//b", "a@{b", "@", "a.", ".a", "a/.b", "a\x01"} {
+	for _, bad := range []string{"", "-main", "a..b", "a b", "a~b", "a^b", "a:b", "a?b", "a*b", "a[b", "a\\b", "a/", "/a", "a.lock", "a//b", "a@{b", "@", "a.", ".a", "a/.b", "a\x01", "HEAD"} {
 		if ValidBranchName(bad) {
 			t.Errorf("%q accepted", bad)
 		}
