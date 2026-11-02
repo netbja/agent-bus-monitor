@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
@@ -109,7 +110,7 @@ func newDeliverWorld(t *testing.T, origin string) *deliverWorld {
 		cmds: map[string]dlvOut{
 			"git rev-parse --verify --quiet refs/heads/coder/x^{commit}":            {out: dlvH + "\n"},
 			"git remote get-url origin":                                             {out: origin + "\n"},
-			"git fetch origin main":                                                 {},
+			"git fetch origin +refs/heads/main:refs/remotes/origin/main":            {},
 			"git rev-list --count refs/remotes/origin/main.." + dlvH:                {out: "2\n"},
 			"git log --reverse --format=%H%x09%s refs/remotes/origin/main.." + dlvH: {out: "aaaaaaaa1\tfirst change\n" + dlvH + "\tsecond change\n"},
 			"git rev-list --count refs/heads/main.." + dlvH:                         {out: "2\n"},
@@ -155,7 +156,7 @@ func TestDeliverGitHubOpensAPullRequestOnTheApprovedHead(t *testing.T) {
 	want := []string{
 		"git rev-parse --verify --quiet refs/heads/coder/x^{commit}",
 		"git remote get-url origin",
-		"git fetch origin main",
+		"git fetch origin +refs/heads/main:refs/remotes/origin/main",
 		"git rev-list --count refs/remotes/origin/main.." + dlvH,
 		"git log --reverse --format=%H%x09%s refs/remotes/origin/main.." + dlvH,
 		"git push origin " + dlvH + ":refs/heads/coder/x",
@@ -248,7 +249,7 @@ func TestDeliverRefusesAnAbsentBranch(t *testing.T) {
 
 func TestDeliverStopsWhenTheBaseCannotBeFetched(t *testing.T) {
 	w := newDeliverWorld(t, "git@github.com:o/r.git")
-	w.r.cmds["git fetch origin main"] = dlvOut{err: errExit1}
+	w.r.cmds["git fetch origin +refs/heads/main:refs/remotes/origin/main"] = dlvOut{err: errExit1}
 	if code, _, errw := w.run("master", "coder/x"); code != 1 || !strings.Contains(errw, "cannot read origin/main") {
 		t.Fatalf("exit %d: %q", code, errw)
 	}
@@ -474,5 +475,25 @@ func TestDeliverRedactsACredentialShapedLine(t *testing.T) {
 	}
 	if strings.Contains(w.r.body, "ghp_") || !strings.Contains(w.r.body, "[redacted]") {
 		t.Errorf("body %q", w.r.body)
+	}
+}
+
+// A multibyte body stays under Linux's one-argument limit on glab's argv.
+func TestDeliverCapsTheGitLabDescriptionInBytes(t *testing.T) {
+	long := strings.Repeat("é", 40000)
+	b := capBytes("x"+long+long, glabDescMax)
+	if len(b) > glabDescMax || !utf8.ValidString(b) {
+		t.Fatalf("len %d, valid %v", len(b), utf8.ValidString(b))
+	}
+}
+
+// A set forge with an origin that names no owner or repository has no page to print.
+func TestDeliverSaysWhenThePageIsUnknown(t *testing.T) {
+	w := newDeliverWorld(t, "git@github.com:r")
+	w.settings["delivery.forge"] = "github"
+	delete(w.r.paths, "gh")
+	code, out, errw := w.run("master", "coder/x")
+	if code != 0 || strings.Contains(out, "github.com//") || !strings.Contains(out, "page unknown") {
+		t.Fatalf("exit %d: %q %q", code, out, errw)
 	}
 }

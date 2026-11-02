@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
@@ -31,6 +32,10 @@ const deliverUsage = "usage: deliver <branch> [--task <plan-task>] [--subject <s
 
 // deliverBodyMax keeps the body under GitHub's 65 536 characters.
 const deliverBodyMax = 60000
+
+// glabDescMax keeps glab's description argv under Linux's 128 KiB for one
+// argument (MAX_ARG_STRLEN), whatever its runes weigh.
+const glabDescMax = 100000
 
 type deliverDeps struct {
 	Run      setup.Runner
@@ -151,7 +156,9 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	// 2. Ahead of the base: origin's, fetched, in a forge mode; the local one in local mode.
 	baseRef := "refs/heads/" + o.base
 	if f.Kind != forge.Local {
-		if _, err := git("fetch", "origin", o.base); err != nil {
+		// An explicit refspec: a single-branch clone's or a narrowed fetch
+		// refspec would leave origin/<base> absent or stale (foureyes).
+		if _, err := git("fetch", "origin", "+refs/heads/"+o.base+":refs/remotes/origin/"+o.base); err != nil {
 			return fail(1, "cannot read origin/%s", o.base)
 		}
 		baseRef = "refs/remotes/origin/" + o.base
@@ -281,6 +288,11 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	// Link mode: the forge's own new-request page.
 	page := linkPage(f, o.base, o.branch)
 	code := link(0)
+	if page == "" {
+		fmt.Fprintf(out, "pushed %s@%s; page unknown: origin names no owner and repository, open the request on %s by hand\n", o.branch, h, f.Kind)
+		tell(fmt.Sprintf("pushed %s@%s; the request is to open on %s by hand (page unknown)", o.branch, h, f.Kind))
+		return code
+	}
 	fmt.Fprintf(out, "pushed %s@%s; open the request at\n  %s\n", o.branch, h, page)
 	tell(fmt.Sprintf("pushed %s@%s; the request is to open at %s", o.branch, h, page))
 	return code
@@ -414,11 +426,22 @@ func deliverGitLab(ctx context.Context, d deliverDeps, o deliverOpts, title, bod
 		return n, u
 	}
 	if _, err := d.Run.Run(ctx, setup.Cmd{Name: "glab", Args: []string{"mr", "create", "--source-branch", o.branch,
-		"--target-branch", o.base, "--title", title, "--description", body, "--yes"}, Dir: d.Dir}); err != nil {
+		"--target-branch", o.base, "--title", title, "--description", capBytes(body, glabDescMax), "--yes"}, Dir: d.Dir}); err != nil {
 		fmt.Fprintf(errw, "glab mr create failed (%v): link mode for this run\n", err)
 		return 0, ""
 	}
 	return view()
+}
+
+// capBytes cuts s to at most n bytes on a rune boundary.
+func capBytes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func writeBody(dir, body string) (string, error) {
@@ -449,8 +472,12 @@ func pathEscape(s string) string {
 }
 
 // linkPage is the forge's own page for a new request, built from origin
-// (never fetched), each part escaped.
+// (never fetched), each part escaped; "" when origin names no owner and
+// repository (or no host, for GitLab).
 func linkPage(f forge.Forge, base, branch string) string {
+	if f.Owner == "" || f.Repo == "" || (f.Kind == forge.GitLab && f.Host == "") {
+		return ""
+	}
 	repo := pathEscape(f.Owner) + "/" + url.PathEscape(f.Repo)
 	switch f.Kind {
 	case forge.GitHub:
