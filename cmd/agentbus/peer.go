@@ -175,7 +175,39 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 	case strings.HasPrefix(home, root+string(filepath.Separator)):
 		return "", fmt.Errorf("%s holds the home directory: refused", root)
 	}
+	if dir := configRefusal(root, home, getenv); dir != "" {
+		return "", fmt.Errorf("%s is in or holds the configuration directory %s: refused (launch the peer from the project's folder)", root, dir)
+	}
 	return root, nil
+}
+
+// configRefusal is the configuration directory root is at, under, or holds,
+// "" for none (PR 259 security re-check, residual c): the base,
+// $XDG_CONFIG_HOME else ~/.config, is often a dotfiles repository, and
+// agentbus's own directory holds redis.env and endpoint-fp.key.
+func configRefusal(root, home string, getenv func(string) string) string {
+	base := getenv("XDG_CONFIG_HOME")
+	if !filepath.IsAbs(base) {
+		base = filepath.Join(home, ".config")
+	}
+	sep := string(filepath.Separator)
+	if b := resolved(base); root == b || strings.HasPrefix(root, b+sep) {
+		return b
+	}
+	if p := config.Path(getenv); p != "" {
+		if d := resolved(filepath.Dir(p)); d == root || strings.HasPrefix(d, root+sep) {
+			return d
+		}
+	}
+	return ""
+}
+
+// resolved is p with its symlinks resolved, or p when it cannot be (absent).
+func resolved(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
 }
 
 // peerIdent adds to the peer's identity the endpoint it resolved, which

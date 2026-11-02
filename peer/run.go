@@ -225,11 +225,25 @@ func (r *Runner) say(s string) {
 
 // paneText keeps newlines and tabs and turns every other control rune (C0,
 // DEL, C1: escape sequences, OSC 52, a bell) into a space, as
-// bus.SanitizeReportFull does: the terminal is never handed a control.
+// bus.SanitizeReportFull does: the terminal is never handed a control. Format
+// runes go too (stripFormat).
 func paneText(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r != '\n' && r != '\t' && unicode.IsControl(r) {
 			return ' '
+		}
+		return r
+	}, stripFormat(s))
+}
+
+// stripFormat drops every Unicode format rune (Cf: bidi overrides and
+// isolates, zero-width characters, the byte order mark): text from a model
+// or the bus could otherwise show a line reversed or a name spoofed, in the
+// pane and in the answer put on the bus (PR 259 security re-check, residual a).
+func stripFormat(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cf, r) {
+			return -1
 		}
 		return r
 	}, s)

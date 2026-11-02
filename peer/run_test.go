@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
@@ -516,5 +517,25 @@ func TestRunnerPublishesNoEndpointBody(t *testing.T) {
 	}
 	if !blocked {
 		t.Fatal("the 500 never declared blocked")
+	}
+}
+
+// Residual a of the PR 259 security re-check: Unicode format runes (bidi
+// overrides and isolates, zero-width characters, every other Cf) reach
+// neither the pane nor the answer put on the bus: display spoofing only, but
+// no reader should see a line reversed by one.
+func TestPaneAndAnswerCarryNoFormatRune(t *testing.T) {
+	const spoof = "ok\u202egnp.exe\u202c \u2066x\u2069 zero\u200bwidth soft\u00adhyphen\ufeffend\n\tkept"
+	out := &syncBuf{}
+	(&Runner{Out: out}).say(spoof)
+	for _, s := range []string{out.String(), capAnswer(spoof)} {
+		for _, r := range s {
+			if unicode.Is(unicode.Cf, r) {
+				t.Fatalf("a format rune %U reached %q", r, s)
+			}
+		}
+		if !strings.Contains(s, "\n\tkept") || !strings.Contains(s, "gnp.exe") {
+			t.Fatalf("the text or its layout was lost: %q", s)
+		}
 	}
 }

@@ -802,13 +802,16 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   8 tool calls, `turn_timeout`), the reply on the entry's thread, a report, its own `working`/`blocked`/`idle`;
   once the reply is sent, a failed report or status is logged, never answered again.
   An answer is cut under `CmdMaxRunes` with a note, and a reply the bus refuses for good is said, reported and
-  acked (never turned again); pane lines carry no control but newline and tab; errors carry the status, never the
+  acked (never turned again); pane lines carry no control but newline and tab, and neither they nor the answer carry a
+  Unicode format rune (`stripFormat`: bidi overrides and isolates, zero-widths, every Cf); errors carry the status, never the
   endpoint's body; the start's `/models` check has 5 s.
   The client follows no redirect and uses no proxy; only transport errors, 5xx, 408, 429 and 404 are retried
   (`blocked`, the entry kept, every 30 s), any other refusal fails the turn with a reply. Tools: `read_file`,
   `list_dir`, `grep` under the project root (peer-security: the template's `working_dir`, else the launch
   folder's Git top-level, never the cwd itself, an absolute path; the home from `$HOME`, else the passwd entry, else no start; `/`,
-  `$HOME` and its ancestors refused; no `..`, no `.git`,
+  `$HOME` and its ancestors refused, and (peer-residuals) a root at or under `$XDG_CONFIG_HOME` (else `~/.config`) or holding
+  agentbus's configuration directory (`configRefusal`); no `..`, no `.git` (any case, like the denies: on a case-insensitive
+  volume `.GIT` and `.ENV` open the real files, so names compare case-insensitively everywhere, fail closed),
   symlinks re-checked, then opened component by component from the root with `O_NOFOLLOW` (`openBeneath`), so a
   link swapped in after the checks is refused; directories read 256 names at a time (grep's own walk, list_dir's 501);
   regular files only; grep bounded by the turn and 20000 entries; the role's
