@@ -29,7 +29,7 @@ func TestGlyphsAreSingleCell(t *testing.T) {
 // emoji, and push a frame's right border out of its column.
 func TestNoStrayNonASCIILiterals(t *testing.T) {
 	allowed := map[rune]bool{}
-	for _, g := range UIGlyphs {
+	for _, g := range append(append([]string{}, UIGlyphs...), IconGlyphs...) { // busmon-icons: the icons join the closed set
 		for _, r := range g {
 			allowed[r] = true
 		}
