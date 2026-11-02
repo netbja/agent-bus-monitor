@@ -3,12 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -16,6 +20,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
+	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
 )
 
@@ -30,6 +35,14 @@ type startDeps struct {
 	TTY      func() io.ReadWriter   // the person's terminal; nil when there is none
 	Look     func(exe string) (string, error)
 	Out, Err io.Writer
+
+	// Outside herdr (spec "Outside herdr"): start launches the session itself.
+	HerdrOnPath   func() bool                                         // nil: not checked
+	Herdr         func(session string) (wait func() error, err error) // herdr --session on the terminal
+	SessionSocket func(session string) (string, error)                // herdr session list --json, until running
+	UpInSession   func(args []string, session, socket string, log io.Writer) int
+	Trusted       func(client, dir string) bool // nil: no trust line
+	LogPath       func(project string) string
 }
 
 // realStartDeps runs up's own code path, reads the manifest as the role
@@ -53,6 +66,32 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			return nil
 		},
 		Look: realUpDeps(stdout, stderr).LookPath,
+		HerdrOnPath: func() bool {
+			_, err := exec.LookPath(herdrBin(os.Getenv))
+			return err == nil
+		},
+		Herdr: func(session string) (func() error, error) {
+			cmd := exec.Command(herdrBin(os.Getenv), "--session", session)
+			cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr // the person's terminal, for herdr's whole run
+			if err := cmd.Start(); err != nil {
+				return nil, err
+			}
+			return cmd.Wait, nil
+		},
+		SessionSocket: herdrSessionSocket,
+		UpInSession: func(args []string, session, socket string, log io.Writer) int {
+			// up opens a workspace only inside herdr: the three a herdr pane
+			// gives a plugin, set for this process and the herdr calls it makes.
+			for k, v := range map[string]string{"HERDR_ENV": "1", "HERDR_SESSION": session, "HERDR_SOCKET_PATH": socket} {
+				_ = os.Setenv(k, v)
+			}
+			return runUp(args, realUpDeps(log, log), log, log)
+		},
+		Trusted: clientTrusted(os.Getenv),
+		LogPath: func(project string) string {
+			paths, _ := service.PathsFrom(os.Getenv)
+			return filepath.Join(paths.StateDir(project), "start.log")
+		},
 		Live: func(project string) (map[string]life, error) {
 			client, err := bus.Connect("")
 			if err != nil {
@@ -74,6 +113,37 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			return out, nil
 		},
 		Out: stdout, Err: stderr,
+	}
+}
+
+// herdrSessionSocket asks herdr where a session lives (herdr session list
+// --json: name, running, socket_path), every 250 ms until it is listed
+// running, for 15 s at most. agentbus never computes herdr's config
+// directory: herdrSession only parses a path it is given.
+func herdrSessionSocket(session string) (string, error) {
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		out, err := exec.Command(herdrBin(os.Getenv), "session", "list", "--json").Output()
+		if err == nil {
+			var list struct {
+				Sessions []struct {
+					Name       string `json:"name"`
+					Running    bool   `json:"running"`
+					SocketPath string `json:"socket_path"`
+				} `json:"sessions"`
+			}
+			if json.Unmarshal(out, &list) == nil {
+				for _, s := range list.Sessions {
+					if s.Name == session && s.Running && s.SocketPath != "" {
+						return s.SocketPath, nil
+					}
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			return "", fmt.Errorf("herdr session %s did not start within 15s", session)
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 
@@ -193,6 +263,11 @@ func runStart(args []string, d startDeps) int {
 		return 0
 	}
 
+	outside := d.Env("HERDR_ENV") != "1"
+	if outside && d.HerdrOnPath != nil && !d.HerdrOnPath() {
+		return fail("herdr is not on PATH: the team runs in it. Install it from https://herdr.dev (or ./setup.sh install --install-herdr), then run agentbus start again")
+	}
+
 	// start's own writes: the name when none is recorded, the default team
 	// when the person chose one.
 	cfg := config.Path(d.Env)
@@ -220,7 +295,76 @@ func runStart(args []string, d startDeps) int {
 	case !p.Existing && !complete:
 		upArgs = append(upArgs, "--roles", teamSpec(p.Team))
 	}
-	return d.Up(upArgs)
+	var tty io.ReadWriter
+	if outside && d.TTY != nil && d.Herdr != nil {
+		tty = d.TTY()
+	}
+	if tty == nil { // inside herdr up opens the team; without a terminal it provisions and says how to open it
+		return d.Up(upArgs)
+	}
+	if code := d.Up(upArgs); code != 0 { // provisioned as up does outside herdr
+		return code
+	}
+	return startInHerdr(d, m, p, upArgs)
+}
+
+// startInHerdr hands the terminal to herdr --session <project> and opens the
+// team inside it through the session's socket (spec, "Outside herdr"). What
+// up would say goes to start.log while herdr draws, so the lines a person
+// needs are said before: the missing clients and the dialogs to answer.
+func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string) int {
+	a := &asker{m: m, look: d.Look}
+	if a.look == nil {
+		a.look = func(exe string) (string, error) { return exe, nil }
+	}
+	for _, l := range a.clientLines(p.Team) {
+		if strings.Contains(l, "✗") {
+			fmt.Fprintln(d.Out, l)
+		}
+	}
+	if d.Trusted != nil {
+		seen := map[string]bool{}
+		for _, r := range p.Team {
+			prof, err := m.ResolveWith(r.Role, a.profileOf(r))
+			if err != nil || seen[prof.Client] || d.Trusted(prof.Client, p.Folder) {
+				continue
+			}
+			seen[prof.Client] = true
+			fmt.Fprintf(d.Out, "%s does not trust %s yet: answer its dialog in the %s tab\n", clientLabel(prof.Client), p.Folder, r.Role)
+		}
+	}
+	wait, err := d.Herdr(p.Project)
+	if err != nil {
+		fmt.Fprintf(d.Err, "agentbus start: starting herdr --session %s: %v\n", p.Project, err)
+		return 1
+	}
+	socket, sockErr := d.SessionSocket(p.Project)
+	code, logPath := 0, d.LogPath(p.Project)
+	if sockErr == nil {
+		code = 1
+		if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
+			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+				code = d.UpInSession(upArgs, p.Project, socket, f)
+				f.Close()
+			}
+		}
+	}
+	herdrErr := wait() // herdr holds the terminal until it exits
+	switch {
+	case sockErr != nil:
+		fmt.Fprintf(d.Err, "agentbus start: %v; inside it, run: agentbus up %s\n", sockErr, p.Project)
+		return 1
+	case code != 0:
+		fmt.Fprintf(d.Err, "agentbus start: opening the team inside herdr failed: see %s\n", logPath)
+		return 1
+	case herdrErr != nil:
+		var exit *exec.ExitError
+		if errors.As(herdrErr, &exit) {
+			return exit.ExitCode()
+		}
+		return 1
+	}
+	return 0
 }
 
 // setProject takes a name the person gave: valid, and never another folder's

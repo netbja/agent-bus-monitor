@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -313,5 +315,97 @@ func TestStartJudgesTheTemplateAsWritten(t *testing.T) {
 	w.live["coder"] = lifeUnknown
 	if code := w.start(w.folder, "--yes", "--roles", "master,foureyes"); code == 0 || !strings.Contains(w.err.String(), "agentbus retire coder") {
 		t.Fatalf("an unknown liveness dropped = %d %q", code, w.err.String())
+	}
+}
+
+// outsideWorld fakes what start does outside herdr: herdr's launch, the
+// session's socket as herdr session list reports it, and up in that session.
+type outsideWorld struct {
+	launched  []string // sessions herdr was started for
+	socket    string   // "" = the session never listed running
+	inSession [][]string
+	inSock    string
+	upCode    int
+	herdrExit error
+	order     []string
+}
+
+func (w *startWorld) outside(o *outsideWorld) startDeps {
+	d := w.deps()
+	d.Up = func(args []string) int { w.ups = append(w.ups, args); o.order = append(o.order, "provision"); return 0 }
+	d.HerdrOnPath = func() bool { return true }
+	d.Herdr = func(session string) (func() error, error) {
+		o.launched = append(o.launched, session)
+		o.order = append(o.order, "herdr")
+		return func() error { o.order = append(o.order, "herdr exit"); return o.herdrExit }, nil
+	}
+	d.SessionSocket = func(session string) (string, error) {
+		if o.socket == "" {
+			return "", errors.New("herdr session " + session + " did not start")
+		}
+		return o.socket, nil
+	}
+	d.UpInSession = func(args []string, session, socket string, log io.Writer) int {
+		o.inSession, o.inSock = append(o.inSession, args), socket
+		o.order = append(o.order, "up in "+session)
+		fmt.Fprintln(log, "opened")
+		return o.upCode
+	}
+	d.LogPath = func(project string) string { return filepath.Join(w.t.TempDir(), project, "start.log") }
+	return d
+}
+
+// Outside herdr with a terminal (agentbus-start spec, "Outside herdr"):
+// provision as up does, launch herdr --session <project> on the terminal,
+// read the session's socket, run up inside it (its output to start.log),
+// then return herdr's status; without a terminal, only up (its hint).
+func TestStartOutsideHerdr(t *testing.T) {
+	w := newStartWorld(t)
+	o := &outsideWorld{socket: "/xdg/herdr/sessions/shop/herdr.sock"}
+	d := w.outside(o)
+	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
+	if code := runStart([]string{w.folder, "--yes"}, d); code != 0 {
+		t.Fatalf("start = %d: %s", code, w.err.String())
+	}
+	if strings.Join(o.order, ",") != "provision,herdr,up in shop,herdr exit" || len(o.launched) != 1 || o.launched[0] != "shop" || o.inSock != o.socket {
+		t.Fatalf("order %q, launched %q, socket %q", o.order, o.launched, o.inSock)
+	}
+	if strings.Join(o.inSession[0], " ") != strings.Join(w.ups[0], " ") {
+		t.Fatalf("up in the session %q, provision %q", o.inSession, w.ups)
+	}
+
+	// The session never listed: herdr keeps the terminal; after it, the
+	// reason and the command to run inside it; exit 1.
+	w = newStartWorld(t)
+	o = &outsideWorld{}
+	d = w.outside(o)
+	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
+	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || !strings.Contains(w.err.String(), "did not start") || !strings.Contains(w.err.String(), "agentbus up shop") || len(o.inSession) != 0 {
+		t.Fatalf("no session = %d %q", code, w.err.String())
+	}
+
+	// up failing inside the session: after herdr exits, the log is named.
+	w = newStartWorld(t)
+	o = &outsideWorld{socket: "/s.sock", upCode: 1}
+	d = w.outside(o)
+	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
+	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || !strings.Contains(w.err.String(), "start.log") {
+		t.Fatalf("up failed in the session = %d %q", code, w.err.String())
+	}
+
+	// No terminal: provision only, nothing launched.
+	w = newStartWorld(t)
+	o = &outsideWorld{socket: "/s.sock"}
+	if code := runStart([]string{w.folder, "--yes"}, w.outside(o)); code != 0 || len(o.launched) != 0 || len(w.ups) != 1 {
+		t.Fatalf("no terminal = %d, launched %q", code, o.launched)
+	}
+
+	// herdr not on PATH: said before anything is written.
+	w = newStartWorld(t)
+	before := w.snapshot()
+	d = w.outside(&outsideWorld{})
+	d.HerdrOnPath = func() bool { return false }
+	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || !strings.Contains(w.err.String(), "https://herdr.dev") || w.snapshot() != before || len(w.ups) != 0 {
+		t.Fatalf("no herdr = %d %q", code, w.err.String())
 	}
 }
