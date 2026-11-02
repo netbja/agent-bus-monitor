@@ -47,6 +47,12 @@ version, the projects, and one row per member (path, size, SHA-256, mode). It al
 was **left out** and why (`services/<p>.env: secret (use --secrets)`, `redis.env: secret`), so
 a restore says what it cannot bring back.
 
+`manifest.json` is the archive's **first member**, so a reader learns what an archive covers by
+reading its first bytes without unpacking the rest. **Coverage**: an archive *covers* a project
+when its manifest lists that project. Only a complete archive (final name, after the rename)
+counts. Freshness is always judged **per project**: the newest archive that covers it. An archive
+of `--project A` says nothing about `B`.
+
 **Not included**: logs and restart budgets (`<state>/<p>/*.log`, `*.restarts`), the cache
 (`~/.cache/agentbus`: rebuilt), the clients' own files, and the repository (Git).
 
@@ -158,7 +164,8 @@ another one (a mount, a synced folder). Bernard's own machine sets `backup.dir =
 
 `backup.keep` (default 7): after a successful backup, the oldest archives of this host beyond
 that count are removed; `0` keeps every one. Only files matching the archive name pattern are
-ever removed.
+ever removed. An archive that is the newest covering some project is never removed, whatever the
+count: a run of `--project A` archives cannot push out the only archive of `B`.
 
 ## Schedule: by hand by default, daily when the person asks
 
@@ -171,13 +178,17 @@ person can make them automatic in one setting:
 - **`daily`**: the dispatch service runs one. This is a chore on its own goroutine, beside the
   reconciliation, as the history archive's is. It runs only while the service holds its dispatch
   lease (`HoldsDispatch`).
-  - **When:** the chore checks once an hour. It runs when the newest archive of this host in
-    `backup.dir` is 24 h old or older, or there is none. A backup the person made by hand
-    therefore counts, and no clock time needs configuring.
+  - **When:** the chore checks once an hour. It runs when **any** project of this host (the
+    broker's and the templates', as `backup` with no `--project` takes them) has no archive
+    covering it that is younger than 24 h. A backup made by hand counts for the projects it
+    covers, and only those: repeated `--project A` archives never hold back the run while `B`
+    goes stale. No clock time needs configuring. A failed run is tried again at the next hourly
+    check.
   - **One per host:** it takes a host-local flock, `<state>/backup.lock`, as the model and
     Redis-release refreshes do (`refreshModelsUnderLock`). The lock is a try-lock (`LOCK_NB`):
-    when another chore holds it, this one skips its turn. After taking the lock, it re-reads the
-    newest archive, so a chore that waited behind another's backup finds it fresh and makes none.
+    when another chore holds it, this one skips its turn. After taking the lock, it judges the
+    coverage again, so a chore that waited behind another's backup finds every project covered
+    and makes none.
     Every project's dispatch service runs the chore, but only one backup is made.
   - **What it runs:** the same code as `agentbus backup` with no `--project`, so every project of
     this host, followed by the retention (`backup.keep`).
@@ -224,14 +235,26 @@ is small. No step waits on the network.
 
 ## Sentinel and health
 
-A health check `backup`: **warn** when the newest archive in `backup.dir` is older than
-`backup.warn_after` (default 7 days; `0` = off) or there is none, **ok** otherwise, **unknown**
-when the directory cannot be read. Its place is **for you**, with the command `agentbus
-backup`. With `backup.schedule = off`, the person is the one who runs backups. With `daily`, a
-stale archive means the scheduled run failed, and the detail names the error from
-`backup-last.json`. A scheduled run that left out secrets because `age` was missing also warns
-until a run includes them. Sentinel only relays it as any warn; it never runs a backup or a
-restore.
+A health check `backup`. It runs in each project's health loop and judges **that project**, from
+two independent facts:
+
+- **Age:** **warn** when the newest archive covering the project is older than
+  `backup.warn_after` (default 7 days), or there is none. `backup.warn_after = 0` turns off this
+  reminder only.
+- **Failure** (only while `backup.schedule = daily`): **warn** when the latest scheduled attempt
+  whose scope included the project failed, whatever the age of older archives. A successful
+  backup yesterday followed by a failed run today warns today. A run that left out the secrets
+  because `age` was missing (with a recipient set) counts as failed for this purpose. The
+  warning clears when a newer attempt or archive succeeds for the project: a later scheduled run
+  that succeeds, or a complete archive covering the project created after the failed attempt,
+  including one made by hand. For the `age` case, that newer archive must hold `secrets.age`.
+  `warn_after = 0` never silences a failure. With `schedule = off`, the attempt record is not
+  read: a failure from an earlier `daily` period no longer warns.
+
+**Ok** when neither warns; **unknown** when the directory or the record cannot be read. The
+detail names the folder read (always), the age of the covering archive, and the failed attempt's
+time and error. Its place is **for you**, with the command `agentbus backup`. Sentinel only relays
+it as any warn; it never runs a backup or a restore.
 
 ## What it never does
 
@@ -276,14 +299,24 @@ Through `AGENTBUS_TEST_REDIS_URL`, never the person's broker:
   writing.
 - **Retention**: `keep = 2` with four archives and one foreign file: the two oldest archives
   removed, the foreign file kept.
-- **Health**: none, old, fresh, unreadable → warn, warn, ok, unknown. A failed scheduled run's
-  error is in the detail, and so is a run that left out the secrets for want of `age`.
+- **Retention by coverage**: `keep = 2`, an old A+B archive then three newer `--project A` ones:
+  the A+B archive is kept (the newest covering B), only the oldest A-only archive is removed.
+- **Health**: none, old, fresh, unreadable → warn, warn, ok, unknown (per project, by
+  coverage). Failure, independently of age:
+  - a fresh earlier success plus a failed scheduled attempt: warn;
+  - a newer success (scheduled, or by hand covering the project): ok;
+  - an `age`-missing run: warn until an archive with `secrets.age`;
+  - `warn_after = 0` with a failed attempt: still warn;
+  - `schedule = off` with an old failed record: ok.
 - **Schedule** (a fake clock, a temporary `backup.dir`, a fake bus): `off` never runs;
-  - `daily` runs when the newest archive is 24 h old or older, or there is none, and does not
-    run when it is fresher (an archive made by hand counts);
+  - `daily` runs when a project has no covering archive younger than 24 h, or none at all, and
+    does not run when every project is covered (an archive made by hand covers its projects);
+  - with projects A and B, a fresh `--project A` archive and B stale or never backed up: it runs;
+  - a manifest that is not the first member, or an unfinished archive under its temporary name,
+    covers nothing;
   - not without the dispatch lease;
   - two chores (two projects' services) under one host lock make one archive: the second either
-    skips while the lock is held, or re-reads the newest archive after taking it;
+    skips while the lock is held, or judges the coverage again after taking it;
   - the health detail names the folder read, and `agentbus backup` warns about a defaulted
     `backup.dir` while `daily` is on;
   - without `backup.age_recipient`, no secret file is opened (the fake file system records the
