@@ -1,6 +1,7 @@
 # Forge delivery: GitHub, GitLab, Bitbucket or local git
 
-Status: spec, not built. Plan v0.26 task `forge-delivery`, review subject `forge-delivery-spec`.
+Status: spec, not built; the open questions answered by Bernard on 2026-11-02 (end of this file).
+Plan v0.26 task `forge-delivery`, review subject `forge-delivery-spec`.
 
 ## Why
 
@@ -10,8 +11,8 @@ the guides say "open the PR". A team on GitLab, Bitbucket or a plain local repos
 improvise each delivery.
 
 Bernard's decision (2026-10-30, option A): a `delivery` setting in `config.toml`, and
-`agentbus deliver <branch>`, which uses the forge's own CLI when it is there (`gh`, `glab`,
-`bb`) and otherwise works in local mode (no PR; the verdicts on the bus are the review; the
+`agentbus deliver <branch>`, which uses the forge's own CLI when it is there (`gh`, `glab`;
+Bitbucket in link mode, answer 2) and otherwise works in local mode (no PR; the verdicts on the bus are the review; the
 person merges with git; `plan link --ref` beside `--pr`). No native per-forge API (option B,
 rejected as heavy). The two `api.github.com` URLs (busmon's update check, redis-watch) are
 about our own releases and Redis's, not the person's repository: they stay.
@@ -27,6 +28,16 @@ base  = "main"   # the branch a delivery targets
 Two registry keys (`config/keys.go`, group Services), env `AGENT_BUS_DELIVERY_FORGE` and
 `AGENT_BUS_DELIVERY_BASE`, read through `config.Resolver` like every other key; `agentbus
 config` shows them. `base` must be a valid Git branch name (`git check-ref-format --branch`).
+
+**One setting for the machine** (answer 1): the person's `config.toml` (or the env), never a
+per-project value. A project's services env file is not read for these two keys, and `up` writes
+neither there. Two projects on two forges need nothing as long as `auto` reads both remotes; a
+project whose remote `auto` cannot place is local until the person sets `forge` for the machine,
+and the line that says so names the key. The cost, said plainly (foureyes): a `forge` set for the
+machine wins over `auto` for **every** project on it, so setting `forge = "gitlab"` to place one
+project's self-hosted GitLab makes a GitHub project deliver as GitLab too. The fix for one
+unrecognised remote is a recognisable host name for it (a `gitlab.` first label, or the forge's
+own domain), not the machine's setting; deliver's line for an unknown host says both.
 
 **`auto`** (the default) decides per repository, from its `origin` remote at each delivery:
 
@@ -48,8 +59,10 @@ over the remote, so a self-hosted GitLab under another name is `forge = "gitlab"
 agentbus deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--dry-run]
 ```
 
-Run by master (or the docs agent for its `pr/<change>` branch); a tool rule allows it for
-those two roles only. It needs the project (the verdicts) and the repository it is run in.
+Run by master, or the docs agent for its `pr/<change>` branch (answer 3: the person allows
+these two roles to deliver, push included, with the 4-eyes proof below; no other role). The tool
+rules carry it (below, "skills and roles"). It needs the project (the verdicts) and the
+repository it is run in.
 Every external command goes through one runner (as `setup.Runner`), so the tests replace it.
 
 ### The checks, before anything leaves the machine
@@ -69,9 +82,11 @@ Every external command goes through one runner (as `setup.Runner`), so the tests
    times: committer dates are set by the committer (`GIT_COMMITTER_DATE`, an amend, a skewed
    clock), and the broker's clock is not the committer's, so no time comparison proves that a
    head was reviewed.
-4. The forge, from the setting, and for a forge its CLI: on PATH, and logged in by its own
-   status command's **exit code** (`gh auth status`, `glab auth status`; its output is not
-   read). A CLI absent or not logged in is **link mode** (below), never a failure.
+4. The forge, from the setting, and for GitHub and GitLab their CLI: on PATH, and logged in by
+   its own status command's **exit code** (`gh auth status`, `glab auth status`; its output is
+   not read). A CLI absent or not logged in is **link mode** (below), never a failure.
+   Bitbucket is always link mode (answer 2): no third-party CLI is looked for or run, even one
+   on PATH.
 
 ### The verdict names its head (a change to `verdict`)
 
@@ -89,7 +104,7 @@ part) says to pass `--head` with the SHA they read; a challenge already names it
 |---|---|---|---|
 | github (`gh`) | `git push origin H:refs/heads/<branch>` | `gh pr create --base <base> --head <branch> --title <t> --body-file <f>` | `gh pr view <branch> --json number,url` |
 | gitlab (`glab`) | same | `glab mr create --source-branch <branch> --target-branch <base> --title <t> --description <body> --yes` (see below) | `glab mr view <branch> --output json` (`iid`, `web_url`) |
-| bitbucket (`bb`, see open question 2) | same | the CLI's create command | its view command |
+| bitbucket (link mode always, answer 2) | same | nothing: deliver prints the new pull request page | none |
 | link mode | same | nothing: deliver prints the forge's own new-request page | none |
 | local | **nothing** | nothing | none |
 
@@ -178,8 +193,20 @@ plan page shows `PR #12` or `ref coder/x@a1b2c3d`.
 - **agent-bus** (every reviewer: foureyes, reviewer-codex, …): a verdict on a branch names its
   head, `agentbus verdict --subject <s> --head <sha> …`, the SHA the reviewer read; a new
   commit means a new verdict on its SHA.
-- `roles.toml`: `Bash(agentbus deliver *)` allowed for master and docs; any other role is not
-  given it.
+- `roles.toml` (answer 3): `Bash(agentbus deliver *)` allowed in master's and docs' own
+  `tool_rules`; every other shipped role carries in its own rules the deny
+  `Bash(agentbus deliver *)` and `Bash(agentbus * deliver *)` (the global-flag spelling, as
+  busmon-reload-deny does for `reload --as`). Per role, never in the top-level `[tool_rules]`:
+  a deny merged into every role would also deny master and docs. Defence in depth, not a
+  boundary: the client matches command text, and a person's own shell has no such rule.
+  A role added later carries the deny too (foureyes): `roles draft` writes the two denies into
+  every draft's `tool_rules`, and `roles adopt` refuses a role that lacks them, with its name, unless
+  the person's answer to the adopt ask names it a delivering role (none but master and docs today).
+  A test on the draft and one on adopt hold it, since `TestShippedManifestRules` sees only the
+  shipped roles.
+- A decision note, `docs/memory/decisions/<date>-forge-delivery.md`, records answer 3 (who may
+  push, and that the 4-eyes proof bound to the head is the condition), so master's skill can cite
+  it.
 - The guides (EN, FR) and the README: "open the PR" says how per forge, and local mode.
 
 ## Credentials: never read
@@ -229,19 +256,28 @@ same link: it changes nothing.
   test environment holds (`GH_TOKEN=tok-SECRET` set in the test, absent from every argv and
   never printed); no path under the fake HOME's CLI config dirs is opened.
 - **Plan**: `--ref` derives like `--pr`; the newer link replaces the other.
+- **Setting scope** (answer 1): `delivery.forge` set in a project's services env file is not read
+  (`agentbus config --project` shows the machine's value, `auto` by default).
+- **Bitbucket** (answer 2): with a fake `bb` (and any other name) first on PATH, a bitbucket
+  remote runs no CLI (the fake runner records none), pushes `H`, prints the escaped new pull
+  request page and records `plan link --ref`.
+- **Who may deliver** (answer 3): `TestShippedManifestRules` holds the allow on master and docs
+  and the two denies on every other shipped role, none in the top-level rules; a `roles draft`
+  carries the two denies, and `roles adopt` refuses a role without them.
+- **Local mode** (answer 4): with an `origin` remote and `forge = "local"`, nothing is pushed or
+  fetched (the fake runner records no `git push` and no `git fetch`).
 
-## Open questions for Bernard
+## Answers (Bernard, 2026-11-02)
 
-1. **One setting for the machine, or per project?** `config.toml` holds machine-wide
-   preferences; with `auto` most teams need nothing, but two projects on two forges with
-   neither on a recognisable host would need a per-project value (the project's env file, as
-   `escalate_to`). Machine-wide plus `auto` is proposed for now.
-2. **Bitbucket's CLI.** Atlassian ships no CLI named `bb`; the ones that exist are community
-   tools with different commands. Pick one to support, or make Bitbucket link mode only (push,
-   then the new pull request page)? Link mode only is proposed until one is chosen.
-3. **Who may deliver?** master and the docs agent are proposed. A push is outward-facing: if
-   agents deliver, master's skill says so only after the person has approved this delivery
-   policy once (recorded as a decision note). Or should the person keep pushing by hand
-   (deliver then only checks and prints)?
-4. **Local mode with a remote**: push the branch anyway (a backup, others can fetch it) or push
-   nothing? Nothing is proposed: local means the person's repository is the only one.
+The four open questions, as asked and as answered (relayed by master):
+
+1. **One setting for the machine, or per project?** One machine-wide setting in `config.toml`,
+   with `auto` (the forge read from `origin`) as its default. No per-project value ("The
+   setting").
+2. **Bitbucket's CLI.** None: Bitbucket is link mode. agentbus pushes `H` and prints the new pull
+   request page; no third-party CLI is supported or run ("The steps per forge").
+3. **Who may deliver?** master and the docs agent, push included, with the 4-eyes proof bound to
+   the head; no other role. The tool rules hold it, and a decision note records it ("What
+   changes in the skills and roles").
+4. **Local mode with a remote**: push nothing. Local means the person's repository is the only
+   one; nothing is fetched either, since the base is the local one ("The checks", step 2).
