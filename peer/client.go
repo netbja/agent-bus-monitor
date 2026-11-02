@@ -246,7 +246,7 @@ func (c Client) do(req *http.Request) ([]byte, int, error) {
 
 // oneLine is the start of an error body, on one line.
 func oneLine(b []byte) string {
-	s := strings.Join(strings.Fields(strings.ToValidUTF8(string(b), "?")), " ")
+	s := strings.Join(strings.Fields(paneText(strings.ToValidUTF8(string(b), "?"))), " ")
 	if len(s) > 200 {
 		cut := 200
 		for cut > 0 && !utf8.RuneStart(s[cut]) {

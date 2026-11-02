@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -214,10 +215,24 @@ func (r *Runner) status(ctx context.Context, state, msg string) {
 	}
 }
 
+// say writes one line to the pane. Its text comes from the bus, the model
+// and the endpoint, so terminal controls are stripped (SEC-LLM-2).
 func (r *Runner) say(s string) {
 	if r.Out != nil {
-		fmt.Fprintf(r.Out, "%s %s\n", time.Now().Format("15:04:05"), s)
+		fmt.Fprintf(r.Out, "%s %s\n", time.Now().Format("15:04:05"), paneText(s))
 	}
+}
+
+// paneText keeps newlines and tabs and turns every other control rune (C0,
+// DEL, C1: escape sequences, OSC 52, a bell) into a space, as
+// bus.SanitizeReportFull does: the terminal is never handed a control.
+func paneText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r != '\n' && r != '\t' && unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // firstWords is a status line: the text's first words, on one line.

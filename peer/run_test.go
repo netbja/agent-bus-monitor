@@ -444,3 +444,30 @@ func TestRunnerAcknowledgesAReplyTheBusRefuses(t *testing.T) {
 		t.Fatalf("no report of the unsent answer: %+v %v", reports, err)
 	}
 }
+
+// hostile carries what a model, an endpoint or a bus sender could aim at the
+// person's terminal: OSC 52 (clipboard), a CSI clear, a bell, DEL, a C1 CSI.
+const hostile = "a\x1b]52;c;ZXZpbA==\x07b\x1b[2Jc\x7fd\u009b31me\r\nf\tg"
+
+// paneSafe fails on any byte the terminal would act on: below 0x20 other
+// than \n and \t, DEL, or a C1 control (SEC-LLM-2).
+func paneSafe(t *testing.T, what, s string) {
+	t.Helper()
+	for i, r := range s {
+		if (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			t.Fatalf("%s holds control %U at byte %d: %q", what, r, i, s)
+		}
+	}
+}
+
+// Every pane line is stripped of terminal controls, whoever wrote its text;
+// newlines and tabs stay, so an answer keeps its layout.
+func TestRunnerPaneCarriesNoTerminalControl(t *testing.T) {
+	out := &syncBuf{}
+	(&Runner{Out: out}).say("from master: " + hostile)
+	paneSafe(t, "the pane", out.String())
+	if !strings.Contains(out.String(), "f\tg") || strings.Count(out.String(), "\n") != 2 {
+		t.Fatalf("the layout is not kept: %q", out)
+	}
+	paneSafe(t, "oneLine", oneLine([]byte(hostile)))
+}
