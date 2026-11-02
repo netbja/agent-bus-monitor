@@ -172,13 +172,18 @@ The file the launch writes, `<folder>/.grok/hooks/agentbus.json`:
   `working` until its pane is seen ready, when `bus.EffectiveState` reads it idle (section 2).
 - It is written only when absent, or when it is the file agentbus wrote last, unedited: the hash of what it
   wrote is kept in the launch cache (`grok-hooks/<hash of the path>`). Any other file is the person's and
-  stays; a lost record makes ours unprovable, so it stays too, and the launch says so.
+  stays; a lost record makes ours unprovable, so it stays too, and the launch says so. Ownership is only
+  ever recorded for a file the launch wrote: a file identical to ours with no record (the person's copy, or
+  ours after the record was lost) is used as it is and never adopted, so a later text never replaces it
+  (reviewer-codex).
 - Never the home folder (that `.grok` is the person's own hooks and trust store), never through a link (a
   `.grok`, `hooks` or `agentbus.json` that is a symlink or not a plain file is refused), never `~/.grok`.
 - A file it cannot write never stops the agent: it starts without turn hooks and stderr says why. A
   written file is named on stderr with the trust to give.
 - Dry runs are unchanged and write nothing; the argv is unchanged.
-- The file shows as untracked in the project's Git status; the person decides whether to ignore it.
+- The file shows as untracked in the project's Git status and holds this machine's agentbus path; the
+  launch note says to keep it out of commits, and ignoring it is the person's decision (the launcher never
+  edits `.git`).
 
 ## Tests (plan)
 

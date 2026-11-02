@@ -741,7 +741,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `~/.codex`; Codex lists them under its session flags and asks once to trust them, never bypassed). A Grok launch
   (route b, `rolecfg/grokhooks.go`) writes `<folder>/.grok/hooks/agentbus.json` where Grok starts (`UserPromptSubmit` turn
   start, `Stop` and `StopFailure` turn end, timeout 5; not `StopCancelled`, which can arrive after the next turn's start),
-  only when absent or the file agentbus last wrote unedited (its hash in the launch cache), never the home folder, never
+  only when absent or the file agentbus last wrote unedited (its hash in the launch cache; an identical file it did not write is used, never adopted), never the home folder, never
   through a link, a non-regular file never read; a failure only warns; Grok runs it once the person answers its own folder-trust
   dialog (never `--trust`); its hooks run as children of the `grok` process, so the bound pid is in their chain, and
   `subagentType` events are ignored. Kimi has no hooks. `Bus.TurnState` (`bus/turnstate.go`) flips idle/working in the `{p}:agents`

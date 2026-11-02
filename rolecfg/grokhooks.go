@@ -76,7 +76,7 @@ func grokTurnHooks(e *envMap, stderr io.Writer) {
 		var path string
 		path, err = installGrokHooks(e, dir, grokHooksJSON(launchHooks(e)))
 		if err == nil {
-			fmt.Fprintf(stderr, "note: grok turn hooks in %s; Grok runs them once you trust this folder (its own dialog, answered once)\n", path)
+			fmt.Fprintf(stderr, "note: grok turn hooks in %s; Grok runs them once you trust this folder (its own dialog, answered once). It holds this machine's agentbus path: keep it out of commits\n", path)
 			return
 		}
 	}
@@ -127,8 +127,11 @@ func installGrokHooks(e *envMap, dir, text string) (string, error) {
 		if err != nil {
 			return file, err
 		}
+		// Ours only when the record says so: an identical file agentbus did
+		// not write (the person's copy, or ours whose record was lost) is used
+		// as it is and never adopted, so a later text never replaces it.
 		if bytes.Equal(old, []byte(text)) {
-			return file, os.WriteFile(record, []byte(hex.EncodeToString(sum[:])+"\n"), 0o600)
+			return file, nil
 		}
 		kept, _ := os.ReadFile(record)
 		oldSum := sha256.Sum256(old)

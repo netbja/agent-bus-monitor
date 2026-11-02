@@ -121,6 +121,36 @@ func TestInstallGrokHooksWritesOnlyItsOwnFile(t *testing.T) {
 	}
 }
 
+// A file that holds exactly our text but that agentbus did not write (the
+// person's copy, or ours after its record was lost) is used as it is and never
+// adopted: no record is written, so a later text never replaces it
+// (reviewer-codex).
+func TestInstallGrokHooksNeverAdoptsAnIdenticalFile(t *testing.T) {
+	v1, v2 := "{\"hooks\":1}\n", "{\"hooks\":2}\n"
+	// The person's own copy, identical to ours.
+	f := newGrokHooksFixture(t)
+	must(t, os.MkdirAll(filepath.Dir(f.file()), 0o755))
+	must(t, os.WriteFile(f.file(), []byte(v1), 0o644))
+	if _, err := f.install(f.project, v1); err != nil || f.read() != v1 {
+		t.Fatalf("identical foreign file: %q %v", f.read(), err)
+	}
+	if _, err := f.install(f.project, v2); !errors.Is(err, errGrokHooksNotOurs) || f.read() != v1 {
+		t.Fatalf("identical foreign file then v2: %q %v (adopted)", f.read(), err)
+	}
+	// Ours, the record lost, then the same version launched again, then v2.
+	g := newGrokHooksFixture(t)
+	if _, err := g.install(g.project, v1); err != nil {
+		t.Fatal(err)
+	}
+	must(t, os.RemoveAll(g.cache))
+	if _, err := g.install(g.project, v1); err != nil || g.read() != v1 {
+		t.Fatalf("lost record, same text: %q %v", g.read(), err)
+	}
+	if _, err := g.install(g.project, v2); !errors.Is(err, errGrokHooksNotOurs) || g.read() != v1 {
+		t.Fatalf("lost record, same text, then v2: %q %v (adopted)", g.read(), err)
+	}
+}
+
 // Never ~/.grok (the person's own hooks and trust store), and never through a
 // link: a .grok, hooks or agentbus.json that is a symlink is refused and its
 // target untouched.
