@@ -317,11 +317,28 @@ func TestRunnerBacksOffAfterAnError(t *testing.T) {
 	}
 	rctx, cancel := context.WithTimeout(ctx, 2500*time.Millisecond)
 	defer cancel()
-	if err := r.Run(rctx); err != nil {
+	done := make(chan error, 1)
+	go func() { done <- r.Run(rctx) }()
+	// The lease stays held through every retry delay (reviewer-codex): the
+	// dispatcher never sees the peer unarmed while Redis is fine.
+	for tries.Load() == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	unarmed := 0
+	for rctx.Err() == nil {
+		if armed, err := b.Armed(ctx, "local"); err == nil && !armed && rctx.Err() == nil {
+			unarmed++
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if n := tries.Load(); n < 1 || n > 3 {
-		t.Fatalf("%d tries in 2.5 s, want a backoff (1 s, then 2 s)", n)
+	if unarmed != 0 {
+		t.Fatalf("the peer was unarmed in %d samples during its backoff", unarmed)
+	}
+	if n := tries.Load(); n < 2 || n > 3 {
+		t.Fatalf("%d tries in 2.5 s, want a retry under the lease after a backoff (1 s, then 2 s)", n)
 	}
 	if board, _ := b.Board(ctx); board["t-stuck"].State != "requested" {
 		t.Fatalf("board = %+v, want the request still pending", board["t-stuck"])

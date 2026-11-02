@@ -31,13 +31,26 @@ type Runner struct {
 }
 
 // Run holds the lease until ctx ends. A lease held by another peer is an
-// error (two peers under one name); a lost lease is taken again, and the
-// queue drained again, before receiving. Every retry backs off (1 s doubling
-// to 30 s, back to 1 s after a lease held a minute), so an error that does
-// not heal idles the peer instead of spinning it.
+// error (two peers under one name). An error while the lease is still held
+// (an entry that fails, a bus write refused) is retried under that same
+// lease, after a backoff, draining again so the pending entry comes first:
+// the dispatcher keeps seeing the peer armed. Only a lost lease is released
+// and taken again. Every retry backs off (1 s doubling to 30 s, back to 1 s
+// after a minute without error), so an error that does not heal idles the
+// peer instead of spinning it.
 func (r *Runner) Run(ctx context.Context) error {
 	r.Turn.Log = func(s string) { r.say("  " + s) }
-	backoff := time.Second
+	backoff, lastErr := time.Second, time.Time{}
+	wait := func(c context.Context, why string) bool {
+		if time.Since(lastErr) > time.Minute {
+			backoff = time.Second
+		}
+		lastErr = time.Now()
+		r.say(fmt.Sprintf("%s; trying again in %s", why, backoff))
+		ok := sleep(c, backoff)
+		backoff = min(2*backoff, 30*time.Second)
+		return ok
+	}
 	for {
 		rc, err := r.Bus.TakeReceiver(ctx, r.Agent, r.Consumer, bus.DefaultHorizon, r.LeaseWait)
 		switch {
@@ -46,31 +59,31 @@ func (r *Runner) Run(ctx context.Context) error {
 		case errors.Is(err, bus.ErrReceiverBusy):
 			return fmt.Errorf("another peer holds %s's receiver lease: one peer per name", r.Agent)
 		case err != nil:
-			r.say("bus unavailable (" + err.Error() + "); retrying")
-			if !sleep(ctx, backoff) {
+			if !wait(ctx, "bus unavailable ("+err.Error()+")") {
 				return nil
 			}
-			backoff = min(2*backoff, 30*time.Second)
 			continue
 		}
-		held := time.Now()
 		r.status(ctx, "idle", "local-llm peer: listening")
-		_, err = rc.Drain(bus.DefaultHorizon, func(e bus.Event) error { return r.handle(ctx, rc.Context(), e) })
-		if err == nil {
-			err = rc.Deliver("0", func(e bus.Event) (bool, error) { return false, r.handle(ctx, rc.Context(), e) })
+		for {
+			_, err = rc.Drain(bus.DefaultHorizon, func(e bus.Event) error { return r.handle(ctx, rc.Context(), e) })
+			if err == nil {
+				err = rc.Deliver("0", func(e bus.Event) (bool, error) { return false, r.handle(ctx, rc.Context(), e) })
+			}
+			if ctx.Err() != nil || rc.Context().Err() != nil {
+				break // stopped, or the lease lost
+			}
+			if !wait(rc.Context(), "delivery failed ("+err.Error()+"), the lease kept") {
+				break
+			}
 		}
 		rc.Close()
 		if ctx.Err() != nil {
 			return nil
 		}
-		if time.Since(held) > time.Minute {
-			backoff = time.Second
-		}
-		r.say(fmt.Sprintf("receiver lease lost (%v); taking it again in %s", err, backoff))
-		if !sleep(ctx, backoff) {
+		if !wait(ctx, "receiver lease lost ("+err.Error()+")") {
 			return nil
 		}
-		backoff = min(2*backoff, 30*time.Second)
 	}
 }
 
