@@ -95,7 +95,9 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 	fmt.Fprintf(out, "local-llm peer %s on %s, model %s, root %s\n", agent, endpointHost(settings.URL), settings.Model, root)
 	peerStartCheck(ctx, c, out)
 	host, _ := os.Hostname()
-	r := &peer.Runner{Bus: b, Agent: agent, Consumer: fmt.Sprintf("%s:%d", host, os.Getpid()), Ident: statusIdent(ctx),
+	ident := statusIdent(ctx)
+	ident.Endpoint = settings.Endpoint // what health llm-endpoint probes for it (R4)
+	r := &peer.Runner{Bus: b, Agent: agent, Consumer: fmt.Sprintf("%s:%d", host, os.Getpid()), Ident: ident,
 		Turn: peer.Turn{Client: c, Prompt: spec.Prompt, MaxCalls: 8, Timeout: settings.TurnTimeout,
 			Tools: peer.Tools{Root: root, Deny: deny, Thread: b.Thread, Agents: b.Agents}},
 		RetryEvery: 30 * time.Second, LeaseWait: 5 * time.Second, Out: out}

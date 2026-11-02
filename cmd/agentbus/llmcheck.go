@@ -31,8 +31,10 @@ func realLLMCheckDeps(b *bus.Bus) llmCheckDeps {
 }
 
 // llmEndpointCheck (local-llm-peer step 2) probes the endpoints the
-// registered local-llm peers use: an endpoint serves a peer when its model
-// is the peer's (the peer's own Resolve refuses to start otherwise). Every
+// registered local-llm peers use: the one each peer resolved and recorded in
+// its snapshot (Endpoint, R4), never another endpoint of the same model. A
+// snapshot from before that field matches by model, as the peer's Resolve
+// requires the two to be equal. Every
 // probe is peer.Client.CheckModel, so the peer's own rules hold: no redirect,
 // no proxy. Probes run side by side, each within llmProbeDeadline.
 func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, error) {
@@ -42,10 +44,16 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 		if err != nil {
 			return health.Outcome{Status: health.Unknown, Detail: "agent registry unavailable"}, err
 		}
-		models := map[string][]string{} // model -> peers
+		models := map[string][]string{} // model -> peers with no recorded endpoint
+		named := map[string][]string{}  // endpoint name -> peers
 		for name, s := range snaps {
-			if s.Client == "local-llm" {
-				in.Peers = append(in.Peers, name)
+			if s.Client != "local-llm" {
+				continue
+			}
+			in.Peers = append(in.Peers, name)
+			if s.Endpoint != "" {
+				named[s.Endpoint] = append(named[s.Endpoint], name)
+			} else {
 				models[s.Model] = append(models[s.Model], name)
 			}
 		}
@@ -61,8 +69,15 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 		}
 		var used []config.Endpoint
 		for _, ep := range cfg.Endpoints() {
-			if len(models[ep.Model]) > 0 {
+			if len(named[ep.Name]) > 0 || len(models[ep.Model]) > 0 {
 				used = append(used, ep)
+			}
+		}
+		for name, peers := range named {
+			if _, ok := cfg.Endpoint(name); !ok {
+				for _, p := range peers {
+					in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (endpoint %s)", p, name))
+				}
 			}
 		}
 		for model, peers := range models {

@@ -151,3 +151,30 @@ func TestLLMEndpointDetailNeverEchoesTheServer(t *testing.T) {
 		t.Errorf("down = %+v", out)
 	}
 }
+
+// The check probes the endpoint each peer resolved (options.endpoint, kept in
+// its snapshot), not every endpoint serving its model: an unused one of the
+// same model being down is no failure (R4). A peer naming an endpoint
+// config.toml no longer has is said; a snapshot written before the field
+// existed still matches by model.
+func TestLLMEndpointCheckProbesTheSelectedEndpoint(t *testing.T) {
+	up := modelsServer(t, "qwen")
+	conf := "[llm.used]\nurl = \"" + up.URL + "/v1\"\nmodel = \"qwen\"\n" +
+		"[llm.spare]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"qwen\"\n"
+	cfg := llmConfig(t, conf)
+	sel := func(ep string) bus.AgentSnapshot {
+		return bus.AgentSnapshot{Client: "local-llm", Model: "qwen", Endpoint: ep}
+	}
+	out, err := llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": sel("used")}, cfg))(context.Background())
+	if err != nil || out.Status != health.OK || strings.Contains(out.Detail, "spare") {
+		t.Fatalf("selected endpoint up, a spare down = %s %q %v, want ok without spare", out.Status, out.Detail, err)
+	}
+	out, _ = llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": sel("spare")}, cfg))(context.Background())
+	if out.Status != health.Fail || !strings.Contains(out.Detail, "spare") {
+		t.Fatalf("selected endpoint down = %s %q, want fail naming spare", out.Status, out.Detail)
+	}
+	out, _ = llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": sel("gone")}, cfg))(context.Background())
+	if !strings.Contains(out.Detail, "local (endpoint gone)") {
+		t.Fatalf("an endpoint config.toml lacks = %s %q", out.Status, out.Detail)
+	}
+}
