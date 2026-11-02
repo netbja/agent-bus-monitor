@@ -91,6 +91,21 @@ var Keys = []*Key{
 			}
 			return nil, "want auto, dark or light"
 		}},
+	// busmon-icons (spec 2026-11-02-busmon-icons-design.md): an icon per agent
+	// and provider, off by default; a wrong value is skipped, never a broken screen.
+	{Name: "display.icons", Env: "AGENT_BUS_BUSMON_ICONS", Kind: String, Default: "off", ReadBy: "busmon",
+		env: func(raw string) (any, envResult) {
+			if isIcons(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && isIcons(s) {
+				return s, ""
+			}
+			return nil, "want off, nerd or agent-font"
+		}},
 	{Name: "display.limit", Env: "AGENT_BUS_BUSMON_LIMIT", Kind: Int, Default: 25, ReadBy: "busmon", Legacy: true, Flag: "busmon --limit",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
@@ -268,6 +283,8 @@ func Lookup(name string) (*Key, bool) {
 var validName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString
 
 func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" }
+
+func isIcons(s string) bool { return s == "off" || s == "nerd" || s == "agent-font" }
 
 // envZeroOne takes 1 (on) and 0 (off) only; anything else is skipped.
 func envZeroOne(raw string) (any, envResult) {

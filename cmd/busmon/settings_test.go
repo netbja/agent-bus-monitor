@@ -105,3 +105,24 @@ func TestUpdateCheckOptOut(t *testing.T) {
 		}
 	}
 }
+
+// busmon-icons: display.icons is off by default, read from config.toml or the
+// env, and an unknown value is a note, then off: never a broken screen.
+func TestBusmonSettingsIcons(t *testing.T) {
+	if got := loadBusmonSettings(settingsDir(t, "", "", nil), settingsFlags{}); got.Icons != "off" {
+		t.Fatalf("default icons %q", got.Icons)
+	}
+	if got := loadBusmonSettings(settingsDir(t, "[display]\nicons = \"nerd\"\n", "", nil), settingsFlags{}); got.Icons != "nerd" {
+		t.Fatalf("file icons %q", got.Icons)
+	}
+	if got := loadBusmonSettings(settingsDir(t, "[display]\nicons = \"nerd\"\n", "", map[string]string{"AGENT_BUS_BUSMON_ICONS": "agent-font"}), settingsFlags{}); got.Icons != "agent-font" {
+		t.Fatalf("env icons %q", got.Icons)
+	}
+	got := loadBusmonSettings(settingsDir(t, "[display]\nicons = \"emoji\"\n", "", nil), settingsFlags{})
+	if got.Icons != "off" || !strings.Contains(got.Note, "display.icons:") || strings.Contains(got.Note, "emoji") {
+		t.Fatalf("unknown file icons %q, note %q", got.Icons, got.Note)
+	}
+	if got := loadBusmonSettings(settingsDir(t, "", "", map[string]string{"AGENT_BUS_BUSMON_ICONS": "emoji"}), settingsFlags{}); got.Icons != "off" {
+		t.Fatalf("unknown env icons %q", got.Icons)
+	}
+}

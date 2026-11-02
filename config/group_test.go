@@ -16,7 +16,7 @@ func TestEveryKeyHasItsGroup(t *testing.T) {
 			t.Errorf("group entry %s names no key", name)
 		}
 	}
-	for name, want := range map[string]Group{"display.theme": GroupDisplay, "waiting.fade": GroupDisplay, "waiting.bell": GroupAttention,
+	for name, want := range map[string]Group{"display.theme": GroupDisplay, "display.icons": GroupDisplay, "waiting.fade": GroupDisplay, "waiting.bell": GroupAttention,
 		"recap.auto_after": GroupAttention, "updates.check": GroupAttention, "identity.as": GroupIdentity, "dispatch.quota": GroupServices,
 		"history.keep_days": GroupServices, "health.runaway.screen_repeats": GroupHealth, "bus.verdict_max": GroupBusCaps} {
 		if k, _ := Lookup(name); k.Group() != want {
