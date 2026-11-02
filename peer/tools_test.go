@@ -356,3 +356,27 @@ func TestDenyMatcherResolvesTheHome(t *testing.T) {
 		}
 	}
 }
+
+// The repository's .git is never read: its config can hold a remote URL with
+// a token, sent off-host with a remote endpoint (SEC-LLM-4). A link onto it
+// is refused as well; grep already skipped it.
+func TestToolsRefuseTheGitDirectory(t *testing.T) {
+	tl := toolsFixture(t)
+	if err := os.Symlink(".git/config", filepath.Join(tl.Root, "gitcfg")); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ tool, path string }{
+		{"read_file", ".git/config"}, {"read_file", "gitcfg"}, {"list_dir", ".git"}, {"grep", ".git"}, {"read_file", "sub/../.git/config"},
+	} {
+		args := map[string]any{"path": c.path}
+		if c.tool == "grep" {
+			args["pattern"] = "board"
+		}
+		if out := run(t, tl, c.tool, args); !strings.HasPrefix(out, "refused:") {
+			t.Errorf("%s(%s) = %q, want refused", c.tool, c.path, out)
+		}
+	}
+	if out := run(t, tl, "list_dir", map[string]any{"path": ""}); !strings.Contains(out, "main.go") {
+		t.Fatalf("the root no longer lists: %q", out)
+	}
+}

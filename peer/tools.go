@@ -131,7 +131,25 @@ func (t Tools) resolve(rel string) (string, string) {
 	if t.Deny.Denied(asked) || t.Deny.Denied(real) {
 		return "", "refused: a Read deny rule of this role matches it"
 	}
+	if inGit(t.Root, asked) || inGit(t.Root, real) {
+		return "", "refused: the repository's .git is not read"
+	}
 	return real, ""
+}
+
+// inGit reports whether p, under root, is in or is a .git: its config can
+// hold a remote URL with a token (SEC-LLM-4).
+func inGit(root, p string) bool {
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return true
+	}
+	for _, s := range strings.Split(filepath.ToSlash(rel), "/") {
+		if s == ".git" {
+			return true
+		}
+	}
+	return false
 }
 
 func (t Tools) readFile(rel string, offset, limit int64) string {
