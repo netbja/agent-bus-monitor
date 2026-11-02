@@ -380,6 +380,65 @@ func TestGrokHooksKeptOutOfGit(t *testing.T) {
 	}
 }
 
+// An exclude line is a gitignore pattern, not a path: a folder named with
+// [ ] * ? or a backslash is written escaped, so the line matches that file
+// and no sibling, and the result is checked with git check-ignore. A path
+// that holds a line break cannot be one line: refused, the exclude untouched
+// (foureyes, reviewer-codex).
+func TestGrokHooksExcludeEscapesPatterns(t *testing.T) {
+	git := func(dir string, args ...string) (string, error) {
+		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		c.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+		out, err := c.CombinedOutput()
+		return string(out), err
+	}
+	text := "{\"hooks\":1}\n"
+	f := newGrokHooksFixture(t)
+	if out, err := git(f.project, "init", "-q"); err != nil {
+		t.Fatal(out, err)
+	}
+	// Each odd folder, with the sibling its unescaped pattern would match instead.
+	for _, c := range []struct{ odd, sibling string }{
+		{"pkg[1]", "pkg1"}, {"a*b", "axyb"}, {"q?", "qz"}, {`back\slash`, "backslash"},
+	} {
+		dir := filepath.Join(f.project, c.odd)
+		must(t, os.MkdirAll(dir, 0o755))
+		if _, _, err := installGrokHooks(newEnv(f.env), dir, text); err != nil {
+			t.Fatalf("%s: %v", c.odd, err)
+		}
+		other := filepath.Join(f.project, c.sibling, ".grok", "hooks", "agentbus.json")
+		must(t, os.MkdirAll(filepath.Dir(other), 0o755))
+		must(t, os.WriteFile(other, []byte("person\n"), 0o644))
+		rel := filepath.Join(c.odd, ".grok", "hooks", "agentbus.json")
+		if out, err := git(f.project, "check-ignore", "-q", "--no-index", rel); err != nil {
+			t.Errorf("%s: our file is not ignored: %v %s", c.odd, err, out)
+		}
+		if _, err := git(f.project, "check-ignore", "-q", "--no-index", filepath.Join(c.sibling, ".grok", "hooks", "agentbus.json")); err == nil {
+			t.Errorf("%s: the sibling %s is ignored too", c.odd, c.sibling)
+		}
+	}
+	// The project's own .gitignore re-includes it (it outranks info/exclude):
+	// check-ignore says so, and the launch warns instead of claiming it.
+	g := newGrokHooksFixture(t)
+	if out, err := git(g.project, "init", "-q"); err != nil {
+		t.Fatal(out, err)
+	}
+	must(t, os.WriteFile(filepath.Join(g.project, ".gitignore"), []byte("!**/agentbus.json\n"), 0o644))
+	if _, _, err := installGrokHooks(newEnv(g.env), g.project, text); !errors.Is(err, errGrokExclude) {
+		t.Fatalf("re-included by .gitignore: %v, want errGrokExclude", err)
+	}
+
+	before, _ := os.ReadFile(filepath.Join(f.project, ".git", "info", "exclude"))
+	nl := filepath.Join(f.project, "two\nlines")
+	must(t, os.MkdirAll(nl, 0o755))
+	if _, _, err := installGrokHooks(newEnv(f.env), nl, text); !errors.Is(err, errGrokExclude) {
+		t.Fatalf("a line break in the path: %v, want errGrokExclude", err)
+	}
+	if after, _ := os.ReadFile(filepath.Join(f.project, ".git", "info", "exclude")); string(after) != string(before) {
+		t.Errorf("the exclude changed for a path with a line break:\n%s", after)
+	}
+}
+
 func withLaunchDir(t *testing.T, dir string) {
 	t.Helper()
 	old := launchDir

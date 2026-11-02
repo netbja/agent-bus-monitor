@@ -226,18 +226,21 @@ func excludeFromGit(file string) error {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("%s is not under %s", file, top)
 	}
+	if strings.ContainsAny(rel, "\n\r") {
+		return fmt.Errorf("%q holds a line break: it cannot be one exclude line", rel)
+	}
 	exclude, err := gitIn(dir, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
 	if err != nil {
 		return err
 	}
-	line := "/" + filepath.ToSlash(rel)
+	line := "/" + gitignoreLiteral(filepath.ToSlash(rel))
 	old, err := os.ReadFile(exclude)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	for _, l := range strings.Split(string(old), "\n") {
 		if strings.TrimSpace(l) == line {
-			return nil
+			return checkIgnored(dir, file)
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(exclude), 0o755); err != nil {
@@ -255,7 +258,34 @@ func excludeFromGit(file string) error {
 		f.Close()
 		return err
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return checkIgnored(dir, file)
+}
+
+// checkIgnored asks git whether the file is now ignored, by the patterns
+// alone (--no-index), so a line that does not match it is said, never silent.
+func checkIgnored(dir, file string) error {
+	if _, err := gitIn(dir, "check-ignore", "-q", "--no-index", file); err != nil {
+		return fmt.Errorf("git check-ignore does not see %s as ignored", file)
+	}
+	return nil
+}
+
+// gitignoreLiteral is path as a gitignore pattern that matches only itself:
+// the pattern characters [ ] * ? and the backslash escaped. The line begins
+// with "/" and ends in agentbus.json, so neither a leading # or ! nor a
+// trailing space can occur.
+func gitignoreLiteral(path string) string {
+	var b strings.Builder
+	for _, r := range path {
+		if strings.ContainsRune(`[]*?\`, r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // gitIn runs git in dir, bounded, without the caller's GIT_DIR-like

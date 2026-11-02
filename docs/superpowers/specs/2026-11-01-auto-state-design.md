@@ -184,7 +184,11 @@ The file the launch writes, `<folder>/.grok/hooks/agentbus.json`:
 - The file holds this machine's agentbus path, so a `git add -A` must not commit it (master): when the
   folder is in a Git checkout and the file is agentbus's, the launch adds its path from the top
   (`/<sub>/.grok/hooks/agentbus.json`) once to the repository's **local** exclude, `info/exclude` of the
-  common git dir (a linked worktree's included), never a `.gitignore`, which would be committed. A
+  common git dir (a linked worktree's included), never a `.gitignore`, which would be committed. An
+  exclude line is a gitignore pattern, so the path is written escaped (`\` before `[ ] * ? \`; the line
+  starts with `/` and ends in `agentbus.json`, so no leading `#`/`!` nor trailing space can occur) and a
+  path holding a line break is refused (foureyes, reviewer-codex). Then `git check-ignore --no-index`
+  confirms it: a file still not ignored (the project's own `.gitignore` re-including it, say) is said. A
   person's file, identical or not, is never listed. A failed listing only warns, naming the path to keep
   out of commits.
 
