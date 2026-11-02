@@ -109,10 +109,13 @@ type deliverOpts struct {
 }
 
 // deliverRoleCheck reads the manifest the launcher used (ROLES_TOML, else
-// the repository's): only master and docs deliver (forge-delivery answer 3),
-// checked here whatever the command's spelling, beside the tool rules. No
-// manifest: no role holds the deny. A manifest that does not load refuses.
-// Defence in depth, not a boundary: AGENT_BUS_AGENT is the caller's word.
+// the repository's): only a role with delivers = true delivers (master and
+// docs, forge-delivery answer 3), checked here before any git call whatever
+// the command's spelling; the tool rules only echo it. The caller is
+// AGENT_BUS_AGENT, which the identity guard requires inside a herdr pane; a
+// person outside the panes is no role and may. No manifest: no role to
+// refuse. A manifest that does not load refuses. Defence in depth, not a
+// boundary: the bus is no boundary against the local user.
 func deliverRoleCheck(env []string) func(self string) error {
 	return func(self string) error {
 		path, err := manifestPath(env)
@@ -126,12 +129,8 @@ func deliverRoleCheck(env []string) func(self string) error {
 		if err != nil {
 			return fmt.Errorf("cannot read %s to check who delivers: %v", path, err)
 		}
-		ok, err := m.MayDeliver(self)
-		if err != nil {
-			return fmt.Errorf("cannot read %s's rules in %s: %v", self, path, err)
-		}
-		if !ok {
-			return fmt.Errorf("%s may not deliver: only master and docs push and open requests (its tool_rules deny agentbus deliver)", self)
+		if !m.MayDeliver(self) {
+			return fmt.Errorf("%s may not deliver: only a role with delivers = true in %s pushes and opens requests (master and docs)", self, path)
 		}
 		return nil
 	}

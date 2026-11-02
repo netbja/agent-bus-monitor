@@ -570,7 +570,7 @@ func TestDeliverRoleCheckReadsTheManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	shipped := deliverRoleCheck([]string{"ROLES_TOML=" + manifest})
-	if err := shipped("coder"); err == nil || !strings.Contains(err.Error(), "master") {
+	if err := shipped("coder"); err == nil || !strings.Contains(err.Error(), "delivers = true") {
 		t.Errorf("coder: %v", err)
 	}
 	if err := shipped("docs"); err != nil {

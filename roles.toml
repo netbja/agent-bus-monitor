@@ -114,6 +114,8 @@ deny = [
 profile = "claude-sonnet-edits"
 tier = "boot"
 pops = true
+# forge-delivery: master delivers; agentbus deliver refuses every role without delivers = true.
+delivers = true
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 # The person, 2026-10-27: master relaunches this project's dead agents without a prompt.
 # Exact commands only: no other project, no other flag, no wildcard.
@@ -128,13 +130,14 @@ allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent
 profile = "claude-opus"
 tier = "boot"
 skills = ["agent-bus", "tdd", "implement"]
-# Only master and docs deliver (forge-delivery, the person's answer 3): every
-# other role denies the command in its own rules, never in the shared
-# [tool_rules], which would deny master and docs too. The launch adds the
-# spellings after the project's own global flag, with its name
-# (ProjectLaunchRules); never "agentbus * deliver *", which would deny the
-# word in any message. Defence in depth, not a boundary: the client matches
-# command text.
+# Only master and docs deliver (forge-delivery, the person's answer 3): they
+# carry delivers = true, which agentbus deliver itself checks whatever the
+# command's spelling. The rules below only echo it: every other role denies
+# the command in its own rules, never in the shared [tool_rules], which would
+# deny master and docs too; the launch adds the spellings after the project's
+# own global flag, with its name (ProjectLaunchRules); never "agentbus *
+# deliver *", which would deny the word in any message. Defence in depth, not
+# a boundary: the bus is no boundary against the local user.
 [roles.coder.tool_rules]
 deny = ["Bash(agentbus deliver *)"]
 
@@ -183,6 +186,7 @@ deny = ["Bash(agentbus deliver *)"]
 profile = "claude-sonnet-edits"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-docs"]
+delivers = true
 # forge-delivery: docs delivers its pr/<change> branch (push included) once the
 # 4-eyes proof names the head.
 [roles.docs.tool_rules]

@@ -292,11 +292,11 @@ func TestShippedManifestRules(t *testing.T) {
 		}
 		switch role {
 		case "master", "docs":
-			if !slices.Contains(lr.Allow, "Bash(agentbus deliver *)") || slices.ContainsFunc(DeliverDeny, func(r string) bool { return slices.Contains(lr.Deny, r) }) {
+			if !m.MayDeliver(role) || !slices.Contains(lr.Allow, "Bash(agentbus deliver *)") || HoldsDeliverDeny(lr) {
 				t.Errorf("%s does not deliver: %+v", role, lr)
 			}
 		default:
-			if !HoldsDeliverDeny(lr) {
+			if m.MayDeliver(role) || !HoldsDeliverDeny(lr) {
 				t.Errorf("%s may deliver: deny %v", role, lr.Deny)
 			}
 		}
@@ -335,7 +335,7 @@ func TestExampleManifestsDeliverRules(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s %s: %v", file, role, err)
 			}
-			if delivers := role == "master" || role == "docs"; delivers == HoldsDeliverDeny(lr) {
+			if delivers := role == "master" || role == "docs"; delivers == HoldsDeliverDeny(lr) || delivers != m.MayDeliver(role) {
 				t.Errorf("%s: %s deny %v", file, role, lr.Deny)
 			}
 		}
@@ -361,6 +361,9 @@ func TestDeliverDenyMatchesTheCommandNotProse(t *testing.T) {
 		"agentbus --project p deliver b",
 		"agentbus --project=p deliver b",
 		"agentbus -p p deliver b",
+		"agentbus --project p --host h deliver b",
+		"agentbus --project=p --host=h deliver b",
+		"agentbus -p p -H h deliver b",
 	} {
 		if decide(r, cmd) != "deny" {
 			t.Errorf("not denied: %s", cmd)
@@ -390,10 +393,11 @@ func TestDeliverDenyMatchesTheCommandNotProse(t *testing.T) {
 	}
 }
 
-// MayDeliver is the same rule read by agentbus deliver itself, whatever the
-// command's spelling (reviewer-codex: a pattern cannot cover every project
-// name or flag order): a role whose rules deny deliver may not; master, docs
-// and a name that is no role (a person) may.
+// MayDeliver is the rule agentbus deliver reads itself, whatever the
+// command's spelling (reviewer-codex; master: enforce it in the command): a
+// role delivers only with delivers = true; a role without it is refused even
+// with no deny in its rules, so a role added by hand never delivers by
+// default; a name that is no role (a person) may.
 func TestMayDeliver(t *testing.T) {
 	m, err := Load(repoPath(t, "roles.toml"))
 	if err != nil {
@@ -401,9 +405,27 @@ func TestMayDeliver(t *testing.T) {
 	}
 	for role, want := range map[string]bool{"master": true, "docs": true, "charlie": true, "anonymous": true,
 		"coder": false, "foureyes": false, "reviewer-codex": false, "infra": false, "sentinel": false} {
-		got, err := m.MayDeliver(role)
-		if err != nil || got != want {
-			t.Errorf("MayDeliver(%s) = %v, %v; want %v", role, got, err, want)
+		if got := m.MayDeliver(role); got != want {
+			t.Errorf("MayDeliver(%s) = %v, want %v", role, got, want)
+		}
+	}
+	bare, err := Load(writeConfig(t, "[roles.master]\nmodel = \"sonnet\"\npermission = \"acceptEdits\"\ntier = \"boot\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bare.MayDeliver("master") {
+		t.Error("a role without delivers = true may deliver")
+	}
+}
+
+func TestDeliversField(t *testing.T) {
+	head := "[roles.master]\nmodel = \"sonnet\"\npermission = \"acceptEdits\"\ntier = \"boot\"\n"
+	for name, c := range map[string]struct{ body, want string }{
+		"not a boolean": {head + "delivers = \"yes\"\n", "delivers must be a boolean"},
+		"and its deny":  {head + "delivers = true\n[roles.master.tool_rules]\ndeny = [\"Bash(agentbus deliver *)\"]\n", "delivers = true but its tool_rules deny"},
+	} {
+		if _, err := Load(writeConfig(t, c.body)); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, c.want)
 		}
 	}
 }

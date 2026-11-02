@@ -193,14 +193,22 @@ plan page shows `PR #12` or `ref coder/x@a1b2c3d`.
 - **agent-bus** (every reviewer: foureyes, reviewer-codex, …): a verdict on a branch names its
   head, `agentbus verdict --subject <s> --head <sha> …`, the SHA the reviewer read; a new
   commit means a new verdict on its SHA.
-- `roles.toml` (answer 3): `Bash(agentbus deliver *)` allowed in master's and docs' own
-  `tool_rules`; every other shipped role carries in its own rules the deny
-  `Bash(agentbus deliver *)` and `Bash(agentbus * deliver *)` (the global-flag spelling, as
-  busmon-reload-deny does for `reload --as`). Per role, never in the top-level `[tool_rules]`:
+- `roles.toml` (answer 3): `delivers = true` on master and docs, and **deliver checks it
+  itself** before any git call, whatever the command's spelling (`Manifest.MayDeliver`; the
+  manifest from `ROLES_TOML`, else the repository's): a role without it is refused with the
+  reason, a name that is no role (a person outside the agents' panes) may, a manifest that does
+  not load refuses. The tool rules echo it: `Bash(agentbus deliver *)` allowed in master's and
+  docs' own `tool_rules`; every other shipped role denies `Bash(agentbus deliver *)` in its own
+  rules, and the launch adds the spellings after the project's own global flag with its literal
+  name (`--project <p>`, `--project=<p>`, `-p <p>`, each alone or followed by `--host`/`-H`;
+  `ProjectLaunchRules`). Not `Bash(agentbus * deliver *)`, as first written here: its wildcard
+  swallows a message, and agents pass `--project <p>` on every command, so any report saying
+  "deliver" was refused (the reviews of step 6). Per role, never in the top-level `[tool_rules]`:
   a deny merged into every role would also deny master and docs. Defence in depth, not a
-  boundary: the client matches command text, and a person's own shell has no such rule.
-  A role added later carries the deny too (foureyes): `roles draft` writes the two denies into
-  every draft's `tool_rules`, and `roles adopt` refuses a role that lacks them, with its name, unless
+  boundary: the bus is no boundary against the local user (the caller is the
+  `AGENT_BUS_AGENT` its environment states), and the client matches command text only.
+  A role added later carries the deny too (foureyes): `roles draft` writes the deny into
+  every draft's `tool_rules`, and `roles adopt` refuses a role that lacks it, with its name, unless
   the person's answer to the adopt ask names it a delivering role (none but master and docs today).
   A test on the draft and one on adopt hold it, since `TestShippedManifestRules` sees only the
   shipped roles.

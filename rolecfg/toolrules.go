@@ -29,14 +29,36 @@ func (r ToolRules) Empty() bool { return len(r.Allow)+len(r.Ask)+len(r.Deny) == 
 var DeliverDeny = []string{"Bash(agentbus deliver *)"}
 
 // DeliverProjectDenies are agentbus deliver after project's own global flag,
-// each spelling expandArgs reads before a command. Another project's name, or
-// -H/--host before it, is not covered: a residual, as is any wrapper.
+// each spelling expandArgs reads before a command, alone or followed by the
+// host's (a message after --host is caught too: rare, and a residual). Another
+// project's name is not covered: agentbus deliver refuses it itself
+// (MayDeliver), the rule these patterns only echo.
 func DeliverProjectDenies(project string) []string {
-	return []string{
-		"Bash(agentbus --project " + project + " deliver *)",
-		"Bash(agentbus --project=" + project + " deliver *)",
-		"Bash(agentbus -p " + project + " deliver *)",
+	var out []string
+	for _, p := range []string{"--project " + project, "--project=" + project, "-p " + project} {
+		out = append(out, "Bash(agentbus "+p+" deliver *)")
+		for _, h := range []string{"--host *", "--host=*", "-H *"} {
+			out = append(out, "Bash(agentbus "+p+" "+h+" deliver *)")
+		}
 	}
+	return out
+}
+
+// checkDelivers: delivers is a boolean, and a role that delivers does not
+// deny agentbus deliver in its own rules.
+func checkDelivers(role string, info map[string]interface{}, own ToolRules) error {
+	v, exists := info["delivers"]
+	if !exists {
+		return nil
+	}
+	d, ok := v.(bool)
+	if !ok {
+		return fmt.Errorf("role %s: delivers must be a boolean", role)
+	}
+	if d && HoldsDeliverDeny(own) {
+		return fmt.Errorf("role %s: delivers = true but its tool_rules deny agentbus deliver", role)
+	}
+	return nil
 }
 
 // HoldsDeliverDeny: r denies agentbus deliver.
@@ -228,18 +250,17 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 }
 
 // MayDeliver is the rule agentbus deliver reads itself, whatever the
-// command's spelling (reviewer-codex: no pattern covers every project name or
-// flag order): a role whose rules deny agentbus deliver may not; a name that
-// is no role (a person) may.
-func (m *Manifest) MayDeliver(role string) (bool, error) {
-	if _, ok := m.Roles[role]; !ok {
-		return true, nil
+// command's spelling (reviewer-codex, master: no pattern covers every project
+// name or flag order): a role delivers only with delivers = true (master and
+// docs, forge-delivery answer 3), so a role added without it never does; a
+// name that is no role (a person) may.
+func (m *Manifest) MayDeliver(role string) bool {
+	info, ok := asTable(m.Roles[role])
+	if !ok {
+		return true
 	}
-	r, err := m.LaunchRules(role)
-	if err != nil {
-		return false, err
-	}
-	return !HoldsDeliverDeny(r), nil
+	d, _ := info["delivers"].(bool)
+	return d
 }
 
 // ProjectLaunchRules are LaunchRules for a launch in project: a role that

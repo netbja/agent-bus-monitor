@@ -32,6 +32,7 @@ model = "your-kimi-model-alias"
 [roles.master]
 tier = "boot"
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]
+delivers = true
 [roles.master.tool_rules]
 allow = ["Bash(agentbus deliver *)"]
 
@@ -81,5 +82,6 @@ deny = ["Bash(agentbus deliver *)"]
 [roles.docs]
 tier = "pop"
 skills = ["agent-bus", "agent-bus-docs"]
+delivers = true
 [roles.docs.tool_rules]
 allow = ["Bash(agentbus deliver *)"]

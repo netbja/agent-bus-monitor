@@ -158,6 +158,8 @@ func Load(path string) (*Manifest, error) {
 		}
 		if _, _, localRules, err := roleRules(role, info); err != nil {
 			return nil, err
+		} else if err := checkDelivers(role, info, localRules); err != nil {
+			return nil, err
 		} else if version == 1 {
 			rules, err := mergeToolRules(role, m.SharedToolRules, localRules)
 			if err != nil {
@@ -314,7 +316,7 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		}
 		profile["options"] = options
 	} else {
-		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles", "pops", "approval", "tool_rules"), "role "+role+" (move execution fields into a profile)"); err != nil {
+		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles", "pops", "approval", "delivers", "tool_rules"), "role "+role+" (move execution fields into a profile)"); err != nil {
 			return Profile{}, err
 		}
 		profileNameValue, ok := info["profile"]

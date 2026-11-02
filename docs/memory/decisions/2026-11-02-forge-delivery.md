@@ -19,11 +19,18 @@ merge request through the forge's own CLI, else prints the forge's page (link mo
 mode, pushes nothing and leaves the merge to the person.
 
 - **Who.** master, for any delivered task, and the docs agent, for its `pr/<change>` branch. No
-  other role pushes or delivers. The tool rules hold it: `Bash(agentbus deliver *)` allowed in
-  master's and docs' own rules, and every other role carries the denies `Bash(agentbus deliver *)`
-  and `Bash(agentbus * deliver *)` in its own rules (never in the shared top-level rules, which
-  would deny master and docs too). `roles draft` writes the denies into every draft, and
-  `roles adopt` refuses a role without them unless the person's answer names it a delivering role.
+  other role pushes or delivers. **deliver itself enforces it**, before any git call and whatever
+  the command's spelling: only a role with `delivers = true` in `roles.toml` (master and docs) may
+  run it, so a role added without the field never delivers; the caller is `AGENT_BUS_AGENT`, which
+  the identity guard requires inside a herdr pane, and a person outside the agents' panes is no
+  role and may. The tool rules only echo it: `Bash(agentbus deliver *)` allowed in master's and
+  docs' own rules; every other role denies `Bash(agentbus deliver *)` in its own rules (never in
+  the shared ones, which would deny master and docs too), and the launch adds the spellings after
+  the project's own `--project`/`-p` (and a following `--host`/`-H`) with the project's literal
+  name. Never `agentbus * deliver *`: the wildcard swallows a message, and agents write
+  `--project <p>` on every command, so every report mentioning "deliver" would be refused (the
+  reviews of step 6). `roles draft` writes the deny into every draft, and `roles adopt` refuses a
+  role without it unless the person's answer names it a delivering role.
 - **The condition: the proof bound to the head.** deliver resolves the branch to one full SHA `H`
   once, and pushes `H:refs/heads/<branch>` only when the subject's roll-up is approved **and** its
   newest independent approve names `H` (`agentbus verdict --head <sha>`), with no reject after it.
@@ -34,9 +41,11 @@ mode, pushes nothing and leaves the merge to the person.
   asked for is that nothing unreviewed reaches the forge, and that a push needs no hand on every
   delivery. Binding the push to the reviewed SHA gives both. The person keeps the merge: deliver
   never merges, never touches the base, and in local mode pushes and fetches nothing.
-- **Defence in depth, not a boundary.** The client matches command text: another spelling, a
-  wrapper or the person's own shell is not held by the rules. The proof check inside deliver is the
-  condition; the rules keep other agents from reaching for it.
+- **Defence in depth, not a boundary.** The bus is no boundary against the local user: the caller
+  is the `AGENT_BUS_AGENT` an agent's environment states, and an agent that sets another name, or
+  runs `git push` itself, is held by neither check. The client's rules match command text only
+  (another project's name, a wrapper, the person's own shell). The proof check inside deliver is
+  the condition; the role check and the rules keep other agents from reaching for it.
 
 ## When it applies
 
