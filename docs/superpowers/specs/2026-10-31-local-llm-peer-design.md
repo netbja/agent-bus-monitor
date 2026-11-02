@@ -171,7 +171,8 @@ For each cmd entry addressed to it (directive, challenge, reply, request):
 
 The root (security review, SEC-LLM-3) is the project's folder: its template's `working_dir`,
 else the Git top-level of the folder the peer was launched from, never that folder itself
-(`agent-spawn` takes it from its caller), and always an absolute path (a relative one is refused). `/`, `$HOME` and a folder holding `$HOME` are refused
+(`agent-spawn` takes it from its caller), and always an absolute path (a relative one is refused);
+without an absolute `$HOME` the peer does not start (the checks below, and the `~/` denies, need it). `/`, `$HOME` and a folder holding `$HOME` are refused
 at start, since the files tools would then reach every credential the person has. No tool reads
 `.git` (its config can hold a remote URL with a token), asked or reached through a link. A
 checked path is opened from the root one component at a time, following no link (`openat` with
@@ -210,8 +211,8 @@ One check in the dispatcher's health loop, run only when a registered agent has 
 
 - For each endpoint those agents use, the one each resolved from its profile's
   `options.endpoint` and recorded in its snapshot (never another endpoint of the same model),
-  judged for the model the running peer asks for (an endpoint whose model `config.toml` changed
-  since the launch is said): `GET {url}/models`, 2 s deadline, every minute.
+  judged for the model the running peer asks for (an endpoint whose model or URL `config.toml`
+  changed since the launch is said; the peer records a fingerprint of its URL, never the URL): `GET {url}/models`, 2 s deadline, every minute.
 - **ok**: it answers and lists the model. **warn**: it answers without the model (not pulled, or
   another name). **fail**: no answer, or an error status. **unknown**: no config readable, or no
   such agent.
