@@ -804,7 +804,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   An answer is cut under `CmdMaxRunes` with a note, and a reply the bus refuses for good is said, reported and
   acked (never turned again); pane lines carry no control but newline and tab, and neither they nor the answer carry a
   rune that reorders or hides text (`stripFormat`/`hidesText`: the bidi controls, the zero-width space, word joiners, the
-  soft hyphen, the BOM; the joiners, tag characters and Arabic number signs, which carry meaning, stay); errors carry the status, never the
+  soft hyphen, the BOM, the deprecated, annotation, shorthand and musical format controls; the joiners, tag characters and Arabic number signs, which carry meaning, stay); errors carry the status, never the
   endpoint's body; the start's `/models` check has 5 s.
   The client follows no redirect and uses no proxy; only transport errors, 5xx, 408, 429 and 404 are retried
   (`blocked`, the entry kept, every 30 s), any other refusal fails the turn with a reply. Tools: `read_file`,

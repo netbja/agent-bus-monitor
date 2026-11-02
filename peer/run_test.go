@@ -556,4 +556,10 @@ func TestFormatStripKeepsJoiners(t *testing.T) {
 	if got := stripFormat("a\u200bb\u2060c\u202ed\u061ce\u00adf\ufeffg\u2066h\u200fi\u180ej"); got != "abcdefghij" {
 		t.Errorf("the other format runes stay: %q", got)
 	}
+	// foureyes on ba39026: the deprecated format controls, the interlinear
+	// annotation marks, the shorthand and the musical format controls render
+	// invisibly too: each range's first and last go.
+	if got := stripFormat("a\u206ab\u206fc\ufff9d\ufffbe\U0001bca0f\U0001bca3g\U0001d173h\U0001d17ai"); got != "abcdefghi" {
+		t.Errorf("the other format runes stay: %q", got)
+	}
 }
