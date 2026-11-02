@@ -69,7 +69,7 @@ func TestTokensPageGoldens(t *testing.T) {
 
 func pageText(st tokState, agents map[string]*agentState, width int) string {
 	var out []string
-	for _, l := range tokensPage(st, nil, nil, agents, "agent-bus-monitor", shellNow, width, false, barView{}, true) { // a: every agent listed
+	for _, l := range tokensPage(iconsOff, st, nil, nil, agents, "agent-bus-monitor", shellNow, width, false, barView{}, true) { // a: every agent listed
 		out = append(out, l.text())
 	}
 	return strings.Join(out, "\n")
@@ -136,25 +136,50 @@ func TestTokensSparkRules(t *testing.T) {
 // The page stays inside the reader at every alignment size and hostile name.
 func TestTokensPageAlignment(t *testing.T) {
 	pinLocal(t)
-	for _, sz := range shellAlignSizes {
-		m := hostileShell(t, sz[0], sz[1], false)
-		if m.layout.Tier == TierTooSmall {
-			continue
+	for _, icons := range []string{iconsOff, iconsNerd, iconsFont} { // busmon-icons §5: every mode
+		for _, sz := range shellAlignSizes {
+			m := hostileShell(t, sz[0], sz[1], false)
+			if m.layout.Tier == TierTooSmall {
+				continue
+			}
+			m.cfg.settings.Icons = icons
+			withIconTeam(m.snap.agents)
+			st := tokFixtureState(shellNow)
+			st.projects = append(st.projects, tokProject{name: "p-" + hostileText, known: true, days: map[string]bus.TokenRow{}})
+			m.snap.tok = st
+			m = keys(t, m, 'U')
+			if !m.rd.open() {
+				continue
+			}
+			g := m.grid()
+			r := m.readerRect()
+			checkFrameAt(t, func(x, y int) string { return g.at(x, y).text }, fmt.Sprintf("tokens page %s %dx%d", icons, sz[0], sz[1]), r, true)
+			for _, l := range m.rd.top().body {
+				if l.Width() > r.W-2 {
+					t.Errorf("%s %dx%d: a body line is %d cells in a %d-cell reader", icons, sz[0], sz[1], l.Width(), r.W-2)
+					break
+				}
+			}
+			checkReaderIconPairs(t, fmt.Sprintf("tokens page %s %dx%d", icons, sz[0], sz[1]), g, r)
 		}
-		st := tokFixtureState(shellNow)
-		st.projects = append(st.projects, tokProject{name: "p-" + hostileText, known: true, days: map[string]bus.TokenRow{}})
-		m.snap.tok = st
-		m = keys(t, m, 'U')
-		if !m.rd.open() {
-			continue
-		}
-		g := m.grid()
-		r := m.readerRect()
-		checkFrameAt(t, func(x, y int) string { return g.at(x, y).text }, fmt.Sprintf("tokens page %dx%d", sz[0], sz[1]), r, true)
-		for _, l := range m.rd.top().body {
-			if l.Width() > r.W-2 {
-				t.Errorf("%dx%d: a body line is %d cells in a %d-cell reader", sz[0], sz[1], l.Width(), r.W-2)
-				break
+	}
+}
+
+// checkReaderIconPairs: every icon in the reader is followed by its blank
+// cell, the pair inside the reader's frame, never against its border.
+func checkReaderIconPairs(t *testing.T, name string, g *grid, r Rect) {
+	t.Helper()
+	icon := map[string]bool{}
+	for _, c := range IconGlyphs {
+		icon[c] = true
+	}
+	for y := r.Y; y < r.Y+r.H; y++ {
+		for x := r.X; x < r.X+r.W; x++ {
+			if !icon[g.at(x, y).text] {
+				continue
+			}
+			if x <= r.X || x+1 >= r.X+r.W-1 || g.at(x+1, y).text != " " {
+				t.Errorf("%s: the icon pair at %d,%d is split or against the border", name, x, y)
 			}
 		}
 	}
@@ -280,12 +305,12 @@ func TestTokensSkeletonAndFadeSchedule(t *testing.T) {
 		t.Error("the skeleton outlived its 2 minutes")
 	}
 	// Rendered after the window: the open project reads ? with its reason, no shimmer.
-	page := linesText(tokensPage(later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}, false))
+	page := linesText(tokensPage(iconsOff, later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}, false))
 	if strings.Contains(page, "first reading pending") || !strings.Contains(page, "agent-bus-monitor") || !strings.Contains(page, "?") || !strings.Contains(page, "not read yet") {
 		t.Errorf("after the window:\n%s", page)
 	}
 	later.snap.tok = tokState{polled: true, projects: []tokProject{{name: "agent-bus-monitor"}}}
-	page = linesText(tokensPage(later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}, false))
+	page = linesText(tokensPage(iconsOff, later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}, false))
 	if !strings.Contains(page, "no tokens recorded") || strings.Contains(page, "first reading pending") {
 		t.Errorf("after the window, no key:\n%s", page)
 	}
@@ -324,7 +349,7 @@ func TestTokensPageProvidersInTheirColours(t *testing.T) {
 	w := []bus.BudgetWindow{{Name: "5h", UsedPct: 40, ObservedAt: 1}}
 	budgets := map[string]bus.BudgetSnapshot{"anthropic": {Windows: w}, "openai": {Windows: w}, "acme": {Windows: w}}
 	roles := map[string]map[Role]bool{}
-	for _, l := range tokensPage(tokFixtureState(shellNow), budgets, nil, agents, "agent-bus-monitor", shellNow, 120, false, barView{}, true) {
+	for _, l := range tokensPage(iconsOff, tokFixtureState(shellNow), budgets, nil, agents, "agent-bus-monitor", shellNow, 120, false, barView{}, true) {
 		for _, s := range l {
 			// A segment of the text role merges with its neighbours: key it by
 			// the provider name it starts with.

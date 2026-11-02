@@ -253,3 +253,63 @@ func TestHeaderGaugeIcons(t *testing.T) {
 		}
 	}
 }
+
+// busmon-icons §5: the U page in each mode at 80 and 120 cells (Accounts rows
+// by provider, the Agents zone by client then provider).
+func TestIconTokensGoldens(t *testing.T) {
+	pinLocal(t)
+	for _, mode := range []string{iconsNerd, iconsFont} {
+		for _, size := range [][2]int{{80, 44}, {120, 44}} {
+			t.Run(fmt.Sprintf("%s-%dx%d", mode, size[0], size[1]), func(t *testing.T) {
+				withPalette(t, "dark", false, 1<<24)
+				m := iconShell(t, size[0], size[1], mode)
+				m.snap.tok = tokFixtureState(shellNow)
+				m = keys(t, m, 'U')
+				if !m.rd.open() || m.rd.top().kind != ovTokens {
+					t.Fatal("U opened no tokens page")
+				}
+				m.paint = newPainter(th)
+				checkGolden(t, fmt.Sprintf("tokens-%dx%d-%s.txt", size[0], size[1], mode), m.grid().plain()+"\n")
+			})
+		}
+	}
+}
+
+// busmon-icons §4: with icons, every U page line still fits its width (the
+// account form chosen with the pair's two cells counted), and below 80 cells
+// (the narrow tier) the page has no icon column.
+func TestTokensPageIconsFit(t *testing.T) {
+	pinLocal(t)
+	at := shellNow.UnixMilli()
+	win := func(n string, pct float64, reset int64) bus.BudgetWindow {
+		return bus.BudgetWindow{Name: n, UsedPct: pct, ObservedAt: at, ResetsAt: shellNow.Unix() + reset}
+	}
+	full := map[string]bus.BudgetSnapshot{ // every window with a reset: each cell as wide as its form
+		"anthropic": {Windows: []bus.BudgetWindow{win("5h", 62, 4*3600), win("7d", 55, 43*3600)}},
+		"openai":    {Windows: []bus.BudgetWindow{win("5h", 100, 3600), win("7d", 23, 61*3600)}},
+	}
+	holds := map[string]int64{"openai": shellNow.Add(40 * time.Minute).Unix()}
+	for _, budgets := range []map[string]bus.BudgetSnapshot{shellFixture(shellNow).budgets, full} {
+		for _, mode := range []string{iconsNerd, iconsFont} {
+			for width := 40; width <= 220; width++ {
+				for _, l := range tokensPage(mode, tokFixtureState(shellNow), budgets, holds, nil, "agent-bus-monitor", shellNow, width, false, barView{}, true) {
+					if l.Width() > width {
+						t.Fatalf("%s at %d: a line is %d cells: %q", mode, width, l.Width(), l.text())
+					}
+				}
+			}
+		}
+	}
+	m := iconShell(t, 60, 40, iconsNerd)
+	m.snap.tok = tokFixtureState(shellNow)
+	if m = keys(t, m, 'U'); !m.rd.open() {
+		t.Skip("no tokens page at 60 cells")
+	}
+	for _, l := range m.rd.top().body {
+		for _, g := range IconGlyphs {
+			if strings.Contains(l.text(), g) {
+				t.Fatalf("an icon below 80 cells: %q", l.text())
+			}
+		}
+	}
+}

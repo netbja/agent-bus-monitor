@@ -128,8 +128,10 @@ func tokCount(n int64) string {
 	return fmt.Sprintf("%.1fM", float64(n)/1e6)
 }
 
-// tokensPage is the U page's body at width cells.
-func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[string]int64, agents map[string]*agentState,
+// tokensPage is the U page's body at width cells. icons is display.icons, off
+// below 80 cells (the caller's tier): an account row's provider and an agent
+// row's provider carry their icon pair, the trailing room paying (busmon-icons §7.3).
+func tokensPage(icons string, st tokState, budgets map[string]bus.BudgetSnapshot, holds map[string]int64, agents map[string]*agentState,
 	project string, now time.Time, width int, pending bool, bars barView, all bool) []Line {
 	var b body
 	// pending: the first reading is on its way (tokensSkeleton): a shimmering
@@ -152,6 +154,10 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 		return gaugeSegs(float64(v)*100/float64(max), barW, RoleOK, false)
 	}
 
+	iconW := 0
+	if icons != iconsOff && icons != "" {
+		iconW = 2
+	}
 	head("Accounts")
 	provs := make([]string, 0, len(budgets))
 	for p := range budgets {
@@ -170,13 +176,13 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 	}
 	form := accountForms[len(accountForms)-1]
 	for _, f := range accountForms {
-		if 2+10+1+most*f.width()+(most-1)*3 <= width {
+		if 2+iconW+10+1+most*f.width()+(most-1)*3 <= width {
 			form = f
 			break
 		}
 	}
 	perRow := most
-	if 2+10+1+most*form.width()+(most-1)*3 > width {
+	if 2+iconW+10+1+most*form.width()+(most-1)*3 > width {
 		perRow = 1
 	}
 	for _, p := range provs {
@@ -186,7 +192,11 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 				if i > 0 {
 					b.text("\n")
 				}
-				b.text("  ").seg(providerRole(p, RoleText), Fit(Preview(p), 10)).text(" ")
+				b.text("  ")
+				if iconW > 0 { // an account is keyed by provider in every mode
+					b.segs(iconPair(providerIcon(icons, p), p))
+				}
+				b.seg(providerRole(p, RoleText), Fit(Preview(p), 10)).text(" ")
 			} else {
 				b.text("   ")
 			}
@@ -289,7 +299,7 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 
 	agentsHead := "Agents, " + Preview(project)
 	b.segs(Seg{Text: agentsHead, Role: RoleText, Bold: true}). // the columns over in and out: name 16, provider 10
-									seg(RoleMuted, strings.Repeat(" ", max(1, 2+16+1+10-Width(agentsHead)))+fmt.Sprintf(" %8s %8s", "in", "out")).text("\n")
+									seg(RoleMuted, strings.Repeat(" ", max(1, 2+16+1+iconW+10-Width(agentsHead)))+fmt.Sprintf(" %8s %8s", "in", "out")).text("\n")
 	var open tokProject
 	for _, p := range st.projects {
 		if p.name == project {
@@ -317,6 +327,18 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 			maxAgent, top = *r.In+*r.Out, r.Agent
 		}
 	}
+	// provider is an agent row's provider cell: its icon pair (the client's
+	// logo, else the provider's, as on the Agents rows) and its name.
+	provider := func(r tokens.AgentRow) {
+		if iconW > 0 {
+			client := ""
+			if a := agents[r.Agent]; a != nil {
+				client = a.client
+			}
+			b.segs(iconPair(agentIcon(icons, client, r.Provider), r.Provider))
+		}
+		b.seg(providerRole(r.Provider, RoleMuted), Fit(Preview(r.Provider), 10))
+	}
 	var folded []string // the short reasons of the rows a folds, in order
 	foldedN := map[string]int{}
 	for _, r := range rows {
@@ -329,13 +351,15 @@ func tokensPage(st tokState, budgets map[string]bus.BudgetSnapshot, holds map[st
 				foldedN[why]++
 				continue
 			}
-			b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ").seg(providerRole(r.Provider, RoleMuted), Fit(Preview(r.Provider), 10)).
-				seg(RoleMuted, fmt.Sprintf(" %8s %8s  ", "?", "?")).seg(RoleMuted, Preview(why)).text("\n")
+			b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ")
+			provider(r)
+			b.seg(RoleMuted, fmt.Sprintf(" %8s %8s  ", "?", "?")).seg(RoleMuted, Preview(why)).text("\n")
 			continue
 		}
 		bold := r.Agent == top
-		b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ").seg(providerRole(r.Provider, RoleMuted), Fit(Preview(r.Provider), 10)).
-			segs(Seg{Text: fmt.Sprintf(" %8s", tokCount(*r.In)), Role: RoleText, Bold: bold}).text(fmt.Sprintf(" %8s", tokCount(*r.Out))).
+		b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ")
+		provider(r)
+		b.segs(Seg{Text: fmt.Sprintf(" %8s", tokCount(*r.In)), Role: RoleText, Bold: bold}).text(fmt.Sprintf(" %8s", tokCount(*r.Out))).
 			text("  ").segs(relBar(*r.In+*r.Out, maxAgent)...).text("\n")
 	}
 	for _, why := range folded {

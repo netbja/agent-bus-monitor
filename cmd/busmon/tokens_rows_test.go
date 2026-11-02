@@ -31,7 +31,7 @@ func tokAccounts(width int, holds map[string]int64) []string {
 		"xai":       {Windows: []bus.BudgetWindow{w("weekly", 34, 48*3600)}},
 	}
 	var out []string
-	for _, l := range tokensPage(tokFixtureState(shellNow), budgets, holds, nil, "agent-bus-monitor", shellNow, width, false, barView{}, false) {
+	for _, l := range tokensPage(iconsOff, tokFixtureState(shellNow), budgets, holds, nil, "agent-bus-monitor", shellNow, width, false, barView{}, false) {
 		if l.Width() > width {
 			out = append(out, "TOO WIDE: "+l.text())
 		}
