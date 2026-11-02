@@ -198,14 +198,22 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, strings.Join(values, "\n"))
 		return nil
 	case "template":
+		var team []rolecfg.TeamRole
+		if n := len(rest); n >= 2 && rest[n-2] == "--roles" { // agentbus-start: a team, role[:profile],...
+			t, err := m.ParseTeam(rest[n-1])
+			if err != nil {
+				return err
+			}
+			team, rest = t, rest[:n-2]
+		}
 		if len(rest) != 6 && len(rest) != 7 {
-			return errors.New("usage: template <project> <cwd> <scripts> <repo> <0|1 dispatch> <0|1 missions> [<busmon --as name>]")
+			return errors.New("usage: template <project> <cwd> <scripts> <repo> <0|1 dispatch> <0|1 missions> [<busmon --as name>] [--roles <role[:profile],...>]")
 		}
 		as := ""
 		if len(rest) == 7 {
 			as = rest[6]
 		}
-		fmt.Fprint(stdout, rolecfg.Template(m, path, rest[0], rest[1], rest[2], rest[3], as, rest[4] == "1", rest[5] == "1"))
+		fmt.Fprint(stdout, rolecfg.TemplateTeam(m, path, rest[0], rest[1], rest[2], rest[3], as, rest[4] == "1", rest[5] == "1", team))
 		return nil
 	}
 	return errors.New("unknown action")

@@ -117,6 +117,7 @@ var foreignFlags = []string{
 	"--settings", "--target-pane", "--version", "--workspace", "--model",
 	"--source", "--agent", "--seq", // herdr pane report-agent-session
 	"--get-regexp", // git config, the github check's remote read
+	"--roles",      // roles template's team, the argv bootstrap builds (agentbus-start)
 }
 
 // Every flag an agentbus command reads (a "--x" literal in a non-test file of

@@ -101,6 +101,15 @@ out="$(cd "$project" && bash -c "$cmd" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "the generated tab command runs"
 assert_contains "$out" "ROLES_TOML=$manifest" "and launches with the selected manifest"
 
+# bootstrap --roles writes only that team; an unknown role is refused and no template is left behind
+out="$(AGENTBUS_PROJECTS_DIR="$root/templates" "$REPO/scripts/bootstrap" new team1 "$project" --roles coder 2>&1)"; rc=$?
+assert_eq "$rc" "0" "bootstrap --roles coder exits 0"
+assert_contains "$(cat "$root/templates/team1.toml")" 'name = "coder"' "the team's role has its tab"
+out="$(AGENTBUS_PROJECTS_DIR="$root/templates" "$REPO/scripts/bootstrap" new team2 "$project" --roles ghost 2>&1)"; rc=$?
+assert_eq "$([[ "$rc" != 0 ]] && echo refused || echo ran)" "refused" "bootstrap --roles ghost is refused"
+assert_contains "$out" "ghost is not a boot role" "with the rule"
+assert_eq "$([[ -e "$root/templates/team2.toml" ]] && echo yes || echo no)" "no" "and leaves no template"
+
 # Skill links: preflight before any write, never over a real directory, idempotent, per client
 export SKILLS_DEST="$root/fresh-dest"; rm -f "$root/skills/test-skill/user-file"
 config claude-code '[roles.reviewer]
