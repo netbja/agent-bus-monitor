@@ -498,3 +498,64 @@ func TestSwapClosesAnInterruptedReloadAsAReload(t *testing.T) {
 		t.Fatalf("swaps: %d %q", code, out.String())
 	}
 }
+
+// withTemplate gives the swap world a project template that runs foureyes on
+// profile (start's client choice): its own profile in this project.
+func withTemplate(t *testing.T, w *swapWorld, d swapDeps, profile string) swapDeps {
+	t.Helper()
+	projects := t.TempDir()
+	tpl := "name = \"x\"\nworking_dir = \"/w\"\n\n[[tabs]]\nname = \"foureyes\"\ncommand = \"/r/scripts/agent-launch foureyes " + w.b.Project() + " --profile " + profile + "\"\n"
+	if err := os.WriteFile(filepath.Join(projects, w.b.Project()+".toml"), []byte(tpl), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := d.Env
+	d.Env = func(k string) string {
+		if k == "AGENTBUS_PROJECTS_DIR" {
+			return projects
+		}
+		return env(k)
+	}
+	return d
+}
+
+// With foureyes on opus by its template, roles.toml's own profile (review) is
+// a target like a fallback, without --force; the fallback record and a
+// failure's recovery name the project's own profile (spec, the reader table).
+func TestSwapReadsTheTemplatesOwnProfile(t *testing.T) {
+	w, d := newSwapWorld(t)
+	d = withTemplate(t, w, d, "opus")
+	if code, out := w.swap(d, "foureyes", "--profile", "review"); code != 0 {
+		t.Fatalf("to roles.toml's own profile: exit %d, %q", code, out)
+	}
+	fb, err := w.b.Fallbacks(context.Background())
+	if err != nil || fb["foureyes"].OwnProfile != "opus" || fb["foureyes"].Profile != "review" {
+		t.Fatalf("fallback record = %+v, %v", fb["foureyes"], err)
+	}
+
+	w, d = newSwapWorld(t)
+	d = withTemplate(t, w, d, "opus")
+	w.spawnFn = func(string, string) error { return errors.New("spawn failed") }
+	if code, out := w.swap(d, "foureyes", "--profile", "review"); code == 0 || !strings.Contains(out, "agent-spawn foureyes "+w.b.Project()+" --profile opus") {
+		t.Fatalf("recovery: exit %d, %q", code, out)
+	}
+}
+
+// A fallback on the provider of the project's own profile would be held with
+// it: refused without --force (checkFallbacks only compares with roles.toml's).
+func TestSwapRefusesTheOwnProfilesProvider(t *testing.T) {
+	w, d := newSwapWorld(t)
+	path := filepath.Join(t.TempDir(), "roles.toml")
+	manifest := strings.Replace(swapManifest, `fallback_profiles = ["opus"]`, `fallback_profiles = ["opus", "sonnet"]`, 1) +
+		"[profiles.sonnet]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"sonnet\"\noptions = { permission = \"manual\" }\n"
+	if err := os.WriteFile(path, []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d.Manifest = func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }
+	d = withTemplate(t, w, d, "opus")
+	if code, out := w.swap(d, "foureyes", "--profile", "sonnet"); code == 0 || !strings.Contains(out, "it would be held with it") {
+		t.Fatalf("same provider as its own: exit %d, %q", code, out)
+	}
+	if w.closed() {
+		t.Fatal("a refused swap closed the pane")
+	}
+}

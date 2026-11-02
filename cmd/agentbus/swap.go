@@ -118,14 +118,22 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	if _, ok := m.Roles[role]; !ok {
 		return fail("unknown role in ROLES_TOML")
 	}
-	own, err := m.Resolve(role)
+	// Its own profile is the project's (its template tab's --profile, else
+	// roles.toml's: ownProfile); the targets are roles.toml's own profile and
+	// its fallback_profiles, so a role whose client the project chose can go
+	// back to roles.toml's without --force (spec, the reader table).
+	own, err := ownProfile(m, d.Env, b.Project(), role)
+	if err != nil {
+		return fail("%v", err)
+	}
+	manifestOwn, err := m.Resolve(role)
 	if err != nil {
 		return fail("%v", err)
 	}
 	if back {
 		profile = own.Profile
 	}
-	allowed := profile == own.Profile
+	allowed := profile == own.Profile || profile == manifestOwn.Profile
 	for _, f := range m.Fallbacks(role) {
 		allowed = allowed || f == profile
 	}
@@ -136,6 +144,12 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	target, err := m.ResolveWith(role, profile)
 	if err != nil {
 		return fail("profile %s: %v", profile, err)
+	}
+	// checkFallbacks holds fallbacks to another provider than roles.toml's
+	// profile; against the project's own one a target may share its provider,
+	// and would be held with it.
+	if profile != own.Profile && target.Provider == own.Provider && !force {
+		return fail("profile %s draws on %s, as its own profile %s: it would be held with it; --force accepts it", profile, own.Provider, own.Profile)
 	}
 	if !allowed {
 		fmt.Fprintf(errw, "notice: --force: %s is not a fallback of %s\n", profile, role)
@@ -233,6 +247,9 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	}
 	defer end()
 	recovery := fmt.Sprintf("recover with: agent-spawn %s %s (its own profile, %s)", role, b.Project(), own.Profile)
+	if own.Profile != manifestOwn.Profile { // the project's own profile, not roles.toml's
+		recovery = fmt.Sprintf("recover with: agent-spawn %s %s --profile %s (its own profile)", role, b.Project(), own.Profile)
+	}
 	// With the intent written, no request or challenge opens on it any more
 	// (refuseWhileSwapping): look again for what opened since the first scan.
 	if code := openWork(ctx, b, role, func(f string, a ...any) int { return failed("open work", f, a...) }); code != 0 {
