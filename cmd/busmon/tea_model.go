@@ -56,6 +56,12 @@ type shellConfig struct {
 	liveFrom time.Time
 	// histDir is the history archive on this host ("" = none: live streams only).
 	histDir string
+	// The settings page (C): the environment its config.toml is found and
+	// resolved through (nil = none: a test reads no file), busmon's flags
+	// (read-only rows), and how a theme applies at once (nil = next start).
+	getenv  func(string) string
+	flags   settingsFlags
+	retheme func(name string) (*Theme, error)
 }
 
 // uiState is the person's place on the screen.
@@ -237,6 +243,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.refresh()
 	case recapMsg:
 		m.gotRecap(msg)
+	case settingsMsg:
+		m.gotSettings(msg)
 	case cacheSavedMsg:
 		if msg.err != nil && m.cfg.st != nil {
 			m.cfg.st.mu.Lock()

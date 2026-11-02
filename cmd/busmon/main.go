@@ -353,9 +353,10 @@ func main() {
 		fmt.Println("busmon version " + buildinfo.Version)
 		return
 	}
-	settings := loadBusmonSettings(os.Getenv, settingsFlags{
+	flags := settingsFlags{
 		LimitSet: set["limit"], Limit: opts.limit, Theme: ifSet(set["theme"], opts.theme), As: ifSet(set["as"], opts.as),
-	})
+	}
+	settings := loadBusmonSettings(os.Getenv, flags)
 	// --pick chooses the project, so like --list it must run before the
 	// project-required exit, and before --reset and --delete: a picker never
 	// purges or deletes, whatever else is on the line. It needs only the
@@ -480,7 +481,10 @@ func main() {
 	// the model; the poll runs in its commands, the tail is fed in below.
 	shell := newShell(shellConfig{ctx: ctx, liveFrom: time.Now(), reader: b, w: b, st: st, project: project, self: self,
 		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour,
-		docker: realSvcRunner, brokerHost: opts.host, histDir: historyDirOf(project)})
+		docker: realSvcRunner, brokerHost: opts.host, histDir: historyDirOf(project),
+		getenv: os.Getenv, flags: flags, retheme: func(name string) (*Theme, error) { // as at the start, with the page's choice
+			return ResolveTheme(name, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
+		}})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up
