@@ -27,7 +27,7 @@ func TestReceiverBoundaryKeepsRuleTwo(t *testing.T) {
 
 	stop := make(chan struct{})
 	var mu sync.Mutex
-	var samples, unarmed int
+	var samples, unarmed, waiting int
 	var bad []Decision
 	done := make(chan struct{})
 	go func() {
@@ -47,8 +47,11 @@ func TestReceiverBoundaryKeepsRuleTwo(t *testing.T) {
 				if !armed {
 					unarmed++
 				}
-				if o.Wakes() && d.Rule != 2 {
-					bad = append(bad, d)
+				if o.Wakes() {
+					waiting++
+					if d.Rule != 2 {
+						bad = append(bad, d)
+					}
 				}
 				mu.Unlock()
 			}
@@ -63,7 +66,19 @@ func TestReceiverBoundaryKeepsRuleTwo(t *testing.T) {
 	if _, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "at the boundary"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(20 * time.Millisecond) // the poller sees the waiting entry before delivery takes it
+	// Delivery waits until the poller has judged the waiting entry (no fixed
+	// sleep: a loaded machine only makes this slower).
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
+		mu.Lock()
+		seen := waiting
+		mu.Unlock()
+		if seen > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the poller never saw the entry waiting")
+		}
+	}
 	if err := r.Deliver("0", func(e bus.Event) (bool, error) { got = append(got, e.Message); return true, nil }); err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +90,7 @@ func TestReceiverBoundaryKeepsRuleTwo(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if samples < 5 || unarmed != 0 || len(bad) != 0 {
-		t.Fatalf("%d samples, %d unarmed, decisions other than rule 2: %+v", samples, unarmed, bad)
+	if waiting == 0 || unarmed != 0 || len(bad) != 0 {
+		t.Fatalf("%d samples (%d with the entry waiting), %d unarmed, decisions other than rule 2: %+v", samples, waiting, unarmed, bad)
 	}
 }
