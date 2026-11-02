@@ -103,10 +103,22 @@ can be stale by the time master acts):
    `ClosePane`**: the same predicate and episode again, the last one reading a fresh observation
    so that a pane the person has just focused is not closed. A change is a `failed` ledger entry
    (`step: popdone`, the reason), the intent ended, nothing closed.
+
+   From the `begin` on, `{p}:swap:<role>` holds retire's **own** intent, which condition 8 would
+   read as "a swap holds it" (reviewer-codex, on 9a95873). So `retire --forget` writes an intent
+   it can recognise exactly: `SwapIntent` gains `Kind = "retire"` (`SwapKindRetire`, beside
+   `SwapKindReload`; the dispatcher's swap rules apply unchanged, as for a reload) and `Nonce`, 16
+   random bytes in hex drawn by this run. The run keeps the intent's exact JSON as it wrote it, and
+   `ReadPopFacts` takes it as `OwnIntent`: condition 8 passes on a stored intent **byte-equal** to
+   `OwnIntent`, and fails on any other (a swap, a reload, another retire, or this role's intent
+   rewritten), on no intent where one is expected (it lapsed: `PX 180000`), and on a valid
+   hand-off whatever the intent. Check 1, before the `begin`, passes no `OwnIntent`, so any
+   intent there refuses. The ledger's `begin` and `retired` entries are unchanged (`kind` stays
+   empty for a retire, as today).
 3. **After the pid is proven gone**: the forget is **one Lua script**, `Bus.ForgetIfClear(role)`,
    never a read followed by a delete, because work can arrive between any read and the delete. In
-   one script it checks that retire's own swap intent `{p}:swap:<role>` still holds (else it
-   changes nothing), then reads, for the role: the consumer group's pending count (`XPENDING`),
+   one script it checks that `{p}:swap:<role>` still holds retire's own intent, byte-equal to
+   `OwnIntent` (else it changes nothing), then reads, for the role: the consumer group's pending count (`XPENDING`),
    the addressed waking entries after its `last-delivered-id` (`XRANGE` from there,
    `target == role` and `wake != no`, the rule `Obligation` uses), its open ask (`open:<role>` in
    `{p}:asks`), a board task it owns not `done` (`{p}:board`), and its gate key. If all are empty
@@ -250,6 +262,12 @@ Both in the registry (`config/keys.go`, group Services), env `AGENT_BUS_POP_RETI
   notice does not hold it; a pending (delivered, unacknowledged) entry holds it; an open ask, an
   owned task not `done` and an open gate each hold it; no swap intent (ended or another's) holds
   it; all empty deletes the registration keys and keeps the group with its last-delivered id.
+- Own intent (reviewer-codex): after the `begin`, with retire's own intent stored, checks 2 and
+  the script pass condition 8 and the retire completes; the same intent with another `Nonce`, a
+  swap's or a reload's intent, a lapsed intent, or a valid hand-off fails condition 8 (`PopDone`
+  table rows, plus one end-to-end case through `swapDeps` that rewrites the intent between the
+  `begin` and `ClosePane`: a `failed` entry, nothing closed); check 1 with any intent present
+  refuses.
 - No replay (foureyes): directives handled by the pop, then `retire --forget`, then a spawn of the
   role (`EnsureGroup` through its first status): `subscribe --drain` prints nothing from before the
   retire; a directive sent after the retire is printed.
