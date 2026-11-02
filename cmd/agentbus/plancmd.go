@@ -131,7 +131,8 @@ func planLoad(ctx context.Context, b *bus.Bus, repo, ref string) (string, error)
 
 // shortRef is <branch>@<sha> with the sha cut to 7, as git shows it.
 func shortRef(ref string) string {
-	if branch, sha, ok := strings.Cut(ref, "@"); ok && len(sha) > 7 {
+	if i := strings.LastIndex(ref, "@"); i >= 0 && len(ref)-i-1 > 7 { // the sha follows the last "@"
+		branch, sha := ref[:i], ref[i+1:]
 		return branch + "@" + sha[:7]
 	}
 	return ref

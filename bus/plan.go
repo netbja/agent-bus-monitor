@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/config"
 	"strings"
 
 	"github.com/redis/go-redis/v9"
@@ -133,8 +134,12 @@ func (b *Bus) PlanLink(ctx context.Context, task string, pr int) error {
 // a delivery that opened no PR (forge-delivery: link and local modes); it
 // replaces a PR link, as a later PR link replaces it.
 func (b *Bus) PlanLinkRef(ctx context.Context, task, ref string) error {
-	branch, sha, ok := strings.Cut(ref, "@")
-	if !ok || branch == "" || len(branch) > 255 || strings.ContainsFunc(branch, func(r rune) bool { return r <= ' ' || r == 0x7f }) || !ValidHead(sha) {
+	i := strings.LastIndex(ref, "@") // a branch may hold "@": the sha follows the last one
+	if i < 0 {
+		return fmt.Errorf("a ref is <branch>@<full commit sha>, not %q", ref)
+	}
+	branch, sha := ref[:i], ref[i+1:]
+	if len(branch) > 255 || !config.ValidBranchName(branch) || !ValidHead(sha) {
 		return fmt.Errorf("a ref is <branch>@<full commit sha>, not %q", ref)
 	}
 	return b.planFact(ctx, task, "ref", ref)

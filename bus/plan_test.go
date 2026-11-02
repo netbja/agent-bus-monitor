@@ -163,7 +163,12 @@ func TestPlanLinkRef(t *testing.T) {
 	if f := facts["a"]; f.PR != 8 || f.Ref != "" {
 		t.Fatalf("after --pr: %+v", f)
 	}
-	for _, bad := range []string{"coder/a", "@" + sha, "coder/a@abc", "co der@" + sha, "coder/a@" + sha + "\n"} {
+	// A branch holding "@" is legal: the ref splits on its last one (reviewer-codex).
+	if err := b.PlanLinkRef(ctx, "a", "coder/a@b@"+sha); err != nil {
+		t.Fatalf("a branch with @: %v", err)
+	}
+	for _, bad := range []string{"coder/a", "@" + sha, "coder/a@abc", "co der@" + sha, "coder/a@" + sha + "\n",
+		"feature/foo?bar@" + sha, "a..b@" + sha, "x.lock@" + sha, "HEAD@" + sha} {
 		if err := b.PlanLinkRef(ctx, "a", bad); err == nil {
 			t.Errorf("ref %q accepted", bad)
 		}
