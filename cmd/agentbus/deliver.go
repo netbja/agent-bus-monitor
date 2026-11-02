@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -112,18 +113,41 @@ type deliverOpts struct {
 // the repository's): only a role with delivers = true delivers (master and
 // docs, forge-delivery answer 3), checked here before any git call whatever
 // the command's spelling; the tool rules only echo it. The caller is
-// AGENT_BUS_AGENT, which the identity guard requires inside a herdr pane; a
-// person outside the panes is no role and may. No manifest: no role to
-// refuse. A manifest that does not load refuses. Defence in depth, not a
-// boundary: the bus is no boundary against the local user.
+// AGENT_BUS_AGENT, which the identity guard requires inside a herdr pane.
+// Defence in depth, not a boundary: the bus is no boundary against the local
+// user.
 func deliverRoleCheck(env []string) func(self string) error {
+	path, _ := manifestPath(env)
+	return deliverRoleCheckFrom(env, path)
+}
+
+// deliverRoleCheckFrom fails closed (reviewer-codex): a manifest named by
+// ROLES_TOML or AGENTBUS_REPO that cannot be read or loaded refuses anyone;
+// with none configured, the one found at path is read, and if there is none
+// an agent in a herdr pane is refused while a person outside the panes may.
+func deliverRoleCheckFrom(env []string, path string) func(self string) error {
 	return func(self string) error {
-		path, err := manifestPath(env)
-		if err != nil {
-			return nil
+		explicit := false
+		for _, k := range []string{"ROLES_TOML", "AGENTBUS_REPO"} {
+			if v, ok := lookupEnv(env, k); ok && v != "" {
+				explicit = true
+			}
 		}
-		if _, err := os.Stat(path); err != nil {
-			return nil
+		if path == "" {
+			if explicit {
+				return errors.New("cannot read the manifest ROLES_TOML or AGENTBUS_REPO names, to check who delivers")
+			}
+		} else if _, err := os.Stat(path); err != nil {
+			if explicit {
+				return fmt.Errorf("cannot read %s to check who delivers: %v", path, err)
+			}
+			path = ""
+		}
+		if path == "" {
+			if pane, ok := lookupEnv(env, "HERDR_PANE_ID"); ok && pane != "" {
+				return fmt.Errorf("cannot read a roles.toml to check that %s delivers (set ROLES_TOML); an agent's pane never delivers unchecked", self)
+			}
+			return nil // a person outside the agents' panes
 		}
 		m, err := rolecfg.Load(path)
 		if err != nil {

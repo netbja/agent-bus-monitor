@@ -554,9 +554,25 @@ func TestDeliverRefusesARoleThatMayNotDeliver(t *testing.T) {
 // that does not load refuses (fail closed).
 func TestDeliverRoleCheckReadsTheManifest(t *testing.T) {
 	dir := t.TempDir()
-	missing := deliverRoleCheck([]string{"ROLES_TOML=" + filepath.Join(dir, "none.toml")})
-	if err := missing("coder"); err != nil {
-		t.Errorf("no manifest: %v", err)
+	// An explicit manifest that cannot be read refuses, for anyone (reviewer-codex).
+	missing := filepath.Join(dir, "none.toml")
+	for _, env := range [][]string{{"ROLES_TOML=" + missing}, {"ROLES_TOML=" + missing, "HERDR_PANE_ID=p1"},
+		{"AGENTBUS_REPO=" + dir}} {
+		if err := deliverRoleCheck(env)("coder"); err == nil || !strings.Contains(err.Error(), "cannot read") {
+			t.Errorf("%v: %v", env, err)
+		}
+	}
+	// None configured nor found: an agent in a herdr pane is refused; a
+	// person outside the panes may.
+	bin := t.TempDir() // a binary with no roles.toml beside it
+	none := func(env []string) func(string) error {
+		return deliverRoleCheckFrom(env, filepath.Join(bin, "roles.toml"))
+	}
+	if err := none([]string{"HERDR_PANE_ID=p1"})("coder"); err == nil {
+		t.Error("an agent delivered with no manifest")
+	}
+	if err := none(nil)("charlie"); err != nil {
+		t.Errorf("a person outside the panes: %v", err)
 	}
 	bad := filepath.Join(dir, "bad.toml")
 	if err := os.WriteFile(bad, []byte("[roles.x\n"), 0o600); err != nil {
