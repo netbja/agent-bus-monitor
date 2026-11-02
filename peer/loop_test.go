@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -129,5 +131,92 @@ func TestTurnFailures(t *testing.T) {
 	res, err := newTurn(t, srv, time.Minute).Run(context.Background(), entry, "")
 	if err != nil || !strings.Contains(res.Text, "exceeds the available context size") {
 		t.Fatalf("refused = %+v %v", res, err)
+	}
+}
+
+func toolCalls(calls ...[3]string) string {
+	var parts []string
+	for _, c := range calls {
+		parts = append(parts, fmt.Sprintf(`{"id":%q,"type":"function","function":{"name":%q,"arguments":%q}}`, c[0], c[1], c[2]))
+	}
+	return `{"choices":[{"message":{"role":"assistant","content":"looking","tool_calls":[` + strings.Join(parts, ",") + `]}}]}`
+}
+
+// One answer carrying more calls than remain: calls past the bound get the
+// bound's error and are never run; then the last call, without tools, ends
+// the turn with its text even if the model still emits a tool call.
+func TestTurnBoundWithinOneAnswerAndTheLastCall(t *testing.T) {
+	n := 0
+	srv, seen := fakeEndpoint(t, nil, func(req chatRequest) (int, string) {
+		n++
+		switch {
+		case len(req.Tools) == 0: // the last call: text plus a stray tool call
+			return 200, `{"choices":[{"message":{"role":"assistant","content":"final words","tool_calls":[{"id":"z","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"main.go\"}"}}]}}]}`
+		case n <= 7:
+			return 200, toolCall(fmt.Sprintf("c%d", n), "read_file", `{"path":"main.go"}`)
+		default: // 7 made: three more in one answer
+			return 200, toolCalls([3]string{"c8", "read_file", `{"path":"main.go"}`}, [3]string{"c9", "read_file", `{"path":"main.go"}`}, [3]string{"c10", "read_file", `{"path":"main.go"}`})
+		}
+	})
+	res, err := newTurn(t, srv, time.Minute).Run(context.Background(), entry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Text != "final words" || len(*seen) != 9 {
+		t.Fatalf("result = %+v after %d requests, want the last call's text after 9", res, len(*seen))
+	}
+	results := map[string]string{}
+	for _, m := range (*seen)[8].Messages {
+		if m.Role == "tool" {
+			results[m.ToolCallID] = m.Content
+		}
+	}
+	if !strings.Contains(results["c8"], "func main()") {
+		t.Errorf("the 8th call was not run: %q", results["c8"])
+	}
+	for _, id := range []string{"c9", "c10"} {
+		if !strings.Contains(results[id], "bound of tool calls") || strings.Contains(results[id], "func main()") {
+			t.Errorf("%s past the bound = %q, want the bound's error, never run", id, results[id])
+		}
+	}
+}
+
+// The wall clock holds through a tool: a tool that waits until the turn's
+// deadline ends in a timed-out reply, and a named pipe read never holds the
+// turn (reviewer-codex).
+func TestTurnClockHoldsThroughTools(t *testing.T) {
+	srv, _ := fakeEndpoint(t, nil, func(req chatRequest) (int, string) {
+		if len(req.Messages) == 2 {
+			return 200, toolCall("c1", "bus_thread", `{"id":"1-0"}`)
+		}
+		return 200, answerJSON
+	})
+	tr := newTurn(t, srv, 100*time.Millisecond)
+	tr.Tools.Thread = func(ctx context.Context, _ string) ([]bus.Event, error) { <-ctx.Done(); return nil, ctx.Err() }
+	start := time.Now()
+	res, err := tr.Run(context.Background(), entry, "")
+	if err != nil || !res.TimedOut || time.Since(start) > 2*time.Second {
+		t.Fatalf("slow tool = %+v %v after %s", res, err, time.Since(start))
+	}
+
+	srv, _ = fakeEndpoint(t, nil, func(req chatRequest) (int, string) {
+		if len(req.Messages) == 2 {
+			return 200, toolCall("c1", "read_file", `{"path":"pipe"}`)
+		}
+		return 200, answerJSON
+	})
+	tr = newTurn(t, srv, time.Minute)
+	if err := syscall.Mkfifo(filepath.Join(tr.Tools.Root, "pipe"), 0o644); err != nil {
+		t.Skip("no mkfifo:", err)
+	}
+	done := make(chan Result, 1)
+	go func() { r, _ := tr.Run(context.Background(), entry, ""); done <- r }()
+	select {
+	case r := <-done:
+		if r.Text != "board.go holds the board." {
+			t.Fatalf("pipe turn = %+v", r)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a named pipe held the turn")
 	}
 }
