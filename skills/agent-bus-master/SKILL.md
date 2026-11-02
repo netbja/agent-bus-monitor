@@ -330,6 +330,12 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
 - Changed your mind (a review found a problem)? `agentbus ask master --replace <id> --file …`: keep
   a question's id only if its header, question and labels are unchanged (its answer is kept);
   give a reworded question a new id. Never send the new question in a `notify`.
+- **Never replace an ask the person may be answering.** The person can spend minutes writing a free
+  answer in busmon; a `--replace` meanwhile makes their question change under them. busmon follows an
+  unchanged question to the new ask, but a reworded or dropped one leaves them a text with nowhere to
+  go (busmon then offers it to you as a message). So once an ask is out, add or change questions only
+  by a **new ask after this one is answered** (or withdrawn); `--replace` only right after asking,
+  before the person can have started, or to fix a typo that keeps every question id and wording.
 - `agentbus asks --open` shows what is still open; `--withdraw <id>` cancels an ask.
 - **The person answered outside the panel** (a message `@master …` instead of the question tabs)?
   Act on it, then close exactly the questions it answers, citing the message, and leave the others

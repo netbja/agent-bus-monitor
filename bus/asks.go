@@ -206,8 +206,9 @@ func textField(name, v string, max int, required bool) error {
 	return ValidateText(v, max)
 }
 
-// sameQuestion: a carried question keeps its header, question and labels.
-func sameQuestion(a, b AskQuestion) bool {
+// SameQuestion: a carried question keeps its header, question and labels. It
+// is the rule the bus follows replaced_by by, and busmon follows it the same.
+func SameQuestion(a, b AskQuestion) bool {
 	if a.Header != b.Header || a.Question != b.Question || len(a.Options) != len(b.Options) {
 		return false
 	}
@@ -408,7 +409,7 @@ func (b *Bus) Ask(ctx context.Context, def AskDef, replaces string) (string, str
 		}
 		for _, q := range def.Questions {
 			if o, ok := byID[q.ID]; ok {
-				if !sameQuestion(o, q) {
+				if !SameQuestion(o, q) {
 					return "", "", fmt.Errorf("question %q changed wording: give it a new id", q.ID)
 				}
 				carried = append(carried, q.ID)

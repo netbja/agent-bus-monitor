@@ -30,3 +30,19 @@ func TestMasterAnswersPeopleOnTheBus(t *testing.T) {
 		}
 	}
 }
+
+// ask-replaced-answer: master never replaces an ask the person may be
+// answering; it asks anew once that ask is answered (the person: the rule holds
+// for every project, so the shared skill carries it).
+func TestMasterNeverReplacesAnAskBeingAnswered(t *testing.T) {
+	b, err := os.ReadFile(repoPath(t, "skills/agent-bus-master/SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Join(strings.Fields(string(b)), " ")
+	for _, want := range []string{"Never replace an ask the person may be answering", "new ask after this one is answered"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the master skill lacks %q", want)
+		}
+	}
+}
