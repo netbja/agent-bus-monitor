@@ -98,8 +98,12 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 	peerStartCheck(ctx, c, out)
 	host, _ := os.Hostname()
 	ident := statusIdent(ctx)
-	ident.Endpoint = settings.Endpoint               // what health llm-endpoint probes for it (R4)
-	ident.EndpointFP = peer.EndpointFP(settings.URL) // the URL it keeps for its life, never shown
+	ident.Endpoint = settings.Endpoint // what health llm-endpoint probes for it (R4)
+	// The URL it keeps for its life, keyed so the bus can test no guess; with
+	// no key, none is recorded and health cannot say the URL changed.
+	if key, err := endpointFPKey(getenv); err == nil {
+		ident.EndpointFP = peer.EndpointFP(key, settings.URL)
+	}
 	r := &peer.Runner{Bus: b, Agent: agent, Consumer: fmt.Sprintf("%s:%d", host, os.Getpid()), Ident: ident,
 		Turn: peer.Turn{Client: c, Prompt: spec.Prompt, MaxCalls: 8, Timeout: settings.TurnTimeout,
 			Tools: peer.Tools{Root: root, Deny: deny, Thread: b.Thread, Agents: b.Agents}},
@@ -175,6 +179,16 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 		return "", fmt.Errorf("%s holds the home directory: refused", root)
 	}
 	return root, nil
+}
+
+// endpointFPKey is the host's endpoint fingerprint key, beside config.toml;
+// with no configuration directory there is none (never one in the cwd).
+func endpointFPKey(getenv func(string) string) ([]byte, error) {
+	p := config.Path(getenv)
+	if p == "" {
+		return nil, fmt.Errorf("no configuration directory")
+	}
+	return peer.FPKey(filepath.Dir(p))
 }
 
 // userHome is the user's home from the passwd entry (os/user); a test's.

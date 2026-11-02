@@ -23,11 +23,13 @@ const llmProbeDeadline = 2 * time.Second
 // real endpoint.
 type llmCheckDeps struct {
 	Agents func(context.Context) (map[string]bus.AgentSnapshot, error)
-	Config func() *config.File // config.toml, as the services read it
+	Config func() *config.File    // config.toml, as the services read it
+	FPKey  func() ([]byte, error) // the host's endpoint fingerprint key (peer.FPKey)
 }
 
 func realLLMCheckDeps(b *bus.Bus) llmCheckDeps {
-	return llmCheckDeps{Agents: b.Agents, Config: func() *config.File { return config.Load(config.Path(os.Getenv), "config.toml") }}
+	return llmCheckDeps{Agents: b.Agents, Config: func() *config.File { return config.Load(config.Path(os.Getenv), "config.toml") },
+		FPKey: func() ([]byte, error) { return endpointFPKey(os.Getenv) }}
 }
 
 // llmEndpointCheck (local-llm-peer step 2) probes the endpoints the
@@ -68,6 +70,10 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 				return health.EvaluateLLMEndpoint(in), nil
 			}
 		}
+		var fpKey []byte // without it a recorded fingerprint cannot be compared
+		if d.FPKey != nil {
+			fpKey, _ = d.FPKey()
+		}
 		// Each probe is an endpoint and the model asked of it, once.
 		var used []config.Endpoint
 		seen := map[string]bool{}
@@ -87,7 +93,7 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 			case !ok:
 				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (endpoint %s)", p, s.Endpoint))
 				continue
-			case s.EndpointFP != "" && s.EndpointFP != peer.EndpointFP(ep.URL):
+			case s.EndpointFP != "" && fpKey != nil && s.EndpointFP != peer.EndpointFP(fpKey, ep.URL):
 				// The peer still calls the URL it started with; this probe
 				// reaches the new one only.
 				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s ([llm.%s]'s URL changed since its launch)", p, ep.Name))

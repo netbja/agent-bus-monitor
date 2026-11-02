@@ -1,6 +1,8 @@
 package peer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,5 +71,36 @@ func TestResolveDefaultsAndRefusals(t *testing.T) {
 	_, err = Resolve(Spec{Model: "llama3:8b", Options: map[string]any{"endpoint": "local"}}, cfg)
 	if err == nil || !strings.Contains(err.Error(), "qwen2.5-coder:3b") || strings.Contains(err.Error(), "11434") {
 		t.Fatalf("mismatch = %v", err)
+	}
+}
+
+// The fingerprint is keyed by a host-local secret: one bus reader holding
+// the snapshot cannot test a guessed URL offline (reviewer-codex: an unkeyed
+// hash verified guesses at a private path). The same key gives the same
+// value, so the health check on this host compares them.
+func TestEndpointFPIsKeyed(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "agentbus")
+	key, err := FPKey(dir)
+	if err != nil || len(key) != 32 {
+		t.Fatalf("FPKey = %d bytes, %v", len(key), err)
+	}
+	if fi, err := os.Stat(filepath.Join(dir, "endpoint-fp.key")); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("key file: %v %v", fi, err)
+	}
+	again, err := FPKey(dir)
+	if err != nil || string(again) != string(key) {
+		t.Fatal("a second read gives another key")
+	}
+	url := "http://127.0.0.1:11434/tenant-7f3a/v1"
+	fp := EndpointFP(key, url)
+	if fp != EndpointFP(key, url) || fp == EndpointFP(key, "http://127.0.0.1:11434/tenant-7f3b/v1") {
+		t.Fatal("not a function of the URL under one key")
+	}
+	other, _ := FPKey(filepath.Join(t.TempDir(), "agentbus"))
+	sum := sha256.Sum256([]byte(url))
+	for _, guess := range []string{EndpointFP(other, url), EndpointFP(nil, url), hex.EncodeToString(sum[:6]), hex.EncodeToString(sum[:8])} {
+		if guess == fp {
+			t.Fatalf("a guess without the key verifies the URL: %s", guess)
+		}
 	}
 }

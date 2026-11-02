@@ -227,3 +227,23 @@ func TestPeerRootFindsTheHomeWithoutHOME(t *testing.T) {
 		}
 	}
 }
+
+// The fingerprint key lives beside config.toml; with no configuration
+// directory there is no key, and none is written in the current folder.
+func TestEndpointFPKeyNeedsTheConfigDir(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	if _, err := endpointFPKey(func(string) string { return "" }); err == nil {
+		t.Fatal("a key with no configuration directory")
+	}
+	if entries, _ := os.ReadDir(cwd); len(entries) != 0 {
+		t.Fatalf("written in the cwd: %v", entries)
+	}
+	xdg := t.TempDir()
+	if key, err := endpointFPKey(func(k string) string { return map[string]string{"XDG_CONFIG_HOME": xdg}[k] }); err != nil || len(key) != 32 {
+		t.Fatalf("key = %d bytes, %v", len(key), err)
+	}
+	if _, err := os.Stat(filepath.Join(xdg, "agentbus", "endpoint-fp.key")); err != nil {
+		t.Fatal(err)
+	}
+}

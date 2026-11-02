@@ -26,10 +26,14 @@ func llmConfig(t *testing.T, body string) *config.File {
 	return config.Load(p, "config.toml")
 }
 
+// testFPKey is the host key the check's tests fingerprint with.
+var testFPKey = []byte("0123456789abcdef0123456789abcdef")
+
 func llmDeps(snaps map[string]bus.AgentSnapshot, cfg *config.File) llmCheckDeps {
 	return llmCheckDeps{
 		Agents: func(context.Context) (map[string]bus.AgentSnapshot, error) { return snaps, nil },
 		Config: func() *config.File { return cfg },
+		FPKey:  func() ([]byte, error) { return testFPKey, nil },
 	}
 }
 
@@ -202,10 +206,10 @@ func TestLLMEndpointCheckSaysAURLChangedSinceTheLaunch(t *testing.T) {
 	snap := func(fp string) map[string]bus.AgentSnapshot {
 		return map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used", EndpointFP: fp}}
 	}
-	if out, _ := llmEndpointCheck(llmDeps(snap(peer.EndpointFP(srv.URL+"/v1")), cfg))(context.Background()); out.Status != health.OK {
+	if out, _ := llmEndpointCheck(llmDeps(snap(peer.EndpointFP(testFPKey, srv.URL+"/v1")), cfg))(context.Background()); out.Status != health.OK {
 		t.Fatalf("same URL = %s %q", out.Status, out.Detail)
 	}
-	out, _ := llmEndpointCheck(llmDeps(snap(peer.EndpointFP("http://127.0.0.1:1/v1")), cfg))(context.Background())
+	out, _ := llmEndpointCheck(llmDeps(snap(peer.EndpointFP(testFPKey, "http://127.0.0.1:1/v1")), cfg))(context.Background())
 	if out.Status != health.Warn || !strings.Contains(out.Detail, "local ([llm.used]'s URL changed since its launch)") || strings.Contains(out.Detail, "127.0.0.1:1") {
 		t.Fatalf("URL changed = %s %q", out.Status, out.Detail)
 	}

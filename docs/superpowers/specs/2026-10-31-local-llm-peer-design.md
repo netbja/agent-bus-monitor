@@ -213,7 +213,9 @@ One check in the dispatcher's health loop, run only when a registered agent has 
 - For each endpoint those agents use, the one each resolved from its profile's
   `options.endpoint` and recorded in its snapshot (never another endpoint of the same model),
   judged for the model the running peer asks for (an endpoint whose model or URL `config.toml`
-  changed since the launch is said; the peer records a fingerprint of its URL, never the URL): `GET {url}/models`, 2 s deadline, every minute.
+  changed since the launch is said; the peer records a fingerprint of its URL, never the URL: an
+  HMAC under a host-local key beside `config.toml`, so a bus reader cannot test guesses at a
+  private path against it): `GET {url}/models`, 2 s deadline, every minute.
 - **ok**: it answers and lists the model. **warn**: it answers without the model (not pulled, or
   another name). **fail**: no answer, or an error status. **unknown**: no config readable, or no
   such agent.

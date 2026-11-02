@@ -6,11 +6,15 @@
 package peer
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/config"
@@ -59,12 +63,51 @@ const (
 
 // EndpointFP is a short fingerprint of an endpoint's URL: what the peer
 // records of the URL it resolved, so health can tell that config.toml has
-// changed it since, without the URL (its path) ever reaching the bus. Not a
-// secret: the bus is no boundary against the local user, who reads
-// config.toml anyway.
-func EndpointFP(url string) string {
-	sum := sha256.Sum256([]byte(url))
-	return hex.EncodeToString(sum[:6])
+// changed it since. It is an HMAC under key, a host-local secret (FPKey): a
+// bus reader holding the snapshot cannot test guessed URLs (a private path)
+// against it offline (reviewer-codex). The peer and the health check run on
+// the same host, so they share the key.
+func EndpointFP(key []byte, url string) string {
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte(url))
+	return hex.EncodeToString(m.Sum(nil)[:8])
+}
+
+// fpKeyFile is EndpointFP's key, beside config.toml: in the configuration
+// directory, not a cache, since a new key would make every running peer read
+// as changed.
+const fpKeyFile = "endpoint-fp.key"
+
+// FPKey reads the host's fingerprint key from dir, creating it once (32
+// random bytes, 0600 in a 0700 directory, O_EXCL: of two first callers one
+// writes, the other reads it).
+func FPKey(dir string) ([]byte, error) {
+	path := filepath.Join(dir, fpKeyFile)
+	if key, err := os.ReadFile(path); err == nil && len(key) == 32 {
+		return key, nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		if key, err := os.ReadFile(path); err == nil && len(key) == 32 {
+			return key, nil
+		}
+		return nil, fmt.Errorf("%s is not a fingerprint key", path)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if _, err := f.Write(key); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return key, f.Close()
 }
 
 // Resolve joins the spec with config.toml's endpoint it names. The profile's
