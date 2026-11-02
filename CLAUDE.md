@@ -258,8 +258,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `health <check>...` prints only those checks, each its status then `reason:`/`detail:` lines (`healthChecks`). `watch` is the legacy alias of `subscribe` (same handler).
   `listen` tails all four streams via `Bus.Tail` for debugging. `report` prints its entry id on
   stdout (lifecycle-2), the id `handoff <self> --report <id>` declares (`bus/handoff.go`:
-  `{p}:handoff`, agent → report, session, pid, pid_start, `at` from Redis `TIME`, written in one
-  script only for the agent's own report from its verified process in its proved session; not in
+  `{p}:handoff`, agent → report, session, pid, pid_start, `at`, written in one
+  script only for the agent's own report from its verified process in its proved session, with the agent's
+  `idle` status entry in the same script and `at` that entry's millisecond (chain-reliability: the declaration is
+  the idle, so `DecideClear`'s "idle since its hand-off", `Snap.TS >= Record.At`, holds without another status; the
+  snapshot follows through `putSnapshot`, a failure said, not ignored); not in
   `projectKinds`, ignored by `HasKeysBesidesDispatch`; any report and any non-idle status of the
   agent delete it in the same MULTI (`addVoidingHandoff`), so voiding never waits for a pass;
   `Handoff.VoidFor` — another process or session, or working since — is the rule the dispatcher's
@@ -357,7 +360,16 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   with its current task from the facts, `currentTask`: an accepted board task it owns, else its plan task in progress,
   never its status message; keys `empty:agent:<name>` open the agent's page, `empty:plan:<task>` the plan task; no
   store), and the
-  recap's For you section shows only when the For you panel is not on screen (`recapForScreen`); its keys are `ModeShell` (the panel table with the shell's tabs)
+  recap's For you section shows only when the For you panel is not on screen (`recapForScreen`), in the list format
+  (recap-foryou: `recapItemLine`, one line per item, the sender in its provider's colour, its text, the age at the
+  right edge, an unread one marked `●`; a report notice reads as its report's own preview, `reportText`, never the
+  envelope nor the id; what was sent to the person newest first (the unread rows with no item, asks, waits and blocked
+  agents keep their own order around them), identical items (sender and text) merged with `(N)` and the newest's report,
+  an unread entry that is such an item marked on it, never a second row; items older than a day folded behind
+  `+ N older` by `recapFold` until `o`; Enter reads every entry the item stands for (`recapRow.IDs`, a merged item's
+  members, `readRecapRow`: the notices, never only the report shown) and opens the report's full text, `Y` copies it; a
+  report not at hand keeps its preview, Enter and `Y` say why (`reportGone`: no longer retained, or could not be read when
+  the report stream's read failed, `ReportUnread`) and copy nothing, never the envelope); its keys are `ModeShell` (the panel table with the shell's tabs)
   and its clicks hit-test `shellLayout` (`tea_update.go`); Enter expands an Activity or For you line
   in place (`tea_expand.go`; A12: `▼` in the gutter, the text under the message column behind a
   muted `│` guide, a last muted `↵ full text` line), then opens it in the reader, a stack of pages over the lower zone, one
@@ -734,7 +746,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   so `ValidName` is repeated there, held equal by a test. `agentbus config`
   (`configcmd.go`, above the project-required exit, no broker) prints each value and its source;
   `--project` reads that project's env file for what its services see (only registry keys and the two
-  per-project facts, never another line).
+  per-project facts, never another line). The local LLM peer's endpoints are not registry keys:
+  `[llm.<name>]` tables of `config.toml` only (`config/llm.go`, `File.Endpoints`; `url`, `model`,
+  `remote`), each taken whole or dropped with a warning (a secret, user info, a query, an unknown
+  key; a host other than `127.0.0.1`, `::1` or `localhost` without `remote = true`); `agentbus
+  config` lists them by host and port, never the URL.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
@@ -810,7 +826,20 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (major -> newest release, 0600; a failed fetch moves only `checked_at`, silently); warn when behind
   in its major; a newer major is never a warning, only named in the detail (changing major is the
   person's decision); unknown when the broker is unread, no release of its major is found or no check
-  succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `github`
+  succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `disk` (disk-check,
+  `health/disk.go` pure, `cmd/agentbus/diskcheck.go` the reader behind injected `diskDeps`, so no test touches a real disk;
+  5 min): the filesystems agent-bus depends on (docker's root from `docker info` when docker is on PATH and the daemon runs
+  on this host (`dockerNotLocal`: the endpoint Docker itself reports, `docker context inspect` with no name, which resolves
+  `DOCKER_CONTEXT` and `DOCKER_HOST` in its own order (checked on Docker 29; never reimplemented), a local `unix://` socket): not
+  measured when docker is absent, the daemon remote or its endpoint unreadable (the note names the scheme, never the host),
+  or its root in a VM, on macOS or Docker Desktop, never a host path of that name; `HOME`; `go env GOCACHE` when go is on PATH, a failed or empty answer not measured, `off` no path; the
+  services' working directory, the repository, and its
+  `.worktrees`; `os.TempDir()`), each device once (`st_dev`), judged by statfs's free-to-unprivileged bytes and %: warn under
+  `health.disk_warn_pct`/`_gib` (10 %, 5 GiB), fail under `health.disk_fail_pct`/`_gib` (2 %, 1 GiB); the detail names each
+  path, its `major:minor` and free space, the worst first; a path not measured (or a filesystem reporting no size) is
+  said, unknown only when nothing was. For you on warn and fail with a command that only looks (`du -sh
+  ~/.cache/go-build ~/.npm ~/.cache/pip`); `go clean -cache` is named in the detail as the person's choice
+  (`DiskCleanChoice`, kept whole: the paths are cut to leave it room within the 300-rune detail), never in the copyable line; a fail wakes sentinel, which never deletes anything. `github`
   (busmon-github-check, `health/github.go` pure, `cmd/agentbus/githubcheck.go` the runner; 15 min, 10 s) runs only
   when a remote is on github.com (origin first): `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` and
   `git -c credential.helper= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
@@ -830,7 +859,15 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   and nothing written since by the agent on status, report or cmd (same millisecond = written), not working, held or
   seen busy; silent since before the retained cmd history = not judged; collected per agent. `clear-stall` warns on
   a valid hand-off older than its threshold, naming the clear pass's last reason (`dispatch.ClearDecisions`; reason
-  `pane-focused` is for you). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
+  `pane-focused` is for you). A warning alone woke nobody (chain-reliability): after each stored `clear-stall` or
+  `quiet-agent` record the health loop's `StallWake` hook (lease token) sends the wakes the judged input owes
+  (`health.ClearStallWakes`/`QuietAgentWakes`), each one waking directive from `dispatch` under `FencedCmdOnce`:
+  a stalled hand-off whose reason is `health.NotIdleReason` wakes the agent with the exact command to re-declare it,
+  `agentbus handoff <a> --report <id>` (never `status idle`: the wake is a prompt, and auto-state's turn-start flip
+  voids the record as working since, while a new declaration is newer than that flip; `ClearHandoff.Report`), with
+  no report known, or any other reason (auto-clear off included), master, once per hand-off and target (mark `stall-clear:<a>`,
+  episode `<at>|<target>`); a quiet agent wakes master once per directive it went quiet on (mark `stall-quiet:<a>`,
+  episode the directive's id). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
   tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an
   unknown pass and deleted once the check reads ok or warn): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
   `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). busmon shows the health pill, F5
@@ -1062,7 +1099,9 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   goes to master, which helps nobody when master is the one lost. An escalation caused by the pane's state (rules
   7-8, `Decision.Cause` → wake `esc_cause`, or read from the reason of an older record) is
   re-armed once the pane is ready: the loop inspects such a record before `Decide`, tries clear
-  and `at` stays. When the escalation target cannot act (it is the agent, its provider is held,
+  and `at` stays. An escalation records the obligation's high id it was for (`WakeRecord.HighID`, chain-reliability):
+  a newer message for the agent re-opens the wake with fresh tries (`Decide`'s reset, "new message since the
+  escalation") instead of "already escalated" until progress; still one escalation per high id. When the escalation target cannot act (it is the agent, its provider is held,
   its tab is blocked), the escalation is a `notify` for the person only (`recipientCannotAct`).
 - **A project pause is a bus fact, not a sleep.** `agentbus pause --for|--until|--until-reset`
   writes `{p}:pause` (`bus/pause.go`); the dispatcher's `paused` check at the top of each pass

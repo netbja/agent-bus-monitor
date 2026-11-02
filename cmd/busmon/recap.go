@@ -203,9 +203,65 @@ func recapKeepCursor(old []recapRow, sel int, rows []recapRow) int {
 	return firstRecapSelection(rows)
 }
 
-// recapBody is the recap's text with the cursor on row cursor, and the line
-// that row is on (its reader page draws it).
-func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {
+// recapFold folds the For you items older than a day behind one '+ N older'
+// line (recap-foryou), unless showOlder (o): a folded row is gone, so the
+// cursor never lands on it.
+func recapFold(r recapModel, showOlder bool) recapModel {
+	if showOlder {
+		return r
+	}
+	out := r
+	out.Rows = nil
+	n, last := 0, -1
+	for _, row := range r.Rows {
+		if row.Older {
+			n++
+			continue
+		}
+		out.Rows = append(out.Rows, row)
+		if row.Section == recapForYou {
+			last = len(out.Rows) - 1
+		}
+	}
+	if n > 0 && last >= 0 {
+		fold := recapRow{Key: "older", Section: recapForYou, Title: fmt.Sprintf("+ %d older  (o shows them)", n)}
+		out.Rows = append(out.Rows[:last+1], append([]recapRow{fold}, out.Rows[last+1:]...)...)
+	}
+	return out
+}
+
+// recapHasOlder reports whether any row folds behind '+ N older'.
+func recapHasOlder(r recapModel) bool {
+	for _, row := range r.Rows {
+		if row.Older {
+			return true
+		}
+	}
+	return false
+}
+
+// recapItemLine is a For you item in the list format: its unread mark, the
+// sender in its colour, its text with (N) when merged, the age right-aligned
+// and muted.
+func recapItemLine(row recapRow, width int) Line {
+	const nameW = 12
+	textW := max(8, width-2-2-nameW-2-2-listAgeW)
+	text := Preview(row.Text)
+	if row.Count > 1 {
+		text += fmt.Sprintf(" (%d)", row.Count)
+	}
+	age := Truncate(row.Age, listAgeW)
+	m := markNone
+	if row.Unread {
+		m = markUnread
+	}
+	return Line{markCell(m), S(row.NameRole, Fit(Preview(row.Name), nameW)), S(RoleText, "  "+Fit(text, textW)+"  "),
+		S(RoleText, strings.Repeat(" ", listAgeW-Width(age))), S(RoleMuted, age)}
+}
+
+// recapBody is the recap's text in width cells with the cursor on row cursor,
+// and the line that row is on (its reader page draws it).
+func recapBody(rows []recapRow, cursor, width int) (lines []Line, cursorLine int) {
 	var b body
 	lastSection := ""
 	for i, row := range rows {
@@ -227,6 +283,10 @@ func recapBody(rows []recapRow, cursor int) (lines []Line, cursorLine int) {
 		role := RoleText
 		if !row.Selectable {
 			role = RoleMuted
+		}
+		if row.Name != "" { // a For you item: one line (recap-foryou)
+			b.segs(mark).segs(recapItemLine(row, width)...).text("\n")
+			continue
 		}
 		b.segs(mark).seg(role, Preview(row.Title)).text("\n")
 		if row.Detail != "" {

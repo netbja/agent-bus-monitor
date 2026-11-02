@@ -128,7 +128,7 @@ func overlayCaptures(t *testing.T) map[string]string {
 	// reminder and the summary confirmation are the shell's dialogs now
 	// (TestShellReminder, TestShellRecapSummaryConfirmation).
 	recap := buildRecap(recapCaptureInput())
-	lines, _ := recapBody(recap.Rows, 0) // no cursor drawn: the capture is the content
+	lines, _ := recapBody(recap.Rows, 0, 100) // no cursor drawn: the capture is the content
 	out["recap"] = plainOf(lines)
 	return out
 }

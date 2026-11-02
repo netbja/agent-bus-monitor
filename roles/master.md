@@ -41,3 +41,9 @@ review, and keep **one task in flight at a time** (see the agent-bus-master skil
 
 If `sentinel` nudges you that your context is high, write a hand-off (current step, what's
 committed, what's pending) and use your client’s verified session reset procedure. Never ignore the nudge.
+
+**Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
+reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
+hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even
+after a `working` you declared. You still declare `waiting`, `blocked` and `done` yourself, and only
+you lift `waiting`: declare `working` once the person has answered.

@@ -663,11 +663,13 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
   adopted from the reviewed draft in `examples/drafts/infra/`, whose README gives the adoption for
   another project: master asks you, then
   `agentbus --project myapp roles adopt infra --ask <id> --from examples/drafts`.
-- **Two specs, not built.** The [feedback loop](superpowers/specs/2026-10-29-feedback-loop-design.md)
+- **One spec, not built.** The [feedback loop](superpowers/specs/2026-10-29-feedback-loop-design.md)
   (`agentbus feedback`: read-only statistics over the reviews the bus retains; a skill change
-  proposed as a pull request only after your yes) and the
-  [config file](superpowers/specs/2026-10-29-config-file-design.md) (one `config.toml` for your
-  preferences, and `agentbus config` to show each setting's value and where it comes from).
+  proposed as a pull request only after your yes). The
+  [config file](superpowers/specs/2026-10-29-config-file-design.md) is built: one `config.toml` for
+  your preferences, `agentbus config` to show each setting's value and where it comes from, and the
+  local model endpoints (`[llm.<name>]`: `url`, `model`, `remote = true` for a host that is not
+  loopback; a key or token is refused).
 
 ---
 

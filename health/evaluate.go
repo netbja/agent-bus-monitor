@@ -393,10 +393,13 @@ func EvaluateContext(ev []ContextEvidence, threshold float64) Outcome {
 	return Outcome{Status: Warn, Detail: truncateDetail(fmt.Sprintf("at or above %.0f%%: %s", threshold, strings.Join(parts, ", ")))}
 }
 
+// detailMax is SafeText's bound on a detail, in runes.
+const detailMax = 300
+
 // truncateDetail keeps a detail within SafeText's bound.
 func truncateDetail(s string) string {
-	if r := []rune(s); len(r) > 300 {
-		return string(r[:297]) + "..."
+	if r := []rune(s); len(r) > detailMax {
+		return string(r[:detailMax-3]) + "..."
 	}
 	return s
 }

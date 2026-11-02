@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"io"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -194,5 +195,46 @@ func TestHealthLoopCallsTheStallHookAfterTeamStall(t *testing.T) {
 	cancel()
 	if len(calls) != 1 || calls[0] != "health-holder|team-stall|fail" {
 		t.Fatalf("hook calls %v", calls)
+	}
+}
+
+// The stall guard's wakes (chain-reliability): after a stored clear-stall or
+// quiet-agent record the loop hands the lease token to StallWake with the
+// check's id; another check never calls it.
+func TestHealthLoopCallsStallWakeAfterTheStallChecks(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "wake-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if err := b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}, Manager: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	var checks []HealthCheck
+	for _, id := range []string{"clear-stall", "quiet-agent", "redis-version"} {
+		d, ok := health.ByID(id)
+		if !ok {
+			t.Fatalf("no definition %s", id)
+		}
+		checks = append(checks, HealthCheck{Definition: d, Run: func(context.Context) (health.Outcome, error) {
+			return health.Outcome{Status: health.Warn, Detail: "x"}, nil
+		}})
+	}
+	var mu sync.Mutex
+	called := map[string]string{}
+	l := &loop{b: b, token: "wake-holder", cfg: Config{EscalateTo: "master", Log: io.Discard, Health: HealthConfig{Checks: checks, Tick: time.Millisecond, PassBudget: time.Second,
+		StallWake: func(_ context.Context, token, check string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			called[check] = token
+			return nil
+		}}}}
+	runCtx, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
+	_ = l.healthLoop(runCtx)
+	cancel()
+	mu.Lock()
+	defer mu.Unlock()
+	if called["clear-stall"] != "wake-holder" || called["quiet-agent"] != "wake-holder" || len(called) != 2 {
+		t.Fatalf("StallWake calls %v", called)
 	}
 }

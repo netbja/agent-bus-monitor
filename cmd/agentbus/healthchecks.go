@@ -45,7 +45,7 @@ func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths, clea
 	manager, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
 	stall := newStallReader(b, os.Getenv, clear, escalateTo)
 	checks := append(realHealthChecks(b, rt, manager, paths), stallChecks(stall)...)
-	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify,
+	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify, StallWake: stall.stallWake,
 		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(b), RedisRefresh: redisRefresh(b)}
 }
 
@@ -455,6 +455,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			}
 			return health.OK, "configured quota readings are fresh", nil
 		}),
+		healthOutcomeTask("disk", diskCheck(realDiskDeps())),
 		healthTask("tracked-secrets", func(ctx context.Context) (health.Status, string, error) {
 			root, err := os.Getwd()
 			if err != nil {

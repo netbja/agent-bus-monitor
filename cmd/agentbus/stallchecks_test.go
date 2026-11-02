@@ -324,3 +324,61 @@ func TestTeamStallReadsAStuckFlipAsIdle(t *testing.T) {
 		t.Fatalf("turn_stale_after = 0 still reads it idle: %+v", out)
 	}
 }
+
+// dispatchDirectives is every waking directive from the dispatcher to target.
+func (w *stallWorld) dispatchDirectives(target string) []string {
+	w.t.Helper()
+	evs, _, err := w.b.Recent(context.Background(), []string{"cmd"}, 200)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	var out []string
+	for _, e := range evs {
+		if e.From == "dispatch" && e.Target == target && e.Type == bus.CmdDirective && !e.NoWake {
+			out = append(out, e.Message)
+		}
+	}
+	return out
+}
+
+// A quiet agent wakes master once per directive it went quiet on; a stalled
+// hand-off the agent can fix wakes the agent, once (chain-reliability).
+func TestStallWakeSendsOnce(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	time.Sleep(2 * time.Millisecond)
+	if _, err := w.b.Cmd(ctx, "master", "coder", bus.CmdDirective, "", "do the next task"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.b.DrainCmd(ctx, "coder", "test", bus.DefaultHorizon, func(bus.Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.quietAgent); out.Status != health.Warn {
+		t.Fatalf("quiet-agent: %+v", out)
+	}
+	for i := 0; i < 2; i++ {
+		if err := w.s.stallWake(ctx, "stall-holder", "quiet-agent"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := w.dispatchDirectives("master"); len(got) != 1 || !strings.Contains(got[0], "coder read directive") {
+		t.Fatalf("master woken %q", got)
+	}
+
+	at := time.Now().Add(-30 * time.Minute)
+	w.s.mu.Lock()
+	w.s.lastClear = &health.ClearStallInput{Now: time.Now(), After: 15 * time.Minute, AutoClear: true,
+		Handoffs: []health.ClearHandoff{{Agent: "coder", At: at, Decision: health.NotIdleReason, Report: "1793-0"}}}
+	w.s.mu.Unlock()
+	for i := 0; i < 2; i++ {
+		if err := w.s.stallWake(ctx, "stall-holder", "clear-stall"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := w.dispatchDirectives("coder"); len(got) != 1 || !strings.Contains(got[0], "agentbus handoff coder --report 1793-0") {
+		t.Fatalf("coder woken %q", got)
+	}
+	if err := w.s.stallWake(ctx, "not-the-holder", "quiet-agent"); err == nil {
+		t.Fatal("a dispatcher without the lease woke someone")
+	}
+}
