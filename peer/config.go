@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/netbja/agent-bus-monitor/config"
 )
 
@@ -60,6 +62,28 @@ const (
 	defaultTurnTimeout = 10 * time.Minute
 	defaultMaxTokens   = 1024
 )
+
+// replaceKey installs key (written whole in tmp) over a wrong-length key
+// file, under an exclusive lock on a sibling file: of callers repairing at
+// once, the first replaces it, the others find the key it installed and
+// return that, so every caller returns the file's key (reviewer-codex).
+func replaceKey(path, tmp string, key []byte, oldLen int) ([]byte, string, error) {
+	lock, err := os.OpenFile(path+".lock", os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, "", err
+	}
+	defer lock.Close()
+	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+		return nil, "", err
+	}
+	if cur, err := os.ReadFile(path); err == nil && len(cur) == 32 {
+		return cur, "", nil // repaired meanwhile
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return nil, "", err
+	}
+	return key, fmt.Sprintf("%s held %d bytes, not a key: replaced", path, oldLen), nil
+}
 
 // EndpointFP is a short fingerprint of an endpoint's URL: what the peer
 // records of the URL it resolved, so health can tell that config.toml has
@@ -115,11 +139,8 @@ func FPKey(dir string) (key []byte, note string, err error) {
 	if err := tmp.Close(); err != nil {
 		return nil, "", err
 	}
-	if old != nil { // there, of the wrong length: replaced whole
-		if err := os.Rename(tmp.Name(), path); err != nil {
-			return nil, "", err
-		}
-		return key, fmt.Sprintf("%s held %d bytes, not a key: replaced", path, len(old)), nil
+	if old != nil { // there, of the wrong length: replaced whole, by one caller
+		return replaceKey(path, tmp.Name(), key, len(old))
 	}
 	if err := os.Link(tmp.Name(), path); errors.Is(err, os.ErrExist) {
 		other, err := os.ReadFile(path)

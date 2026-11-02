@@ -153,3 +153,36 @@ func TestFPKeyReplacesAWrongLengthFile(t *testing.T) {
 		t.Fatalf("replacement file: %v %v", fi, err)
 	}
 }
+
+// Callers repairing a wrong-length key at once all return the one key
+// installed: each returned key is the file's (reviewer-codex: two renames
+// each returned their own, one of them not the file's).
+func TestFPKeyConcurrentRepairers(t *testing.T) {
+	for round := 0; round < 20; round++ {
+		dir := filepath.Join(t.TempDir(), "agentbus")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, "endpoint-fp.key")
+		if err := os.WriteFile(path, []byte("short"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		const n = 16
+		keys, errs := make([][]byte, n), make([]error, n)
+		var wg sync.WaitGroup
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() { defer wg.Done(); keys[i], _, errs[i] = FPKey(dir) }()
+		}
+		wg.Wait()
+		installed, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < n; i++ {
+			if errs[i] != nil || string(keys[i]) != string(installed) {
+				t.Fatalf("round %d caller %d returned another key than the installed one (%v)", round, i, errs[i])
+			}
+		}
+	}
+}
