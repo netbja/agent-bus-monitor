@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
+	"golang.org/x/sys/unix"
 )
 
 // installer-no-client (Charlie): up with no agent CLI for any role of the
@@ -319,5 +321,28 @@ func TestUpStartsEveryTabWhenTheShellTimesOut(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "could not tell whether claude is installed") || !strings.Contains(out.String(), "did not answer within") {
 		t.Fatalf("the timeout is not said: %q", out.String())
+	}
+}
+
+// The login-shell probe runs in a session of its own, with no controlling
+// terminal: an interactive shell's job control can never take the terminal
+// from herdr, which start runs in the foreground meanwhile (foureyes).
+func TestShellProbeHasItsOwnSession(t *testing.T) {
+	if _, err := os.Stat("/proc/self/stat"); err != nil {
+		t.Skip("no /proc")
+	}
+	sh := filepath.Join(t.TempDir(), "sidsh")
+	// It answers with its own session id (field 6 of /proc/self/stat).
+	write(t, sh, "#!/bin/sh\nawk '{print $6}' /proc/$$/stat\nprintf 'AGENTBUS_PROBE_DONE 0\\n'\n")
+	if err := os.Chmod(sh, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := shellProbe(func(k string) string { return map[string]string{"SHELL": sh}[k] }, 2*time.Second)("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	own, _ := unix.Getsid(0)
+	if got == strconv.Itoa(own) {
+		t.Fatalf("the probe shares this process's session %s", got)
 	}
 }

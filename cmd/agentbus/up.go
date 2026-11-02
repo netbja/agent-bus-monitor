@@ -927,6 +927,10 @@ func shellProbe(getenv func(string) string, timeout time.Duration) func(string) 
 		defer cancel()
 		cmd := exec.CommandContext(ctx, sh, args...)
 		cmd.WaitDelay = 500 * time.Millisecond
+		// A session of its own, so no controlling terminal: an interactive
+		// shell's job control (tcsetpgrp) can never take the terminal from a
+		// foreground herdr that start runs meanwhile (foureyes).
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		out, _ := cmd.Output() // the shell's own exit status is not the answer: the marker is
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("%s did not answer within %s", filepath.Base(sh), timeout)
