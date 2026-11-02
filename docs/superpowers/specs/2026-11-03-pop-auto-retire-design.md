@@ -1,6 +1,6 @@
 # A pop's end, automated: retire and unregister a pop once its work is done
 
-Status: spec, not built. Subject `pop-auto-retire`. Request: Bernard, 2026-11-02, after master
+Status: spec, answered (§10), being built (subject `pop-auto-retire-code`). Subject `pop-auto-retire`. Request: Bernard, 2026-11-02, after master
 retired security by hand once its review was done: "cela peut être automatisé" (this can be
 automated).
 
@@ -31,11 +31,11 @@ A pop is **done** when every one of these holds, read by the dispatch service on
 | # | Condition | Read from |
 |---|---|---|
 | 1 | It is a pop: its verified identity records `tier = pop` | `AgentSnapshot.Tier`, new, set by the launcher with the identity (§6) |
-| 2 | It owns no board task in a state other than `done` | `{p}:board` |
+| 2 | It owns no board task in a state other than `done` (the board's states are free words: any other, `review` or a team's own, holds it) | `{p}:board` |
 | 3 | No gate holds it, and no gate it opened is open | `Bus.ReviewsOf` (as `openWork`) |
 | 4 | No mission attempt is in progress on it | `missionsOf` (as `openWork`) |
 | 5 | It has no open ask | `{p}:asks` `open:<agent>` |
-| 6 | Nothing waits for it on the bus: no pending and no unread entry | `Obligation` (pending + lag) |
+| 6 | Nothing waits for it on the bus: no pending and no unread waking entry, older than the 24 h horizon included (the forget script reads with no floor, so the judgement does too) | `Obligation` (pending, unread and stale) |
 | 7 | It is not armed, and no wake is being typed into its pane | `{p}:armed:<agent>`, `{p}:wake:<agent>` |
 | 8 | No swap or reload intent holds it, and no valid hand-off waits for a `/clear` | `{p}:swap:<role>`, `{p}:handoff` |
 | 9 | It declared `idle` or `done` at least `dispatch.pop_retire_after` ago (default 15 min), and declared nothing since | `{p}:agents` (the declared state and its time, never a turn flip: `DeclTS`) |
@@ -64,11 +64,11 @@ Three options were weighed:
 
 | | Who acts | For | Against |
 |---|---|---|---|
-| **A** (proposed) | The dispatcher sees the pop done and sends master **one waking directive**; master runs `agentbus retire <role> --forget --episode <ms>` | No new automated pane action: the dispatcher stays the writer of a wake line and a `/clear` only (decision 2026-10-10, lifecycle-4). The act re-judges the whole of §2 itself and forgets atomically (§4). Master can decline with a reason. | Needs master awake; a held master delays the end (§7) |
+| **A** (chosen) | The dispatcher sees the pop done and sends master **one waking directive**; master runs `agentbus retire <role> --forget --episode <ms>` | No new automated pane action: the dispatcher stays the writer of a wake line and a `/clear` only (decision 2026-10-10, lifecycle-4). The act re-judges the whole of §2 itself and forgets atomically (§4). Master can decline with a reason. | Needs master awake; a held master delays the end (§7) |
 | B | The dispatcher closes the pane itself | No round trip | A new class of automated act on panes, which the event-driven dispatch decision limits to typing a wake line; a decision note and its own review would be needed |
 | C | The pop retires itself at the end of its task | Knows best when it is done | A process cannot prove its own end: `retire` refuses its own pane on purpose, and closing it from inside kills the command mid-way |
 
-**A is proposed.** The directive (from `dispatch`, `FencedCmdOnce`, mark `popdone:<agent>` =
+**A is chosen** (Bernard, §10). The directive (from `dispatch`, `FencedCmdOnce`, mark `popdone:<agent>` =
 episode, so a pop that works again and idles again is a new episode):
 
 ```
@@ -118,10 +118,13 @@ can be stale by the time master acts):
 3. **After the pid is proven gone**: the forget is **one Lua script**, `Bus.ForgetIfClear(role)`,
    never a read followed by a delete, because work can arrive between any read and the delete. In
    one script it checks that `{p}:swap:<role>` still holds retire's own intent, byte-equal to
-   `OwnIntent` (else it changes nothing), then reads, for the role: the consumer group's pending count (`XPENDING`),
+   `OwnIntent`, and that the stored registration is still the process retire closed (its pid and
+   start) in the episode it was told (its `ts`): a respawn between the close and the forget, or a
+   new declaration, is another registration, kept whole (reviewer-codex on code steps 1-5); else
+   it changes nothing, then reads, for the role: the consumer group's pending count (`XPENDING`),
    the addressed waking entries after its `last-delivered-id` (`XRANGE` from there,
    `target == role` and `wake != no`, the rule `Obligation` uses), its open ask (`open:<role>` in
-   `{p}:asks`), a board task it owns not `done` (`{p}:board`), and its gate key. If all are empty
+   `{p}:asks`), a board task it owns in any state but `done` (`{p}:board`), and its gate key. If all are empty
    it deletes the **registration** (snapshot, usage, wake, armed, receiver and gate keys) in the
    same script; if any is not, it changes nothing and returns what it found.
 
@@ -158,6 +161,9 @@ costs a respawn, never the message, because (3) keeps the group.
 
 Also:
 
+- a slow close (the pid wait plus the script past the intent's `SwapTTL`, 3 min) lets the intent
+  lapse: the script then refuses and the registration is kept, the safe outcome, said like any
+  other refusal (foureyes on 781a10b);
 - the forget happens after the proof only, so a refused or failed retire never forgets a live agent;
 - `agents forget`'s own refusals (armed, a status within 10 min) do not apply there: the process
   is proven gone, its armed key is stale, and the script deletes it;
@@ -179,8 +185,6 @@ from the kept cursor, never replaying what the previous instance handled.
 
 - **Open work**, any of conditions 2 to 8.
 - **The person's focus**: a focused pane (condition 10), whatever the rest says.
-- **A pop that requires the person** (`approval = "person"`: deploy, infra): see §6 and open
-  question 2. Proposed: never automatically; busmon offers the end to the person instead.
 - **A boot role** (master, coder, foureyes, sentinel), whatever its state.
 - **An agent with no verified identity**: no tier is recorded, and `retire` needs the pane.
 - **During a pause or its provider's hold** (condition 11): an idle pop may be waiting for the
@@ -193,15 +197,13 @@ verified identity; it also exports `AGENT_BUS_TIER` (`boot` or `pop`, from `role
 `AgentSnapshot.Tier` with the proof, like the model. The dispatcher never reads `roles.toml`.
 
 **The person's yes.** A pop with `approval = "person"` is popped only after the person says yes
-(an ask rule on master's `agent-spawn`). Ending such a pop narrows what runs, so in principle the
-yes to start covers the end. But those roles act on targets (deploy, infra), and the person may
-want to look at the result in the pane before it closes. Proposed (open question 2): for these
-roles the dispatcher sends no directive; busmon shows a For-you row instead, and the person ends
-it from there.
+(an ask rule on master's `agent-spawn`). That yes covers its end too (Bernard, §10 question 2):
+deploy and infra are judged and ended like every other pop. The person who wants to read the
+result in the pane keeps it by focusing it (condition 10).
 
 **Tool rules** (`rolecfg/toolrules.go`, generated like the `agent-spawn` rules): master gets, per
-pop role without `approval = "person"`, `Bash(agentbus retire <role> --forget --episode * --reason *)`
-as an allow. No rule for boot roles, none with `--now`. Defence in depth, not a boundary: the client
+pop role, `Bash(agentbus retire <role> --forget --episode * --reason *)` as an allow, whatever its
+`approval`. No rule for boot roles, none with `--now`. Defence in depth, not a boundary: the client
 matches command text.
 
 ## 7. What busmon and health show
@@ -216,18 +218,13 @@ shows nothing new.
 │  ○ security  idle     18m  —   done 18m    review sent: PR 259 re-check      │
 ```
 
+While `retire --forget` holds its intent (kind `retire`), the pop is flagged `retiring`, not
+`swapping` (busmon reads the intent's kind as it does for `reloading`; foureyes on 781a10b).
+
 **The notice.** The swap ledger's `retired` entry (already read every fifth tick) gives the quiet
 footer line: `security retired (work done)`.
 
-**For you** (approval = person pops only, §6):
-
-```
-│  ◆ end    deploy    finished: no task, gate or message left, idle 15m     15m│
-```
-
-Enter opens the agent's page with an `Action:` row, `e` ends it (the same `retire --forget
---episode <ms>` with the episode the row was judged on, run as the person, `--as`; refused the same
-way when the pop moved on).
+No For-you row: every pop is ended through master (§6).
 
 **Health.** `cmd-delivery` stays ok after the end (the role is no longer registered). A new warn, `pop-done`
 (in hand, master), when a pop has been done for twice `pop_retire_after` and is still there: the
@@ -247,8 +244,8 @@ Both in the registry (`config/keys.go`, group Services), env `AGENT_BUS_POP_RETI
 
 - `PopDone`: a table, one row per condition failing alone, the reason named; unknown facts are
   not done; a turn flip never counts as condition 9's declaration; no `Tier` is not done.
-- The pass: one directive per episode (`FencedCmdOnce`), none while master cannot act, none for
-  an `approval = "person"` pop, none for a boot role; a new episode after the pop works again.
+- The pass: one directive per episode (`FencedCmdOnce`), none while master cannot act, one for
+  an `approval = "person"` pop like any other, none for a boot role; a new episode after the pop works again.
 - `retire --forget`: forgets only after the pid is gone; a failed close forgets nothing; a forget
   failure after the close exits 1 with the command; refused on a boot role, on no tier, without
   `--episode`, with `--now`; the ledger's `forgot`.
@@ -274,17 +271,16 @@ Both in the registry (`config/keys.go`, group Services), env `AGENT_BUS_POP_RETI
 - No mission start in the window (reviewer-codex): with retire's intent held, `FencedRequest` and
   the conductor's challenge to the role are refused `SWAPPING`, and the script still finds the
   intent; a conductor pass between the kill and the script starts no attempt.
-- Tool rules: master's allow per pop role without person approval, none for boot roles,
+- Tool rules: master's allow per pop role (person approval included), none for boot roles,
   none with `--now` (`TestShippedManifestRules`).
-- busmon: the `done` flag, the For-you row and its `e`, the notice line.
+- busmon: the `done` flag, the `retiring` flag, the notice line.
 - Health: `cmd-delivery` ok after the end; `pop-done` warns after twice the delay.
 
-## 10. Open questions for Bernard
+## 10. Bernard's answers (2026-11-02, through master)
 
-1. **Who ends it?** A (proposed): the dispatcher tells master, master runs `retire --forget`. Or B:
-   the dispatcher closes the pane itself, with no round trip through master, which needs its own
-   decision note since today it only types a wake line and `/clear`.
-2. **Pops that need your yes (deploy, infra)**: ended only by you from busmon (proposed), or
-   automatically like the others, since your yes to start covers the end?
-3. **The idle delay**: 15 minutes after its last declared idle (proposed), or another value?
-4. **On by default?** `on` (proposed, since you asked for it), or `off` until you turn it on?
+1. **Who ends it?** A: the dispatcher tells master, master runs `retire --forget`; the dispatcher
+   types and closes nothing new.
+2. **Pops that need the person's yes (deploy, infra)**: ended automatically like the others; the
+   yes to pop covers the end.
+3. **The idle delay**: 15 minutes.
+4. **On by default**: yes.

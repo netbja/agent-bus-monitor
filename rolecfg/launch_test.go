@@ -615,7 +615,7 @@ func TestTierValidation(t *testing.T) {
 
 const popsRoles = "pops = true\n[roles.coder.tool_rules]\ndeny = [\"WebFetch\"]\n[roles.deploy]\ntier = \"pop\"\napproval = \"person\"\n[roles.architect]\ntier = \"pop\"\n"
 
-const popsSettings = `{"permissions": {"allow": ["Bash(agent-spawn architect *)"], "ask": ["Bash(agent-spawn deploy *)"], "deny": ["WebFetch"]}}`
+const popsSettings = `{"permissions": {"allow": ["Bash(agent-spawn architect *)", "Bash(agentbus retire deploy --forget --episode * --reason *)", "Bash(agentbus retire architect --forget --episode * --reason *)"], "ask": ["Bash(agent-spawn deploy *)"], "deny": ["WebFetch"]}}`
 
 func TestLaunchSettingsFlag(t *testing.T) {
 	f := newLaunchFixture(t)
@@ -657,7 +657,7 @@ func TestElevatedAnnouncesAllow(t *testing.T) {
 	m := f.config("claude-code", "", popsRoles, "")
 	_, errOut, err := f.launch(m, "coder")
 	must(t, err)
-	if !strings.Contains(errOut, "notice: coder runs claude-code with elevated allow=1 rules") {
+	if !strings.Contains(errOut, "notice: coder runs claude-code with elevated allow=3 rules") {
 		t.Fatalf("stderr = %q", errOut)
 	}
 }
@@ -727,4 +727,20 @@ func claudePermission(client, options string) string {
 		options = "[profiles.main.options]"
 	}
 	return options + "\npermission = \"manual\""
+}
+
+// The launcher exports the role's tier (pop-auto-retire §6), which status and
+// bind record with the proof: what the dispatcher reads to judge a pop's end.
+func TestLaunchExportsRoleTier(t *testing.T) {
+	f := newLaunchFixture(t)
+	m := f.config("claude-code", "", "[roles.security]\ntier = \"pop\"\nskills = [\"test-skill\"]\n", "")
+	must(t, os.WriteFile(filepath.Join(f.root, "security.md"), []byte("SECURITY\n"), 0o644))
+	for role, want := range map[string]string{"coder": "boot", "security": "pop"} {
+		if _, e, err := f.launch(m, role, "AGENT_BUS_TIER=forged"); err != nil {
+			t.Fatal(err, e)
+		}
+		if v, _ := envOf(f.execEnv, "AGENT_BUS_TIER"); v != want {
+			t.Fatalf("%s: AGENT_BUS_TIER=%q, want %q", role, v, want)
+		}
+	}
 }

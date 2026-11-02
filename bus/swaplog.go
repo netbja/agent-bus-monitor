@@ -53,6 +53,9 @@ type SwapEvent struct {
 	Episode      string `json:"episode,omitempty"`
 	Error        string `json:"error,omitempty"`
 	Kind         string `json:"kind,omitempty"` // "" a swap, SwapKindReload a reload
+	// Forgot (pop-auto-retire) is set on a retire --forget's retired entry:
+	// "true" unregistered, "false" kept (Error says why).
+	Forgot string `json:"forgot,omitempty"`
 }
 
 // SwapReasonMax bounds a ledger reason or error.
@@ -84,6 +87,7 @@ func (e SwapEvent) fields() []interface{} {
 	add("episode", e.Episode)
 	add("error", clip(e.Error, SwapReasonMax))
 	add("kind", e.Kind)
+	add("forgot", e.Forgot)
 	return out
 }
 
@@ -260,7 +264,7 @@ func swapEventFrom(m redis.XMessage) SwapEvent {
 	return SwapEvent{ID: m.ID, Role: s("role"), Event: s("event"), FromProfile: s("from_profile"), ToProfile: s("to_profile"),
 		FromProvider: s("from_provider"), ToProvider: s("to_provider"), ToModel: s("to_model"), By: s("by"), Reason: s("reason"),
 		OldPID: i("old_pid"), OldPane: s("old_pane"), NewPID: i("new_pid"), NewPane: s("new_pane"), Episode: s("episode"), Error: s("error"),
-		Kind: s("kind")}
+		Kind: s("kind"), Forgot: s("forgot")}
 }
 
 // Interrupted reports whether role's last ledger entry is a begin with no

@@ -11,7 +11,7 @@ unset HERDR_ENV HERDR_PANE_ID REDIS_URL
 # identity, ROLES_TOML (the live manifest) and AGENTBUS_BIN (the installed binary), and a suite that
 # honoured them stayed green on a broken branch (tests/hermetic_test.sh).
 unset ROLES_TOML AGENT_BUS_PROJECT AGENT_BUS_AGENT AGENT_BUS_CLIENT AGENT_BUS_PROVIDER AGENT_BUS_MODEL \
-  AGENT_BUS_MODEL_TIER AGENT_BUS_PROFILE AGENT_BUS_REASONING AGENT_BUS_CLIENT_FP
+  AGENT_BUS_MODEL_TIER AGENT_BUS_PROFILE AGENT_BUS_REASONING AGENT_BUS_CLIENT_FP AGENT_BUS_TIER
 # The scripts resolve roles through `agentbus roles`: run.sh's build of this checkout, else our own.
 if [[ -n "${AGENTBUS_TEST_BIN:-}" ]]; then
   export AGENTBUS_BIN="$AGENTBUS_TEST_BIN"

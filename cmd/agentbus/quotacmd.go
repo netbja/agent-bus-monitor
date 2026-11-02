@@ -257,6 +257,15 @@ func serviceClear(getenv func(string) string, lookPath func(string) (string, err
 	return dispatch.ClearConfig{On: config.Machine(getenv).Bool("dispatch.auto_clear"), Proof: 30 * time.Second, Notify: desktopNotify(lookPath, run)}
 }
 
+// servicePopRetire is the pop's end (pop-auto-retire §8): on unless
+// dispatch.pop_retire is off or its delay is 0; missions lists the mission
+// attempts in progress on an agent.
+func servicePopRetire(getenv func(string) string, missions func(context.Context, string) ([]string, error)) dispatch.PopRetireConfig {
+	r := config.Machine(getenv)
+	after := r.Duration("dispatch.pop_retire_after")
+	return dispatch.PopRetireConfig{On: r.Bool("dispatch.pop_retire") && after > 0, After: after, Missions: missions}
+}
+
 // desktopNotify runs notify-send, bounded to 5 s; nil when it is not on PATH.
 func desktopNotify(lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) func(ctx context.Context, title, body string) error {

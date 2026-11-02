@@ -124,6 +124,16 @@ func waitsForPerson(a *agentState) bool {
 	return a.openAsk > 0 || a.state == "waiting" && !answered(a) || promptWaiting(a)
 }
 
+// popDoneAt is when agent's current episode was declared, if the
+// dispatcher's pop-done mark names it (pop-auto-retire §7: the directive
+// waits for master); zero otherwise, so a pop that worked since shows nothing.
+func popDoneAt(marks map[string]string, agent string, s bus.AgentSnapshot) time.Time {
+	if v, ok := marks[bus.PopDoneMark(agent)]; ok && s.TS > 0 && v == strconv.FormatInt(s.TS, 10) {
+		return time.UnixMilli(s.TS)
+	}
+	return time.Time{}
+}
+
 func agentFlags(a *agentState, pilot bool) []agentFlag {
 	var fs []agentFlag
 	add := func(w string, r Role, prio, group int) { fs = append(fs, agentFlag{w, r, prio, group}) }
@@ -149,6 +159,12 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	}
 	if a.reloading {
 		add("reloading", RoleDispatch, 1, 1)
+	}
+	if a.retiring {
+		add("retiring", RoleDispatch, 1, 1)
+	}
+	if !a.popDoneAt.IsZero() && !a.retiring {
+		add("done "+humanAge(a.clock().Sub(a.popDoneAt)), RoleMuted, 4, 2)
 	}
 	if a.handoff {
 		add("handoff", RoleDispatch, 3, 1)

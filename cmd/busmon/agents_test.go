@@ -83,6 +83,10 @@ func TestAgentFlagsTable(t *testing.T) {
 		{"stale", agentState{stale: 3}, false, "stale 3", RoleMuted},
 		{"unknown wake", agentState{wake: &bus.WakeRecord{State: "weird"}}, false, "wake:weird", RoleMuted},
 		{"clear", agentState{wake: &bus.WakeRecord{State: "clear"}}, false, "", 0},
+		// pop-auto-retire §7: retire --forget holds its intent; a pop the
+		// dispatcher judged done waits for master's retire.
+		{"retiring", agentState{retiring: true}, false, "retiring", RoleDispatch},
+		{"pop done", agentState{popDoneAt: time.Unix(1000, 0), judgedAt: time.Unix(1000+18*60, 0)}, false, "done 18m", RoleMuted},
 		{"empty", agentState{wake: &bus.WakeRecord{}}, false, "", 0},
 	}
 	for _, c := range cases {
@@ -314,6 +318,24 @@ func TestSwappingFlagAndLongPauseHint(t *testing.T) {
 	} {
 		if got := pauseSeg(p, now)[0].Text; strings.Contains(got, "long pause") {
 			t.Fatalf("pause %+v = %q", p, got)
+		}
+	}
+}
+
+// done Nm shows only while the dispatcher's mark names the current episode
+// (pop-auto-retire §7): a pop that declared again since shows nothing.
+func TestPopDoneAt(t *testing.T) {
+	s := bus.AgentSnapshot{TS: 1793647000000}
+	if got := popDoneAt(map[string]string{"popdone:security": "1793647000000"}, "security", s); !got.Equal(time.UnixMilli(s.TS)) {
+		t.Fatalf("same episode = %v", got)
+	}
+	for name, marks := range map[string]map[string]string{
+		"another episode": {"popdone:security": "1793646000000"},
+		"another agent":   {"popdone:docs": "1793647000000"},
+		"no mark":         {},
+	} {
+		if got := popDoneAt(marks, "security", s); !got.IsZero() {
+			t.Errorf("%s = %v", name, got)
 		}
 	}
 }

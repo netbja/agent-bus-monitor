@@ -192,8 +192,11 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := ToolRules{
-		Allow: []string{"Bash(agent-spawn coder *)", "Bash(agent-spawn architect *)", "Read"},
-		Ask:   []string{"Bash(agent-spawn deploy *)"},
+		// The spawn rules, then a pop's end for every pop, person-approved
+		// included (pop-auto-retire §6), then the role's own.
+		Allow: []string{"Bash(agent-spawn coder *)", "Bash(agent-spawn architect *)",
+			"Bash(agentbus retire deploy --forget --episode * --reason *)", "Bash(agentbus retire architect --forget --episode * --reason *)", "Read"},
+		Ask: []string{"Bash(agent-spawn deploy *)"},
 	}
 	if !reflect.DeepEqual(r, want) {
 		t.Fatalf("LaunchRules(master) = %+v, want %+v", r, want)
@@ -244,8 +247,26 @@ func TestShippedManifestRules(t *testing.T) {
 	if want := []string{"Bash(agent-spawn deploy *)", "Bash(agent-spawn infra *)"}; !reflect.DeepEqual(asked, want) || !reflect.DeepEqual(r.Ask, want) {
 		t.Fatalf("master ask = %v, person-approved roles %v, want %v", r.Ask, asked, want)
 	}
-	if len(r.Allow) != others+len(masterUpRules) || !reflect.DeepEqual(r.Allow[others:], masterUpRules) {
-		t.Fatalf("master allow = %v, want one per role but master and the person-approved ones (%d), then %v", r.Allow, others, masterUpRules)
+	// Then a pop's end for every pop role, person-approved included
+	// (pop-auto-retire §6): the exact --forget form, never --now.
+	var retire []string
+	for _, role := range m.roleOrder {
+		if role != "master" && m.RoleTier(role) == "pop" {
+			retire = append(retire, "Bash(agentbus retire "+role+" --forget --episode * --reason *)")
+		}
+	}
+	if len(retire) == 0 || !slices.Contains(retire, "Bash(agentbus retire deploy --forget --episode * --reason *)") {
+		t.Fatalf("retire rules %v lack the person-approved pops", retire)
+	}
+	if len(r.Allow) != others+len(retire)+len(masterUpRules) || !reflect.DeepEqual(r.Allow[others:others+len(retire)], retire) ||
+		!reflect.DeepEqual(r.Allow[others+len(retire):], masterUpRules) {
+		t.Fatalf("master allow = %v, want one per role but master and the person-approved ones (%d), then %v, then %v", r.Allow, others, retire, masterUpRules)
+	}
+	for _, rule := range r.Allow {
+		if strings.Contains(rule, "retire") && (strings.Contains(rule, "--now") || strings.Contains(rule, "master") ||
+			strings.Contains(rule, "coder") || strings.Contains(rule, "foureyes") || strings.Contains(rule, "sentinel")) {
+			t.Fatalf("a retire rule beyond a pop's end: %s", rule)
+		}
 	}
 	for _, role := range m.roleOrder {
 		resolved, err := m.Resolve(role)
