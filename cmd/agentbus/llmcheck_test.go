@@ -178,3 +178,16 @@ func TestLLMEndpointCheckProbesTheSelectedEndpoint(t *testing.T) {
 		t.Fatalf("an endpoint config.toml lacks = %s %q", out.Status, out.Detail)
 	}
 }
+
+// The endpoint is judged for the model the running peer asks for, not the
+// one config.toml names now: an endpoint changed to another model after the
+// launch, serving that one only, is no ok (reviewer-codex); the change is said.
+func TestLLMEndpointCheckJudgesThePeersRunningModel(t *testing.T) {
+	srv := modelsServer(t, "phi")
+	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"phi\"\n")
+	snaps := map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used"}}
+	out, err := llmEndpointCheck(llmDeps(snaps, cfg))(context.Background())
+	if err != nil || out.Status != health.Warn || !strings.Contains(out.Detail, "answers without qwen") || !strings.Contains(out.Detail, "local (runs qwen; [llm.used] now names phi)") {
+		t.Fatalf("config changed under a running peer = %s %q %v", out.Status, out.Detail, err)
+	}
+}

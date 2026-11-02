@@ -778,16 +778,18 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   The client follows no redirect and uses no proxy; only transport errors, 5xx, 408, 429 and 404 are retried
   (`blocked`, the entry kept, every 30 s), any other refusal fails the turn with a reply. Tools: `read_file`,
   `list_dir`, `grep` under the project root (peer-security: the template's `working_dir`, else the launch
-  folder's Git top-level, never the cwd itself; `/`, `$HOME` and its ancestors refused; no `..`, no `.git`,
+  folder's Git top-level, never the cwd itself, an absolute path; `/`, `$HOME` and its ancestors refused; no `..`, no `.git`,
   symlinks re-checked, then opened component by component from the root with `O_NOFOLLOW` (`openBeneath`), so a
-  link swapped in after the checks is refused; regular files only; grep bounded by the turn and 20000 entries; the role's
+  link swapped in after the checks is refused; directories read 256 names at a time (grep's own walk, list_dir's 501);
+  regular files only; grep bounded by the turn and 20000 entries; the role's
   effective `Read(…)` denies with Claude Code's glob meaning, `~/` matched against the resolved home too, a bare
   `Read` denying everything, fail closed),
   `bus_thread`, `bus_agents`; no shell, no write, no verdict. `--check <endpoint>` asks its `/models`. Provider
   `local` is a built-in unlimited quota reader (listed by `agentbus quota` only with an endpoint). Health
   `llm-endpoint` (step 2; `health/llmendpoint.go` pure, `cmd/agentbus/llmcheck.go` the reader, every minute) probes
   only the endpoints the registered `local-llm` agents use (the one each peer resolved, `AgentSnapshot.Endpoint`, set by
-  its own status; a snapshot without it matches by model), `GET /models`
+  its own status, probed for the model the peer runs, an endpoint whose config.toml model changed since said; a snapshot
+  without it matches by model), `GET /models`
   through `peer.Client` (no redirect, no proxy) within 2 s each, side by side: fail on no answer or an error
   status, warn when one answers without its model or a peer has no endpoint, ok when all list theirs; unknown
   with no such agent, an unreadable config.toml or no endpoint at all; for you on warn and fail

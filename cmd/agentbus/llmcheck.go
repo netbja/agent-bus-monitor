@@ -45,18 +45,19 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 			return health.Outcome{Status: health.Unknown, Detail: "agent registry unavailable"}, err
 		}
 		models := map[string][]string{} // model -> peers with no recorded endpoint
-		named := map[string][]string{}  // endpoint name -> peers
+		var named []string              // peers with a recorded endpoint
 		for name, s := range snaps {
 			if s.Client != "local-llm" {
 				continue
 			}
 			in.Peers = append(in.Peers, name)
 			if s.Endpoint != "" {
-				named[s.Endpoint] = append(named[s.Endpoint], name)
+				named = append(named, name)
 			} else {
 				models[s.Model] = append(models[s.Model], name)
 			}
 		}
+		sort.Strings(named)
 		if len(in.Peers) == 0 {
 			return health.EvaluateLLMEndpoint(in), nil
 		}
@@ -67,17 +68,34 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 				return health.EvaluateLLMEndpoint(in), nil
 			}
 		}
+		// Each probe is an endpoint and the model asked of it, once.
 		var used []config.Endpoint
-		for _, ep := range cfg.Endpoints() {
-			if len(named[ep.Name]) > 0 || len(models[ep.Model]) > 0 {
+		seen := map[string]bool{}
+		probe := func(ep config.Endpoint) {
+			if k := ep.Name + "\x00" + ep.Model; !seen[k] {
+				seen[k] = true
 				used = append(used, ep)
 			}
 		}
-		for name, peers := range named {
-			if _, ok := cfg.Endpoint(name); !ok {
-				for _, p := range peers {
-					in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (endpoint %s)", p, name))
-				}
+		// A peer's own endpoint is probed for the model the peer runs, which
+		// its launch checked against config.toml then: an endpoint edited since
+		// is judged for what the peer still asks, and the edit is said.
+		for _, p := range named {
+			s := snaps[p]
+			ep, ok := cfg.Endpoint(s.Endpoint)
+			switch {
+			case !ok:
+				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (endpoint %s)", p, s.Endpoint))
+				continue
+			case s.Model != "" && s.Model != ep.Model:
+				in.Unmatched = append(in.Unmatched, fmt.Sprintf("%s (runs %s; [llm.%s] now names %s)", p, s.Model, ep.Name, ep.Model))
+				ep.Model = s.Model
+			}
+			probe(ep)
+		}
+		for _, ep := range cfg.Endpoints() {
+			if len(models[ep.Model]) > 0 {
+				probe(ep)
 			}
 		}
 		for model, peers := range models {
