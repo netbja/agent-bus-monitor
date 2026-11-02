@@ -10,10 +10,10 @@ import (
 // Codex reads each -c value as TOML and takes one that does not parse as a
 // raw string, silently: every turn hook must come back as the command given,
 // whatever the agentbus path holds (a space, a quote, a backslash, a tab,
-// an escape character, which TOML refuses raw, non-ASCII, a character beyond
+// an escape character and DEL, which TOML refuses raw, non-ASCII, a character beyond
 // the BMP that JSON would write as a surrogate pair).
 func TestCodexHookArgsAreTOML(t *testing.T) {
-	for _, bin := range []string{"/usr/local/bin/agentbus", "/opt/agent bus/agentbus", `/tmp/a"b\c/agentbus`, "/tmp/tab\there/agentbus", "/tmp/esc\x1b/agentbus", "/home/zoé/agentbus", "/tmp/\U0001F600/agentbus"} {
+	for _, bin := range []string{"/usr/local/bin/agentbus", "/opt/agent bus/agentbus", `/tmp/a"b\c/agentbus`, "/tmp/tab\there/agentbus", "/tmp/esc\x1b/agentbus", "/tmp/del\x7f/agentbus", "/home/zoé/agentbus", "/tmp/\U0001F600/agentbus"} {
 		h := claudeHooks{TurnStart: ShellJoin([]string{bin, "roles", "turn", "start"}), TurnEnd: ShellJoin([]string{bin, "roles", "turn", "end"})}
 		args := codexHookArgs(h)
 		if len(args) != 6 || args[0] != "-c" || args[2] != "-c" || args[4] != "-c" {
