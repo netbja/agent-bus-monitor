@@ -329,3 +329,30 @@ func TestGrepCutsLongLines(t *testing.T) {
 		t.Fatalf("one line gave %d bytes", len(out))
 	}
 }
+
+// A home reached through a symlink (/home -> /var/home on Fedora Atomic) still
+// has its ~/ denies matched: the tools compare resolved paths, so the matcher
+// resolves the home too (SEC-LLM-6).
+func TestDenyMatcherResolvesTheHome(t *testing.T) {
+	base := t.TempDir()
+	real, link := filepath.Join(base, "var", "home", "u"), filepath.Join(base, "home")
+	if err := os.MkdirAll(filepath.Join(real, ".ssh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "var", "home"), link); err != nil {
+		t.Fatal(err)
+	}
+	m, err := NewDenyMatcher([]string{"~/.ssh/**"}, base, filepath.Join(link, "u"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Join(real, ".ssh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{filepath.Join(resolved, "id_ed25519"), filepath.Join(link, "u", ".ssh", "id_ed25519")} {
+		if !m.Denied(p) {
+			t.Errorf("%s is not denied", p)
+		}
+	}
+}

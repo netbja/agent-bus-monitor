@@ -42,32 +42,43 @@ func ReadDenies(m *rolecfg.Manifest, role string) ([]string, error) {
 // (*.pem) at any depth, as gitignore and Claude Code read it.
 type DenyMatcher struct{ patterns [][]string }
 
-// NewDenyMatcher compiles patterns; one it cannot read is an error.
+// NewDenyMatcher compiles patterns; one it cannot read is an error. A ~/
+// pattern is compiled for the home as given and, when it differs, as
+// resolved: the tools compare resolved paths, and a home under a symlink
+// (/home -> /var/home) would otherwise never match (SEC-LLM-6).
 func NewDenyMatcher(patterns []string, root, home string) (DenyMatcher, error) {
 	var m DenyMatcher
+	homes := []string{home}
+	if h, err := filepath.EvalSymlinks(home); err == nil && h != home {
+		homes = append(homes, h)
+	}
 	for _, p := range patterns {
-		var abs string
+		var abs []string
 		switch {
 		case p == "":
 			return m, fmt.Errorf("an empty deny rule")
 		case strings.HasPrefix(p, "**"):
-			abs = "/" + p
+			abs = []string{"/" + p}
 		case strings.HasPrefix(p, "~/"):
-			abs = filepath.Join(home, p[2:])
-		case strings.HasPrefix(p, "//"):
-			abs = p[1:]
-		case !strings.Contains(p, "/"):
-			abs = "/**/" + p
-		default:
-			abs = filepath.Join(root, strings.TrimPrefix(p, "/"))
-		}
-		segs := split(filepath.ToSlash(abs))
-		for _, s := range segs {
-			if _, err := path.Match(s, ""); err != nil {
-				return m, fmt.Errorf("deny rule %q: %v", p, err)
+			for _, h := range homes {
+				abs = append(abs, filepath.Join(h, p[2:]))
 			}
+		case strings.HasPrefix(p, "//"):
+			abs = []string{p[1:]}
+		case !strings.Contains(p, "/"):
+			abs = []string{"/**/" + p}
+		default:
+			abs = []string{filepath.Join(root, strings.TrimPrefix(p, "/"))}
 		}
-		m.patterns = append(m.patterns, segs)
+		for _, a := range abs {
+			segs := split(filepath.ToSlash(a))
+			for _, s := range segs {
+				if _, err := path.Match(s, ""); err != nil {
+					return m, fmt.Errorf("deny rule %q: %v", p, err)
+				}
+			}
+			m.patterns = append(m.patterns, segs)
+		}
 	}
 	return m, nil
 }
