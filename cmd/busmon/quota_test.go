@@ -60,7 +60,7 @@ func TestQuotaShowsBothWindowsByTierAndAttachesMarkers(t *testing.T) {
 	if got := wide.text(); !strings.HasPrefix(got, "claude 5h "+strings.Repeat(GlyphThinBar, 4)+glyphVertical+" 88% │ 7d ") || !strings.Contains(got, "96% "+GlyphNone+" 1h") {
 		t.Fatalf("wide %q", got)
 	}
-	withPalette(t, "dark", false, 16) // the light track without true colour
+	withPalette(t, "dark", false, 16)                                                                                                                                                                         // the light track without true colour
 	if got := quotaSeg("anthropic", b, time.Time{}, false, nil, now, TierWide, barView{}).text(); !strings.Contains(got, " 7d "+strings.Repeat(GlyphThinBar, 7)+glyphVertical+GlyphThinBar+glyphHorizontal) { // 96 % = 9 cells, 5 of 7 days gone
 		t.Fatalf("wide, 16 colours %q", got)
 	}
