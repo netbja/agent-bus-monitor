@@ -608,3 +608,21 @@ func TestUpUnitsRunTheInstalledBinary(t *testing.T) {
 		t.Fatalf("unit runs %q, want %q", got, u.exe)
 	}
 }
+
+// start-tabs: the first workspace herdr made for a session start launched
+// (labelled after the folder, often the project) is not the project's: up
+// ignores it and opens the project's own, busmon first.
+func TestUpIgnoresTheSessionsFirstWorkspace(t *testing.T) {
+	work, _, h, _, deps := upFixture(t)
+	h.workspaces = `{"label":"demo","workspace_id":"w1"}`
+	deps.IgnoreWorkspace = "w1"
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	got := strings.Join(h.calls, "\n")
+	if strings.Contains(got, "workspace focus w1") || !strings.Contains(got, "workspace create --cwd "+work+" --label demo --focus") ||
+		!strings.Contains(got, "tab rename w9:t1 busmon") {
+		t.Fatalf("the session's first workspace was taken for the project's:\n%s", got)
+	}
+}

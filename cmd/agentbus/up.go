@@ -26,9 +26,12 @@ import (
 
 // upDeps is what `agentbus up` touches, injected for tests.
 type upDeps struct {
-	Herdr     func(args ...string) ([]byte, error) // the herdr CLI
-	Bootstrap func(args []string) error            // scripts/bootstrap <args>
-	Env       func(string) string
+	Herdr func(args ...string) ([]byte, error) // the herdr CLI
+	// IgnoreWorkspace is never taken for the project's open workspace: the
+	// first one herdr made for a session agentbus start launched (start-tabs).
+	IgnoreWorkspace string
+	Bootstrap       func(args []string) error // scripts/bootstrap <args>
+	Env             func(string) string
 
 	// The project services (v0.12). Services finds the manager, or says why
 	// there is none; nil means none.
@@ -444,7 +447,7 @@ func findWorkspace(d upDeps, project string) (string, error) {
 		return "", fmt.Errorf("herdr workspace list: %w", err)
 	}
 	for _, w := range v.Result.Workspaces {
-		if w.Label == project {
+		if w.Label == project && w.WorkspaceID != d.IgnoreWorkspace {
 			return w.WorkspaceID, nil
 		}
 	}

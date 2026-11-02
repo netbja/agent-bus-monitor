@@ -666,7 +666,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   edited by hand (rebuilt with `TemplateTeam` from its own tabs and compared byte for byte) or when it drops or moves an
   agent that is live or unprovable (`agentbus retire` first). Outside herdr with a terminal it runs `herdr --session
   <p>` on it, reads the socket from `herdr session list --json`, and runs `up` with `HERDR_ENV`/`HERDR_SESSION`/
-  `HERDR_SOCKET_PATH` set, its output in `<state>/start.log`. A role's own profile in a project is its template tab's
+  `HERDR_SOCKET_PATH` set, its output in `<state>/start.log`. herdr's first workspace of a session start created (labelled after the folder,
+  one bare shell tab: `initialWorkspace`, read only when `herdr session list` showed the session not running before) is
+  ignored by that `up` (`upDeps.IgnoreWorkspace`), so the project's own workspace opens busmon first; once `up` succeeds
+  start closes it only if a re-read still shows one tab and one plain shell (`closeInitialWorkspace`, `paneShell`;
+  never typed into), the note in `start.log` (start-tabs). A role's own profile in a project is its template tab's
   `--profile` (`ownprofile.go`: `tabLaunch`, `launchProfile` = own or a fallback, `ownProfile`); `tabProfile`, doctor,
   swap and reload read it there, and `up`'s `checkProfiles` stops before anything starts on a profile `roles.toml` no
   longer allows. Tests stub up, herdr and the bus (`startDeps`); none starts a real session.

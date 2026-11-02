@@ -332,6 +332,14 @@ type outsideWorld struct {
 	tty       io.ReadWriter // what herdr was given
 	release   chan struct{} // up waits until herdr exits
 	mu        sync.Mutex    // up runs beside herdr's wait
+
+	// start-tabs: the session's first workspace.
+	running bool     // the session ran before start launched herdr
+	runErr  error    // SessionRunning's error: unknown whether it ran
+	initial string   // what InitialWorkspace finds ("" = none)
+	asked   int      // InitialWorkspace calls
+	ignored []string // the workspace each up was told to ignore
+	closed  []string // CloseInitial calls
 }
 
 func (o *outsideWorld) note(s string) { o.mu.Lock(); defer o.mu.Unlock(); o.order = append(o.order, s) }
@@ -357,12 +365,27 @@ func (w *startWorld) outside(o *outsideWorld) startDeps {
 		}
 		return o.socket, nil
 	}
-	d.UpInSession = func(args []string, session, socket string, log io.Writer) int {
+	d.SessionRunning = func(session string) (bool, error) { return o.running, o.runErr }
+	d.InitialWorkspace = func(socket string) (string, error) {
+		o.mu.Lock()
+		o.asked++
+		o.mu.Unlock()
+		return o.initial, nil
+	}
+	d.CloseInitial = func(socket, ws string) (string, error) {
+		o.mu.Lock()
+		o.closed = append(o.closed, ws)
+		o.mu.Unlock()
+		o.note("close " + ws)
+		return "closed herdr's first workspace " + ws, nil
+	}
+	d.UpInSession = func(args []string, session, socket, ignore string, log io.Writer) int {
 		if o.release != nil {
 			<-o.release
 		}
 		o.mu.Lock()
 		o.inSession, o.inSock = append(o.inSession, args), socket
+		o.ignored = append(o.ignored, ignore)
 		o.mu.Unlock()
 		o.note("up in " + session)
 		fmt.Fprintln(log, "opened")
@@ -524,5 +547,49 @@ func TestStartOpensTheTerminalOnce(t *testing.T) {
 	d.TTY = func() io.ReadWriter { return tty }
 	if code := runStart([]string{w.folder}, d); code != 0 || tty.closed != 1 {
 		t.Fatalf("inside herdr = %d, closed %d", code, tty.closed)
+	}
+}
+
+// start-tabs: in a session start created, herdr's first workspace (one bare
+// shell tab, labelled after the folder) is not the project's: up ignores it,
+// so the project's own workspace opens busmon first, and once the team is
+// open start closes it, when still untouched. A session that already ran
+// has no such workspace; a failed up keeps it.
+func TestStartClosesHerdrsFirstWorkspace(t *testing.T) {
+	run := func(o *outsideWorld) *startWorld {
+		t.Helper()
+		w := newStartWorld(t)
+		d := w.outside(o)
+		d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
+		runStart([]string{w.folder, "--yes"}, d)
+		return w
+	}
+	o := &outsideWorld{socket: "/s.sock", initial: "w1"}
+	run(o)
+	if len(o.ignored) != 1 || o.ignored[0] != "w1" || len(o.closed) != 1 || o.closed[0] != "w1" {
+		t.Fatalf("new session: ignored %q, closed %q", o.ignored, o.closed)
+	}
+	if order := strings.Join(o.order, ","); !strings.Contains(order, "up in shop,close w1") && !strings.Contains(order, "up in shop,herdr exit,close w1") {
+		t.Fatalf("closed before the team was open: %s", order)
+	}
+
+	o = &outsideWorld{socket: "/s.sock", initial: "w1", running: true}
+	run(o)
+	if o.asked != 0 || len(o.ignored) != 1 || o.ignored[0] != "" || len(o.closed) != 0 {
+		t.Fatalf("a running session: asked %d, ignored %q, closed %q", o.asked, o.ignored, o.closed)
+	}
+
+	// Unknown whether the session ran: its first workspace may be the
+	// person's, so it is neither looked for nor closed.
+	o = &outsideWorld{socket: "/s.sock", initial: "w1", runErr: errors.New("herdr session list: timeout")}
+	run(o)
+	if o.asked != 0 || len(o.ignored) != 1 || o.ignored[0] != "" || len(o.closed) != 0 {
+		t.Fatalf("an unread session: asked %d, ignored %q, closed %q", o.asked, o.ignored, o.closed)
+	}
+
+	o = &outsideWorld{socket: "/s.sock", initial: "w1", upCode: 1}
+	run(o)
+	if len(o.closed) != 0 {
+		t.Fatalf("closed after a failed up: %q", o.closed)
 	}
 }
