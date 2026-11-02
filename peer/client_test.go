@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // fakeEndpoint answers /chat/completions with handle and /models with models.
@@ -136,5 +137,79 @@ func TestClientModels(t *testing.T) {
 	c.Model = "phi4"
 	if err := c.CheckModel(context.Background()); !errors.Is(err, ErrModelNotServed) || !strings.Contains(err.Error(), "phi4") {
 		t.Fatalf("missing model = %v", err)
+	}
+}
+
+// A redirect is never followed (the loopback check would be bypassed: the
+// prompt and repository text replayed to another host), and the client uses
+// no proxy; both hold for a client a test supplies too.
+func TestClientFollowsNoRedirectAndNoProxy(t *testing.T) {
+	hits := 0
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++; _, _ = io.WriteString(w, answerJSON) }))
+	defer other.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	for _, hc := range []*http.Client{nil, srv.Client()} {
+		c := Client{URL: srv.URL + "/v1", Model: "m", HTTP: hc}
+		_, _, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "secret text"}}, nil)
+		if !errors.Is(err, ErrRequestRefused) || !strings.Contains(err.Error(), "307") {
+			t.Fatalf("redirect = %v, want refused naming 307", err)
+		}
+		if err := c.CheckModel(context.Background()); !errors.Is(err, ErrRequestRefused) {
+			t.Fatalf("models redirect = %v", err)
+		}
+	}
+	if hits != 0 {
+		t.Fatalf("the redirect target was reached %d times", hits)
+	}
+	if tr, ok := (Client{}).http().Transport.(*http.Transport); !ok || tr.Proxy != nil {
+		t.Fatal("the production client may use a proxy")
+	}
+}
+
+// Only what can heal is retried (transport, 5xx, 408, 429, and 404: Ollama's
+// model not found, which the spec maps to blocked); any other refusal fails
+// the turn, so one entry never wedges the queue.
+func TestClientRetriesOnlyWhatCanHeal(t *testing.T) {
+	ctx := context.Background()
+	msgs := []Message{{Role: "user", Content: "q"}}
+	var ef *EndpointError
+	for _, code := range []int{404, 408, 429, 500, 502, 503} {
+		srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return code, `{"error":"busy"}` })
+		c := Client{URL: srv.URL + "/v1", Model: "m", HTTP: srv.Client()}
+		if _, _, err := c.Chat(ctx, msgs, ToolSpecs()); !errors.As(err, &ef) {
+			t.Errorf("%d = %v, want an EndpointError (retried)", code, err)
+		}
+	}
+	// llama-server's answer for a thread longer than its context, tools sent.
+	ctxFull := `{"error":{"code":400,"type":"exceed_context_size_error","message":"the request exceeds the available context size, try increasing it"}}`
+	for _, c := range []struct {
+		code int
+		body string
+	}{{400, ctxFull}, {401, `unauthorized`}, {413, `too large`}, {422, `{"error":"bad"}`}} {
+		srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return c.code, c.body })
+		cl := Client{URL: srv.URL + "/v1", Model: "m", HTTP: srv.Client()}
+		_, _, err := cl.Chat(ctx, msgs, ToolSpecs())
+		if !errors.Is(err, ErrRequestRefused) || errors.As(err, &ef) || errors.Is(err, ErrToolsUnsupported) {
+			t.Errorf("%d = %v, want refused, not retried", c.code, err)
+		}
+	}
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 400, ctxFull })
+	cl := Client{URL: srv.URL + "/v1", Model: "m", HTTP: srv.Client()}
+	if _, _, err := cl.Chat(ctx, msgs, ToolSpecs()); err == nil || !strings.Contains(err.Error(), "exceeds the available context size") {
+		t.Errorf("the reason is lost: %v", err)
+	}
+	// An answer with neither text nor a tool call is no completion.
+	for _, body := range []string{`{"choices":[{}]}`, `{"choices":[{"message":{"role":"assistant","content":null}}]}`, `{"choices":[{"message":{"content":""}}]}`} {
+		srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 200, body })
+		cl := Client{URL: srv.URL + "/v1", Model: "m", HTTP: srv.Client()}
+		if _, _, err := cl.Chat(ctx, msgs, nil); !errors.Is(err, ErrBadResponse) {
+			t.Errorf("%s = %v, want ErrBadResponse", body, err)
+		}
+	}
+	if got := oneLine([]byte(strings.Repeat("é", 150))); !utf8.ValidString(got) || len(got) > 200 {
+		t.Errorf("oneLine cut a rune: %q", got)
 	}
 }

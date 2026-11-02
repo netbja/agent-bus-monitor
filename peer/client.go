@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
 // Message is one OpenAI chat message.
@@ -63,7 +64,34 @@ var (
 	ErrBadResponse = errors.New("the endpoint's answer is not a chat completion")
 	// ErrModelNotServed: /models does not list the model.
 	ErrModelNotServed = errors.New("model not served")
+	// ErrRequestRefused: the endpoint refused this request for good (a 4xx
+	// that no retry heals, such as a thread longer than its context, or a
+	// redirect, never followed). The turn fails; the entry is acknowledged,
+	// so one entry never wedges the queue.
+	ErrRequestRefused = errors.New("the endpoint refused the request")
 )
+
+// refused is ErrRequestRefused with the status and the endpoint's reason.
+type refused struct {
+	status int
+	reason string
+}
+
+func (r *refused) Error() string {
+	return fmt.Sprintf("%v: status %d: %s", ErrRequestRefused, r.status, r.reason)
+}
+func (r *refused) Is(target error) bool { return target == ErrRequestRefused }
+
+// statusError classes a non-200: only what can heal is an EndpointError
+// (retried, the entry kept): 5xx, 408, 429, and 404 (Ollama's model not
+// found, which the spec maps to blocked). Any other is refused.
+func statusError(what string, status int, body []byte) error {
+	reason := oneLine(body)
+	if status >= 500 || status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusNotFound {
+		return &EndpointError{Err: fmt.Errorf("%sstatus %d: %s", what, status, reason)}
+	}
+	return &refused{status: status, reason: reason}
+}
 
 // EndpointError is a fault of the endpoint itself (unreachable, or a server
 // error): the peer declares blocked and retries, never acknowledging the entry.
@@ -84,11 +112,25 @@ type Client struct {
 	HTTP      *http.Client
 }
 
+// directTransport is the default transport without a proxy: the endpoint
+// is reached directly or not at all (prompts and repository text never
+// travel through HTTP(S)_PROXY).
+var directTransport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	return t
+}()
+
+// http is the client a call uses: c.HTTP's transport (a test's) or the
+// direct one, and never a redirect followed (the loopback check would be
+// bypassed: a 307 replays the request to another host).
 func (c Client) http() *http.Client {
+	hc := http.Client{Transport: directTransport}
 	if c.HTTP != nil {
-		return c.HTTP
+		hc = *c.HTTP
 	}
-	return http.DefaultClient
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &hc
 }
 
 // Chat sends one chat completion; tools nil sends none.
@@ -106,11 +148,14 @@ func (c Client) Chat(ctx context.Context, msgs []Message, tools []ToolSpec) (Mes
 	if err != nil {
 		return Message{}, Usage{}, err
 	}
+	// A 4xx naming tools while tools were sent reads as a refusal of tools
+	// (the turn is then tried once without them). It may also be a complaint
+	// about a tool message mid-loop; the one retry without tools is harmless.
 	if status >= 400 && status < 500 && len(tools) > 0 && strings.Contains(strings.ToLower(string(data)), "tool") {
 		return Message{}, Usage{}, ErrToolsUnsupported
 	}
 	if status != http.StatusOK {
-		return Message{}, Usage{}, &EndpointError{Err: fmt.Errorf("status %d: %s", status, oneLine(data))}
+		return Message{}, Usage{}, statusError("", status, data)
 	}
 	var resp chatResponse
 	if err := json.Unmarshal(data, &resp); err != nil || len(resp.Choices) == 0 {
@@ -120,6 +165,9 @@ func (c Client) Chat(ctx context.Context, msgs []Message, tools []ToolSpec) (Mes
 	out := Message{Role: "assistant", ToolCalls: m.ToolCalls}
 	if m.Content != nil {
 		out.Content = *m.Content
+	}
+	if out.Content == "" && len(out.ToolCalls) == 0 {
+		return Message{}, Usage{}, ErrBadResponse // neither text nor a tool call
 	}
 	return out, resp.Usage, nil
 }
@@ -135,7 +183,7 @@ func (c Client) CheckModel(ctx context.Context) error {
 		return err
 	}
 	if status != http.StatusOK {
-		return &EndpointError{Err: fmt.Errorf("models: status %d", status)}
+		return statusError("models: ", status, data)
 	}
 	var list struct {
 		Data []struct {
@@ -180,9 +228,13 @@ func (c Client) do(req *http.Request) ([]byte, int, error) {
 
 // oneLine is the start of an error body, on one line.
 func oneLine(b []byte) string {
-	s := strings.Join(strings.Fields(string(b)), " ")
+	s := strings.Join(strings.Fields(strings.ToValidUTF8(string(b), "?")), " ")
 	if len(s) > 200 {
-		s = s[:200]
+		cut := 200
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut]
 	}
 	return s
 }
