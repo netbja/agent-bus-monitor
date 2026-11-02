@@ -25,8 +25,8 @@ Facts read on this host on 2026-11-02:
 | Nerd Fonts 3.4.0 has **no** maker logo for Claude/Anthropic, OpenAI/Codex, Kimi/Moonshot or Grok/xAI | `glyphnames.json` of the v3.4.0 tag: no key matches `claude|anthropic|openai|kimi|moonshot|grok|xai` (`gemini` only as `md-zodiac_gemini`) |
 | The agent font's range overlaps no Nerd Font range (Nerd Fonts use `E000–E00A`, `E0A0–…`, `E200–…`) | both charsets above |
 
-The `Herdr Agent Icons Max` codepoints come from herdr-radar's `lib/logos.js` (personal note
-`agent-icon-font`, 2026-10-20); the font itself does not name its glyphs.
+The `Herdr Agent Icons Max` codepoints come from the logo table of the herdr font installer
+that put the font here (read 2026-10-20); the font itself does not name its glyphs.
 
 ## 2. The setting
 
