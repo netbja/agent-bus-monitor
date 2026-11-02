@@ -778,7 +778,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   The client follows no redirect and uses no proxy; only transport errors, 5xx, 408, 429 and 404 are retried
   (`blocked`, the entry kept, every 30 s), any other refusal fails the turn with a reply. Tools: `read_file`,
   `list_dir`, `grep` under the project root (peer-security: the template's `working_dir`, else the launch
-  folder's Git top-level, never the cwd itself, an absolute path; no start without an absolute `$HOME`; `/`,
+  folder's Git top-level, never the cwd itself, an absolute path; the home from `$HOME`, else the passwd entry, else no start; `/`,
   `$HOME` and its ancestors refused; no `..`, no `.git`,
   symlinks re-checked, then opened component by component from the root with `O_NOFOLLOW` (`openBeneath`), so a
   link swapped in after the checks is refused; directories read 256 names at a time (grep's own walk, list_dir's 501);

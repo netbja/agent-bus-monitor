@@ -172,7 +172,8 @@ For each cmd entry addressed to it (directive, challenge, reply, request):
 The root (security review, SEC-LLM-3) is the project's folder: its template's `working_dir`,
 else the Git top-level of the folder the peer was launched from, never that folder itself
 (`agent-spawn` takes it from its caller), and always an absolute path (a relative one is refused);
-without an absolute `$HOME` the peer does not start (the checks below, and the `~/` denies, need it). `/`, `$HOME` and a folder holding `$HOME` are refused
+the home is `$HOME`, else (unset or relative) the user's passwd entry, and with neither the peer does
+not start (the checks below, and the `~/` denies, need it). `/`, `$HOME` and a folder holding `$HOME` are refused
 at start, since the files tools would then reach every credential the person has. No tool reads
 `.git` (its config can hold a remote URL with a token), asked or reached through a link. A
 checked path is opened from the root one component at a time, following no link (`openat` with

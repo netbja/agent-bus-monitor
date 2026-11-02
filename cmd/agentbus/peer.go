@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -74,7 +75,8 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 		fmt.Fprintln(errw, "peer: the role's deny rules cannot be read:", err)
 		return 1
 	}
-	deny, err := peer.NewDenyMatcher(denies, root, getenv("HOME"))
+	home, _ := peerHome(getenv) // peerRoot has checked it
+	deny, err := peer.NewDenyMatcher(denies, root, home)
 	if err != nil {
 		fmt.Fprintln(errw, "peer: the role's deny rules cannot be read:", err)
 		return 1
@@ -129,11 +131,9 @@ func peerStartCheck(ctx context.Context, c peer.Client, out io.Writer) {
 // its caller. The filesystem root, the home directory and a folder holding
 // it are refused: read_file and grep would reach every credential in it.
 func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
-	home := getenv("HOME")
-	if !filepath.IsAbs(home) {
-		// Without it the home checks below cannot run, and the ~/ denies
-		// would anchor nowhere (reviewer-codex): fail closed.
-		return "", fmt.Errorf("HOME is not set to an absolute path: refused")
+	home, err := peerHome(getenv)
+	if err != nil {
+		return "", err
 	}
 	root := ""
 	if rows, err := projlist.Templates(rolecfg.ProjectsDir(getenv)); err == nil {
@@ -159,7 +159,7 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 	if !filepath.IsAbs(root) {
 		return "", fmt.Errorf("the project's folder %q is not an absolute path: refused", root)
 	}
-	root, err := filepath.EvalSymlinks(root)
+	root, err = filepath.EvalSymlinks(root)
 	if err != nil {
 		return "", err
 	}
@@ -175,6 +175,29 @@ func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
 		return "", fmt.Errorf("%s holds the home directory: refused", root)
 	}
 	return root, nil
+}
+
+// userHome is the user's home from the passwd entry (os/user); a test's.
+var userHome = func() (string, error) {
+	u, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	return u.HomeDir, nil
+}
+
+// peerHome is the home the root checks and the ~/ denies are anchored on:
+// HOME, else (unset or relative) the user's passwd entry; with neither
+// absolute the peer does not start (reviewer-codex, master: an empty home
+// skipped the checks and anchored the ~/ denies nowhere).
+func peerHome(getenv func(string) string) (string, error) {
+	if h := getenv("HOME"); filepath.IsAbs(h) {
+		return h, nil
+	}
+	if h, err := userHome(); err == nil && filepath.IsAbs(h) {
+		return h, nil
+	}
+	return "", fmt.Errorf("no home directory: HOME is not an absolute path and the user has no home entry: refused")
 }
 
 // peerCheck asks one endpoint for its models: 0 when it serves its model.

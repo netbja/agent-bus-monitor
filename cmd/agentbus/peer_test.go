@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -203,15 +204,26 @@ func TestPeerStartCheckIsBounded(t *testing.T) {
 	}
 }
 
-// With HOME unset or relative the home checks cannot run: the peer refuses,
-// never reads a repository rooted at the real home (reviewer-codex).
-func TestPeerRootNeedsAnAbsoluteHome(t *testing.T) {
-	repo := t.TempDir()
-	gitInit(t, repo)
-	for _, home := range []string{"", "relative/home"} {
-		env := map[string]string{"HOME": home, "AGENTBUS_PROJECTS_DIR": t.TempDir()}
-		if root, err := peerRoot("other", repo, func(k string) string { return env[k] }); err == nil || !strings.Contains(err.Error(), "HOME") {
-			t.Errorf("HOME=%q: root = %q, %v; want a refusal naming HOME", home, root, err)
+// With HOME unset or relative, the home is the user's passwd entry; the home
+// checks run against it, so a repository rooted there is still refused. No
+// home at all refuses the start (reviewer-codex, master).
+func TestPeerRootFindsTheHomeWithoutHOME(t *testing.T) {
+	home := t.TempDir()
+	gitInit(t, home)
+	defer func(f func() (string, error)) { userHome = f }(userHome)
+	for _, h := range []string{"", "relative/home"} {
+		env := map[string]string{"HOME": h, "AGENTBUS_PROJECTS_DIR": t.TempDir()}
+		getenv := func(k string) string { return env[k] }
+		userHome = func() (string, error) { return home, nil }
+		if root, err := peerRoot("other", home, getenv); err == nil || !strings.Contains(err.Error(), "the home directory") {
+			t.Errorf("HOME=%q, passwd home a repository: root = %q, %v; want refused as the home", h, root, err)
+		}
+		if got, err := peerHome(getenv); err != nil || got != home {
+			t.Errorf("HOME=%q: peerHome = %q, %v; want the passwd entry", h, got, err)
+		}
+		userHome = func() (string, error) { return "", errors.New("no passwd entry") }
+		if root, err := peerRoot("other", home, getenv); err == nil || !strings.Contains(err.Error(), "no home directory") {
+			t.Errorf("HOME=%q, no passwd home: root = %q, %v; want a refusal", h, root, err)
 		}
 	}
 }
