@@ -235,7 +235,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`history`/`challenge`/`reply`/
-  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`plan`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`down`/`service`/`subscribe`/`watch`/`listen`/`config`/`version`. Parses args manually;
+  `verdict`/`verdicts`/`pilot`/`gate`/`agents`/`bind`/`usage`/`budget`/`board`/`plan`/`shutdown`/`refresh`/`request`/`dispatch`/`missions`/`mission`/`mem`/`roles`/`up`/`start`/`down`/`service`/`subscribe`/`watch`/`listen`/`config`/`version`. Parses args manually;
   trailing words are joined. Every command's usage, flags and examples are one table
   (`cmd/agentbus/commands.go`, types in `cli/`): `agentbus help [<cmd>]` and `<cmd> --help`
   render it above the project-required exit, and `expandArgs` rewrites the table's short flags
@@ -653,6 +653,22 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `errCLIAbsent`, read from its own `AGENTBUS_PROBE_DONE <status>` marker so a shell failing at startup is not a miss; anything else `errCLIUnknown`, counted as found: fail open), and starts every tab
   anyway (master: a lookup alone never drops a tab; a CLI confirmed absent opens no trust gate); only with none of the team's found does it
   refuse (exit 1) with the pointers and `agentbus up <p>`. Nil `TabExe`/`LookPath` = no check.
+- **`agentbus start` (spec `docs/superpowers/specs/2026-11-01-agentbus-start-design.md`) is a front door over
+  `up`, not a second launcher** (`start.go`, `start_deduce.go`, `start_ask.go`; above the project-required exit, beside
+  `up`). `deduceStart` reads the folder (resolved, its Git root, a linked worktree's main checkout: `canonDir`, used for
+  templates' `working_dir` too, since bootstrap records the logical path), the project (a template on that folder, else
+  `startProjectName` of its base name, `-2`… when another folder's template holds it), the name (`identity.as`, else
+  `$USER`) and the team (the template's tabs, else `start.team`, else every boot role). The assistant is plain lines on
+  `/dev/tty` (`setup.OpenTTY`); with no terminal and no `--yes` it prints and exits 2. Its own writes are only
+  `identity.as` when none is recorded and `start.team` when the person chose a team; everything else is `up`'s code path
+  (`runUp`), with `--roles` for a reduced new team or `new --roles` for a team change, which is refused on a template
+  edited by hand (rebuilt with `TemplateTeam` from its own tabs and compared byte for byte) or when it drops or moves an
+  agent that is live or unprovable (`agentbus retire` first). Outside herdr with a terminal it runs `herdr --session
+  <p>` on it, reads the socket from `herdr session list --json`, and runs `up` with `HERDR_ENV`/`HERDR_SESSION`/
+  `HERDR_SOCKET_PATH` set, its output in `<state>/start.log`. A role's own profile in a project is its template tab's
+  `--profile` (`ownprofile.go`: `tabLaunch`, `launchProfile` = own or a fallback, `ownProfile`); `tabProfile`, doctor,
+  swap and reload read it there, and `up`'s `checkProfiles` stops before anything starts on a profile `roles.toml` no
+  longer allows. Tests stub up, herdr and the bus (`startDeps`); none starts a real session.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P
