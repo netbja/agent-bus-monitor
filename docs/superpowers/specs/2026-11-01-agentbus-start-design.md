@@ -18,6 +18,17 @@ Bernard's decisions (2026-10-31):
 - **The default team is the complete one**: master, coder, foureyes, sentinel (the shipped
   `roles.toml`'s `boot` roles).
 
+Bernard's answers to the questions this spec left open (2026-11-02):
+
+- **Outside herdr, start launches herdr itself** (`herdr --session <project>`), and the team
+  opens inside it ("Outside herdr" below).
+- **The team line also changes a role's client**, chosen from that role's `fallback_profiles`,
+  not only keeps or drops roles ("The assistant").
+- **A reduced team is kept in the project's template and as the default team for future
+  projects** in `config.toml`, the registry key `start.team` ("What is written").
+- **The name is a new command, `agentbus start`**; `agentbus up` stays as it is, strict and
+  scriptable: a project argument still required, no assistant, no deduction.
+
 ## What start is, and is not
 
 `start` is a front door over `agentbus up`, not a second launcher. It deduces, asks, writes
@@ -27,8 +38,12 @@ the trust gate, the services and their env file, `waitBroker`, `upLock`, and rel
 that no existing pane is ever typed into.
 
 ```
-agentbus start [<path>] [--yes] [--dry-run] [--name <project>] [--as <name>] [--roles <r,r,...>]
+agentbus start [<path>] [--yes] [--dry-run] [--name <project>] [--as <name>] [--roles <r[:profile],...>]
 ```
+
+`--roles` names the team, each role optionally with the profile it runs on
+(`master,coder,foureyes:review`); a profile must be the role's own or one of its
+`fallback_profiles`, checked as the team line checks it.
 
 `<path>` defaults to the current directory. The flags pre-answer the assistant; `--yes` takes
 every deduced value without asking. Its block in `main()` sits above the project-required
@@ -41,9 +56,9 @@ exit, beside `up`'s: no project is known until start has deduced one.
 | Folder | `<path>`, else the current directory; then its Git root, and inside a linked worktree (`.worktrees/x`) the main checkout, as `trustKey` resolves it | must exist and be a directory; a team works in one checkout and makes its own worktrees, so a worktree never becomes a project of its own |
 | Project | an existing template whose `working_dir` is that folder; else the folder's base name, lower-cased, every run of characters outside `[a-z0-9_-]` turned into one `-`, a leading non-letter dropped, cut at 32 | `bus.ValidName`; nothing valid left = asked, never invented; two templates naming that folder = both listed and asked (with `--yes`: refused, naming both) |
 | Your name | `identity.as` (`config.toml`, then `busmon.toml`: `personName`); else `$USER` normalised by the project's rule | a `$USER` that normalises to nothing valid = asked; the name is shown, never silently written |
-| Team | the template's agent tabs when the project exists; else `roles.toml`'s `boot` roles, in its order | each role's client looked up with `lookAgentCLI` (PATH, the usual per-user dirs, the login shell) |
+| Team | the template's agent tabs (and the `--profile` each tab's command carries) when the project exists; else `start.team` (`config.toml`); else `roles.toml`'s `boot` roles, in its order, each on its own profile | each role's client looked up with `lookAgentCLI` (PATH, the usual per-user dirs, the login shell); a `start.team` role the manifest no longer has as `boot` is dropped, and a profile no longer among the role's own or `fallback_profiles` falls back to its own, each said in one line; master is always in (added back, said, when `start.team` lacks it) |
 | Services | systemd `--user` / launchd when `up` would use them, else tabs | as `up` decides it today (`d.Services`) |
-| herdr session | `HERDR_SESSION`, then `HERDR_SOCKET_PATH` | as `up` (`herdrSession`) |
+| herdr session | `HERDR_SESSION`, then `HERDR_SOCKET_PATH`; outside herdr, the project's name | as `up` (`herdrSession`); outside herdr, the session start launches ("Outside herdr") |
 
 A project name already used by a template for **another** folder is never taken over: the
 deduced name gets `-2`, `-3`, … (the first free one) and the assistant says why.
@@ -64,9 +79,13 @@ agentbus start — ~/src/shop
   4  Team       master  coder  foureyes  sentinel
                 claude ✓ (all four)
   5  Services   systemd --user           dispatch and missions
+  6  herdr      session shop             launched by start (you are outside herdr)
 
   Enter: start the team   1-5: change   q: quit, nothing written
 ```
+
+Line 6 shows only outside herdr; it is information, not a choice (inside herdr the team opens in
+the current session, as `up`).
 
 Changing a line asks one question, with the deduced value as the default, checked by the same
 rule as the table above; a refusal says the rule and asks again:
@@ -77,16 +96,42 @@ rule as the table above; a refusal says the rule and asks again:
   Project [shop]: shop-api
 ```
 
-The team line toggles roles by number and never adds one the manifest does not have:
+The team line lists each role with the client it runs on. A number toggles that role; `c` and a
+number changes its client. It never adds a role the manifest does not have as `boot`:
 
 ```
-  Team: 1 master ✓  2 coder ✓  3 foureyes ✓  4 sentinel ✓   number to toggle, Enter when done
+  Team  1 master    claude (default)     ✓
+        2 coder     claude (default)     ✓
+        3 foureyes  claude (default)     ✓   also: review (codex)
+        4 sentinel  claude (light)       ✓
+  number: on/off   c then number: client   Enter when done
   > 4
-  Team: 1 master ✓  2 coder ✓  3 foureyes ✓  4 sentinel -   number to toggle, Enter when done
+        4 sentinel  claude (light)       -
+  > c3
+    foureyes runs on: 1 default (claude) ✓   2 review (codex) ✓
+  > 2
+        3 foureyes  codex (review)       ✓
 ```
 
-master cannot be removed (it is the escalation target and the pilot); the screen says so.
-foureyes off is allowed, with one line: `no reviewer: 4-eyes reviews will wait for one`.
+The client choice offers the role's own profile and its `fallback_profiles`, in the manifest's
+order (`rolecfg.Fallbacks`: defined, another provider, at most 3), each with its client looked
+up as the line above (`lookAgentCLI`; an unknown answer counts as found, as `up` fails open). A
+profile whose client is confirmed absent is listed with `✗` and its install page, and cannot be
+chosen. A role with no `fallback_profiles` offers nothing to choose and says so: `no other client
+configured for coder (fallback_profiles in roles.toml)`; the shipped `roles.toml` declares none
+for its `boot` roles, so on it the choice is empty until the person adds one, which start never
+does for them.
+
+master cannot be removed (it is the escalation target and the pilot); the screen says so. Its
+client can be changed like any other role's. foureyes off is allowed, with one line: `no
+reviewer: 4-eyes reviews will wait for one`.
+
+A team that differs from the complete one on its default profiles (a role off, or a client
+changed) shows one more line before Enter, the second write it causes:
+
+```
+  This team becomes the default for new projects (start.team in config.toml).
+```
 
 A client that is missing is shown, never installed:
 
@@ -126,12 +171,80 @@ Nothing before Enter (or `--yes`). Then two kinds of writes.
    writer: the smallest edit, a symlink followed, a comment kept), only when no name is
    recorded. A recorded name is never replaced here.
 2. **The template's team**, only on a change. A new project's template is bootstrap's (below).
-   A team other than the complete one adds `--roles <r,r,...>` to bootstrap, which passes it to
-   `roles template`: `Template` takes the role list, default the `boot` roles, an unknown or
-   non-`boot` role refused. **Without `--roles` its output stays byte for byte what it is
-   today**, so `up`'s behaviour does not move (held by the existing template and
+   A team other than the complete one on its own profiles adds `--roles <r[:profile],...>` to
+   bootstrap, which passes it to `roles template`: `Template` takes the role list, each with an
+   optional profile, default the `boot` roles on their own profiles; an unknown or non-`boot`
+   role, or a profile that is neither the role's own nor one of its `fallback_profiles`, is
+   refused. A role on another profile gets `--profile <p>` in its tab's command (`agent-launch
+   <role> <project> --profile <p>`, the form `agent-launch` and the resume hook already accept);
+   a role on its own profile gets none. **Without `--roles` its output stays byte for byte what
+   it is today**, so `up`'s behaviour does not move (held by the existing template and
    `tests/roles_scripts_test.sh` dry-run tests, plus one comparing the default call with the
    old signature's output).
+3. **`config.toml`: `start.team`**, through `config.Set`, whenever the person confirms a team in
+   the assistant (or passes `--roles`) that differs from the complete one on its own profiles,
+   for a new project or an existing one; the screen said so before Enter. Confirming the
+   complete team again removes the key (`config.Unset`), so new projects follow the manifest's
+   `boot` roles once more. A team taken unchanged (Enter on the deduced line, `--yes` alone)
+   writes nothing.
+
+`start.team` is a registry key (`config/keys.go`), so `agentbus config` shows it with its source
+and busmon's settings page lists it:
+
+| Field | Value |
+|---|---|
+| Name | `start.team` |
+| Kind | `String`: comma-separated `role` or `role:profile`, the `--roles` syntax |
+| Default | `""`: the manifest's `boot` roles on their own profiles |
+| Env | none (a team is a person's choice kept in a file, not a session's override) |
+| ReadBy | `agentbus start` |
+| File rule | each item a valid name, optionally `:` and a valid name, no duplicate role; the manifest is not read here (`config` imports no `rolecfg`), so start checks the roles and profiles at use, as the Team row says |
+| Group | `Identity` (who you are and the team you start with); `TestEveryKeyHasItsGroup` holds it |
+
+### A role's own profile in a project
+
+The configured profile of a role is then the template's when its tab names one. One function,
+`ownProfile(m, project, role)`, answers it: the `--profile` of the role's tab in the project's
+template (`rolecfg.ProjectsDir`/`<project>.toml`, split as `tabProfile` splits it) resolved with
+`m.ResolveWith`, else `m.Resolve(role)` (no template, no tab for the role, as for a pop, or a tab
+without `--profile`). A template that exists but cannot be read or parsed is an error, never a
+silent fall back to `roles.toml`: a reader that acts (swap, reload) refuses with it, a reader that
+reports (doctor) shows `?`.
+
+Every reader that today takes a role's own profile from `m.Resolve(role)` reads it through
+`ownProfile` instead:
+
+| Reader | What it does with the own profile |
+|---|---|
+| `tabProfile` (`trust.go`), so `tabExecutable`, `checkClients` and the trust gate (`trustPlan`) | the client a tab launches: `foureyes:review` is checked as codex and opens codex's trust gate, not claude's; an `ownProfile` error aborts `up` (below) |
+| `roles doctor` | the configured model, so a client chosen at start is never `model≠` drift |
+| `swap`: own profile and target set | the targets are the manifest's own profile plus its `fallback_profiles`, minus the current own; so with foureyes on `review`, `swap foureyes --profile default` is allowed without `--force` |
+| `swap`: provider rule | `checkFallbacks` checks "another provider" against the manifest's profile at load; swap also refuses a target on the current own profile's provider, since it would be held with it |
+| `swap --back`, the `{p}:fallback` record (`OwnProfile`, `OwnProvider`), the `hold:<provider>` mark it reads | back to the template's profile, and the own provider watched is the template's |
+| `swap`'s recovery line | `agent-spawn <role> <p> --profile <own>` when own differs from the manifest's, so a recovery respawns on the project's profile |
+| `reload` preflight and proof | the client executable checked before the kill and the client/provider `replaced` proves against: the relaunch runs the template's command, so the proof must expect the template's client, or a sentinel reload of a role whose client was chosen at start would kill it and then fail |
+| `reload`'s recovery lines | as swap's |
+
+**A profile that does not resolve stops `up`, it is never skipped.** Today `tabProfile` returns
+`false` for a tab it cannot resolve, `tabExecutable` then returns `""`, `checkClients` skips the
+tab and `trustPlan` treats it as ungated: for a profile, that would open a pane with neither
+check. So `tabProfile` returns an error alongside its result, and an `ownProfile` error (the
+template unreadable or unparsable, or a tab's `--profile` that `roles.toml` no longer defines, or
+that is neither the role's own profile nor one of its `fallback_profiles`) aborts `up` in
+`checkClients`, before any service is started, any workspace or tab opened and any pane
+launched, with the tab and the profile named: `agentbus up: tab foureyes: profile review is not
+in roles.toml (its own profile or fallback_profiles): run agentbus start to choose again, or edit
+<template>`. Exit 1. The same error refuses the trust gate's plan, so no path launches past it.
+Tabs that launch no agent (busmon, dispatch, missions) and a role name `roles.toml` does not have
+keep today's behaviour (skipped by the checks; agent-launch refuses the role itself): only a
+profile the template names is new, so only it is new to check. start's Team row reads the same
+error and shows that role `✗ profile review no longer allowed`, asks for its client, and with
+`--yes` refuses, naming it.
+
+`resumeProfile` (the resume hook) needs no change: it already adds `--profile` for a running
+profile that differs from the manifest's. A choice made at start is the project's configuration,
+not a fallback: it writes no `{p}:fallback` record, busmon shows no `fallback` flag, and no
+`back:` notice follows.
 
 A team change on an **existing** project:
 
@@ -139,8 +252,9 @@ A team change on an **existing** project:
   differ (a hand edit: another command, an added tab), the change is refused, naming the file:
   `shop.toml was edited by hand: change its tabs there, or move it aside to let start write
   it`. bootstrap writes with a redirect, so a rewrite would erase the edit.
-- On an **open workspace**, dropping a role whose agent is live is refused, pointing at
-  `agentbus retire <role>` first: `up`'s relaunch never closes a tab, so the agent would keep
+- On an **open workspace**, dropping a role whose agent is live, or changing its client, is
+  refused, pointing at `agentbus retire <role>` first (for a client change while it runs,
+  `agentbus swap <role> --profile <p>` is the temporary route, and the template is unchanged): `up`'s relaunch never closes a tab, so the agent would keep
   running outside its template. Adding a role is allowed: the new template has its tab, and
   `up`'s relaunch on the open workspace creates a tab that is missing (`Create`), in a new tab,
   typing into no pane.
@@ -162,7 +276,8 @@ start runs them as `up` does; every write below is theirs, on every run, and sta
   panes for dead agents and new tabs for missing ones, and the old panes it proves it may close.
 
 Never written by either: `roles.toml`, any client config, Git, a cron entry, the index
-(`--index` and `--cron` stay `up`'s flags).
+(`--index` and `--cron` stay `up`'s flags), any `config.toml` key but `identity.as` and
+`start.team`.
 
 ## Idempotence
 
@@ -178,9 +293,38 @@ A start after a reboot is `up`'s relaunch too.
 
 ## Outside herdr
 
-`up` outside herdr provisions and prints how to open the workspace. `start` does the same and
-names the exact next command: `herdr --session <project>`, then `agentbus start` again in that
-session (it then sees the provisioned project and opens it). See open question 1.
+`up` outside herdr provisions and prints how to open the workspace. `start` goes on and launches
+herdr itself, so the team opens inside it:
+
+1. It provisions exactly as `up` does outside herdr (bootstrap, the template, the services).
+2. It runs `herdr --session <project>` as a child that inherits start's terminal (stdin, stdout,
+   stderr), the same process a person typing that command would get; herdr launches the session,
+   or attaches to it when one of that name already runs.
+3. In parallel it asks herdr where that session lives: `herdr session list --json` (herdr's own
+   answer: `name`, `running`, `socket_path`), every 250 ms until the session is listed `running`,
+   bounded at 15 s. agentbus never computes herdr's config directory: `herdrSession` and
+   `sessionFromSocket` only parse a path they are given.
+4. It then runs `up`'s code path (`runUp`) with `--session <project>` and an environment that
+   says it is inside that session, since `up` opens a workspace only when `HERDR_ENV=1`
+   (`up.go`; outside herdr it provisions and prints the hint, `--session` or not):
+   `HERDR_ENV=1`, `HERDR_SESSION=<project>`, `HERDR_SOCKET_PATH=<socket_path>` from step 3, on
+   top of start's own environment (the same three a herdr pane gives a plugin). Its herdr calls
+   reach the session through that socket. That run's output goes to `<state>/start.log` (0600),
+   never to the terminal herdr now draws.
+5. start waits for herdr to exit and returns its exit status. If step 3 or 4 failed, it then
+   prints the error and the log's path; the session and its workspace stay (they are herdr's).
+
+What `up` would say on the terminal goes to `start.log` while herdr draws, so start says the two
+lines a person needs **before** handing the terminal over, on the assistant's screen: the clients
+`checkClients` finds missing (the Team line already shows them) and, for each client whose trust
+reader says the folder is not trusted yet, `codex does not trust ~/src/shop yet: answer its dialog
+in the foureyes tab`. Once herdr draws, that dialog is visible in its pane, and the dispatcher's
+existing `prompt` flag and desktop ring (A10) cover a dialog left unanswered.
+
+start does not own the terminal beyond that: it hands it to herdr for herdr's whole run and never
+writes to it meanwhile. Without a terminal (a script with `--yes`), start cannot hand one to
+herdr: it provisions, prints today's `herdr --session <project>` line, and exits 0. A second
+`start` from inside the session finds the project open, as any start inside herdr.
 
 ## Failure paths
 
@@ -188,6 +332,11 @@ session (it then sees the provisioned project and opens it). See open question 1
 |---|---|
 | `agentbus` installed but no broker (docker down, compose never run) | bootstrap's own error, plus `./setup.sh status` to see why |
 | herdr not on PATH | says herdr is needed and where to get it (setup's step 2 text); writes nothing |
+| Outside herdr, the session is not listed `running` within 15 s | herdr keeps the terminal; once it exits, start prints `herdr session <project> did not start` and `agentbus up <project>` to run inside it; exits 1 |
+| Outside herdr, `up` fails inside the launched session | after herdr exits, the error and `<state>/start.log`; exits 1 |
+| A `start.team` role or profile the manifest no longer allows | dropped or back to the role's own profile, said on the screen; never refused |
+| A template tab's `--profile` no longer allowed by `roles.toml` (removed, or no longer a fallback), or the template unreadable | `up` (and so start) exits 1 before any service, tab or pane, naming the tab and the profile; start's Team row asks for that role's client again, `--yes` refuses |
+| A client change for a role whose agent is live | refused, pointing at `agentbus retire <role>` (or `swap` for a temporary change) |
 | No terminal and no `--yes` | prints the deduced values, says `--yes` takes them, exits 2; writes nothing |
 | Folder name gives no valid project | asks; with `--yes`, refuses with the rule and `--name` |
 | Template name taken by another folder | a free `-N` name, said on the screen |
@@ -229,6 +378,39 @@ session (it then sees the provisioned project and opens it). See open question 1
 - **Team change**: a hand-edited template refused and left byte-identical; dropping a live role
   on an open workspace refused with `agentbus retire`; adding one creates its tab and types
   into no pane.
+- **Client choice**: only the role's own profile and its `fallback_profiles` are offered; one
+  with a confirmed-absent client cannot be chosen; a role without fallbacks says so; the chosen
+  profile is in its tab's command as `--profile <p>` and absent for its own; `--roles
+  coder:nope` is refused before anything is written; a client change for a live role is refused.
+- **Default team** (`start.team`): written through `config.Set` when a confirmed team differs
+  from the complete one, removed when the complete one is confirmed, untouched by `--yes`
+  alone; a new project's deduced team reads it; a stale role or profile in it is dropped or set
+  back with a line; master added back when missing; the key's file rule refuses `a:b:c`,
+  `Coder` and a duplicate role; `TestEveryKeyHasItsGroup` and `TestNoEnvLiteralOutsideTheRegistry`
+  still pass.
+- **Own profile** (`ownProfile`, a table: no template, a tab without `--profile`, a tab with
+  one, a pop with no tab, an unreadable template), then one test per reader of the table above:
+  `tabProfile`/`checkClients`/trust gate check codex for `foureyes:review`; a syntactically
+  valid template whose tab names a profile `roles.toml` no longer defines, one that is no longer
+  among the role's fallbacks, and an unparsable template each make `up` exit 1 with the tab and
+  profile named, before the fake service manager, herdr or any launch records a call (no
+  workspace, tab or pane; `trustPlan` never reached with an empty client); a busmon or dispatch
+  tab and an unknown role keep today's skip; doctor reports no
+  drift; swap's target set includes the manifest's own profile and excludes the current own,
+  refuses a target on the current own's provider, and its recovery line carries `--profile`;
+  `swap --back` and the `{p}:fallback` record use the template's profile and provider; reload's
+  preflight checks the template's client executable and its proof accepts the template's
+  client/provider, and refuses on an unreadable template before any kill; a choice at start
+  writes no `{p}:fallback`.
+- **Outside herdr** (fake herdr): start runs `herdr --session <p>` with its terminal; polls
+  `herdr session list --json` until the session is `running`; the `up` run gets `HERDR_ENV=1`,
+  `HERDR_SESSION=<p>` and `HERDR_SOCKET_PATH` equal to the listed `socket_path` (recorded by the
+  fake `upDeps`), and reaches `openWorkspace`: the fake herdr records the workspace list, the
+  workspace and tab creation and the focus, each call made with that `HERDR_SOCKET_PATH` (not
+  `up`'s provisioning-only hint); its output goes only to `start.log`; start returns
+  herdr's exit status; a session never listed running ends as the failure table says; the
+  missing-client and untrusted-folder lines are on the screen before herdr starts; without a
+  terminal it prints the command and launches nothing.
 - **Folder**: a linked worktree resolves to its main checkout; two templates on one folder
   asked, and refused with `--yes`.
 - **Idempotence**: start twice through `upDeps` fakes on a running workspace, every agent
@@ -242,15 +424,18 @@ session (it then sees the provisioned project and opens it). See open question 1
 - `TestEveryDispatchedCommandIsInTheTable` and `TestEveryFlagLiteralIsInTheTable` get `start`
   and its flags through the command table.
 
-## Open questions for Bernard
+## Questions for Bernard
 
-1. **Outside herdr**: should `start` launch herdr itself (`herdr --session <project>`, then the
-   team opens inside it), or only print that command? Launching is one step fewer; printing
-   keeps `start` from owning a terminal it did not open.
-2. **The team line**: only keep or drop roles, or also change a role's client (for example
-   foureyes on Codex when Codex is installed, from its `fallback_profiles`)? Dropping only is
-   simpler; a client choice is what a person with two subscriptions will want.
-3. **A reduced team**: remembered only in that project's template, or also as a default team
-   for future projects (`config.toml`)? The template only is proposed.
-4. **The name**: a new `agentbus start`, or `agentbus up` with no project argument doing it?
-   `start` is proposed, so `up`'s strict, scriptable form stays as it is.
+All answered 2026-11-02 (recorded at the top and in the sections above); none is open.
+
+1. **Outside herdr**: start launches herdr itself (`herdr --session <project>`), the team opens
+   inside it.
+2. **The team line**: it also changes a role's client, chosen from its `fallback_profiles`.
+3. **A reduced team**: kept in the project's template and as the default team for future
+   projects, `start.team` in `config.toml`.
+4. **The name**: a new command, `agentbus start`. `agentbus up` keeps its command line and
+   its behaviour: `up` with no project argument is still the usage error it is today, never the
+   assistant. What `up` gains from this spec is only what a template written by start needs:
+   `ownProfile` for a tab's `--profile`, and the abort on one that does not resolve ("A role's
+   own profile in a project"); a template without `--profile`, as bootstrap writes today, runs
+   exactly as before.
