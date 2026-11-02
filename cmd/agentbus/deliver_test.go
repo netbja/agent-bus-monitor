@@ -634,3 +634,32 @@ func TestDeliverTakesABodyFile(t *testing.T) {
 		t.Fatalf("missing body file: exit %d, ran %v: %s", code, w.r.ran, errw)
 	}
 }
+
+// A long description is cut, never the 4-eyes record after it, within both
+// caps: GitHub's runes and glab's argv bytes (foureyes).
+func TestDeliverBodyKeepsTheRecordWhole(t *testing.T) {
+	vs := []bus.Verdict{{Reviewer: "foureyes", Author: "coder", Decision: "approve", Message: "ok", Ref: "r1", TS: 1}}
+	for name, desc := range map[string]string{"ascii": strings.Repeat("a", 200000), "multibyte": strings.Repeat("é", 90000)} {
+		b := deliverBody("title", nil, vs, dlvH, desc)
+		if !strings.Contains(b, "## 4-eyes\n- approved by foureyes") || !strings.HasSuffix(b, "(`agentbus deliver`)\n") {
+			t.Errorf("%s: record cut:\n...%s", name, b[max(0, len(b)-300):])
+		}
+		if n := utf8.RuneCountInString(b); n > deliverBodyMax || len(b) > glabDescMax {
+			t.Errorf("%s: %d runes, %d bytes", name, n, len(b))
+		}
+		if !strings.Contains(b, "description cut") {
+			t.Errorf("%s: the cut is not said", name)
+		}
+	}
+}
+
+// The body file is read through a bound: a file that grows past it after the
+// size check is refused, never read whole (foureyes).
+func TestReadDescIsBounded(t *testing.T) {
+	if _, err := readDesc(strings.NewReader(strings.Repeat("a", deliverDescMax+1))); err == nil {
+		t.Error("read past the bound")
+	}
+	if s, err := readDesc(strings.NewReader("ok\n")); err != nil || s != "ok\n" {
+		t.Errorf("%q %v", s, err)
+	}
+}

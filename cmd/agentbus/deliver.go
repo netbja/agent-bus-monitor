@@ -203,11 +203,16 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 		if err != nil || !st.Mode().IsRegular() || st.Size() > deliverDescMax {
 			return fail(1, "cannot read the body file %s (a regular file of at most 1 MiB)", o.bodyFile)
 		}
-		b, err := os.ReadFile(o.bodyFile)
+		f, err := os.Open(o.bodyFile)
 		if err != nil {
 			return fail(1, "cannot read the body file %s: %v", o.bodyFile, err)
 		}
-		desc = screenDesc(string(b))
+		text, err := readDesc(f)
+		f.Close()
+		if err != nil {
+			return fail(1, "cannot read the body file %s: %v", o.bodyFile, err)
+		}
+		desc = screenDesc(text)
 	}
 	git := func(args ...string) (string, error) {
 		b, err := d.Run.Run(ctx, setup.Cmd{Name: "git", Args: args, Dir: d.Dir})
@@ -452,39 +457,66 @@ func screenDesc(s string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
+// readDesc reads a --body-file through its bound: a file that grew past it
+// after the size check is refused, never read whole (foureyes).
+func readDesc(r io.Reader) (string, error) {
+	b, err := io.ReadAll(io.LimitReader(r, deliverDescMax+1))
+	if err != nil {
+		return "", err
+	}
+	if len(b) > deliverDescMax {
+		return "", errors.New("larger than 1 MiB")
+	}
+	return string(b), nil
+}
+
+// deliverCut says the description was shortened to fit the request.
+const deliverCut = "\n\n_(description cut to fit the request)_\n"
+
 // deliverBody is the request's description: the title, then the given
-// description (--body-file) or the commits' subjects, then the 4-eyes record.
+// description (--body-file) or the commits' subjects, then the 4-eyes record
+// and the footer. The record is never cut (foureyes): the part before it is
+// shortened so the whole fits both GitHub's runes and glab's argv bytes.
 func deliverBody(title string, commits [][2]string, approvals []bus.Verdict, h, desc string) string {
-	var sb strings.Builder
-	sb.WriteString(title + "\n\n")
+	var head strings.Builder
+	head.WriteString(title + "\n\n")
 	if desc != "" {
-		sb.WriteString(desc + "\n")
+		head.WriteString(desc + "\n")
 		commits = nil
 	} else {
-		sb.WriteString("## Commits\n")
+		head.WriteString("## Commits\n")
 	}
 	for _, c := range commits {
 		short := c[0]
 		if len(short) > 7 {
 			short = short[:7]
 		}
-		fmt.Fprintf(&sb, "- `%s` %s\n", short, safeLine(c[1]))
+		fmt.Fprintf(&head, "- `%s` %s\n", short, safeLine(c[1]))
 	}
-	sb.WriteString("\n## 4-eyes\n")
+	var rec strings.Builder
+	rec.WriteString("\n## 4-eyes\n")
 	for _, v := range approvals {
 		at := time.UnixMilli(v.TS).UTC().Format("2006-01-02 15:04")
 		ref := ""
 		if v.Ref != "" {
 			ref = " (`" + safeLine(v.Ref) + "`)"
 		}
-		fmt.Fprintf(&sb, "- approved by %s at %s on `%s`%s: %s\n", v.Reviewer, at, h, ref, safeLine(v.Message))
+		fmt.Fprintf(&rec, "- approved by %s at %s on `%s`%s: %s\n", v.Reviewer, at, h, ref, safeLine(v.Message))
 	}
-	sb.WriteString("\n🤖 Generated with agent-bus (`agentbus deliver`)\n")
-	s := sb.String()
-	if r := []rune(s); len(r) > deliverBodyMax {
-		s = string(r[:deliverBodyMax])
+	rec.WriteString("\n🤖 Generated with agent-bus (`agentbus deliver`)\n")
+	hs, rs := head.String(), rec.String()
+	if utf8.RuneCountInString(hs+rs) <= deliverBodyMax && len(hs+rs) <= glabDescMax {
+		return hs + rs
 	}
-	return s
+	runes := deliverBodyMax - utf8.RuneCountInString(rs+deliverCut)
+	bytes := glabDescMax - len(rs+deliverCut)
+	if runes <= 0 || bytes <= 0 { // a record too long for any room: keep its start
+		return capBytes(string([]rune(rs)[:min(len([]rune(rs)), deliverBodyMax)]), glabDescMax)
+	}
+	if r := []rune(hs); len(r) > runes {
+		hs = string(r[:runes])
+	}
+	return capBytes(hs, bytes) + deliverCut + rs
 }
 
 // cliReady: the forge CLI is on PATH and its own status command exits 0
