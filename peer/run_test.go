@@ -13,6 +13,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
+	"github.com/redis/go-redis/v9"
 )
 
 func runnerBus(t *testing.T) *bus.Bus {
@@ -371,5 +372,149 @@ func TestRunnerAcknowledgesADoneRequest(t *testing.T) {
 	stop()
 	if evs, _ := b.Thread(ctx, id); len(evs) != 2 || calls.Load() != 1 {
 		t.Fatalf("thread = %d entries, %d turns: want the first response only and one turn (the next directive)", len(evs), calls.Load())
+	}
+}
+
+// An endpoint answering more than a bus entry holds gets one reply (cut),
+// and the entry is acknowledged: the next one is answered, and no turn is
+// run twice (SEC-LLM-1: the refusal used to leave it pending, retried forever).
+func TestRunnerAnswersAnOversizedAnswerOnce(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	var calls atomic.Int32
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { calls.Add(1); return 200, longAnswer(70000) })
+	_, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	first, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "write me a novel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs := waitThread(t, b, first, 2)
+	if !strings.Contains(evs[1].Message, "[answer cut at ") {
+		t.Fatalf("the reply is not the cut answer: ...%s", evs[1].Message[max(0, len(evs[1].Message)-60):])
+	}
+	second, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, second, 2)
+	time.Sleep(200 * time.Millisecond) // a retried first entry would turn again now
+	stop()
+	if evs, _ := b.Thread(ctx, first); len(evs) != 2 || calls.Load() != 2 {
+		t.Fatalf("thread = %d entries, %d turns: want one reply and one turn per entry", len(evs), calls.Load())
+	}
+}
+
+// An entry whose reply the bus refuses for good (here a sender that is no
+// agent name, which only raw Redis can write) is said, reported and
+// acknowledged: one turn, never retried, the next entry answered.
+func TestRunnerAcknowledgesAReplyTheBusRefuses(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	raw, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	if err := raw.XAdd(ctx, &redis.XAddArgs{Stream: b.Project() + ":cmd", Values: map[string]any{
+		"from": "Not A Name", "target": "local", "type": bus.CmdDirective, "ref": "", "command": "q", "text_complete": "yes"}}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { calls.Add(1); return 200, answerJSON })
+	out, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	next, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, next, 2)
+	time.Sleep(200 * time.Millisecond)
+	stop()
+	if calls.Load() != 2 {
+		t.Fatalf("%d turns, want 2: the refused reply was retried", calls.Load())
+	}
+	if !strings.Contains(out.String(), "cannot be sent") {
+		t.Fatalf("the refusal is not said:\n%s", out)
+	}
+	reports, _, err := b.Recent(ctx, []string{"report"}, 10)
+	found := false
+	for _, r := range reports {
+		found = found || strings.Contains(r.Message, "could not send")
+	}
+	if err != nil || !found {
+		t.Fatalf("no report of the unsent answer: %+v %v", reports, err)
+	}
+}
+
+// hostile carries what a model, an endpoint or a bus sender could aim at the
+// person's terminal: OSC 52 (clipboard), a CSI clear, a bell, DEL, a C1 CSI.
+const hostile = "a\x1b]52;c;ZXZpbA==\x07b\x1b[2Jc\x7fd\u009b31me\r\nf\tg"
+
+// paneSafe fails on any byte the terminal would act on: below 0x20 other
+// than \n and \t, DEL, or a C1 control (SEC-LLM-2).
+func paneSafe(t *testing.T, what, s string) {
+	t.Helper()
+	for i, r := range s {
+		if (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			t.Fatalf("%s holds control %U at byte %d: %q", what, r, i, s)
+		}
+	}
+}
+
+// Every pane line is stripped of terminal controls, whoever wrote its text;
+// newlines and tabs stay, so an answer keeps its layout.
+func TestRunnerPaneCarriesNoTerminalControl(t *testing.T) {
+	out := &syncBuf{}
+	(&Runner{Out: out}).say("from master: " + hostile)
+	paneSafe(t, "the pane", out.String())
+	if !strings.Contains(out.String(), "f\tg") || strings.Count(out.String(), "\n") != 2 {
+		t.Fatalf("the layout is not kept: %q", out)
+	}
+}
+
+// An endpoint's error body never reaches the bus: it can echo a configured
+// URL path or a request detail. The blocked status and the refusal reply
+// carry fixed words and the status only (R3).
+func TestRunnerPublishesNoEndpointBody(t *testing.T) {
+	b := runnerBus(t)
+	ctx := context.Background()
+	const leak = "LEAK /v1/tenant-7f3a/secret-path"
+	var calls atomic.Int32
+	srv, _ := fakeEndpoint(t, nil, func(req chatRequest) (int, string) {
+		switch n := calls.Add(1); {
+		case n <= 2:
+			return 500, leak // blocked, then healed
+		case strings.Contains(req.Messages[1].Content, "refuse me"):
+			return 400, leak
+		}
+		return 200, answerJSON
+	})
+	_, stop := startRunner(t, b, newTurn(t, srv, time.Minute))
+	first, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThread(t, b, first, 2)
+	second, err := b.Cmd(ctx, "master", "local", bus.CmdDirective, "", "refuse me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs := waitThread(t, b, second, 2)
+	stop()
+	if !strings.Contains(evs[1].Message, "400") {
+		t.Fatalf("the refusal does not give its status: %q", evs[1].Message)
+	}
+	all, _, err := b.Recent(ctx, []string{"status", "cmd", "report"}, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked := false
+	for _, e := range all {
+		blocked = blocked || e.State == "blocked"
+		if strings.Contains(e.Message, "LEAK") || strings.Contains(e.Message, "secret-path") {
+			t.Errorf("entry %s carries the body: %q", e.ID, e.Message)
+		}
+	}
+	if !blocked {
+		t.Fatal("the 500 never declared blocked")
 	}
 }

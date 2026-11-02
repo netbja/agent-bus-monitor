@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -327,5 +329,213 @@ func TestGrepCutsLongLines(t *testing.T) {
 	}
 	if out := run(t, tl, "grep", map[string]any{"pattern": "board", "path": "min.js"}); len(out) > 400 {
 		t.Fatalf("one line gave %d bytes", len(out))
+	}
+}
+
+// A home reached through a symlink (/home -> /var/home on Fedora Atomic) still
+// has its ~/ denies matched: the tools compare resolved paths, so the matcher
+// resolves the home too (SEC-LLM-6).
+func TestDenyMatcherResolvesTheHome(t *testing.T) {
+	base := t.TempDir()
+	real, link := filepath.Join(base, "var", "home", "u"), filepath.Join(base, "home")
+	if err := os.MkdirAll(filepath.Join(real, ".ssh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "var", "home"), link); err != nil {
+		t.Fatal(err)
+	}
+	m, err := NewDenyMatcher([]string{"~/.ssh/**"}, base, filepath.Join(link, "u"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Join(real, ".ssh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{filepath.Join(resolved, "id_ed25519"), filepath.Join(link, "u", ".ssh", "id_ed25519")} {
+		if !m.Denied(p) {
+			t.Errorf("%s is not denied", p)
+		}
+	}
+}
+
+// The repository's .git is never read: its config can hold a remote URL with
+// a token, sent off-host with a remote endpoint (SEC-LLM-4). A link onto it
+// is refused as well; grep already skipped it.
+func TestToolsRefuseTheGitDirectory(t *testing.T) {
+	tl := toolsFixture(t)
+	if err := os.Symlink(".git/config", filepath.Join(tl.Root, "gitcfg")); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ tool, path string }{
+		{"read_file", ".git/config"}, {"read_file", "gitcfg"}, {"list_dir", ".git"}, {"grep", ".git"}, {"read_file", "sub/../.git/config"},
+	} {
+		args := map[string]any{"path": c.path}
+		if c.tool == "grep" {
+			args["pattern"] = "board"
+		}
+		if out := run(t, tl, c.tool, args); !strings.HasPrefix(out, "refused:") {
+			t.Errorf("%s(%s) = %q, want refused", c.tool, c.path, out)
+		}
+	}
+	if out := run(t, tl, "list_dir", map[string]any{"path": ""}); !strings.Contains(out, "main.go") {
+		t.Fatalf("the root no longer lists: %q", out)
+	}
+}
+
+// grep stops with the turn's clock and after a bounded number of entries, so
+// a large root (node_modules, .worktrees) never holds the receiver lease past
+// turn_timeout (SEC-LLM-5); each stop is said.
+func TestGrepStopsWithTheTurnAndAtItsEntryCap(t *testing.T) {
+	tl := toolsFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	b, _ := json.Marshal(map[string]any{"pattern": "board"})
+	if out := tl.Run(ctx, "grep", string(b)); !strings.Contains(out, "[stopped: the turn ended]") || strings.Contains(out, "main.go:3:") {
+		t.Fatalf("grep after the turn ended = %q", out)
+	}
+	defer func(n int) { grepEntries = n }(grepEntries)
+	grepEntries = 3
+	if out := run(t, tl, "grep", map[string]any{"pattern": "zzz-none"}); !strings.Contains(out, "[stopped after 3 entries]") {
+		t.Fatalf("grep past its entry cap = %q", out)
+	}
+}
+
+// A file or a directory swapped for a link between the checks and the open
+// (another local writer) is refused, never followed: the open walks the
+// checked path from the root without following any link (R1).
+func TestToolsRefuseAPathSwappedForALink(t *testing.T) {
+	defer func() { beforeOpen = nil }()
+	for _, c := range []struct{ name, path, swap, target, leak string }{
+		{"a file onto a file outside", "sub/b.txt", "sub/b.txt", "outside/secret.txt", "board outside"},
+		{"a file onto a denied one", "sub/b.txt", "sub/b.txt", "proj/.env", "hunter2"},
+		{"a directory onto one outside", "sub/b.txt", "sub", "outside", "board outside"},
+	} {
+		tl := toolsFixture(t)
+		base := filepath.Dir(tl.Root)
+		if err := os.WriteFile(filepath.Join(base, "outside", "b.txt"), []byte("board outside\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		beforeOpen = func() {
+			p := filepath.Join(tl.Root, c.swap)
+			if err := os.RemoveAll(p); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(base, c.target), p); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out := run(t, tl, "read_file", map[string]any{"path": c.path})
+		if strings.Contains(out, c.leak) || !strings.HasPrefix(out, "refused:") {
+			t.Errorf("%s: read_file = %q, want refused", c.name, out)
+		}
+	}
+	// list_dir too: a directory swapped for a link lists nothing outside.
+	tl := toolsFixture(t)
+	beforeOpen = func() {
+		p := filepath.Join(tl.Root, "sub")
+		_ = os.RemoveAll(p)
+		_ = os.Symlink(filepath.Join(filepath.Dir(tl.Root), "outside"), p)
+	}
+	if out := run(t, tl, "list_dir", map[string]any{"path": "sub"}); strings.Contains(out, "secret.txt") || !strings.HasPrefix(out, "refused:") {
+		t.Errorf("list_dir after the swap = %q, want refused", out)
+	}
+}
+
+// One directory larger than the caps is read in bounded batches: grep stops
+// reading it at its entry cap, list_dir past its 500 names, instead of loading
+// every name first (reviewer-codex: WalkDir and ReadDir(-1) read a whole
+// directory before any check ran).
+func TestToolsReadAHugeDirectoryInBatches(t *testing.T) {
+	tl := toolsFixture(t)
+	huge := filepath.Join(tl.Root, "huge")
+	if err := os.MkdirAll(huge, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3000; i++ {
+		if err := os.WriteFile(filepath.Join(huge, "f"+strconv.Itoa(i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := 0
+	dirBatchRead = func(n int) { read += n }
+	defer func(n int) { dirBatchRead, grepEntries = nil, n }(grepEntries)
+	grepEntries = 10
+	if out := run(t, tl, "grep", map[string]any{"pattern": "x", "path": "huge"}); !strings.Contains(out, "[stopped after 10 entries]") {
+		t.Fatalf("grep = %q", out)
+	}
+	if read > grepEntries+dirBatch {
+		t.Fatalf("grep read %d names of a 3000-entry directory to stop at %d", read, grepEntries)
+	}
+	read = 0
+	out := run(t, tl, "list_dir", map[string]any{"path": "huge"})
+	if read > listCap+1 || strings.Count(out, "\n") != listCap+1 || !strings.Contains(out, "more not listed") {
+		t.Fatalf("list_dir read %d names and printed %d lines", read, strings.Count(out, "\n"))
+	}
+}
+
+// A ~/ deny with no absolute home to anchor it is an error, never a pattern
+// relative to the process's folder that matches nothing (reviewer-codex).
+func TestDenyMatcherNeedsAnAbsoluteHome(t *testing.T) {
+	for _, home := range []string{"", "rel"} {
+		if _, err := NewDenyMatcher([]string{"~/.ssh/**"}, "/work/proj", home); err == nil {
+			t.Errorf("home %q: no error", home)
+		}
+	}
+	if _, err := NewDenyMatcher([]string{"*.pem"}, "/work/proj", ""); err != nil {
+		t.Errorf("a pattern that needs no home: %v", err)
+	}
+}
+
+// A named pipe under the root is refused by its type before any open: no
+// tool opens it, not even non-blocking (foureyes).
+func TestToolsNeverOpenAPipe(t *testing.T) {
+	tl := toolsFixture(t)
+	pipe := filepath.Join(tl.Root, "sub", "pipe")
+	if err := syscall.Mkfifo(pipe, 0o644); err != nil {
+		t.Skip("no mkfifo:", err)
+	}
+	var seen []string
+	opened = func(p string) { seen = append(seen, p) }
+	defer func() { opened = nil }()
+	if out := run(t, tl, "read_file", map[string]any{"path": "sub/pipe"}); out != "error: not a regular file" {
+		t.Fatalf("read_file = %q", out)
+	}
+	run(t, tl, "grep", map[string]any{"pattern": "board", "path": "sub"})
+	run(t, tl, "list_dir", map[string]any{"path": "sub/pipe"})
+	for _, p := range seen {
+		if strings.HasSuffix(p, "pipe") {
+			t.Fatalf("the pipe was opened: %v", seen)
+		}
+	}
+	if len(seen) == 0 {
+		t.Fatal("the hook saw no open at all")
+	}
+}
+
+// A link inside .git onto a file outside it is refused by its asked path:
+// the inGit check on the asked path alone (foureyes).
+func TestToolsRefuseTheAskedGitPath(t *testing.T) {
+	tl := toolsFixture(t)
+	if err := os.Symlink("../sub/b.txt", filepath.Join(tl.Root, ".git", "link")); err != nil {
+		t.Fatal(err)
+	}
+	if out := run(t, tl, "read_file", map[string]any{"path": ".git/link"}); !strings.HasPrefix(out, "refused:") {
+		t.Fatalf("read_file(.git/link -> sub/b.txt) = %q", out)
+	}
+}
+
+// grep's walk opens each directory beneath the root (R1), as the hook sees,
+// never by its name (foureyes: os.Open in its place passed every test).
+func TestGrepOpensDirectoriesBeneathTheRoot(t *testing.T) {
+	tl := toolsFixture(t)
+	var seen []string
+	opened = func(p string) { seen = append(seen, p) }
+	defer func() { opened = nil }()
+	run(t, tl, "grep", map[string]any{"pattern": "board"})
+	for _, d := range []string{tl.Root, filepath.Join(tl.Root, "sub")} {
+		if !slices.Contains(seen, d) {
+			t.Fatalf("%s not opened beneath the root: %v", d, seen)
+		}
 	}
 }

@@ -22,12 +22,20 @@ type LLMEndpointInput struct {
 	ConfigErr string          // config.toml unreadable: why
 	Probes    []EndpointProbe // one per endpoint those peers use
 	Unmatched []string        // peers no [llm.*] endpoint serves: "name (model m)"
+	// Changed: peers whose endpoint config.toml changed since their launch
+	// (its model or URL): "name (what changed)". A warning.
+	Changed []string
+	// Unverified: peers whose URL could not be compared with the one they
+	// run (no fingerprint key): unknown at best, never ok.
+	Unverified []string
 }
 
 // EvaluateLLMEndpoint: fail when an endpoint gives no answer or an error
-// status, warn when one answers without its model or a peer has no endpoint,
-// ok when every endpoint lists its model; unknown with no peer, no readable
-// config or no endpoint at all. The worst decides; the detail names each.
+// status, warn when one answers without its model, a peer has no endpoint or
+// its endpoint changed since its launch, ok when every endpoint lists its
+// model; unknown with no peer, no readable config, no endpoint at all, or,
+// when nothing is worse, a peer whose URL could not be compared. The worst
+// decides; the detail names each.
 func EvaluateLLMEndpoint(in LLMEndpointInput) Outcome {
 	switch {
 	case len(in.Peers) == 0:
@@ -68,6 +76,18 @@ func EvaluateLLMEndpoint(in LLMEndpointInput) Outcome {
 			status = Warn
 		}
 		bad = append(bad, "no [llm.*] endpoint for "+strings.Join(in.Unmatched, ", "))
+	}
+	if len(in.Changed) > 0 {
+		if status == OK {
+			status = Warn
+		}
+		bad = append(bad, "endpoint changed for "+strings.Join(in.Changed, ", "))
+	}
+	if len(in.Unverified) > 0 {
+		if status == OK {
+			status = Unknown
+		}
+		bad = append(bad, "URL not compared for "+strings.Join(in.Unverified, ", ")+" (no fingerprint key)")
 	}
 	return Outcome{Status: status, Detail: truncateDetail(strings.Join(append(bad, good...), "; "))}
 }

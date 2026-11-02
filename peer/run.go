@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -152,6 +153,21 @@ func (r *Runner) handle(ctx, turnCtx context.Context, e bus.Event) error {
 	if blocked != "" {
 		r.status(ctx, "working", firstWords(e.Message))
 	}
+	report := r.report
+	if report == nil {
+		report = r.Bus.Report
+	}
+	// A reply the bus refuses for good (a text it cannot hold, a sender that
+	// is no agent name) is said, reported and acknowledged: retried, the same
+	// entry would turn again forever (SEC-LLM-1).
+	if why := unsendable(e.From, res.Text); why != "" {
+		r.say(fmt.Sprintf("%s: the answer cannot be sent (%s); acknowledged", e.ID, why))
+		if _, err := report(ctx, r.Agent, bus.ReportNote, fmt.Sprintf("could not send the answer to %s on thread %s: %s", e.From, threadID, why)); err != nil {
+			r.say("report: " + err.Error())
+		}
+		r.status(ctx, "idle", "answer not sent")
+		return nil
+	}
 	var err error
 	if tracked {
 		_, err = r.Bus.CompleteRequest(ctx, e.Task, r.Agent, res.Text) // writes the reply on the thread
@@ -166,15 +182,23 @@ func (r *Runner) handle(ctx, turnCtx context.Context, e bus.Event) error {
 	took := time.Since(start).Round(100 * time.Millisecond)
 	r.say(fmt.Sprintf("answer (%s, %d tool calls, %d prompt + %d completion tokens):\n%s",
 		took, res.Calls, res.Usage.PromptTokens, res.Usage.CompletionTokens, res.Text))
-	report := r.report
-	if report == nil {
-		report = r.Bus.Report
-	}
 	if _, err := report(ctx, r.Agent, bus.ReportNote, fmt.Sprintf("answered %s on thread %s in %s: %s", e.From, threadID, took, firstWords(res.Text))); err != nil {
 		r.say("report: " + err.Error())
 	}
 	r.status(ctx, "idle", "answered "+e.From)
 	return nil
+}
+
+// unsendable is why the bus would refuse a reply for good, "" when it
+// takes it: the checks Bus.Cmd and CompleteRequest make before writing.
+func unsendable(to, text string) string {
+	if err := bus.ValidateText(text, bus.CmdMaxRunes); err != nil {
+		return err.Error()
+	}
+	if !bus.ValidName(to) {
+		return fmt.Sprintf("the sender %q is no agent name", to)
+	}
+	return ""
 }
 
 // isPeer reports whether agent is a local-llm peer, as its snapshot says.
@@ -191,10 +215,24 @@ func (r *Runner) status(ctx context.Context, state, msg string) {
 	}
 }
 
+// say writes one line to the pane. Its text comes from the bus, the model
+// and the endpoint, so terminal controls are stripped (SEC-LLM-2).
 func (r *Runner) say(s string) {
 	if r.Out != nil {
-		fmt.Fprintf(r.Out, "%s %s\n", time.Now().Format("15:04:05"), s)
+		fmt.Fprintf(r.Out, "%s %s\n", time.Now().Format("15:04:05"), paneText(s))
 	}
+}
+
+// paneText keeps newlines and tabs and turns every other control rune (C0,
+// DEL, C1: escape sequences, OSC 52, a bell) into a space, as
+// bus.SanitizeReportFull does: the terminal is never handed a control.
+func paneText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r != '\n' && r != '\t' && unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // firstWords is a status line: the text's first words, on one line.

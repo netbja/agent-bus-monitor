@@ -788,14 +788,28 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   accepted, then completed with the answer) a fresh turn (`Turn.Run`: the role prompt `roles/local.md`, the entry and its thread, at most
   8 tool calls, `turn_timeout`), the reply on the entry's thread, a report, its own `working`/`blocked`/`idle`;
   once the reply is sent, a failed report or status is logged, never answered again.
+  An answer is cut under `CmdMaxRunes` with a note, and a reply the bus refuses for good is said, reported and
+  acked (never turned again); pane lines carry no control but newline and tab; errors carry the status, never the
+  endpoint's body; the start's `/models` check has 5 s.
   The client follows no redirect and uses no proxy; only transport errors, 5xx, 408, 429 and 404 are retried
   (`blocked`, the entry kept, every 30 s), any other refusal fails the turn with a reply. Tools: `read_file`,
-  `list_dir`, `grep` under the project root (no `..`, symlinks re-checked, regular files only, the role's
-  effective `Read(…)` denies with Claude Code's glob meaning, a bare `Read` denying everything, fail closed),
+  `list_dir`, `grep` under the project root (peer-security: the template's `working_dir`, else the launch
+  folder's Git top-level, never the cwd itself, an absolute path; the home from `$HOME`, else the passwd entry, else no start; `/`,
+  `$HOME` and its ancestors refused; no `..`, no `.git`,
+  symlinks re-checked, then opened component by component from the root with `O_NOFOLLOW` (`openBeneath`), so a
+  link swapped in after the checks is refused; directories read 256 names at a time (grep's own walk, list_dir's 501);
+  regular files only; grep bounded by the turn and 20000 entries; the role's
+  effective `Read(…)` denies with Claude Code's glob meaning, `~/` matched against the resolved home too, a bare
+  `Read` denying everything, fail closed),
   `bus_thread`, `bus_agents`; no shell, no write, no verdict. `--check <endpoint>` asks its `/models`. Provider
   `local` is a built-in unlimited quota reader (listed by `agentbus quota` only with an endpoint). Health
   `llm-endpoint` (step 2; `health/llmendpoint.go` pure, `cmd/agentbus/llmcheck.go` the reader, every minute) probes
-  only the endpoints the registered `local-llm` agents use (the one whose model is the agent's), `GET /models`
+  only the endpoints the registered `local-llm` agents use (the one each peer resolved, `AgentSnapshot.Endpoint`, set by
+  its own status with `EndpointFP`, its URL's fingerprint (HMAC under the host key `endpoint-fp.key` beside config.toml,
+  0600, made once and linked whole: a bus reader cannot test a guessed path; no key, no fingerprint; a recorded one
+  with an unreadable key is said, never ok), probed for the model the peer runs, an endpoint whose
+  config.toml model or URL changed since the launch said; a snapshot
+  without it matches by model), `GET /models`
   through `peer.Client` (no redirect, no proxy) within 2 s each, side by side: fail on no answer or an error
   status, warn when one answers without its model or a peer has no endpoint, ok when all list theirs; unknown
   with no such agent, an unreadable config.toml or no endpoint at all; for you on warn and fail

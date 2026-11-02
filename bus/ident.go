@@ -56,6 +56,9 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 	if next.Provider != "" {
 		out.Provider = next.Provider
 	}
+	if next.Endpoint != "" {
+		out.Endpoint, out.EndpointFP = next.Endpoint, next.EndpointFP
+	}
 	if identityOnly {
 		setIdentity(next.IdentTS)
 		return out

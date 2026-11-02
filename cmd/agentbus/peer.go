@@ -6,14 +6,18 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/peer"
+	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
@@ -47,6 +51,19 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 		fmt.Fprintln(errw, "peer:", err)
 		return 1
 	}
+	project := spec.Project
+	if project == "" {
+		project = getenv("AGENT_BUS_PROJECT")
+	}
+	cwd, err := os.Getwd()
+	root := ""
+	if err == nil {
+		root, err = peerRoot(project, cwd, getenv)
+	}
+	if err != nil {
+		fmt.Fprintln(errw, "peer: the project root:", err)
+		return 1
+	}
 	// The role's effective Read denies, or no start at all (fail closed).
 	manifest, err := rolecfg.Load(spec.Manifest)
 	if err != nil {
@@ -58,22 +75,11 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 		fmt.Fprintln(errw, "peer: the role's deny rules cannot be read:", err)
 		return 1
 	}
-	root, err := os.Getwd()
-	if err == nil {
-		root, err = filepath.EvalSymlinks(root)
-	}
-	if err != nil {
-		fmt.Fprintln(errw, "peer: the project root:", err)
-		return 1
-	}
-	deny, err := peer.NewDenyMatcher(denies, root, getenv("HOME"))
+	home, _ := peerHome(getenv) // peerRoot has checked it
+	deny, err := peer.NewDenyMatcher(denies, root, home)
 	if err != nil {
 		fmt.Fprintln(errw, "peer: the role's deny rules cannot be read:", err)
 		return 1
-	}
-	project := spec.Project
-	if project == "" {
-		project = getenv("AGENT_BUS_PROJECT")
 	}
 	client, err := bus.Connect("")
 	if err != nil {
@@ -89,11 +95,13 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 	defer stop()
 	c := peer.Client{URL: settings.URL, Model: settings.Model, MaxTokens: settings.MaxTokens}
 	fmt.Fprintf(out, "local-llm peer %s on %s, model %s, root %s\n", agent, endpointHost(settings.URL), settings.Model, root)
-	if err := c.CheckModel(ctx); err != nil {
-		fmt.Fprintln(out, "endpoint not ready yet:", err)
-	}
+	peerStartCheck(ctx, c, out)
 	host, _ := os.Hostname()
-	r := &peer.Runner{Bus: b, Agent: agent, Consumer: fmt.Sprintf("%s:%d", host, os.Getpid()), Ident: statusIdent(ctx),
+	ident, note := peerIdent(statusIdent(ctx), settings, getenv)
+	if note != "" {
+		fmt.Fprintln(out, note)
+	}
+	r := &peer.Runner{Bus: b, Agent: agent, Consumer: fmt.Sprintf("%s:%d", host, os.Getpid()), Ident: ident,
 		Turn: peer.Turn{Client: c, Prompt: spec.Prompt, MaxCalls: 8, Timeout: settings.TurnTimeout,
 			Tools: peer.Tools{Root: root, Deny: deny, Thread: b.Thread, Agents: b.Agents}},
 		RetryEvery: 30 * time.Second, LeaseWait: 5 * time.Second, Out: out}
@@ -102,6 +110,119 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 		return 1
 	}
 	return 0
+}
+
+// startCheck bounds the model check at start (R2): it runs before the
+// receiver lease, and the client has no timeout of its own.
+var startCheck = 5 * time.Second
+
+// peerStartCheck says whether the endpoint serves the model yet; a fault is
+// only said, the peer starts anyway and retries per entry.
+func peerStartCheck(ctx context.Context, c peer.Client, out io.Writer) {
+	ctx, cancel := context.WithTimeout(ctx, startCheck)
+	defer cancel()
+	if err := c.CheckModel(ctx); err != nil {
+		fmt.Fprintln(out, "endpoint not ready yet:", err)
+	}
+}
+
+// peerRoot is the folder the peer's tools read under (SEC-LLM-3): the
+// project's path, its template's working_dir, else the Git top-level of the
+// launch folder; never the launch folder itself, which agent-spawn takes from
+// its caller. The filesystem root, the home directory and a folder holding
+// it are refused: read_file and grep would reach every credential in it.
+func peerRoot(project, cwd string, getenv func(string) string) (string, error) {
+	home, err := peerHome(getenv)
+	if err != nil {
+		return "", err
+	}
+	root := ""
+	if rows, err := projlist.Templates(rolecfg.ProjectsDir(getenv)); err == nil {
+		for _, r := range rows {
+			if r.Name == project && r.WorkingDir != "" {
+				root = os.ExpandEnv(strings.Replace(r.WorkingDir, "~", home, 1)) // the home the checks use
+			}
+		}
+	}
+	if root == "" {
+		cmd := exec.Command("git", "-C", cwd, "rev-parse", "--show-toplevel")
+		cmd.Env = append(os.Environ(), "LC_ALL=C")
+		out, err := cmd.Output()
+		if err != nil {
+			return "", fmt.Errorf("no template for %s names its folder, and %s is not in a Git repository", project, cwd)
+		}
+		root = strings.TrimSpace(string(out))
+	}
+	// A relative folder would resolve against wherever the peer was launched,
+	// and stay relative through EvalSymlinks, past the home checks below and
+	// past every absolute deny pattern (reviewer-codex): refused. bootstrap
+	// writes an absolute working_dir; git answers an absolute top-level.
+	if !filepath.IsAbs(root) {
+		return "", fmt.Errorf("the project's folder %q is not an absolute path: refused", root)
+	}
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	if h, err := filepath.EvalSymlinks(home); err == nil {
+		home = h
+	}
+	switch {
+	case root == "/":
+		return "", fmt.Errorf("%s is the filesystem root: refused", root)
+	case root == home:
+		return "", fmt.Errorf("%s is the home directory: refused (launch the peer from the project's folder)", root)
+	case strings.HasPrefix(home, root+string(filepath.Separator)):
+		return "", fmt.Errorf("%s holds the home directory: refused", root)
+	}
+	return root, nil
+}
+
+// peerIdent adds to the peer's identity the endpoint it resolved, which
+// health llm-endpoint probes for it (R4), and its URL's keyed fingerprint,
+// the URL it keeps for its life (the bus can test no guess against it).
+// Without the host key no fingerprint is recorded, and note says so.
+func peerIdent(ident bus.AgentIdent, s peer.Settings, getenv func(string) string) (bus.AgentIdent, string) {
+	ident.Endpoint = s.Endpoint
+	key, note, err := endpointFPKey(getenv)
+	if err != nil {
+		return ident, "no endpoint fingerprint key (" + err.Error() + "): health cannot tell if [llm." + s.Endpoint + "]'s URL changes"
+	}
+	ident.EndpointFP = peer.EndpointFP(key, s.URL)
+	return ident, note
+}
+
+// endpointFPKey is the host's endpoint fingerprint key, beside config.toml;
+// with no configuration directory there is none (never one in the cwd).
+func endpointFPKey(getenv func(string) string) ([]byte, string, error) {
+	p := config.Path(getenv)
+	if p == "" {
+		return nil, "", fmt.Errorf("no configuration directory")
+	}
+	return peer.FPKey(filepath.Dir(p))
+}
+
+// userHome is the user's home from the passwd entry (os/user); a test's.
+var userHome = func() (string, error) {
+	u, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	return u.HomeDir, nil
+}
+
+// peerHome is the home the root checks and the ~/ denies are anchored on:
+// HOME, else (unset or relative) the user's passwd entry; with neither
+// absolute the peer does not start (reviewer-codex, master: an empty home
+// skipped the checks and anchored the ~/ denies nowhere).
+func peerHome(getenv func(string) string) (string, error) {
+	if h := getenv("HOME"); filepath.IsAbs(h) {
+		return h, nil
+	}
+	if h, err := userHome(); err == nil && filepath.IsAbs(h) {
+		return h, nil
+	}
+	return "", fmt.Errorf("no home directory: HOME is not an absolute path and the user has no home entry: refused")
 }
 
 // peerCheck asks one endpoint for its models: 0 when it serves its model.
