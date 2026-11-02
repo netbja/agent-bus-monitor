@@ -457,6 +457,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 		}),
 		healthOutcomeTask("disk", diskCheck(realDiskDeps())),
 		healthOutcomeTask("llm-endpoint", llmEndpointCheck(realLLMCheckDeps(b))),
+		healthOutcomeTask("pop-done", popDoneCheck(realPopDoneDeps(b))),
 		healthTask("tracked-secrets", func(ctx context.Context) (health.Status, string, error) {
 			root, err := os.Getwd()
 			if err != nil {
