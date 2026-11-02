@@ -394,6 +394,19 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus up demo ~/src/demo", "agentbus up demo -n"},
 	},
 	{
+		Name: "start", NoProject: true,
+		Usage:   []string{"start [<path>] [--yes] [--dry-run] [--name <project>] [--as <name>] [--roles <role[:profile],...>]"},
+		Summary: "deduce a project from its folder, show it, then run up",
+		Flags: []cli.Flag{
+			{Long: "yes", Short: 'y', Help: "take the deduced values without asking"},
+			{Long: "dry-run", Short: 'n', Help: "show what would happen; write and start nothing"},
+			{Long: "name", Arg: "<project>", Help: "the project's name"},
+			{Long: "as", Short: 'a', Arg: "<name>", Help: "your name (recorded when none is)"},
+			{Long: "roles", Arg: "<role[:profile],...>", Help: "the team; also the default for new projects"},
+		},
+		Examples: []string{"agentbus start", "agentbus start ~/src/shop --yes", "agentbus start --roles master,coder,foureyes:review"},
+	},
+	{
 		Name: "down", NoProject: true, Usage: []string{"down <project>"},
 		Summary:  "stop a project's services; deletes nothing",
 		Examples: []string{"agentbus down demo"},

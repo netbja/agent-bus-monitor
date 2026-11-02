@@ -35,7 +35,7 @@ type settingGroup struct {
 var settingLabels = map[string]string{
 	"display.theme": "Theme", "display.limit": "Activity lines at start", "display.idle_hint_after": "Idle? hint after",
 	"waiting.fade": "Fade and slide", "waiting.popup_after": "Reminder after", "waiting.snooze": "Reminder snooze",
-	"waiting.bell": "Bell", "recap.auto_after": "Recap after away", "updates.check": "Update check", "identity.as": "Your name",
+	"waiting.bell": "Bell", "recap.auto_after": "Recap after away", "updates.check": "Update check", "identity.as": "Your name", "start.team": "Default team",
 }
 
 // settingFlags are the flags above a key's env: busmon's own, read-only here.

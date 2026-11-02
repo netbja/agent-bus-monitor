@@ -522,3 +522,38 @@ func TestReloadWithoutARelaunchCheckSignalsNothing(t *testing.T) {
 		t.Fatalf("exit %d, out %q, calls %q", code, out, w.callList())
 	}
 }
+
+// A role on the profile its template chose is relaunched by that template on
+// it: the preflight checks that profile's client and the proof expects it,
+// or the reload would kill the agent and then fail (foureyes; spec, the
+// reader table). A failure's recovery keeps the --profile.
+func TestReloadProvesTheTemplatesProfile(t *testing.T) {
+	w, d := newReloadWorld(t)
+	projects := t.TempDir()
+	tpl := "name = \"x\"\nworking_dir = \"/w\"\n\n[[tabs]]\nname = \"coder\"\ncommand = \"/r/scripts/agent-launch coder " + w.b.Project() + " --profile review\"\n"
+	if err := os.WriteFile(filepath.Join(projects, w.b.Project()+".toml"), []byte(tpl), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.env["AGENTBUS_PROJECTS_DIR"] = projects
+	relaunch := d.Relaunch
+	d.Relaunch = func(ctx context.Context, role, session string) error {
+		if err := relaunch(ctx, role, session); err != nil {
+			return err
+		}
+		return w.b.Bind(context.Background(), role, bus.AgentIdent{Pane: "p-new", PID: 5151, PIDStart: 9, Client: "codex", Provider: "openai", ClientFP: w.launched})
+	}
+	if code, out := w.run(d, "sentinel", "coder", "--reason", "client update"); code != 0 || !strings.Contains(out, "reloaded coder") {
+		t.Fatalf("reload on the template's profile: %d %s", code, out)
+	}
+
+	w, d = newReloadWorld(t)
+	w.env["AGENTBUS_PROJECTS_DIR"] = projects
+	tpl2 := "name = \"x\"\nworking_dir = \"/w\"\n\n[[tabs]]\nname = \"coder\"\ncommand = \"/r/scripts/agent-launch coder " + w.b.Project() + " --profile review\"\n"
+	if err := os.WriteFile(filepath.Join(projects, w.b.Project()+".toml"), []byte(tpl2), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.relaunch = errors.New("relaunch failed")
+	if code, out := w.run(d, "sentinel", "coder"); code == 0 || !strings.Contains(out, "agent-launch coder "+w.b.Project()+" --profile review") {
+		t.Fatalf("recovery: %d %s", code, out)
+	}
+}

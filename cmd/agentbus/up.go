@@ -167,6 +167,9 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
 		return 1
 	}
+	if !checkProfiles(d, tpl, path, stderr) {
+		return 1
+	}
 	absent, ok := checkClients(d, project, tpl, stdout, stderr)
 	if !ok {
 		return 1
@@ -559,7 +562,11 @@ func repoDir(env func(string) string) (string, error) {
 }
 
 // realUpDeps runs the real herdr and the repository's bootstrap.
-func realUpDeps(stdout, stderr io.Writer) upDeps {
+func realUpDeps(stdout, stderr io.Writer) upDeps { return realUpDepsIn(os.Stdin, stdout, stderr) }
+
+// realUpDepsIn is realUpDeps with bootstrap's stdin given: start's run inside
+// herdr gives none, herdr owning the terminal (foureyes).
+func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 	paths, _ := service.PathsFrom(os.Getenv)
 	host, _ := os.Hostname()
 	return upDeps{
@@ -574,7 +581,7 @@ func realUpDeps(stdout, stderr io.Writer) upDeps {
 				return err
 			}
 			cmd := bootstrapCommand(repo, args)
-			cmd.Stdout, cmd.Stderr, cmd.Stdin = stdout, stderr, os.Stdin
+			cmd.Stdout, cmd.Stderr, cmd.Stdin = stdout, stderr, stdin
 			return cmd.Run()
 		},
 		Env: os.Getenv,
@@ -924,6 +931,10 @@ func shellProbe(getenv func(string) string, timeout time.Duration) func(string) 
 		defer cancel()
 		cmd := exec.CommandContext(ctx, sh, args...)
 		cmd.WaitDelay = 500 * time.Millisecond
+		// A session of its own, so no controlling terminal: an interactive
+		// shell's job control (tcsetpgrp) can never take the terminal from a
+		// foreground herdr that start runs meanwhile (foureyes).
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		out, _ := cmd.Output() // the shell's own exit status is not the answer: the marker is
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("%s did not answer within %s", filepath.Base(sh), timeout)

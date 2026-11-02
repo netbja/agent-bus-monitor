@@ -114,6 +114,10 @@ func main() {
 	if len(args) >= 1 && args[0] == "up" {
 		os.Exit(runUp(args[1:], realUpDeps(os.Stdout, os.Stderr), os.Stdout, os.Stderr))
 	}
+	// start is up with every value deduced, shown and asked first (agentbus-start).
+	if len(args) >= 1 && args[0] == "start" {
+		os.Exit(runStart(args[1:], realStartDeps(os.Stdout, os.Stderr)))
+	}
 	// service drives the project's user services (v0.12); run is what a unit
 	// executes and loads its environment file before it connects. list and
 	// remove --all need no project; down stops a project's services.

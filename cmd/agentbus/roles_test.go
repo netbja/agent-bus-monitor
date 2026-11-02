@@ -185,3 +185,17 @@ func TestRolesProjectsDirNeedsNoManifest(t *testing.T) {
 		t.Fatalf("exit %d, out %q, err %q", code, out, errw)
 	}
 }
+
+// roles template --roles <team> writes only that team; an invalid team is
+// refused and nothing is printed (agentbus-start part 2).
+func TestRolesTemplateTeam(t *testing.T) {
+	_, env := rolesFixture(t)
+	code, out, errOut := roles(env, "template", "demo", "/work", "/repo/scripts", "/repo", "0", "0", "--roles", "master")
+	if code != 0 || strings.Contains(out, `name = "coder"`) || !strings.Contains(out, `name = "master"`) {
+		t.Fatalf("template --roles master = %d %s\n%s", code, errOut, out)
+	}
+	code, out, errOut = roles(env, "template", "demo", "/work", "/repo/scripts", "/repo", "0", "0", "charlie", "--roles", "master,ghost")
+	if code == 0 || out != "" || !strings.Contains(errOut, "ghost is not a boot role") {
+		t.Fatalf("an invalid team = %d %q %q", code, out, errOut)
+	}
+}

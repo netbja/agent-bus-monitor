@@ -165,11 +165,11 @@ func TestSetKeepsTheTrailingComment(t *testing.T) {
 		v           any
 		want        string
 	}{
-		"after a number": {"[display]\nlimit = 40 # lines\n", "display.limit", 10, "[display]\nlimit = 10 # lines\n"},
-		"a hash in the old string": {"[identity]\nas = \"a#b\"\t# me\n", "identity.as", "carol", "[identity]\nas = \"carol\"\t# me\n"},
+		"after a number":                     {"[display]\nlimit = 40 # lines\n", "display.limit", 10, "[display]\nlimit = 10 # lines\n"},
+		"a hash in the old string":           {"[identity]\nas = \"a#b\"\t# me\n", "identity.as", "carol", "[identity]\nas = \"carol\"\t# me\n"},
 		"an escaped quote in the old string": {"[identity]\nas = \"a\\\"#b\" # me\n", "identity.as", "carol", "[identity]\nas = \"carol\" # me\n"},
-		"a literal string": {"[identity]\nas = 'a#b' # me\n", "identity.as", "carol", "[identity]\nas = \"carol\" # me\n"},
-		"no comment": {"[identity]\nas = \"a#b\"\n", "identity.as", "carol", "[identity]\nas = \"carol\"\n"},
+		"a literal string":                   {"[identity]\nas = 'a#b' # me\n", "identity.as", "carol", "[identity]\nas = \"carol\" # me\n"},
+		"no comment":                         {"[identity]\nas = \"a#b\"\n", "identity.as", "carol", "[identity]\nas = \"carol\"\n"},
 	} {
 		p := tomlFile(t, c.before)
 		if err := Set(p, c.key, c.v); err != nil {

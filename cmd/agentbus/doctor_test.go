@@ -178,3 +178,42 @@ func TestDoctorNewerMustExist(t *testing.T) {
 		t.Fatalf("newer pointed at a missing model: %q", v)
 	}
 }
+
+// A role on a profile its project's template chose (start's client choice)
+// is configured on that profile: no drift for its model (spec, the reader
+// table: roles doctor reads ownProfile).
+func TestDoctorReadsTheTemplatesProfile(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = bus.DeleteProject(context.Background(), r, b.Project()) })
+	dir := t.TempDir()
+	path := filepath.Join(dir, "roles.toml")
+	manifest := doctorManifest + "[profiles.alt]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"gpt-x\"\n"
+	manifest = strings.Replace(manifest, "[roles.foureyes]\ntier = \"boot\"\n", "[roles.foureyes]\ntier = \"boot\"\nfallback_profiles = [\"alt\"]\n", 1)
+	if err := os.WriteFile(path, []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	projects := filepath.Join(dir, "projects")
+	if err := os.MkdirAll(projects, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tpl := "name = \"x\"\nworking_dir = \"/w\"\n\n[[tabs]]\nname = \"foureyes\"\ncommand = \"env ROLES_TOML=" + path + " /r/scripts/agent-launch foureyes " + b.Project() + " --profile alt\"\n"
+	if err := os.WriteFile(filepath.Join(projects, b.Project()+".toml"), []byte(tpl), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Status(ctx, "foureyes", "idle", "", bus.AgentIdent{Pane: "p", PID: 12, PIDStart: 1, Model: "gpt-x", Client: "codex", Provider: "openai"}); err != nil {
+		t.Fatal(err)
+	}
+	d := doctorDeps{
+		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
+		ProcStart:  func(int) (uint64, error) { return 1, nil },
+		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
+		Transcript: func(string) (usage.UsedModel, error) { return usage.UsedModel{}, errors.New("none") },
+		Now:        time.Now,
+		Env:        func(k string) string { return map[string]string{"AGENTBUS_PROJECTS_DIR": projects}[k] },
+	}
+	rows, err := doctorRows(ctx, b, d)
+	if err != nil || len(rows) != 1 || rows[0].Verdict != "ok" || rows[0].Profile != "alt" {
+		t.Fatalf("rows = %+v, %v; want foureyes ok on alt", rows, err)
+	}
+}
