@@ -313,3 +313,37 @@ func TestTokensPageIconsFit(t *testing.T) {
 		}
 	}
 }
+
+// foureyes on steps 0-3: the C page's sample is fitted by whole pairs, never
+// cut after an icon or against the frame, at every size the shell draws.
+func TestSettingsIconSampleFits(t *testing.T) {
+	pinLocal(t)
+	for width := 1; width <= 120; width++ {
+		l := iconSample(width)
+		if l.Width() > width {
+			t.Fatalf("at %d the sample is %d cells", width, l.Width())
+		}
+		for _, s := range l {
+			for _, g := range IconGlyphs {
+				if strings.Contains(s.Text, g) && !strings.Contains(s.Text, g+" ") {
+					t.Fatalf("at %d an icon lost its blank cell: %q", width, l.text())
+				}
+			}
+		}
+	}
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	for _, sz := range shellAlignSizes {
+		m := shellWith(t, sz[0], sz[1], shellConfig{getenv: getenv}, false)
+		if m.layout.Tier == TierTooSmall {
+			continue
+		}
+		if m = press(t, m, 'C'); m.rd.top() == nil || m.rd.top().kind != ovSettings {
+			continue
+		}
+		g := m.grid()
+		r := m.readerRect()
+		name := fmt.Sprintf("C page %dx%d", sz[0], sz[1])
+		checkFrameAt(t, func(x, y int) string { return g.at(x, y).text }, name, r, true)
+		checkReaderIconPairs(t, name, g, r)
+	}
+}

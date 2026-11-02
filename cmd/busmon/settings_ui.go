@@ -353,7 +353,7 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 			b.segs(mark...).seg(role, r.Sym).text(" ").text(Fit(Preview(r.Label), labelW)+"  ").
 				text(Fit(Preview(value), valueW)+"  ").seg(RoleMuted, Preview(r.Source)).text("\n")
 			if r.Key == "display.icons" {
-				b.segs(iconSample()...).text("\n")
+				b.segs(iconSample(width)...).text("\n")
 			}
 			if i == sel && s.err != "" {
 				b.text("      ").seg(RoleAttention, Preview(s.err)).text("\n")
@@ -376,18 +376,28 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 // iconSampleProviders are the sample's providers, in the spec's order.
 var iconSampleProviders = []string{"anthropic", "openai", "moonshot", "xai", "google"}
 
-// iconSample is the Icons row's help line (busmon-icons §6): each mode's
-// glyphs drawn in that mode, each with its blank cell, so the person sees
-// whether the terminal draws them; boxes or tofu there say keep off.
-func iconSample() Line {
-	l := Line{{Text: "    off " + GlyphNone + " nerd ", Role: RoleMuted}}
+// iconSample is the Icons row's help line (busmon-icons §6) in width cells:
+// each mode's glyphs drawn in that mode, each with its blank cell, so the
+// person sees whether the terminal draws them; boxes or tofu there say keep
+// off. Fitted by whole pieces, in order, up to the first that does not fit:
+// an icon is never cut from its blank nor left against the frame (foureyes).
+func iconSample(width int) Line {
+	pieces := []Seg{{Text: "    off " + GlyphNone + " nerd ", Role: RoleMuted}}
 	for _, mode := range []string{iconsNerd, iconsFont} {
 		if mode == iconsFont {
-			l = append(l, Seg{Text: GlyphNone + " agent-font ", Role: RoleMuted})
+			pieces = append(pieces, Seg{Text: GlyphNone + " agent-font ", Role: RoleMuted})
 		}
 		for _, p := range iconSampleProviders {
-			l = append(l, Seg{Text: providerIcon(mode, p) + " ", Role: providerRole(p, RoleText)})
+			pieces = append(pieces, iconPair(providerIcon(mode, p), p))
 		}
 	}
-	return append(l, Seg{Text: "   (what your terminal draws is what you get)", Role: RoleMuted})
+	pieces = append(pieces, Seg{Text: "   (what your terminal draws is what you get)", Role: RoleMuted})
+	var l Line
+	for _, p := range pieces {
+		if l.Width()+Width(p.Text) > width {
+			break
+		}
+		l = append(l, p)
+	}
+	return l
 }
