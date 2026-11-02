@@ -6,10 +6,18 @@
 package peer
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/netbja/agent-bus-monitor/config"
 )
@@ -54,6 +62,97 @@ const (
 	defaultTurnTimeout = 10 * time.Minute
 	defaultMaxTokens   = 1024
 )
+
+// replaceKey installs key (written whole in tmp) over a wrong-length key
+// file, under an exclusive lock on a sibling file: of callers repairing at
+// once, the first replaces it, the others find the key it installed and
+// return that, so every caller returns the file's key (reviewer-codex).
+func replaceKey(path, tmp string, key []byte, oldLen int) ([]byte, string, error) {
+	lock, err := os.OpenFile(path+".lock", os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, "", err
+	}
+	defer lock.Close()
+	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+		return nil, "", err
+	}
+	if cur, err := os.ReadFile(path); err == nil && len(cur) == 32 {
+		return cur, "", nil // repaired meanwhile
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return nil, "", err
+	}
+	return key, fmt.Sprintf("%s held %d bytes, not a key: replaced", path, oldLen), nil
+}
+
+// EndpointFP is a short fingerprint of an endpoint's URL: what the peer
+// records of the URL it resolved, so health can tell that config.toml has
+// changed it since. It is an HMAC under key, a host-local secret (FPKey): a
+// bus reader holding the snapshot cannot test guessed URLs (a private path)
+// against it offline (reviewer-codex). The peer and the health check run on
+// the same host, so they share the key.
+func EndpointFP(key []byte, url string) string {
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte(url))
+	return hex.EncodeToString(m.Sum(nil)[:8])
+}
+
+// fpKeyFile is EndpointFP's key, beside config.toml: in the configuration
+// directory, not a cache, since a new key would make every running peer read
+// as changed.
+const fpKeyFile = "endpoint-fp.key"
+
+// FPKey reads the host's fingerprint key from dir, creating it once: 32
+// random bytes written whole to a temporary file (0600, in a 0700
+// directory), then linked to its name, which fails if the name exists. The
+// key is never visible half-written, and of two first callers one links, the
+// other reads the winner's (reviewer-codex, foureyes). A file of another
+// length (truncated, emptied by hand) is replaced by a new key, renamed over
+// it, and note says so (foureyes, master): refused, it would stop every
+// fingerprint for good. Peers that recorded the old one then read as
+// changed until they restart.
+func FPKey(dir string) (key []byte, note string, err error) {
+	path := filepath.Join(dir, fpKeyFile)
+	old, err := os.ReadFile(path)
+	switch {
+	case err == nil && len(old) == 32:
+		return old, "", nil
+	case err != nil && !errors.Is(err, os.ErrNotExist):
+		return nil, "", err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, "", err
+	}
+	key = make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, "", err
+	}
+	tmp, err := os.CreateTemp(dir, fpKeyFile+".*")
+	if err != nil {
+		return nil, "", err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(key); err != nil {
+		tmp.Close()
+		return nil, "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, "", err
+	}
+	if old != nil { // there, of the wrong length: replaced whole, by one caller
+		return replaceKey(path, tmp.Name(), key, len(old))
+	}
+	if err := os.Link(tmp.Name(), path); errors.Is(err, os.ErrExist) {
+		other, err := os.ReadFile(path)
+		if err != nil || len(other) != 32 {
+			return nil, "", fmt.Errorf("%s is not a fingerprint key", path)
+		}
+		return other, "", nil
+	} else if err != nil {
+		return nil, "", err
+	}
+	return key, "", nil
+}
 
 // Resolve joins the spec with config.toml's endpoint it names. The profile's
 // model must be the endpoint's: the one name is written twice but checked,

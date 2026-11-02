@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 )
 
 // fakeEndpoint answers /chat/completions with handle and /models with models.
@@ -198,8 +197,9 @@ func TestClientRetriesOnlyWhatCanHeal(t *testing.T) {
 	}
 	srv, _ := fakeEndpoint(t, nil, func(chatRequest) (int, string) { return 400, ctxFull })
 	cl := Client{URL: srv.URL + "/v1", Model: "m", HTTP: srv.Client()}
-	if _, _, err := cl.Chat(ctx, msgs, ToolSpecs()); err == nil || !strings.Contains(err.Error(), "exceeds the available context size") {
-		t.Errorf("the reason is lost: %v", err)
+	// The error names the status and keeps the body out: it is published (R3).
+	if _, _, err := cl.Chat(ctx, msgs, ToolSpecs()); err == nil || !strings.Contains(err.Error(), "status 400") || strings.Contains(err.Error(), "context size") {
+		t.Errorf("refusal = %v, want its status and not the body", err)
 	}
 	// An answer with neither text nor a tool call is no completion.
 	for _, body := range []string{`{"choices":[{}]}`, `{"choices":[{"message":{"role":"assistant","content":null}}]}`, `{"choices":[{"message":{"content":""}}]}`} {
@@ -208,8 +208,5 @@ func TestClientRetriesOnlyWhatCanHeal(t *testing.T) {
 		if _, _, err := cl.Chat(ctx, msgs, nil); !errors.Is(err, ErrBadResponse) {
 			t.Errorf("%s = %v, want ErrBadResponse", body, err)
 		}
-	}
-	if got := oneLine([]byte(strings.Repeat("é", 150))); !utf8.ValidString(got) || len(got) > 200 {
-		t.Errorf("oneLine cut a rune: %q", got)
 	}
 }

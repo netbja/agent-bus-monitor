@@ -14,6 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/peer"
 )
 
 func llmConfig(t *testing.T, body string) *config.File {
@@ -25,10 +26,14 @@ func llmConfig(t *testing.T, body string) *config.File {
 	return config.Load(p, "config.toml")
 }
 
+// testFPKey is the host key the check's tests fingerprint with.
+var testFPKey = []byte("0123456789abcdef0123456789abcdef")
+
 func llmDeps(snaps map[string]bus.AgentSnapshot, cfg *config.File) llmCheckDeps {
 	return llmCheckDeps{
 		Agents: func(context.Context) (map[string]bus.AgentSnapshot, error) { return snaps, nil },
 		Config: func() *config.File { return cfg },
+		FPKey:  func() ([]byte, error) { return testFPKey, nil },
 	}
 }
 
@@ -149,5 +154,77 @@ func TestLLMEndpointDetailNeverEchoesTheServer(t *testing.T) {
 	out, _ := llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen"}}, cfg))(context.Background())
 	if out.Status != health.Fail || !strings.Contains(out.Detail, "connection refused") || strings.Contains(out.Detail, "private-prefix") {
 		t.Errorf("down = %+v", out)
+	}
+}
+
+// The check probes the endpoint each peer resolved (options.endpoint, kept in
+// its snapshot), not every endpoint serving its model: an unused one of the
+// same model being down is no failure (R4). A peer naming an endpoint
+// config.toml no longer has is said; a snapshot written before the field
+// existed still matches by model.
+func TestLLMEndpointCheckProbesTheSelectedEndpoint(t *testing.T) {
+	up := modelsServer(t, "qwen")
+	conf := "[llm.used]\nurl = \"" + up.URL + "/v1\"\nmodel = \"qwen\"\n" +
+		"[llm.spare]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"qwen\"\n"
+	cfg := llmConfig(t, conf)
+	sel := func(ep string) bus.AgentSnapshot {
+		return bus.AgentSnapshot{Client: "local-llm", Model: "qwen", Endpoint: ep}
+	}
+	out, err := llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": sel("used")}, cfg))(context.Background())
+	if err != nil || out.Status != health.OK || strings.Contains(out.Detail, "spare") {
+		t.Fatalf("selected endpoint up, a spare down = %s %q %v, want ok without spare", out.Status, out.Detail, err)
+	}
+	out, _ = llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": sel("spare")}, cfg))(context.Background())
+	if out.Status != health.Fail || !strings.Contains(out.Detail, "spare") {
+		t.Fatalf("selected endpoint down = %s %q, want fail naming spare", out.Status, out.Detail)
+	}
+	out, _ = llmEndpointCheck(llmDeps(map[string]bus.AgentSnapshot{"local": sel("gone")}, cfg))(context.Background())
+	if !strings.Contains(out.Detail, "local (endpoint gone)") {
+		t.Fatalf("an endpoint config.toml lacks = %s %q", out.Status, out.Detail)
+	}
+}
+
+// The endpoint is judged for the model the running peer asks for, not the
+// one config.toml names now: an endpoint changed to another model after the
+// launch, serving that one only, is no ok (reviewer-codex); the change is said.
+func TestLLMEndpointCheckJudgesThePeersRunningModel(t *testing.T) {
+	srv := modelsServer(t, "phi")
+	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"phi\"\n")
+	snaps := map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used"}}
+	out, err := llmEndpointCheck(llmDeps(snaps, cfg))(context.Background())
+	if err != nil || out.Status != health.Warn || !strings.Contains(out.Detail, "answers without qwen") || !strings.Contains(out.Detail, "local (runs qwen; [llm.used] now names phi)") {
+		t.Fatalf("config changed under a running peer = %s %q %v", out.Status, out.Detail, err)
+	}
+}
+
+// The peer keeps the URL it resolved for its whole life: an endpoint whose
+// URL config.toml changed since is said, even when the new server answers
+// (reviewer-codex), by a fingerprint, never the URL.
+func TestLLMEndpointCheckSaysAURLChangedSinceTheLaunch(t *testing.T) {
+	srv := modelsServer(t, "qwen")
+	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"qwen\"\n")
+	snap := func(fp string) map[string]bus.AgentSnapshot {
+		return map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used", EndpointFP: fp}}
+	}
+	if out, _ := llmEndpointCheck(llmDeps(snap(peer.EndpointFP(testFPKey, srv.URL+"/v1")), cfg))(context.Background()); out.Status != health.OK {
+		t.Fatalf("same URL = %s %q", out.Status, out.Detail)
+	}
+	out, _ := llmEndpointCheck(llmDeps(snap(peer.EndpointFP(testFPKey, "http://127.0.0.1:1/v1")), cfg))(context.Background())
+	if out.Status != health.Warn || !strings.Contains(out.Detail, "local ([llm.used]'s URL changed since its launch)") || strings.Contains(out.Detail, "127.0.0.1:1") {
+		t.Fatalf("URL changed = %s %q", out.Status, out.Detail)
+	}
+}
+
+// A peer that recorded a fingerprint, checked on a host whose key cannot be
+// read, is unknown, never ok: the URL could not be compared, and that is said
+// (reviewer-codex, master).
+func TestLLMEndpointCheckSaysAnUnreadableKey(t *testing.T) {
+	srv := modelsServer(t, "qwen")
+	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"qwen\"\n")
+	d := llmDeps(map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used", EndpointFP: "00112233aabbccdd"}}, cfg)
+	d.FPKey = func() ([]byte, error) { return nil, errors.New("permission denied") }
+	out, _ := llmEndpointCheck(d)(context.Background())
+	if out.Status != health.Unknown || !strings.Contains(out.Detail, "URL not compared for local") {
+		t.Fatalf("unreadable key = %s %q", out.Status, out.Detail)
 	}
 }

@@ -30,6 +30,13 @@ func TestEvaluateLLMEndpoint(t *testing.T) {
 		"no reason":        {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{silent}}, Fail, []string{"quiet 127.0.0.1:7000 no answer"}},
 		"error status":     {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{errStatus}}, Fail, []string{"srv 127.0.0.1:9000 status 500"}},
 		"a peer unmatched": {LLMEndpointInput{Peers: []string{"local", "other"}, Probes: []EndpointProbe{ok}, Unmatched: []string{"other (model phi)"}}, Warn, []string{"no [llm.*] endpoint for other (model phi)"}},
+		// The endpoint a running peer resolved has changed in config.toml
+		// since its launch: a warning in its own words (foureyes).
+		"endpoint changed": {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{ok}, Changed: []string{"local ([llm.local]'s URL changed since its launch)"}}, Warn, []string{"endpoint changed for local ([llm.local]'s URL changed since its launch)"}},
+		// A URL that could not be compared is not known: never ok (master),
+		// and a worse finding still decides.
+		"not compared":          {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{ok}, Unverified: []string{"local"}}, Unknown, []string{"URL not compared for local", "serves qwen"}},
+		"not compared and down": {LLMEndpointInput{Peers: []string{"local"}, Probes: []EndpointProbe{down}, Unverified: []string{"local"}}, Fail, []string{"no answer", "URL not compared for local"}},
 	} {
 		out := EvaluateLLMEndpoint(c.in)
 		if out.Status != c.want {

@@ -7,15 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"unicode/utf8"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -68,6 +68,29 @@ const (
 	threadCap   = 20
 )
 
+// grepEntries bounds the entries one grep walks (SEC-LLM-5): the byte budget
+// alone let a tree of many small or skipped files run past turn_timeout.
+var grepEntries = 20000
+
+// dirBatch is how many names one directory read returns: a directory is read
+// in batches, each checked against the caps before the next (reviewer-codex:
+// ReadDir(-1) loaded a huge directory whole before any check).
+const dirBatch = 256
+
+// dirBatchRead, a test's hook, sees how many names each directory read
+// returned.
+var dirBatchRead func(n int)
+
+// readDirBatch reads up to n names of an open directory, sorted.
+func readDirBatch(d *os.File, n int) ([]os.DirEntry, error) {
+	batch, err := d.ReadDir(n)
+	if dirBatchRead != nil {
+		dirBatchRead(len(batch))
+	}
+	sort.Slice(batch, func(i, j int) bool { return batch[i].Name() < batch[j].Name() })
+	return batch, err
+}
+
 // Tools runs the peer's read-only tools. Root is the project root with its
 // symlinks resolved; Deny the role's effective Read denies; Thread and Agents
 // read the bus.
@@ -99,7 +122,7 @@ func (t Tools) Run(ctx context.Context, name, args string) string {
 	case "list_dir":
 		return t.listDir(a.Path)
 	case "grep":
-		return t.grep(a.Pattern, a.Path)
+		return t.grep(ctx, a.Pattern, a.Path)
 	case "bus_thread":
 		return t.busThread(ctx, a.ID)
 	case "bus_agents":
@@ -131,7 +154,25 @@ func (t Tools) resolve(rel string) (string, string) {
 	if t.Deny.Denied(asked) || t.Deny.Denied(real) {
 		return "", "refused: a Read deny rule of this role matches it"
 	}
+	if inGit(t.Root, asked) || inGit(t.Root, real) {
+		return "", "refused: the repository's .git is not read"
+	}
 	return real, ""
+}
+
+// inGit reports whether p, under root, is in or is a .git: its config can
+// hold a remote URL with a token (SEC-LLM-4).
+func inGit(root, p string) bool {
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return true
+	}
+	for _, s := range strings.Split(filepath.ToSlash(rel), "/") {
+		if s == ".git" {
+			return true
+		}
+	}
+	return false
 }
 
 func (t Tools) readFile(rel string, offset, limit int64) string {
@@ -142,7 +183,7 @@ func (t Tools) readFile(rel string, offset, limit int64) string {
 	if msg != "" {
 		return msg
 	}
-	f, msg := openRegular(p)
+	f, msg := openRegular(t.Root, p)
 	if msg != "" {
 		return msg
 	}
@@ -170,14 +211,30 @@ func (t Tools) listDir(rel string) string {
 	if msg != "" {
 		return msg
 	}
-	entries, err := os.ReadDir(p)
-	if err != nil {
+	if beforeOpen != nil {
+		beforeOpen()
+	}
+	// The last component without O_DIRECTORY: a link there is ELOOP, where
+	// O_DIRECTORY would make it ENOTDIR, like a plain file.
+	d, err := openBeneath(t.Root, p, unix.O_NONBLOCK, unix.S_IFDIR)
+	switch {
+	case errors.Is(err, unix.ELOOP), errors.Is(err, unix.ENOTDIR):
+		return refusedSwap
+	case err != nil:
+		return "error: not a directory"
+	}
+	defer d.Close()
+	if fi, err := d.Stat(); err != nil || !fi.IsDir() {
+		return "error: not a directory"
+	}
+	entries, err := readDirBatch(d, listCap+1) // one past the cap: whether more exist
+	if err != nil && !errors.Is(err, io.EOF) {
 		return "error: not a directory"
 	}
 	var b strings.Builder
 	for i, e := range entries {
 		if i == listCap {
-			fmt.Fprintf(&b, "[%d more not listed]\n", len(entries)-listCap)
+			b.WriteString("[more not listed]\n")
 			break
 		}
 		b.WriteString(e.Name())
@@ -189,7 +246,7 @@ func (t Tools) listDir(rel string) string {
 	return b.String()
 }
 
-func (t Tools) grep(pattern, rel string) string {
+func (t Tools) grep(ctx context.Context, pattern, rel string) string {
 	if pattern == "" {
 		return "error: pattern is required"
 	}
@@ -202,15 +259,22 @@ func (t Tools) grep(pattern, rel string) string {
 		return msg
 	}
 	var b strings.Builder
-	matches, budget := 0, int64(grepBudget)
-	stop := errors.New("stop")
-	walkErr := filepath.WalkDir(start, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
+	matches, budget, entries := 0, int64(grepBudget), 0
+	stop, tooMany := errors.New("stop"), errors.New("entries")
+	fi, err := os.Lstat(start)
+	if err != nil {
+		return "error: no such file or directory"
+	}
+	walkErr := t.walk(start, fi.IsDir(), func(p string, dir bool) error {
+		if ctx.Err() != nil {
+			return ctx.Err() // the turn's clock: the lease is held meanwhile
 		}
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return filepath.SkipDir
+		if entries++; entries > grepEntries {
+			return tooMany
+		}
+		if dir {
+			if filepath.Base(p) == ".git" {
+				return errSkipDir // resolve refuses every path in it anyway: a speed-up
 			}
 			return nil
 		}
@@ -219,9 +283,9 @@ func (t Tools) grep(pattern, rel string) string {
 		if msg != "" {
 			return nil
 		}
-		f, msg := openRegular(real)
+		f, msg := openRegular(t.Root, real)
 		if msg != "" {
-			return nil // a pipe, a device, a socket: never opened
+			return nil // a pipe, a device, a socket: refused by its type, never opened
 		}
 		defer f.Close()
 		data, _ := io.ReadAll(io.LimitReader(f, budget))
@@ -244,6 +308,10 @@ func (t Tools) grep(pattern, rel string) string {
 		return nil
 	})
 	switch {
+	case ctx.Err() != nil:
+		b.WriteString("[stopped: the turn ended]\n")
+	case errors.Is(walkErr, tooMany):
+		fmt.Fprintf(&b, "[stopped after %d entries]\n", grepEntries)
 	case errors.Is(walkErr, stop) && matches == grepMatches:
 		fmt.Fprintf(&b, "[stopped at %d matches]\n", grepMatches)
 	case errors.Is(walkErr, stop):
@@ -308,27 +376,151 @@ func (t Tools) busAgents(ctx context.Context) string {
 	return b.String()
 }
 
-// openRegular opens a regular file only. A named pipe would block the open
-// until a writer comes, past the turn's clock and with the receiver lease
-// held: the type is checked before opening (p is resolved, so Lstat sees the
-// file itself), the open never blocks (O_NONBLOCK), and the open file is
-// checked again.
-func openRegular(p string) (*os.File, string) {
-	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
-		if err == nil && fi.IsDir() {
-			return nil, "error: a directory (use list_dir)"
-		}
-		return nil, "error: not a regular file"
+// beforeOpen runs between a path's checks and its open: a test's hook to
+// swap the path for a link there (R1).
+var beforeOpen func()
+
+// refusedSwap is a path that became a link after it was checked.
+const refusedSwap = "refused: the path changed after it was checked (a link appeared)"
+
+// openBeneath opens p, a path under root that resolve has checked, one
+// component at a time from root, following no link (O_NOFOLLOW on each):
+// a component swapped for a link after the checks fails with ELOOP instead
+// of leading outside the root or onto a denied file (R1). It holds on Linux
+// and macOS alike, needing no openat2. With kinds (S_IFREG, S_IFDIR, ...),
+// the last component's type is read first (fstatat, no link followed) and
+// any other type is errWrongType, never opened: a pipe, a device or a socket
+// under the root is refused before an open could act on it (foureyes). The
+// caller's fstat after the open still covers a swap between the two.
+func openBeneath(root, p string, flags int, kinds ...uint32) (*os.File, error) {
+	rel, err := filepath.Rel(root, p)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+		return nil, fmt.Errorf("not under the root")
 	}
-	f, err := os.OpenFile(p, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	fd, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
+		return nil, err
+	}
+	parts := split(filepath.ToSlash(rel))
+	if rel == "." {
+		parts = nil
+	}
+	for i, part := range parts {
+		fl := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_DIRECTORY
+		if i == len(parts)-1 {
+			fl = unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | flags
+			if err := typeBeneath(fd, part, kinds); err != nil {
+				unix.Close(fd)
+				return nil, err
+			}
+		}
+		next, err := unix.Openat(fd, part, fl, 0)
+		unix.Close(fd)
+		if err != nil {
+			return nil, err
+		}
+		fd = next
+	}
+	if opened != nil {
+		opened(p)
+	}
+	return os.NewFile(uintptr(fd), p), nil
+}
+
+// opened, a test's hook, sees every path openBeneath opened.
+var opened func(p string)
+
+// errWrongType: the path is not of a type the caller opens.
+var errWrongType = errors.New("not of the type asked")
+
+// typeBeneath reads name's type in the directory fd without following a
+// link: a link is ELOOP, a type not in kinds errWrongType; no kinds, any.
+func typeBeneath(fd int, name string, kinds []uint32) error {
+	if len(kinds) == 0 {
+		return nil
+	}
+	var st unix.Stat_t
+	if err := unix.Fstatat(fd, name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	t := uint32(st.Mode) & unix.S_IFMT
+	if t == unix.S_IFLNK {
+		return unix.ELOOP
+	}
+	for _, k := range kinds {
+		if t == k {
+			return nil
+		}
+	}
+	return errWrongType
+}
+
+// openRegular opens a regular file only, beneath root (openBeneath). A named
+// pipe would block the open until a writer comes, past the turn's clock and
+// with the receiver lease held: the open never blocks (O_NONBLOCK) and the
+// open file's type is checked.
+func openRegular(root, p string) (*os.File, string) {
+	if beforeOpen != nil {
+		beforeOpen()
+	}
+	f, err := openBeneath(root, p, unix.O_NONBLOCK, unix.S_IFREG, unix.S_IFDIR)
+	switch {
+	case errors.Is(err, errWrongType):
+		return nil, "error: not a regular file"
+	case errors.Is(err, unix.ELOOP):
+		return nil, refusedSwap
+	case errors.Is(err, unix.ENOTDIR):
+		return nil, refusedSwap // a directory on the path is no longer one
+	case err != nil:
 		return nil, "error: cannot open it"
 	}
-	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+	fi, err := f.Stat()
+	switch {
+	case err != nil:
+		f.Close()
+		return nil, "error: not a regular file"
+	case fi.IsDir():
+		f.Close()
+		return nil, "error: a directory (use list_dir)"
+	case !fi.Mode().IsRegular():
 		f.Close()
 		return nil, "error: not a regular file"
 	}
 	return f, ""
+}
+
+// errSkipDir, from walk's visit, leaves a directory unread.
+var errSkipDir = errors.New("skip")
+
+// walk visits p, then, for a directory, its entries depth first: each
+// directory opened beneath the root following no link (openBeneath, R1) and
+// read in batches of dirBatch, every entry visited before the next batch is
+// read, so visit's caps stop the walk inside one huge directory. A link is
+// visited as a file (never followed into), as WalkDir did; a directory that
+// cannot be opened is skipped.
+func (t Tools) walk(p string, dir bool, visit func(p string, dir bool) error) error {
+	if err := visit(p, dir); err != nil || !dir {
+		if errors.Is(err, errSkipDir) {
+			return nil
+		}
+		return err
+	}
+	d, err := openBeneath(t.Root, p, unix.O_NONBLOCK, unix.S_IFDIR)
+	if err != nil {
+		return nil
+	}
+	defer d.Close()
+	for {
+		batch, err := readDirBatch(d, dirBatch)
+		for _, e := range batch {
+			if werr := t.walk(filepath.Join(p, e.Name()), e.IsDir(), visit); werr != nil {
+				return werr
+			}
+		}
+		if err != nil || len(batch) == 0 {
+			return nil // the end (io.EOF), or a directory that cannot be read on
+		}
+	}
 }
 
 // lineCap bounds one printed grep line: a minified file's one line never
