@@ -46,6 +46,40 @@ func launchHooks(e *envMap) claudeHooks {
 		TurnEnd:   ShellJoin([]string{bin, "roles", "turn", "end"})}
 }
 
+// codexHookArgs are the turn hooks of a Codex launch (auto-state step 5,
+// route a): -c overrides for this launch only, never ~/.codex, the hooks
+// feature on, turn start on UserPromptSubmit and turn end on Stop. Codex
+// lists them from its session flags and asks once to trust them; the same
+// command on every launch keeps that trust.
+func codexHookArgs(h claudeHooks) []string {
+	hook := func(event, command string) string {
+		return "hooks." + event + `=[{hooks=[{type="command",command=` + tomlString(command) + `}]}]`
+	}
+	return []string{"-c", "features.hooks=true", "-c", hook("UserPromptSubmit", h.TurnStart), "-c", hook("Stop", h.TurnEnd)}
+}
+
+// tomlString is s as a TOML basic string: Codex parses a -c value as TOML
+// and keeps one that fails as a raw string, so no JSON escape (a surrogate
+// pair is not TOML). Only the quote, the backslash and control characters
+// are escaped; the rest stays UTF-8.
+func tomlString(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch {
+		case r == '"' || r == '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
 // ResumeArgv is the command herdr runs to resume a session: the template's
 // own launch (env ROLES_TOML=… agent-launch <role> <project>), with
 // --profile for a role running on another profile than its own, and

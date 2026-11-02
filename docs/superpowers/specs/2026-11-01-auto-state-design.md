@@ -18,7 +18,7 @@ Every client we launch has turn hooks. Read from the installed binaries on 2026-
 | Client | Version | Turn start | Turn end | How a launch can pass the hook |
 |---|---|---|---|---|
 | Claude Code | (installed) | `UserPromptSubmit` | `Stop` | `--settings` JSON, already passed on every launch (it carries the `SessionStart` resume hook) |
-| Codex | 0.164.0 | `UserPromptSubmit` | `Stop` | hooks are a feature (`codex_hooks`, `hooks.json`), behind a one-time trust dialog (`screens/codex-hooks.txt`); `-c` overrides per launch; to verify |
+| Codex | 0.164.0 | `UserPromptSubmit` | `Stop` | hooks are a feature (`hooks`, stable and on by default in 0.164.0; `hooks.json`), behind a one-time trust dialog (`screens/codex-hooks.txt`); `-c` overrides per launch, verified 2026-11-02 with a throwaway `CODEX_HOME`: `app-server`'s `hooks/list` reads both from source `sessionFlags`, enabled, `untrusted` until trusted, the hash the same on every launch (route a, chosen) |
 | Kimi Code | 2.2.0 | `UserPromptSubmit` | `Stop` | hook events present in the binary; the config route is to verify |
 | Grok | 1.0.70 | `UserPromptSubmit` | `Stop` | `.grok/hooks`, `hooks.json` (per directory); to verify |
 

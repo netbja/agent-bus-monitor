@@ -315,6 +315,7 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 		if p.Reasoning != "" {
 			cmd = append(cmd, "-c", "model_reasoning_effort="+jsonString(p.Reasoning))
 		}
+		cmd = append(cmd, codexHookArgs(launchHooks(newEnv(env)))...)
 		// The initial prompt is additive: never replace the user's developer instructions.
 		if dry {
 			return append(cmd, "<role prompt and skill paths>"), nil

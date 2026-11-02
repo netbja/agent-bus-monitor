@@ -162,7 +162,11 @@ func TestLaunchCommandLines(t *testing.T) {
 	if _, e, err := f.launch(m, "coder"); err != nil {
 		t.Fatal(err, e)
 	}
-	want = []string{"codex", "--model", "test-model", "-c", `model_provider="test-provider"`, "--sandbox", "workspace-write", "--ask-for-approval", "never", "-c", `model_reasoning_effort="xhigh"`}
+	h := launchHooks(newEnv(f.env))
+	want = []string{"codex", "--model", "test-model", "-c", `model_provider="test-provider"`, "--sandbox", "workspace-write", "--ask-for-approval", "never", "-c", `model_reasoning_effort="xhigh"`,
+		"-c", "features.hooks=true",
+		"-c", `hooks.UserPromptSubmit=[{hooks=[{type="command",command="` + h.TurnStart + `"}]}]`,
+		"-c", `hooks.Stop=[{hooks=[{type="command",command="` + h.TurnEnd + `"}]}]`}
 	if got := f.execed[1 : len(f.execed)-1]; strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("codex argv = %q", got)
 	}
