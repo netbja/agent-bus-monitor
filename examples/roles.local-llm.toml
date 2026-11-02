@@ -1,0 +1,47 @@
+# A local model as a read-only test peer (spec
+# docs/superpowers/specs/2026-10-31-local-llm-peer-design.md). Copy this file into a
+# throwaway project as its roles.toml, give config.toml the endpoint, then
+# `agent-launch local <project>` in a pane:
+#
+#   [llm.local]                            # ~/.config/agentbus/config.toml
+#   url   = "http://127.0.0.1:11434/v1"    # Ollama; llama-server: http://127.0.0.1:8080/v1
+#   model = "qwen2.5-coder:3b"             # the same name as the profile's model below
+#
+# `agentbus peer --check local` asks the endpoint whether it serves the model.
+# The server's context is set on the server: Ollama's OpenAI endpoint takes no
+# num_ctx (OLLAMA_CONTEXT_LENGTH), llama-server takes -c; llama-server needs
+# --jinja for tool calls.
+schema_version = 2
+
+[defaults]
+profile = "local"
+
+# Resolved against this file's directory: in a copy elsewhere, name the
+# script by its absolute path in this checkout.
+[adapters.local-llm]
+executable = "../scripts/local-llm-peer"
+
+[profiles.local]
+client = "local-llm"
+provider = "local"
+model = "qwen2.5-coder:3b"
+[profiles.local.options]
+endpoint = "local"      # the [llm.<name>] table of config.toml
+turn_timeout = "10m"    # one turn's wall clock
+max_tokens = 1024       # the answer's bound
+
+# The peer refuses every file these match (read_file, grep), and refuses to
+# start when they cannot be read. The shipped list, as in roles.toml.
+[tool_rules]
+deny = [
+  "Read(**/.env)", "Read(**/.env.local)", "Read(**/.env.production)", "Read(**/.env.development)",
+  "Read(**/.env.test)", "Read(**/.env.staging)", "Read(**/.env.preview)",
+  "Read(**/.env.production.local)", "Read(**/.env.development.local)", "Read(**/.env.test.local)",
+  "Read(**/.env.staging.local)", "Read(**/.env.preview.local)",
+  "Read(**/*.pem)", "Read(**/*.key)", "Read(**/id_rsa*)", "Read(**/id_ed25519*)",
+  "Read(~/.ssh/**)", "Read(**/*keypair*.json)", "Read(**/wallet*.json)",
+]
+
+[roles.local]
+tier = "pop"
+skills = []

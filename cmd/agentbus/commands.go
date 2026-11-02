@@ -531,6 +531,16 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus plugin projects"},
 	},
 	{
+		Name: "peer", NoProject: true, Internal: true,
+		Usage:   []string{"peer --spec-file <launch.json>", "peer --check <endpoint>"},
+		Summary: "a local model as a read-only test peer (launched by agent-launch through scripts/local-llm-peer); --check asks config.toml's [llm.<endpoint>] whether it serves its model",
+		Flags: []cli.Flag{
+			{Long: "spec-file", Arg: "<launch.json>", Help: "the launcher's resolved launch spec (the adapter script passes it)"},
+			{Long: "check", Arg: "<endpoint>", Help: "ask the endpoint for its models; exit 0 when it serves its model"},
+		},
+		Examples: []string{"agentbus peer --check local"},
+	},
+	{
 		Name: "statusline", NoProject: true, Internal: true,
 		Usage:   []string{"statusline [--then <command>]", "statusline --print-install [--then <command>]"},
 		Summary: "Claude Code's statusLine: records rate limits from stdin",

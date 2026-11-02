@@ -750,7 +750,19 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `[llm.<name>]` tables of `config.toml` only (`config/llm.go`, `File.Endpoints`; `url`, `model`,
   `remote`), each taken whole or dropped with a warning (a secret, user info, a query, an unknown
   key; a host other than `127.0.0.1`, `::1` or `localhost` without `remote = true`); `agentbus
-  config` lists them by host and port, never the URL.
+  config` lists them by host and port, never the URL. `agentbus peer` (local-llm-peer step 1, package
+  `peer/`) is the local model as a read-only test peer: `examples/roles.local-llm.toml` launches it through
+  the adapter `scripts/local-llm-peer --spec-file <launch.json>`; the profile's `model` must equal its
+  endpoint's (`Resolve`); one receiver lease from before the drain to its exit (`Bus.TakeReceiver`, then
+  `Receiver.Drain` and `Deliver` under it, so the dispatcher sees rule 2 throughout); per entry (directive,
+  challenge, reply) a fresh turn (`Turn.Run`: the role prompt `roles/local.md`, the entry and its thread, at most
+  8 tool calls, `turn_timeout`), the reply on the entry's thread, a report, its own `working`/`blocked`/`idle`.
+  The client follows no redirect and uses no proxy; only transport errors, 5xx, 408, 429 and 404 are retried
+  (`blocked`, the entry kept, every 30 s), any other refusal fails the turn with a reply. Tools: `read_file`,
+  `list_dir`, `grep` under the project root (no `..`, symlinks re-checked, regular files only, the role's
+  effective `Read(…)` denies with Claude Code's glob meaning, a bare `Read` denying everything, fail closed),
+  `bus_thread`, `bus_agents`; no shell, no write, no verdict. `--check <endpoint>` asks its `/models`. Provider
+  `local` is a built-in unlimited quota reader (listed by `agentbus quota` only with an endpoint).
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of

@@ -17,6 +17,12 @@ func TestEveryPromptCarriesTheStateRule(t *testing.T) {
 	}
 	files := append(prompts, repoPath(t, "examples/drafts/infra/infra.md"), repoPath(t, "skills/agent-bus/SKILL.md"))
 	for _, f := range files {
+		// The local-llm peer declares its states itself (peer.Runner); the
+		// model behind it cannot run agentbus, and the rule would only cost a
+		// small model prompt tokens.
+		if f == repoPath(t, "roles/local.md") {
+			continue
+		}
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
