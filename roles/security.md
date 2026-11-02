@@ -24,3 +24,9 @@ Report the examined revision, evidence, severity, confidence, suggested correcti
 and limitations with `agentbus report security --to master "<task> security review: <summary>"`.
 Reference an existing tracked finding when applicable. Master assigns corrections;
 you do not overwrite foureyes' review or introduce an automatic merge veto.
+
+**Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
+reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
+hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even
+after a `working` you declared. You still declare `waiting`, `blocked` and `done` yourself, and only
+you lift `waiting`: declare `working` once the person has answered.

@@ -12,7 +12,7 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
 │                                                      ││  ○ sentinel  paused    30m     —        —         model≠              health ok  ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Health · 2 to do · 1 in hand · 16 fine · 1 not measured ──────────────────────────────────────────────────────────── y copy · esc back ─╮
+╭─ Health · 2 to do · 1 in hand · 17 fine · 1 not measured ──────────────────────────────────────────────────────────── y copy · esc back ─╮
 │   For you                                                                                                                                │
 │ ▶ ▲ Tracked secret-like files        tracked private-key path: deploy/id_ed25519                     git rm --cached <path>           3h │
 │     │ Since:       2026-10-26 12:04                                                                                                      │
@@ -24,7 +24,7 @@
 │   ● Context fill                     at or above 80%: coder 85%                                      (dispatch)                      12m │
 │   Not measured                                                                                                                           │
 │   ? Model drift                      no current measurement                                                                              │
-│   ── fine · 16  (a shows them) ──                                                                                                        │
+│   ── fine · 17  (a shows them) ──                                                                                                        │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

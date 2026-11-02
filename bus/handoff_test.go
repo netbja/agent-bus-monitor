@@ -75,6 +75,26 @@ func TestDeclareHandoffNeedsTheAgentsOwnReportProcessAndSessionRedis(t *testing.
 	if got != h || got.Report != own || got.Session != "session-0001" || got.PID != 42 || got.PIDStart != 7 || got.At == 0 {
 		t.Fatalf("record %+v, returned %+v", got, h)
 	}
+	// The declaration is the agent's idle (chain-reliability): one status
+	// entry and the snapshot, both at the record's own time, so the clear's
+	// "idle since its hand-off" holds without a separate status.
+	last, err := b.r.XRevRangeN(ctx, StreamKey(b.project, "status"), "+", "-", 1).Result()
+	if err != nil || len(last) != 1 {
+		t.Fatalf("status stream: %v %v", last, err)
+	}
+	if ms, _ := splitID(last[0].ID); ms != h.At || last[0].Values["agent"] != "coder" || last[0].Values["state"] != "idle" {
+		t.Fatalf("status entry %+v, record at %d", last[0], h.At)
+	}
+	snaps, err := b.Agents(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := snaps["coder"]; s.State != "idle" || s.TS != h.At || s.PID != 42 || s.PIDStart != 7 || s.IdentSession != "session-0001" {
+		t.Fatalf("snapshot %+v, record at %d", s, h.At)
+	}
+	if void, why := h.VoidFor(snaps["coder"], true); void {
+		t.Fatalf("its own idle voids the record: %s", why)
+	}
 	if ok, err := b.HasKeysBesidesDispatch(ctx); err != nil || !ok {
 		t.Fatalf("HasKeysBesidesDispatch: %v %v", ok, err) // the agents' own keys are there
 	}
@@ -274,11 +294,11 @@ func TestFencedReserveClearRedis(t *testing.T) {
 	if len(last) != 1 {
 		t.Fatal("no status entry")
 	}
-	if m := marks[ClearMark("coder")]; m != "session-0001|"+strconv.FormatInt(at, 10)+"|"+r+"|"+last[0].ID+"|1" {
+	if m := marks[ClearMark("coder")]; m != "session-0001|"+strconv.FormatInt(at, 10)+"|"+r+"|"+last[0].ID+"|2" { // the declaration's idle, then this status
 		t.Fatalf("mark %q", m)
 	}
 	c, ok := ParseClearMark(marks[ClearMark("coder")])
-	if !ok || c.Session != "session-0001" || c.At != at || c.Report != r || c.StatusID != last[0].ID || c.Added != 1 {
+	if !ok || c.Session != "session-0001" || c.At != at || c.Report != r || c.StatusID != last[0].ID || c.Added != 2 {
 		t.Fatalf("ParseClearMark: %+v %v", c, ok)
 	}
 }
