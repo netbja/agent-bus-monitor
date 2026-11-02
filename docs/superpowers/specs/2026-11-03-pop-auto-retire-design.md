@@ -104,20 +104,41 @@ can be stale by the time master acts):
    so that a pane the person has just focused is not closed. A change is a `failed` ledger entry
    (`step: popdone`, the reason), the intent ended, nothing closed.
 3. **After the pid is proven gone**: the forget is **one Lua script**, `Bus.ForgetIfClear(role)`,
-   never a read followed by `ForgetAgent`, because a message can arrive between any read and the
-   group's destruction. In one script it reads, for the role: the consumer group's pending count
-   (`XPENDING`), the addressed waking entries after its `last-delivered-id` (`XRANGE` from there,
+   never a read followed by a delete, because work can arrive between any read and the delete. In
+   one script it checks that retire's own swap intent `{p}:swap:<role>` still holds (else it
+   changes nothing), then reads, for the role: the consumer group's pending count (`XPENDING`),
+   the addressed waking entries after its `last-delivered-id` (`XRANGE` from there,
    `target == role` and `wake != no`, the rule `Obligation` uses), its open ask (`open:<role>` in
    `{p}:asks`), a board task it owns not `done` (`{p}:board`), and its gate key. If all are empty
-   it deletes what `ForgetAgent` deletes and destroys the group, in the same script; if any is
-   not, it changes nothing and returns what it found.
+   it deletes the **registration** (snapshot, usage, wake, armed, receiver and gate keys) in the
+   same script; if any is not, it changes nothing and returns what it found.
 
-When the script finds something, the pane is closed but the registration and the group are
-**kept**: `retire` prints the entry ids (or the ask, task, gate) and exits 1, the ledger's
+   It **keeps the consumer group and its cursor** (foureyes, on 9b0b46c). Destroying it would make
+   the next spawn of the role replay its handled messages: `EnsureGroup` recreates a missing group
+   at `now - 24h` and `subscribe --drain` has no floor, so a pop forgotten and spawned again the
+   same day (reviewer-codex, security) would drain every directive, reply and challenge of the
+   last day, the ones its previous instance already handled included. Kept, the group is what
+   `cmd-delivery` no longer judges (it reads registered agents only, A9), so the health failure
+   that started this is gone all the same; a later message to the role still makes an obligation
+   the dispatcher sees and escalates (`Decide` rule 6, `no snapshot`); and a later spawn reads on
+   from the cursor. `agents forget` (busmon's `d`) keeps destroying the group, as today.
+
+   **Mission attempts** (condition 4, reviewer-codex on 9b0b46c) are not read by the script:
+   they cannot start in the window. Every attempt starts with the conductor's `FencedRequest`,
+   whose script refuses with `SWAPPING` while `{p}:swap:<target>` exists, and the conductor's
+   challenges (`fencedChallenge`) the same; retire holds that intent from its `begin` (after
+   which check 2 has read the missions, condition 4) until after the script, which checks it
+   still holds. An attempt already running is caught by checks 1 and 2, and it cannot move on
+   without the agent (a delivery is the agent's own act). The request also writes an owned board
+   task in the same script, which the script reads, so even a request sent another way holds it.
+
+When the script finds something, the pane is closed but the registration is **kept** (the group
+always is): `retire` prints the entry ids (or the ask, task, gate) and exits 1, the ledger's
 `retired` entry says `forgot: false` with that reason, and the swap intent ends. The pop is then
 a registered agent with a dead pid and a waiting message: the dispatcher escalates it to master as
-it does for any agent whose pane is gone (`Decide` rule 7, `pane gone`, after `escalate_after`), and master spawns the role again, which
-reads the message from the kept group. No entry is acknowledged or destroyed unread.
+it does for any agent whose pane is gone (`Decide` rule 7, `pane gone`, after `escalate_after`),
+and master spawns the role again, which reads the message from the kept group. No entry is
+acknowledged or destroyed unread.
 
 The window between the last check (2) and the close is not closed by a lock (a pane cannot be
 closed inside a Redis script): a message that lands there closes a pop that now has work. That
@@ -130,16 +151,17 @@ Also:
   is proven gone, its armed key is stale, and the script deletes it;
 - the ledger's `retired` entry gains `forgot: true|false` (`agentbus swaps` prints
   `retired … forgot` or `retired … kept: <reason>`);
-- a script error after a successful close is said, with the command to finish
-  (`agentbus agents forget <role> --force`, after reading `agentbus subscribe --drain`'s view of
-  what waits), and exits 1.
+- a script error after a successful close is said and exits 1; the registration stays, so the
+  pop reads as a dead agent and is escalated like one; the person may then finish with
+  `agentbus agents forget <role> --force` (which also destroys the group).
 
 `--forget` is refused on a role whose recorded tier is not `pop` (or none, condition 1): a boot
 role comes back with `agentbus up` and keeps its consumer group's cursor. `--forget` requires
 `--episode`, and refuses `--now`. Plain `retire` is unchanged.
 
-After it, `cmd-delivery` no longer sees the group (it is destroyed), busmon no longer lists the
-agent, and a later `agent-spawn` of the same role registers it afresh.
+After it, `cmd-delivery` no longer judges the group (the role is not registered), busmon no
+longer lists the agent, and a later `agent-spawn` of the same role registers it afresh and reads on
+from the kept cursor, never replaying what the previous instance handled.
 
 ## 5. What is never ended
 
@@ -195,7 +217,7 @@ Enter opens the agent's page with an `Action:` row, `e` ends it (the same `retir
 --episode <ms>` with the episode the row was judged on, run as the person, `--as`; refused the same
 way when the pop moved on).
 
-**Health.** `cmd-delivery` stays ok after the end (the group is gone). A new warn, `pop-done`
+**Health.** `cmd-delivery` stays ok after the end (the role is no longer registered). A new warn, `pop-done`
 (in hand, master), when a pop has been done for twice `pop_retire_after` and is still there: the
 directive was not acted on. It never fails, so it never wakes sentinel.
 
@@ -226,8 +248,14 @@ Both in the registry (`config/keys.go`, group Services), env `AGENT_BUS_POP_RETI
 - `ForgetIfClear` (Redis, opt-in): a waking directive sent between the kill and the forget means
   no forget, the group and the entry kept, readable by a new consumer of that group; a `wake=no`
   notice does not hold it; a pending (delivered, unacknowledged) entry holds it; an open ask, an
-  owned task not `done` and an open gate each hold it; all empty destroys the group and deletes
-  the keys `ForgetAgent` deletes.
+  owned task not `done` and an open gate each hold it; no swap intent (ended or another's) holds
+  it; all empty deletes the registration keys and keeps the group with its last-delivered id.
+- No replay (foureyes): directives handled by the pop, then `retire --forget`, then a spawn of the
+  role (`EnsureGroup` through its first status): `subscribe --drain` prints nothing from before the
+  retire; a directive sent after the retire is printed.
+- No mission start in the window (reviewer-codex): with retire's intent held, `FencedRequest` and
+  the conductor's challenge to the role are refused `SWAPPING`, and the script still finds the
+  intent; a conductor pass between the kill and the script starts no attempt.
 - Tool rules: master's allow per pop role without person approval, none for boot roles,
   none with `--now` (`TestShippedManifestRules`).
 - busmon: the `done` flag, the For-you row and its `e`, the notice line.
