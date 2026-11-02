@@ -623,8 +623,11 @@ You and the docs agent are the only roles that deliver, push included (the perso
 
 ```bash
 agentbus deliver <branch> --task <plan-task>     # subject and title from the plan task
-agentbus deliver <branch> --subject <s> [--base <b>] [--title <t>] [--dry-run]
+agentbus deliver <branch> --subject <s> [--base <b>] [--title <t>] [--body-file <f>] [--dry-run]
 ```
+
+The request's description is your `--body-file` (what, why, how it was validated, limits; each
+line screened for credentials), followed by the verdicts; without it, the commits' subjects.
 
 - **The 4-eyes check is deliver's own.** It resolves the branch head `H` once and goes on only
   when the subject's roll-up is APPROVED **and** its newest independent approve names `H`

@@ -29,22 +29,25 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    - every link resolves;
    - every number comes from a source you read.
    - Run the project's doc checks (here: `go run ./cmd/agentbus mem check`).
-5. **Commit** on `pr/<c>` (never `main`) with a subject line that says what the change does for a
-   user: the request's body lists only each commit's subject (its first line) and the verdicts,
-   never a commit's longer message. The rest the old pull request body said (why, how it was
-   validated: tests, live runs, reviews; known limits) goes in your report to master (step 7).
+5. **Commit** on `pr/<c>` (never `main`), and write the request's description to a file outside
+   the repository (`/tmp/pr-<c>.md`). It says, in this order:
+   - what the change does, for a user;
+   - why;
+   - how it was validated (tests, live runs, reviews);
+   - known limits.
    Do not push: `agentbus deliver` does, once the review names your head.
 6. **Ask for the 4-eyes review** on the bus, naming the commit:
    `agentbus challenge <reviewer> --subject pr-<c> "review the docs of <c> at <full sha>"`.
    The reviewer's verdict must name that SHA (`--head`); a new commit needs a new verdict.
-7. **Deliver** once approved: `agentbus deliver pr/<c> --base <base> --subject pr-<c> --title "<c>: <what it delivers>"`.
+7. **Deliver** once approved: `agentbus deliver pr/<c> --base <base> --subject pr-<c> --title "<c>: <what it delivers>" --body-file /tmp/pr-<c>.md`.
    It pushes the approved commit and opens the pull or merge request through the forge's CLI
-   (its body: your commits and the verdicts), or prints the page to open (link mode: no CLI, or
+   (its body: your description, each line screened for credentials, then the verdicts and the
+   footer; without `--body-file`, only the commits' subjects), or prints the page to open (link mode: no CLI, or
    Bitbucket), or in local mode pushes nothing and prints the merge for the person; it reports
    the URL or the ref to master itself. Exit 3 means the approval does not name your head: ask
    for a verdict on it. Never work around it by `git push`, by merging, or by pushing to `<base>`.
-   Then report the rest (`agentbus report <you> --to master "<c> delivered: <url or ref>"`, with
-   `## Why`, `## Validated` and `## Limits` parts): `agentbus report` keeps the full text.
+   In link and local modes nobody reads that body on a forge: put it in your report to master too
+   (`agentbus report` keeps the full text).
 
 ## Shared memory
 
@@ -66,6 +69,6 @@ you repeat it.
 
 - Merge a PR, push `main`, rewrite history, or delete a branch you did not create.
 - Change code, tests or configuration. If the docs reveal a bug, report it to master on the bus.
-- Invent a capability, a version or a result. When you cannot verify something, say so in your
-  report's limits.
+- Invent a capability, a version or a result. When you cannot verify something, say so in the
+  description's limits.
 - Push, or open a pull request by hand: `agentbus deliver` does both, from the approved commit.

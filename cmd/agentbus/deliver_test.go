@@ -603,3 +603,34 @@ func TestDeliverRoleCheckReadsTheManifest(t *testing.T) {
 		t.Errorf("docs: %v", err)
 	}
 }
+
+// --body-file is the request's description (master writes one, as with gh
+// pr create): each line screened, the 4-eyes record kept after it; read
+// before anything leaves, so a missing file pushes nothing.
+func TestDeliverTakesABodyFile(t *testing.T) {
+	w := newDeliverWorld(t, "git@github.com:o/r.git")
+	body := filepath.Join(t.TempDir(), "body.md")
+	text := "## Why\nthe person asked for it\n\nkey ghp_" + strings.Repeat("a", 36) + "\n## Validated\nfull suite\x1b[31m\n"
+	if err := os.WriteFile(body, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errw := w.run("master", "coder/x", "--body-file", body); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw)
+	}
+	for _, s := range []string{"first change\n", "## Why\nthe person asked for it\n\n", "## Validated\nfull suite", "[redacted]",
+		"## 4-eyes", "approved by foureyes", "agentbus deliver"} {
+		if !strings.Contains(w.r.body, s) {
+			t.Errorf("body lacks %q:\n%s", s, w.r.body)
+		}
+	}
+	for _, s := range []string{"ghp_", "\x1b", "## Commits"} {
+		if strings.Contains(w.r.body, s) {
+			t.Errorf("body holds %q:\n%s", s, w.r.body)
+		}
+	}
+
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	if code, _, errw := w.run("master", "coder/x", "--body-file", filepath.Join(t.TempDir(), "none.md")); code != 1 || w.r.did("git push") || !strings.Contains(errw, "body") {
+		t.Fatalf("missing body file: exit %d, ran %v: %s", code, w.r.ran, errw)
+	}
+}

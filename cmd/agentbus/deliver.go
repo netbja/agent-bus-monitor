@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -30,7 +31,7 @@ import (
 // command goes through deliverDeps.Run; nothing leaves the machine before the
 // 4-eyes proof bound to the head holds.
 
-const deliverUsage = "usage: deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--dry-run]"
+const deliverUsage = "usage: deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--body-file <path>] [--dry-run]"
 
 // deliverBodyMax keeps the body under GitHub's 65 536 characters.
 const deliverBodyMax = 60000
@@ -105,9 +106,12 @@ func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 }
 
 type deliverOpts struct {
-	branch, task, subject, base, title string
-	dry                                bool
+	branch, task, subject, base, title, bodyFile string
+	dry                                          bool
 }
+
+// deliverDescMax bounds a --body-file read; the body is capped after.
+const deliverDescMax = 1 << 20
 
 // deliverRoleCheck reads the manifest the launcher used (ROLES_TOML, else
 // the repository's): only a role with delivers = true delivers (master and
@@ -172,6 +176,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	args, o.subject = extractFlag(args, "--subject")
 	args, o.base = extractFlag(args, "--base")
 	args, o.title = extractFlag(args, "--title")
+	args, o.bodyFile = extractFlag(args, "--body-file")
 	args, o.dry = extractBool(args, "--dry-run")
 	if len(args) != 1 {
 		fmt.Fprintln(errw, deliverUsage)
@@ -190,6 +195,19 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	}
 	if !config.ValidBranchName(o.base) || o.base == "HEAD" {
 		return fail(1, "base %q is not a valid branch name", o.base)
+	}
+	// The description, read before anything leaves the machine.
+	desc := ""
+	if o.bodyFile != "" {
+		st, err := os.Stat(o.bodyFile)
+		if err != nil || !st.Mode().IsRegular() || st.Size() > deliverDescMax {
+			return fail(1, "cannot read the body file %s (a regular file of at most 1 MiB)", o.bodyFile)
+		}
+		b, err := os.ReadFile(o.bodyFile)
+		if err != nil {
+			return fail(1, "cannot read the body file %s: %v", o.bodyFile, err)
+		}
+		desc = screenDesc(string(b))
 	}
 	git := func(args ...string) (string, error) {
 		b, err := d.Run.Run(ctx, setup.Cmd{Name: "git", Args: args, Dir: d.Dir})
@@ -299,7 +317,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 		title = commits[0][1]
 	}
 	title = deliverTitle(title, o.branch)
-	body := deliverBody(title, commits, approvals, h)
+	body := deliverBody(title, commits, approvals, h, desc)
 
 	link := func(prN int) int {
 		if o.task == "" {
@@ -417,9 +435,34 @@ func deliverTitle(t, branch string) string {
 	return t
 }
 
-func deliverBody(title string, commits [][2]string, approvals []bus.Verdict, h string) string {
+// screenDesc is a --body-file's text as it may reach the forge: control
+// characters but tab dropped, and each line that looks like a credential
+// replaced whole (health.Redact).
+func screenDesc(s string) string {
+	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	for i, l := range lines {
+		l = strings.Map(func(r rune) rune {
+			if r != '\t' && unicode.IsControl(r) {
+				return -1
+			}
+			return r
+		}, l)
+		lines[i] = health.Redact(l)
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+// deliverBody is the request's description: the title, then the given
+// description (--body-file) or the commits' subjects, then the 4-eyes record.
+func deliverBody(title string, commits [][2]string, approvals []bus.Verdict, h, desc string) string {
 	var sb strings.Builder
-	sb.WriteString(title + "\n\n## Commits\n")
+	sb.WriteString(title + "\n\n")
+	if desc != "" {
+		sb.WriteString(desc + "\n")
+		commits = nil
+	} else {
+		sb.WriteString("## Commits\n")
+	}
 	for _, c := range commits {
 		short := c[0]
 		if len(short) > 7 {

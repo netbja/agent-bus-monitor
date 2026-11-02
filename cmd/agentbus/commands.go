@@ -371,13 +371,14 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo plan load docs/plans/v0.22.json@HEAD", "agentbus -p demo plan link roles --pr 102", "agentbus -p demo plan done roles"},
 	},
 	{
-		Name: "deliver", Usage: []string{"deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--dry-run]"},
+		Name: "deliver", Usage: []string{"deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--body-file <path>] [--dry-run]"},
 		Summary: "push a branch's approved head and open its pull or merge request (github, gitlab), print the page to open (bitbucket, no CLI) or hand it to the person to merge (local); master and docs only",
 		Flags: []cli.Flag{
 			{Long: "task", Short: 't', Arg: "<plan-task>", Help: "the plan task: its review subject and title, and plan link once delivered"},
 			{Long: "subject", Short: 's', Arg: "<s>", Help: "the review subject (default the task's, else the branch)"},
 			{Long: "base", Short: 'b', Arg: "<b>", Help: "the branch delivered to (default delivery.base)"},
 			{Long: "title", Short: 'T', Arg: "<t>", Help: "the request's title (default the task's, else the first commit's subject)"},
+			{Long: "body-file", Short: 'F', Arg: "<path>", Help: "the request's description (default the commits' subjects); the 4-eyes record follows it"},
 			{Long: "dry-run", Short: 'n', Help: "check everything and print what would be delivered; push nothing"},
 		},
 		Examples: []string{"agentbus -p demo deliver coder/roles -t roles", "agentbus -p demo deliver pr/v0.26 -b main -n"},

@@ -204,6 +204,7 @@ agentbus ask master --task roles -F q.json               # an ask about a plan t
 # ── DELIVER: push the approved head and open its PR/MR (master and docs only) ──
 agentbus deliver coder/roles --task roles                # checks the 4-eyes proof names the branch head, else exit 3
 agentbus deliver pr/v0.26 --base main --subject pr-v0.26 --dry-run   # checks everything, pushes nothing
+agentbus deliver coder/roles -t roles --body-file /tmp/pr.md   # the description (default: commit subjects), then the verdicts
 # Forge from delivery.forge (config.toml; auto reads origin): github/gitlab via gh/glab, else link
 # mode (prints the page); bitbucket always link mode; local pushes nothing and prints the merge.
 # Any other role is refused by the command itself (delivers = true in roles.toml).
