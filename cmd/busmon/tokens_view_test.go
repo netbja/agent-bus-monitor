@@ -377,7 +377,7 @@ func TestTokensPageAccountCards(t *testing.T) {
 		"openai": {Windows: []bus.BudgetWindow{
 			{Name: "5h", UsedPct: 50, ResetsAt: at(4 * time.Hour), ObservedAt: now.UnixMilli()}}}, // 60 min gone, 50 % used: the limit in 60 more
 	}
-	for _, width := range []int{80, 120} {
+	for _, width := range []int{70, 80, 120, 190} {
 		lines := tokensPage(iconsOff, tokFixtureState(now), budgets, nil, nil, "agent-bus-monitor", now, width, false, barView{}, true)
 		page := linesText(lines)
 		for _, l := range lines {
@@ -396,16 +396,17 @@ func TestTokensPageAccountCards(t *testing.T) {
 		if strings.Contains(page, "24h") {
 			t.Errorf("%d: the 24-hour spark is still drawn", width)
 		}
+		card := min(width, 80)    // usage-card-width: a card is at most 80 cells, left-aligned
 		for _, l := range lines { // the busiest window sits at the card's right edge, two cells in
-			if txt := l.text(); strings.Contains(txt, "CLAUDE") && Width(strings.TrimRight(txt, " ")) != width-2 {
-				t.Errorf("%d: the head ends at %d, want %d: %q", width, Width(strings.TrimRight(txt, " ")), width-2, txt)
+			if txt := l.text(); strings.Contains(txt, "CLAUDE") && Width(strings.TrimRight(txt, " ")) != card-2 {
+				t.Errorf("%d: the head ends at %d, want %d: %q", width, Width(strings.TrimRight(txt, " ")), card-2, txt)
 			}
 		}
-		if !strings.Contains(page, strings.Repeat(glyphHorizontal, width-4)) {
-			t.Errorf("%d: no rule between the cards", width)
+		if !strings.Contains(page, strings.Repeat(glyphHorizontal, card-4)) || strings.Contains(page, strings.Repeat(glyphHorizontal, card-3)) {
+			t.Errorf("%d: the rule between the cards is not %d cells", width, card-4)
 		}
 		for _, l := range strings.Split(page, "\n") {
-			if strings.HasPrefix(strings.TrimSpace(l), "5h ") && strings.Count(l, GlyphThinBar)+strings.Count(l, GlyphThinMark)+strings.Count(l, glyphVertical) < width/3 {
+			if strings.HasPrefix(strings.TrimSpace(l), "5h ") && strings.Count(l, GlyphThinBar)+strings.Count(l, GlyphThinMark)+strings.Count(l, glyphVertical) < card/3 {
 				t.Errorf("%d: the bar is not full width: %q", width, l)
 			}
 		}

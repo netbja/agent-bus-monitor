@@ -12,6 +12,11 @@ import (
 // master's mock-up): per provider a head line, one row per window with a
 // full-width thin bar and its pace mark, and a pace sentence under it.
 
+// cardMaxWidth is the widest a card is drawn (usage-card-width, the person's
+// approval of the cards at 80 cells): on a wider page it stays at the left,
+// the rest of the zone blank.
+const cardMaxWidth = 80
+
 // accountCard is one provider's card: its name upper case in its colour, at
 // the right its busiest window (or its hold); one row per window; the pace
 // sentence. Every line fits width.

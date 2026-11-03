@@ -142,11 +142,12 @@ func tokensPage(icons string, st tokState, budgets map[string]bus.BudgetSnapshot
 	if len(provs) == 0 {
 		muted("  ? no account reading (no dispatch service collecting quotas)")
 	}
+	cardW := min(width, cardMaxWidth) // usage-card-width: at most 80 cells, left-aligned; narrower fits down
 	for n, p := range provs {
-		if n > 0 { // a thin rule between cards
-			b.text("  ").seg(RoleLine, strings.Repeat(glyphHorizontal, max(0, width-4))).text("\n")
+		if n > 0 { // a thin rule between cards, as wide as a card
+			b.text("  ").seg(RoleLine, strings.Repeat(glyphHorizontal, max(0, cardW-4))).text("\n")
 		}
-		for _, l := range accountCard(icons, p, budgets[p], holds, now, width, bars) {
+		for _, l := range accountCard(icons, p, budgets[p], holds, now, cardW, bars) {
 			b.segs(l...).text("\n")
 		}
 	}
