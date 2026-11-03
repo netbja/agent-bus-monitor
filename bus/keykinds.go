@@ -53,7 +53,9 @@ var keyKinds = map[string]KeyClass{
 
 // ClassOf classifies key as project's: its class and the kind that matched
 // ("" and KeyUnknown for a key not under "project:" or of no known kind). An
-// exact kind wins over a ":*" one ("health:log" is not "health" nor a tail).
+// exact kind wins over a ":*" one ("health:log" is not "health" nor a tail),
+// and a ":*" kind takes one ValidName segment only ("gate:coder", never
+// "gate:coder:x").
 func ClassOf(project, key string) (KeyClass, string) {
 	rest, ok := strings.CutPrefix(key, project+":")
 	if !ok || rest == "" {
@@ -62,7 +64,9 @@ func ClassOf(project, key string) (KeyClass, string) {
 	if c, ok := keyKinds[rest]; ok {
 		return c, rest
 	}
-	if head, tail, ok := strings.Cut(rest, ":"); ok && tail != "" {
+	// A tail is one segment, a valid name (an agent, a role, a change), as
+	// bus/ writes it: a nested or malformed one is foreign (reviewer-codex).
+	if head, tail, ok := strings.Cut(rest, ":"); ok && ValidName(tail) {
 		if c, ok := keyKinds[head+":*"]; ok {
 			return c, head + ":*"
 		}
