@@ -45,40 +45,73 @@ writer, no new supervisor, nothing restored into Redis.**
 
 ## 3. The suspend pause (bus change)
 
-`PauseRecord` gains four additive fields:
+`PauseRecord` gains additive fields:
 
 ```go
-Kind string        `json:"kind,omitempty"` // "" = a timed pause (today); "suspend"
-Prev *PauseRecord  `json:"prev,omitempty"` // the pause the suspend replaced, if any
-Host string        `json:"host,omitempty"` // a suspend's host (os.Hostname)
-Boot string        `json:"boot,omitempty"` // that host's boot when it suspended (below)
+Kind     string            `json:"kind,omitempty"`     // "" = a timed pause (today); "suspend"
+Phase    string            `json:"phase,omitempty"`    // a suspend's phase: "draining", then "suspended"
+Drain    map[string]string `json:"drain,omitempty"`    // draining: agent -> its suspend directive's id
+Services map[string]bool   `json:"services,omitempty"` // suspended: kind -> was active before any stop
+Prev     *PauseRecord      `json:"prev,omitempty"`     // the pause the suspend replaced, if any
+Host     string            `json:"host,omitempty"`     // a suspend's host (os.Hostname)
+Boot     string            `json:"boot,omitempty"`     // that host's boot when it suspended (below)
 ```
 
 `Boot` identifies the running boot of the host: Linux `/proc/sys/kernel/random/boot_id`, macOS
 `kern.boottime` (`sysctl`), read once by `suspend`; empty when it cannot be read. It is only
 compared (§8), never trusted for anything else.
 
-A suspend pause has no deadline in meaning. Its `Until` is set to `at + 365 days`, so a dispatcher
-of an older release, which does not know `kind`, never ends it in practice; busmon and `pause
---status` show it as `suspended since <at>`, never by its `Until`.
+A suspend has two phases (reviewer-codex: the team must be quiesced, not merely the agents first
+seen working):
+
+- **draining**: the barrier. The project is paused for everything but the suspend itself: the
+  dispatcher wakes only an agent listed in `Drain` whose directive it has not yet acknowledged (§3.1),
+  so ordinary traffic, a person's message included, waits; it escalates, clears, retires and alerts
+  nobody; it still observes the panes (the wait reads `EffectiveState`, which needs observations).
+  `Until` is a real deadline, `at + wait + 2 min`: if the suspend process dies, the dispatcher ends
+  the draining when due (§3.1) and the project is as it was.
+- **suspended**: the project sleeps. `Until` is set to `at + 365 days`, so a dispatcher of an older
+  release, which does not know `kind`, never ends it in practice; busmon and `pause --status` show it
+  as `suspended since <at>`, never by its `Until`. `Services` is written in the same script that
+  enters this phase, from the service manager's state read just before, and **before any service is
+  stopped**; nothing rewrites it afterwards (a retry and the resume read it from the record).
+
+An older dispatcher that does not know `kind` reads a draining record as a plain pause and wakes
+nobody, the directive's target included: the suspend then runs into its timeout, which is safe.
 
 Rules, each in the one script that writes the key (so a reader never races a writer):
 
 | Writer | On a suspend pause |
 |---|---|
-| `Bus.Suspend` (new, one script) | writes `kind=suspend`, `by`, `notify`, `at` from Redis `TIME`, `reason`; an existing timed pause (a person's or a quota pause) is moved into `prev` whole; an existing suspend pause is left as it is and reported (`already suspended since …`) |
-| `FencedResume` (dispatcher, when due) | never ends it: the script returns 0 when the stored record decodes to `kind = "suspend"` (the dispatcher logs `paused`, as for any pause not due) |
+| `Bus.SuspendBegin` (new, one script) | writes `kind=suspend`, `phase=draining`, `by`, `notify`, `at` and `Until` from Redis `TIME`, `reason`, `host`, `boot`, an empty `drain`; an existing timed pause (a person's or a quota pause) is moved into `prev` whole; an existing suspend in either phase is left as it is and reported (`already suspended since …` / `a suspend is in progress`) |
+| `Bus.SuspendDrain` (new, CAS on the record read) | adds `agent -> directive id` to `drain` (the directive is XADDed in the same script, so the barrier knows it before the dispatcher can see it) |
+| `Bus.SuspendCommit` (new, one script, CAS on the draining record read) | §4.1 step 4: refuses (returns which) when any agent of `{p}:agents` decodes to state `working` (declared or flipped) and is not in the `--force` list, or when a wake record of the project (`{p}:wake:<a>`, keys passed) is `prompted` at or after the draining's `at` for an agent not yet answered; else writes `phase=suspended`, `Services`, the far `Until`, drops `drain` |
+| `Bus.SuspendCancel` (new, CAS) | ends a draining that timed out or was refused: `prev` back if still in the future, else the key deleted; no resume directive (nothing was stopped), one `for=person` notice `suspend of <p> cancelled: <why>` |
+| `FencedResume` (dispatcher, when due) | a **suspended** record is never ended (returns 0, logs `paused`); a **draining** record past its `Until` is ended exactly as `SuspendCancel` does (the suspend process died), its notice from `dispatch` |
 | `FencedQuotaPause` | its script today replaces a pause whose `reason` equals `quota <provider>`, so a suspend whose reason the person typed as `quota anthropic` would be taken: the script refuses (returns 0) on a record that decodes to `kind = "suspend"`, before the reason test (foureyes) |
 | `FencedQuotaUnpause*` | already deletes only its own exact record; unchanged |
-| `SetPause` (`agentbus pause`) | refused: `project suspended since …: agentbus resume brings it back`; it moves to a script so the check and the write are one |
+| `SetPause` (`agentbus pause`) | refused in either phase: `project suspended since …: agentbus resume brings it back`; it moves to a script so the check and the write are one |
 | `Bus.Resume` (`agentbus resume` today) | refused with `ErrSuspended`; the CLI's `resume` then runs the full resume (§5) instead, see §4's verb table |
-| `Bus.Unsuspend` (new, one script, compare-and-swap on the record read) | if `prev` is a timed pause still in the future (Redis `TIME`), puts `prev` back as the pause (no resume directive: the team stays paused until that deadline, and the dispatcher ends it as usual); else deletes the key and XADDs the resume directive (§5 step 6) |
+| `Bus.Unsuspend` (new, one script, compare-and-swap on the record read) | only from **suspended**: if `prev` is a timed pause still in the future (Redis `TIME`), puts `prev` back as the pause (no resume directive: the team stays paused until that deadline, and the dispatcher ends it as usual); else deletes the key and XADDs the resume directive (§5 step 6) |
 
 `{p}:pause` is already in `projectKinds` and is a record (restored by `restore`); no new key, no new
-kind, so `TestEveryWrittenKeyKindIsClassified` needs nothing. The dispatcher's pass is unchanged: a
-paused project already wakes, escalates, clears, observes, retires and alerts nobody (`loop.go`, the
-`paused` check); the passes before it (quota, context, tokens, hand-off voiding) only read or write
-records and run as they do under a timed pause.
+kind, so `TestEveryWrittenKeyKindIsClassified` needs nothing.
+
+### 3.1 The dispatcher
+
+A **suspended** project changes nothing in the pass: a paused project already wakes, escalates,
+clears, observes, retires and alerts nobody (`loop.go`, the `paused` check); the passes before it
+(quota, context, tokens, hand-off voiding) only read or write records and run as they do under a
+timed pause.
+
+A **draining** project takes a narrower path in `paused`: when the record is due, `FencedResume`
+cancels it (above); else the pass goes on to the observation and to the wakes, where only the agents
+of `Drain` whose directive id is still unacknowledged (`Obligation`: above `LastDelivered`, or in
+`PendingIDs`) are passed to `Decide`, every other agent treated as owed nothing; no escalation, no
+clear, no pop retire, no context alert, no prompt notice. An agent that has read its directive is
+never woken again by this suspend, so a woken master or reviewer cannot start ordinary work through
+the dispatcher while the barrier holds. `Decide` itself is unchanged (pure); the filter is in the
+loop, read from the record of the same pass.
 
 ## 4. The CLI
 
@@ -128,59 +161,77 @@ agentbus resume --all          bring every suspended project back: services, mis
    even with `--force`, since stopping under a relaunch half-done is the one state resume could
    not repair); a missions attempt `integrating` is said (not refused: `down` already interrupts
    it and the conductor redoes it at start, `Startup`).
-2. **Ask the agents to stop at a clean point**, unless `--no-wait`: every registered, non-dormant agent
-   (`bus.DormantAfter`) whose effective state (`bus.EffectiveState`, the stall guard's reading) is
-   `working` gets one waking directive from the person, with an expiry of `--wait` (default the setting `suspend.wait`, 10 min, §12 Q5).
-   That is a new helper, `Bus.HumanCmdTTL`: `HumanCmd` (`human=yes`, waking) plus `CmdNoWakeTTL`'s
-   `expires_at` from Redis `TIME`, so a directive still unread when the suspend ended drains as
-   expired after the resume, never as a stale order:
+2. **Raise the barrier**: `Bus.SuspendBegin` (§3), phase **draining**, `Until` = now + `--wait` +
+   2 min. From here the dispatcher wakes only the suspend's own directives (§3.1). With `--no-wait`,
+   steps 3-4 are skipped and step 5 runs at once (agents still working are recorded as such, as
+   with `--force`).
+3. **Ask, and wait**, re-reading every 2 s, at most `--wait` (default the setting `suspend.wait`,
+   10 min, §12 Q5). Each round reads every registered, non-dormant agent (`bus.DormantAfter`), not a
+   set frozen at the start (reviewer-codex), and:
+   - an agent whose effective state (`bus.EffectiveState`, the stall guard's reading) is `working` and
+     that has no unanswered directive of this run gets one, through `Bus.SuspendDrain` (the directive
+     and its `drain` entry in one script), waking, from the person, with an expiry of the deadline;
+     an agent that answered and is seen `working` again (a person typing in its pane, an armed agent
+     woken by a message) gets a new one with a new nonce; the helper is `Bus.HumanCmdTTL`'s fields
+     (`human=yes`, waking, `expires_at` from Redis `TIME`), so a directive still unread after the
+     suspend drains as expired, never as a stale order:
 
-   > Suspend of <p> requested by <person>: finish or stop your current step at a clean point,
-   > commit your work in progress on your branch, report where you are (agentbus report), then
-   > declare idle with exactly this message: agentbus status idle "suspended <nonce>". Do not
-   > declare a hand-off: your session is
-   > resumed as it is.
+     > Suspend of <p> requested by <person>: finish or stop your current step at a clean point,
+     > commit your work in progress on your branch, report where you are (agentbus report), then
+     > declare idle with exactly this message: agentbus status idle "suspended <nonce>". Do not
+     > declare a hand-off: your session is resumed as it is.
 
-   `<nonce>` is 8 hex characters from `crypto/rand`, one per agent and per suspend run, kept in the
-   suspend process's memory only (never in the snapshot): it is how the wait tells this directive's
-   answer from the agent's own end-of-step idle.
+     `<nonce>` is 8 hex characters from `crypto/rand`, one per directive, kept in the suspend
+     process's memory only (never in the snapshot or the record): it is how the wait tells this
+     directive's answer from the agent's own end-of-step idle.
+   - an agent that got a directive has **answered it** when all of: its directive is acknowledged (the
+     id at or below the group's `LastDelivered` and not in its `PendingIDs`, `Obligation`; a drain ACKs
+     after output); its last **declaration** (`DeclaredTS`, never an auto-state flip) is later than the
+     directive's id, declares a state other than `working`, with exactly the message `suspended
+     <nonce>` (compared, never stored); and its effective state is not `working`.
+   - the round is **quiet** when every agent read is either answered or not `working` and owes no
+     answer, and no agent has a directive unanswered.
 
-   Not a hand-off: a hand-off makes the dispatcher type `/clear` while the project is not yet paused,
-   and the point of a suspend is to resume the *same* conversation (`--resume <IdentSession>`).
-   Agents idle, blocked or waiting get nothing (they are already at a clean point; their open
-   asks and gates persist in Redis).
-3. **Wait**, at most `--wait`, re-reading every 2 s, until each agent that got the directive has
-   **answered it**, which is all of:
-   - its directive is acknowledged: the id is at or below the agent group's `LastDelivered` and not in
-     its `PendingIDs` (`Obligation`; a drain ACKs after output), so the agent has read it;
-   - its last **declaration** (`DeclaredTS`, never an auto-state flip) is later than the directive's id,
-     declares a state other than `working`, and its message is exactly `suspended <nonce>` (compared,
-     never stored);
-   - its effective state (`bus.EffectiveState`) is not `working`.
+   Neither a turn end nor the agent's own end-of-step idle answers a directive (foureyes): while the
+   barrier holds, the dispatcher still wakes that agent for its directive, which it reads and acts on
+   in a turn of its own (commit, report); only the nonce, learnt from the directive alone, proves the
+   declaration answers it. Agents idle, blocked or waiting and never seen working get no directive
+   (they are at a clean point, and the barrier keeps them there; their asks and gates persist).
 
-   Neither a turn end nor the agent's own end-of-step idle is enough (foureyes, twice): the team
-   declares idle at the end of every step, and while the project is not yet paused the dispatcher
-   then wakes that agent for the pending directive, which it reads and acts on in a turn of its own
-   (commit, report); pausing before that turn ends would cut it at the very moment the machine goes
-   down. Only the nonce, which the agent learns from the directive alone, proves the declaration
-   answers it, so the wait covers the directive's turn. An agent the dispatcher cannot wake within
-   `--wait` (its pane busy or focused) runs into the timeout. On timeout:
-   without `--force`, stop here for that project, write nothing more, exit 1 and name each agent still
-   working and since when; the directives already sent stay (an agent that stops later has lost
-   nothing). With `--force`, go on and record them as `working at suspend` in the snapshot.
-4. **Pause**: `Bus.Suspend` (§3). From here no agent of the project is woken.
+   Not a hand-off: a hand-off would make the dispatcher type `/clear`, and the point of a suspend is to
+   resume the *same* conversation (`--resume <IdentSession>`); the draining phase already stops the
+   clear pass, but the directive says it anyway.
+4. **Commit**, on the first quiet round: read the service manager's state of each installed kind, then
+   `Bus.SuspendCommit` (§3) with that state as `Services`. The script re-checks, against the stored
+   snapshots and wake records, that no agent turned `working` and no wake was typed for an unanswered
+   agent since the round read them; a refusal is not an error, the wait goes on (and its agent gets a
+   directive at the next round). From here the project is **suspended** and its services' restart
+   intent is on the bus, before anything is stopped (reviewer-codex).
+
+   On timeout: without `--force`, `Bus.SuspendCancel`, exit 1, and name each agent still working or
+   not answered and since when; nothing was stopped, the directives already sent expire, and an agent
+   that stops later has lost nothing. With `--force`, commit with those agents in the script's
+   `--force` list and record them as `working at suspend` in the snapshot.
 5. **Read the snapshot's facts** (§6) from the bus, herdr (if reachable) and the service manager.
-6. **Stop the services** through the service manager (`Manager.Stop`, as `down` does), recording for
-   each kind whether it was active. No service manager (tab mode): say `dispatch and missions run as
-   herdr tabs: they stay; paused, they wake nobody`.
-7. **Write the snapshot** (§6), then print one line per project: `suspended (N agents, M open items);
-   services stopped; snapshot <path>`.
+6. **Stop the services** through the service manager (`Manager.Stop`, as `down` does), each kind the
+   record's `Services` marks active (or found active now). No service manager (tab mode): say
+   `dispatch and missions run as herdr tabs: they stay; paused, they wake nobody`.
+7. **Write the snapshot** (§6), its `services` copied from the record, then print one line per
+   project: `suspended (N agents, M open items); services stopped; snapshot <path>`.
 
-A failure at 5-7 leaves the project suspended (step 4 holds): the bus is the truth, the snapshot a
-convenience, and resume reads the live bus when the file is missing (§7). It is said, with the
-command to retry (`agentbus suspend -p <p>` sees the suspend and only completes steps 5-7: the one
-case where "already suspended" is not a no-op is a project whose snapshot file is missing or older
-than its pause's `at`).
+A failure at 5-7, or the process dying there, leaves the project suspended with `Services` intact
+(step 4 holds): the bus is the truth, the snapshot a convenience. It is said, with the command to
+retry: `agentbus suspend -p <p>` on a **suspended** project whose snapshot is missing or older than
+its pause's `at` completes steps 5-7 only, stopping whatever is still active and **never rewriting
+`Services`** (a retry after every stop succeeded would otherwise read both services inactive). On a
+suspended project with a current snapshot it is a no-op (`already suspended since …`). A record with
+no `Services` (the manager could not be read at commit) makes resume start every installed kind.
+
+Residual, stated: an agent whose subscribe is armed can be woken by a message addressed to it between
+the last round and the commit, and start a turn before its turn-start hook flips it `working`; the
+commit's re-check then sees it idle. The window is the hook's latency; the team's agents do not stay
+armed while idle (`no idle subscribe`), and every other sender is either paused or the person who is
+suspending.
 
 Projects are suspended one after the other, in the projects directory's order, each to the end;
 `--project` narrows. `--dry-run` runs step 1 and prints what 2-7 would do, writing nothing.
@@ -200,8 +251,8 @@ their panes was considered and set aside (§12, Q2).
    terminal; `start` does that in the person's terminal): it says `herdr session <s> is not running:
    start it (herdr --session <s>, or agentbus start in <folder>) and run agentbus resume again`, and
    goes on with step 3 only; the pause stays (step 6 is not reached without `--partial`).
-3. **Services**: start every kind the snapshot recorded as active, or, with no snapshot, every
-   installed kind (`Manager.Start`, the restart budget reset first, as `service start` does). The
+3. **Services**: start every kind the suspend record's `Services` marks active (the snapshot's copy
+   is only read when the record has none), or, with neither, every installed kind (`Manager.Start`, the restart budget reset first, as `service start` does). The
    dispatcher starts on a paused project and wakes nobody yet.
 4. **Agents**: `up`'s relaunch on the project's open workspace with `Resume: true` (`relaunchUp`, under
    `upLock`), so the existing rules decide each template tab: a live agent is left (herdr's native
@@ -337,7 +388,7 @@ turns it on accepts that any focus after a reboot resumes, whoever focuses.
 
 ## 9. busmon
 
-- **Header and state column**: a suspend pause reads `suspended since 21:40` (and `· by <name>`,
+- **Header and state column**: a draining suspend reads `suspending… (N to answer)`; a suspend pause reads `suspended since 21:40` (and `· by <name>`,
   `· <reason>` as room allows), in the pause segment's place and colour; agents read `paused` as
   under any pause (`stateLook`).
 - **Key `Z`** (sleep; free on every table, `ModeShell`): one key for both, on the open project only.
@@ -359,7 +410,9 @@ turns it on accepts that any focus after a reboot resumes, whoever focuses.
 | Broker down | refused for every project (nothing can be paused): exit 1 | §7 can start nothing that needs the bus; says `broker unreachable: start docker (docker compose up -d in <repo>)` and stops |
 | A timed pause exists (the person's) | moved into `prev`; restored at resume if still in the future | `prev` back, no resume directive; summary says `paused until HH:MM by <name>` |
 | A quota pause exists | moved into `prev` the same way; the dispatcher's quota pass re-judges it after resume (`FencedQuotaUnpause` ends it when the window clears) | same |
-| Already suspended | skipped (`already suspended since …`), unless its snapshot is missing: steps 5-7 only | — |
+| Already suspended | skipped (`already suspended since …`), unless its snapshot is missing: steps 5-7 only, `Services` kept | — |
+| A suspend in progress (draining) | refused (`a suspend is in progress`); a dead one is cancelled by the dispatcher at its deadline | refused until it commits or is cancelled |
+| An agent starts working during the wait | it gets its directive and holds the commit (§4.1 step 3) | — |
 | Resume of a project not suspended | — | §7 (crash path), or `nothing to resume` |
 | An agent keeps working past `--wait` | refused for that project without `--force` (names it); `--force` records it | its turn is lost if the machine went down; the summary says `working at suspend` |
 | An agent that refuses or never reads the directive | as above: only `working` agents are waited for, so an idle one never blocks | — |
@@ -381,24 +434,42 @@ Every test runs on fakes or the disposable broker (`AGENTBUS_TEST_REDIS_URL`); n
 user's service manager, herdr or the production broker, and none starts a real session (`suspendDeps`
 and `resumeDeps` injected like `startDeps`, `upDeps`).
 
-- `bus` (Redis, opt-in): `Suspend` writes `kind`, moves a timed pause into `prev`, leaves an existing
-  suspend; `FencedResume` never ends a suspend however due its `Until`; `SetPause` and `Resume` refuse
-  it; `FencedQuotaPause` does not replace it, even when its reason reads `quota <provider>`; `Unsuspend` restores a future `prev` without a directive,
-  deletes and directs otherwise, and refuses a record changed since it was read (compare-and-swap);
-  an older reader (a `PauseRecord` without the fields) decodes the record; `HumanCmdTTL` writes
-  `human=yes`, no `wake=no`, and an `expires_at` from Redis `TIME`, and drains as expired after it.
+- `bus` (Redis, opt-in): `SuspendBegin` writes `kind`, `phase=draining`, a real `Until`, moves a timed
+  pause into `prev`, leaves an existing suspend in either phase; `SuspendDrain` adds the entry and
+  XADDs the directive in one script, refused on a changed record; `SuspendCommit` refuses while an
+  agent's stored state is `working` (declared or flipped) and not forced, and while a wake record is
+  `prompted` since the draining began for an unanswered agent, and otherwise writes `phase=suspended`
+  and `Services` and the far `Until`; `SuspendCancel` restores a future `prev`, else deletes, and
+  sends the person's notice; `FencedResume` never ends a suspended record however due its `Until`,
+  and cancels a draining one once due; `SetPause` and `Resume` refuse both phases; `FencedQuotaPause`
+  does not replace either, even when its reason reads `quota <provider>`; `Unsuspend` refuses a
+  draining record, restores a future `prev` without a directive, deletes and directs otherwise, and
+  refuses a record changed since it was read (compare-and-swap); an older reader (a `PauseRecord`
+  without the fields) decodes the record; the directive carries `human=yes`, no `wake=no`, an
+  `expires_at` from Redis `TIME`, and drains as expired after it.
 - `dispatch` (fake runtime, opt-in Redis): a suspended project gets no wake, clear, escalation or
-  pop retire across many passes, with the suspend's `Until` set in the past to prove `kind` decides.
-- `cmd/agentbus` suspend (pure `suspendPlan` + injected deps): only `working` agents get the directive;
-  a dormant one does not; the wait ends once each has declared a non-working state after its
-  directive carrying its nonce, with the directive acknowledged, and not at a mere turn end, an
-  auto-state flip or the agent's own idle declared after the directive without the nonce (the race:
-  the agent declares idle of its own, a fake dispatcher then wakes it for the directive, and the wait
-  goes on until `suspended <nonce>`); a wrong or another agent's nonce does not end it; the nonce
-  appears in no snapshot field; timeout without `--force` writes no
-  pause; `--force` records them; an intent refuses even with `--force`; `--dry-run` writes nothing;
-  the order is directive → pause → read → stop → snapshot (a fake records calls); a failed stop or
-  write leaves the pause and says the retry; no terminal and no `--yes` exits 2.
+  pop retire across many passes, with the suspend's `Until` set in the past to prove `kind` decides;
+  a draining project wakes only an agent of `drain` whose directive is unacknowledged (master idle
+  with an ordinary message waiting is not woken; an agent that read its directive is not woken again),
+  escalates and clears nobody, still observes, and a due draining record is cancelled.
+- `cmd/agentbus` suspend (pure `suspendPlan` + injected deps, a fake bus, dispatcher and manager):
+  the barrier is raised before any directive; a dormant agent gets none; the wait ends once each
+  directive is answered (acknowledged, a later declaration non-working with its nonce, not
+  effectively working) and not at a mere turn end, an auto-state flip or the agent's own idle declared
+  after the directive without the nonce (the race: the agent declares idle of its own, a fake
+  dispatcher then wakes it for the directive, and the wait goes on until `suspended <nonce>`); a wrong
+  or another agent's nonce does not end it; the nonce appears in no snapshot or record field.
+  Barrier cases (reviewer-codex): an agent idle at the start and seen working during the wait gets a
+  directive and holds the commit until it answers; an answered agent seen working again gets a new
+  nonce; a commit raced by a wake (the fake turns an agent `working` between the quiet round and the
+  script) is refused and the wait goes on. Timeout without `--force` cancels the draining and stops
+  nothing; `--force` commits with them listed; an intent refuses even with `--force`; `--dry-run`
+  writes nothing; the order is barrier → directives → wait → commit (with `Services`) → read → stop →
+  snapshot (a fake records calls). Service intent (reviewer-codex): dispatch and missions active, a
+  failure (or the process killed) after the first stop, and after both stops before the snapshot: the
+  record still marks both active; the retry stops what is left and leaves `Services` alone; resume
+  then starts both. A record with no `Services` makes resume start every installed kind. No terminal
+  and no `--yes` exits 2.
 - snapshot: golden JSON from a fixture; a reason holding a token is redacted whole; no field holds a
   message text (the fixture's messages carry a marker the test greps for); 0600 in 0700; written by
   rename; `unknown` filled for each failed read; `[]` only after a successful read.
