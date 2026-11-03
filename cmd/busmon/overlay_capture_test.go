@@ -130,6 +130,16 @@ func overlayCaptures(t *testing.T) map[string]string {
 	recap := buildRecap(recapCaptureInput())
 	lines, _ := recapBody(recap.Rows, 0, 100) // no cursor drawn: the capture is the content
 	out["recap"] = plainOf(lines)
+
+	// The settings page (settings-panels): the groups beside the keys at 96
+	// cells, a tab bar above them at 70; D's confirmation on Attention.
+	getenv := settingsEnv(t, "[display]\ntheme = \"dark\"\nicons = \"nerd\"\n[waiting]\nsnooze = \"nonsense\"\nbell = false\n", "",
+		map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	set := &settingsPage{groups: settingsGroups(getenv, settingsFlags{}, settingsPageGroups), loaded: true}
+	out["settings"] = plainOf(settingsBody(set, 2, 96))
+	set.group = 1
+	set.reset, _ = settingsResettable(set.groups[1])
+	out["settings-narrow"] = plainOf(settingsBody(set, 0, 70))
 	return out
 }
 

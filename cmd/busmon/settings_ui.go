@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -22,17 +23,21 @@ import (
 // written by busmon; settingOnPage).
 var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity, config.GroupNotifications, config.GroupBackup}
 
-// settingsPage is the page's state.
+// settingsPage is the page's state (settings-panels: the groups on the left,
+// the selected group's keys on the right; page.sel is the row in that group).
 type settingsPage struct {
 	groups  []settingGroup
+	group   int      // the selected group
 	targets []string // notify.toml's targets under the Notifications rows
 	loaded  bool
-	edit    string // the key being edited ("" = none)
-	text    string // the editor's text
-	choice  int    // a key of settingChoices: the option under the cursor
-	confirm string // the key a d waits a y for
-	err     string // the last refusal, in the rule's own words
-	busy    bool   // a write is in flight: keys wait for its rows
+	edit    string   // the key being edited ("" = none)
+	text    string   // the editor's text
+	choice  int      // a key of settingChoices: the option under the cursor
+	confirm string   // the key a d waits a y for
+	reset   []string // the keys a D waits a y for (nil = none)
+	err     string   // the last refusal, in the rule's own words
+	busy    bool     // a write is in flight: keys wait for its rows
+	selLine int      // the body line of the selected row, to keep it in view
 }
 
 // themeChoices are display.theme's values, in the page's order.
@@ -46,12 +51,20 @@ var settingChoices = map[string][]string{"display.theme": themeChoices, "display
 type settingsMsg struct {
 	groups  []settingGroup
 	targets []string // notify.toml's targets, one line each, never a URL
-	key     string   // the key written or unset ("" = an open)
+	keys    []string // the keys written or unset (none = an open)
 	err     error
 }
 
-// rows is the page's rows in order, flat.
+// rows is the selected group's rows.
 func (s *settingsPage) rows() []settingRow {
+	if s.group < 0 || s.group >= len(s.groups) {
+		return nil
+	}
+	return s.groups[s.group].Rows
+}
+
+// allRows is every group's rows in order, flat (the title's counts).
+func (s *settingsPage) allRows() []settingRow {
 	var out []settingRow
 	for _, g := range s.groups {
 		out = append(out, g.Rows...)
@@ -69,19 +82,19 @@ func (m *Model) settingsGetenv() func(string) string {
 // openSettings opens the page and reads its rows.
 func (m *Model) openSettings() tea.Cmd {
 	m.push(page{kind: ovSettings, set: &settingsPage{}})
-	return m.settingsCmd(func() error { return nil }, "")
+	return m.settingsCmd(func() error { return nil })
 }
 
-// settingsCmd runs write (a config.Set, an Unset, or nothing) then reads the
-// rows again, in a command.
-func (m *Model) settingsCmd(write func() error, key string) tea.Cmd {
-	if p := m.settingsPageOpen(); p != nil && key != "" {
+// settingsCmd runs write (a config.Set, Unsets, or nothing) for keys then
+// reads the rows again once, in a command.
+func (m *Model) settingsCmd(write func() error, keys ...string) tea.Cmd {
+	if p := m.settingsPageOpen(); p != nil && len(keys) > 0 {
 		p.set.busy = true
 	}
 	getenv, flags := m.settingsGetenv(), m.cfg.flags
 	return func() tea.Msg {
 		err := write()
-		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), targets: notifyTargetLines(getenv), key: key, err: err}
+		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), targets: notifyTargetLines(getenv), keys: keys, err: err}
 	}
 }
 
@@ -109,10 +122,19 @@ func (m *Model) gotSettings(msg settingsMsg) {
 	case msg.err != nil && errors.As(msg.err, &refused):
 		s.err = refused.Why // the editor stays open
 	case msg.err != nil:
-		s.err, s.edit, s.confirm = msg.err.Error(), "", ""
-	case msg.key != "":
-		s.err, s.edit, s.confirm = "", "", ""
-		m.ui.flash, m.ui.flashErr = m.applySettings(msg.key), false
+		s.err, s.edit, s.confirm, s.reset = msg.err.Error(), "", "", nil
+	case len(msg.keys) > 0:
+		s.err, s.edit, s.confirm, s.reset = "", "", "", nil
+		var said []string
+		for _, k := range msg.keys {
+			if w := m.applySettings(k); indexOf(said, w) < 0 {
+				said = append(said, w)
+			}
+		}
+		m.ui.flash, m.ui.flashErr = strings.Join(said, "; "), false
+		if len(msg.keys) > 1 {
+			m.ui.flash = fmt.Sprintf("%d keys reset: %s", len(msg.keys), m.ui.flash)
+		}
 	}
 	m.refresh()
 }
@@ -143,49 +165,84 @@ func (m *Model) applySettings(key string) string {
 	return "saved: next start of busmon"
 }
 
-// settingsKey is a key on the settings page.
-func (m *Model) settingsKey(k Key) tea.Cmd {
+// settingsKey is a key on the settings page (ModeSettings): a pending y
+// first, then the editor, which takes every key while open (so ←→ change a
+// choice and a typed q is text), then the page's table.
+func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 	p := m.rd.top()
 	s := p.set
-	rows := s.rows()
-	if !s.loaded || s.busy || len(rows) == 0 { // a key waits for the rows a write reads again
+	if !s.loaded || s.busy || len(s.groups) == 0 { // a key waits for the rows a write reads again
 		if k.Code == keyEscape {
 			m.pop()
 		}
 		return nil
 	}
-	p.sel = clamp(p.sel, 0, len(rows)-1)
-	row := rows[p.sel]
+	s.group = clamp(s.group, 0, len(s.groups)-1)
+	rows := s.rows()
+	p.sel = clamp(p.sel, 0, max(0, len(rows)-1))
 	p.dirty = true
-	defer m.refresh()
-	if s.confirm != "" { // a d waits its y; anything else keeps the file as it is
-		key := s.confirm
-		s.confirm = ""
-		if k.Code == keyRune && k.Rune == 'y' {
-			path := config.Path(m.settingsGetenv())
+	defer m.keepSettingInView(p)
+	path := config.Path(m.settingsGetenv())
+	if s.confirm != "" || s.reset != nil { // a d or D waits its y; anything else keeps the file as it is
+		key, keys := s.confirm, s.reset
+		s.confirm, s.reset = "", nil
+		if k.Code != keyRune || k.Rune != 'y' {
+			return nil
+		}
+		if key != "" {
 			return m.settingsCmd(func() error { return config.Unset(path, key) }, key)
 		}
+		return m.settingsCmd(func() error {
+			for _, key := range keys {
+				if err := config.Unset(path, key); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, keys...)
+	}
+	if s.edit != "" && len(rows) > 0 {
+		return m.settingsEditKey(k, rows[p.sel])
+	}
+	switch act {
+	case ActClose:
+		m.pop()
+		return nil
+	case ActUp, ActDown:
+		if act == ActUp {
+			p.sel--
+		} else {
+			p.sel++
+		}
+		p.sel, s.err = clamp(p.sel, 0, max(0, len(rows)-1)), ""
+		return nil
+	case ActGroupNext, ActGroupPrev:
+		step := 1
+		if act == ActGroupPrev {
+			step = len(s.groups) - 1
+		}
+		s.group, p.sel, p.top, s.err = (s.group+step)%len(s.groups), 0, 0, ""
+		return nil
+	case ActResetGroup:
+		keys, kept := settingsResettable(s.groups[s.group])
+		if len(keys) == 0 {
+			m.ui.flash, m.ui.flashErr = settingsNothingToReset(s.groups[s.group], kept), true
+			return nil
+		}
+		s.reset = keys
 		return nil
 	}
-	if s.edit != "" {
-		return m.settingsEditKey(k, row)
+	if len(rows) == 0 {
+		return nil
 	}
+	row := rows[p.sel]
 	switch {
-	case k.Code == keyEscape:
-		m.pop()
-	case k.Code == keyUp || k.Code == keyRune && k.Rune == 'k':
-		p.sel = clamp(p.sel-1, 0, len(rows)-1)
-		s.err = ""
-	case k.Code == keyDown || k.Code == keyRune && k.Rune == 'j':
-		p.sel = clamp(p.sel+1, 0, len(rows)-1)
-		s.err = ""
-	case k.Code == keyRune && k.Rune == 'd' && row.Editable && row.InFile:
+	case act == ActReset && row.Editable && row.InFile:
 		s.confirm = row.Key
-	case (k.Code == keyEnter || k.Code == keyRune && k.Rune == ' ') && row.Editable:
+	case act == ActOpen && row.Editable:
 		key, _ := config.Lookup(row.Key)
 		switch {
 		case key.Kind == config.Bool: // one key, one meaning: written at once
-			path := config.Path(m.settingsGetenv())
 			v := row.Value != "on"
 			return m.settingsCmd(func() error { return config.Set(path, row.Key, v) }, row.Key)
 		case settingChoices[row.Key] != nil:
@@ -193,12 +250,59 @@ func (m *Model) settingsKey(k Key) tea.Cmd {
 		default:
 			s.edit, s.text = row.Key, editText(key, row.Value)
 		}
-	case k.Code == keyEnter && !row.Editable && row.PersonOnly:
+	case act == ActOpen && row.PersonOnly:
 		m.ui.flash, m.ui.flashErr = row.Label+" is your own setting: edit config.toml yourself", true
-	case k.Code == keyEnter && !row.Editable:
+	case act == ActOpen:
 		m.ui.flash, m.ui.flashErr = row.Label+" is set by "+row.Source+": unset it there for the file to apply", true
 	}
 	return nil
+}
+
+// settingsResettable is what D removes from config.toml in g: every key the
+// file holds a line for (a refused line, one a flag or the env shadows), in
+// order; kept
+// names the person's own keys the file holds, which stay (backup spec).
+func settingsResettable(g settingGroup) (keys, kept []string) {
+	for _, r := range g.Rows {
+		switch {
+		case !r.FileHeld:
+		case r.PersonOnly:
+			kept = append(kept, r.Key)
+		default: // shadowed by a flag or the env, its line is still the file's
+			keys = append(keys, r.Key)
+		}
+	}
+	return keys, kept
+}
+
+// settingsNothingToReset is the flash of a D with nothing to remove.
+func settingsNothingToReset(g settingGroup, kept []string) string {
+	if len(kept) > 0 {
+		return string(g.Group) + ": nothing to reset; your own " + settingShortKeys(kept) + " stay: edit config.toml yourself"
+	}
+	return string(g.Group) + ": nothing set in config.toml"
+}
+
+// settingShortKeys is keys without their table, comma-separated.
+func settingShortKeys(keys []string) string {
+	out := make([]string, len(keys))
+	for i, k := range keys {
+		_, out[i], _ = strings.Cut(k, ".")
+	}
+	return strings.Join(out, ", ")
+}
+
+// keepSettingInView rebuilds the page and scrolls it so the selected row
+// shows.
+func (m *Model) keepSettingInView(p *page) {
+	m.refresh()
+	if p.set == nil {
+		return
+	}
+	if rows := m.readerRows(); rows > 0 && (p.set.selLine < p.top || p.set.selLine >= p.top+rows) {
+		p.top = max(0, p.set.selLine-3)
+		m.clampPage(p)
+	}
 }
 
 // settingsEditKey is a key while a row is being changed: the theme's choice
@@ -311,16 +415,16 @@ func indexOf(xs []string, x string) int {
 	return -1
 }
 
-// settingsTitle is the page's counter summary.
+// settingsTitle is the page's counter summary, over every group.
 func settingsTitle(s *settingsPage) string {
 	var here, elsewhere, refused, def int
-	for _, r := range s.rows() {
-		switch r.Sym {
-		case GlyphWorking:
+	for _, r := range s.allRows() {
+		switch r.From {
+		case fromFile:
 			here++
-		case GlyphNone:
+		case fromElsewhere:
 			elsewhere++
-		case GlyphBlocked:
+		case fromRefused:
 			refused++
 		default:
 			def++
@@ -333,64 +437,315 @@ func settingsTitle(s *settingsPage) string {
 	return "Settings " + GlyphNone + " " + sum
 }
 
-// settingsBody lays the page out in width cells: the groups and their rows,
-// the row being changed with its editor, a refusal under it, then the lines
-// that say where a change goes and when it applies.
+// settingsSideW is the groups' sidebar; at a page narrower than
+// settingsSideMin (a terminal under 96 cells) the groups are a tab bar above
+// the keys instead.
+const (
+	settingsSideW   = 18
+	settingsSideMin = 92
+	settingsLabelW  = 26
+	settingsValueW  = 28 // a longer value is cut, with its ellipsis
+)
+
+// settingsGroupNotes are a group's line beside its name.
+var settingsGroupNotes = map[config.Group]string{
+	config.GroupDisplay:       "how busmon looks; theme, icons and fade apply at once",
+	config.GroupAttention:     "how busmon calls you; bell and reminder timings apply at once",
+	config.GroupIdentity:      "your name as a person on the bus",
+	config.GroupNotifications: "what reaches your phone or desktop; targets in notify.toml",
+	config.GroupBackup:        "your own command after each backup: edit config.toml yourself",
+}
+
+// settingsBody lays the page out in width cells: the groups on the left (or
+// a tab bar above, on a narrow page), the selected group's keys on the right,
+// each value drawn as a control, then the selected key's detail zone.
 func settingsBody(s *settingsPage, sel, width int) []Line {
 	var b body
 	if !s.loaded {
 		b.seg(RoleMuted, "  reading the settings").text("\n")
 		return b.Lines()
 	}
-	const labelW, valueW = 24, 22
-	i := 0
-	for _, g := range s.groups {
-		b.segs(listSection(string(g.Group))...).text("\n")
-		for _, r := range g.Rows {
-			mark := planMark(i == sel)
-			role := RoleText
-			switch r.Sym {
-			case GlyphWorking:
-				role = RoleAccent
-			case GlyphBlocked:
-				role = RoleAttention
-			case GlyphIdle, GlyphNone:
-				role = RoleMuted
+	if len(s.groups) == 0 {
+		return nil
+	}
+	s.group = clamp(s.group, 0, len(s.groups)-1)
+	side := width >= settingsSideMin
+	panelW := width
+	if side {
+		panelW = width - settingsSideW - 1
+	}
+	right, selLine := settingsPanel(s, sel, panelW)
+	var lines []Line
+	if side {
+		for i := 0; i < max(len(right), len(s.groups)); i++ {
+			l := Line{}
+			if i < len(s.groups) {
+				l = append(l, settingsSideRow(s.groups[i].Group, i == s.group)...)
 			}
-			value := r.Value
-			if s.edit == r.Key {
-				if choices := settingChoices[r.Key]; choices != nil {
-					value = GlyphArrowL + " " + choices[s.choice] + " " + GlyphArrowR
-				} else {
-					value = "[ " + s.text + " ]"
-				}
+			l = FitLine(l, settingsSideW)
+			l = append(l, S(RoleText, strings.Repeat(" ", settingsSideW-l.Width())), S(RoleLine, glyphVertical))
+			if i < len(right) {
+				l = append(l, right[i]...)
 			}
-			b.segs(mark...).seg(role, r.Sym).text(" ").text(Fit(Preview(r.Label), labelW)+"  ").
-				text(Fit(Preview(value), valueW)+"  ").seg(RoleMuted, Preview(r.Source)).text("\n")
-			if r.Key == "display.icons" {
-				b.segs(iconSample(width)...).text("\n")
-			}
-			if i == sel && s.err != "" {
-				b.text("      ").seg(RoleAttention, Preview(s.err)).text("\n")
-			}
-			if i == sel && s.confirm == r.Key {
-				b.text("      ").seg(RoleAttention, Preview("unset "+r.Label+" here? "+r.AfterUnset+" will apply (y)")).text("\n")
-			}
-			i++
+			lines = append(lines, FitLine(l, width))
 		}
-		if g.Group == config.GroupNotifications {
-			for _, l := range s.targets {
-				b.seg(RoleMuted, "    "+Preview(l)).text("\n")
-			}
+	} else {
+		lines = append(lines, FitLine(settingsTabs(s.groups, s.group, width), width), Line{})
+		selLine += 2
+		for _, l := range right {
+			lines = append(lines, FitLine(l, width))
 		}
 	}
-	b.text("\n").seg(RoleMuted, "  Changes   theme, icons, fade, bell and reminder timings at once; the others at busmon's next start").text("\n")
-	b.seg(RoleMuted, "  Written   config.toml only; a value from the environment or a flag is read-only here").text("\n")
-	lines := b.Lines()
-	for j := range lines {
-		lines[j] = FitLine(lines[j], width)
-	}
+	s.selLine = selLine
 	return lines
+}
+
+// settingsSideRow is a group in the sidebar: the selected one marked and in
+// the accent, bold; the others muted.
+func settingsSideRow(g config.Group, selected bool) Line {
+	if selected {
+		return Line{S(RoleAccent, " "+GlyphPrompt+" "), {Text: string(g), Role: RoleAccent, Bold: true}}
+	}
+	return Line{S(RoleMuted, "   "+string(g))}
+}
+
+// settingsTabs is the groups as the lower panel's tab bar draws its tabs
+// (tabBar's blocks): the selected one a pill, the others grey; on a page too
+// narrow for them all, those farthest from the selected one give way to an
+// ellipsis on their side.
+func settingsTabs(groups []settingGroup, active, width int) Line {
+	block := func(i int) Seg {
+		if i == active {
+			return Seg{Text: " " + string(groups[i].Group) + " ", Role: RoleAccent, Bold: true, Pill: true, Tab: true}
+		}
+		return Seg{Text: " " + string(groups[i].Group) + " ", Role: RoleMuted, Off: true, Tab: true}
+	}
+	w := func(i int) int { return Width(block(i).Text) + 1 }
+	lo, hi, used := active, active, w(active)
+	for grew := true; grew; {
+		grew = false
+		mark := func(lo, hi int) int { // the ellipses the window still needs
+			n := 0
+			if lo > 0 {
+				n += 2
+			}
+			if hi < len(groups)-1 {
+				n += 2
+			}
+			return n
+		}
+		if hi+1 < len(groups) && used+w(hi+1)+mark(lo, hi+1) <= width {
+			hi, used, grew = hi+1, used+w(hi+1), true
+		}
+		if lo > 0 && used+w(lo-1)+mark(lo-1, hi) <= width {
+			lo, used, grew = lo-1, used+w(lo-1), true
+		}
+	}
+	var l Line
+	if lo > 0 {
+		l = append(l, S(RoleMuted, GlyphEllipsis+" "))
+	}
+	for i := lo; i <= hi; i++ {
+		l = append(l, block(i), Seg{Text: " ", Role: RoleText, Tab: true})
+	}
+	if hi < len(groups)-1 {
+		l = append(l, S(RoleMuted, GlyphEllipsis+" "))
+	}
+	return l
+}
+
+// settingsPanel is the selected group's side of the page in width cells: its
+// name and note, its keys as controls, then the detail zone of the selected
+// one; selLine is that row's line.
+func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
+	g := s.groups[s.group]
+	var b body
+	b.text(" ").segs(Seg{Text: string(g.Group), Role: RoleText, Bold: true}).
+		seg(RoleMuted, "  "+settingsGroupNotes[g.Group]).text("\n\n")
+	n, selLine := 2, 2
+	for i, r := range g.Rows {
+		if i == sel {
+			selLine = n
+		}
+		b.segs(settingsKeyRow(s, r, i == sel, width)...).text("\n")
+		n++
+		if r.Key == "display.icons" {
+			b.segs(iconSample(width)...).text("\n")
+			n++
+		}
+	}
+	if g.Group == config.GroupNotifications {
+		for _, l := range s.targets {
+			b.seg(RoleMuted, "    "+Preview(l)).text("\n")
+		}
+	}
+	if len(g.Rows) > 0 {
+		r := g.Rows[clamp(sel, 0, len(g.Rows)-1)]
+		b.text("\n").text(" ").seg(RoleLine, strings.Repeat(glyphHorizontal, max(0, width-2))).text("\n")
+		note := func(text string, role Role) {
+			b.join(wrapSpans([]mdSpan{{text: Preview(text), role: role}}, width-1, " ", " ")).text("\n")
+		}
+		b.join(wrapSpans(settingsDetail(r), width-1, " ", " ")).text("\n")
+		if h := settingHelp(r); h != "" {
+			note(h, RoleMuted)
+		}
+		switch {
+		case s.err != "":
+			note(s.err, RoleAttention)
+		case s.confirm == r.Key:
+			note("unset "+r.Label+" here? "+r.AfterUnset+" will apply (y)", RoleAttention)
+		}
+		if s.reset != nil {
+			note(settingsResetQuestion(g, s.reset), RoleAttention)
+		}
+	}
+	return b.Lines(), selLine
+}
+
+// settingsResetQuestion is D's confirmation: the keys config.toml loses, the
+// ones a flag or the env still sets after it (master), and the person's own
+// keys that stay.
+func settingsResetQuestion(g settingGroup, keys []string) string {
+	q := fmt.Sprintf("Reset %s? %d key", g.Group, len(keys))
+	if len(keys) > 1 {
+		q += "s"
+	}
+	q += " set in config.toml (" + settingShortKeys(keys) + ") will be removed"
+	for _, r := range g.Rows { // a flag or the env still wins once its line is gone
+		if r.FileHeld && !r.PersonOnly && (strings.HasPrefix(r.Source, "flag ") || strings.HasPrefix(r.Source, "env ")) {
+			q += "; " + settingShortKeys([]string{r.Key}) + " still follows " + r.Source
+		}
+	}
+	if _, kept := settingsResettable(g); len(kept) > 0 {
+		q += "; your own " + settingShortKeys(kept) + " stay"
+	}
+	return q + " (y)"
+}
+
+// settingsKeyRow is one key: the selection mark, • when config.toml sets it
+// to other than its default, its label, and its value as a control at the
+// right edge.
+func settingsKeyRow(s *settingsPage, r settingRow, selected bool, width int) Line {
+	l := Line{S(RoleText, " ")}
+	l = append(l, planMark(selected)...)
+	if r.Set {
+		l = append(l, S(RoleAccent, GlyphSet+" "))
+	} else {
+		l = append(l, S(RoleText, "  "))
+	}
+	value := settingControl(s, r)
+	room := width - l.Width() - value.Width() - 2
+	label := Fit(Preview(r.Label), max(0, min(settingsLabelW, room)))
+	l = append(l, S(RoleText, label))
+	if gap := width - l.Width() - value.Width() - 1; gap > 0 {
+		l = append(l, S(RoleText, strings.Repeat(" ", gap)))
+	}
+	return append(append(l, value...), S(RoleText, " ")) // one blank cell before the edge
+}
+
+// settingControl is a row's value as a control: on/off a dot (on in the ok
+// colour), a choice ‹ value ›, the rest plain; the value being edited its
+// editor; a value from a flag, the env or busmon.toml muted, a refused one in
+// the attention colour.
+func settingControl(s *settingsPage, r settingRow) Line {
+	if s.edit == r.Key {
+		if choices := settingChoices[r.Key]; choices != nil {
+			return Line{S(RoleMuted, GlyphArrowL+" "), {Text: choices[s.choice], Role: RoleAccent, Bold: true}, S(RoleMuted, " "+GlyphArrowR)}
+		}
+		return Line{S(RoleAccent, "[ "+Preview(s.text)+" ]")}
+	}
+	text, role := Preview(r.Value), RoleText
+	if Width(text) > settingsValueW {
+		text = Fit(text, settingsValueW)
+	}
+	var l Line
+	switch {
+	case r.Kind == config.Bool && r.Value == "on":
+		l = Line{S(RoleOK, GlyphWorking+" on")}
+	case r.Kind == config.Bool:
+		l = Line{S(RoleMuted, GlyphIdle+" off")}
+	case settingChoices[r.Key] != nil:
+		l = Line{S(RoleMuted, GlyphChoiceL+" "), S(RoleAccent, text), S(RoleMuted, " "+GlyphChoiceR)}
+	default:
+		l = Line{S(role, text)}
+	}
+	switch r.From {
+	case fromElsewhere:
+		for i := range l {
+			l[i].Role = RoleMuted
+		}
+	case fromRefused:
+		for i := range l {
+			l[i].Role = RoleAttention
+		}
+	}
+	return l
+}
+
+// settingsDetail is the selected key's line: its label, file key, source in
+// agentbus config's words, default and who reads it (wrapped by the page).
+func settingsDetail(r settingRow) []mdSpan {
+	from := r.Source
+	if from == "default" {
+		from = "the default"
+	}
+	spans := []mdSpan{{text: Preview(r.Label) + " " + GlyphNone + " ", role: RoleMuted}, {text: r.Key, role: RoleText},
+		{text: " " + GlyphNone + " from ", role: RoleMuted}, {text: Preview(from), role: RoleAccent}}
+	if r.From != fromDefault {
+		spans = append(spans, mdSpan{text: " (default: " + Preview(r.Default) + ")", role: RoleMuted})
+	}
+	if r.ReadBy != "" {
+		spans = append(spans, mdSpan{text: " " + GlyphNone + " read by " + Preview(r.ReadBy), role: RoleMuted})
+	}
+	return spans
+}
+
+// settingHelps are the page's keys' help lines; a key without one is helped
+// by its kind (settingHelp).
+var settingHelps = map[string]string{
+	"display.theme":           "auto follows the terminal's background; dark or light forces one",
+	"display.icons":           "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
+	"display.limit":           "Activity lines replayed when busmon starts; 0 or below: all history",
+	"display.idle_hint_after": "flags idle? on a working agent whose pane looks ready this long; 0 is off",
+	"waiting.fade":            "fades a waiting agent in and out and slides the gauges (true colour only)",
+	"waiting.popup_after":     "the reminder opens once a decision has waited this long",
+	"waiting.snooze":          "how long a dismissed reminder stays away",
+	"waiting.bell":            "rings the terminal's bell on a new decision for you",
+	"recap.auto_after":        "the recap opens by itself after you were away this long",
+	"updates.check":           "asks GitHub once a day whether a newer release exists",
+	"identity.as":             "your name on the bus, as a person",
+	"start.team":              "the roles agentbus start opens for a new project, separated by commas",
+	"notify.on":               "sends notifications to the targets of notify.toml",
+	"notify.targets":          "the targets of notify.toml to send to, separated by commas",
+	"notify.events":           "decision, stall, fail, blocked, prompt, for-you; separated by commas",
+	"notify.detail":           "summary sends no agent text; full sends it to a private target only",
+	"notify.delay":            "how long an event waits before it is sent",
+	"notify.max_per_hour":     "messages an hour at most; a fail or a stall always goes",
+	"notify.quiet":            "HH:MM-HH:MM; only the exempt events are sent then",
+	"notify.quiet_exempt":     "the events still sent in quiet hours, separated by commas",
+}
+
+// settingHelp is r's help line: its own, else what its kind takes.
+func settingHelp(r settingRow) string {
+	if r.PersonOnly {
+		return "your own setting: edit config.toml yourself"
+	}
+	if h, ok := settingHelps[r.Key]; ok {
+		return h
+	}
+	switch {
+	case settingChoices[r.Key] != nil:
+		return strings.Join(settingChoices[r.Key], ", ")
+	case r.List:
+		return "names separated by commas"
+	case r.Kind == config.Bool:
+		return "on or off"
+	case r.Kind == config.Duration:
+		return "a duration, such as 30m or 2h"
+	case r.Kind == config.Int, r.Kind == config.Float:
+		return "a number"
+	}
+	return ""
 }
 
 // iconSampleProviders are the sample's providers, in the spec's order.

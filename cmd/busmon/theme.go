@@ -340,14 +340,19 @@ const (
 	// cell still reads filled without colour (foureyes on usage-bars).
 	GlyphThinMark = "╋"
 	// The updated column's freshness gauge: the same two dots as working/idle.
-	GlyphDotFull     = GlyphWorking
-	GlyphDotEmpty    = GlyphIdle
-	GlyphPrompt      = "›"
-	GlyphHuman       = "♙" // a person on the bus (busmon), never an agent
-	GlyphNotEqual    = "≠" // model≠: the running model is not the configured one
-	GlyphGate        = "◆" // a 4-eyes gate waiting on a verdict (For you); ▲ means blocked
-	GlyphReturn      = "↵" // an expansion's last line: Enter again opens the full text
-	GlyphTimes       = "×" // a repeat count: a subject reviewed three times reads `a ×3`
+	GlyphDotFull  = GlyphWorking
+	GlyphDotEmpty = GlyphIdle
+	GlyphPrompt   = "›"
+	GlyphHuman    = "♙" // a person on the bus (busmon), never an agent
+	GlyphNotEqual = "≠" // model≠: the running model is not the configured one
+	GlyphGate     = "◆" // a 4-eyes gate waiting on a verdict (For you); ▲ means blocked
+	GlyphReturn   = "↵" // an expansion's last line: Enter again opens the full text
+	GlyphTimes    = "×" // a repeat count: a subject reviewed three times reads `a ×3`
+	// The settings page (settings-panels): a choice reads ‹ value ›, and •
+	// marks a key config.toml sets to other than its default.
+	GlyphChoiceL     = "‹"
+	GlyphChoiceR     = GlyphPrompt
+	GlyphSet         = "•"
 	glyphVertical    = "│"
 	glyphThumb       = "┃"
 	glyphHorizontal  = "─"
@@ -423,5 +428,5 @@ var UIGlyphs = []string{
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
 	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6,
-	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark,
+	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark, GlyphChoiceL, GlyphSet,
 }

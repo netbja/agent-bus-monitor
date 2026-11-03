@@ -12,10 +12,21 @@ import (
 // the registry's keys by group, one row each, saying what value applies and
 // where it comes from, in agentbus config's words.
 
+// settingFrom is where a row's value comes from, as the page draws it.
+type settingFrom int
+
+const (
+	fromDefault   settingFrom = iota
+	fromFile                  // config.toml
+	fromElsewhere             // a flag, the env or busmon.toml: drawn muted
+	fromRefused               // a value its rule refuses: drawn in the attention colour
+)
+
 // settingRow is one key on the page.
 type settingRow struct {
 	Key      string
-	Sym      string // ● config.toml, ○ the default, · elsewhere (read-only here), ▲ refused
+	From     settingFrom
+	Set      bool // config.toml sets it to other than its default: marked •
 	Label    string
 	Value    string // the value that applies, in the person's words
 	Source   string
@@ -23,10 +34,17 @@ type settingRow struct {
 	// PersonOnly is a person's own setting (backup.after_*): shown, never
 	// written here (edit config.toml yourself).
 	PersonOnly bool
-	InFile     bool // config.toml holds the key (● or a refused line): d may unset it
+	InFile     bool // config.toml's line is the one that applies or is refused: d may unset it
+	// FileHeld: config.toml holds a line for the key, whatever applies above
+	// it (a flag, the env): D removes it (reviewer-codex).
+	FileHeld bool
 	// AfterUnset is what applies once config.toml's line is gone ("busmon.toml's
 	// light", "the default auto"): d's confirmation names it (spec).
 	AfterUnset string
+	Default    string // the default, in the person's words (the detail zone)
+	ReadBy     string // who reads it (the registry's words)
+	Kind       config.Kind
+	List       bool
 }
 
 // settingGroup is one group's rows, in the registry's order.
@@ -90,20 +108,23 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 			value := res.Value
 			switch v, isFlag := flagged[k.Name]; {
 			case isFlag:
-				row.Sym, row.Source, row.Editable, value = GlyphNone, "flag "+settingFlags[k.Name], false, v
+				row.From, row.Source, row.Editable, value = fromElsewhere, "flag "+settingFlags[k.Name], false, v
 			case res.Invalid:
-				row.Sym, row.Source, row.Editable = GlyphBlocked, res.Source+" refused", false
+				row.From, row.Source, row.Editable = fromRefused, res.Source+" refused", false
 			case res.Source != "default" && res.Source != "config.toml" && res.Source != "busmon.toml":
-				row.Sym, row.Source, row.Editable = GlyphNone, res.Source, false // the env: only unsetting it lets a file apply
+				row.From, row.Source, row.Editable = fromElsewhere, res.Source, false // the env: only unsetting it lets a file apply
 			case refused[k.Name] > 0:
-				row.Sym, row.Source, row.InFile = GlyphBlocked, fmt.Sprintf("config.toml line %d refused", refused[k.Name]), true
+				row.From, row.Source, row.InFile = fromRefused, fmt.Sprintf("config.toml line %d refused", refused[k.Name]), true
 			case res.Source == "config.toml":
-				row.Sym, row.Source, row.InFile = GlyphWorking, "config.toml", true
+				row.From, row.Source, row.InFile = fromFile, "config.toml", true
+				row.Set = config.Format(value) != config.Format(k.Default)
 			case res.Source == "busmon.toml":
-				row.Sym, row.Source = GlyphNone, "busmon.toml (legacy)"
+				row.From, row.Source = fromElsewhere, "busmon.toml (legacy)"
 			default:
-				row.Sym, row.Source = GlyphIdle, "default"
+				row.From, row.Source = fromDefault, "default"
 			}
+			row.Default, row.ReadBy, row.Kind, row.List = settingValue(k, k.Default), k.ReadBy, k.Kind, k.List
+			row.FileHeld = cfg.Has(k.Name) || refused[k.Name] > 0
 			row.Value = settingValue(k, value)
 			switch after := below.Get(k.Name); after.Source {
 			case "default":

@@ -76,6 +76,14 @@ KEYS
   ?                    help
   esc                  close
   ^C                   quit (everywhere)
+  the settings page (C)
+  ↑↓ j k               move
+  ←→ tab               the previous or next group; on an open choice (after enter), ←→ change its value
+  enter                flip an on/off, open a choice or the line editor (enter writes, esc leaves the file as it is)
+  d                    remove the selected key from config.toml (y confirms): what applies next is named
+  D                    remove every key of the group set in config.toml (y confirms); your own backup.after_* stay
+  esc q                back
+  ^C                   quit (everywhere)
   the compose window
   ^S                   send
   tab                  recipient · text; a text that is only @prefix becomes the recipient (completed, or its list opens)

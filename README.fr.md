@@ -148,7 +148,17 @@ busmon est l'écran de la personne : ce qui vous attend, qui fait quoi, et ce qu
 **Pages** (chacune s'ouvre sur la zone du bas, Échap revient) : Entrée (l'élément en entier),
 `!` `w` F4 (les questions), F1 `?` (l'aide ; `t` y rejoue la visite), F2 `r` (les demandes
 suivies), F3 `s` (les services et le broker Redis), F5 (la santé du projet), `R` (le
-récapitulatif « où en étais-je ? »), `P` (le plan), `U` (les jetons).
+récapitulatif « où en étais-je ? »), `P` (le plan), `U` (les jetons), `C` (les réglages).
+
+**Réglages** (`C`) : les groupes à gauche, les clés du groupe choisi à droite (sous 96 colonnes,
+les groupes deviennent des onglets au-dessus). Une valeur se lit comme une commande : `● on` /
+`○ off`, un choix `‹ dark ›`, le reste en clair ; `•` marque une clé que `config.toml` règle autrement
+que sa valeur par défaut, une valeur venue de l'environnement, d'une option ou de `busmon.toml` est
+grisée. Sous les clés, la clé choisie : sa clé de fichier, d'où vient sa valeur, sa valeur par défaut,
+qui la lit, et à quoi elle sert. `↑` `↓` choisissent une clé, `←` `→` ou Tab changent de groupe (sur un
+choix ouvert, `←` `→` changent la valeur), Entrée modifie, `d` retire la clé de `config.toml`, `D`
+retire toutes celles du groupe (vos propres `backup.after_*` restent) ; chaque changement est écrit
+tout de suite, `y` confirme un retrait.
 
 À 120 colonnes et plus, For you et Agents côte à côte au-dessus des onglets ; de 80 à 119, l'un
 au-dessus de l'autre ; en dessous de 80, une vue à la fois. Chaque état est aussi un glyphe et un

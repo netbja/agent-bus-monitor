@@ -1,0 +1,17 @@
+ Display   Attention   Identity   Notifications   Backup              
+
+ Attention  how busmon calls you; bell and reminder timings apply at …
+                                                                      
+ ▶   Reminder after                                                5m 
+     Reminder snooze                                              15m 
+   • Bell                                                       ○ off 
+     Recap after away                                              8h 
+     Update check                                               ○ off 
+                                                                      
+ ──────────────────────────────────────────────────────────────────── 
+ Reminder after · waiting.popup_after · from the default · read by    
+ busmon                                                               
+ the reminder opens once a decision has waited this long              
+ Reset Attention? 2 keys set in config.toml (snooze, bell) will be    
+ removed (y)                                                          
+                                                                      

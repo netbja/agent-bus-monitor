@@ -28,6 +28,8 @@ func (m *Model) mode() Mode {
 		return ModeInput
 	case m.rd.open() && m.rd.top().kind == ovAsk:
 		return ModeShellAsk
+	case m.rd.open() && m.rd.top().kind == ovSettings:
+		return ModeSettings
 	case m.rd.open():
 		return ModeOverlay
 	}

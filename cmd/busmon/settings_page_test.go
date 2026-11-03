@@ -14,7 +14,7 @@ import (
 
 // settingsEnv is a config directory with config.toml and busmon.toml, and an
 // environment reading it: never the person's own files.
-func settingsEnv(t *testing.T, cfgText, legacyText string, env map[string]string) func(string) string {
+func settingsEnv(t testing.TB, cfgText, legacyText string, env map[string]string) func(string) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "agentbus"), 0o700); err != nil {
@@ -60,25 +60,34 @@ func TestSettingsRows(t *testing.T) {
 		t.Fatalf("groups %+v", groups)
 	}
 	for _, c := range []struct {
-		key, sym, label, value, source string
-		editable                       bool
+		key          string
+		from         settingFrom
+		set          bool // config.toml sets it to other than its default (•)
+		label, value string
+		source       string
+		editable     bool
 	}{
-		{"display.theme", GlyphWorking, "Theme", "dark", "config.toml", true},
-		{"display.limit", GlyphWorking, "Activity lines at start", "all", "config.toml", true},
-		{"waiting.snooze", GlyphBlocked, "Reminder snooze", "20m", "config.toml line 5 refused", true},
-		{"waiting.fade", GlyphNone, "Fade and slide", "off", "busmon.toml (legacy)", true},
-		{"waiting.bell", GlyphIdle, "Bell", "on", "default", true},
-		{"updates.check", GlyphNone, "Update check", "off", "env AGENT_BUS_NO_UPDATE_CHECK", false},
-		{"identity.as", GlyphWorking, "Your name", "charlie", "config.toml", true},
+		{"display.theme", fromFile, true, "Theme", "dark", "config.toml", true},
+		{"display.limit", fromFile, true, "Activity lines at start", "all", "config.toml", true},
+		{"waiting.snooze", fromRefused, false, "Reminder snooze", "20m", "config.toml line 5 refused", true},
+		{"waiting.fade", fromElsewhere, false, "Fade and slide", "off", "busmon.toml (legacy)", true},
+		{"waiting.bell", fromDefault, false, "Bell", "on", "default", true},
+		{"updates.check", fromElsewhere, false, "Update check", "off", "env AGENT_BUS_NO_UPDATE_CHECK", false},
+		{"identity.as", fromFile, true, "Your name", "charlie", "config.toml", true},
 	} {
 		r := settingRowOf(t, groups, c.key)
-		if r.Sym != c.sym || r.Label != c.label || r.Value != c.value || r.Source != c.source || r.Editable != c.editable {
-			t.Errorf("%s: %+v, want %s %q %q %q editable %v", c.key, r, c.sym, c.label, c.value, c.source, c.editable)
+		if r.From != c.from || r.Set != c.set || r.Label != c.label || r.Value != c.value || r.Source != c.source || r.Editable != c.editable {
+			t.Errorf("%s: %+v, want %v set %v %q %q %q editable %v", c.key, r, c.from, c.set, c.label, c.value, c.source, c.editable)
 		}
+	}
+	// A key config.toml sets to its own default is in the file, never marked •.
+	same := settingsGroups(settingsEnv(t, "[waiting]\nbell = true\n", "", nil), settingsFlags{}, []config.Group{config.GroupAttention})
+	if r := settingRowOf(t, same, "waiting.bell"); r.From != fromFile || r.Set || !r.InFile {
+		t.Fatalf("a default written in the file: %+v", r)
 	}
 	// A flag wins and is read-only here.
 	groups = settingsGroups(getenv, settingsFlags{Theme: "light"}, []config.Group{config.GroupDisplay})
-	if r := settingRowOf(t, groups, "display.theme"); r.Sym != GlyphNone || r.Value != "light" || r.Source != "flag busmon --theme" || r.Editable {
+	if r := settingRowOf(t, groups, "display.theme"); r.From != fromElsewhere || r.Value != "light" || r.Source != "flag busmon --theme" || r.Editable {
 		t.Fatalf("flag: %+v", r)
 	}
 	// Every row of the three groups has a label of its own, never the key.
@@ -126,14 +135,31 @@ func press(t *testing.T, m Model, k any) Model {
 func selectSetting(t *testing.T, m Model, key string) Model {
 	t.Helper()
 	p := m.rd.top()
-	for i, r := range p.set.rows() {
-		if r.Key == key {
-			p.sel, p.dirty = i, true
+	for g, grp := range p.set.groups {
+		for i, r := range grp.Rows {
+			if r.Key == key {
+				p.set.group, p.sel, p.dirty = g, i, true
+				m.refresh()
+				return m
+			}
+		}
+	}
+	t.Fatalf("no row %s", key)
+	return m
+}
+
+// showGroup selects group g's first row, so the body shows its keys.
+func showGroup(t *testing.T, m Model, g config.Group) Model {
+	t.Helper()
+	p := m.rd.top()
+	for i, grp := range p.set.groups {
+		if grp.Group == g {
+			p.set.group, p.sel, p.dirty = i, 0, true
 			m.refresh()
 			return m
 		}
 	}
-	t.Fatalf("no row %s", key)
+	t.Fatalf("no group %s", g)
 	return m
 }
 
@@ -352,10 +378,13 @@ func TestSettingsPageNotifications(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "notify.toml"), []byte("[ntfy.phone]\ntopic = \"agentbus-secret-topic\"\ntoken = \"tk_never\"\n[discord.team]\nwebhook = \"https://discord.com/api/webhooks/1/hook-secret\"\n"), 0o600)
 	var themed string
 	m := press(t, settingsShell(t, getenv, &themed), 'C')
-	body := tokLinesText(m.rd.top().body)
-	ident, notif := strings.Index(body, "Identity"), strings.Index(body, "Notifications")
-	if ident < 0 || notif < ident {
-		t.Fatalf("Notifications not after Identity:\n%s", body)
+	body := tokLinesText(showGroup(t, m, config.GroupNotifications).rd.top().body)
+	var order []config.Group
+	for _, g := range m.rd.top().set.groups {
+		order = append(order, g.Group)
+	}
+	if indexOfGroup(order, config.GroupIdentity) < 0 || indexOfGroup(order, config.GroupNotifications) != indexOfGroup(order, config.GroupIdentity)+1 {
+		t.Fatalf("Notifications not after Identity: %v", order)
 	}
 	for _, s := range []string{"Send notifications", "Targets", "Quiet hours", "phone", "ntfy", "team", "discord", "not listed", "edit it yourself"} {
 		if !strings.Contains(body, s) {
@@ -379,7 +408,7 @@ func TestSettingsPageNotifications(t *testing.T) {
 	if !strings.Contains(configText(t, getenv), `targets = ["phone", "team"]`) {
 		t.Fatalf("targets: %q (err %q)", configText(t, getenv), m.rd.top().set.err)
 	}
-	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "phone, team") || strings.Contains(body, "not listed") {
+	if body := tokLinesText(showGroup(t, m, config.GroupNotifications).rd.top().body); !strings.Contains(body, "phone, team") || strings.Contains(body, "not listed") {
 		t.Fatalf("after listing:\n%s", body)
 	}
 }
@@ -395,5 +424,269 @@ func TestSettingsNotifyTargetsUnreadableRecord(t *testing.T) {
 	lines := strings.Join(notifyTargetLines(getenv), "\n")
 	if strings.Contains(lines, "never sent") || !strings.Contains(lines, "last send unknown") {
 		t.Fatalf("%s", lines)
+	}
+}
+
+func indexOfGroup(gs []config.Group, g config.Group) int {
+	for i, x := range gs {
+		if x == g {
+			return i
+		}
+	}
+	return -1
+}
+
+// settings-panels: at 92 cells and wider the groups are a sidebar beside the
+// selected group's keys; narrower, a tab bar above them (tabBar's blocks, the
+// selected one a pill), which gives way around the selected group with an
+// ellipsis rather than cut it.
+func TestSettingsPanelsLayout(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	set := &settingsPage{groups: settingsGroups(getenv, settingsFlags{}, settingsPageGroups), loaded: true}
+	wide := settingsBody(set, 0, 96)
+	for i, g := range set.groups {
+		if !strings.Contains(wide[i].text(), string(g.Group)) || !strings.Contains(wide[i].text(), glyphVertical) {
+			t.Fatalf("sidebar line %d lacks %s:\n%s", i, g.Group, tokLinesText(wide))
+		}
+	}
+	if !strings.HasPrefix(strings.TrimSpace(wide[0].text()), GlyphPrompt+" Display") {
+		t.Fatalf("the selected group is not marked: %q", wide[0].text())
+	}
+	for _, w := range []int{91, 70, 40, 24} {
+		set.group = 3 // Notifications
+		lines := settingsBody(set, 0, w)
+		tabs := lines[0]
+		if strings.Contains(tokLinesText(lines), glyphVertical) {
+			t.Fatalf("%d: a sidebar below 92 cells", w)
+		}
+		var pill *Seg
+		for i := range tabs {
+			if tabs[i].Pill {
+				pill = &tabs[i]
+			}
+		}
+		if pill == nil || strings.TrimSpace(pill.Text) != "Notifications" || tabs.Width() > w {
+			t.Fatalf("%d: tabs %q (%d cells)", w, tabs.text(), tabs.Width())
+		}
+		if w < 60 && !strings.Contains(tabs.text(), GlyphEllipsis) {
+			t.Fatalf("%d: no ellipsis for the hidden groups: %q", w, tabs.text())
+		}
+		for _, l := range lines {
+			if l.Width() > w {
+				t.Fatalf("%d: a line of %d cells: %q", w, l.Width(), l.text())
+			}
+		}
+	}
+}
+
+// The values as controls: on/off a dot (on in the ok colour, off muted), a
+// choice ‹ value ›, the rest plain; • only for a key config.toml sets to other
+// than its default; a value from the env muted, a refused one in the attention
+// colour.
+func TestSettingsControls(t *testing.T) {
+	getenv := settingsEnv(t, "[display]\ntheme = \"dark\"\n[waiting]\nbell = true\nfade = false\nsnooze = \"nonsense\"\n", "",
+		map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	groups := settingsGroups(getenv, settingsFlags{}, settingsPageGroups)
+	s := &settingsPage{}
+	control := func(key string) Line { return settingControl(s, settingRowOf(t, groups, key)) }
+	if c := control("waiting.bell"); c.text() != GlyphWorking+" on" || c[0].Role != RoleOK {
+		t.Fatalf("on: %+v", c)
+	}
+	if c := control("waiting.fade"); c.text() != GlyphIdle+" off" || c[0].Role != RoleMuted {
+		t.Fatalf("off: %+v", c)
+	}
+	if c := control("display.theme"); c.text() != GlyphChoiceL+" dark "+GlyphChoiceR || c[1].Role != RoleAccent {
+		t.Fatalf("choice: %+v", c)
+	}
+	if c := control("updates.check"); c[0].Role != RoleMuted {
+		t.Fatalf("env value not muted: %+v", c)
+	}
+	if c := control("waiting.snooze"); c[0].Role != RoleAttention {
+		t.Fatalf("refused value not in the attention colour: %+v", c)
+	}
+	marked := func(key string) bool {
+		return strings.Contains(settingsKeyRow(s, settingRowOf(t, groups, key), false, 80).text(), GlyphSet)
+	}
+	if !marked("display.theme") || !marked("waiting.fade") || marked("waiting.bell") || marked("display.icons") {
+		t.Fatalf("marks: theme %v fade %v bell %v icons %v", marked("display.theme"), marked("waiting.fade"), marked("waiting.bell"), marked("display.icons"))
+	}
+	row := settingsKeyRow(s, settingRowOf(t, groups, "display.theme"), true, 80)
+	if row.Width() != 80 || !strings.HasSuffix(row.text(), GlyphChoiceR+" ") {
+		t.Fatalf("the value is not at the right edge: %q (%d)", row.text(), row.Width())
+	}
+	detail := tokLinesText(wrapSpans(settingsDetail(settingRowOf(t, groups, "display.theme")), 200, "", ""))
+	for _, w := range []string{"Theme", "display.theme", "from config.toml", "(default: auto)", "read by busmon"} {
+		if !strings.Contains(detail, w) {
+			t.Errorf("detail lacks %q: %s", w, detail)
+		}
+	}
+}
+
+// The keys: ←→ and tab step the groups, wrapping, and the selection starts
+// at the group's first key; on an open choice ←→ change its value and leave
+// the group alone; the footer advertises the page's own keys.
+func TestSettingsGroupKeys(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	if m.mode() != ModeSettings {
+		t.Fatalf("mode %v", m.mode())
+	}
+	set := m.rd.top().set
+	m = press(t, m, tea.Key{Code: tea.KeyDown})
+	m = press(t, m, tea.Key{Code: tea.KeyTab})
+	if set = m.rd.top().set; set.group != 1 || m.rd.top().sel != 0 {
+		t.Fatalf("tab: group %d sel %d", set.group, m.rd.top().sel)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	if set = m.rd.top().set; set.group != 2 {
+		t.Fatalf("right: group %d", set.group)
+	}
+	for range 3 {
+		m = press(t, m, tea.Key{Code: tea.KeyLeft})
+	}
+	if set = m.rd.top().set; set.group != len(set.groups)-1 {
+		t.Fatalf("left wraps: group %d of %d", set.group, len(set.groups))
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyTab, Mod: tea.ModShift})
+	if set = m.rd.top().set; set.group != len(set.groups)-2 {
+		t.Fatalf("shift+tab: group %d", set.group)
+	}
+	m = selectSetting(t, m, "display.theme")
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	if set = m.rd.top().set; set.group != 0 || set.edit != "display.theme" || themeChoices[set.choice] != "dark" {
+		t.Fatalf("on an open choice: group %d edit %q choice %d", set.group, set.edit, set.choice)
+	}
+	foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 200, m.pageOffers, m.pageHint).text()
+	for _, w := range []string{"group", "edit", "d reset", "D reset group", "back"} {
+		if !strings.Contains(foot, w) {
+			t.Errorf("footer lacks %q: %q", w, foot)
+		}
+	}
+}
+
+// D: every key of the group config.toml holds (a refused line too) is named
+// and removed on y, in one write and one read back; the person's own
+// backup.after_* stay and are said to; any other key keeps the file; a group
+// with nothing set says so.
+func TestSettingsResetGroup(t *testing.T) {
+	getenv := settingsEnv(t, "# mine\n[display]\ntheme = \"dark\"\nicons = \"nerd\"\n[waiting]\nsnooze = \"nonsense\"\n[backup]\nafter_command = \"restic backup /b\"\n", "",
+		map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	before := configText(t, getenv)
+	m = press(t, m, 'D')
+	body := tokLinesText(m.rd.top().body)
+	if !strings.Contains(body, "Reset Display? 2 keys set in config.toml (theme, icons) will be removed (y)") {
+		t.Fatalf("D's confirmation:\n%s", body)
+	}
+	m = press(t, m, 'n')
+	if configText(t, getenv) != before || m.rd.top().set.reset != nil {
+		t.Fatal("a key other than y changed the file")
+	}
+	m = press(t, m, 'D')
+	m = press(t, m, 'y')
+	got := configText(t, getenv)
+	if strings.Contains(got, "theme") || strings.Contains(got, "icons") || !strings.Contains(got, "snooze") ||
+		!strings.HasPrefix(got, "# mine\n") || !strings.Contains(got, "after_command") {
+		t.Fatalf("after D y: %q", got)
+	}
+	if themed != "auto" || !strings.Contains(m.ui.flash, "2 keys reset") {
+		t.Fatalf("applied: theme %q flash %q", themed, m.ui.flash)
+	}
+	m = press(t, showGroup(t, m, config.GroupAttention), 'D')
+	if !strings.Contains(tokLinesText(m.rd.top().body), "(snooze) will be removed") {
+		t.Fatalf("a refused line is not offered:\n%s", tokLinesText(m.rd.top().body))
+	}
+	m = press(t, m, 'y')
+	m = press(t, showGroup(t, m, config.GroupBackup), 'D')
+	if m.rd.top().set.reset != nil || !strings.Contains(m.ui.flash, "after_command stay") {
+		t.Fatalf("Backup's D: reset %v flash %q", m.rd.top().set.reset, m.ui.flash)
+	}
+	if !strings.Contains(configText(t, getenv), "after_command") {
+		t.Fatal("D removed a person's own setting")
+	}
+	m = press(t, showGroup(t, m, config.GroupIdentity), 'D')
+	if !strings.Contains(m.ui.flash, "nothing set in config.toml") {
+		t.Fatalf("empty group: %q", m.ui.flash)
+	}
+}
+
+// On a short page the selected key stays in view as it moves.
+func TestSettingsSelectionInView(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	m := shellWith(t, 80, 24, shellConfig{getenv: getenv}, false)
+	m = press(t, m, 'C')
+	m = showGroup(t, m, config.GroupNotifications)
+	for range 7 {
+		m = press(t, m, tea.Key{Code: tea.KeyDown})
+	}
+	p := m.rd.top()
+	if line := p.set.selLine; line < p.top || line >= p.top+m.readerRows() {
+		t.Fatalf("selected line %d outside %d..%d", line, p.top, p.top+m.readerRows())
+	}
+}
+
+// reviewer-codex: D removes every config.toml line of the group, also one a
+// flag or the env shadows (the row keeps showing the value that applies),
+// and names a person's own key the file holds as staying, shadowed or not.
+func TestSettingsResetGroupShadowed(t *testing.T) {
+	getenv := settingsEnv(t, "[display]\ntheme = \"dark\"\nicons = \"nerd\"\n[backup]\nafter_command = \"restic backup /b\"\n", "",
+		map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1", "AGENT_BUS_BUSMON_ICONS": "off"})
+	m := shellWith(t, 120, 40, shellConfig{getenv: getenv, flags: settingsFlags{Theme: "light"}}, false)
+	m = press(t, m, 'C')
+	if r := settingRowOf(t, m.rd.top().set.groups, "display.theme"); r.From != fromElsewhere || r.Editable {
+		t.Fatalf("the flag's row: %+v", r)
+	}
+	m = press(t, m, 'D')
+	body := tokLinesText(m.rd.top().body)
+	if !strings.Contains(body, "2 keys set in config.toml (theme, icons) will be removed") {
+		t.Fatalf("shadowed lines not named:\n%s", body)
+	}
+	// master: the confirmation says what still wins once the lines are gone.
+	if flat := strings.Join(strings.Fields(strings.ReplaceAll(body, glyphVertical, " ")), " "); !strings.Contains(flat, "theme still follows flag busmon --theme") ||
+		!strings.Contains(flat, "icons still follows env AGENT_BUS_BUSMON_ICONS") {
+		t.Fatalf("the winners after the reset are not said:\n%s", body)
+	}
+	m = press(t, m, 'y')
+	if got := configText(t, getenv); strings.Contains(got, "theme") || strings.Contains(got, "icons") {
+		t.Fatalf("after D y: %q", got)
+	}
+	if _, kept := settingsResettable(groupOf(t, m, config.GroupBackup)); len(kept) != 1 || kept[0] != "backup.after_command" {
+		t.Fatalf("kept %v", kept)
+	}
+}
+
+func groupOf(t *testing.T, m Model, g config.Group) settingGroup {
+	t.Helper()
+	for _, grp := range m.rd.top().set.groups {
+		if grp.Group == g {
+			return grp
+		}
+	}
+	t.Fatalf("no group %s", g)
+	return settingGroup{}
+}
+
+// foureyes: below 92 cells the tab bar's two lines are counted, so the
+// selected key stays in view there too.
+func TestSettingsSelectionInViewNarrow(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	m := shellWith(t, 80, 24, shellConfig{getenv: getenv}, false)
+	m = showGroup(t, press(t, m, 'C'), config.GroupNotifications)
+	if m.readerWidth() >= settingsSideMin {
+		t.Fatalf("reader %d cells: not the narrow layout", m.readerWidth())
+	}
+	rows := len(m.rd.top().set.rows())
+	for i := 1; i < rows; i++ {
+		m = press(t, m, tea.Key{Code: tea.KeyDown})
+		p := m.rd.top()
+		want := m.rd.top().set.rows()[p.sel].Label
+		top, n := p.top, m.readerRows()
+		shown := tokLinesText(p.body[top:min(len(p.body), top+n)])
+		if !strings.Contains(shown, GlyphSelect+"   "+want) && !strings.Contains(shown, GlyphSelect+" "+GlyphSet+" "+want) {
+			t.Fatalf("row %d (%s) not on screen:\n%s", p.sel, want, shown)
+		}
 	}
 }

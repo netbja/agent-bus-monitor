@@ -1021,6 +1021,15 @@ and the local model endpoints (`[llm.<name>]`: `url`, `model`, and `remote = tru
 is not loopback; never a key or token). No secret and no broker connection go in that file: the
 notification targets' topics, tokens and webhooks are in `notify.toml` beside it, yours alone.
 
+busmon's settings page (`C`) edits the same file: the groups on the left, the selected group's keys
+on the right (below 96 cells the groups are tabs above them). A value reads as a control (`● on` /
+`○ off`, a choice `‹ dark ›`, the rest plain); `•` marks a key `config.toml` sets to other than its
+default, and a value from the environment, a flag or `busmon.toml` reads muted. Under the keys, the
+selected one: its file key, where its value comes from, its default, who reads it and what it takes.
+`↑` `↓` choose a key, `←` `→` or Tab the group (on an open choice, `←` `→` change its value), Enter
+edits, `d` removes the key from `config.toml`, `D` every key of the group (your own `backup.after_*`
+stay); every change is written at once, `y` confirms a removal.
+
 The freshness bar of the Agents table empties over `staleAfter` (10m), a constant at the top
 of `cmd/busmon/main.go`.
 

@@ -58,7 +58,7 @@ func checkGolden(t *testing.T, name, got string) {
 // goldenStates are the screens the goldens draw (busmon Charm spec, step b
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
-var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health"}
+var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings"}
 
 // reportID is the fixture's report, whose fenced code is longer than any width.
 var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
@@ -81,6 +81,11 @@ func inState(t testing.TB, m Model, state string) Model {
 		snap.guardian = summarizeGuardian(snap.guardianHealth, shellNow)
 		m = step(t, m, pollMsg{snap: snap, at: shellNow})
 		return keys(t, keys(t, m, tea.Key{Code: tea.KeyF5}), kEnter)
+	case "settings": // C (settings-panels): Display, theme and icons set in config.toml, Icons selected
+		m.cfg.getenv = settingsEnv(t, "[display]\ntheme = \"dark\"\nicons = \"nerd\"\n[waiting]\nsnooze = \"nonsense\"\n", "",
+			map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+		m = stepCmd(t, m, tea.KeyPressMsg(tea.Key{Code: 'C', Text: "C"}))
+		return keys(t, m, kDown, kDown)
 	case "compose": // a directive to coder, two lines written
 		m = typeText(t, keys(t, m, 'I'), "@cod")
 		m = typeText(t, keys(t, m, kTab), "Review lot 1 please: the reader, the ask mode and the cache.")
