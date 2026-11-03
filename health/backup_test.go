@@ -48,6 +48,18 @@ func TestEvaluateBackup(t *testing.T) {
 		{"no age, newer with secrets", func(in *BackupInput) {
 			in.Daily, in.Scheduled, in.Archives = true, noAge, []BackupArchive{archiveAt(time.Hour, true)}
 		}, OK, ""},
+		// reviewer-codex: an attempt that left the secrets out and also
+		// failed clears only with a newer archive holding them.
+		{"both errors, newer without secrets", func(in *BackupInput) {
+			both := *noAge
+			both.Error = "disk full"
+			in.Daily, in.Scheduled, in.Archives = true, &both, []BackupArchive{archiveAt(time.Hour, false)}
+		}, Warn, "disk full"},
+		{"both errors, newer with secrets", func(in *BackupInput) {
+			both := *noAge
+			both.Error = "disk full"
+			in.Daily, in.Scheduled, in.Archives = true, &both, []BackupArchive{archiveAt(time.Hour, true)}
+		}, OK, ""},
 		// warn_after = 0 never silences a failure.
 		{"warn_after 0, failed", func(in *BackupInput) {
 			in.Daily, in.Scheduled, in.WarnAfter, in.Archives = true, failed, 0, []BackupArchive{archiveAt(5*time.Hour, false)}

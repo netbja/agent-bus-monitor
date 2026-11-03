@@ -76,11 +76,12 @@ func EvaluateBackup(in BackupInput) Outcome {
 	}
 	if a := in.Scheduled; in.Daily && a != nil && slices.Contains(a.Projects, in.Project) && (a.Error != "" || a.SecretsError != "") {
 		// Cleared by a complete archive covering the project made after the
-		// failed attempt, by hand or scheduled; for the age case, one that
-		// holds the secrets.
+		// failed attempt, by hand or scheduled; whenever the attempt left the
+		// secrets out (age missing), only by one that holds them, whatever
+		// else failed (reviewer-codex).
 		cleared := false
 		for _, ar := range in.Archives {
-			if ar.At.After(a.At) && (a.Error != "" || ar.Secrets) {
+			if ar.At.After(a.At) && (a.SecretsError == "" || ar.Secrets) {
 				cleared = true
 			}
 		}
