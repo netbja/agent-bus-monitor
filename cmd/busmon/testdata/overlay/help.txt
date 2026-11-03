@@ -77,9 +77,10 @@ KEYS
   esc                  close
   ^C                   quit (everywhere)
   the settings page (C)
-  ↑↓ j k               move
-  ←→ tab               the previous or next group; on an open choice (after enter), ←→ change its value
-  enter                flip an on/off, open a choice or the line editor (enter writes, esc leaves the file as it is)
+  ↑↓ j k               the groups (or the keys, with the focus there); on a narrow page ↓ from the tabs goes to the keys, ↑ on the first key back
+  ←→                   → into the keys, ← back to the groups (a narrow page: they step the tabs); on an open choice they change its value
+  tab                  move the focus between the groups and the keys
+  enter                on a group: go to its keys; on a key: flip an on/off, open a choice or the line editor (enter writes, esc leaves the file as it is)
   d                    remove the selected key from config.toml (y confirms): what applies next is named
   D                    remove every key of the group set in config.toml (y confirms); your own backup.after_* stay
   esc q                back

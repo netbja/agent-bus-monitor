@@ -802,11 +802,16 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   words) and the interaction (`settings_ui.go`, settings-panels, its own key table `ModeSettings`/`settingsBindings`, reads
   and writes in commands): two panels, the groups a sidebar (`settingsSideW`) beside the selected group's keys from a page
   of `settingsSideMin` (92) cells, a tab bar above them narrower (`settingsTabs`, tabBar's blocks, the far tabs giving way
-  to an ellipsis); a value as a control (`settingControl`: `● on` ok / `○ off` muted, a choice `‹ v ›`, the rest plain at the
-  right edge; elsewhere muted, refused the attention colour), `•` (`GlyphSet`) before a `Set` key; the selected key's detail
-  zone (`settingsDetail`: label, file key, `from` source, default, read by; `settingHelp`); `↑↓` move in the group (kept in
-  view, `selLine`), `←→`/Tab the group (the editor takes keys first, so on an open choice `←→` change its value), Enter
-  flips an on/off at once, opens a choice or a line editor checked by the kind then the rule; `d` asks `y`, naming what
+  to an ellipsis); a value as a control (`settingControl`: `● on` ok / `○ off` muted, a choice `‹ v ›`, the rest plain, in one
+  column after the group's longest label and a 3-cell gutter, settings-focus: `settingsLabelCol`, `settingsGutter`; elsewhere
+  muted, refused the attention colour), `•` (`GlyphSet`) before a `Set` key; the selected key's detail
+  zone (`settingsDetail`: label, file key, `from` source, default, read by; `settingHelp`). The focus (settings-focus,
+  `settingsPage.keys`) is on the groups or the keys, the focused side lit (the group in the accent, the key's `▶` in the
+  accent, the narrow tab a full pill) and the other muted (the tab dimmed by `frameFade`): wide, `↑↓` choose the group (its
+  keys follow, the selection back to the first), `→` or Enter go to its keys, `←` back; narrow (the tab bar), `←→` step the
+  tabs (wrapping), `↓` or Enter go to the keys, `↑` on the first key and `←` come back; Tab toggles; `↑↓` move among the keys
+  (kept in view, `selLine`); the editor takes keys first, so on an open choice `←→` change its value, Enter writes, Esc
+  closes it. Enter on a key flips an on/off at once, opens a choice or a line editor checked by the kind then the rule; `d` asks `y`, naming what
   applies next; `D` asks `y` naming the group's keys config.toml holds a line for (`settingsResettable` over `FileHeld`: a refused line
   and one a flag or the env shadows too, which the confirmation says still wins, never a `PersonOnly` key, said to stay), unset one by one then read back once; theme, fade, bell and the reminder and recap
   timings apply at once through `applySettings` and `shellConfig.retheme`, the rest at busmon's next start). `agentbus config`

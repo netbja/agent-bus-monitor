@@ -6,6 +6,10 @@ release exists.
 
 ## Unreleased
 
+- busmon's settings page `C` shows which side has the focus (the groups or the keys, the other muted)
+  and moves it with `←` `→` (Tab too; on a narrow page `↓` and `↑` between the tabs and the keys); the
+  values sit in one column after the labels instead of at the right edge.
+
 ## v0.26.0 — one settings file, a team that notices it has stalled, history, backups and notifications
 
 - Public release groundwork: MIT licence, a random Redis password on a fresh install
