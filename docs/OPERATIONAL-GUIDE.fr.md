@@ -584,6 +584,10 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   `--with-runtime` : `agentbus up <p>` les réécrit. `--dry-run` affiche l'action de chaque clé et
   de chaque fichier ; `--redis-only` et `--files-only` restreignent. Restaurer sur un Redis plus
   ancien que celui de l'archive est refusé : mettez d'abord le broker à jour.
+  Une restauration des fichiers écrit les fichiers de rôles d'un projet là où son modèle archivé
+  les place : le chemin absolu de son `roles.toml` (un dépôt, par exemple
+  `/data/projects/<p>/roles.toml`), pas sous votre dossier personnel. Sur une autre machine,
+  vérifiez ce chemin d'abord avec `--dry-run` ; un fichier différent y est gardé sauf avec `--force`.
   Pour envoyer chaque archive ailleurs, posez `backup.after_command` dans `config.toml` (par
   exemple `"restic backup /data/backups/agentbus"`, un `rclone copy`, un `rsync` ; vide par
   défaut). Elle s'exécute après chaque archive complète, dans `backup.dir`, sans shell (écrivez

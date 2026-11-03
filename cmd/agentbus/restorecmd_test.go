@@ -13,6 +13,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/backup"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -52,7 +53,7 @@ func (w *restoreWorld) deps() restoreDeps {
 			if s, ok := w.starts[pid]; ok {
 				return s, nil
 			}
-			return 0, fmt.Errorf("pid %d: %w", pid, fs.ErrNotExist)
+			return 0, fmt.Errorf("pid %d: %w", pid, dispatch.ErrNoProcess) // what dispatch.ProcStart returns for a pid /proc lists no more
 		},
 		Lock:     func(string) (func(), error) { return func() {}, nil },
 		Services: w.services,
@@ -134,6 +135,32 @@ func TestRestoreCommandRefusesALiveProject(t *testing.T) {
 				t.Errorf("%s (force %v): restored", name, force)
 			}
 		}
+	}
+	// A registered agent whose process has died is not live: the project
+	// is restored (backup-live-check: a dead pid read as "cannot tell").
+	dead := newRestoreCmdWorld(t)
+	dead.b.Status(ctx, "coder", "idle", "", bus.AgentIdent{Pane: "p1", PID: 4242, PIDStart: 9})
+	c, _ := dead.d.Dial()
+	keys, _ := bus.ProjectKeys(ctx, c, dead.b.Project())
+	for _, k := range keys {
+		if k != bus.AgentsKey(dead.b.Project()) {
+			c.Del(ctx, k)
+		}
+	}
+	// Its agents snapshot is a present key, so --force (refused for a live
+	// project whatever it says): the liveness check is what is under test.
+	if code, out := dead.restore(dead.archive, "--project", dead.b.Project(), "--force", "--yes"); code != 0 || c.Exists(ctx, bus.BoardKey(dead.b.Project())).Val() == 0 {
+		t.Fatalf("a dead agent's project: %d\n%s", code, out)
+	}
+	// Any other read error proves nothing: refused, fail closed.
+	other := newRestoreCmdWorld(t)
+	other.b.Status(ctx, "coder", "idle", "", bus.AgentIdent{Pane: "p1", PID: 4242, PIDStart: 9})
+	od := other.deps()
+	od.ProcStart = func(int) (uint64, error) { return 0, fs.ErrPermission }
+	var oout bytes.Buffer
+	if code := runRestore(ctx, []string{other.archive, "--project", other.b.Project()}, "", od, &oout, &oout); code != 1 ||
+		!strings.Contains(oout.String(), "cannot tell") {
+		t.Fatalf("an unreadable pid: %d\n%s", code, oout.String())
 	}
 	// herdr unreadable: cannot tell, refused (fail closed).
 	w := newRestoreCmdWorld(t)
