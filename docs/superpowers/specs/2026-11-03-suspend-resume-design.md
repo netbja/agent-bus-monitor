@@ -224,7 +224,8 @@ agentbus resume --all          bring every suspended project back: services, mis
    process dying before the cancel leaves a suspend whose `Services` resume reads as usual.
 
    The same cancel runs on every other way out of steps 2-3 (reviewer-codex): the person's `Ctrl+C`
-   (SIGINT) or a SIGTERM during the wait, a failed early stop, and an error reading the facts for
+   (SIGINT), a SIGTERM or a SIGHUP (a closed terminal or ssh session, or busmon exiting while its `Z`
+   child runs, foureyes) during the wait, a failed early stop, and an error reading the facts for
    more than three rounds in a row; the signal is caught for the cancel's duration only (a second one
    exits at once, leaving the suspend). A SIGKILL or a crash cannot run it: the project then stays
    suspended with `Services` on the record, `suspend --status` says so, and `agentbus resume` (or
@@ -479,7 +480,7 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   the notice and the `agentbus resume` line are printed, exit 1, and a later `resume` starts dispatch
   from the record;
   a process killed between the start and the cancel leaves the suspend with `Services` intact;
-  SIGINT and SIGTERM during the wait, a failed early stop and repeated read errors run the same
+  SIGINT, SIGTERM and SIGHUP during the wait, a failed early stop and repeated read errors run the same
   cancel (dispatch started again, prior pause kept); a second signal exits leaving the suspend, which
   `resume` then restores from `Services`; `--force`
   records the busy agents and their reasons; `--no-wait` and `suspend.wait = 0` pause, judge one round,
