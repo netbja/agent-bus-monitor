@@ -104,6 +104,7 @@ return 0`)
 // retry window); {1, hash} reserved. "at" is stamped from TIME.
 var reserveWake = redis.NewScript(`
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return {-1} end
+if redis.call('EXISTS', KEYS[3]) == 1 then return {2} end
 if redis.call('PTTL', KEYS[1]) < tonumber(ARGV[2]) then return {0, redis.call('HGETALL', KEYS[2])} end
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
@@ -183,20 +184,25 @@ func (b *Bus) Wake(ctx context.Context, agent string) (WakeRecord, bool, error) 
 // (with At stamped from the server's TIME; next.At is ignored) only when token
 // holds the lease with at least minPTTL left and the stored record is outside
 // the retry window (At == 0 or now-At >= retry). It returns the stored record
-// and whether it reserved. Not holding the lease is ErrNotHolder; a low PTTL or
-// a closed window is (current record, false, nil).
+// and whether it reserved. Not holding the lease is ErrNotHolder; a project
+// paused (any pause, a suspend included) is ErrPaused, checked in the same
+// script, so a pass that read the project before the pause was written reserves
+// nothing after it; a low PTTL or a closed window is (current record, false, nil).
 func (b *Bus) ReserveWake(ctx context.Context, agent, token string, next WakeRecord, retry, minPTTL time.Duration) (WakeRecord, bool, error) {
 	if !ValidName(agent) {
 		return WakeRecord{}, false, fmt.Errorf("invalid agent %q", agent)
 	}
 	args := append([]interface{}{token, minPTTL.Milliseconds(), retry.Milliseconds()}, next.fields(false)...)
-	res, err := reserveWake.Run(ctx, b.r, []string{DispatchKey(b.project), WakeKey(b.project, agent)}, args...).Slice()
+	res, err := reserveWake.Run(ctx, b.r, []string{DispatchKey(b.project), WakeKey(b.project, agent), PauseKey(b.project)}, args...).Slice()
 	if err != nil {
 		return WakeRecord{}, false, err
 	}
 	code, _ := res[0].(int64)
 	if code < 0 {
 		return WakeRecord{}, false, ErrNotHolder
+	}
+	if code == 2 {
+		return WakeRecord{}, false, ErrPaused
 	}
 	var rec WakeRecord
 	if len(res) > 1 {

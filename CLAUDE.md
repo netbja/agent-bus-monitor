@@ -1317,7 +1317,15 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script
   that checks the lease, that the record is unchanged and that Redis `TIME` is past the deadline,
   then deletes it and XADDs the resume directive to `notify`. `agentbus resume` (`Bus.Resume`) ends
-  it early. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
+  it early. A **suspend** (spec `docs/superpowers/specs/2026-11-03-suspend-resume-design.md`, `bus/suspend.go`)
+  is a pause of `kind = "suspend"` (additive fields `kind`, `services`, `prev`, `host`, `boot`; `Until` = `at` +
+  365 days so an older dispatcher never ends it): `Bus.Suspend` writes it in one script (an existing suspend left
+  and returned, a timed pause kept as `prev`, times from Redis `TIME`); `FencedResume` never ends it, `SetPause`
+  and `Resume` refuse it (`ErrSuspended`), `FencedQuotaPause` never takes it whatever its reason; `Unsuspend` and
+  `SuspendCancel` (compare-and-swap on the raw record) put a still-due `prev` back with no directive, else delete
+  it and send the notify target a `human=yes` resume directive. `reserveWake` refuses while any pause exists, in
+  its own script after the lease check (`ErrPaused`), so a pass that read the project before a pause reserves
+  and types nothing after it; a reservation made before stays visible as `prompting`/`prompted`. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
   that declared working or idle reads `paused`, or `quota` when its provider is held; blocked,
   waiting and done are never covered; the detail keeps the declared state, the panel counts what
   is shown); `@all` targets only agents in `{p}:agents`
