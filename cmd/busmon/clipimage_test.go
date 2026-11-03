@@ -3,9 +3,11 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -134,4 +136,52 @@ func stepCmd(t testing.TB, m Model, msg tea.Msg) Model {
 		m = step(t, m, out)
 	}
 	return m
+}
+
+// The path's separators come from the text around the cursor, before and
+// after it, never from the end of the draft (reviewer-codex).
+func TestPastedPathSeparators(t *testing.T) {
+	for _, c := range []struct {
+		text string
+		cur  int
+		want string
+	}{
+		{"hello world", 6, "hello P world"},
+		{"hello world", 5, "hello P world"},
+		{"see", 3, "see P"},
+		{"", 0, "P"},
+		{"a\nb", 2, "a\nP b"},
+	} {
+		a := textArea{limit: 1000}
+		a.set(c.text)
+		a.cur = c.cur
+		insertPath(&a, "P")
+		if got := a.value(); got != c.want {
+			t.Errorf("%q at %d: %q, want %q", c.text, c.cur, got, c.want)
+		}
+	}
+}
+
+// A clipboard reader's output is read through its bound: past it, the
+// reader is stopped and refused, never buffered whole (reviewer-codex).
+func TestBoundedOutputStopsAtItsBound(t *testing.T) {
+	if _, err := exec.LookPath("yes"); err != nil {
+		t.Skip("no yes on PATH")
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := boundedOutput(exec.Command("yes"), 4096)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("an endless output was accepted")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the read did not stop at its bound")
+	}
+	if out, err := boundedOutput(exec.Command("printf", "ok"), 4096); err != nil || string(out) != "ok" {
+		t.Fatalf("%q %v", out, err)
+	}
 }

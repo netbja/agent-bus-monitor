@@ -20,7 +20,7 @@ func accountCard(icons, p string, b bus.BudgetSnapshot, holds map[string]int64, 
 	if icons != iconsOff && icons != "" {
 		indent = append(indent, iconPair(providerIcon(icons, p), p))
 	}
-	inner := max(0, width-2-indent.Width()) // a card keeps two blank cells at the right, as the rule does
+	inner := max(0, width-2-indent.Width())                                                                                               // a card keeps two blank cells at the right, as the rule does
 	name := Seg{Text: Truncate(strings.ToUpper(Preview(providerLabel(p))), max(1, inner/2)), Role: providerRole(p, RoleText), Bold: true} // the header's name
 	var right Seg
 	until, isHeld := held(holds, p, now)

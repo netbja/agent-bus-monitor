@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,8 +40,33 @@ type clipTools struct {
 func realClipTools() clipTools {
 	return clipTools{
 		look: exec.LookPath,
-		out:  func(name string, args ...string) ([]byte, error) { return exec.Command(name, args...).Output() },
+		out: func(name string, args ...string) ([]byte, error) {
+			return boundedOutput(exec.Command(name, args...), clipImageMax)
+		},
 	}
+}
+
+// boundedOutput is cmd's stdout read through max+1 bytes: past max, the
+// command is killed and refused, so a reader never buffers more than it may
+// keep (reviewer-codex).
+func boundedOutput(cmd *exec.Cmd, max int) ([]byte, error) {
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	data, rerr := io.ReadAll(io.LimitReader(out, int64(max)+1))
+	if len(data) > max {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return nil, errors.New("the clipboard's image is larger than 20 MiB")
+	}
+	if werr := cmd.Wait(); werr != nil {
+		return nil, werr
+	}
+	return data, rerr
 }
 
 // clipboardImage is the clipboard's PNG image, through the first reader on
@@ -140,9 +166,9 @@ func pasteImageCmd(tools clipTools, dir string) tea.Cmd {
 	}
 }
 
-// gotPastedImage puts a pasted image's path at the compose window's cursor
-// (a space before it unless the text ends with one), or says why there is
-// none; a window closed since keeps nothing but the message.
+// gotPastedImage puts a pasted image's path at the compose window's cursor,
+// or says why there is none; a window closed since keeps nothing but the
+// message.
 func (m *Model) gotPastedImage(msg pastedImageMsg) {
 	if msg.err != nil {
 		m.ui.flash, m.ui.flashErr = msg.err.Error(), true
@@ -153,13 +179,25 @@ func (m *Model) gotPastedImage(msg pastedImageMsg) {
 		m.ui.flash, m.ui.flashErr = "image saved: "+msg.path, false
 		return
 	}
-	text := msg.path
-	if v := c.area.value(); v != "" && !strings.HasSuffix(v, " ") && !strings.HasSuffix(v, "\n") {
-		text = " " + text
-	}
-	if c.area.insert(text) > 0 {
+	if insertPath(&c.area, msg.path) > 0 {
 		m.ui.flash, m.ui.flashErr = "image saved, but the text is full: "+msg.path, true
 		return
 	}
 	m.ui.flash, m.ui.flashErr = "image saved: "+msg.path, false
+}
+
+// insertPath puts path at a's cursor (a selection replaced), with a space
+// before it unless it starts the text or follows a space or a line break, and
+// one after it unless it ends the text or meets one (reviewer-codex: the
+// cursor's neighbours, never the end of the draft). dropped as insert's.
+func insertPath(a *textArea, path string) (dropped int) {
+	a.cutSelection()
+	gap := func(i int) bool { return i < 0 || i >= len(a.text) || a.text[i] == ' ' || a.text[i] == '\n' }
+	if !gap(a.cur - 1) {
+		path = " " + path
+	}
+	if !gap(a.cur) {
+		path += " "
+	}
+	return a.insert(path)
 }
