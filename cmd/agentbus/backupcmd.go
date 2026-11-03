@@ -35,12 +35,13 @@ type backupDeps struct {
 	Host     string // this host's name, in the archive's name
 	Dial     func() (*redis.Client, error)
 	LookPath func(string) (string, error) // finds age
+	Environ  func() []string              // the environment backup.after_command starts from, scrubbed
 }
 
 func realBackupDeps(redisHost string) backupDeps {
 	host, _ := os.Hostname()
 	return backupDeps{Getenv: os.Getenv, Now: time.Now, Host: host,
-		Dial: func() (*redis.Client, error) { return bus.Connect(redisHost) }, LookPath: exec.LookPath}
+		Dial: func() (*redis.Client, error) { return bus.Connect(redisHost) }, LookPath: exec.LookPath, Environ: os.Environ}
 }
 
 func runBackup(ctx context.Context, args []string, explicitProject string, d backupDeps, out, errw io.Writer) int {
@@ -156,7 +157,11 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 		secretSrcs = backup.Secrets(projects, backup.Locations{PasswordFile: bus.PasswordFile(d.Getenv), EnvFile: paths.EnvFile})
 		left = nil // encrypted, not left out
 	}
+	after := r.String("backup.after_command")
 	if dry {
+		if after != "" {
+			fmt.Fprintf(out, "  would run backup.after_command: %s (in %s, after the archive is complete)\n", after, dir)
+		}
 		for _, s := range secretSrcs {
 			fmt.Fprintf(out, "  %s: would be encrypted to %s in %s\n", s.Member, recipient, backup.SecretsName)
 		}
@@ -205,6 +210,29 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 	}
 	if secrets {
 		fmt.Fprintf(out, "  %s opens only with the private key of %s: keep it where you keep your other keys, not on this disk\n", backup.SecretsName, recipient)
+	}
+	// backup.after_command: after the rename, before the retention; its
+	// failure is a warning (health reads the record) and never touches the
+	// archive.
+	if after != "" {
+		var allow []string
+		if a := r.String("backup.after_env"); a != "" {
+			allow = strings.Split(a, ",")
+		}
+		environ := os.Environ
+		if d.Environ != nil {
+			environ = d.Environ
+		}
+		ran := backup.RunAfter(ctx, backup.AfterSpec{Command: after, Dir: dir, Archive: res.Path, Projects: projects,
+			Env: environ(), Allow: allow, Timeout: r.Duration("backup.after_timeout"), Log: errw})
+		if err := backup.RecordAfter(backupLastPath(paths), projects, backup.AfterEntry{At: ran.At, Archive: res.Name, Outcome: ran.Outcome}); err != nil {
+			fmt.Fprintf(errw, "backup: recording backup.after_command's outcome: %v\n", err)
+		}
+		if ran.Outcome == "ok" {
+			fmt.Fprintln(out, "  backup.after_command: ok")
+		} else {
+			fmt.Fprintf(errw, "backup: warning: backup.after_command: %s (the archive is complete and kept)\n", ran.Outcome)
+		}
 	}
 	removed, err := backup.Retain(dir, d.Host, r.Int("backup.keep"))
 	for _, n := range removed {
@@ -302,4 +330,10 @@ func sortedUnique(s []string) []string {
 		}
 	}
 	return out
+}
+
+// backupLastPath is <state>/backup-last.json, the host's backup record:
+// $XDG_STATE_HOME/agentbus (else ~/.local/state/agentbus).
+func backupLastPath(p service.Paths) string {
+	return filepath.Join(p.StateHome, "agentbus", "backup-last.json")
 }

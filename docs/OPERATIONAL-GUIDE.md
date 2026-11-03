@@ -549,6 +549,15 @@ to watch a pane.
   writes them again. `--dry-run` prints each key's and file's action; `--redis-only` and
   `--files-only` narrow it. Restoring onto an older Redis than the archive's is refused: upgrade
   the broker first.
+  To send each archive elsewhere, set `backup.after_command` in `config.toml` (for example
+  `"restic backup /data/backups/agentbus"`, an `rclone copy`, an `rsync`; empty by default). It
+  runs after each complete archive, in `backup.dir`, with no shell (write `sh -c '…'` for a pipe),
+  given `AGENTBUS_BACKUP_ARCHIVE`, `AGENTBUS_BACKUP_DIR`, `AGENTBUS_BACKUP_PROJECTS` and
+  `AGENTBUS_BACKUP_SCHEDULED`, and an environment without the broker's or anything named like a
+  secret (`backup.after_env` lists names to keep, such as `["RESTIC_PASSWORD_FILE"]`), for at
+  most `backup.after_timeout` (30m). A failure is recorded and warned about; the archive is never
+  touched. These three settings are yours only: no variable sets them, agentbus never writes them,
+  and no agent may edit `config.toml`.
 
 ---
 

@@ -1,7 +1,9 @@
 package config
 
 import (
+	"strings"
 	"testing"
+	"time"
 )
 
 // The backup settings (backup spec, "Settings"): backup.dir an absolute
@@ -89,5 +91,49 @@ func TestBackupAgeRecipient(t *testing.T) {
 	}
 	if _, res := k.env("AGE-SECRET-KEY-1ABC"); res != envSkip {
 		t.Error("a private key in the env was used")
+	}
+}
+
+// backup.after_command, after_env and after_timeout (spec "After the
+// archive"): the person's own, from config.toml alone: no env variable,
+// never a project's services env file (MachineOnly), never written by
+// agentbus (Set and Unset refuse them).
+func TestBackupAfterKeys(t *testing.T) {
+	for _, name := range []string{"backup.after_command", "backup.after_env", "backup.after_timeout"} {
+		k, ok := Lookup(name)
+		if !ok || k.Env != "" || !k.MachineOnly || !k.PersonOnly || k.Group() != GroupBackup {
+			t.Fatalf("%s row %+v", name, k)
+		}
+		p := writeFile(t, "config.toml", "[backup]\n")
+		if err := Set(p, name, "x"); err == nil || !strings.Contains(err.Error(), "edit config.toml yourself") {
+			t.Errorf("Set %s: %v", name, err)
+		}
+		if err := Unset(p, name); err == nil || !strings.Contains(err.Error(), "edit config.toml yourself") {
+			t.Errorf("Unset %s: %v", name, err)
+		}
+	}
+	p := writeFile(t, "config.toml", "[backup]\nafter_command = \"restic backup /data/backups/agentbus\"\n"+
+		"after_env = [\"RESTIC_PASSWORD_FILE\", \"RESTIC_REPOSITORY\"]\nafter_timeout = \"10m\"\n")
+	r := Resolver{Getenv: env(map[string]string{"AGENT_BUS_BACKUP_AFTER_COMMAND": "rm -rf /"}), Files: []*File{Load(p, "config.toml")}}
+	if r.String("backup.after_command") != "restic backup /data/backups/agentbus" ||
+		r.String("backup.after_env") != "RESTIC_PASSWORD_FILE,RESTIC_REPOSITORY" || r.Duration("backup.after_timeout") != 10*time.Minute {
+		t.Fatalf("resolved %q %q %v", r.String("backup.after_command"), r.String("backup.after_env"), r.Duration("backup.after_timeout"))
+	}
+	k, _ := Lookup("backup.after_env")
+	for _, c := range []struct {
+		v   any
+		why string
+	}{
+		{[]any{"A_B", "x1"}, ""},
+		{[]any{"A B"}, "want a list of variable names"},
+		{[]any{1}, "want a list of variable names"},
+		{"A", "want a list of variable names"},
+	} {
+		if _, got := k.file(c.v); got != c.why {
+			t.Errorf("after_env %#v: %q, want %q", c.v, got, c.why)
+		}
+	}
+	if d, _ := Lookup("backup.after_timeout"); d.Default != 30*time.Minute {
+		t.Errorf("after_timeout default %v", d.Default)
 	}
 }

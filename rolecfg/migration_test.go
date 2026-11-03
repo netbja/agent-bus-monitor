@@ -71,7 +71,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		}
 	}
 	want.Allow = append(want.Allow, masterUpRules...)
-	want.Deny = append(append([]string{}, r1.Deny...), reloadAsDeny...)
+	want.Deny = append(append(append([]string{}, r1.Deny...), reloadAsDeny...), configDeny...)
 	if !reflect.DeepEqual(want, r2) {
 		t.Fatalf("master's rules %+v, want %+v", r2, want)
 	}
@@ -87,7 +87,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 	s2, _ := v2.LaunchRules("sentinel")
 	wantS := s1
 	wantS.Allow = append(append([]string{}, s1.Allow...), "Bash(agentbus reload *)")
-	wantS.Deny = append(append(append([]string{}, s1.Deny...), reloadAsDeny...), DeliverDeny...)
+	wantS.Deny = append(append(append(append([]string{}, s1.Deny...), reloadAsDeny...), configDeny...), DeliverDeny...)
 	if !reflect.DeepEqual(wantS, s2) {
 		t.Fatalf("sentinel's rules %+v, want %+v", s2, wantS)
 	}
@@ -102,7 +102,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		case "master", "sentinel":
 		default:
 			wantO := o1
-			wantO.Deny = append(append([]string{}, o1.Deny...), reloadAsDeny...)
+			wantO.Deny = append(append(append([]string{}, o1.Deny...), reloadAsDeny...), configDeny...)
 			if role == "docs" {
 				wantO.Allow = append(append([]string{}, o1.Allow...), "Bash(agentbus deliver *)")
 			} else {

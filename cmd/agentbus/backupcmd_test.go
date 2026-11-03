@@ -246,3 +246,88 @@ func mustRead(t *testing.T, p string) []byte {
 	}
 	return b
 }
+
+// backup.after_command: run once per complete archive, after the rename and
+// before the retention, its outcome recorded for the archive's projects; a
+// failure warns and never touches the archive; a dry run or a refused run
+// runs nothing.
+func TestBackupCommandAfterCommand(t *testing.T) {
+	w := newBackupWorld(t)
+	p := w.b.Project()
+	marker := filepath.Join(w.home, "ran")
+	ok := filepath.Join(w.home, "send-ok")
+	os.WriteFile(ok, []byte("#!/bin/sh\nprintf '%s\\n' \"$AGENTBUS_BACKUP_ARCHIVE\" >> "+marker+"\nls \"$AGENTBUS_BACKUP_DIR\" | wc -l >> "+marker+"\n"), 0o700)
+	fail := filepath.Join(w.home, "send-fail")
+	os.WriteFile(fail, []byte("#!/bin/sh\necho ran >> "+marker+"\nexit 3\n"), 0o700)
+	cfg := filepath.Join(w.home, ".config", "agentbus", "config.toml")
+	setAfter := func(cmd string) {
+		os.WriteFile(cfg, []byte("[backup]\nkeep = 1\nafter_command = \""+cmd+"\"\n"), 0o600)
+	}
+	last := filepath.Join(w.home, ".local", "state", "agentbus", "backup-last.json")
+
+	setAfter(ok)
+	if code, out, errw := w.run("--project", p, "--dry-run"); code != 0 || !strings.Contains(out, "would run backup.after_command: "+ok) {
+		t.Fatalf("dry run: %d %q %q", code, out, errw)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("the dry run ran the command")
+	}
+	code, out, errw := w.run("--project", p)
+	if code != 0 || !strings.Contains(out, "backup.after_command: ok") {
+		t.Fatalf("ok: %d %q %q", code, out, errw)
+	}
+	list, _ := backup.List(w.dir(), "h1")
+	got := strings.Split(strings.TrimSpace(string(mustRead(t, marker))), "\n")
+	// Run after the rename (the archive is at its final name) and before the
+	// retention (keep = 1: the folder still held the previous archive... here
+	// the first, so one).
+	if got[0] != list[0].Path || strings.TrimSpace(got[1]) != "1" {
+		t.Fatalf("the command saw %q, archive %s", got, list[0].Path)
+	}
+	rec, _ := backup.ReadLast(last)
+	if rec.After[p].Outcome != "ok" || rec.After[p].Archive != list[0].Name {
+		t.Fatalf("record %+v", rec)
+	}
+	// A failure: exit code 0 (the archive is complete), a warning, the record.
+	setAfter(fail)
+	code, out, errw = w.run("--project", p)
+	list, _ = backup.List(w.dir(), "h1")
+	if code != 0 || !strings.Contains(errw, "exit 3") || len(list) != 1 {
+		t.Fatalf("fail: %d %q %q %d archives", code, out, errw, len(list))
+	}
+	f, _ := os.Open(list[0].Path)
+	if _, err := backup.Verify(f); err != nil {
+		t.Fatalf("the archive after a failed command: %v", err)
+	}
+	f.Close()
+	if rec, _ := backup.ReadLast(last); rec.After[p].Outcome != "exit 3" {
+		t.Fatalf("record %+v", rec)
+	}
+	if st, _ := os.Stat(last); st.Mode().Perm() != 0o600 {
+		t.Fatalf("record mode %v", st.Mode().Perm())
+	}
+	// A refused run (an unreadable history) runs nothing.
+	os.Remove(marker)
+	if os.Geteuid() != 0 {
+		sub := filepath.Join(w.home, ".local", "state", "agentbus", p, "history", "old")
+		os.MkdirAll(sub, 0o700)
+		os.Chmod(sub, 0o000)
+		defer os.Chmod(sub, 0o700)
+		if code, _, _ := w.run("--project", p); code != 1 {
+			t.Fatal("the run did not fail")
+		}
+		if _, err := os.Stat(marker); !os.IsNotExist(err) {
+			t.Fatal("a refused run ran the command")
+		}
+	}
+	// Set in the environment, it is not read: only config.toml.
+	os.WriteFile(cfg, []byte("[backup]\n"), 0o600)
+	w.env["AGENT_BUS_BACKUP_AFTER_COMMAND"] = ok
+	os.Chmod(filepath.Join(w.home, ".local", "state", "agentbus", p, "history", "old"), 0o700)
+	if code, _, _ := w.run("--project", p); code != 0 {
+		t.Fatal("backup failed")
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("the environment's command ran")
+	}
+}

@@ -1025,7 +1025,15 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   else refused before anything is written; a tar of `redis.env` and `services/<p>.env` is streamed into `age -r` (no
   clear text on disk) and the ciphertext is the member `secrets.age`; `restore --identity <file>` pipes it into
   `age -d -i` (agentbus never reads the key), each secret restored 0600 by the file rules, the password file only
-  without `--project`.
+  without `--project`. `backup.after_command` (`backup/after.go`, `RunAfter`): config.toml alone (`Key.PersonOnly`: no env,
+  `MachineOnly`, `config.Set`/`Unset` refuse it; `after_env` a TOML list kept as a comma-joined string), split by
+  `rolecfg.ShellSplit` and run with no shell in `backup.dir`, its own process group (SIGTERM at `after_timeout`, SIGKILL
+  10 s later), the `AGENTBUS_BACKUP_*` variables, an environment scrubbed of secret-named or `health.Sensitive`
+  variables but those `after_env` names; output capped at 64 KiB, each line `health.Redact`ed; run after the rename and
+  before the retention, never on a refused run, its outcome in `<state>/backup-last.json` `after` per project
+  (`RecordAfter`, 0600); a failure only warns. Every role denies `Edit`/`Write` of `~/.config/agentbus/config.toml`
+  (shipped `[tool_rules]`), and a Claude Code launch adds the path `XDG_CONFIG_HOME` gives it (`rolecfg.ConfigDenies`,
+  `//` absolute form; a relative one adds nothing and says so).
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

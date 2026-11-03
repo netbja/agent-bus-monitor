@@ -584,6 +584,15 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   `--with-runtime` : `agentbus up <p>` les réécrit. `--dry-run` affiche l'action de chaque clé et
   de chaque fichier ; `--redis-only` et `--files-only` restreignent. Restaurer sur un Redis plus
   ancien que celui de l'archive est refusé : mettez d'abord le broker à jour.
+  Pour envoyer chaque archive ailleurs, posez `backup.after_command` dans `config.toml` (par
+  exemple `"restic backup /data/backups/agentbus"`, un `rclone copy`, un `rsync` ; vide par
+  défaut). Elle s'exécute après chaque archive complète, dans `backup.dir`, sans shell (écrivez
+  `sh -c '…'` pour un tube), avec `AGENTBUS_BACKUP_ARCHIVE`, `AGENTBUS_BACKUP_DIR`,
+  `AGENTBUS_BACKUP_PROJECTS` et `AGENTBUS_BACKUP_SCHEDULED`, et un environnement sans le secret du
+  broker ni rien qui porte un nom de secret (`backup.after_env` liste les noms à garder, comme
+  `["RESTIC_PASSWORD_FILE"]`), pendant au plus `backup.after_timeout` (30m). Un échec est noté et
+  signalé ; l'archive n'est jamais touchée. Ces trois réglages sont à vous seul : aucune variable ne
+  les pose, agentbus ne les écrit jamais, et aucun agent ne peut modifier `config.toml`.
 
 ---
 

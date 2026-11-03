@@ -70,6 +70,11 @@ type Key struct {
 	// MachineOnly keys are the machine's alone: a project's services env file
 	// is never read for them (forge-delivery answer 1).
 	MachineOnly bool
+	// PersonOnly keys are the person's alone (backup.after_*): read from
+	// config.toml only, never written by agentbus (Set and Unset refuse
+	// them: edit config.toml yourself). They have no env variable and are
+	// MachineOnly too.
+	PersonOnly bool
 
 	env  func(raw string) (any, envResult) // today's env rule, for a non-empty value
 	file func(v any) (any, string)         // a decoded file value: the setting, or why not
@@ -303,6 +308,20 @@ var Keys = []*Key{
 			}
 			return nil, "want an age public key (age1...)"
 		}},
+	// A command of the person's own run after each archive (backup spec,
+	// "After the archive"), the variable names it may keep despite looking
+	// secret, and its bound: config.toml only.
+	{Name: "backup.after_command", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch", MachineOnly: true, PersonOnly: true,
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && !strings.ContainsAny(s, "\n\r") {
+				return s, ""
+			}
+			return nil, "want one command line"
+		}},
+	{Name: "backup.after_env", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch", MachineOnly: true, PersonOnly: true,
+		file: fileEnvNames},
+	{Name: "backup.after_timeout", Kind: Duration, Default: 30 * time.Minute, ReadBy: "agentbus backup, dispatch", MachineOnly: true, PersonOnly: true,
+		file: fileDuration(false)},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
@@ -341,6 +360,28 @@ func fileTeam(v any) (any, string) {
 		seen[role] = true
 	}
 	return s, ""
+}
+
+// envNameRE is an environment variable's name.
+var envNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// fileEnvNames is backup.after_env's rule: a list of variable names, kept
+// as one comma-separated string.
+func fileEnvNames(v any) (any, string) {
+	const want = "want a list of variable names"
+	list, ok := v.([]any)
+	if !ok {
+		return nil, want
+	}
+	names := make([]string, 0, len(list))
+	for _, x := range list {
+		s, ok := x.(string)
+		if !ok || !envNameRE.MatchString(s) {
+			return nil, want
+		}
+		names = append(names, s)
+	}
+	return strings.Join(names, ","), ""
 }
 
 // Lookup is the row of a file key.
