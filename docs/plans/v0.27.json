@@ -2,7 +2,7 @@
   "plan": "v0.27",
   "goal": "Suspend and resume the team in one gesture, then busmon pages for focus, backup, notifications and About",
   "tasks": [
-    {"id": "suspend-spec", "title": "Spec: agentbus suspend and resume, approved by both reviewers (PR 291)", "owner": "coder", "review": "suspend-spec"},
+    {"id": "suspend-spec", "title": "Spec docs/superpowers/specs/2026-11-03-suspend-resume-design.md, approved (PR 291)", "owner": "coder", "review": "suspend-spec"},
     {"id": "suspend", "title": "agentbus suspend / resume --all, reserveWake refused under a pause, busmon Z, suspend.wait and auto_resume on page C", "owner": "coder", "review": "suspend", "after": ["suspend-spec"]},
     {"id": "focus-notice", "title": "A desktop notice after 30 s when a wake waits on a focused pane, the wake once focus leaves; a setting on page C", "owner": "coder", "review": "focus-notice"},
     {"id": "backup-page", "title": "Page C, Backup: back up now in the background with its result, the archives with detail, restore's command to copy", "owner": "coder", "review": "backup-page"},
