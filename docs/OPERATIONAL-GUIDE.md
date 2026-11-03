@@ -571,6 +571,55 @@ to watch a pane.
   or not; one that left out the secrets for want of `age` clears only with an archive holding
   them), or when `backup.after_command` failed for its latest archive. Its detail names the folder
   it read. Sentinel never runs a backup or a restore.
+- **Notifications away from the desk.** The dispatch service can tell you on your phone or desktop
+  what waits for you ([spec](superpowers/specs/2026-11-03-notifications-design.md)): a decision
+  (an open question, an agent declared `waiting`, a plan task for you), a team stall, a health
+  check that fails, a notice only you can act on, a pane stuck on its client's prompt; a for-you
+  warning only if you add `for-you` to `notify.events`. The targets live in
+  `~/.config/agentbus/notify.toml`, which you write yourself (agentbus never does), mode `0600` in a
+  folder no one else can write: a topic, a token or a webhook is a secret, so it never goes in
+  `config.toml`, on the bus or in a log, and no agent may read the file.
+
+  ```toml
+  [ntfy.phone]
+  topic = "agentbus-7f3c9a1b2d"      # 12+ letters, digits, - or _: on a public server its name is its only lock
+  # server = "https://ntfy.sh"       # the default; your own server here
+  # token = "tk_..."                 # optional access token
+  # self_hosted = true               # your own server: full text allowed there (never for ntfy.sh)
+
+  [discord.team]
+  webhook = "https://discord.com/api/webhooks/..."
+
+  [desktop.here]                     # notify-send on this host
+  ```
+
+  Then in `config.toml` (or the C page of busmon, group Notifications):
+
+  ```toml
+  [notify]
+  on = true
+  targets = ["phone", "here"]
+  # events = ["decision", "stall", "fail", "blocked", "prompt"]   # the default; add "for-you"
+  # detail = "summary"           # or "full": an agent's text, scrubbed, only to a private target
+  # delay = "2m"                 # what you answer at the desk within it never buzzes
+  # max_per_hour = 6             # per target, for the whole host; fail and stall never held back
+  # quiet = "22:00-07:30"        # local time; held, then sent as one message when it ends
+  # quiet_exempt = ["fail", "stall"]
+  ```
+
+  `summary` sends no text an agent wrote ("master asks a question"). `full` adds it, scrubbed of
+  URLs, paths and emails and cut to 120 characters, but only to the desktop or to a ntfy server
+  you mark `self_hosted = true`: that mark is your word that the server is yours. ntfy.sh and
+  Discord always get the summary. The first pass for a target sends nothing that already stood
+  (it is in busmon); after that each new event is sent once per target, grouped in one message per
+  pass. While a desktop target sends prompts, the dispatcher's own prompt bell stays silent, so a
+  prompt never rings twice. `agentbus notifications status` shows each target, whether it is
+  listed and its last send (never a URL); `agentbus notifications test [<target>]` sends one
+  message now. The test is yours: agents are refused it, so on Linux it reads the broker's agents
+  first and refuses when the broker is down. Health `notifications` (every 5 minutes, for you)
+  warns when the file is open to others, a listed target is missing or refused, a send failed,
+  or a source of the project cannot be read (then nothing is sent). Answers from the phone are not
+  possible: two-way is a later spec.
 
 ---
 
@@ -679,6 +728,7 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 | Tokens spent | `agentbus tokens` / `--project myapp --by agent` |
 | Back up this host's projects | `agentbus backup` / `backup list` |
 | Restore an archive | `agentbus restore <archive> --dry-run`, then without it |
+| Notification targets, a test message | `agentbus notifications status` / `notifications test [<target>]` |
 | Declared hand-offs | `agentbus --project myapp handoff` |
 | Reload an agent | `agentbus --project myapp reload coder --as <your-name>` |
 | Move a role to a fallback | `agentbus --project myapp swap coder --profile <p>` / `--back` |

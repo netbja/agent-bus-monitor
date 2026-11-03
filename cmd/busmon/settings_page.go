@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/config"
@@ -39,6 +40,8 @@ var settingLabels = map[string]string{
 	"display.theme": "Theme", "display.icons": "Icons", "display.limit": "Activity lines at start", "display.idle_hint_after": "Idle? hint after",
 	"waiting.fade": "Fade and slide", "waiting.popup_after": "Reminder after", "waiting.snooze": "Reminder snooze",
 	"waiting.bell": "Bell", "recap.auto_after": "Recap after away", "updates.check": "Update check", "identity.as": "Your name", "start.team": "Default team",
+	"notify.on": "Send notifications", "notify.targets": "Targets", "notify.events": "Events", "notify.detail": "Detail",
+	"notify.delay": "Delay", "notify.max_per_hour": "At most per hour", "notify.quiet": "Quiet hours", "notify.quiet_exempt": "Sent in quiet hours",
 	"backup.after_command": "Command after each backup", "backup.after_env": "Variables it keeps", "backup.after_timeout": "Its time limit",
 }
 
@@ -137,6 +140,9 @@ func settingValue(k *config.Key, v any) string {
 	case string:
 		if x == "" {
 			return "none"
+		}
+		if k.List {
+			return strings.ReplaceAll(x, ",", ", ")
 		}
 	}
 	return config.Format(v)

@@ -20,11 +20,12 @@ import (
 // these first, the services' thresholds staying in the file for now), and
 // Backup for its person-only keys alone, read-only (backup spec: shown, never
 // written by busmon; settingOnPage).
-var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity, config.GroupBackup}
+var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity, config.GroupNotifications, config.GroupBackup}
 
 // settingsPage is the page's state.
 type settingsPage struct {
 	groups  []settingGroup
+	targets []string // notify.toml's targets under the Notifications rows
 	loaded  bool
 	edit    string // the key being edited ("" = none)
 	text    string // the editor's text
@@ -43,9 +44,10 @@ var settingChoices = map[string][]string{"display.theme": themeChoices, "display
 
 // settingsMsg is the rows read again, after an open or a write.
 type settingsMsg struct {
-	groups []settingGroup
-	key    string // the key written or unset ("" = an open)
-	err    error
+	groups  []settingGroup
+	targets []string // notify.toml's targets, one line each, never a URL
+	key     string   // the key written or unset ("" = an open)
+	err     error
 }
 
 // rows is the page's rows in order, flat.
@@ -79,7 +81,7 @@ func (m *Model) settingsCmd(write func() error, key string) tea.Cmd {
 	getenv, flags := m.settingsGetenv(), m.cfg.flags
 	return func() tea.Msg {
 		err := write()
-		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), key: key, err: err}
+		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), targets: notifyTargetLines(getenv), key: key, err: err}
 	}
 }
 
@@ -101,7 +103,7 @@ func (m *Model) gotSettings(msg settingsMsg) {
 		return
 	}
 	s := p.set
-	s.groups, s.loaded, s.busy, p.dirty = msg.groups, true, false, true
+	s.groups, s.targets, s.loaded, s.busy, p.dirty = msg.groups, msg.targets, true, false, true
 	var refused *config.RefusedError
 	switch {
 	case msg.err != nil && errors.As(msg.err, &refused):
@@ -259,6 +261,15 @@ func editText(k *config.Key, shown string) string {
 // all, and the page writes 0 for it (spec).
 func parseSetting(k *config.Key, text string) (any, string) {
 	text = strings.TrimSpace(text)
+	if k.List { // typed comma-separated, written as a TOML list
+		items := []string{}
+		for _, s := range strings.Split(text, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				items = append(items, s)
+			}
+		}
+		return items, ""
+	}
 	switch k.Kind {
 	case config.Int:
 		if k.Name == "display.limit" && text == "all" {
@@ -366,6 +377,11 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 				b.text("      ").seg(RoleAttention, Preview("unset "+r.Label+" here? "+r.AfterUnset+" will apply (y)")).text("\n")
 			}
 			i++
+		}
+		if g.Group == config.GroupNotifications {
+			for _, l := range s.targets {
+				b.seg(RoleMuted, "    "+Preview(l)).text("\n")
+			}
 		}
 	}
 	b.text("\n").seg(RoleMuted, "  Changes   theme, icons, fade, bell and reminder timings at once; the others at busmon's next start").text("\n")

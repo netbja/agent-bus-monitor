@@ -236,7 +236,7 @@ func (b *Bus) HasKeysBesidesDispatch(ctx context.Context) (bool, error) {
 			k != HealthKey(b.project) && k != HealthLogKey(b.project) &&
 			k != HealthNotesKey(b.project) && k != HealthDailyKey(b.project) &&
 			k != SessionsKey(b.project) && k != TokensKey(b.project) && k != QuotaHistKey(b.project) &&
-			k != HandoffKey(b.project) {
+			k != HandoffKey(b.project) && k != NotifiedKey(b.project) {
 			return true, nil
 		}
 	}

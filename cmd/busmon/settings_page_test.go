@@ -341,3 +341,59 @@ func TestSettingsPageShowsAfterKeysReadOnly(t *testing.T) {
 		t.Fatal("d offered to unset a person's own setting")
 	}
 }
+
+// The Notifications group (notifications spec, "busmon"): after Identity,
+// every key editable; a list key is typed comma-separated and written as a
+// TOML list; under the rows one muted line per target of notify.toml with
+// its kind and last outcome, never its URL, topic or token.
+func TestSettingsPageNotifications(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	dir := filepath.Dir(config.Path(getenv))
+	os.WriteFile(filepath.Join(dir, "notify.toml"), []byte("[ntfy.phone]\ntopic = \"agentbus-secret-topic\"\ntoken = \"tk_never\"\n[discord.team]\nwebhook = \"https://discord.com/api/webhooks/1/hook-secret\"\n"), 0o600)
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	body := tokLinesText(m.rd.top().body)
+	ident, notif := strings.Index(body, "Identity"), strings.Index(body, "Notifications")
+	if ident < 0 || notif < ident {
+		t.Fatalf("Notifications not after Identity:\n%s", body)
+	}
+	for _, s := range []string{"Send notifications", "Targets", "Quiet hours", "phone", "ntfy", "team", "discord", "not listed", "edit it yourself"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("page lacks %q:\n%s", s, body)
+		}
+	}
+	for _, s := range []string{"agentbus-secret-topic", "tk_never", "hook-secret", "https://"} {
+		if strings.Contains(body, s) {
+			t.Fatalf("page shows %q:\n%s", s, body)
+		}
+	}
+	m = press(t, selectSetting(t, m, "notify.on"), tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "on = true") {
+		t.Fatalf("notify.on: %q", configText(t, getenv))
+	}
+	m = press(t, selectSetting(t, m, "notify.targets"), tea.Key{Code: tea.KeyEnter})
+	for _, r := range "phone, team" {
+		m = press(t, m, r)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), `targets = ["phone", "team"]`) {
+		t.Fatalf("targets: %q (err %q)", configText(t, getenv), m.rd.top().set.err)
+	}
+	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "phone, team") || strings.Contains(body, "not listed") {
+		t.Fatalf("after listing:\n%s", body)
+	}
+}
+
+// reviewer-codex: a notify-last.json that cannot be read never reads as
+// "never sent": the page says the outcome is unknown.
+func TestSettingsNotifyTargetsUnreadableRecord(t *testing.T) {
+	state := t.TempDir()
+	getenv := settingsEnv(t, "[notify]\ntargets = [\"phone\"]\n", "", map[string]string{"XDG_STATE_HOME": state})
+	os.WriteFile(filepath.Join(filepath.Dir(config.Path(getenv)), "notify.toml"), []byte("[ntfy.phone]\ntopic = \"agentbus-0123456789\"\n"), 0o600)
+	os.MkdirAll(filepath.Join(state, "agentbus"), 0o700)
+	os.WriteFile(filepath.Join(state, "agentbus", "notify-last.json"), []byte("{not json"), 0o600)
+	lines := strings.Join(notifyTargetLines(getenv), "\n")
+	if strings.Contains(lines, "never sent") || !strings.Contains(lines, "last send unknown") {
+		t.Fatalf("%s", lines)
+	}
+}

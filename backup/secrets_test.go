@@ -62,8 +62,9 @@ func TestSealAndOpenSecrets(t *testing.T) {
 	// The secrets are 0000 in home(): make them readable for --secrets.
 	os.Chmod(loc.PasswordFile, 0o600)
 	os.Chmod(loc.EnvFile("demo"), 0o600)
+	os.Chmod(filepath.Join(loc.ConfigDir, "notify.toml"), 0o600)
 	srcs := Secrets([]string{"demo", "other"}, loc)
-	if len(srcs) != 2 || srcs[0].Member != "redis.env" || srcs[1].Member != "services/demo.env" {
+	if len(srcs) != 3 || srcs[0].Member != "redis.env" || srcs[1].Member != "notify.toml" || srcs[2].Member != "services/demo.env" {
 		t.Fatalf("secrets %+v", srcs)
 	}
 	sealed, err := SealSecrets(context.Background(), age, testRecipient, srcs)
@@ -86,7 +87,8 @@ func TestSealAndOpenSecrets(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got["redis.env"], "pw-SECRET") || !strings.Contains(got["services/demo.env"], "pw-SECRET") || len(got) != 2 {
+	if !strings.Contains(got["redis.env"], "pw-SECRET") || !strings.Contains(got["services/demo.env"], "pw-SECRET") ||
+		!strings.Contains(got["notify.toml"], "pw-SECRET") || len(got) != 3 {
 		t.Fatalf("opened %q", got)
 	}
 	if err := OpenSecrets(context.Background(), age, filepath.Join(t.TempDir(), "none"), bytes.NewReader(sealed),
@@ -102,6 +104,7 @@ func TestRunWithSecrets(t *testing.T) {
 	loc, _ := home(t)
 	os.Chmod(loc.PasswordFile, 0o600)
 	os.Chmod(loc.EnvFile("demo"), 0o600)
+	os.Chmod(filepath.Join(loc.ConfigDir, "notify.toml"), 0o600)
 	p := plan(t, "demo")
 	var err error
 	if p.Files, _, p.Notes, err = Gather([]string{"demo"}, loc); err != nil {
@@ -144,8 +147,10 @@ func TestRestoreSecrets(t *testing.T) {
 	env := filepath.Join(srcDir, "demo.env")
 	os.WriteFile(pw, []byte(`REDIS_PASSWORD="pw-SECRET"`+"\n"), 0o600)
 	os.WriteFile(env, []byte("REDIS_URL=redis://:pw-SECRET@h\n"), 0o600)
+	nt := filepath.Join(srcDir, "notify.toml")
+	os.WriteFile(nt, []byte("[ntfy.phone]\ntopic = \"pw-SECRET-topic\"\n"), 0o600)
 	sealed, err := SealSecrets(context.Background(), age, testRecipient,
-		[]Source{{Member: "redis.env", Path: pw}, {Member: "services/demo.env", Path: env}})
+		[]Source{{Member: "redis.env", Path: pw}, {Member: "notify.toml", Path: nt}, {Member: "services/demo.env", Path: env}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,6 +190,7 @@ func TestRestoreSecrets(t *testing.T) {
 			}
 		}
 		check(w.loc.PasswordFile, c.pw)
+		check(filepath.Join(w.loc.ConfigDir, "notify.toml"), c.pw) // the host's, like the password file
 		check(w.loc.EnvFile("demo"), c.demo)
 		if c.o.Identity == "" && !strings.Contains(out.String(), "no --identity") {
 			t.Errorf("%s: output %q", c.name, out.String())
@@ -268,7 +274,7 @@ func writeSecretsTarNoCap(t *testing.T, w io.Writer, files map[string][]byte) {
 }
 
 // reviewer-codex: a secrets tar holding anything but regular files named
-// redis.env or services/<project>.env is refused whole before any is
+// redis.env, notify.toml or services/<project>.env is refused whole before any is
 // handed over, so --force can never write an empty or foreign secret.
 func TestOpenSecretsRefusesUnexpectedEntries(t *testing.T) {
 	age, _ := fakeAge(t)

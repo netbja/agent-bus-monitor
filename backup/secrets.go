@@ -28,12 +28,16 @@ const secretMax = 1 << 20
 func ValidRecipient(r string) bool { return config.ValidAgeRecipient(r) }
 
 // Secrets lists the secret files present for projects: the broker's
-// password file and each project's services env file, as members of the
-// encrypted tar (redis.env, services/<p>.env). They are only stat'ed here.
+// password file, the notification targets (notify.toml) and each project's
+// services env file, as members of the encrypted tar (redis.env,
+// notify.toml, services/<p>.env). They are only stat'ed here.
 func Secrets(projects []string, loc Locations) []Source {
 	var out []Source
 	if exists(loc.PasswordFile) {
 		out = append(out, Source{Member: "redis.env", Path: loc.PasswordFile, Required: true})
+	}
+	if f := loc.notifyFile(); exists(f) {
+		out = append(out, Source{Member: notifyName, Path: f, Required: true})
 	}
 	for _, p := range projects {
 		if f := loc.EnvFile(p); exists(f) {
@@ -106,7 +110,7 @@ func writeSecretsTar(w io.Writer, srcs []Source) error {
 
 // secretName: a member secrets.age may hold, as Secrets names them.
 func secretName(name string) bool {
-	if name == "redis.env" {
+	if name == "redis.env" || name == notifyName {
 		return true
 	}
 	p, ok := strings.CutPrefix(name, "services/")
@@ -147,7 +151,7 @@ func OpenSecrets(ctx context.Context, age, identity string, sealed io.Reader, fn
 			break
 		}
 		if hdr.Typeflag != tar.TypeReg || !secretName(hdr.Name) {
-			rerr = fmt.Errorf("secret %q: not a regular file named redis.env or services/<project>.env: refused, nothing restored", hdr.Name)
+			rerr = fmt.Errorf("secret %q: not a regular file named redis.env, notify.toml or services/<project>.env: refused, nothing restored", hdr.Name)
 			break
 		}
 		if hdr.Size > secretMax {

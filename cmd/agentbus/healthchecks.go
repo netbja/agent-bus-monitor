@@ -461,6 +461,9 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 		healthOutcomeTask("backup", func(ctx context.Context) (health.Outcome, error) { // b is read at run time, as the others
 			return backupCheck(b.Project(), realBackupCheckDeps())(ctx)
 		}),
+		healthOutcomeTask("notifications", func(ctx context.Context) (health.Outcome, error) { // b is read at run time, as the others
+			return notificationsCheck(b.Project(), os.Getenv, time.Now)(ctx)
+		}),
 		healthTask("tracked-secrets", func(ctx context.Context) (health.Status, string, error) {
 			root, err := os.Getwd()
 			if err != nil {

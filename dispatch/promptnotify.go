@@ -26,6 +26,12 @@ type PromptConfig struct {
 	Grace time.Duration
 	// Notify shows a desktop notification (nil = none: a logged note).
 	Notify func(ctx context.Context, title, body string) error
+	// Skip reports that notifications' own desktop target rings for the
+	// prompt episode that began at since (notifications spec, the person's
+	// answer 6): the episode is marked, the desktop is not rung a second time.
+	// An episode older than that target's baseline stays the ring's: the
+	// notifier baselined it and will never send it (reviewer-codex).
+	Skip func(ctx context.Context, since int64) bool
 }
 
 // PromptGraceDefault: two observe passes past the first reading. A prompt is
@@ -126,6 +132,10 @@ func (l *loop) promptNotices(ctx context.Context, snaps map[string]bus.AgentSnap
 			continue
 		}
 		l.log(map[string]any{"agent": a, "action": "prompt-notify", "pane": s.Pane, "since": o.Since})
+		if skip := l.cfg.Prompt.Skip; skip != nil && skip(ctx, o.Since) {
+			l.log(map[string]any{"agent": a, "action": "prompt-notify", "note": "notifications' desktop target rings it"})
+			continue
+		}
 		n := l.cfg.Prompt.Notify
 		if n == nil {
 			l.log(map[string]any{"agent": a, "action": "prompt-notify", "note": "no notify-send on PATH: nothing shown"})

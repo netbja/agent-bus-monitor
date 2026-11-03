@@ -418,9 +418,9 @@ func (s *stallReader) stallNotify(ctx context.Context, token string, _ health.Re
 	var msg string
 	switch since := s.now().Sub(time.UnixMilli(first)); {
 	case why != "":
-		msg = fmt.Sprintf("Stall guard: the team is idle with work ready (%s), and %s cannot act (%s). Dispatch from busmon, or wait.", rec.Detail, target, why)
+		msg = stallNoticePrefix + fmt.Sprintf("the team is idle with work ready (%s), and %s cannot act (%s). Dispatch from busmon, or wait.", rec.Detail, target, why)
 	case since >= 2*readStallSettings(s.getenv).stall:
-		msg = fmt.Sprintf("Stall guard: the team is still idle with work ready (%s); %s was told and nothing moved. Look at %s's pane, or dispatch from busmon.", rec.Detail, target, target)
+		msg = stallNoticePrefix + fmt.Sprintf("the team is still idle with work ready (%s); %s was told and nothing moved. Look at %s's pane, or dispatch from busmon.", rec.Detail, target, target)
 	default:
 		return nil
 	}

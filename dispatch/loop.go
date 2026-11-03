@@ -71,6 +71,8 @@ type Config struct {
 	PopRetire PopRetireConfig
 	// Backup is the daily backup chore (backupchore.go); off without a pass.
 	Backup BackupConfig
+	// Notify is the notifications chore (notifychore.go); off without a pass.
+	Notify NotifyConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -248,6 +250,14 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 		go func() {
 			defer wg.Done()
 			l.backupLoop(inner)
+		}()
+	}
+
+	if cfg.Notify.on() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.notifyLoop(inner)
 		}()
 	}
 
