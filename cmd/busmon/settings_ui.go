@@ -602,14 +602,20 @@ func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
 	return b.Lines(), selLine
 }
 
-// settingsResetQuestion is D's confirmation: the keys config.toml loses, and
-// the person's own keys that stay.
+// settingsResetQuestion is D's confirmation: the keys config.toml loses, the
+// ones a flag or the env still sets after it (master), and the person's own
+// keys that stay.
 func settingsResetQuestion(g settingGroup, keys []string) string {
 	q := fmt.Sprintf("Reset %s? %d key", g.Group, len(keys))
 	if len(keys) > 1 {
 		q += "s"
 	}
 	q += " set in config.toml (" + settingShortKeys(keys) + ") will be removed"
+	for _, r := range g.Rows { // a flag or the env still wins once its line is gone
+		if r.FileHeld && !r.PersonOnly && (strings.HasPrefix(r.Source, "flag ") || strings.HasPrefix(r.Source, "env ")) {
+			q += "; " + settingShortKeys([]string{r.Key}) + " still follows " + r.Source
+		}
+	}
 	if _, kept := settingsResettable(g); len(kept) > 0 {
 		q += "; your own " + settingShortKeys(kept) + " stay"
 	}

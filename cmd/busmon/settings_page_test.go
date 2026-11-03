@@ -640,8 +640,14 @@ func TestSettingsResetGroupShadowed(t *testing.T) {
 		t.Fatalf("the flag's row: %+v", r)
 	}
 	m = press(t, m, 'D')
-	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "2 keys set in config.toml (theme, icons) will be removed") {
+	body := tokLinesText(m.rd.top().body)
+	if !strings.Contains(body, "2 keys set in config.toml (theme, icons) will be removed") {
 		t.Fatalf("shadowed lines not named:\n%s", body)
+	}
+	// master: the confirmation says what still wins once the lines are gone.
+	if flat := strings.Join(strings.Fields(strings.ReplaceAll(body, glyphVertical, " ")), " "); !strings.Contains(flat, "theme still follows flag busmon --theme") ||
+		!strings.Contains(flat, "icons still follows env AGENT_BUS_BUSMON_ICONS") {
+		t.Fatalf("the winners after the reset are not said:\n%s", body)
 	}
 	m = press(t, m, 'y')
 	if got := configText(t, getenv); strings.Contains(got, "theme") || strings.Contains(got, "icons") {
