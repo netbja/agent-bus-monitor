@@ -253,10 +253,16 @@ func TestNotifierOffClearsTheRecord(t *testing.T) {
 	if rec, _ := b.Notified(ctx); len(rec) == 0 {
 		t.Fatal("no baseline")
 	}
-	os.WriteFile(filepath.Join(h.home, ".config", "agentbus", "config.toml"), []byte("[notify]\non = false\n"), 0o600)
+	// Off with the targets still listed (foureyes: else pruning alone would
+	// empty the record): nothing sent, the record cleared.
+	os.WriteFile(filepath.Join(h.home, ".config", "agentbus", "config.toml"),
+		[]byte("[notify]\non = false\ntargets = [\"phone\", \"watch\"]\ndelay = \"0\"\n"), 0o600)
+	f := &fakeSender{}
+	n.sender = f.senderFor
+	wait(t, b, "coder", "new while off")
 	n.pass(ctx, "tok")
-	if rec, _ := b.Notified(ctx); len(rec) != 0 {
-		t.Fatalf("off kept %v", rec)
+	if rec, _ := b.Notified(ctx); len(rec) != 0 || f.count("phone") != 0 {
+		t.Fatalf("off kept %v, sent %d", rec, f.count("phone"))
 	}
 }
 
@@ -282,7 +288,7 @@ func TestNotifierTwoProjectsShareTheHour(t *testing.T) {
 	}
 }
 
-func TestDesktopRingsPrompts(t *testing.T) {
+func TestDesktopPromptTargets(t *testing.T) {
 	for cfg, want := range map[string]bool{
 		"[notify]\non = true\ntargets = [\"here\"]\n":                                      true,
 		"[notify]\non = false\ntargets = [\"here\"]\n":                                     false,
@@ -291,8 +297,55 @@ func TestDesktopRingsPrompts(t *testing.T) {
 		"[notify]\non = true\ntargets = [\"here\"]\nevents = [\"prompt\", \"decision\"]\n": true,
 	} {
 		h := newNotifyHome(t, cfg)
-		if got := desktopRingsPrompts(h.getenv); got != want {
+		if got := len(desktopPromptTargets(h.getenv)) > 0; got != want {
 			t.Errorf("%q: %v", cfg, got)
 		}
+	}
+}
+
+// reviewer-codex: full detail reaches a private target scrubbed end to end,
+// a bracketed path included.
+func TestNotifierFullDetailIsScrubbed(t *testing.T) {
+	b := notifyBus(t)
+	h := newNotifyHome(t, "[notify]\non = true\ntargets = [\"here\"]\ndelay = \"0\"\ndetail = \"full\"\n")
+	f := &fakeSender{}
+	ctx := context.Background()
+	n := newNotifier(b, h, f)
+	n.pass(ctx, "tok")
+	wait(t, b, "coder", "see (/home/alice/secrets) and https://x.example/a")
+	n.pass(ctx, "tok")
+	if f.count("here") != 1 {
+		t.Fatalf("sent %d", f.count("here"))
+	}
+	line := f.sent["here"][0].Lines[0]
+	if line != "coder waits for you (busmon For you): see ([path]) and [url]" {
+		t.Fatalf("line %q", line)
+	}
+}
+
+// reviewer-codex, master: the handover of prompts from the dispatcher's own
+// ring to the desktop target loses none. An episode that began before the
+// target's baseline is the old ring's (it was baselined, never sent); one
+// that began after is the notifier's; without a baseline the ring rings.
+func TestPromptSkipOnlyAfterTheDesktopBaseline(t *testing.T) {
+	b := notifyBus(t)
+	h := newNotifyHome(t, "[notify]\non = true\ntargets = [\"here\"]\n")
+	ctx := context.Background()
+	skip := promptSkip(b, h.getenv)
+	if skip(ctx, time.Now().UnixMilli()) {
+		t.Fatal("skipped before any baseline")
+	}
+	newNotifier(b, h, &fakeSender{}).pass(ctx, "tok")
+	rec, _ := b.Notified(ctx)
+	at, _ := strconv.ParseInt(rec["_target|here"], 10, 64)
+	if skip(ctx, at-1) {
+		t.Fatal("an episode older than the baseline is skipped: nobody would ring it")
+	}
+	if !skip(ctx, at+1) {
+		t.Fatal("an episode after the baseline rings twice")
+	}
+	other := newNotifyHome(t, "[notify]\non = true\ntargets = [\"phone\"]\n")
+	if promptSkip(b, other.getenv)(ctx, at+1) {
+		t.Fatal("skipped with no desktop target listed")
 	}
 }

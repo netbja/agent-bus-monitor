@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,21 +42,46 @@ func serviceNotify(b *bus.Bus, getenv func(string) string) dispatch.NotifyConfig
 	return dispatch.NotifyConfig{Pass: n.pass}
 }
 
-// desktopRingsPrompts: notifications are on, a listed desktop target is
-// valid and prompts are among the kinds sent, so the dispatcher's own prompt
-// ring stays silent (the person's answer 6: never rung twice).
-func desktopRingsPrompts(getenv func(string) string) bool {
+// desktopPromptTargets are the listed, valid desktop targets while
+// notifications are on and prompts are among the kinds sent: they ring for
+// prompts (the person's answer 6), so the dispatcher's own ring stays silent.
+func desktopPromptTargets(getenv func(string) string) []string {
 	r := config.Machine(getenv)
 	if !r.Bool("notify.on") || !slices.Contains(config.SplitList(r.String("notify.events")), "prompt") {
-		return false
+		return nil
 	}
 	f := notify.Load(notify.Path(getenv))
+	var out []string
 	for _, name := range config.SplitList(r.String("notify.targets")) {
 		if t, ok := f.Target(name); ok && t.Kind == "desktop" {
-			return true
+			out = append(out, name)
 		}
 	}
-	return false
+	return out
+}
+
+// promptSkip is the dispatcher's PromptConfig.Skip: true only for an episode
+// that began at or after a desktop target's baseline, which the notifier
+// sends; an older one was baselined, never sent, so the ring keeps it
+// (reviewer-codex: a handover loses no open prompt). A read that fails
+// rings: a second ring beats none.
+func promptSkip(b *bus.Bus, getenv func(string) string) func(ctx context.Context, since int64) bool {
+	return func(ctx context.Context, since int64) bool {
+		names := desktopPromptTargets(getenv)
+		if len(names) == 0 {
+			return false
+		}
+		rec, err := b.Notified(ctx)
+		if err != nil {
+			return false
+		}
+		for _, n := range names {
+			if at, err := strconv.ParseInt(rec[notify.TargetField(n)], 10, 64); err == nil && at <= since {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 type sendOutcome struct {

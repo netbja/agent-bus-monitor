@@ -22,6 +22,10 @@ import (
 
 type notifyPlanTask struct{ ID, Title string }
 
+// stallNoticePrefix opens the stall guard's notice for the person
+// (stallchecks.go): while team-stall fails, that notice is the stall line.
+const stallNoticePrefix = "Stall guard: "
+
 type notifyFacts struct {
 	Asks        []bus.Ask
 	Agents      map[string]bus.AgentSnapshot
@@ -93,9 +97,16 @@ func notifyEvents(f notifyFacts, planSeen map[string]time.Time, now time.Time) [
 			add("for-you", id+"|"+since, time.UnixMilli(rec.Since), title+" needs you (busmon F5)", rec.Detail)
 		}
 	}
+	stalled := false
+	for _, e := range out {
+		stalled = stalled || e.Kind == "stall"
+	}
 	for _, e := range f.Notices {
 		if e.Fields["for"] != "person" {
 			continue
+		}
+		if stalled && e.Fields["from"] == "dispatch" && strings.HasPrefix(e.Fields["message"], stallNoticePrefix) {
+			continue // the stall guard's notice is the same stall: one line (foureyes)
 		}
 		add("blocked", e.ID, streamTime(e.ID), "a notice only you can act on (busmon Activity)", e.Fields["message"])
 	}
@@ -135,6 +146,9 @@ func streamTime(id string) time.Time {
 	ms, _ := strconv.ParseInt(strings.SplitN(id, "-", 2)[0], 10, 64)
 	return time.UnixMilli(ms)
 }
+
+// verdictCacheMax bounds the verdicts kept in memory, as the ledger is.
+const verdictCacheMax = 10000
 
 // notifyReader reads the facts of one project. A source that is absent (no
 // plan, no observation, no notice) is an empty set; a read fails only on a
@@ -232,6 +246,9 @@ func (r *notifyReader) readVerdicts(ctx context.Context) (map[string][]bus.Verdi
 			return nil, err
 		}
 		r.verdicts = append(r.verdicts, vs...)
+		if over := len(r.verdicts) - verdictCacheMax; over > 0 { // the ledger's own cap (foureyes: bounded)
+			r.verdicts = append([]bus.Verdict(nil), r.verdicts[over:]...)
+		}
 		if len(vs) > 0 {
 			r.lastID = vs[len(vs)-1].ID
 		}

@@ -310,15 +310,16 @@ func TestPromptNotifySkippedForTheDesktopTarget(t *testing.T) {
 	desk := &fakeDesktop{}
 	l := promptLoop(t, b, "prompt-skip", desk, 1000, 1000+31_000)
 	skip := true
-	l.cfg.Prompt.Skip = func() bool { return skip }
+	var asked int64
+	l.cfg.Prompt.Skip = func(_ context.Context, since int64) bool { asked = since; return skip }
 	if err := l.promptNotices(ctx, coderSnap); err != nil {
 		t.Fatal(err)
 	}
 	if s := desk.Sent(); len(s) != 0 {
 		t.Fatalf("rang twice with a desktop target: %q", s)
 	}
-	if marks, _ := b.QuotaMarks(ctx); marks[promptMark("coder")] == "" {
-		t.Fatal("the episode is not marked")
+	if marks, _ := b.QuotaMarks(ctx); marks[promptMark("coder")] == "" || asked != 1000 {
+		t.Fatalf("the episode is not marked, or Skip was not asked with its since (%d)", asked)
 	}
 	skip = false
 	l.observeAt("coder", bus.Observation{State: "blocked", PID: 10, Since: 90_000, At: 125_000})

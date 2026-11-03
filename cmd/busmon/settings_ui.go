@@ -46,8 +46,8 @@ var settingChoices = map[string][]string{"display.theme": themeChoices, "display
 type settingsMsg struct {
 	groups  []settingGroup
 	targets []string // notify.toml's targets, one line each, never a URL
-	key    string // the key written or unset ("" = an open)
-	err    error
+	key     string   // the key written or unset ("" = an open)
+	err     error
 }
 
 // rows is the page's rows in order, flat.

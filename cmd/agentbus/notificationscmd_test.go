@@ -307,4 +307,7 @@ func TestAgentAncestorFindsARegisteredParent(t *testing.T) {
 	if _, err := b.Status(ctx, "coder", "working", "x", bus.AgentIdent{PID: ppid, PIDStart: start + 1}); err != nil {
 		t.Fatal(err)
 	}
+	if got, err := agentAncestor(ctx); err != nil || got != "" { // another start: a recycled pid is not the agent
+		t.Fatalf("another start matched: %q %v", got, err)
+	}
 }
