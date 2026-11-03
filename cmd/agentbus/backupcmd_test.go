@@ -14,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/backup"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 // backupWorld: the disposable broker with one project holding a board, a
@@ -216,7 +217,9 @@ func TestBackupCommandSecrets(t *testing.T) {
 	os.WriteFile(identity, []byte("AGE-SECRET-KEY-1"), 0o600)
 	pw := filepath.Join(w.home, ".config", "agentbus", "redis.env")
 	os.Remove(pw)
-	rw := &restoreWorld{backupWorld: w, archive: list[0].Path, workspaces: `{"result":{"workspaces":[]}}`, starts: map[int]uint64{}}
+	w.env["AGENTBUS_SERVICE_MANAGER"] = "none"
+	rw := &restoreWorld{backupWorld: w, archive: list[0].Path, workspaces: `{"result":{"workspaces":[]}}`, starts: map[int]uint64{},
+		services: func() (service.Manager, string) { return nil, "AGENTBUS_SERVICE_MANAGER=none" }}
 	c, _ := w.d.Dial()
 	bus.DeleteProject(context.Background(), c, p)
 	d := rw.deps()

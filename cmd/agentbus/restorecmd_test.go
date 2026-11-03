@@ -13,6 +13,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/backup"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 // restoreWorld is a backupWorld whose project was archived then deleted.
@@ -22,6 +23,7 @@ type restoreWorld struct {
 	workspaces string // herdr's workspace list
 	starts     map[int]uint64
 	answer     string
+	services   func() (service.Manager, string)
 }
 
 func newRestoreCmdWorld(t *testing.T) *restoreWorld {
@@ -35,7 +37,10 @@ func newRestoreCmdWorld(t *testing.T) *restoreWorld {
 	if _, err := bus.DeleteProject(context.Background(), c, bw.b.Project()); err != nil {
 		t.Fatal(err)
 	}
-	return &restoreWorld{backupWorld: bw, archive: list[0].Path, workspaces: `{"result":{"workspaces":[]}}`, starts: map[int]uint64{}}
+	// This host runs no service manager, and says so explicitly.
+	bw.env["AGENTBUS_SERVICE_MANAGER"] = "none"
+	return &restoreWorld{backupWorld: bw, archive: list[0].Path, workspaces: `{"result":{"workspaces":[]}}`, starts: map[int]uint64{},
+		services: func() (service.Manager, string) { return nil, "AGENTBUS_SERVICE_MANAGER=none" }}
 }
 
 func (w *restoreWorld) deps() restoreDeps {
@@ -50,6 +55,7 @@ func (w *restoreWorld) deps() restoreDeps {
 			return 0, fmt.Errorf("pid %d: %w", pid, fs.ErrNotExist)
 		},
 		Lock:     func(string) (func(), error) { return func() {}, nil },
+		Services: w.services,
 		Stdin:    strings.NewReader(w.answer),
 		TTY:      true,
 		LookPath: func(string) (string, error) { return "", errors.New("no age") },
@@ -163,5 +169,54 @@ func TestRestoreCommandArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := runRestore(context.Background(), []string{w2.archive, "--project", w2.b.Project(), "--force", "--redis-only"}, "", d, &out, &out); code != 1 {
 		t.Fatalf("non-TTY force: %d\n%s", code, out.String())
+	}
+}
+
+// stateManager answers State with active for the kinds listed.
+type stateManager struct {
+	service.Manager
+	active map[string]bool
+	err    error
+}
+
+func (f stateManager) State(_, kind string) (service.State, error) {
+	return service.State{Installed: true, Active: f.active[kind]}, f.err
+}
+
+// reviewer-codex: the services' state must be known. An active service
+// refuses; a manager that cannot be found or read refuses (fail closed),
+// unless AGENTBUS_SERVICE_MANAGER=none says this host runs none.
+func TestRestoreCommandServices(t *testing.T) {
+	ctx := context.Background()
+	for name, c := range map[string]struct {
+		services func() (service.Manager, string)
+		want     string
+	}{
+		"an active service": {func() (service.Manager, string) {
+			return stateManager{active: map[string]bool{service.Dispatch: true}}, ""
+		}, "service is active"},
+		"a manager that fails": {func() (service.Manager, string) {
+			return stateManager{err: errors.New("bus timeout")}, ""
+		}, "cannot tell"},
+		"no manager found": {func() (service.Manager, string) { return nil, "systemd --user is not available" }, "cannot tell"},
+	} {
+		w := newRestoreCmdWorld(t)
+		w.services = c.services
+		delete(w.env, "AGENTBUS_SERVICE_MANAGER")
+		code, out := w.restore(w.archive, "--project", w.b.Project())
+		if code != 1 || !strings.Contains(out, c.want) {
+			t.Errorf("%s: %d\n%s", name, code, out)
+		}
+		cl, _ := w.d.Dial()
+		if cl.Exists(ctx, bus.BoardKey(w.b.Project())).Val() != 0 {
+			t.Errorf("%s: restored", name)
+		}
+	}
+	// Inactive services: restored.
+	w := newRestoreCmdWorld(t)
+	delete(w.env, "AGENTBUS_SERVICE_MANAGER")
+	w.services = func() (service.Manager, string) { return stateManager{}, "" }
+	if code, out := w.restore(w.archive, "--project", w.b.Project()); code != 0 {
+		t.Fatalf("inactive services: %d\n%s", code, out)
 	}
 }

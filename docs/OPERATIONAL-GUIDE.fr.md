@@ -577,7 +577,8 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   `agentbus restore <archive>` vérifie d'abord chaque membre contre le manifeste, puis refuse un
   projet vivant (son bail dispatch ou conductor tenu, un service actif, son espace de travail herdr
   ouvert, le processus d'un agent vivant : lancez `agentbus down <p>` et fermez son espace d'abord),
-  même avec `--force`. Les clés d'un projet sont restaurées en une seule étape, tout ou rien ; des
+  même avec `--force` ; si le gestionnaire de services ne répond pas, il refuse aussi (sur un hôte
+  qui n'en a pas, posez `AGENTBUS_SERVICE_MANAGER=none`). Les clés d'un projet sont restaurées en une seule étape, tout ou rien ; des
   clés déjà présentes, ou un fichier différent, sont gardés sauf avec `--force` (qui demande
   d'abord). Les clés d'exécution (agents, services, réveils, retenues) ne sont restaurées qu'avec
   `--with-runtime` : `agentbus up <p>` les réécrit. `--dry-run` affiche l'action de chaque clé et

@@ -542,7 +542,8 @@ to watch a pane.
   `agentbus restore <archive>` checks every member against the manifest first, then refuses a
   live project (its dispatch or conductor lease held, a service active, its herdr workspace open,
   an agent's process alive: run `agentbus down <p>` and close its workspace first), even with
-  `--force`. A project's keys are restored in one step, all or nothing; keys already there, or a
+  `--force`; when the service manager cannot be asked it refuses too (on a host that runs none,
+  set `AGENTBUS_SERVICE_MANAGER=none`). A project's keys are restored in one step, all or nothing; keys already there, or a
   file that differs, are kept unless you pass `--force` (it asks first). Runtime keys (agents,
   services, wake records, holds) are not restored unless `--with-runtime`: `agentbus up <p>`
   writes them again. `--dry-run` prints each key's and file's action; `--redis-only` and

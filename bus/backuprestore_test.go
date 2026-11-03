@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // snapshotKeys is every key of project with its DUMP, to compare a
@@ -124,5 +125,45 @@ func TestRestoreProjectForce(t *testing.T) {
 	if _, err := RestoreProject(ctx, b.r, b.project, nil, []string{"other:board"}); err == nil ||
 		!strings.Contains(err.Error(), "other:board") {
 		t.Fatalf("a foreign delete: %v", err)
+	}
+}
+
+// foureyes: a forced restore whose RESTORE fails mid-way puts back every key
+// it deleted, values and TTLs, so the project is exactly as before.
+func TestRestoreProjectForcedFailureRollsBack(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { DeleteProject(ctx, b.r, b.project) })
+	keys, _ := archived(t, b)
+	b.r.HSet(ctx, BoardKey(b.project), "now", "1")
+	b.r.Set(ctx, PlanKey(b.project), "plan-now", 0)
+	b.r.Set(ctx, StreamKey(b.project, "ttl"), "x", time.Hour)
+	before := snapshotKeys(t, b, b.project)
+	present, _ := ProjectKeys(ctx, b.r, b.project)
+	bad := append(slices.Clone(keys[:1]), DumpedKey{Key: b.project + ":junk", Dump: []byte("not a dump")})
+	bad = append(bad, keys[1:]...)
+	if _, err := RestoreProject(ctx, b.r, b.project, bad, present); err == nil {
+		t.Fatal("a refused payload restored")
+	}
+	after := snapshotKeys(t, b, b.project)
+	if len(after) != len(before) {
+		t.Fatalf("keyspace %d keys, was %d", len(after), len(before))
+	}
+	for k, v := range before {
+		if after[k] != v {
+			t.Errorf("%s not put back as it was", k)
+		}
+	}
+	if ttl := b.r.PTTL(ctx, StreamKey(b.project, "ttl")).Val(); ttl <= 0 || ttl > time.Hour {
+		t.Errorf("the TTL key came back with %v", ttl)
+	}
+	// A key of the archive present and not named for deletion refuses
+	// before anything is deleted.
+	b.r.Set(ctx, b.project+":junk", "j", 0)
+	if _, err := RestoreProject(ctx, b.r, b.project, bad, []string{BoardKey(b.project)}); err == nil {
+		t.Fatal("restored over a present key")
+	}
+	if b.r.Exists(ctx, BoardKey(b.project)).Val() != 1 {
+		t.Fatal("the refusal ran after a delete")
 	}
 }

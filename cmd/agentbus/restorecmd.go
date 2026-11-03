@@ -36,7 +36,7 @@ type restoreDeps struct {
 	Getenv    func(string) string
 	Dial      func() (*redis.Client, error)
 	Herdr     func(args ...string) ([]byte, error)
-	Services  func() (service.Manager, string) // nil: no manager to ask
+	Services  func() (service.Manager, string) // the manager, or why there is none
 	ProcStart func(pid int) (uint64, error)
 	Lock      func(project string) (func(), error)
 	Stdin     io.Reader
@@ -122,15 +122,25 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 		fmt.Fprintf(errw, "restore: %v\n", err)
 		return 1
 	}
-	var mgr service.Manager
-	if d.Services != nil {
-		mgr, _ = d.Services()
+	// The services' state must be known (reviewer-codex): no manager found
+	// refuses, unless AGENTBUS_SERVICE_MANAGER=none says this host runs none.
+	mgr, noMgr := d.Services()
+	if mgr == nil && d.Getenv("AGENTBUS_SERVICE_MANAGER") != "none" {
+		noMgr = "no service manager to ask (" + noMgr + "): stop the project's services first (agentbus down <p>), " +
+			"or set AGENTBUS_SERVICE_MANAGER=none if this host runs none"
+	} else {
+		noMgr = ""
 	}
 	in := bufio.NewReader(d.Stdin)
 	rep, err := backup.Restore(ctx, args[0], o, backup.RestoreDeps{
 		Broker: restoreBroker{c},
-		Live:   func(ctx context.Context, p string) (string, error) { return projectLive(ctx, c, p, d, mgr) },
-		Lock:   d.Lock,
+		Live: func(ctx context.Context, p string) (string, error) {
+			if noMgr != "" {
+				return "", errors.New(noMgr)
+			}
+			return projectLive(ctx, c, p, d, mgr)
+		},
+		Lock: d.Lock,
 		Confirm: func(p string, keys int) bool {
 			if yes {
 				return true
