@@ -1,6 +1,6 @@
 # Suspend and resume: put a whole host's team to sleep, and bring it back
 
-Status: spec, open questions in §12. Subject `suspend-spec`. Request: the person, 2026-11-03, after a
+Status: spec, answered (§12). Subject `suspend-spec`. Request: the person, 2026-11-03, after a
 reboot for OS updates that left the team to be brought back by hand: "an option to put everything on
 pause, like a snapshot, to resume easily after a power cut, a crash, or simply my choice". v0.27,
 step 1 (master's plan task `suspend-spec`).
@@ -88,7 +88,7 @@ records and run as they do under a timed pause.
 One verb, `resume`, because the person's sentence is "resume": a timed pause needs only its lift, a
 suspended project needs services and agents too, and the bus record says which. A second verb
 (`unsuspend`, `wake`) would leave `resume` on a suspended project either refused (a dead end for the
-person) or doing half the job. Open question Q1.
+person) or doing half the job. Decided (§12, Q1).
 
 `suspend` and `resume --all` sit above the project-required exit (they name projects themselves, like
 `backup`); plain `resume` stays where it is. Both are writes for the identity guard (`identityGuard`):
@@ -124,7 +124,7 @@ agentbus resume --all          bring every suspended project back: services, mis
    it and the conductor redoes it at start, `Startup`).
 2. **Ask the agents to stop at a clean point**, unless `--no-wait`: every registered, non-dormant agent
    (`bus.DormantAfter`) whose effective state (`bus.EffectiveState`, the stall guard's reading) is
-   `working` gets one waking directive from the person, with an expiry of `--wait` (default 10 min).
+   `working` gets one waking directive from the person, with an expiry of `--wait` (default the setting `suspend.wait`, 10 min, §12 Q5).
    That is a new helper, `Bus.HumanCmdTTL`: `HumanCmd` (`human=yes`, waking) plus `CmdNoWakeTTL`'s
    `expires_at` from Redis `TIME`, so a directive still unread when the suspend ended drains as
    expired after the resume, never as a stale order:
@@ -170,7 +170,7 @@ Without `--yes` it asks once on the terminal for the whole list (`setup.OpenTTY`
 `--yes` prints the plan and exits 2, like `start`.
 
 Agents are **left running**: idle, paused, they cost nothing, and a reboot ends them anyway. Closing
-their panes is open question Q2.
+their panes was considered and set aside (§12, Q2).
 
 ## 5. `resume` of a suspended project, in this order
 
@@ -191,7 +191,7 @@ their panes is open question Q2.
    tab or a new tab, on its `IdentSession`; nothing ever types into an existing pane. A workspace
    not open is created by `up`'s own path (`Create: true`). Pops are **not** relaunched (they are
    spawned for one piece of work; their template is not the project's): the summary names each with
-   its session and the command (`agent-spawn <role> <p> --resume <id>`) for master. Open question Q3.
+   its session and the command (`agent-spawn <role> <p> --resume <id>`) for master (§12, Q3).
 5. **Wait for proof**, bounded 90 s: each relaunched agent's verified identity, a new live pid in its
    new pane (the proof `relaunch` already waits for). On Linux only, like every verified identity; on
    macOS the agents are counted as `relaunched, not provable` and the step does not wait.
@@ -298,7 +298,7 @@ ours to stop: an agent restored into a suspended project boots, declares idle, a
   `· <reason>` as room allows), in the pause segment's place and colour; agents read `paused` as
   under any pause (`stateLook`).
 - **Key `Z`** (sleep; free on every table, `ModeShell`): one key for both, on the open project only.
-  Not suspended: a confirmation `Suspend <p>? Working agents are asked to stop (up to 10 min), then the
+  Not suspended: a confirmation `Suspend <p>? Working agents are asked to stop (up to <suspend.wait>), then the
   project is paused and its services stopped. y / n`. Suspended: `Resume <p>? Services, missing
   agents, then the pause lifted. y / n`. On `y`, busmon runs `agentbus suspend -p <p> --yes` or
   `agentbus resume --yes` as a child (as `--pick` runs `agentbus up`: busmon never starts a service
@@ -369,21 +369,25 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   argv; the header golden for a suspended project; the pause popup's first button on a suspend.
 - `TestEveryDispatchedCommandIsInTheTable` / `TestEveryFlagLiteralIsInTheTable` cover the new verbs.
 
-## 12. Open questions (one recommendation each)
+## 12. Decisions (the person's answers, 2026-11-03, through master)
 
-- **Q1. Verb.** `agentbus resume` does the full resume on a suspended project, and `resume --all` the
-  host (recommended), or a separate verb (`agentbus wake`) leaving `resume` for timed pauses only?
-- **Q2. Agents at suspend.** Leave them running, idle and paused (recommended: costs nothing, a
-  reboot ends them, and resume finds them live), or close their panes (SIGTERM, as reload) so the
-  machine is quiet and every agent comes back on its session at resume?
-- **Q3. Pops.** Not relaunched, named to master with the command (recommended: a pop is spawned for
-  one piece of work, and master decides whether it is still needed), or relaunched like boot agents?
-- **Q4. Lifting the pause with agents missing.** Never without `--partial` (recommended), or lift when
-  master alone is back, so master can re-spawn the rest itself?
-- **Q5. Wait.** 10 minutes by default for working agents to reach a clean point (recommended), a
-  setting `suspend.wait` (group Services) if the person wants another default?
-- **Q6. Automatic resume.** None (recommended: waking the team is the person's act, as suspending
-  it is), or should the workspace hook resume a suspended project when its workspace is focused?
+Every question was answered with the recommendation; none is left open.
+
+- **Q1. Verb: `resume`.** `agentbus resume` does the full resume (§5) on a suspended project and stays
+  today's verb for a timed pause; `resume --all` covers the host. No second verb.
+- **Q2. Agents are left open** at suspend: idle and paused, they cost nothing, a reboot ends them, and
+  resume finds them live. Nothing closes their panes.
+- **Q3. Pops are not relaunched.** The summary names each with its session and the command
+  (`agent-spawn <role> <p> --resume <id>`); master decides whether it is still needed.
+- **Q4. The pause is never lifted with a boot agent missing** unless the person passes `--partial`.
+- **Q5. Wait: 10 minutes by default, and a setting.** `suspend.wait` in the registry (`config/keys.go`,
+  group Services, env `AGENT_BUS_SUSPEND_WAIT`, kind Duration, default 10 min, read by `suspend`,
+  `fileDuration`; `0` = do not wait, the same as `--no-wait`); `--wait` on the command line wins.
+  It shows on busmon's C page with the other Services keys, and the `Z` confirmation names its value.
+  Its test: the registry's own tests (group held, env literal only in the registry) plus `suspend`
+  reading `--wait`, then the env, then config.toml, then the default.
+- **Q6. No automatic resume.** Waking the team is the person's act, as suspending it is; the workspace
+  hook only refrains from starting a suspended project's services (§8).
 
 ## 13. Out of scope
 
