@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/notify"
 )
 
@@ -252,5 +255,56 @@ func TestNotificationsTestRefusesAnAgent(t *testing.T) {
 	out.Reset()
 	if code := runNotifications(context.Background(), []string{"status"}, d, &out, &errw); code != 0 {
 		t.Fatalf("status exit %d", code)
+	}
+}
+
+// reviewer-codex, master: env -u AGENT_BUS_AGENT is no way out. A caller
+// whose process descends from a registered agent's verified pid is refused;
+// a check that cannot be made refuses too; the person's shell is allowed.
+func TestNotificationsTestRefusesAnAgentsChild(t *testing.T) {
+	for name, c := range map[string]struct {
+		caller string
+		err    error
+		code   int
+	}{
+		"agent's child": {caller: "coder", code: 1},
+		"unchecked":     {err: errors.New("broker unreachable"), code: 1},
+		"no /proc":      {err: errNoAncestry, code: 0}, // off Linux: the env rule alone
+		"person":        {code: 0},
+	} {
+		w := newNotifyWorld(t)
+		w.write(t, "notify.toml", w.notifyToml())
+		d := w.deps()
+		d.AgentCaller = func(context.Context) (string, error) { return c.caller, c.err }
+		var out, errw bytes.Buffer
+		code := runNotifications(context.Background(), []string{"test", "phone"}, d, &out, &errw)
+		if code != c.code || (c.code == 1 && len(w.got) != 0) || (c.code == 0 && len(w.got) != 1) {
+			t.Errorf("%s: exit %d %q, sent %d", name, code, errw.String(), len(w.got))
+		}
+	}
+}
+
+// The real check: this test process is the child of a process registered
+// as an agent with its verified pid and start, so it is refused; with that
+// registration gone it is the person's.
+func TestAgentAncestorFindsARegisteredParent(t *testing.T) {
+	b := notifyBus(t)
+	ctx := context.Background()
+	ppid := os.Getppid()
+	start, err := dispatch.ProcStart(ppid)
+	if err != nil {
+		t.Skip("no /proc: ancestry is Linux only")
+	}
+	if got, err := agentAncestor(ctx); err != nil || got != "" {
+		t.Fatalf("before any registration: %q %v", got, err)
+	}
+	if _, err := b.Status(ctx, "coder", "working", "x", bus.AgentIdent{PID: ppid, PIDStart: start}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := agentAncestor(ctx); err != nil || got != b.Project()+"/coder" {
+		t.Fatalf("an agent's child: %q %v", got, err)
+	}
+	if _, err := b.Status(ctx, "coder", "working", "x", bus.AgentIdent{PID: ppid, PIDStart: start + 1}); err != nil {
+		t.Fatal(err)
 	}
 }

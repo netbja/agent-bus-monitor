@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +13,9 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/notify"
 )
 
@@ -29,11 +32,63 @@ type notificationsDeps struct {
 	Now      func() time.Time
 	Hostname func() (string, error)
 	Desktop  notify.DesktopRun // nil = no notify-send on PATH
+	// AgentCaller names the registered agent this process descends from
+	// ("" = none); errNoAncestry off Linux, where the env rule alone applies.
+	AgentCaller func(ctx context.Context) (string, error)
 }
 
 func realNotificationsDeps() notificationsDeps {
 	return notificationsDeps{Getenv: os.Getenv, Now: time.Now, Hostname: os.Hostname,
-		Desktop: desktopRun(exec.LookPath, runQuiet)}
+		Desktop: desktopRun(exec.LookPath, runQuiet), AgentCaller: agentAncestor}
+}
+
+// errNoAncestry: this host has no /proc to read the caller's ancestors.
+var errNoAncestry = errors.New("no process ancestry on this host")
+
+// agentAncestor is "<project>/<agent>" for the registered agent, in any
+// project of the broker, whose verified pid and start are an ancestor of
+// this process (reviewer-codex, master: clearing AGENT_BUS_AGENT is no way
+// out of the agent refusal). The bus is no boundary against the local user:
+// an agent's process can still read notify.toml and post to its target
+// itself; this keeps the command from being an agent's easy path.
+func agentAncestor(ctx context.Context) (string, error) {
+	chain := dispatch.Ancestors(os.Getpid())
+	if len(chain) == 0 {
+		return "", errNoAncestry
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	r, err := bus.ConnectContext(ctx, "")
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+	projects, err := bus.Projects(ctx, r)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range projects {
+		b, err := bus.Open(r, p.Project)
+		if err != nil {
+			return "", err
+		}
+		snaps, err := b.Agents(ctx)
+		if err != nil {
+			return "", err
+		}
+		for _, name := range sortedAgentNames(snaps) {
+			s := snaps[name]
+			if s.PID == 0 || s.PIDStart == 0 {
+				continue // no verified identity to match
+			}
+			for _, a := range chain {
+				if a.PID == s.PID && a.Start == s.PIDStart {
+					return p.Project + "/" + name, nil
+				}
+			}
+		}
+	}
+	return "", nil
 }
 
 // desktopRun is notify-send with an urgency, bounded to 5 s; nil when it is
@@ -86,6 +141,17 @@ func notificationsTest(ctx context.Context, name string, d notificationsDeps, ou
 	if self := d.Getenv("AGENT_BUS_AGENT"); self != "" {
 		fmt.Fprintf(errw, "agentbus notifications: a test message reaches the person's phone: the person's act, not %s's (run it from your own shell, without AGENT_BUS_AGENT)\n", self)
 		return 1
+	}
+	if d.AgentCaller != nil {
+		switch caller, err := d.AgentCaller(ctx); {
+		case errors.Is(err, errNoAncestry): // off Linux: the env rule above alone
+		case err != nil:
+			fmt.Fprintln(errw, "agentbus notifications: cannot check that no agent runs this (the broker's agents):", err)
+			return 1
+		case caller != "":
+			fmt.Fprintf(errw, "agentbus notifications: a test message reaches the person's phone: the person's act, and this runs under the agent %s\n", caller)
+			return 1
+		}
 	}
 	f := notify.Load(notify.Path(d.Getenv))
 	if f.Refused != "" {

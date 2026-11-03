@@ -44,15 +44,20 @@ func (b *Bus) FencedNotifiedSent(ctx context.Context, token string, fields ...st
 	return b.fencedHash(ctx, notifiedSet, token, NotifiedKey(b.project), append([]string{""}, fields...)...)
 }
 
+// notifiedBaseline: 0 not the holder, else 1. ARGV[1] token, ARGV[2] the
+// target's _target|<target> field (Redis TIME), then the fields recorded as
+// "baseline": one script, so a baseline is never half taken (foureyes).
+var notifiedBaseline = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+for i = 3, #ARGV do redis.call('HSET', KEYS[2], ARGV[i], 'baseline') end
+local t = redis.call('TIME')
+redis.call('HSET', KEYS[2], ARGV[2], tostring(tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)))
+return 1`)
+
 // FencedNotifiedBaseline takes target's baseline: fields recorded as
-// "baseline", then _target|<target>, in one script.
+// "baseline" and _target|<target> set, in one script.
 func (b *Bus) FencedNotifiedBaseline(ctx context.Context, token, target string, fields ...string) error {
-	if len(fields) > 0 {
-		if err := b.fencedHash(ctx, notifiedSet, token, NotifiedKey(b.project), append([]string{"baseline"}, fields...)...); err != nil {
-			return err
-		}
-	}
-	return b.fencedHash(ctx, notifiedSet, token, NotifiedKey(b.project), "", "_target|"+target)
+	return b.fencedHash(ctx, notifiedBaseline, token, NotifiedKey(b.project), append([]string{"_target|" + target}, fields...)...)
 }
 
 // FencedNotifiedDel deletes fields (a fact or a target gone).

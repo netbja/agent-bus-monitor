@@ -81,7 +81,9 @@ read. An **absent** source is not a failed read: no plan loaded, observation off
 plan notifies like any other (foureyes). A read fails only on an error from the broker or a value
 that does not parse. Each pass records the sources it could not read in `notify-last.json` (per
 project, the source and since when), which the health check reads. So turning `notify.on` on, or adding a target, never floods a phone with the notices,
-asks and fails already standing (they are in busmon). The same holds for every kind, `blocked`
+asks and fails already standing (they are in busmon). A kind turned on later in `notify.events` is
+the one exception, accepted: its episodes from before the target's baseline were recorded then, but
+those that began since have no field and are sent once, since they still hold. The same holds for every kind, `blocked`
 included. When `notify.on` turns false the pass deletes the whole hash; when a target leaves
 `notify.targets` it deletes that target's fields: turning either back on takes a new baseline.
 
@@ -275,8 +277,13 @@ agentbus notifications test [<target>]   # one test message now, to one target o
 
 `notifications` (not `notify`, which is the bus command). Both sit above the project-required exit
 and need no broker. `test` sends "agentbus: a test message from <host>", records the outcome, and
-prints `ok` or the short error; it is the person's act, never an agent's (the shipped tool rules
-deny `Bash(agentbus notifications test*)` to every role: a test reaches a phone).
+prints `ok` or the short error; it is the person's act, never an agent's: the shipped tool rules
+deny `Bash(agentbus notifications test*)` to every role (no wildcard before the words, which would
+deny any message mentioning them), and the command itself refuses a caller with `AGENT_BUS_AGENT`
+set, or whose process descends from a registered agent's verified pid and start in any project of
+the broker (Linux `/proc`; a broker it cannot read refuses; off Linux the variable alone).
+Residual, as everywhere on the bus: no boundary against the local user, so an agent's own process
+can still read `notify.toml` and post to its target without this command.
 
 ## Health
 
