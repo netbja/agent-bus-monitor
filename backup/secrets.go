@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 )
 
@@ -103,11 +104,21 @@ func writeSecretsTar(w io.Writer, srcs []Source) error {
 	return tw.Close()
 }
 
+// secretName: a member secrets.age may hold, as Secrets names them.
+func secretName(name string) bool {
+	if name == "redis.env" {
+		return true
+	}
+	p, ok := strings.CutPrefix(name, "services/")
+	return ok && strings.HasSuffix(p, ".env") && bus.ValidName(strings.TrimSuffix(p, ".env"))
+}
+
 // OpenSecrets decrypts a secrets.age body with `age -d -i <identity>` (the
 // person's key file, which agentbus passes to age and never reads), reads
-// every secret whole first (each one its tar header's size, none over
-// secretMax: a secret is refused, never cut), and only then hands each to fn
-// by its member name, so a refusal hands over nothing.
+// every secret whole first (each a regular file named as Secrets names them,
+// its tar header's size, none over secretMax: a secret is refused, never cut
+// nor taken from a link; reviewer-codex), and only then hands each to fn by
+// its member name, so a refusal hands over nothing.
 func OpenSecrets(ctx context.Context, age, identity string, sealed io.Reader, fn func(name string, body []byte) error) error {
 	cmd := exec.CommandContext(ctx, age, "-d", "-i", identity)
 	var stderr bytes.Buffer
@@ -133,6 +144,10 @@ func OpenSecrets(ctx context.Context, age, identity string, sealed io.Reader, fn
 		}
 		if err != nil {
 			rerr = fmt.Errorf("secrets: %w", err)
+			break
+		}
+		if hdr.Typeflag != tar.TypeReg || !secretName(hdr.Name) {
+			rerr = fmt.Errorf("secret %q: not a regular file named redis.env or services/<project>.env: refused, nothing restored", hdr.Name)
 			break
 		}
 		if hdr.Size > secretMax {

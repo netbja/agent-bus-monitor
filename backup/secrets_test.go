@@ -263,3 +263,44 @@ func writeSecretsTarNoCap(t *testing.T, w io.Writer, files map[string][]byte) {
 	}
 	tw.Close()
 }
+
+// reviewer-codex: a secrets tar holding anything but regular files named
+// redis.env or services/<project>.env is refused whole before any is
+// handed over, so --force can never write an empty or foreign secret.
+func TestOpenSecretsRefusesUnexpectedEntries(t *testing.T) {
+	age, _ := fakeAge(t)
+	identity := filepath.Join(t.TempDir(), "key.txt")
+	os.WriteFile(identity, []byte("k"), 0o600)
+	for name, hdrs := range map[string][]tar.Header{
+		"a symlink":      {{Name: "redis.env", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"}},
+		"a hard link":    {{Name: "redis.env", Typeflag: tar.TypeLink, Linkname: "x"}},
+		"a directory":    {{Name: "services/", Typeflag: tar.TypeDir, Mode: 0o700}},
+		"a device":       {{Name: "redis.env", Typeflag: tar.TypeChar}},
+		"a foreign name": {{Name: "../.bashrc", Typeflag: tar.TypeReg, Size: 1}},
+		"a bad project":  {{Name: "services/Bad.env", Typeflag: tar.TypeReg, Size: 1}},
+		"after a good one": {{Name: "redis.env", Typeflag: tar.TypeReg, Size: 1},
+			{Name: "services/demo.env", Typeflag: tar.TypeSymlink, Linkname: "/x"}},
+	} {
+		var buf bytes.Buffer
+		tw := tar.NewWriter(&buf)
+		for _, h := range hdrs {
+			h.Mode = 0o600
+			tw.WriteHeader(&h)
+			if h.Size > 0 {
+				tw.Write([]byte("x"))
+			}
+		}
+		tw.Close()
+		cmd := exec.Command(age, "-r", testRecipient)
+		cmd.Stdin = &buf
+		sealed, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		called := 0
+		err = OpenSecrets(context.Background(), age, identity, bytes.NewReader(sealed), func(string, []byte) error { called++; return nil })
+		if err == nil || called != 0 {
+			t.Errorf("%s: err %v, %d handed over", name, err, called)
+		}
+	}
+}

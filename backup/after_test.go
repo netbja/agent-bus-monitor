@@ -144,3 +144,32 @@ func TestAfterRecord(t *testing.T) {
 		t.Fatalf("an absent record: %v", err)
 	}
 }
+
+// foureyes: a command that exits 0 but leaves a child holding its output
+// (an ssh ControlMaster left by rsync or restic) is ok, judged by its own
+// exit once WaitDelay has passed, and the child is left alone.
+func TestRunAfterExitsWithAChildHoldingItsOutput(t *testing.T) {
+	pids := filepath.Join(t.TempDir(), "pids")
+	bin := script(t, "mux", "sleep 3 &\necho $! > "+pids+"\nexit 0\n")
+	s := afterSpec(t, bin)
+	s.Timeout, s.WaitDelay = 10*time.Second, 200*time.Millisecond
+	start := time.Now()
+	res := RunAfter(context.Background(), s)
+	if res.Outcome != "ok" || res.Exit != 0 {
+		t.Fatalf("outcome %+v", res)
+	}
+	if took := time.Since(start); took > 2*time.Second {
+		t.Fatalf("waited %v for a child that holds the output", took)
+	}
+	b, _ := os.ReadFile(pids)
+	if child, _ := strconv.Atoi(strings.TrimSpace(string(b))); child > 0 && syscall.Kill(child, 0) != nil {
+		t.Fatal("the persisting child was killed after a normal exit")
+	}
+	// The same with a failing exit: judged by the command's code.
+	bin = script(t, "mux3", "sleep 3 &\nexit 3\n")
+	s = afterSpec(t, bin)
+	s.Timeout, s.WaitDelay = 10*time.Second, 200*time.Millisecond
+	if res := RunAfter(context.Background(), s); res.Outcome != "exit 3" {
+		t.Fatalf("outcome %+v", res)
+	}
+}

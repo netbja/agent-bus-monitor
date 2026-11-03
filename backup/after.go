@@ -32,7 +32,11 @@ type AfterSpec struct {
 	Allow     []string      // backup.after_env: names kept despite looking secret
 	Timeout   time.Duration // backup.after_timeout
 	Grace     time.Duration // SIGTERM to SIGKILL (10 s)
-	Log       io.Writer     // its output, at most afterLogMax, each line redacted
+	// WaitDelay is how long the output is read after the command exits
+	// (5 s): a child it leaves holding its output (an ssh ControlMaster
+	// left by rsync or restic) never makes it a timeout (foureyes).
+	WaitDelay time.Duration
+	Log       io.Writer // its output, at most afterLogMax, each line redacted
 }
 
 // AfterOutcome is how the command ended: "ok", "exit N", "timeout" or "not
@@ -59,6 +63,10 @@ func RunAfter(ctx context.Context, s AfterSpec) AfterOutcome {
 	cmd.Dir = s.Dir
 	cmd.Env = afterEnv(s)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.WaitDelay = s.WaitDelay
+	if cmd.WaitDelay <= 0 {
+		cmd.WaitDelay = 5 * time.Second
+	}
 	out := &cappedLog{max: afterLogMax}
 	cmd.Stdout, cmd.Stderr = out, out
 	if err := cmd.Start(); err != nil {
@@ -88,15 +96,26 @@ func RunAfter(ctx context.Context, s AfterSpec) AfterOutcome {
 	if res.Outcome == "timeout" {
 		return res
 	}
+	// Judged by the command's own exit: ErrWaitDelay only says a child kept
+	// its output open, and that child is left alone.
 	var ee *exec.ExitError
 	switch {
-	case werr == nil:
-		res.Outcome, res.Exit = "ok", 0
 	case errors.As(werr, &ee):
 		res.Exit = ee.ExitCode()
-		res.Outcome = "exit " + strconv.Itoa(res.Exit)
+	case werr == nil || errors.Is(werr, exec.ErrWaitDelay):
+		if cmd.ProcessState == nil {
+			res.Outcome = "not started"
+			return res
+		}
+		res.Exit = cmd.ProcessState.ExitCode()
 	default:
 		res.Outcome = "not started"
+		return res
+	}
+	if res.Exit == 0 {
+		res.Outcome = "ok"
+	} else {
+		res.Outcome = "exit " + strconv.Itoa(res.Exit)
 	}
 	return res
 }

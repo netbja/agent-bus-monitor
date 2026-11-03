@@ -305,3 +305,39 @@ func TestSettingsPageIcons(t *testing.T) {
 		t.Fatalf("icons back: %q %q", configText(t, getenv), m.cfg.settings.Icons)
 	}
 }
+
+// backup spec, "A person's setting only": the C page shows the three
+// backup.after_* keys read-only, Enter says to edit config.toml yourself,
+// d offers nothing, and the file is never touched.
+func TestSettingsPageShowsAfterKeysReadOnly(t *testing.T) {
+	getenv := settingsEnv(t, "[backup]\nafter_command = \"restic backup /b\"\nafter_env = [\"RESTIC_PASSWORD_FILE\"]\n", "",
+		map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	groups := settingsGroups(getenv, settingsFlags{}, settingsPageGroups)
+	for _, key := range []string{"backup.after_command", "backup.after_env", "backup.after_timeout"} {
+		r := settingRowOf(t, groups, key)
+		if r.Editable {
+			t.Errorf("%s is editable on the page", key)
+		}
+	}
+	if r := settingRowOf(t, groups, "backup.after_command"); r.Value != "restic backup /b" || r.Source != "config.toml" {
+		t.Fatalf("row %+v", r)
+	}
+	for _, g := range groups {
+		for _, r := range g.Rows {
+			if g.Group == config.GroupBackup && !strings.HasPrefix(r.Key, "backup.after_") {
+				t.Errorf("the page shows %s: only the after_* keys are asked for", r.Key)
+			}
+		}
+	}
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	before := configText(t, getenv)
+	m = press(t, selectSetting(t, m, "backup.after_command"), tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(m.ui.flash, "edit config.toml yourself") || configText(t, getenv) != before {
+		t.Fatalf("Enter: flash %q", m.ui.flash)
+	}
+	m = press(t, m, 'd')
+	if m.rd.top().set.confirm != "" || configText(t, getenv) != before {
+		t.Fatal("d offered to unset a person's own setting")
+	}
+}

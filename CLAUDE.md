@@ -1039,7 +1039,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   due judged again under it, then `makeArchive` (the same as by hand, `Scheduled`: `AGENTBUS_BACKUP_SCHEDULED=1`);
   secrets only with `backup.age_recipient`, without `age` the archive is made without them and `SecretsError`
   recorded; `backup-last.json`'s `scheduled` part (`RecordScheduled`) is written only by the chore. `agentbus backup`
-  warns about a defaulted `backup.dir` while `daily` is on.
+  warns about a defaulted `backup.dir` while `daily` is on. busmon's C page shows the three `backup.after_*` keys (Backup group, `settingOnPage`: only its
+  `PersonOnly` keys) read-only: Enter says "edit config.toml yourself", `d` offers nothing.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each
