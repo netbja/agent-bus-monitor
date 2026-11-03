@@ -313,7 +313,8 @@ func dispatchSeg(state string, compact bool) Line {
 }
 
 // budgetRole is a usage level's colour (usage-cards, the person's choice):
-// blue below 80 %, amber from 80 %, red from 95 %, before the provider limit.
+// a deep green below 80 % (RoleGauge, usage-green), amber from 80 %, red from
+// 95 %, before the provider limit.
 func budgetRole(pct float64) Role {
 	switch {
 	case pct >= 95:
@@ -321,7 +322,7 @@ func budgetRole(pct float64) Role {
 	case pct >= 80:
 		return RoleAttention
 	}
-	return RoleAccent
+	return RoleGauge
 }
 
 // budgetSeg is one provider's USED share of its account windows: gauges in
