@@ -6,63 +6,29 @@ release exists.
 
 ## Unreleased
 
-- `agentbus config [--project <p>] [--json]`: each setting's value and where it comes from (env,
-  `config.toml`, `busmon.toml`, default), the files found, the connection as facts only (never a
-  password or a URL) and every warning; `--project` adds what that project's services see, marking a
-  value frozen into its env file by `agentbus up`. Read-only, no broker.
-- The project services and the writers read `config.toml` too, below the environment, each with its
-  own rule unchanged: `[dispatch]` `context_alert`, `prompt_grace`, `quota`, `quota_warn`, `quota_hold`,
-  `quota_max_age`, `quota_long_hold`, `tokens`, `auto_clear`; `[bus]` `report_max`, `report_full_max`,
-  `verdict_max` (per writer); `[health.runaway]` `silent_after`, `context_growth`, `growth_span`,
-  `screen_repeats`, which a service could never get from the shell (`agentbus up` does not copy them).
-  A service reads the `config.toml` of the `XDG_CONFIG_HOME` its env file names, at its next start.
-  A bad value falls back to the next source and is said once: in the service's log at its start, on
-  stderr for an `agentbus` command (never the value; a service never stops over it).
-- `agentbus identity set <name>` records the name in `config.toml` (append-only, as before), and a
-  name already in `busmon.toml` no longer refuses it: the new one wins, and the command says the old one
-  is shadowed. `agentbus identity` and `agentbus up`'s default `--as` read `config.toml`, then
-  `busmon.toml`; `agentbus identity` names the file on stderr. The settings files are found through
-  `$XDG_CONFIG_HOME` or `$HOME` only when absolute, as the password file and the services already are
-  (a relative `XDG_CONFIG_HOME`, which busmon used to accept, is now ignored, as the XDG spec says).
-- busmon reads its settings from `~/.config/agentbus/config.toml` (or `$XDG_CONFIG_HOME/agentbus/`),
-  key by key above `busmon.toml`, which is still read: flag, then environment, then `config.toml`, then
-  `busmon.toml`, then the default. New key `[updates] check = false` turns the update check off, like
-  `AGENT_BUS_NO_UPDATE_CHECK=1`. A file problem is still a note, now naming the file, line and key and
-  never the value. One change: a negative `display.limit` in a file now replays all history, as the
-  flag and the environment always did, instead of falling back to 25. Nothing changes without a file.
-- Docs for the public release: a French README (`README.fr.md`), a "First run" section (name rule,
-  the client's trust dialog, busmon without a project, an empty team, the `anonymous` default sender),
-  the busmon notice line, and where pull requests go (GitHub today; GitLab, Bitbucket and a local mode
-  planned for v0.26), in the README and both operational guides.
-- busmon: a quiet line at the right end of the footer for what happened by itself while it runs: a
-  pause the dispatcher or an agent set (a quota pause in orange), the project resumed, an automatic
-  `/clear`, a reload begun, done or failed, a swap to a fallback or back, a health check worsening or
-  recovering (a fail mended with a sentinel note since shows that note, `sentinel: <note>`). One at a time, 4 s (2 s while others wait,
-  past five the rest in one `N more automatic actions (R: recap)` line), fading out over its last second
-  in true colour; no bell, no mark, no count, never the person's own act, never an ask or a message.
-  The hints give way from the right; a flash or a dialog holds it back, and one already on screen keeps the
-  time it had left.
-- `busmon` without a project now says `--project <p>` (it said `-project`) and points to `busmon --list`
-  and `busmon --pick`.
-- `agentbus up` with an invalid project name (`MyProject`) now says why it is refused and what is
-  allowed, and suggests the lowercase name with the rest of the command, instead of only its usage line.
-- `agentbus up` no longer prints bootstrap's `recall: … open it with agentbus up <p>` hint, which told the
-  person to run the command they had just run (`bootstrap recall` run by hand still prints it).
-- `agentbus agents` on a project no agent has joined yet says so instead of printing nothing.
-- busmon: `←` and `→` step the lower panel's tabs (Activity, Board, Requests, Plan) while one of them
-  has the focus, wrapping as herdr's tabs do; on an opened page they still step its list. `w` with no
-  question open opens the compose window to master (with one open it still opens it, as `!` does).
-- The CLI's default sender, when `AGENT_BUS_AGENT` is unset, is now `anonymous` (it was a
-  different built-in name).
-  The same rules apply: refused as a writer inside a herdr pane. Entries already on a bus keep the
-  sender they were written with; nothing migrates.
-- `agentbus up` right after a fresh `docker compose up` no longer fails with `marking
-  <p>:services: LOADING`: it waits for the broker to answer PING (up to 10 s, only while it is
-  loading its data or refusing connections) before marking the project's services.
-- `herdr plugin install netbja/agent-bus-monitor` (what herdr's plugin list offers) now stops at
-  the plugin's build step with how to install from a clone (`./setup.sh install`), and installs
-  nothing. Before, it registered a plugin whose binaries did not exist. `herdr plugin link`, which
-  setup uses, is unchanged.
+## v0.26.0 — one settings file, a team that notices it has stalled, history, backups and notifications
+
+- Public release groundwork: MIT licence, a random Redis password on a fresh install
+  (`./setup.sh rotate-redis-password` for an older one), `anonymous` as the default sender, a
+  machine with no agent CLI handled, first-run fixes, a French README.
+- One settings file, `~/.config/agentbus/config.toml`, read by busmon, the services and the writers
+  below the environment; `agentbus config` shows each value and its source; a skipped environment
+  value is now warned for every key; busmon's settings page `C` edits it.
+- busmon: one list pattern for Health, Requests, Tokens, the recap and For you; the notice line;
+  usage cards on `U`; icons (off by default); compose selection and image paste; fixes to the
+  reminder, report notices, replaced asks and Backspace lag.
+- The stall guard (`team-stall`, `clear-stall`, `quiet-agent`) and chain reliability; automatic
+  agent state from Claude Code, Codex and Grok turn hooks.
+- History: an archive of the streams, `agentbus history` and busmon's `H` page. Health `github`,
+  `disk`, `llm-endpoint`.
+- `agentbus start`; `agentbus deliver` (GitHub, GitLab, Bitbucket, local); `agentbus backup` /
+  `restore` (zstd, `age` secrets, daily schedule, `after_command`); notifications to ntfy, Discord
+  and the desktop (off by default); `agentbus peer`, a local model as a read-only test peer.
+- Automatic `/clear` after a hand-off is on by default; pop roles retire themselves.
+- Known: health `backup` warns for a project never backed up until its first archive; the
+  `--secrets` path was not exercised live (no `age` on the release host).
+
+[Notes](docs/releases/v0.26.0.md)
 
 ## v0.24.0 — the installer in Go by default, busmon's pages read better, reloads checked first
 
