@@ -94,9 +94,29 @@ left in-flight reservations crossing it. The smaller design closes the same race
 |---|---|
 | dormant (`bus.DormantAfter`, as the stall guard reads it) | ignored |
 | its verified process proved gone (`dispatch.ProcGone`: `ErrNoProcess`, a pid readable `/proc` lists no more, a recycled pid) | ignored, recorded `gone` (a dead agent left `working` never blocks, reviewer-codex) |
-| a wake record in state `prompting` | busy (`wake in flight`) until it is `prompted` or older than the prompt budget, then read as `prompted` |
-| a wake record `prompted` at `T` | busy (`woken, turn not seen ending`) until a declaration or auto-state flip to a non-working state after `T`, or a pane inspection taken after `T` that sees it ready and not busy |
+| a wake record in state `prompting` | busy (`wake in flight`), **never released by age** (reviewer-codex: a dispatcher held between its reservation and its prompt may still type): it is resolved only by evidence that no late prompt remains possible, which gives its boundary `B` (below) |
+| a wake record `prompted` or `unobserved` (the input may have been sent even when its marker was not seen) | busy (`woken, turn not seen ending`) until evidence later than its boundary `B` |
 | otherwise | `bus.EffectiveState(snapshot, obs, now, turn_stale_after)` with `obs` an `Observation` built from the suspend's **own** pane inspection of this round (read-only, `Runtime.Inspect` on the verified pane, `since` the first round that saw that state): `working` = busy; a stale auto-state flip with the pane seen ready reads idle (foureyes), as everywhere else |
+
+**The boundary `B`** of a wake is never the record's `At` (the reservation's time, which a prompt
+typed later does not move). It is the first moment the suspend has proof that the wake's input can no
+longer arrive later:
+
+- the suspend's own read (Redis `TIME`) that first finds the record out of `prompting`, in `prompted`,
+  `unobserved` or any later state: the dispatcher has returned from its prompt; or
+- the moment the suspend proves the dispatcher gone: the dispatch service read inactive by the
+  service manager **and** `{p}:dispatch` absent (the lease lapses within its `PX 15000` once the
+  process has exited), both read after the pause. No process of ours can type into a pane then.
+
+After `B`, the wake counts as answered only by a declaration or auto-state flip to a non-working
+state whose time is later than `B`, or by own pane inspections taken at or after `B + settle`
+(`settle` = 5 s, longer than a client's turn start after its input) that see the pane ready and not
+busy in two consecutive rounds. A `prompting` record with the dispatcher alive and holding stays busy
+until the timeout: the suspend then cancels, or `--force` goes on (the residual it accepts).
+
+To reach the second proof quickly, the suspend stops the **dispatch** service right after the pause
+(§4.1 step 2): a paused dispatcher wakes nobody anyway, and once it has exited no wake reserved
+before the pause can still be typed. Missions stops with the rest at the end.
 
 The suspend inspects the panes itself because a paused dispatcher no longer observes them; when herdr
 cannot be reached, the inspection is absent and `EffectiveState` reads the snapshot alone, said in the
@@ -178,11 +198,17 @@ agentbus resume --all          bring every suspended project back: services, mis
    `down` already interrupts it and the conductor redoes it at start, `Startup`).
 2. **Pause**: read the service manager's state of each installed kind, then `Bus.Suspend` (§3) with
    it as `Services`. From here the dispatcher reserves no wake (§3.1) and the restart intent is on the
-   bus, before anything is stopped.
+   bus, before anything is stopped. Then stop the **dispatch** service at once (`Manager.Stop`), so a
+   wake reserved before the pause can no longer be typed (§3.1, the boundary `B`); with no service
+   manager (tab mode) the dispatcher keeps running, and a `prompting` record resolves only when it
+   leaves that state.
 3. **Wait for quiet** (§3.1), re-reading every 2 s, at most `--wait` (default the setting
    `suspend.wait`, 10 min, §12 Q5; `--no-wait` and `suspend.wait = 0` mean a wait of zero: one
    round, then the same decision as a timeout, so they never skip step 2 nor the rule below,
-   reviewer-codex). Each round prints the agents still busy and why (`coder: working (pane busy)`,
+   reviewer-codex). A zero wait cannot see quiet when evidence needs time: a stale auto-state flip
+   reads idle only after `dispatch.turn_stale_after` (2 min) of rounds seeing its pane ready, and a
+   wake needs `B + settle`; such an agent makes a zero-wait suspend cancel unless `--force`
+   (foureyes). Each round prints the agents still busy and why (`coder: working (pane busy)`,
    `master: wake in flight`).
 
    On timeout: without `--force`, `Bus.SuspendCancel`, exit 1, naming each agent still busy and since
@@ -191,7 +217,7 @@ agentbus resume --all          bring every suspended project back: services, mis
    turn is cut if the machine goes down (the residual `--force` accepts, said on the terminal).
 4. **Read the snapshot's facts** (§6) from the bus, herdr (if reachable) and the service manager.
 5. **Stop the services** through the service manager (`Manager.Stop`, as `down` does), each kind the
-   record's `Services` marks active (or found active now). No service manager (tab mode): say
+   record's `Services` marks active (or found active now) and not already stopped at step 2. No service manager (tab mode): say
    `dispatch and missions run as herdr tabs: they stay; paused, they wake nobody`.
 6. **Write the snapshot** (§6), its `services` copied from the record, then print one line per
    project: `suspended (N agents, M open items); services stopped; snapshot <path>`.
@@ -415,12 +441,19 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   `prompt` path with its hooks: a pass that read the project before the pause and reaches
   `ReserveWake` after it reserves nothing and types nothing; a pass stopped at `afterReserve` (the
   reservation written, the prompt not sent) while the pause is written: the suspend reads
-  `prompting`, stays busy, and stays busy after the prompt is typed until the turn is seen ending;
+  `prompting` and stays busy **past the prompt budget** while the dispatcher holds there with its
+  lease alive and the pane still ready (no release by age); released, the prompt is typed and the
+  suspend stays busy until evidence later than `B` (the turn seen starting then ending); the same with
+  the dispatcher stopped instead of released: `B` is the proof it is gone, and a prompt it typed just
+  before exiting is caught by the inspections after `B + settle`; a prompt sent whose marker is not
+  seen (`unobserved`) is busy like `prompted`; a non-working declaration between the reservation and
+  the actual prompt does not end the wait (it is not later than `B`);
   a suspended project gets no wake, clear, escalation or pop retire across many passes, with the
   suspend's `Until` set in the past to prove `kind` decides.
 - `suspendQuiet` (pure, table): dormant working ignored; a gone process working ignored and recorded;
-  `prompting` busy; `prompted` busy until a later non-working declaration or flip, or a later ready
-  inspection; a stale working flip with a ready, not busy inspection is quiet (foureyes); a declared
+  `prompting` busy at any age while the dispatcher is not proved gone; `prompted` and `unobserved`
+  busy until a non-working declaration or flip later than `B`, or two ready inspections at or after
+  `B + settle`; `B` is the suspend's read or the dispatcher's proved exit, never the record's `At`; a stale working flip with a ready, not busy inspection is quiet (foureyes); a declared
   working with no inspection is busy; quiet needs two consecutive rounds.
 - `cmd/agentbus` suspend (pure `suspendPlan` + injected deps, a fake bus, herdr and manager): the
   order is services read → pause (with `Services`) → wait → read → stop → snapshot (a fake records
