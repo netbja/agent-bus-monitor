@@ -6,15 +6,15 @@
 │                                                          ┃
 │  Display  how busmon looks; theme, icons and fade apply… ┃
 │                                                          ┃
-│      Fade and slide                                ● on  ┃
-│    • Theme                                     ‹ dark ›  ┃
-│  ▶ • Icons                                     ‹ nerd ›  ┃
+│      Fade and slide            ● on                      ┃
+│    • Theme                     ‹ dark ›                  ┃
+│  ▶ • Icons                     ‹ nerd ›                  ┃
 │     off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font               ┃
-│      Activity lines at start                         25  ┃
-│      Idle? hint after                               10m  ┃
+│      Activity lines at start   25                        ┃
+│      Idle? hint after          10m                       ┃
 │                                                          │
 │  ──────────────────────────────────────────────────────  │
 │  Icons · display.icons · from config.toml (default:      │
 │  off) · read by busmon                                   ▼
 ╰──────────────────────────────────────────────────────────╯
- ↑↓ j k move   ←→ tab group   enter edit   d reset          
+ ↑↓ j k move   ←→ panel   tab focus   enter edit            

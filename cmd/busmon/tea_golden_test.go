@@ -85,7 +85,7 @@ func inState(t testing.TB, m Model, state string) Model {
 		m.cfg.getenv = settingsEnv(t, "[display]\ntheme = \"dark\"\nicons = \"nerd\"\n[waiting]\nsnooze = \"nonsense\"\n", "",
 			map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
 		m = stepCmd(t, m, tea.KeyPressMsg(tea.Key{Code: 'C', Text: "C"}))
-		return keys(t, m, kDown, kDown)
+		return keys(t, m, kEnter, kDown, kDown) // into Display's keys, then Icons
 	case "compose": // a directive to coder, two lines written
 		m = typeText(t, keys(t, m, 'I'), "@cod")
 		m = typeText(t, keys(t, m, kTab), "Review lot 1 please: the reader, the ask mode and the cache.")

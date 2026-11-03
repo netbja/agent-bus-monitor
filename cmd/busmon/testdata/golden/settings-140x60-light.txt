@@ -16,12 +16,12 @@
 ╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 19 default ──────────────────────────────────────────────────────────────── esc back ─╮
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
-│    Identity       │     Fade and slide                                                                                             ● on  │
-│    Notifications  │   • Theme                                                                                                  ‹ dark ›  │
-│    Backup         │ ▶ • Icons                                                                                                  ‹ nerd ›  │
+│    Identity       │     Fade and slide            ● on                                                                                   │
+│    Notifications  │   • Theme                     ‹ dark ›                                                                               │
+│    Backup         │ ▶ • Icons                     ‹ nerd ›                                                                               │
 │                   │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font         (what your terminal draws is what you get)                         │
-│                   │     Activity lines at start                                                                                      25  │
-│                   │     Idle? hint after                                                                                            10m  │
+│                   │     Activity lines at start   25                                                                                     │
+│                   │     Idle? hint after          10m                                                                                    │
 │                   │                                                                                                                      │
 │                   │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────  │
 │                   │ Icons · display.icons · from config.toml (default: off) · read by busmon                                             │
@@ -57,4 +57,4 @@
 │                                                                                                                                          │
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k move   ←→ tab group   enter edit   d reset   D reset group   esc q back                                                             
+ ↑↓ j k move   ←→ panel   tab focus   enter edit   d reset   D reset group   esc q back                                                     

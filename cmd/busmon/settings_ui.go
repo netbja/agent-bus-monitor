@@ -28,6 +28,7 @@ var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttenti
 type settingsPage struct {
 	groups  []settingGroup
 	group   int      // the selected group
+	keys    bool     // the focus is on the keys (else on the groups: settings-focus)
 	targets []string // notify.toml's targets under the Notifications rows
 	loaded  bool
 	edit    string   // the key being edited ("" = none)
@@ -204,24 +205,53 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 	if s.edit != "" && len(rows) > 0 {
 		return m.settingsEditKey(k, rows[p.sel])
 	}
+	side := m.readerWidth() >= settingsSideMin
+	step := func(d int) {
+		n := len(s.groups)
+		if side {
+			s.group = clamp(s.group+d, 0, n-1)
+		} else {
+			s.group = (s.group + d + n) % n
+		}
+		p.sel, p.top, s.err = 0, 0, ""
+	}
 	switch act {
 	case ActClose:
 		m.pop()
 		return nil
+	case ActFocusToggle:
+		s.keys, s.err = !s.keys, ""
+		return nil
 	case ActUp, ActDown:
+		d := 1
 		if act == ActUp {
-			p.sel--
-		} else {
-			p.sel++
+			d = -1
 		}
-		p.sel, s.err = clamp(p.sel, 0, max(0, len(rows)-1)), ""
+		switch {
+		case !s.keys && side:
+			step(d)
+		case !s.keys && act == ActDown: // the tab bar: ↓ into its keys
+			s.keys = true
+		case !s.keys:
+		case act == ActUp && p.sel == 0 && !side: // ↑ on the first key: back to the tabs
+			s.keys = false
+		default:
+			p.sel, s.err = clamp(p.sel+d, 0, max(0, len(rows)-1)), ""
+		}
 		return nil
 	case ActGroupNext, ActGroupPrev:
-		step := 1
-		if act == ActGroupPrev {
-			step = len(s.groups) - 1
+		switch {
+		case s.keys && act == ActGroupPrev:
+			s.keys, s.err = false, ""
+		case s.keys:
+		case side && act == ActGroupNext:
+			s.keys = true
+		case side:
+		case act == ActGroupNext:
+			step(1)
+		default:
+			step(-1)
 		}
-		s.group, p.sel, p.top, s.err = (s.group+step)%len(s.groups), 0, 0, ""
 		return nil
 	case ActResetGroup:
 		keys, kept := settingsResettable(s.groups[s.group])
@@ -230,6 +260,12 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 		s.reset = keys
+		return nil
+	}
+	if !s.keys { // enter on a group goes to its keys; d waits for a key
+		if act == ActOpen {
+			s.keys = true
+		}
 		return nil
 	}
 	if len(rows) == 0 {
@@ -480,7 +516,7 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 		for i := 0; i < max(len(right), len(s.groups)); i++ {
 			l := Line{}
 			if i < len(s.groups) {
-				l = append(l, settingsSideRow(s.groups[i].Group, i == s.group)...)
+				l = append(l, settingsSideRow(s.groups[i].Group, i == s.group, !s.keys)...)
 			}
 			l = FitLine(l, settingsSideW)
 			l = append(l, S(RoleText, strings.Repeat(" ", settingsSideW-l.Width())), S(RoleLine, glyphVertical))
@@ -490,7 +526,7 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 			lines = append(lines, FitLine(l, width))
 		}
 	} else {
-		lines = append(lines, FitLine(settingsTabs(s.groups, s.group, width), width), Line{})
+		lines = append(lines, FitLine(settingsTabs(s.groups, s.group, width, !s.keys), width), Line{})
 		selLine += 2
 		for _, l := range right {
 			lines = append(lines, FitLine(l, width))
@@ -500,23 +536,32 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 	return lines
 }
 
-// settingsSideRow is a group in the sidebar: the selected one marked and in
-// the accent, bold; the others muted.
-func settingsSideRow(g config.Group, selected bool) Line {
-	if selected {
+// settingsSideRow is a group in the sidebar: the selected one marked, in the
+// accent and bold while the groups have the focus, plain text when the keys
+// have it (still seen, no longer lit); the others muted.
+func settingsSideRow(g config.Group, selected, focused bool) Line {
+	switch {
+	case selected && focused:
 		return Line{S(RoleAccent, " "+GlyphPrompt+" "), {Text: string(g), Role: RoleAccent, Bold: true}}
+	case selected:
+		return Line{S(RoleMuted, " "+GlyphPrompt+" "), S(RoleText, string(g))}
 	}
 	return Line{S(RoleMuted, "   "+string(g))}
 }
 
 // settingsTabs is the groups as the lower panel's tab bar draws its tabs
-// (tabBar's blocks): the selected one a pill, the others grey; on a page too
-// narrow for them all, those farthest from the selected one give way to an
-// ellipsis on their side.
-func settingsTabs(groups []settingGroup, active, width int) Line {
+// (tabBar's blocks): the selected one a pill, dimmed with the frame's fade
+// while the keys have the focus, as an unfocused panel's tab is; the others
+// grey; on a page too narrow for them all, those farthest from the selected
+// one give way to an ellipsis on their side.
+func settingsTabs(groups []settingGroup, active, width int, focused bool) Line {
 	block := func(i int) Seg {
 		if i == active {
-			return Seg{Text: " " + string(groups[i].Group) + " ", Role: RoleAccent, Bold: true, Pill: true, Tab: true}
+			fade := 0
+			if !focused {
+				fade = frameFade
+			}
+			return Seg{Text: " " + string(groups[i].Group) + " ", Role: RoleAccent, Bold: true, Pill: true, Fade: fade, Tab: true}
 		}
 		return Seg{Text: " " + string(groups[i].Group) + " ", Role: RoleMuted, Off: true, Tab: true}
 	}
@@ -563,11 +608,12 @@ func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
 	b.text(" ").segs(Seg{Text: string(g.Group), Role: RoleText, Bold: true}).
 		seg(RoleMuted, "  "+settingsGroupNotes[g.Group]).text("\n\n")
 	n, selLine := 2, 2
+	labelW := settingsLabelCol(g)
 	for i, r := range g.Rows {
 		if i == sel {
 			selLine = n
 		}
-		b.segs(settingsKeyRow(s, r, i == sel, width)...).text("\n")
+		b.segs(settingsKeyRow(s, r, i == sel, labelW, width)...).text("\n")
 		n++
 		if r.Key == "display.icons" {
 			b.segs(iconSample(width)...).text("\n")
@@ -622,25 +668,41 @@ func settingsResetQuestion(g settingGroup, keys []string) string {
 	return q + " (y)"
 }
 
-// settingsKeyRow is one key: the selection mark, • when config.toml sets it
-// to other than its default, its label, and its value as a control at the
-// right edge.
-func settingsKeyRow(s *settingsPage, r settingRow, selected bool, width int) Line {
+// settingsLabelCol is the group's label column: its longest label, at most
+// settingsLabelW, so the values start in one column after it
+// (busmon-detail-labels' rule, settings-focus).
+func settingsLabelCol(g settingGroup) int {
+	w := 0
+	for _, r := range g.Rows {
+		w = max(w, Width(Preview(r.Label)))
+	}
+	return min(w, settingsLabelW)
+}
+
+// settingsGutter is the cells between the label column and the values.
+const settingsGutter = 3
+
+// settingsKeyRow is one key: the selection mark (the accent while the keys
+// have the focus, muted when the groups have it), • when config.toml sets it
+// to other than its default, its label in the group's label column, then its
+// value as a control after the gutter.
+func settingsKeyRow(s *settingsPage, r settingRow, selected bool, labelW, width int) Line {
 	l := Line{S(RoleText, " ")}
-	l = append(l, planMark(selected)...)
+	switch {
+	case selected && s.keys:
+		l = append(l, planMark(true)...)
+	case selected:
+		l = append(l, S(RoleMuted, GlyphSelect), S(RoleText, " "))
+	default:
+		l = append(l, planMark(false)...)
+	}
 	if r.Set {
 		l = append(l, S(RoleAccent, GlyphSet+" "))
 	} else {
 		l = append(l, S(RoleText, "  "))
 	}
-	value := settingControl(s, r)
-	room := width - l.Width() - value.Width() - 2
-	label := Fit(Preview(r.Label), max(0, min(settingsLabelW, room)))
-	l = append(l, S(RoleText, label))
-	if gap := width - l.Width() - value.Width() - 1; gap > 0 {
-		l = append(l, S(RoleText, strings.Repeat(" ", gap)))
-	}
-	return append(append(l, value...), S(RoleText, " ")) // one blank cell before the edge
+	l = append(l, S(RoleText, Fit(Preview(r.Label), labelW)), S(RoleText, strings.Repeat(" ", settingsGutter)))
+	return FitLine(append(l, settingControl(s, r)...), width)
 }
 
 // settingControl is a row's value as a control: on/off a dot (on in the ok

@@ -138,7 +138,7 @@ func selectSetting(t *testing.T, m Model, key string) Model {
 	for g, grp := range p.set.groups {
 		for i, r := range grp.Rows {
 			if r.Key == key {
-				p.set.group, p.sel, p.dirty = g, i, true
+				p.set.group, p.set.keys, p.sel, p.dirty = g, true, i, true
 				m.refresh()
 				return m
 			}
@@ -505,14 +505,36 @@ func TestSettingsControls(t *testing.T) {
 		t.Fatalf("refused value not in the attention colour: %+v", c)
 	}
 	marked := func(key string) bool {
-		return strings.Contains(settingsKeyRow(s, settingRowOf(t, groups, key), false, 80).text(), GlyphSet)
+		return strings.Contains(settingsKeyRow(s, settingRowOf(t, groups, key), false, 26, 80).text(), GlyphSet)
 	}
 	if !marked("display.theme") || !marked("waiting.fade") || marked("waiting.bell") || marked("display.icons") {
 		t.Fatalf("marks: theme %v fade %v bell %v icons %v", marked("display.theme"), marked("waiting.fade"), marked("waiting.bell"), marked("display.icons"))
 	}
-	row := settingsKeyRow(s, settingRowOf(t, groups, "display.theme"), true, 80)
-	if row.Width() != 80 || !strings.HasSuffix(row.text(), GlyphChoiceR+" ") {
-		t.Fatalf("the value is not at the right edge: %q (%d)", row.text(), row.Width())
+	// settings-focus: the values start in one column, the group's longest
+	// label plus the gutter, never pushed to the right edge.
+	var display settingGroup
+	for _, g := range groups {
+		if g.Group == config.GroupDisplay {
+			display = g
+		}
+	}
+	labelW := settingsLabelCol(display)
+	if labelW != Width("Activity lines at start") {
+		t.Fatalf("label column %d", labelW)
+	}
+	col := -1
+	for _, r := range display.Rows {
+		row := settingsKeyRow(s, r, false, labelW, 120).text()
+		v := Width(row[:strings.Index(row, settingControl(s, r).text())]) // in cells
+		if col < 0 {
+			col = v
+		}
+		if v != col {
+			t.Fatalf("%s: value at cell %d, want %d (%q)", r.Key, v, col, row)
+		}
+	}
+	if want := 1 + 2 + 2 + labelW + settingsGutter; col != want {
+		t.Fatalf("value column %d, want %d", col, want)
 	}
 	detail := tokLinesText(wrapSpans(settingsDetail(settingRowOf(t, groups, "display.theme")), 200, "", ""))
 	for _, w := range []string{"Theme", "display.theme", "from config.toml", "(default: auto)", "read by busmon"} {
@@ -522,47 +544,150 @@ func TestSettingsControls(t *testing.T) {
 	}
 }
 
-// The keys: ←→ and tab step the groups, wrapping, and the selection starts
-// at the group's first key; on an open choice ←→ change its value and leave
-// the group alone; the footer advertises the page's own keys.
+// settings-focus, the person's rule: the focus is on the groups or on the
+// keys. Wide: ↑↓ choose the group (its keys follow), → or enter go to its
+// keys, ← back, tab toggles; ↑↓ then move among the keys; an open choice
+// takes ←→ for its value. The focused side is lit, the other muted. The
+// footer advertises the page's own keys.
 func TestSettingsGroupKeys(t *testing.T) {
 	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
 	var themed string
 	m := press(t, settingsShell(t, getenv, &themed), 'C')
-	if m.mode() != ModeSettings {
-		t.Fatalf("mode %v", m.mode())
+	if m.mode() != ModeSettings || m.readerWidth() < settingsSideMin {
+		t.Fatalf("mode %v width %d", m.mode(), m.readerWidth())
 	}
-	set := m.rd.top().set
-	m = press(t, m, tea.Key{Code: tea.KeyDown})
-	m = press(t, m, tea.Key{Code: tea.KeyTab})
-	if set = m.rd.top().set; set.group != 1 || m.rd.top().sel != 0 {
-		t.Fatalf("tab: group %d sel %d", set.group, m.rd.top().sel)
+	set := func() *settingsPage { return m.rd.top().set }
+	down, up := tea.Key{Code: tea.KeyDown}, tea.Key{Code: tea.KeyUp}
+	m = press(t, m, down)
+	if set().group != 1 || set().keys {
+		t.Fatalf("↓ on the groups: group %d keys %v", set().group, set().keys)
+	}
+	m = press(t, m, up)
+	m = press(t, m, up)
+	if set().group != 0 {
+		t.Fatalf("↑ stops at the first group: %d", set().group)
 	}
 	m = press(t, m, tea.Key{Code: tea.KeyRight})
-	if set = m.rd.top().set; set.group != 2 {
-		t.Fatalf("right: group %d", set.group)
+	if !set().keys || m.rd.top().sel != 0 {
+		t.Fatalf("→: keys %v sel %d", set().keys, m.rd.top().sel)
 	}
-	for range 3 {
-		m = press(t, m, tea.Key{Code: tea.KeyLeft})
+	body := m.rd.top().body
+	if c := body[0][0]; c.Role != RoleMuted || !strings.Contains(c.Text, GlyphPrompt) {
+		t.Fatalf("the selected group is not muted with the focus on the keys: %+v", body[0])
 	}
-	if set = m.rd.top().set; set.group != len(set.groups)-1 {
-		t.Fatalf("left wraps: group %d of %d", set.group, len(set.groups))
+	if markRole := func() Role {
+		for _, l := range m.rd.top().body {
+			for _, sg := range l {
+				if sg.Text == GlyphSelect {
+					return sg.Role
+				}
+			}
+		}
+		return 0
+	}(); markRole != RoleAccent {
+		t.Fatal("the selected key is not lit with the focus on the keys")
+	}
+	m = press(t, m, down)
+	if m.rd.top().sel != 1 || set().group != 0 {
+		t.Fatalf("↓ on the keys: sel %d group %d", m.rd.top().sel, set().group)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyLeft})
+	if set().keys {
+		t.Fatal("← did not go back to the groups")
+	}
+	if c := m.rd.top().body[0][0]; c.Role != RoleAccent {
+		t.Fatalf("the focused group is not lit: %+v", m.rd.top().body[0])
+	}
+	markRole := func() Role { // the selected key's ▶, wherever its line is
+		for _, l := range m.rd.top().body {
+			for _, sg := range l {
+				if sg.Text == GlyphSelect {
+					return sg.Role
+				}
+			}
+		}
+		t.Fatal("no selected key")
+		return 0
+	}
+	if markRole() != RoleMuted {
+		t.Fatal("the selected key is still lit with the focus on the groups")
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyTab})
+	if !set().keys {
+		t.Fatal("tab did not move the focus to the keys")
 	}
 	m = press(t, m, tea.Key{Code: tea.KeyTab, Mod: tea.ModShift})
-	if set = m.rd.top().set; set.group != len(set.groups)-2 {
-		t.Fatalf("shift+tab: group %d", set.group)
+	if set().keys {
+		t.Fatal("shift+tab did not move it back")
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !set().keys || m.rd.top().set.edit != "" {
+		t.Fatalf("enter on a group: keys %v edit %q", set().keys, set().edit)
 	}
 	m = selectSetting(t, m, "display.theme")
 	m = press(t, m, tea.Key{Code: tea.KeyEnter})
 	m = press(t, m, tea.Key{Code: tea.KeyRight})
-	if set = m.rd.top().set; set.group != 0 || set.edit != "display.theme" || themeChoices[set.choice] != "dark" {
-		t.Fatalf("on an open choice: group %d edit %q choice %d", set.group, set.edit, set.choice)
+	if set().group != 0 || set().edit != "display.theme" || themeChoices[set().choice] != "dark" || !set().keys {
+		t.Fatalf("on an open choice: group %d edit %q choice %d", set().group, set().edit, set().choice)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEscape})
+	m = press(t, m, 'd')
+	if set().confirm != "" {
+		t.Fatal("d offered on a default key") // nothing in the file
 	}
 	foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 200, m.pageOffers, m.pageHint).text()
-	for _, w := range []string{"group", "edit", "d reset", "D reset group", "back"} {
+	for _, w := range []string{"move", "panel", "focus", "edit", "d reset", "D reset group", "back"} {
 		if !strings.Contains(foot, w) {
 			t.Errorf("footer lacks %q: %q", w, foot)
 		}
+	}
+}
+
+// Narrow (a tab bar above the keys): ←→ step the tabs, wrapping; ↓ or enter
+// go to the keys; ↑ on the first key comes back to the tabs; ← from the keys
+// too. The tab is a pill dimmed while the keys have the focus.
+func TestSettingsGroupKeysNarrow(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	m := press(t, shellWith(t, 80, 24, shellConfig{getenv: getenv}, false), 'C')
+	if m.readerWidth() >= settingsSideMin {
+		t.Fatalf("reader %d: not narrow", m.readerWidth())
+	}
+	set := func() *settingsPage { return m.rd.top().set }
+	m = press(t, m, tea.Key{Code: tea.KeyLeft})
+	if set().group != len(set().groups)-1 || set().keys {
+		t.Fatalf("← on the tabs wraps: group %d keys %v", set().group, set().keys)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	if set().group != 1 {
+		t.Fatalf("→ on the tabs: group %d", set().group)
+	}
+	pill := func() Seg {
+		for _, s := range m.rd.top().body[0] {
+			if s.Pill {
+				return s
+			}
+		}
+		t.Fatal("no pill")
+		return Seg{}
+	}
+	if pill().Fade != 0 {
+		t.Fatal("the focused tab is dimmed")
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyDown})
+	if !set().keys || m.rd.top().sel != 0 || pill().Fade != frameFade {
+		t.Fatalf("↓ into the keys: keys %v sel %d fade %d", set().keys, m.rd.top().sel, pill().Fade)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyDown})
+	m = press(t, m, tea.Key{Code: tea.KeyUp})
+	m = press(t, m, tea.Key{Code: tea.KeyUp})
+	if set().keys {
+		t.Fatal("↑ on the first key did not come back to the tabs")
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyLeft})
+	if set().keys || set().group != 1 {
+		t.Fatalf("← from the keys: keys %v group %d", set().keys, set().group)
 	}
 }
 
@@ -619,7 +744,7 @@ func TestSettingsSelectionInView(t *testing.T) {
 	m := shellWith(t, 80, 24, shellConfig{getenv: getenv}, false)
 	m = press(t, m, 'C')
 	m = showGroup(t, m, config.GroupNotifications)
-	for range 7 {
+	for range 8 { // the first ↓ goes from the tabs to the keys
 		m = press(t, m, tea.Key{Code: tea.KeyDown})
 	}
 	p := m.rd.top()
@@ -679,6 +804,7 @@ func TestSettingsSelectionInViewNarrow(t *testing.T) {
 		t.Fatalf("reader %d cells: not the narrow layout", m.readerWidth())
 	}
 	rows := len(m.rd.top().set.rows())
+	m = press(t, m, tea.Key{Code: tea.KeyDown}) // from the tabs to the first key
 	for i := 1; i < rows; i++ {
 		m = press(t, m, tea.Key{Code: tea.KeyDown})
 		p := m.rd.top()

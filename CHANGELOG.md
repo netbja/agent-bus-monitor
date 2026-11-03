@@ -6,12 +6,15 @@ release exists.
 
 ## Unreleased
 
-## v0.26.1 — restore after a dead agent, the plugin's version
+## v0.26.1 — restore after a dead agent, the plugin's version, the settings page's focus
 
 - `agentbus restore` no longer refuses a project whose registered agent has died (a pid `/proc` no
   longer lists read as "cannot tell"); any other read error still refuses.
 - `herdr-plugin.toml` says 0.26.1 (it was left at 0.24.0 under the v0.26.0 tag). The operational
   guides say a files restore writes the roles files to the path the archived template names.
+- busmon's settings page `C` shows which side has the focus (the groups or the keys, the other muted)
+  and moves it with `←` `→` (Tab too; on a narrow page `↓` and `↑` between the tabs and the keys); the
+  values sit in one column after the labels instead of at the right edge.
 
 [Notes](docs/releases/v0.26.1.md)
 

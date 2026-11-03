@@ -90,8 +90,9 @@ const (
 	ActHistory      // open the history page (H)
 	ActOlder        // History: load the days before
 	ActLineEdit     // the line: move its cursor or delete at it (the field does it)
-	ActGroupNext    // settings (C): the next group, wrapping
-	ActGroupPrev    // settings (C): the previous group, wrapping
+	ActGroupNext    // settings (C): → into the keys (or the next tab on a narrow page)
+	ActGroupPrev    // settings (C): ← back to the groups (or the previous tab on a narrow page)
+	ActFocusToggle  // settings (C): tab moves the focus between the groups and the keys
 	ActReset        // settings (C): remove the selected key from config.toml (asks y)
 	ActResetGroup   // settings (C): remove the group's keys from config.toml (asks y)
 )
@@ -309,15 +310,19 @@ var (
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
-	// settingsBindings: the C page (settings-panels). ←→ and tab step the
-	// groups; while a choice is open (enter on it), ←→ change its value
-	// instead, as the editor takes the keys first (settings_ui.go).
+	// settingsBindings: the C page (settings-panels, settings-focus). The focus
+	// is on the groups or on the keys: on the groups ↑↓ choose one (the keys
+	// follow), → or enter go to its keys; on the keys ↑↓ move, ← goes back,
+	// enter edits. On a narrow page the groups are a tab bar: ←→ step it, ↓ or
+	// enter go to the keys, ↑ on the first key comes back. tab toggles the
+	// focus. An open choice takes ←→ for its value first (settings_ui.go).
 	settingsBindings = []binding{
-		{Keys: arrows + " j k", Hint: "move", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
+		{Keys: arrows + " j k", Hint: "move", Help: "the groups (or the keys, with the focus there); on a narrow page " + GlyphDownArrow + " from the tabs goes to the keys, " + GlyphUp + " on the first key back", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
-		{Keys: GlyphArrowL + GlyphArrowR + " tab", Hint: "group", Help: "the previous or next group; on an open choice (after enter), " + GlyphArrowL + GlyphArrowR + " change its value", Act: ActGroupNext, match: either(keyIs(keyRight), keyIs(keyTab))},
-		{Keys: GlyphArrowL, Act: ActGroupPrev, match: either(keyIs(keyLeft), keyIs(keyBacktab))},
-		{Keys: "enter", Hint: "edit", Help: "flip an on/off, open a choice or the line editor (enter writes, esc leaves the file as it is)", Act: ActOpen, match: either(keyIs(keyEnter), runeIs(' '))},
+		{Keys: GlyphArrowL + GlyphArrowR, Hint: "panel", Help: GlyphArrowR + " into the keys, " + GlyphArrowL + " back to the groups (a narrow page: they step the tabs); on an open choice they change its value", Act: ActGroupNext, match: keyIs(keyRight)},
+		{Keys: GlyphArrowL, Act: ActGroupPrev, match: keyIs(keyLeft)},
+		{Keys: "tab", Hint: "focus", Help: "move the focus between the groups and the keys", Act: ActFocusToggle, match: either(keyIs(keyTab), keyIs(keyBacktab))},
+		{Keys: "enter", Hint: "edit", Help: "on a group: go to its keys; on a key: flip an on/off, open a choice or the line editor (enter writes, esc leaves the file as it is)", Act: ActOpen, match: either(keyIs(keyEnter), runeIs(' '))},
 		{Keys: "d", Hint: "reset", Help: "remove the selected key from config.toml (y confirms): what applies next is named", Act: ActReset, match: runeIs('d')},
 		{Keys: "D", Hint: "reset group", Help: "remove every key of the group set in config.toml (y confirms); your own backup.after_* stay", Act: ActResetGroup, match: runeIs('D')},
 		{Keys: "esc q", Hint: "back", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
