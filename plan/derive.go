@@ -56,6 +56,7 @@ type Row struct {
 	State     State
 	Verdict   string // a label above, "" when the task has no review
 	PR        int
+	Ref       string // <branch>@<sha>: delivered with no PR (forge-delivery)
 	DoneAt    int64
 	Recorded  bool // done because master recorded it: a claim, shown with its age
 	Note      string
@@ -98,7 +99,8 @@ func Derive(f File, in Inputs) []Row {
 func derive(t Task, in Inputs, waitingOn []string) Row {
 	r := Row{Task: t, WaitingOn: waitingOn}
 	fact := in.Facts[t.ID]
-	r.PR, r.Note, r.LastFact = fact.PR, fact.Note, fact.At
+	r.PR, r.Ref, r.Note, r.LastFact = fact.PR, fact.Ref, fact.Note, fact.At
+	linked := fact.PR > 0 || fact.Ref != "" // a ref reads as a PR does; only a PR adds its pr:<n> subject
 	if t.Mission != "" {
 		return deriveMission(r, in)
 	}
@@ -115,7 +117,7 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		r.LastFact = max(r.LastFact, boardTime(e))
 	}
 	review, reviewed := rollUp(t, fact, in)
-	if t.Owner != Person && (reviewed || delivered(e) || e.State == "review" || fact.PR > 0) {
+	if t.Owner != Person && (reviewed || delivered(e) || e.State == "review" || linked) {
 		r.Verdict = review
 	}
 	for _, v := range subjectsVerdicts(t, fact, in) {
@@ -136,10 +138,11 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		r.State = Done
 	case ask != nil:
 		r.State, r.Ask = Waiting, ask.ID
-	// The merge is the person's only once there is a PR to merge
-	// (plan-view): approved with none linked, it stays with the team.
-	case t.MergeTask() && review == Approved && fact.PR > 0:
-		r.State, r.Reason = Waiting, "merge PR "+strconv.Itoa(fact.PR)
+	// The merge is the person's only once there is something to merge, a PR
+	// or a delivered ref (plan-view): approved with neither, it stays with
+	// the team.
+	case t.MergeTask() && review == Approved && linked:
+		r.State, r.Reason = Waiting, mergeReason(fact)
 	// The person answered and nothing is open: master records it.
 	case t.Owner == Person && answeredAsk(t.ID, in.Asks):
 		r.State = Answered
@@ -150,7 +153,7 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		if e.Request != nil {
 			r.Reason = e.Request.BlockedReason
 		}
-	case t.Owner != Person && (delivered(e) || e.State == "review" || fact.PR > 0):
+	case t.Owner != Person && (delivered(e) || e.State == "review" || linked):
 		r.State = InReview
 	case onBoard && (e.State == "accepted" || e.State == "working"):
 		r.State = InProgress
@@ -248,6 +251,23 @@ func openAsk(id string, asks []bus.Ask) *bus.Ask {
 		}
 	}
 	return nil
+}
+
+// mergeReason is what the person merges: the PR, else the delivered ref,
+// its commit shortened.
+func mergeReason(f Fact) string {
+	if f.PR > 0 {
+		return "merge PR " + strconv.Itoa(f.PR)
+	}
+	i := strings.LastIndex(f.Ref, "@") // a branch may hold @ (PlanLinkRef splits on the last)
+	if i < 0 {
+		return "merge " + f.Ref
+	}
+	branch, sha := f.Ref[:i], f.Ref[i+1:]
+	if len(sha) > 7 {
+		sha = sha[:7]
+	}
+	return "merge " + branch + "@" + sha
 }
 
 // answeredAsk: an ask about the task was answered (openAsk found none open).

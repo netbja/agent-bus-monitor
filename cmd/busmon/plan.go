@@ -345,12 +345,24 @@ func planMark(selected bool) Line {
 	return Line{S(RoleText, "  ")}
 }
 
+// planShortRef is a delivered ref, <branch>@<sha>, its sha cut to 7.
+func planShortRef(ref string) string {
+	if i := strings.LastIndex(ref, "@"); i >= 0 && len(ref)-i-1 > 7 { // the sha follows the last "@"
+		branch, sha := ref[:i], ref[i+1:]
+		return Preview(branch) + "@" + sha[:7]
+	}
+	return Preview(ref)
+}
+
 // planRowDetails: PR, verdict, the done label, why blocked, what it waits on,
 // the ask, quiet, the note.
 func planRowDetails(r plan.Row, now time.Time) string {
 	var parts []string
 	if r.PR > 0 {
 		parts = append(parts, fmt.Sprintf("#%d", r.PR))
+	}
+	if r.Ref != "" {
+		parts = append(parts, "ref "+planShortRef(r.Ref))
 	}
 	if r.Verdict != "" && r.State != plan.Done {
 		parts = append(parts, r.Verdict)
@@ -422,6 +434,9 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 	}
 	if r.PR > 0 {
 		add("PR", fmt.Sprintf("#%d", r.PR))
+	}
+	if r.Ref != "" {
+		add("ref", planShortRef(r.Ref))
 	}
 	for _, s := range plan.Subjects(r.Task, p.in.Facts[id]) {
 		var vs []string

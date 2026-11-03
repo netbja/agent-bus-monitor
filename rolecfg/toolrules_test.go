@@ -2,6 +2,7 @@ package rolecfg
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -152,7 +153,7 @@ tier = "boot"
 
 func TestToolRulesRejections(t *testing.T) {
 	long := "Read(" + strings.Repeat("x", 196) + ")"
-	many := make([]string, 41)
+	many := make([]string, maxRules+1)
 	for i := range many {
 		many[i] = `"Read"`
 	}
@@ -216,7 +217,7 @@ var reloadAsDeny = []string{"Bash(agentbus reload *--as*)", "Bash(agentbus * rel
 // 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
 // exact reload of sentinel, nothing broader.
 var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
-	"Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)"}
+	"Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)", "Bash(agentbus deliver *)"}
 
 func TestShippedManifestRules(t *testing.T) {
 	m, err := Load(repoPath(t, "roles.toml"))
@@ -297,6 +298,30 @@ func TestShippedManifestRules(t *testing.T) {
 			t.Fatalf("shared deny %v lacks %s", m.SharedToolRules.Deny, rule)
 		}
 	}
+	// Only master and docs deliver (forge-delivery answer 3): their own allow,
+	// and both denies in every other role's own rules, never in the shared
+	// ones, which would deny master and docs too.
+	for _, rule := range DeliverDeny {
+		if slices.Contains(m.SharedToolRules.Deny, rule) {
+			t.Fatalf("shared deny holds %s", rule)
+		}
+	}
+	for _, role := range m.roleOrder {
+		lr, err := m.LaunchRules(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch role {
+		case "master", "docs":
+			if !m.MayDeliver(role) || !slices.Contains(lr.Allow, "Bash(agentbus deliver *)") || HoldsDeliverDeny(lr) {
+				t.Errorf("%s does not deliver: %+v", role, lr)
+			}
+		default:
+			if m.MayDeliver(role) || !HoldsDeliverDeny(lr) {
+				t.Errorf("%s may deliver: deny %v", role, lr.Deny)
+			}
+		}
+	}
 	// Sentinel reloads agents (lifecycle part C): that one command, nothing else.
 	s, err := m.LaunchRules("sentinel")
 	if err != nil {
@@ -304,5 +329,124 @@ func TestShippedManifestRules(t *testing.T) {
 	}
 	if !reflect.DeepEqual(s.Allow, []string{"Bash(agentbus reload *)"}) || len(s.Ask) != 0 {
 		t.Fatalf("sentinel rules = %+v", s)
+	}
+}
+
+// The example manifests follow the shipped rule (forge-delivery): only master
+// and docs deliver, every other role carries both denies.
+func TestExampleManifestsDeliverRules(t *testing.T) {
+	base, err := os.ReadFile(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	add, err := os.ReadFile(repoPath(t, "examples/roles.specialists.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The specialists are appended to a manifest like this repository's.
+	specialists := writeConfig(t, string(base)+"\n"+string(add))
+	for file, path := range map[string]string{"examples/roles.mixed.toml": repoPath(t, "examples/roles.mixed.toml"),
+		"roles.toml + examples/roles.specialists.toml": specialists} {
+		m, err := Load(path)
+		if err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		for _, role := range m.roleOrder {
+			lr, err := m.LaunchRules(role)
+			if err != nil {
+				t.Fatalf("%s %s: %v", file, role, err)
+			}
+			if delivers := role == "master" || role == "docs"; delivers == HoldsDeliverDeny(lr) || delivers != m.MayDeliver(role) {
+				t.Errorf("%s: %s deny %v", file, role, lr.Deny)
+			}
+		}
+	}
+}
+
+// The deliver denies catch the command and its spellings after the project's
+// own global flag, rendered at launch with the project's name, and leave the
+// word in a message alone, flag or not (foureyes on step 6): deliver is
+// everyday prose on the bus, and agents write --project <p> as a rule.
+func TestDeliverDenyMatchesTheCommandNotProse(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := m.ProjectLaunchRules("coder", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range []string{
+		"agentbus deliver coder/x",
+		"agentbus deliver coder/x --task t1",
+		"agentbus --project p deliver b",
+		"agentbus --project=p deliver b",
+		"agentbus -p p deliver b",
+		"agentbus --project p --host h deliver b",
+		"agentbus --project=p --host=h deliver b",
+		"agentbus -p p -H h deliver b",
+	} {
+		if decide(r, cmd) != "deny" {
+			t.Errorf("not denied: %s", cmd)
+		}
+	}
+	for _, cmd := range []string{
+		`agentbus report coder "we deliver it next"`,
+		`agentbus --project p report coder "we deliver it next"`,
+		`agentbus --project=p report coder --to master "deliver step 5"`,
+		`agentbus -p p verdict --subject s coder approve "ok to deliver"`,
+		`agentbus -p p reply --ref 1-0 master the PR to deliver is ready`,
+		`agentbus --project p plan link t1 --ref coder/deliver@abc`,
+	} {
+		if decide(r, cmd) == "deny" {
+			t.Errorf("prose denied: %s", cmd)
+		}
+	}
+	// master and docs deliver: no project form is derived for them.
+	for _, role := range []string{"master", "docs"} {
+		mr, err := m.ProjectLaunchRules(role, "p")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if decide(mr, "agentbus --project p deliver b") == "deny" || decide(mr, "agentbus deliver b") == "deny" {
+			t.Errorf("%s may not deliver: deny %v", role, mr.Deny)
+		}
+	}
+}
+
+// MayDeliver is the rule agentbus deliver reads itself, whatever the
+// command's spelling (reviewer-codex; master: enforce it in the command): a
+// role delivers only with delivers = true; a role without it is refused even
+// with no deny in its rules, so a role added by hand never delivers by
+// default; a name that is no role (a person) may.
+func TestMayDeliver(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for role, want := range map[string]bool{"master": true, "docs": true, "charlie": true, "anonymous": true,
+		"coder": false, "foureyes": false, "reviewer-codex": false, "infra": false, "sentinel": false} {
+		if got := m.MayDeliver(role); got != want {
+			t.Errorf("MayDeliver(%s) = %v, want %v", role, got, want)
+		}
+	}
+	bare, err := Load(writeConfig(t, "[roles.master]\nmodel = \"sonnet\"\npermission = \"acceptEdits\"\ntier = \"boot\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bare.MayDeliver("master") {
+		t.Error("a role without delivers = true may deliver")
+	}
+}
+
+func TestDeliversField(t *testing.T) {
+	head := "[roles.master]\nmodel = \"sonnet\"\npermission = \"acceptEdits\"\ntier = \"boot\"\n"
+	for name, c := range map[string]struct{ body, want string }{
+		"not a boolean": {head + "delivers = \"yes\"\n", "delivers must be a boolean"},
+		"and its deny":  {head + "delivers = true\n[roles.master.tool_rules]\ndeny = [\"Bash(agentbus deliver *)\"]\n", "delivers = true but its tool_rules deny"},
+	} {
+		if _, err := Load(writeConfig(t, c.body)); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, c.want)
+		}
 	}
 }

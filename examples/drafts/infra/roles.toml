@@ -60,4 +60,6 @@ deny = [
   "Bash(terraform *plan*-out*)", "Bash(tofu *plan*-out*)",
   "Bash(terraform *workspace new*-state*)", "Bash(tofu *workspace new*-state*)",
   "Bash(printenv*)", "Bash(env)", "Bash(env *)",
+  # Only master and docs deliver (forge-delivery).
+  "Bash(agentbus deliver *)",
 ]

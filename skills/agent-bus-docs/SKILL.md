@@ -1,6 +1,6 @@
 ---
 name: agent-bus-docs
-description: Keep a project's documentation current and deliver it as a well-formed pull request on the Agent Bus. Use when you are the docs agent — popped by master, or handed a change by the conductor when it completes ("update the docs and open the PR to <base>").
+description: Keep a project's documentation current and deliver it as a well-formed pull request (agentbus deliver) on the Agent Bus. Use when you are the docs agent — popped by master, or handed a change by the conductor when it completes ("update the docs and open the PR to <base>").
 ---
 
 # Documentation agent
@@ -29,26 +29,27 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    - every link resolves;
    - every number comes from a source you read.
    - Run the project's doc checks (here: `go run ./cmd/agentbus mem check`).
-5. **Commit** with a plain message, push `pr/<c>` (never `main`), then open the PR to `<base>`:
-
-   ```
-   gh pr create --base <base> --head pr/<c> --title "<c>: <what it delivers>" --body "<body>"
-   ```
-
-   The body says, in this order:
+5. **Commit** on `pr/<c>` (never `main`), and write the request's description to a file outside
+   the repository (`/tmp/pr-<c>.md`). It says, in this order:
    - what the change does, for a user;
    - why;
    - how it was validated (tests, live runs, reviews);
-   - known limits;
-   - the 🤖 footer the repository uses.
-
-   **No GitHub?** The remote may not be GitHub, there may be no remote, or `gh` may be missing or
-   not logged in. Then push `pr/<c>` if there is a remote, open nothing else, and put the PR body
-   in your report instead (`agentbus report` keeps the full text). The reviewer reads the branch.
-   Never work around it by merging, or by pushing to `<base>`.
-6. **Ask for the 4-eyes review** on the bus:
-   `agentbus challenge <reviewer> --ref pr-<c> "review the docs of PR <url>"`.
-   Then report: `agentbus report <you> "PR <url> opened for <c>"`.
+   - known limits.
+   Do not push: `agentbus deliver` does, once the review names your head.
+6. **Ask for the 4-eyes review** on the bus, naming the commit:
+   `agentbus challenge <reviewer> --subject pr-<c> "review the docs of <c> at <full sha>"`.
+   The reviewer's verdict must name that SHA (`--head`); a new commit needs a new verdict.
+7. **Deliver** once approved: `agentbus deliver pr/<c> --base <base> --subject pr-<c> --title "<c>: <what it delivers>" --body-file /tmp/pr-<c>.md`.
+   It pushes the approved commit and opens the pull or merge request through the forge's CLI
+   (its body: your description, each line screened for credentials, then the verdicts and the
+   footer; without `--body-file`, only the commits' subjects), or prints the page to open (link mode: no CLI, or
+   Bitbucket), or in local mode pushes nothing and prints the merge for the person; it reports
+   the URL or the ref to master itself. Exit 3 means no current APPROVED verdict names your head:
+   the review is pending or rejected, or the approval names another commit or none. Read its
+   message; answer a rejection first (fix, commit, ask again), then get an approval with `--head`
+   on the final SHA. Never work around it by `git push`, by merging, or by pushing to `<base>`.
+   In link and local modes nobody reads that body on a forge: put it in your report to master too
+   (`agentbus report` keeps the full text).
 
 ## Shared memory
 
@@ -71,4 +72,5 @@ you repeat it.
 - Merge a PR, push `main`, rewrite history, or delete a branch you did not create.
 - Change code, tests or configuration. If the docs reveal a bug, report it to master on the bus.
 - Invent a capability, a version or a result. When you cannot verify something, say so in the
-  PR body.
+  description's limits.
+- Push, or open a pull request by hand: `agentbus deliver` does both, from the approved commit.

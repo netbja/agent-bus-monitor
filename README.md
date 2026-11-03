@@ -95,9 +95,12 @@ fill: without it the Claude gauges and the context alert have nothing to read. C
 Kimi Code and agy need nothing ([quotas](docs/OPERATIONAL-GUIDE.md#scenario-c-watching-and-stopping-a-project)).
 
 **Pull requests and forges.** The bus itself needs only Git: the missions conductor merges and
-tests on local branches and never pushes. Delivery to a forge is GitHub today: the docs agent opens
-its pull request with the `gh` CLI. GitLab, Bitbucket and a local mode with no forge are planned
-for v0.26.
+tests on local branches and never pushes. master and the docs agent deliver a reviewed branch with
+`agentbus deliver <branch>`, only when the 4-eyes approval names its exact commit (`verdict --head`).
+The forge is read from `origin` (`delivery.forge` in `config.toml`, default `auto`): GitHub and
+GitLab through `gh`/`glab` when they are logged in, else the page to open; Bitbucket the page; a
+repository with no forge in local mode, where nothing is pushed and you merge with the printed
+`git merge`. See the [operational guide](docs/OPERATIONAL-GUIDE.md#8-best-practices--common-traps).
 
 **What's new:** see the [CHANGELOG](CHANGELOG.md), and [`docs/releases/`](docs/releases/) for
 the full notes of each version. The step-by-step guides are in English and French:

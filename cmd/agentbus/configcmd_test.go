@@ -190,7 +190,7 @@ func TestConfigJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, out)
 	}
-	if len(doc.Rows) != 41 { // the registry, stall guard, auto-state, idle hint, history, disk, reload, start.team and pop-retire keys included
+	if len(doc.Rows) != 43 { // the registry, stall guard, auto-state, idle hint, history, disk, reload, start.team, pop-retire and delivery.forge/base keys included
 		t.Errorf("%d rows", len(doc.Rows))
 	}
 	for _, r := range doc.Rows {
@@ -322,5 +322,21 @@ func TestConfigListsTheEndpoints(t *testing.T) {
 	f2 := newConfigFixture(t)
 	if out, _, _ := f2.run(t, ""); !strings.Contains(out, "llm endpoints: none") {
 		t.Errorf("no endpoint:\n%s", out)
+	}
+}
+
+// The delivery settings are the machine's (forge-delivery answer 1): a
+// project's services env file is never read for them.
+func TestConfigProjectIgnoresDeliverySettings(t *testing.T) {
+	f := newConfigFixture(t)
+	f.write(t, "services/demo.env", "AGENT_BUS_DELIVERY_FORGE=\"gitlab\"\nAGENT_BUS_DELIVERY_BASE=\"dev\"\n")
+	out, errw, code := f.run(t, "demo")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errw)
+	}
+	for key, want := range map[string]string{"delivery.forge": "auto default", "delivery.base": "main default"} {
+		if row := strings.Join(rowOf(t, out, key), " "); !strings.Contains(row, want) || strings.Contains(row, "gitlab") || strings.Contains(row, "dev") {
+			t.Errorf("%s row %q: want %q, never the env file's value", key, row, want)
+		}
 	}
 }

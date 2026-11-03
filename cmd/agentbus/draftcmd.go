@@ -187,6 +187,15 @@ func runAdopt(ctx context.Context, b *bus.Bus, self string, args, env []string, 
 	if _, err := m.Resolve(role); err != nil {
 		return fail("%s would not resolve: %v", role, err)
 	}
+	// Only master and docs deliver (forge-delivery answer 3): a role without
+	// both denies is adopted only when the question the person answered named
+	// it a delivering role.
+	if rules, err := m.LaunchRules(role); err != nil || !rolecfg.HoldsDeliverDeny(rules) {
+		if !askNamesDelivering(*ask, qid) {
+			return fail("%s lacks the denies %s in its own tool_rules, so it could run agentbus deliver: add them to the draft, or ask the person to adopt it as a delivering role",
+				role, strings.Join(rolecfg.DeliverDeny, " and "))
+		}
+	}
 	if err := os.WriteFile(target, prompt, 0o644); err != nil {
 		return fail("%v", err)
 	}
@@ -197,6 +206,17 @@ func runAdopt(ctx context.Context, b *bus.Bus, self string, args, env []string, 
 	fmt.Fprintf(stdout, "adopted %s (ask %s, answered by %s): %s and %s; pop it when needed (approval = person)\n",
 		role, askID, adoptedBy(*ask, qid), path, target)
 	return 0
+}
+
+// askNamesDelivering: the question qid the person approved says the role is
+// a delivering role, so they saw that it may push and open requests.
+func askNamesDelivering(a bus.Ask, qid string) bool {
+	for _, q := range a.Questions {
+		if q.ID == qid && strings.Contains(strings.ToLower(q.Question), "delivering role") {
+			return true
+		}
+	}
+	return false
 }
 
 func adoptedBy(a bus.Ask, qid string) string {

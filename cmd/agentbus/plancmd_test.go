@@ -89,6 +89,17 @@ func TestPlanCLI(t *testing.T) {
 		}
 	}
 
+	// forge-delivery: --ref replaces the PR link, and show names it short.
+	ref := "coder/roles@" + strings.Repeat("e5", 20)
+	if code, _, errw := runPlanT(t, b, repo, "link", "roles", "--ref", ref); code != 0 {
+		t.Fatalf("link --ref: %s", errw)
+	}
+	if code, out, _ := runPlanT(t, b, repo, "show"); code != 0 || !strings.Contains(out, "ref coder/roles@e5e5e5e") || strings.Contains(out, "#102") {
+		t.Fatalf("show after --ref:\n%s", out)
+	}
+	if code, _, _ := runPlanT(t, b, repo, "link", "roles", "--ref", "coder/roles@abc"); code == 0 {
+		t.Fatal("a short sha was accepted as a ref")
+	}
 	if code, _, errw := runPlanT(t, b, repo, "done", "roles"); code != 0 {
 		t.Fatalf("done: %s", errw)
 	}

@@ -588,8 +588,8 @@ travail de deux façons, selon sa taille.
    n'approuve jamais son propre travail).
 3. **Suivez** le panneau Board et le fil Activity. Un agent qui a besoin de vous écrit à master,
    et master vous pose la question.
-4. **Terminez.** master annonce la branche et le verdict de revue
-   (`agentbus --project myapp verdicts`). Vous ouvrez ou validez la PR.
+4. **Terminez.** master livre la branche relue (`agentbus deliver`) : vous recevez la pull request
+   à fusionner, la page pour l'ouvrir, ou en mode local la commande `git merge`. Vous fusionnez.
 
 Pour un correctif d'une ligne, vous pouvez passer outre master : `@coder Fix the typo in the README title.`
 
@@ -639,7 +639,8 @@ l'exécute étape par étape.
    dont le contexte est plein peut être relancé : le brief de sa mission et sa branche suffisent.
 7. **La fin.** Quand toutes les missions sont intégrées, master reçoit un avis `complete` (et
    l'agent de documentation sa directive, si le plan en nomme un). Le conducteur ne merge jamais
-   `change/auth-v2` dans `main` : ouvrez cette PR vous-même, ou demandez-la à master, et mergez-la.
+   `change/auth-v2` dans `main` : master la livre une fois relue (`agentbus deliver change/auth-v2`),
+   et vous fusionnez.
 
 ---
 
@@ -686,11 +687,21 @@ l'exécute étape par étape.
    d'environnement du projet, et les services en gardent une après que vous l'avez retirée de votre
    shell, jusqu'au prochain `up` sans elle. La cible d'escalade et le réglage de rechargement
    restent même alors, jusqu'à ce que `--escalate-to` ou `--reload` les change.
-6. **Les pull requests vont aujourd'hui sur GitHub** : le bus et le conducteur des missions n'ont
-   besoin que de Git (le conducteur fusionne et teste sur des branches locales et ne pousse jamais),
-   mais la livraison vers une forge passe par GitHub : l'agent docs ouvre sa pull request avec la
-   CLI `gh`. GitLab, Bitbucket et un mode local sans forge
-   sont prévus pour la v0.26.
+6. **Livraison vers votre forge, ou aucune** : le bus et le conducteur des missions n'ont besoin
+   que de Git (le conducteur fusionne et teste sur des branches locales et ne pousse jamais).
+   master et l'agent docs livrent une branche relue avec `agentbus deliver`, et seulement quand
+   l'approbation 4 yeux nomme son commit exact. La forge est lue depuis `origin`
+   (`delivery.forge = "auto"` dans `~/.config/agentbus/config.toml`, la branche cible
+   `delivery.base`, `main` par défaut) :
+   - **GitHub / GitLab** : il pousse le commit approuvé et ouvre la pull ou merge request avec `gh`
+     ou `glab` s'ils sont installés et connectés (`gh auth login`, `glab auth login`) ; sinon il
+     pousse et vous donne la page pour l'ouvrir ;
+   - **Bitbucket** : il pousse et vous donne la page ;
+   - **local** (pas d'`origin`, ou `forge = "local"`) : rien n'est poussé ni récupéré ; master vous
+     donne `git switch main && git merge --no-ff <sha>` et note la fusion quand vous l'annoncez.
+   Un GitLab auto-hébergé dont le nom d'hôte ne commence pas par `gitlab.` est lu comme local :
+   donnez-lui un tel nom, ou réglez `delivery.forge`, qui vaut alors pour tous les projets de la
+   machine.
 
 ---
 

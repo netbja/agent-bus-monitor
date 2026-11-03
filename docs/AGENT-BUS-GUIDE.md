@@ -126,8 +126,9 @@ agentbus cmd --no-wake claude2 read this when you are next up   # wake=no: deliv
 agentbus challenge <target> [--ref R] <why...>          # prints: "challenge <ref> opened on <target>"
 agentbus challenge claude2 confirm you backed up the DB # auto-generates a ref, PRINTS it — capture it
 agentbus reply   --ref <R> <target> <answer...>         # answer a challenge you received
-agentbus verdict (--pr N | --subject S) [--ref R] <target> <approve|reject> [msg...]   # records to {p}:verdicts; --ref resolves the gate (best-effort)
+agentbus verdict (--pr N | --subject S) [--ref R] [--head SHA] <target> <approve|reject> [msg...]   # records to {p}:verdicts; --ref resolves the gate (best-effort)
 agentbus verdict --pr 25 --ref k3f9q claude2 approve looks good
+agentbus verdict --subject roles --head "$(git rev-parse HEAD)" coder approve read at this commit   # --head: the FULL sha you read; deliver needs it
 agentbus verdicts --pr 25                                          # roll-up 4-eyes state: APPROVED/REJECTED/PENDING (exit 0/3/2)
 
 # ── AM I BLOCKED? (check before you proceed / mark done) ──────────────────────
@@ -191,6 +192,7 @@ agentbus shutdown --force                               # override the guard (yo
 # ── PLAN: the batch's plan, as busmon's Plan view (P) shows it (master writes it) ──
 agentbus plan load docs/plans/v0.22.json@<commit>       # publish a committed plan file (strict JSON); replaces the active plan
 agentbus plan link roles --pr 102                        # record a task's PR (its review then also reads pr:102)
+agentbus plan link roles --ref coder/roles@<sha>          # or the delivered commit, when no PR was opened (link or local mode)
 agentbus plan done roles                                 # the person merged it (or did their step): shown as "merged (recorded 2h ago)"
 agentbus plan note roles rebased on main                 # a one-line note on the task
 agentbus plan show [--json]                              # tasks by DERIVED state; exit 1 when a read failed ('?' tasks)
@@ -199,6 +201,14 @@ agentbus ask master --task roles -F q.json               # an ask about a plan t
 # approved, its PR linked, unrecorded = WAITING FOR YOU ("merge PR N"; with no PR it stays in review);
 # a person task whose ask is answered, nothing open = ANSWERED, MASTER TO RECORD; done needs `plan done`
 # (or "merge": false + delivered + approved). Reviews are read on the board task's subject + pr:<n>.
+
+# ── DELIVER: push the approved head and open its PR/MR (master and docs only) ──
+agentbus deliver coder/roles --task roles                # checks the 4-eyes proof names the branch head, else exit 3
+agentbus deliver pr/v0.26 --base main --subject pr-v0.26 --dry-run   # checks everything, pushes nothing
+agentbus deliver coder/roles -t roles --body-file /tmp/pr.md   # the description (default: commit subjects), then the verdicts
+# Forge from delivery.forge (config.toml; auto reads origin): github/gitlab via gh/glab, else link
+# mode (prints the page); bitbucket always link mode; local pushes nothing and prints the merge.
+# Any other role is refused by the command itself (delivers = true in roles.toml).
 
 # ── WAKE DISPATCHER: wakes UNARMED agents through herdr when a cmd waits ──────
 agentbus dispatch                                       # foreground, one per project (a 2nd exits 0); JSON decision log on stderr

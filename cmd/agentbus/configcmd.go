@@ -261,7 +261,7 @@ func projectEnv(project string, getenv func(string) string) (map[string]string, 
 	}
 	keep := map[string]string{}
 	for _, k := range config.Keys {
-		if v, ok := all[k.Env]; ok && k.Env != "" {
+		if v, ok := all[k.Env]; ok && k.Env != "" && !k.MachineOnly { // the machine's alone: never a project's
 			keep[k.Env] = v
 		}
 	}

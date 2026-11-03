@@ -349,6 +349,14 @@ func main() {
 
 	case "verdict":
 		rest, ref := extractFlag(rest, "--ref")
+		rest, headFlag := extractFlag(rest, "--head")
+		head := ""
+		if headFlag != "" {
+			var herr error
+			if head, herr = resolveVerdictHead(".", headFlag); herr != nil {
+				die(herr.Error())
+			}
+		}
 		rest, pr := extractFlag(rest, "--pr")
 		rest, subjectFlag := extractFlag(rest, "--subject")
 		subject, serr := resolveSubject(pr, subjectFlag)
@@ -356,7 +364,7 @@ func main() {
 			die(serr.Error())
 		}
 		if len(rest) < 2 {
-			die("usage: verdict (--pr N | --subject S) [--ref R] <author> <approve|reject> [message]")
+			die("usage: verdict (--pr N | --subject S) [--ref R] [--head SHA] <author> <approve|reject> [message]")
 		}
 		author, decision := rest[0], rest[1]
 		if decision != "approve" && decision != "reject" {
@@ -375,7 +383,7 @@ func main() {
 		authorProv, selfProv := verdictProviders(ctx, b, author, self)
 		if _, err := b.AppendVerdict(ctx, bus.Verdict{
 			Subject: subject, Author: author, Reviewer: self,
-			Decision: decision, Message: rationale, Ref: ref,
+			Decision: decision, Message: rationale, Ref: ref, Head: head,
 			AuthorProvider: authorProv, ReviewerProvider: selfProv,
 		}); err != nil {
 			die(err.Error())
@@ -521,6 +529,10 @@ func main() {
 	case "plan":
 		wd, _ := os.Getwd()
 		os.Exit(runPlan(ctx, b, wd, rest, os.Stdout, os.Stderr))
+
+	case "deliver":
+		wd, _ := os.Getwd()
+		os.Exit(runDeliver(ctx, realDeliverDeps(b, self, wd), self, rest, os.Stdout, os.Stderr))
 
 	case "pause", "resume":
 		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv}

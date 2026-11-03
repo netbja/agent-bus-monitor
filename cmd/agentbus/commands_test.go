@@ -116,9 +116,12 @@ var foreignFlags = []string{
 	"--git-dir", "--interactive", "--label", "--login", "--name", "--no-focus", "--plugin",
 	"--settings", "--target-pane", "--version", "--workspace", "--model",
 	"--source", "--agent", "--seq", // herdr pane report-agent-session
-	"--get-regexp",    // git config, the github check's remote read
-	"--show-toplevel", // git rev-parse, the local-llm peer's read root
-	"--roles",         // roles template's team, the argv bootstrap builds (agentbus-start)
+	"--get-regexp",        // git config, the github check's remote read
+	"--show-toplevel",     // git rev-parse, the local-llm peer's read root
+	"--verify", "--quiet", // git rev-parse, verdict --head's commit check (forge-delivery)
+	"--roles",                        // roles template's team, the argv bootstrap builds (agentbus-start)
+	"--count", "--reverse", "--push", // git rev-list, git log and git remote get-url (deliver)
+	"--body-file", "--output", "--source-branch", "--target-branch", "--description", // gh and glab (deliver)
 }
 
 // Every flag an agentbus command reads (a "--x" literal in a non-test file of
