@@ -56,7 +56,10 @@ command = "env 'ROLES_TOML=`+repo+`/roles.toml' /r/scripts/agent-launch coder de
 
 func TestGather(t *testing.T) {
 	loc, repo := home(t)
-	files, left, _ := Gather([]string{"demo", "other"}, loc)
+	files, left, _, err := Gather([]string{"demo", "other"}, loc)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var got []string
 	for _, f := range files {
 		got = append(got, f.Member+"="+f.Path)
@@ -91,7 +94,10 @@ func TestRunNeverReadsASecret(t *testing.T) {
 	}
 	loc, _ := home(t)
 	p := plan(t, "demo")
-	p.Files, p.LeftOut, _ = Gather([]string{"demo"}, loc)
+	var err error
+	if p.Files, p.LeftOut, _, err = Gather([]string{"demo"}, loc); err != nil {
+		t.Fatal(err)
+	}
 	res, err := Run(context.Background(), t.TempDir(), p)
 	if err != nil {
 		t.Fatal(err)
@@ -106,5 +112,37 @@ func TestRunNeverReadsASecret(t *testing.T) {
 	m, err := Verify(bytes.NewReader(b))
 	if err != nil || len(m.LeftOut) != 2 {
 		t.Fatalf("manifest left out %+v, %v", m.LeftOut, err)
+	}
+}
+
+// An unreadable history folder fails the gather (reviewer-codex): never an
+// archive that silently lacks part of the history.
+func TestGatherFailsOnAnUnreadableHistory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a 0000 folder")
+	}
+	loc, _ := home(t)
+	sub := filepath.Join(loc.StateDir("demo"), "history", "old")
+	os.MkdirAll(sub, 0o700)
+	os.WriteFile(filepath.Join(sub, "x.jsonl"), []byte("{}\n"), 0o600)
+	os.Chmod(sub, 0o000)
+	t.Cleanup(func() { os.Chmod(sub, 0o700) })
+	if _, _, _, err := Gather([]string{"demo"}, loc); err == nil || !strings.Contains(err.Error(), "history") {
+		t.Fatalf("Gather = %v, want the unreadable history named", err)
+	}
+	// A project with no history folder at all is fine.
+	if _, _, _, err := Gather([]string{"other"}, loc); err != nil {
+		t.Fatalf("no history: %v", err)
+	}
+}
+
+// A template whose tabs name no ROLES_TOML archives no manifest, and the
+// manifest's notes say where it is (foureyes).
+func TestGatherNotesATemplateWithoutManifest(t *testing.T) {
+	loc, _ := home(t)
+	os.WriteFile(filepath.Join(loc.ProjectsDir, "bare.toml"), []byte("[[tabs]]\ncommand = \"agent-launch coder bare\"\n"), 0o600)
+	_, _, notes, err := Gather([]string{"bare"}, loc)
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0], "bare: its template names no ROLES_TOML") {
+		t.Fatalf("notes %q, %v", notes, err)
 	}
 }

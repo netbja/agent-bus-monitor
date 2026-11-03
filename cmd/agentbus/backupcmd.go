@@ -115,13 +115,17 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 		fmt.Fprintf(errw, "backup: %v\n", err)
 		return 1
 	}
-	files, left, notes := backup.Gather(projects, backup.Locations{
+	files, left, notes, err := backup.Gather(projects, backup.Locations{
 		ConfigDir:    filepath.Dir(config.Path(d.Getenv)),
 		ProjectsDir:  projectsDir,
 		PasswordFile: bus.PasswordFile(d.Getenv),
 		EnvFile:      paths.EnvFile,
 		StateDir:     paths.StateDir,
 	})
+	if err != nil {
+		fmt.Fprintf(errw, "backup: %v (no archive written)\n", err)
+		return 1
+	}
 	notes = append(notes, "Redis: each project is read at one instant after its SCAN; a key created after the SCAN is not in the archive, and keys with an expiry are skipped")
 	now := d.Now().UTC()
 	if dry {

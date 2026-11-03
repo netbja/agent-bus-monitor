@@ -144,3 +144,22 @@ func TestBackupCommandScopeAndRefusals(t *testing.T) {
 		t.Fatalf("AGENT_BUS_PROJECT narrowed the scope: %+v", l2)
 	}
 }
+
+// An unreadable history folder fails the run: no archive (reviewer-codex).
+func TestBackupCommandFailsOnAnUnreadableHistory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a 0000 folder")
+	}
+	w := newBackupWorld(t)
+	sub := filepath.Join(w.home, ".local", "state", "agentbus", w.b.Project(), "history", "old")
+	os.MkdirAll(sub, 0o700)
+	os.Chmod(sub, 0o000)
+	t.Cleanup(func() { os.Chmod(sub, 0o700) })
+	code, out, errw := w.run("--project", w.b.Project())
+	if code != 1 || !strings.Contains(errw, "history") || !strings.Contains(errw, "no archive written") {
+		t.Fatalf("backup: %d %q %q", code, out, errw)
+	}
+	if l, _ := backup.List(w.dir(), "h1"); len(l) != 0 {
+		t.Fatalf("an archive was written: %+v", l)
+	}
+}
