@@ -19,26 +19,26 @@
 │  ●  release   working  7m   —   fallback k… tagging                         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Tokens · today · anthropic 62% 5h · xai held 40m ──────────────── esc back ─╮
-│ Accounts                                                                     │
-│    anthropic  5h  ██████▎     62%   7d  ████▏       41%                     │
+│ Accounts                                                                     ▲
+│    ANTHROPIC                                                     5h · 62%   ┃
+│    5h  ━━━━━━━━━━━━━━━━━━━━━━━━━│━━━━━━━━━━━━━━━   62% · resets 17:04       ┃
+│    7d  ━━━━━━━━━━━━━━━━━━━━━━━│━━━━━━━━━━━━━━━━━   41% · resets Thu 15:04   ┃
+│    At this pace the limit comes around 16:54, before the 17:04 reset.       ┃
+│   ────────────────────────────────────────────────────────────────────────   ┃
+│    XAI                                                   held until 15:44   ┃
+│    5h  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━  100% · resets 15:44   ┃
+│    Limit reached: it resets at 15:44.                                       ┃
+│ Projects                 in+out  7 days                                      ┃
+│   agent-bus-monitor       ~1.8M     ▃ █▆  ████████     ~5.1M                 ┃
+│   blog                        0   ▁       ▎             170k                 ┃
+│   wiki  no data (no dispatch service counting tokens)                        ┃
+│ Agents, agent-bus-monitor             in      out                            ┃
+│   foureyes          anthropic      1.2M     206k  ████████                  ┃
+│   coder             anthropic      345k      83k  ██▍                       ┃
+│   1 more · Codex session not proved  (a lists them)                          ┃
+│   6 more · no proved session  (a lists them)                                 ┃
+│   2 more · Kimi logs give no token counts  (a lists them)                    ┃
 │                                                                              │
-│    xai        5h  ██████████ 100%  held 40m                                 │
-│ Projects                 in+out  7 days                                      │
-│   agent-bus-monitor       ~1.8M     ▃ █▆  ████████     ~5.1M                 │
-│   blog                        0   ▁       ▎             170k                 │
-│   wiki  no data (no dispatch service counting tokens)                        │
-│ Agents, agent-bus-monitor             in      out                            │
-│   foureyes          anthropic      1.2M     206k  ████████                  │
-│   coder             anthropic      345k      83k  ██▍                       │
-│   1 more · Codex session not proved  (a lists them)                          │
-│   6 more · no proved session  (a lists them)                                 │
-│   2 more · Kimi logs give no token counts  (a lists them)                    │
-│                                                                              │
-│ in: input + cache writes · ~ counting · no cost                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
+│ in: input + cache writes · ~ counting · no cost                              ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   a all   esc q close   F5 health    

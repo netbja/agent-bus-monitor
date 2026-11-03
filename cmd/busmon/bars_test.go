@@ -317,10 +317,30 @@ func TestTokensPageBarsSlide(t *testing.T) {
 		return s
 	}
 	row := func(m Model) string {
-		for _, l := range strings.Split(linesText(m.rd.top().body), "\n") {
-			if strings.Contains(l, "anthropic") && strings.Contains(l, "5h") {
-				return l
+		// The thin bar's fill and track are one glyph (usage-cards): read the
+		// fill as the cells of the bar not faded, '#' each, the track '.'.
+		inCard := false
+		for _, l := range m.rd.top().body {
+			text := strings.TrimSpace(l.text())
+			if strings.HasPrefix(text, "ANTHROPIC") {
+				inCard = true
 			}
+			if !inCard || !strings.HasPrefix(text, "5h ") {
+				continue
+			}
+			var b strings.Builder
+			for _, sg := range l {
+				for _, r := range sg.Text {
+					switch {
+					case string(r) != GlyphThinBar && string(r) != GlyphThinMark:
+					case sg.Fade > 0:
+						b.WriteByte('.')
+					default:
+						b.WriteByte('#')
+					}
+				}
+			}
+			return b.String()
 		}
 		t.Fatalf("no anthropic 5h row:\n%s", linesText(m.rd.top().body))
 		return ""
@@ -336,7 +356,8 @@ func TestTokensPageBarsSlide(t *testing.T) {
 	mid := row(m)
 	m = step(t, m, fadeMsg(at.Add(600*time.Millisecond)))
 	end := row(m)
-	if mid == start || mid == end || !strings.Contains(end, strings.Repeat(GlyphBarFull, 8)+" ") {
+	fill := func(r string) int { return strings.Count(r, "#") }
+	if !(fill(start) < fill(mid) && fill(mid) < fill(end)) {
 		t.Errorf("the U page's bar did not slide:\nstart %q\nmid   %q\nend   %q", start, mid, end)
 	}
 }

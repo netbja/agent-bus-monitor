@@ -116,20 +116,9 @@ func TestTokensPagePendingUnknownZero(t *testing.T) {
 
 // Bars compare across projects (scaled to the largest day of all); the
 // hour sparkline keeps the hour's last sample, a space for an hour without.
-func TestTokensSparkRules(t *testing.T) {
+func TestTokensSparkSteps(t *testing.T) {
 	if sparkOf(0, 100) != " " || sparkOf(100, 100) != GlyphBarFull || sparkOf(1, 100) != GlyphSpark1 {
 		t.Errorf("spark steps: %q %q %q", sparkOf(0, 100), sparkOf(100, 100), sparkOf(1, 100))
-	}
-	now := shellNow
-	hist := []bus.QuotaSample{
-		{Provider: "claude", Window: "5h", Pct: 10, At: now.Add(-90 * time.Minute).UnixMilli()},
-		{Provider: "claude", Window: "5h", Pct: 99, At: now.Add(-80 * time.Minute).UnixMilli()}, // same hour, later: wins
-		{Provider: "claude", Window: "7d", Pct: 50, At: now.Add(-80 * time.Minute).UnixMilli()},
-		{Provider: "claude", Window: "5h", Pct: 50, At: now.Add(-30 * time.Hour).UnixMilli()}, // older than 24 h
-	}
-	s := []rune(hourSpark(hist, "claude", "5h", now))
-	if len(s) != 24 || string(s[22]) != GlyphBarFull || strings.TrimSpace(string(s)) != GlyphBarFull {
-		t.Errorf("hour spark %q", string(s))
 	}
 }
 
@@ -353,7 +342,7 @@ func TestTokensPageProvidersInTheirColours(t *testing.T) {
 		for _, s := range l {
 			// A segment of the text role merges with its neighbours: key it by
 			// the provider name it starts with.
-			p, _, _ := strings.Cut(strings.TrimSpace(s.Text), " ")
+			p, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(s.Text)), " ") // a card's head is upper case (usage-cards)
 			if roles[p] == nil {
 				roles[p] = map[Role]bool{}
 			}
@@ -368,5 +357,69 @@ func TestTokensPageProvidersInTheirColours(t *testing.T) {
 	}
 	if !roles["acme"][RoleText] || len(roles["acme"]) != 1 {
 		t.Errorf("an unknown provider drawn in %v, want today's plain text", roles["acme"])
+	}
+}
+
+// The Accounts zone as cards (usage-cards, the person's choice from master's
+// mock-up): per provider a head line, its name upper case and at the right its
+// busiest window; one row per window with a full-width thin bar, the figure
+// and the reset; a pace sentence under the card; a rule between cards; no
+// 24-hour spark.
+func TestTokensPageAccountCards(t *testing.T) {
+	pinLocal(t)
+	now := shellNow
+	at := func(d time.Duration) int64 { return now.Add(d).Unix() }
+	budgets := map[string]bus.BudgetSnapshot{
+		"anthropic": {Windows: []bus.BudgetWindow{
+			{Name: "5h", UsedPct: 13, ResetsAt: at(2 * time.Hour), ObservedAt: now.UnixMilli()},   // 60 % gone, 13 % used: room
+			{Name: "7d", UsedPct: 86, ResetsAt: at(12 * time.Hour), ObservedAt: now.UnixMilli()}}, // the busiest
+		},
+		"openai": {Windows: []bus.BudgetWindow{
+			{Name: "5h", UsedPct: 50, ResetsAt: at(4 * time.Hour), ObservedAt: now.UnixMilli()}}}, // 60 min gone, 50 % used: the limit in 60 more
+	}
+	for _, width := range []int{80, 120} {
+		lines := tokensPage(iconsOff, tokFixtureState(now), budgets, nil, nil, "agent-bus-monitor", now, width, false, barView{}, true)
+		page := linesText(lines)
+		for _, l := range lines {
+			if l.Width() > width {
+				t.Fatalf("%d: a line is %d cells: %q", width, l.Width(), l.text())
+			}
+		}
+		for _, s := range []string{"ANTHROPIC", "7d " + GlyphNone + " 86%", "OPENAI",
+			GlyphNone + " resets " + now.Add(2*time.Hour).Local().Format("15:04"),
+			"On track: you should reach the reset with room to spare.",
+			"At this pace the limit comes around " + now.Add(60*time.Minute).Local().Format("15:04") + ", before the " + now.Add(4*time.Hour).Local().Format("15:04") + " reset."} {
+			if !strings.Contains(page, s) {
+				t.Errorf("%d: the page lacks %q:\n%s", width, s, page)
+			}
+		}
+		if strings.Contains(page, "24h") {
+			t.Errorf("%d: the 24-hour spark is still drawn", width)
+		}
+		for _, l := range lines { // the busiest window sits at the card's right edge, two cells in
+			if txt := l.text(); strings.Contains(txt, "ANTHROPIC") && Width(strings.TrimRight(txt, " ")) != width-2 {
+				t.Errorf("%d: the head ends at %d, want %d: %q", width, Width(strings.TrimRight(txt, " ")), width-2, txt)
+			}
+		}
+		if !strings.Contains(page, strings.Repeat(glyphHorizontal, width-4)) {
+			t.Errorf("%d: no rule between the cards", width)
+		}
+		for _, l := range strings.Split(page, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(l), "5h ") && strings.Count(l, GlyphThinBar)+strings.Count(l, GlyphThinMark)+strings.Count(l, glyphVertical) < width/3 {
+				t.Errorf("%d: the bar is not full width: %q", width, l)
+			}
+		}
+	}
+}
+
+// A window at its limit is never "on track": the card says the limit is
+// reached and when it resets.
+func TestPaceSentenceAtTheLimit(t *testing.T) {
+	pinLocal(t)
+	now := shellNow
+	reset := now.Add(40 * time.Minute)
+	ws := []bus.BudgetWindow{{Name: "5h", UsedPct: 100, ResetsAt: reset.Unix(), ObservedAt: now.UnixMilli()}}
+	if got, want := paceSentence(ws, now), "Limit reached: it resets at "+reset.Local().Format("15:04")+"."; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
