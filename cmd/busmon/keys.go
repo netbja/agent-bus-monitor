@@ -21,6 +21,7 @@ const (
 	ModeShell    // the step-b shell's panels (busmon Charm spec): ModePanel's table with the shell's tabs
 	ModeShellAsk // the shell's reader on an ask: ModeAsk's table, where a digit answers
 	ModeTour     // the first-launch tour (tour.go): its pages own the keyboard
+	ModeSettings // the settings page (C): its groups and their keys (settings_ui.go)
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -89,6 +90,10 @@ const (
 	ActHistory      // open the history page (H)
 	ActOlder        // History: load the days before
 	ActLineEdit     // the line: move its cursor or delete at it (the field does it)
+	ActGroupNext    // settings (C): the next group, wrapping
+	ActGroupPrev    // settings (C): the previous group, wrapping
+	ActReset        // settings (C): remove the selected key from config.toml (asks y)
+	ActResetGroup   // settings (C): remove the group's keys from config.toml (asks y)
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -304,6 +309,19 @@ var (
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
+	// settingsBindings: the C page (settings-panels). ←→ and tab step the
+	// groups; while a choice is open (enter on it), ←→ change its value
+	// instead, as the editor takes the keys first (settings_ui.go).
+	settingsBindings = []binding{
+		{Keys: arrows + " j k", Hint: "move", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
+		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
+		{Keys: GlyphArrowL + GlyphArrowR + " tab", Hint: "group", Help: "the previous or next group; on an open choice (after enter), " + GlyphArrowL + GlyphArrowR + " change its value", Act: ActGroupNext, match: either(keyIs(keyRight), keyIs(keyTab))},
+		{Keys: GlyphArrowL, Act: ActGroupPrev, match: either(keyIs(keyLeft), keyIs(keyBacktab))},
+		{Keys: "enter", Hint: "edit", Help: "flip an on/off, open a choice or the line editor (enter writes, esc leaves the file as it is)", Act: ActOpen, match: either(keyIs(keyEnter), runeIs(' '))},
+		{Keys: "d", Hint: "reset", Help: "remove the selected key from config.toml (y confirms): what applies next is named", Act: ActReset, match: runeIs('d')},
+		{Keys: "D", Hint: "reset group", Help: "remove every key of the group set in config.toml (y confirms); your own backup.after_* stay", Act: ActResetGroup, match: runeIs('D')},
+		{Keys: "esc q", Hint: "back", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
+	}
 	tourBindings = []binding{
 		{Keys: "enter", Hint: "next", Alt: GlyphArrowR, Act: ActNextItem, match: either(keyIs(keyEnter), keyIs(keyRight))},
 		{Keys: GlyphArrowL, Hint: "back", Act: ActPrevItem, match: keyIs(keyLeft)},
@@ -369,6 +387,8 @@ func bindings(m Mode) []binding {
 		bs = shellAskBindings
 	case ModeTour:
 		bs = tourBindings
+	case ModeSettings:
+		bs = settingsBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }

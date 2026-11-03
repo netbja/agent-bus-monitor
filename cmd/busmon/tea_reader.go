@@ -707,7 +707,7 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 	case ovRecap:
 		return m.recapKey(k)
 	case ovSettings:
-		return m.settingsKey(k)
+		return m.settingsKey(act, k)
 	}
 	if p.kind == ovServices && p.svc != nil { // the cards: arrows choose, enter or l opens the log
 		// Side by side the cards are a row, so ←/→ move between them too;

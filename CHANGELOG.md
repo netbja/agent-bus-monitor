@@ -13,7 +13,8 @@ release exists.
   machine with no agent CLI handled, first-run fixes, a French README.
 - One settings file, `~/.config/agentbus/config.toml`, read by busmon, the services and the writers
   below the environment; `agentbus config` shows each value and its source; a skipped environment
-  value is now warned for every key; busmon's settings page `C` edits it.
+  value is now warned for every key; busmon's settings page `C` edits it, in two panels (groups,
+  keys as controls, the selected key's detail; `D` resets a group).
 - busmon: one list pattern for Health, Requests, Tokens, the recap and For you; the notice line;
   usage cards on `U`; icons (off by default); compose selection and image paste; fixes to the
   reminder, report notices, replaced asks and Backspace lag.

@@ -797,11 +797,19 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (`config/write.go`: the key's own file rule, the smallest edit, its line replaced or added under its table or the
   table appended, the edited text read back as exactly that change, refused when the file does not parse, a temporary
   file renamed, 0600 in 0700), each key's `Group` (`config/group.go`, held by a test), the rows (`settingsGroups` in
-  `settings_page.go`: `●` config.toml, `○` default, `·` a flag, the env or busmon.toml, read-only but busmon.toml's,
-  `▲` refused, the source in `agentbus config`'s words) and the interaction (`settings_ui.go`, reads and writes in
-  commands: Enter flips an on/off at once, chooses the theme with ←→, or opens a line editor checked by the kind then
-  the rule; `d` asks `y`, naming what applies next; theme, fade, bell and the reminder and recap timings apply at once
-  through `applySettings` and `shellConfig.retheme`, the rest at busmon's next start). `agentbus config`
+  `settings_page.go`: `settingFrom` default, config.toml, elsewhere (a flag, the env or busmon.toml, read-only but
+  busmon.toml's) or refused, `Set` when config.toml sets it to other than its default, the source in `agentbus config`'s
+  words) and the interaction (`settings_ui.go`, settings-panels, its own key table `ModeSettings`/`settingsBindings`, reads
+  and writes in commands): two panels, the groups a sidebar (`settingsSideW`) beside the selected group's keys from a page
+  of `settingsSideMin` (92) cells, a tab bar above them narrower (`settingsTabs`, tabBar's blocks, the far tabs giving way
+  to an ellipsis); a value as a control (`settingControl`: `● on` ok / `○ off` muted, a choice `‹ v ›`, the rest plain at the
+  right edge; elsewhere muted, refused the attention colour), `•` (`GlyphSet`) before a `Set` key; the selected key's detail
+  zone (`settingsDetail`: label, file key, `from` source, default, read by; `settingHelp`); `↑↓` move in the group (kept in
+  view, `selLine`), `←→`/Tab the group (the editor takes keys first, so on an open choice `←→` change its value), Enter
+  flips an on/off at once, opens a choice or a line editor checked by the kind then the rule; `d` asks `y`, naming what
+  applies next; `D` asks `y` naming the group's keys config.toml holds (`settingsResettable`: a refused line too, never a
+  `PersonOnly` key, said to stay), unset one by one then read back once; theme, fade, bell and the reminder and recap
+  timings apply at once through `applySettings` and `shellConfig.retheme`, the rest at busmon's next start). `agentbus config`
   (`configcmd.go`, above the project-required exit, no broker) prints each value and its source;
   `--project` reads that project's env file for what its services see (only registry keys and the two
   per-project facts, never another line). The local LLM peer's endpoints are not registry keys:
