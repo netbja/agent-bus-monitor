@@ -121,7 +121,7 @@ func Run(ctx context.Context, dir string, p Plan) (Result, error) {
 		return Result{}, err
 	}
 	res := Result{Name: name, Path: final, Projects: p.Projects, Keys: map[string]int{}, Exec: map[string]time.Duration{}}
-	w, err := NewWriter(tmp, Coverage{CreatedAt: p.Now.UTC(), Host: p.Host, Projects: p.Projects})
+	w, err := NewWriter(tmp, Coverage{CreatedAt: p.Now.UTC(), Host: p.Host, Projects: p.Projects, Secrets: p.Secrets != nil})
 	if err != nil {
 		return Result{}, err
 	}

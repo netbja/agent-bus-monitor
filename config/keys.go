@@ -308,6 +308,19 @@ var Keys = []*Key{
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 keeps every archive")},
 	// The age public key --secrets encrypts to (backup spec, answer 4): a
 	// recipient, never a private key or a passphrase.
+	// The health reminder: an archive covering each project at least this
+	// recent (0 turns the reminder off; a failure still warns).
+	{Name: "backup.warn_after", Env: "AGENT_BUS_BACKUP_WARN_AFTER", Kind: Duration, Default: 7 * 24 * time.Hour, ReadBy: "dispatch (health)",
+		env: func(raw string) (any, envResult) {
+			if d, err := time.ParseDuration(raw); err == nil && d >= 0 {
+				return d, envUse
+			}
+			if raw == "0" {
+				return time.Duration(0), envUse
+			}
+			return nil, envSkip
+		},
+		file: fileDuration(true)},
 	{Name: "backup.age_recipient", Env: "AGENT_BUS_BACKUP_AGE_RECIPIENT", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch",
 		env: func(raw string) (any, envResult) {
 			if ValidAgeRecipient(raw) {

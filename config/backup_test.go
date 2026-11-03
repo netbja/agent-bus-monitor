@@ -152,3 +152,22 @@ func TestBackupSchedule(t *testing.T) {
 		t.Error("an unknown env schedule was used")
 	}
 }
+
+func TestBackupWarnAfter(t *testing.T) {
+	k, ok := Lookup("backup.warn_after")
+	if !ok || k.Kind != Duration || k.Default != 7*24*time.Hour || k.Group() != GroupBackup {
+		t.Fatalf("row %+v", k)
+	}
+	if v, res := k.env("336h"); res != envUse || v != 14*24*time.Hour {
+		t.Errorf("env 336h: %v %v", v, res)
+	}
+	if v, res := k.env("0"); res != envUse || v != time.Duration(0) {
+		t.Errorf("env 0: %v %v", v, res)
+	}
+	if _, res := k.env("-1h"); res != envSkip {
+		t.Error("a negative env duration was used")
+	}
+	if v, why := k.file("0"); why != "" || v != time.Duration(0) {
+		t.Errorf("file 0: %v %q", v, why)
+	}
+}

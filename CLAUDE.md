@@ -1040,7 +1040,12 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   secrets only with `backup.age_recipient`, without `age` the archive is made without them and `SecretsError`
   recorded; `backup-last.json`'s `scheduled` part (`RecordScheduled`) is written only by the chore. `agentbus backup`
   warns about a defaulted `backup.dir` while `daily` is on. busmon's C page shows the three `backup.after_*` keys (Backup group, `settingOnPage`: only its
-  `PersonOnly` keys) read-only: Enter says "edit config.toml yourself", `d` offers nothing.
+  `PersonOnly` keys) read-only: Enter says "edit config.toml yourself", `d` offers nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `cmd/agentbus/backupcheck.go` the reader; 15 min,
+  for you, `agentbus backup`): per project, warn on no covering archive younger than `backup.warn_after` (168h, `0` =
+  this reminder off), on the latest scheduled attempt covering it failed while `daily` (cleared by a newer covering
+  archive; the age case only by one with secrets, read from `coverage.json`'s `secrets`), on its latest
+  `after_command` run failed while one is set; unknown when the folder or the record cannot be read; the detail names
+  the folder.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

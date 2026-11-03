@@ -38,6 +38,9 @@ type Coverage struct {
 	CreatedAt time.Time `json:"created_at"`
 	Host      string    `json:"host"`
 	Projects  []string  `json:"projects"`
+	// Secrets says the archive holds secrets.age (health reads it here,
+	// without reading the archive).
+	Secrets bool `json:"secrets,omitempty"`
 }
 
 // Member is one archive member as the manifest lists it.

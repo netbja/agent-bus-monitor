@@ -120,6 +120,9 @@ func TestRunWithSecrets(t *testing.T) {
 	if !strings.Contains(strings.Join(names, ","), SecretsName) {
 		t.Fatalf("members %q", names)
 	}
+	if c, err := ReadCoverage(bytes.NewReader(b)); err != nil || !c.Secrets {
+		t.Fatalf("coverage %+v, %v: secrets not said", c, err)
+	}
 	for n, c := range got {
 		if strings.Contains(c, "pw-SECRET") {
 			t.Fatalf("%s holds the clear password", n)

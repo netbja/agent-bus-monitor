@@ -565,6 +565,12 @@ to watch a pane.
   Unattended, the secrets are included only when `backup.age_recipient` is set; with it but no
   `age` on the service's PATH, the archive is made without them and the failure recorded in
   `~/.local/state/agentbus/backup-last.json`. A restore is never scheduled.
+  Health `backup` (every 15 minutes, per project) warns, for you, when no archive covering the
+  project is younger than `backup.warn_after` (`168h`, a week; `0` turns this reminder off), when
+  the latest scheduled backup that covered it failed (until a newer archive covers it, made by hand
+  or not; one that left out the secrets for want of `age` clears only with an archive holding
+  them), or when `backup.after_command` failed for its latest archive. Its detail names the folder
+  it read. Sentinel never runs a backup or a restore.
 
 ---
 

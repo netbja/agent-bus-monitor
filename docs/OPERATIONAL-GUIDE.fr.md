@@ -601,6 +601,12 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   est posé ; avec lui mais sans `age` dans le PATH du service, l'archive est faite sans eux et
   l'échec noté dans `~/.local/state/agentbus/backup-last.json`. Une restauration n'est jamais
   planifiée.
+  La vérification `backup` (toutes les 15 minutes, par projet) vous avertit quand aucune archive
+  couvrant le projet n'a moins de `backup.warn_after` (`168h`, une semaine ; `0` coupe ce rappel),
+  quand la dernière sauvegarde planifiée qui le couvrait a échoué (jusqu'à ce qu'une archive plus
+  récente le couvre, faite à la main ou non ; un échec faute d'`age` ne s'efface qu'avec une archive
+  qui contient les secrets), ou quand `backup.after_command` a échoué pour sa dernière archive. Son
+  détail nomme le dossier lu. Sentinel ne lance jamais ni sauvegarde ni restauration.
 
 ---
 

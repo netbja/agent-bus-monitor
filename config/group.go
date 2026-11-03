@@ -34,7 +34,7 @@ var groups = map[string]Group{
 	"health.disk_warn_pct": GroupHealth, "health.disk_warn_gib": GroupHealth, "health.disk_fail_pct": GroupHealth,
 	"health.disk_fail_gib": GroupHealth, "health.runaway.silent_after": GroupHealth, "health.runaway.context_growth": GroupHealth,
 	"health.runaway.growth_span": GroupHealth, "health.runaway.screen_repeats": GroupHealth,
-	"backup.schedule": GroupBackup, "backup.dir": GroupBackup, "backup.keep": GroupBackup, "backup.age_recipient": GroupBackup,
+	"backup.schedule": GroupBackup, "backup.dir": GroupBackup, "backup.keep": GroupBackup, "backup.warn_after": GroupBackup, "backup.age_recipient": GroupBackup,
 	"backup.after_command": GroupBackup, "backup.after_env": GroupBackup, "backup.after_timeout": GroupBackup,
 	"bus.report_max": GroupBusCaps, "bus.report_full_max": GroupBusCaps, "bus.verdict_max": GroupBusCaps,
 }
