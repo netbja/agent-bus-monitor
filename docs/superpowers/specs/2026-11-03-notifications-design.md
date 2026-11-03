@@ -75,7 +75,11 @@ agents, plan, health, notices, observations): a pass with any failed read takes 
 sends nothing, and the next pass tries again (foureyes: a baseline missing the open asks would send
 them all at the next pass, the flood it exists to prevent). The same holds for every later pass: a
 pass with a failed read sends nothing, so an event is never judged new because its source was not
-read. So turning `notify.on` on, or adding a target, never floods a phone with the notices,
+read. An **absent** source is not a failed read: no plan loaded, observation off (no
+`{p}:observed`, so no `prompt` event), no notice, no ask are empty sets, and a project without a
+plan notifies like any other (foureyes). A read fails only on an error from the broker or a value
+that does not parse. Each pass records the sources it could not read in `notify-last.json` (per
+project, the source and since when), which the health check reads. So turning `notify.on` on, or adding a target, never floods a phone with the notices,
 asks and fails already standing (they are in busmon). The same holds for every kind, `blocked`
 included. When `notify.on` turns false the pass deletes the whole hash; when a target leaves
 `notify.targets` it deletes that target's fields: turning either back on takes a new baseline.
@@ -253,8 +257,10 @@ A check `notifications` (every 5 minutes, per project, for you, command `agentbu
 test`):
 
 - **unknown** when `notify.on` is false (nothing to judge), or `notify.toml` cannot be read;
-- **warn** when the file is readable by others, a listed target is missing or refused, or a
-  target's latest send failed (the detail: the target's name and the short error, never the URL);
+- **warn** when the file is readable by others, a listed target is missing or refused, a
+  target's latest send failed (the detail: the target's name and the short error, never the URL),
+  or a source of the project has failed to read for longer than 10 minutes (the detail names the
+  source and since when: the chore sends nothing while it fails, so the stop is said, never silent);
 - **ok** when every listed target's latest send succeeded or none was needed yet.
 
 Never a fail: it wakes nobody. A failed send does not lose the event: it is retried, for that
@@ -329,7 +335,9 @@ Discord or any host.
 - **No double line**: a `team-stall` fail is one `stall` line, never also a `fail` line.
 - **A failed read**: a first pass whose asks read fails takes no baseline and sends nothing; the
   next pass, the read back, records the open asks as baseline and sends none of them; any later
-  pass with a failed read sends nothing.
+  pass with a failed read sends nothing; a read failing for over 10 minutes warns in health, naming
+  the source. **An absent source**: no plan loaded and observation off still notify the other kinds
+  (a baseline is taken, a new ask is sent).
 - **Delay**: an ask answered within `notify.delay` is never sent; one still open is.
 - **Grouping and limits**: ten events in one pass are one message; the eleventh line reads "and N
   more"; past `max_per_hour` events wait, `fail` does not; two services (two projects) sending to one
