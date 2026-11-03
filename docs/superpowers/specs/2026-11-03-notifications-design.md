@@ -70,7 +70,12 @@ before its next target.
 **A baseline: no history on first enable, nor to a new target.** The first pass that finds a target
 in `notify.targets` without its `_target|<target>` field records every event that holds at that
 moment as `baseline` for that target and sends none of them; only episodes that appear after it
-are sent. So turning `notify.on` on, or adding a target, never floods a phone with the notices,
+are sent. A baseline is taken only from a pass whose every read of the facts succeeded (asks,
+agents, plan, health, notices, observations): a pass with any failed read takes no baseline and
+sends nothing, and the next pass tries again (foureyes: a baseline missing the open asks would send
+them all at the next pass, the flood it exists to prevent). The same holds for every later pass: a
+pass with a failed read sends nothing, so an event is never judged new because its source was not
+read. So turning `notify.on` on, or adding a target, never floods a phone with the notices,
 asks and fails already standing (they are in busmon). The same holds for every kind, `blocked`
 included. When `notify.on` turns false the pass deletes the whole hash; when a target leaves
 `notify.targets` it deletes that target's fields: turning either back on takes a new baseline.
@@ -195,8 +200,11 @@ type Sender interface {
   any other status fails that send. An error carries the status and the target's name, never the
   URL nor the response body.
 - **The outcome** of each send (target, project, time, ok or the short error) goes to
-  `<state>/notify-last.json` (`$XDG_STATE_HOME/agentbus/`, 0600, per target the latest 20, which
-  also count the hour's sends for the limit), which the health check reads; never the message.
+  `<state>/notify-last.json` (`$XDG_STATE_HOME/agentbus/`, 0600), which the health check reads;
+  never the message. Per target it keeps two things apart: `recent`, the latest 20 outcomes, for
+  display and health; and `hour`, the time of every send the limit counts (all but `fail` and
+  `stall`) in the last hour, pruned past one hour only (reviewer-codex: a burst of exempt sends must
+  never push a counted one out of the count).
   Every project's service writes it, so every read-modify-write of it, and the limit's decision
   before a send, happen under the host lock `<state>/notify.lock` (flock, waited for at most 5 s,
   else the pass sends nothing this time), the file replaced by a temporary file renamed.
@@ -319,11 +327,15 @@ Discord or any host.
   baseline; a field whose fact still holds after 8 days (a fake clock) sends nothing; a field whose
   fact is gone is deleted; a plan task waiting, then not, then waiting again is sent twice.
 - **No double line**: a `team-stall` fail is one `stall` line, never also a `fail` line.
+- **A failed read**: a first pass whose asks read fails takes no baseline and sends nothing; the
+  next pass, the read back, records the open asks as baseline and sends none of them; any later
+  pass with a failed read sends nothing.
 - **Delay**: an ask answered within `notify.delay` is never sent; one still open is.
 - **Grouping and limits**: ten events in one pass are one message; the eleventh line reads "and N
   more"; past `max_per_hour` events wait, `fail` does not; two services (two projects) sending to one
   target share the hour's limit through `notify-last.json` under the host lock, and both writers'
-  outcomes survive in the file; quiet hours hold all but `fail` and `stall`, then one message marked
+  outcomes survive in the file; six counted sends then twenty `fail`/`stall` sends within the hour
+  still leave the next ordinary message held (the hour's count is kept apart from the latest 20); quiet hours hold all but `fail` and `stall`, then one message marked
   "(during quiet hours)" (a fake clock).
 - **Detail**: `summary` carries no agent text (an ask titled `pw-SECRET` never reaches the
   server); `full` carries it scrubbed and cut: a credential-like value, `https://x.example/a`,
