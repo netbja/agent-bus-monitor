@@ -93,6 +93,7 @@ func TestPlanReadsOnlyOnRequestTicks(t *testing.T) {
 	}
 
 	f = newPlanFake(true)
+	f.facts["roles"] = bus.PlanFact{PR: 101} // approved with its PR: the person's to merge
 	st = newPlanShared()
 	f.ledger = []bus.Verdict{{ID: "5-0", Subject: "t", Author: "coder", Reviewer: "foureyes", Decision: "approve"}}
 	pollOnce(context.Background(), f, st, 1)
@@ -188,11 +189,11 @@ func hostilePlan(now time.Time) planState {
 	long := strings.Repeat("w", 31)
 	tasks := []string{}
 	var specs []string
-	for i, s := range []string{"wait", "block", "rev", "prog", "up", "unk", "done", "done2"} {
+	for i, s := range []string{"wait", "block", "rev", "prog", "up", "unk", "done", "done2", "answ"} {
 		id := fmt.Sprintf("%s%s", s, long)[:32]
 		tasks = append(tasks, id)
 		owner := "coder"
-		if i == 0 {
+		if i == 0 || s == "answ" {
 			owner = "person"
 		}
 		extra := fmt.Sprintf(`,"board":"%s"`, id)
@@ -224,7 +225,7 @@ func hostilePlan(now time.Time) planState {
 		ledger: map[string][]bus.Verdict{tasks[2]: {{ID: "5-0", Subject: tasks[2], Author: "coder", Reviewer: "foureyes", Decision: "reject"}}},
 		failed: map[string]bool{"missions": true}, partial: true}
 	p.in = plan.Inputs{Board: board, Facts: facts, Verdicts: p.ledger, BoardOK: true, FactsOK: true, VerdictsOK: true, AsksOK: true,
-		Asks: []bus.Ask{{ID: "9-0", From: "master", Task: tasks[0], State: "open"}}}
+		Asks: []bus.Ask{{ID: "9-0", From: "master", Task: tasks[0], State: "open"}, {ID: "9-1", From: "master", Task: tasks[8], State: "answered"}}}
 	p.rows = plan.Derive(f, p.in)
 	return p
 }
@@ -266,7 +267,7 @@ func TestRecapPlanSection(t *testing.T) {
 	if !strings.Contains(planRows, p.rows[2].Task.ID) || strings.Contains(planRows, p.rows[3].Task.ID) {
 		t.Fatalf("only a change proven by a fact after the visit is listed:\n%s", planRows)
 	}
-	if !strings.Contains(planRows, "2/8?") {
+	if !strings.Contains(planRows, "2/9?") {
 		t.Fatalf("the plan line with its count and the kept-value mark:\n%s", planRows)
 	}
 	expected := strings.Join(recapTitles(m, "For you"), "\n")
@@ -307,6 +308,7 @@ func TestPlanRowsFromKeptValuesAreMarked(t *testing.T) {
 
 func TestPlanVerdictsUnknownUntilTheLedgerCaughtUp(t *testing.T) {
 	f := newPlanFake(true)
+	f.facts["roles"] = bus.PlanFact{PR: 101}
 	for i := 0; i < planLedgerPage*planLedgerPages+10; i++ { // more than one tick reads
 		f.ledger = append(f.ledger, bus.Verdict{ID: fmt.Sprintf("%d-0", i+1), Subject: "other", Author: "a", Reviewer: "b", Decision: "approve"})
 	}
@@ -322,6 +324,29 @@ func TestPlanVerdictsUnknownUntilTheLedgerCaughtUp(t *testing.T) {
 	for _, r := range st.plan.rows {
 		if r.Task.ID == "roles" && r.State != plan.Waiting {
 			t.Fatalf("caught up: approved, waiting for the person: %+v", r)
+		}
+	}
+}
+
+// The title is cut with … and always one space or more from the owner, at
+// every width the panel takes (plan-view: "Grokcoder", "deliverycoder").
+func TestPlanTitleNeverTouchesTheOwner(t *testing.T) {
+	p := hostilePlan(time.Now())
+	for width := 60; width <= 200; width++ {
+		_, plain, _ := planOverlay(p, -1, true, time.Now(), width)
+		for _, l := range strings.Split(plain, "\n") {
+			if strings.Contains(l, "wTi[red]") || strings.Contains(l, "…Ti[red]") {
+				t.Fatalf("width %d: the id touches the title: %q", width, l)
+			}
+			for _, owner := range []string{"coder", GlyphHuman + " person"} {
+				i := strings.Index(l, owner)
+				if i <= 0 || strings.HasPrefix(strings.TrimLeft(l, " "), owner) {
+					continue
+				}
+				if l[i-1] != ' ' {
+					t.Fatalf("width %d: the owner touches the title: %q", width, l)
+				}
+			}
 		}
 	}
 }

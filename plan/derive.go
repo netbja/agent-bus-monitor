@@ -14,7 +14,8 @@ type State string
 
 const (
 	Done       State = "done"
-	Waiting    State = "waiting" // waiting for the person
+	Waiting    State = "waiting"  // waiting for the person
+	Answered   State = "answered" // a person task answered, master to record it
 	Blocked    State = "blocked"
 	InReview   State = "review"
 	InProgress State = "progress"
@@ -24,7 +25,7 @@ const (
 
 // Order is the display order of the states (spec: waiting for you first,
 // done last).
-var Order = []State{Waiting, Blocked, InReview, InProgress, Upcoming, Unknown, Done}
+var Order = []State{Waiting, Answered, Blocked, InReview, InProgress, Upcoming, Unknown, Done}
 
 // Verdict labels of a task's review.
 const (
@@ -137,8 +138,14 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		r.State = Done
 	case ask != nil:
 		r.State, r.Ask = Waiting, ask.ID
-	case t.MergeTask() && review == Approved:
-		r.State = Waiting
+	// The merge is the person's only once there is something to merge, a PR
+	// or a delivered ref (plan-view): approved with neither, it stays with
+	// the team.
+	case t.MergeTask() && review == Approved && linked:
+		r.State, r.Reason = Waiting, mergeReason(fact)
+	// The person answered and nothing is open: master records it.
+	case t.Owner == Person && answeredAsk(t.ID, in.Asks):
+		r.State = Answered
 	case t.Owner == Person && len(waitingOn) == 0:
 		r.State = Waiting
 	case onBoard && (e.State == "blocked" || (e.Request != nil && e.Request.BlockedReason != "")):
@@ -244,6 +251,33 @@ func openAsk(id string, asks []bus.Ask) *bus.Ask {
 		}
 	}
 	return nil
+}
+
+// mergeReason is what the person merges: the PR, else the delivered ref,
+// its commit shortened.
+func mergeReason(f Fact) string {
+	if f.PR > 0 {
+		return "merge PR " + strconv.Itoa(f.PR)
+	}
+	i := strings.LastIndex(f.Ref, "@") // a branch may hold @ (PlanLinkRef splits on the last)
+	if i < 0 {
+		return "merge " + f.Ref
+	}
+	branch, sha := f.Ref[:i], f.Ref[i+1:]
+	if len(sha) > 7 {
+		sha = sha[:7]
+	}
+	return "merge " + branch + "@" + sha
+}
+
+// answeredAsk: an ask about the task was answered (openAsk found none open).
+func answeredAsk(id string, asks []bus.Ask) bool {
+	for i := range asks {
+		if asks[i].Task == id && asks[i].State == "answered" {
+			return true
+		}
+	}
+	return false
 }
 
 // IDLess orders stream ids (<ms>-<seq>) numerically.

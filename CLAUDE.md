@@ -105,7 +105,10 @@ cjson would rewrite `[]`) plus master's facts in `{p}:plan:facts` (`bus/plan.go`
 Redis `TIME`; one script each, a task not in the plan refused); neither key is in `projectKinds`,
 and a load is refused for a project with no such key. `Derive` (`derive.go`) is pure: a board
 request `done` is *delivered*, so **in review**; done needs a recorded `plan done` (shown as a
-dated claim) or `merge:false` + delivered + approved; the review is `bus.RollUp` over the task's
+dated claim) or `merge:false` + delivered + approved; an approved merge task waits for the person
+only with its PR linked (`merge PR N`; plan-view), else stays with the team; a person task whose ask is
+answered, nothing open, is `Answered` ("answered, master to record": not For you, master's ready work in
+`team-stall`); the review is `bus.RollUp` over the task's
 subject (default its board task) plus `pr:<n>`; asks match only by `AskDef.Task`; a never-read
 input reads `?`. busmon reads the plan every `requestPoll` tick through the optional
 `planReader` (the ledger incrementally, `VerdictsAfter` from the last seen id), derives in

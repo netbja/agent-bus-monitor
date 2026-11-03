@@ -434,8 +434,10 @@ noms d'onglets et d'agents, sans modèle de projet) :
   (`2 requests waiting · oldest 3h`), ce que les agents se doivent entre eux en gris
   (`4 between agents`), chacun absent à 0.
 - **Le plan.** Quand master charge le plan du lot (`agentbus plan load docs/plans/<nom>.json@<commit>`),
-  l'onglet Plan (`4`) et `P` montrent ses tâches par état (waiting for you, blocked, in review,
-  in progress, upcoming, done), chacune avec sa revue, sa PR et ses questions. Une tâche qui vous
+  l'onglet Plan (`4`) et `P` montrent ses tâches par état (waiting for you, answered, blocked,
+  in review, in progress, upcoming, done), chacune avec sa revue, sa PR et ses questions. Une
+  fusion ne vous attend qu'une fois sa PR liée (« merge PR N ») ; une question à laquelle vous avez
+  répondu fait passer la tâche à answered, master to record. Une tâche qui vous
   attend a une ligne `Action:` : Entrée ou `s` ouvre la fenêtre de rédaction vers master,
   préremplie, pour la démarrer. Une tâche n'est
   done que si master l'enregistre (`agentbus plan done <tâche>`), ou si elle n'a pas à être

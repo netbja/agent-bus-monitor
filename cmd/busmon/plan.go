@@ -227,6 +227,8 @@ func planLook(s plan.State) (string, Role) {
 	switch s {
 	case plan.Waiting:
 		return GlyphHuman, RoleAttention
+	case plan.Answered: // master's to record, no longer the person's
+		return GlyphDotEmpty, RoleAccent
 	case plan.Blocked:
 		return GlyphBlocked, RoleError
 	case plan.InReview:
@@ -307,27 +309,29 @@ func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) 
 				titleW = max(8, width-idw-4-len([]rune(owner))-2-min(40, len([]rune(details))))
 			}
 			rowTitle := clip(Preview(r.Task.Title), titleW)
-			text := "  " + pad(Preview(r.Task.ID), idw) + rowTitle
-			row := append(planMark(idx == sel), S(role, glyph), sp, S(RoleText, pad(Preview(r.Task.ID), idw)), S(RoleText, rowTitle))
+			id := pad(clip(Preview(r.Task.ID), idw-2), idw) // clip adds its …: one space is left before the title
+			text := "  " + id + rowTitle
+			row := append(planMark(idx == sel), S(role, glyph), sp, S(RoleText, id), S(RoleText, rowTitle))
 			kept := ""
 			if p.kept(r) {
 				kept = " ?" // derived from a value kept after a failed read
 			}
+			// The separator is added after the cut: clip trims the edges of
+			// what it cuts, which glued the owner to the title (plan-view).
+			rest := owner
+			if details != "" {
+				rest += "  " + details
+			}
 			if narrow {
 				emit(row, text)
-				sub := "    " + owner
-				if details != "" {
-					sub += "  " + details
-				}
-				sub = clip(sub, max(0, width-len(kept)))
+				sub := "    " + clip(rest, max(0, width-4-len(kept)))
 				emit(Line{S(RoleMuted, sub+kept)}, sub+kept)
 				continue
 			}
-			tail := "  " + owner
-			if details != "" {
-				tail += "  " + details
+			tail := ""
+			if room := width - idw - 4 - len([]rune(rowTitle)) - len(kept) - 2; room > 0 {
+				tail = "  " + clip(rest, room)
 			}
-			tail = clip(tail, max(0, width-idw-4-len([]rune(rowTitle))-len(kept)))
 			emit(append(row, S(RoleMuted, tail+kept)), text+tail+kept)
 		}
 	}

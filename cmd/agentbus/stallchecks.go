@@ -280,6 +280,8 @@ func (s *stallReader) teamStall(ctx context.Context) (health.Outcome, error) {
 			switch {
 			case r.State == plan.Waiting:
 				in.PersonReady = append(in.PersonReady, r.Task.Title)
+			case r.State == plan.Answered: // the person answered: master records it
+				in.AgentReady = append(in.AgentReady, health.ReadyTask{ID: r.Task.ID, Title: r.Task.Title, Owner: "master"})
 			case r.State == plan.Upcoming && r.Task.Owner != plan.Person && len(r.WaitingOn) == 0:
 				t := health.ReadyTask{ID: r.Task.ID, Title: r.Task.Title, Owner: r.Task.Owner}
 				if snap, ok := snaps[r.Task.Owner]; ok && held[snap.Provider] {

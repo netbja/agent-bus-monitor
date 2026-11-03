@@ -198,7 +198,8 @@ agentbus plan note roles rebased on main                 # a one-line note on th
 agentbus plan show [--json]                              # tasks by DERIVED state; exit 1 when a read failed ('?' tasks)
 agentbus ask master --task roles -F q.json               # an ask about a plan task names it by field (never by its words)
 # States are derived, never typed: board request done = delivered = IN REVIEW (not done);
-# approved and unrecorded = WAITING FOR YOU (the merge is the person's); done needs `plan done`
+# approved, its PR linked, unrecorded = WAITING FOR YOU ("merge PR N"; with no PR it stays in review);
+# a person task whose ask is answered, nothing open = ANSWERED, MASTER TO RECORD; done needs `plan done`
 # (or "merge": false + delivered + approved). Reviews are read on the board task's subject + pr:<n>.
 
 # ── DELIVER: push the approved head and open its PR/MR (master and docs only) ──
@@ -468,7 +469,7 @@ agentbus verdict --pr 25 --ref k3f9q claude2 approve verified
     even over an SSH tunnel). `Esc` clears the selection and returns to live tail.
   - Mouse wheel scrolls; the title shows `[live]` or a pause indicator.
 - **PLAN** — `P` opens the batch's plan (published by `agentbus plan load`): its tasks grouped
-  by derived state (waiting for you, blocked, in review, in progress, upcoming, `?`, done), `Enter`
+  by derived state (waiting for you, answered, blocked, in review, in progress, upcoming, `?`, done), `Enter`
   opens a task (board, request, verdicts per subject, ask, recorded facts) or expands done. The
   header shows `plan v0.22 3/9` (`?` after the count when a read failed and values are kept; `♙ N`
   when tasks wait for the person); the recap (`R`) adds a Plan section.

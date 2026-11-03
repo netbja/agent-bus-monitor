@@ -298,7 +298,11 @@ The person cannot see the plan in your conversation; busmon shows it (`P`, the h
   (the board task it follows: also its review subject), `after`, and `"merge": false` for a task
   that ends without a merge of its own (a spec, a review), or `mission: "<change>/<id>"`.
 - States are derived, never typed: delivered (`request done`) reads **in review**; an approved
-  merge task reads **waiting for you** until you record the merge. Keep the facts true:
+  merge task reads **waiting for you** ("merge PR N", or "merge <branch>@<sha>" for a delivery
+  recorded as a ref) only once its PR or ref is linked, and until you record the merge (approved
+  with neither, it stays in review: deliver it); a person task whose ask was answered, with
+  nothing open, reads **answered, master to record**: yours to act on and record, no longer the
+  person's. Keep the facts true:
   `agentbus deliver <branch> --task <task>` records the link itself (`--pr <n>` once a pull or
   merge request is open, `--ref <branch>@<sha>` in link or local mode); `agentbus plan link <task>
   --pr <n>|--ref <branch>@<sha>` only for a request opened another way; `agentbus plan done <task>` when the
