@@ -22,7 +22,7 @@ func TestEvaluateNotifications(t *testing.T) {
 		"missing":        {NotificationsInput{On: true, Targets: []NotifyTarget{{Name: "gone", Missing: true}}}, Warn, []string{"gone", "not in notify.toml"}},
 		"refused":        {NotificationsInput{On: true, Targets: []NotifyTarget{{Name: "bad", Refused: true}}}, Warn, []string{"bad", "refused"}},
 		"failed send": {NotificationsInput{On: true, Now: now, Targets: []NotifyTarget{{Name: "phone", Sent: true, Err: "phone: 401 unauthorized", At: now.Add(-time.Minute)}}},
-			Warn, []string{"phone: 401 unauthorized"}},
+			Warn, []string{"phone: last send failed", "(401 unauthorized)"}},
 		"source failing long": {NotificationsInput{On: true, Now: now, Targets: ok, Sources: map[string]time.Time{"asks": now.Add(-11 * time.Minute)}},
 			Warn, []string{"asks", "nothing is sent"}},
 		"source failing briefly": {NotificationsInput{On: true, Now: now, Targets: ok, Sources: map[string]time.Time{"asks": now.Add(-time.Minute)}},

@@ -268,7 +268,7 @@ func TestNotificationsTestRefusesAnAgentsChild(t *testing.T) {
 		code   int
 	}{
 		"agent's child": {caller: "coder", code: 1},
-		"unchecked":     {err: errors.New("broker unreachable"), code: 1},
+		"unchecked":     {err: errors.New("dial unix: no such file"), code: 1},
 		"no /proc":      {err: errNoAncestry, code: 0}, // off Linux: the env rule alone
 		"person":        {code: 0},
 	} {
@@ -309,5 +309,28 @@ func TestAgentAncestorFindsARegisteredParent(t *testing.T) {
 	}
 	if got, err := agentAncestor(ctx); err != nil || got != "" { // another start: a recycled pid is not the agent
 		t.Fatalf("another start matched: %q %v", got, err)
+	}
+}
+
+// master: with the broker unreadable on Linux the test is refused, and the
+// message says why (the agent check reads the broker's agents) and how to fix
+// it; status needs no broker.
+func TestNotificationsTestSaysTheBrokerIsNeeded(t *testing.T) {
+	w := newNotifyWorld(t)
+	w.write(t, "notify.toml", w.notifyToml())
+	d := w.deps()
+	d.AgentCaller = func(context.Context) (string, error) { return "", errors.New("dial: refused") }
+	var out, errw bytes.Buffer
+	if code := runNotifications(context.Background(), []string{"test", "phone"}, d, &out, &errw); code != 1 || len(w.got) != 0 {
+		t.Fatalf("exit %d, sent %d", code, len(w.got))
+	}
+	for _, s := range []string{"needs the broker", "dial: refused", "docker compose up -d", "REDIS_URL"} {
+		if !strings.Contains(errw.String(), s) {
+			t.Errorf("message %q lacks %q", errw.String(), s)
+		}
+	}
+	errw.Reset()
+	if code := runNotifications(context.Background(), []string{"status"}, d, &out, &errw); code != 0 {
+		t.Fatalf("status needs the broker: %d %q", code, errw.String())
 	}
 }

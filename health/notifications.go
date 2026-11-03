@@ -62,7 +62,9 @@ func EvaluateNotifications(in NotificationsInput) Outcome {
 		case t.Refused:
 			warns = append(warns, t.Name+": refused in notify.toml (agentbus notifications status says why)")
 		case t.Sent && !t.OK:
-			warns = append(warns, "last send failed "+t.At.Local().Format("15:04")+" ("+t.Err+")")
+			// The target's name first, the bare reason after (foureyes): never
+			// relying on the error's own format.
+			warns = append(warns, t.Name+": last send failed "+t.At.Local().Format("15:04")+" ("+strings.TrimPrefix(t.Err, t.Name+": ")+")")
 		case t.Sent:
 			fine = append(fine, t.Name+" ok")
 		default:

@@ -21,7 +21,9 @@ import (
 
 // agentbus notifications status|test (spec
 // docs/superpowers/specs/2026-11-03-notifications-design.md, "Commands"): no
-// project, no broker. status shows each target of notify.toml, whether it is
+// project. status needs no broker; test reads the broker's agents on Linux to
+// refuse an agent's process (master: an unreadable broker refuses it).
+// status shows each target of notify.toml, whether it is
 // listed and its last send; test sends one message now and records its
 // outcome. Neither ever prints a URL, a topic, a token or a webhook. test is
 // the person's act (it reaches a phone): it refuses a caller with
@@ -145,8 +147,8 @@ func notificationsTest(ctx context.Context, name string, d notificationsDeps, ou
 	if d.AgentCaller != nil {
 		switch caller, err := d.AgentCaller(ctx); {
 		case errors.Is(err, errNoAncestry): // off Linux: the env rule above alone
-		case err != nil:
-			fmt.Fprintln(errw, "agentbus notifications: cannot check that no agent runs this (the broker's agents):", err)
+		case err != nil: // safe (master): no check, no send
+			fmt.Fprintf(errw, "agentbus notifications: test needs the broker: it checks that no registered agent runs it, and could not read the agents (%v). Start the broker (docker compose up -d in the agent-bus checkout) or check REDIS_URL, then run it again; status needs no broker.\n", err)
 			return 1
 		case caller != "":
 			fmt.Fprintf(errw, "agentbus notifications: a test message reaches the person's phone: the person's act, and this runs under the agent %s\n", caller)

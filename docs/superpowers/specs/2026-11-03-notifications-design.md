@@ -276,7 +276,9 @@ agentbus notifications test [<target>]   # one test message now, to one target o
 ```
 
 `notifications` (not `notify`, which is the bus command). Both sit above the project-required exit
-and need no broker. `test` sends "agentbus: a test message from <host>", records the outcome, and
+and need no project. `status` needs no broker; `test` reads the broker's registered agents to
+refuse an agent's process (below), so on Linux an unreadable broker refuses it, saying why and
+how to fix it (master: safe over convenient). `test` sends "agentbus: a test message from <host>", records the outcome, and
 prints `ok` or the short error; it is the person's act, never an agent's: the shipped tool rules
 deny `Bash(agentbus notifications test*)` to every role (no wildcard before the words, which would
 deny any message mentioning them), and the command itself refuses a caller with `AGENT_BUS_AGENT`

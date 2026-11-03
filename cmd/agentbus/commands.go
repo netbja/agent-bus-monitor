@@ -489,7 +489,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "notifications", NoProject: true, Usage: []string{"notifications status", "notifications test [<target>]"},
-		Summary:  "the notification targets of notify.toml (never a URL) and their last sends; test sends one message now (the person's act)",
+		Summary:  "the notification targets of notify.toml (never a URL) and their last sends (no broker); test sends one message now, the person's act (it reads the broker's agents to refuse an agent's process)",
 		Examples: []string{"agentbus notifications status", "agentbus notifications test phone"},
 	},
 	{

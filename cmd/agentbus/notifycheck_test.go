@@ -27,7 +27,7 @@ func TestNotificationsCheckReadsTheHost(t *testing.T) {
 	if err != nil || got.Status != health.Warn {
 		t.Fatalf("%+v %v", got, err)
 	}
-	for _, s := range []string{"gone: not in notify.toml", "bad: refused", "phone: 401 unauthorized", "plan since"} {
+	for _, s := range []string{"gone: not in notify.toml", "bad: refused", "phone: last send failed", "(401 unauthorized)", "plan since"} {
 		if !strings.Contains(got.Detail, s) {
 			t.Errorf("detail %q lacks %q", got.Detail, s)
 		}
