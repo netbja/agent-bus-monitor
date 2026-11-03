@@ -23,9 +23,9 @@ person. The notifier **reads** them; no producer changes.
 
 | Kind | The fact (already on the bus) | Episode (sent once per) |
 |---|---|---|
-| `decision` | an open ask (`{p}:asks`); an agent declared `waiting`; a plan task waiting for the person (plan-view's For you item) | the ask id; the declaration's `ts`; the task and its waiting state's since |
+| `decision` | an open ask (`{p}:asks`); an agent declared `waiting`; a plan task waiting for the person (plan-view's For you item) | the ask id; the declaration's `ts`; the task id while it waits (plan.Derive keeps no since: the episode is one stretch of waiting, from the pass that first sees it to the pass that no longer does) |
 | `stall` | health `team-stall` at `fail` (the stall guard's episode) | the record's `since` |
-| `fail` | any health check entering `fail` | the check and its `since` |
+| `fail` | any other health check entering `fail` (`team-stall` is `stall` only, never a second `fail` line) | the check and its `since` |
 | `blocked` | a dispatcher notice marked `for=person` (`{p}:notify`, `for=person`): an escalation nobody on the bus can act on, the coordinator's own long hold | the notice's stream id |
 | `prompt` | an agent's pane waiting on its client's prompt, past the prompt-notify grace (the same episode the desktop rings for) | `pid:since` |
 | `for-you` | a health check entering `warn` with its place For you (backup, disk, github...) | the check and its `since` |
@@ -43,13 +43,43 @@ backup chores: a pass every 30 s, only while the service holds its dispatch leas
 (`HoldsDispatch`). It never runs in busmon, never in an agent, never in the CLI. Each project
 notifies about itself; the targets are the host's (one file, below), shared by every project.
 
-**Once per episode, across restarts.** Each sent episode is recorded by a fenced write in
-`{p}:notified` (a hash: field = kind and episode key, value = Redis `TIME` of the send), *before*
-the send, as the prompt-notify mark is: a dispatcher that lost its lease sends nothing, and an
-episode is sent at most once even when the service restarts between two passes. A field older than
-7 days is pruned by the pass. The key is classified **runtime** in the backup key table (it
-describes what this host sent, not the project's record), not in `projectKinds`, ignored by
-`HasKeysBesidesDispatch`.
+**What is sent, recorded per target.** `{p}:notified` is a hash written only by fenced scripts
+(the lease token checked first). Its fields:
+
+- `<kind>|<episode>|<target>`: that event was sent to that target (value: Redis `TIME` of the
+  send), or recorded at a baseline (value `baseline`, below);
+- `_target|<target>`: the target's baseline was taken (value: Redis `TIME`).
+
+The key is classified **runtime** in the backup key table (it describes what this host sent, not
+the project's record), is not in `projectKinds`, and is ignored by `HasKeysBesidesDispatch`.
+
+**At least once, per target.** A send is an HTTP request to a third party: it cannot be fenced
+with Redis. The rule is therefore at least once: a pass builds, per target, the events whose field
+for that target is absent, sends them as one message, and only after that target answers with
+success writes their fields for that target (one fenced script for the batch). A failed target is
+retried alone at the next pass; the others are not sent again. The failures accepted, named here:
+
+- the service dies, or its lease lapses, between a target's success and the fenced write: that
+  target gets the same lines once more at the next pass (a repeated buzz, never a lost one);
+- a lease handed over in the middle of a send: the new holder may send the same lines once
+  (the same residual as above, bounded by one pass).
+
+No send is ever made without the lease checked in the same pass, and a pass that loses it stops
+before its next target.
+
+**A baseline: no history on first enable, nor to a new target.** The first pass that finds a target
+in `notify.targets` without its `_target|<target>` field records every event that holds at that
+moment as `baseline` for that target and sends none of them; only episodes that appear after it
+are sent. So turning `notify.on` on, or adding a target, never floods a phone with the notices,
+asks and fails already standing (they are in busmon). The same holds for every kind, `blocked`
+included. When `notify.on` turns false the pass deletes the whole hash; when a target leaves
+`notify.targets` it deletes that target's fields: turning either back on takes a new baseline.
+
+**Pruned only when the fact is gone.** Each pass computes the events that hold now; a field whose
+episode no longer holds (the ask closed, the declaration replaced, the check no longer at that
+status since that time, the notice trimmed from `{p}:notify`, the plan task no longer waiting) is
+deleted. A field is never pruned by age while its fact still holds, so a week-long fail is sent
+once, not weekly. A plan task that waits again later is a new stretch, sent again.
 
 **Not on the bus.** No message, URL, token or delivery result is written to a stream; the person's
 phone is not a bus participant. The record above holds kind, episode and time only.
@@ -64,13 +94,15 @@ phone is not a bus participant. The record above holds kind, episode and time on
   phone. `0` sends at the next pass.
 - **Grouped.** The events of one pass that are due go out as one message per target, one line each
   (at most 10 lines, then "and N more: open busmon"), so a burst is one buzz.
-- **A rate limit** (`notify.max_per_hour`, default 6 messages per target per hour): beyond it,
-  events are kept and sent in the next allowed message; `fail` and `stall` are never held back by
-  it (open question 3).
+- **A rate limit per host** (`notify.max_per_hour`, default 6 messages per target per hour): every
+  project's dispatch service sends to the same targets, so the limit is the host's, counted in
+  `<state>/notify-last.json` (below) under the host lock: three projects share the 6, never send 18.
+  Beyond it, events are kept (their fields absent) and sent in the next allowed message; `fail` and
+  `stall` are never held back by it (open question 3).
 - **Quiet hours** (`notify.quiet`, `"22:00-07:30"` style, local time; empty = none, the default):
   during them nothing is sent but `fail` and `stall` (open question 3); what was held is sent as one
-  message when they end, its lines marked "(during quiet hours)". The record is written when the
-  message is sent, not when the event is held.
+  message when they end, its lines marked "(during quiet hours)". A held event has no field until
+  its message is sent, as any other (at least once, above).
 - **Paused project**: nothing is sent while `{p}:pause` holds (a pause is the person's own act),
   except `fail`.
 
@@ -89,8 +121,12 @@ agent-bus-monitor · 2 waiting for you
 - **Detail level** (`notify.detail`, open question 2): `summary` (the default) sends no free text
   written by an agent: "master asks a question (2)" instead of the question itself, since the
   target is a third-party service (ntfy.sh, Discord). `full` adds the question's title, a waiting
-  agent's status message and the check's detail, each through `health.Redact` (the whole field
-  replaced on any credential-like hit) and cut to 120 runes.
+  agent's status message and the check's detail, each scrubbed, then cut to 120 runes. The scrub
+  (`notify.Scrub`): `health.Redact` first (the whole field replaced on any credential-like hit),
+  then every URL (any `scheme://...`, any `www.` host) replaced by `[url]`, every absolute path and
+  every `~/` path (a word starting with `/` or `~/` holding a second `/`) by `[path]`, every email
+  address by `[email]`. A health detail that names a folder (backup's) thus sends `[path]`. The
+  scrub is a best effort over free text, which is why `summary`, which sends none, is the default.
 - **Never**: a secret, a URL from the bus, a file path under the home, an ask's answer options as
   links. A message is at most 2000 bytes (Discord's limit; ntfy's 4096 is higher).
 - **Priority** (ntfy's `Priority`, Discord has none): `fail` and `stall` high, `decision` and
@@ -158,9 +194,12 @@ type Sender interface {
   `Retry-After` (at most 60 s) once, a `5xx` or transport error is retried twice with 2 s and 8 s;
   any other status fails that send. An error carries the status and the target's name, never the
   URL nor the response body.
-- **The outcome** of each send (target, time, ok or the short error) goes to
-  `<state>/notify-last.json` (`$XDG_STATE_HOME/agentbus/`, 0600, per target, the latest 20), which
-  the health check reads; never the message.
+- **The outcome** of each send (target, project, time, ok or the short error) goes to
+  `<state>/notify-last.json` (`$XDG_STATE_HOME/agentbus/`, 0600, per target the latest 20, which
+  also count the hour's sends for the limit), which the health check reads; never the message.
+  Every project's service writes it, so every read-modify-write of it, and the limit's decision
+  before a send, happen under the host lock `<state>/notify.lock` (flock, waited for at most 5 s,
+  else the pass sends nothing this time), the file replaced by a temporary file renamed.
 - **Later, two-way** (Signal, Telegram; Bernard's "later maybe"): a `Receiver` beside `Sender`,
   out of scope here. Its rule is written now so the interface does not foreclose it: an answer
   from a phone is a person's act, so it may only enter the bus as busmon's own writes do (an ask's
@@ -210,10 +249,9 @@ test`):
   target's latest send failed (the detail: the target's name and the short error, never the URL);
 - **ok** when every listed target's latest send succeeded or none was needed yet.
 
-Never a fail: it wakes nobody. A failed send does not lose the event: it is retried at the next
-pass until it succeeds or the event no longer holds (the `{p}:notified` field is written only after
-a successful send to at least one target; with several targets, the ones that failed are retried
-alone, per target).
+Never a fail: it wakes nobody. A failed send does not lose the event: it is retried, for that
+target alone, at the next pass until it succeeds or the event no longer holds (fields per target,
+above).
 
 ## busmon
 
@@ -256,7 +294,9 @@ No new key, no new panel, no bell: busmon already rings for these facts.
   notified record or an agent's environment; read `notify.toml` from an agent's tool.
 - Send anything an agent wrote with `summary` detail; send an answer option as a link.
 - Send from busmon, an agent or the CLI (but the person's `notifications test`); send without the
-  dispatch lease; send an episode twice.
+  dispatch lease checked in the same pass; send an episode to a target again, but the one repeat
+  after a crash or a lease lapse between a success and its record; send what already stood when
+  notifications or a target were turned on.
 - Ping a Discord role or `@everyone`; follow a redirect; use an environment proxy.
 - Accept an answer from a phone (two-way is a later spec, under the rule above).
 
@@ -268,15 +308,27 @@ Discord or any host.
 - **Events**: a fake bus with an open ask, a `waiting` declaration, a `team-stall` fail, a check
   entering `fail`, a `for=person` notice, a prompt episode, a for-you warn: each kind sent once, the
   default events only; `human=yes` entries, reports and in-hand warns never.
-- **Episodes**: two passes send once; a restart (a new loop on the same Redis) sends nothing more;
-  without the lease nothing is sent nor recorded; a new episode (a new `since`, a new ask) sends
-  again; fields older than 7 days pruned.
+- **Episodes and targets**: two passes send once; a restart (a new loop on the same Redis) sends
+  nothing more; without the lease nothing is sent nor recorded; a new episode (a new `since`, a new
+  ask) sends again; with two targets one failing, the next pass sends to the failing one only; a
+  crash between a success and its record (a fake that stops there) sends that target the lines
+  once more, never more.
+- **Baseline and pruning**: the first pass with a target sends nothing that already held (an open
+  ask, a retained `for=person` notice, a standing fail) and records them `baseline`; a new episode
+  after it is sent; a target added later gets no history; `notify.on` off then on takes a new
+  baseline; a field whose fact still holds after 8 days (a fake clock) sends nothing; a field whose
+  fact is gone is deleted; a plan task waiting, then not, then waiting again is sent twice.
+- **No double line**: a `team-stall` fail is one `stall` line, never also a `fail` line.
 - **Delay**: an ask answered within `notify.delay` is never sent; one still open is.
 - **Grouping and limits**: ten events in one pass are one message; the eleventh line reads "and N
-  more"; past `max_per_hour` events wait, `fail` does not; quiet hours hold all but `fail` and
-  `stall`, then one message marked "(during quiet hours)" (a fake clock).
+  more"; past `max_per_hour` events wait, `fail` does not; two services (two projects) sending to one
+  target share the hour's limit through `notify-last.json` under the host lock, and both writers'
+  outcomes survive in the file; quiet hours hold all but `fail` and `stall`, then one message marked
+  "(during quiet hours)" (a fake clock).
 - **Detail**: `summary` carries no agent text (an ask titled `pw-SECRET` never reaches the
-  server); `full` carries it redacted and cut.
+  server); `full` carries it scrubbed and cut: a credential-like value, `https://x.example/a`,
+  `/home/u/backups`, `~/x/y` and `a@b.example` reach the server as `[redacted]`, `[url]`, `[path]`,
+  `[path]` and `[email]`.
 - **Senders** (httptest): ntfy headers and body, Bearer only with a token; Discord's JSON with
   `allowed_mentions` empty; a 302 not followed; a 429 retried once after `Retry-After`; a 500
   retried twice; a 401 not retried; an error string with neither the URL nor the body.
@@ -292,7 +344,8 @@ Discord or any host.
 
 1. `notify` package: `Sender`, ntfy and Discord, the HTTP client, `notify.toml` reading.
 2. The settings keys, `agentbus notifications status|test`, the tool-rule denies, backup's secret.
-3. The chore: events, episodes in `{p}:notified`, delay, grouping, limits, quiet hours.
+3. The chore: events, per-target records and baselines in `{p}:notified`, pruning, delay,
+   grouping, the host-wide limit, quiet hours.
 4. Health `notifications`; busmon's C page group and target lines.
 
 ## Open questions for Bernard
