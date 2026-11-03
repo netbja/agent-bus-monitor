@@ -45,12 +45,18 @@ writer, no new supervisor, nothing restored into Redis.**
 
 ## 3. The suspend pause (bus change)
 
-`PauseRecord` gains two additive fields:
+`PauseRecord` gains four additive fields:
 
 ```go
 Kind string        `json:"kind,omitempty"` // "" = a timed pause (today); "suspend"
 Prev *PauseRecord  `json:"prev,omitempty"` // the pause the suspend replaced, if any
+Host string        `json:"host,omitempty"` // a suspend's host (os.Hostname)
+Boot string        `json:"boot,omitempty"` // that host's boot when it suspended (below)
 ```
+
+`Boot` identifies the running boot of the host: Linux `/proc/sys/kernel/random/boot_id`, macOS
+`kern.boottime` (`sysctl`), read once by `suspend`; empty when it cannot be read. It is only
+compared (§8), never trusted for anything else.
 
 A suspend pause has no deadline in meaning. Its `Until` is set to `at + 365 days`, so a dispatcher
 of an older release, which does not know `kind`, never ends it in practice; busmon and `pause
@@ -241,6 +247,7 @@ is missing would stall, and a resume directive to a master that is missing would
   "project": "p",
   "taken_at": 1793743724567,
   "host": "laptop",
+  "boot": "6f1c…",
   "by": "person-name",
   "reason": "OS updates",
   "herdr": {"session": "agent-bus", "workspace": "w-3", "reachable": true},
@@ -302,7 +309,12 @@ suspended project it reads the pause (2 s) and, by the setting `suspend.auto_res
 
 - **off** (the default): it starts nothing and prints `<p>: suspended since …: agentbus resume brings
   it back`;
-- **on**: it starts the full resume of that project (§5), exactly as `agentbus resume -p <p> --yes`
+- **on**, and only **after a reboot or a crash**: the record's `Host` is this host and its `Boot` is
+  non-empty and differs from the current boot (foureyes: focus events are frequent, and a person who
+  suspends from busmon inside that very workspace and switches back to it before the reboot would
+  otherwise wake the team just before the machine goes down). On the same boot, or with either boot
+  unknown, or another host, it starts nothing and prints `<p>: suspended on this boot: agentbus
+  resume brings it back`. Then it starts the full resume of that project (§5), exactly as `agentbus resume -p <p> --yes`
   would, with the same rules: services, `up`'s relaunch with `--resume` (never typing into an existing
   pane), the proof, and the pause lifted only when every boot agent is back (no `--partial` from a
   hook, ever: a missing agent leaves the project suspended, said in the log and by a `for=person`
@@ -317,6 +329,11 @@ that does not answer is the crash case, where starting is right; the dispatcher 
 itself and wakes nobody. herdr's native restore of agents is not ours to stop: an agent restored into
 a suspended project boots, declares idle, and is woken by nobody (or, with `auto_resume` on, is found
 live by the resume's relaunch).
+
+Residual, stated: with `auto_resume` on, an agent can start a resume after a reboot through herdr
+(focusing or creating the workspace from the herdr skill), which the deny rules on `suspend` and
+`resume --all` do not cover. It is opt-in, off by default, and limited to a new boot; the person who
+turns it on accepts that any focus after a reboot resumes, whoever focuses.
 
 ## 9. busmon
 
@@ -391,7 +408,9 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   `prev` restored when future; the summary is cut under `CmdMaxRunes` with the `+N more` tail; herdr
   not running starts services only; a crash host (no suspend) touches no pause and creates no closed
   workspace; idempotence: a second `resume --all` says `nothing to resume`.
-- `upHook`: with `auto_resume` off a suspended project's services stay stopped; on, the hook starts
+- `upHook`: with `auto_resume` off a suspended project's services stay stopped; on, with the same
+  boot (focus right after the suspend) nothing starts and the message says `suspended on this boot`;
+  with an empty recorded or current boot, or another host, nothing starts; with another boot the hook starts
   the detached resume (fake child, exact argv, `--partial` never passed) and returns at once; a second
   event while it runs is a no-op; no recorded person name, no resume; an unreadable pause starts the
   services and resumes nothing.
