@@ -2,6 +2,7 @@ package backup
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -26,7 +27,8 @@ type RestoreOptions struct {
 	FilesOnly   bool
 	WithRuntime bool // runtime and unknown keys too
 	DryRun      bool
-	Force       bool // replace the keys present and differing files
+	Force       bool   // replace the keys present and differing files
+	Identity    string // the person's age identity file: secrets.age is opened only with it
 }
 
 // Broker is what restore needs of the broker.
@@ -48,6 +50,7 @@ type RestoreDeps struct {
 	// Confirm asks the person before --force deletes keys.
 	Confirm func(project string, keys int) bool
 	Loc     Locations
+	Age     string // the age binary, for --identity
 }
 
 // Report is what a restore did.
@@ -149,6 +152,9 @@ func Restore(ctx context.Context, archive string, o RestoreOptions, d RestoreDep
 			switch {
 			case strings.HasPrefix(mem.Path, "redis/") || mem.Path == CoverageName:
 				return nil
+			case mem.Path == SecretsName:
+				rep.Refused += restoreSecrets(ctx, mem, body, o, d, ok, out)
+				return nil
 			case why != "":
 				fmt.Fprintf(out, "file %s: skip (%s)\n", mem.Path, why)
 				return nil
@@ -158,7 +164,7 @@ func Restore(ctx context.Context, archive string, o RestoreOptions, d RestoreDep
 			case !host && !ok[project]:
 				return nil // its project was refused: said above
 			}
-			action, err := restoreFile(dest, mem, body, o)
+			action, err := restoreFile(dest, mem, body, func() error { return Verified(body) }, o)
 			if err != nil {
 				fmt.Fprintf(out, "file %s -> %s: refused (%v)\n", mem.Path, dest, err)
 				rep.Refused++
@@ -325,7 +331,7 @@ func destination(path string, loc Locations, templates map[string][]byte) (dest,
 // symlink's target, so the link stays a link). The body is checked against
 // the manifest before the rename: a member changed since Verify is never
 // committed.
-func restoreFile(dest string, mem Member, body io.Reader, o RestoreOptions) (string, error) {
+func restoreFile(dest string, mem Member, body io.Reader, verify func() error, o RestoreOptions) (string, error) {
 	target := dest
 	action := "write"
 	if st, err := os.Lstat(dest); err == nil {
@@ -363,7 +369,7 @@ func restoreFile(dest string, mem Member, body io.Reader, o RestoreOptions) (str
 		tmp.Close()
 		return "", err
 	}
-	if err := Verified(body); err != nil {
+	if err := verify(); err != nil {
 		tmp.Close()
 		return "", err
 	}
@@ -431,4 +437,59 @@ func plural(n int, word string) string {
 		return "1 " + word
 	}
 	return fmt.Sprintf("%d %ss", n, word)
+}
+
+// restoreSecrets opens secrets.age with the person's identity (never without
+// it) and restores each secret like a file, 0600: the password file only for
+// an unscoped restore, a project's services env file only when its project
+// was restored. The member is checked against the manifest before age reads
+// it. It returns how many were refused.
+func restoreSecrets(ctx context.Context, mem Member, body io.Reader, o RestoreOptions, d RestoreDeps, ok map[string]bool, out io.Writer) int {
+	if o.Identity == "" {
+		fmt.Fprintf(out, "file %s: skip (no --identity: the secrets stay encrypted)\n", SecretsName)
+		return 0
+	}
+	sealed, err := io.ReadAll(io.LimitReader(body, 16<<20))
+	if err == nil {
+		err = Verified(body)
+	}
+	if err != nil {
+		fmt.Fprintf(out, "file %s: refused (%v)\n", SecretsName, err)
+		return 1
+	}
+	refused := 0
+	err = OpenSecrets(ctx, d.Age, o.Identity, bytes.NewReader(sealed), func(name string, data []byte) error {
+		var dest string
+		switch p, isEnv := strings.CutPrefix(name, "services/"); {
+		case name == "redis.env" && len(o.Projects) == 0:
+			dest = d.Loc.PasswordFile
+		case name == "redis.env":
+			fmt.Fprintf(out, "secret %s: skip (host setting: restored only without --project)\n", name)
+			return nil
+		case isEnv && strings.HasSuffix(p, ".env") && bus.ValidName(strings.TrimSuffix(p, ".env")) && ok[strings.TrimSuffix(p, ".env")]:
+			dest = d.Loc.EnvFile(strings.TrimSuffix(p, ".env"))
+		default:
+			fmt.Fprintf(out, "secret %s: skip (not a secret of a project restored)\n", name)
+			return nil
+		}
+		if dest == "" {
+			fmt.Fprintf(out, "secret %s: skip (no place for it here)\n", name)
+			return nil
+		}
+		h := sha256.Sum256(data)
+		m := Member{Path: name, Size: int64(len(data)), SHA256: hex.EncodeToString(h[:]), Mode: 0o600}
+		action, err := restoreFile(dest, m, bytes.NewReader(data), func() error { return nil }, o)
+		if err != nil {
+			fmt.Fprintf(out, "secret %s -> %s: refused (%v)\n", name, dest, err)
+			refused++
+			return nil
+		}
+		fmt.Fprintf(out, "secret %s -> %s: %s\n", name, dest, action)
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintf(out, "file %s: refused (%v)\n", SecretsName, err)
+		refused++
+	}
+	return refused
 }

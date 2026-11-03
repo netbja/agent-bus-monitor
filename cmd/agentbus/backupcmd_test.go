@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,7 +130,7 @@ func TestBackupCommandScopeAndRefusals(t *testing.T) {
 	if !strings.Contains(cov, w.b.Project()) || !strings.Contains(cov, "tplonly") {
 		t.Fatalf("coverage %q", cov)
 	}
-	for _, args := range [][]string{{"--project", "Bad*"}, {"--dir", "relative"}, {"--bogus"}, {"--secrets"}} {
+	for _, args := range [][]string{{"--project", "Bad*"}, {"--dir", "relative"}, {"--bogus"}} {
 		if code, _, errw := w.run(args...); code != 2 || errw == "" {
 			t.Errorf("%v: %d %q", args, code, errw)
 		}
@@ -162,4 +163,83 @@ func TestBackupCommandFailsOnAnUnreadableHistory(t *testing.T) {
 	if l, _ := backup.List(w.dir(), "h1"); len(l) != 0 {
 		t.Fatalf("an archive was written: %+v", l)
 	}
+}
+
+// fakeAgeBin is an age stand-in on a temporary path (see backup's fakeAge).
+func fakeAgeBin(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "age")
+	os.WriteFile(bin, []byte(`#!/bin/sh
+if [ "$1" = "-d" ]; then
+  [ -f "$3" ] || exit 1
+  read header
+  base64 -d
+else
+  echo "FAKEAGE $2"
+  base64
+fi
+`), 0o700)
+	return bin
+}
+
+const cmdRecipient = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq"
+
+// --secrets: refused before anything is written without age or a
+// recipient; with both, secrets.age holds them and the manifest no longer
+// lists them left out; restore --identity brings the password file back.
+func TestBackupCommandSecrets(t *testing.T) {
+	w := newBackupWorld(t)
+	p := w.b.Project()
+	age := fakeAgeBin(t)
+	w.d.LookPath = func(string) (string, error) { return "", errors.New("not found") }
+	if code, _, errw := w.run("--project", p, "--secrets", "--recipient", cmdRecipient); code != 1 || !strings.Contains(errw, "age") {
+		t.Fatalf("no age: %d %q", code, errw)
+	}
+	w.d.LookPath = func(string) (string, error) { return age, nil }
+	if code, _, errw := w.run("--project", p, "--secrets"); code != 1 || !strings.Contains(errw, "recipient") {
+		t.Fatalf("no recipient: %d %q", code, errw)
+	}
+	if code, _, errw := w.run("--project", p, "--secrets", "--recipient", "AGE-SECRET-KEY-1X"); code != 2 || errw == "" {
+		t.Fatalf("a private key as recipient: %d %q", code, errw)
+	}
+	if _, err := os.Stat(w.dir()); !os.IsNotExist(err) {
+		t.Fatal("a refused --secrets run created the backup folder")
+	}
+	os.WriteFile(filepath.Join(w.home, ".config", "agentbus", "config.toml"), []byte("[backup]\nage_recipient = \""+cmdRecipient+"\"\n"), 0o600)
+	code, out, errw := w.run("--project", p, "--secrets")
+	if code != 0 || strings.Contains(out, "left out: redis.env") || !strings.Contains(out, "secrets.age") {
+		t.Fatalf("secrets: %d %q %q", code, out, errw)
+	}
+	list, _ := backup.List(w.dir(), "h1")
+	// restore --identity: the password file comes back 0600.
+	identity := filepath.Join(w.home, "key.txt")
+	os.WriteFile(identity, []byte("AGE-SECRET-KEY-1"), 0o600)
+	pw := filepath.Join(w.home, ".config", "agentbus", "redis.env")
+	os.Remove(pw)
+	rw := &restoreWorld{backupWorld: w, archive: list[0].Path, workspaces: `{"result":{"workspaces":[]}}`, starts: map[int]uint64{}}
+	c, _ := w.d.Dial()
+	bus.DeleteProject(context.Background(), c, p)
+	d := rw.deps()
+	d.LookPath = func(string) (string, error) { return age, nil }
+	var rout bytes.Buffer
+	if code := runRestore(context.Background(), []string{list[0].Path, "--identity", identity}, "", d, &rout, &rout); code != 0 {
+		t.Fatalf("restore --identity: %d\n%s", code, rout.String())
+	}
+	if st, err := os.Stat(pw); err != nil || st.Mode().Perm() != 0o600 || !strings.Contains(string(mustRead(t, pw)), "pw-SECRET") {
+		t.Fatalf("password file after restore: %v %v", st, err)
+	}
+	// --identity without age is refused before anything.
+	d.LookPath = func(string) (string, error) { return "", errors.New("not found") }
+	if code := runRestore(context.Background(), []string{list[0].Path, "--identity", identity}, "", d, &rout, &rout); code != 1 {
+		t.Fatalf("restore without age: %d", code)
+	}
+}
+
+func mustRead(t *testing.T, p string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }

@@ -49,9 +49,10 @@ func (w *restoreWorld) deps() restoreDeps {
 			}
 			return 0, fmt.Errorf("pid %d: %w", pid, fs.ErrNotExist)
 		},
-		Lock:  func(string) (func(), error) { return func() {}, nil },
-		Stdin: strings.NewReader(w.answer),
-		TTY:   true,
+		Lock:     func(string) (func(), error) { return func() {}, nil },
+		Stdin:    strings.NewReader(w.answer),
+		TTY:      true,
+		LookPath: func(string) (string, error) { return "", errors.New("no age") },
 	}
 }
 

@@ -1018,7 +1018,12 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   under `pcall`, every written key deleted on error); records only unless `--with-runtime` (unknown keys too); files
   after a successful Redis part, each verified against the manifest before its rename (`Walk`, `Verified`), a
   symlink's target replaced, the roles destination only an absolute clean `.../roles.toml` from the archive's
-  template; the host's settings only without `--project`.
+  template; the host's settings only without `--project`. Secrets (`backup/secrets.go`): `--secrets` needs `age` on
+  PATH and a recipient (`--recipient` or `backup.age_recipient`, `config.ValidAgeRecipient`: an `age1…` public key),
+  else refused before anything is written; a tar of `redis.env` and `services/<p>.env` is streamed into `age -r` (no
+  clear text on disk) and the ciphertext is the member `secrets.age`; `restore --identity <file>` pipes it into
+  `age -d -i` (agentbus never reads the key), each secret restored 0600 by the file rules, the password file only
+  without `--project`.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

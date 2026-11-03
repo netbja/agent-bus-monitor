@@ -38,6 +38,7 @@ type Plan struct {
 	Files   []Source
 	LeftOut []LeftOut
 	Notes   []string
+	Secrets []byte // SealSecrets' ciphertext, the secrets.age member; nil = none
 
 	beforeRead func(path string) // tests: runs between a file's stat and its read
 }
@@ -143,6 +144,11 @@ func Run(ctx context.Context, dir string, p Plan) (Result, error) {
 	}
 	for _, s := range p.Files {
 		if err := addFile(w, s, p.beforeRead); err != nil {
+			return Result{}, err
+		}
+	}
+	if p.Secrets != nil {
+		if err := w.Add(SecretsName, 0o600, int64(len(p.Secrets)), bytes.NewReader(p.Secrets)); err != nil {
 			return Result{}, err
 		}
 	}

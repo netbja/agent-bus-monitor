@@ -564,7 +564,12 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   de chaque projet lues en un instant (les clés qui expirent sont sautées), `config.toml` et ses
   voisins, les gabarits, le `roles.toml` et les prompts de chaque gabarit, et l'archive
   d'historique. Le mot de passe du broker et les fichiers d'environnement des services sont des
-  secrets : ils sont laissés de côté et listés dans le manifeste de l'archive. Les archives vont
+  secrets : ils sont laissés de côté et listés dans le manifeste de l'archive, sauf avec
+  `--secrets`, qui les chiffre avec [age](https://age-encryption.org) pour un destinataire
+  (`--recipient age1...` ou `backup.age_recipient` dans `config.toml` ; `age` doit être dans le
+  PATH). Seule la clé publique est donnée : agentbus ne crée, ne lit ni ne garde jamais la clé
+  privée, alors gardez-la avec vos autres clés, pas sur le disque que la sauvegarde protège ; sans
+  elle, `secrets.age` ne s'ouvre pour personne. `restore --identity <votre fichier de clé>` l'ouvre. Les archives vont
   dans `backup.dir` (par défaut `~/.local/share/agentbus/backups`) ; une sauvegarde sur le même
   disque ne survit pas au disque, alors pointez `backup.dir` vers un autre (un montage, un dossier
   synchronisé). `backup.keep` (7) archives sont gardées, jamais la plus récente qui couvre un

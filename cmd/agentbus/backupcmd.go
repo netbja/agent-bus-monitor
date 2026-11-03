@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -23,22 +24,23 @@ import (
 // agentbus backup (spec docs/superpowers/specs/2026-11-01-backup-design.md):
 // one archive of every project of this host (the broker's and every
 // template's), or of the projects named on the command line; never narrowed
-// by the ambient AGENT_BUS_PROJECT. Secrets are left out and listed (step 4
-// adds --secrets).
+// by the ambient AGENT_BUS_PROJECT. Secrets are left out and listed, or with
+// --secrets encrypted with age to a recipient (never in clear).
 
-const backupUsage = "usage: agentbus backup [--project <p>]... [--dir <d>] [--dry-run] | backup list [--dir <d>]"
+const backupUsage = "usage: agentbus backup [--project <p>]... [--dir <d>] [--secrets [--recipient <age1...>]] [--dry-run] | backup list [--dir <d>]"
 
 type backupDeps struct {
-	Getenv func(string) string
-	Now    func() time.Time
-	Host   string // this host's name, in the archive's name
-	Dial   func() (*redis.Client, error)
+	Getenv   func(string) string
+	Now      func() time.Time
+	Host     string // this host's name, in the archive's name
+	Dial     func() (*redis.Client, error)
+	LookPath func(string) (string, error) // finds age
 }
 
 func realBackupDeps(redisHost string) backupDeps {
 	host, _ := os.Hostname()
 	return backupDeps{Getenv: os.Getenv, Now: time.Now, Host: host,
-		Dial: func() (*redis.Client, error) { return bus.Connect(redisHost) }}
+		Dial: func() (*redis.Client, error) { return bus.Connect(redisHost) }, LookPath: exec.LookPath}
 }
 
 func runBackup(ctx context.Context, args []string, explicitProject string, d backupDeps, out, errw io.Writer) int {
@@ -55,6 +57,8 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 	}
 	args, dirArg := extractFlag(args, "--dir")
 	args, dry := extractBool(args, "--dry-run")
+	args, secrets := extractBool(args, "--secrets")
+	args, recipient := extractFlag(args, "--recipient")
 	var projects []string
 	if explicitProject != "" {
 		projects = append(projects, explicitProject)
@@ -77,6 +81,9 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 	if dirArg != "" && !filepath.IsAbs(dirArg) {
 		return usage("--dir: want an absolute folder")
 	}
+	if recipient != "" && (!secrets || !backup.ValidRecipient(recipient)) {
+		return usage("--recipient takes an age public key (age1...) and goes with --secrets")
+	}
 	r := config.Machine(d.Getenv)
 	dir, _, err := config.BackupDir(r, d.Getenv)
 	if dirArg != "" {
@@ -87,10 +94,26 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 		return 1
 	}
 	if list {
-		if dry || len(projects) > 0 {
+		if dry || secrets || len(projects) > 0 {
 			return usage("list takes only --dir")
 		}
 		return backupList(dir, d.Host, out, errw)
+	}
+	// --secrets is refused before anything is read or written without age or
+	// a recipient (spec "Secrets").
+	var age string
+	if secrets {
+		if recipient == "" {
+			recipient = r.String("backup.age_recipient")
+		}
+		if recipient == "" {
+			fmt.Fprintln(errw, "backup: --secrets needs an age recipient: --recipient <age1...> or backup.age_recipient in config.toml; nothing written")
+			return 1
+		}
+		if age, err = d.LookPath("age"); err != nil {
+			fmt.Fprintln(errw, "backup: --secrets needs age on PATH (https://age-encryption.org); nothing written")
+			return 1
+		}
 	}
 
 	c, err := d.Dial()
@@ -128,7 +151,15 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 	}
 	notes = append(notes, "Redis: each project is read at one instant after its SCAN; a key created after the SCAN is not in the archive, and keys with an expiry are skipped")
 	now := d.Now().UTC()
+	var secretSrcs []backup.Source
+	if secrets {
+		secretSrcs = backup.Secrets(projects, backup.Locations{PasswordFile: bus.PasswordFile(d.Getenv), EnvFile: paths.EnvFile})
+		left = nil // encrypted, not left out
+	}
 	if dry {
+		for _, s := range secretSrcs {
+			fmt.Fprintf(out, "  %s: would be encrypted to %s in %s\n", s.Member, recipient, backup.SecretsName)
+		}
 		return backupDryRun(ctx, c, dir, backup.ArchiveName(d.Host, now), projects, files, left, notes, out, errw)
 	}
 	b, err := bus.Open(c, projects[0])
@@ -141,10 +172,22 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 		fmt.Fprintf(errw, "backup: the broker: %v\n", err)
 		return 1
 	}
+	var sealed []byte
+	if secrets {
+		if sealed, err = backup.SealSecrets(ctx, age, recipient, secretSrcs); err != nil {
+			fmt.Fprintf(errw, "backup: secrets: %v (no archive written)\n", err)
+			return 1
+		}
+		names := make([]string, len(secretSrcs))
+		for i, s := range secretSrcs {
+			names[i] = s.Member
+		}
+		notes = append(notes, fmt.Sprintf("%s: %s, encrypted to %s", backup.SecretsName, strings.Join(names, ", "), recipient))
+	}
 	res, err := backup.Run(ctx, dir, backup.Plan{
 		Projects: projects, Host: d.Host, Now: now, Version: buildinfo.Version, RedisVersion: info.Version,
 		Dump:  func(ctx context.Context, p string) (bus.ProjectDump, error) { return bus.DumpProject(ctx, c, p) },
-		Files: files, LeftOut: left, Notes: notes,
+		Files: files, LeftOut: left, Notes: notes, Secrets: sealed,
 	})
 	if err != nil {
 		fmt.Fprintf(errw, "backup: %v (no archive written)\n", err)
@@ -159,6 +202,9 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 	}
 	for _, n := range notes {
 		fmt.Fprintf(out, "  note: %s\n", n)
+	}
+	if secrets {
+		fmt.Fprintf(out, "  %s opens only with the private key of %s: keep it where you keep your other keys, not on this disk\n", backup.SecretsName, recipient)
 	}
 	removed, err := backup.Retain(dir, d.Host, r.Int("backup.keep"))
 	for _, n := range removed {

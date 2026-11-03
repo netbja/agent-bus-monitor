@@ -288,6 +288,21 @@ var Keys = []*Key{
 		}},
 	{Name: "backup.keep", Env: "AGENT_BUS_BACKUP_KEEP", Kind: Int, Default: 7, ReadBy: "agentbus backup, dispatch",
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 keeps every archive")},
+	// The age public key --secrets encrypts to (backup spec, answer 4): a
+	// recipient, never a private key or a passphrase.
+	{Name: "backup.age_recipient", Env: "AGENT_BUS_BACKUP_AGE_RECIPIENT", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch",
+		env: func(raw string) (any, envResult) {
+			if ValidAgeRecipient(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "" || ValidAgeRecipient(s)) {
+				return s, ""
+			}
+			return nil, "want an age public key (age1...)"
+		}},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},

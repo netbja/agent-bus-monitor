@@ -530,7 +530,12 @@ to watch a pane.
   Redis keys read at one instant (keys with an expiry are skipped), `config.toml` and its
   siblings, the templates, each template's `roles.toml` and prompts, and the history archive.
   The broker's password and the services' env files are secrets: they are left out and listed
-  in the archive's manifest. Archives go to `backup.dir` (default `~/.local/share/agentbus/backups`);
+  in the archive's manifest, unless you pass `--secrets`, which encrypts them with
+  [age](https://age-encryption.org) to a recipient (`--recipient age1...` or `backup.age_recipient`
+  in `config.toml`; `age` must be on PATH). Only the public key is given: agentbus never creates,
+  reads or keeps the private key, so keep it where you keep your other keys, not on the disk the
+  backup protects; without it `secrets.age` cannot be opened by anyone. `restore --identity
+  <your key file>` opens it. Archives go to `backup.dir` (default `~/.local/share/agentbus/backups`);
   a backup on the same disk does not survive the disk, so point `backup.dir` at another one (a
   mount, a synced folder). `backup.keep` (7) archives are kept, never the newest one covering a
   project. `agentbus backup list` shows them; `--dry-run` shows what a run would read and write.

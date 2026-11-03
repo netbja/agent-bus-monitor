@@ -75,3 +75,19 @@ func TestBackupDir(t *testing.T) {
 		t.Error("no HOME and no backup.dir: a folder was invented")
 	}
 }
+
+func TestBackupAgeRecipient(t *testing.T) {
+	k, ok := Lookup("backup.age_recipient")
+	if !ok || k.Kind != String || k.Default != "" || k.Group() != GroupBackup {
+		t.Fatalf("row %+v", k)
+	}
+	good := "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq"
+	for v, why := range map[any]string{"": "", good: "", "AGE-SECRET-KEY-1ABC": "want an age public key (age1...)", "age1short": "want an age public key (age1...)"} {
+		if _, got := k.file(v); got != why {
+			t.Errorf("file %#v: %q, want %q", v, got, why)
+		}
+	}
+	if _, res := k.env("AGE-SECRET-KEY-1ABC"); res != envSkip {
+		t.Error("a private key in the env was used")
+	}
+}

@@ -30,7 +30,7 @@ import (
 // "Restore"): the person's act, never scheduled. Every member is verified
 // first; a live project is never restored, with or without --force.
 
-const restoreUsage = "usage: agentbus restore <archive> [--project <p>]... [--redis-only | --files-only] [--with-runtime] [--dry-run] [--force [--yes]]"
+const restoreUsage = "usage: agentbus restore <archive> [--project <p>]... [--redis-only | --files-only] [--with-runtime] [--identity <age key file>] [--dry-run] [--force [--yes]]"
 
 type restoreDeps struct {
 	Getenv    func(string) string
@@ -40,7 +40,8 @@ type restoreDeps struct {
 	ProcStart func(pid int) (uint64, error)
 	Lock      func(project string) (func(), error)
 	Stdin     io.Reader
-	TTY       bool // stdin is a terminal: --force may ask
+	TTY       bool                         // stdin is a terminal: --force may ask
+	LookPath  func(string) (string, error) // finds age, for --identity
 }
 
 func realRestoreDeps(redisHost string) restoreDeps {
@@ -57,8 +58,9 @@ func realRestoreDeps(redisHost string) restoreDeps {
 		Lock: func(project string) (func(), error) {
 			return upLock(upCacheDir(os.Getenv))(project, false)
 		},
-		Stdin: os.Stdin,
-		TTY:   setup.IsTerminal(os.Stdin),
+		Stdin:    os.Stdin,
+		TTY:      setup.IsTerminal(os.Stdin),
+		LookPath: exec.LookPath,
 	}
 }
 
@@ -77,6 +79,7 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 	args, o.DryRun = extractBool(args, "--dry-run")
 	args, o.Force = extractBool(args, "--force")
 	args, yes := extractBool(args, "--yes")
+	args, o.Identity = extractFlag(args, "--identity")
 	if explicitProject != "" {
 		o.Projects = append(o.Projects, explicitProject)
 	}
@@ -101,6 +104,14 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 		}
 	}
 	o.Projects = sortedUnique(o.Projects)
+	var age string
+	if o.Identity != "" {
+		var err error
+		if age, err = d.LookPath("age"); err != nil {
+			fmt.Fprintln(errw, "restore: --identity needs age on PATH (https://age-encryption.org); nothing written")
+			return 1
+		}
+	}
 	c, err := d.Dial()
 	if err != nil {
 		fmt.Fprintf(errw, "restore: the broker: %v\n", err)
@@ -133,11 +144,13 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 			return strings.EqualFold(strings.TrimSpace(line), "y") || strings.EqualFold(strings.TrimSpace(line), "yes")
 		},
 		Loc: backup.Locations{
-			ConfigDir:   filepath.Dir(config.Path(d.Getenv)),
-			ProjectsDir: rolecfg.ProjectsDir(d.Getenv),
-			EnvFile:     paths.EnvFile,
-			StateDir:    paths.StateDir,
+			ConfigDir:    filepath.Dir(config.Path(d.Getenv)),
+			ProjectsDir:  rolecfg.ProjectsDir(d.Getenv),
+			PasswordFile: bus.PasswordFile(d.Getenv),
+			EnvFile:      paths.EnvFile,
+			StateDir:     paths.StateDir,
 		},
+		Age: age,
 	}, out)
 	if err != nil {
 		fmt.Fprintf(errw, "restore: %v\n", err)
