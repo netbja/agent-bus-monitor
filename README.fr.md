@@ -158,7 +158,7 @@ option ou de `busmon.toml` est grisée. Sous les clés, la clé choisie : sa cl�
 valeur, sa valeur par défaut, qui la lit, et à quoi elle sert. Un côté a le focus et s'allume, l'autre
 est grisé : sur les groupes, `↑` `↓` en choisissent un (ses clés suivent), `→` ou Entrée vont à ses
 clés ; sur les clés, `↑` `↓` se déplacent, `←` revient, Entrée modifie (un on/off bascule ; un choix
-s'ouvre, `←` `→` le changent, Entrée ou Échap le ferment). Sous 96 colonnes, `←` `→` parcourent les
+s'ouvre, `←` `→` le changent, Entrée l'enregistre, Échap laisse le fichier tel quel). Sous 96 colonnes, `←` `→` parcourent les
 onglets, `↓` va aux clés et `↑` sur la première clé revient. Tab déplace le focus. `d` retire la clé
 de `config.toml`, `D` toutes celles du groupe (vos propres `backup.after_*` restent) ; chaque
 changement est écrit tout de suite, `y` confirme un retrait.

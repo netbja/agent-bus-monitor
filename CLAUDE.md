@@ -811,7 +811,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   keys follow, the selection back to the first), `→` or Enter go to its keys, `←` back; narrow (the tab bar), `←→` step the
   tabs (wrapping), `↓` or Enter go to the keys, `↑` on the first key and `←` come back; Tab toggles; `↑↓` move among the keys
   (kept in view, `selLine`); the editor takes keys first, so on an open choice `←→` change its value, Enter writes, Esc
-  closes it. Enter on a key flips an on/off at once, opens a choice or a line editor checked by the kind then the rule; `d` asks `y`, naming what
+  closes it leaving the file as it is. Enter on a key flips an on/off at once, opens a choice or a line editor checked by the kind then the rule; `d` asks `y`, naming what
   applies next; `D` asks `y` naming the group's keys config.toml holds a line for (`settingsResettable` over `FileHeld`: a refused line
   and one a flag or the env shadows too, which the confirmation says still wins, never a `PersonOnly` key, said to stay), unset one by one then read back once; theme, fade, bell and the reminder and recap
   timings apply at once through `applySettings` and `shellConfig.retheme`, the rest at busmon's next start). `agentbus config`
