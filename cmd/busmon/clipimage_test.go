@@ -1,0 +1,137 @@
+package main
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+)
+
+var pngBytes = append(append([]byte{}, pngMagic...), []byte("rest of a picture")...)
+
+// fakeClip is a machine's clipboard tools: the ones on PATH, each command's
+// answer, and what ran.
+type fakeClip struct {
+	tools map[string]bool
+	out   map[string][]byte
+	err   map[string]error
+	ran   []string
+}
+
+func (f *fakeClip) tool() clipTools {
+	return clipTools{
+		look: func(name string) (string, error) {
+			if f.tools[name] {
+				return "/bin/" + name, nil
+			}
+			return "", errors.New("not found")
+		},
+		out: func(name string, args ...string) ([]byte, error) {
+			key := strings.Join(append([]string{name}, args...), " ")
+			f.ran = append(f.ran, key)
+			return f.out[key], f.err[key]
+		},
+	}
+}
+
+func TestClipboardImageReadsWhicheverToolExists(t *testing.T) {
+	cases := map[string]struct {
+		clip *fakeClip
+		want error
+	}{
+		"wayland": {&fakeClip{tools: map[string]bool{"wl-paste": true}, out: map[string][]byte{
+			"wl-paste --list-types": []byte("text/plain\nimage/png\n"), "wl-paste --no-newline --type image/png": pngBytes}}, nil},
+		"x11": {&fakeClip{tools: map[string]bool{"xclip": true}, out: map[string][]byte{
+			"xclip -selection clipboard -t TARGETS -o": []byte("TARGETS\nimage/png\n"), "xclip -selection clipboard -t image/png -o": pngBytes}}, nil},
+		"macos":   {&fakeClip{tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": pngBytes}}, nil},
+		"no tool": {&fakeClip{}, errNoClipTool},
+		"text only": {&fakeClip{tools: map[string]bool{"wl-paste": true}, out: map[string][]byte{
+			"wl-paste --list-types": []byte("text/plain\n")}}, errNoClipImage},
+		"not a png":          {&fakeClip{tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": []byte("GIF89a")}}, errNoClipImage},
+		"pngpaste with none": {&fakeClip{tools: map[string]bool{"pngpaste": true}, err: map[string]error{"pngpaste -": errors.New("exit 1")}}, errNoClipImage},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			data, err := clipboardImage(c.clip.tool())
+			if !errors.Is(err, c.want) {
+				t.Fatalf("err %v, want %v (ran %v)", err, c.want, c.clip.ran)
+			}
+			if c.want == nil && string(data) != string(pngBytes) {
+				t.Fatalf("data %q", data)
+			}
+		})
+	}
+}
+
+// The image is saved 0600 in a 0700 directory, never anywhere else, and
+// nothing leaves the machine.
+func TestSaveAttachment(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "attachments")
+	path, err := saveAttachment(dir, pngBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(path) != dir || filepath.Ext(path) != ".png" {
+		t.Fatalf("path %s", path)
+	}
+	if st, _ := os.Stat(path); st == nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("file mode %v", st)
+	}
+	if st, _ := os.Stat(dir); st == nil || st.Mode().Perm() != 0o700 {
+		t.Fatalf("dir mode %v", st)
+	}
+	if b, _ := os.ReadFile(path); string(b) != string(pngBytes) {
+		t.Fatal("content")
+	}
+	if other, _ := saveAttachment(dir, pngBytes); other == path {
+		t.Fatal("two pastes share a file")
+	}
+}
+
+// Ctrl+V in the compose window pastes the clipboard's image: saved, its path
+// inserted at the cursor; without one, it says why and inserts nothing.
+func TestComposePastesAnImage(t *testing.T) {
+	m := newShell(shellConfig{project: "p", self: "charlie"})
+	m = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
+	dir := filepath.Join(t.TempDir(), "attachments")
+	m.cfg.attachDir = dir
+	clip := &fakeClip{tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": pngBytes}}
+	m.cfg.clip = clip.tool()
+	m = keys(t, m, 'I')
+	if m.ui.compose == nil {
+		t.Fatal("no compose window")
+	}
+	m.ui.compose.area.set("see") // the text so far; the cursor at its end
+	m = stepCmd(t, m, tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
+	text := m.ui.compose.area.value()
+	if !strings.HasPrefix(text, "see "+dir+string(filepath.Separator)) || !strings.HasSuffix(text, ".png") {
+		t.Fatalf("text %q", text)
+	}
+	if !strings.Contains(m.ui.flash, "image saved") {
+		t.Errorf("flash %q", m.ui.flash)
+	}
+
+	clip.out["pngpaste -"] = []byte("plain text")
+	before := m.ui.compose.area.value()
+	m = stepCmd(t, m, tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
+	if m.ui.compose.area.value() != before || !m.ui.flashErr || !strings.Contains(m.ui.flash, "no image in the clipboard") {
+		t.Errorf("text %q flash %q", m.ui.compose.area.value(), m.ui.flash)
+	}
+}
+
+// stepCmd is one Update, then its command run and its message fed back once.
+func stepCmd(t testing.TB, m Model, msg tea.Msg) Model {
+	t.Helper()
+	next, cmd := m.Update(msg)
+	m = next.(Model)
+	if cmd == nil {
+		return m
+	}
+	if out := cmd(); out != nil {
+		m = step(t, m, out)
+	}
+	return m
+}
