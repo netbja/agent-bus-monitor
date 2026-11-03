@@ -22,16 +22,17 @@ import (
 // suspendWorld is one disposable project, a fake service manager with both
 // services installed and active, and fake panes.
 type suspendWorld struct {
-	t       *testing.T
-	b       *bus.Bus
-	mgr     *fakeManager
-	state   string // the state directory
-	mu      sync.Mutex
-	panes   map[string]dispatch.Inspection // pane -> what an inspection sees
-	onRound func(n int)                    // called before each round's reading
-	rounds  int
-	sigs    chan os.Signal
-	env     map[string]string
+	t        *testing.T
+	b        *bus.Bus
+	mgr      *fakeManager
+	state    string // the state directory
+	mu       sync.Mutex
+	panes    map[string]dispatch.Inspection // pane -> what an inspection sees
+	onRound  func(n int)                    // called before each round's reading
+	rounds   int
+	sigs     chan os.Signal
+	factsErr func(n int) error // a round's reading fails when it returns an error
+	env      map[string]string
 }
 
 func newSuspendWorld(t *testing.T) *suspendWorld {
@@ -72,7 +73,13 @@ func selfIdent(pane string) bus.AgentIdent {
 	return bus.AgentIdent{PID: os.Getpid(), PIDStart: start, Pane: pane, Provider: "anthropic"}
 }
 
+// setPane sets what an inspection of the agent's pane sees; with no PIDs it
+// sees this process, the agents' verified identity.
 func (w *suspendWorld) setPane(name string, in dispatch.Inspection) {
+	if in.PIDs == nil {
+		start, _ := dispatch.ProcStart(os.Getpid())
+		in.PIDs, in.Starts = []int{os.Getpid()}, map[int]uint64{os.Getpid(): start}
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.panes["p-"+name] = in
@@ -104,6 +111,7 @@ func (w *suspendWorld) deps() suspendDeps {
 			}
 		},
 		Signals:     func() (<-chan os.Signal, func()) { return w.sigs, func() {} },
+		FactsErr:    w.factsErr,
 		AgentCaller: func(context.Context) (string, error) { return "", nil },
 	}
 }
@@ -383,4 +391,108 @@ func readSnapshot(t *testing.T, dir string) suspendSnapshot {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// A deadline reached without a successful reading proves nothing: never
+// read as quiet (reviewer-codex).
+func TestSuspendFailedReadingsNeverReadQuiet(t *testing.T) {
+	w := newSuspendWorld(t)
+	w.agent("coder", "idle")
+	w.factsErr = func(int) error { return errors.New("broker hiccup") }
+	if code, out, errw := w.run("--no-wait"); code != 1 {
+		t.Fatalf("zero wait with failed readings = %d\n%s\n%s", code, out, errw)
+	}
+	if p := w.pause(); p != nil {
+		t.Fatalf("suspended on no evidence: %+v", p)
+	}
+	// One good round, then the final reading fails at a short deadline.
+	w2 := newSuspendWorld(t)
+	w2.agent("coder", "idle")
+	w2.factsErr = func(n int) error {
+		if n >= 2 {
+			return errors.New("broker hiccup")
+		}
+		return nil
+	}
+	if code, out, errw := w2.run("--wait", "30ms"); code != 1 {
+		t.Fatalf("failed final reading = %d\n%s\n%s", code, out, errw)
+	}
+	if p := w2.pause(); p != nil {
+		t.Fatalf("suspended after a failed final reading: %+v", p)
+	}
+}
+
+// A service that does not stop is recorded as running, the run fails, and
+// a rerun stops it although the snapshot exists (foureyes, reviewer-codex).
+func TestSuspendFailedStopIsRetried(t *testing.T) {
+	w := newSuspendWorld(t)
+	w.agent("coder", "idle")
+	fails := 1
+	w.mgr.stopErr = func(_, k string) error {
+		if k == service.Missions && fails > 0 {
+			fails--
+			return errors.New("unit busy")
+		}
+		return nil
+	}
+	code, out, errw := w.run()
+	if code != 1 || strings.Contains(out, "services stopped") || !strings.Contains(errw, "missions") {
+		t.Fatalf("first run = %d\n%s\n%s", code, out, errw)
+	}
+	if snap := readSnapshot(t, w.state); snap.Services["missions"].Stopped || !snap.Services["dispatch"].Stopped {
+		t.Fatalf("snapshot services = %+v", snap.Services)
+	}
+	if !w.mgr.active[w.b.Project()+"/missions"] {
+		t.Fatal("the fake stopped missions")
+	}
+	code, out, errw = w.run()
+	if code != 0 || w.mgr.active[w.b.Project()+"/missions"] {
+		t.Fatalf("rerun = %d, missions active %v\n%s\n%s", code, w.mgr.active[w.b.Project()+"/missions"], out, errw)
+	}
+	if snap := readSnapshot(t, w.state); !snap.Services["missions"].Stopped || !snap.Services["missions"].WasActive {
+		t.Fatalf("snapshot after the rerun = %+v", snap.Services)
+	}
+}
+
+// Only herdr's verified readiness, on the agent's own process, is ready
+// evidence (reviewer-codex): an idle-looking pane that is not Ready, or a
+// pane whose process is another, answers no wake and ages no turn flip.
+func TestSuspendReadinessIsVerified(t *testing.T) {
+	ctx := context.Background()
+	for name, pane := range map[string]dispatch.Inspection{
+		"not ready":       {State: "idle", Ready: false},
+		"another process": {State: "idle", Ready: true, PIDs: []int{1}, Starts: map[int]uint64{1: 1}},
+	} {
+		w := newSuspendWorld(t)
+		w.agent("coder", "idle")
+		w.setPane("coder", pane)
+		if err := w.b.PutWake(ctx, "coder", "", bus.WakeRecord{State: "unobserved", At: time.Now().UnixMilli()}); err == nil {
+			t.Fatalf("%s: PutWake without the lease succeeded", name)
+		}
+		// Write the record as the dispatcher would have, under a lease.
+		if ok, err := w.b.AcquireDispatch(ctx, "tok", time.Minute); err != nil || !ok {
+			t.Fatal(err)
+		}
+		if err := w.b.PutWake(ctx, "coder", "tok", bus.WakeRecord{State: "unobserved", At: time.Now().UnixMilli()}); err != nil {
+			t.Fatal(err)
+		}
+		_ = w.b.ReleaseDispatch(ctx, "tok")
+		if code, out, errw := w.run("--wait", "100ms"); code != 1 {
+			t.Fatalf("%s: the wake was answered by an unverified pane: %d\n%s\n%s", name, code, out, errw)
+		}
+		// A stale turn flip is not aged into idle by such a pane either.
+		w2 := newSuspendWorld(t)
+		who := selfIdent("p-coder")
+		if _, err := w2.b.Status(ctx, "coder", "idle", "", who); err != nil {
+			t.Fatal(err)
+		}
+		if err := w2.b.TurnState(ctx, "coder", "working", who); err != nil {
+			t.Fatal(err)
+		}
+		w2.setPane("coder", pane)
+		w2.env["AGENT_BUS_TURN_STALE_AFTER"] = "10ms"
+		if code, out, errw := w2.run("--wait", "100ms"); code != 1 {
+			t.Fatalf("%s: a stale flip aged by an unverified pane: %d\n%s\n%s", name, code, out, errw)
+		}
+	}
 }

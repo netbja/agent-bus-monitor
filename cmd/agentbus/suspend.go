@@ -56,7 +56,8 @@ type suspendDeps struct {
 	Person    func() string // the person's name (identity.as); "" = none recorded
 	// Round and Settle are suspendRound and quietSettle; tests shorten them.
 	Round, Settle time.Duration
-	BeforeRound   func(n int) // tests: called before each round's reading
+	BeforeRound   func(n int)       // tests: called before each round's reading
+	FactsErr      func(n int) error // tests: a round's reading fails when it returns an error
 	Signals       func() (<-chan os.Signal, func())
 	AgentCaller   func(ctx context.Context) (string, error)
 	TTY           bool
@@ -295,9 +296,15 @@ func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDe
 	}
 	snapPath := filepath.Join(d.StateDir(p), suspendSnapshotFile)
 	if rec != nil && rec.Suspended() {
-		if s, err := loadSnapshot(snapPath); err == nil && s.TakenAt >= rec.At {
-			say("already suspended since %s", time.UnixMilli(rec.At).Format("15:04"))
-			return 0
+		if snap, err := loadSnapshot(snapPath); err == nil && snap.TakenAt >= rec.At {
+			// Complete but for a service that did not stop (foureyes,
+			// reviewer-codex): a rerun stops what still runs.
+			mgr, _ := d.Services()
+			if mgr == nil || !anyActive(mgr, p) {
+				say("already suspended since %s", time.UnixMilli(rec.At).Format("15:04"))
+				return 0
+			}
+			return finishStops(p, mgr, rec, snap, snapPath, out, errw)
 		}
 		say("suspended since %s without a current snapshot: completing it (Services kept as recorded)", time.UnixMilli(rec.At).Format("15:04"))
 	} else {
@@ -345,13 +352,11 @@ func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDe
 	if err != nil {
 		return fail("reading the suspend back: %v", err)
 	}
-	stopped := map[string]bool{}
 	if mgr != nil && rec.Services[service.Dispatch] {
 		if st, err := mgr.State(p, service.Dispatch); err == nil && st.Active {
 			if err := mgr.Stop(p, service.Dispatch); err != nil {
 				return suspendCancel(ctx, p, b, raw, rec, mgr, o.by, "the dispatch service did not stop: "+err.Error(), d, out, errw)
 			}
-			stopped[service.Dispatch] = true
 		}
 	}
 	busy, reason := suspendWait(ctx, p, b, mgr, o, d, out)
@@ -370,31 +375,60 @@ func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDe
 		say("--force: going on with %d agent(s) still busy; their turns are cut if the machine goes down", len(busy))
 	}
 	snap := readSnapshotFacts(ctx, p, b, rec, busy, d)
+	return finishStops(p, mgr, rec, snap, snapPath, out, errw)
+}
+
+// finishStops stops every service still running, records what is actually
+// stopped (a service that did not stop is recorded running), writes the
+// snapshot, and fails while one still runs, so that a rerun, which then sees
+// it active, stops it (foureyes, reviewer-codex).
+func finishStops(p string, mgr service.Manager, rec *bus.PauseRecord, snap suspendSnapshot, snapPath string, out, errw io.Writer) int {
+	var failed []string
+	running := map[string]bool{}
 	if mgr != nil {
 		for _, k := range service.Kinds {
 			st, err := mgr.State(p, k)
 			if err != nil {
 				snap.Unknown = append(snap.Unknown, "service "+k+": "+err.Error())
+				failed = append(failed, k+" (unreadable: "+err.Error()+")")
+				running[k] = true
 				continue
 			}
 			if st.Active {
 				if err := mgr.Stop(p, k); err != nil {
-					fmt.Fprintf(errw, "%s: %s did not stop: %v (agentbus suspend -p %s finishes it)\n", p, k, err, p)
-					continue
+					failed = append(failed, k+" ("+err.Error()+")")
+					running[k] = true
 				}
-				stopped[k] = true
 			}
 		}
 	}
+	if snap.Services == nil {
+		snap.Services = map[string]snapService{}
+	}
 	for k, was := range rec.Services {
-		snap.Services[k] = snapService{WasActive: was, Stopped: stopped[k] || was}
+		snap.Services[k] = snapService{WasActive: was, Stopped: !running[k]}
 	}
 	if err := writeSnapshot(snapPath, snap); err != nil {
 		fmt.Fprintf(errw, "%s: the project is suspended, but its snapshot was not written: %v (agentbus suspend -p %s writes it)\n", p, err, p)
 		return 1
 	}
-	say("suspended (%s); services stopped; snapshot %s", snap.counts(), snapPath)
+	if len(failed) > 0 {
+		fmt.Fprintf(errw, "%s: suspended, but %s did not stop; agentbus suspend -p %s stops it (snapshot %s)\n", p, strings.Join(failed, ", "), p, snapPath)
+		return 1
+	}
+	fmt.Fprintf(out, "%s: suspended (%s); services stopped; snapshot %s\n", p, snap.counts(), snapPath)
 	return 0
+}
+
+// anyActive reports whether a service of the project still runs (an
+// unreadable state counts as running: a rerun then tries).
+func anyActive(mgr service.Manager, p string) bool {
+	for _, k := range service.Kinds {
+		if st, err := mgr.State(p, k); err != nil || st.Active {
+			return true
+		}
+	}
+	return false
 }
 
 // readServices is each installed kind's state before anything stops; nil
@@ -446,8 +480,19 @@ func suspendWait(ctx context.Context, p string, b *bus.Bus, mgr service.Manager,
 		if d.BeforeRound != nil {
 			d.BeforeRound(n)
 		}
-		f, err := readQuietFacts(ctx, p, b, mgr, d, since, &goneAt)
+		var f quietFacts
+		var err error
+		if d.FactsErr != nil {
+			err = d.FactsErr(n)
+		}
+		if err == nil {
+			f, err = readQuietFacts(ctx, p, b, mgr, d, since, &goneAt)
+		}
 		if err != nil {
+			// A failed reading proves nothing (reviewer-codex): the quiet count
+			// starts again, and the project stays busy until a reading succeeds.
+			s.quiet = 0
+			last = []busyAgent{{Agent: p, Why: "the bus could not be read (" + err.Error() + ")"}}
 			if failures++; failures > suspendReadErrors {
 				return last, "the bus could not be read: " + err.Error()
 			}
@@ -457,15 +502,15 @@ func suspendWait(ctx context.Context, p string, b *bus.Bus, mgr service.Manager,
 			if quiet {
 				return nil, ""
 			}
-			if busy != nil {
-				last = busy
-			}
+			last = busy
 			if line := busyLine(busy); line != shown && line != "" {
 				fmt.Fprintf(out, "%s: waiting for %s\n", p, line)
 				shown = line
 			}
 		}
-		// Zero wait still reads the quiet rule's minimum (two rounds).
+		// Zero wait still reads the quiet rule's minimum (two rounds). Past the
+		// deadline, last is never empty: quiet returned above, and a failed or a
+		// busy round left its reason in it.
 		if time.Now().After(deadline) && n >= quietReadyRounds {
 			return last, ""
 		}
@@ -525,10 +570,16 @@ func readQuietFacts(ctx context.Context, p string, b *bus.Bus, mgr service.Manag
 			continue
 		}
 		in := d.Inspect(ctx, snap.Pane)
-		if in.Err != nil {
-			continue
+		if in.Err != nil || !dispatch.IdentityOK(&snap, in) {
+			continue // a pane not running the agent's verified process proves nothing about it
 		}
-		o := &bus.Observation{Busy: in.State == "working" || in.Busy, State: in.State, At: f.Now, Since: f.Now, PID: snap.PID}
+		// Only herdr's verified readiness is ready evidence (reviewer-codex):
+		// idle or done without Ready reads unknown, which proves nothing.
+		state := in.State
+		if (state == "idle" || state == "done") && !in.Ready {
+			state = "unknown"
+		}
+		o := &bus.Observation{Busy: in.State == "working" || in.Busy, State: state, At: f.Now, Since: f.Now, PID: snap.PID}
 		if m, ok := since[a]; ok && m.state == o.State && m.pid == o.PID {
 			o.Since = m.since
 		}

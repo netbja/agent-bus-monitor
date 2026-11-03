@@ -252,6 +252,11 @@ func stateWord(s string) string {
 
 // identityOK: the registered pid is among the pane's foreground processes and
 // its start time matches, so a recycled pane or a restarted agent never passes.
+// IdentityOK reports whether the inspected pane runs the agent's verified
+// process (its pid, with the recorded start): the check the dispatcher makes
+// before it trusts a pane's reading, shared with the suspend's quiet rule.
+func IdentityOK(s *bus.AgentSnapshot, in Inspection) bool { return identityOK(s, in) }
+
 func identityOK(s *bus.AgentSnapshot, in Inspection) bool {
 	found := false
 	for _, pid := range in.PIDs {
