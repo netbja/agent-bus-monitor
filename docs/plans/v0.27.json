@@ -8,10 +8,12 @@
     {"id": "backup-page", "title": "Page C, Backup: back up now in the background with its result, the archives with detail, restore's command to copy", "owner": "coder", "review": "backup-page"},
     {"id": "notify-assistant", "title": "busmon assistant for ntfy, Discord and desktop: steps, a template to copy, notify.toml's state, the last test", "owner": "coder", "review": "notify-assistant"},
     {"id": "about-page", "title": "busmon About: versions (y copies them), two agents on a bus line with a travelling packet (r replays)", "owner": "coder", "review": "about-page"},
-    {"id": "v027-release-notes", "title": "v0.27 release notes, CHANGELOG and herdr-plugin.toml; the Redis suite on a disposable broker", "owner": "coder", "review": "v027-release-notes", "after": ["suspend", "focus-notice", "backup-page", "notify-assistant", "about-page"]},
+    {"id": "foryou-no-progress", "title": "For you, nothing expected: drop the In progress rows the Agents panel already shows; keep the next decision", "owner": "coder", "review": "foryou-no-progress"},
+    {"id": "v027-release-notes", "title": "v0.27 release notes, CHANGELOG and herdr-plugin.toml; the Redis suite on a disposable broker", "owner": "coder", "review": "v027-release-notes", "after": ["suspend", "focus-notice", "backup-page", "notify-assistant", "about-page", "foryou-no-progress"]},
     {"id": "v027-reinstall-tag", "title": "Merge, reinstall and tag v0.27 when the person says", "owner": "person", "after": ["v027-release-notes"]},
     {"id": "idea-agent-led-setup", "title": "Decide: an agent-led setup (silent probe, one question at a time with a recommendation, one plan, no secret in chat)", "owner": "person", "merge": false},
     {"id": "idea-github-source", "title": "Decide: a GitHub @mention by an allowed person becomes a request to master; PR comments reach the PR's agent", "owner": "person", "merge": false},
+    {"id": "idea-link-report-to-directive", "title": "Decide: a report --to the person answers their directive in Requests (busmon links it, or report --ref)", "owner": "person", "merge": false},
     {"id": "idea-observe-mode", "title": "Decide: observe mode, where a new automatic rule first only records what it would have done", "owner": "person", "merge": false}
   ]
 }
