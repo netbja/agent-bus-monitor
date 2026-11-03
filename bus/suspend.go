@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -150,10 +152,7 @@ func (b *Bus) unsuspend(ctx context.Context, raw, by string, text func(PauseReco
 	}
 	args := []any{raw, streamMaxLen}
 	if ValidName(p.Notify) {
-		command := text(p)
-		if err := ValidateText(command, CmdMaxRunes); err != nil {
-			return false, "", err
-		}
+		command := fitDirective(text(p))
 		args = append(args, "from", by, "target", p.Notify, "type", CmdDirective, "ref", "",
 			"command", command, "text_complete", "yes", "human", "yes")
 	} else {
@@ -176,3 +175,18 @@ func (b *Bus) unsuspend(ctx context.Context, raw, by string, text func(PauseReco
 	return false, id, nil
 }
 
+// directiveCut ends a resume directive cut to the bus's limit.
+const directiveCut = " … (cut)"
+
+// fitDirective makes the resume directive publishable whatever went into it
+// (reviewer-codex): a reason accepted at the limit, a summary of any length.
+// Formatting must never stop a suspend from being lifted, so the text is made
+// valid UTF-8 and cut to CmdMaxRunes, the cut said at its end.
+func fitDirective(s string) string {
+	s = strings.ToValidUTF8(s, "?")
+	if utf8.RuneCountInString(s) <= CmdMaxRunes {
+		return s
+	}
+	keep := CmdMaxRunes - utf8.RuneCountInString(directiveCut)
+	return string([]rune(s)[:keep]) + directiveCut
+}

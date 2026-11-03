@@ -250,3 +250,75 @@ func mustRecent(t *testing.T, b *Bus) []Event {
 	}
 	return evs
 }
+
+// Every accepted suspend stays resumable (reviewer-codex): a reason at the
+// limit, multibyte or not, and a summary or cancel note of any length never
+// stop the lift; the directive is cut to the limit, visibly.
+func TestUnsuspendNeverBlockedByTheDirectiveLength(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, PauseKey(b.Project())) })
+	for _, reason := range []string{strings.Repeat("x", CmdMaxRunes), strings.Repeat("é", CmdMaxRunes), strings.Repeat("界", CmdMaxRunes)} {
+		for name, end := range map[string]func(raw string) (bool, string, error){
+			"unsuspend": func(raw string) (bool, string, error) {
+				return b.Unsuspend(ctx, raw, "charlie", strings.Repeat("summary ", CmdMaxRunes))
+			},
+			"cancel": func(raw string) (bool, string, error) {
+				return b.SuspendCancel(ctx, raw, "charlie", strings.Repeat("ç", CmdMaxRunes))
+			},
+		} {
+			b.r.Del(ctx, PauseKey(b.Project()))
+			spec := suspendSpec()
+			spec.Reason = reason
+			_, raw, _, err := b.Suspend(ctx, spec)
+			if err != nil {
+				t.Fatalf("Suspend with a %d-rune reason: %v", CmdMaxRunes, err)
+			}
+			restored, id, err := end(raw)
+			if err != nil || restored || id == "" {
+				t.Fatalf("%s: %v %q %v", name, restored, id, err)
+			}
+			if p, _ := b.Pause(ctx); p != nil {
+				t.Fatalf("%s: still paused", name)
+			}
+			evs := mustRecent(t, b)
+			msg := evs[len(evs)-1].Message
+			if n := len([]rune(msg)); n > CmdMaxRunes || !strings.HasSuffix(msg, directiveCut) {
+				t.Fatalf("%s: directive of %d runes, ends %q", name, n, msg[max(0, len(msg)-40):])
+			}
+		}
+	}
+	// A previous pause still due comes back, whatever the directive would have been.
+	b.r.Del(ctx, PauseKey(b.Project()))
+	if _, err := b.SetPause(ctx, "dana", "master", strings.Repeat("é", CmdMaxRunes), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	spec := suspendSpec()
+	spec.Reason = strings.Repeat("界", CmdMaxRunes)
+	_, raw, _, err := b.Suspend(ctx, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored, _, err := b.Unsuspend(ctx, raw, "charlie", strings.Repeat("x", 3*CmdMaxRunes)); err != nil || !restored {
+		t.Fatalf("prev not restored: %v %v", restored, err)
+	}
+}
+
+func TestFitDirective(t *testing.T) {
+	short := "Project resumed."
+	if got := fitDirective(short); got != short {
+		t.Fatalf("short text changed: %q", got)
+	}
+	exact := strings.Repeat("é", CmdMaxRunes)
+	if got := fitDirective(exact); got != exact {
+		t.Fatal("a text at the limit was cut")
+	}
+	long := strings.Repeat("界", CmdMaxRunes+1)
+	got := fitDirective(long)
+	if len([]rune(got)) != CmdMaxRunes || !strings.HasSuffix(got, directiveCut) || ValidateText(got, CmdMaxRunes) != nil {
+		t.Fatalf("cut text: %d runes, valid %v", len([]rune(got)), ValidateText(got, CmdMaxRunes))
+	}
+	if got := fitDirective("bad \xff byte"); ValidateText(got, CmdMaxRunes) != nil {
+		t.Fatalf("invalid UTF-8 kept: %q", got)
+	}
+}
