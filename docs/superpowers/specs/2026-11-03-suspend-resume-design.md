@@ -219,6 +219,13 @@ agentbus resume --all          bring every suspended project back: services, mis
    resume directive woken for by the dispatcher just restarted. A start that fails is said with its
    command and the cancel still runs (a project left paused with no dispatcher would tell nobody);
    a process dying before the cancel leaves a suspend whose `Services` resume reads as usual.
+
+   The same cancel runs on every other way out of steps 2-3 (reviewer-codex): the person's `Ctrl+C`
+   (SIGINT) or a SIGTERM during the wait, a failed early stop, and an error reading the facts for
+   more than three rounds in a row; the signal is caught for the cancel's duration only (a second one
+   exits at once, leaving the suspend). A SIGKILL or a crash cannot run it: the project then stays
+   suspended with `Services` on the record, `suspend --status` says so, and `agentbus resume` (or
+   `suspend -p <p>` to finish) restores the services from it.
    With `--force`, go on and record them as `busy at suspend` with their reason in the snapshot: their
    turn is cut if the machine goes down (the residual `--force` accepts, said on the terminal).
 4. **Read the snapshot's facts** (§6) from the bus, herdr (if reachable) and the service manager.
@@ -466,7 +473,10 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   calls); timeout without `--force` starts dispatch again from the record's `Services` (budget reset)
   before `SuspendCancel`, the prior timed pause back, and the dispatcher, restarted, wakes master for
   the resume directive (fake manager and dispatcher); a start that fails still cancels and says it;
-  a process killed between the start and the cancel leaves the suspend with `Services` intact; `--force`
+  a process killed between the start and the cancel leaves the suspend with `Services` intact;
+  SIGINT and SIGTERM during the wait, a failed early stop and repeated read errors run the same
+  cancel (dispatch started again, prior pause kept); a second signal exits leaving the suspend, which
+  `resume` then restores from `Services`; `--force`
   records the busy agents and their reasons; `--no-wait` and `suspend.wait = 0` pause, judge one round,
   and then cancel or (with `--force`) go on, never leaving a suspend without `Services`; an intent
   refuses even with `--force`; `--dry-run` writes nothing. Service intent (reviewer-codex): dispatch
