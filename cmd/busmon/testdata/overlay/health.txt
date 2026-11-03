@@ -28,4 +28,5 @@
   ? Disk space                       no current measurement                                         
   ? Local model endpoint             no current measurement                                         
   ? Finished pops                    no current measurement                                         
+  ? Backups                          no current measurement                                         
   ── fine · 1  (a shows them) ──

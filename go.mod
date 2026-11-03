@@ -10,6 +10,7 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/gdamore/tcell/v2 v2.13.9
+	github.com/klauspost/compress v1.20.3
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/rivo/uniseg v0.4.7
 	golang.org/x/sys v0.47.0

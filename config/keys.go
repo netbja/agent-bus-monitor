@@ -10,6 +10,7 @@
 package config
 
 import (
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -69,6 +70,11 @@ type Key struct {
 	// MachineOnly keys are the machine's alone: a project's services env file
 	// is never read for them (forge-delivery answer 1).
 	MachineOnly bool
+	// PersonOnly keys are the person's alone (backup.after_*): read from
+	// config.toml only, never written by agentbus (Set and Unset refuse
+	// them: edit config.toml yourself). They have no env variable and are
+	// MachineOnly too.
+	PersonOnly bool
 
 	env  func(raw string) (any, envResult) // today's env rule, for a non-empty value
 	file func(v any) (any, string)         // a decoded file value: the setting, or why not
@@ -269,6 +275,79 @@ var Keys = []*Key{
 			}
 			return nil, "want a Git branch name"
 		}},
+	// Backups (spec 2026-11-01-backup-design.md): where archives go (an
+	// absolute folder; "" = $XDG_DATA_HOME/agentbus/backups, BackupDir) and
+	// how many of this host's are kept (0 keeps every one).
+	{Name: "backup.schedule", Env: "AGENT_BUS_BACKUP_SCHEDULE", Kind: String, Default: "off", ReadBy: "agentbus backup, dispatch",
+		env: func(raw string) (any, envResult) {
+			if raw == "off" || raw == "daily" {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "off" || s == "daily") {
+				return s, ""
+			}
+			return nil, "want off or daily"
+		}},
+	{Name: "backup.dir", Env: "AGENT_BUS_BACKUP_DIR", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch",
+		env: func(raw string) (any, envResult) {
+			if filepath.IsAbs(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "" || filepath.IsAbs(s)) {
+				return s, ""
+			}
+			return nil, "want an absolute folder"
+		}},
+	{Name: "backup.keep", Env: "AGENT_BUS_BACKUP_KEEP", Kind: Int, Default: 7, ReadBy: "agentbus backup, dispatch",
+		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 keeps every archive")},
+	// The age public key --secrets encrypts to (backup spec, answer 4): a
+	// recipient, never a private key or a passphrase.
+	// The health reminder: an archive covering each project at least this
+	// recent (0 turns the reminder off; a failure still warns).
+	{Name: "backup.warn_after", Env: "AGENT_BUS_BACKUP_WARN_AFTER", Kind: Duration, Default: 7 * 24 * time.Hour, ReadBy: "dispatch (health)",
+		env: func(raw string) (any, envResult) {
+			if d, err := time.ParseDuration(raw); err == nil && d >= 0 {
+				return d, envUse
+			}
+			if raw == "0" {
+				return time.Duration(0), envUse
+			}
+			return nil, envSkip
+		},
+		file: fileDuration(true)},
+	{Name: "backup.age_recipient", Env: "AGENT_BUS_BACKUP_AGE_RECIPIENT", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch",
+		env: func(raw string) (any, envResult) {
+			if ValidAgeRecipient(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "" || ValidAgeRecipient(s)) {
+				return s, ""
+			}
+			return nil, "want an age public key (age1...)"
+		}},
+	// A command of the person's own run after each archive (backup spec,
+	// "After the archive"), the variable names it may keep despite looking
+	// secret, and its bound: config.toml only.
+	{Name: "backup.after_command", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch", MachineOnly: true, PersonOnly: true,
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && !strings.ContainsAny(s, "\n\r") {
+				return s, ""
+			}
+			return nil, "want one command line"
+		}},
+	{Name: "backup.after_env", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch", MachineOnly: true, PersonOnly: true,
+		file: fileEnvNames},
+	{Name: "backup.after_timeout", Kind: Duration, Default: 30 * time.Minute, ReadBy: "agentbus backup, dispatch", MachineOnly: true, PersonOnly: true,
+		file: fileDuration(false)},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
@@ -307,6 +386,28 @@ func fileTeam(v any) (any, string) {
 		seen[role] = true
 	}
 	return s, ""
+}
+
+// envNameRE is an environment variable's name.
+var envNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// fileEnvNames is backup.after_env's rule: a list of variable names, kept
+// as one comma-separated string.
+func fileEnvNames(v any) (any, string) {
+	const want = "want a list of variable names"
+	list, ok := v.([]any)
+	if !ok {
+		return nil, want
+	}
+	names := make([]string, 0, len(list))
+	for _, x := range list {
+		s, ok := x.(string)
+		if !ok || !envNameRE.MatchString(s) {
+			return nil, want
+		}
+		names = append(names, s)
+	}
+	return strings.Join(names, ","), ""
 }
 
 // Lookup is the row of a file key.

@@ -108,6 +108,10 @@ deny = [
   # table and AGENT_BUS_RELOAD's opt-outs. Defence in depth, not a boundary:
   # the client matches command text, and a person's own shell is not affected.
   "Bash(agentbus reload *--as*)", "Bash(agentbus * reload *--as*)",
+  # backup.after_command runs with the person's rights, from config.toml
+  # alone: no role edits that file (the launch adds the path XDG_CONFIG_HOME
+  # gives it). Defence in depth: a shell can still write it.
+  "Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)",
 ]
 
 [roles.master]

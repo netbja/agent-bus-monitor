@@ -213,6 +213,10 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 // in depth, not a boundary: the client matches command text.
 var reloadAsDeny = []string{"Bash(agentbus reload *--as*)", "Bash(agentbus * reload *--as*)"}
 
+// configDeny is the shared deny of the person's config.toml (backup spec:
+// backup.after_command is the person's alone).
+var configDeny = []string{"Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)"}
+
 // masterUpRules are master's own rules in the shipped manifest (Charlie,
 // 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
 // exact reload of sentinel, nothing broader.

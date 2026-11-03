@@ -12,11 +12,12 @@ const (
 	GroupIdentity  Group = "Identity"
 	GroupServices  Group = "Services"
 	GroupHealth    Group = "Health"
+	GroupBackup    Group = "Backup"
 	GroupBusCaps   Group = "Bus caps"
 )
 
 // Groups is the page's order.
-var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupServices, GroupHealth, GroupBusCaps}
+var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupServices, GroupHealth, GroupBackup, GroupBusCaps}
 
 // groups is each key's group; TestEveryKeyHasItsGroup fails on a key without.
 var groups = map[string]Group{
@@ -33,6 +34,8 @@ var groups = map[string]Group{
 	"health.disk_warn_pct": GroupHealth, "health.disk_warn_gib": GroupHealth, "health.disk_fail_pct": GroupHealth,
 	"health.disk_fail_gib": GroupHealth, "health.runaway.silent_after": GroupHealth, "health.runaway.context_growth": GroupHealth,
 	"health.runaway.growth_span": GroupHealth, "health.runaway.screen_repeats": GroupHealth,
+	"backup.schedule": GroupBackup, "backup.dir": GroupBackup, "backup.keep": GroupBackup, "backup.warn_after": GroupBackup, "backup.age_recipient": GroupBackup,
+	"backup.after_command": GroupBackup, "backup.after_env": GroupBackup, "backup.after_timeout": GroupBackup,
 	"bus.report_max": GroupBusCaps, "bus.report_full_max": GroupBusCaps, "bus.verdict_max": GroupBusCaps,
 }
 

@@ -559,6 +559,54 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   même session prouvée, jamais d'une session qu'un statut se contente de nommer. La page `U` de busmon montre la même chose avec l'historique sur 24 heures
   des fenêtres du compte. Aucun coût n'est affiché, par principe : sur un abonnement, ce chiffre
   serait une fiction.
+- **Sauvegardes.** `agentbus backup` écrit une archive, `agentbus-backup-<hôte>-<heure>.tar.zst`
+  (0600), de tous les projets de cet hôte (ou de ceux nommés avec `--project`) : les clés Redis
+  de chaque projet lues en un instant (les clés qui expirent sont sautées), `config.toml` et ses
+  voisins, les gabarits, le `roles.toml` et les prompts de chaque gabarit, et l'archive
+  d'historique. Le mot de passe du broker et les fichiers d'environnement des services sont des
+  secrets : ils sont laissés de côté et listés dans le manifeste de l'archive, sauf avec
+  `--secrets`, qui les chiffre avec [age](https://age-encryption.org) pour un destinataire
+  (`--recipient age1...` ou `backup.age_recipient` dans `config.toml` ; `age` doit être dans le
+  PATH). Seule la clé publique est donnée : agentbus ne crée, ne lit ni ne garde jamais la clé
+  privée, alors gardez-la avec vos autres clés, pas sur le disque que la sauvegarde protège ; sans
+  elle, `secrets.age` ne s'ouvre pour personne. `restore --identity <votre fichier de clé>` l'ouvre. Les archives vont
+  dans `backup.dir` (par défaut `~/.local/share/agentbus/backups`) ; une sauvegarde sur le même
+  disque ne survit pas au disque, alors pointez `backup.dir` vers un autre (un montage, un dossier
+  synchronisé). `backup.keep` (7) archives sont gardées, jamais la plus récente qui couvre un
+  projet. `agentbus backup list` les montre ; `--dry-run` montre ce qu'une exécution lirait et écrirait.
+  `agentbus restore <archive>` vérifie d'abord chaque membre contre le manifeste, puis refuse un
+  projet vivant (son bail dispatch ou conductor tenu, un service actif, son espace de travail herdr
+  ouvert, le processus d'un agent vivant : lancez `agentbus down <p>` et fermez son espace d'abord),
+  même avec `--force` ; si le gestionnaire de services ne répond pas, il refuse aussi (sur un hôte
+  qui n'en a pas, posez `AGENTBUS_SERVICE_MANAGER=none`). Les clés d'un projet sont restaurées en une seule étape, tout ou rien ; des
+  clés déjà présentes, ou un fichier différent, sont gardés sauf avec `--force` (qui demande
+  d'abord). Les clés d'exécution (agents, services, réveils, retenues) ne sont restaurées qu'avec
+  `--with-runtime` : `agentbus up <p>` les réécrit. `--dry-run` affiche l'action de chaque clé et
+  de chaque fichier ; `--redis-only` et `--files-only` restreignent. Restaurer sur un Redis plus
+  ancien que celui de l'archive est refusé : mettez d'abord le broker à jour.
+  Pour envoyer chaque archive ailleurs, posez `backup.after_command` dans `config.toml` (par
+  exemple `"restic backup /data/backups/agentbus"`, un `rclone copy`, un `rsync` ; vide par
+  défaut). Elle s'exécute après chaque archive complète, dans `backup.dir`, sans shell (écrivez
+  `sh -c '…'` pour un tube), avec `AGENTBUS_BACKUP_ARCHIVE`, `AGENTBUS_BACKUP_DIR`,
+  `AGENTBUS_BACKUP_PROJECTS` et `AGENTBUS_BACKUP_SCHEDULED`, et un environnement sans le secret du
+  broker ni rien qui porte un nom de secret (`backup.after_env` liste les noms à garder, comme
+  `["RESTIC_PASSWORD_FILE"]`), pendant au plus `backup.after_timeout` (30m). Un échec est noté et
+  signalé ; l'archive n'est jamais touchée. Ces trois réglages sont à vous seul : aucune variable ne
+  les pose, agentbus ne les écrit jamais, et aucun agent ne peut modifier `config.toml`.
+  Les sauvegardes se font à la main par défaut. `backup.schedule = "daily"` fait faire au service
+  dispatch une sauvegarde dès qu'un projet de cet hôte n'a pas d'archive de moins d'un jour (vérifié
+  chaque heure, une archive pour tous les projets, par le service du premier projet qui y arrive).
+  Posez alors `backup.dir` dans `config.toml` : l'environnement d'un service peut résoudre le défaut
+  vers un autre dossier. Sans surveillance, les secrets ne sont inclus que si `backup.age_recipient`
+  est posé ; avec lui mais sans `age` dans le PATH du service, l'archive est faite sans eux et
+  l'échec noté dans `~/.local/state/agentbus/backup-last.json`. Une restauration n'est jamais
+  planifiée.
+  La vérification `backup` (toutes les 15 minutes, par projet) vous avertit quand aucune archive
+  couvrant le projet n'a moins de `backup.warn_after` (`168h`, une semaine ; `0` coupe ce rappel),
+  quand la dernière sauvegarde planifiée qui le couvrait a échoué (jusqu'à ce qu'une archive plus
+  récente le couvre, faite à la main ou non ; un échec faute d'`age` ne s'efface qu'avec une archive
+  qui contient les secrets), ou quand `backup.after_command` a échoué pour sa dernière archive. Son
+  détail nomme le dossier lu. Sentinel ne lance jamais ni sauvegarde ni restauration.
 
 ---
 
@@ -668,6 +716,8 @@ l'exécute étape par étape.
 | Quotas des fournisseurs | `agentbus quota` |
 | Santé du projet | `agentbus --project mon-app health` / `health detail <id>` |
 | Tokens dépensés | `agentbus tokens` / `--project mon-app --by agent` |
+| Sauvegarder les projets de cet hôte | `agentbus backup` / `backup list` |
+| Restaurer une archive | `agentbus restore <archive> --dry-run`, puis sans |
 | Passations déclarées | `agentbus --project mon-app handoff` |
 | Recharger un agent | `agentbus --project mon-app reload coder --as <votre-nom>` |
 | Passer un rôle sur un profil de repli | `agentbus --project mon-app swap coder --profile <p>` / `--back` |

@@ -69,6 +69,8 @@ type Config struct {
 	// PopRetire tells the escalation target when a pop's work is done
 	// (popretire.go); off unless On.
 	PopRetire PopRetireConfig
+	// Backup is the daily backup chore (backupchore.go); off without a pass.
+	Backup BackupConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -238,6 +240,14 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 		go func() {
 			defer wg.Done()
 			l.historyLoop(inner)
+		}()
+	}
+
+	if cfg.Backup.on() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.backupLoop(inner)
 		}()
 	}
 

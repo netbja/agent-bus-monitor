@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -512,6 +513,17 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 	rules, err := m.ProjectLaunchRules(role, project)
 	if err != nil {
 		return err
+	}
+	if p.Client == "claude-code" {
+		denies, note := ConfigDenies(func(k string) string { v, _ := e.get(k); return v })
+		for _, d := range denies {
+			if !slices.Contains(rules.Deny, d) {
+				rules.Deny = append(rules.Deny, d)
+			}
+		}
+		if note != "" {
+			fmt.Fprintln(cfg.Stderr, note)
+		}
 	}
 	if p.Client != "claude-code" && !rules.Empty() { // v0.17 §6: Codex and Kimi have no such rules; their own approval mode applies
 		fmt.Fprintf(cfg.Stderr, "note: tool_rules not applied for %s\n", p.Client)

@@ -17,8 +17,10 @@ import (
 // are read and written in commands, never in View.
 
 // settingsPageGroups are the groups the page shows (the person's answer:
-// these first, the services' thresholds staying in the file for now).
-var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity}
+// these first, the services' thresholds staying in the file for now), and
+// Backup for its person-only keys alone, read-only (backup spec: shown, never
+// written by busmon; settingOnPage).
+var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity, config.GroupBackup}
 
 // settingsPage is the page's state.
 type settingsPage struct {
@@ -189,6 +191,8 @@ func (m *Model) settingsKey(k Key) tea.Cmd {
 		default:
 			s.edit, s.text = row.Key, editText(key, row.Value)
 		}
+	case k.Code == keyEnter && !row.Editable && row.PersonOnly:
+		m.ui.flash, m.ui.flashErr = row.Label+" is your own setting: edit config.toml yourself", true
 	case k.Code == keyEnter && !row.Editable:
 		m.ui.flash, m.ui.flashErr = row.Label+" is set by "+row.Source+": unset it there for the file to apply", true
 	}

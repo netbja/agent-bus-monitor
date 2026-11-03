@@ -55,6 +55,9 @@ func Set(path, name string, v any) error {
 	if !ok {
 		return fmt.Errorf("%s: not a setting", name)
 	}
+	if k.PersonOnly {
+		return fmt.Errorf("%s: the person's own setting: edit config.toml yourself", name)
+	}
 	lit, err := literal(k, v)
 	if err != nil {
 		return err
@@ -86,8 +89,12 @@ func Set(path, name string, v any) error {
 // Unset removes key's line from the config.toml at path, every other byte
 // kept; an absent key or file is no edit at all.
 func Unset(path, name string) error {
-	if _, ok := Lookup(name); !ok {
+	k, ok := Lookup(name)
+	if !ok {
 		return fmt.Errorf("%s: not a setting", name)
+	}
+	if k.PersonOnly {
+		return fmt.Errorf("%s: the person's own setting: edit config.toml yourself", name)
 	}
 	text, old, err := readForEdit(path)
 	if err != nil {
