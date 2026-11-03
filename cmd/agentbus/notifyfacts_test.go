@@ -151,9 +151,9 @@ func keys(m map[string]notify.Event) []string {
 	return out
 }
 
-// foureyes: the stall guard's own notice for the person is the same stall:
-// while team-stall fails it is no second, blocked line; once the stall is
-// over, a notice for the person counts again.
+// foureyes: the stall guard's own notice for the person is the stall itself,
+// never an event of its own: no second line while the stall lasts, and no
+// late buzz about a stall already over once it ends (it stays in the stream).
 func TestNotifyEventsOneLineForAStall(t *testing.T) {
 	stall := map[string]health.Record{"team-stall": {ID: "team-stall", Status: health.Fail, Since: nfMS(-time.Hour), ObservedAt: nfMS(0)}}
 	notice := []bus.RawEntry{{ID: "1793710000000-0", Fields: map[string]string{"from": "dispatch", "for": "person",
@@ -162,7 +162,7 @@ func TestNotifyEventsOneLineForAStall(t *testing.T) {
 	if len(evs) != 1 || evs[0].Kind != "stall" {
 		t.Fatalf("%v", evs)
 	}
-	if evs := notifyEvents(notifyFacts{Notices: notice}, nil, nfNow); len(evs) != 1 || evs[0].Kind != "blocked" {
-		t.Fatalf("no stall: %v", evs)
+	if evs := notifyEvents(notifyFacts{Notices: notice}, nil, nfNow); len(evs) != 0 {
+		t.Fatalf("the stall is over: %v", evs)
 	}
 }

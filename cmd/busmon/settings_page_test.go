@@ -383,3 +383,17 @@ func TestSettingsPageNotifications(t *testing.T) {
 		t.Fatalf("after listing:\n%s", body)
 	}
 }
+
+// reviewer-codex: a notify-last.json that cannot be read never reads as
+// "never sent": the page says the outcome is unknown.
+func TestSettingsNotifyTargetsUnreadableRecord(t *testing.T) {
+	state := t.TempDir()
+	getenv := settingsEnv(t, "[notify]\ntargets = [\"phone\"]\n", "", map[string]string{"XDG_STATE_HOME": state})
+	os.WriteFile(filepath.Join(filepath.Dir(config.Path(getenv)), "notify.toml"), []byte("[ntfy.phone]\ntopic = \"agentbus-0123456789\"\n"), 0o600)
+	os.MkdirAll(filepath.Join(state, "agentbus"), 0o700)
+	os.WriteFile(filepath.Join(state, "agentbus", "notify-last.json"), []byte("{not json"), 0o600)
+	lines := strings.Join(notifyTargetLines(getenv), "\n")
+	if strings.Contains(lines, "never sent") || !strings.Contains(lines, "last send unknown") {
+		t.Fatalf("%s", lines)
+	}
+}

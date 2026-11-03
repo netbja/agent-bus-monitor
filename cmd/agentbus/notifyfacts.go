@@ -23,7 +23,7 @@ import (
 type notifyPlanTask struct{ ID, Title string }
 
 // stallNoticePrefix opens the stall guard's notice for the person
-// (stallchecks.go): while team-stall fails, that notice is the stall line.
+// (stallchecks.go): that notice is the stall itself, never an event.
 const stallNoticePrefix = "Stall guard: "
 
 type notifyFacts struct {
@@ -97,16 +97,15 @@ func notifyEvents(f notifyFacts, planSeen map[string]time.Time, now time.Time) [
 			add("for-you", id+"|"+since, time.UnixMilli(rec.Since), title+" needs you (busmon F5)", rec.Detail)
 		}
 	}
-	stalled := false
-	for _, e := range out {
-		stalled = stalled || e.Kind == "stall"
-	}
 	for _, e := range f.Notices {
 		if e.Fields["for"] != "person" {
 			continue
 		}
-		if stalled && e.Fields["from"] == "dispatch" && strings.HasPrefix(e.Fields["message"], stallNoticePrefix) {
-			continue // the stall guard's notice is the same stall: one line (foureyes)
+		if e.Fields["from"] == "dispatch" && strings.HasPrefix(e.Fields["message"], stallNoticePrefix) {
+			// The stall guard writes it only during a team-stall fail, which
+			// the stall event covers: never an event of its own, so no second
+			// line, and no late buzz once the stall is over (foureyes).
+			continue
 		}
 		add("blocked", e.ID, streamTime(e.ID), "a notice only you can act on (busmon Activity)", e.Fields["message"])
 	}

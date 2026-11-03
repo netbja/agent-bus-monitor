@@ -27,13 +27,20 @@ func notifyTargetLines(getenv func(string) string) []string {
 		listed[n] = true
 	}
 	var last notify.Last
-	if d := notifyStateDir(getenv); d != "" {
-		last, _ = notify.ReadLast(notify.LastPath(d))
+	unread := false // the record cannot be read: no outcome is claimed (reviewer-codex)
+	if d := notifyStateDir(getenv); d == "" {
+		unread = true
+	} else if l, err := notify.ReadLast(notify.LastPath(d)); err != nil {
+		unread = true
+	} else {
+		last = l
 	}
 	var out []string
 	for i, t := range f.Targets {
 		state := "not listed in Targets"
-		if listed[t.Name] {
+		if listed[t.Name] && unread {
+			state = "last send unknown (notify-last.json cannot be read)"
+		} else if listed[t.Name] {
 			state = "never sent"
 			if o, ok := last.Latest(t.Name); ok {
 				state = "last sent " + o.At.Local().Format("15:04") + " ok"
