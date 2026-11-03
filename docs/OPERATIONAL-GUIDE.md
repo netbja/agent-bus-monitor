@@ -549,6 +549,10 @@ to watch a pane.
   writes them again. `--dry-run` prints each key's and file's action; `--redis-only` and
   `--files-only` narrow it. Restoring onto an older Redis than the archive's is refused: upgrade
   the broker first.
+  A files restore writes a project's roles files where its archived template says they are: the
+  absolute path of its `roles.toml` (a checkout, say `/data/projects/<p>/roles.toml`), not under your
+  home. On another machine, check that path with `--dry-run` first; a differing file there is kept
+  unless `--force`.
   To send each archive elsewhere, set `backup.after_command` in `config.toml` (for example
   `"restic backup /data/backups/agentbus"`, an `rclone copy`, an `rsync`; empty by default). It
   runs after each complete archive, in `backup.dir`, with no shell (write `sh -c '…'` for a pipe),
