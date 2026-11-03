@@ -470,7 +470,8 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   (`paused · resumes in 1h52 (lunch)`), your name as a person, and one usage gauge per provider
   (`claude 5h 62% │ 7d 41%`, `held` past the hold threshold), each provider in its own colour,
   then the clock. In a true-colour terminal a gauge fills in eighths of a cell and slides to a new
-  value in half a second (the figure changes at once); a 16-colour terminal keeps whole cells.
+  value in half a second (the figure changes at once); a 16-colour terminal keeps whole cells. A
+  gauge is deep green below 80 %, amber from 80 % and red from 95 %.
   What is owed to you in Requests reads in orange (`2 requests waiting · oldest 3h`), what agents
   owe each other muted (`4 between agents`); each is absent at 0. Health and dispatch are never
   truncated; the rest gives way from the right.

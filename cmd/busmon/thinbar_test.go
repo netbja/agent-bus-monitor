@@ -147,12 +147,30 @@ func TestWindowElapsedPct(t *testing.T) {
 	_ = strings.TrimSpace
 }
 
-// The level colours (usage-cards, the person's choice): blue (the accent)
-// below 80 %, amber from 80 %, red from 95 %.
+// The level colours (usage-cards, usage-green: the person's choices): a deep
+// green (RoleGauge) below 80 %, amber from 80 %, red from 95 %.
 func TestBudgetRoleThresholds(t *testing.T) {
-	for pct, want := range map[float64]Role{0: RoleAccent, 79.9: RoleAccent, 80: RoleAttention, 94.9: RoleAttention, 95: RoleError, 100: RoleError} {
+	for pct, want := range map[float64]Role{0: RoleGauge, 79.9: RoleGauge, 80: RoleAttention, 94.9: RoleAttention, 95: RoleError, 100: RoleError} {
 		if got := budgetRole(pct); got != want {
 			t.Errorf("budgetRole(%v) = %v, want %v", pct, got, want)
+		}
+	}
+}
+
+// RoleGauge is the deep green the person chose (usage-green, G2) in dark, a
+// darker green on light, ANSI green on 16 colours; never the accent's blue.
+func TestGaugeRoleIsGreen(t *testing.T) {
+	for _, c := range []struct {
+		theme  string
+		colors int
+		want   string
+	}{{"dark", 1 << 24, "#39c69e"}, {"light", 1 << 24, "#0b7d60"}, {"dark", 16, "green"}} {
+		thm, _ := ResolveTheme(c.theme, "", "", false, c.colors)
+		if got := thm.tags[RoleGauge]; got != c.want {
+			t.Errorf("%s/%d: RoleGauge = %q, want %q", c.theme, c.colors, got, c.want)
+		}
+		if thm.tags[RoleGauge] == thm.tags[RoleAccent] {
+			t.Errorf("%s/%d: RoleGauge is the accent's colour", c.theme, c.colors)
 		}
 	}
 }
