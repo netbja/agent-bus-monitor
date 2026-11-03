@@ -26,9 +26,6 @@ func tokFixtureState(now time.Time) tokState {
 		{name: "agent-bus-monitor", known: true, partial: true, days: daysOf(abm), rows: abm},
 		{name: "wiki"},
 	}}
-	for h := 0; h < 24; h += 3 {
-		st.hist = append(st.hist, bus.QuotaSample{Provider: "anthropic", Window: "5h", Pct: float64(h * 4), At: now.Add(-time.Duration(23-h) * time.Hour).UnixMilli()})
-	}
 	return st
 }
 
@@ -352,6 +349,9 @@ func TestTokensPageProvidersInTheirColours(t *testing.T) {
 	if !roles["anthropic"][RoleProvAnthropic] || roles["anthropic"][RoleMuted] || roles["anthropic"][RoleText] {
 		t.Errorf("anthropic drawn in %v, want its own colour everywhere", roles["anthropic"])
 	}
+	if !roles["claude"][RoleProvAnthropic] || !roles["codex"][RoleProvOpenAI] { // the cards' heads, by the header's names
+		t.Errorf("card heads drawn in %v and %v", roles["claude"], roles["codex"])
+	}
 	if !roles["openai"][RoleProvOpenAI] {
 		t.Errorf("openai drawn in %v", roles["openai"])
 	}
@@ -385,7 +385,7 @@ func TestTokensPageAccountCards(t *testing.T) {
 				t.Fatalf("%d: a line is %d cells: %q", width, l.Width(), l.text())
 			}
 		}
-		for _, s := range []string{"ANTHROPIC", "7d " + GlyphNone + " 86%", "OPENAI",
+		for _, s := range []string{"CLAUDE", "7d " + GlyphNone + " 86%", "CODEX", // the header's names (foureyes)
 			GlyphNone + " resets " + now.Add(2*time.Hour).Local().Format("15:04"),
 			"On track: you should reach the reset with room to spare.",
 			"At this pace the limit comes around " + now.Add(60*time.Minute).Local().Format("15:04") + ", before the " + now.Add(4*time.Hour).Local().Format("15:04") + " reset."} {
@@ -397,7 +397,7 @@ func TestTokensPageAccountCards(t *testing.T) {
 			t.Errorf("%d: the 24-hour spark is still drawn", width)
 		}
 		for _, l := range lines { // the busiest window sits at the card's right edge, two cells in
-			if txt := l.text(); strings.Contains(txt, "ANTHROPIC") && Width(strings.TrimRight(txt, " ")) != width-2 {
+			if txt := l.text(); strings.Contains(txt, "CLAUDE") && Width(strings.TrimRight(txt, " ")) != width-2 {
 				t.Errorf("%d: the head ends at %d, want %d: %q", width, Width(strings.TrimRight(txt, " ")), width-2, txt)
 			}
 		}
@@ -419,7 +419,17 @@ func TestPaceSentenceAtTheLimit(t *testing.T) {
 	now := shellNow
 	reset := now.Add(40 * time.Minute)
 	ws := []bus.BudgetWindow{{Name: "5h", UsedPct: 100, ResetsAt: reset.Unix(), ObservedAt: now.UnixMilli()}}
-	if got, want := paceSentence(ws, now), "Limit reached: it resets at "+reset.Local().Format("15:04")+"."; got != want {
+	if got, want := paceSentence(bus.BudgetSnapshot{Windows: ws}, now), "Limit reached: it resets at "+reset.Local().Format("15:04")+"."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// An aged reading never feeds a forecast (foureyes on step 2): the card says
+// how old it is instead.
+func TestPaceSentenceAgedReading(t *testing.T) {
+	now := shellNow
+	ws := []bus.BudgetWindow{{Name: "5h", UsedPct: 50, ResetsAt: now.Add(4 * time.Hour).Unix(), ObservedAt: now.Add(-2 * time.Hour).UnixMilli()}}
+	if got, want := paceSentence(bus.BudgetSnapshot{Windows: ws}, now), "Reading 2h old: no forecast."; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

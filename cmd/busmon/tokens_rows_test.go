@@ -51,7 +51,7 @@ func cardOf(rows []string, provider string) []string {
 	for _, r := range rows {
 		t := strings.TrimSpace(r)
 		switch {
-		case strings.HasPrefix(t, strings.ToUpper(provider)+" "):
+		case strings.HasPrefix(t, strings.ToUpper(providerLabel(provider))+" "):
 			out = []string{r}
 		case len(out) > 0 && (strings.HasPrefix(t, glyphHorizontal) || t == "" || t == strings.ToUpper(t) && !strings.ContainsAny(t[:1], "0123456789")):
 			return out

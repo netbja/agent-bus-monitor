@@ -21,7 +21,7 @@ func accountCard(icons, p string, b bus.BudgetSnapshot, holds map[string]int64, 
 		indent = append(indent, iconPair(providerIcon(icons, p), p))
 	}
 	inner := max(0, width-2-indent.Width()) // a card keeps two blank cells at the right, as the rule does
-	name := Seg{Text: Truncate(strings.ToUpper(Preview(p)), max(1, inner/2)), Role: providerRole(p, RoleText), Bold: true}
+	name := Seg{Text: Truncate(strings.ToUpper(Preview(providerLabel(p))), max(1, inner/2)), Role: providerRole(p, RoleText), Bold: true} // the header's name
 	var right Seg
 	until, isHeld := held(holds, p, now)
 	if busy, ok := busiestWindow(b.Windows); isHeld {
@@ -52,7 +52,7 @@ func accountCard(icons, p string, b bus.BudgetSnapshot, holds map[string]int64, 
 		row = append(row, S(budgetRole(w.UsedPct), fmt.Sprintf(" %4.0f%%", w.UsedPct)), S(RoleMuted, " "+tails[i]))
 		out = append(out, FitLine(row, width))
 	}
-	if s := paceSentence(b.Windows, now); s != "" {
+	if s := paceSentence(b, now); s != "" {
 		out = append(out, FitLine(append(append(Line{}, indent...), S(RoleMuted, s)), width))
 	}
 	return out
@@ -111,14 +111,21 @@ func resetClock(t, now time.Time) string {
 
 // paceSentence says whether the card's windows reach their resets at the
 // pace they are spent: a spent window first, then the earliest window
-// projected past its limit before its reset, else on track; "" when no window has a pace to judge (no
+// projected past its limit before its reset, else on track. An aged reading
+// never feeds a forecast (foureyes): with no fresh window to judge, the card
+// says how old its reading is. "" when no window has a pace to judge (no
 // reset, an unknown length, nothing spent yet).
-func paceSentence(ws []bus.BudgetWindow, now time.Time) string {
+func paceSentence(b bus.BudgetSnapshot, now time.Time) string {
 	judged := false
+	aged := ""
 	var limitAt, resetAt, spentUntil time.Time
-	for _, w := range ws {
+	for _, w := range b.Windows {
 		gone := windowElapsedPct(w, now)
 		if windowUnobserved(w) || gone <= 0 {
+			continue
+		}
+		if windowAged(w, b, now) {
+			aged = windowAge(w, b, now)
 			continue
 		}
 		judged = true
@@ -146,6 +153,8 @@ func paceSentence(ws []bus.BudgetWindow, now time.Time) string {
 		return "At this pace the limit comes around " + resetClock(limitAt, now) + ", before the " + resetClock(resetAt, now) + " reset."
 	case judged:
 		return "On track: you should reach the reset with room to spare."
+	case aged != "":
+		return "Reading " + aged + " old: no forecast."
 	}
 	return ""
 }

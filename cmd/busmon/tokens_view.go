@@ -21,7 +21,6 @@ import (
 type tokensReader interface {
 	ProjectNames(ctx context.Context) ([]string, error)
 	TokensOf(ctx context.Context, project string) (map[string]bus.TokenRow, bus.TokensMeta, bool, error)
-	QuotaHist(ctx context.Context, since int64) ([]bus.QuotaSample, error)
 }
 
 // tokProject is one project's {p}:tokens as last read.
@@ -37,7 +36,6 @@ type tokProject struct {
 type tokState struct {
 	polled   bool
 	projects []tokProject
-	hist     []bus.QuotaSample
 	failed   bool // the last read failed: the values are the kept ones
 }
 
@@ -68,9 +66,6 @@ func readTokens(ctx context.Context, b busReader, project string, now time.Time,
 			p.rows = rows
 		}
 		out.projects = append(out.projects, p)
-	}
-	if out.hist, err = tr.QuotaHist(ctx, now.Add(-24*time.Hour).UnixMilli()); err != nil {
-		out.hist, out.failed = prev.hist, true
 	}
 	return out
 }

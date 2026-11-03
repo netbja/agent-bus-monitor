@@ -218,7 +218,8 @@ it silently never fired.
   `a`, the title `tokensTitle`'s summary): the account windows as cards (usage-cards, `account_cards.go`: per provider a head line, its name upper case in its
   colour and at the right its busiest window or its hold; one row per window, a full-width thin bar with its pace
   mark, the figure and `· resets HH:MM` (weekday beyond a day; an aged reading `· read Xm ago`); a pace sentence,
-  `paceSentence`: limit reached, the limit before the reset at this pace, else on track; a rule between cards; no
+  `paceSentence`: limit reached, the limit before the reset at this pace, else on track, an aged reading its age and no
+  forecast; the card's name the header's, `providerLabel`; a rule between cards; no
   24-hour spark), every project side by side (`ProjectNames`,
   `TokensOf`, read every `requestPoll` tick through the optional `tokensReader`; the open project first,
   7-day bars scaled across projects, `~` while partial, no key = one `no data` line), the open project by

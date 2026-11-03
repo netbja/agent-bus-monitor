@@ -322,7 +322,7 @@ func TestTokensPageBarsSlide(t *testing.T) {
 		inCard := false
 		for _, l := range m.rd.top().body {
 			text := strings.TrimSpace(l.text())
-			if strings.HasPrefix(text, "ANTHROPIC") {
+			if strings.HasPrefix(text, "CLAUDE") {
 				inCard = true
 			}
 			if !inCard || !strings.HasPrefix(text, "5h ") {
