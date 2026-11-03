@@ -263,7 +263,8 @@ func serviceClear(getenv func(string) string, lookPath func(string) (string, err
 func servicePopRetire(getenv func(string) string, missions func(context.Context, string) ([]string, error)) dispatch.PopRetireConfig {
 	r := config.Machine(getenv)
 	after := r.Duration("dispatch.pop_retire_after")
-	return dispatch.PopRetireConfig{On: r.Bool("dispatch.pop_retire") && after > 0, After: after, Missions: missions}
+	return dispatch.PopRetireConfig{On: r.Bool("dispatch.pop_retire") && after > 0, After: after, Missions: missions,
+		ProcStart: dispatch.ProcStart}
 }
 
 // desktopNotify runs notify-send, bounded to 5 s; nil when it is not on PATH.

@@ -1,7 +1,9 @@
 package dispatch
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -44,11 +46,21 @@ func readStat(pid int) (statFields, error) {
 	return parseStat(string(b))
 }
 
+// ErrNoProcess: /proc, readable on this system, lists no such pid. Only it
+// proves a process gone; any other error (no /proc, as on macOS, or a
+// failed read) proves nothing (pop-closed-by-hand, reviewer-codex).
+var ErrNoProcess = errors.New("no such process")
+
 // ProcStart is pid's start time (field 22 of /proc/<pid>/stat). With the pid it
 // identifies one process for its whole life: a recycled pid gets a new value.
 func ProcStart(pid int) (uint64, error) {
 	f, err := readStat(pid)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			if _, serr := os.Stat("/proc/self/stat"); serr == nil {
+				return 0, fmt.Errorf("pid %d: %w", pid, ErrNoProcess)
+			}
+		}
 		return 0, err
 	}
 	return f.start, nil

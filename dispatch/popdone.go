@@ -29,8 +29,16 @@ type PopFacts struct {
 	// byte-equal to it passes condition 8.
 	Intent, OwnIntent string
 	Handoff           bool       // a valid hand-off waits for its /clear
+	HandoffReport     string     // its report id, named to master for a closed pop
 	Pane              Inspection // a live inspection of its pane
 	Paused, Held      bool
+	// Closed: its verified process is gone and herdr no longer knows its
+	// pane or sees an agent in it (pop-closed-by-hand: closed by hand,
+	// plain retire or herdr). Nothing can declare, clear or be inspected
+	// any more, so conditions 8's hand-off, 9's state and 10 are not read
+	// (the hand-off's report is named to master instead, HandoffReport);
+	// every other condition, condition 9's delay included, still is.
+	Closed bool
 	// Episode, when not 0, is the episode retire was told (--episode):
 	// another one is not done.
 	Episode int64
@@ -72,11 +80,11 @@ func PopDone(f PopFacts) (bool, string) {
 		return no("its retire intent lapsed")
 	case f.Intent != "" && f.Intent != f.OwnIntent:
 		return no("a swap or reload holds it")
-	case f.Handoff:
+	case f.Handoff && !f.Closed:
 		return no("a hand-off waits for its /clear")
-	case s.Auto != "":
+	case s.Auto != "" && !f.Closed:
 		return no("a turn since its declaration")
-	case s.State != "idle" && s.State != "done":
+	case s.State != "idle" && s.State != "done" && !f.Closed:
 		return no("declared %s", s.State)
 	}
 	if age := f.Now.Sub(time.UnixMilli(s.TS)); age < f.RetireAfter {
@@ -87,6 +95,7 @@ func PopDone(f PopFacts) (bool, string) {
 	}
 	in := f.Pane
 	switch {
+	case f.Closed: // no pane to read: condition 10 does not apply
 	case in.Err != nil || in.Gone:
 		return no("its pane could not be read")
 	case !identityOK(s, in):
@@ -97,6 +106,8 @@ func PopDone(f PopFacts) (bool, string) {
 		return no("its pane is on a prompt")
 	case in.Busy || !in.Ready || (in.State != "idle" && in.State != "done"):
 		return no("its pane is not ready")
+	}
+	switch {
 	case f.Paused:
 		return no("the project is paused")
 	case f.Held:

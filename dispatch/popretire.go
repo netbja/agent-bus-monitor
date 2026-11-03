@@ -25,12 +25,28 @@ type PopRetireConfig struct {
 	// Missions lists the mission attempts in progress on an agent; nil reads
 	// as unknown, so no pop is ever judged done without it.
 	Missions func(ctx context.Context, agent string) ([]string, error)
+	// ProcStart reads a pid's start time; nil never judges a pop closed
+	// (pop-closed-by-hand).
+	ProcStart func(pid int) (uint64, error)
 }
 
 // PopRetireText is the directive master gets for a done pop.
 func PopRetireText(role string, episode int64, idle time.Duration) string {
 	return fmt.Sprintf("%s has finished: no task, gate, ask or message left, idle %s. End it: agentbus retire %s --forget --episode %d --reason \"work done\"",
 		role, idle.Round(time.Minute), role, episode)
+}
+
+// PopClosedText is the directive master gets for a pop closed by hand
+// (pop-closed-by-hand): its process and pane are gone, nothing waits for it.
+// A hand-off it declared is named first, to be read before the end
+// (reviewer-codex): no /clear will ever take it.
+func PopClosedText(role string, episode int64, handoffReport string) string {
+	first := ""
+	if handoffReport != "" {
+		first = fmt.Sprintf(" It declared a hand-off: read it first, agentbus reports %s.", handoffReport)
+	}
+	return fmt.Sprintf("%s was closed (its process and pane are gone) and nothing is left for it: no task, gate, ask or message.%s Unregister it: agentbus retire %s --forget --episode %d --reason \"closed\"",
+		role, first, role, episode)
 }
 
 // popRetirePass runs after the pause check (a paused project ends nobody).
@@ -61,9 +77,13 @@ func (l *loop) popRetirePass(ctx context.Context, snaps map[string]bus.AgentSnap
 	names := make([]string, 0, len(snaps))
 	for a, s := range snaps {
 		// The cheap part of §2 first, from the snapshot alone: a pop, declared
-		// idle or done long enough, not already told for this episode.
-		if s.Tier != "pop" || s.Auto != "" || (s.State != "idle" && s.State != "done") ||
-			now.Sub(time.UnixMilli(s.TS)) < c.After || marks[bus.PopDoneMark(a)] == strconv.FormatInt(PopEpisode(&s), 10) {
+		// idle or done long enough (or whose process is gone: closed by hand,
+		// pop-closed-by-hand), not already told for this episode.
+		if s.Tier != "pop" || now.Sub(time.UnixMilli(s.TS)) < c.After ||
+			marks[bus.PopDoneMark(a)] == strconv.FormatInt(PopEpisode(&s), 10) {
+			continue
+		}
+		if (s.Auto != "" || (s.State != "idle" && s.State != "done")) && !ProcGone(&s, c.ProcStart) {
 			continue
 		}
 		names = append(names, a)
@@ -82,7 +102,7 @@ func (l *loop) popRetirePass(ctx context.Context, snaps map[string]bus.AgentSnap
 
 func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 	c := l.cfg.PopRetire
-	f := ReadPopFacts(ctx, l.b, l.rt, a, PopReadOptions{Now: now, RetireAfter: c.After, Missions: c.Missions})
+	f := ReadPopFacts(ctx, l.b, l.rt, a, PopReadOptions{Now: now, RetireAfter: c.After, Missions: c.Missions, ProcStart: c.ProcStart})
 	if f.Snap == nil {
 		return nil
 	}
@@ -100,6 +120,9 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 	}
 	episode := PopEpisode(f.Snap)
 	text := PopRetireText(a, episode, now.Sub(time.UnixMilli(episode)))
+	if f.Closed {
+		text = PopClosedText(a, episode, f.HandoffReport)
+	}
 	sent, err := l.b.FencedCmdOnce(ctx, l.token, bus.PopDoneMark(a), strconv.FormatInt(episode, 10), dispatchFrom,
 		l.cfg.EscalateTo, bus.CmdDirective, text, false)
 	if err != nil {

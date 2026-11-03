@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -22,6 +23,11 @@ import (
 // a pop's end: the whole of PopDone judged before the begin, after it and
 // right before the close, then ForgetIfClear unregisters it in one script,
 // keeping its consumer group, or keeps it when anything arrived.
+//
+// pop-closed-by-hand: a plain retire of a pop ends with the same forget
+// (a boot role never), and --forget accepts a pop already closed by hand
+// (its verified process gone, herdr knowing its pane no more): nothing is
+// closed, and ForgetIfClear still checks pid, start, episode and what waits.
 
 const retireUsage = "usage: agentbus retire <role> [--reason <text>] [--now] | retire <role> --forget --episode <ms> [--reason <text>]"
 
@@ -57,8 +63,26 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	if !ok || snap.Pane == "" || snap.PID == 0 {
 		return fail("no verified pane recorded (agentbus agents): nothing to close")
 	}
-	if start, err := d.ProcStart(snap.PID); err != nil || start != snap.PIDStart {
-		return fail("its recorded process (pid %d) is not running any more: nothing to close", snap.PID)
+	// A pop is unregistered by its retire too (pop-closed-by-hand), with the
+	// retire intent ForgetIfClear checks; a boot role never is.
+	pop := snap.Tier == "pop"
+	// closed: a pop already closed by hand (its process and pane gone), which
+	// only --forget ends: nothing to close, the forget alone (pop-closed-by-hand).
+	closed := false
+	if start, err := d.ProcStart(snap.PID); err != nil && !errors.Is(err, dispatch.ErrNoProcess) {
+		// Unreadable proves nothing either way (reviewer-codex).
+		return fail("cannot read its recorded process (pid %d): %v; nothing closed", snap.PID, err)
+	} else if err == nil && start == snap.PIDStart {
+		// alive: the usual retire
+	} else {
+		if !forget || !pop {
+			hint := ""
+			if pop {
+				hint = fmt.Sprintf(" (a pop: agentbus retire %s --forget --episode %d unregisters it once nothing waits)", role, snap.TS)
+			}
+			return fail("its recorded process (pid %d) is not running any more: nothing to close%s", snap.PID, hint)
+		}
+		closed = true
 	}
 	if pane := d.Env("HERDR_PANE_ID"); pane != "" && pane == snap.Pane {
 		return fail("an agent cannot retire itself: run it from master's pane or a terminal")
@@ -69,16 +93,23 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	// popDone re-judges the whole of §2 (pop-auto-retire); own is retire's
 	// own intent once written, "" before.
 	popDone := func(own string) (bool, string) {
-		return dispatch.PopDone(dispatch.ReadPopFacts(ctx, b, d.Runtime, role, dispatch.PopReadOptions{
-			Now: d.Now(), RetireAfter: d.PopRetireAfter, OwnIntent: own, Episode: episode,
-			Missions: func(ctx context.Context, agent string) ([]string, error) { return missionsOf(ctx, b, agent) }}))
+		f := dispatch.ReadPopFacts(ctx, b, d.Runtime, role, dispatch.PopReadOptions{
+			Now: d.Now(), RetireAfter: d.PopRetireAfter, OwnIntent: own, Episode: episode, ProcStart: d.ProcStart,
+			Missions: func(ctx context.Context, agent string) ([]string, error) { return missionsOf(ctx, b, agent) }})
+		switch {
+		case closed && !f.Closed:
+			return false, "its process is gone but herdr still knows its pane: close that pane first"
+		case !closed && f.Closed:
+			return false, "its process and pane went since retire began"
+		}
+		return dispatch.PopDone(f)
 	}
 	if forget {
 		if done, why := popDone(""); !done {
 			return fail("retire-refused: not done: %s; nothing closed", why)
 		}
 	}
-	if !now {
+	if !now && !closed {
 		obs, err := b.Observed(ctx)
 		if err != nil {
 			return fail("%v", err)
@@ -92,7 +123,7 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	}
 	closeInterrupted(ctx, b, role, self)
 	intent := bus.SwapIntent{By: self, OldPID: snap.PID, OldStart: snap.PIDStart}
-	if forget {
+	if forget || pop {
 		intent.Kind, intent.Nonce = bus.SwapKindRetire, bus.NewIntentNonce()
 	}
 	own := intent.Encode()
@@ -136,21 +167,28 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 			return failed("popdone", "not done any more: %s; nothing was closed", why)
 		}
 	}
-	if err := d.ClosePane(ctx, snap.Pane); err != nil {
-		return failed("close", "%v; nothing was closed", err)
-	}
-	for deadline := d.Now().Add(d.PIDGone); ; d.Sleep(200 * time.Millisecond) {
-		if start, err := d.ProcStart(snap.PID); err != nil || start != snap.PIDStart {
-			break
+	if !closed {
+		if err := d.ClosePane(ctx, snap.Pane); err != nil {
+			return failed("close", "%v; nothing was closed", err)
 		}
-		if d.Now().After(deadline) {
-			return failed("old process", "pane %s closed but pid %d is still running after %s", snap.Pane, snap.PID, d.PIDGone)
+		for deadline := d.Now().Add(d.PIDGone); ; d.Sleep(200 * time.Millisecond) {
+			if dispatch.ProcGone(&snap, d.ProcStart) {
+				break
+			}
+			if d.Now().After(deadline) {
+				return failed("old process", "pane %s closed but pid %d is still running after %s", snap.Pane, snap.PID, d.PIDGone)
+			}
 		}
 	}
 	ev := bus.SwapEvent{Role: role, FromProvider: snap.Provider, By: self, Reason: reason, OldPID: snap.PID, OldPane: snap.Pane}
 	var kept []string
-	if forget {
-		res, err := b.ForgetIfClear(ctx, role, own, bus.RetiredAs{PID: snap.PID, PIDStart: snap.PIDStart, Episode: episode})
+	if forget || pop {
+		// A plain retire forgets the episode it read; --forget the one it was told.
+		ep := snap.TS
+		if forget {
+			ep = episode
+		}
+		res, err := b.ForgetIfClear(ctx, role, own, bus.RetiredAs{PID: snap.PID, PIDStart: snap.PIDStart, Episode: ep})
 		switch {
 		case err != nil:
 			ev.Forgot, ev.Error = "false", "forget: "+err.Error()
@@ -171,7 +209,11 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 			"the dispatcher escalates what waits and a new spawn of %s reads it from its kept group "+
 			"(agentbus agents forget %s --force ends it by hand)", snap.Pane, snap.PID, strings.Join(kept, "; "), role, role)
 	}
-	if forget {
+	if closed {
+		fmt.Fprintf(out, "retired %s: already closed (pane %s and pid %d gone), unregistered (its consumer group kept)\n", role, snap.Pane, snap.PID)
+		return 0
+	}
+	if forget || pop {
 		fmt.Fprintf(out, "retired %s: pane %s closed, pid %d gone, unregistered (its consumer group kept)\n", role, snap.Pane, snap.PID)
 		return 0
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/redis/go-redis/v9"
 )
@@ -86,7 +87,7 @@ func newSwapWorld(t *testing.T) (*swapWorld, swapDeps) {
 			if s, ok := w.procs[pid]; ok {
 				return s, nil
 			}
-			return 0, errors.New("no such process")
+			return 0, dispatch.ErrNoProcess
 		},
 		ClosePane: func(_ context.Context, pane string) error {
 			w.mu.Lock()
@@ -459,6 +460,10 @@ func TestRetireClosesOneAgent(t *testing.T) {
 	}
 	if w.intent() {
 		t.Fatal("intent left behind")
+	}
+	// A boot role is never unregistered by a retire (pop-closed-by-hand).
+	if !w.registered(t, "foureyes") || log[0].Forgot != "" {
+		t.Fatalf("a boot role's registration: registered=%v forgot=%q", w.registered(t, "foureyes"), log[0].Forgot)
 	}
 	out.Reset()
 	if code := runSwaps(ctx, w.b, nil, &out, &errw); code != 0 || !strings.Contains(out.String(), "retire") {
