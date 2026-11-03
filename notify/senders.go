@@ -67,7 +67,7 @@ func (s *discord) Send(ctx context.Context, m Message) error {
 // caller); urgency is notify-send's: low, normal or critical.
 type DesktopRun func(ctx context.Context, title, body, urgency string) error
 
-// desktop is notify-send on this host, one more target (Bernard Q6).
+// desktop is notify-send on this host, one more target (the person's answer 6).
 type desktop struct {
 	name string
 	run  DesktopRun

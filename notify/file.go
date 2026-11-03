@@ -34,8 +34,8 @@ func Path(getenv func(string) string) string {
 	return ""
 }
 
-// DefaultServer is the ntfy server a target uses without its own (Bernard
-// Q5: the public ntfy.sh).
+// DefaultServer is the ntfy server a target uses without its own (the
+// person's answer 5: the public ntfy.sh).
 const DefaultServer = "https://ntfy.sh"
 
 // Target is one table of notify.toml that passed every rule. It holds
@@ -52,7 +52,7 @@ type Target struct {
 	Line       int    // its table's header
 }
 
-func (t Target) String() string   { return t.Kind + " target " + t.Name }
+func (t Target) String() string { return t.Kind + " target " + t.Name }
 
 // Format makes every verb, %+v included, print String: the fields hold
 // secrets.
@@ -70,8 +70,8 @@ func (t Target) URL() string {
 	return ""
 }
 
-// Private is a target that may receive full text (Bernard Q5): the desktop,
-// or a ntfy server the person declares their own. ntfy.sh and Discord are
+// Private is a target that may receive full text (the person's answer 5):
+// the desktop, or a ntfy server the person declares their own. ntfy.sh and Discord are
 // third parties: summary only.
 func (t Target) Private() bool {
 	return t.Kind == "desktop" || (t.Kind == "ntfy" && t.SelfHosted)
