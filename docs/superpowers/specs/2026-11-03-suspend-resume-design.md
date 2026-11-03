@@ -364,8 +364,8 @@ suspended project it reads the pause (2 s) and, by the setting `suspend.auto_res
   non-empty and differs from the current boot (foureyes: focus events are frequent, and a person who
   suspends from busmon inside that very workspace and switches back to it before the reboot would
   otherwise wake the team just before the machine goes down). On the same boot, or with either boot
-  unknown, or another host, it starts nothing and prints `<p>: suspended on this boot: agentbus
-  resume brings it back`. Then it starts the full resume of that project (§5), exactly as `agentbus resume -p <p> --yes`
+  unknown, or another host, it starts nothing and prints `<p>: suspended: agentbus resume brings it
+  back` (one message fits every case, foureyes). Otherwise it starts the full resume of that project (§5), exactly as `agentbus resume -p <p> --yes`
   would, with the same rules: services, `up`'s relaunch with `--resume` (never typing into an existing
   pane), the proof, and the pause lifted only when every boot agent is back (no `--partial` from a
   hook, ever: a missing agent leaves the project suspended, said in the log and by a `for=person`
@@ -480,7 +480,7 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   not running starts services only; a crash host (no suspend) touches no pause and creates no closed
   workspace; idempotence: a second `resume --all` says `nothing to resume`.
 - `upHook`: with `auto_resume` off a suspended project's services stay stopped; on, with the same
-  boot (focus right after the suspend) nothing starts and the message says `suspended on this boot`;
+  boot (focus right after the suspend) nothing starts and the message says `suspended: agentbus resume brings it back`;
   with an empty recorded or current boot, or another host, nothing starts; with another boot the hook starts
   the detached resume (fake child, exact argv, `--partial` never passed) and returns at once; a second
   event while it runs is a no-op; no recorded person name, no resume; an unreadable pause starts the
