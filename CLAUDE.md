@@ -807,8 +807,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   zone (`settingsDetail`: label, file key, `from` source, default, read by; `settingHelp`); `↑↓` move in the group (kept in
   view, `selLine`), `←→`/Tab the group (the editor takes keys first, so on an open choice `←→` change its value), Enter
   flips an on/off at once, opens a choice or a line editor checked by the kind then the rule; `d` asks `y`, naming what
-  applies next; `D` asks `y` naming the group's keys config.toml holds (`settingsResettable`: a refused line too, never a
-  `PersonOnly` key, said to stay), unset one by one then read back once; theme, fade, bell and the reminder and recap
+  applies next; `D` asks `y` naming the group's keys config.toml holds a line for (`settingsResettable` over `FileHeld`: a refused line
+  and one a flag or the env shadows too, never a `PersonOnly` key, said to stay), unset one by one then read back once; theme, fade, bell and the reminder and recap
   timings apply at once through `applySettings` and `shellConfig.retheme`, the rest at busmon's next start). `agentbus config`
   (`configcmd.go`, above the project-required exit, no broker) prints each value and its source;
   `--project` reads that project's env file for what its services see (only registry keys and the two

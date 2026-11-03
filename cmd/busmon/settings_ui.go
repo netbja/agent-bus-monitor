@@ -259,14 +259,16 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 }
 
 // settingsResettable is what D removes from config.toml in g: every key the
-// file holds that the page may unset (a refused line too), in order; kept
+// file holds a line for (a refused line, one a flag or the env shadows), in
+// order; kept
 // names the person's own keys the file holds, which stay (backup spec).
 func settingsResettable(g settingGroup) (keys, kept []string) {
 	for _, r := range g.Rows {
 		switch {
-		case r.PersonOnly && r.From == fromFile:
+		case !r.FileHeld:
+		case r.PersonOnly:
 			kept = append(kept, r.Key)
-		case r.InFile && !r.PersonOnly:
+		default: // shadowed by a flag or the env, its line is still the file's
 			keys = append(keys, r.Key)
 		}
 	}

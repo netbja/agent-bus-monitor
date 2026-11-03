@@ -34,7 +34,10 @@ type settingRow struct {
 	// PersonOnly is a person's own setting (backup.after_*): shown, never
 	// written here (edit config.toml yourself).
 	PersonOnly bool
-	InFile     bool // config.toml holds the key (● or a refused line): d may unset it
+	InFile     bool // config.toml's line is the one that applies or is refused: d may unset it
+	// FileHeld: config.toml holds a line for the key, whatever applies above
+	// it (a flag, the env): D removes it (reviewer-codex).
+	FileHeld bool
 	// AfterUnset is what applies once config.toml's line is gone ("busmon.toml's
 	// light", "the default auto"): d's confirmation names it (spec).
 	AfterUnset string
@@ -121,6 +124,7 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 				row.From, row.Source = fromDefault, "default"
 			}
 			row.Default, row.ReadBy, row.Kind, row.List = settingValue(k, k.Default), k.ReadBy, k.Kind, k.List
+			row.FileHeld = cfg.Has(k.Name) || refused[k.Name] > 0
 			row.Value = settingValue(k, value)
 			switch after := below.Get(k.Name); after.Source {
 			case "default":

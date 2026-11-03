@@ -627,3 +627,60 @@ func TestSettingsSelectionInView(t *testing.T) {
 		t.Fatalf("selected line %d outside %d..%d", line, p.top, p.top+m.readerRows())
 	}
 }
+
+// reviewer-codex: D removes every config.toml line of the group, also one a
+// flag or the env shadows (the row keeps showing the value that applies),
+// and names a person's own key the file holds as staying, shadowed or not.
+func TestSettingsResetGroupShadowed(t *testing.T) {
+	getenv := settingsEnv(t, "[display]\ntheme = \"dark\"\nicons = \"nerd\"\n[backup]\nafter_command = \"restic backup /b\"\n", "",
+		map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1", "AGENT_BUS_BUSMON_ICONS": "off"})
+	m := shellWith(t, 120, 40, shellConfig{getenv: getenv, flags: settingsFlags{Theme: "light"}}, false)
+	m = press(t, m, 'C')
+	if r := settingRowOf(t, m.rd.top().set.groups, "display.theme"); r.From != fromElsewhere || r.Editable {
+		t.Fatalf("the flag's row: %+v", r)
+	}
+	m = press(t, m, 'D')
+	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "2 keys set in config.toml (theme, icons) will be removed") {
+		t.Fatalf("shadowed lines not named:\n%s", body)
+	}
+	m = press(t, m, 'y')
+	if got := configText(t, getenv); strings.Contains(got, "theme") || strings.Contains(got, "icons") {
+		t.Fatalf("after D y: %q", got)
+	}
+	if _, kept := settingsResettable(groupOf(t, m, config.GroupBackup)); len(kept) != 1 || kept[0] != "backup.after_command" {
+		t.Fatalf("kept %v", kept)
+	}
+}
+
+func groupOf(t *testing.T, m Model, g config.Group) settingGroup {
+	t.Helper()
+	for _, grp := range m.rd.top().set.groups {
+		if grp.Group == g {
+			return grp
+		}
+	}
+	t.Fatalf("no group %s", g)
+	return settingGroup{}
+}
+
+// foureyes: below 92 cells the tab bar's two lines are counted, so the
+// selected key stays in view there too.
+func TestSettingsSelectionInViewNarrow(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	m := shellWith(t, 80, 24, shellConfig{getenv: getenv}, false)
+	m = showGroup(t, press(t, m, 'C'), config.GroupNotifications)
+	if m.readerWidth() >= settingsSideMin {
+		t.Fatalf("reader %d cells: not the narrow layout", m.readerWidth())
+	}
+	rows := len(m.rd.top().set.rows())
+	for i := 1; i < rows; i++ {
+		m = press(t, m, tea.Key{Code: tea.KeyDown})
+		p := m.rd.top()
+		want := m.rd.top().set.rows()[p.sel].Label
+		top, n := p.top, m.readerRows()
+		shown := tokLinesText(p.body[top:min(len(p.body), top+n)])
+		if !strings.Contains(shown, GlyphSelect+"   "+want) && !strings.Contains(shown, GlyphSelect+" "+GlyphSet+" "+want) {
+			t.Fatalf("row %d (%s) not on screen:\n%s", p.sel, want, shown)
+		}
+	}
+}
