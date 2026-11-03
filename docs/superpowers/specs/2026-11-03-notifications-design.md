@@ -1,8 +1,9 @@
 # Notifications: tell the person on their phone, through ntfy or Discord
 
-Status: spec, not built. Subject `notifications-spec`. Request: master's directive of 2026-11-03,
-from Bernard: notifications through ntfy and Discord, each configurable in the settings; later maybe
-two-way (Signal, Telegram), so behind a sender interface. Open questions for Bernard at the end.
+Status: spec approved (#282), being built (subject `notifications`). Request: master's directive
+of 2026-11-03, from Bernard: notifications through ntfy and Discord, each configurable in the
+settings; later maybe two-way (Signal, Telegram), so behind a sender interface. Bernard's answers to
+the seven open questions are at the end and folded into the text.
 
 ## Why
 
@@ -30,8 +31,8 @@ person. The notifier **reads** them; no producer changes.
 | `prompt` | an agent's pane waiting on its client's prompt, past the prompt-notify grace (the same episode the desktop rings for) | `pid:since` |
 | `for-you` | a health check entering `warn` with its place For you (backup, disk, github...) | the check and its `since` |
 
-Defaults (open question 1): `decision`, `stall`, `fail`, `blocked` and `prompt` on; `for-you` off,
-since a for-you warn can wait for the next look at busmon.
+Defaults (Bernard, Q1: as proposed): `decision`, `stall`, `fail`, `blocked` and `prompt` on;
+`for-you` off, since a for-you warn can wait for the next look at busmon.
 
 Never notified: reports, directives between agents, verdicts, a warn in hand (sentinel's or
 master's), anything a person wrote (`human=yes`).
@@ -107,11 +108,12 @@ phone is not a bus participant. The record above holds kind, episode and time on
   project's dispatch service sends to the same targets, so the limit is the host's, counted in
   `<state>/notify-last.json` (below) under the host lock: three projects share the 6, never send 18.
   Beyond it, events are kept (their fields absent) and sent in the next allowed message; `fail` and
-  `stall` are never held back by it (open question 3).
-- **Quiet hours** (`notify.quiet`, `"22:00-07:30"` style, local time; empty = none, the default):
-  during them nothing is sent but `fail` and `stall` (open question 3); what was held is sent as one
-  message when they end, its lines marked "(during quiet hours)". A held event has no field until
-  its message is sent, as any other (at least once, above).
+  `stall` are never held back by it.
+- **Quiet hours** (Bernard, Q3: configurable in the settings; `notify.quiet`, `"22:00-07:30"`
+  style, local time; empty = none, the default): during them nothing is sent but the kinds in
+  `notify.quiet_exempt` (default `["fail", "stall"]`, also configurable; `[]` holds everything);
+  what was held is sent as one message when they end, its lines marked "(during quiet hours)". A
+  held event has no field until its message is sent, as any other (at least once, above).
 - **Paused project**: nothing is sent while `{p}:pause` holds (a pause is the person's own act),
   except `fail`.
 
@@ -127,9 +129,14 @@ agent-bus-monitor · 2 waiting for you
 
 - **Title**: the project and a count. **Body**: one line per event: who, what, and the busmon key
   to open it (`F5`, `!`, For you).
-- **Detail level** (`notify.detail`, open question 2): `summary` (the default) sends no free text
-  written by an agent: "master asks a question (2)" instead of the question itself, since the
-  target is a third-party service (ntfy.sh, Discord). `full` adds the question's title, a waiting
+- **Detail level** (`notify.detail`, Bernard Q2: `summary` by default): `summary` sends no free
+  text written by an agent: "master asks a question (2)" instead of the question itself, since the
+  target may be a third-party service (ntfy.sh, Discord). **`full` applies only to a private
+  target** (Bernard Q5): a ntfy target on a server the person declares their own (`self_hosted =
+  true`, never for `ntfy.sh`), or the desktop. Every other target, the public ntfy.sh and Discord,
+  is sent `summary` whatever `notify.detail` says: never sensitive text, never a secret there. The
+  detail used is decided per target, so one pass may send `full` to the desktop and `summary` to
+  Discord. `full` adds the question's title, a waiting
   agent's status message and the check's detail, each scrubbed, then cut to 120 runes. The scrub
   (`notify.Scrub`): `health.Redact` first (the whole field replaced on any credential-like hit),
   then every URL (any `scheme://...`, any `www.` host) replaced by `[url]`, every absolute path and
@@ -152,12 +159,29 @@ mode `0600` in a `0700` folder, owned by the person:
 
 ```toml
 [ntfy.phone]
-url = "https://ntfy.example.org/agentbus-7f3c"   # the topic URL
+topic = "agentbus-7f3c..."                        # the topic: hard to guess, a secret
+server = "https://ntfy.sh"                        # optional: the server (Bernard Q5), ntfy.sh by default
 token = "tk_..."                                  # optional: an access token (Authorization: Bearer)
+self_hosted = false                               # optional: true = the person's own server, `full` allowed
 
 [discord.team]
 webhook = "https://discord.com/api/webhooks/123/abc..."
+
+[desktop.here]                                    # notify-send on this host (Bernard Q6); no secret
 ```
+
+- **The ntfy server** (Bernard Q5): configurable per target, the public `https://ntfy.sh` by
+  default. The message is sent to `<server>/<topic>`. `self_hosted = true` is refused for the host
+  `ntfy.sh` (a warning naming the target and line), and only a self-hosted target may receive
+  `full` text. A topic must be at least 12 characters of `[A-Za-z0-9_-]` (ntfy's own topic rule;
+  on a public server its name is its only lock): shorter is refused for that target. A public
+  topic without a token is accepted (the person's choice, summary forced on it).
+- **The desktop** (Bernard Q6): `notify-send` becomes one more target, kind `desktop`, with the
+  same events and rules (delay, grouping, limit, quiet hours, baseline, per-target record). The
+  dispatcher's own prompt ring (`dispatch/promptnotify.go`) stays for a host with no `desktop`
+  target listed, and is skipped while one is listed and `notify.on` is true, so a prompt never
+  rings twice. The context alert's and the identity mismatch's rings are not notification events
+  and stay as they are.
 
 - **Read rules.** A file readable by group or others is refused whole (the health check says so,
   and nothing is sent until the mode is fixed). A symlink is followed only to a file the person
@@ -193,7 +217,10 @@ type Sender interface {
 }
 ```
 
-- **ntfy**: one `POST` to the topic URL; the body is the lines, the title in the `Title` header,
+- **desktop**: `notify-send` (5 s, the existing runner), the title as its summary and the lines
+  as its body, urgency `critical` for High, `normal`, `low`; not on PATH = that send fails with
+  "no notify-send on PATH".
+- **ntfy**: one `POST` to `<server>/<topic>`; the body is the lines, the title in the `Title` header,
   `Priority`, `Tags: agentbus`, `Authorization: Bearer <token>` when a token is set; `Markdown: no`.
 - **Discord**: one `POST` of JSON `{"username": "agentbus", "content": ..., "allowed_mentions":
   {"parse": []}}` to the webhook (no `@everyone`, no role pings, whatever the text holds); the
@@ -218,8 +245,7 @@ type Sender interface {
   answer through `Bus.Answer`, a `human=yes` directive), identified by a pairing the person
   makes at the desk, never by a phone number alone.
 
-The desktop's `notify-send` stays as it is (prompt, context, identity); making it a sender like the
-others is open question 6.
+The desktop is a sender like the others (Bernard Q6, above).
 
 ## Settings
 
@@ -231,13 +257,14 @@ through `config.Machine`:
 | `notify.on` | `false` | the chore runs only when true |
 | `notify.targets` | `[]` | the names from `notify.toml` to send to |
 | `notify.events` | `["decision", "stall", "fail", "blocked", "prompt"]` | the kinds sent |
-| `notify.detail` | `summary` | `summary` or `full` |
-| `notify.delay` | `2m` | how long an event must hold before it is sent |
+| `notify.detail` | `summary` | `summary` or `full` (`full` reaches only private targets) |
+| `notify.delay` | `2m` | how long an event must hold before it is sent (Bernard Q4: 2 minutes, configurable) |
 | `notify.max_per_hour` | `6` | messages per target per hour (fail and stall excepted) |
 | `notify.quiet` | `""` | quiet hours, `HH:MM-HH:MM` local; empty = none |
+| `notify.quiet_exempt` | `["fail", "stall"]` | the kinds sent during quiet hours |
 
-No secret among them. `notify.targets` and `notify.events` are TOML lists (stored as the backup
-spec's `after_env` is: a comma-joined string with a list file rule).
+No secret among them. `notify.targets`, `notify.events` and `notify.quiet_exempt` are TOML lists
+(stored as the backup spec's `after_env` is: a comma-joined string with a list file rule).
 
 ## Commands
 
@@ -354,7 +381,13 @@ Discord or any host.
   retried twice; a 401 not retried; an error string with neither the URL nor the body.
 - **notify.toml**: 0644 refused whole; a non-https URL, user info, a foreign webhook host, an
   unknown key refused per target with the line and never the value; `http` only with `insecure`
-  on a private host.
+  on a private host; no `server` = `https://ntfy.sh`; `self_hosted` on `ntfy.sh` refused; a short
+  topic refused; a `desktop` table with any key refused.
+- **Detail per target**: with `notify.detail = full`, a self-hosted ntfy target and the desktop
+  receive the scrubbed text, ntfy.sh and Discord the summary (the same pass).
+- **Desktop**: a fake `notify-send` gets the title, body and urgency; while a desktop target is
+  listed the dispatcher's prompt ring is skipped, and rings again once it is not.
+- **Quiet exempt**: `notify.quiet_exempt = []` holds a fail during quiet hours.
 - **Backup**: `notify.toml` left out and listed without `--secrets`, in `secrets.age` with it.
 - **Tool rules**: every role denies Read/Edit/Write of the file and `notifications test`.
 - **Health**: unknown off, warn on a failed send, a bad mode, a missing target; ok after a success.
@@ -362,13 +395,28 @@ Discord or any host.
 
 ## Steps (when built)
 
-1. `notify` package: `Sender`, ntfy and Discord, the HTTP client, `notify.toml` reading.
+1. `notify` package: `Sender`, ntfy, Discord and desktop, the HTTP client, `notify.toml` reading.
 2. The settings keys, `agentbus notifications status|test`, the tool-rule denies, backup's secret.
 3. The chore: events, per-target records and baselines in `{p}:notified`, pruning, delay,
    grouping, the host-wide limit, quiet hours.
 4. Health `notifications`; busmon's C page group and target lines.
 
-## Open questions for Bernard
+## Bernard's answers (2026-11-03, through master)
+
+1. Events as proposed: decisions waiting, team stall, a fail, a notice only the person can act on,
+   a pane on its prompt; for-you warns off.
+2. `summary` by default.
+3. Quiet hours configurable in the settings; when set, everything is held but a fail and a stall,
+   and that exemption is configurable too (`notify.quiet_exempt`).
+4. The delay is 2 minutes, configurable.
+5. The ntfy server is configurable, the public ntfy.sh by default. On a public server never
+   sensitive text and never a secret (`summary` forced); on a local or self-hosted server full
+   text is allowed when the person sets it (`self_hosted = true` and `notify.detail = full`).
+6. `notify-send` becomes one more target (`desktop`), with the same events and rules.
+7. Two-way later, only through busmon-style person writes after a pairing made at the desk;
+   nothing built now.
+
+## The questions as they were asked
 
 1. **Which events by default?** Proposed: decisions waiting, team stall, a fail, a notice only you
    can act on, a pane on its prompt; for-you warns (backup, disk...) off. Add or drop any?
