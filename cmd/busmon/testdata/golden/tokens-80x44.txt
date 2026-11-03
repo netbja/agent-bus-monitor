@@ -20,9 +20,14 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Tokens · today · anthropic 62% 5h · xai held 40m ──────────────── esc back ─╮
 │ Accounts                                                                     │
-│   anthropic  5h  ██████▎     62%   7d  ████▏       41%                       │
-│                                                                              │
-│   xai        5h  ██████████ 100%  held 40m                                   │
+│   CLAUDE                                                          5h · 62%   │
+│   5h  ━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━   62% · resets 17:04       │
+│   7d  ━━━━━━━━━━━━━━━━━━━━━━━━━│━━━━━━━━━━━━━━━━━   41% · resets Thu 15:04   │
+│   At this pace the limit comes around 16:54, before the 17:04 reset.         │
+│   ────────────────────────────────────────────────────────────────────────   │
+│   GROK                                                    held until 15:44   │
+│   5h  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━  100% · resets 15:44   │
+│   Limit reached: it resets at 15:44.                                         │
 │ Projects                 in+out  7 days                                      │
 │   agent-bus-monitor       ~1.8M     ▃ █▆  ████████     ~5.1M                 │
 │   blog                        0   ▁       ▎             170k                 │
@@ -33,11 +38,6 @@
 │   9 more · no proved session  (a lists them)                                 │
 │                                                                              │
 │ in: input + cache writes · ~ counting · no cost                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
 │                                                                              │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯

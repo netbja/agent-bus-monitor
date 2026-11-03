@@ -66,6 +66,7 @@ const (
 	ActComposeOpen  // open the compose window
 	ActComposeField // the window: text <-> recipient
 	ActComposeAsk   // the window: answer the open question in its panel
+	ActPasteImage   // the window: paste the clipboard's image (saved locally, its path inserted)
 	ActRecap        // open the deterministic project recap
 	ActHealth       // open project health details
 	ActPickType     // the picker: a typed character or backspace edits the filter
@@ -266,6 +267,7 @@ var (
 		{Keys: "^S", Hint: "send", Act: ActSend, match: keyIs(keyCtrlS)},
 		{Keys: "tab", Hint: "recipient", Help: "recipient " + GlyphNone + " text; a text that is only @prefix becomes the recipient (completed, or its list opens)", Act: ActComposeField, match: keyIs(keyTab)},
 		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(keyCtrlT)},
+		{Keys: "^V", Help: "paste the clipboard's image: saved 0600 under the cache's agentbus/attachments, its path inserted; nothing uploaded", Act: ActPasteImage, match: keyIs(keyCtrlV)},
 		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(keyEscape)},
 		// Help only: the window's own keys move and select (tea_compose.go), never through the table.
 		{Keys: "shift+" + arrows + GlyphArrowL + GlyphArrowR + " home end", Help: "select text: del or backspace removes it, typing replaces it, esc or a plain move clears it", match: never},

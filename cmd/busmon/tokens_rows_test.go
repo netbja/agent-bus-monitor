@@ -44,74 +44,60 @@ func tokAccounts(width int, holds map[string]int64) []string {
 	return out
 }
 
-// Accounts: one row per provider, its windows side by side, each window in
-// its own column so the 7d windows line up; the richest form that fits.
-func TestTokensAccountsOneRowPerProvider(t *testing.T) {
-	for _, c := range []struct {
-		width        int
-		spark, reset bool
-	}{{190, true, true}, {120, false, true}, {80, false, false}, {66, false, false}} {
-		rows := tokAccounts(c.width, nil)
-		col := -1
-		for _, p := range []string{"anthropic", "openai"} {
-			var mine []string
-			for _, r := range rows {
-				if strings.HasPrefix(strings.TrimSpace(r), p) {
-					mine = append(mine, r)
-				}
-			}
-			if len(mine) != 1 || !strings.Contains(mine[0], "5h") || !strings.Contains(mine[0], "7d") {
-				t.Fatalf("%d: %s rows %q", c.width, p, mine)
-			}
-			at := Width(mine[0][:strings.Index(mine[0], "7d")]) // in cells: a spark glyph is several bytes
-			if col >= 0 && at != col {
-				t.Errorf("%d: 7d at %d for %s, %d above", c.width, at, p, col)
-			}
-			col = at
-			if strings.Contains(mine[0], "24h") != c.spark || strings.Contains(mine[0], "resets") != c.reset {
-				t.Errorf("%d: spark %v reset %v: %q", c.width, c.spark, c.reset, mine[0])
-			}
+// cardOf is a provider's card in the Accounts rows: its head line (the name
+// upper case) and the lines under it, up to the rule or the next card.
+func cardOf(rows []string, provider string) []string {
+	var out []string
+	for _, r := range rows {
+		t := strings.TrimSpace(r)
+		switch {
+		case strings.HasPrefix(t, strings.ToUpper(providerLabel(provider))+" "):
+			out = []string{r}
+		case len(out) > 0 && (strings.HasPrefix(t, glyphHorizontal) || t == "" || t == strings.ToUpper(t) && !strings.ContainsAny(t[:1], "0123456789")):
+			return out
+		case len(out) > 0:
+			out = append(out, r)
 		}
+	}
+	return out
+}
+
+// Accounts as cards (usage-cards): one card per provider, one row per window,
+// the bars of a card starting in one column, nothing wider than the page and
+// no 24-hour spark, at every width.
+func TestTokensAccountsCards(t *testing.T) {
+	for _, width := range []int{190, 120, 80, 66, 50} {
+		rows := tokAccounts(width, nil)
 		for _, r := range rows {
 			if strings.HasPrefix(r, "TOO WIDE") {
-				t.Errorf("%d: %s", c.width, r)
+				t.Errorf("%d: %s", width, r)
+			}
+			if strings.Contains(r, "24h") {
+				t.Errorf("%d: a spark is drawn: %q", width, r)
 			}
 		}
-	}
-	// Below the bare form's width: one window per row, the provider named on
-	// each, nothing cut.
-	rows := tokAccounts(50, nil)
-	var anthropic []string
-	for _, r := range rows {
-		if strings.HasPrefix(r, "TOO WIDE") {
-			t.Errorf("50: %q", r)
+		card := cardOf(rows, "anthropic")
+		if len(card) < 3 || !strings.Contains(card[1], "5h") || !strings.Contains(card[2], "7d") {
+			t.Fatalf("%d: anthropic card %q", width, card)
 		}
-		if strings.HasPrefix(strings.TrimSpace(r), "anthropic") {
-			if strings.Contains(r, GlyphEllipsis) { // a long window name is fitted to its column; a 5h/7d row is never cut
-				t.Errorf("50: cut %q", r)
-			}
-			anthropic = append(anthropic, r)
+		bar := func(r string) int { return Width(r[:strings.IndexAny(r, GlyphThinBar+GlyphThinMark+glyphVertical)]) }
+		if bar(card[1]) != bar(card[2]) {
+			t.Errorf("%d: the bars start at %d and %d", width, bar(card[1]), bar(card[2]))
 		}
-	}
-	if len(anthropic) != 2 || !strings.Contains(anthropic[0], "5h") || !strings.Contains(anthropic[0], "2%") ||
-		!strings.Contains(anthropic[1], "7d") || !strings.Contains(anthropic[1], "55%") {
-		t.Errorf("50: anthropic rows %q", anthropic)
+		if !strings.Contains(card[1], "2%") || !strings.Contains(card[2], "55%") {
+			t.Errorf("%d: figures %q", width, card)
+		}
 	}
 }
 
-// A hold is never dropped for room: the bare form says it once at the end of
-// the provider's row.
+// A hold is never dropped for room: the card's head says it.
 func TestTokensAccountsKeepAHold(t *testing.T) {
 	holds := map[string]int64{"openai": shellNow.Add(40 * time.Minute).Unix()}
+	want := "held until " + shellNow.Add(40*time.Minute).Local().Format("15:04")
 	for _, width := range []int{190, 120, 80, 66} {
-		var row string
-		for _, r := range tokAccounts(width, holds) {
-			if strings.HasPrefix(strings.TrimSpace(r), "openai") {
-				row = r
-			}
-		}
-		if !strings.Contains(row, "held 40m") {
-			t.Errorf("%d: no hold in %q", width, row)
+		card := cardOf(tokAccounts(width, holds), "openai")
+		if len(card) == 0 || !strings.Contains(card[0], want) {
+			t.Errorf("%d: no hold in %q", width, card)
 		}
 	}
 }
@@ -149,14 +135,9 @@ func TestTokensAgentBarTrackStopsAtTheBar(t *testing.T) {
 // column (xai's weekly read "we…"): wk, mo, day; 5h and 7d unchanged.
 func TestTokensAccountsShortWindowLabels(t *testing.T) {
 	for _, width := range []int{190, 80, 50} {
-		var xai string
-		for _, r := range tokAccounts(width, nil) {
-			if strings.HasPrefix(strings.TrimSpace(r), "xai") {
-				xai = r
-			}
-		}
-		if !strings.Contains(xai, "wk ") || strings.Contains(xai, "we"+GlyphEllipsis) {
-			t.Errorf("%d: xai row %q", width, xai)
+		card := cardOf(tokAccounts(width, nil), "xai")
+		if len(card) < 2 || !strings.HasPrefix(strings.TrimSpace(card[1]), "wk ") || strings.Contains(card[1], "we"+GlyphEllipsis) {
+			t.Errorf("%d: xai card %q", width, card)
 		}
 	}
 	for name, want := range map[string]string{"weekly": "wk", "monthly": "mo", "daily": "day", "5h": "5h", "7d": "7d", "spend-monthly": "spend-monthly"} {

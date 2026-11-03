@@ -21,7 +21,6 @@ import (
 type tokensReader interface {
 	ProjectNames(ctx context.Context) ([]string, error)
 	TokensOf(ctx context.Context, project string) (map[string]bus.TokenRow, bus.TokensMeta, bool, error)
-	QuotaHist(ctx context.Context, since int64) ([]bus.QuotaSample, error)
 }
 
 // tokProject is one project's {p}:tokens as last read.
@@ -37,7 +36,6 @@ type tokProject struct {
 type tokState struct {
 	polled   bool
 	projects []tokProject
-	hist     []bus.QuotaSample
 	failed   bool // the last read failed: the values are the kept ones
 }
 
@@ -69,9 +67,6 @@ func readTokens(ctx context.Context, b busReader, project string, now time.Time,
 		}
 		out.projects = append(out.projects, p)
 	}
-	if out.hist, err = tr.QuotaHist(ctx, now.Add(-24*time.Hour).UnixMilli()); err != nil {
-		out.hist, out.failed = prev.hist, true
-	}
 	return out
 }
 
@@ -88,33 +83,13 @@ func contains(xs []string, x string) bool {
 var sparkSteps = []string{GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6, GlyphGauge, GlyphBarFull}
 
 // sparkOf is v on a scale to max: a space for none, the lowest block for a
-// little.
+// little (the Projects zone's 7 days).
 func sparkOf(v, max float64) string {
 	if v <= 0 || max <= 0 {
 		return " "
 	}
 	i := int(v / max * float64(len(sparkSteps)))
 	return sparkSteps[clamp(i, 0, len(sparkSteps)-1)]
-}
-
-// hourSpark is a window's last 24 hours, one cell per hour (the hour's last
-// sample, 0-100 %), oldest first; an hour with no sample is a space.
-func hourSpark(hist []bus.QuotaSample, provider, window string, now time.Time) string {
-	cells := make([]string, 24)
-	for i := range cells {
-		cells[i] = " "
-	}
-	start := now.Add(-24 * time.Hour).UnixMilli()
-	for _, s := range hist { // oldest first: a later sample of the hour wins
-		if s.Provider != provider || s.Window != window || s.At < start {
-			continue
-		}
-		h := int((s.At - start) / time.Hour.Milliseconds())
-		if h >= 0 && h < 24 {
-			cells[h] = sparkSteps[clamp(int(s.Pct/100*float64(len(sparkSteps))), 0, len(sparkSteps)-1)]
-		}
-	}
-	return strings.Join(cells, "")
 }
 
 // tokCount: 0, 873, 206k, 5.1M.
@@ -167,56 +142,13 @@ func tokensPage(icons string, st tokState, budgets map[string]bus.BudgetSnapshot
 	if len(provs) == 0 {
 		muted("  ? no account reading (no dispatch service collecting quotas)")
 	}
-	// One row per provider, its windows side by side in columns of one width,
-	// so the same window lines up down the zone: the richest form that fits
-	// (the 24-hour spark, then the reset), else one window per row.
-	most := 0
-	for _, p := range provs {
-		most = max(most, len(budgets[p].Windows))
-	}
-	form := accountForms[len(accountForms)-1]
-	for _, f := range accountForms {
-		if 2+iconW+10+1+most*f.width()+(most-1)*3 <= width {
-			form = f
-			break
-		}
-	}
-	perRow := most
-	if 2+iconW+10+1+most*form.width()+(most-1)*3 > width {
-		perRow = 1
-	}
 	for n, p := range provs {
-		// A blank line between providers (usage-bars): a full-height gauge and
-		// a 24-hour spark of one row touched the next row's, and the two
-		// accounts read as one block (the person's screenshot). The blank keeps
-		// the bars full height, where the spark needs its height to be read.
-		if n > 0 {
-			b.text("\n")
+		if n > 0 { // a thin rule between cards
+			b.text("  ").seg(RoleLine, strings.Repeat(glyphHorizontal, max(0, width-4))).text("\n")
 		}
-		ws := budgets[p].Windows
-		for i, w := range ws {
-			if i%max(perRow, 1) == 0 {
-				if i > 0 {
-					b.text("\n")
-				}
-				b.text("  ")
-				if iconW > 0 { // an account is keyed by provider in every mode
-					b.segs(iconPair(providerIcon(icons, p), p))
-				}
-				b.seg(providerRole(p, RoleText), Fit(Preview(p), 10)).text(" ")
-			} else {
-				b.text("   ")
-			}
-			cell := accountCell(form, st, p, w, holds, now, bars)
-			if i%max(perRow, 1) < perRow-1 && i < len(ws)-1 {
-				cell = append(cell, S(RoleText, strings.Repeat(" ", max(0, form.width()-cell.Width()))))
-			}
-			b.segs(cell...)
+		for _, l := range accountCard(icons, p, budgets[p], holds, now, width, bars) {
+			b.segs(l...).text("\n")
 		}
-		if until, isHeld := held(holds, p, now); isHeld && !form.reset { // a hold is never dropped for room
-			b.seg(RoleError, "  held "+compactDur(until.Sub(now)))
-		}
-		b.text("\n")
 	}
 
 	days := tokens.LastDays(now, time.Local, 7)
@@ -383,69 +315,6 @@ func tokensPage(icons string, st tokState, budgets map[string]bus.BudgetSnapshot
 		lines[i] = FitLine(lines[i], width)
 	}
 	return lines
-}
-
-// accountForm is how much of an account window a cell shows: its gauge and
-// figure always, then the 24-hour spark, then the reset or the hold.
-type accountForm struct{ spark, reset bool }
-
-var accountForms = []accountForm{{true, true}, {false, true}, {false, false}}
-
-// width is the cell's cells: name 3, gauge 10, figure 5, spark 6+24, reset 15.
-func (f accountForm) width() int {
-	w := 4 + 10 + 5
-	if f.spark {
-		w += 6 + 24
-	}
-	if f.reset {
-		w += 15
-	}
-	return w
-}
-
-// accountWindowName is a window's name in the 3-cell column: a window named
-// in words (xai's billing periods) gets a short label, so weekly reads wk,
-// not a cut "we…"; any other name is shown as it is, fitted.
-func accountWindowName(name string) string {
-	switch name {
-	case "weekly":
-		return "wk"
-	case "monthly":
-		return "mo"
-	case "daily":
-		return "day"
-	}
-	return name
-}
-
-// accountCell is one account window in a form: never observed reads ?,
-// never 0%.
-func accountCell(f accountForm, st tokState, p string, w bus.BudgetWindow, holds map[string]int64, now time.Time, bars barView) Line {
-	var c body
-	c.text(Fit(Preview(accountWindowName(w.Name)), 3)).text(" ")
-	if windowUnobserved(w) {
-		c.seg(RoleDim, strings.Repeat(GlyphBarEmpty, 10)).seg(RoleMuted, "    ?")
-	} else {
-		c.segs(bars.gauge(barKey(p, w.Name), w.UsedPct, 10, budgetRole(w.UsedPct))...)
-		c.text(fmt.Sprintf(" %3.0f%%", w.UsedPct))
-	}
-	if f.spark {
-		c.seg(RoleMuted, "  24h ").seg(RoleAccent, Fit(hourSpark(st.hist, p, w.Name, now), 24))
-	}
-	if f.reset {
-		if until, isHeld := held(holds, p, now); isHeld {
-			c.seg(RoleError, Fit("  held "+compactDur(until.Sub(now)), 15))
-		} else if w.ResetsAt > 0 {
-			if left := time.Unix(w.ResetsAt, 0).Sub(now); left > 0 {
-				c.seg(RoleMuted, Fit("  resets "+compactDur(left), 15))
-			}
-		}
-	}
-	var l Line
-	for _, line := range c.Lines() {
-		l = append(l, line...)
-	}
-	return l
 }
 
 // shortTokReason is an unknown agent's reason as its row reads it: grey and

@@ -514,7 +514,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   `←` `→` by character, Home/End (or Ctrl+A/Ctrl+E) to the ends, Delete, Ctrl+W back a word, Ctrl+U to
   the start. Plain text is a notice nobody
   reads: the first Enter says so, a second one sends it. **`I`** opens the compose window for
-  several lines (Ctrl+S sends, Tab moves to the recipient, Esc keeps the draft). You write as a
+  several lines (Ctrl+S sends, Tab moves to the recipient, Esc keeps the draft, Ctrl+V pastes the
+  clipboard's image: saved privately under `~/.cache/agentbus/attachments`, its path put in the text,
+  nothing uploaded; it needs `wl-paste`, `xclip` or `pngpaste`). You write as a
   **person**: `busmon --as charlie` (or `AGENT_BUS_HUMAN`, or `agentbus identity set charlie`)
   shows `♙ Charlie [human]`; your entries carry `human=yes`, and agents see `"human": true`.
 - **Footer** — the keys of where you are (F1 lists them all). At its right end, for a few

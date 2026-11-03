@@ -215,10 +215,12 @@ it silently never fired.
   `--json`; `--unattributed` is the person's host scan (1 GiB budget) of what no project's record names.
   busmon's `U` page (`tokens_view.go`, `ovTokens`; since busmon pages step 3 the list pattern: zones Accounts, Projects,
   Agents, bars against the zone's largest row, its top consumer bold, unknown agents folded by short reason and listed by
-  `a`, the title `tokensTitle`'s summary): the account windows, one row per provider with its windows side by side in
-  columns of one width (`accountCell`: the richest `accountForms` entry that fits, gauge always, then the reset or hold,
-  then a 24-hour sparkline from `{p}:quota:hist`, one cell per hour, its last sample; a hold is never dropped for room;
-  one window per row only when bare cells do not fit), every project side by side (`ProjectNames`,
+  `a`, the title `tokensTitle`'s summary): the account windows as cards (usage-cards, `account_cards.go`: per provider a head line, its name upper case in its
+  colour and at the right its busiest window or its hold; one row per window, a full-width thin bar with its pace
+  mark, the figure and `· resets HH:MM` (weekday beyond a day; an aged reading `· read Xm ago`); a pace sentence,
+  `paceSentence`: limit reached, the limit before the reset at this pace, else on track, an aged reading its age and no
+  forecast; the card's name the header's, `providerLabel`; a rule between cards; no
+  24-hour spark), every project side by side (`ProjectNames`,
   `TokensOf`, read every `requestPoll` tick through the optional `tokensReader`; the open project first,
   7-day bars scaled across projects, `~` while partial, no key = one `no data` line), the open project by
   agent today (`tokens.AgentRows`, shared with the CLI: `?` with its reason, 0 only for a proved session).
@@ -385,7 +387,10 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   quarter of the room after it) and the
   compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells; a
   selection from Shift with a move, `Key.Shift` on navigation keys only, removed by Backspace/Del, replaced by typing or a
-  paste, ended by a plain move, a click or a first Esc; PageUp/PageDown a page of the window's rows)
+  paste, ended by a plain move, a click or a first Esc; PageUp/PageDown a page of the window's rows); `^V` pastes the clipboard's image (usage-cards, `clipimage.go`: wl-paste, xclip or pngpaste,
+  chosen by the session (WAYLAND_DISPLAY, DISPLAY, macOS), 5 s timeout, read through its 20 MiB bound, PNG only, saved 0600 as a new file under `os.UserCacheDir()/agentbus/attachments` (0700), its path
+  inserted at the cursor with a space on each side as its neighbours need, said when there is no tool or no image; our own
+  files older than 30 days pruned at each paste; never uploaded)
   send through `send.go` (`planSend` decides, `exec` makes the bus calls in a command, `outcome`
   reads them; recipient and body are fields, never an `@name body` line); the pause popup
   (`drawPausePopup`), the reminder, the recap summary's confirmation and d/y are in
@@ -418,7 +423,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   role per provider, `providerRole(p, fallback)`; the 16-colour palette takes a hand-picked ANSI name per
   provider (no two alike, none an alert role's colour nor the text roles' gray/silver/teal, openai the
   terminal's own foreground), no-colour none; an unknown provider keeps today's colour): the provider label
-  of a header gauge (the fill keeps its 85/95 % roles), the model lines of an agent's page, and the U page's
+  of a header gauge (the fill keeps its level roles: blue, amber from 80 %, red from 95 %, usage-cards; the thin track is the fill faded; when a gauge's two windows do not fit, every provider keeps only its busiest, `quotaSegOf`), the model lines of an agent's page, and the U page's
   account windows and per-agent provider column. Icons (busmon-icons, spec
   `docs/superpowers/specs/2026-11-02-busmon-icons-design.md`): `display.icons` = `off` (default, today's screen byte for
   byte, `TestIconsOffIsToday`) | `nerd` (a lettered box per provider) | `agent-font` (the maker's logo, by client then

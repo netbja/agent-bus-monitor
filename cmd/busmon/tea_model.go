@@ -56,6 +56,11 @@ type shellConfig struct {
 	liveFrom time.Time
 	// histDir is the history archive on this host ("" = none: live streams only).
 	histDir string
+	// clip reads the clipboard's image for the compose window's ^V (zero =
+	// the machine's tools); attachDir is where a pasted image is saved ("" =
+	// pasting says so and saves nothing).
+	clip      clipTools
+	attachDir string
 	// The settings page (C): the environment its config.toml is found and
 	// resolved through (nil = none: a test reads no file), busmon's flags
 	// (read-only rows), and how a theme applies at once (nil = next start).
@@ -235,6 +240,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case sendResultMsg:
 		m.gotSend(msg)
 		m.refresh()
+	case pastedImageMsg:
+		m.gotPastedImage(msg)
 	case resumeMsg:
 		cmd := m.gotResume(msg)
 		m.refresh()

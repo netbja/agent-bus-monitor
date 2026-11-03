@@ -542,6 +542,9 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 	switch act {
 	case ActSend:
 		return m.composeSend()
+	case ActPasteImage:
+		m.ui.flash, m.ui.flashErr = "reading the clipboard"+GlyphEllipsis, false
+		return pasteImageCmd(m.cfg.clip, m.cfg.attachDir)
 	case ActComposeField:
 		c.area.unmark() // a selection belongs to the field it was made in: leaving it ends it
 		c.to.unmark()

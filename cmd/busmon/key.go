@@ -42,5 +42,6 @@ const (
 	keyCtrlS
 	keyCtrlT
 	keyCtrlU
+	keyCtrlV
 	keyCtrlW
 )

@@ -61,7 +61,7 @@ func TestThinGaugeMarkNeverHidesTheFill(t *testing.T) {
 					l := thinGauge(pct, pace, cells, RoleOK, false)
 					filled := 0
 					for _, s := range l {
-						if s.Role == RoleOK {
+						if s.Role == RoleOK && s.Fade == 0 { // the track is the same role, faded
 							filled += strings.Count(s.Text, GlyphThinBar) + strings.Count(s.Text, GlyphThinMark)
 						}
 					}
@@ -74,15 +74,16 @@ func TestThinGaugeMarkNeverHidesTheFill(t *testing.T) {
 	}
 }
 
-// In true colour the fill keeps its level role and the rest the track's; the
-// pace mark is text; a moving bar lifts its leading filled cell only.
+// In true colour the fill keeps its level role and the track is that role
+// faded towards the background (usage-cards); the pace mark is text; a moving
+// bar lifts its leading filled cell only.
 func TestThinGaugeRoles(t *testing.T) {
 	withPalette(t, "dark", false, 1<<24)
 	cells := func(l Line) []Seg {
 		var out []Seg
 		for _, s := range l {
 			for _, r := range s.Text {
-				out = append(out, Seg{Text: string(r), Role: s.Role, Lift: s.Lift})
+				out = append(out, Seg{Text: string(r), Role: s.Role, Lift: s.Lift, Fade: s.Fade})
 			}
 		}
 		return out
@@ -95,12 +96,12 @@ func TestThinGaugeRoles(t *testing.T) {
 				t.Errorf("pace cell = %+v", s)
 			}
 		case i < 2:
-			if s.Role != RoleError {
+			if s.Role != RoleError || s.Fade != 0 {
 				t.Errorf("filled cell %d = %+v", i, s)
 			}
 		default:
-			if s.Role != RoleLine {
-				t.Errorf("track cell %d = %+v", i, s)
+			if s.Role != RoleError || s.Fade == 0 || s.Text != GlyphThinBar {
+				t.Errorf("track cell %d = %+v, want the fill's role faded", i, s)
 			}
 		}
 		if s.Lift != 0 {
@@ -144,4 +145,14 @@ func TestWindowElapsedPct(t *testing.T) {
 		}
 	}
 	_ = strings.TrimSpace
+}
+
+// The level colours (usage-cards, the person's choice): blue (the accent)
+// below 80 %, amber from 80 %, red from 95 %.
+func TestBudgetRoleThresholds(t *testing.T) {
+	for pct, want := range map[float64]Role{0: RoleAccent, 79.9: RoleAccent, 80: RoleAttention, 94.9: RoleAttention, 95: RoleError, 100: RoleError} {
+		if got := budgetRole(pct); got != want {
+			t.Errorf("budgetRole(%v) = %v, want %v", pct, got, want)
+		}
+	}
 }

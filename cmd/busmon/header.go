@@ -144,20 +144,25 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	var pairs []iconAt // the gauges' icon pairs, leftmost first
+	var pairs []iconAt        // the gauges' icon pairs, leftmost first
+	busiest := map[int]Line{} // a gauge's one-window form, by item
 	for i, n := range names {
 		b := d.budgets[n]
-		var l Line
+		var l, one Line
 		if len(b.Windows) == 0 && !b.Unknown && !b.Unlimited {
 			l = budgetSeg(n, b, tier, d.bars) // a legacy snapshot (no dispatcher): the old gauge
 		} else {
 			until, isHeld := held(d.holds, n, d.now)
 			l = quotaSeg(n, b, until, isHeld, d.pace, d.now, tier, d.bars)
+			one = quotaSegOf(n, b, until, isHeld, d.pace, d.now, tier, d.bars, true)
 		}
 		if l == nil {
 			continue
 		}
 		add(l, gaugePrio+i, second) // the rightmost provider has the lowest priority
+		if one != nil && one.Width() < l.Width() {
+			busiest[len(items)-1] = one
+		}
 		// spec §7.2: either gauge carries its provider's pair, in the wide tier only (reviewer-codex)
 		if icon := providerIcon(d.icons, n); icon != "" && tier == TierWide {
 			pairs = append(pairs, iconAt{len(items) - 1, iconPair(icon, n)})
@@ -173,6 +178,27 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	clock.right = true
 
 	admitted, cut := admitHeader(items, rows, width, gap)
+	// usage-cards: when a gauge's two windows do not fit (cut or left out),
+	// every provider keeps only its busiest window, if that shows more gauges
+	// whole.
+	whole := func(a []bool, c []int) int {
+		n := 0
+		for i := range items {
+			if _, ok := busiest[i]; ok && a[i] && c[i] == 0 {
+				n++
+			}
+		}
+		return n
+	}
+	if len(busiest) > 0 && whole(admitted, cut) < len(busiest) {
+		one := slices.Clone(items)
+		for i, l := range busiest {
+			one[i].line = l
+		}
+		if a, c := admitHeader(one, rows, width, gap); whole(a, c) > whole(admitted, cut) {
+			items, admitted, cut = one, a, c
+		}
+	}
 	// busmon-icons §4: the gauges' icon pairs are the first thing to go for
 	// room, before any text: the most pairs, leftmost provider first, that
 	// leave every item admitted and cut exactly as without them.
@@ -286,15 +312,16 @@ func dispatchSeg(state string, compact bool) Line {
 	return serviceSeg("dispatch", "disp", state, compact)
 }
 
-// budgetRole warns at 85% and turns red at 95%, before the provider limit.
+// budgetRole is a usage level's colour (usage-cards, the person's choice):
+// blue below 80 %, amber from 80 %, red from 95 %, before the provider limit.
 func budgetRole(pct float64) Role {
 	switch {
 	case pct >= 95:
 		return RoleError
-	case pct >= 85:
+	case pct >= 80:
 		return RoleAttention
 	}
-	return RoleOK
+	return RoleAccent
 }
 
 // budgetSeg is one provider's USED share of its account windows: gauges in

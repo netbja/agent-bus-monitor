@@ -481,7 +481,7 @@ func main() {
 
 	// The Elm shell (busmon Charm spec): Update drives everything, View draws
 	// the model; the poll runs in its commands, the tail is fed in below.
-	shell := newShell(shellConfig{ctx: ctx, liveFrom: time.Now(), reader: b, w: b, st: st, project: project, self: self,
+	shell := newShell(shellConfig{ctx: ctx, liveFrom: time.Now(), reader: b, w: b, st: st, project: project, self: self, attachDir: attachmentsDir(),
 		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour,
 		docker: realSvcRunner, brokerHost: opts.host, histDir: historyDirOf(project),
 		getenv: os.Getenv, flags: flags, retheme: func(name string) (*Theme, error) { // as at the start, with the page's choice
