@@ -168,3 +168,17 @@ func TestLastSourceFailures(t *testing.T) {
 		t.Fatalf("a project reading every source again keeps no failure: %v", l.Sources)
 	}
 }
+
+func TestReserveAndUnreserve(t *testing.T) {
+	var l Last
+	l.Reserve("phone", t0)
+	l.Reserve("phone", t0.Add(time.Second))
+	if l.SentInHour("phone", t0.Add(time.Minute)) != 2 {
+		t.Fatal("reserved")
+	}
+	l.Unreserve("phone", t0)
+	l.Unreserve("other", t0)
+	if l.SentInHour("phone", t0.Add(time.Minute)) != 1 {
+		t.Fatal("unreserved")
+	}
+}

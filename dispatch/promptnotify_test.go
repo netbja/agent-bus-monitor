@@ -300,3 +300,32 @@ func TestPromptNotifyBeforeTheFirstStatus(t *testing.T) {
 		t.Fatalf("a bound agent with no status yet did not ring: %q", s)
 	}
 }
+
+// While notifications' own desktop target rings for prompts (the person's
+// answer 6), the dispatcher marks the episode and does not ring a second
+// time; once the target is gone it rings again for a new episode.
+func TestPromptNotifySkippedForTheDesktopTarget(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	desk := &fakeDesktop{}
+	l := promptLoop(t, b, "prompt-skip", desk, 1000, 1000+31_000)
+	skip := true
+	l.cfg.Prompt.Skip = func() bool { return skip }
+	if err := l.promptNotices(ctx, coderSnap); err != nil {
+		t.Fatal(err)
+	}
+	if s := desk.Sent(); len(s) != 0 {
+		t.Fatalf("rang twice with a desktop target: %q", s)
+	}
+	if marks, _ := b.QuotaMarks(ctx); marks[promptMark("coder")] == "" {
+		t.Fatal("the episode is not marked")
+	}
+	skip = false
+	l.observeAt("coder", bus.Observation{State: "blocked", PID: 10, Since: 90_000, At: 125_000})
+	if err := l.promptNotices(ctx, coderSnap); err != nil {
+		t.Fatal(err)
+	}
+	if s := desk.Sent(); len(s) != 1 {
+		t.Fatalf("no ring once the target is gone: %q", s)
+	}
+}

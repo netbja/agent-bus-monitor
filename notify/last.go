@@ -65,6 +65,36 @@ func (l *Last) Add(target string, o Outcome, counted bool) {
 	r.Hour = within(r.Hour, o.At)
 }
 
+// Reserve counts a send about to be made in target's hour, under the host
+// lock, so two services deciding at once see each other's sends; the send
+// itself happens outside the lock.
+func (l *Last) Reserve(target string, at time.Time) {
+	if l.Targets == nil {
+		l.Targets = map[string]*TargetRecord{}
+	}
+	r := l.Targets[target]
+	if r == nil {
+		r = &TargetRecord{}
+		l.Targets[target] = r
+	}
+	r.Hour = append(within(r.Hour, at), at)
+}
+
+// Unreserve gives back one reservation at at (the send failed or was not
+// made): a target that is down does not use up its hour.
+func (l *Last) Unreserve(target string, at time.Time) {
+	r := l.Targets[target]
+	if r == nil {
+		return
+	}
+	for i, t := range r.Hour {
+		if t.Equal(at) {
+			r.Hour = append(r.Hour[:i], r.Hour[i+1:]...)
+			return
+		}
+	}
+}
+
 // within keeps the times less than an hour before now.
 func within(ts []time.Time, now time.Time) []time.Time {
 	out := ts[:0]
