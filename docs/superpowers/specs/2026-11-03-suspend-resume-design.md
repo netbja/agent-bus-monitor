@@ -131,22 +131,34 @@ agentbus resume --all          bring every suspended project back: services, mis
 
    > Suspend of <p> requested by <person>: finish or stop your current step at a clean point,
    > commit your work in progress on your branch, report where you are (agentbus report), then
-   > declare idle (agentbus status idle "suspended"). Do not declare a hand-off: your session is
+   > declare idle with exactly this message: agentbus status idle "suspended <nonce>". Do not
+   > declare a hand-off: your session is
    > resumed as it is.
+
+   `<nonce>` is 8 hex characters from `crypto/rand`, one per agent and per suspend run, kept in the
+   suspend process's memory only (never in the snapshot): it is how the wait tells this directive's
+   answer from the agent's own end-of-step idle.
 
    Not a hand-off: a hand-off makes the dispatcher type `/clear` while the project is not yet paused,
    and the point of a suspend is to resume the *same* conversation (`--resume <IdentSession>`).
    Agents idle, blocked or waiting get nothing (they are already at a clean point; their open
    asks and gates persist in Redis).
 3. **Wait**, at most `--wait`, re-reading every 2 s, until each agent that got the directive has
-   **declared** a state other than `working` after it: its `DeclaredTS` (a declaration, never an
-   auto-state flip) is later than the directive's id, and its effective state is not `working`. A turn
-   that merely ends is not enough (foureyes): while the project is not yet paused, the dispatcher
-   wakes an agent whose turn ended, and that agent then reads the directive and works (commit,
-   report) in a turn of its own; pausing at the first turn end would cut that turn at the very moment
-   the machine goes down. The directive's own last step, `agentbus status idle "suspended"`, is what
-   the wait looks for, so the wait covers the directive's turn. An agent the dispatcher cannot wake
-   within `--wait` (its pane busy or focused) runs into the timeout. On timeout:
+   **answered it**, which is all of:
+   - its directive is acknowledged: the id is at or below the agent group's `LastDelivered` and not in
+     its `PendingIDs` (`Obligation`; a drain ACKs after output), so the agent has read it;
+   - its last **declaration** (`DeclaredTS`, never an auto-state flip) is later than the directive's id,
+     declares a state other than `working`, and its message is exactly `suspended <nonce>` (compared,
+     never stored);
+   - its effective state (`bus.EffectiveState`) is not `working`.
+
+   Neither a turn end nor the agent's own end-of-step idle is enough (foureyes, twice): the team
+   declares idle at the end of every step, and while the project is not yet paused the dispatcher
+   then wakes that agent for the pending directive, which it reads and acts on in a turn of its own
+   (commit, report); pausing before that turn ends would cut it at the very moment the machine goes
+   down. Only the nonce, which the agent learns from the directive alone, proves the declaration
+   answers it, so the wait covers the directive's turn. An agent the dispatcher cannot wake within
+   `--wait` (its pane busy or focused) runs into the timeout. On timeout:
    without `--force`, stop here for that project, write nothing more, exit 1 and name each agent still
    working and since when; the directives already sent stay (an agent that stops later has lost
    nothing). With `--force`, go on and record them as `working at suspend` in the snapshot.
@@ -286,11 +298,25 @@ per project and exits 0.
 ## 8. The workspace hook
 
 `upHook` (herdr's `workspace.created`/`workspace.focused`) starts a project's stopped services. On a
-suspended project it must not: it reads the pause (2 s), and on `kind = "suspend"` starts nothing and
-prints `<p>: suspended since …: agentbus resume brings it back`. A pause it cannot read keeps today's
-behaviour (start), since a broker that does not answer is the crash case, where starting is right;
-the dispatcher then reads the suspend itself and wakes nobody. herdr's native restore of agents is not
-ours to stop: an agent restored into a suspended project boots, declares idle, and is woken by nobody.
+suspended project it reads the pause (2 s) and, by the setting `suspend.auto_resume` (§12, Q6):
+
+- **off** (the default): it starts nothing and prints `<p>: suspended since …: agentbus resume brings
+  it back`;
+- **on**: it starts the full resume of that project (§5), exactly as `agentbus resume -p <p> --yes`
+  would, with the same rules: services, `up`'s relaunch with `--resume` (never typing into an existing
+  pane), the proof, and the pause lifted only when every boot agent is back (no `--partial` from a
+  hook, ever: a missing agent leaves the project suspended, said in the log and by a `for=person`
+  notice). The hook must not hold herdr's event: it starts the resume as a detached child
+  (`setsid`, as `report-resume`'s sender), its output in `<state>/agentbus/<p>/suspend.log`, and
+  returns at once. `upLock` makes a second event while one runs a no-op (`resume already running`).
+  The resume directive and the notice are written as the person (`identity.as`), since the setting is
+  the person's standing consent; with no recorded name the hook does not resume and says why.
+
+A pause it cannot read keeps today's behaviour (start the services, never a resume), since a broker
+that does not answer is the crash case, where starting is right; the dispatcher then reads the suspend
+itself and wakes nobody. herdr's native restore of agents is not ours to stop: an agent restored into
+a suspended project boots, declares idle, and is woken by nobody (or, with `auto_resume` on, is found
+live by the resume's relaunch).
 
 ## 9. busmon
 
@@ -348,8 +374,11 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   pop retire across many passes, with the suspend's `Until` set in the past to prove `kind` decides.
 - `cmd/agentbus` suspend (pure `suspendPlan` + injected deps): only `working` agents get the directive;
   a dormant one does not; the wait ends once each has declared a non-working state after its
-  directive, not at a mere turn end or auto-state flip (the race: a fake dispatcher wakes the agent
-  between its turn end and the pause, and the pause waits for the declaration); timeout without `--force` writes no
+  directive carrying its nonce, with the directive acknowledged, and not at a mere turn end, an
+  auto-state flip or the agent's own idle declared after the directive without the nonce (the race:
+  the agent declares idle of its own, a fake dispatcher then wakes it for the directive, and the wait
+  goes on until `suspended <nonce>`); a wrong or another agent's nonce does not end it; the nonce
+  appears in no snapshot field; timeout without `--force` writes no
   pause; `--force` records them; an intent refuses even with `--force`; `--dry-run` writes nothing;
   the order is directive → pause → read → stop → snapshot (a fake records calls); a failed stop or
   write leaves the pause and says the retry; no terminal and no `--yes` exits 2.
@@ -362,7 +391,10 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   `prev` restored when future; the summary is cut under `CmdMaxRunes` with the `+N more` tail; herdr
   not running starts services only; a crash host (no suspend) touches no pause and creates no closed
   workspace; idempotence: a second `resume --all` says `nothing to resume`.
-- `upHook`: a suspended project's services stay stopped; an unreadable pause starts them.
+- `upHook`: with `auto_resume` off a suspended project's services stay stopped; on, the hook starts
+  the detached resume (fake child, exact argv, `--partial` never passed) and returns at once; a second
+  event while it runs is a no-op; no recorded person name, no resume; an unreadable pause starts the
+  services and resumes nothing.
 - tool rules: every shipped role denies `agentbus suspend*`, `agentbus -p x suspend`, `agentbus resume --all*` and `agentbus -p x resume --all`; `resume` on
   a suspended project refuses an agent caller.
 - busmon: `Z` opens the right confirmation by the pause kind; `y` runs the fake child with the exact
@@ -371,7 +403,7 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
 
 ## 12. Decisions (the person's answers, 2026-11-03, through master)
 
-Every question was answered with the recommendation; none is left open.
+Every question was answered with the recommendation (Q6 made configurable); none is left open.
 
 - **Q1. Verb: `resume`.** `agentbus resume` does the full resume (§5) on a suspended project and stays
   today's verb for a timed pause; `resume --all` covers the host. No second verb.
@@ -386,8 +418,12 @@ Every question was answered with the recommendation; none is left open.
   It shows on busmon's C page with the other Services keys, and the `Z` confirmation names its value.
   Its test: the registry's own tests (group held, env literal only in the registry) plus `suspend`
   reading `--wait`, then the env, then config.toml, then the default.
-- **Q6. No automatic resume.** Waking the team is the person's act, as suspending it is; the workspace
-  hook only refrains from starting a suspended project's services (§8).
+- **Q6. No automatic resume by default, configurable.** The setting `suspend.auto_resume`
+  (`config/keys.go`, group Services, env `AGENT_BUS_SUSPEND_AUTO_RESUME`, kind Bool, default `false`,
+  read by the workspace hook; shown on busmon's C page with the other Services keys, an on/off).
+  Off, the hook only refrains from starting a suspended project's services; on, focusing or creating
+  the project's workspace starts its full resume, with the same rules (§8). The registry's tests hold
+  its group and env literal; the hook's tests cover both values.
 
 ## 13. Out of scope
 
