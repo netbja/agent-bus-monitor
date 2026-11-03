@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -109,6 +110,69 @@ func TestPopRetirePassSendsNothing(t *testing.T) {
 			tier = "boot"
 		}
 		w := newPopWorld(t, tier)
+		if arrange != nil {
+			arrange(w)
+		}
+		w.pass()
+		if got := w.directives(); len(got) != 0 {
+			t.Errorf("%s: %q", name, got)
+		}
+	}
+}
+
+// closePop makes security's process gone and its pane unknown to herdr,
+// after it declared working (pop-closed-by-hand: closed by hand mid-turn).
+func (w *popWorld) closePop() {
+	w.t.Helper()
+	time.Sleep(2 * time.Millisecond)
+	if _, err := w.b.Status(context.Background(), "security", "working", "on it", bus.AgentIdent{}); err != nil {
+		w.t.Fatal(err)
+	}
+	w.l.cfg.PopRetire.ProcStart = func(pid int) (uint64, error) {
+		if pid == testPID {
+			return 0, errors.New("no such process")
+		}
+		return testStart, nil
+	}
+	w.rt.script = func(string, int) Inspection { return Inspection{Gone: true} }
+}
+
+func TestPopRetirePassTellsMasterOfAClosedPop(t *testing.T) {
+	w := newPopWorld(t, "pop")
+	w.closePop()
+	w.pass()
+	w.pass()
+	snaps, _ := w.b.Agents(context.Background())
+	episode := strconv.FormatInt(snaps["security"].TS, 10)
+	got := w.directives()
+	if len(got) != 1 || !strings.HasPrefix(got[0], "|") || !strings.Contains(got[0], "closed") ||
+		!strings.Contains(got[0], "agentbus retire security --forget --episode "+episode) {
+		t.Fatalf("directives %q, want one waking directive for the closed pop, episode %s", got, episode)
+	}
+}
+
+func TestPopRetirePassKeepsAPopNotClosed(t *testing.T) {
+	ctx := context.Background()
+	for name, arrange := range map[string]func(w *popWorld){
+		"a boot role": nil,
+		"process alive": func(w *popWorld) {
+			w.l.cfg.PopRetire.ProcStart = func(int) (uint64, error) { return testStart, nil }
+		},
+		"pane still runs a process": func(w *popWorld) {
+			w.rt.script = func(string, int) Inspection { return readyIn() }
+		},
+		"pane unreadable": func(w *popWorld) {
+			w.rt.script = func(string, int) Inspection { return Inspection{Err: errors.New("herdr down")} }
+		},
+		"no process reader": func(w *popWorld) { w.l.cfg.PopRetire.ProcStart = nil },
+		"messages wait":     func(w *popWorld) { w.b.Cmd(ctx, "foureyes", "security", "directive", "", "more") },
+	} {
+		tier := "pop"
+		if name == "a boot role" {
+			tier = "boot"
+		}
+		w := newPopWorld(t, tier)
+		w.closePop()
 		if arrange != nil {
 			arrange(w)
 		}

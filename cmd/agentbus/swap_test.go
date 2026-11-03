@@ -460,6 +460,10 @@ func TestRetireClosesOneAgent(t *testing.T) {
 	if w.intent() {
 		t.Fatal("intent left behind")
 	}
+	// A boot role is never unregistered by a retire (pop-closed-by-hand).
+	if !w.registered(t, "foureyes") || log[0].Forgot != "" {
+		t.Fatalf("a boot role's registration: registered=%v forgot=%q", w.registered(t, "foureyes"), log[0].Forgot)
+	}
 	out.Reset()
 	if code := runSwaps(ctx, w.b, nil, &out, &errw); code != 0 || !strings.Contains(out.String(), "retire") {
 		t.Fatalf("swaps: %d %q", code, out.String())

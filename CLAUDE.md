@@ -1110,7 +1110,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   registration is still that pid, start and episode and nothing waits (pending, unread with no
   floor, open ask, owned board task not `done`, gate), and keeps its consumer group so a respawn
   reads on; `dispatch.pop_retire`/`pop_retire_after` (on, 15 min), busmon `done Nm`/`retiring`,
-  health `pop-done`);
+  health `pop-done`; pop-closed-by-hand: a plain `retire` of a pop ends with the same `ForgetIfClear`
+  under a retire intent (a boot role never), and a pop closed by hand, its verified process gone
+  (`dispatch.ProcGone`) and herdr knowing its pane no more (`PopFacts.Closed`), is judged by the rest of
+  `PopDone` (not its state, hand-off or pane; its delay still) whatever it declared, master told with
+  `PopClosedText`, and `retire --forget` accepts it with nothing to close);
   `agentbus swaps` lists the ledger (a reload's entries tagged `[reload]`). Lifecycle-3a: a reload
   (`agentbus reload`, part C) holds the same intent with `kind=reload` (`SwapIntent.Kind`,
   `SwapKindReload`), so every swap rule of the dispatcher applies unchanged; its `begin` carries the

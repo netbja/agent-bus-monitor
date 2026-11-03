@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ type popRT struct {
 	mu        sync.Mutex
 	n         int
 	focused   bool
+	gone      bool // herdr knows the pane no more (closed by hand)
 	onInspect func(n int)
 }
 
@@ -30,6 +32,9 @@ func (p *popRT) Inspect(context.Context, string) dispatch.Inspection {
 	p.mu.Unlock()
 	if hook != nil {
 		hook(n)
+	}
+	if p.gone {
+		return dispatch.Inspection{Gone: true}
 	}
 	return dispatch.Inspection{State: "idle", Ready: true, Focused: p.focused, PIDs: []int{6161}, Starts: map[int]uint64{6161: 61}}
 }
@@ -259,5 +264,105 @@ func TestRetireForgetKeepsARespawn(t *testing.T) {
 	snaps, _ := w.b.Agents(ctx)
 	if s := snaps["security"]; s.PID != 7171 || s.Pane != "p-sec2" {
 		t.Fatalf("the respawn's registration = %+v", s)
+	}
+}
+
+// closeByHand: security's pane was closed in herdr while it worked, its
+// process gone (pop-closed-by-hand).
+func (w *swapWorld) closeByHand(t *testing.T, rt *popRT) {
+	t.Helper()
+	time.Sleep(2 * time.Millisecond)
+	if _, err := w.b.Status(context.Background(), "security", "working", "on it", bus.AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	w.mu.Lock()
+	delete(w.procs, 6161)
+	w.mu.Unlock()
+	rt.gone = true
+}
+
+// pop-closed-by-hand (1): a plain retire of a pop ends with the same
+// unregister as --forget, its consumer group kept.
+func TestRetireUnregistersAPop(t *testing.T) {
+	w, d, _, _ := newPopWorld(t)
+	ctx := context.Background()
+	var out, errw bytes.Buffer
+	if code := runRetire(ctx, w.b, d, "master", []string{"security"}, &out, &errw); code != 0 ||
+		!strings.Contains(out.String(), "unregistered") || !w.closed() {
+		t.Fatalf("retire: %d %s%s", code, out.String(), errw.String())
+	}
+	if w.registered(t, "security") {
+		t.Fatal("the pop is still registered")
+	}
+	log, _ := w.b.SwapLog(ctx, "security", 0)
+	if len(log) == 0 || log[0].Event != bus.SwapRetire || log[0].Forgot != "true" {
+		t.Fatalf("ledger %+v", log)
+	}
+	if groups, _ := w.b.GroupNames(ctx); !slices.Contains(groups, "security") {
+		t.Fatalf("its consumer group went: %q", groups)
+	}
+	if w.intent() {
+		t.Fatal("intent left behind")
+	}
+}
+
+// What arrives after the close keeps a plain retire's pop registered, and
+// retire says so.
+func TestRetireKeepsAPopSomethingWaitsFor(t *testing.T) {
+	w, d, _, afterClose := newPopWorld(t)
+	ctx := context.Background()
+	*afterClose = func() { w.b.Cmd(ctx, "master", "security", "directive", "", "late work") }
+	var out, errw bytes.Buffer
+	if code := runRetire(ctx, w.b, d, "master", []string{"security"}, &out, &errw); code != 1 ||
+		!w.closed() || !strings.Contains(errw.String(), "registration is kept") {
+		t.Fatalf("retire: %d %s%s", code, out.String(), errw.String())
+	}
+	if !w.registered(t, "security") {
+		t.Fatal("the registration went")
+	}
+}
+
+// pop-closed-by-hand (2): retire --forget accepts a pop already closed by
+// hand: nothing to close, the forget still checks the registration.
+func TestRetireForgetEndsAClosedPop(t *testing.T) {
+	w, d, rt, _ := newPopWorld(t)
+	ctx := context.Background()
+	w.closeByHand(t, rt)
+	code, out := w.retireForget(d, w.episode(t))
+	if code != 0 || !strings.Contains(out, "unregistered") || w.closed() {
+		t.Fatalf("retire --forget: %d closed=%v %s", code, w.closed(), out)
+	}
+	if w.registered(t, "security") {
+		t.Fatal("the closed pop is still registered")
+	}
+	log, _ := w.b.SwapLog(ctx, "security", 0)
+	if len(log) == 0 || log[0].Event != bus.SwapRetire || log[0].Forgot != "true" {
+		t.Fatalf("ledger %+v", log)
+	}
+}
+
+func TestRetireRefusesAClosedPopNotDone(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		name, want string
+		arrange    func(w *swapWorld, rt *popRT)
+	}{
+		{"messages wait", "messages wait for it", func(w *swapWorld, _ *popRT) { w.b.Cmd(ctx, "master", "security", "directive", "", "more") }},
+		{"pane still known", "close that pane first", func(_ *swapWorld, rt *popRT) { rt.gone = false }},
+	} {
+		w, d, rt, _ := newPopWorld(t)
+		w.closeByHand(t, rt)
+		c.arrange(w, rt)
+		if code, out := w.retireForget(d, w.episode(t)); code != 1 || !strings.Contains(out, c.want) || w.closed() || !w.registered(t, "security") {
+			t.Errorf("%s: %d closed=%v %s", c.name, code, w.closed(), out)
+		}
+	}
+	// A plain retire has nothing to close and never forgets on its own.
+	w, d, rt, _ := newPopWorld(t)
+	w.closeByHand(t, rt)
+	var out, errw bytes.Buffer
+	if code := runRetire(ctx, w.b, d, "master", []string{"security"}, &out, &errw); code != 1 ||
+		!strings.Contains(errw.String(), "--forget") || !w.registered(t, "security") {
+		t.Fatalf("plain retire of a closed pop: %d %s", code, errw.String())
 	}
 }

@@ -81,3 +81,74 @@ func TestPopDone(t *testing.T) {
 		t.Fatalf("episode = %d, want the declaration's time %d", got, f.Snap.TS)
 	}
 }
+
+// closedPop is a pop whose verified process is gone and whose pane no
+// longer exists (pop-closed-by-hand): closed by hand while it worked.
+func closedPop() PopFacts {
+	f := donePop()
+	f.Snap.State, f.Snap.Auto = "working", "turn"
+	f.Closed = true
+	f.Pane = Inspection{Gone: true}
+	f.Handoff = true // a hand-off that waits for a /clear no process will ever take
+	return f
+}
+
+func TestPopDoneJudgesAClosedPop(t *testing.T) {
+	if done, why := PopDone(closedPop()); !done {
+		t.Fatalf("the closed pop is kept: %s", why)
+	}
+	for _, c := range []struct {
+		name, why string
+		edit      func(*PopFacts)
+	}{
+		{"not a pop", "not a pop", func(f *PopFacts) { f.Snap.Tier = "boot" }},
+		{"unknown read", "unknown: board", func(f *PopFacts) { f.Unknown = []string{"board"} }},
+		{"board task", "it owns a board task", func(f *PopFacts) { f.OwnedTasks = []string{"t1 (accepted)"} }},
+		{"gate", "a review gate", func(f *PopFacts) { f.Gates = []string{"gate"} }},
+		{"mission", "a mission attempt", func(f *PopFacts) { f.Missions = []string{"m"} }},
+		{"ask", "an open ask", func(f *PopFacts) { f.OpenAsk = true }},
+		{"unread", "messages wait for it", func(f *PopFacts) { f.Obligation.Unread = 1 }},
+		{"armed", "armed", func(f *PopFacts) { f.Armed = true }},
+		{"swap intent", "a swap or reload holds it", func(f *PopFacts) { f.Intent = `{"kind":"reload"}` }},
+		{"too recent", "under", func(f *PopFacts) { f.Snap.TS = f.Now.Add(-5 * time.Minute).UnixMilli() }},
+		{"other episode", "another episode", func(f *PopFacts) { f.Episode = 1 }},
+		{"paused", "the project is paused", func(f *PopFacts) { f.Paused = true }},
+		{"held", "its provider is held", func(f *PopFacts) { f.Held = true }},
+	} {
+		f := closedPop()
+		c.edit(&f)
+		if done, why := PopDone(f); done || !strings.Contains(why, c.why) {
+			t.Errorf("%s: done=%v why=%q, want kept for %q", c.name, done, why, c.why)
+		}
+	}
+	// Not closed, the same facts are judged as today: a working pop is kept.
+	f := closedPop()
+	f.Closed = false
+	if done, _ := PopDone(f); done {
+		t.Fatal("a pop not closed, declared working, was judged done")
+	}
+}
+
+func TestProcGone(t *testing.T) {
+	s := &bus.AgentSnapshot{PID: 42, PIDStart: 4200}
+	at := func(start uint64, err error) func(int) (uint64, error) {
+		return func(int) (uint64, error) { return start, err }
+	}
+	for _, c := range []struct {
+		name string
+		snap *bus.AgentSnapshot
+		read func(int) (uint64, error)
+		want bool
+	}{
+		{"alive", s, at(4200, nil), false},
+		{"no such process", s, at(0, errors.New("x")), true},
+		{"a recycled pid", s, at(9999, nil), true},
+		{"no reader", s, nil, false},
+		{"no verified pid", &bus.AgentSnapshot{}, at(0, errors.New("x")), false},
+		{"no snapshot", nil, at(0, errors.New("x")), false},
+	} {
+		if got := ProcGone(c.snap, c.read); got != c.want {
+			t.Errorf("%s: ProcGone = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

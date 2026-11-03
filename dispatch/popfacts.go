@@ -18,6 +18,20 @@ type PopReadOptions struct {
 	// Missions lists the mission attempts in progress on an agent (the
 	// conductor's store; injected so dispatch stays free of the mission package).
 	Missions func(ctx context.Context, agent string) ([]string, error)
+	// ProcStart reads a pid's start time (dispatch.ProcStart); nil never
+	// judges a pop closed (pop-closed-by-hand).
+	ProcStart func(pid int) (uint64, error)
+}
+
+// ProcGone reports whether s's verified process no longer runs: its pid
+// reads no start time, or another (a recycled pid). No verified identity or
+// no reader is never gone.
+func ProcGone(s *bus.AgentSnapshot, procStart func(int) (uint64, error)) bool {
+	if s == nil || s.PID == 0 || procStart == nil {
+		return false
+	}
+	start, err := procStart(s.PID)
+	return err != nil || start != s.PIDStart
 }
 
 // ReadPopFacts reads every fact of §2 for role, the dispatch pass and retire
@@ -92,6 +106,8 @@ func ReadPopFacts(ctx context.Context, b *bus.Bus, rt Runtime, role string, o Po
 		f.Unknown = append(f.Unknown, "pane")
 	} else {
 		f.Pane = rt.Inspect(ctx, f.Snap.Pane)
+		// Closed: herdr knows no pane or agent there, and the process is gone.
+		f.Closed = f.Pane.Gone && ProcGone(f.Snap, o.ProcStart)
 	}
 	return f
 }

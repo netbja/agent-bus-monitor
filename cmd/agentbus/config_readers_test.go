@@ -166,7 +166,7 @@ func TestServiceRunLogsSettingsWarnings(t *testing.T) {
 // off by the file's false, the env's 0, or a delay of 0.
 func TestServicePopRetire(t *testing.T) {
 	missions := func(context.Context, string) ([]string, error) { return nil, nil }
-	if c := servicePopRetire(withConfig(t, "", nil), missions); !c.On || c.After != 15*time.Minute || c.Missions == nil {
+	if c := servicePopRetire(withConfig(t, "", nil), missions); !c.On || c.After != 15*time.Minute || c.Missions == nil || c.ProcStart == nil {
 		t.Errorf("default = %+v", c)
 	}
 	if c := servicePopRetire(withConfig(t, "[dispatch]\npop_retire = false\n", nil), missions); c.On {
