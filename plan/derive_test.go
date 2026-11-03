@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -225,5 +226,21 @@ func TestDeriveAReviewedTaskIsInReview(t *testing.T) {
 	in.Verdicts["a-impl"] = []bus.Verdict{verdict("5-0", "a-impl", "reject")}
 	if r := derive1(t, f, in, "a"); r.State != InReview || r.Verdict != ChangesAsked {
 		t.Fatalf("a task with a verdict and no board entry: %+v", r)
+	}
+}
+
+// plan link --ref (forge-delivery): a ref derives like a PR (in review, then
+// waiting for the person once approved), with no pr:<n> subject added.
+func TestDeriveRefLikeAPR(t *testing.T) {
+	f := File{Plan: "p", Tasks: []Task{task("roles")}}
+	in := ok()
+	ref := "coder/roles@" + strings.Repeat("d4", 20)
+	in.Facts["roles"] = Fact{Ref: ref}
+	if r := derive1(t, f, in, "roles"); r.State != InReview || r.Ref != ref || r.PR != 0 {
+		t.Fatalf("a ref, no verdict: %+v", r)
+	}
+	in.Verdicts["roles-impl"] = []bus.Verdict{verdict("5-0", "roles-impl", "approve")}
+	if r := derive1(t, f, in, "roles"); r.State != Waiting || r.Verdict != Approved {
+		t.Fatalf("a ref, approved: %+v", r)
 	}
 }

@@ -299,7 +299,9 @@ The person cannot see the plan in your conversation; busmon shows it (`P`, the h
   that ends without a merge of its own (a spec, a review), or `mission: "<change>/<id>"`.
 - States are derived, never typed: delivered (`request done`) reads **in review**; an approved
   merge task reads **waiting for you** until you record the merge. Keep the facts true:
-  `agentbus plan link <task> --pr <n>` when you open its PR, `agentbus plan done <task>` when the
+  `agentbus deliver <branch> --task <task>` records the link itself (`--pr <n>` once a pull or
+  merge request is open, `--ref <branch>@<sha>` in link or local mode); `agentbus plan link <task>
+  --pr <n>|--ref <branch>@<sha>` only for a request opened another way; `agentbus plan done <task>` when the
   person says they merged it (or did their own step), `agentbus plan note <task> <text>` for a
   one-line note. A recorded done shows as `merged (recorded 2h ago)`: a claim with its age.
 - A question to the person about a task names it: `agentbus ask master --task <plan-task> …`.
@@ -457,8 +459,8 @@ Both arrive as `cmd` events addressed to you; their `type` field tells them apar
   client restarts.
 - **`complete`** (`from: conductor`) — every mission of a change revision is integrated on
   `change/<change>` and the change suite passed on its head. The body gives the counts
-  (integrated, skipped) and the base. Review the branch and open the PR to the base: the
-  conductor never does.
+  (integrated, skipped) and the base. Have the branch reviewed and deliver it to the base
+  (`agentbus deliver change/<change> --subject <its review subject>`): the conductor never does.
 - **`blocked`** (`from:` the peer) — the peer ran `request block <task> <reason>` on a request
   you sent; in the JSON event `body` is the reason, `ref` the thread, `task` the request. Decide: answer on
   the thread, re-scope, or reassign. It is sent once per new reason, not on every repeat.
@@ -641,8 +643,36 @@ arbitrate. For a short, Claude-only change, agent teams are lighter.
   the change from its merge trailers on `change/<c>` (integrated missions come back integrated;
   one merged under an older definition comes back blocked for you to decide).
 
-The conductor merges only into `change/<c>`, never `main`, never pushes. Merging `change/<c>` to
-`main` is a normal PR, yours to open.
+The conductor merges only into `change/<c>`, never `main`, never pushes. Delivering `change/<c>` to
+`main` is yours: `agentbus deliver change/<c>` once it is reviewed (below).
+
+## Delivering a branch: `agentbus deliver`
+
+You and the docs agent are the only roles that deliver, push included (the person's decision,
+[forge delivery](../../docs/memory/decisions/2026-11-02-forge-delivery.md); `delivers = true` in
+`roles.toml`, checked by the command itself). Never `git push` or `gh pr create` by hand.
+
+```bash
+agentbus deliver <branch> --task <plan-task>     # subject and title from the plan task
+agentbus deliver <branch> --subject <s> [--base <b>] [--title <t>] [--body-file <f>] [--dry-run]
+```
+
+The request's description is your `--body-file` (what, why, how it was validated, limits; each
+line screened for credentials), followed by the verdicts; without it, the commits' subjects.
+
+- **The 4-eyes check is deliver's own.** It resolves the branch head `H` once and goes on only
+  when the subject's roll-up is APPROVED **and** its newest independent approve names `H`
+  (`verdict --head`). Otherwise it exits 3: no current APPROVED verdict names `H` (the roll-up is
+  PENDING or REJECTED, or the approval names another commit or none). Its message names the
+  subject, the state, the head approved (or none) and `H`. Answer a rejection first, then get an
+  approval with `--head` on the final SHA; never work around it.
+- **Per forge** (`delivery.forge` in the person's `config.toml`, `auto` reads `origin`): on GitHub
+  or GitLab it pushes `H` and opens the request with `gh`/`glab` (or reuses the open one); without
+  the CLI, logged out, or on Bitbucket it pushes and prints the page to open (link mode): give the
+  person that URL. In **local** mode it pushes nothing and prints `git switch <base> && git merge
+  --no-ff <H>`: ask the person to merge (an ask naming the task), then `plan done`.
+- Exit 2 means delivered but the plan link was not recorded (say it, record it by hand). A push
+  git refuses (the remote branch is ahead) stops it with git's own message.
 
 ## Record the decisions you make, or they die in the pane
 

@@ -509,7 +509,7 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 	for _, name := range missing { // a team that does not start is worse than an agent short of a skill
 		fmt.Fprintf(cfg.Stderr, "warning: skill %s not found (run ./setup.sh install); %s starts without it\n", name, role)
 	}
-	rules, err := m.LaunchRules(role)
+	rules, err := m.ProjectLaunchRules(role, project)
 	if err != nil {
 		return err
 	}

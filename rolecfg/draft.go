@@ -166,6 +166,12 @@ func DraftRole(m *Manifest, role, task string, skills []ScoredSkill) (snippet, p
 		sb.WriteString("model = \"sonnet\"\npermission = \"manual\"\n")
 	}
 	fmt.Fprintf(&sb, "tier = \"pop\"\napproval = \"person\"\nskills = [%s]\n", strings.Join(names, ", "))
+	// Only master and docs deliver (forge-delivery); adopt refuses a role without these.
+	quoted := make([]string, len(DeliverDeny))
+	for i, d := range DeliverDeny {
+		quoted[i] = fmt.Sprintf("%q", d)
+	}
+	fmt.Fprintf(&sb, "[roles.%s.tool_rules]\ndeny = [%s]\n", role, strings.Join(quoted, ", "))
 	var skillList []string
 	for _, s := range skills {
 		skillList = append(skillList, "`"+s.Name+"`")

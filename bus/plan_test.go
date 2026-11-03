@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -131,5 +132,45 @@ func TestVerdictsAfterReadsIncrementally(t *testing.T) {
 	none, err := b.VerdictsAfter(ctx, ids[2], 2)
 	if err != nil || len(none) != 0 {
 		t.Fatalf("nothing new: %+v %v", none, err)
+	}
+}
+
+// plan link --ref (forge-delivery): a ref fact beside the PR, the newer link
+// replacing the other; a malformed ref is refused.
+func TestPlanLinkRef(t *testing.T) {
+	b := dialTest(t)
+	cleanPlan(t, b)
+	ctx := context.Background()
+	b.Status(ctx, "master", "idle", "x", AgentIdent{})
+	if err := b.LoadPlan(ctx, "p.json", "c1", []byte(`{}`), []string{"a"}); err != nil {
+		t.Fatal(err)
+	}
+	sha := strings.Repeat("c3", 20)
+	if err := b.PlanLink(ctx, "a", 7); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.PlanLinkRef(ctx, "a", "coder/a@"+sha); err != nil {
+		t.Fatal(err)
+	}
+	facts, _ := b.PlanFacts(ctx)
+	if f := facts["a"]; f.Ref != "coder/a@"+sha || f.PR != 0 || f.Linked == 0 {
+		t.Fatalf("after --ref: %+v", f)
+	}
+	if err := b.PlanLink(ctx, "a", 8); err != nil {
+		t.Fatal(err)
+	}
+	facts, _ = b.PlanFacts(ctx)
+	if f := facts["a"]; f.PR != 8 || f.Ref != "" {
+		t.Fatalf("after --pr: %+v", f)
+	}
+	// A branch holding "@" is legal: the ref splits on its last one (reviewer-codex).
+	if err := b.PlanLinkRef(ctx, "a", "coder/a@b@"+sha); err != nil {
+		t.Fatalf("a branch with @: %v", err)
+	}
+	for _, bad := range []string{"coder/a", "@" + sha, "coder/a@abc", "co der@" + sha, "coder/a@" + sha + "\n",
+		"feature/foo?bar@" + sha, "a..b@" + sha, "x.lock@" + sha, "HEAD@" + sha} {
+		if err := b.PlanLinkRef(ctx, "a", bad); err == nil {
+			t.Errorf("ref %q accepted", bad)
+		}
 	}
 }

@@ -28,7 +28,7 @@ func TestRegistryRows(t *testing.T) {
 		"display.theme", "display.icons", "display.limit", "display.idle_hint_after", "identity.as", "updates.check",
 		"dispatch.context_alert", "dispatch.prompt_grace", "dispatch.quota", "dispatch.quota_warn",
 		"dispatch.quota_hold", "dispatch.quota_max_age", "dispatch.quota_long_hold", "dispatch.tokens",
-		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "dispatch.turn_stale_after", "dispatch.pop_retire", "dispatch.pop_retire_after", "history.keep_days", "history.max_mb", "start.team", "sentinel.reload", "bus.report_max", "bus.report_full_max", "bus.verdict_max",
+		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "dispatch.turn_stale_after", "dispatch.pop_retire", "dispatch.pop_retire_after", "history.keep_days", "history.max_mb", "start.team", "sentinel.reload", "delivery.forge", "delivery.base", "bus.report_max", "bus.report_full_max", "bus.verdict_max",
 		"health.disk_warn_pct", "health.disk_warn_gib", "health.disk_fail_pct", "health.disk_fail_gib",
 		"health.runaway.silent_after", "health.runaway.context_growth", "health.runaway.growth_span",
 		"health.runaway.screen_repeats",

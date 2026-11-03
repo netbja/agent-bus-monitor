@@ -551,8 +551,8 @@ depending on its size.
    approves its own work).
 3. **Watch** the Board panel and the Activity feed. An agent that needs you sends a message
    to master, and master asks you.
-4. **Finish.** master reports the branch and the review verdict (`agentbus --project myapp verdicts`).
-   You open or approve the PR.
+4. **Finish.** master delivers the reviewed branch (`agentbus deliver`): you get the pull request
+   to merge, the page to open it, or in local mode the `git merge` command. You merge.
 
 For a one-line fix you can skip master: `@coder Fix the typo in the README title.`
 
@@ -600,7 +600,8 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
    be restarted: its mission's brief and its branch are all it needs.
 7. **The end.** When every mission is integrated, master receives a `complete` notice (and the
    docs agent its directive, if the plan named one). `change/auth-v2` is never merged into `main`
-   by the conductor: open that PR yourself, or ask master to, and merge it.
+   by the conductor: master delivers it once reviewed (`agentbus deliver change/auth-v2`), and you
+   merge.
 
 ---
 
@@ -647,10 +648,19 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
    the services keep one after you unset it in your shell, until the next `up` without it. The
    escalation target and the reload setting stay even then, until `--escalate-to` or `--reload`
    changes them.
-6. **Pull requests go to GitHub today**: the bus and the missions conductor need only Git (the
-   conductor merges and tests on local branches and never pushes), but delivery to a forge is
-   GitHub: the docs agent opens its pull request with the `gh` CLI.
-   GitLab, Bitbucket and a local mode with no forge are planned for v0.26.
+6. **Delivery to your forge, or none**: the bus and the missions conductor need only Git (the
+   conductor merges and tests on local branches and never pushes). master and the docs agent
+   deliver a reviewed branch with `agentbus deliver`, and only when the 4-eyes approval names its
+   exact commit. The forge is read from `origin` (`delivery.forge = "auto"` in
+   `~/.config/agentbus/config.toml`, the target branch `delivery.base`, `main` by default):
+   - **GitHub / GitLab**: it pushes the approved commit and opens the pull or merge request with
+     `gh` or `glab` when installed and logged in (`gh auth login`, `glab auth login`); otherwise it
+     pushes and gives you the page to open it;
+   - **Bitbucket**: it pushes and gives you the page;
+   - **local** (no `origin`, or `forge = "local"`): nothing is pushed or fetched; master gives you
+     `git switch main && git merge --no-ff <sha>` and records the merge once you say it is done.
+   A self-hosted GitLab whose host name does not start with `gitlab.` reads as local: give it such
+   a name, or set `delivery.forge`, which then applies to every project on this machine.
 
 ---
 

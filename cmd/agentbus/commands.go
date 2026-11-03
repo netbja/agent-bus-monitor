@@ -129,14 +129,16 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo reply -r 1792537337865-0 master \"yes, on main\""},
 	},
 	{
-		Name: "verdict", Text: true, Usage: []string{"verdict (--pr <n> | --subject <s>) [--ref <id>] <author> <approve|reject> [message...]"},
+		Name: "verdict", Text: true, Usage: []string{"verdict (--pr <n> | --subject <s>) [--ref <id>] [--head <sha>] <author> <approve|reject> [message...]"},
 		Summary: "record a 4-eyes verdict in the ledger (resolves a matching gate)",
 		Flags: []cli.Flag{
 			{Long: "pr", Short: 'P', Arg: "<n>", Help: "the pull request number"},
 			{Long: "subject", Short: 's', Arg: "<s>", Help: "any other subject"},
 			fRef,
+			{Long: "head", Arg: "<sha>", Help: "the full commit SHA you read: only such a verdict authorises agentbus deliver"},
 		},
-		Examples: []string{"agentbus -p demo verdict -P 12 coder approve \"tests cover the edge\""},
+		Examples: []string{"agentbus -p demo verdict -P 12 coder approve \"tests cover the edge\"",
+			"agentbus -p demo verdict -s my-task --head $(git rev-parse HEAD) coder approve \"read at that commit\""},
 	},
 	{
 		Name: "verdicts", Usage: []string{"verdicts [--json] [--pr <n> | --subject <s>]"},
@@ -360,14 +362,28 @@ var commands = []cli.Command{
 		Name: "plan", Text: true, Usage: []string{
 			"plan [show] [--json]",
 			"plan load <path>@<commit>",
-			"plan link <task> --pr <n> | plan done <task> | plan note <task> <text...> | plan clear",
+			"plan link <task> (--pr <n> | --ref <branch>@<sha>) | plan done <task> | plan note <task> <text...> | plan clear",
 		},
 		Summary: "the batch's plan, as busmon's Plan view (P) shows it",
 		Flags: []cli.Flag{
 			fJSON,
 			{Long: "pr", Arg: "<n>", Help: "link: the task's pull request"},
+			{Long: "ref", Arg: "<branch>@<sha>", Help: "link: the delivered commit, when no pull request was opened (agentbus deliver)"},
 		},
 		Examples: []string{"agentbus -p demo plan load docs/plans/v0.22.json@HEAD", "agentbus -p demo plan link roles --pr 102", "agentbus -p demo plan done roles"},
+	},
+	{
+		Name: "deliver", Usage: []string{"deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--body-file <path>] [--dry-run]"},
+		Summary: "push a branch's approved head and open its pull or merge request (github, gitlab), print the page to open (bitbucket, no CLI) or hand it to the person to merge (local); master and docs only",
+		Flags: []cli.Flag{
+			{Long: "task", Short: 't', Arg: "<plan-task>", Help: "the plan task: its review subject and title, and plan link once delivered"},
+			{Long: "subject", Short: 's', Arg: "<s>", Help: "the review subject (default the task's, else the branch)"},
+			{Long: "base", Short: 'b', Arg: "<b>", Help: "the branch delivered to (default delivery.base)"},
+			{Long: "title", Short: 'T', Arg: "<t>", Help: "the request's title (default the task's, else the first commit's subject)"},
+			{Long: "body-file", Short: 'F', Arg: "<path>", Help: "the request's description (default the commits' subjects); the 4-eyes record follows it"},
+			{Long: "dry-run", Short: 'n', Help: "check everything and print what would be delivered; push nothing"},
+		},
+		Examples: []string{"agentbus -p demo deliver coder/roles -t roles", "agentbus -p demo deliver pr/v0.26 -b main -n"},
 	},
 	{
 		Name: "swaps", Usage: []string{"swaps [--role <role>] [--json]"},
