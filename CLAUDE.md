@@ -1033,7 +1033,13 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   before the retention, never on a refused run, its outcome in `<state>/backup-last.json` `after` per project
   (`RecordAfter`, 0600); a failure only warns. Every role denies `Edit`/`Write` of `~/.config/agentbus/config.toml`
   (shipped `[tool_rules]`), and a Claude Code launch adds the path `XDG_CONFIG_HOME` gives it (`rolecfg.ConfigDenies`,
-  `//` absolute form; a relative one adds nothing and says so).
+  `//` absolute form; a relative one adds nothing and says so). `backup.schedule = daily` (`backupschedule.go`, `scheduledBackupPass`;
+  `dispatch.BackupConfig`, an hourly pass only while `HoldsDispatch`): due when a project of the host has no archive
+  covering it under 24 h (`backupDue`, per project), a host try-lock `<state>/backup.lock` (`backupLock`, `LOCK_NB`),
+  due judged again under it, then `makeArchive` (the same as by hand, `Scheduled`: `AGENTBUS_BACKUP_SCHEDULED=1`);
+  secrets only with `backup.age_recipient`, without `age` the archive is made without them and `SecretsError`
+  recorded; `backup-last.json`'s `scheduled` part (`RecordScheduled`) is written only by the chore. `agentbus backup`
+  warns about a defaulted `backup.dir` while `daily` is on.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

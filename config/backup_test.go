@@ -137,3 +137,18 @@ func TestBackupAfterKeys(t *testing.T) {
 		t.Errorf("after_timeout default %v", d.Default)
 	}
 }
+
+func TestBackupSchedule(t *testing.T) {
+	k, ok := Lookup("backup.schedule")
+	if !ok || k.Kind != String || k.Default != "off" || k.Group() != GroupBackup {
+		t.Fatalf("row %+v", k)
+	}
+	for v, why := range map[any]string{"off": "", "daily": "", "hourly": "want off or daily", true: "want off or daily"} {
+		if _, got := k.file(v); got != why {
+			t.Errorf("file %#v: %q, want %q", v, got, why)
+		}
+	}
+	if _, res := k.env("weekly"); res != envSkip {
+		t.Error("an unknown env schedule was used")
+	}
+}

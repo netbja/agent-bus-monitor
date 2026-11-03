@@ -278,6 +278,19 @@ var Keys = []*Key{
 	// Backups (spec 2026-11-01-backup-design.md): where archives go (an
 	// absolute folder; "" = $XDG_DATA_HOME/agentbus/backups, BackupDir) and
 	// how many of this host's are kept (0 keeps every one).
+	{Name: "backup.schedule", Env: "AGENT_BUS_BACKUP_SCHEDULE", Kind: String, Default: "off", ReadBy: "agentbus backup, dispatch",
+		env: func(raw string) (any, envResult) {
+			if raw == "off" || raw == "daily" {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "off" || s == "daily") {
+				return s, ""
+			}
+			return nil, "want off or daily"
+		}},
 	{Name: "backup.dir", Env: "AGENT_BUS_BACKUP_DIR", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch",
 		env: func(raw string) (any, envResult) {
 			if filepath.IsAbs(raw) {

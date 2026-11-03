@@ -213,11 +213,36 @@ type AfterEntry struct {
 	Outcome string    `json:"outcome"` // ok, exit N, timeout, not started
 }
 
-// Last is <state>/backup-last.json: the scheduled run's record (step 6, kept
-// as it is here) and, per project, the latest run of after_command.
+// Last is <state>/backup-last.json, never a secret: the latest scheduled
+// run, written only by the chore, and, per project, the latest run of
+// after_command, by hand or scheduled.
 type Last struct {
-	Scheduled json.RawMessage       `json:"scheduled,omitempty"`
+	Scheduled *ScheduledRun         `json:"scheduled,omitempty"`
 	After     map[string]AfterEntry `json:"after,omitempty"`
+}
+
+// ScheduledRun is the latest scheduled run (spec "Record"): its archive or
+// its error, the projects in its scope, each project's EXEC time, and the
+// error that left the secrets out (a recipient but no age), which counts as
+// a failure for the health check.
+type ScheduledRun struct {
+	At           time.Time         `json:"at"`
+	Archive      string            `json:"archive,omitempty"`
+	Error        string            `json:"error,omitempty"`
+	Projects     []string          `json:"projects"`
+	Exec         map[string]string `json:"exec,omitempty"`
+	SecretsError string            `json:"secrets_error,omitempty"`
+}
+
+// RecordScheduled replaces the record's scheduled part, leaving after as it
+// was.
+func RecordScheduled(path string, run ScheduledRun) error {
+	l, err := ReadLast(path)
+	if err != nil {
+		return err
+	}
+	l.Scheduled = &run
+	return writeLast(path, l)
 }
 
 // ReadLast reads the record; an absent one is empty.

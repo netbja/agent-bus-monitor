@@ -36,6 +36,16 @@ type backupDeps struct {
 	Dial     func() (*redis.Client, error)
 	LookPath func(string) (string, error) // finds age
 	Environ  func() []string              // the environment backup.after_command starts from, scrubbed
+	// Projects is the host's scope (nil: hostProjects, the broker's and the
+	// templates'); tests pin theirs on a shared test broker.
+	Projects func(ctx context.Context, c *redis.Client, projectsDir string) ([]string, error)
+}
+
+func (d backupDeps) hostProjects(ctx context.Context, c *redis.Client, projectsDir string) ([]string, error) {
+	if d.Projects != nil {
+		return d.Projects(ctx, c, projectsDir)
+	}
+	return hostProjects(ctx, c, projectsDir)
 }
 
 func realBackupDeps(redisHost string) backupDeps {
@@ -124,7 +134,7 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 	}
 	projectsDir := rolecfg.ProjectsDir(d.Getenv)
 	if len(projects) == 0 {
-		if projects, err = hostProjects(ctx, c, projectsDir); err != nil {
+		if projects, err = d.hostProjects(ctx, c, projectsDir); err != nil {
 			fmt.Fprintf(errw, "backup: %v\n", err)
 			return 1
 		}
@@ -167,54 +177,81 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 		}
 		return backupDryRun(ctx, c, dir, backup.ArchiveName(d.Host, now), projects, files, left, notes, out, errw)
 	}
-	b, err := bus.Open(c, projects[0])
-	if err != nil {
-		fmt.Fprintf(errw, "backup: %v\n", err)
-		return 1
-	}
-	info, err := b.RedisInfo(ctx)
-	if err != nil {
-		fmt.Fprintf(errw, "backup: the broker: %v\n", err)
-		return 1
-	}
-	var sealed []byte
+	job := archiveJob{Projects: projects, Dir: dir, Now: now, Files: files, Left: left, Notes: notes}
 	if secrets {
-		if sealed, err = backup.SealSecrets(ctx, age, recipient, secretSrcs); err != nil {
-			fmt.Fprintf(errw, "backup: secrets: %v (no archive written)\n", err)
-			return 1
-		}
-		names := make([]string, len(secretSrcs))
-		for i, s := range secretSrcs {
-			names[i] = s.Member
-		}
-		notes = append(notes, fmt.Sprintf("%s: %s, encrypted to %s", backup.SecretsName, strings.Join(names, ", "), recipient))
+		job.Secrets, job.Recipient, job.Age = secretSrcs, recipient, age
 	}
-	res, err := backup.Run(ctx, dir, backup.Plan{
-		Projects: projects, Host: d.Host, Now: now, Version: buildinfo.Version, RedisVersion: info.Version,
-		Dump:  func(ctx context.Context, p string) (bus.ProjectDump, error) { return bus.DumpProject(ctx, c, p) },
-		Files: files, LeftOut: left, Notes: notes, Secrets: sealed,
-	})
-	if err != nil {
+	if _, defaulted, _ := config.BackupDir(r, d.Getenv); defaulted && dirArg == "" && r.String("backup.schedule") == "daily" {
+		fmt.Fprintf(errw, "backup: warning: backup.dir is the default (%s) while backup.schedule = daily: the service's environment may resolve another folder; set backup.dir in config.toml\n", dir)
+	}
+	if _, err := makeArchive(ctx, c, d, r, paths, job, out, errw); err != nil {
 		fmt.Fprintf(errw, "backup: %v (no archive written)\n", err)
 		return 1
 	}
+	return 0
+}
+
+// archiveJob is one archive to make, by hand or by the schedule.
+type archiveJob struct {
+	Projects []string
+	Dir      string
+	Now      time.Time
+	Files    []backup.Source
+	Left     []backup.LeftOut
+	Notes    []string
+	// Secrets, when not nil, are sealed with Age to Recipient into secrets.age.
+	Secrets        []backup.Source
+	Recipient, Age string
+	Scheduled      bool
+}
+
+// makeArchive is a run of agentbus backup after its checks: the archive,
+// then backup.after_command (after the rename, before the retention; its
+// failure only warns and never touches the archive), then the retention.
+// An error means no archive was written.
+func makeArchive(ctx context.Context, c *redis.Client, d backupDeps, r config.Resolver, paths service.Paths, j archiveJob, out, errw io.Writer) (backup.Result, error) {
+	b, err := bus.Open(c, j.Projects[0])
+	if err != nil {
+		return backup.Result{}, err
+	}
+	info, err := b.RedisInfo(ctx)
+	if err != nil {
+		return backup.Result{}, fmt.Errorf("the broker: %w", err)
+	}
+	notes := j.Notes
+	var sealed []byte
+	if j.Secrets != nil {
+		if sealed, err = backup.SealSecrets(ctx, j.Age, j.Recipient, j.Secrets); err != nil {
+			return backup.Result{}, fmt.Errorf("secrets: %w", err)
+		}
+		names := make([]string, len(j.Secrets))
+		for i, s := range j.Secrets {
+			names[i] = s.Member
+		}
+		notes = append(notes, fmt.Sprintf("%s: %s, encrypted to %s", backup.SecretsName, strings.Join(names, ", "), j.Recipient))
+	}
+	res, err := backup.Run(ctx, j.Dir, backup.Plan{
+		Projects: j.Projects, Host: d.Host, Now: j.Now, Version: buildinfo.Version, RedisVersion: info.Version,
+		Dump:  func(ctx context.Context, p string) (bus.ProjectDump, error) { return bus.DumpProject(ctx, c, p) },
+		Files: j.Files, LeftOut: j.Left, Notes: notes, Secrets: sealed,
+	})
+	if err != nil {
+		return backup.Result{}, err
+	}
 	fmt.Fprintf(out, "backup: %s\n", res.Path)
-	for _, p := range projects {
+	for _, p := range j.Projects {
 		fmt.Fprintf(out, "  %s: %s, the broker held for %s\n", p, plural(res.Keys[p], "key"), res.Exec[p].Round(time.Microsecond))
 	}
-	for _, l := range left {
+	for _, l := range j.Left {
 		fmt.Fprintf(out, "  left out: %s (%s)\n", l.Path, l.Why)
 	}
 	for _, n := range notes {
 		fmt.Fprintf(out, "  note: %s\n", n)
 	}
-	if secrets {
-		fmt.Fprintf(out, "  %s opens only with the private key of %s: keep it where you keep your other keys, not on this disk\n", backup.SecretsName, recipient)
+	if j.Secrets != nil {
+		fmt.Fprintf(out, "  %s opens only with the private key of %s: keep it where you keep your other keys, not on this disk\n", backup.SecretsName, j.Recipient)
 	}
-	// backup.after_command: after the rename, before the retention; its
-	// failure is a warning (health reads the record) and never touches the
-	// archive.
-	if after != "" {
+	if after := r.String("backup.after_command"); after != "" {
 		var allow []string
 		if a := r.String("backup.after_env"); a != "" {
 			allow = strings.Split(a, ",")
@@ -223,9 +260,9 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 		if d.Environ != nil {
 			environ = d.Environ
 		}
-		ran := backup.RunAfter(ctx, backup.AfterSpec{Command: after, Dir: dir, Archive: res.Path, Projects: projects,
-			Env: environ(), Allow: allow, Timeout: r.Duration("backup.after_timeout"), Log: errw})
-		if err := backup.RecordAfter(backupLastPath(paths), projects, backup.AfterEntry{At: ran.At, Archive: res.Name, Outcome: ran.Outcome}); err != nil {
+		ran := backup.RunAfter(ctx, backup.AfterSpec{Command: after, Dir: j.Dir, Archive: res.Path, Projects: j.Projects,
+			Scheduled: j.Scheduled, Env: environ(), Allow: allow, Timeout: r.Duration("backup.after_timeout"), Log: errw})
+		if err := backup.RecordAfter(backupLastPath(paths), j.Projects, backup.AfterEntry{At: ran.At, Archive: res.Name, Outcome: ran.Outcome}); err != nil {
 			fmt.Fprintf(errw, "backup: recording backup.after_command's outcome: %v\n", err)
 		}
 		if ran.Outcome == "ok" {
@@ -234,14 +271,14 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 			fmt.Fprintf(errw, "backup: warning: backup.after_command: %s (the archive is complete and kept)\n", ran.Outcome)
 		}
 	}
-	removed, err := backup.Retain(dir, d.Host, r.Int("backup.keep"))
+	removed, err := backup.Retain(j.Dir, d.Host, r.Int("backup.keep"))
 	for _, n := range removed {
 		fmt.Fprintf(out, "  removed %s (backup.keep = %d)\n", n, r.Int("backup.keep"))
 	}
 	if err != nil {
 		fmt.Fprintf(errw, "backup: retention: %v (the archive is complete)\n", err)
 	}
-	return 0
+	return res, nil
 }
 
 // hostProjects is every project of this host: the broker's and every

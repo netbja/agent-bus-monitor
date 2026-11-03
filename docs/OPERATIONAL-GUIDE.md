@@ -558,6 +558,13 @@ to watch a pane.
   most `backup.after_timeout` (30m). A failure is recorded and warned about; the archive is never
   touched. These three settings are yours only: no variable sets them, agentbus never writes them,
   and no agent may edit `config.toml`.
+  Backups are made by hand by default. `backup.schedule = "daily"` makes the dispatch service make
+  one whenever a project of this host has no archive younger than a day (checked hourly, one
+  archive for all the projects, whichever project's service gets there first). Set `backup.dir` in
+  `config.toml` with it: a service's environment can resolve the default to another folder.
+  Unattended, the secrets are included only when `backup.age_recipient` is set; with it but no
+  `age` on the service's PATH, the archive is made without them and the failure recorded in
+  `~/.local/state/agentbus/backup-last.json`. A restore is never scheduled.
 
 ---
 

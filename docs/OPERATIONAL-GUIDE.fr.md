@@ -593,6 +593,14 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   `["RESTIC_PASSWORD_FILE"]`), pendant au plus `backup.after_timeout` (30m). Un échec est noté et
   signalé ; l'archive n'est jamais touchée. Ces trois réglages sont à vous seul : aucune variable ne
   les pose, agentbus ne les écrit jamais, et aucun agent ne peut modifier `config.toml`.
+  Les sauvegardes se font à la main par défaut. `backup.schedule = "daily"` fait faire au service
+  dispatch une sauvegarde dès qu'un projet de cet hôte n'a pas d'archive de moins d'un jour (vérifié
+  chaque heure, une archive pour tous les projets, par le service du premier projet qui y arrive).
+  Posez alors `backup.dir` dans `config.toml` : l'environnement d'un service peut résoudre le défaut
+  vers un autre dossier. Sans surveillance, les secrets ne sont inclus que si `backup.age_recipient`
+  est posé ; avec lui mais sans `age` dans le PATH du service, l'archive est faite sans eux et
+  l'échec noté dans `~/.local/state/agentbus/backup-last.json`. Une restauration n'est jamais
+  planifiée.
 
 ---
 
