@@ -70,6 +70,13 @@ func tightestWindow(ws []bus.BudgetWindow, now time.Time) (bus.BudgetWindow, boo
 // compact bar for short windows and a 10-cell bar for longer ones; medium
 // shows percentages only; narrow keeps the tightest window.
 func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld bool, pace map[string]string, now time.Time, tier Tier, bars barView) Line {
+	return quotaSegOf(provider, b, holdUntil, isHeld, pace, now, tier, bars, false)
+}
+
+// quotaSegOf is quotaSeg; busiest keeps only the window closest to its limit
+// at every tier, as narrow does (usage-cards: the header's fallback when both
+// windows do not fit).
+func quotaSegOf(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld bool, pace map[string]string, now time.Time, tier Tier, bars barView, busiest bool) Line {
 	if b.Unlimited {
 		return nil
 	}
@@ -83,7 +90,7 @@ func quotaSeg(provider string, b bus.BudgetSnapshot, holdUntil time.Time, isHeld
 		return l
 	}
 	windows := orderedQuotaWindows(b.Windows, now)
-	if tier == TierNarrow {
+	if tier == TierNarrow || busiest {
 		w, ok := tightestWindow(freshWindows(b, now), now)
 		if !ok {
 			w, ok = tightestWindow(windows, now)

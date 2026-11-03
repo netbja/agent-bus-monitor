@@ -269,3 +269,53 @@ func TestPaceSurvivesAJitteredReset(t *testing.T) {
 		t.Fatalf("pace %q carried into the next window", got)
 	}
 }
+
+// The header shows both windows per provider while they fit; when they do
+// not, each provider keeps only its busiest window, never a cut gauge
+// (usage-cards, the person's choice).
+func TestHeaderKeepsTheBusiestWindowWhenBothDoNotFit(t *testing.T) {
+	now := shellNow
+	win := func(n string, pct float64, h time.Duration, minutes int) bus.BudgetWindow {
+		return bus.BudgetWindow{Name: n, UsedPct: pct, ResetsAt: now.Add(h).Unix(), Minutes: minutes, ObservedAt: now.UnixMilli()}
+	}
+	sawBoth, sawOne := false, false
+	for width := 80; width <= 240; width++ {
+		d := fullHeader()
+		d.now = now
+		d.budgets = map[string]bus.BudgetSnapshot{
+			"anthropic": {ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{win("5h", 13, 2*time.Hour, 300), win("7d", 86, 12*time.Hour, 10080)}},
+			"openai":    {ObservedAt: now.UnixMilli(), Windows: []bus.BudgetWindow{win("5h", 3, 4*time.Hour, 300), win("7d", 45, 60*time.Hour, 10080)}},
+		}
+		tier := TierMedium
+		if width >= 120 {
+			tier = TierWide
+		}
+		var text string
+		for _, l := range headerLines(d, width, tier) {
+			text += l.text() + "\n"
+		}
+		for _, p := range []string{"claude", "codex"} {
+			i := strings.Index(text, p+" ")
+			if i < 0 {
+				continue
+			}
+			seg := text[i:]
+			if j := strings.Index(seg, "  "); j > 0 {
+				seg = seg[:j]
+			}
+			switch {
+			case strings.Contains(seg, GlyphEllipsis):
+				t.Errorf("%d: %s's gauge is cut: %q", width, p, seg)
+			case strings.HasPrefix(seg, p+" 5h") && strings.Contains(seg, glyphVertical+" 7d"):
+				sawBoth = true
+			case strings.HasPrefix(seg, p+" 7d") && !strings.Contains(seg, "5h"):
+				sawOne = true
+			default:
+				t.Errorf("%d: %s shows neither both windows nor its busiest: %q", width, p, seg)
+			}
+		}
+	}
+	if !sawBoth || !sawOne {
+		t.Errorf("both %v, busiest only %v: the range should show each", sawBoth, sawOne)
+	}
+}
