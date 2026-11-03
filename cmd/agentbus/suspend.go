@@ -304,6 +304,10 @@ func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDe
 				say("already suspended since %s", time.UnixMilli(rec.At).Format("15:04"))
 				return 0
 			}
+			if o.dryRun {
+				say("suspended, a service still running: would stop it and rewrite %s", snapPath)
+				return 0
+			}
 			return finishStops(p, mgr, rec, snap, snapPath, out, errw)
 		}
 		say("suspended since %s without a current snapshot: completing it (Services kept as recorded)", time.UnixMilli(rec.At).Format("15:04"))
@@ -508,10 +512,13 @@ func suspendWait(ctx context.Context, p string, b *bus.Bus, mgr service.Manager,
 				shown = line
 			}
 		}
-		// Zero wait still reads the quiet rule's minimum (two rounds). Past the
-		// deadline, last is never empty: quiet returned above, and a failed or a
-		// busy round left its reason in it.
+		// Zero wait still reads the quiet rule's minimum (two rounds). The
+		// deadline never passes on less than quiet proven (reviewer-codex): a
+		// last round quiet but not the one before it is still not quiet.
 		if time.Now().After(deadline) && n >= quietReadyRounds {
+			if len(last) == 0 {
+				last = []busyAgent{{Agent: p, Why: "quiet in one round only, not two in a row"}}
+			}
 			return last, ""
 		}
 		select {

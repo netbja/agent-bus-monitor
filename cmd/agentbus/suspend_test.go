@@ -496,3 +496,60 @@ func TestSuspendReadinessIsVerified(t *testing.T) {
 		}
 	}
 }
+
+// The deadline never passes on one quiet round: quiet is two in a row
+// (reviewer-codex), after a failed reading or a busy one alike.
+func TestSuspendDeadlineNeedsQuietTwice(t *testing.T) {
+	w := newSuspendWorld(t)
+	w.agent("coder", "idle")
+	w.factsErr = func(n int) error {
+		if n == 1 {
+			return errors.New("broker hiccup")
+		}
+		return nil
+	}
+	if code, out, errw := w.run("--no-wait"); code != 1 {
+		t.Fatalf("failed then quiet, zero wait = %d\n%s\n%s", code, out, errw)
+	}
+	if p := w.pause(); p != nil {
+		t.Fatalf("suspended on one quiet round: %+v", p)
+	}
+	w2 := newSuspendWorld(t)
+	w2.agent("coder", "working")
+	w2.onRound = func(n int) {
+		if n == 2 {
+			if _, err := w2.b.Status(context.Background(), "coder", "idle", "", selfIdent("p-coder")); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+	if code, out, errw := w2.run("--no-wait"); code != 1 {
+		t.Fatalf("busy then quiet, zero wait = %d\n%s\n%s", code, out, errw)
+	}
+	if p := w2.pause(); p != nil {
+		t.Fatalf("suspended on one quiet round: %+v", p)
+	}
+}
+
+// --dry-run writes nothing, even on a suspended project whose rerun would
+// stop a service still running (reviewer-codex).
+func TestSuspendDryRunOnACurrentSuspend(t *testing.T) {
+	w := newSuspendWorld(t)
+	w.agent("coder", "idle")
+	if code, _, _ := w.run(); code != 0 {
+		t.Fatal("suspend failed")
+	}
+	w.mgr.active[w.b.Project()+"/missions"] = true
+	before, _ := os.ReadFile(filepath.Join(w.state, "suspend.json"))
+	calls := len(w.mgr.calls)
+	code, out, errw := w.run("--dry-run")
+	if code != 0 || len(w.mgr.calls) != calls || !strings.Contains(out, "would stop") {
+		t.Fatalf("--dry-run = %d, calls %v\n%s\n%s", code, w.mgr.calls[calls:], out, errw)
+	}
+	if after, _ := os.ReadFile(filepath.Join(w.state, "suspend.json")); !bytes.Equal(before, after) {
+		t.Fatal("--dry-run rewrote the snapshot")
+	}
+	if !w.mgr.active[w.b.Project()+"/missions"] {
+		t.Fatal("--dry-run stopped missions")
+	}
+}
