@@ -133,7 +133,7 @@ Rules, each in the one script that writes the key (so a reader never races a wri
 | Writer | On a suspend pause |
 |---|---|
 | `Bus.Suspend` (new, one script) | writes `kind=suspend`, `by`, `notify`, `at` and `Until` from Redis `TIME`, `reason`, `host`, `boot`, `services`; an existing timed pause (a person's or a quota pause) is moved into `prev` whole; an existing suspend is left as it is and reported (`already suspended since …`) |
-| `Bus.SuspendCancel` (new, CAS on the record written) | a suspend that timed out without `--force`: `prev` back if still in the future, else the key deleted, and the pause's `notify` target gets today's resume directive (it may have been held from wakes during the wait) |
+| `Bus.SuspendCancel` (new, CAS on the record written) | a suspend that timed out without `--force`, called only **after** the CLI has started again every kind the record's `Services` marks active (§4.1 step 3), so a process dying between the two leaves the record saying what to restart: `prev` back if still in the future, else the key deleted, and the pause's `notify` target gets today's resume directive (it may have been held from wakes during the wait) |
 | `reserveWake` (dispatcher) | refuses while any pause exists (above) |
 | `FencedResume` (dispatcher, when due) | never ends a suspend: returns 0 when the stored record decodes to `kind = "suspend"` (the dispatcher logs `paused`) |
 | `FencedQuotaPause` | its script today replaces a pause whose `reason` equals `quota <provider>`, so a suspend whose reason the person typed as `quota anthropic` would be taken: the script refuses (returns 0) on a record that decodes to `kind = "suspend"`, before the reason test (foureyes) |
@@ -211,8 +211,14 @@ agentbus resume --all          bring every suspended project back: services, mis
    (foureyes). Each round prints the agents still busy and why (`coder: working (pane busy)`,
    `master: wake in flight`).
 
-   On timeout: without `--force`, `Bus.SuspendCancel`, exit 1, naming each agent still busy and since
-   when; nothing was stopped, and the project is as it was (its previous timed pause back, if any).
+   On timeout without `--force`, cancel (foureyes): first start again every kind the record's
+   `Services` marks active and that is not active now (the dispatch service step 2 stopped;
+   `Manager.Start`, the restart budget reset first, as `service start` does), read from the record, not
+   from memory; then `Bus.SuspendCancel`; exit 1, naming each agent still busy and since when. The
+   project is then as it was: its services running, its previous timed pause back if any, and master's
+   resume directive woken for by the dispatcher just restarted. A start that fails is said with its
+   command and the cancel still runs (a project left paused with no dispatcher would tell nobody);
+   a process dying before the cancel leaves a suspend whose `Services` resume reads as usual.
    With `--force`, go on and record them as `busy at suspend` with their reason in the snapshot: their
    turn is cut if the machine goes down (the residual `--force` accepts, said on the terminal).
 4. **Read the snapshot's facts** (§6) from the bus, herdr (if reachable) and the service manager.
@@ -409,7 +415,7 @@ turns it on accepts that any focus after a reboot resumes, whoever focuses.
 | A wake reserved just before the pause | waited out (`wake in flight`, then until its turn is seen ending) | — |
 | A dormant agent, or one whose process is gone, left `working` | ignored, recorded (`gone`) | relaunched by `up`'s rules if it is a boot agent |
 | Resume of a project not suspended | — | §7 (crash path), or `nothing to resume` |
-| An agent keeps working past `--wait` | cancelled for that project without `--force` (names it, prior pause back); `--force` records it | its turn is lost if the machine went down; the summary says `busy at suspend` |
+| An agent keeps working past `--wait` | cancelled for that project without `--force` (names it, dispatch started again, prior pause back); `--force` records it | its turn is lost if the machine went down; the summary says `busy at suspend` |
 | Open ask, gate, request, board task | recorded (ids, counts); never blocks | in the summary to master; they are still in Redis |
 | Swap / reload / retire intent in flight | refused for that project, even with `--force` | an intent left by a crash expires (`PX 180000`); an interrupted ledger `begin` is closed by the next swap as today; the summary names it |
 | Missions mid-integration | said; stopped as `down` stops it; redone at start | started; `Startup` repairs |
@@ -457,7 +463,10 @@ and `resumeDeps` injected like `startDeps`, `upDeps`).
   working with no inspection is busy; quiet needs two consecutive rounds.
 - `cmd/agentbus` suspend (pure `suspendPlan` + injected deps, a fake bus, herdr and manager): the
   order is services read → pause (with `Services`) → wait → read → stop → snapshot (a fake records
-  calls); timeout without `--force` cancels and stops nothing, the prior timed pause back; `--force`
+  calls); timeout without `--force` starts dispatch again from the record's `Services` (budget reset)
+  before `SuspendCancel`, the prior timed pause back, and the dispatcher, restarted, wakes master for
+  the resume directive (fake manager and dispatcher); a start that fails still cancels and says it;
+  a process killed between the start and the cancel leaves the suspend with `Services` intact; `--force`
   records the busy agents and their reasons; `--no-wait` and `suspend.wait = 0` pause, judge one round,
   and then cancel or (with `--force`) go on, never leaving a suspend without `Services`; an intent
   refuses even with `--force`; `--dry-run` writes nothing. Service intent (reviewer-codex): dispatch
