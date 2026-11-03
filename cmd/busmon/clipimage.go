@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -21,7 +24,7 @@ import (
 // the text. Nothing is uploaded: an agent on this machine reads the file.
 
 var (
-	errNoClipTool  = errors.New("no clipboard reader: install wl-clipboard (Wayland), xclip (X11) or pngpaste (macOS)")
+	errNoClipTool  = errors.New("no clipboard reader for this session: wl-clipboard (Wayland), xclip (X11) or pngpaste (macOS)")
 	errNoClipImage = errors.New("no image in the clipboard")
 )
 
@@ -33,15 +36,25 @@ var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'} // the PNG si
 // clipTools runs the clipboard readers: the real ones (os/exec) unless a test
 // gives its own.
 type clipTools struct {
+	env  func(string) string // the session: WAYLAND_DISPLAY, DISPLAY
+	goos string
 	look func(name string) (string, error)
 	out  func(name string, args ...string) ([]byte, error)
 }
 
+// clipTimeout bounds one clipboard tool: one that hangs (a clipboard owner
+// that never answers) is killed (foureyes).
+const clipTimeout = 5 * time.Second
+
 func realClipTools() clipTools {
 	return clipTools{
+		env:  os.Getenv,
+		goos: runtime.GOOS,
 		look: exec.LookPath,
 		out: func(name string, args ...string) ([]byte, error) {
-			return boundedOutput(exec.Command(name, args...), clipImageMax)
+			ctx, cancel := context.WithTimeout(context.Background(), clipTimeout)
+			defer cancel()
+			return boundedOutput(exec.CommandContext(ctx, name, args...), clipImageMax)
 		},
 	}
 }
@@ -69,29 +82,31 @@ func boundedOutput(cmd *exec.Cmd, max int) ([]byte, error) {
 	return data, rerr
 }
 
-// clipboardImage is the clipboard's PNG image, through the first reader on
-// PATH: wl-paste (Wayland), xclip (X11), pngpaste (macOS).
+// clipboardImage is the clipboard's PNG image, through the session's own
+// reader (foureyes: by the session, never by what is installed, since an X11
+// session with wl-clipboard installed has no Wayland clipboard): wl-paste
+// under Wayland, xclip under X11, pngpaste on macOS.
 func clipboardImage(t clipTools) ([]byte, error) {
-	if t.look == nil || t.out == nil {
+	if t.look == nil || t.out == nil || t.env == nil {
 		t = realClipTools()
 	}
 	has := func(name string) bool { _, err := t.look(name); return err == nil }
 	var data []byte
 	var err error
 	switch {
-	case has("wl-paste"):
+	case t.env("WAYLAND_DISPLAY") != "" && has("wl-paste"):
 		types, terr := t.out("wl-paste", "--list-types")
 		if terr != nil || !strings.Contains(string(types), "image/png") {
 			return nil, errNoClipImage
 		}
 		data, err = t.out("wl-paste", "--no-newline", "--type", "image/png")
-	case has("xclip"):
+	case t.env("DISPLAY") != "" && has("xclip"):
 		types, terr := t.out("xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
 		if terr != nil || !strings.Contains(string(types), "image/png") {
 			return nil, errNoClipImage
 		}
 		data, err = t.out("xclip", "-selection", "clipboard", "-t", "image/png", "-o")
-	case has("pngpaste"):
+	case t.goos == "darwin" && has("pngpaste"):
 		data, err = t.out("pngpaste", "-")
 	default:
 		return nil, errNoClipTool
@@ -161,6 +176,7 @@ func pasteImageCmd(tools clipTools, dir string) tea.Cmd {
 		if err != nil {
 			return pastedImageMsg{err: err}
 		}
+		pruneAttachments(dir, time.Now())
 		path, err := saveAttachment(dir, data)
 		return pastedImageMsg{path: path, err: err}
 	}
@@ -200,4 +216,30 @@ func insertPath(a *textArea, path string) (dropped int) {
 		path += " "
 	}
 	return a.insert(path)
+}
+
+// attachmentKeep is how long a pasted image is kept (foureyes: the
+// attachments are pruned at each paste).
+const attachmentKeep = 30 * 24 * time.Hour
+
+// attachmentName is the name saveAttachment gives: only these files are ever
+// pruned.
+var attachmentName = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png$`)
+
+// pruneAttachments removes from dir the attachments older than
+// attachmentKeep: only regular files with saveAttachment's name (never a link,
+// never another file), best effort.
+func pruneAttachments(dir string, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !attachmentName.MatchString(e.Name()) || !e.Type().IsRegular() {
+			continue
+		}
+		if info, err := e.Info(); err == nil && now.Sub(info.ModTime()) > attachmentKeep {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }

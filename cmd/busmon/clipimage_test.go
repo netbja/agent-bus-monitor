@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -17,6 +18,8 @@ var pngBytes = append(append([]byte{}, pngMagic...), []byte("rest of a picture")
 // fakeClip is a machine's clipboard tools: the ones on PATH, each command's
 // answer, and what ran.
 type fakeClip struct {
+	env   map[string]string // the session: WAYLAND_DISPLAY, DISPLAY
+	goos  string
 	tools map[string]bool
 	out   map[string][]byte
 	err   map[string]error
@@ -24,7 +27,13 @@ type fakeClip struct {
 }
 
 func (f *fakeClip) tool() clipTools {
+	goos := f.goos
+	if goos == "" {
+		goos = "linux"
+	}
 	return clipTools{
+		env:  func(k string) string { return f.env[k] },
+		goos: goos,
 		look: func(name string) (string, error) {
 			if f.tools[name] {
 				return "/bin/" + name, nil
@@ -44,16 +53,18 @@ func TestClipboardImageReadsWhicheverToolExists(t *testing.T) {
 		clip *fakeClip
 		want error
 	}{
-		"wayland": {&fakeClip{tools: map[string]bool{"wl-paste": true}, out: map[string][]byte{
+		"wayland": {&fakeClip{env: map[string]string{"WAYLAND_DISPLAY": "wayland-0"}, tools: map[string]bool{"wl-paste": true, "xclip": true}, out: map[string][]byte{
 			"wl-paste --list-types": []byte("text/plain\nimage/png\n"), "wl-paste --no-newline --type image/png": pngBytes}}, nil},
-		"x11": {&fakeClip{tools: map[string]bool{"xclip": true}, out: map[string][]byte{
+		// an X11 session with wl-clipboard installed too (Fedora) reads with xclip (foureyes)
+		"x11": {&fakeClip{env: map[string]string{"DISPLAY": ":0"}, tools: map[string]bool{"wl-paste": true, "xclip": true}, out: map[string][]byte{
 			"xclip -selection clipboard -t TARGETS -o": []byte("TARGETS\nimage/png\n"), "xclip -selection clipboard -t image/png -o": pngBytes}}, nil},
-		"macos":   {&fakeClip{tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": pngBytes}}, nil},
-		"no tool": {&fakeClip{}, errNoClipTool},
-		"text only": {&fakeClip{tools: map[string]bool{"wl-paste": true}, out: map[string][]byte{
+		"macos":      {&fakeClip{goos: "darwin", tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": pngBytes}}, nil},
+		"no tool":    {&fakeClip{env: map[string]string{"DISPLAY": ":0"}}, errNoClipTool},
+		"no session": {&fakeClip{tools: map[string]bool{"wl-paste": true, "xclip": true}}, errNoClipTool},
+		"text only": {&fakeClip{env: map[string]string{"WAYLAND_DISPLAY": "w"}, tools: map[string]bool{"wl-paste": true}, out: map[string][]byte{
 			"wl-paste --list-types": []byte("text/plain\n")}}, errNoClipImage},
-		"not a png":          {&fakeClip{tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": []byte("GIF89a")}}, errNoClipImage},
-		"pngpaste with none": {&fakeClip{tools: map[string]bool{"pngpaste": true}, err: map[string]error{"pngpaste -": errors.New("exit 1")}}, errNoClipImage},
+		"not a png":          {&fakeClip{goos: "darwin", tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": []byte("GIF89a")}}, errNoClipImage},
+		"pngpaste with none": {&fakeClip{goos: "darwin", tools: map[string]bool{"pngpaste": true}, err: map[string]error{"pngpaste -": errors.New("exit 1")}}, errNoClipImage},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -100,7 +111,7 @@ func TestComposePastesAnImage(t *testing.T) {
 	m = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
 	dir := filepath.Join(t.TempDir(), "attachments")
 	m.cfg.attachDir = dir
-	clip := &fakeClip{tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": pngBytes}}
+	clip := &fakeClip{goos: "darwin", tools: map[string]bool{"pngpaste": true}, out: map[string][]byte{"pngpaste -": pngBytes}}
 	m.cfg.clip = clip.tool()
 	m = keys(t, m, 'I')
 	if m.ui.compose == nil {
@@ -183,5 +194,49 @@ func TestBoundedOutputStopsAtItsBound(t *testing.T) {
 	}
 	if out, err := boundedOutput(exec.Command("printf", "ok"), 4096); err != nil || string(out) != "ok" {
 		t.Fatalf("%q %v", out, err)
+	}
+}
+
+// A clipboard tool that hangs is killed at its timeout (foureyes).
+func TestBoundedOutputHasATimeout(t *testing.T) {
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skip("no sleep on PATH")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := boundedOutput(exec.CommandContext(ctx, "sleep", "10"), 4096); err == nil || time.Since(start) > 3*time.Second {
+		t.Fatalf("err %v after %v", err, time.Since(start))
+	}
+}
+
+// Each paste prunes our own attachments older than 30 days: never another
+// file, never a link, never a newer one (foureyes).
+func TestPruneAttachments(t *testing.T) {
+	dir := t.TempDir()
+	old := time.Now().Add(-31 * 24 * time.Hour)
+	mk := func(name string, at time.Time) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, at, at); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	gone := mk("20260901-101010-0123abcd.png", old)
+	fresh := mk("20261102-101010-0123abce.png", time.Now())
+	theirs := mk("notes.png", old)
+	link := filepath.Join(dir, "20260901-101011-0123abcf.png")
+	if err := os.Symlink(theirs, link); err != nil {
+		t.Fatal(err)
+	}
+	pruneAttachments(dir, time.Now())
+	for p, want := range map[string]bool{gone: false, fresh: true, theirs: true, link: true} {
+		_, err := os.Lstat(p)
+		if (err == nil) != want {
+			t.Errorf("%s: exists %v, want %v", filepath.Base(p), err == nil, want)
+		}
 	}
 }

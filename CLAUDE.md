@@ -388,8 +388,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells; a
   selection from Shift with a move, `Key.Shift` on navigation keys only, removed by Backspace/Del, replaced by typing or a
   paste, ended by a plain move, a click or a first Esc; PageUp/PageDown a page of the window's rows); `^V` pastes the clipboard's image (usage-cards, `clipimage.go`: wl-paste, xclip or pngpaste,
-  whichever is on PATH, PNG only, saved 0600 as a new file under `os.UserCacheDir()/agentbus/attachments` (0700), its path
-  inserted at the cursor, said when there is no tool or no image; never uploaded)
+  chosen by the session (WAYLAND_DISPLAY, DISPLAY, macOS), 5 s timeout, read through its 20 MiB bound, PNG only, saved 0600 as a new file under `os.UserCacheDir()/agentbus/attachments` (0700), its path
+  inserted at the cursor with a space on each side as its neighbours need, said when there is no tool or no image; our own
+  files older than 30 days pruned at each paste; never uploaded)
   send through `send.go` (`planSend` decides, `exec` makes the bus calls in a command, `outcome`
   reads them; recipient and body are fields, never an `@name body` line); the pause popup
   (`drawPausePopup`), the reminder, the recap summary's confirmation and d/y are in
