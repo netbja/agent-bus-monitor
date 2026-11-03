@@ -286,15 +286,16 @@ func dispatchSeg(state string, compact bool) Line {
 	return serviceSeg("dispatch", "disp", state, compact)
 }
 
-// budgetRole warns at 85% and turns red at 95%, before the provider limit.
+// budgetRole is a usage level's colour (usage-cards, the person's choice):
+// blue below 80 %, amber from 80 %, red from 95 %, before the provider limit.
 func budgetRole(pct float64) Role {
 	switch {
 	case pct >= 95:
 		return RoleError
-	case pct >= 85:
+	case pct >= 80:
 		return RoleAttention
 	}
-	return RoleOK
+	return RoleAccent
 }
 
 // budgetSeg is one provider's USED share of its account windows: gauges in

@@ -16,6 +16,10 @@ import (
 // barSlideFor is how long a bar takes to reach a new value.
 const barSlideFor = 500 * time.Millisecond
 
+// thinTrackFade is the thin bar's track: its fill's colour at this intensity,
+// between the line colour and the fill (Seg.Fade).
+const thinTrackFade = 30
+
 // barLift is how far a sliding bar's leading cell goes towards the text colour.
 const barLift = 60
 
@@ -84,13 +88,15 @@ func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
 	if pace >= 0 {
 		mark = clamp(int(math.Round(pace*float64(cells)/100)), 0, cells-1)
 	}
-	track, trackRole := GlyphThinBar, RoleLine
+	// The track is the bar's own colour faded towards the background
+	// (usage-cards); without true colour, a light line in the dim role.
+	track, trackRole, trackFade := GlyphThinBar, role, thinTrackFade
 	if !th.Animated() {
-		track, trackRole = glyphHorizontal, RoleDim
+		track, trackRole, trackFade = glyphHorizontal, RoleDim, 0
 	}
 	var l Line
 	add := func(s Seg) {
-		if n := len(l); n > 0 && l[n-1].Role == s.Role && l[n-1].Lift == s.Lift {
+		if n := len(l); n > 0 && l[n-1].Role == s.Role && l[n-1].Lift == s.Lift && l[n-1].Fade == s.Fade {
 			l[n-1].Text += s.Text
 			return
 		}
@@ -110,7 +116,7 @@ func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
 			}
 			add(s)
 		default:
-			add(Seg{Text: track, Role: trackRole})
+			add(Seg{Text: track, Role: trackRole, Fade: trackFade})
 		}
 	}
 	return l

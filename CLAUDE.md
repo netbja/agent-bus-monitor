@@ -418,7 +418,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   role per provider, `providerRole(p, fallback)`; the 16-colour palette takes a hand-picked ANSI name per
   provider (no two alike, none an alert role's colour nor the text roles' gray/silver/teal, openai the
   terminal's own foreground), no-colour none; an unknown provider keeps today's colour): the provider label
-  of a header gauge (the fill keeps its 85/95 % roles), the model lines of an agent's page, and the U page's
+  of a header gauge (the fill keeps its level roles: blue, amber from 80 %, red from 95 %, usage-cards; the thin track is the fill faded), the model lines of an agent's page, and the U page's
   account windows and per-agent provider column. Icons (busmon-icons, spec
   `docs/superpowers/specs/2026-11-02-busmon-icons-design.md`): `display.icons` = `off` (default, today's screen byte for
   byte, `TestIconsOffIsToday`) | `nerd` (a lettered box per provider) | `agent-font` (the maker's logo, by client then
