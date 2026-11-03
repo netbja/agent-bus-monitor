@@ -1325,7 +1325,22 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `SuspendCancel` (compare-and-swap on the raw record) put a still-due `prev` back with no directive, else delete
   it and send the notify target a `human=yes` resume directive. `reserveWake` refuses while any pause exists, in
   its own script after the lease check (`ErrPaused`), so a pass that read the project before a pause reserves
-  and types nothing after it; a reservation made before stays visible as `prompting`/`prompted`. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
+  and types nothing after it; a reservation made before stays visible as `prompting`/`prompted`. `agentbus suspend`
+  (`suspend.go`, above the project-required exit like `backup`; the host's projects = templates the broker has, or
+  `--project`; the person's act: `AGENT_BUS_AGENT` or a process under a registered agent's verified pid is refused,
+  `agentAncestor`, and the shared denies are only the plain `agentbus suspend*` / `agentbus resume --all*`, since
+  a `agentbus * suspend*` form would deny every message mentioning a suspend): per project under `upLock`, refused
+  while a swap/reload/retire intent is held, then `Services` read and `Bus.Suspend`, the dispatch service stopped at
+  once, the quiet rule (`suspendquiet.go`, pure: dormant and proved-gone agents ignored; a wake record `prompting`
+  busy at any age until it leaves that state or the dispatcher is proved gone, then busy until a non-working
+  declaration later than that boundary or two ready own inspections at or after it plus 5 s; else `EffectiveState`
+  on the suspend's own inspections, and a busy pane; quiet = two rounds in a row, 2 s apart) up to `--wait`
+  (`suspend.wait`, Services, 10 min; `--no-wait` = 0 still runs the two rounds). Timeout without `--force`, a
+  signal (SIGINT, SIGTERM, SIGHUP) or repeated read errors cancel: the services the record marks active start again
+  first, then `SuspendCancel`; a failed start keeps the suspend and says `agentbus resume` (also as a `for=person`
+  notice). Then the snapshot's facts, the other services stopped, `<state>/agentbus/<p>/suspend.json` (0600, ids,
+  states and counts only, the reason through `health.Redact`; `suspendsnap.go`). A suspended project without a
+  current snapshot is completed by a rerun, `Services` never rewritten; `suspend --status` lists them. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
   that declared working or idle reads `paused`, or `quota` when its provider is held; blocked,
   waiting and done are never covered; the detail keeps the declared state, the panel counts what
   is shown); `@all` targets only agents in `{p}:agents`

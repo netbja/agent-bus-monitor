@@ -102,6 +102,16 @@ if ok and type(p) == 'table' and p['kind'] == 'suspend' then return {2} end
 redis.call('DEL', KEYS[1])
 return {1, v}`)
 
+// PauseRaw is the pause record as stored, "" when there is none: what a
+// compare-and-swap (Unsuspend, SuspendCancel) is given.
+func (b *Bus) PauseRaw(ctx context.Context) (string, error) {
+	v, err := b.r.Get(ctx, PauseKey(b.project)).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	return v, err
+}
+
 // Resume ends a pause now: it deletes the record and sends its notify target
 // the resume directive, from by. It reports false when nothing was paused, and
 // ErrSuspended for a suspend, which only the full resume ends (Unsuspend).

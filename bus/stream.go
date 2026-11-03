@@ -1108,6 +1108,16 @@ func (b *Bus) HumanClose(ctx context.Context, from, target, ref, message string)
 	return b.cmd(ctx, from, target, CmdReply, ref, message, map[string]interface{}{"human": "yes", "wake": "no"})
 }
 
+// PersonNotice is a person's own CLI telling them something they must act
+// on (for=person: busmon marks it unread), e.g. a suspend that could not be
+// cancelled cleanly.
+func (b *Bus) PersonNotice(ctx context.Context, from, message string) (string, error) {
+	if !ValidName(from) {
+		return "", fmt.Errorf("invalid sender %q", from)
+	}
+	return b.add(ctx, "notify", map[string]interface{}{"from": from, "message": message, "human": "yes", "for": ForPerson})
+}
+
 // HumanNotify is a broadcast written by a person: nobody reads it and nothing
 // wakes for it, which busmon says before sending one.
 func (b *Bus) HumanNotify(ctx context.Context, from, message string) (string, error) {

@@ -482,6 +482,18 @@ var commands = []cli.Command{
 			"agentbus restore <archive> --project myapp"},
 	},
 	{
+		Name: "suspend", NoProject: true, Usage: []string{"suspend [--project <p>] [--wait <d> | --no-wait] [--force] [--reason <text>] [--dry-run] [--yes]", "suspend --status"},
+		Summary: "put every project of this host to sleep (or the one named with --project): pause, let running turns end, record a snapshot, stop the services; agentbus resume brings it back",
+		Flags: []cli.Flag{{Long: "wait", Arg: "<d>", Help: "how long running turns may take to end (default suspend.wait, 10m); past it the suspend is cancelled unless --force"},
+			{Long: "no-wait", Help: "no wait: suspend only a project already quiet (the same as suspend.wait = 0)"},
+			{Long: "force", Help: "go on when the wait ends with turns still running; they are cut if the machine goes down"},
+			{Long: "reason", Arg: "<text>", Help: "why, shown with the suspend and in the resume directive"},
+			{Long: "dry-run", Help: "say what would be done; write nothing"},
+			{Long: "yes", Help: "do not ask for confirmation (no terminal needed)"},
+			{Long: "status", Help: "what is suspended, since when, and what each snapshot holds"}},
+		Examples: []string{"agentbus suspend --reason \"OS updates\"", "agentbus suspend --project agent-bus-monitor --dry-run", "agentbus suspend --status"},
+	},
+	{
 		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]"},
 		Summary:  "each setting's effective value and where it comes from (env, config.toml, busmon.toml, default); --project adds what that project's services see",
 		Flags:    []cli.Flag{fJSON},
