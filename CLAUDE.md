@@ -998,6 +998,19 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   there step the page's rows, `historyStep`), `o` (`ActOlder`, OnPage) widens the window by three days (the archive read on from its cursor, the gaps read again, the live entries windowed again), `/` filters it with
   Activity's syntax on its own line kind (`lineHistFilter`, `historyFiltered`), `t` narrows it to the selected
   entry's thread.
+- **Backups** (spec `docs/superpowers/specs/2026-11-01-backup-design.md`, package `backup/`, being built step by
+  step): `bus/keykinds.go` classes every `{p}:<kind>` record (restored) or runtime (archived, restored only with
+  `--with-runtime`), a ":*" kind one `ValidName` tail only; `TestEveryWrittenKeyKindIsClassified` scans the module for
+  kinds written (literals joined with `+`, and literal kinds given to any bus function that routes a parameter into
+  `StreamKey`, found to a fixpoint), so a new key is classified when it is added. `bus.DumpProject`: one `MULTI` of
+  `TYPE`/`PTTL`/`DUMP` per project (`ProjectKeys`' exact prefix), only `PTTL = -1` kept. `backup.Writer`: a `.tar.zst`
+  (klauspost zstd, default level, one encoder goroutine, frame checksum), `coverage.json` first, every member hashed,
+  `manifest.json` last; any failed `Add` abandons the archive; `Verify` checks every member before anything is
+  restored; `Run` writes a temporary file in the folder and links it to its final name (never replacing one).
+  `agentbus backup` (`backupcmd.go`, above the project-required exit; `--project` only from the command line, never
+  `AGENT_BUS_PROJECT`): every project of the host (broker + templates), `backup.dir`/`backup.keep` (group Backup),
+  `backup list`, `--dry-run`; secrets (`redis.env`, `services/<p>.env`) only stat'ed, left out and listed.
+  Retention never removes the newest archive covering a project.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each

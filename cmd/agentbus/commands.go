@@ -461,6 +461,13 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus tokens", "agentbus tokens --project agent-bus-monitor --by agent", "agentbus tokens --unattributed"},
 	},
 	{
+		Name: "backup", NoProject: true, Usage: []string{"backup [--project <p>]... [--dir <d>] [--dry-run]", "backup list [--dir <d>]"},
+		Summary: "one archive (.tar.zst) of every project of this host, or of the ones named with --project (repeatable; never narrowed by AGENT_BUS_PROJECT): Redis keys, settings, templates, roles, history; secrets left out and listed",
+		Flags: []cli.Flag{{Long: "dir", Arg: "<d>", Help: "an absolute folder for this run (default backup.dir, else $XDG_DATA_HOME/agentbus/backups)"},
+			{Long: "dry-run", Help: "print what would be read and written; touch nothing"}},
+		Examples: []string{"agentbus backup", "agentbus backup --project agent-bus-monitor --dry-run", "agentbus backup list"},
+	},
+	{
 		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]"},
 		Summary:  "each setting's effective value and where it comes from (env, config.toml, busmon.toml, default); --project adds what that project's services see",
 		Flags:    []cli.Flag{fJSON},

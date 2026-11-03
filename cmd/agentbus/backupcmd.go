@@ -1,0 +1,255 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+
+	"github.com/netbja/agent-bus-monitor/backup"
+	"github.com/netbja/agent-bus-monitor/buildinfo"
+	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
+	"github.com/netbja/agent-bus-monitor/service"
+)
+
+// agentbus backup (spec docs/superpowers/specs/2026-11-01-backup-design.md):
+// one archive of every project of this host (the broker's and every
+// template's), or of the projects named on the command line; never narrowed
+// by the ambient AGENT_BUS_PROJECT. Secrets are left out and listed (step 4
+// adds --secrets).
+
+const backupUsage = "usage: agentbus backup [--project <p>]... [--dir <d>] [--dry-run] | backup list [--dir <d>]"
+
+type backupDeps struct {
+	Getenv func(string) string
+	Now    func() time.Time
+	Host   string // this host's name, in the archive's name
+	Dial   func() (*redis.Client, error)
+}
+
+func realBackupDeps(redisHost string) backupDeps {
+	host, _ := os.Hostname()
+	return backupDeps{Getenv: os.Getenv, Now: time.Now, Host: host,
+		Dial: func() (*redis.Client, error) { return bus.Connect(redisHost) }}
+}
+
+func runBackup(ctx context.Context, args []string, explicitProject string, d backupDeps, out, errw io.Writer) int {
+	usage := func(format string, a ...any) int {
+		if format != "" {
+			fmt.Fprintf(errw, "backup: "+format+"\n", a...)
+		}
+		fmt.Fprintln(errw, backupUsage)
+		return 2
+	}
+	list := len(args) > 0 && args[0] == "list"
+	if list {
+		args = args[1:]
+	}
+	args, dirArg := extractFlag(args, "--dir")
+	args, dry := extractBool(args, "--dry-run")
+	var projects []string
+	if explicitProject != "" {
+		projects = append(projects, explicitProject)
+	}
+	for {
+		var p string
+		if args, p = extractFlag(args, "--project"); p == "" {
+			break
+		}
+		projects = append(projects, p)
+	}
+	if len(args) != 0 {
+		return usage("unexpected %q", args[0])
+	}
+	for _, p := range projects {
+		if !bus.ValidName(p) {
+			return usage("invalid project %q", p)
+		}
+	}
+	if dirArg != "" && !filepath.IsAbs(dirArg) {
+		return usage("--dir: want an absolute folder")
+	}
+	r := config.Machine(d.Getenv)
+	dir, _, err := config.BackupDir(r, d.Getenv)
+	if dirArg != "" {
+		dir, err = dirArg, nil
+	}
+	if err != nil {
+		fmt.Fprintf(errw, "backup: %v\n", err)
+		return 1
+	}
+	if list {
+		if dry || len(projects) > 0 {
+			return usage("list takes only --dir")
+		}
+		return backupList(dir, d.Host, out, errw)
+	}
+
+	c, err := d.Dial()
+	if err != nil {
+		fmt.Fprintf(errw, "backup: the broker: %v\n", err)
+		return 1
+	}
+	projectsDir := rolecfg.ProjectsDir(d.Getenv)
+	if len(projects) == 0 {
+		if projects, err = hostProjects(ctx, c, projectsDir); err != nil {
+			fmt.Fprintf(errw, "backup: %v\n", err)
+			return 1
+		}
+	}
+	projects = sortedUnique(projects)
+	if len(projects) == 0 {
+		fmt.Fprintln(errw, "backup: no project on this host (none on the broker, no template)")
+		return 1
+	}
+	paths, err := service.PathsFrom(d.Getenv)
+	if err != nil {
+		fmt.Fprintf(errw, "backup: %v\n", err)
+		return 1
+	}
+	files, left, notes := backup.Gather(projects, backup.Locations{
+		ConfigDir:    filepath.Dir(config.Path(d.Getenv)),
+		ProjectsDir:  projectsDir,
+		PasswordFile: bus.PasswordFile(d.Getenv),
+		EnvFile:      paths.EnvFile,
+		StateDir:     paths.StateDir,
+	})
+	notes = append(notes, "Redis: each project is read at one instant after its SCAN; a key created after the SCAN is not in the archive, and keys with an expiry are skipped")
+	now := d.Now().UTC()
+	if dry {
+		return backupDryRun(ctx, c, dir, backup.ArchiveName(d.Host, now), projects, files, left, notes, out, errw)
+	}
+	b, err := bus.Open(c, projects[0])
+	if err != nil {
+		fmt.Fprintf(errw, "backup: %v\n", err)
+		return 1
+	}
+	info, err := b.RedisInfo(ctx)
+	if err != nil {
+		fmt.Fprintf(errw, "backup: the broker: %v\n", err)
+		return 1
+	}
+	res, err := backup.Run(ctx, dir, backup.Plan{
+		Projects: projects, Host: d.Host, Now: now, Version: buildinfo.Version, RedisVersion: info.Version,
+		Dump:  func(ctx context.Context, p string) (bus.ProjectDump, error) { return bus.DumpProject(ctx, c, p) },
+		Files: files, LeftOut: left, Notes: notes,
+	})
+	if err != nil {
+		fmt.Fprintf(errw, "backup: %v (no archive written)\n", err)
+		return 1
+	}
+	fmt.Fprintf(out, "backup: %s\n", res.Path)
+	for _, p := range projects {
+		fmt.Fprintf(out, "  %s: %s, the broker held for %s\n", p, plural(res.Keys[p], "key"), res.Exec[p].Round(time.Microsecond))
+	}
+	for _, l := range left {
+		fmt.Fprintf(out, "  left out: %s (%s)\n", l.Path, l.Why)
+	}
+	for _, n := range notes {
+		fmt.Fprintf(out, "  note: %s\n", n)
+	}
+	removed, err := backup.Retain(dir, d.Host, r.Int("backup.keep"))
+	for _, n := range removed {
+		fmt.Fprintf(out, "  removed %s (backup.keep = %d)\n", n, r.Int("backup.keep"))
+	}
+	if err != nil {
+		fmt.Fprintf(errw, "backup: retention: %v (the archive is complete)\n", err)
+	}
+	return 0
+}
+
+// hostProjects is every project of this host: the broker's and every
+// template's, sorted, once each.
+func hostProjects(ctx context.Context, c *redis.Client, projectsDir string) ([]string, error) {
+	ps, err := bus.Projects(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range ps {
+		out = append(out, p.Project)
+	}
+	tpls, _ := filepath.Glob(filepath.Join(projectsDir, "*.toml"))
+	for _, t := range tpls {
+		if name := strings.TrimSuffix(filepath.Base(t), ".toml"); bus.ValidName(name) {
+			out = append(out, name)
+		}
+	}
+	return sortedUnique(out), nil
+}
+
+func backupDryRun(ctx context.Context, c *redis.Client, dir, name string, projects []string, files []backup.Source,
+	left []backup.LeftOut, notes []string, out, errw io.Writer) int {
+	fmt.Fprintf(out, "would write %s (nothing is written by --dry-run)\n", filepath.Join(dir, name))
+	for _, p := range projects {
+		keys, err := bus.ProjectKeys(ctx, c, p)
+		if err != nil {
+			fmt.Fprintf(errw, "backup: %s: %v\n", p, err)
+			return 1
+		}
+		fmt.Fprintf(out, "  %s: %s on the broker (any with an expiry is skipped)\n", p, plural(len(keys), "key"))
+	}
+	for _, f := range files {
+		if st, err := os.Stat(f.Path); err == nil {
+			fmt.Fprintf(out, "  %s (%d bytes, from %s)\n", f.Member, st.Size(), f.Path)
+		}
+	}
+	for _, l := range left {
+		fmt.Fprintf(out, "  left out: %s (%s)\n", l.Path, l.Why)
+	}
+	for _, n := range notes {
+		fmt.Fprintf(out, "  note: %s\n", n)
+	}
+	return 0
+}
+
+func backupList(dir, host string, out, errw io.Writer) int {
+	list, err := backup.List(dir, host)
+	if err != nil {
+		fmt.Fprintf(errw, "backup list: %v\n", err)
+		return 1
+	}
+	if len(list) == 0 {
+		fmt.Fprintf(out, "no archive of this host in %s\n", dir)
+		return 0
+	}
+	fmt.Fprintf(out, "%s\n", dir)
+	for _, a := range list {
+		size := "?"
+		if st, err := os.Stat(a.Path); err == nil {
+			size = fmt.Sprintf("%d bytes", st.Size())
+		}
+		covers := strings.Join(a.Coverage.Projects, ", ")
+		if a.Err != nil {
+			covers = "unreadable: " + a.Err.Error()
+		}
+		fmt.Fprintf(out, "  %s  %s  %s  covers %s\n", a.Name, a.At.Local().Format("2006-01-02 15:04:05"), size, covers)
+	}
+	return 0
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
+func sortedUnique(s []string) []string {
+	sort.Strings(s)
+	out := s[:0]
+	for i, v := range s {
+		if i == 0 || v != s[i-1] {
+			out = append(out, v)
+		}
+	}
+	return out
+}

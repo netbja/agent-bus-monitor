@@ -559,6 +559,16 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   même session prouvée, jamais d'une session qu'un statut se contente de nommer. La page `U` de busmon montre la même chose avec l'historique sur 24 heures
   des fenêtres du compte. Aucun coût n'est affiché, par principe : sur un abonnement, ce chiffre
   serait une fiction.
+- **Sauvegardes.** `agentbus backup` écrit une archive, `agentbus-backup-<hôte>-<heure>.tar.zst`
+  (0600), de tous les projets de cet hôte (ou de ceux nommés avec `--project`) : les clés Redis
+  de chaque projet lues en un instant (les clés qui expirent sont sautées), `config.toml` et ses
+  voisins, les gabarits, le `roles.toml` et les prompts de chaque gabarit, et l'archive
+  d'historique. Le mot de passe du broker et les fichiers d'environnement des services sont des
+  secrets : ils sont laissés de côté et listés dans le manifeste de l'archive. Les archives vont
+  dans `backup.dir` (par défaut `~/.local/share/agentbus/backups`) ; une sauvegarde sur le même
+  disque ne survit pas au disque, alors pointez `backup.dir` vers un autre (un montage, un dossier
+  synchronisé). `backup.keep` (7) archives sont gardées, jamais la plus récente qui couvre un
+  projet. `agentbus backup list` les montre ; `--dry-run` montre ce qu'une exécution lirait et écrirait.
 
 ---
 
@@ -668,6 +678,7 @@ l'exécute étape par étape.
 | Quotas des fournisseurs | `agentbus quota` |
 | Santé du projet | `agentbus --project mon-app health` / `health detail <id>` |
 | Tokens dépensés | `agentbus tokens` / `--project mon-app --by agent` |
+| Sauvegarder les projets de cet hôte | `agentbus backup` / `backup list` |
 | Passations déclarées | `agentbus --project mon-app handoff` |
 | Recharger un agent | `agentbus --project mon-app reload coder --as <votre-nom>` |
 | Passer un rôle sur un profil de repli | `agentbus --project mon-app swap coder --profile <p>` / `--back` |

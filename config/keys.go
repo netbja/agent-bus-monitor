@@ -10,6 +10,7 @@
 package config
 
 import (
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -269,6 +270,24 @@ var Keys = []*Key{
 			}
 			return nil, "want a Git branch name"
 		}},
+	// Backups (spec 2026-11-01-backup-design.md): where archives go (an
+	// absolute folder; "" = $XDG_DATA_HOME/agentbus/backups, BackupDir) and
+	// how many of this host's are kept (0 keeps every one).
+	{Name: "backup.dir", Env: "AGENT_BUS_BACKUP_DIR", Kind: String, Default: "", ReadBy: "agentbus backup, dispatch",
+		env: func(raw string) (any, envResult) {
+			if filepath.IsAbs(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "" || filepath.IsAbs(s)) {
+				return s, ""
+			}
+			return nil, "want an absolute folder"
+		}},
+	{Name: "backup.keep", Env: "AGENT_BUS_BACKUP_KEEP", Kind: Int, Default: 7, ReadBy: "agentbus backup, dispatch",
+		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 keeps every archive")},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},

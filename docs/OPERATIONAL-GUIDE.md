@@ -525,6 +525,15 @@ to watch a pane.
   one a status merely names.
   busmon's `U` page shows the same with the account windows' 24-hour history. No cost is shown,
   by rule: on a subscription the figure would be fiction.
+- **Backups.** `agentbus backup` writes one archive, `agentbus-backup-<host>-<time>.tar.zst`
+  (0600), of every project of this host (or of the ones named with `--project`): each project's
+  Redis keys read at one instant (keys with an expiry are skipped), `config.toml` and its
+  siblings, the templates, each template's `roles.toml` and prompts, and the history archive.
+  The broker's password and the services' env files are secrets: they are left out and listed
+  in the archive's manifest. Archives go to `backup.dir` (default `~/.local/share/agentbus/backups`);
+  a backup on the same disk does not survive the disk, so point `backup.dir` at another one (a
+  mount, a synced folder). `backup.keep` (7) archives are kept, never the newest one covering a
+  project. `agentbus backup list` shows them; `--dry-run` shows what a run would read and write.
 
 ---
 
@@ -631,6 +640,7 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 | Provider quotas | `agentbus quota` |
 | Project health | `agentbus --project myapp health` / `health detail <id>` |
 | Tokens spent | `agentbus tokens` / `--project myapp --by agent` |
+| Back up this host's projects | `agentbus backup` / `backup list` |
 | Declared hand-offs | `agentbus --project myapp handoff` |
 | Reload an agent | `agentbus --project myapp reload coder --as <your-name>` |
 | Move a role to a fallback | `agentbus --project myapp swap coder --profile <p>` / `--back` |
