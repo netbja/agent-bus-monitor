@@ -534,6 +534,15 @@ to watch a pane.
   a backup on the same disk does not survive the disk, so point `backup.dir` at another one (a
   mount, a synced folder). `backup.keep` (7) archives are kept, never the newest one covering a
   project. `agentbus backup list` shows them; `--dry-run` shows what a run would read and write.
+  `agentbus restore <archive>` checks every member against the manifest first, then refuses a
+  live project (its dispatch or conductor lease held, a service active, its herdr workspace open,
+  an agent's process alive: run `agentbus down <p>` and close its workspace first), even with
+  `--force`. A project's keys are restored in one step, all or nothing; keys already there, or a
+  file that differs, are kept unless you pass `--force` (it asks first). Runtime keys (agents,
+  services, wake records, holds) are not restored unless `--with-runtime`: `agentbus up <p>`
+  writes them again. `--dry-run` prints each key's and file's action; `--redis-only` and
+  `--files-only` narrow it. Restoring onto an older Redis than the archive's is refused: upgrade
+  the broker first.
 
 ---
 
@@ -641,6 +650,7 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 | Project health | `agentbus --project myapp health` / `health detail <id>` |
 | Tokens spent | `agentbus tokens` / `--project myapp --by agent` |
 | Back up this host's projects | `agentbus backup` / `backup list` |
+| Restore an archive | `agentbus restore <archive> --dry-run`, then without it |
 | Declared hand-offs | `agentbus --project myapp handoff` |
 | Reload an agent | `agentbus --project myapp reload coder --as <your-name>` |
 | Move a role to a fallback | `agentbus --project myapp swap coder --profile <p>` / `--back` |

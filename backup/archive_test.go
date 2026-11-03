@@ -3,6 +3,9 @@ package backup
 import (
 	"archive/tar"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -216,4 +219,75 @@ func TestAddRefusesBadMembers(t *testing.T) {
 			t.Error("a Close after a failure was accepted")
 		}
 	}
+}
+
+// Walk streams each member but the manifest, in order, checked against m:
+// an archive changed after Verify fails the walk at the changed member.
+func TestWalk(t *testing.T) {
+	b := write(t, []string{"demo"}, map[string]string{"a": "alpha", "b": "beta"}, "a", "b")
+	m, err := Verify(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	err = Walk(bytes.NewReader(b), m, func(mem Member, body io.Reader) error {
+		c, err := io.ReadAll(body)
+		seen = append(seen, mem.Path+"="+string(c))
+		return err
+	})
+	if err != nil || strings.Join(seen, ",") != CoverageName+"="+mustCoverage(t, b)+",a=alpha,b=beta" {
+		t.Fatalf("walk %q, %v", seen, err)
+	}
+	// A body not read to its end is still checked.
+	if err := Walk(bytes.NewReader(b), m, func(Member, io.Reader) error { return nil }); err != nil {
+		t.Fatalf("unread bodies: %v", err)
+	}
+	other := write(t, []string{"demo"}, map[string]string{"a": "ALPHA", "b": "beta"}, "a", "b")
+	if err := Walk(bytes.NewReader(other), m, func(Member, io.Reader) error { return nil }); err == nil {
+		t.Fatal("a changed archive walked against the first manifest")
+	}
+	// A member whose body is wrong is reported before the callback's write
+	// can be committed: Walk hands the check back through Verified.
+	var verr error
+	Walk(bytes.NewReader(other), m, func(mem Member, body io.Reader) error {
+		io.ReadAll(body)
+		if mem.Path == "a" {
+			verr = Verified(body)
+		}
+		return nil
+	})
+	if verr == nil {
+		t.Fatal("Verified passed a changed member")
+	}
+}
+
+func mustCoverage(t *testing.T, b []byte) string {
+	t.Helper()
+	_, got := members(t, b)
+	return got[CoverageName]
+}
+
+// retarWith builds a consistent archive (hashes right) holding one member
+// named name, bypassing Add's checks.
+func retarWith(t *testing.T, name string) []byte {
+	t.Helper()
+	cov := []byte(`{"format":1,"projects":["demo"]}`)
+	body := []byte("x")
+	sum := func(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+	man, _ := json.Marshal(Manifest{Format: Format, Projects: []string{"demo"}, Members: []Member{
+		{Path: CoverageName, Size: int64(len(cov)), SHA256: sum(cov)},
+		{Path: name, Size: 1, SHA256: sum(body)}}})
+	var buf bytes.Buffer
+	zw, _ := zstd.NewWriter(&buf)
+	tw := tar.NewWriter(zw)
+	for _, m := range []struct {
+		n string
+		c []byte
+	}{{CoverageName, cov}, {name, body}, {ManifestName, man}} {
+		tw.WriteHeader(&tar.Header{Name: m.n, Mode: 0o600, Size: int64(len(m.c)), Typeflag: tar.TypeReg})
+		tw.Write(m.c)
+	}
+	tw.Close()
+	zw.Close()
+	return buf.Bytes()
 }

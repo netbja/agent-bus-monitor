@@ -111,6 +111,11 @@ func main() {
 	if len(args) >= 1 && args[0] == "backup" {
 		os.Exit(runBackup(context.Background(), args[1:], explicitProject, realBackupDeps(host), os.Stdout, os.Stderr))
 	}
+	// restore is the person's act on an archive; its projects, like backup's,
+	// come from the command line only.
+	if len(args) >= 1 && args[0] == "restore" {
+		os.Exit(runRestore(context.Background(), args[1:], explicitProject, realRestoreDeps(host), os.Stdout, os.Stderr))
+	}
 	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
 	if len(args) >= 1 && args[0] == "plugin" {
 		os.Exit(runPlugin(args[1:], realPluginDeps(), os.Stdout, os.Stderr))

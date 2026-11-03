@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/fs"
 	"path"
@@ -215,6 +216,11 @@ func Verify(r io.Reader) (Manifest, error) {
 		if hdr.Typeflag != tar.TypeReg {
 			return Manifest{}, fmt.Errorf("member %q: not a regular file", hdr.Name)
 		}
+		if hdr.Name != CoverageName && hdr.Name != ManifestName {
+			if err := validMember(hdr.Name); err != nil {
+				return Manifest{}, err
+			}
+		}
 		if hdr.Name == ManifestName {
 			if manifest, err = io.ReadAll(io.LimitReader(tr, 64<<20)); err != nil {
 				return Manifest{}, fmt.Errorf("archive unreadable: %w", err)
@@ -276,4 +282,77 @@ func ReadCoverage(r io.Reader) (Coverage, error) {
 		return Coverage{}, fmt.Errorf("archive format %d, this agentbus reads %d", c.Format, Format)
 	}
 	return c, nil
+}
+
+// memberReader is a member's body in Walk, hashed as it is read.
+type memberReader struct {
+	r    io.Reader
+	h    hash.Hash
+	n    int64
+	want Member
+}
+
+func (m *memberReader) Read(p []byte) (int, error) {
+	n, err := m.r.Read(p)
+	m.h.Write(p[:n])
+	m.n += int64(n)
+	return n, err
+}
+
+// check reads what is left of the body and compares it with the manifest.
+func (m *memberReader) check() error {
+	if _, err := io.Copy(io.Discard, m); err != nil {
+		return fmt.Errorf("member %q: %w", m.want.Path, err)
+	}
+	if m.n != m.want.Size || hex.EncodeToString(m.h.Sum(nil)) != m.want.SHA256 {
+		return fmt.Errorf("member %q changed since it was verified", m.want.Path)
+	}
+	return nil
+}
+
+// Verified reads the rest of a body Walk handed over and reports whether it
+// matches the manifest: a caller writing the body to a temporary file calls it
+// before renaming, so a member changed since Verify is never committed.
+func Verified(body io.Reader) error {
+	m, ok := body.(*memberReader)
+	if !ok {
+		return errors.New("not a member body from Walk")
+	}
+	return m.check()
+}
+
+// Walk is a later pass over an archive Verify accepted: it hands fn each
+// member but the manifest, in order, with its manifest row and its body, and
+// checks every body against m whether fn read it or not. Any difference from
+// m (a member changed, missing, added or out of order) ends the walk with an
+// error.
+func Walk(r io.Reader, m Manifest, fn func(Member, io.Reader) error) error {
+	zr, err := zstd.NewReader(r, zstd.WithDecoderConcurrency(1))
+	if err != nil {
+		return err
+	}
+	defer zr.Close()
+	tr := tar.NewReader(zr)
+	for i := 0; ; i++ {
+		hdr, err := tr.Next()
+		if err != nil {
+			return fmt.Errorf("archive unreadable: %w", err)
+		}
+		if hdr.Name == ManifestName {
+			if i != len(m.Members) {
+				return fmt.Errorf("the archive holds %d members, the manifest lists %d", i, len(m.Members))
+			}
+			return nil
+		}
+		if i >= len(m.Members) || hdr.Name != m.Members[i].Path {
+			return fmt.Errorf("member %q is not the manifest's next", hdr.Name)
+		}
+		body := &memberReader{r: tr, h: sha256.New(), want: m.Members[i]}
+		if err := fn(m.Members[i], body); err != nil {
+			return err
+		}
+		if err := body.check(); err != nil {
+			return err
+		}
+	}
 }

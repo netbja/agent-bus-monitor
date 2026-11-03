@@ -569,6 +569,15 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   disque ne survit pas au disque, alors pointez `backup.dir` vers un autre (un montage, un dossier
   synchronisé). `backup.keep` (7) archives sont gardées, jamais la plus récente qui couvre un
   projet. `agentbus backup list` les montre ; `--dry-run` montre ce qu'une exécution lirait et écrirait.
+  `agentbus restore <archive>` vérifie d'abord chaque membre contre le manifeste, puis refuse un
+  projet vivant (son bail dispatch ou conductor tenu, un service actif, son espace de travail herdr
+  ouvert, le processus d'un agent vivant : lancez `agentbus down <p>` et fermez son espace d'abord),
+  même avec `--force`. Les clés d'un projet sont restaurées en une seule étape, tout ou rien ; des
+  clés déjà présentes, ou un fichier différent, sont gardés sauf avec `--force` (qui demande
+  d'abord). Les clés d'exécution (agents, services, réveils, retenues) ne sont restaurées qu'avec
+  `--with-runtime` : `agentbus up <p>` les réécrit. `--dry-run` affiche l'action de chaque clé et
+  de chaque fichier ; `--redis-only` et `--files-only` restreignent. Restaurer sur un Redis plus
+  ancien que celui de l'archive est refusé : mettez d'abord le broker à jour.
 
 ---
 
@@ -679,6 +688,7 @@ l'exécute étape par étape.
 | Santé du projet | `agentbus --project mon-app health` / `health detail <id>` |
 | Tokens dépensés | `agentbus tokens` / `--project mon-app --by agent` |
 | Sauvegarder les projets de cet hôte | `agentbus backup` / `backup list` |
+| Restaurer une archive | `agentbus restore <archive> --dry-run`, puis sans |
 | Passations déclarées | `agentbus --project mon-app handoff` |
 | Recharger un agent | `agentbus --project mon-app reload coder --as <votre-nom>` |
 | Passer un rôle sur un profil de repli | `agentbus --project mon-app swap coder --profile <p>` / `--back` |

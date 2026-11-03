@@ -73,12 +73,21 @@ func Gather(projects []string, loc Locations) (files []Source, left []LeftOut, n
 // templateManifests reads the ROLES_TOML each tab's command names, in tab
 // order, once each. An unreadable template names none.
 func templateManifests(path string) []string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return manifestsOf(b)
+}
+
+// manifestsOf is templateManifests of a template's text.
+func manifestsOf(template []byte) []string {
 	var t struct {
 		Tabs []struct {
 			Command string `toml:"command"`
 		} `toml:"tabs"`
 	}
-	if _, err := toml.DecodeFile(path, &t); err != nil {
+	if _, err := toml.Decode(string(template), &t); err != nil {
 		return nil
 	}
 	var out []string

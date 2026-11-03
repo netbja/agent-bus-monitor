@@ -468,6 +468,17 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus backup", "agentbus backup --project agent-bus-monitor --dry-run", "agentbus backup list"},
 	},
 	{
+		Name: "restore", NoProject: true, Usage: []string{"restore <archive> [--project <p>]... [--redis-only | --files-only] [--with-runtime] [--dry-run] [--force [--yes]]"},
+		Summary: "restore an archive: every member verified first; never a live project; existing keys or differing files only with --force",
+		Flags: []cli.Flag{{Long: "redis-only", Help: "the Redis keys only"}, {Long: "files-only", Help: "the files only"},
+			{Long: "with-runtime", Help: "the runtime keys too (services, agents, wake records, holds...), for a person who knows why"},
+			{Long: "dry-run", Help: "print each key's and file's action; write nothing"},
+			{Long: "force", Help: "replace a project's keys (asked first) and differing files"},
+			{Long: "yes", Help: "answer --force's question yes (no terminal needed)"}},
+		Examples: []string{"agentbus restore ~/.local/share/agentbus/backups/agentbus-backup-h-20261103T120000Z.tar.zst --dry-run",
+			"agentbus restore <archive> --project myapp"},
+	},
+	{
 		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]"},
 		Summary:  "each setting's effective value and where it comes from (env, config.toml, busmon.toml, default); --project adds what that project's services see",
 		Flags:    []cli.Flag{fJSON},

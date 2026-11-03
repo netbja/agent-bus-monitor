@@ -1010,7 +1010,15 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `agentbus backup` (`backupcmd.go`, above the project-required exit; `--project` only from the command line, never
   `AGENT_BUS_PROJECT`): every project of the host (broker + templates), `backup.dir`/`backup.keep` (group Backup),
   `backup list`, `--dry-run`; secrets (`redis.env`, `services/<p>.env`) only stat'ed, left out and listed.
-  Retention never removes the newest archive covering a project.
+  Retention never removes the newest archive covering a project. `agentbus restore` (`restorecmd.go`,
+  `backup.Restore`): `Verify` first (member names must be clean relative paths), the broker's version not older than
+  the manifest's in any part, the project's `upLock`, then `projectLive` (dispatch/conductor lease, a service active,
+  the herdr workspace open, a registered agent's verified pid alive; a read that fails refuses) whatever `--force`;
+  `bus.RestoreProject` is one Lua script (leases absent, `--force`'s keys deleted, no archive key present, `RESTORE`
+  under `pcall`, every written key deleted on error); records only unless `--with-runtime` (unknown keys too); files
+  after a successful Redis part, each verified against the manifest before its rename (`Walk`, `Verified`), a
+  symlink's target replaced, the roles destination only an absolute clean `.../roles.toml` from the archive's
+  template; the host's settings only without `--project`.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each
