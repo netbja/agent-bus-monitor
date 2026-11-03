@@ -21,7 +21,9 @@ func TestNotifyKeys(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: not in the registry", name)
 		}
-		if k.Default != def || k.Env != "" || !k.MachineOnly || k.PersonOnly || k.Group() != GroupNotifications {
+		_, isList := def.(string)
+		isList = isList && (name == "notify.targets" || name == "notify.events" || name == "notify.quiet_exempt")
+		if k.Default != def || k.Env != "" || !k.MachineOnly || k.PersonOnly || k.Group() != GroupNotifications || k.List != isList {
 			t.Errorf("%s: %+v group %q", name, k, k.Group())
 		}
 	}
