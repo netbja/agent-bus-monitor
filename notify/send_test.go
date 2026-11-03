@@ -315,6 +315,9 @@ func TestRetryAfterAsAnHTTPDate(t *testing.T) {
 		{now.Add(2 * time.Hour).Format(http.TimeFormat), 60 * time.Second},
 		{now.Add(-time.Minute).Format(http.TimeFormat), 0},
 		{"nonsense", 2 * time.Second},
+		{"999999999999999999999999999999", 60 * time.Second}, // past any integer: the cap, not 2 s (reviewer-codex)
+		{"9300000000", 60 * time.Second},                     // past time.Duration: never a negative wait (foureyes)
+		{"61", 60 * time.Second},
 		{"", 2 * time.Second},
 	} {
 		r := newRecorder(t, 429, 200)

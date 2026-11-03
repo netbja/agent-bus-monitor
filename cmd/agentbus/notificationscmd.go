@@ -21,7 +21,8 @@ import (
 // project, no broker. status shows each target of notify.toml, whether it is
 // listed and its last send; test sends one message now and records its
 // outcome. Neither ever prints a URL, a topic, a token or a webhook. test is
-// the person's act: every role's tool rules deny it (it reaches a phone).
+// the person's act (it reaches a phone): it refuses a caller with
+// AGENT_BUS_AGENT set, and every role's tool rules deny its plain form.
 
 type notificationsDeps struct {
 	Getenv   func(string) string
@@ -79,6 +80,13 @@ func notifyStateDir(getenv func(string) string) string {
 }
 
 func notificationsTest(ctx context.Context, name string, d notificationsDeps, out, errw io.Writer) int {
+	// The person's act (foureyes, master): an agent caller is refused here,
+	// whatever the spelling of its command line, so no deny has to match
+	// prose that mentions the feature.
+	if self := d.Getenv("AGENT_BUS_AGENT"); self != "" {
+		fmt.Fprintf(errw, "agentbus notifications: a test message reaches the person's phone: the person's act, not %s's (run it from your own shell, without AGENT_BUS_AGENT)\n", self)
+		return 1
+	}
 	f := notify.Load(notify.Path(d.Getenv))
 	if f.Refused != "" {
 		fmt.Fprintln(errw, "agentbus notifications: notify.toml refused:", f.Refused)

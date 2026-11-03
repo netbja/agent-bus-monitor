@@ -228,3 +228,29 @@ func TestNotificationsUsage(t *testing.T) {
 		}
 	}
 }
+
+// notifications test is the person's act (foureyes, master): an agent caller,
+// AGENT_BUS_AGENT set, is refused by the command itself whatever the spelling
+// of its command line, and nothing is sent.
+func TestNotificationsTestRefusesAnAgent(t *testing.T) {
+	w := newNotifyWorld(t)
+	w.write(t, "notify.toml", w.notifyToml())
+	d := w.deps()
+	get := d.Getenv
+	d.Getenv = func(k string) string {
+		if k == "AGENT_BUS_AGENT" {
+			return "coder"
+		}
+		return get(k)
+	}
+	var out, errw bytes.Buffer
+	code := runNotifications(context.Background(), []string{"test", "phone"}, d, &out, &errw)
+	if code != 1 || !strings.Contains(errw.String(), "the person's") || len(w.got) != 0 {
+		t.Fatalf("exit %d %q, sent %d", code, errw.String(), len(w.got))
+	}
+	// status only reads: an agent may run it.
+	out.Reset()
+	if code := runNotifications(context.Background(), []string{"status"}, d, &out, &errw); code != 0 {
+		t.Fatalf("status exit %d", code)
+	}
+}

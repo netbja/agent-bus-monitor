@@ -20,9 +20,17 @@ func TestShippedManifestDeniesTheConfigFile(t *testing.T) {
 		}
 		for _, want := range []string{"Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)",
 			"Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)", "Write(~/.config/agentbus/notify.toml)",
-			"Bash(agentbus notifications test*)", "Bash(agentbus * notifications test*)"} {
+			"Bash(agentbus notifications test*)"} {
 			if !slices.Contains(r.Deny, want) {
 				t.Errorf("%s does not deny %s", role, want)
+			}
+		}
+		// No wildcard before the words (foureyes): a report or reply that
+		// mentions the feature stays allowed; the command refuses an agent
+		// itself (runNotifications).
+		for _, d := range r.Deny {
+			if strings.Contains(d, "* notifications") {
+				t.Errorf("%s denies prose: %s", role, d)
 			}
 		}
 	}

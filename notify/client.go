@@ -127,7 +127,13 @@ func (c *client) once(ctx context.Context, url string, header http.Header, body 
 // else (absent, nonsense) waits 2 s.
 func retryAfter(v string, now time.Time) time.Duration {
 	var d time.Duration
-	if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+	if allDigits(v) {
+		// Any number of seconds past the cap is the cap, however many digits
+		// (reviewer-codex): never an overflow, never a negative wait.
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil || n > uint64(maxRetryAfter/time.Second) {
+			return maxRetryAfter
+		}
 		d = time.Duration(n) * time.Second
 	} else if at, err := http.ParseTime(v); err == nil {
 		d = max(at.Sub(now), 0)
@@ -135,6 +141,18 @@ func retryAfter(v string, now time.Time) time.Duration {
 		return serverRetries[0]
 	}
 	return min(d, maxRetryAfter)
+}
+
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // transportReason is a transport error in words that carry no URL nor host:
