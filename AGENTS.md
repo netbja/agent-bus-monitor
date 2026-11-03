@@ -50,6 +50,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 ## Open questions and historical checkpoints
 
 - [Adoption and recovery decisions still to verify](docs/memory/open-questions/2026-09-19-adoption.md)
+- [Three ideas from DeepSeek's Super-Agent prototype, waiting for the person (open)](docs/memory/open-questions/2026-11-03-deepseek-superagent-ideas.md)
 - [Journal index](docs/memory/journal/INDEX.md)
 
 Current state must be reread from its owner: Git/PR for merge, runtime for deployed
