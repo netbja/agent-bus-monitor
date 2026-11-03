@@ -463,7 +463,9 @@ func restoreSecrets(ctx context.Context, mem Member, body io.Reader, o RestoreOp
 		switch p, isEnv := strings.CutPrefix(name, "services/"); {
 		case name == "redis.env" && len(o.Projects) == 0:
 			dest = d.Loc.PasswordFile
-		case name == "redis.env":
+		case name == notifyName && len(o.Projects) == 0:
+			dest = d.Loc.notifyFile()
+		case name == "redis.env" || name == notifyName:
 			fmt.Fprintf(out, "secret %s: skip (host setting: restored only without --project)\n", name)
 			return nil
 		case isEnv && strings.HasSuffix(p, ".env") && bus.ValidName(strings.TrimSuffix(p, ".env")) && ok[strings.TrimSuffix(p, ".env")]:

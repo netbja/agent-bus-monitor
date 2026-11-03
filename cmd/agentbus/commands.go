@@ -488,6 +488,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus config", "agentbus config --project agent-bus-monitor"},
 	},
 	{
+		Name: "notifications", NoProject: true, Usage: []string{"notifications status", "notifications test [<target>]"},
+		Summary:  "the notification targets of notify.toml (never a URL) and their last sends; test sends one message now (the person's act)",
+		Examples: []string{"agentbus notifications status", "agentbus notifications test phone"},
+	},
+	{
 		Name: "identity", NoProject: true, Usage: []string{"identity [set <name>]"},
 		Summary:  "your name as a person in busmon",
 		Examples: []string{"agentbus identity set charlie"},

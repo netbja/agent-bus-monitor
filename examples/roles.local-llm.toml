@@ -40,6 +40,7 @@ deny = [
   "Read(**/.env.staging.local)", "Read(**/.env.preview.local)",
   "Read(**/*.pem)", "Read(**/*.key)", "Read(**/id_rsa*)", "Read(**/id_ed25519*)",
   "Read(~/.ssh/**)", "Read(**/*keypair*.json)", "Read(**/wallet*.json)",
+  "Read(~/.config/agentbus/notify.toml)",
 ]
 
 [roles.local]

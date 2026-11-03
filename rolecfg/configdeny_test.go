@@ -18,7 +18,9 @@ func TestShippedManifestDeniesTheConfigFile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)"} {
+		for _, want := range []string{"Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)",
+			"Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)", "Write(~/.config/agentbus/notify.toml)",
+			"Bash(agentbus notifications test*)", "Bash(agentbus * notifications test*)"} {
 			if !slices.Contains(r.Deny, want) {
 				t.Errorf("%s does not deny %s", role, want)
 			}
@@ -39,7 +41,8 @@ func TestConfigDenies(t *testing.T) {
 	}{
 		{"default", map[string]string{"HOME": "/home/u"}, nil, false},
 		{"xdg", map[string]string{"HOME": "/home/u", "XDG_CONFIG_HOME": "/x"},
-			[]string{"Edit(//x/agentbus/config.toml)", "Write(//x/agentbus/config.toml)"}, false},
+			[]string{"Edit(//x/agentbus/config.toml)", "Write(//x/agentbus/config.toml)",
+				"Read(//x/agentbus/notify.toml)", "Edit(//x/agentbus/notify.toml)", "Write(//x/agentbus/notify.toml)"}, false},
 		{"xdg = the default", map[string]string{"HOME": "/home/u", "XDG_CONFIG_HOME": "/home/u/.config"}, nil, false},
 		{"relative xdg", map[string]string{"HOME": "/home/u", "XDG_CONFIG_HOME": "rel"}, nil, true},
 		{"no home", map[string]string{}, nil, true},
@@ -63,7 +66,7 @@ func TestLaunchDeniesTheConfigFileWhereItIs(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := strings.Join(f.execed, " ")
-	for _, want := range []string{"Edit(//x/agentbus/config.toml)", "Write(//x/agentbus/config.toml)"} {
+	for _, want := range []string{"Edit(//x/agentbus/config.toml)", "Write(//x/agentbus/config.toml)", "Read(//x/agentbus/notify.toml)"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("launch lacks %s: %s", want, args)
 		}

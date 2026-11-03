@@ -13,6 +13,8 @@ import (
 // Claude Code's absolute form, "//" and the path. A path that cannot be
 // resolved (no HOME, a relative XDG_CONFIG_HOME) adds nothing, and note says
 // so. Defence in depth: an agent with a shell can still write the file.
+// notify.toml beside it (the notification targets' secrets, notifications
+// spec) is denied Read as well.
 func ConfigDenies(getenv func(string) string) (denies []string, note string) {
 	if xdg := getenv("XDG_CONFIG_HOME"); xdg != "" && !filepath.IsAbs(xdg) {
 		return nil, "note: XDG_CONFIG_HOME is not absolute: only the shipped deny of ~/.config/agentbus/config.toml applies"
@@ -24,6 +26,7 @@ func ConfigDenies(getenv func(string) string) (denies []string, note string) {
 	if home := getenv("HOME"); filepath.IsAbs(home) && path == filepath.Join(home, ".config", "agentbus", "config.toml") {
 		return nil, ""
 	}
-	abs := "/" + path
-	return []string{"Edit(" + abs + ")", "Write(" + abs + ")"}, ""
+	abs, notify := "/"+path, "/"+filepath.Join(filepath.Dir(path), "notify.toml")
+	return []string{"Edit(" + abs + ")", "Write(" + abs + ")",
+		"Read(" + notify + ")", "Edit(" + notify + ")", "Write(" + notify + ")"}, ""
 }

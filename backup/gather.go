@@ -24,6 +24,18 @@ type Locations struct {
 	StateDir     func(project string) string // a project's state directory
 }
 
+// notifyName is the notification targets' file (notifications spec): its
+// topics, tokens and webhooks are secrets, kept only in secrets.age.
+const notifyName = "notify.toml"
+
+// notifyFile is notify.toml beside config.toml ("" without a config dir).
+func (loc Locations) notifyFile() string {
+	if loc.ConfigDir == "" {
+		return ""
+	}
+	return filepath.Join(loc.ConfigDir, notifyName)
+}
+
 // configFiles are the person's settings kept in an archive.
 var configFiles = []string{"config.toml", "busmon.toml", "quota.toml", "models.toml"}
 
@@ -66,6 +78,9 @@ func Gather(projects []string, loc Locations) (files []Source, left []LeftOut, n
 	}
 	if exists(loc.PasswordFile) {
 		left = append(left, LeftOut{Path: "redis.env", Why: secretWhy})
+	}
+	if exists(loc.notifyFile()) {
+		left = append(left, LeftOut{Path: notifyName, Why: secretWhy})
 	}
 	for _, p := range projects {
 		if exists(loc.EnvFile(p)) {

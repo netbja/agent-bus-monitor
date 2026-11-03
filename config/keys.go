@@ -348,6 +348,35 @@ var Keys = []*Key{
 		file: fileEnvNames},
 	{Name: "backup.after_timeout", Kind: Duration, Default: 30 * time.Minute, ReadBy: "agentbus backup, dispatch", MachineOnly: true, PersonOnly: true,
 		file: fileDuration(false)},
+	// Notifications (spec 2026-11-03-notifications-design.md): the host's,
+	// config.toml only, none a secret (the targets' URLs are in notify.toml).
+	{Name: "notify.on", Kind: Bool, Default: false, ReadBy: "dispatch", MachineOnly: true, file: fileBool},
+	{Name: "notify.targets", Kind: String, Default: "", ReadBy: "dispatch, agentbus notifications", MachineOnly: true,
+		file: fileNameList("want a list of target names from notify.toml", func(s string) bool { return validName(s) })},
+	{Name: "notify.events", Kind: String, Default: "decision,stall,fail,blocked,prompt", ReadBy: "dispatch", MachineOnly: true,
+		file: fileNameList("want a list of: "+strings.Join(NotifyEvents, ", "), notifyEvent)},
+	{Name: "notify.detail", Kind: String, Default: "summary", ReadBy: "dispatch", MachineOnly: true,
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "summary" || s == "full") {
+				return s, ""
+			}
+			return nil, "want summary or full"
+		}},
+	{Name: "notify.delay", Kind: Duration, Default: 2 * time.Minute, ReadBy: "dispatch", MachineOnly: true, file: fileDuration(true)},
+	{Name: "notify.max_per_hour", Kind: Int, Default: 6, ReadBy: "dispatch", MachineOnly: true, file: filePositiveInt},
+	{Name: "notify.quiet", Kind: String, Default: "", ReadBy: "dispatch", MachineOnly: true,
+		file: func(v any) (any, string) {
+			s, ok := v.(string)
+			if ok && s == "" {
+				return s, ""
+			}
+			if _, valid := ParseQuiet(s); ok && valid {
+				return s, ""
+			}
+			return nil, "want HH:MM-HH:MM (local time), or \"\" for none"
+		}},
+	{Name: "notify.quiet_exempt", Kind: String, Default: "fail,stall", ReadBy: "dispatch", MachineOnly: true,
+		file: fileNameList("want a list of: "+strings.Join(NotifyEvents, ", "), notifyEvent)},
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},

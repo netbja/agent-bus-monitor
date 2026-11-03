@@ -7,17 +7,18 @@ package config
 type Group string
 
 const (
-	GroupDisplay   Group = "Display"
-	GroupAttention Group = "Attention"
-	GroupIdentity  Group = "Identity"
-	GroupServices  Group = "Services"
-	GroupHealth    Group = "Health"
-	GroupBackup    Group = "Backup"
-	GroupBusCaps   Group = "Bus caps"
+	GroupDisplay       Group = "Display"
+	GroupAttention     Group = "Attention"
+	GroupIdentity      Group = "Identity"
+	GroupServices      Group = "Services"
+	GroupHealth        Group = "Health"
+	GroupBackup        Group = "Backup"
+	GroupNotifications Group = "Notifications"
+	GroupBusCaps       Group = "Bus caps"
 )
 
 // Groups is the page's order.
-var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupServices, GroupHealth, GroupBackup, GroupBusCaps}
+var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupNotifications, GroupServices, GroupHealth, GroupBackup, GroupBusCaps}
 
 // groups is each key's group; TestEveryKeyHasItsGroup fails on a key without.
 var groups = map[string]Group{
@@ -36,6 +37,8 @@ var groups = map[string]Group{
 	"health.runaway.growth_span": GroupHealth, "health.runaway.screen_repeats": GroupHealth,
 	"backup.schedule": GroupBackup, "backup.dir": GroupBackup, "backup.keep": GroupBackup, "backup.warn_after": GroupBackup, "backup.age_recipient": GroupBackup,
 	"backup.after_command": GroupBackup, "backup.after_env": GroupBackup, "backup.after_timeout": GroupBackup,
+	"notify.on": GroupNotifications, "notify.targets": GroupNotifications, "notify.events": GroupNotifications, "notify.detail": GroupNotifications,
+	"notify.delay": GroupNotifications, "notify.max_per_hour": GroupNotifications, "notify.quiet": GroupNotifications, "notify.quiet_exempt": GroupNotifications,
 	"bus.report_max": GroupBusCaps, "bus.report_full_max": GroupBusCaps, "bus.verdict_max": GroupBusCaps,
 }
 

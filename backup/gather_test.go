@@ -44,6 +44,7 @@ command = "env 'ROLES_TOML=`+repo+`/roles.toml' /r/scripts/agent-launch coder de
 	write(filepath.Join(state, "demo", "dispatch.restarts"), "1\n", 0o600)
 	// Secrets, unreadable: opening one would fail the run.
 	write(filepath.Join(cfg, "redis.env"), `REDIS_PASSWORD="pw-SECRET"`+"\n", 0o000)
+	write(filepath.Join(cfg, "notify.toml"), "[ntfy.phone]\ntopic = \"pw-SECRET-topic\"\n", 0o000)
 	write(filepath.Join(cfg, "services", "demo.env"), "REDIS_PASSWORD=pw-SECRET\n", 0o000)
 	return Locations{
 		ConfigDir:    cfg,
@@ -81,7 +82,7 @@ func TestGather(t *testing.T) {
 	for _, l := range left {
 		leftOut = append(leftOut, l.Path+": "+l.Why)
 	}
-	if strings.Join(leftOut, "; ") != "redis.env: secret (use --secrets); services/demo.env: secret (use --secrets)" {
+	if strings.Join(leftOut, "; ") != "redis.env: secret (use --secrets); notify.toml: secret (use --secrets); services/demo.env: secret (use --secrets)" {
 		t.Fatalf("left out %q", leftOut)
 	}
 }
@@ -110,7 +111,7 @@ func TestRunNeverReadsASecret(t *testing.T) {
 		}
 	}
 	m, err := Verify(bytes.NewReader(b))
-	if err != nil || len(m.LeftOut) != 2 {
+	if err != nil || len(m.LeftOut) != 3 {
 		t.Fatalf("manifest left out %+v, %v", m.LeftOut, err)
 	}
 }

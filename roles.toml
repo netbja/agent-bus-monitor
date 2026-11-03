@@ -112,6 +112,13 @@ deny = [
   # alone: no role edits that file (the launch adds the path XDG_CONFIG_HOME
   # gives it). Defence in depth: a shell can still write it.
   "Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)",
+  # notify.toml holds the notification targets' secrets (a topic, a token, a
+  # webhook): no role reads or writes it, and no role sends a test message,
+  # which reaches the person's phone (notifications spec). The launch adds
+  # the path XDG_CONFIG_HOME gives it. Defence in depth: a shell can still
+  # read it.
+  "Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)", "Write(~/.config/agentbus/notify.toml)",
+  "Bash(agentbus notifications test*)", "Bash(agentbus * notifications test*)",
 ]
 
 [roles.master]

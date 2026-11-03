@@ -214,8 +214,12 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 var reloadAsDeny = []string{"Bash(agentbus reload *--as*)", "Bash(agentbus * reload *--as*)"}
 
 // configDeny is the shared deny of the person's config.toml (backup spec:
-// backup.after_command is the person's alone).
-var configDeny = []string{"Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)"}
+// backup.after_command is the person's alone) and of notify.toml, its
+// targets' secrets, and the test send that reaches a phone (notifications
+// spec).
+var configDeny = []string{"Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)",
+	"Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)", "Write(~/.config/agentbus/notify.toml)",
+	"Bash(agentbus notifications test*)", "Bash(agentbus * notifications test*)"}
 
 // masterUpRules are master's own rules in the shipped manifest (Charlie,
 // 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
