@@ -431,5 +431,9 @@ func TestPaceSentenceAgedReading(t *testing.T) {
 	ws := []bus.BudgetWindow{{Name: "5h", UsedPct: 50, ResetsAt: now.Add(4 * time.Hour).Unix(), ObservedAt: now.Add(-2 * time.Hour).UnixMilli()}}
 	if got, want := paceSentence(bus.BudgetSnapshot{Windows: ws}, now), "Reading 2h old: no forecast."; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	} // A window of unknown length has no pace, but its age is still said (reviewer-codex).
+	custom := []bus.BudgetWindow{{Name: "custom", UsedPct: 50, ResetsAt: now.Add(4 * time.Hour).Unix(), ObservedAt: now.Add(-2 * time.Hour).UnixMilli()}}
+	if got, want := paceSentence(bus.BudgetSnapshot{Windows: custom}, now), "Reading 2h old: no forecast."; got != want {
+		t.Errorf("unknown length: got %q, want %q", got, want)
 	}
 }

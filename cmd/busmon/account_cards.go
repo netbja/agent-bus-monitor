@@ -120,12 +120,15 @@ func paceSentence(b bus.BudgetSnapshot, now time.Time) string {
 	aged := ""
 	var limitAt, resetAt, spentUntil time.Time
 	for _, w := range b.Windows {
-		gone := windowElapsedPct(w, now)
-		if windowUnobserved(w) || gone <= 0 {
+		if windowUnobserved(w) {
 			continue
 		}
-		if windowAged(w, b, now) {
+		if windowAged(w, b, now) { // its age is said even when it has no pace (reviewer-codex)
 			aged = windowAge(w, b, now)
+			continue
+		}
+		gone := windowElapsedPct(w, now)
+		if gone <= 0 {
 			continue
 		}
 		judged = true
