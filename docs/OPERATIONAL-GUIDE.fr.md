@@ -607,6 +607,57 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   récente le couvre, faite à la main ou non ; un échec faute d'`age` ne s'efface qu'avec une archive
   qui contient les secrets), ou quand `backup.after_command` a échoué pour sa dernière archive. Son
   détail nomme le dossier lu. Sentinel ne lance jamais ni sauvegarde ni restauration.
+- **Notifications loin du bureau.** Le service dispatch peut vous prévenir sur votre téléphone ou
+  votre bureau de ce qui vous attend ([spec](superpowers/specs/2026-11-03-notifications-design.md)) :
+  une décision (une question ouverte, un agent déclaré `waiting`, une tâche du plan pour vous), un
+  arrêt de l'équipe, une vérification de santé en échec, un avis que vous seul pouvez traiter, un
+  panneau bloqué sur l'invite de son client ; un avertissement « pour vous » seulement si vous
+  ajoutez `for-you` à `notify.events`. Les cibles sont dans `~/.config/agentbus/notify.toml`, que
+  vous écrivez vous-même (agentbus jamais), en mode `0600` dans un dossier que personne d'autre ne
+  peut écrire : un topic, un jeton ou un webhook est un secret, il ne va donc jamais dans
+  `config.toml`, sur le bus ni dans un journal, et aucun agent ne peut lire ce fichier.
+
+  ```toml
+  [ntfy.phone]
+  topic = "agentbus-7f3c9a1b2d"      # 12+ lettres, chiffres, - ou _ : sur un serveur public, son nom est son seul verrou
+  # server = "https://ntfy.sh"       # le défaut ; votre propre serveur ici
+  # token = "tk_..."                 # jeton d'accès, facultatif
+  # self_hosted = true               # votre serveur : texte complet permis (jamais pour ntfy.sh)
+
+  [discord.team]
+  webhook = "https://discord.com/api/webhooks/..."
+
+  [desktop.here]                     # notify-send sur cet hôte
+  ```
+
+  Puis dans `config.toml` (ou la page C de busmon, groupe Notifications) :
+
+  ```toml
+  [notify]
+  on = true
+  targets = ["phone", "here"]
+  # events = ["decision", "stall", "fail", "blocked", "prompt"]   # le défaut ; ajoutez "for-you"
+  # detail = "summary"           # ou "full" : le texte d'un agent, nettoyé, vers une cible privée seulement
+  # delay = "2m"                 # ce que vous répondez au bureau dans ce délai ne sonne jamais
+  # max_per_hour = 6             # par cible, pour tout l'hôte ; fail et stall jamais retenus
+  # quiet = "22:00-07:30"        # heure locale ; retenu, puis envoyé en un message à la fin
+  # quiet_exempt = ["fail", "stall"]
+  ```
+
+  `summary` n'envoie aucun texte écrit par un agent (« master asks a question »). `full` l'ajoute,
+  nettoyé des URL, chemins et e-mails et coupé à 120 caractères, mais seulement vers le bureau ou
+  vers un serveur ntfy que vous marquez `self_hosted = true` : cette marque est votre parole que le
+  serveur est à vous. ntfy.sh et Discord reçoivent toujours le résumé. Le premier passage pour une
+  cible n'envoie rien de ce qui existait déjà (c'est dans busmon) ; ensuite chaque nouvel
+  événement part une fois par cible, regroupé en un message par passage. Tant qu'une cible bureau
+  envoie les invites, la sonnerie d'invite du dispatcher se tait : une invite ne sonne jamais deux
+  fois. `agentbus notifications status` montre chaque cible, si elle est listée et son dernier
+  envoi (jamais une URL) ; `agentbus notifications test [<cible>]` envoie un message tout de suite.
+  Le test est le vôtre : il est refusé aux agents, donc sous Linux il lit d'abord les agents du
+  broker et refuse si le broker est arrêté. La vérification `notifications` (toutes les 5 minutes,
+  pour vous) avertit quand le fichier est ouvert aux autres, qu'une cible listée manque ou est
+  refusée, qu'un envoi a échoué, ou qu'une source du projet ne peut pas être lue (rien n'est alors
+  envoyé). Répondre depuis le téléphone n'est pas possible : le double sens est une spec à venir.
 
 ---
 
@@ -717,6 +768,7 @@ l'exécute étape par étape.
 | Santé du projet | `agentbus --project mon-app health` / `health detail <id>` |
 | Tokens dépensés | `agentbus tokens` / `--project mon-app --by agent` |
 | Sauvegarder les projets de cet hôte | `agentbus backup` / `backup list` |
+| Cibles de notification, un message de test | `agentbus notifications status` / `notifications test [<cible>]` |
 | Restaurer une archive | `agentbus restore <archive> --dry-run`, puis sans |
 | Passations déclarées | `agentbus --project mon-app handoff` |
 | Recharger un agent | `agentbus --project mon-app reload coder --as <votre-nom>` |

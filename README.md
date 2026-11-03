@@ -792,6 +792,21 @@ agent-launch coder myproject --resume <session-id>
 Never run `claude --resume` by hand. Session resume through the launcher is Claude Code only;
 other clients are refused until their resume flags are defined.
 
+### Notifications on your phone and desktop
+
+The dispatch service can tell you, away from the desk, what waits for you: a decision, a team
+stall, a failing health check, a notice only you can act on, a pane stuck on its client's prompt
+([spec](docs/superpowers/specs/2026-11-03-notifications-design.md)). Targets are ntfy (ntfy.sh by
+default, or your own server), Discord and the desktop (`notify-send`), each a table in
+`~/.config/agentbus/notify.toml`, a file you write yourself, `0600`, never read by an agent: its
+topics, tokens and webhooks are secrets. `notify.on`, `notify.targets` and the rest are settings
+(`config.toml` or busmon's C page). A summary is sent by default, no agent's text; `detail =
+"full"` reaches only the desktop or a ntfy server you mark `self_hosted = true`. Each event is sent
+once per target, after a 2-minute delay, grouped, at most 6 messages an hour per target (fail and
+stall excepted), held in quiet hours if you set them. `agentbus notifications status` and
+`notifications test [<target>]`; health `notifications` says when a target fails. The
+[operational guide](docs/OPERATIONAL-GUIDE.md#scenario-d-a-team-that-runs-for-days) has the tables to copy.
+
 ### Keeping a team going: context, hand-offs, reloads, quotas
 
 A team that runs for days meets full contexts, client updates and quota limits. agent-bus
@@ -981,7 +996,8 @@ the human dashboard.
 > line, never a message; master's manual pane injection remains the fallback while no dispatcher
 > runs.** Pane ids are self-registered (or bound with `agentbus bind`) and pid-verified, not hard-coded.
 
-**Separate notification path — NOT the bus.** A Claude Code `Stop` hook in
+**Separate notification path — NOT the bus.** (agent-bus now has its own notifier,
+[above](#notifications-on-your-phone-and-desktop); this hook predates it.) A Claude Code `Stop` hook in
 `myproject/.claude/settings.local.json` can POST to a notification webhook of your own (on the
 remote box, say) that pings you on your phone when a task stops. Such a webhook never touches
 Redis, so that path is **independent of the agent bus**: its traffic does not appear on the bus,
@@ -1001,7 +1017,8 @@ Your preferences live in one file, `~/.config/agentbus/config.toml` (or under `$
 [spec](docs/superpowers/specs/2026-10-29-config-file-design.md)), below the environment and above
 the defaults; `agentbus config` shows each setting's value and where it comes from, every warning,
 and the local model endpoints (`[llm.<name>]`: `url`, `model`, and `remote = true` for a host that
-is not loopback; never a key or token). No secret and no broker connection go in that file.
+is not loopback; never a key or token). No secret and no broker connection go in that file: the
+notification targets' topics, tokens and webhooks are in `notify.toml` beside it, yours alone.
 
 The freshness bar of the Agents table empties over `staleAfter` (10m), a constant at the top
 of `cmd/busmon/main.go`.

@@ -1051,6 +1051,31 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   archive; the age case only by one with secrets, read from `coverage.json`'s `secrets`), on its latest
   `after_command` run failed while one is set; unknown when the folder or the record cannot be read; the detail names
   the folder.
+- **Notifications** (spec `docs/superpowers/specs/2026-11-03-notifications-design.md`, package `notify/`): the
+  dispatch service's chore (`cmd/agentbus/notifychore.go`, `dispatch.NotifyConfig`, 30 s, only while
+  `HoldsDispatch`) tells the person what waits, through ntfy, Discord and the desktop. Targets and their secrets are
+  in `notify.toml` beside config.toml (`notify.Load`: refused whole when open to others or not the person's, its folder
+  writable by no one else, opened once `O_NOFOLLOW` and judged by fstat; per target https, http only `insecure` on a
+  private host, ntfy.sh by default and never `self_hosted`, a topic of 12-64 safe characters, Discord's hosts only;
+  warnings carry no value; a `Target` prints only kind and name). Never written by agentbus; every role denies its
+  Read/Edit/Write and `Bash(agentbus notifications test*)` (no wildcard before the words: it would deny prose), and the
+  command refuses `AGENT_BUS_AGENT` or a process under a registered agent's verified pid in any project (so on Linux
+  it needs the broker); a backup secret. The settings are `notify.*` (group Notifications, config.toml only, list keys
+  `Key.List`). Events (`notifyfacts.go`, never an agent's text in a summary line): open asks, `waiting`
+  declarations, plan tasks waiting for the person (episode `plan:<id>`, first seen in memory), team-stall at fail
+  (a stall only; the stall guard's own notice is never an event), other fails, for-you warns, `for=person` notices,
+  prompts by the desktop ring's rule. `notify.Decide` is pure: a target's first pass records everything standing as
+  `baseline` and sends nothing; then the due events without a field (delay, kinds, pause = fail only, quiet hours =
+  `quiet_exempt` only, past `max_per_hour` fail/stall only), one message per target, `full` detail (`notify.Scrub`) only
+  to a private target (desktop or `self_hosted`); fields pruned when their fact or target is gone, never by age.
+  `{p}:notified` (`bus/notified.go`, fenced; runtime, ignored by `HasKeysBesidesDispatch`) holds kind, episode, target
+  and time only; a field is written after that target's success (at least once). A pass with any failed read sends
+  nothing and records the source in `<state>/notify-last.json` (host-wide, under the flock `notify.lock`: latest 20
+  outcomes per target apart from the counted hour; a send's hour reserved under the lock, given back if it fails).
+  The dispatcher's own prompt ring is skipped (`PromptConfig.Skip`) only for an episode that began after a listed
+  desktop target's baseline. Health `notifications` (5 min, for you, never fail); busmon's C page shows the group and
+  one muted line per target, never its URL. One HTTP client: no redirect, no proxy, 10 s, a 429 waited once (seconds
+  or a date, at most 60 s), a 5xx retried twice; errors name the target and status, never the URL or body.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
   `cmd/busmon/main.go`) and never infers `offline`. Agents are one-shot CLI calls, so each
