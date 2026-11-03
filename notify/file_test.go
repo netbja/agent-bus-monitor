@@ -301,3 +301,57 @@ func TestSenderForEachKind(t *testing.T) {
 		}
 	}
 }
+
+func TestFolderOpenToOthersRefused(t *testing.T) {
+	p := writeFile(t, goodFile, 0o600)
+	if err := os.Chmod(filepath.Dir(p), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	f := Load(p)
+	if f.Refused == "" || len(f.Targets) != 0 || !strings.Contains(f.Refused, "folder") {
+		t.Fatalf("%+v", f)
+	}
+	os.Chmod(filepath.Dir(p), 0o755) // readable by others, writable by none: taken
+	if f := Load(p); f.Refused != "" {
+		t.Fatalf("0755 folder: %q", f.Refused)
+	}
+}
+
+// A symlink in a folder others may write is refused, whatever it points
+// to: the link itself could be swapped.
+func TestSymlinkInAnOpenFolderRefused(t *testing.T) {
+	real := writeFile(t, goodFile, 0o600)
+	dir := t.TempDir()
+	link := filepath.Join(dir, "notify.toml")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	os.Chmod(dir, 0o777)
+	defer os.Chmod(dir, 0o700)
+	if f := Load(link); f.Refused == "" {
+		t.Fatalf("%+v", f)
+	}
+}
+
+// The file judged is the file read: a swap after the check reads the
+// checked file or nothing (one open, fstat on its descriptor).
+func TestLoadJudgesTheDescriptorItReads(t *testing.T) {
+	p := writeFile(t, goodFile, 0o600)
+	swapped := false
+	afterOpen = func() {
+		if !swapped {
+			swapped = true
+			other := filepath.Join(filepath.Dir(p), "other.toml")
+			os.WriteFile(other, []byte("[desktop.evil]\n"), 0o644)
+			os.Rename(other, p)
+		}
+	}
+	defer func() { afterOpen = func() {} }()
+	f := Load(p)
+	if f.Refused != "" || len(f.Targets) != 4 {
+		t.Fatalf("read another file than the one opened: %+v", f)
+	}
+	if _, ok := f.Target("evil"); ok {
+		t.Fatal("the swapped file was read")
+	}
+}

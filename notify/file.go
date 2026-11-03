@@ -3,6 +3,7 @@ package notify
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/url"
@@ -118,13 +119,20 @@ func (f *File) Target(name string) (Target, bool) {
 	return Target{}, false
 }
 
-// Load reads notify.toml at path. A missing file is an empty one.
+// afterOpen is a test's hook between the open and the read.
+var afterOpen = func() {}
+
+// Load reads notify.toml at path. A missing file is an empty one. A symlink
+// is resolved once; the link's folder and the file's folder must be the
+// person's and writable by no one else, and the file is opened once
+// (O_NOFOLLOW), judged by fstat on that descriptor and read from it, so the
+// file judged is the file read (reviewer-codex).
 func Load(path string) *File {
 	f := &File{}
 	if path == "" {
 		return f
 	}
-	info, err := os.Stat(path) // a symlink is followed, then judged by its target
+	link, err := os.Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return f
 	}
@@ -133,13 +141,48 @@ func Load(path string) *File {
 		f.Refused = "cannot be read"
 		return f
 	}
+	real := path
+	if link.Mode()&fs.ModeSymlink != 0 {
+		if why := folderRefusal(filepath.Dir(path)); why != "" {
+			f.Refused = why
+			return f
+		}
+		if real, err = filepath.EvalSymlinks(path); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				f.Exists = false
+				return f
+			}
+			f.Refused = "cannot be read"
+			return f
+		}
+	}
+	if why := folderRefusal(filepath.Dir(real)); why != "" {
+		f.Refused = why
+		return f
+	}
+	fd, err := os.OpenFile(real, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		f.Refused = "cannot be read"
+		return f
+	}
+	defer fd.Close()
+	afterOpen()
+	info, err := fd.Stat()
+	if err != nil {
+		f.Refused = "cannot be read"
+		return f
+	}
 	if why := fileRefusal(info); why != "" {
 		f.Refused = why
 		return f
 	}
-	data, err := os.ReadFile(path)
+	data, err := io.ReadAll(io.LimitReader(fd, maxFile+1))
 	if err != nil {
 		f.Refused = "cannot be read"
+		return f
+	}
+	if len(data) > maxFile {
+		f.Refused = "over 64 KiB"
 		return f
 	}
 	var raw map[string]any
@@ -155,19 +198,44 @@ func Load(path string) *File {
 	return f
 }
 
+// maxFile is the most notify.toml may hold.
+const maxFile = 64 << 10
+
 // fileRefusal is why a file is refused whole ("" = read it): not a regular
 // file, not the person's, or open to anyone else.
 func fileRefusal(info fs.FileInfo) string {
 	if !info.Mode().IsRegular() {
 		return "not a regular file"
 	}
-	if st, ok := info.Sys().(*syscall.Stat_t); ok && int(st.Uid) != os.Getuid() {
+	if !ownedByMe(info) {
 		return "not owned by you"
 	}
 	if info.Mode().Perm()&0o077 != 0 {
 		return "readable or writable by others: run chmod 600 on notify.toml"
 	}
 	return ""
+}
+
+// folderRefusal is why the folder holding notify.toml (or its link) is
+// refused: not the person's, or writable by anyone else, who could swap the
+// file.
+func folderRefusal(dir string) string {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "its folder cannot be read"
+	}
+	if !ownedByMe(info) {
+		return "its folder is not yours"
+	}
+	if info.Mode().Perm()&0o022 != 0 {
+		return "its folder is writable by others: run chmod 700 on it"
+	}
+	return ""
+}
+
+func ownedByMe(info fs.FileInfo) bool {
+	st, ok := info.Sys().(*syscall.Stat_t)
+	return !ok || int(st.Uid) == os.Getuid()
 }
 
 var (

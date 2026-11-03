@@ -65,7 +65,7 @@ func (s *noSleep) sleep(ctx context.Context, d time.Duration) error {
 }
 
 func testClient(s *noSleep) *client {
-	return &client{http: plainHTTP(nil), sleep: s.sleep}
+	return &client{http: plainHTTP(nil), sleep: s.sleep, now: time.Now}
 }
 
 var sample = Message{Project: "demo", Title: "demo · 2 waiting for you",
@@ -302,5 +302,37 @@ func TestDesktopWithoutNotifySend(t *testing.T) {
 	err := NewDesktop("here", nil).Send(context.Background(), sample)
 	if err == nil || !strings.Contains(err.Error(), "no notify-send on PATH") || !strings.Contains(err.Error(), "here") {
 		t.Fatalf("err %v", err)
+	}
+}
+
+func TestRetryAfterAsAnHTTPDate(t *testing.T) {
+	now := time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		header string
+		want   time.Duration
+	}{
+		{now.Add(30 * time.Second).Format(http.TimeFormat), 30 * time.Second},
+		{now.Add(2 * time.Hour).Format(http.TimeFormat), 60 * time.Second},
+		{now.Add(-time.Minute).Format(http.TimeFormat), 0},
+		{"nonsense", 2 * time.Second},
+		{"", 2 * time.Second},
+	} {
+		r := newRecorder(t, 429, 200)
+		h := c.header
+		r.extra = func(w http.ResponseWriter, n int) {
+			if h != "" {
+				w.Header().Set("Retry-After", h)
+			}
+		}
+		sl := &noSleep{}
+		cl := testClient(sl)
+		cl.now = func() time.Time { return now }
+		s := &ntfy{name: "phone", url: r.srv.URL + "/t", c: cl}
+		if err := s.Send(context.Background(), sample); err != nil {
+			t.Fatal(err)
+		}
+		if len(sl.waits) != 1 || sl.waits[0] != c.want {
+			t.Errorf("Retry-After %q: waits %v, want %v", c.header, sl.waits, c.want)
+		}
 	}
 }

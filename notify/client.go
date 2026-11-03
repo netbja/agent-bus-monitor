@@ -24,6 +24,7 @@ var serverRetries = []time.Duration{2 * time.Second, 8 * time.Second}
 type client struct {
 	http  *http.Client
 	sleep func(ctx context.Context, d time.Duration) error
+	now   func() time.Time // reads a Retry-After date
 }
 
 // directTransport is the default transport without a proxy: a message goes
@@ -45,7 +46,7 @@ func plainHTTP(rt http.RoundTripper) *http.Client {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-func newClient() *client { return &client{http: plainHTTP(nil), sleep: sleepCtx} }
+func newClient() *client { return &client{http: plainHTTP(nil), sleep: sleepCtx, now: time.Now} }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
@@ -114,21 +115,26 @@ func (c *client) once(ctx context.Context, url string, header http.Header, body 
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10)) // never kept: it may echo the URL
-	return resp.StatusCode, retryAfter(resp.Header.Get("Retry-After")), nil
+	now := time.Now
+	if c.now != nil {
+		now = c.now
+	}
+	return resp.StatusCode, retryAfter(resp.Header.Get("Retry-After"), now()), nil
 }
 
-// retryAfter reads a Retry-After in seconds, capped at 60 s; anything else
-// (absent, a date, nonsense) waits 2 s.
-func retryAfter(v string) time.Duration {
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 {
+// retryAfter reads a Retry-After in seconds or as an HTTP date
+// (reviewer-codex), capped at 60 s, a date already past = no wait; anything
+// else (absent, nonsense) waits 2 s.
+func retryAfter(v string, now time.Time) time.Duration {
+	var d time.Duration
+	if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+		d = time.Duration(n) * time.Second
+	} else if at, err := http.ParseTime(v); err == nil {
+		d = max(at.Sub(now), 0)
+	} else {
 		return serverRetries[0]
 	}
-	d := time.Duration(n) * time.Second
-	if d > maxRetryAfter {
-		return maxRetryAfter
-	}
-	return d
+	return min(d, maxRetryAfter)
 }
 
 // transportReason is a transport error in words that carry no URL nor host:
