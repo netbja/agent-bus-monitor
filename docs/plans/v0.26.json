@@ -38,6 +38,8 @@
     {"id": "specs-answered", "title": "Specs answered: backup (#262, #269), forge delivery (#272)", "owner": "coder", "review": "specs-answered", "merge": false},
     {"id": "notifications-order", "title": "Decide: notifications (Discord, ntfy), and where they come in the order", "owner": "person"},
     {"id": "notifications", "title": "Notifications to Discord or ntfy", "owner": "coder", "review": "notifications", "after": ["notifications-order"]},
-    {"id": "reinstall-tag", "title": "Reinstall and tag v0.26 when Bernard says", "owner": "person", "after": ["pages-4", "pages-5", "history-spec", "stall-guard", "history", "auto-state", "settings-page", "config-followups", "agentbus-start", "forge-delivery", "backup", "local-llm-peer", "auto-reload", "notifications"]}
+    {"id": "usage-green", "title": "Usage gauges: a deep green below 80 % instead of the pale blue", "owner": "coder", "review": "usage-green"},
+    {"id": "settings-panels", "title": "Settings page C in two panels, D resets a group", "owner": "coder", "review": "settings-panels", "after": ["usage-green"]},
+    {"id": "reinstall-tag", "title": "Reinstall and tag v0.26 when Bernard says", "owner": "person", "after": ["pages-4", "pages-5", "history-spec", "stall-guard", "history", "auto-state", "settings-page", "config-followups", "agentbus-start", "forge-delivery", "backup", "local-llm-peer", "auto-reload", "notifications", "usage-green", "settings-panels"]}
   ]
 }

@@ -20,6 +20,9 @@ const (
 	RoleDone
 	RoleDispatch
 	RoleLine
+	// RoleGauge is an account gauge's low level, below 80 % (usage-green, the
+	// person's choice: a deep green; amber and red keep the alert roles).
+	RoleGauge
 	// The providers' own colours (busmon-llm-colors): their names and models
 	// wherever written. providerHues is the table; providerRole picks one.
 	RoleProvAnthropic
@@ -106,21 +109,21 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 		}
 	}
 	t := &Theme{palette: PaletteDark, selection: tcell.GetColor("#22324A")}
-	copy(t.tags[:], []string{"#E6EDF3", "#7D8A99", "#4A5563", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48"})
+	copy(t.tags[:], []string{"#E6EDF3", "#7D8A99", "#4A5563", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48", "#39C69E"})
 	for _, h := range providerHues {
 		t.tags[h.role] = h.dark
 	}
 	if name == "light" {
 		t.palette = PaletteLight
 		t.selection = tcell.GetColor("#DDF4FF")
-		copy(t.tags[:], []string{"#1F2328", "#5A6572", "#B0B8C1", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE"})
+		copy(t.tags[:], []string{"#1F2328", "#5A6572", "#B0B8C1", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE", "#0B7D60"})
 		for _, h := range providerHues {
 			t.tags[h.role] = h.light
 		}
 	}
 	if colors < 1<<24 {
 		t.palette = Palette16
-		copy(t.tags[:], []string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray"})
+		copy(t.tags[:], []string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray", "green"})
 		for _, h := range providerHues {
 			t.tags[h.role] = h.ansi
 		}

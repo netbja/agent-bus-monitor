@@ -116,7 +116,8 @@ busmon est l'écran de la personne : ce qui vous attend, qui fait quoi, et ce qu
 
 - **En-tête** : le projet, le lien de busmon lui-même vers Redis (`● bus ok`, ou `▲ bus down`),
   le dispatcher et le conducteur, ce qui est pour vous (`♙ 4 for you`, `● 2 unread`), la santé du
-  projet, une pause éventuelle, votre nom, une jauge d'usage par fournisseur, l'heure.
+  projet, une pause éventuelle, votre nom, une jauge d'usage par fournisseur (vert profond sous 80 %,
+  ambre dès 80 %, rouge dès 95 %), l'heure.
 - **For you** : ce que vous seul pouvez trancher : les questions ouvertes d'un agent (`ask`), un
   agent qui attend votre décision (`wait`), une revue à 4 yeux qui vous concerne (`gate`), les
   messages qui vous sont adressés et que vous n'avez pas ouverts (`unread`). Entrée en ouvre un ;
