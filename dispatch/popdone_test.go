@@ -2,6 +2,9 @@ package dispatch
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -89,7 +92,7 @@ func closedPop() PopFacts {
 	f.Snap.State, f.Snap.Auto = "working", "turn"
 	f.Closed = true
 	f.Pane = Inspection{Gone: true}
-	f.Handoff = true // a hand-off that waits for a /clear no process will ever take
+	f.Handoff, f.HandoffReport = true, "1793-0" // a hand-off no process will ever /clear
 	return f
 }
 
@@ -141,14 +144,36 @@ func TestProcGone(t *testing.T) {
 		want bool
 	}{
 		{"alive", s, at(4200, nil), false},
-		{"no such process", s, at(0, errors.New("x")), true},
+		{"no such process", s, at(0, fmt.Errorf("read: %w", ErrNoProcess)), true},
 		{"a recycled pid", s, at(9999, nil), true},
+		// reviewer-codex: an unreadable or unsupported /proc (macOS,
+		// permissions) proves nothing: fail closed.
+		{"unreadable", s, at(0, errors.New("permission denied")), false},
+		{"no /proc", s, at(0, os.ErrNotExist), false},
 		{"no reader", s, nil, false},
-		{"no verified pid", &bus.AgentSnapshot{}, at(0, errors.New("x")), false},
-		{"no snapshot", nil, at(0, errors.New("x")), false},
+		{"no verified pid", &bus.AgentSnapshot{}, at(0, ErrNoProcess), false},
+		{"no snapshot", nil, at(0, ErrNoProcess), false},
 	} {
 		if got := ProcGone(c.snap, c.read); got != c.want {
 			t.Errorf("%s: ProcGone = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// ProcStart says ErrNoProcess only for a pid that /proc, readable, does not
+// list: a process that ran and exited.
+func TestProcStartNoProcess(t *testing.T) {
+	if _, err := os.Stat("/proc/self/stat"); err != nil {
+		t.Skip("no /proc on this system")
+	}
+	cmd := exec.Command("true")
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProcStart(cmd.Process.Pid); !errors.Is(err, ErrNoProcess) {
+		t.Fatalf("an exited pid: %v, want ErrNoProcess", err)
+	}
+	if _, err := ProcStart(os.Getpid()); err != nil {
+		t.Fatalf("this process: %v", err)
 	}
 }

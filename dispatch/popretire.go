@@ -38,9 +38,15 @@ func PopRetireText(role string, episode int64, idle time.Duration) string {
 
 // PopClosedText is the directive master gets for a pop closed by hand
 // (pop-closed-by-hand): its process and pane are gone, nothing waits for it.
-func PopClosedText(role string, episode int64) string {
-	return fmt.Sprintf("%s was closed (its process and pane are gone) and nothing is left for it: no task, gate, ask or message. Unregister it: agentbus retire %s --forget --episode %d --reason \"closed\"",
-		role, role, episode)
+// A hand-off it declared is named first, to be read before the end
+// (reviewer-codex): no /clear will ever take it.
+func PopClosedText(role string, episode int64, handoffReport string) string {
+	first := ""
+	if handoffReport != "" {
+		first = fmt.Sprintf(" It declared a hand-off: read it first, agentbus reports %s.", handoffReport)
+	}
+	return fmt.Sprintf("%s was closed (its process and pane are gone) and nothing is left for it: no task, gate, ask or message.%s Unregister it: agentbus retire %s --forget --episode %d --reason \"closed\"",
+		role, first, role, episode)
 }
 
 // popRetirePass runs after the pause check (a paused project ends nobody).
@@ -115,7 +121,7 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 	episode := PopEpisode(f.Snap)
 	text := PopRetireText(a, episode, now.Sub(time.UnixMilli(episode)))
 	if f.Closed {
-		text = PopClosedText(a, episode)
+		text = PopClosedText(a, episode, f.HandoffReport)
 	}
 	sent, err := l.b.FencedCmdOnce(ctx, l.token, bus.PopDoneMark(a), strconv.FormatInt(episode, 10), dispatchFrom,
 		l.cfg.EscalateTo, bus.CmdDirective, text, false)

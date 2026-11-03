@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"strconv"
@@ -130,7 +131,7 @@ func (w *popWorld) closePop() {
 	}
 	w.l.cfg.PopRetire.ProcStart = func(pid int) (uint64, error) {
 		if pid == testPID {
-			return 0, errors.New("no such process")
+			return 0, ErrNoProcess
 		}
 		return testStart, nil
 	}
@@ -165,7 +166,10 @@ func TestPopRetirePassKeepsAPopNotClosed(t *testing.T) {
 			w.rt.script = func(string, int) Inspection { return Inspection{Err: errors.New("herdr down")} }
 		},
 		"no process reader": func(w *popWorld) { w.l.cfg.PopRetire.ProcStart = nil },
-		"messages wait":     func(w *popWorld) { w.b.Cmd(ctx, "foureyes", "security", "directive", "", "more") },
+		"process unreadable": func(w *popWorld) {
+			w.l.cfg.PopRetire.ProcStart = func(int) (uint64, error) { return 0, errors.New("permission denied") }
+		},
+		"messages wait": func(w *popWorld) { w.b.Cmd(ctx, "foureyes", "security", "directive", "", "more") },
 	} {
 		tier := "pop"
 		if name == "a boot role" {
@@ -180,5 +184,23 @@ func TestPopRetirePassKeepsAPopNotClosed(t *testing.T) {
 		if got := w.directives(); len(got) != 0 {
 			t.Errorf("%s: %q", name, got)
 		}
+	}
+}
+
+// reviewer-codex: a closed pop's hand-off report is named in master's
+// directive, to be read before it is unregistered.
+func TestPopRetirePassNamesAClosedPopsHandoff(t *testing.T) {
+	w := newPopWorld(t, "pop")
+	ctx := context.Background()
+	w.closePop()
+	snaps, _ := w.b.Agents(ctx)
+	h, _ := json.Marshal(bus.Handoff{Report: "1793000000000-0", PID: testPID, PIDStart: testStart, At: snaps["security"].TS})
+	if err := w.r.HSet(ctx, bus.HandoffKey(w.b.Project()), "security", h).Err(); err != nil {
+		t.Fatal(err)
+	}
+	w.pass()
+	got := w.directives()
+	if len(got) != 1 || !strings.Contains(got[0], "agentbus reports 1793000000000-0") {
+		t.Fatalf("directives %q, want the hand-off report named", got)
 	}
 }

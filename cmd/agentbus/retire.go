@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -68,7 +69,12 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	// closed: a pop already closed by hand (its process and pane gone), which
 	// only --forget ends: nothing to close, the forget alone (pop-closed-by-hand).
 	closed := false
-	if dispatch.ProcGone(&snap, d.ProcStart) {
+	if start, err := d.ProcStart(snap.PID); err != nil && !errors.Is(err, dispatch.ErrNoProcess) {
+		// Unreadable proves nothing either way (reviewer-codex).
+		return fail("cannot read its recorded process (pid %d): %v; nothing closed", snap.PID, err)
+	} else if err == nil && start == snap.PIDStart {
+		// alive: the usual retire
+	} else {
 		if !forget || !pop {
 			hint := ""
 			if pop {

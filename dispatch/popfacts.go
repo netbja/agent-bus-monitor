@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -23,15 +24,19 @@ type PopReadOptions struct {
 	ProcStart func(pid int) (uint64, error)
 }
 
-// ProcGone reports whether s's verified process no longer runs: its pid
-// reads no start time, or another (a recycled pid). No verified identity or
-// no reader is never gone.
+// ProcGone reports whether s's verified process is proved gone: its pid is
+// listed no more (ErrNoProcess) or reads another start (a recycled pid). No
+// verified identity, no reader or a read that fails otherwise is never gone:
+// fail closed (reviewer-codex).
 func ProcGone(s *bus.AgentSnapshot, procStart func(int) (uint64, error)) bool {
 	if s == nil || s.PID == 0 || procStart == nil {
 		return false
 	}
 	start, err := procStart(s.PID)
-	return err != nil || start != s.PIDStart
+	if err != nil {
+		return errors.Is(err, ErrNoProcess)
+	}
+	return start != s.PIDStart
 }
 
 // ReadPopFacts reads every fact of §2 for role, the dispatch pass and retire
@@ -93,6 +98,9 @@ func ReadPopFacts(ctx context.Context, b *bus.Bus, rt Runtime, role string, o Po
 		if h, ok := hs[role]; ok {
 			void, _ := h.VoidFor(*f.Snap, true)
 			f.Handoff = !void
+			if f.Handoff {
+				f.HandoffReport = h.Report
+			}
 		}
 	}
 	if p, err := b.Pause(ctx); !unknown("pause", err) {

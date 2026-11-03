@@ -29,12 +29,14 @@ type PopFacts struct {
 	// byte-equal to it passes condition 8.
 	Intent, OwnIntent string
 	Handoff           bool       // a valid hand-off waits for its /clear
+	HandoffReport     string     // its report id, named to master for a closed pop
 	Pane              Inspection // a live inspection of its pane
 	Paused, Held      bool
 	// Closed: its verified process is gone and herdr no longer knows its
 	// pane or sees an agent in it (pop-closed-by-hand: closed by hand,
 	// plain retire or herdr). Nothing can declare, clear or be inspected
-	// any more, so conditions 8's hand-off, 9's state and 10 are not read;
+	// any more, so conditions 8's hand-off, 9's state and 10 are not read
+	// (the hand-off's report is named to master instead, HandoffReport);
 	// every other condition, condition 9's delay included, still is.
 	Closed bool
 	// Episode, when not 0, is the episode retire was told (--episode):

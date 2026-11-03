@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -364,5 +365,23 @@ func TestRetireRefusesAClosedPopNotDone(t *testing.T) {
 	if code := runRetire(ctx, w.b, d, "master", []string{"security"}, &out, &errw); code != 1 ||
 		!strings.Contains(errw.String(), "--forget") || !w.registered(t, "security") {
 		t.Fatalf("plain retire of a closed pop: %d %s", code, errw.String())
+	}
+}
+
+// reviewer-codex: a process start that cannot be read proves nothing:
+// neither retire closes nor --forget forgets.
+func TestRetireRefusesAnUnreadableProcess(t *testing.T) {
+	for _, args := range [][]string{{"security"}, {"security", "--forget", "--episode", ""}} {
+		w, d, rt, _ := newPopWorld(t)
+		rt.gone = true
+		d.ProcStart = func(int) (uint64, error) { return 0, errors.New("permission denied") }
+		if args[len(args)-1] == "" {
+			args[len(args)-1] = w.episode(t)
+		}
+		var out, errw bytes.Buffer
+		if code := runRetire(context.Background(), w.b, d, "master", args, &out, &errw); code != 1 ||
+			!strings.Contains(errw.String(), "cannot read") || w.closed() || !w.registered(t, "security") {
+			t.Errorf("%v: %d closed=%v %s", args, code, w.closed(), errw.String())
+		}
 	}
 }

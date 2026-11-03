@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/redis/go-redis/v9"
 )
@@ -86,7 +87,7 @@ func newSwapWorld(t *testing.T) (*swapWorld, swapDeps) {
 			if s, ok := w.procs[pid]; ok {
 				return s, nil
 			}
-			return 0, errors.New("no such process")
+			return 0, dispatch.ErrNoProcess
 		},
 		ClosePane: func(_ context.Context, pane string) error {
 			w.mu.Lock()
