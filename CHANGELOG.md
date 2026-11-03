@@ -6,6 +6,15 @@ release exists.
 
 ## Unreleased
 
+## v0.26.1 — restore after a dead agent, the plugin's version
+
+- `agentbus restore` no longer refuses a project whose registered agent has died (a pid `/proc` no
+  longer lists read as "cannot tell"); any other read error still refuses.
+- `herdr-plugin.toml` says 0.26.1 (it was left at 0.24.0 under the v0.26.0 tag). The operational
+  guides say a files restore writes the roles files to the path the archived template names.
+
+[Notes](docs/releases/v0.26.1.md)
+
 ## v0.26.0 — one settings file, a team that notices it has stalled, history, backups and notifications
 
 - Public release groundwork: MIT licence, a random Redis password on a fresh install
