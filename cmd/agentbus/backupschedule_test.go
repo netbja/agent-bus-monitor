@@ -13,6 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/backup"
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // scheduleWorld: a backupWorld whose config.toml says daily, backup.dir set.
@@ -21,6 +22,8 @@ func newScheduleWorld(t *testing.T, extra string) *backupWorld {
 	w := newBackupWorld(t)
 	os.WriteFile(filepath.Join(w.home, ".config", "agentbus", "config.toml"),
 		[]byte("[backup]\nschedule = \"daily\"\ndir = \""+w.dir()+"\"\n"+extra), 0o600)
+	// A fresh client per dial, as the service has: the pass closes its own.
+	w.d.Dial = func() (*redis.Client, error) { return bus.Connect("") }
 	// The shared test broker holds other packages' projects: the scope is
 	// this world's project and its templates.
 	w.d.Projects = func(_ context.Context, _ *redis.Client, dir string) ([]string, error) {
@@ -188,5 +191,22 @@ func TestBackupWarnsAboutADefaultDirWhenDaily(t *testing.T) {
 	os.WriteFile(filepath.Join(w.home, ".config", "agentbus", "config.toml"), []byte("[backup]\nschedule = \"daily\"\n"), 0o600)
 	if _, _, errw := w.run("--project", w.b.Project()); !strings.Contains(errw, "backup.dir is the default") {
 		t.Fatalf("no warning: %q", errw)
+	}
+}
+
+// foureyes: the long-running service's pass closes the client it dialled.
+func TestScheduledBackupClosesItsClient(t *testing.T) {
+	w := newScheduleWorld(t, "")
+	var dialled *redis.Client
+	w.d.Dial = func() (*redis.Client, error) {
+		c, err := bus.Connect("")
+		dialled = c
+		return c, err
+	}
+	if err, log := w.pass(t); err != nil {
+		t.Fatalf("pass: %v\n%s", err, log)
+	}
+	if dialled == nil || dialled.Ping(context.Background()).Err() == nil {
+		t.Fatal("the pass left its client open")
 	}
 }

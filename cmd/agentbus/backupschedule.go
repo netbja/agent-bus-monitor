@@ -50,6 +50,7 @@ func scheduledBackupPass(ctx context.Context, d backupDeps, log io.Writer) error
 	if err != nil {
 		return fmt.Errorf("the broker: %w", err)
 	}
+	defer c.Close() // the service runs for days: one client per pass, closed (foureyes)
 	projectsDir := rolecfg.ProjectsDir(d.Getenv)
 	projects, err := d.hostProjects(ctx, c, projectsDir)
 	if err != nil || len(projects) == 0 {
