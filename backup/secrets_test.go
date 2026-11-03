@@ -1,8 +1,10 @@
 package backup
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -218,4 +220,46 @@ func TestSecretsWithRealAge(t *testing.T) {
 	if got != "REDIS_PASSWORD=pw-SECRET\n" {
 		t.Fatalf("opened %q", got)
 	}
+}
+
+// reviewer-codex: a secret over the cap is refused whole, never cut, and
+// nothing is handed over (no earlier member written either); a sealed
+// secret over the cap is refused at backup time.
+func TestSecretsOverTheCap(t *testing.T) {
+	age, _ := fakeAge(t)
+	dir := t.TempDir()
+	small := filepath.Join(dir, "redis.env")
+	big := filepath.Join(dir, "big.env")
+	os.WriteFile(small, []byte("REDIS_PASSWORD=pw\n"), 0o600)
+	os.WriteFile(big, bytes.Repeat([]byte("x"), secretMax+1), 0o600)
+	if _, err := SealSecrets(context.Background(), age, testRecipient, []Source{{Member: "services/demo.env", Path: big}}); err == nil {
+		t.Fatal("an oversized secret was sealed")
+	}
+	// Build the sealed tar by hand, bypassing SealSecrets' check.
+	var tarBuf bytes.Buffer
+	writeSecretsTarNoCap(t, &tarBuf, map[string][]byte{"redis.env": []byte("REDIS_PASSWORD=pw\n"), "services/demo.env": bytes.Repeat([]byte("x"), secretMax+1)})
+	cmd := exec.Command(age, "-r", testRecipient)
+	cmd.Stdin = &tarBuf
+	sealed, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := filepath.Join(dir, "key.txt")
+	os.WriteFile(identity, []byte("k"), 0o600)
+	called := 0
+	err = OpenSecrets(context.Background(), age, identity, bytes.NewReader(sealed), func(string, []byte) error { called++; return nil })
+	if err == nil || called != 0 {
+		t.Fatalf("an oversized secret: err %v, %d handed over", err, called)
+	}
+}
+
+func writeSecretsTarNoCap(t *testing.T, w io.Writer, files map[string][]byte) {
+	t.Helper()
+	tw := tar.NewWriter(w)
+	for _, name := range []string{"redis.env", "services/demo.env"} {
+		b := files[name]
+		tw.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: int64(len(b)), Typeflag: tar.TypeReg})
+		tw.Write(b)
+	}
+	tw.Close()
 }
