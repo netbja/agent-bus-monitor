@@ -98,6 +98,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	snaps, snapsErr := b.Agents(pollCtx)
 	usageSnaps, usageErr := b.Usage(pollCtx)
 	budgetSnaps, budgetErr := b.Budgets(pollCtx)
+	boardStart := time.Now() // a write before it is in this read (request-priority overrides)
 	boardSnap, boardErr := b.Board(pollCtx)
 
 	// The board is already in hand, so the requests view costs nothing extra;
@@ -320,7 +321,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		st.tok = tokR
 	}
 	if haveReqs {
-		st.requests = reqs
+		st.requests, st.requestsReadAt = reqs, boardStart
 	}
 	if haveThreads {
 		st.threads = threads

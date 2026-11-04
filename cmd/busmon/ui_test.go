@@ -152,6 +152,8 @@ type fakeReader struct {
 	intents    map[string]bus.SwapIntent // SwapIntents, beside swaps (plain swaps)
 	handoffs   map[string]bus.Handoff
 	fallbacks  map[string]bus.FallbackRecord
+	board      map[string]bus.BoardEntry // Board, when set
+	boardErr   error                     // Board fails with it, when set
 	verdicts   map[string]bus.ModelVerdict
 	asks       []bus.Ask
 	pauseErr   error // returned by Pause when set
@@ -193,6 +195,12 @@ func (f *fakeReader) Budgets(context.Context) (map[string]bus.BudgetSnapshot, er
 }
 func (f *fakeReader) Board(context.Context) (map[string]bus.BoardEntry, error) {
 	f.n("Board")
+	if f.boardErr != nil {
+		return nil, f.boardErr
+	}
+	if f.board != nil {
+		return f.board, nil
+	}
 	return map[string]bus.BoardEntry{"t": {Owner: "coder", State: "working"}}, nil
 }
 func (f *fakeReader) Recent(context.Context, []string, int) ([]bus.Event, map[string]string, error) {

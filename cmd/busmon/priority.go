@@ -22,19 +22,21 @@ type priorityMsg struct {
 	at          time.Time
 }
 
-// prioOverride is a level this busmon wrote, kept until a poll that started
-// after the write: + and - step from it, never from an older snapshot
+// prioOverride is a level this busmon wrote, kept until a successful board
+// read that began after the write: + and - step from it, never from an older snapshot
 // (reviewer-codex: two presses before a poll both stepped from low).
 type prioOverride struct {
 	level string
 	at    time.Time
 }
 
-// endPriorityOverrides drops the overrides a poll that started at started
-// has read past.
-func (m *Model) endPriorityOverrides(started time.Time) {
+// endPriorityOverrides drops the overrides the board read that began at
+// readAt has read past: the snapshot's requests come from it. A failed read
+// keeps the older requests and their older time, so it ends none
+// (reviewer-codex).
+func (m *Model) endPriorityOverrides(readAt time.Time) {
 	for task, o := range m.ui.prioSeen {
-		if o.at.Before(started) {
+		if o.at.Before(readAt) {
 			delete(m.ui.prioSeen, task)
 		}
 	}

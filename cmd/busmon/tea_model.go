@@ -16,7 +16,6 @@ import (
 type pollMsg struct {
 	snap     snapshot
 	at       time.Time
-	started  time.Time       // when its reads began: a write before it is in snap (request-priority)
 	swaps    []bus.SwapEvent // the swap ledger's entries new since the last pollMsg
 	swapLost bool            // entries were trimmed before they were read
 }
@@ -98,7 +97,7 @@ type uiState struct {
 	planExpanded   bool                    // the Plan tab shows its done tasks (A11)
 	reqOpen        reqOpen                 // the Requests view's expanded groups and folded section
 	prioBusy       bool                    // a priority write is in flight: + and - wait for its answer
-	prioSeen       map[string]prioOverride // task -> the level this busmon wrote, until a poll started after it
+	prioSeen       map[string]prioOverride // task -> the level this busmon wrote, until a board read begun after it
 	compose        *composeState           // the compose window, when open (tea_compose.go)
 	msgCompose     composeDraft            // the window's message draft while it is closed
 	heldDrafts     []composeDraft          // message drafts kept after msgCompose, each opening in turn
@@ -198,11 +197,10 @@ func (m Model) pollCmd(tick int) tea.Cmd {
 			cfg.st.tokOpen = tokOpen
 			cfg.st.mu.Unlock()
 		}
-		started := time.Now()
 		pollOnce(cfg.ctx, cfg.reader, cfg.st, tick)
 		now := time.Now()
 		swaps, lost := takeSwapNews(cfg.st)
-		return pollMsg{snap: takeSnapshot(cfg.st, now), at: now, started: started, swaps: swaps, swapLost: lost}
+		return pollMsg{snap: takeSnapshot(cfg.st, now), at: now, swaps: swaps, swapLost: lost}
 	}
 }
 
@@ -220,7 +218,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.layoutCompose()
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
-		m.endPriorityOverrides(msg.started)
+		m.endPriorityOverrides(msg.snap.requestsReadAt) // only a successful board read begun after the write
 		m.notice.fromPoll(msg.snap, m.cfg.self, msg.swaps, msg.swapLost)
 		if m.sig.started.IsZero() {
 			m.sig.started = msg.at

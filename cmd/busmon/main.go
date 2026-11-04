@@ -324,6 +324,7 @@ type shared struct {
 	svcRecs        map[string]bus.ServiceRecord  // each service's last state
 	board          map[string]bus.BoardEntry
 	requests       []request    // tracked requests read from the board
+	requestsReadAt time.Time    // when the read that gave requests began (a failed read keeps both)
 	threads        []openThread // cmd exchanges with no answer in retained history
 	health         health       // the MONITOR's own link to the broker
 	guardianHealth map[string]guardian.Record

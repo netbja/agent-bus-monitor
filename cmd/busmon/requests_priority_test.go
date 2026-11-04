@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // request-priority §6: in the tracked section, a group's requests by rank
@@ -119,8 +122,8 @@ func TestPriorityKeysOnTheRequestsTab(t *testing.T) {
 	if got := fw.priorities(); len(got) != 2 || got[1] != "priority solo normal charlie" {
 		t.Fatalf("- wrote %v", got)
 	}
-	// Already at the bound: nothing written, said. A poll that started after
-	// the writes reads the board (high) and ends the override.
+	// Already at the bound: nothing written, said. A board read begun after
+	// the writes (high) ends the override.
 	snap := m.snap
 	for i := range snap.requests {
 		if snap.requests[i].Task == "solo" {
@@ -128,7 +131,8 @@ func TestPriorityKeysOnTheRequestsTab(t *testing.T) {
 		}
 	}
 	later := time.Now().Add(time.Minute)
-	m = step(t, m, pollMsg{snap: snap, at: later, started: later})
+	snap.requestsReadAt = later
+	m = step(t, m, pollMsg{snap: snap, at: later})
 	m.lists.requests.Select("req:solo")
 	m = keyRun(t, m, '+')
 	if got := fw.priorities(); len(got) != 2 || !strings.Contains(m.ui.flash, "already high") {
@@ -330,14 +334,63 @@ func TestPriorityStepsFollowTheirOwnWrites(t *testing.T) {
 	if !equalStrings(got, want) {
 		t.Fatalf("writes %v, want %v", got, want)
 	}
-	// A poll that started before the last write keeps the override; one after ends it.
+	// A board read begun before the last write keeps the override; one begun
+	// after ends it.
 	written := m.ui.prioSeen["solo"].at
-	m = step(t, m, pollMsg{snap: m.snap, at: written, started: written.Add(-time.Second)})
+	stale := m.snap
+	stale.requestsReadAt = written.Add(-time.Second)
+	m = step(t, m, pollMsg{snap: stale, at: written.Add(time.Second)})
 	if _, ok := m.ui.prioSeen["solo"]; !ok {
-		t.Fatal("an older poll ended the override")
+		t.Fatal("an older board read ended the override")
 	}
-	m = step(t, m, pollMsg{snap: m.snap, at: written.Add(2 * time.Second), started: written.Add(time.Second)})
+	fresh := m.snap
+	fresh.requestsReadAt = written.Add(time.Second)
+	m = step(t, m, pollMsg{snap: fresh, at: written.Add(2 * time.Second)})
 	if _, ok := m.ui.prioSeen["solo"]; ok {
-		t.Fatal("a newer poll kept the override")
+		t.Fatal("a newer board read kept the override")
+	}
+}
+
+// A newer poll whose board read failed keeps the older requests and their
+// older read time, so it ends no override: low, + (normal), a failed newer
+// poll, + reaches high (reviewer-codex).
+func TestPriorityOverrideSurvivesAFailedBoardRead(t *testing.T) {
+	fw := &fakeWriter{}
+	m := priorityShell(t, fw)
+	snap := m.snap
+	for i := range snap.requests {
+		if snap.requests[i].Task == "solo" {
+			snap.requests[i].Priority = "low"
+		}
+	}
+	snap.requestsReadAt = time.Now().Add(-time.Minute)
+	m = step(t, m, pollMsg{snap: snap, at: time.Now()})
+	m.lists.requests.Select("req:solo")
+	m = keyRun(t, m, '+') // normal
+	// A newer poll: its board read failed, so the snapshot keeps the low
+	// requests and the read time of the read that gave them.
+	m = step(t, m, pollMsg{snap: snap, at: time.Now().Add(time.Minute)})
+	m.lists.requests.Select("req:solo")
+	m = keyRun(t, m, '+')
+	if got := fw.priorities(); !equalStrings(got, []string{"priority solo normal charlie", "priority solo high charlie"}) {
+		t.Fatalf("writes %v", got)
+	}
+}
+
+// pollOnce stamps requestsReadAt only on a successful board read.
+func TestRequestsReadAtOnlyOnASuccessfulRead(t *testing.T) {
+	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
+	before := time.Now()
+	r := &fakeReader{calls: map[string]int{}, board: map[string]bus.BoardEntry{"rq": {Owner: "coder", State: "requested",
+		Request: &bus.RequestInfo{ID: "1-0", Target: "coder", Availability: "retained"}}}}
+	pollOnce(context.Background(), r, st, 1)
+	if st.requestsReadAt.Before(before) || len(st.requests) != 1 {
+		t.Fatalf("after a read: at %v, %d requests", st.requestsReadAt, len(st.requests))
+	}
+	at := st.requestsReadAt
+	r.boardErr = errors.New("board unavailable")
+	pollOnce(context.Background(), r, st, 2)
+	if !st.requestsReadAt.Equal(at) || len(st.requests) != 1 {
+		t.Fatalf("a failed read moved the time (%v -> %v) or the requests (%d)", at, st.requestsReadAt, len(st.requests))
 	}
 }
