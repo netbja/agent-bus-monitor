@@ -57,7 +57,7 @@ Ce guide pratique est conçu en complément du [README](../README.fr.md) (la ré
 
 4. **L'Event-Driven Dispatcher (`agentbus dispatch`)**
    - Service utilisateur (systemd `--user`, launchd) surveillant le flux `{p}:cmd`.
-   - Lorsqu'une directive arrive pour un agent au repos et désarmé, il injecte une commande de réveil unique dans son volet `herdr` (uniquement si le volet est libre et non focalisé).
+   - Lorsqu'une directive arrive pour un agent au repos et désarmé, il injecte une commande de réveil unique dans son volet `herdr` (uniquement si le volet est libre et non focalisé). Un réveil qui attend 30 s sur le volet où vous êtes vous vaut une notification de bureau (notify-send) ; quittez le volet et le passage suivant le réveille. `dispatch.focus_notice` (page C, Attention ; `0` = désactivé) en règle le délai.
    - L'agent se réveille, dépile ses tâches via `agentbus subscribe --drain <agent>`, s'exécute, puis retourne en sommeil.
    - Il lit aussi les quotas des fournisseurs, le remplissage du contexte des agents et la santé du projet, et agit selon des règles (section 5, cas C et D).
 

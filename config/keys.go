@@ -169,6 +169,10 @@ var Keys = []*Key{
 			}
 			return nil, "want whole seconds from 0 to 3600"
 		}},
+	// focus-notice: a wake waiting this long on the pane that has the focus
+	// earns the person one desktop notice (0 = off).
+	{Name: "dispatch.focus_notice", Env: "AGENT_BUS_FOCUS_NOTICE", Kind: Duration, Default: 30 * time.Second, ReadBy: "dispatch",
+		env: envStallDuration, file: fileDuration(true)},
 	{Name: "dispatch.quota", Env: "AGENT_BUS_QUOTA", Kind: Bool, Default: true, ReadBy: "dispatch",
 		env:  func(raw string) (any, envResult) { return raw != "off", envUse }, // off turns it off
 		file: fileBool},

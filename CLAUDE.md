@@ -526,7 +526,9 @@ dispatch test: a prompt that is not a wake line, or a `/clear` without its reser
 line is fixed — `[agentbus#<nonce>] <project>: <n> message(s) waiting for <agent>. Run: agentbus
 --project <project> subscribe --drain <agent>` — and the agent then drains through Redis. The
 dispatcher touches only unarmed agents with a real obligation, in a pane that is ready, unfocused
-and pid-verified. Don't add a second pane writer, and don't make the dispatcher type message
+and pid-verified (focus-notice, `dispatch/focusnotify.go`: a wake deferred for `pane focused` whose oldest message waits
+`dispatch.focus_notice`, 30 s, `0` = off, page C Attention, rings the desktop once per oldest message through the prompt
+ring's runner, fenced mark `focus:<agent>` in `{p}:quota` deleted once the focus defer ends; nothing typed). Don't add a second pane writer, and don't make the dispatcher type message
 content. Since v0.12 it runs, with the conductor, as a **user service** (systemd `--user`,
 launchd), started by `agentbus up`; herdr tabs remain only as the explicit fallback
 (`docs/memory/decisions/2026-10-14-project-services.md`).

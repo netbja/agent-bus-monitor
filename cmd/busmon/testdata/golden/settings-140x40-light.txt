@@ -12,7 +12,7 @@
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 19 default ──────────────────────────────────────────────────────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 20 default ──────────────────────────────────────────────────────────────── esc back ─╮
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
 │    Identity       │     Fade and slide            ● on                                                                                   │

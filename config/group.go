@@ -24,7 +24,7 @@ var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupNotificat
 var groups = map[string]Group{
 	"display.theme": GroupDisplay, "display.icons": GroupDisplay, "display.limit": GroupDisplay, "display.idle_hint_after": GroupDisplay, "waiting.fade": GroupDisplay,
 	"waiting.popup_after": GroupAttention, "waiting.snooze": GroupAttention, "waiting.bell": GroupAttention,
-	"recap.auto_after": GroupAttention, "updates.check": GroupAttention,
+	"recap.auto_after": GroupAttention, "updates.check": GroupAttention, "dispatch.focus_notice": GroupAttention,
 	"identity.as": GroupIdentity, "start.team": GroupIdentity,
 	"dispatch.context_alert": GroupServices, "dispatch.prompt_grace": GroupServices, "dispatch.quota": GroupServices,
 	"dispatch.quota_warn": GroupServices, "dispatch.quota_hold": GroupServices, "dispatch.quota_max_age": GroupServices,
