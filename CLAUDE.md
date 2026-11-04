@@ -361,10 +361,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   its badge and reminder subset; a plan task waiting for the person is an item of its own (`rankPlan`, `planItems`:
   counted in the title and badge, Enter opens its page with the Action row, also from the reminder; it stays a standing
   decision in the badge and the reminder until master records it done, even one with no `after`); with nothing for the person it says so, then
-  what is in progress and the next decision as selectable rows (`forYouEmptyRows`: one row per agent declaring working,
-  with its current task from the facts, `currentTask`: an accepted board task it owns, else its plan task in progress,
-  never its status message; keys `empty:agent:<name>` open the agent's page, `empty:plan:<task>` the plan task; no
-  store), and the
+  the next decision as a selectable row (`forYouEmptyRows`, foryou-no-progress: no In progress rows, the Agents panel shows them; key
+  `empty:plan:<task>` opens the plan task; no store), and the
   recap's For you section shows only when the For you panel is not on screen (`recapForScreen`), in the list format
   (recap-foryou: `recapItemLine`, one line per item, the sender in its provider's colour, its text, the age at the
   right edge, an unread one marked `●`; a report notice reads as its report's own preview, `reportText`, never the

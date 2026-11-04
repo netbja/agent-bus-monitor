@@ -189,7 +189,7 @@ func planItems(s snapshot) []attentionItem {
 }
 
 // emptyRow is one line of the empty state, selectable when it has a key:
-// empty:agent:<name> opens the agent's page, empty:plan:<task> the plan task.
+// empty:plan:<task> opens the plan task.
 type emptyRow struct {
 	key  string
 	line Line
@@ -204,16 +204,10 @@ func forYouEmpty(s snapshot, owed int) []Line {
 	return out
 }
 
-// forYouEmptyRows: what is owed, else "Nothing expected", then what is in
-// progress, one row per agent declaring working with its current task from
-// the facts (an accepted board task it owns, else its plan task in progress),
-// never its status message, which may be stale; then the next decision.
+// forYouEmptyRows: what is owed, else "Nothing expected", then the next
+// decision. What is in progress is the Agents panel's: never repeated here
+// (foryou-no-progress, the person's answer).
 func forYouEmptyRows(s snapshot, owed int) []emptyRow {
-	names := make([]string, 0, len(s.agents))
-	for n := range s.agents {
-		names = append(names, n)
-	}
-	sort.Strings(names)
 	var rows []emptyRow
 	if owed > 0 {
 		word := "requests"
@@ -223,21 +217,6 @@ func forYouEmptyRows(s snapshot, owed int) []emptyRow {
 		rows = append(rows, emptyRow{line: Line{{Text: fmt.Sprintf("Owed by you: %d %s (Requests)", owed, word), Role: RoleAttention}}})
 	} else {
 		rows = append(rows, emptyRow{line: Line{{Text: "Nothing expected from you.", Role: RoleOK}}})
-	}
-	working := 0
-	for _, n := range names {
-		if s.agents[n].state != "working" {
-			continue
-		}
-		working++
-		w := n
-		if t := currentTask(s, n); t != "" {
-			w += " " + GlyphNone + " " + t
-		}
-		rows = append(rows, emptyRow{key: "empty:agent:" + n, line: Line{{Text: "In progress: ", Role: RoleMuted}, {Text: Preview(w), Role: RoleText}}})
-	}
-	if working == 0 {
-		rows = append(rows, emptyRow{line: Line{{Text: "In progress: ", Role: RoleMuted}, {Text: "nobody declares working", Role: RoleText}}})
 	}
 	next := emptyRow{line: Line{{Text: "Next for you: ", Role: RoleMuted}, {Text: "no decision planned", Role: RoleText}}}
 	if s.planState.loaded {
@@ -252,27 +231,4 @@ func forYouEmptyRows(s snapshot, owed int) []emptyRow {
 		}
 	}
 	return append(rows, next)
-}
-
-// currentTask is what an agent works on, from current facts only: an
-// accepted board task it owns, else a plan task of its in progress.
-func currentTask(s snapshot, agent string) string {
-	var tasks []string
-	for id, e := range s.board {
-		if e.Owner == agent && e.State == "accepted" {
-			tasks = append(tasks, id)
-		}
-	}
-	if len(tasks) > 0 {
-		sort.Strings(tasks)
-		return tasks[0]
-	}
-	if s.planState.loaded {
-		for _, r := range s.planState.rows {
-			if r.Task.Owner == agent && r.State == plan.InProgress {
-				return r.Task.ID
-			}
-		}
-	}
-	return ""
 }
