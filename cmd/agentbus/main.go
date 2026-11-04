@@ -556,7 +556,12 @@ func main() {
 		os.Exit(runDeliver(ctx, realDeliverDeps(b, self, wd), self, rest, os.Stdout, os.Stderr))
 
 	case "pause", "resume":
-		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv}
+		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv,
+			Full: func(ctx context.Context, args []string) int {
+				args, partial := extractBool(args, "--partial")
+				o := resumeOptions{partial: partial, message: strings.Join(args, " ")}
+				return runSuspendedResume(ctx, project, o, realResumeDeps(host), os.Stdout, os.Stderr)
+			}}
 		if cmd == "pause" {
 			os.Exit(runPause(ctx, d, self, rest, os.Stdout, os.Stderr))
 		}

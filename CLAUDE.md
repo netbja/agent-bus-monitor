@@ -1340,7 +1340,16 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   first, then `SuspendCancel`; a failed start keeps the suspend and says `agentbus resume` (also as a `for=person`
   notice). Then the snapshot's facts, the other services stopped, `<state>/agentbus/<p>/suspend.json` (0600, ids,
   states and counts only, the reason through `health.Redact`; `suspendsnap.go`). A suspended project without a
-  current snapshot is completed by a rerun, `Services` never rewritten; `suspend --status` lists them. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
+  current snapshot is completed by a rerun, `Services` never rewritten; `suspend --status` lists them. `agentbus resume` on a
+  suspended project (`resume.go`; `Bus.Resume` answers `ErrSuspended`, `pauseDeps.Full` runs it): refused to an agent
+  caller like suspend; the services the record's `Services` marks active start (else the snapshot's copy, else every
+  installed kind); then `agentbus up <p> --resume --no-dispatch --no-missions` inside the herdr session recorded in the
+  services env file (`HERDR_ENV`/`HERDR_SESSION`/`HERDR_SOCKET_PATH` set as `start` does; a session not running is said
+  with `herdr --session <s>`, services only); then up to 90 s for every agent tab of the template to have a live verified
+  process (`alive`: pid with its recorded start); a missing one keeps the suspend unless `--partial`; then `Unsuspend` with
+  one summary (agents back, missing, pops named with `agent-spawn <role> <p> --resume <session>`, never spawned, what was
+  open at the suspend, the person's words), a `for=person` notice when the directive's target is missing, and the
+  snapshot set aside as `suspend.<taken_at>.json` (5 kept). busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
   that declared working or idle reads `paused`, or `quota` when its provider is held; blocked,
   waiting and done are never covered; the detail keeps the declared state, the panel counts what
   is shown); `@all` targets only agents in `{p}:agents`

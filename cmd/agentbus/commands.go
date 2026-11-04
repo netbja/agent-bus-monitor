@@ -263,9 +263,10 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo pause -f 2h \"release window\"", "agentbus -p demo pause -s"},
 	},
 	{
-		Name: "resume", Text: true, Usage: []string{"resume [message...]"},
-		Summary:  "end a pause now",
-		Examples: []string{"agentbus -p demo resume"},
+		Name: "resume", Text: true, Usage: []string{"resume [--partial] [message...]"},
+		Summary:  "end a pause now; on a suspended project, bring it back: its services, its agents on their sessions, then the pause lifted and master told",
+		Flags:    []cli.Flag{{Long: "partial", Help: "a suspended project: lift the pause even if an agent of the template is not back"}},
+		Examples: []string{"agentbus -p demo resume", "agentbus -p demo resume --partial"},
 	},
 	{
 		Name: "ask", Usage: []string{"ask <agent> [--file <questions.json> | < questions.json] [--replace <id>] [--task <plan-task>]", "ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"},
