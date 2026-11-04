@@ -23,7 +23,7 @@ import (
 
 // tourVersion is bumped by a release that changes a page's meaning (each
 // page carries the version it last changed in); a wording fix does not.
-const tourVersion = 1
+const tourVersion = 2
 
 // tourMarkerFile sits beside the per-project caches; its name is no valid
 // project name, so no project's cache can be read or written as it.
@@ -208,12 +208,13 @@ var tourBook = []tourPage{
 			krow(cells(ky(ModeShellAsk, ActAskOther)), tx("Other: write your own answer in the compose window"))),
 		para(tx("Your answer wakes the agent; nothing else is needed.")),
 	}},
-	{title: "Useful keys", since: 1, blocks: []tourBlock{
+	{title: "Useful keys", since: 2, blocks: []tourBlock{ // 2: request priority
 		rows(krow(cells(ky(ModeShell, ActOpen)), tx("open a line (once: in place; twice: the full text)")),
 			krow(cells(ky(ModeShell, ActNextUnread)), tx("the next unread line for you")),
 			krow(cells(ky(ModeShell, ActRecap)), tx("where was I? the recap since your last visit")),
 			krow(cells(ky(ModeShell, ActPlan)), tx("the batch's plan")),
 			krow(cells(ky(ModeShell, ActFilter)), tx("filter Activity")),
+			krow(cells(ky(ModeShell, ActPriorityUp)), tx("Requests: a tracked request's priority; agents take high first")),
 			krow(cells(kyAlt(ModeShell, ActHelp)), tx("help, every key")),
 			krow(cells(ky(ModeShell, ActRequests), ky(ModeShell, ActServices)), tx("requests, services")),
 			krow(cells(ky(ModeShell, ActHealth)), tx("project health")),

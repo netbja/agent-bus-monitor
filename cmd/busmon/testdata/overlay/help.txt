@@ -22,6 +22,7 @@ KEYS
   d del                remove
   a                    show or hide the agents silent for more than a day
   o                    Requests: show or hide the answered threads and those older than 7 days
+  + -                  Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first
   /                    filter
   i :                  write
   I                    write in the compose window (several lines, Ctrl+S sends)
@@ -67,6 +68,7 @@ KEYS
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
   o                    History (H): load the three days before; the recap (R): show For you's items older than a day
   r                    About (A): play the packet's run again
+  + -                  a tracked request's page: raise or lower its priority (low, normal, high)
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
   ^C                   quit (everywhere)

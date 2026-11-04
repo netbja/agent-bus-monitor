@@ -5,14 +5,14 @@
 │  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
 │  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
 │  ◆ gate   coder     by charlie  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
-│  ● unread dispatch  project paused until … 8m││  ✓ architect done      40m     —     —         escalating… spec merg…│
-│                     ╭─ Useful keys ────────────────────────────────────────────────────── 4/5 ─╮ate 1 · d… busmon-ch…▼
-╰─────────────────────│                                                                          │─────────────────────╯
-╭─  1 Activity   2 Boa│   enter  open a line (once: in place; twice: the full text)              │ents · filter: none ─╮
-│    time   from      │   u      the next unread line for you                                    │                     │
-│  ── Mon 2026-10-26 -│   R      where was I? the recap since your last visit                    │─────────────────────│
-│    14:24  architect │   P      the batch's plan                                                │                     │
-│    14:50  ♙ Charlie │   /      filter Activity                                                 │                     │
+│  ● unread dispatch  ╭─ Useful keys ────────────────────────────────────────────────────── 4/5 ─╮scalating… spec merg…│
+│                     │                                                                          │ate 1 · d… busmon-ch…▼
+╰─────────────────────│   enter  open a line (once: in place; twice: the full text)              │─────────────────────╯
+╭─  1 Activity   2 Boa│   u      the next unread line for you                                    │ents · filter: none ─╮
+│    time   from      │   R      where was I? the recap since your last visit                    │                     │
+│  ── Mon 2026-10-26 -│   P      the batch's plan                                                │─────────────────────│
+│    14:24  architect │   /      filter Activity                                                 │                     │
+│    14:50  ♙ Charlie │   + -    Requests: a tracked request's priority; agents take high first  │                     │
 │    14:51  coder     │   F1 ?   help, every key                                                 │                     │
 │  ○ 14:52  master    │   F2 F3  requests, services                                              │                     │
 │  ● 14:56  dispatch  │   F5     project health                                                  │                     │

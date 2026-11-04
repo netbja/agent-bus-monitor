@@ -803,6 +803,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 	case ActPlanStart:
 		m.planStart(p)
 		return nil
+	case ActPriorityUp, ActPriorityDown:
+		return m.setPriority(act == ActPriorityUp)
 	case ActComposeOpen: // in an agent's page: write to that agent
 		if p.kind == ovAgent {
 			agent := p.key
@@ -1211,6 +1213,10 @@ func (m *Model) planStart(p *page) {
 // pageOffers reports whether the reader's top page offers act, for the
 // footer's OnPage keys.
 func (m Model) pageOffers(act Action) bool {
+	if act == ActPriorityUp || act == ActPriorityDown { // the Requests tab's row, or a request's page
+		_, why := m.priorityTarget()
+		return why == ""
+	}
 	p := m.rd.top()
 	if p == nil {
 		return false

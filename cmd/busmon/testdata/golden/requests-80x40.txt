@@ -14,19 +14,19 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity   2 Board   3 Requests   4 Plan   ─ 22 waiting · 1 tracked · 9…─╮
 │  You wait on                                                                 │
-│  ○ you → master        dir  message 21 from the person                     5m│
-│  ○ you → master        dir  message 20 from the person                    10m│
-│    you → master        dir  + 20 older  (enter shows them)                 1h│
+│  ○ you → master          dir  message 21 from the person                   5m│
+│  ○ you → master          dir  message 20 from the person                  10m│
+│    you → master          dir  + 20 older  (enter shows them)               1h│
 │  Tracked                                                                     │
-│  ◆ master → coder      req  busmon-group-a · accepted                      1h│
+│  ◆ master → coder        req  busmon-group-a · accepted                    1h│
 │  Reviews gated                                                               │
-│  ● coder → reviewer-…  chal lifecycle-spec · gate-subject-close · a-pe…    1h│
+│  ● coder → reviewer-…    chal lifecycle-spec · gate-subject-close · a-…    1h│
 │  Between agents                                                              │
-│  ● coder → ui-kimi     dir  coder to ui-kimi                              12h│
-│  ○ master → sentinel   dir  master to sentinel (+1)                       14h│
-│  ○ master → foureyes   dir  master to foureyes                            12h│
-│  ○ master → coder      dir  master to coder                               11h│
-│  ○ sentinel → master   dir  sentinel to master (+5)                       48m│
+│  ● coder → ui-kimi       dir  coder to ui-kimi                            12h│
+│  ○ master → sentinel     dir  master to sentinel (+1)                     14h│
+│  ○ master → foureyes     dir  master to foureyes                          12h│
+│  ○ master → coder        dir  master to coder                             11h│
+│  ○ sentinel → master     dir  sentinel to master (+5)                     48m│
 │  ── notices · 22, nobody owes an answer  (enter shows them) ──               │
 │  ── done or answered · 77, older than 7 d folded  (o shows them) ──          │
 │                                                                              │

@@ -471,6 +471,12 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   and what agents owe each other a muted `N between agents` (no age, the first item to go for room), each
   absent at 0. Enter expands a group (or `+ N older`), opens a thread, a
   report notice's report, a request, or a notice group's list; `d`/`y` closes each thread of a group once.
+  Request priority (request-priority §6, `priority.go`): `+`/`-` on a single tracked request's row (Requests, `OnPage`
+  through `pageOffers`, which reads the row key only, `priorityTarget`) or on its page write the person's level through
+  `busWriter.SetRequestPriority` in a command, said by a flash (the next poll reads the board; busmon never edits its
+  copy); a group, a row that is no request and a done one say why; each row carries a mark column (`listRow.HasMark`:
+  `↑` attention high, `↓` muted low, blank normal; a group its highest member's); the tracked section sorts by
+  `threadRank` (a requested request's level, anything else normal), groups by unread, best rank, then oldest.
   Activity auto-scroll (v0.12.3): selecting, clicking or opening a line keeps it live; only `f`
   (`listState.Pause`) and a wheel-up leave it, and (A3) moving the selection down onto the newest
   line or wheeling back to the bottom resumes it (`f`/End still do).
@@ -1420,6 +1426,22 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   cutover (the old sentinel→JSON break) into an explicit signal. `agentbus version` prints the
   constant. Stream entries and `agents`/`usage`/`verdicts` output are **not** versioned (they are
   additive-by-key via `ParseEntry`/`json.Unmarshal`).
+- **Request priority is the person's, and lives in the board entry** (spec
+  `docs/superpowers/specs/2026-11-04-request-priority-design.md`, phase 1, `bus/priority.go`): `RequestInfo.Priority`
+  `high`/`low` (absent = normal, `normal` never stored) with `priority_by` and `priority_at` (Redis `TIME`), written only
+  by `Bus.SetRequestPriority` (one script `requestPriority`: unknown, untracked and done refused with
+  `requestTransition`'s words; the same level writes nothing; `updated` untouched; no stream entry). Every other board
+  writer is a Lua cjson round trip, so the field survives accept, block, delivery, the conductor and done; **never write a
+  board entry from a Go struct** (`json.Marshal` + `HSET` drops unknown fields): `TestNoStructWriterOfTheBoard`
+  type-checks the module (`go list -export`) for a `json.Marshal` of `BoardEntry`/`RequestInfo` or an `HSet`/`HSetNX`/
+  `HMSet` whose key reaches `BoardKey` through assignments and production call sites, and the old `boardSet` is a test
+  helper. `bus.RequestLess` (rank, created_at, id) and `bus.NextRequest` (an accepted request first, `finish first`; else
+  the first requested with `Availability` retained; blocked does not hold; a done one in review neither holds nor is
+  ready: no review barrier) are what `agentbus request next [<agent>] [--json]` prints (exit 64 when nothing is ready)
+  and the skills tell agents to follow. `agentbus request priority <task> high|normal|low --as <person>` refuses an
+  agent caller (`refuseAgentForPriority`: `AGENT_BUS_AGENT`, or a registered agent's verified pid among the ancestors, or
+  a check that cannot be made), passes the identity guard only with `--as`, and every role denies the plain
+  `Bash(agentbus request priority*)` (no `agentbus * …` form: it would deny messages). Plan-task priority is phase 2.
 - **`report` keeps a bounded preview AND the full text.** The write path stores `message` (the
   ≤500 one-line `SanitizeReportMessage` preview, for `listen`/busmon) and — only when it carries
   more — a `full` field (`SanitizeReportFull`: newlines/tabs kept, ≤8000). Don't raise the preview

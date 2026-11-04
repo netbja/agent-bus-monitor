@@ -56,6 +56,13 @@ func (f *fakeWriter) HumanClose(_ context.Context, from, target, ref, message st
 	return "1-0", f.fail
 }
 
+func (f *fakeWriter) SetRequestPriority(_ context.Context, task, level, by string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "priority "+task+" "+level+" "+by)
+	return true, f.fail
+}
+
 func (f *fakeWriter) ForgetAgent(_ context.Context, agent string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

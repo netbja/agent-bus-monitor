@@ -100,6 +100,8 @@ const (
 	ActFocusToggle  // settings (C): tab moves the focus between the groups and the keys
 	ActReset        // settings (C): remove the selected key from config.toml (asks y)
 	ActResetGroup   // settings (C): remove the group's keys from config.toml (asks y)
+	ActPriorityUp   // Requests or a request's page: raise a tracked request's priority (the person's)
+	ActPriorityDown // and lower it
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -217,6 +219,9 @@ var (
 		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(keyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "o", Help: "Requests: show or hide the answered threads and those older than 7 days", Act: ActFold, Panels: []PanelID{PanelRequests}, match: runeIs('o')},
+		// request-priority §6: on one tracked request, written at once (the opposite key undoes it).
+		{Keys: "+ -", Hint: "priority", Help: "Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first", Act: ActPriorityUp, Panels: []PanelID{PanelRequests}, OnPage: true, match: runeIs('+')},
+		{Keys: "-", Act: ActPriorityDown, Panels: []PanelID{PanelRequests}, OnPage: true, match: runeIs('-')},
 		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
 		{Keys: "i", Hint: "write", Alt: ":", Act: ActCompose, match: runeIs('i', ':')},
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},
@@ -317,6 +322,8 @@ var (
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
 		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
+		{Keys: "+ -", Hint: "priority", Help: "a tracked request's page: raise or lower its priority (low, normal, high)", Act: ActPriorityUp, OnPage: true, match: runeIs('+')},
+		{Keys: "-", Act: ActPriorityDown, OnPage: true, match: runeIs('-')},
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
