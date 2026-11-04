@@ -1062,7 +1062,13 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   secrets only with `backup.age_recipient`, without `age` the archive is made without them and `SecretsError`
   recorded; `backup-last.json`'s `scheduled` part (`RecordScheduled`) is written only by the chore. `agentbus backup`
   warns about a defaulted `backup.dir` while `daily` is on. busmon's C page shows the three `backup.after_*` keys (Backup group, `settingOnPage`: only its
-  `PersonOnly` keys) read-only: Enter says "edit config.toml yourself", `d` offers nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `cmd/agentbus/backupcheck.go` the reader; 15 min,
+  `PersonOnly` keys) read-only: Enter says "edit config.toml yourself", `d` offers nothing. Below them (backup-page,
+  `settings_backup.go`, read with the rows in the page's command: `readBackupFacts`, nothing without a HOME or XDG folder):
+  the folder, `Back up now` (Enter, then `y`: `agentbus backup`, `--secrets` when `backup.age_recipient` is set and `age` is on PATH (else left out and said, as the schedule does), run as Z
+  runs suspend, `startRun` in `sleep.go`: one child at a time, its own session, output in `<state>/agentbus/backup.log`,
+  its last line the notice, its end reading the page again), one row per archive of this host (`backup.List`: date, size,
+  projects, secrets or not), and the last runs from `backup-last.json` (errors through `health.Redact`); Enter on an
+  archive opens its coverage, the restore dry runs to copy (`y`, the path shell-quoted) and what takes each project offline first (`agentbus down <p>`, its herdr workspace closed: a suspend keeps the agents and the workspace, which restore refuses even with `--force`; `backupOfflineSteps`); busmon restores nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `cmd/agentbus/backupcheck.go` the reader; 15 min,
   for you, `agentbus backup`): per project, warn on no covering archive younger than `backup.warn_after` (168h, `0` =
   this reminder off), on the latest scheduled attempt covering it failed while `daily` (cleared by a newer covering
   archive; the age case only by one with secrets, read from `coverage.json`'s `secrets`), on its latest

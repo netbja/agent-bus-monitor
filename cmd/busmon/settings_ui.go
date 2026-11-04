@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,21 @@ type settingsPage struct {
 	err     string   // the last refusal, in the rule's own words
 	busy    bool     // a write is in flight: keys wait for its rows
 	selLine int      // the body line of the selected row, to keep it in view
+	// backup is the Backup group's archives and last run (backup-page): its
+	// selectable lines follow the group's keys (backupItems).
+	backup    *backupFacts
+	backupAsk bool   // Back up now waits for its y
+	running   string // the backup running, as Back up now's line says it ("" = none)
+}
+
+// selectable is how many lines the selected group can select: its keys, then
+// for Backup, Back up now and the archives.
+func (s *settingsPage) selectable() int {
+	n := len(s.rows())
+	if s.group >= 0 && s.group < len(s.groups) && s.groups[s.group].Group == config.GroupBackup {
+		n += backupItems(s.backup)
+	}
+	return n
 }
 
 // themeChoices are display.theme's values, in the page's order.
@@ -52,6 +68,7 @@ var settingChoices = map[string][]string{"display.theme": themeChoices, "display
 type settingsMsg struct {
 	groups  []settingGroup
 	targets []string // notify.toml's targets, one line each, never a URL
+	backup  *backupFacts
 	keys    []string // the keys written or unset (none = an open)
 	err     error
 }
@@ -95,7 +112,9 @@ func (m *Model) settingsCmd(write func() error, keys ...string) tea.Cmd {
 	getenv, flags := m.settingsGetenv(), m.cfg.flags
 	return func() tea.Msg {
 		err := write()
-		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), targets: notifyTargetLines(getenv), keys: keys, err: err}
+		host, _ := os.Hostname()
+		f := readBackupFacts(getenv, host)
+		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), targets: notifyTargetLines(getenv), backup: &f, keys: keys, err: err}
 	}
 }
 
@@ -117,7 +136,7 @@ func (m *Model) gotSettings(msg settingsMsg) {
 		return
 	}
 	s := p.set
-	s.groups, s.targets, s.loaded, s.busy, p.dirty = msg.groups, msg.targets, true, false, true
+	s.groups, s.targets, s.backup, s.loaded, s.busy, p.dirty = msg.groups, msg.targets, msg.backup, true, false, true
 	var refused *config.RefusedError
 	switch {
 	case msg.err != nil && errors.As(msg.err, &refused):
@@ -180,7 +199,7 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 	}
 	s.group = clamp(s.group, 0, len(s.groups)-1)
 	rows := s.rows()
-	p.sel = clamp(p.sel, 0, max(0, len(rows)-1))
+	p.sel = clamp(p.sel, 0, max(0, s.selectable()-1))
 	p.dirty = true
 	defer m.keepSettingInView(p)
 	path := config.Path(m.settingsGetenv())
@@ -202,7 +221,15 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 			return nil
 		}, keys...)
 	}
-	if s.edit != "" && len(rows) > 0 {
+	if s.backupAsk { // Back up now waits its y; anything else runs nothing
+		s.backupAsk = false
+		if k.Code != keyRune || k.Rune != 'y' {
+			m.ui.flash, m.ui.flashErr = "nothing done", false
+			return nil
+		}
+		return m.startBackup(s.backup)
+	}
+	if s.edit != "" && len(rows) > 0 && p.sel < len(rows) {
 		return m.settingsEditKey(k, rows[p.sel])
 	}
 	side := m.readerWidth() >= settingsSideMin
@@ -236,7 +263,7 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 		case act == ActUp && p.sel == 0 && !side: // ↑ on the first key: back to the tabs
 			s.keys = false
 		default:
-			p.sel, s.err = clamp(p.sel+d, 0, max(0, len(rows)-1)), ""
+			p.sel, s.err = clamp(p.sel+d, 0, max(0, s.selectable()-1)), ""
 		}
 		return nil
 	case ActGroupNext, ActGroupPrev:
@@ -265,6 +292,17 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 	if !s.keys { // enter on a group goes to its keys; d waits for a key
 		if act == ActOpen {
 			s.keys = true
+		}
+		return nil
+	}
+	if p.sel >= len(rows) { // the Backup group's lines after its keys
+		if act != ActOpen || s.backup == nil {
+			return nil
+		}
+		if i := p.sel - len(rows); i == 0 {
+			return m.backupNowKey(s)
+		} else if i-1 < len(s.backup.Archives) {
+			return m.push(backupArchivePage(s.backup.Archives[i-1]))
 		}
 		return nil
 	}
@@ -489,7 +527,7 @@ var settingsGroupNotes = map[config.Group]string{
 	config.GroupAttention:     "how busmon calls you; bell and reminder timings apply at once",
 	config.GroupIdentity:      "your name as a person on the bus",
 	config.GroupNotifications: "what reaches your phone or desktop; targets in notify.toml",
-	config.GroupBackup:        "your own command after each backup: edit config.toml yourself",
+	config.GroupBackup:        "this host's archives; your own after_* keys: edit config.toml yourself",
 }
 
 // settingsBody lays the page out in width cells: the groups on the left (or
@@ -623,6 +661,30 @@ func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
 	if g.Group == config.GroupNotifications {
 		for _, l := range s.targets {
 			b.seg(RoleMuted, "    "+Preview(l)).text("\n")
+		}
+	}
+	if g.Group == config.GroupBackup && s.backup != nil {
+		lines, at := backupItemLines(s, s.backup, len(g.Rows), sel, width, s.running)
+		if at >= 0 {
+			selLine = n + at
+		}
+		for _, l := range lines {
+			b.segs(l...).text("\n")
+		}
+		if sel >= len(g.Rows) {
+			b.text("\n").text(" ").seg(RoleLine, strings.Repeat(glyphHorizontal, max(0, width-2))).text("\n")
+			note := func(text string, role Role) {
+				b.join(wrapSpans([]mdSpan{{text: Preview(text), role: role}}, width-1, " ", " ")).text("\n")
+			}
+			switch i := sel - len(g.Rows); {
+			case s.backupAsk:
+				note("Back up every project of this host now? agentbus "+strings.Join(backupNowArgs(*s.backup), " ")+" runs beside busmon, its output in "+s.backup.Log+" (y)", RoleAttention)
+			case i == 0:
+				note("enter: run agentbus backup now, as by hand; the schedule and the folder are backup.schedule and backup.dir in config.toml", RoleMuted)
+			default:
+				note("enter: this archive's coverage and the restore commands to copy; busmon restores nothing", RoleMuted)
+			}
+			return b.Lines(), selLine
 		}
 	}
 	if len(g.Rows) > 0 {
