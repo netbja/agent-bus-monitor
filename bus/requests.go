@@ -30,6 +30,12 @@ type RequestInfo struct {
 	Commit            string `json:"commit,omitempty"`       // request done --commit (missions)
 	Branch            string `json:"branch,omitempty"`       // request done --branch
 	Availability      string `json:"availability,omitempty"` // derived, never persisted
+	// Priority (request-priority, additive): "high" or "low", absent = normal;
+	// set only by a person through SetRequestPriority, kept by every board
+	// script's cjson round trip.
+	Priority   string `json:"priority,omitempty"`
+	PriorityBy string `json:"priority_by,omitempty"` // the person who set it
+	PriorityAt int64  `json:"priority_at,omitempty"` // Redis TIME, Unix ms
 }
 
 // Request atomically publishes and records a named request. Reusing a task is
