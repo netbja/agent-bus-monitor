@@ -952,8 +952,9 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (`DiskCleanChoice`, kept whole: the paths are cut to leave it room within the 300-rune detail), never in the copyable line; a fail wakes sentinel, which never deletes anything. `github`
   (busmon-github-check, `health/github.go` pure, `cmd/agentbus/githubcheck.go` the runner; 15 min, 10 s) runs only
   when a remote is on github.com (origin first): `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` and
-  `git -c credential.helper= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
-  under `LC_ALL=C` (the answers are read by git's English messages); any answer from GitHub is reached (auth unknown),
+  `git -c credential.helper= -c core.askPass= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
+  under `LC_ALL=C` and without any askpass program (`probeEnviron`: `GIT_ASKPASS`/`SSH_ASKPASS` removed, `SSH_ASKPASS_REQUIRE=never`;
+  github-askpass: the terminal switch alone left KDE's ksshaskpass asking for a username every 15 minutes) (the answers are read by git's English messages); any answer from GitHub is reached (auth unknown),
   matched before the network errors since it may quote a repository named like one (TLS by its own phrases), only a network error failed, an unrecognised answer or a missing binary not
   judged. Both reached ok, one warn (for you), neither unknown then warn after `GitHubNeitherWarnAfter` (1 h, tracked
   in the check's memory: a restart starts it over); never fail, so it never wakes sentinel. The stall guard (spec
