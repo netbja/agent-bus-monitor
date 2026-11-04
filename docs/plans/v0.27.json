@@ -14,6 +14,8 @@
     {"id": "compose-undo", "title": "busmon compose window: Ctrl+Z undoes the last edit (a bad paste), Ctrl+Y redoes", "owner": "coder", "review": "compose-undo", "after": ["docs-start"]},
     {"id": "v027-release-notes", "title": "v0.27 release notes, CHANGELOG and herdr-plugin.toml; the Redis suite on a disposable broker", "owner": "coder", "review": "v027-release-notes", "after": ["suspend", "focus-notice", "backup-page", "notify-assistant", "about-page", "foryou-no-progress", "deny-write-warning", "docs-start", "compose-undo"]},
     {"id": "v027-reinstall-tag", "title": "Merge, reinstall and tag v0.27 when the person says", "owner": "person", "after": ["v027-release-notes"]},
+    {"id": "review-queue-idle", "title": "Health review-queue: warn and wake master when a review is owed or half-approved while every agent idles (stall_after)", "owner": "coder", "review": "review-queue-idle", "after": ["v027-release-notes"]},
+    {"id": "message-reply-key", "title": "busmon: one key on a message, report or note page opens compose to its sender, prefilled with re: <first line>", "owner": "coder", "review": "message-reply-key", "after": ["review-queue-idle"]},
     {"id": "idea-agent-led-setup", "title": "Decide: an agent-led setup (silent probe, one question at a time with a recommendation, one plan, no secret in chat)", "owner": "person", "merge": false},
     {"id": "idea-github-source", "title": "Decide: a GitHub @mention by an allowed person becomes a request to master; PR comments reach the PR's agent", "owner": "person", "merge": false},
     {"id": "idea-link-report-to-directive", "title": "Decide: a report --to the person answers their directive in Requests (busmon links it, or report --ref)", "owner": "person", "merge": false},
