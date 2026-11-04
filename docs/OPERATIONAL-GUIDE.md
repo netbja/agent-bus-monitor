@@ -4,6 +4,41 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 ---
 
+## Start a new project
+
+Once agent-bus is installed ([section 3](#3-step-by-step-terminal-installation)), one command, run in
+the project's folder, starts a team:
+
+```bash
+cd ~/code/myapp
+agentbus start
+```
+
+`agentbus start` deduces what it can: the project's name (from the folder, or the template a
+previous run wrote), your name (`agentbus identity set`, else `$USER`) and the team (every boot role of
+`roles.toml` by default: master, coder, foureyes and sentinel as shipped). It shows them once and asks only for what it cannot deduce.
+Then it runs `agentbus up` for you. Outside herdr, it opens the herdr session itself
+(`herdr --session <project>`) and the team opens inside it.
+
+- `agentbus start --yes` takes the deduced values without asking.
+- `agentbus start --dry-run` shows the plan and starts nothing.
+- `agentbus start ~/code/myapp` names the folder instead of the current one.
+- `--name <project>`, `--as <your-name>` and `--roles master,coder,foureyes` set a value
+  yourself; a reduced team is kept for the project and for the next new ones.
+
+**When to use `agentbus up` instead.** `up` is the strict, scriptable form: no questions and no
+deduction, the project named on the command line. Use it:
+
+- for a project that already exists: `agentbus up myapp` reopens it, and relaunches any agent that
+  is gone ([Scenario B](#scenario-b-resuming-an-existing-project));
+- with `--resume`, to bring the Claude Code agents back on their recorded sessions;
+- in a script that names everything: `agentbus up myapp ~/code/myapp --as <your-name>`;
+- for its other flags (`--tabs`, `--no-dispatch`, `--escalate-to`, `--dry-run`).
+
+[Section 5](#5-walkthrough-launching-and-managing-projects) walks through both.
+
+---
+
 ## 1. Overview & Core Features
 
 `agent-bus-monitor` is a decoupled, asynchronous multi-agent coordination bus built on **Redis Streams** and written in **Go**. It enables multiple autonomous agents (Claude Code, OpenAI Codex, Kimi CLI, etc.) to collaborate on a software project with complete visibility and oversight for the human operator.
@@ -215,7 +250,8 @@ For security, the broker binds strictly to loopback (`127.0.0.1:6380`). Remote a
 
 ### Scenario A: Starting a Team on a NEW Project
 
-Assume your target project is at `~/code/myapp`.
+Assume your target project is at `~/code/myapp`. The short way is `cd ~/code/myapp && agentbus start`
+([Start a new project](#start-a-new-project)); below is what it does, step by step, with `agentbus up`.
 
 1. **Start herdr** (a session per project is handy):
    ```bash
