@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -353,5 +354,31 @@ func TestLoadJudgesTheDescriptorItReads(t *testing.T) {
 	}
 	if _, ok := f.Target("evil"); ok {
 		t.Fatal("the swapped file was read")
+	}
+}
+
+// The topic is a public ntfy server's only lock: a guessable (short), overlong
+// or oddly spelled one is refused, the bounds exactly, and a drawn-shaped one
+// (agentbus- and 20 of a-z0-9) is taken.
+func TestNtfyTopicBounds(t *testing.T) {
+	cases := []struct {
+		topic string
+		ok    bool
+	}{
+		{"agentbus-" + strings.Repeat("a", 20), true},
+		{strings.Repeat("a", 12), true},
+		{strings.Repeat("a", 64), true},
+		{strings.Repeat("a", 11), false},
+		{strings.Repeat("a", 65), false},
+		{"agentbus-01234567.9", false},
+		{"agentbus 0123456789", false},
+		{"agentbus-0123456789\n", false},
+		{"agentbus-0123456789é", false},
+	}
+	for _, c := range cases {
+		f := Load(writeFile(t, "[ntfy.x]\ntopic = "+strconv.Quote(c.topic)+"\n", 0o600))
+		if got := len(f.Targets) == 1; got != c.ok {
+			t.Errorf("topic %q: taken %v, want %v (%v)", c.topic, got, c.ok, f.Warnings)
+		}
 	}
 }
