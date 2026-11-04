@@ -1,6 +1,6 @@
-# Guide Opérationnel : Agent Bus Monitor (`agent-bus`)
+# Guide opérationnel : Agent Bus Monitor (`agent-bus`)
 
-Ce guide pratique est conçu en complément du [README](../README.fr.md) (la référence complète est dans le [README anglais](../README.md)). Il fournit une marche à suivre pas à pas pour installer, configurer et utiliser `agent-bus-monitor`, le gestionnaire d'espaces de travail `herdr`, son plugin `netbja.agentbus`, ainsi que le pilotage quotidien d'équipes d'agents IA sur un projet neuf ou existant.
+Ce guide pratique complète le [README](../README.fr.md) (la référence complète est dans le [README anglais](../README.md)). Il fournit une marche à suivre pas à pas pour installer, configurer et utiliser `agent-bus-monitor`, le gestionnaire d'espaces de travail `herdr`, son plugin `netbja.agentbus`, ainsi que le pilotage au quotidien d'équipes d'agents IA sur un projet neuf ou existant.
 
 ---
 
@@ -40,16 +40,16 @@ La [section 5](#5-marche-à-suivre--lancement-et-gestion-des-projets) détaille 
 
 ---
 
-## 1. Vue d'ensemble & Fonctions Principales
+## 1. Vue d'ensemble et fonctions principales
 
 `agent-bus-monitor` est un bus de coordination multi-agents asynchrone et découplé, bâti sur **Redis Streams** et outillé en **Go**. Il permet à plusieurs agents autonomes (Claude Code, OpenAI Codex, Kimi CLI, etc.) de collaborer sur un même projet avec une visibilité totale pour l'humain.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                       Opérateur Humain                      │
-│                  (TUI busmon + herdr tabs)                  │
+│                       Opérateur humain                      │
+│                (TUI busmon + onglets herdr)                 │
 └──────────────┬──────────────────────────────▲───────────────┘
-               │ @agent directive             │ Flux live / Board d'avancement
+               │ directive @agent             │ Flux en direct / tableau des tâches
                ▼                              │
 ┌─────────────────────────────────────────────┴───────────────┐
 │              Broker Redis (Streams sur :6380)               │
@@ -58,31 +58,31 @@ La [section 5](#5-marche-à-suivre--lancement-et-gestion-des-projets) détaille 
         │                      │                      │
 ┌───────┴────────┐     ┌───────┴────────┐     ┌───────┴────────┐
 │     master     │     │     coder      │     │    foureyes    │
-│  (Coordinateur)│     │ (Implémenteur) │     │ (Revue 4-yeux) │
+│  (Coordinateur)│     │ (Implémenteur) │     │ (Revue 4 yeux) │
 └────────────────┘     └────────────────┘     └────────────────┘
 ```
 
-### Les Composants Majeurs
+### Les composants principaux
 
-1. **Le Broker Redis (`redis:8-alpine`)**
-   - Isole les données par espace de nom de projet (`{project}:{stream}`).
+1. **Le broker Redis (`redis:8-alpine`)**
+   - Isole les données par espace de noms de projet (`{project}:{stream}`).
    - Gère les flux :
      - `{p}:cmd` : directives et commandes adressées.
      - `{p}:status` : états déclarés et pulsations passives.
      - `{p}:report` : comptes-rendus synthétiques destinés aux humains.
      - `{p}:notify` : annonces globales d'information.
      - `{p}:verdicts` : registre d'audit des approbations et refus.
-   - Maintient les structures d'état : `{p}:board` (registre des tâches), `{p}:pilot` (bail du coordinateur), `{p}:armed:<agent>` (baux d'écoute active), et `{p}:gate:<agent>` (défis de revue 4-yeux).
+   - Maintient les structures d'état : `{p}:board` (registre des tâches), `{p}:pilot` (bail du coordinateur), `{p}:armed:<agent>` (baux d'écoute active), et `{p}:gate:<agent>` (verrous de revue 4 yeux).
 
 2. **Le CLI `agentbus` (`cmd/agentbus`)**
    - Outil en ligne de commande permettant aux agents et aux scripts d'interagir avec le bus :
      - Émettre un état / pulsation : `agentbus status <agent> <working|idle|blocked|waiting|done> <message>`
      - Assigner des ordres : `agentbus cmd [--ref T] <agent> <directive>`
      - Publier un rapport d'étape : `agentbus report <agent> <note>`
-     - Consulter le tableau de bord partagé : `agentbus board`
-     - Valider les verrous 4-yeux : `agentbus gate`, `agentbus verdict`
+     - Suivre les tâches sur le tableau partagé : `agentbus board`
+     - Gérer les verrous de revue 4 yeux : `agentbus gate`, `agentbus verdict`
 
-3. **Le Dashboard TUI `busmon` (`cmd/busmon`)**
+3. **Le tableau de bord TUI `busmon` (`cmd/busmon`)**
    - Interface terminal interactive pour superviser la ruche d'agents en temps réel :
      - **En-tête** : lien au broker, état du dispatcher et du conducteur, ce qui est pour vous, santé, pause, une jauge d'usage par fournisseur.
      - **For you** : les questions, décisions, verrous et messages non lus que vous seul pouvez régler.
@@ -91,29 +91,29 @@ La [section 5](#5-marche-à-suivre--lancement-et-gestion-des-projets) détaille 
      - **Pages** : services (F3), santé (F5), récapitulatif (`R`), plan (`P`), tokens (`U`), historique (`H`), à propos (`A` : les versions, `y` les copie), aide (F1).
      - **Saisie** : `@coder ...` envoie une directive qui réveille l'agent.
 
-4. **L'Event-Driven Dispatcher (`agentbus dispatch`)**
+4. **Le dispatcher événementiel (`agentbus dispatch`)**
    - Service utilisateur (systemd `--user`, launchd) surveillant le flux `{p}:cmd`.
-   - Lorsqu'une directive arrive pour un agent au repos et désarmé, il injecte une commande de réveil unique dans son volet `herdr` (uniquement si le volet est libre et non focalisé). Un réveil qui attend 30 s sur le volet où vous êtes vous vaut une notification de bureau (notify-send) ; quittez le volet et le passage suivant le réveille. `dispatch.focus_notice` (page C, Attention ; `0` = désactivé) en règle le délai.
-   - L'agent se réveille, dépile ses tâches via `agentbus subscribe --drain <agent>`, s'exécute, puis retourne en sommeil.
+   - Lorsqu'une directive arrive pour un agent au repos et désarmé, il injecte une commande de réveil unique dans son volet `herdr` (uniquement si le volet est prêt et n'a pas le focus). Un réveil qui attend 30 s sur le volet où vous êtes vous vaut une notification de bureau (notify-send) ; quittez le volet et le passage suivant le réveille. `dispatch.focus_notice` (page C, Attention ; `0` = désactivé) en règle le délai.
+   - L'agent se réveille, dépile ses tâches via `agentbus subscribe --drain <agent>`, fait son travail, puis se rendort.
    - Il lit aussi les quotas des fournisseurs, le remplissage du contexte des agents et la santé du projet, et agit selon des règles (section 5, cas C et D).
 
 ---
 
-## 2. Avantages de l'Architecture
+## 2. Avantages de l'architecture
 
-- **Zéro coût de jetons au repos** : Grâce au dispatcher événementiel, un agent inactif ne consomme aucun token en boucle de veille inutile ; il est réveillé uniquement lorsqu'une tâche concrète lui est assignée.
-- **Claude par défaut, adaptable à tout modèle** : Le projet utilise Claude Code par défaut (`roles.toml`), mais supporte nativement des équipes mixtes avec OpenAI Codex ou Kimi CLI via des profils configurables (`docs/AGENT-PROFILES.md`).
-- **100% local, prêt pour le distant** : Fonctionne entièrement en local sur votre machine (`127.0.0.1:6380`), tout en étant nativement conçu pour relier des serveurs distants (une machine distante, serveurs GPU) via un simple tunnel SSH chiffré.
-- **Observabilité et gouvernance** : Visibilité immédiate pour l'humain via le TUI `busmon`, combinée à une barrière de relecture obligatoire à 4 yeux (`foureyes`, `security`).
+- **Zéro coût en tokens au repos** : grâce au dispatcher événementiel, un agent inactif ne consomme aucun token dans une boucle d'attente inutile ; il est réveillé uniquement lorsqu'une tâche concrète lui est assignée.
+- **Claude par défaut, adaptable à tout modèle** : le projet utilise Claude Code par défaut (`roles.toml`), mais prend en charge des équipes mixtes avec OpenAI Codex ou Kimi CLI via des profils configurables (`docs/AGENT-PROFILES.md`).
+- **100 % local, prêt pour le distant** : fonctionne entièrement en local sur votre machine (`127.0.0.1:6380`), tout en étant nativement conçu pour relier des serveurs distants (une machine distante, des serveurs GPU) via un simple tunnel SSH chiffré.
+- **Observabilité et gouvernance** : visibilité immédiate pour l'humain via le TUI `busmon`, combinée à une barrière de relecture obligatoire à 4 yeux (`foureyes`, `security`).
 
 ---
 
-## 3. Installation Pas à Pas depuis le Terminal
+## 3. Installation pas à pas depuis le terminal
 
 Tout passe par `./setup.sh`, lancé depuis un clone du dépôt. Chaque étape peut être relancée
 sans risque.
 
-### Étape 1 : Prérequis Système
+### Étape 1 : prérequis système
 
 - **Linux ou macOS.**
 - **Go** : la version exigée par `go.mod`, actuellement 1.26.3.
@@ -128,7 +128,7 @@ sans risque.
 
 Python n'est plus nécessaire depuis la v0.10.2.
 
-### Étape 2 : Cloner et installer
+### Étape 2 : cloner et installer
 
 ```bash
 git clone https://github.com/netbja/agent-bus-monitor ~/agent-bus-monitor
@@ -186,7 +186,7 @@ signalez ce qui vous y a obligé, la version suivante le retire.
   mkdir -p ~/.config/agentbus/projects && mv ~/.config/herdr/plugins/config/cloudmanic.herdr-plus/projects/*.toml ~/.config/agentbus/projects/
   ```
 
-### Étape 3 : Vérifier, mettre à jour, désinstaller
+### Étape 3 : vérifier, mettre à jour, désinstaller
 
 ```bash
 ./setup.sh status       # versions, PATH, skills, plugin herdr, raccourci, Redis
@@ -197,7 +197,7 @@ signalez ce qui vous y a obligé, la version suivante le retire.
 
 **Le mot de passe du broker.** Une installation sur un broker neuf écrit un mot de passe aléatoire
 dans `~/.config/agentbus/redis.env` (0600) ; compose et tous les processus agentbus et busmon le
-lisent, rien n'est à exporter. Une installation antérieure garde l'historique `AgentBus2025!` (la
+lisent, rien n'est à exporter. Une installation antérieure garde le mot de passe historique `AgentBus2025!` (la
 santé `redis-password` avertit) jusqu'à `./setup.sh rotate-redis-password` : il vérifie d'abord,
 demande, pose le nouveau mot de passe sur le broker en marche, le prouve, recrée le conteneur du
 broker (quelques secondes, les données gardées) pour qu'un redémarrage le garde, et redémarre les
@@ -230,31 +230,31 @@ ou ne rien toucher.
 
 ---
 
-## 4. Topologie Réseau : Local vs Distant
+## 4. Topologie réseau : local ou distant
 
-### Déploiement 100% Local (par défaut)
+### Déploiement 100 % local (par défaut)
 Tous les processus tournent sur la même machine. Les agents et `busmon` se connectent directement à `127.0.0.1:6380`, avec le mot de passe de `~/.config/agentbus/redis.env` (une installation antérieure garde `AgentBus2025!` jusqu'à sa rotation).
 
-### Déploiement Hybride avec Serveur Distant (machine distante / GPU)
-Le broker Redis reste confiné au loopback (`127.0.0.1:6380`) pour des raisons de sécurité. La connexion distante s'opère via un tunnel SSH sécurisé :
+### Déploiement hybride avec un serveur distant (machine distante / GPU)
+Le broker Redis reste confiné au loopback (`127.0.0.1:6380`) pour des raisons de sécurité. L'accès distant passe par des tunnels SSH :
 
-- **Cas A : Vous surveillez depuis votre machine un bus tournant sur un serveur distant** :
+- **Cas A : surveiller depuis votre machine un bus qui tourne sur un serveur distant** :
   ```bash
   ssh -NL 6381:localhost:6380 utilisateur@serveur-distant &
   REDIS_PORT=6381 busmon --project mon-projet
   ```
-- **Cas B : Les agents distants rejoignent le bus de votre machine de développement** :
-  Depuis le serveur distant, ouvrez le tunnel inverse :
+- **Cas B : des agents distants rejoignent le bus de votre machine** :
+  Depuis le serveur distant, ouvrez un tunnel vers votre machine :
   ```bash
   ssh -L 6380:localhost:6380 utilisateur@machine-locale -N
   ```
-  Les agents sur le serveur distant interagissent alors naturellement avec le bus comme s'il était local.
+  Les agents du serveur distant publient et s'abonnent alors sur `localhost:6380`, comme si le bus était local.
 
 ---
 
-## 5. Marche à Suivre : Lancement et Gestion des Projets
+## 5. Marche à suivre : lancement et gestion des projets
 
-### Cas A : Démarrer une Équipe sur un NOUVEAU Projet
+### Cas A : démarrer une équipe sur un NOUVEAU projet
 
 Votre projet est dans `~/code/myapp`. Le plus court est `cd ~/code/myapp && agentbus start`
 ([Démarrer un nouveau projet](#démarrer-un-nouveau-projet)) ; voici ce qu'il fait, pas à pas, avec
@@ -276,7 +276,7 @@ Votre projet est dans `~/code/myapp`. Le plus court est `cd ~/code/myapp && agen
    - démarre les **services** du projet avec le gestionnaire de services du système (systemd
      `--user` sous Linux, launchd sous macOS) :
      - `dispatch` : réveille les agents inactifs quand du travail arrive ;
-     - `missions` : le conductor des gros changements.
+     - `missions` : le conducteur des grands changements.
 
      Ils ne vivent pas dans un onglet : fermer busmon, l'espace de travail ou herdr ne les arrête
      pas. Sans gestionnaire utilisable, `up` le dit et les lance en onglets ; `--tabs` force ce
@@ -311,14 +311,14 @@ Votre projet est dans `~/code/myapp`. Le plus court est `cd ~/code/myapp && agen
   `busmon --pick`.
 - `agentbus --project myapp agents` avant qu'un agent ait rejoint le projet le dit, au lieu de ne
   rien afficher.
-- Depuis un shell, `agentbus` écrit au nom de `AGENT_BUS_AGENT`, et de `anonymous` quand elle n'est
-  pas définie. Dans un volet herdr où elle ne l'est pas, une commande qui écrit est refusée avec le
+- Depuis un shell, `agentbus` écrit sous le nom donné par `AGENT_BUS_AGENT`, et sous `anonymous`
+  quand cette variable n'est pas définie. Dans un volet herdr où elle ne l'est pas, une commande qui écrit est refusée avec le
   correctif, pour qu'un agent ne publie jamais sous un mauvais nom. Dans busmon, vous écrivez en
   tant que personne (`--as`).
 
 ---
 
-### Cas B : Reprendre un Projet EXISTANT
+### Cas B : reprendre un projet EXISTANT
 
 1. Lancez herdr (`herdr --session myapp`).
 2. Lancez `agentbus up myapp`, ou faites `Ctrl+B` puis `↑` et choisissez `myapp`.
@@ -341,7 +341,7 @@ Votre projet est dans `~/code/myapp`. Le plus court est `cd ~/code/myapp && agen
 
 ---
 
-### Cas B2 : Passer une équipe d'avant la v0.12
+### Cas B2 : migrer une équipe d'avant la v0.12
 
 Une équipe dont dispatch et missions tournaient dans des onglets, ou montée à la main (ses propres
 noms d'onglets et d'agents, sans modèle de projet) :
@@ -353,20 +353,20 @@ noms d'onglets et d'agents, sans modèle de projet) :
    agentbus up myapp ~/code/myapp --session <session-herdr> --escalate-to <coordinateur>
    ```
    - `--session` : la session herdr où vivent les agents, quand son nom n'est pas celui du
-     projet. Le dispatcher y cherche leurs onglets.
+     projet. Le dispatcher y cherche leurs volets.
    - `--escalate-to` : l'agent qui reçoit les escalades et les avis `complete`, quand le
      coordinateur ne s'appelle pas `master`. Le choix est enregistré : un `agentbus up myapp`
      ultérieur le garde.
 2. **Fermez les anciens onglets** qui lançaient `agentbus dispatch`, `agentbus missions` ou une
-   ancienne boucle de réveil : le dispatcher doit être le seul à écrire dans les onglets.
+   ancienne boucle de réveil : le dispatcher doit être le seul processus à taper dans les volets.
 3. **Chaque agent se déclare une fois** depuis son onglet
    (`agentbus --project myapp status <nom> idle "back"`), ou le coordinateur le fait pour
-   l'équipe. Tant qu'un agent ne l'a pas fait, le dispatcher ne connaît pas son onglet et n'y
-   écrit jamais.
+   l'équipe. Tant qu'un agent ne l'a pas fait, le dispatcher ne connaît pas son volet et n'y
+   tape jamais rien.
 
 ---
 
-### Cas C : Surveiller et Arrêter un Projet
+### Cas C : surveiller et arrêter un projet
 
 - **Surveiller.** L'en-tête de busmon affiche `dispatch ready`, `dispatch waiting herdr`,
   `missions idle`, `missions busy`, `missions failed`, etc. `F3` (ou `s`) montre dispatch,
@@ -390,7 +390,7 @@ noms d'onglets et d'agents, sans modèle de projet) :
   passé pendant que busmon était fermé est dans `R`.
 - **For you.** Le panneau For you, à côté d'Agents, regroupe ce que vous seul pouvez régler : les
   questions ouvertes d'un agent (`ask`), un agent qui attend votre décision (`wait`), un verrou
-  4-yeux que vous avez ouvert ou qui vous bloque (`gate`), et les messages qui vous sont adressés
+  4 yeux que vous avez ouvert ou qui vous bloque (`gate`), et les messages qui vous sont adressés
   et que vous n'avez pas ouverts (`unread`). L'en-tête les compte (`♙ 4 for you · ● 2 unread`).
   Entrée en ouvre un. Chaque page se lit `Label:  value`, les valeurs d'un bloc alignées sur une
   colonne.
@@ -398,7 +398,7 @@ noms d'onglets et d'agents, sans modèle de projet) :
   d'usage de chaque fournisseur (% utilisé, remise à zéro) dans des sources locales, sans appel au
   modèle. L'en-tête de busmon affiche une jauge par fournisseur
   (`claude 5h 82% ~25m · codex 5h 96% held 03:10 · grok wk 59%`), remplie par huitièmes de case et
-  qui glisse vers une nouvelle valeur dans un terminal en couleurs vraies ; `agentbus quota` les affiche dans
+  qui glisse vers une nouvelle valeur dans un terminal en couleurs 24 bits (true colour) ; `agentbus quota` les affiche dans
   un terminal. À 85 % d'une fenêtre, master reçoit un avertissement ; à 95 %, les agents de ce
   fournisseur ne sont plus réveillés jusqu'à la remise à zéro (leur colonne state affiche `quota`, ou le
   marqueur `held` s'ils ont déclaré blocked ou done) ; quand le
@@ -410,7 +410,7 @@ noms d'onglets et d'agents, sans modèle de projet) :
     la ligne d'état (`Opus 5.5 · myapp · ctx 41% · 5h 12% (08:33) · 7d 54%`) : aucun autre outil
     n'est nécessaire, ccstatusline peut être désinstallé. Pour garder une autre ligne d'état, ajoutez
     `--then '<sa commande>'`.
-  - **Codex** et **Grok** fonctionnent d'office quand leur CLI est installée.
+  - **Codex** et **Grok** fonctionnent d'office quand leur CLI est installé.
   - **Kimi Code** et **agy** (Antigravity) aussi, depuis leurs propres journaux. Ils ne montrent
     qu'une limite atteinte, jamais un pourcentage : une limite Kimi `5-hour` ou `weekly` retient ses
     agents jusqu'à la prochaine réponse que Kimi obtient, ou au plus tard la durée de la fenêtre
@@ -428,14 +428,14 @@ noms d'onglets et d'agents, sans modèle de projet) :
   --until-reset quota` (ou `--for 2h`, `--until 02:15`). Personne n'est réveillé d'ici là, et
   l'en-tête de busmon affiche `paused · resumes in 1h52 (quota)`. À l'échéance, le dispatcher lève
   la pause et envoie une seule directive de reprise à master. `agentbus --project myapp resume` la
-  lève plus tôt ; `pause --status` l'affiche. master le fait lui-même quand sentinel signale que la
-  session atteint 90 %.
-- **`@all`** touche les agents listés dans Agents (pas le conductor, qui ne fait que publier des
+  lève plus tôt ; `pause --status` l'affiche. master le fait lui-même quand sentinel signale que le
+  budget de session atteint 90 %.
+- **`@all`** touche les agents listés dans Agents (pas le conducteur, qui ne fait que publier des
   rapports). C'est toujours un message par agent, pour que chacun soit livré à part, mais Activity
   n'affiche qu'une ligne `→ @all (6)`.
 - **Des questions pour vous.** Quand master a besoin de décisions, il les pose comme des questions
   (`agentbus ask`) : elles apparaissent dans For you comme `ask`, l'en-tête les compte (`♙ 2 for you`) et la ligne de
-  l'agent affiche `waiting` en fondu. Faites `!` ou `w` (ou Entrée dans la fiche de l'agent) pour les ouvrir (sans question ouverte, `w` écrit à master) : un onglet par question,
+  l'agent affiche `waiting` en fondu. Appuyez sur `!` ou `w` (ou Entrée dans la fiche de l'agent) pour les ouvrir (sans question ouverte, `w` écrit à master) : un onglet par question,
   `↑↓` ou un chiffre pour choisir une option, Entrée pour envoyer cette réponse tout de suite,
   `Other…` pour écrire la vôtre, `←→` pour changer de question, Échap pour fermer. Une question
   répondue affiche sa réponse et ne revient jamais. `agentbus asks --open` les liste dans un
@@ -460,14 +460,14 @@ noms d'onglets et d'agents, sans modèle de projet) :
   déclaré : rien ne devine qu'un agent est mort. busmon retire du panneau Agents, et de `@all`, un
   agent silencieux depuis plus d'un jour qui n'écoute pas et à qui rien n'est dû ; le panneau les
   compte (`3 dormant`) et `a` les affiche. Pour en retirer un définitivement, sélectionnez-le et
-  faites `d` (ou `Suppr`), puis `y` : c'est `agentbus --project myapp agents forget <nom>`. Un
+  appuyez sur `d` (ou `Suppr`), puis `y` : c'est `agentbus --project myapp agents forget <nom>`. Un
   agent qui écoute, ou qui a déclaré un état dans les 10 dernières minutes, est refusé.
 - **Requests : qui doit une réponse à qui.** L'onglet Requests (`3`) regroupe les fils selon ce
   qu'ils attendent : dus par vous, attendus par vous, requêtes suivies, revues encore verrouillées,
   directives entre agents, avis. Les fils répondus et ceux de plus de 24 heures sont repliés (`o`
   les montre) : une directive plus ancienne restée sans réponse ne réveille personne. Entrée
   déplie un groupe ou ouvre un fil ; `d` puis `y` clôt un fil par une réponse de votre part, son
-  historique reste. Une requête suivie est close par son destinataire (`agentbus request done`).
+  historique reste. Une requête suivie est close par son propriétaire (`agentbus request done`).
   L'en-tête reprend les mêmes comptes : ce que vous devez en orange
   (`2 requests waiting · oldest 3h`), ce que les agents se doivent entre eux en gris
   (`4 between agents`), chacun absent à 0.
@@ -483,7 +483,7 @@ noms d'onglets et d'agents, sans modèle de projet) :
 - **Lire les journaux :** `agentbus --project myapp service logs missions -n 100`. Ils tournent
   à 1 Mio, trois fichiers gardés.
 - **Arrêter :** `agentbus down myapp` arrête les services et ne supprime rien. Les agents et
-  l'espace de travail restent ouverts ; fermez-les dans herdr. Si le conductor vérifiait ou
+  l'espace de travail restent ouverts ; fermez-les dans herdr. Si le conducteur vérifiait ou
   intégrait, ses tests sont tués avec leur groupe de processus, et il refait cette étape à son
   prochain démarrage.
 - **Redémarrer un service :** `agentbus --project myapp service restart dispatch`, par exemple
@@ -497,7 +497,7 @@ noms d'onglets et d'agents, sans modèle de projet) :
 
 ---
 
-### Cas D : Une équipe qui tourne plusieurs jours
+### Cas D : une équipe qui tourne plusieurs jours
 
 Les contextes se remplissent, les clients se mettent à jour, les quotas s'épuisent. Chaque cas a
 sa règle ; aucun ne vous demande de surveiller un volet.
@@ -536,7 +536,7 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   relance dans son onglet (un rôle pop par `agent-spawn`) et prouve le nouveau processus. master ne peut recharger que sentinel. Vous pouvez recharger
   n'importe qui : `agentbus --project myapp reload coder --as <votre-nom>` (`--dry-run` dit ce qui
   se passerait, `--fresh` démarre une nouvelle conversation). `agentbus up myapp --reload
-  propose` fait attendre chaque rechargement votre accord ; `--reload off` vous les laisse.
+  propose` fait attendre chaque rechargement votre accord ; `--reload off` vous les réserve.
 - **Quotas épuisés.** À 95 %, les agents d'un fournisseur sont retenus (cas C). Quand la remise à
   zéro est à plus de 2 heures (`AGENT_BUS_QUOTA_LONG_HOLD`), master vous dit quels agents retenus
   avaient du travail en cours, pour que vous puissiez passer un rôle sur l'un de ses
@@ -560,16 +560,16 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   seulement nommée, car changer de majeure est votre décision. Sans vérification réussie depuis
   48 heures, elle est `unknown`. Vous mettez le broker à jour vous-même ; sentinel ne le redémarre
   ni ne le met à jour jamais.
-- **Garde contre l'arrêt.** Trois vérifications, chacune après 15 minutes (`dispatch.stall_after`,
+- **Garde anti-blocage.** Trois vérifications, chacune après 15 minutes (`dispatch.stall_after`,
   `clear_stall_after`, `quiet_after` dans `config.toml` ; `0` en coupe une). `team-stall` échoue
-  quand tous les agents sont inactifs, que rien n'est ouvert (demande, tâche acceptée, question,
-  revue, pause, échange, passation, mission, message en attente) et que le plan a une tâche prête
+  quand tous les agents sont inactifs, que rien n'est ouvert (requête, tâche acceptée, question,
+  verrou, pause, swap, passation, mission, message en attente) et que le plan a une tâche prête
   pour un agent : sentinel envoie à master une directive qui la nomme. Quand seules vos propres
   tâches sont prêtes, c'est un avertissement pour vous. Vous recevez un avis si master ne peut pas
-  agir (bloqué par son quota ou par une invite), ou si l'arrêt dure deux fois le seuil.
+  agir (bloqué par son quota ou par une invite), ou si le blocage dure deux fois le seuil.
   `clear-stall` avertit quand une passation n'a pas été suivie d'un `/clear`, avec la raison du
-  dispatcher (si c'est votre panneau actif, changez de panneau). `quiet-agent` avertit quand un agent
-  a reçu du travail et n'a rien écrit depuis. Les panneaux doivent être observés : là où ils ne le
+  dispatcher (si c'est votre volet actif, passez sur un autre). `quiet-agent` avertit quand un agent
+  a reçu du travail et n'a rien écrit depuis. Les volets doivent être observés : là où ils ne le
   sont pas (macOS), `team-stall` reste `unknown`.
 - **Archive de l'historique.** Le service dispatch ajoute chaque minute tous les flux (`cmd`,
   `report`, `status`, `notify`, `verdicts`, `health:log`, `swaps`) à un fichier JSONL par jour UTC
@@ -577,7 +577,7 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   ainsi au jour et demi du flux. `history.keep_days` (90, `0` = pas d'archive) et `history.max_mb`
   (256) dans `config.toml`. Un champ qui ressemble à un secret est écrit `[redacted]`, en entier ;
   c'est au mieux, traitez donc le répertoire comme sensible. Un trou que le dispatcher a manqué est
-  une ligne `gap`, jamais silencieux. Vous pouvez supprimer le répertoire à tout moment.
+  une ligne `gap`, jamais un silence. Vous pouvez supprimer le répertoire à tout moment.
   `agentbus history` la lit, puis les flux vivants : `--agent`, `--thread`, `--kind`, `--since`/`--until`
   (`3d`, `2026-10-30`, `14:20`), `--grep`, `--limit` (200), `--json`. Sur une autre machine, il ne voit
   que les flux vivants, et le dit.
@@ -600,7 +600,7 @@ sa règle ; aucun ne vous demande de surveiller un volet.
 - **Sauvegardes.** `agentbus backup` écrit une archive, `agentbus-backup-<hôte>-<heure>.tar.zst`
   (0600), de tous les projets de cet hôte (ou de ceux nommés avec `--project`) : les clés Redis
   de chaque projet lues en un instant (les clés qui expirent sont sautées), `config.toml` et ses
-  voisins, les gabarits, le `roles.toml` et les prompts de chaque gabarit, et l'archive
+  voisins, les modèles de projet, le `roles.toml` et les prompts de chaque modèle, et l'archive
   d'historique. Le mot de passe du broker et les fichiers d'environnement des services sont des
   secrets : ils sont laissés de côté et listés dans le manifeste de l'archive, sauf avec
   `--secrets`, qui les chiffre avec [age](https://age-encryption.org) pour un destinataire
@@ -613,14 +613,14 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   synchronisé). `backup.keep` (7) archives sont gardées, jamais la plus récente qui couvre un
   projet. `agentbus backup list` les montre ; `--dry-run` montre ce qu'une exécution lirait et écrirait.
   `agentbus restore <archive>` vérifie d'abord chaque membre contre le manifeste, puis refuse un
-  projet vivant (son bail dispatch ou conductor tenu, un service actif, son espace de travail herdr
+  projet vivant (son bail dispatch ou conducteur tenu, un service actif, son espace de travail herdr
   ouvert, le processus d'un agent vivant : lancez `agentbus down <p>` et fermez son espace d'abord),
-  même avec `--force` ; si le gestionnaire de services ne répond pas, il refuse aussi (sur un hôte
+  même avec `--force` ; si le gestionnaire de services ne peut pas être interrogé, il refuse aussi (sur un hôte
   qui n'en a pas, posez `AGENTBUS_SERVICE_MANAGER=none`). Les clés d'un projet sont restaurées en une seule étape, tout ou rien ; des
   clés déjà présentes, ou un fichier différent, sont gardés sauf avec `--force` (qui demande
   d'abord). Les clés d'exécution (agents, services, réveils, retenues) ne sont restaurées qu'avec
   `--with-runtime` : `agentbus up <p>` les réécrit. `--dry-run` affiche l'action de chaque clé et
-  de chaque fichier ; `--redis-only` et `--files-only` restreignent. Restaurer sur un Redis plus
+  de chaque fichier ; `--redis-only` et `--files-only` restreignent l'opération. Restaurer sur un Redis plus
   ancien que celui de l'archive est refusé : mettez d'abord le broker à jour.
   Une restauration des fichiers écrit les fichiers de rôles d'un projet là où son modèle archivé
   les place : le chemin absolu de son `roles.toml` (un dépôt, par exemple
@@ -653,14 +653,14 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   votre bureau de ce qui vous attend ([spec](superpowers/specs/2026-11-03-notifications-design.md)) :
   une décision (une question ouverte, un agent déclaré `waiting`, une tâche du plan pour vous), un
   arrêt de l'équipe, une vérification de santé en échec, un avis que vous seul pouvez traiter, un
-  panneau bloqué sur l'invite de son client ; un avertissement « pour vous » seulement si vous
+  volet bloqué sur l'invite de son client ; un avertissement « pour vous » seulement si vous
   ajoutez `for-you` à `notify.events`. Les cibles sont dans `~/.config/agentbus/notify.toml`, que
   vous écrivez vous-même (agentbus jamais), en mode `0600` dans un dossier que personne d'autre ne
   peut écrire : un topic, un jeton ou un webhook est un secret, il ne va donc jamais dans
   `config.toml`, sur le bus ni dans un journal, et aucun agent ne peut lire ce fichier. La page C
-  de busmon, groupe Notifications, se termine par un assistant par sorte de cible (`Set up ntfy`,
+  de busmon, groupe Notifications, se termine par un assistant par type de cible (`Set up ntfy`,
   `Set up Discord`, `Set up the desktop`) : Entrée montre les étapes, l'état du fichier (noms et
-  sortes des cibles, jamais un topic ni une URL), une table à copier avec `y` (pour ntfy un topic
+  types des cibles, jamais un topic ni une URL), une table à copier avec `y` (pour ntfy un topic
   tiré sur le moment, gardé nulle part) et le dernier test de chaque cible ; vous la collez
   vous-même dans le fichier.
 
@@ -704,11 +704,11 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   broker et refuse si le broker est arrêté. La vérification `notifications` (toutes les 5 minutes,
   pour vous) avertit quand le fichier est ouvert aux autres, qu'une cible listée manque ou est
   refusée, qu'un envoi a échoué, ou qu'une source du projet ne peut pas être lue (rien n'est alors
-  envoyé). Répondre depuis le téléphone n'est pas possible : le double sens est une spec à venir.
+  envoyé). Répondre depuis le téléphone n'est pas possible : l'échange dans les deux sens fera l'objet d'une spec ultérieure.
 
 ---
 
-## 6. Démarrer le Travail : une Petite Tâche, un Grand Changement
+## 6. Démarrer le travail : une petite tâche, un grand changement
 
 L'équipe est lancée (`agentbus up myapp …`) et busmon est ouvert. Vous pouvez lui confier du
 travail de deux façons, selon sa taille.
@@ -718,7 +718,7 @@ travail de deux façons, selon sa taille.
 | Taille | d'une heure à une journée ; une fonctionnalité, un correctif | plusieurs jours ; plusieurs agents en parallèle |
 | Qui pilote | `master`, dans sa conversation | le **conducteur** (service `missions`), à partir d'un plan dans Git |
 | Ce qui survit à un redémarrage | le tableau (board) et les messages du bus | tout : le plan est dans Git, son état dans Redis |
-| Ce que vous faites | écrire la demande, répondre aux questions | valider le plan, trancher les escalades, merger le résultat |
+| Ce que vous faites | écrire la demande, répondre aux questions | valider le plan, trancher les escalades, fusionner le résultat |
 
 ### Petite tâche : demander à `master`
 
@@ -729,7 +729,7 @@ travail de deux façons, selon sa taille.
    ```
    Vous pouvez aussi écrire directement dans l'onglet de master ; busmon est simplement plus
    rapide à atteindre.
-2. **master découpe et distribue.** Il envoie une directive à `coder`, qui réclame la tâche sur
+2. **master découpe et distribue.** Il envoie une directive à `coder`, qui s'attribue la tâche sur
    le tableau et travaille sur sa branche, puis `foureyes` relit (règle des 4 yeux : l'auteur
    n'approuve jamais son propre travail).
 3. **Suivez** le panneau Board et le fil Activity. Un agent qui a besoin de vous écrit à master,
@@ -737,7 +737,7 @@ travail de deux façons, selon sa taille.
 4. **Terminez.** master livre la branche relue (`agentbus deliver`) : vous recevez la pull request
    à fusionner, la page pour l'ouvrir, ou en mode local la commande `git merge`. Vous fusionnez.
 
-Pour un correctif d'une ligne, vous pouvez passer outre master : `@coder Fix the typo in the README title.`
+Pour un correctif d'une ligne, vous pouvez vous passer de master : `@coder Fix the typo in the README title.`
 
 ### Grand changement : le planifier en missions, laisser le conducteur piloter
 
@@ -767,7 +767,7 @@ l'exécute étape par étape.
      indépendantes avancent en parallèle) ;
    - vérifie chaque livraison : seulement les chemins autorisés, les tests de la mission au vert ;
    - ouvre la revue avec le relecteur de la mission ;
-   - merge la mission approuvée dans `change/auth-v2` et lance la suite du changement.
+   - fusionne la mission approuvée dans `change/auth-v2` et lance la suite du changement.
 4. **Suivez-le** dans busmon (`missions busy`, `missions idle`), ou en détail :
    ```bash
    agentbus --project myapp mission status auth-v2
@@ -784,53 +784,53 @@ l'exécute étape par étape.
    redémarrage de la machine, c'est aussi `agentbus up myapp` qui relance les services. Un agent
    dont le contexte est plein peut être relancé : le brief de sa mission et sa branche suffisent.
 7. **La fin.** Quand toutes les missions sont intégrées, master reçoit un avis `complete` (et
-   l'agent de documentation sa directive, si le plan en nomme un). Le conducteur ne merge jamais
+   l'agent de documentation sa directive, si le plan en nomme un). Le conducteur ne fusionne jamais
    `change/auth-v2` dans `main` : master la livre une fois relue (`agentbus deliver change/auth-v2`),
    et vous fusionnez.
 
 ---
 
-## 7. Synthèse des Commandes Essentielles
+## 7. Synthèse des commandes essentielles
 
 | Action | Commande |
 |---|---|
-| Créer et ouvrir une équipe | `agentbus up mon-app ~/code/mon-app --as <votre-nom>` |
-| Arrêter les services d'un projet | `agentbus down mon-app` |
-| État et journaux des services | `agentbus --project mon-app service status` / `service logs [dispatch\|missions]` |
+| Créer et ouvrir une équipe | `agentbus up myapp ~/code/myapp --as <votre-nom>` |
+| Arrêter les services d'un projet | `agentbus down myapp` |
+| État et journaux des services | `agentbus --project myapp service status` / `service logs [dispatch\|missions]` |
 | Mettre à jour les outils | `./setup.sh update` |
 | Voir ce qui est installé | `./setup.sh status` |
 | Retirer les outils | `./setup.sh uninstall` |
-| Afficher le dashboard live | `busmon --project mon-app --as <votre-nom>` |
+| Ouvrir le tableau de bord en direct | `busmon --project myapp --as <votre-nom>` |
 | Lister les projets sur le bus | `busmon --list` |
-| Vérifier les agents enregistrés | `agentbus --project mon-app agents` |
-| Consulter le registre des tâches | `agentbus --project mon-app board` |
-| Envoyer un ordre direct | `agentbus --project mon-app cmd coder "Corriger le test unitaire"` |
-| Consulter l'historique d'un ordre | `agentbus --project mon-app thread <id-ou-ref>` |
-| Lister les comptes-rendus | `agentbus --project mon-app reports` |
-| Ajouter un agent en renfort | `agent-spawn architect mon-app` (depuis le master) |
+| Vérifier les agents enregistrés | `agentbus --project myapp agents` |
+| Consulter le registre des tâches | `agentbus --project myapp board` |
+| Envoyer un ordre direct | `agentbus --project myapp cmd coder "Corriger le test unitaire"` |
+| Consulter l'historique d'un fil | `agentbus --project myapp thread <id-ou-ref>` |
+| Lister les comptes-rendus | `agentbus --project myapp reports` |
+| Ajouter un agent en renfort | `agent-spawn architect myapp` (depuis master) |
 | Tous les projets connus | `agentbus projects` |
-| Les questions qui vous attendent | `agentbus --project mon-app asks --open` / `answer <id> <q> --choice <libellé>` |
-| Pause, reprise | `agentbus --project mon-app pause --for 2h` / `resume` |
+| Les questions qui vous attendent | `agentbus --project myapp asks --open` / `answer <id> <q> --choice <libellé>` |
+| Pause, reprise | `agentbus --project myapp pause --for 2h` / `resume` |
 | Quotas des fournisseurs | `agentbus quota` |
-| Santé du projet | `agentbus --project mon-app health` / `health detail <id>` |
-| Tokens dépensés | `agentbus tokens` / `--project mon-app --by agent` |
+| Santé du projet | `agentbus --project myapp health` / `health detail <id>` |
+| Tokens dépensés | `agentbus tokens` / `--project myapp --by agent` |
 | Sauvegarder les projets de cet hôte | `agentbus backup` / `backup list` |
-| Cibles de notification, un message de test | `agentbus notifications status` / `notifications test [<cible>]` |
 | Restaurer une archive | `agentbus restore <archive> --dry-run`, puis sans |
-| Passations déclarées | `agentbus --project mon-app handoff` |
-| Recharger un agent | `agentbus --project mon-app reload coder --as <votre-nom>` |
-| Passer un rôle sur un profil de repli | `agentbus --project mon-app swap coder --profile <p>` / `--back` |
+| Cibles de notification, un message de test | `agentbus notifications status` / `notifications test [<cible>]` |
+| Passations déclarées | `agentbus --project myapp handoff` |
+| Recharger un agent | `agentbus --project myapp reload coder --as <votre-nom>` |
+| Passer un rôle sur un profil de repli | `agentbus --project myapp swap coder --profile <p>` / `--back` |
 | Toutes les commandes | `agentbus help` / `agentbus help <commande>` |
-| Purger l'historique d'un projet | `busmon --project mon-app --reset` |
+| Purger l'historique d'un projet | `busmon --project myapp --reset` |
 
 ---
 
-## 8. Bonnes Pratiques & Pièges Fréquents
+## 8. Bonnes pratiques et pièges fréquents
 
-1. **`AGENT_BUS_PROJECT` obligatoire** : Pensez à exporter `export AGENT_BUS_PROJECT=<nom>` dans vos shells d'agents pour ne pas répéter `--project`.
+1. **`AGENT_BUS_PROJECT` obligatoire** : lancez `export AGENT_BUS_PROJECT=<nom>` dans vos shells d'agents pour ne pas répéter `--project`.
 2. **Format des options** : `--ref abc123`, `--ref=abc123` et la forme courte indiquée par l'aide (`-r abc123`) fonctionnent. Un seul tiret devant un nom long (`-ref`), des options courtes groupées (`-ab`) et une valeur collée (`-rabc123`) ne fonctionnent pas.
-3. **Ordre positionnel strict** : Les arguments suivent un ordre précis : `agentbus status <agent> <state> <message>`. Le message se place toujours en dernier.
-4. **Nommage normalisé** : Les noms de projets et d'agents doivent respecter l'expression régulière `^[a-z][a-z0-9_-]{0,31}$` (minuscules, débutant par une lettre).
+3. **Ordre positionnel strict** : les arguments suivent un ordre précis : `agentbus status <agent> <state> <message>`. Le message se place toujours en dernier.
+4. **Nommage normalisé** : les noms de projets et d'agents doivent respecter l'expression régulière `^[a-z][a-z0-9_-]{0,31}$` (minuscules, débutant par une lettre).
 5. **Un `AGENT_BUS_*` exporté reste dans les services** : `agentbus up` copie les variables
    `AGENT_BUS_*` de son shell (sauf les noms du projet et de l'agent) dans le fichier
    d'environnement du projet, et les services en gardent une après que vous l'avez retirée de votre
@@ -854,7 +854,7 @@ l'exécute étape par étape.
 
 ---
 
-## 9. Le Rôle infra et les Spécifications Prévues
+## 9. Le rôle infra et les spécifications prévues
 
 - **Le rôle `infra`.** Un rôle pop pour Ansible, Terraform/OpenTofu et l'automatisation
   informatique, sur un profil manuel : seules des commandes exactes de syntaxe et de lint tournent

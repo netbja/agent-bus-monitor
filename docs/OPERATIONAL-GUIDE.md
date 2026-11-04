@@ -158,14 +158,14 @@ Make sure `~/.local/bin` is on your `PATH`; `install` warns when it is not, or w
 shadows it.
 
 **Claude Code users, once per machine:** `agentbus statusline --print-install` prints the
-`statusLine` block to put in `~/.claude/settings.json`. Without it agent-bus cannot read Claude's
+`statusLine` block to put in `~/.claude/settings.json`. Without it agent-bus can read neither Claude's
 usage windows nor each session's context fill (scenarios C and D).
 
 **The installer is in Go.** `./setup.sh` builds `agentbus` and runs `agentbus setup`, with the same
 subcommands and flags (`install`, `update`, `status`, `uninstall`) as before. It also refuses to
 start, stop or remove a Redis container that another copy of the repository started (it reads the
 container's Compose `working_dir` label). Should it fail on a machine, the former bash installer
-stays one release as `scripts/setup-legacy.sh` (same subcommands and flags): report what made you
+remains for one release as `scripts/setup-legacy.sh` (same subcommands and flags): report what made you
 use it, since the next release removes it.
 
 ### The Projects picker and the busmon action
@@ -238,7 +238,7 @@ For security, the broker binds strictly to loopback (`127.0.0.1:6380`). Remote a
   REDIS_PORT=6381 busmon --project myproject
   ```
 - **Scenario B: Remote agents joining your local bus**:
-  From the remote server, open a reverse tunnel:
+  From the remote server, open a tunnel to your workstation:
   ```bash
   ssh -L 6380:localhost:6380 user@local-workstation -N
   ```
@@ -474,7 +474,7 @@ Contexts fill up, clients update, quotas run out. Each case has its rule; none o
 to watch a pane.
 
 - **Context fill.** With the `statusLine` installed (section 3), Claude Code reports each
-  session's context fill and busmon shows it next to the tokens (`88k 85%`). At 80 %
+  session's context fill and busmon shows it next to the tokens (`88k 85%`). At 80%
   (`AGENT_BUS_CONTEXT_ALERT`, `0` turns it off) the agent gets one directive: at its next stopping
   point, commit its work, publish its hand-off with `agentbus report <self> --to master`, then
   declare it. master gets one notice, and the desktop one notification (`notify-send`, when it is
@@ -507,7 +507,7 @@ to watch a pane.
   <your-name>` (`--dry-run` says what would happen, `--fresh` starts a new conversation).
   `agentbus up myapp --reload propose` makes every reload wait for you; `--reload off` leaves
   them to you alone.
-- **Quotas run out.** At 95 % a provider's agents are held (scenario C). When the reset is more
+- **Quotas run out.** At 95% a provider's agents are held (scenario C). When the reset is more
   than 2 hours away (`AGENT_BUS_QUOTA_LONG_HOLD`), master tells you which held agents had work in
   flight, so you can move a role to one of its `fallback_profiles` in `roles.toml`:
   `agentbus --project myapp roles fallbacks coder` lists them, `agentbus --project myapp swap coder
@@ -652,7 +652,7 @@ to watch a pane.
   ```
 
   `summary` sends no text an agent wrote ("master asks a question"). `full` adds it, scrubbed of
-  URLs, paths and emails and cut to 120 characters, but only to the desktop or to a ntfy server
+  URLs, paths and emails and cut to 120 characters, but only to the desktop or to an ntfy server
   you mark `self_hosted = true`: that mark is your word that the server is yours. ntfy.sh and
   Discord always get the summary. The first pass for a target sends nothing that already stood
   (it is in busmon); after that each new event is sent once per target, grouped in one message per
@@ -783,10 +783,10 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 
 ## 8. Best Practices & Common Traps
 
-1. **`AGENT_BUS_PROJECT` is Mandatory**: Export `export AGENT_BUS_PROJECT=<name>` in agent shells to avoid repeating `--project`.
+1. **`AGENT_BUS_PROJECT` is Mandatory**: run `export AGENT_BUS_PROJECT=<name>` in agent shells to avoid repeating `--project`.
 2. **Flag Syntax**: `--ref abc123`, `--ref=abc123` and the short form the help shows (`-r abc123`) all work. A single dash with a long name (`-ref`), bundled shorts (`-ab`) and attached values (`-rabc123`) do not.
-3. **Positional Order**: Arguments must follow exact ordering: `agentbus status <agent> <state> <message>`. The message is always last.
-4. **Naming Conventions**: Project and agent names must match `^[a-z][a-z0-9_-]{0,31}$` (lowercase, starting with a letter).
+3. **Positional Order**: arguments must follow the exact order: `agentbus status <agent> <state> <message>`. The message is always last.
+4. **Naming Conventions**: project and agent names must match `^[a-z][a-z0-9_-]{0,31}$` (lowercase, starting with a letter).
 5. **An exported `AGENT_BUS_*` stays with the services**: `agentbus up` copies the `AGENT_BUS_*`
    variables of its shell (except the project and agent names) into the project's env file, and
    the services keep one after you unset it in your shell, until the next `up` without it. The
