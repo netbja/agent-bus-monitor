@@ -1,8 +1,11 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -30,42 +33,59 @@ func TestAboutRoute(t *testing.T) {
 }
 
 // The drawing says where the run is: ready before, the packet on its way
-// (a directive out, a reply back), delivered once done, no packet then.
+// (a directive out, a reply back), delivered once done, no packet then; a
+// still drawing has no packet whatever the step, and says why.
 func TestAboutBody(t *testing.T) {
-	v := aboutVersions{Lines: []string{"busmon dev", "agentbus v0.26.1"}}
-	text := func(step int) string { return tokLinesText(aboutBody(aboutState{step: step, versions: v, loaded: true}, 80)) }
-	if b := text(0); !strings.Contains(b, "bus ready") || strings.Contains(b, GlyphWorking) || !strings.Contains(b, "agentbus v0.26.1") {
+	a := aboutState{versions: aboutVersions{Lines: []string{"busmon dev", "agentbus version v0.26.1"}}, loaded: true}
+	text := func(step int, still bool) string { return tokLinesText(aboutBody(a, step, still, 80)) }
+	if b := text(0, false); !strings.Contains(b, "bus ready") || strings.Contains(b, GlyphWorking) || !strings.Contains(b, "agentbus version v0.26.1") {
 		t.Fatalf("step 0:\n%s", b)
 	}
-	if b := text(3); !strings.Contains(b, "a directive") || !strings.Contains(b, GlyphWorking) {
+	if b := text(3, false); !strings.Contains(b, "a directive") || !strings.Contains(b, GlyphWorking) {
 		t.Fatalf("on its way:\n%s", b)
 	}
-	if b := text(len(aboutRoute()) - 3); !strings.Contains(b, "a reply") {
+	if b := text(len(aboutRoute())-3, false); !strings.Contains(b, "a reply") {
 		t.Fatalf("coming back:\n%s", b)
 	}
-	b := text(len(aboutRoute()))
+	b := text(len(aboutRoute()), false)
 	if !strings.Contains(b, "delivered") || strings.Contains(b, GlyphWorking) || !strings.Contains(b, "master") || !strings.Contains(b, "coder") {
 		t.Fatalf("done:\n%s", b)
 	}
-	for _, l := range aboutBody(aboutState{step: 5, versions: v, loaded: true}, 40) {
+	if b := text(5, true); strings.Contains(b, GlyphWorking) || !strings.Contains(b, "bus ready") || !strings.Contains(b, "still:") {
+		t.Fatalf("still:\n%s", b)
+	}
+	for _, l := range aboutBody(a, 5, false, 40) {
 		if l.Width() > 40 {
 			t.Fatalf("a line is %d cells at 40", l.Width())
 		}
 	}
 }
 
-func aboutShell(t *testing.T) Model {
+func aboutShell(t *testing.T, fade bool) Model {
 	t.Helper()
 	m := fixtureShell(t, 120, 40)
-	m.cfg.aboutAgentbus = func() string { return "agentbus version v9.9.9" }
+	m.cfg.settings.Fade, m.cfg.settings.UpdateCheck = fade, true
+	m.cfg.about = aboutSources{
+		agentbus: func() string { return "agentbus version v9.9.9" },
+		herdr:    func() string { return "herdr 0.9.5" },
+		plugin:   func() string { return "0.26.1" },
+		update:   func() string { return "update v9.9.10 available" },
+	}
 	return m
 }
 
-// runAbout feeds the commands an Update returned until a tick would wait:
-// the versions are read, a tick is returned as itself.
-func runAbout(t *testing.T, m Model, cmd tea.Cmd) (Model, []aboutTickMsg) {
+// openAboutIn presses A and feeds the versions read; it returns whether a
+// fade frame was scheduled.
+func openAboutIn(t *testing.T, m Model) (Model, bool) {
 	t.Helper()
-	var ticks []aboutTickMsg
+	next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'A', Text: "A"}))
+	m = next.(Model)
+	return feedAbout(t, m, cmd)
+}
+
+func feedAbout(t *testing.T, m Model, cmd tea.Cmd) (Model, bool) {
+	t.Helper()
+	fade := false
 	var walk func(tea.Cmd)
 	walk = func(c tea.Cmd) {
 		if c == nil {
@@ -76,8 +96,8 @@ func runAbout(t *testing.T, m Model, cmd tea.Cmd) (Model, []aboutTickMsg) {
 			for _, c := range msg {
 				walk(c)
 			}
-		case aboutTickMsg:
-			ticks = append(ticks, msg)
+		case fadeMsg:
+			fade = true
 		case aboutVersionsMsg:
 			next, more := m.Update(msg)
 			m = next.(Model)
@@ -85,52 +105,126 @@ func runAbout(t *testing.T, m Model, cmd tea.Cmd) (Model, []aboutTickMsg) {
 		}
 	}
 	walk(cmd)
-	return m, ticks
+	return m, fade
 }
 
-// A opens About: the versions read in a command (y copies them), a tick
-// each step while it plays; r replays from the start and an earlier run's
-// tick changes nothing; a closed page ends the chain.
-func TestAboutPage(t *testing.T) {
-	m := aboutShell(t)
-	next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'A', Text: "A"}))
-	m, ticks := runAbout(t, next.(Model), cmd)
+// A opens About with every version the plan names (y copies them), and in
+// true colour with fade on the packet rides the fade schedule: the run
+// starts at the first frame, moves with the frames' time, ends delivered and
+// stops asking for frames; r plays it again.
+func TestAboutPageRidesTheFadeSchedule(t *testing.T) {
+	withPalette(t, "dark", false, 1<<24)
+	calm := aboutShell(t, true)
+	calm.snap.agents, calm.notice.cur, calm.bars = map[string]*agentState{}, nil, nil // nothing else moves
+	if calm.animated() {
+		t.Fatal("the calm shell moves")
+	}
+	m, fade := openAboutIn(t, calm)
+	if !m.animated() {
+		t.Fatal("About does not count as a motion of the fade schedule")
+	}
 	p := m.rd.top()
 	if p == nil || p.kind != ovAbout {
 		t.Fatal("A opened no About page")
 	}
-	if !strings.Contains(p.plain, "agentbus version v9.9.9") || !strings.Contains(p.plain, "busmon ") || !strings.Contains(p.plain, "protocol v") {
-		t.Fatalf("y copies %q", p.plain)
+	for _, s := range []string{"project agent-bus-monitor", "busmon ", "agentbus version v9.9.9", "protocol v", "redis ", "herdr 0.9.5", "plugin 0.26.1", "update v9.9.10 available"} {
+		if !strings.Contains(p.plain, s) {
+			t.Errorf("y copies no %q:\n%s", s, p.plain)
+		}
 	}
-	if len(ticks) != 1 || !m.pageOffers(ActReplay) {
-		t.Fatalf("ticks %v, r offered %v", ticks, m.pageOffers(ActReplay))
+	if !fade || !m.pageOffers(ActReplay) {
+		t.Fatalf("no fade frame scheduled (%v) or r not offered", fade)
 	}
-	old := ticks[0]
-	next, cmd = m.Update(old)
-	m = next.(Model)
-	if m.rd.top().about.step != 1 || cmd == nil {
-		t.Fatalf("a tick: step %d", m.rd.top().about.step)
-	}
-	next, cmd = m.Update(tea.KeyPressMsg(tea.Key{Code: 'r', Text: "r"}))
-	m, ticks = runAbout(t, next.(Model), cmd)
-	if m.rd.top().about.step != 0 || len(ticks) != 1 {
-		t.Fatalf("r: step %d, ticks %d", m.rd.top().about.step, len(ticks))
-	}
-	next, _ = m.Update(old) // the earlier run's tick
-	m = next.(Model)
-	if m.rd.top().about.step != 0 {
-		t.Fatal("an earlier run's tick moved the packet")
-	}
-	for i := 0; i < len(aboutRoute())+5; i++ {
-		next, cmd = m.Update(aboutTickMsg{serial: ticks[0].serial, gen: ticks[0].gen})
+	t0 := shellNow.Add(time.Second)
+	frame := func(at time.Time) tea.Cmd {
+		next, cmd := m.Update(fadeMsg(at))
 		m = next.(Model)
+		return cmd
 	}
-	if a := m.rd.top().about; a.step != len(aboutRoute()) || cmd != nil {
-		t.Fatalf("done: step %d, still ticking %v", a.step, cmd != nil)
+	frame(t0)
+	if a := m.rd.top().about; !a.start.Equal(t0) || a.step(m.now) != 0 {
+		t.Fatalf("the run did not start at the first frame: %+v", a)
 	}
-	next, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+	frame(t0.Add(10 * aboutCell))
+	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, GlyphWorking) || !strings.Contains(body, "a directive") {
+		t.Fatalf("mid-run:\n%s", body)
+	}
+	cmd := frame(t0.Add(time.Duration(len(aboutRoute())+1) * aboutCell))
+	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "delivered both ways") {
+		t.Fatalf("end:\n%s", body)
+	}
+	_ = cmd // the fixture's own motions (a waiting agent) may still ask for frames
+	if m.aboutPlaying() {
+		t.Fatal("a finished run still asks for frames")
+	}
+	next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'r', Text: "r"}))
 	m = next.(Model)
-	if _, cmd = m.Update(ticks[0]); cmd != nil {
-		t.Fatal("a closed page still ticks")
+	if !m.rd.top().about.start.IsZero() || !m.aboutPlaying() {
+		t.Fatal("r did not restart the run")
+	}
+	switch { // the next fade frame starts it: one already scheduled, or r's
+	case cmd == nil && !m.sig.fading:
+		t.Fatal("r scheduled no fade frame")
+	case cmd != nil:
+		if _, isFade := cmd().(fadeMsg); !isFade {
+			t.Fatal("r's command is not a fade frame")
+		}
+	}
+}
+
+// With fade off, in 16 colours or with no colour the drawing is still: no
+// fade frame is scheduled, a frame moves nothing, r says there is nothing
+// to replay.
+func TestAboutStillWithoutMotion(t *testing.T) {
+	for _, c := range []struct {
+		name          string
+		fade, noColor bool
+		colors        int
+	}{{"fade off", false, false, 1 << 24}, {"16 colours", true, false, 16}, {"no colour", true, true, 1 << 24}} {
+		t.Run(c.name, func(t *testing.T) {
+			withPalette(t, "dark", c.noColor, c.colors)
+			m, fade := openAboutIn(t, aboutShell(t, c.fade))
+			if fade || m.animated() && m.aboutMotion() {
+				t.Fatal("a fade frame was scheduled")
+			}
+			next, _ := m.Update(fadeMsg(shellNow.Add(2 * time.Second))) // another motion's frame
+			m = next.(Model)
+			body := tokLinesText(m.rd.top().body)
+			if strings.Contains(body, GlyphWorking) || !strings.Contains(body, "still:") || !m.rd.top().about.start.IsZero() {
+				t.Fatalf("moved:\n%s", body)
+			}
+			next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 'r', Text: "r"}))
+			m = next.(Model)
+			if cmd != nil || !strings.Contains(m.ui.flash, "nothing to replay") {
+				t.Fatalf("r: cmd %v, flash %q", cmd != nil, m.ui.flash)
+			}
+		})
+	}
+}
+
+// The plugin's version from the first herdr-plugin.toml found; the update
+// state from the cache only.
+func TestAboutSources(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(b, "herdr-plugin.toml"), []byte("id = \"x\"\nversion = \"1.2.3\"  # bumped\n"), 0o600)
+	if v := pluginVersion([]string{a, b}); v != "1.2.3" {
+		t.Fatalf("plugin %q", v)
+	}
+	if v := pluginVersion([]string{a}); v != "?" {
+		t.Fatalf("no file: %q", v)
+	}
+	cache := filepath.Join(a, "latest.json")
+	if s := updateState(cache, "v1.0.0"); !strings.Contains(s, "unknown") {
+		t.Fatalf("no cache: %q", s)
+	}
+	os.WriteFile(cache, []byte(`{"checked_at":"2026-11-04T08:00:00Z","tag":"v1.1.0"}`), 0o600)
+	if s := updateState(cache, "v1.0.0"); !strings.Contains(s, "v1.1.0 available") {
+		t.Fatalf("newer: %q", s)
+	}
+	if s := updateState(cache, "v1.1.0"); !strings.HasPrefix(s, "up to date") {
+		t.Fatalf("current: %q", s)
+	}
+	if s := updateState(cache, "dev"); !strings.Contains(s, "dev build") {
+		t.Fatalf("dev: %q", s)
 	}
 }

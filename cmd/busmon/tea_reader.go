@@ -495,7 +495,7 @@ func (m *Model) buildPage() bool {
 	case ovSettings:
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
 	case ovAbout:
-		p.title, p.body = "About", aboutBody(*p.about, width)
+		p.title, p.body = "About", aboutBody(*p.about, p.about.step(now), !m.aboutMotion(), width)
 		p.plain, p.plainWhat = strings.Join(p.about.versions.Lines, "\n"), "versions"
 	case ovTokens:
 		p.title = tokensTitle(s.budgets, s.holds, now)
