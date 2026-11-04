@@ -1377,7 +1377,15 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `AGENTBUS_RESUME_HOOK=1`, so every way such a resume leaves the project suspended (template or agents unreadable, a
   service not started, an agent missing, the lift failing: `keep` in `runSuspendedResume`) also writes a `for=person`
   notice; a pause it
-  cannot read starts the services as before. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
+  cannot read starts the services as before. busmon (step 4, `sleep.go`): the header reads a suspend as `suspended since HH:MM · by <name> · <reason>`
+  (`pauseSeg`); `Z` (`ActSleep`, shell table) asks by the pause's kind, `Suspend <p>? … (up to <suspend.wait>) … y / n`
+  or `Resume <p>? … y / n` (`sleepAsk`, suspend.wait read in a command), and `y` runs `agentbus --project <p>
+  suspend|resume --yes` as a child (`realSleepRunner`: `agentbusBeside()`, its own session, output appended to the
+  project's `suspend.log`, never a service started by busmon), its log's last line read every second as the notice
+  until it exits (`sleepNotice`), then the outcome pushed as a notice; a second `Z` while it runs says so; the pause
+  popup on a suspend says `suspended since` and its first button `Resume (services, agents)` runs the same resume (the
+  draft waits). suspend.wait and suspend.auto_resume are on the C page with the Services keys.
+  busmon shows a timed pause in the header and in the state column (v0.14.4, `stateLook`: an agent
   that declared working or idle reads `paused`, or `quota` when its provider is held; blocked,
   waiting and done are never covered; the detail keeps the declared state, the panel counts what
   is shown); `@all` targets only agents in `{p}:agents`

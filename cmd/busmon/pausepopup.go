@@ -46,6 +46,9 @@ func drawPausePopup(screen cellSink, r Rect, rec bus.PauseRecord, sel int, now t
 	// the hints and the note as room allows (a small screen drops the rest).
 	inner := r.H - 2
 	msg := Line{{Text: Preview("Project paused until " + until + why + "."), Role: RoleText}}
+	if rec.Suspended() { // no deadline: only a resume ends it
+		msg = Line{{Text: Preview("Project suspended since " + time.UnixMilli(rec.At).Local().Format("Jan 2 15:04") + why + "."), Role: RoleText}}
+	}
 	note := Line{{Text: "Nothing wakes the agents until it ends.", Role: RoleMuted}}
 	hints := Line{{Text: "r resume " + GlyphNone + " s send anyway " + GlyphNone + " c esc cancel", Role: RoleMuted}}
 	rows := map[int]Line{}
@@ -65,7 +68,11 @@ func drawPausePopup(screen cellSink, r Rect, rec bus.PauseRecord, sel int, now t
 		drawLine(screen, x+2, y+1+i, iw, l, false)
 	}
 	bx, by := x+2, y+1+btnRow
-	for i, label := range pauseButtons {
+	labels := pauseButtons
+	if rec.Suspended() { // a suspend comes back whole: services, agents, then the pause lifted (agentbus resume)
+		labels[0] = "Resume (services, agents)"
+	}
+	for i, label := range labels {
 		seg := Seg{Text: " " + label + " ", Role: RoleAccent, Pill: i == sel}
 		if i == 2 {
 			seg.Role = RoleMuted

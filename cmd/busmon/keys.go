@@ -77,6 +77,7 @@ const (
 	ActTabNext      // the lower panel's next tab, wrapping (busmon-keys)
 	ActTabPrev      // the lower panel's previous tab, wrapping
 	ActAskOrWrite   // w: the open question, or with none the compose window to master
+	ActSleep        // Z: suspend the open project, or resume it when it is suspended (agentbus suspend/resume)
 	ActNextItem     // reader: the next item of the list the page came from (A5)
 	ActPrevItem     // reader: the previous one
 	ActAskOther     // the shell's ask: a free answer ("Other") in the compose window
@@ -208,6 +209,7 @@ var (
 		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
 		{Keys: "!", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!'))},
 		{Keys: "w", Help: "answer the open question, or with none open write to master", Act: ActAskOrWrite, match: runeIs('w')},
+		{Keys: "Z", Help: "put the project to sleep (agentbus suspend), or, when it is suspended, bring it back (agentbus resume); asks first", Act: ActSleep, match: runeIs('Z')},
 		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(keyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "o", Help: "Requests: show or hide the answered threads and those older than 7 days", Act: ActFold, Panels: []PanelID{PanelRequests}, match: runeIs('o')},

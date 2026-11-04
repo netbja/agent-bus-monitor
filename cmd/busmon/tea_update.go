@@ -60,6 +60,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.chooseKey(k)
 	case m.ui.confirm != nil:
 		cmd = m.confirmKey(k)
+	case m.ui.sleepAsk != nil:
+		cmd = m.sleepConfirm(k)
 	default:
 		cmd = m.modeKey(k)
 	}
@@ -152,6 +154,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.pushAskOf(agent)
 	case ActAskOrWrite:
 		cmd = m.askOrWrite()
+	case ActSleep:
+		cmd = m.sleepKey()
 	case ActFollow:
 		if act := &m.lists.activity; act.Live() {
 			act.Pause()
