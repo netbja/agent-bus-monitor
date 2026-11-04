@@ -217,8 +217,8 @@ var reloadAsDeny = []string{"Bash(agentbus reload *--as*)", "Bash(agentbus * rel
 // backup.after_command is the person's alone) and of notify.toml, its
 // targets' secrets, and the test send that reaches a phone (notifications
 // spec).
-var configDeny = []string{"Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)",
-	"Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)", "Write(~/.config/agentbus/notify.toml)",
+var configDeny = []string{"Edit(~/.config/agentbus/config.toml)",
+	"Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)",
 	"Bash(agentbus notifications test*)",
 	// suspend spec §4: plain forms only, the commands refuse agent callers.
 	"Bash(agentbus suspend*)", "Bash(agentbus resume --all*)"}

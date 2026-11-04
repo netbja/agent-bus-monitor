@@ -1049,7 +1049,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   10 s later), the `AGENTBUS_BACKUP_*` variables, an environment scrubbed of secret-named or `health.Sensitive`
   variables but those `after_env` names; output capped at 64 KiB, each line `health.Redact`ed; run after the rename and
   before the retention, never on a refused run, its outcome in `<state>/backup-last.json` `after` per project
-  (`RecordAfter`, 0600); a failure only warns. Every role denies `Edit`/`Write` of `~/.config/agentbus/config.toml`
+  (`RecordAfter`, 0600); a failure only warns. Every role denies `Edit` of `~/.config/agentbus/config.toml` (an Edit rule covers the Write tool; Claude Code never matches a `Write(path)` rule and warns about one at each launch, `neverMatches` in `rolecfg/configdeny_test.go` keeps them out)
   (shipped `[tool_rules]`), and a Claude Code launch adds the path `XDG_CONFIG_HOME` gives it (`rolecfg.ConfigDenies`,
   `//` absolute form; a relative one adds nothing and says so). `backup.schedule = daily` (`backupschedule.go`, `scheduledBackupPass`;
   `dispatch.BackupConfig`, an hourly pass only while `HoldsDispatch`): due when a project of the host has no archive
@@ -1071,7 +1071,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   writable by no one else, opened once `O_NOFOLLOW` and judged by fstat; per target https, http only `insecure` on a
   private host, ntfy.sh by default and never `self_hosted`, a topic of 12-64 safe characters, Discord's hosts only;
   warnings carry no value; a `Target` prints only kind and name). Never written by agentbus; every role denies its
-  Read/Edit/Write and `Bash(agentbus notifications test*)` (no wildcard before the words: it would deny prose), and the
+  Read/Edit and `Bash(agentbus notifications test*)` (no wildcard before the words: it would deny prose), and the
   command refuses `AGENT_BUS_AGENT` or a process under a registered agent's verified pid in any project (so on Linux
   it needs the broker); a backup secret. The settings are `notify.*` (group Notifications, config.toml only, list keys
   `Key.List`). Events (`notifyfacts.go`, never an agent's text in a summary line): open asks, `waiting`
