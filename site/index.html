@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-bus: a coordination bus for AI agents</title>
+<meta name="description" content="A self-contained multi-agent coordination bus over Redis Streams, with a terminal dashboard, busmon.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html">agent-bus</a>
+    <nav aria-label="Sections">
+      <ul>
+        <li><a href="#what">What it does</a></li>
+        <li><a href="#busmon">busmon</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#quickstart">Quick start</a></li>
+        <li><a href="#review">4-eyes</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#licence">Licence</a></li>
+      </ul>
+    </nav>
+    <a class="lang" href="fr.html" hreflang="fr" lang="fr">Français</a>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+<section class="hero" aria-labelledby="title" style="border-top:0">
+  <h1 id="title">A multi-agent coordination bus over Redis Streams</h1>
+  <p class="lead">agent-bus is a self-contained multi-agent coordination bus over Redis Streams, plus the Go tooling around it. Agents publish status, commands and notifications on a shared Redis instance, under a required project namespace. <code>busmon</code>, a terminal dashboard, shows the traffic live.</p>
+  <p>The broker, the client and the monitor all live in one repository: one Redis container, two Go binaries and a few scripts, on your own machine. Nothing polls an agent: an idle agent waits on the bus without spending tokens.</p>
+  <div class="btns">
+    <a class="btn primary" href="https://github.com/netbja/agent-bus-monitor">Source on GitHub</a>
+    <a class="btn" href="https://github.com/netbja/agent-bus-monitor/releases/tag/v0.27.0">Latest release: v0.27.0</a>
+    <a class="btn" href="#quickstart">Quick start</a>
+  </div>
+</section>
+
+<section id="what" aria-labelledby="what-h">
+  <h2 id="what-h">What it does</h2>
+  <ul class="grid">
+    <li><strong>Status and directives</strong>A shared bus per project: status, reports, directives and notifications, with at-least-once delivery to each agent (<code>agentbus subscribe</code>).</li>
+    <li><strong>Tracked requests</strong>A request is sent, accepted, blocked or done by its target; acceptance and completion are recorded, never inferred (<code>agentbus request</code>).</li>
+    <li><strong>4-eyes reviews</strong>A challenge gates an agent until a verdict; the verdict ledger is the audit record (<code>agentbus challenge</code>, <code>verdict</code>).</li>
+    <li><strong>Wake dispatcher</strong>A dispatcher types a one-line wake-up into an idle agent's herdr pane when work is waiting, and escalates when nobody answers (<code>agentbus dispatch</code>).</li>
+    <li><strong>Plan view</strong>The batch's plan, loaded with <code>agentbus plan load</code>, shown by task state in busmon: waiting for you, in review, in progress, upcoming, done.</li>
+    <li><strong>Suspend and resume</strong><code>agentbus suspend</code> rests a project before a reboot or a long absence, keeps a snapshot, and <code>agentbus resume</code> brings services and agents back (v0.27.0).</li>
+    <li><strong>Backups</strong><code>agentbus backup</code> writes one archive of every project of the host; <code>agentbus restore</code> verifies it before restoring anything.</li>
+    <li><strong>Notifications</strong>The dispatch service can tell you what waits for you through ntfy, Discord and the desktop, from targets you configure yourself.</li>
+    <li><strong>Questions to a person</strong>An agent asks, busmon shows the options, your answer wakes it (<code>agentbus ask</code>).</li>
+    <li><strong>Quotas and health</strong>Usage windows are read from local sources; agents are held before the limit. Project health is measured (<code>agentbus health</code>). Tokens are counted, never a cost.</li>
+  </ul>
+</section>
+
+<section id="busmon" aria-labelledby="busmon-h">
+  <h2 id="busmon-h">busmon, the terminal dashboard</h2>
+  <p>busmon is the person's screen: what needs you, who does what, and what was said. The panes are For you, Agents, and a lower panel with Activity, Board, Requests and Plan. The text below is the 140-column layout from the project README, on example data.</p>
+  <figure>
+    <div class="codewrap"><pre tabindex="0" aria-label="busmon at 140 columns: header, For you and Agents panels, then the Activity tab"> agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                                           15:04:05
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44
+╭─ For you ───────────────────── 4 for you · 2 unread ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
+│  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
+│  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
+│  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask ┃
+│  ◆ gate   coder     by charlie  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  ┃
+│  ● unread dispatch  project paused until 16:56     8m││  ✓ architect done      40m     —        —         escalating · busy   spec merged┃
+│                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…┃
+│                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…┃
+│                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…┃
+│                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
+│                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity  2 Board  3 Requests  4 Plan   auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
+│    time   from      to         type       message                                                                                        │
+│  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│    14:24  architect            status     done · spec merged                                                                             │
+│    14:50  ♙ Charlie → coder    directive  review lot 1                                                                                   │
+│    14:51  coder                report     Lot 1 delivered (+197)                                                                         │
+│  ○ 14:52  master    → charlie  directive  please look at the plan                                                                        │
+│  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
+│  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
+│    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›
+ tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! answer   / filter   i write   F1 help   F5 health</pre></div>
+    <figcaption>busmon on example data, as drawn in the README. Not a live capture.</figcaption>
+  </figure>
+  <p>Without a project name, <code>busmon --list</code> prints the broker's projects and exits:</p>
+  <div class="codewrap"><pre tabindex="0">$ busmon --list
+PROJECT             AGENTS  MASTER  LAST ACTIVITY
+project-a         6  master  2m ago
+agent-bus-monitor        2  -       3h ago
+demo                     0  -       23d ago</pre></div>
+</section>
+
+<section id="how" aria-labelledby="how-h">
+  <h2 id="how-h">How it works</h2>
+  <p>Every stream is namespaced <code>{project}:{kind}</code>. Four stream kinds carry the traffic: <code>status</code>, <code>report</code>, <code>notify</code> and <code>cmd</code>. Other keys hold leases, the task board, the 4-eyes ledger and the agents' state.</p>
+  <figure>
+    <svg viewBox="0 0 720 360" role="img" aria-labelledby="d-t d-d">
+      <title id="d-t">Architecture of agent-bus</title>
+      <desc id="d-d">Agents and the dispatcher read and write the Redis Streams bus. busmon reads the bus and shows it to the person, who writes back through busmon. The dispatcher types a wake line into an idle agent's pane.</desc>
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head"/></marker></defs>
+      <rect class="box" x="20" y="40" width="170" height="70" rx="8"/>
+      <text x="105" y="70" text-anchor="middle">Agents</text>
+      <text x="105" y="90" text-anchor="middle">master, coder, foureyes…</text>
+      <rect class="bus" x="265" y="150" width="190" height="64" rx="8"/>
+      <text class="bus-t" x="360" y="178" text-anchor="middle">Redis Streams</text>
+      <text class="bus-t" x="360" y="198" text-anchor="middle">{project}:status|report|notify|cmd</text>
+      <rect class="box" x="20" y="250" width="170" height="70" rx="8"/>
+      <text x="105" y="280" text-anchor="middle">Dispatcher</text>
+      <text x="105" y="300" text-anchor="middle">agentbus dispatch</text>
+      <rect class="box" x="530" y="40" width="170" height="70" rx="8"/>
+      <text x="615" y="70" text-anchor="middle">busmon</text>
+      <text x="615" y="90" text-anchor="middle">terminal dashboard</text>
+      <rect class="box" x="530" y="250" width="170" height="70" rx="8"/>
+      <text x="615" y="285" text-anchor="middle">The person</text>
+      <path class="arrow" d="M190 90 L265 165" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path class="arrow" d="M190 275 L265 200" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path class="arrow" d="M455 165 L530 90" marker-end="url(#ah)"/>
+      <path class="arrow" d="M615 110 L615 250" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path class="arrow" stroke-dasharray="6 4" d="M105 250 L105 110" marker-end="url(#ah)"/>
+      <text x="115" y="185">wake line in the pane</text>
+      <text x="625" y="185">reads and answers</text>
+    </svg>
+    <figcaption>The dispatcher reads the bus and Redis; its only pane write is a one-line wake-up, never a message.</figcaption>
+  </figure>
+  <p>An agent subscribes with <code>agentbus subscribe</code>, which blocks on the project's <code>cmd</code> stream, prints the first addressed entry and exits. A woken agent runs <code>agentbus subscribe --drain</code> to read what waited. The dispatcher touches only unarmed agents with a real obligation, in a pane that is ready, unfocused and pid-verified. Roles (master, coder, foureyes, sentinel, and pop roles) are defined in <code>roles.toml</code> and launched for Claude Code, Codex and other clients.</p>
+</section>
+
+<section id="quickstart" aria-labelledby="qs-h">
+  <h2 id="qs-h">Quick start</h2>
+  <p>Linux or macOS, Go (the version in <code>go.mod</code>), Docker with Compose, Git and curl. herdr 0.9.0 or newer is installed for you with <code>--install-herdr</code>. At least one agent CLI is installed by you: Claude Code, Codex CLI, Kimi Code CLI or Grok Build.</p>
+  <div class="codewrap"><pre tabindex="0">git clone https://github.com/netbja/agent-bus-monitor &amp;&amp; cd agent-bus-monitor
+./setup.sh install --install-herdr     # toolchain check, binaries, skills, herdr plugin, Redis
+agentbus statusline --print-install    # Claude Code users: the statusLine block for ~/.claude/settings.json
+cd ~/code/myproject &amp;&amp; agentbus start   # start a team on your project</pre></div>
+  <p><code>agentbus start</code> deduces the project's name, yours and the team, asks only for what it cannot deduce, then runs <code>agentbus up</code>. <code>--yes</code> takes the deduced values and <code>--dry-run</code> shows the plan. Use the commands above rather than <code>herdr plugin install</code>: the plugin needs the broker, binaries and skills that <code>./setup.sh</code> sets up.</p>
+  <h3>Everyday commands</h3>
+  <div class="codewrap"><pre tabindex="0">export AGENT_BUS_PROJECT=myproject
+agentbus status claude1 working "plan 10 shipped"
+agentbus cmd claude2 run the suite
+agentbus subscribe --drain claude1
+agentbus agents
+busmon --project myproject</pre></div>
+  <p>Later: <code>./setup.sh update</code>, <code>./setup.sh status</code>, <code>./setup.sh uninstall</code>. <code>agentbus help</code> lists every command.</p>
+</section>
+
+<section id="requirements" aria-labelledby="req-h">
+  <h2 id="req-h">Requirements</h2>
+  <ul>
+    <li>Linux or macOS.</li>
+    <li>Go, the version <code>go.mod</code> requires (1.26.3 at this writing).</li>
+    <li>Docker and Docker Compose, for the Redis broker (<code>redis:8-alpine</code>, published on <code>127.0.0.1:6380</code>).</li>
+    <li>Git and curl.</li>
+    <li>herdr 0.9.0 or newer.</li>
+    <li>At least one agent CLI; the install does not fail without one and lists where to get each.</li>
+  </ul>
+</section>
+
+<section id="review" aria-labelledby="rev-h">
+  <h2 id="rev-h">The 4-eyes review flow</h2>
+  <ol class="steps">
+    <li>Work is done on a branch. A challenge, <code>agentbus challenge &lt;agent&gt; [--subject S] &lt;why…&gt;</code>, opens a gate on the named agent; the gate blocks it until a verdict.</li>
+    <li>A verdict is recorded: <code>agentbus verdict --pr 25 --ref &lt;ref&gt; &lt;agent&gt; approve|reject [message]</code>. It is always appended to the <code>{p}:verdicts</code> ledger.</li>
+    <li><code>agentbus verdicts --pr 25</code> prints the roll-up: APPROVED, REJECTED or PENDING (exit 0, 3 or 2). It is approved when the latest independent approval (reviewer different from author) is newer than any rejection. A self-approval is recorded but ignored.</li>
+    <li>master and the docs agent deliver a reviewed branch with <code>agentbus deliver &lt;branch&gt;</code>, only when the approval names the exact commit (<code>verdict --head</code>).</li>
+  </ol>
+  <p>The gate is only a lock; the ledger is the audit source of truth.</p>
+</section>
+
+<section id="security" aria-labelledby="sec-h">
+  <h2 id="sec-h">Security stance</h2>
+  <ul>
+    <li><strong>Loopback broker.</strong> The broker is bound to <code>127.0.0.1:6380</code>. The Redis password travels in plaintext, so the bus is never exposed raw over the network; a remote bus is watched through an SSH tunnel.</li>
+    <li><strong>Password handling.</strong> A fresh install writes a random password to <code>~/.config/agentbus/redis.env</code> (mode 0600). Compose gives it to Redis as a config on stdin, never on a command line.</li>
+    <li><strong>Tests never use the production broker.</strong> Integration tests run only against an isolated, disposable Redis named by <code>AGENTBUS_TEST_REDIS_URL</code>; the ambient <code>REDIS_URL</code> does not opt them in.</li>
+    <li><strong>Secrets stay out of settings.</strong> <code>config.toml</code> holds no secret and no connection. Notification targets and their tokens live in <code>notify.toml</code>, which you write yourself and agents are denied.</li>
+    <li><strong>Defence in depth, not a boundary.</strong> The role tool rules and denies reduce risk; processes an agent starts can still read environment files, and the project documents this.</li>
+  </ul>
+</section>
+
+<section id="licence" aria-labelledby="lic-h">
+  <h2 id="lic-h">Licence and links</h2>
+  <p>MIT License. Copyright (c) 2026 NetBJA.</p>
+  <ul>
+    <li><a href="https://github.com/netbja/agent-bus-monitor">github.com/netbja/agent-bus-monitor</a></li>
+    <li><a href="https://github.com/netbja/agent-bus-monitor/releases/tag/v0.27.0">Release v0.27.0</a>: suspend and resume the team, busmon pages for backups, notifications and About.</li>
+    <li><a href="https://github.com/netbja/agent-bus-monitor/blob/main/docs/OPERATIONAL-GUIDE.md">Operational guide</a> (English), <a href="https://github.com/netbja/agent-bus-monitor/blob/main/docs/OPERATIONAL-GUIDE.fr.md">guide opérationnel</a> (français).</li>
+  </ul>
+</section>
+
+</div>
+</main>
+<footer>
+  <div class="wrap">MIT License · Copyright (c) 2026 NetBJA · <a href="https://github.com/netbja/agent-bus-monitor">github.com/netbja/agent-bus-monitor</a></div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>
