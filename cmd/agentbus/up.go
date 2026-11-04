@@ -75,6 +75,17 @@ type upDeps struct {
 	// agent runs ("" for none), LookPath finds it on up's PATH. Nil: no check.
 	TabExe   func(command string) string
 	LookPath func(string) (string, error)
+
+	// The workspace hook on a suspended project (suspend spec §8). Nil
+	// SuspendPause: the hook reads no pause and starts the services as before.
+	SuspendPause func(project string) (*bus.PauseRecord, error) // bounded, 2 s
+	AutoResume   func() bool                                    // suspend.auto_resume
+	Boot         func() string                                  // this host's boot, "" unknown
+	Hostname     func() (string, error)
+	Person       func() string // identity.as
+	// SpawnResume starts agentbus --project <p> resume --yes detached, its
+	// output in log, and does not wait.
+	SpawnResume func(project, log string) error
 }
 
 type upTab struct {
@@ -833,6 +844,13 @@ func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 	if d.Services == nil {
 		return 0
 	}
+	if d.SuspendPause != nil {
+		// A pause it cannot read keeps today's behaviour: the broker not
+		// answering is the crash case, where starting the services is right.
+		if rec, err := d.SuspendPause(project); err == nil && rec != nil && rec.Suspended() {
+			return hookSuspended(d, project, rec, stdout, stderr)
+		}
+	}
 	m, why := d.Services()
 	if m == nil {
 		fmt.Fprintf(stdout, "%s: no service manager (%s)\n", project, why)
@@ -853,6 +871,56 @@ func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: %s started (it was stopped)\n", project, k)
 	}
 	return code
+}
+
+// hookSuspended is the hook on a suspended project (spec §8): it starts no
+// service by itself. With suspend.auto_resume on, and only on this host after
+// a new boot (a focus before the reboot never wakes the team), it starts the
+// full resume detached, as the person (identity.as), and returns at once;
+// never --partial.
+func hookSuspended(d upDeps, project string, rec *bus.PauseRecord, stdout, stderr io.Writer) int {
+	if d.AutoResume == nil || !d.AutoResume() {
+		fmt.Fprintf(stdout, "%s: suspended since %s: agentbus resume brings it back\n", project, time.UnixMilli(rec.At).Format("Jan 2 15:04"))
+		return 0
+	}
+	host := ""
+	if d.Hostname != nil {
+		host, _ = d.Hostname()
+	}
+	boot := ""
+	if d.Boot != nil {
+		boot = d.Boot()
+	}
+	if host == "" || rec.Host != host || rec.Boot == "" || boot == "" || rec.Boot == boot {
+		fmt.Fprintf(stdout, "%s: suspended: agentbus resume brings it back\n", project)
+		return 0
+	}
+	if d.Person == nil || !bus.ValidName(d.Person()) {
+		fmt.Fprintf(stdout, "%s: suspended, not resumed: no name is recorded for you to resume it as (agentbus identity set <your-name>)\n", project)
+		return 0
+	}
+	if d.Lock != nil {
+		unlock, err := d.Lock(project, false)
+		if errors.Is(err, errUpBusy) {
+			fmt.Fprintf(stdout, "%s: resume already running\n", project)
+			return 0
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "agentbus: %s: %v: not resumed\n", project, err)
+			return 1
+		}
+		unlock() // the resume takes it again for its whole run
+	}
+	if d.SpawnResume == nil {
+		return 0
+	}
+	log := filepath.Join(d.Paths.StateDir(project), "suspend.log")
+	if err := d.SpawnResume(project, log); err != nil {
+		fmt.Fprintf(stderr, "agentbus: %s: starting the resume: %v (agentbus resume brings it back)\n", project, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "%s: suspended before this boot: resuming (log: %s)\n", project, log)
+	return 0
 }
 
 // checkClients (installer-no-client) refuses before any service starts or any

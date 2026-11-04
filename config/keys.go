@@ -255,6 +255,10 @@ var Keys = []*Key{
 	// with --force, goes on); 0 = no wait. --wait on the command line wins.
 	{Name: "suspend.wait", Env: "AGENT_BUS_SUSPEND_WAIT", Kind: Duration, Default: 10 * time.Minute, ReadBy: "agentbus suspend",
 		env: envStallDuration, file: fileDuration(true)},
+	// Suspend (§12 Q6): the workspace hook resumes a suspended project by
+	// itself, only after a reboot or a crash of this host; off by default.
+	{Name: "suspend.auto_resume", Env: "AGENT_BUS_SUSPEND_AUTO_RESUME", Kind: Bool, Default: false, ReadBy: "the workspace hook",
+		env: envZeroOne, file: fileBool},
 	// Forge delivery (spec 2026-11-01-forge-delivery-design.md): the forge
 	// agentbus deliver uses (auto reads origin) and the branch it targets;
 	// one setting for the machine, never a project's.

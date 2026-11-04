@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -19,6 +18,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/setup"
 )
 
 // agentbus resume on a suspended project (spec docs/superpowers/specs/2026-
@@ -52,6 +52,12 @@ type resumeDeps struct {
 	// first read to the last write, so a suspend or another resume never
 	// runs beside it; the nested up does not take it again. Nil: no lock.
 	Lock func(project string) (func(), error)
+	// resume --all (§7): the host's projects, whether a project's workspace
+	// is open in a herdr session, and the confirmation.
+	Projects      func(ctx context.Context) ([]string, error)
+	WorkspaceOpen func(socket, project string) (bool, error)
+	TTY           bool
+	Stdin         io.Reader
 	// ProofWait and Poll are resumeProofWait and suspendRound; tests shorten them.
 	ProofWait, Poll time.Duration
 }
@@ -89,6 +95,13 @@ func realResumeDeps(host string) resumeDeps {
 		Lock: func(project string) (func(), error) {
 			return upLock(upCacheDir(os.Getenv))(project, false)
 		},
+		Projects: realSuspendDeps(host).Projects,
+		WorkspaceOpen: func(socket, project string) (bool, error) {
+			id, err := findWorkspace(upDeps{Herdr: herdrIn(socket)}, project)
+			return id != "", err
+		},
+		TTY:       setup.IsTerminal(os.Stdin),
+		Stdin:     os.Stdin,
 		ProofWait: resumeProofWait,
 		Poll:      suspendRound,
 	}
@@ -147,17 +160,8 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 	say := func(format string, a ...any) { fmt.Fprintf(out, p+": "+format+"\n", a...) }
 	fail := func(format string, a ...any) int { fmt.Fprintf(errw, p+": "+format+"\n", a...); return 1 }
 	// The person's act (spec §4), as suspend: an agent caller is refused.
-	if self := d.Getenv("AGENT_BUS_AGENT"); self != "" {
-		return fail("the project is suspended: waking it is the person's act, not %s's (run agentbus resume from your own shell)", self)
-	}
-	if d.AgentCaller != nil {
-		switch caller, err := d.AgentCaller(ctx); {
-		case errors.Is(err, errNoAncestry):
-		case err != nil:
-			return fail("cannot check that no registered agent runs this (%v)", err)
-		case caller != "":
-			return fail("the project is suspended: waking it is the person's act, and this runs under the agent %s", caller)
-		}
+	if why := refuseAgentCaller(ctx, d); why != "" {
+		return fail("the project is suspended: %s", why)
 	}
 	by := d.Person()
 	if !bus.ValidName(by) {
@@ -283,8 +287,14 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 		return 1
 	}
 	if len(missing) > 0 && !o.partial {
-		fmt.Fprintf(errw, "%s: stays suspended: %s not back (agentbus resume again once they are, or agentbus resume --partial to lift it anyway)\n",
+		line := fmt.Sprintf("%s stays suspended: %s not back (agentbus resume again once they are, or agentbus resume --partial to lift it anyway)",
 			p, strings.Join(missing, ", "))
+		fmt.Fprintln(errw, line)
+		if d.Getenv(resumeHookEnv) == "1" { // nobody reads the hook's log
+			if _, err := b.PersonNotice(ctx, by, line); err != nil {
+				fmt.Fprintf(errw, "%s: the notice was not written: %v\n", p, err)
+			}
+		}
 		return 1
 	}
 	summary := resumeSummary(p, rec, snap, haveSnap, required, missing, pops, o.message)

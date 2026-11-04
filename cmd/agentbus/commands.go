@@ -263,13 +263,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo pause -f 2h \"release window\"", "agentbus -p demo pause -s"},
 	},
 	{
-		Name: "resume", Text: true, Usage: []string{"resume [--partial] [--yes] [message...]"},
+		Name: "resume", Text: true, Usage: []string{"resume [--partial] [--yes] [message...]", "resume --all [--dry-run] [--partial] [--yes]"},
 		Summary: "end a pause now; on a suspended project, bring it back: its services, its agents on their sessions, then the pause lifted and master told",
 		Flags: []cli.Flag{
 			{Long: "partial", Help: "a suspended project: lift the pause even if an agent it needs is not back (never a service that did not start)"},
-			{Long: "yes", Help: "confirmation for callers that pass it (busmon); resume asks nothing"},
+			{Long: "all", Help: "every project of this host: a suspended one comes back, any other has its stopped services started and its dead agents relaunched where its workspace is open"},
+			{Long: "dry-run", Help: "with --all: say what would be done, do nothing"},
+			{Long: "yes", Help: "do not ask (--all asks on a terminal; a single project's resume asks nothing)"},
 		},
-		Examples: []string{"agentbus -p demo resume", "agentbus -p demo resume --partial"},
+		Examples: []string{"agentbus -p demo resume", "agentbus -p demo resume --partial", "agentbus resume --all"},
 	},
 	{
 		Name: "ask", Usage: []string{"ask <agent> [--file <questions.json> | < questions.json] [--replace <id>] [--task <plan-task>]", "ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"},

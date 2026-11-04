@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -126,6 +127,10 @@ func main() {
 	// every project unless one is named on the command line, like backup.
 	if len(args) >= 1 && args[0] == "suspend" {
 		os.Exit(runSuspend(context.Background(), args[1:], explicitProject, realSuspendDeps(host), os.Stdout, os.Stderr))
+	}
+	// resume --all wakes this host's projects (spec §7): it names them itself, like suspend.
+	if len(args) >= 1 && args[0] == "resume" && slices.Contains(args[1:], "--all") {
+		os.Exit(runResumeAll(context.Background(), args[1:], realResumeDeps(host), os.Stdout, os.Stderr))
 	}
 	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
 	if len(args) >= 1 && args[0] == "plugin" {

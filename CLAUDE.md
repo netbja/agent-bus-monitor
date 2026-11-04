@@ -1358,7 +1358,21 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   and ignored (busmon passes it); then `Unsuspend` with
   one summary (agents back, missing, pops named with `agent-spawn <role> <p> --resume <session>`, never spawned, what was
   open at the suspend, the person's words), a `for=person` notice when the directive's target is missing, and the
-  snapshot set aside as `suspend.<taken_at>.json` (5 kept). busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
+  snapshot set aside as `suspend.<taken_at>.json` (5 kept). `agentbus resume --all [--dry-run] [--partial] [--yes]`
+  (`resumeall.go`, above the project-required exit like `suspend`; asks on a terminal, exit 2 without one and without
+  `--yes`; an agent caller refused, `refuseAgentCaller`): every project of the host, a suspended one through the
+  above, any other through the crash path (`runCrashResume`, §7): under `upLock`, its installed stopped services started,
+  its dead required agents relaunched by `up --resume` only when its workspace is open in its recorded herdr session (a
+  crash never opens a closed workspace: `agentbus up <p> --resume` is named), no pause touched, a summary on stdout
+  (what could not be known, the open work the bus holds now, read with `readSnapshotFacts`) and to the escalation
+  target as the person only when something was relaunched; `nothing to resume` when all runs. The workspace hook
+  (`upHook`, `hookSuspended`; real deps `withSuspendHook`) reads the pause (2 s) and on a suspended project starts no
+  service: with `suspend.auto_resume` (Services, Bool, off, `AGENT_BUS_SUSPEND_AUTO_RESUME`) on, and only when the
+  record's host is this host and its boot is known and differs from the current one, with a recorded `identity.as`
+  and the lock free (else `resume already running`), it starts `agentbus --project <p> resume --yes` detached
+  (`hookResumeArgv`, never `--partial`; `spawnDetachedLog`, output in the project's `suspend.log`) with
+  `AGENTBUS_RESUME_HOOK=1`, so a resume that leaves the project suspended also writes a `for=person` notice; a pause it
+  cannot read starts the services as before. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
   that declared working or idle reads `paused`, or `quota` when its provider is held; blocked,
   waiting and done are never covered; the detail keeps the declared state, the panel counts what
   is shown); `@all` targets only agents in `{p}:agents`

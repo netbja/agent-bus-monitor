@@ -28,6 +28,7 @@ type resumeWorld struct {
 	bootErr error      // the template cannot be read
 	lock    func(string) (func(), error)
 	proof   time.Duration // ProofWait; 60 ms unless set
+	wsOpen  bool          // the project's workspace is open (resume --all)
 }
 
 func newResumeWorld(t *testing.T, agents ...string) *resumeWorld {
