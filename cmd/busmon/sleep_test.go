@@ -111,7 +111,7 @@ func TestSleepRunShowsItsProgress(t *testing.T) {
 	w := newSleepWorld(t, nil)
 	w.press(t, 'Z')
 	w.press(t, 'y')
-	w.m = step(t, w.m, sleepLineMsg{line: "agent-bus-monitor: waiting for coder's turn to end"})
+	w.m = step(t, w.m, sleepLineMsg{id: w.m.ui.sleepRun.id, line: "agent-bus-monitor: waiting for coder's turn to end"})
 	if got := w.m.noticeLine(200).text(); !strings.Contains(got, "waiting for coder") {
 		t.Fatalf("notice while it runs = %q", got)
 	}
@@ -120,7 +120,7 @@ func TestSleepRunShowsItsProgress(t *testing.T) {
 		t.Fatalf("second Z: %q, runs %q", f, w.runs)
 	}
 	w.m.ui.flash = ""
-	w.m = step(t, w.m, sleepDoneMsg{err: nil})
+	w.m = step(t, w.m, sleepDoneMsg{id: w.m.ui.sleepRun.id, err: nil})
 	if w.m.ui.sleepRun != nil {
 		t.Fatal("the run is still recorded")
 	}
@@ -135,8 +135,8 @@ func TestSleepRunFailure(t *testing.T) {
 	w := newSleepWorld(t, nil)
 	w.press(t, 'Z')
 	w.press(t, 'y')
-	w.m = step(t, w.m, sleepLineMsg{line: "agent-bus-monitor: no name recorded for you"})
-	w.m = step(t, w.m, sleepDoneMsg{err: errExit1})
+	w.m = step(t, w.m, sleepLineMsg{id: w.m.ui.sleepRun.id, line: "agent-bus-monitor: no name recorded for you"})
+	w.m = step(t, w.m, sleepDoneMsg{id: w.m.ui.sleepRun.id, err: errExit1})
 	w.m = step(t, w.m, fadeMsg{})
 	if got := w.m.noticeLine(200).text(); !strings.Contains(got, "suspend failed") || !strings.Contains(got, "no name recorded") {
 		t.Fatalf("failure notice = %q", got)
@@ -176,8 +176,42 @@ func TestPausePopupResumeWhileARunGoes(t *testing.T) {
 	w.press(t, 'Z')
 	w.press(t, 'y')
 	w.m.ui.pausePopup = &pauseDialog{rec: *suspendedPause(), key: "k", sel: 0}
+	before := *w.m.ui.sleepRun
 	w.feed(t, w.m.pressPause(0))
 	if len(w.runs) != 1 || !strings.Contains(w.m.ui.flash, "already running") {
 		t.Fatalf("runs %q, flash %q", w.runs, w.m.ui.flash)
+	}
+	if r := w.m.ui.sleepRun; r == nil || *r != before {
+		t.Fatalf("the run in progress was replaced: %+v, was %+v", r, before)
+	}
+}
+
+// Each run has its id: a tick or an exit of an earlier run, arriving after a
+// new run started, changes nothing of the new one (reviewer-codex).
+func TestSleepIgnoresAnEarlierRunsMessages(t *testing.T) {
+	w := newSleepWorld(t, nil)
+	w.press(t, 'Z')
+	w.press(t, 'y')
+	first := w.m.ui.sleepRun.id
+	w.m = step(t, w.m, sleepDoneMsg{id: first})
+	w.m.ui.flash = ""
+	w.press(t, 'Z')
+	w.press(t, 'y')
+	second := w.m.ui.sleepRun
+	if second == nil || second.id == first {
+		t.Fatalf("second run = %+v", second)
+	}
+	w.m = step(t, w.m, sleepLineMsg{id: second.id, line: "the second run's line"})
+	w.m = step(t, w.m, sleepLineMsg{id: first, line: "a stale line of the first"})
+	if got := w.m.ui.sleepRun.last; got != "the second run's line" {
+		t.Fatalf("a stale tick overwrote the progress: %q", got)
+	}
+	w.m = step(t, w.m, sleepDoneMsg{id: first, err: errExit1})
+	if w.m.ui.sleepRun == nil || w.m.ui.sleepRun.id != second.id {
+		t.Fatalf("a stale exit ended the second run: %+v", w.m.ui.sleepRun)
+	}
+	w.m = step(t, w.m, sleepStartedMsg{id: first, err: errExit1})
+	if w.m.ui.sleepRun == nil || w.m.ui.sleepRun.id != second.id {
+		t.Fatalf("a stale start result ended the second run: %+v", w.m.ui.sleepRun)
 	}
 }

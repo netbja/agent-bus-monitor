@@ -107,6 +107,7 @@ type uiState struct {
 	confirm        *pendingRemoval   // a d waiting for its y
 	sleepAsk       *sleepAsk         // a Z waiting for its y
 	sleepRun       *sleepRun         // agentbus suspend or resume running
+	sleepSeq       int               // the last run's id
 	reminder       *reminderDialog   // the reminder, when open
 	summary        bool              // the recap's summary confirmation is open
 	summarySent    bool              // the summary request is in flight: its success closes the recap

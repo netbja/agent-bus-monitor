@@ -26,6 +26,7 @@ type sleepAsk struct{ resume bool }
 
 // sleepRun is the child running: what it does, its log, its last line.
 type sleepRun struct {
+	id              int // which run: a message of an earlier one is ignored (reviewer-codex)
 	verb, log, last string
 }
 
@@ -37,16 +38,23 @@ type sleepAskMsg struct {
 
 // sleepStartedMsg: the child started (done is its exit), or did not (err).
 type sleepStartedMsg struct {
+	id        int
 	verb, log string
 	done      <-chan error
 	err       error
 }
 
 // sleepLineMsg is the log's last line, read every second while it runs.
-type sleepLineMsg struct{ line string }
+type sleepLineMsg struct {
+	id   int
+	line string
+}
 
 // sleepDoneMsg: the child exited.
-type sleepDoneMsg struct{ err error }
+type sleepDoneMsg struct {
+	id  int
+	err error
+}
 
 // sleepEvery is how often the log's last line is read.
 const sleepEvery = time.Second
@@ -114,49 +122,56 @@ func (m *Model) startSleep(resume bool) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = "no agentbus to run "+verb+" with", true
 		return nil
 	}
-	m.ui.sleepRun = &sleepRun{verb: verb, log: logOf(p), last: "starting" + GlyphEllipsis}
+	m.ui.sleepSeq++
+	id := m.ui.sleepSeq
+	m.ui.sleepRun = &sleepRun{id: id, verb: verb, log: logOf(p), last: "starting" + GlyphEllipsis}
 	args := []string{"--project", p, verb, "--yes"}
 	log := m.ui.sleepRun.log
 	return func() tea.Msg {
 		done, err := run(args, log)
-		return sleepStartedMsg{verb: verb, log: log, done: done, err: err}
+		return sleepStartedMsg{id: id, verb: verb, log: log, done: done, err: err}
 	}
 }
 
 // gotSleepStarted waits for the exit and reads the log every second.
+// A message of an earlier run is ignored: its id is not the run's.
 func (m *Model) gotSleepStarted(msg sleepStartedMsg) tea.Cmd {
+	if r := m.ui.sleepRun; r == nil || r.id != msg.id {
+		return nil
+	}
 	if msg.err != nil {
 		m.ui.sleepRun = nil
 		m.notice.push(notice{text: msg.verb + " not started: " + Preview(msg.err.Error()), level: noticeAttention})
 		return nil
 	}
 	done := msg.done
-	return tea.Batch(func() tea.Msg { return sleepDoneMsg{err: <-done} }, sleepTick(msg.log))
+	id := msg.id
+	return tea.Batch(func() tea.Msg { return sleepDoneMsg{id: id, err: <-done} }, sleepTick(id, msg.log))
 }
 
-func sleepTick(log string) tea.Cmd {
-	return tea.Tick(sleepEvery, func(time.Time) tea.Msg { return sleepLineMsg{line: lastLine(log)} })
+func sleepTick(id int, log string) tea.Cmd {
+	return tea.Tick(sleepEvery, func(time.Time) tea.Msg { return sleepLineMsg{id: id, line: lastLine(log)} })
 }
 
 // gotSleepLine keeps the last line and reads again while the run goes.
 func (m *Model) gotSleepLine(msg sleepLineMsg) tea.Cmd {
 	r := m.ui.sleepRun
-	if r == nil {
+	if r == nil || r.id != msg.id { // an earlier run's tick ends its own chain
 		return nil
 	}
 	if msg.line != "" {
 		r.last = msg.line
 	}
-	return sleepTick(r.log)
+	return sleepTick(r.id, r.log)
 }
 
 // gotSleepDone: the outcome is the notice, with the last line on a failure.
 func (m *Model) gotSleepDone(msg sleepDoneMsg) {
 	r := m.ui.sleepRun
-	m.ui.sleepRun = nil
-	if r == nil {
+	if r == nil || r.id != msg.id { // an earlier run's exit never ends this one
 		return
 	}
+	m.ui.sleepRun = nil
 	if msg.err == nil {
 		m.notice.push(notice{text: r.verb + " done", level: noticeDone})
 		return
