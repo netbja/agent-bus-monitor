@@ -20,7 +20,7 @@ import (
 // summary line names who and what and the busmon key, never an agent's free
 // text, which goes in Detail for full detail to a private target only.
 
-type notifyPlanTask struct{ ID, Title string }
+type notifyPlanTask struct{ ID, Title, Subject string } // Subject: its review subject (a merge item it already announces)
 
 // stallNoticePrefix opens the stall guard's notice for the person
 // (stallchecks.go): that notice is the stall itself, never an event.
@@ -30,6 +30,7 @@ type notifyFacts struct {
 	Asks        []bus.Ask
 	Agents      map[string]bus.AgentSnapshot
 	PlanWaiting []notifyPlanTask
+	Merge       []bus.MergeItem // the merge queue's items (merge-queue): each waits for the person's merge
 	Health      map[string]health.Record
 	Notices     []bus.RawEntry // {p}:notify, retained
 	Observed    map[string]bus.Observation
@@ -70,6 +71,23 @@ func notifyEvents(f notifyFacts, planSeen map[string]time.Time, now time.Time) [
 		}
 		add("decision", "plan:"+t.ID, at, "plan task "+t.ID+" waits for you (busmon P)", t.Title)
 	}
+	planned := map[string]bool{}
+	for _, t := range f.PlanWaiting {
+		planned[t.Subject] = t.Subject != ""
+	}
+merge:
+	for _, it := range f.Merge {
+		for _, s := range it.Subjects {
+			if planned[s] { // its plan task's event already says it
+				continue merge
+			}
+		}
+		id, what := it.Branch, "branch "+it.Branch
+		if it.Number > 0 {
+			id, what = strconv.Itoa(it.Number), "PR "+strconv.Itoa(it.Number)
+		}
+		add("decision", "merge:"+id+"|"+it.Head, time.UnixMilli(it.ApprovedAt), what+" waits for your merge (busmon For you)", it.Title)
+	}
 	defs := map[string]health.Definition{}
 	for _, d := range health.Definitions() {
 		defs[d.ID] = d
@@ -91,6 +109,7 @@ func notifyEvents(f notifyFacts, planSeen map[string]time.Time, now time.Time) [
 		case id == "team-stall" && st == health.Fail: // a stall only, never a second fail line
 			add("stall", since, time.UnixMilli(rec.Since), "team stall: every agent idle, work ready (busmon F5)", rec.Detail)
 		case id == "team-stall":
+		case id == "merge-queue": // its items are events of their own (merge:<pr>|<head>)
 		case st == health.Fail:
 			add("fail", id+"|"+since, time.UnixMilli(rec.Since), title+" fails (busmon F5)", rec.Detail)
 		case st == health.Warn && def.PlaceOf(rec, st) == health.PlaceForYou:
@@ -189,6 +208,11 @@ func (r *notifyReader) read(ctx context.Context, now time.Time) (notifyFacts, ma
 	if f.PlanWaiting, err = r.planWaiting(ctx); err != nil {
 		failed["plan"] = err.Error()
 	}
+	if rec, err := r.b.MergeQueue(ctx); err != nil {
+		failed["merge-queue"] = err.Error()
+	} else if rec.ItemsAt > 0 {
+		f.Merge = rec.Items
+	}
 	return f, failed
 }
 
@@ -230,7 +254,7 @@ func (r *notifyReader) planWaiting(ctx context.Context) ([]notifyPlanTask, error
 	var out []notifyPlanTask
 	for _, row := range plan.Derive(act.File, pin) {
 		if row.State == plan.Waiting {
-			out = append(out, notifyPlanTask{ID: row.Task.ID, Title: row.Task.Title})
+			out = append(out, notifyPlanTask{ID: row.Task.ID, Title: row.Task.Title, Subject: row.Task.ReviewSubject()})
 		}
 	}
 	return out, nil

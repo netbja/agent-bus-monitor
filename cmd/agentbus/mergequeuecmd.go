@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/health"
 )
 
 // agentbus merge-queue [--json] [--live] (merge-queue spec §5): read-only. It
@@ -97,4 +98,13 @@ func printMergeQueue(rec bus.MergeQueueRecord, asJSON bool, out io.Writer) int {
 		fmt.Fprintf(out, "%d open PR%s not on an approved head (a newer push, no review, an approve no longer retained)\n", rec.Unapproved, s)
 	}
 	return code
+}
+
+// mergeQueueInput is the record as the health check reads it.
+func mergeQueueInput(rec bus.MergeQueueRecord) health.MergeQueueInput {
+	in := health.MergeQueueInput{ItemsAt: rec.ItemsAt, Reason: rec.Reason, Unapproved: rec.Unapproved}
+	for _, it := range rec.Items {
+		in.Items = append(in.Items, health.MergeQueueEntry{Number: it.Number, Title: it.Title, Branch: it.Branch})
+	}
+	return in
 }
