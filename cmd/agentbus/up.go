@@ -899,8 +899,12 @@ func hookSuspended(d upDeps, project string, rec *bus.PauseRecord, stdout, stder
 		fmt.Fprintf(stdout, "%s: suspended, not resumed: no name is recorded for you to resume it as (agentbus identity set <your-name>)\n", project)
 		return 0
 	}
+	if d.SpawnResume == nil {
+		return 0
+	}
+	unlock := func() {}
 	if d.Lock != nil {
-		unlock, err := d.Lock(project, false)
+		u, err := d.Lock(project, false)
 		if errors.Is(err, errUpBusy) {
 			fmt.Fprintf(stdout, "%s: resume already running\n", project)
 			return 0
@@ -909,23 +913,25 @@ func hookSuspended(d upDeps, project string, rec *bus.PauseRecord, stdout, stder
 			fmt.Fprintf(stderr, "agentbus: %s: %v: not resumed\n", project, err)
 			return 1
 		}
-		defer unlock() // released before the resume takes it again for its whole run
-	}
-	if d.SpawnResume == nil {
-		return 0
+		unlock = u
 	}
 	// One try per boot and suspend (foureyes): a resume that stays suspended
 	// is not started again on every focus, each with its own notice. The
-	// mark is read and written under the lock, before the spawn; one that
-	// cannot be written starts nothing.
+	// mark is read and written under the lock, which is released before the
+	// spawn: the resume takes it without waiting, and the mark, not the
+	// lock, keeps a second event from starting another (reviewer-codex,
+	// foureyes). One that cannot be written starts nothing.
 	dir := d.Paths.StateDir(project)
 	mark := autoResumeMark{Boot: boot, At: rec.At}
 	if autoResumeTried(filepath.Join(dir, autoResumeFile), mark) {
+		unlock()
 		fmt.Fprintf(stdout, "%s: suspended: the auto-resume on this boot did not complete (agentbus resume brings it back; see %s)\n",
 			project, filepath.Join(dir, "suspend.log"))
 		return 0
 	}
-	if err := writeAutoResumeMark(dir, mark); err != nil {
+	err := writeAutoResumeMark(dir, mark)
+	unlock()
+	if err != nil {
 		fmt.Fprintf(stderr, "agentbus: %s: recording the auto-resume: %v: not resumed (agentbus resume brings it back)\n", project, err)
 		return 1
 	}

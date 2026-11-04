@@ -325,6 +325,38 @@ func TestHookAutoResumesOncePerBoot(t *testing.T) {
 	}
 }
 
+// The hook hands the lock over: its detached resume takes it without
+// waiting, so the hook holds none when it spawns (reviewer-codex, foureyes).
+func TestHookReleasesTheLockBeforeTheSpawn(t *testing.T) {
+	h := newHookWorld(t)
+	h.rec = suspendedOn("host-a", "boot-1")
+	dir := t.TempDir()
+	h.d.Lock = upLock(dir)
+	h.d.SpawnResume = func(p, _ string) error {
+		u, err := upLock(dir)(p, false) // what the child's resume does
+		if err != nil {
+			t.Errorf("the child could not take the lock: %v", err)
+			return nil
+		}
+		u()
+		h.spawned = append(h.spawned, [2]string{p, ""})
+		return nil
+	}
+	if code, out := h.run(); code != 0 || len(h.spawned) != 1 {
+		t.Fatalf("hook = %d %q, spawned %v", code, out, h.spawned)
+	}
+	// A second event while the resume runs (it holds the lock): a no-op.
+	u, err := upLock(dir)("demo", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer u()
+	h.boot = "boot-3"
+	if _, out := h.run(); len(h.spawned) != 1 || !strings.Contains(out, "already running") {
+		t.Fatalf("while a resume runs: %q, spawned %v", out, h.spawned)
+	}
+}
+
 // The resume the hook starts is exactly agentbus --project <p> resume --yes:
 // never --partial.
 func TestHookResumeArgv(t *testing.T) {
