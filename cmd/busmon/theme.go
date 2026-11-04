@@ -323,6 +323,9 @@ const (
 	GlyphSpark4 = "▄"
 	GlyphSpark5 = "▅"
 	GlyphSpark6 = "▆"
+	// The upper half block: with GlyphSpark4 (the lower half) and GlyphBarFull
+	// it draws About's two-row wordmark (about-design).
+	GlyphUpperHalf = "▀"
 	// A gauge's partial cell in true colour, one to seven eighths filled from
 	// the left (busmon-bars); GlyphBarFull is the whole cell.
 	GlyphEighth1 = "▏"
@@ -427,6 +430,6 @@ var UIGlyphs = []string{
 	GlyphSelect, GlyphArrowR, GlyphArrowL, GlyphUp, GlyphDownArrow, GlyphEllipsis,
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
-	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6,
+	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6, GlyphUpperHalf,
 	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark, GlyphChoiceL, GlyphSet,
 }
