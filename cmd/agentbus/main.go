@@ -252,6 +252,10 @@ func main() {
 
 	case "request":
 		if err := runRequest(ctx, b, self, rest, os.Stdout); err != nil {
+			if errors.Is(err, errNothingReady) { // request next: nothing in hand or ready, as an empty drain
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(64)
+			}
 			die(err.Error())
 		}
 	case "status":

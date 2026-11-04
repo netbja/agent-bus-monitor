@@ -45,7 +45,10 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		return slices.Contains(rest, "--as")
 	case "pilot":
 		return first == "status"
-	case "request", "board", "handoff":
+	case "request":
+		// next only reads; priority is a person's, by an explicit --as (request-priority §4)
+		return first == "" || first == "next" || first == "priority" && slices.Contains(rest, "--as")
+	case "board", "handoff":
 		return first == ""
 	case "plan":
 		return first == "" || first == "show"
