@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 256" width="860" height="256"><title>lockup (exploration: live text, to outline before delivery)</title>
+<path fill="#111" d="M40 24 H84 V224 H40 Z M140 80 A72 72 0 1 1 139.99 80 Z M140 120 A32 32 0 1 0 140.01 120 Z"/>
+<circle fill="#111" cx="140" cy="152" r="12"/>
+<rect fill="#111" x="24" y="234" width="208" height="12" rx="6"/>
+<text x="290" y="166" font-family="DejaVu Sans, sans-serif" font-weight="700" font-size="100" letter-spacing="-4" fill="#111">agent-bus</text>
+</svg>

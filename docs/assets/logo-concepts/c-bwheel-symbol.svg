@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t"><title id="t">agent-bus concept C: b-wheel</title>
+<path fill="#111" d="M40 24 H84 V224 H40 Z M140 80 A72 72 0 1 1 139.99 80 Z M140 120 A32 32 0 1 0 140.01 120 Z"/>
+<circle fill="#111" cx="140" cy="152" r="12"/>
+<rect fill="#111" x="24" y="234" width="208" height="12" rx="6"/>
+</svg>
