@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -81,9 +82,23 @@ func TestReadBackupFacts(t *testing.T) {
 	if got := strings.Join(backupNowArgs(f), " "); got != "backup" {
 		t.Fatalf("args %q", got)
 	}
-	f = readBackupFacts(newBackupWorld(t, "age_recipient = \"age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq\"\n").getenv, w.host)
+	recipient := newBackupWorld(t, "age_recipient = \"age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq\"\n")
+	defer func(l func(string) (string, error)) { lookAge = l }(lookAge)
+	lookAge = func(string) (string, error) { return "/usr/bin/age", nil }
+	f = readBackupFacts(recipient.getenv, w.host)
 	if got := strings.Join(backupNowArgs(f), " "); got != "backup --secrets" {
 		t.Fatalf("with a recipient: args %q (err %q)", got, f.Err)
+	}
+	// foureyes: a recipient but no age, the run leaves the secrets out, as
+	// the schedule does, and the line says why.
+	lookAge = func(string) (string, error) { return "", exec.ErrNotFound }
+	f = readBackupFacts(recipient.getenv, w.host)
+	if got := strings.Join(backupNowArgs(f), " "); got != "backup" || !f.NoAge {
+		t.Fatalf("no age: args %q, facts %+v", got, f)
+	}
+	lines, _ := backupItemLines(&settingsPage{}, &f, 0, -1, 200, "")
+	if txt := tokLinesText(lines); !strings.Contains(txt, "age is not on PATH") {
+		t.Fatalf("the line does not say age is missing:\n%s", txt)
 	}
 }
 

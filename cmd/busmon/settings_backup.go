@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -40,9 +41,13 @@ type backupFacts struct {
 	Archives  []backupArchiveRow
 	Last      []string // the last runs' outcomes, one line each
 	Err       string   // the folder or the record could not be read
-	Secrets   bool     // backup.age_recipient is set: Back up now adds --secrets
+	Secrets   bool     // backup.age_recipient is set and age is on PATH: Back up now adds --secrets
+	NoAge     bool     // a recipient is set but age is not on PATH: secrets left out, as the schedule does (foureyes)
 	Log       string   // where Back up now's output goes ("" = no state folder)
 }
+
+// lookAge finds age on PATH (a test replaces it).
+var lookAge = exec.LookPath
 
 // readBackupFacts reads backup.dir's archives of host and backup-last.json.
 // With no HOME and no XDG folder it reads nothing (a test reads no file).
@@ -50,7 +55,13 @@ func readBackupFacts(getenv func(string) string, host string) backupFacts {
 	cfg := config.Load(config.Path(getenv), "config.toml")
 	r := config.Resolver{Getenv: getenv, Files: []*config.File{cfg}}
 	var f backupFacts
-	f.Secrets = r.String("backup.age_recipient") != ""
+	if r.String("backup.age_recipient") != "" {
+		if _, err := lookAge("age"); err != nil {
+			f.NoAge = true
+		} else {
+			f.Secrets = true
+		}
+	}
 	dir, defaulted, err := config.BackupDir(r, getenv)
 	if err != nil {
 		f.Err = err.Error()
@@ -172,7 +183,10 @@ func backupItemLines(s *settingsPage, f *backupFacts, first, sel, width int, run
 	}
 	label := "Back up now"
 	what := "  agentbus " + strings.Join(backupNowArgs(*f), " ") + ": every project of this host"
-	if !f.Secrets {
+	switch {
+	case f.NoAge:
+		what += ", secrets left out: age is not on PATH"
+	case !f.Secrets:
 		what += ", secrets left out"
 	}
 	if running != "" {
