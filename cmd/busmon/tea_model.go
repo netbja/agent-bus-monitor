@@ -67,6 +67,11 @@ type shellConfig struct {
 	getenv  func(string) string
 	flags   settingsFlags
 	retheme func(name string) (*Theme, error)
+	// Z (sleep.go): the runner of agentbus suspend/resume, the project's
+	// suspend.log, suspend.wait; nil = Z says there is no agentbus to run.
+	sleepRunner func(args []string, log string) (<-chan error, error)
+	sleepLog    func(project string) string
+	sleepWait   func() time.Duration
 }
 
 // uiState is the person's place on the screen.
@@ -100,6 +105,9 @@ type uiState struct {
 	pauseAck       string            // the send the person chose to make despite the pause
 	pausePopup     *pauseDialog      // the pause popup, when open
 	confirm        *pendingRemoval   // a d waiting for its y
+	sleepAsk       *sleepAsk         // a Z waiting for its y
+	sleepRun       *sleepRun         // agentbus suspend or resume running
+	sleepSeq       int               // the last run's id
 	reminder       *reminderDialog   // the reminder, when open
 	summary        bool              // the recap's summary confirmation is open
 	summarySent    bool              // the summary request is in flight: its success closes the recap
@@ -240,6 +248,14 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case sendResultMsg:
 		m.gotSend(msg)
 		m.refresh()
+	case sleepAskMsg:
+		m.gotSleepAsk(msg)
+	case sleepStartedMsg:
+		return m.gotSleepStarted(msg)
+	case sleepLineMsg:
+		return m.gotSleepLine(msg)
+	case sleepDoneMsg:
+		m.gotSleepDone(msg)
 	case pastedImageMsg:
 		m.gotPastedImage(msg)
 	case resumeMsg:

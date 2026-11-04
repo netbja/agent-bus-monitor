@@ -263,9 +263,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo pause -f 2h \"release window\"", "agentbus -p demo pause -s"},
 	},
 	{
-		Name: "resume", Text: true, Usage: []string{"resume [message...]"},
-		Summary:  "end a pause now",
-		Examples: []string{"agentbus -p demo resume"},
+		Name: "resume", Text: true, Usage: []string{"resume [--partial] [--yes] [message...]", "resume --all [--dry-run] [--partial] [--yes]"},
+		Summary: "end a pause now; on a suspended project, bring it back: its services, its agents on their sessions, then the pause lifted and master told",
+		Flags: []cli.Flag{
+			{Long: "partial", Help: "a suspended project: lift the pause even if an agent it needs is not back (never a service that did not start)"},
+			{Long: "all", Help: "every project of this host: a suspended one comes back, any other has its stopped services started and its dead agents relaunched where its workspace is open"},
+			{Long: "dry-run", Help: "with --all: say what would be done, do nothing"},
+			{Long: "yes", Help: "do not ask (--all asks on a terminal; a single project's resume asks nothing)"},
+		},
+		Examples: []string{"agentbus -p demo resume", "agentbus -p demo resume --partial", "agentbus resume --all"},
 	},
 	{
 		Name: "ask", Usage: []string{"ask <agent> [--file <questions.json> | < questions.json] [--replace <id>] [--task <plan-task>]", "ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"},
@@ -480,6 +486,18 @@ var commands = []cli.Command{
 			{Long: "yes", Help: "answer --force's question yes (no terminal needed)"}},
 		Examples: []string{"agentbus restore ~/.local/share/agentbus/backups/agentbus-backup-h-20261103T120000Z.tar.zst --dry-run",
 			"agentbus restore <archive> --project myapp"},
+	},
+	{
+		Name: "suspend", NoProject: true, Usage: []string{"suspend [--project <p>] [--wait <d> | --no-wait] [--force] [--reason <text>] [--dry-run] [--yes]", "suspend --status"},
+		Summary: "put every project of this host to sleep (or the one named with --project): pause, let running turns end, record a snapshot, stop the services; agentbus resume brings it back",
+		Flags: []cli.Flag{{Long: "wait", Arg: "<d>", Help: "how long running turns may take to end (default suspend.wait, 10m); past it the suspend is cancelled unless --force"},
+			{Long: "no-wait", Help: "no wait: suspend only a project already quiet (the same as suspend.wait = 0)"},
+			{Long: "force", Help: "go on when the wait ends with turns still running; they are cut if the machine goes down"},
+			{Long: "reason", Arg: "<text>", Help: "why, shown with the suspend and in the resume directive"},
+			{Long: "dry-run", Help: "say what would be done; write nothing"},
+			{Long: "yes", Help: "do not ask for confirmation (no terminal needed)"},
+			{Long: "status", Help: "what is suspended, since when, and what each snapshot holds"}},
+		Examples: []string{"agentbus suspend --reason \"OS updates\"", "agentbus suspend --project agent-bus-monitor --dry-run", "agentbus suspend --status"},
 	},
 	{
 		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]"},

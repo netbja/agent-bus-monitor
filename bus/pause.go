@@ -26,12 +26,30 @@ type PauseRecord struct {
 	By     string `json:"by"`
 	Notify string `json:"notify"`
 	At     int64  `json:"at"`
+	// A suspend's fields (suspend.go): additive, so an older reader still
+	// decodes the record as a pause.
+	Kind     string          `json:"kind,omitempty"`     // "" = a timed pause; PauseKindSuspend
+	Services map[string]bool `json:"services,omitempty"` // service kind -> was active before the suspend
+	Prev     *PauseRecord    `json:"prev,omitempty"`     // the timed pause the suspend replaced
+	Host     string          `json:"host,omitempty"`     // the suspend's host
+	Boot     string          `json:"boot,omitempty"`     // that host's boot when it suspended
 }
 
 // UntilTime is the deadline as a time.
 func (p PauseRecord) UntilTime() time.Time { return time.UnixMilli(p.Until) }
 
-// SetPause pauses the project until the deadline. A later call replaces it.
+// setPause writes a timed pause unless the project is suspended (0).
+var setPause = redis.NewScript(`
+local v = redis.call('GET', KEYS[1])
+if v then
+  local ok, p = pcall(cjson.decode, v)
+  if ok and type(p) == 'table' and p['kind'] == 'suspend' then return 0 end
+end
+redis.call('SET', KEYS[1], ARGV[1])
+return 1`)
+
+// SetPause pauses the project until the deadline. A later call replaces it,
+// but never a suspend (ErrSuspended).
 func (b *Bus) SetPause(ctx context.Context, by, notify, reason string, until time.Time) (PauseRecord, error) {
 	if !ValidName(by) || !ValidName(notify) {
 		return PauseRecord{}, fmt.Errorf("invalid name %q or %q", by, notify)
@@ -48,7 +66,14 @@ func (b *Bus) SetPause(ctx context.Context, by, notify, reason string, until tim
 	}
 	p := PauseRecord{Until: until.UnixMilli(), Reason: reason, By: by, Notify: notify, At: now.UnixMilli()}
 	v, _ := json.Marshal(p)
-	return p, b.r.Set(ctx, PauseKey(b.project), v, 0).Err()
+	n, err := setPause.Run(ctx, b.r, []string{PauseKey(b.project)}, v).Int()
+	if err != nil {
+		return PauseRecord{}, err
+	}
+	if n == 0 {
+		return PauseRecord{}, ErrSuspended
+	}
+	return p, nil
 }
 
 // Pause reads the project's pause; nil when it is not paused.
@@ -67,19 +92,44 @@ func (b *Bus) Pause(ctx context.Context) (*PauseRecord, error) {
 	return &p, nil
 }
 
+// resumePause deletes a timed pause and returns it: {0} none, {2} a suspend
+// (left as it is), {1, record} deleted.
+var resumePause = redis.NewScript(`
+local v = redis.call('GET', KEYS[1])
+if not v then return {0} end
+local ok, p = pcall(cjson.decode, v)
+if ok and type(p) == 'table' and p['kind'] == 'suspend' then return {2} end
+redis.call('DEL', KEYS[1])
+return {1, v}`)
+
+// PauseRaw is the pause record as stored, "" when there is none: what a
+// compare-and-swap (Unsuspend, SuspendCancel) is given.
+func (b *Bus) PauseRaw(ctx context.Context) (string, error) {
+	v, err := b.r.Get(ctx, PauseKey(b.project)).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	return v, err
+}
+
 // Resume ends a pause now: it deletes the record and sends its notify target
-// the resume directive, from by. It reports false when nothing was paused.
+// the resume directive, from by. It reports false when nothing was paused, and
+// ErrSuspended for a suspend, which only the full resume ends (Unsuspend).
 func (b *Bus) Resume(ctx context.Context, by, message string) (bool, error) {
 	if !ValidName(by) {
 		return false, fmt.Errorf("invalid sender %q", by)
 	}
-	v, err := b.r.GetDel(ctx, PauseKey(b.project)).Result()
-	if err == redis.Nil {
-		return false, nil
-	}
+	res, err := resumePause.Run(ctx, b.r, []string{PauseKey(b.project)}).Slice()
 	if err != nil {
 		return false, err
 	}
+	switch code, _ := res[0].(int64); code {
+	case 0:
+		return false, nil
+	case 2:
+		return false, ErrSuspended
+	}
+	v, _ := res[1].(string)
 	var p PauseRecord
 	_ = json.Unmarshal([]byte(v), &p)
 	if !ValidName(p.Notify) {
@@ -128,6 +178,12 @@ func (b *Bus) FencedResume(ctx context.Context, token, from string) (string, err
 	var p PauseRecord
 	if err := json.Unmarshal([]byte(raw), &p); err != nil || !ValidName(p.Notify) {
 		return "", fmt.Errorf("%s: unreadable pause record", PauseKey(b.project))
+	}
+	if p.Suspended() {
+		// Never ended by the dispatcher, however due: the script below compares
+		// the record byte for byte, so a suspend written after this read is
+		// left alone too.
+		return "", nil
 	}
 	res, err := fencedResume.Run(ctx, b.r,
 		[]string{DispatchKey(b.project), PauseKey(b.project), StreamKey(b.project, "cmd")},

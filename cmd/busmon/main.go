@@ -486,7 +486,8 @@ func main() {
 		docker: realSvcRunner, brokerHost: opts.host, histDir: historyDirOf(project),
 		getenv: os.Getenv, flags: flags, retheme: func(name string) (*Theme, error) { // as at the start, with the page's choice
 			return ResolveTheme(name, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
-		}})
+		},
+		sleepRunner: realSleepRunner(agentbusBeside()), sleepLog: realSleepLog(os.Getenv), sleepWait: realSleepWait(os.Getenv)})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up

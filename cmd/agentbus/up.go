@@ -42,8 +42,12 @@ type upDeps struct {
 	// unknown: when it exists the units run it, whoever runs up.
 	Installed string
 	Environ   []string // the service environment is picked from it
-	Mark      func(project string, inst bus.ServicesInstall) error
-	Host      string
+	// KeepEnv keeps the project's env file as it is, its herdr session
+	// excepted: a suspended project's resume never changes its configuration
+	// (suspend 3a). What Environ would have changed is named, never its value.
+	KeepEnv bool
+	Mark    func(project string, inst bus.ServicesInstall) error
+	Host    string
 	// Ping asks the broker for PING, within timeout, before the marker is written
 	// (up-broker-ready): a broker docker has just started answers LOADING for a while.
 	// Now is the clock of that wait (nil: time.Now). Nil Ping: no wait.
@@ -71,6 +75,17 @@ type upDeps struct {
 	// agent runs ("" for none), LookPath finds it on up's PATH. Nil: no check.
 	TabExe   func(command string) string
 	LookPath func(string) (string, error)
+
+	// The workspace hook on a suspended project (suspend spec §8). Nil
+	// SuspendPause: the hook reads no pause and starts the services as before.
+	SuspendPause func(project string) (*bus.PauseRecord, error) // bounded, 2 s
+	AutoResume   func() bool                                    // suspend.auto_resume
+	Boot         func() string                                  // this host's boot, "" unknown
+	Hostname     func() (string, error)
+	Person       func() string // identity.as
+	// SpawnResume starts agentbus --project <p> resume --yes detached, its
+	// output in log, and does not wait.
+	SpawnResume func(project, log string) error
 }
 
 type upTab struct {
@@ -305,6 +320,45 @@ func missingServiceTab(tpl upTemplate, kinds []string) bool {
 	return false
 }
 
+// keptEnv is the project's env file to keep, its herdr keys replaced by the
+// caller's (the session's socket may move with a new herdr server). It names
+// on out every other key the caller's environment sets differently, or not at
+// all, never a value. No file: nil, nothing to keep. A file it cannot read is
+// an error: a configuration never read is never replaced.
+func keptEnv(path string, caller map[string]string, out io.Writer) (map[string]string, error) {
+	old, err := service.LoadEnvFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("the project's settings cannot be read to keep them (%v): fix the file, or run agentbus up to write it anew", err)
+	}
+	var differ []string
+	for _, k := range slices.Sorted(maps.Keys(caller)) {
+		if strings.HasPrefix(k, "HERDR_") {
+			continue
+		}
+		if v, ok := old[k]; !ok || v != caller[k] {
+			differ = append(differ, k)
+		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(old)) {
+		if _, ok := caller[k]; !ok && !strings.HasPrefix(k, "HERDR_") && k != service.EscalateEnv && k != service.ReloadEnv {
+			differ = append(differ, k)
+		}
+	}
+	for _, k := range []string{"HERDR_SESSION", "HERDR_SOCKET_PATH"} {
+		if v, ok := caller[k]; ok {
+			old[k] = v
+		}
+	}
+	if len(differ) > 0 {
+		slices.Sort(differ)
+		fmt.Fprintf(out, "services: the project's settings are kept; your environment differs on %s (agentbus up applies yours)\n", strings.Join(slices.Compact(differ), ", "))
+	}
+	return old, nil
+}
+
 // errNotInstalled: up refused to write a unit at all.
 var errNotInstalled = errors.New("services not installed")
 
@@ -328,6 +382,15 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 		return fmt.Errorf("%w: a unit must run an installed agentbus, not %s (./setup.sh install, then run that one)", errNotInstalled, exe)
 	}
 	env := service.CollectEnv(d.Environ)
+	if d.KeepEnv {
+		kept, err := keptEnv(d.Paths.EnvFile(project), env, stdout)
+		if err != nil {
+			return fmt.Errorf("%w: %v", errNotInstalled, err)
+		}
+		if kept != nil {
+			env = kept
+		}
+	}
 	if env["HERDR_SESSION"] != session { // another session's socket would reach the wrong server
 		if name, _ := sessionFromSocket(env["HERDR_SOCKET_PATH"]); name != session {
 			delete(env, "HERDR_SOCKET_PATH")
@@ -781,6 +844,13 @@ func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 	if d.Services == nil {
 		return 0
 	}
+	if d.SuspendPause != nil {
+		// A pause it cannot read keeps today's behaviour: the broker not
+		// answering is the crash case, where starting the services is right.
+		if rec, err := d.SuspendPause(project); err == nil && rec != nil && rec.Suspended() {
+			return hookSuspended(d, project, rec, stdout, stderr)
+		}
+	}
 	m, why := d.Services()
 	if m == nil {
 		fmt.Fprintf(stdout, "%s: no service manager (%s)\n", project, why)
@@ -801,6 +871,118 @@ func upHook(d upDeps, project, ws string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: %s started (it was stopped)\n", project, k)
 	}
 	return code
+}
+
+// hookSuspended is the hook on a suspended project (spec §8): it starts no
+// service by itself. With suspend.auto_resume on, and only on this host after
+// a new boot (a focus before the reboot never wakes the team), it starts the
+// full resume detached, as the person (identity.as), and returns at once;
+// never --partial.
+func hookSuspended(d upDeps, project string, rec *bus.PauseRecord, stdout, stderr io.Writer) int {
+	if d.AutoResume == nil || !d.AutoResume() {
+		fmt.Fprintf(stdout, "%s: suspended since %s: agentbus resume brings it back\n", project, time.UnixMilli(rec.At).Format("Jan 2 15:04"))
+		return 0
+	}
+	host := ""
+	if d.Hostname != nil {
+		host, _ = d.Hostname()
+	}
+	boot := ""
+	if d.Boot != nil {
+		boot = d.Boot()
+	}
+	if host == "" || rec.Host != host || rec.Boot == "" || boot == "" || rec.Boot == boot {
+		fmt.Fprintf(stdout, "%s: suspended: agentbus resume brings it back\n", project)
+		return 0
+	}
+	if d.Person == nil || !bus.ValidName(d.Person()) {
+		fmt.Fprintf(stdout, "%s: suspended, not resumed: no name is recorded for you to resume it as (agentbus identity set <your-name>)\n", project)
+		return 0
+	}
+	if d.SpawnResume == nil {
+		return 0
+	}
+	unlock := func() {}
+	if d.Lock != nil {
+		u, err := d.Lock(project, false)
+		if errors.Is(err, errUpBusy) {
+			fmt.Fprintf(stdout, "%s: resume already running\n", project)
+			return 0
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "agentbus: %s: %v: not resumed\n", project, err)
+			return 1
+		}
+		unlock = u
+	}
+	// One try per boot and suspend (foureyes): a resume that stays suspended
+	// is not started again on every focus, each with its own notice. The
+	// mark is read and written under the lock, which is released before the
+	// spawn: the resume takes it without waiting, and the mark, not the
+	// lock, keeps a second event from starting another (reviewer-codex,
+	// foureyes). One that cannot be written starts nothing.
+	dir := d.Paths.StateDir(project)
+	mark := autoResumeMark{Boot: boot, At: rec.At}
+	if autoResumeTried(filepath.Join(dir, autoResumeFile), mark) {
+		unlock()
+		fmt.Fprintf(stdout, "%s: suspended: the auto-resume on this boot did not complete (agentbus resume brings it back; see %s)\n",
+			project, filepath.Join(dir, "suspend.log"))
+		return 0
+	}
+	err := writeAutoResumeMark(dir, mark)
+	unlock()
+	if err != nil {
+		fmt.Fprintf(stderr, "agentbus: %s: recording the auto-resume: %v: not resumed (agentbus resume brings it back)\n", project, err)
+		return 1
+	}
+	log := filepath.Join(dir, "suspend.log")
+	if err := d.SpawnResume(project, log); err != nil {
+		fmt.Fprintf(stderr, "agentbus: %s: starting the resume: %v (agentbus resume brings it back)\n", project, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "%s: suspended before this boot: resuming (log: %s)\n", project, log)
+	return 0
+}
+
+// autoResumeFile records the auto-resume the hook started: the boot and the
+// suspend it was for.
+const autoResumeFile = "auto-resume.json"
+
+type autoResumeMark struct {
+	Boot string `json:"boot"`
+	At   int64  `json:"at"` // the suspend's at
+}
+
+// autoResumeTried: the hook already started the auto-resume of this suspend on
+// this boot. An unreadable mark reads as not tried.
+func autoResumeTried(path string, m autoResumeMark) bool {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var old autoResumeMark
+	return json.Unmarshal(raw, &old) == nil && old == m
+}
+
+// writeAutoResumeMark writes the mark 0600 in a 0700 directory, by a rename.
+func writeAutoResumeMark(dir string, m autoResumeMark) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	raw, _ := json.Marshal(m)
+	tmp, err := os.CreateTemp(dir, ".auto-resume-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), filepath.Join(dir, autoResumeFile))
 }
 
 // checkClients (installer-no-client) refuses before any service starts or any

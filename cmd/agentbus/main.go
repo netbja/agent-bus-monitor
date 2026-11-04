@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -122,6 +123,15 @@ func main() {
 	if len(args) >= 1 && args[0] == "restore" {
 		os.Exit(runRestore(context.Background(), args[1:], explicitProject, realRestoreDeps(host), os.Stdout, os.Stderr))
 	}
+	// suspend puts this host's projects to sleep (spec 2026-11-03-suspend-resume):
+	// every project unless one is named on the command line, like backup.
+	if len(args) >= 1 && args[0] == "suspend" {
+		os.Exit(runSuspend(context.Background(), args[1:], explicitProject, realSuspendDeps(host), os.Stdout, os.Stderr))
+	}
+	// resume --all wakes this host's projects (spec §7): it names them itself, like suspend.
+	if len(args) >= 1 && args[0] == "resume" && slices.Contains(args[1:], "--all") {
+		os.Exit(runResumeAll(context.Background(), args[1:], realResumeDeps(host), os.Stdout, os.Stderr))
+	}
 	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
 	if len(args) >= 1 && args[0] == "plugin" {
 		os.Exit(runPlugin(args[1:], realPluginDeps(), os.Stdout, os.Stderr))
@@ -175,6 +185,26 @@ func main() {
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "anonymous")
+	// The resume of a suspended project is the person's, from their own herdr
+	// pane too: routed before the guard, which it would not pass (foureyes).
+	if ok, code := suspendedResumeFirst(context.Background(), os.Getenv, args,
+		func(ctx context.Context) (*bus.PauseRecord, error) {
+			c, err := bus.Connect(host)
+			if err != nil {
+				return nil, err
+			}
+			defer c.Close()
+			b, err := bus.Open(c, project)
+			if err != nil {
+				return nil, err
+			}
+			return b.Pause(ctx)
+		},
+		func(ctx context.Context, rest []string) int {
+			return runSuspendedResume(ctx, project, parseResumeArgs(rest), realResumeDeps(host), os.Stdout, os.Stderr)
+		}); ok {
+		os.Exit(code)
+	}
 	if err := identityGuard(os.Getenv, args[0], args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "agentbus: "+err.Error())
 		os.Exit(2)
@@ -551,7 +581,10 @@ func main() {
 		os.Exit(runDeliver(ctx, realDeliverDeps(b, self, wd), self, rest, os.Stdout, os.Stderr))
 
 	case "pause", "resume":
-		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv}
+		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv,
+			Full: func(ctx context.Context, args []string) int {
+				return runSuspendedResume(ctx, project, parseResumeArgs(args), realResumeDeps(host), os.Stdout, os.Stderr)
+			}}
 		if cmd == "pause" {
 			os.Exit(runPause(ctx, d, self, rest, os.Stdout, os.Stderr))
 		}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -20,6 +21,9 @@ type pauseDeps struct {
 	Budgets func(ctx context.Context) (map[string]bus.BudgetSnapshot, error)
 	Now     func() time.Time
 	Env     func(string) string
+	// Full runs the whole resume of a suspended project (resume.go) with the
+	// remaining arguments; nil = a suspend is said and left.
+	Full func(ctx context.Context, args []string) int
 }
 
 // resetMargin: the quota window's reset is read from a cache; resuming a
@@ -109,6 +113,9 @@ func runPause(ctx context.Context, d pauseDeps, self string, args []string, out,
 
 func runResume(ctx context.Context, d pauseDeps, self string, args []string, out, errw io.Writer) int {
 	ok, err := d.Resume(ctx, self, strings.Join(args, " "))
+	if errors.Is(err, bus.ErrSuspended) && d.Full != nil {
+		return d.Full(ctx, args)
+	}
 	if err != nil {
 		fmt.Fprintf(errw, "resume: %v\n", err)
 		return 1
