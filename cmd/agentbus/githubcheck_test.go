@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -62,7 +66,7 @@ func TestGitHubCheckRunsTheSpecProbes(t *testing.T) {
 			sawSSH = line == "ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com"
 		case "git":
 			if cmd[len(cmd)-1] == "https://github.com/netbja/agent-bus-monitor" {
-				sawHTTPS = line == "git -c credential.helper= ls-remote https://github.com/netbja/agent-bus-monitor"
+				sawHTTPS = line == "git -c credential.helper= -c core.askPass= ls-remote https://github.com/netbja/agent-bus-monitor"
 				if !strings.Contains(strings.Join(f.envs[i], " "), "GIT_TERMINAL_PROMPT=0") {
 					t.Errorf("ls-remote may prompt: env %v", f.envs[i])
 				}
@@ -157,5 +161,71 @@ func TestGitHubCheckReadsTheRemoteWithRealGit(t *testing.T) {
 	c := &githubCheck{run: runProbe, now: time.Now}
 	if got := c.repo(context.Background()); got != "netbja/agent-bus-monitor" {
 		t.Errorf("repo() = %q with the real git config", got)
+	}
+}
+
+// No probe can open a desktop prompt (the person's KDE ksshaskpass asked for
+// a GitHub username every 15 minutes): the inherited askpass programs are
+// removed and ssh is told never to use one, whatever the service's
+// environment holds.
+func TestProbeEnvironCarriesNoAskpass(t *testing.T) {
+	base := []string{"HOME=/h", "SSH_ASKPASS=/usr/bin/ksshaskpass", "GIT_ASKPASS=/usr/bin/ksshaskpass",
+		"SSH_ASKPASS_REQUIRE=force", "LC_ALL=fr_FR.UTF-8", "DISPLAY=:0"}
+	env := probeEnviron(base, probeEnv)
+	for _, kv := range env {
+		k, _, _ := strings.Cut(kv, "=")
+		if k == "SSH_ASKPASS" || k == "GIT_ASKPASS" {
+			t.Errorf("the probe environment keeps %s", kv)
+		}
+		if k == "SSH_ASKPASS_REQUIRE" && kv != "SSH_ASKPASS_REQUIRE=never" {
+			t.Errorf("the probe environment keeps %s", kv)
+		}
+	}
+	for _, want := range []string{"HOME=/h", "DISPLAY=:0", "SSH_ASKPASS_REQUIRE=never", "LC_ALL=C"} {
+		if !slices.Contains(env, want) {
+			t.Errorf("the probe environment lacks %s: %v", want, env)
+		}
+	}
+	if i, j := slices.Index(env, "LC_ALL=fr_FR.UTF-8"), slices.Index(env, "LC_ALL=C"); i >= 0 && i > j {
+		t.Errorf("the service's locale wins over LC_ALL=C: %v", env)
+	}
+}
+
+// The real git against a server that asks for credentials, with an askpass
+// program in every place git and ssh look: none is run, and the answer still
+// counts as reached (a private repository is reachable, authentication unknown).
+func TestGitHubHTTPSProbeNeverAsksWithRealGit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Basic realm="GitHub"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "asked")
+	askpass := filepath.Join(dir, "askpass")
+	if err := os.WriteFile(askpass, []byte("#!/bin/sh\necho asked >> "+marker+"\necho x\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(dir, "gitconfig"))
+	if err := os.WriteFile(filepath.Join(dir, "gitconfig"), []byte("[core]\n\taskPass = "+askpass+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SSH_ASKPASS", askpass)
+	t.Setenv("GIT_ASKPASS", askpass)
+	t.Setenv("SSH_ASKPASS_REQUIRE", "force")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	env, args := httpsProbe(srv.URL + "/o/r")
+	r := runProbe(ctx, env, "git", args...)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatalf("the probe ran an askpass program; output: %s", r.out)
+	}
+	if p := health.ClassifyHTTPS(r.ran, r.timedOut, r.exit, r.out); p.Result != health.ProbeReached {
+		t.Fatalf("an answer asking for credentials is %v (%s): %s", p.Result, p.Note, r.out)
 	}
 }

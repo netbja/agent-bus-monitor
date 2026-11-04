@@ -40,6 +40,30 @@ type githubCheck struct {
 // probes' answers are read by their English messages (foureyes).
 var probeEnv = []string{"LC_ALL=C"}
 
+// httpsProbe is the HTTPS probe's environment and git arguments: no
+// credential helper and no prompt of any kind, a reachability probe only.
+// GIT_TERMINAL_PROMPT=0 stops only the terminal: git still runs an askpass
+// program (GIT_ASKPASS, core.askPass, then SSH_ASKPASS), a desktop dialog
+// asking for a GitHub username every 15 minutes on a private repository
+// (KDE's ksshaskpass). An empty core.askPass overrides the person's config.
+func httpsProbe(url string) (env, args []string) {
+	return slices.Concat(probeEnv, []string{"GIT_TERMINAL_PROMPT=0"}), []string{"-c", "credential.helper=", "-c", "core.askPass=", "ls-remote", url}
+}
+
+// askpassVars are the variables naming a program that may prompt the person.
+var askpassVars = []string{"GIT_ASKPASS", "SSH_ASKPASS", "SSH_ASKPASS_REQUIRE"}
+
+// probeEnviron is a probe's whole environment: the service's without any
+// askpass program, ssh told never to use one (SSH_ASKPASS_REQUIRE=never, on
+// top of BatchMode), then env, which wins.
+func probeEnviron(base, env []string) []string {
+	out := slices.DeleteFunc(slices.Clone(base), func(kv string) bool {
+		k, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(askpassVars, k)
+	})
+	return slices.Concat(out, []string{"SSH_ASKPASS_REQUIRE=never"}, env)
+}
+
 func newGitHubCheck() *githubCheck { return &githubCheck{run: runProbe, now: time.Now} }
 
 // outcome runs both probes in parallel within ctx, when the project's remote
@@ -62,8 +86,8 @@ func (c *githubCheck) outcome(ctx context.Context) health.Outcome {
 	}()
 	go func() {
 		defer wg.Done()
-		// No credential helper and no prompt: a reachability probe only.
-		r := c.run(ctx, slices.Concat(probeEnv, []string{"GIT_TERMINAL_PROMPT=0"}), "git", "-c", "credential.helper=", "ls-remote", "https://github.com/"+repo)
+		env, args := httpsProbe("https://github.com/" + repo)
+		r := c.run(ctx, env, "git", args...)
 		https = health.ClassifyHTTPS(r.ran, r.timedOut, r.exit, r.out)
 	}()
 	wg.Wait()
@@ -128,7 +152,7 @@ func (b *cappedBuffer) Write(p []byte) (int, error) {
 // stdin, in the project directory (the service's working directory).
 func runProbe(ctx context.Context, env []string, name string, args ...string) probeRun {
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = probeEnviron(os.Environ(), env)
 	cmd.WaitDelay = time.Second
 	var out cappedBuffer
 	cmd.Stdout, cmd.Stderr = &out, &out
