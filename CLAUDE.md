@@ -1341,12 +1341,21 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   notice). Then the snapshot's facts, the other services stopped, `<state>/agentbus/<p>/suspend.json` (0600, ids,
   states and counts only, the reason through `health.Redact`; `suspendsnap.go`). A suspended project without a
   current snapshot is completed by a rerun, `Services` never rewritten; `suspend --status` lists them. `agentbus resume` on a
-  suspended project (`resume.go`; `Bus.Resume` answers `ErrSuspended`, `pauseDeps.Full` runs it): refused to an agent
-  caller like suspend; the services the record's `Services` marks active start (else the snapshot's copy, else every
-  installed kind); then `agentbus up <p> --resume --no-dispatch --no-missions` inside the herdr session recorded in the
+  suspended project (`resume.go`; `Bus.Resume` answers `ErrSuspended`, `pauseDeps.Full` runs it; from a herdr pane with no
+  `AGENT_BUS_AGENT` it is routed ahead of the identity guard, `suspendedResumeFirst`, only when the pause reads as a
+  suspend): refused to an agent caller like suspend; the project's `upLock` held without waiting from the first read to
+  the last write (the nested up does not take it again); the template's agents read first, an unreadable template doing
+  nothing; the services the record's `Services` marks active start (else the snapshot's copy, else every
+  installed kind), one that cannot be read or started keeping the suspend, `--partial` or not; then `agentbus up <p> --resume --no-dispatch --no-missions` inside the herdr session recorded in the
   services env file (`HERDR_ENV`/`HERDR_SESSION`/`HERDR_SOCKET_PATH` set as `start` does; a session not running is said
-  with `herdr --session <s>`, services only); then up to 90 s for every agent tab of the template to have a live verified
-  process (`alive`: pid with its recorded start); a missing one keeps the suspend unless `--partial`; then `Unsuspend` with
+  with `herdr --session <s>`, services only, no wait), with `upDeps.KeepEnv`: **a resume keeps the project's env file as
+  it is** (escalation target, reload policy and every hand-set `AGENT_BUS_*` key; only the herdr session and socket
+  are the caller's), names the keys the caller's environment would have changed, never a value, and installs nothing
+  on a file it cannot read (`keptEnv`; a plain `up` still takes the caller's environment); then up to 90 s for every
+  required agent (`requiredAgents`: the template's agent tabs plus each non-pop agent the snapshot knows alive at the
+  suspend, or with no snapshot each verified non-pop agent of the bus; dormant ones skipped) to have a live verified
+  process (`alive`: pid with its recorded start); a missing one keeps the suspend unless `--partial`; `--yes` is taken
+  and ignored (busmon passes it); then `Unsuspend` with
   one summary (agents back, missing, pops named with `agent-spawn <role> <p> --resume <session>`, never spawned, what was
   open at the suspend, the person's words), a `for=person` notice when the directive's target is missing, and the
   snapshot set aside as `suspend.<taken_at>.json` (5 kept). busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent

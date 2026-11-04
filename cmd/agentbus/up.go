@@ -42,8 +42,12 @@ type upDeps struct {
 	// unknown: when it exists the units run it, whoever runs up.
 	Installed string
 	Environ   []string // the service environment is picked from it
-	Mark      func(project string, inst bus.ServicesInstall) error
-	Host      string
+	// KeepEnv keeps the project's env file as it is, its herdr session
+	// excepted: a suspended project's resume never changes its configuration
+	// (suspend 3a). What Environ would have changed is named, never its value.
+	KeepEnv bool
+	Mark    func(project string, inst bus.ServicesInstall) error
+	Host    string
 	// Ping asks the broker for PING, within timeout, before the marker is written
 	// (up-broker-ready): a broker docker has just started answers LOADING for a while.
 	// Now is the clock of that wait (nil: time.Now). Nil Ping: no wait.
@@ -305,6 +309,45 @@ func missingServiceTab(tpl upTemplate, kinds []string) bool {
 	return false
 }
 
+// keptEnv is the project's env file to keep, its herdr keys replaced by the
+// caller's (the session's socket may move with a new herdr server). It names
+// on out every other key the caller's environment sets differently, or not at
+// all, never a value. No file: nil, nothing to keep. A file it cannot read is
+// an error: a configuration never read is never replaced.
+func keptEnv(path string, caller map[string]string, out io.Writer) (map[string]string, error) {
+	old, err := service.LoadEnvFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("the project's settings cannot be read to keep them (%v): fix the file, or run agentbus up to write it anew", err)
+	}
+	var differ []string
+	for _, k := range slices.Sorted(maps.Keys(caller)) {
+		if strings.HasPrefix(k, "HERDR_") {
+			continue
+		}
+		if v, ok := old[k]; !ok || v != caller[k] {
+			differ = append(differ, k)
+		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(old)) {
+		if _, ok := caller[k]; !ok && !strings.HasPrefix(k, "HERDR_") && k != service.EscalateEnv && k != service.ReloadEnv {
+			differ = append(differ, k)
+		}
+	}
+	for _, k := range []string{"HERDR_SESSION", "HERDR_SOCKET_PATH"} {
+		if v, ok := caller[k]; ok {
+			old[k] = v
+		}
+	}
+	if len(differ) > 0 {
+		slices.Sort(differ)
+		fmt.Fprintf(out, "services: the project's settings are kept; your environment differs on %s (agentbus up applies yours)\n", strings.Join(slices.Compact(differ), ", "))
+	}
+	return old, nil
+}
+
 // errNotInstalled: up refused to write a unit at all.
 var errNotInstalled = errors.New("services not installed")
 
@@ -328,6 +371,15 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 		return fmt.Errorf("%w: a unit must run an installed agentbus, not %s (./setup.sh install, then run that one)", errNotInstalled, exe)
 	}
 	env := service.CollectEnv(d.Environ)
+	if d.KeepEnv {
+		kept, err := keptEnv(d.Paths.EnvFile(project), env, stdout)
+		if err != nil {
+			return fmt.Errorf("%w: %v", errNotInstalled, err)
+		}
+		if kept != nil {
+			env = kept
+		}
+	}
 	if env["HERDR_SESSION"] != session { // another session's socket would reach the wrong server
 		if name, _ := sessionFromSocket(env["HERDR_SOCKET_PATH"]); name != session {
 			delete(env, "HERDR_SOCKET_PATH")

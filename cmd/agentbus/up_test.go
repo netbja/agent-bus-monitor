@@ -626,3 +626,72 @@ func TestUpIgnoresTheSessionsFirstWorkspace(t *testing.T) {
 		t.Fatalf("the session's first workspace was taken for the project's:\n%s", got)
 	}
 }
+
+// KeepEnv (a suspended project's resume): the project's env file is kept as
+// it is, its herdr session excepted, so a resume never changes a project's
+// configuration; what the caller's environment would have changed is named,
+// never its value (master, suspend 3a).
+func TestUpKeepEnvKeepsTheProjectsSettings(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_AUTO_CLEAR=0", "AGENT_BUS_QUOTA_LONG_HOLD=3h"}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up: %d %s", code, errw.String())
+	}
+	deps.KeepEnv = true
+	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_QUOTA_LONG_HOLD=1h", "AGENT_BUS_TOKENS=0"}
+	out.Reset()
+	if code := runUp([]string{"demo"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up KeepEnv: %d %s", code, errw.String())
+	}
+	env, err := service.LoadEnvFile(u.paths.EnvFile("demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env["AGENT_BUS_AUTO_CLEAR"] != "0" || env["AGENT_BUS_QUOTA_LONG_HOLD"] != "3h" || env["HERDR_SESSION"] != "demo" {
+		t.Fatalf("env after a KeepEnv up = %v", env)
+	}
+	if _, set := env["AGENT_BUS_TOKENS"]; set {
+		t.Fatalf("the caller's new key was taken: %v", env)
+	}
+	// Named: a value the caller sets differently, a key it adds, a key it lacks; never a value.
+	if s := out.String(); !strings.Contains(s, "AGENT_BUS_QUOTA_LONG_HOLD") || !strings.Contains(s, "AGENT_BUS_TOKENS") ||
+		!strings.Contains(s, "AGENT_BUS_AUTO_CLEAR") || strings.Contains(s, "1h") || strings.Contains(s, "3h") {
+		t.Fatalf("the note on the caller's keys = %q", s)
+	}
+	// Without KeepEnv, up takes the caller's environment, as it always did.
+	deps.KeepEnv = false
+	if code := runUp([]string{"demo"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up: %d %s", code, errw.String())
+	}
+	if env, _ = service.LoadEnvFile(u.paths.EnvFile("demo")); env["AGENT_BUS_AUTO_CLEAR"] != "" || env["AGENT_BUS_QUOTA_LONG_HOLD"] != "1h" {
+		t.Fatalf("a plain up = %v", env)
+	}
+}
+
+// KeepEnv with an env file it cannot read installs nothing: it never
+// replaces a configuration it could not read.
+func TestUpKeepEnvRefusesAnUnreadableEnvFile(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_AUTO_CLEAR=0"}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up: %d %s", code, errw.String())
+	}
+	if err := os.Chmod(u.paths.EnvFile("demo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	deps.KeepEnv = true
+	errw.Reset()
+	if code := runUp([]string{"demo"}, deps, &out, &errw); code != 1 || !strings.Contains(errw.String(), "keep") {
+		t.Fatalf("up KeepEnv on an unreadable file = %d %q", code, errw.String())
+	}
+	if err := os.Chmod(u.paths.EnvFile("demo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if env, _ := service.LoadEnvFile(u.paths.EnvFile("demo")); env["AGENT_BUS_AUTO_CLEAR"] != "0" {
+		t.Fatalf("the file was replaced: %v", env)
+	}
+}

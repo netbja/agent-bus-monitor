@@ -21,6 +21,7 @@ type fakeManager struct {
 	active    map[string]bool
 	calls     []string
 	failStart bool
+	failState bool                    // every State read fails
 	stopErr   func(p, k string) error // nil = every stop succeeds
 	failList  bool                    // List fails after the first removal
 	removed   int
@@ -64,6 +65,9 @@ func (f *fakeManager) Remove(p, k string) error {
 	return nil
 }
 func (f *fakeManager) State(p, k string) (service.State, error) {
+	if f.failState {
+		return service.State{}, errors.New("cannot read the unit")
+	}
 	_, inst := f.specs[p+"/"+k]
 	st := service.State{Installed: inst, Status: "inactive (dead)"}
 	if f.active[p+"/"+k] {

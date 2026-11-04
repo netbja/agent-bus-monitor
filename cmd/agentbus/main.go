@@ -180,6 +180,26 @@ func main() {
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "anonymous")
+	// The resume of a suspended project is the person's, from their own herdr
+	// pane too: routed before the guard, which it would not pass (foureyes).
+	if ok, code := suspendedResumeFirst(context.Background(), os.Getenv, args,
+		func(ctx context.Context) (*bus.PauseRecord, error) {
+			c, err := bus.Connect(host)
+			if err != nil {
+				return nil, err
+			}
+			defer c.Close()
+			b, err := bus.Open(c, project)
+			if err != nil {
+				return nil, err
+			}
+			return b.Pause(ctx)
+		},
+		func(ctx context.Context, rest []string) int {
+			return runSuspendedResume(ctx, project, parseResumeArgs(rest), realResumeDeps(host), os.Stdout, os.Stderr)
+		}); ok {
+		os.Exit(code)
+	}
 	if err := identityGuard(os.Getenv, args[0], args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "agentbus: "+err.Error())
 		os.Exit(2)
@@ -558,9 +578,7 @@ func main() {
 	case "pause", "resume":
 		d := pauseDeps{Set: b.SetPause, Get: b.Pause, Resume: b.Resume, Budgets: b.Budgets, Now: time.Now, Env: os.Getenv,
 			Full: func(ctx context.Context, args []string) int {
-				args, partial := extractBool(args, "--partial")
-				o := resumeOptions{partial: partial, message: strings.Join(args, " ")}
-				return runSuspendedResume(ctx, project, o, realResumeDeps(host), os.Stdout, os.Stderr)
+				return runSuspendedResume(ctx, project, parseResumeArgs(args), realResumeDeps(host), os.Stdout, os.Stderr)
 			}}
 		if cmd == "pause" {
 			os.Exit(runPause(ctx, d, self, rest, os.Stdout, os.Stderr))

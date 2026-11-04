@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -46,6 +48,10 @@ type resumeDeps struct {
 	StateDir    func(project string) string
 	Person      func() string
 	AgentCaller func(ctx context.Context) (string, error)
+	// Lock is the project's up lock, taken without waiting and held from the
+	// first read to the last write, so a suspend or another resume never
+	// runs beside it; the nested up does not take it again. Nil: no lock.
+	Lock func(project string) (func(), error)
 	// ProofWait and Poll are resumeProofWait and suspendRound; tests shorten them.
 	ProofWait, Poll time.Duration
 }
@@ -70,15 +76,21 @@ func realResumeDeps(host string) resumeDeps {
 			for k, v := range map[string]string{"HERDR_ENV": "1", "HERDR_SESSION": session, "HERDR_SOCKET_PATH": socket} {
 				_ = os.Setenv(k, v)
 			}
-			return runUp(args, realUpDepsIn(nil, log, log), log, log)
+			ud := realUpDepsIn(nil, log, log)
+			ud.Lock = nil     // resume holds it
+			ud.KeepEnv = true // a resume never changes the project's configuration
+			return runUp(args, ud, log, log)
 		},
 		BootRoles:   templateAgents(os.Getenv),
 		ProcStart:   dispatch.ProcStart,
 		StateDir:    paths.StateDir,
 		Person:      func() string { name, _ := personName(os.Getenv); return name },
 		AgentCaller: agentAncestor,
-		ProofWait:   resumeProofWait,
-		Poll:        suspendRound,
+		Lock: func(project string) (func(), error) {
+			return upLock(upCacheDir(os.Getenv))(project, false)
+		},
+		ProofWait: resumeProofWait,
+		Poll:      suspendRound,
 	}
 }
 
@@ -105,6 +117,32 @@ type resumeOptions struct {
 	message string
 }
 
+// parseResumeArgs takes --partial and --yes (busmon's confirmation: resume
+// asks nothing, so it only never lands in the message).
+func parseResumeArgs(args []string) resumeOptions {
+	args, partial := extractBool(args, "--partial")
+	args, _ = extractBool(args, "--yes")
+	return resumeOptions{partial: partial, message: strings.Join(args, " ")}
+}
+
+// suspendedResumeFirst runs the resume of a suspended project ahead of the
+// identity guard, which would refuse it in the person's own herdr pane (no
+// AGENT_BUS_AGENT), while its advice, exporting one, makes resume refuse the
+// caller as an agent (foureyes). Only when the guard would refuse and the
+// pause reads as a suspend: anything else, an unreadable pause included,
+// takes the usual path. resume refuses an agent caller itself.
+func suspendedResumeFirst(ctx context.Context, getenv func(string) string, args []string,
+	readPause func(context.Context) (*bus.PauseRecord, error), full func(context.Context, []string) int) (bool, int) {
+	if len(args) == 0 || args[0] != "resume" || identityGuard(getenv, args[0], args[1:]) == nil {
+		return false, 0
+	}
+	rec, err := readPause(ctx)
+	if err != nil || rec == nil || !rec.Suspended() {
+		return false, 0
+	}
+	return true, full(ctx, args[1:])
+}
+
 func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resumeDeps, out, errw io.Writer) int {
 	say := func(format string, a ...any) { fmt.Fprintf(out, p+": "+format+"\n", a...) }
 	fail := func(format string, a ...any) int { fmt.Fprintf(errw, p+": "+format+"\n", a...); return 1 }
@@ -125,6 +163,13 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 	if !bus.ValidName(by) {
 		return fail("no name recorded for you: agentbus identity set <your-name>, then run it again")
 	}
+	if d.Lock != nil {
+		unlock, err := d.Lock(p)
+		if err != nil {
+			return fail("%v (a suspend or another resume of it is running); nothing done", err)
+		}
+		defer unlock()
+	}
 	b, err := d.Bus(p)
 	if err != nil {
 		return fail("broker unreachable: %v", err)
@@ -141,6 +186,16 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 		say("not suspended: nothing to resume")
 		return 0
 	}
+	// The agents that must come back: read before anything is done, since a
+	// template that cannot be read would otherwise stand for none to wait for.
+	roles, err := d.BootRoles(p)
+	if err != nil {
+		return fail("reading the template: %v: its agents cannot be checked, so it stays suspended; nothing done", err)
+	}
+	live, err := b.Agents(ctx)
+	if err != nil {
+		return fail("reading the agents: %v; nothing done", err)
+	}
 	snapPath := filepath.Join(d.StateDir(p), suspendSnapshotFile)
 	snap, serr := loadSnapshot(snapPath)
 	haveSnap := serr == nil && snap.TakenAt >= rec.At
@@ -148,8 +203,13 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 		say("no current snapshot: the bus as it is now stands in")
 	}
 
+	required := requiredAgents(roles, snap, haveSnap, live, rec.At)
+
 	// Services: the record's restart intent, else the snapshot's copy, else
-	// every installed kind.
+	// every installed kind. One that cannot be read or started keeps the
+	// suspend, --partial or not: --partial is about agents, and a project
+	// without its dispatcher wakes nobody.
+	var svcFailed []string
 	mgr, why := d.Services()
 	if mgr == nil {
 		say("no service manager (%s): dispatch and missions run as herdr tabs, which up relaunches", why)
@@ -159,6 +219,7 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 			st, err := mgr.State(p, k)
 			if err != nil {
 				fmt.Fprintf(errw, "%s: %s: %v\n", p, k, err)
+				svcFailed = append(svcFailed, k)
 				continue
 			}
 			want := st.Installed
@@ -174,6 +235,7 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 			_ = service.Budget{Path: paths.BudgetFile(p, k)}.Reset()
 			if err := mgr.Start(p, k); err != nil {
 				fmt.Fprintf(errw, "%s: %s did not start: %v (agentbus service start %s)\n", p, k, err, k)
+				svcFailed = append(svcFailed, k)
 				continue
 			}
 			say("%s started", k)
@@ -190,6 +252,7 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 	if session == "" && haveSnap {
 		session = snap.Herdr.Session
 	}
+	upRan := false
 	switch running, err := d.SessionRunning(session); {
 	case session == "":
 		fmt.Fprintf(errw, "%s: no herdr session is recorded for it: agentbus up %s --resume relaunches its agents from herdr\n", p, p)
@@ -201,24 +264,30 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 			fmt.Fprintf(errw, "%s: herdr session %s: %v\n", p, session, err)
 			break
 		}
+		upRan = true
 		if code := d.Up([]string{p, "--resume", "--no-dispatch", "--no-missions"}, session, socket, out); code != 0 {
 			fmt.Fprintf(errw, "%s: agentbus up %s --resume did not complete (exit %d)\n", p, p, code)
 		}
 	}
 
-	// Proof: every agent of the template alive, its verified process.
-	roles, err := d.BootRoles(p)
-	if err != nil {
-		fmt.Fprintf(errw, "%s: reading the template: %v (the agents cannot be checked)\n", p, err)
+	// Proof: every required agent alive, its verified process. Without an up
+	// nobody can come back: one reading, no wait.
+	if !upRan {
+		d.ProofWait = 0
 	}
-	missing := waitAlive(ctx, b, roles, d)
-	pops := missingPops(ctx, b, roles, d)
+	missing := waitAlive(ctx, b, required, d)
+	pops := missingPops(ctx, b, required, d)
+	if len(svcFailed) > 0 {
+		fmt.Fprintf(errw, "%s: stays suspended: %s not running (agentbus --project %s service start <kind>, then agentbus resume again)\n",
+			p, strings.Join(svcFailed, ", "), p)
+		return 1
+	}
 	if len(missing) > 0 && !o.partial {
 		fmt.Fprintf(errw, "%s: stays suspended: %s not back (agentbus resume again once they are, or agentbus resume --partial to lift it anyway)\n",
 			p, strings.Join(missing, ", "))
 		return 1
 	}
-	summary := resumeSummary(p, rec, snap, haveSnap, roles, missing, pops, o.message)
+	summary := resumeSummary(p, rec, snap, haveSnap, required, missing, pops, o.message)
 	restored, _, err := b.Unsuspend(ctx, raw, by, summary)
 	if err != nil {
 		return fail("lifting the suspend: %v", err)
@@ -243,6 +312,38 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 		}
 	}
 	return 0
+}
+
+// requiredAgents is every agent a resume waits for: the template's agent
+// tabs, plus each boot agent (not a pop) the snapshot knows alive at the
+// suspend, or, with no snapshot, each verified non-pop agent of the bus; an
+// agent dormant at the suspend is not waited for (its last declaration a
+// day before it). The template alone does not name an agent started by hand
+// (reviewer-codex).
+func requiredAgents(roles []string, snap suspendSnapshot, haveSnap bool, live map[string]bus.AgentSnapshot, at int64) []string {
+	out := slices.Clone(roles)
+	add := func(name string) {
+		if s, ok := live[name]; ok && at-s.TS > bus.DormantAfter.Milliseconds() {
+			return
+		}
+		if !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	if haveSnap {
+		for _, name := range slices.Sorted(maps.Keys(snap.Agents)) {
+			if a := snap.Agents[name]; a.Tier != "pop" && !a.Gone {
+				add(name)
+			}
+		}
+		return out
+	}
+	for _, name := range slices.Sorted(maps.Keys(live)) {
+		if s := live[name]; s.Tier != "pop" && s.PID != 0 {
+			add(name)
+		}
+	}
+	return out
 }
 
 // waitAlive waits, at most ProofWait, until every role has a live verified

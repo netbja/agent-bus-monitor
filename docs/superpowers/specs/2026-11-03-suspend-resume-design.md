@@ -294,6 +294,18 @@ their panes was considered and set aside (§12, Q2).
 7. **Close**: the snapshot is renamed `suspend.<taken_at>.json` (the last 5 kept); one line per project
    on stdout, the same summary.
 
+**What resume keeps.** A resume never changes a project's configuration: `up` runs with `KeepEnv`, so the
+project's services env file stays as it is (the escalation target, the reload policy and every key set by hand,
+such as `AGENT_BUS_AUTO_CLEAR` or a quota value), only `HERDR_SESSION` and `HERDR_SOCKET_PATH` taken from the
+session resume runs in. The keys the caller's environment would have changed are named on stdout (never a
+value), with `agentbus up <p>` as the way to apply them; an env file that cannot be read installs nothing
+rather than replacing it. Resume holds the project's `upLock` from its first read to its last write, so a suspend
+or another resume of the project is refused, not interleaved. A service the record wants that cannot be read or
+started keeps the suspend whatever `--partial` says (`--partial` is about agents; a project without its dispatcher
+wakes nobody), and so does a template that cannot be read (nothing is done). The agents waited for are the
+template's agent tabs plus every non-pop agent the snapshot knows alive at the suspend (with no snapshot, every
+verified non-pop agent of the bus), dormant ones excepted.
+
 A step that fails is said with its command and does not stop the next project. The pause is never
 lifted on a project whose agents are not all back, unless `--partial`: a woken agent whose reviewer
 is missing would stall, and a resume directive to a master that is missing would be lost.
