@@ -1,6 +1,10 @@
 package buildinfo
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
 
 func TestNewer(t *testing.T) {
 	for _, c := range []struct {
@@ -15,5 +19,21 @@ func TestNewer(t *testing.T) {
 		if got := Newer(c.a, c.b); got != c.want {
 			t.Errorf("Newer(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
 		}
+	}
+}
+
+// about-credits: the About page's author and licence are LICENSE's own, so a
+// changed LICENSE fails here rather than showing something false.
+func TestLicenseMatches(t *testing.T) {
+	b, err := os.ReadFile("../LICENSE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(b)
+	if !strings.HasPrefix(text, License+" License\n") {
+		t.Fatalf("LICENSE does not open with %q", License+" License")
+	}
+	if !strings.Contains(text, "\n"+Copyright()+"\n") {
+		t.Fatalf("LICENSE has no line %q", Copyright())
 	}
 }

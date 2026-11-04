@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/netbja/agent-bus-monitor/buildinfo"
 )
 
 // The packet's route: from master's node down onto the bus, along it to
@@ -107,6 +109,36 @@ func TestAboutLayout(t *testing.T) {
 	}
 	if narrow := tokLinesText(aboutBody(a, 0, true, 30)); strings.Contains(narrow, aboutLogo[0]) || !strings.Contains(narrow, "agent-bus monitor") {
 		t.Fatalf("narrow:\n%s", narrow)
+	}
+}
+
+// about-credits: the author under the subtitle, the licence and the
+// repository at the foot, and y copies them; only the pseudonym LICENSE names.
+func TestAboutCredits(t *testing.T) {
+	a := aboutState{loaded: true, versions: aboutVersions{Project: "demo"}}
+	lines := strings.Split(tokLinesText(aboutBody(a, 0, true, 100)), "\n")
+	by, sub := -1, -1
+	for i, l := range lines {
+		switch {
+		case strings.Contains(l, "agents coordinating"):
+			sub = i
+		case strings.TrimSpace(l) == "by "+buildinfo.Author:
+			by = i
+		}
+	}
+	if sub < 0 || by != sub+1 {
+		t.Fatalf("the author is not under the subtitle (%d, %d):\n%s", sub, by, strings.Join(lines, "\n"))
+	}
+	body := strings.Join(lines, "\n")
+	foot := buildinfo.License + " License " + GlyphNone + " " + buildinfo.Copyright()
+	if i, j := strings.Index(body, foot), strings.Index(body, "bus ready"); i < 0 || i < j || !strings.Contains(body[i:], buildinfo.Source) {
+		t.Fatalf("no licence and source at the foot:\n%s", body)
+	}
+	m, _ := openAboutIn(t, aboutShell(t, false))
+	for _, s := range []string{"license " + buildinfo.License, buildinfo.Copyright(), "source " + buildinfo.Source} {
+		if !strings.Contains(m.rd.top().plain, s) {
+			t.Errorf("y copies no %q", s)
+		}
 	}
 }
 
