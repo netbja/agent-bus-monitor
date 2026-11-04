@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in agentbus, busmon, the installer or the herdr plugin does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **A security problem is not a bug report:** report it privately, see SECURITY.md.
+        Do not paste the broker password, `redis.env`, `notify.toml`, API keys or tokens anywhere in this form.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `agentbus version` (busmon's About page `A` shows it too).
+      placeholder: v0.27.0
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - agentbus (CLI)
+        - busmon (TUI)
+        - dispatch service
+        - missions (conductor)
+        - setup.sh / installer
+        - herdr plugin / agentbus up, start
+        - roles / launcher (agent-launch, agent-spawn)
+        - other
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and version, Go version, Redis version, herdr version if used.
+      placeholder: Linux (Debian 13), go1.26.3, Redis 8, herdr 0.9.x
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, including any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened, ideally with a link to the README or guide that says so.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The commands you ran, in order. Use a throwaway project name.
+      placeholder: |
+        1. agentbus --project demo status ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Relevant output (`agentbus health`, a service log from busmon's F3 page...). Remove any secret first.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I am on the latest release, or I said in Version why not.
+          required: true
+        - label: I removed every password, token and personal data from this report.
+          required: true
