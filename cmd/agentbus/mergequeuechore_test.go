@@ -91,7 +91,10 @@ func TestMergeQueueChoreFallbacks(t *testing.T) {
 			local = true
 			return lt(ctx, d, e, base)
 		}
-		ch.github = func(context.Context, string, []string) ([]mergequeue.PR, error) { t.Fatalf("%s: gh read", name); return nil, nil }
+		ch.github = func(context.Context, string, []string) ([]mergequeue.PR, error) {
+			t.Fatalf("%s: gh read", name)
+			return nil, nil
+		}
 		if err := ch.pass(ctx, "mq"); err != nil {
 			t.Fatal(err)
 		}

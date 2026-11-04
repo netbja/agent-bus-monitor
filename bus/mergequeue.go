@@ -51,14 +51,14 @@ const MergeQueueTTL = 15 * time.Minute
 // (reviewer-codex: an attempt is not an observation). Reason is "" after a
 // success, else what could not be read; both times are Redis TIME, Unix ms.
 type MergeQueueRecord struct {
-	AttemptedAt int64
-	ItemsAt     int64
-	Source      string // gh, or git
-	Forge       string // github, gitlab, bitbucket or local (forge.Resolve's kind)
-	Base        string // the base branch (delivery.base)
-	Reason      string
-	Items       []MergeItem
-	Unapproved  int // open PRs not on an approved head
+	AttemptedAt int64       `json:"attempted_at"`
+	ItemsAt     int64       `json:"items_at"`
+	Source      string      `json:"source"` // gh, or git
+	Forge       string      `json:"forge"`  // github, gitlab, bitbucket or local (forge.Resolve's kind)
+	Base        string      `json:"base"`   // the base branch (delivery.base)
+	Reason      string      `json:"reason,omitempty"`
+	Items       []MergeItem `json:"items"`
+	Unapproved  int         `json:"unapproved"` // open PRs not on an approved head
 }
 
 // MergeQueue reads the cache; a missing key is the zero record (unknown).

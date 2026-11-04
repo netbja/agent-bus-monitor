@@ -47,11 +47,21 @@ type mergeQueueChore struct {
 
 // serviceMergeQueue is the dispatch service's chore, in its working directory.
 func serviceMergeQueue(b *bus.Bus, getenv func(string) string) dispatch.MergeQueueConfig {
-	dir, err := os.Getwd()
-	if err != nil {
+	c := serviceMergeQueueChore(b, getenv)
+	if c == nil {
 		return dispatch.MergeQueueConfig{}
 	}
-	c := &mergeQueueChore{b: b, dir: dir, getenv: getenv, environ: os.Environ,
+	return dispatch.MergeQueueConfig{Every: mergeQueueEvery, Pass: c.pass}
+}
+
+// serviceMergeQueueChore is the chore with the real readers, in the current
+// directory (nil without one); merge-queue --live uses it too.
+func serviceMergeQueueChore(b *bus.Bus, getenv func(string) string) *mergeQueueChore {
+	dir, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	return &mergeQueueChore{b: b, dir: dir, getenv: getenv, environ: os.Environ,
 		repo:   gitRepoCheck,
 		origin: gitOrigin,
 		hasGH: func(env []string) bool {
@@ -60,7 +70,6 @@ func serviceMergeQueue(b *bus.Bus, getenv func(string) string) dispatch.MergeQue
 		},
 		github: mergequeue.ReadGitHub, remoteTips: mergequeue.RemoteTips, localTips: mergequeue.LocalTips,
 		fetchBase: mergequeue.FetchBase, inBase: mergequeue.InBase}
-	return dispatch.MergeQueueConfig{Every: mergeQueueEvery, Pass: c.pass}
 }
 
 // mergeQueueEnv is every command's environment: no askpass program and no
