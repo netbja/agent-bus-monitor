@@ -1,6 +1,6 @@
 # Merge queue: what waits for the person's merge, derived, never remembered
 
-Status: spec, for review (subject `merge-queue-spec`). Not built. The task comes from the person,
+Status: spec, for review (subject `merge-queue-spec`), with master's decisions in §8. Not built. The task comes from the person,
 2026-11-05, through master: busmon's For you stopped showing the PRs waiting for the person's merge,
 because nothing derived them. They showed only when master remembered to open an ask or link a PR to
 a plan task.
@@ -45,7 +45,7 @@ That means:
 - **A newer push.** The PR's head moved past the approved one, so the PR is not in the queue. It is
   the team's again: a new head needs a new verdict, merge-only heads included.
 - **Approved but not delivered.** No open PR carries H. That is master's work (`deliver`), not the
-  person's. It is not For you; see §8 question 2.
+  person's. It is not For you; reporting it is a later step (§8, decision 2).
 - **A rejection after the approve.** The roll-up is `REJECTED`, so the item is out, even with the
   PR open.
 - **Merged or closed.** The PR's state is not open, or (git fallback) H is an ancestor of the base
@@ -99,8 +99,8 @@ that ref.
 
 **What the fallback cannot see:**
 - **A squash merge**, or a rebase merge, leaves H outside the base forever. The branch's deletion
-  ends the item (no remote tip at H); a branch kept after a squash keeps it, until §8 question 3 is
-  answered.
+  ends the item (no remote tip at H). A branch kept after a squash is dropped once its diff against
+  the base is empty, said as "merged (contents)" (§8, decision 3).
 - **Titles and URLs:** git has none. The title is the plan task's title, when a plan link names H's
   branch, else the first commit's subject in `B..H`, as `deliver` builds it (`deliverTitle`). The URL
   is the forge's compare page (`linkPage`), or none.
@@ -144,8 +144,8 @@ can say "nothing waits".
   - text `merge PR 309: <title>`, or `merge <branch>` without a number;
   - the sender column `you`;
   - the age since the deciding approve.
-- **Rank:** `rankPlan`'s place in the order (a new `rankMerge` right after it, or the same rank), so
-  it sits with the plan's waits.
+- **Rank:** its own, `rankMerge`, right after `rankPlan`, so it sits with the plan's waits (§8,
+  decision 1).
 - **Counts:** in the title and in the badge (`decisions`), and in the reminder.
 - **No double row:** a plan task waiting for the person (`merge PR N`) whose PR or head is an item
   shows once, as the merge item, its plan task named on the page.
@@ -237,24 +237,20 @@ Nothing new: the For you badge already counts decisions.
   count, `N open PRs with no approve in the retained ledger`, on the page and in the health detail.
   It is never hidden.
 
-## 8. Open questions
+## 8. Decisions (master, 2026-11-05, the person being away)
 
-1. **Rank:** a new `rankMerge` after `rankPlan`, or `rankPlan` itself? The proposal is a rank of its
-   own, so the page and the dedupe stay simple.
-2. **Approved, not delivered:** should the chore also report subjects approved on a head with no
-   open PR, older than, say, 1 h? That would be master's work, as a health `merge-queue` warn in hand
-   by master. It is not the person's. The proposal is a later step.
-3. **Squash merges under the git fallback:** a kept branch after a squash keeps its item, since git
-   cannot see the merge. Should the fallback also drop an item whose branch's diff against the base
-   is empty (`git diff --quiet B H` after the objects-only fetch)? It is cheap and fairly reliable.
-   The proposal is yes, said in the page as "merged (contents)".
-4. **Several forges:** a project with both GitHub and GitLab remotes reads `origin` only, as
-   `deliver` does. Agreed?
-5. **Drafts:** never queued (the proposal), or queued and marked as drafts?
-6. **The plan:** should `plan.Derive` read the queue, so an approved merge task waits for the person
-   with no PR link at all? And should it record done when H reaches the base? The proposal for this
-   change: the waiting yes, the done no, since "done needs a recorded `plan done`" stays the plan
-   spec's rule.
+The six questions this spec left open, as master decided them:
+
+1. **Rank:** a rank of its own, `rankMerge`, right after `rankPlan`.
+2. **Approved, not delivered:** a later step, not in this change.
+3. **Squash merges under the git fallback:** an item whose branch has no difference from the base
+   (`git diff --quiet B H` after the objects-only fetch) is dropped. The page and the CLI say
+   "merged (contents)" for it.
+4. **Several forges:** `origin` only, as `deliver` does.
+5. **Drafts:** never queued.
+6. **The plan:** `plan.Derive` reads the queue, so an approved merge task whose head is an item waits
+   for the person with no PR link at all. No automatic done: "done needs a recorded `plan done`"
+   stays the plan spec's rule.
 
 ## 9. Test plan
 
@@ -279,7 +275,8 @@ Test-first, one step each:
    - the remote tips;
    - the objects-only fetch writes no ref (`git for-each-ref` before and after, byte equal);
    - ancestry;
-   - the squash case of question 3.
+   - the squash case (§8, decision 3): a kept branch whose diff against the base is empty is
+     dropped, said "merged (contents)".
 4. **The chore:**
    - fenced (a lost lease writes nothing);
    - an unknown pass keeps the previous items;
@@ -291,6 +288,8 @@ Test-first, one step each:
    - the page and its `y`/`Y`;
    - goldens.
 6. **CLI:** output, `--json`, exit codes, `--live` writes nothing, the table tests.
-7. **Health and notifications:** the check's places, and the `merge` event with its episode and
+7. **The plan** (§8, decision 6): an approved merge task whose head is an item waits for the person
+   with no PR link; nothing records it done.
+8. **Health and notifications:** the check's places, and the `merge` event with its episode and
    baseline.
-8. **The full suite and the Redis suite** before each challenge.
+9. **The full suite and the Redis suite** before each challenge.
