@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t"><title id="t">agent-bus concept A: visor bus</title>
+<path id="body" fill="#111" fill-rule="evenodd" d="M80 28 H176 A40 40 0 0 1 216 68 V172 A40 40 0 0 1 176 212 H80 A40 40 0 0 1 40 172 V68 A40 40 0 0 1 80 28 Z M84 60 H172 A20 20 0 0 1 192 80 V112 A20 20 0 0 1 172 132 H84 A20 20 0 0 1 64 112 V80 A20 20 0 0 1 84 60 Z M88 170 A14 14 0 1 0 60 170 A14 14 0 1 0 88 170 Z M196 170 A14 14 0 1 0 168 170 A14 14 0 1 0 196 170 Z"/>
+<rect fill="#111" x="98" y="78" width="16" height="36" rx="8"/><rect fill="#111" x="142" y="78" width="16" height="36" rx="8"/>
+<rect fill="#111" x="60" y="200" width="36" height="32" rx="10"/><rect fill="#111" x="160" y="200" width="36" height="32" rx="10"/>
+</svg>
