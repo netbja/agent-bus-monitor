@@ -143,6 +143,8 @@ func (m *Model) openAbout() tea.Cmd {
 				"plugin " + plugin,
 				update,
 				goLine,
+				"license " + buildinfo.License + " " + GlyphNone + " " + buildinfo.Copyright(),
+				"source " + buildinfo.Source,
 			},
 			Project: project,
 			Build: []aboutRow{
@@ -278,6 +280,7 @@ func aboutBody(a aboutState, step int, still bool, width int) []Line {
 		line(Seg{Text: "agent-bus monitor", Role: RoleAccent, Bold: true})
 	}
 	line(S(RoleMuted, "agents coordinating over Redis Streams"))
+	line(S(RoleMuted, "by "+buildinfo.Author))
 	b.text("\n")
 
 	if !a.loaded {
@@ -356,6 +359,11 @@ func aboutBody(a aboutState, step int, still bool, width int) []Line {
 	if still {
 		line(S(RoleMuted, "still: the packet travels with fade on, in true colour"))
 	}
+	// about-credits: the licence and the repository, LICENSE's own words
+	// (buildinfo, held to the file by TestLicenseMatches).
+	b.text("\n")
+	line(S(RoleMuted, buildinfo.License+" License "+GlyphNone+" "+buildinfo.Copyright()))
+	line(S(RoleMuted, buildinfo.Source))
 	var out []Line
 	for _, l := range b.Lines() {
 		out = append(out, FitLine(l, width))

@@ -19,6 +19,19 @@ var Repo = ""
 // so one machine's units all name one binary.
 var Bin = ""
 
+// Author, License and Source are what busmon's About page names (about-credits):
+// the copyright holder and the licence LICENSE states, and the repository.
+// TestLicenseMatches holds Author, License and Year to the LICENSE file.
+const (
+	Author  = "NetBJA"
+	License = "MIT"
+	Year    = "2026"
+	Source  = "github.com/netbja/agent-bus-monitor"
+)
+
+// Copyright is LICENSE's copyright line.
+func Copyright() string { return "Copyright (c) " + Year + " " + Author }
+
 // Newer reports whether tag a is a strictly newer release than b. Both are
 // vMAJOR.MINOR.PATCH, optionally followed by "-…" (git describe); anything
 // else, including "dev", is never newer and never older.
