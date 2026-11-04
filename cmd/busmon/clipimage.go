@@ -195,7 +195,9 @@ func (m *Model) gotPastedImage(msg pastedImageMsg) {
 		m.ui.flash, m.ui.flashErr = "image saved: "+msg.path, false
 		return
 	}
-	if insertPath(&c.area, msg.path) > 0 {
+	dropped := 0
+	c.area.edit("", func() { dropped = insertPath(&c.area, msg.path) }) // one step, as a paste
+	if dropped > 0 {
 		m.ui.flash, m.ui.flashErr = "image saved, but the text is full: "+msg.path, true
 		return
 	}

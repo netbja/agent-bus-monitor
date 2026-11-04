@@ -32,6 +32,75 @@ type textArea struct {
 	rev                int   // bumped by every change of text
 	cached             []row // the rows of revision cachedRev at width cachedW
 	cachedRev, cachedW int
+
+	// The edit history (compose-undo): the states before each step, newest
+	// last, at most undoMax; what undo took back, for redo; run is the kind of
+	// the last step while it can still grow (a run of typed characters, or of
+	// deletions), "" once anything else happened.
+	undo, redo []areaState
+	run        string
+}
+
+// undoMax bounds the edit history: the oldest steps go first.
+const undoMax = 100
+
+// areaState is what undo restores: the text, the cursor and the selection.
+type areaState struct {
+	text        []rune
+	cur, anchor int
+	mark        bool
+}
+
+func (t *textArea) state() areaState {
+	return areaState{text: append([]rune(nil), t.text...), cur: t.cur, anchor: t.anchor, mark: t.mark}
+}
+
+func (t *textArea) restore(st areaState) {
+	t.text, t.cur, t.anchor, t.mark = st.text, st.cur, st.anchor, st.mark
+	t.changed()
+}
+
+// edit runs one edit and keeps the state before it as a step when the text
+// changed. A step of the same run (kind "type" or "delete") as the last one
+// is joined to it; any other kind, "" included, ends the run.
+func (t *textArea) edit(kind string, f func()) {
+	before, rev := t.state(), t.rev
+	f()
+	if t.rev == rev {
+		return
+	}
+	if kind == "" || kind != t.run {
+		t.undo = append(t.undo, before)
+		if len(t.undo) > undoMax {
+			t.undo = append(t.undo[:0:0], t.undo[len(t.undo)-undoMax:]...)
+		}
+	}
+	t.redo, t.run = nil, kind
+}
+
+// endRun keeps the next edit from joining the last step (a move, a click).
+func (t *textArea) endRun() { t.run = "" }
+
+// undoStep and redoStep move one step through the history; at its end they
+// do nothing and report false.
+func (t *textArea) undoStep() bool {
+	if len(t.undo) == 0 {
+		return false
+	}
+	t.redo = append(t.redo, t.state())
+	t.restore(t.undo[len(t.undo)-1])
+	t.undo, t.run = t.undo[:len(t.undo)-1], ""
+	return true
+}
+
+func (t *textArea) redoStep() bool {
+	if len(t.redo) == 0 {
+		return false
+	}
+	t.undo = append(t.undo, t.state())
+	t.restore(t.redo[len(t.redo)-1])
+	t.redo, t.run = t.redo[:len(t.redo)-1], ""
+	return true
 }
 
 // wrapCalls counts the wraps: a key wraps the text once (the cost test).
@@ -85,8 +154,11 @@ func (t *textArea) insert(s string) (dropped int) {
 	return dropped
 }
 
+// set replaces the text whole and starts a new history: what it replaces
+// (the window opened, sent, a completion) is no step to go back to.
 func (t *textArea) set(s string) {
 	t.text, t.cur, t.top, t.mark = nil, 0, 0, false
+	t.undo, t.redo, t.run = nil, nil, ""
 	t.changed()
 	t.insert(s)
 }
@@ -279,7 +351,7 @@ func (t *textArea) keepCursor(width, height int) {
 
 // clickAt puts the cursor at the cell (col, row) of the shown rows.
 func (t *textArea) clickAt(width, col, rowIdx int) {
-	t.mark = false
+	t.mark, t.run = false, "" // a click ends a run, as a move does
 	rs := t.prepare(width)
 	t.cur = t.colIn(rs[clamp(t.top+rowIdx, 0, len(rs)-1)], col)
 }
@@ -545,6 +617,17 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 	case ActPasteImage:
 		m.ui.flash, m.ui.flashErr = "reading the clipboard"+GlyphEllipsis, false
 		return pasteImageCmd(m.cfg.clip, m.cfg.attachDir)
+	case ActUndo, ActRedo:
+		moved := field.undoStep
+		if act == ActRedo {
+			moved = field.redoStep
+		}
+		if !moved() {
+			m.ui.flash, m.ui.flashErr = "nothing to "+map[Action]string{ActUndo: "undo", ActRedo: "redo"}[act], false
+		}
+		c.pick = 0
+		m.layoutCompose()
+		return nil
 	case ActComposeField:
 		c.area.unmark() // a selection belongs to the field it was made in: leaving it ends it
 		c.to.unmark()
@@ -586,24 +669,30 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 		} else if !k.Shift {
 			field.unmark()
 		}
+		field.endRun() // a move ends a run of typing or deleting
 	}
 	switch {
 	case k.Code == keyEnter && field == &c.to: // the recipient is done: to the text
 		c.onTo = false
 	case k.Code == keyEnter, k.Code == keyRune && !k.Alt:
-		s := "\n"
+		s, kind := "\n", "" // a line break is a step of its own
 		if k.Code == keyRune {
-			s = string(k.Rune)
+			s, kind = string(k.Rune), "type"
 		}
-		if field.insert(s) > 0 {
+		if _, _, sel := field.selection(); sel {
+			kind = "" // typing over a selection is a step of its own
+		}
+		dropped := 0
+		field.edit(kind, func() { dropped = field.insert(s) })
+		if dropped > 0 {
 			m.ui.flash, m.ui.flashErr = fmt.Sprintf("limit %d characters", field.limit), true
 		}
 		c.pick = 0
 	case k.Code == keyBackspace:
-		field.backspace(rs)
+		field.edit(deleteKind(field), func() { field.backspace(rs) })
 		c.pick = 0
 	case k.Code == keyDelete:
-		field.del(rs)
+		field.edit(deleteKind(field), func() { field.del(rs) })
 	case k.Code == keyLeft:
 		field.left(rs)
 	case k.Code == keyRight:
@@ -627,16 +716,28 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 	return nil
 }
 
+// deleteKind is a Backspace or Del's step: one of a run of deletions, or
+// its own when it removes a selection.
+func deleteKind(t *textArea) string {
+	if _, _, sel := t.selection(); sel {
+		return ""
+	}
+	return "delete"
+}
+
 // pasteCompose cuts a paste to what the limit leaves and gives it to the
-// focused field; the recipient field takes one line only.
+// focused field; the recipient field takes one line only. A paste is one
+// step of the history, whatever its length (compose-undo).
 func (m *Model) pasteCompose(s string) {
 	c := m.ui.compose
 	if c.onTo && c.kind == composeMessage {
 		s, _, _ = strings.Cut(s, "\n")
-		c.to.insert(s)
+		c.to.edit("", func() { c.to.insert(s) })
 		return
 	}
-	if n := c.area.insert(s); n > 0 {
+	n := 0
+	c.area.edit("", func() { n = c.area.insert(s) })
+	if n > 0 {
 		m.ui.flash, m.ui.flashErr = fmt.Sprintf("limit %d characters: %d dropped from the paste", c.area.limit, n), true
 	}
 	m.layoutCompose()

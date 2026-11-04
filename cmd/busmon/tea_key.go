@@ -15,13 +15,16 @@ var teaKeys = map[rune]KeyCode{
 	tea.KeyF1: keyF1, tea.KeyF2: keyF2, tea.KeyF3: keyF3, tea.KeyF4: keyF4, tea.KeyF5: keyF5,
 }
 
-var teaCtrl = map[rune]KeyCode{'a': keyCtrlA, 'c': keyCtrlC, 'e': keyCtrlE, 'o': keyCtrlO, 's': keyCtrlS, 't': keyCtrlT, 'u': keyCtrlU, 'v': keyCtrlV, 'w': keyCtrlW}
+var teaCtrl = map[rune]KeyCode{'a': keyCtrlA, 'c': keyCtrlC, 'e': keyCtrlE, 'o': keyCtrlO, 's': keyCtrlS, 't': keyCtrlT, 'u': keyCtrlU, 'v': keyCtrlV, 'w': keyCtrlW, 'y': keyCtrlY, 'z': keyCtrlZ}
 
 // keyOfTea is a bubbletea key press as a Key.
 func keyOfTea(msg tea.KeyPressMsg) Key {
 	k := msg.Key()
 	alt := k.Mod.Contains(tea.ModAlt)
 	if k.Mod.Contains(tea.ModCtrl) {
+		if k.Code == 'z' && k.Mod.Contains(tea.ModShift) { // ctrl+shift+z redoes, where the terminal tells it apart
+			return Key{Code: keyCtrlY, Alt: alt}
+		}
 		return Key{Code: teaCtrl[k.Code], Alt: alt}
 	}
 	if k.Code == tea.KeyTab && k.Mod.Contains(tea.ModShift) {

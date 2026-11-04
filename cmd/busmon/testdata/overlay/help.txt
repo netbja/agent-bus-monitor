@@ -90,6 +90,8 @@ KEYS
   tab                  recipient · text; a text that is only @prefix becomes the recipient (completed, or its list opens)
   ^T                   after the open-question hint: answer in its question panel
   ^V                   paste the clipboard's image: saved 0600 under the cache's agentbus/attachments, its path inserted; nothing uploaded
+  ^Z                   undo the last edit: a paste whole, a run of typing or of deleting (until the window closes)
+  ^Y                   redo what undo took back (also ctrl+shift+z where the terminal tells it apart)
   esc                  close (draft kept)
   shift+↑↓←→ home end  select text: del or backspace removes it, typing replaces it, esc or a plain move clears it
   pgup pgdn            a page up or down (with shift: extend the selection)
