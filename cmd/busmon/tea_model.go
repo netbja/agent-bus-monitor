@@ -269,6 +269,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.gotRecap(msg)
 	case settingsMsg:
 		m.gotSettings(msg)
+	case notifyAssistMsg:
+		if m.settingsPageOpen() != nil { // the page it was asked from is still open
+			return m.push(notifyAssistPage(msg.kind, msg.f))
+		}
 	case cacheSavedMsg:
 		if msg.err != nil && m.cfg.st != nil {
 			m.cfg.st.mu.Lock()

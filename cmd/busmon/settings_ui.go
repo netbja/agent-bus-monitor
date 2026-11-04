@@ -51,8 +51,13 @@ type settingsPage struct {
 // for Backup, Back up now and the archives.
 func (s *settingsPage) selectable() int {
 	n := len(s.rows())
-	if s.group >= 0 && s.group < len(s.groups) && s.groups[s.group].Group == config.GroupBackup {
-		n += backupItems(s.backup)
+	if s.group >= 0 && s.group < len(s.groups) {
+		switch s.groups[s.group].Group {
+		case config.GroupBackup:
+			n += backupItems(s.backup)
+		case config.GroupNotifications:
+			n += len(notifyAssistKinds)
+		}
 	}
 	return n
 }
@@ -292,6 +297,12 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 	if !s.keys { // enter on a group goes to its keys; d waits for a key
 		if act == ActOpen {
 			s.keys = true
+		}
+		return nil
+	}
+	if p.sel >= len(rows) && act == ActOpen && s.groups[s.group].Group == config.GroupNotifications {
+		if i := p.sel - len(rows); i < len(notifyAssistKinds) {
+			return m.notifyAssistOpen(notifyAssistKinds[i].kind)
 		}
 		return nil
 	}
@@ -661,6 +672,19 @@ func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
 	if g.Group == config.GroupNotifications {
 		for _, l := range s.targets {
 			b.seg(RoleMuted, "    "+Preview(l)).text("\n")
+			n++
+		}
+		lines, at := notifyAssistLines(s, len(g.Rows), sel, width)
+		if at >= 0 {
+			selLine = n + at
+		}
+		for _, l := range lines {
+			b.segs(l...).text("\n")
+		}
+		if sel >= len(g.Rows) {
+			b.text("\n").text(" ").seg(RoleLine, strings.Repeat(glyphHorizontal, max(0, width-2))).text("\n")
+			b.join(wrapSpans([]mdSpan{{text: "enter: the steps, a template to copy and the last test; busmon never writes notify.toml", role: RoleMuted}}, width-1, " ", " ")).text("\n")
+			return b.Lines(), selLine
 		}
 	}
 	if g.Group == config.GroupBackup && s.backup != nil {
