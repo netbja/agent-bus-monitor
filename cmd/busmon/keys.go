@@ -88,6 +88,8 @@ const (
 	ActTokens       // open the tokens page (U)
 	ActSettings     // open the settings page (C)
 	ActHistory      // open the history page (H)
+	ActAbout        // open About (A): the versions and the bus line
+	ActReplay       // About: play the packet's run again (r)
 	ActOlder        // History: load the days before
 	ActLineEdit     // the line: move its cursor or delete at it (the field does it)
 	ActGroupNext    // settings (C): → into the keys (or the next tab on a narrow page)
@@ -223,6 +225,7 @@ var (
 		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
 		{Keys: "C", Help: "settings: display, attention and your name, changed in config.toml", Act: ActSettings, match: runeIs('C')},
 		{Keys: "H", Help: "history: re-read the past, the archive on this host then the live streams (enter opens an entry)", Act: ActHistory, match: runeIs('H')},
+		{Keys: "A", Help: "about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work", Act: ActAbout, match: runeIs('A')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}
@@ -307,6 +310,7 @@ var (
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
+		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}

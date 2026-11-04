@@ -48,6 +48,8 @@ type shellConfig struct {
 	tour          *tourMarker    // the machine's tour marker; nil = the tour never opens by itself
 	// docker runs the F3 pages' docker reads; nil = none at all (tests).
 	docker svcRunner
+	// aboutAgentbus is `agentbus version`'s line for About (nil: unknown).
+	aboutAgentbus func() string
 	// brokerHost is --host, which overrides REDIS_HOST (bus.Connect): the
 	// Redis page states container facts only for the broker it reads.
 	brokerHost string
@@ -235,6 +237,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
 	case redisPageMsg:
 		return m.gotRedisPage(msg)
+	case aboutVersionsMsg:
+		m.gotAboutVersions(msg)
+	case aboutTickMsg:
+		return m.gotAboutTick(msg)
 	case answerMsg:
 		m.gotAnswer(msg)
 	case sendResultMsg:

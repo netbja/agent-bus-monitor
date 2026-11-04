@@ -144,6 +144,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.openSettings()
 	case ActHistory:
 		cmd = m.openHistory()
+	case ActAbout:
+		cmd = m.openAbout()
 	case ActAsk:
 		agent := ""
 		if sel := m.lists.agents.Selected(); m.ui.focus == PanelAgents && m.snap.agents[sel] != nil && m.snap.agents[sel].openAsk > 0 {

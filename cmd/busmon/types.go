@@ -48,6 +48,7 @@ const (
 	ovTokens     // tokens (U): account windows, projects side by side, the open project by agent
 	ovHistory    // history (H): the archive, then the live streams, newest first
 	ovSettings   // settings (C): the registry's keys by group, changed in place (settings_ui.go)
+	ovAbout      // about (A): the versions and the bus line (about.go)
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.

@@ -1008,6 +1008,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   streams, `history.Merge` by (stream, id), `history.Filter` (`--agent` matches from/target/agent and a verdict's
   author/reviewer; a gap line passes an agent or kind filter it may hide, never `--thread`/`--grep`), newest
   `--limit` (200); says `broker unreachable: archive only` or `no archive on this host: live streams only`.
+  busmon's About page (`A`, about-page, `about.go`, `ovAbout`): the versions read in a command (busmon, `agentbus version` beside it, protocol, Redis INFO, Go; `y` copies them), master and coder on a bus line, a packet travelling there and back one cell a tick (`aboutRoute`, 45 ms, each run its own `gen`, so an earlier run's or a closed page's tick ends its chain), `r` (`ActReplay`, OnPage) replays.
   busmon's History page (`H`, `history_page.go`, `ovHistory`): loaded in a command (`historyLoadCmd`: the last 3 days
   under an 8 MiB cap through `history.ReadBack`, which pages **by position** with a `Cursor` (day file, byte offset)
   because a day file is not in id order; `ReadGaps`; the live streams through the writer's optional

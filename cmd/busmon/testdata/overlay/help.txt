@@ -32,6 +32,7 @@ KEYS
   U                    tokens: the account windows, every project side by side, this project by agent
   C                    settings: display, attention and your name, changed in config.toml
   H                    history: re-read the past, the archive on this host then the live streams (enter opens an entry)
+  A                    about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work
   F1 ?                 help
   q                    quit
   ^C                   quit (everywhere)
@@ -64,6 +65,7 @@ KEYS
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
   o                    History (H): load the three days before; the recap (R): show For you's items older than a day
+  r                    About (A): play the packet's run again
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
   ^C                   quit (everywhere)
