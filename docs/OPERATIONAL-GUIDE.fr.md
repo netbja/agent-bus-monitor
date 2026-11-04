@@ -16,7 +16,8 @@ agentbus start
 
 `agentbus start` déduit ce qu'il peut : le nom du projet (d'après le dossier, ou le modèle qu'un
 lancement précédent a écrit), votre nom (`agentbus identity set`, sinon `$USER`) et l'équipe
-(master, coder, foureyes et sentinel par défaut). Il les montre une fois et ne demande que ce qu'il
+(par défaut tous les rôles de démarrage de `roles.toml` : master, coder, foureyes et sentinel tels
+que livrés). Il les montre une fois et ne demande que ce qu'il
 ne peut pas déduire. Puis il lance `agentbus up` pour vous. Hors de herdr, il ouvre lui-même la
 session herdr (`herdr --session <projet>`) et l'équipe s'ouvre dedans.
 

@@ -15,8 +15,8 @@ agentbus start
 ```
 
 `agentbus start` deduces what it can: the project's name (from the folder, or the template a
-previous run wrote), your name (`agentbus identity set`, else `$USER`) and the team (master, coder,
-foureyes and sentinel by default). It shows them once and asks only for what it cannot deduce.
+previous run wrote), your name (`agentbus identity set`, else `$USER`) and the team (every boot role of
+`roles.toml` by default: master, coder, foureyes and sentinel as shipped). It shows them once and asks only for what it cannot deduce.
 Then it runs `agentbus up` for you. Outside herdr, it opens the herdr session itself
 (`herdr --session <project>`) and the team opens inside it.
 
