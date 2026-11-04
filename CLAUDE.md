@@ -342,7 +342,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   `s` opening the compose window to master prefilled, busmon-plan-start-ux: the footer advertises a
   binding marked `OnPage` only where `pageOffers` says the page offers it, under the word `pageHint` gives;
   on an agent's page `y` copies the status message and `Y` the whole report the page shows, `Y` offered only where a
-  page has something for it), `keys.go` (one key table per mode drives the handler, the footer
+  page has something for it; message-reply-key, `reply_key.go`: `i` on a message, report or note page opens the compose
+  window to its sender prefilled `re: <first line>` (cut at `replyFirstMax`, 72 runes; a report notice quotes its
+  report, the retained one's text else the notice's subject, never the envelope: `replySource`), offered (`OnPage`, after close in
+  the footer) only when the sender is a registered agent (`replyTarget`: never the dispatcher, the person or a non-agent,
+  each said when `i` is pressed), a draft opened as it was, never overwritten), `keys.go` (one key table per mode drives the handler, the footer
   (its F-keys grouped last, ascending; on the main screen room is kept for F1 help and F5 health) and the help; `key.go`'s engine-neutral `Key`, `keyOfTea` its adapter), `poll.go` (`pollOnce`
   behind the `busReader` interface: the 1 s tick and its read inventory), `types.go` (`busWriter`,
   the page kinds, the Activity feed), `main.go` (flags, CLI paths, the tail goroutine feeding the
@@ -991,7 +995,14 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   episode the directive's id). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
   tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an
   unknown pass and deleted once the check reads ok or warn): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
-  `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). busmon shows the health pill, F5
+  `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). `review-queue` (spec
+  `docs/superpowers/specs/2026-11-04-review-queue-design.md`; `health/reviewqueue.go` pure, `cmd/agentbus/reviewqueue.go`
+  the reader) warns (master) when the same idle team (`teamIdle`, shared with `team-stall`), nothing else open (gates
+  aside), owes a review: an open gate whose challenge the reviewer read, older than `stall_after` (a challenge no longer retained is
+  never proved read, a group skipping trimmed entries: not judged, unknown when nothing is owed); or a subject approved
+  within 72 h (fixed) and not done in the plan, where a reviewer who engaged with it (a verdict on it, an open gate on
+  it, or a challenge under a ref a verdict on it carries) has no approve of the deciding head; the `StallWake` hook
+  wakes master once per owed set (mark `stall-review`, episode a hash of the owed keys); never fail. busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
   not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check

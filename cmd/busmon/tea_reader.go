@@ -805,7 +805,11 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return nil
 	case ActPriorityUp, ActPriorityDown:
 		return m.setPriority(act == ActPriorityUp)
-	case ActComposeOpen: // in an agent's page: write to that agent
+	case ActComposeOpen: // an agent's page: write to that agent; a message page: reply to its sender
+		if p.kind == ovMessage {
+			m.replyFromPage(p)
+			return nil
+		}
 		if p.kind == ovAgent {
 			agent := p.key
 			quote := m.needQuote(agent)
@@ -1222,6 +1226,12 @@ func (m Model) pageOffers(act Action) bool {
 		return false
 	}
 	switch act {
+	case ActComposeOpen:
+		if p.kind == ovMessage {
+			_, why := replyTarget(p.ev, m.snap.agents, m.cfg.self)
+			return why == ""
+		}
+		return p.kind == ovAgent
 	case ActCopyThread:
 		return p.threadPlain != ""
 	case ActPlanStart:

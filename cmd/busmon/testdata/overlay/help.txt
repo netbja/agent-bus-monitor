@@ -52,7 +52,6 @@ KEYS
   ^C                   quit (everywhere)
   an open detail
   F5                   health
-  i I                  in an agent's detail: reply to that agent in the compose window
   ↑↓ j k               scroll
   pgup                 page up
   pgdn                 page down
@@ -68,9 +67,10 @@ KEYS
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
   o                    History (H): load the three days before; the recap (R): show For you's items older than a day
   r                    About (A): play the packet's run again
-  + -                  a tracked request's page: raise or lower its priority (low, normal, high)
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
+  + -                  a tracked request's page: raise or lower its priority (low, normal, high)
+  i I                  reply in the compose window: on an agent's page to that agent; on a message, report or note page to its sender, an agent, prefilled with re: and its first line
   ^C                   quit (everywhere)
   answering questions
   ↑↓ j k               choose

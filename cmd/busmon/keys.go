@@ -304,7 +304,6 @@ var (
 	}
 	overlayBindings = []binding{
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
-		{Keys: "i I", Help: "in an agent's detail: reply to that agent in the compose window", Act: ActComposeOpen, match: runeIs('i', 'I')},
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
 		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(keyPgUp)},
@@ -322,10 +321,12 @@ var (
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
 		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
-		{Keys: "+ -", Hint: "priority", Help: "a tracked request's page: raise or lower its priority (low, normal, high)", Act: ActPriorityUp, OnPage: true, match: runeIs('+')},
-		{Keys: "-", Act: ActPriorityDown, OnPage: true, match: runeIs('-')},
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
+		// After close: on a narrow footer the way out stays (message-reply-key).
+		{Keys: "+ -", Hint: "priority", Help: "a tracked request's page: raise or lower its priority (low, normal, high)", Act: ActPriorityUp, OnPage: true, match: runeIs('+')},
+		{Keys: "-", Act: ActPriorityDown, OnPage: true, match: runeIs('-')},
+		{Keys: "i I", Hint: "reply", Help: "reply in the compose window: on an agent's page to that agent; on a message, report or note page to its sender, an agent, prefilled with re: and its first line", Act: ActComposeOpen, OnPage: true, match: runeIs('i', 'I')},
 	}
 	// settingsBindings: the C page (settings-panels, settings-focus). The focus
 	// is on the groups or on the keys: on the groups ↑↓ choose one (the keys

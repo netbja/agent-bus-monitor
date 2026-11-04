@@ -50,8 +50,9 @@ type stallReader struct {
 	firstFail int64
 	// lastClear and lastQuiet are the inputs clear-stall and quiet-agent last
 	// judged, for the wakes the health loop asks for right after storing them.
-	lastClear *health.ClearStallInput
-	lastQuiet *health.QuietAgentInput
+	lastClear  *health.ClearStallInput
+	lastQuiet  *health.QuietAgentInput
+	lastReview *health.ReviewQueueInput
 }
 
 func newStallReader(b *bus.Bus, getenv func(string) string, clear dispatch.ClearConfig, master *string) *stallReader {
@@ -213,43 +214,12 @@ func (s *stallReader) teamStall(ctx context.Context) (health.Outcome, error) {
 		in.ReadErr = phrase
 		return health.EvaluateTeamStall(in), nil
 	}
-	snaps, err := s.b.Agents(ctx)
-	if err != nil {
-		return fail("agents unavailable")
+	tr, phrase := s.readTeam(ctx, now, set)
+	if phrase != "" {
+		return fail(phrase)
 	}
-	obs, err := s.b.Observed(ctx)
-	if err != nil {
-		return fail("observations unavailable")
-	}
-	held, err := s.heldProviders(ctx)
-	if err != nil {
-		return fail("quota holds unavailable")
-	}
-	in.NoIdentities = true
-	team := map[string]bus.AgentSnapshot{}
-	for name, snap := range snaps {
-		if snap.PID > 0 {
-			in.NoIdentities = false
-		}
-		var seen *bus.Observation
-		if ob, ok := obs[name]; ok {
-			seen = &ob
-		}
-		// A turn's working left stuck (no Stop) reads idle once the pane is
-		// seen ready for turn_stale_after (bus.EffectiveState, auto-state).
-		state, since := bus.EffectiveState(snap, seen, now.UnixMilli(), set.turnStale.Milliseconds())
-		a := health.StallAgent{Name: name, State: state, DeclaredAt: time.UnixMilli(since), Dormant: dormantAt(snap, now)}
-		if ob, ok := obs[name]; ok && ob.Fresh(now.UnixMilli()) {
-			a.Pane = health.PaneIdle
-			if ob.Busy {
-				a.Pane = health.PaneBusy
-			}
-		}
-		in.Agents = append(in.Agents, a)
-		if !a.Dormant {
-			team[name] = snap
-		}
-	}
+	snaps, held, team := tr.snaps, tr.held, tr.team
+	in.Agents, in.NoIdentities = tr.agents, tr.noIdentities
 	if phrase, err := s.readOpenWork(ctx, team, &in.Open); err != nil {
 		return fail(phrase)
 	}
@@ -292,6 +262,57 @@ func (s *stallReader) teamStall(ctx context.Context) (health.Outcome, error) {
 		}
 	}
 	return health.EvaluateTeamStall(in), nil
+}
+
+// teamRead is the team as team-stall and review-queue read it.
+type teamRead struct {
+	snaps        map[string]bus.AgentSnapshot
+	held         map[string]bool
+	agents       []health.StallAgent
+	team         map[string]bus.AgentSnapshot // the non-dormant agents
+	noIdentities bool
+}
+
+// readTeam reads the agents, their panes and the quota holds; on a failed
+// read it returns the phrase to report.
+func (s *stallReader) readTeam(ctx context.Context, now time.Time, set stallSettings) (teamRead, string) {
+	snaps, err := s.b.Agents(ctx)
+	if err != nil {
+		return teamRead{}, "agents unavailable"
+	}
+	obs, err := s.b.Observed(ctx)
+	if err != nil {
+		return teamRead{}, "observations unavailable"
+	}
+	held, err := s.heldProviders(ctx)
+	if err != nil {
+		return teamRead{}, "quota holds unavailable"
+	}
+	tr := teamRead{snaps: snaps, held: held, team: map[string]bus.AgentSnapshot{}, noIdentities: true}
+	for name, snap := range snaps {
+		if snap.PID > 0 {
+			tr.noIdentities = false
+		}
+		var seen *bus.Observation
+		if ob, ok := obs[name]; ok {
+			seen = &ob
+		}
+		// A turn's working left stuck (no Stop) reads idle once the pane is
+		// seen ready for turn_stale_after (bus.EffectiveState, auto-state).
+		state, since := bus.EffectiveState(snap, seen, now.UnixMilli(), set.turnStale.Milliseconds())
+		a := health.StallAgent{Name: name, State: state, DeclaredAt: time.UnixMilli(since), Dormant: dormantAt(snap, now)}
+		if ob, ok := obs[name]; ok && ob.Fresh(now.UnixMilli()) {
+			a.Pane = health.PaneIdle
+			if ob.Busy {
+				a.Pane = health.PaneBusy
+			}
+		}
+		tr.agents = append(tr.agents, a)
+		if !a.Dormant {
+			tr.team[name] = snap
+		}
+	}
+	return tr, ""
 }
 
 // readOpenWork fills open with what keeps the team out of a stall; on a
@@ -446,8 +467,8 @@ func (s *stallReader) keep(set func()) {
 	set()
 }
 
-// stallWake is the health loop's hook after a stored clear-stall or
-// quiet-agent record (HealthConfig.StallWake): each wake the judged input
+// stallWake is the health loop's hook after a stored clear-stall,
+// quiet-agent or review-queue record (HealthConfig.StallWake): each wake the judged input
 // owes is one waking directive from the dispatcher, once per episode under
 // its {p}:quota mark (chain-reliability: a warning alone woke nobody). A
 // target being swapped is skipped; the next pass sends it.
@@ -459,6 +480,8 @@ func (s *stallReader) stallWake(ctx context.Context, token, check string) error 
 		wakes = health.ClearStallWakes(*s.lastClear, s.escalateTo())
 	case check == "quiet-agent" && s.lastQuiet != nil:
 		wakes = health.QuietAgentWakes(*s.lastQuiet)
+	case check == "review-queue" && s.lastReview != nil:
+		wakes = health.ReviewQueueWakes(*s.lastReview, s.escalateTo())
 	}
 	s.mu.Unlock()
 	for _, w := range wakes {
@@ -473,11 +496,12 @@ func (s *stallReader) stallWake(ctx context.Context, token, check string) error 
 // stallMark is the {p}:quota field of the stall guard's notice for the person.
 const stallMark = "stall"
 
-// stallChecks are the three health checks of the stall guard.
+// stallChecks are the stall guard's health checks (review-queue too).
 func stallChecks(s *stallReader) []dispatch.HealthCheck {
 	return []dispatch.HealthCheck{
 		healthOutcomeTask("quiet-agent", s.quietAgent), // before team-stall, which reads its record
 		healthOutcomeTask("clear-stall", s.clearStall),
 		healthOutcomeTask("team-stall", s.teamStall),
+		healthOutcomeTask("review-queue", s.reviewQueue),
 	}
 }

@@ -108,41 +108,9 @@ func EvaluateTeamStall(in TeamStallInput) Outcome {
 	case in.ReadErr != "":
 		return unknown(in.ReadErr)
 	}
-	var team []StallAgent
-	for _, a := range in.Agents {
-		if !a.Dormant {
-			team = append(team, a)
-		}
-	}
-	if len(team) == 0 {
-		return unknown("no registered agent")
-	}
-	for _, a := range team { // any agent at work, or with its own circuit, settles it
-		switch a.State {
-		case "working", "blocked", "waiting":
-			return ok(a.Name + " " + a.State)
-		}
-	}
-	idleFor := time.Duration(-1) // the team's idle time: since its most recent declaration
-	for _, a := range team {
-		d := in.Now.Sub(a.DeclaredAt)
-		if d < in.After {
-			return ok(fmt.Sprintf("%s idle only %s", a.Name, minutes(d)))
-		}
-		if a.Pane == PaneBusy {
-			return ok(a.Name + " busy (not declared)")
-		}
-		if idleFor < 0 || d < idleFor {
-			idleFor = d
-		}
-	}
-	for _, a := range team {
-		if a.Pane == PaneUnseen {
-			if in.NoIdentities {
-				return unknown("cannot see panes on this host: no verified identities")
-			}
-			return unknown(fmt.Sprintf("cannot see %s's pane (no fresh observation)", a.Name))
-		}
+	idleFor, settled, done := teamIdle(in.Agents, in.Now, in.After, in.NoIdentities)
+	if done {
+		return settled
 	}
 	if in.Open.Any() {
 		return ok("work is open: " + strings.Join(in.Open.items(), ", "))
@@ -174,6 +142,55 @@ func EvaluateTeamStall(in TeamStallInput) Outcome {
 		return ok("ready work waits on a quota hold: " + strings.Join(held, ", "))
 	}
 	return ok("team idle, plan has nothing ready")
+}
+
+// teamIdle is the idle preamble team-stall and review-queue share: the
+// non-dormant team, each idle for after with its pane seen not busy. When
+// that does not hold, done is true and out says why (ok or unknown).
+func teamIdle(agents []StallAgent, now time.Time, after time.Duration, noIdentities bool) (idleFor time.Duration, out Outcome, done bool) {
+	unknown := func(d string) (time.Duration, Outcome, bool) {
+		return 0, Outcome{Status: Unknown, Detail: truncateDetail(d)}, true
+	}
+	ok := func(d string) (time.Duration, Outcome, bool) {
+		return 0, Outcome{Status: OK, Detail: truncateDetail(d)}, true
+	}
+	var team []StallAgent
+	for _, a := range agents {
+		if !a.Dormant {
+			team = append(team, a)
+		}
+	}
+	if len(team) == 0 {
+		return unknown("no registered agent")
+	}
+	for _, a := range team { // any agent at work, or with its own circuit, settles it
+		switch a.State {
+		case "working", "blocked", "waiting":
+			return ok(a.Name + " " + a.State)
+		}
+	}
+	idleFor = -1 // the team's idle time: since its most recent declaration
+	for _, a := range team {
+		d := now.Sub(a.DeclaredAt)
+		if d < after {
+			return ok(fmt.Sprintf("%s idle only %s", a.Name, minutes(d)))
+		}
+		if a.Pane == PaneBusy {
+			return ok(a.Name + " busy (not declared)")
+		}
+		if idleFor < 0 || d < idleFor {
+			idleFor = d
+		}
+	}
+	for _, a := range team {
+		if a.Pane == PaneUnseen {
+			if noIdentities {
+				return unknown("cannot see panes on this host: no verified identities")
+			}
+			return unknown(fmt.Sprintf("cannot see %s's pane (no fresh observation)", a.Name))
+		}
+	}
+	return idleFor, Outcome{}, false
 }
 
 // ClearHandoff is one declared hand-off as clear-stall reads it.
