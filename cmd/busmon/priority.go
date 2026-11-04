@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -13,11 +14,30 @@ import (
 // outcome is said and the next poll reads the board again (busmon never edits
 // its own copy).
 
-// priorityMsg is the writer's answer.
+// priorityMsg is the writer's answer, at the time it came back.
 type priorityMsg struct {
 	task, level string
 	changed     bool
 	err         error
+	at          time.Time
+}
+
+// prioOverride is a level this busmon wrote, kept until a poll that started
+// after the write: + and - step from it, never from an older snapshot
+// (reviewer-codex: two presses before a poll both stepped from low).
+type prioOverride struct {
+	level string
+	at    time.Time
+}
+
+// endPriorityOverrides drops the overrides a poll that started at started
+// has read past.
+func (m *Model) endPriorityOverrides(started time.Time) {
+	for task, o := range m.ui.prioSeen {
+		if o.at.Before(started) {
+			delete(m.ui.prioSeen, task)
+		}
+	}
 }
 
 // priorityTarget is the request + and - would set from what the person has
@@ -75,7 +95,14 @@ func (m *Model) setPriority(up bool) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = why, true
 		return nil
 	}
+	if m.ui.prioBusy {
+		m.ui.flash, m.ui.flashErr = "a priority change is on its way: press again once it is said", false
+		return nil
+	}
 	cur := bus.PriorityLevel(r.Priority)
+	if o, ok := m.ui.prioSeen[r.Task]; ok {
+		cur = o.level
+	}
 	next := stepPriority(cur, up)
 	if next == cur {
 		m.ui.flash, m.ui.flashErr = Preview(r.Task)+": already "+cur, false
@@ -89,16 +116,24 @@ func (m *Model) setPriority(up bool) tea.Cmd {
 		ctx = context.Background()
 	}
 	task := r.Task
+	m.ui.prioBusy = true
 	return func() tea.Msg {
 		cc, cancel := context.WithTimeout(ctx, pollBudget)
 		defer cancel()
 		changed, err := w.SetRequestPriority(cc, task, next, self)
-		return priorityMsg{task: task, level: next, changed: changed, err: err}
+		return priorityMsg{task: task, level: next, changed: changed, err: err, at: time.Now()}
 	}
 }
 
 // gotPriority says the outcome: the level, or the refusal as the bus words it.
 func (m *Model) gotPriority(msg priorityMsg) {
+	m.ui.prioBusy = false
+	if msg.err == nil { // the level now stored, whatever the snapshot says until a newer poll
+		if m.ui.prioSeen == nil {
+			m.ui.prioSeen = map[string]prioOverride{}
+		}
+		m.ui.prioSeen[msg.task] = prioOverride{level: msg.level, at: msg.at}
+	}
 	switch {
 	case msg.err != nil:
 		m.ui.flash, m.ui.flashErr = Preview(msg.task)+": "+Preview(msg.err.Error()), true

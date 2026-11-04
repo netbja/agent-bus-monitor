@@ -114,20 +114,21 @@ func TestPriorityKeysOnTheRequestsTab(t *testing.T) {
 	if !strings.Contains(m.ui.flash+noticeTexts(m), "solo: high") {
 		t.Fatalf("no outcome: flash %q, notices %q", m.ui.flash, noticeTexts(m))
 	}
-	// - from normal: low. The view reads the board again; it never edits its copy.
+	// - steps from the level just written (high), not the snapshot's: normal.
 	m = keyRun(t, m, '-')
-	if got := fw.priorities(); len(got) != 2 || got[1] != "priority solo low charlie" {
+	if got := fw.priorities(); len(got) != 2 || got[1] != "priority solo normal charlie" {
 		t.Fatalf("- wrote %v", got)
 	}
-	// Already at the bound: nothing written, said.
+	// Already at the bound: nothing written, said. A poll that started after
+	// the writes reads the board (high) and ends the override.
 	snap := m.snap
 	for i := range snap.requests {
 		if snap.requests[i].Task == "solo" {
 			snap.requests[i].Priority = "high"
 		}
 	}
-	m.snap = snap
-	m.refresh()
+	later := time.Now().Add(time.Minute)
+	m = step(t, m, pollMsg{snap: snap, at: later, started: later})
 	m.lists.requests.Select("req:solo")
 	m = keyRun(t, m, '+')
 	if got := fw.priorities(); len(got) != 2 || !strings.Contains(m.ui.flash, "already high") {
@@ -271,5 +272,72 @@ func TestRequestsPriorityGoldens(t *testing.T) {
 			}
 			checkGolden(t, fmt.Sprintf("requests-priority-%dx%d.txt", sz[0], sz[1]), plain+"\n")
 		})
+	}
+}
+
+// An all-low group sorts after a normal one, whatever their ages
+// (reviewer-codex: the rank started at normal).
+func TestAllLowGroupSortsAfterNormal(t *testing.T) {
+	now := shellNow
+	rq := func(task, target, prio string, ago time.Duration) request {
+		return request{Task: task, Tracked: true, ID: task + "-id", Thread: task + "-id", From: "master", Target: target,
+			State: "requested", Created: now.Add(-ago), Updated: now.Add(-ago), Priority: prio}
+	}
+	v := requestGroups(reqInput{now: now, self: "charlie", reqs: []request{
+		rq("low-a", "qa", "low", 90*time.Minute), rq("low-b", "qa", "low", 80*time.Minute),
+		rq("plain", "coder", "", 5*time.Minute),
+	}})
+	gs := v.groups[secTracked]
+	if len(gs) != 2 || gs[0].Target != "coder" || gs[1].Target != "qa" {
+		t.Fatalf("order %v", []string{gs[0].Target, gs[1].Target})
+	}
+	if r := groupRank(gs[1]); r != 2 {
+		t.Fatalf("all-low group's rank %d", r)
+	}
+}
+
+// Steps follow the person's own writes, not the last poll (reviewer-codex):
+// low, +, its answer, + reaches high before any poll; a press while a write
+// is in flight is said and sends nothing; the override ends with a poll that
+// started after the write.
+func TestPriorityStepsFollowTheirOwnWrites(t *testing.T) {
+	fw := &fakeWriter{}
+	m := priorityShell(t, fw)
+	snap := m.snap
+	for i := range snap.requests {
+		if snap.requests[i].Task == "solo" {
+			snap.requests[i].Priority = "low"
+		}
+	}
+	m.snap = snap
+	m.refresh()
+	m.lists.requests.Select("req:solo")
+
+	next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: '+', Text: "+"}))
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("+ sent nothing")
+	}
+	m = keys(t, m, '+') // in flight: refused
+	if !strings.Contains(m.ui.flash, "on its way") {
+		t.Fatalf("second press while in flight: %q", m.ui.flash)
+	}
+	m = step(t, m, cmd()) // the first write's answer
+	m = keyRun(t, m, '+')
+	m = keyRun(t, m, '-')
+	got := fw.priorities()
+	want := []string{"priority solo normal charlie", "priority solo high charlie", "priority solo normal charlie"}
+	if !equalStrings(got, want) {
+		t.Fatalf("writes %v, want %v", got, want)
+	}
+	// A poll that started before the last write keeps the override; one after ends it.
+	written := m.ui.prioSeen["solo"].at
+	m = step(t, m, pollMsg{snap: m.snap, at: written, started: written.Add(-time.Second)})
+	if _, ok := m.ui.prioSeen["solo"]; !ok {
+		t.Fatal("an older poll ended the override")
+	}
+	m = step(t, m, pollMsg{snap: m.snap, at: written.Add(2 * time.Second), started: written.Add(time.Second)})
+	if _, ok := m.ui.prioSeen["solo"]; ok {
+		t.Fatal("a newer poll kept the override")
 	}
 }

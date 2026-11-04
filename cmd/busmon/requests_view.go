@@ -451,8 +451,11 @@ func threadRank(th reqThread) int {
 
 // groupRank is a group's best thread rank.
 func groupRank(g reqGroup) int {
-	best := bus.PriorityRank("")
-	for _, th := range g.Threads {
+	if len(g.Threads) == 0 {
+		return bus.PriorityRank("")
+	}
+	best := threadRank(g.Threads[0]) // not normal: an all-low group ranks low (reviewer-codex)
+	for _, th := range g.Threads[1:] {
 		best = min(best, threadRank(th))
 	}
 	return best

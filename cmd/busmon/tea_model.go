@@ -16,6 +16,7 @@ import (
 type pollMsg struct {
 	snap     snapshot
 	at       time.Time
+	started  time.Time       // when its reads began: a write before it is in snap (request-priority)
 	swaps    []bus.SwapEvent // the swap ledger's entries new since the last pollMsg
 	swapLost bool            // entries were trimmed before they were read
 }
@@ -92,28 +93,30 @@ type uiState struct {
 	pause          pauseCursor
 	flash          string
 	flashErr       bool
-	expanded       string            // the row expanded in place (its list key), "" none
-	expandIn       PanelID           // the list it is in: Activity or For you
-	planExpanded   bool              // the Plan tab shows its done tasks (A11)
-	reqOpen        reqOpen           // the Requests view's expanded groups and folded section
-	compose        *composeState     // the compose window, when open (tea_compose.go)
-	msgCompose     composeDraft      // the window's message draft while it is closed
-	heldDrafts     []composeDraft    // message drafts kept after msgCompose, each opening in turn
-	askDrafts      map[string]string // free answers being written, by ask|question
-	askDraft       string            // a directive held once: its recipient has an open ask
-	broadcastDraft string            // a broadcast warned about once: the next send sends it
-	askChoose      *askChoice        // several recipients hold questions: the next digit picks one
-	sending        bool              // a send is in flight
-	pauseAck       string            // the send the person chose to make despite the pause
-	pausePopup     *pauseDialog      // the pause popup, when open
-	confirm        *pendingRemoval   // a d waiting for its y
-	sleepAsk       *sleepAsk         // a Z waiting for its y
-	sleepRun       *sleepRun         // agentbus suspend or resume running
-	sleepSeq       int               // the last run's id
-	reminder       *reminderDialog   // the reminder, when open
-	summary        bool              // the recap's summary confirmation is open
-	summarySent    bool              // the summary request is in flight: its success closes the recap
-	tour           *tourState        // the first-launch tour, when open (tour.go)
+	expanded       string                  // the row expanded in place (its list key), "" none
+	expandIn       PanelID                 // the list it is in: Activity or For you
+	planExpanded   bool                    // the Plan tab shows its done tasks (A11)
+	reqOpen        reqOpen                 // the Requests view's expanded groups and folded section
+	prioBusy       bool                    // a priority write is in flight: + and - wait for its answer
+	prioSeen       map[string]prioOverride // task -> the level this busmon wrote, until a poll started after it
+	compose        *composeState           // the compose window, when open (tea_compose.go)
+	msgCompose     composeDraft            // the window's message draft while it is closed
+	heldDrafts     []composeDraft          // message drafts kept after msgCompose, each opening in turn
+	askDrafts      map[string]string       // free answers being written, by ask|question
+	askDraft       string                  // a directive held once: its recipient has an open ask
+	broadcastDraft string                  // a broadcast warned about once: the next send sends it
+	askChoose      *askChoice              // several recipients hold questions: the next digit picks one
+	sending        bool                    // a send is in flight
+	pauseAck       string                  // the send the person chose to make despite the pause
+	pausePopup     *pauseDialog            // the pause popup, when open
+	confirm        *pendingRemoval         // a d waiting for its y
+	sleepAsk       *sleepAsk               // a Z waiting for its y
+	sleepRun       *sleepRun               // agentbus suspend or resume running
+	sleepSeq       int                     // the last run's id
+	reminder       *reminderDialog         // the reminder, when open
+	summary        bool                    // the recap's summary confirmation is open
+	summarySent    bool                    // the summary request is in flight: its success closes the recap
+	tour           *tourState              // the first-launch tour, when open (tour.go)
 }
 
 // shellLists are the shell's lists. They live behind a pointer: the Model is
@@ -195,10 +198,11 @@ func (m Model) pollCmd(tick int) tea.Cmd {
 			cfg.st.tokOpen = tokOpen
 			cfg.st.mu.Unlock()
 		}
+		started := time.Now()
 		pollOnce(cfg.ctx, cfg.reader, cfg.st, tick)
 		now := time.Now()
 		swaps, lost := takeSwapNews(cfg.st)
-		return pollMsg{snap: takeSnapshot(cfg.st, now), at: now, swaps: swaps, swapLost: lost}
+		return pollMsg{snap: takeSnapshot(cfg.st, now), at: now, started: started, swaps: swaps, swapLost: lost}
 	}
 }
 
@@ -216,6 +220,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.layoutCompose()
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
+		m.endPriorityOverrides(msg.started)
 		m.notice.fromPoll(msg.snap, m.cfg.self, msg.swaps, msg.swapLost)
 		if m.sig.started.IsZero() {
 			m.sig.started = msg.at
