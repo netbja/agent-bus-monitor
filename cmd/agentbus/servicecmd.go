@@ -430,6 +430,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, runQuiet) // a pane blocked on its client's prompt (prompt-notify)
 			cfg.Prompt.Skip = promptSkip(b, os.Getenv)                     // never rung twice with a desktop target (notifications)
 			cfg.Notify = serviceNotify(b, os.Getenv)                       // the person's phone and desktop (notifications)
+			cfg.MergeQueue = serviceMergeQueue(b, os.Getenv)               // what waits for the person's merge (merge-queue)
 			cfg.Clear = serviceClear(os.Getenv, exec.LookPath, runQuiet)   // /clear after a declared hand-off (lifecycle part B)
 			cfg.Clear.Decisions = dispatch.NewClearDecisions()             // why a clear waits: logged, and read by clear-stall
 			cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &cfg.EscalateTo)

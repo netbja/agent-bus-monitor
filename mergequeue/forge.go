@@ -99,6 +99,9 @@ func run(ctx context.Context, dir string, env []string, name string, args ...str
 	return out.Bytes(), nil
 }
 
+// LookIn finds an executable name on env's PATH (what run would start).
+func LookIn(env []string, name string) (string, error) { return lookIn(env, name) }
+
 // lookIn finds an executable name on env's PATH.
 func lookIn(env []string, name string) (string, error) {
 	path := ""

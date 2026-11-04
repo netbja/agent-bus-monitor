@@ -48,7 +48,7 @@ var keyKinds = map[string]KeyClass{
 	"budget": KeyRuntime, "tokens": KeyRuntime, "sessions": KeyRuntime, "doctor": KeyRuntime,
 	"pilot": KeyRuntime, "dispatch": KeyRuntime, "conductor": KeyRuntime, "receiver:*": KeyRuntime,
 	"armed:*": KeyRuntime, "swap:*": KeyRuntime, "observed": KeyRuntime, "context": KeyRuntime,
-	"health:daily": KeyRuntime, "notified": KeyRuntime, "missionops": KeyRuntime, "missionops:results": KeyRuntime,
+	"health:daily": KeyRuntime, "notified": KeyRuntime, "mergequeue": KeyRuntime, "missionops": KeyRuntime, "missionops:results": KeyRuntime,
 }
 
 // ClassOf classifies key as project's: its class and the kind that matched

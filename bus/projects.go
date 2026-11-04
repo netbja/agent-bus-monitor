@@ -226,6 +226,7 @@ func sortProjects(list []ProjectSummary) {
 // deleted, and re-acquiring would recreate it. {p}:observed does not count
 // either: the dispatcher itself rewrites it every few seconds, so one write
 // racing a delete must not make the project look alive (it expires anyway).
+// {p}:mergequeue is the same: a cache the dispatcher rewrites.
 func (b *Bus) HasKeysBesidesDispatch(ctx context.Context) (bool, error) {
 	keys, err := ProjectKeys(ctx, b.r, b.project)
 	if err != nil {
@@ -236,7 +237,7 @@ func (b *Bus) HasKeysBesidesDispatch(ctx context.Context) (bool, error) {
 			k != HealthKey(b.project) && k != HealthLogKey(b.project) &&
 			k != HealthNotesKey(b.project) && k != HealthDailyKey(b.project) &&
 			k != SessionsKey(b.project) && k != TokensKey(b.project) && k != QuotaHistKey(b.project) &&
-			k != HandoffKey(b.project) && k != NotifiedKey(b.project) {
+			k != HandoffKey(b.project) && k != NotifiedKey(b.project) && k != MergeQueueKey(b.project) {
 			return true, nil
 		}
 	}

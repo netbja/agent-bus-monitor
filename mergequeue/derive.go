@@ -118,3 +118,13 @@ func Derive(in Input) Result {
 	sort.SliceStable(res.Items, func(i, j int) bool { return res.Items[i].ApprovedAt < res.Items[j].ApprovedAt })
 	return res
 }
+
+// ApprovedHeads are the heads some subject's deciding approve names: the only
+// ones the git fallback needs to judge (in base or not).
+func ApprovedHeads(vs []bus.Verdict) map[string]bool {
+	out := map[string]bool{}
+	for h := range candidates(vs) {
+		out[h] = true
+	}
+	return out
+}
