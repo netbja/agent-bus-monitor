@@ -121,8 +121,8 @@ section{padding-block:clamp(56px,9vw,104px)}
 .rib-line{stroke:var(--line);stroke-width:2;fill:none}
 .rib-line.live{stroke:var(--green);stroke-width:2;stroke-dasharray:3 9;opacity:.8}
 .rib-t{font:500 12px/1 var(--mono);fill:var(--muted);letter-spacing:.04em}
-.pkt{fill:var(--green);animation:travel 7s cubic-bezier(.5,0,.5,1) infinite}
-.pkt.two{fill:var(--amber);animation-delay:-3.5s;animation-direction:reverse}
+.pkt{fill:var(--green);animation:travel 4.5s cubic-bezier(.5,0,.5,1) 1 both}
+.pkt.two{fill:var(--amber);animation-direction:reverse}
 @keyframes travel{0%{transform:translateX(70px)}100%{transform:translateX(730px)}}
 .shot-hero{margin-top:18px}
 

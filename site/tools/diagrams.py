@@ -218,13 +218,13 @@ def fig_foureyes(t):
 # ------------------------------------------------------------------ figure 5: layers
 def fig_layers(t):
     f = Fig("f5", 900, 470, t("The layers that make a restart safe", "Les couches qui rendent un redémarrage sûr"),
-            t("Five layers, from Redis persistence at the bottom to once-per-episode marks at the top. Each one removes a failure of the layer below.",
-              "Cinq couches, de la persistance Redis en bas aux marques « une fois par épisode » en haut. Chacune supprime une défaillance de la couche du dessous."))
+            t("Five layers, from Redis persistence at the bottom to once-per-episode marks at the top. Each one reduces a failure of the layer below; none makes delivery lossless.",
+              "Cinq couches, de la persistance Redis en bas aux marques « une fois par épisode » en haut. Chacune réduit une défaillance de la couche du dessous ; aucune ne rend la livraison sans perte."))
     layers = [
-        ("svc", "5", t("Once per episode", "Une fois par épisode"), t("A notice and its mark are written in one script,", "Un avis et sa marque s'écrivent dans un même script,"), t("so a restarted service never repeats it.", "un service redémarré ne le répète donc jamais."), "FencedCmdOnce"),
+        ("svc", "5", t("Once per episode", "Une fois par épisode"), t("A notice and its mark are written in one script,", "Un avis et sa marque s'écrivent dans un même script,"), t("so a restarted service does not repeat it.", "un service redémarré ne le répète donc pas."), "FencedCmdOnce"),
         ("svc", "4", t("Fenced writes", "Écritures protégées"), t("Every write first checks the service's lease token.", "Chaque écriture vérifie d'abord le jeton de bail du service."), t("A stale service, or a deleted project, writes nothing.", "Un service périmé, ou un projet supprimé, n'écrit rien."), t("Lua · lease token", "Lua · jeton de bail")),
         ("svc", "3", t("Stateless services", "Services sans état"), t("Dispatcher and conductor keep no durable local state:", "Répartiteur et conducteur ne gardent aucun état local durable :"), t("each decision is recomputed from Redis and herdr.", "chaque décision est recalculée depuis Redis et herdr."), "systemd --user · launchd"),
-        ("bus", "2", t("Per-agent queues", "Files par agent"), t("One consumer group per agent: at-least-once delivery,", "Un groupe de consommateurs par agent : livraison au moins une fois,"), t("unacknowledged entries come back first.", "les entrées non acquittées reviennent d'abord."), t("24 h horizon", "horizon de 24 h")),
+        ("bus", "2", t("Per-agent queues", "Files par agent"), t("One group per agent: entries not yet acknowledged return first,", "Un groupe par agent : les entrées non acquittées reviennent d'abord,"), t("but streams are capped (~1000 entries) and old ones are trimmed.", "mais les flux sont plafonnés (~1000 entrées) et les anciennes sont élaguées."), t("--drain acks after output", "--drain acquitte après sortie")),
         ("bus", "1", t("Redis persistence", "Persistance de Redis"), t("The broker writes an append-only file", "Le courtier écrit un fichier en ajout seul"), t("to a named Docker volume.", "dans un volume Docker nommé."), "--appendonly yes"),
     ]
     y = 14
