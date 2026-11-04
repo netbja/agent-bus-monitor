@@ -1064,7 +1064,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   runs suspend, `startRun` in `sleep.go`: one child at a time, its own session, output in `<state>/agentbus/backup.log`,
   its last line the notice, its end reading the page again), one row per archive of this host (`backup.List`: date, size,
   projects, secrets or not), and the last runs from `backup-last.json` (errors through `health.Redact`); Enter on an
-  archive opens its coverage and the restore dry runs to copy (`y`, the path shell-quoted); busmon restores nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `cmd/agentbus/backupcheck.go` the reader; 15 min,
+  archive opens its coverage, the restore dry runs to copy (`y`, the path shell-quoted) and what takes each project offline first (`agentbus down <p>`, its herdr workspace closed: a suspend keeps the agents and the workspace, which restore refuses even with `--force`; `backupOfflineSteps`); busmon restores nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `cmd/agentbus/backupcheck.go` the reader; 15 min,
   for you, `agentbus backup`): per project, warn on no covering archive younger than `backup.warn_after` (168h, `0` =
   this reminder off), on the latest scheduled attempt covering it failed while `daily` (cleared by a newer covering
   archive; the age case only by one with secrets, read from `coverage.json`'s `secrets`), on its latest
