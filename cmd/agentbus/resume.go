@@ -190,15 +190,28 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 		say("not suspended: nothing to resume")
 		return 0
 	}
+	// keep is every way out that leaves the project suspended: said, and,
+	// for a resume the workspace hook started, told to the person too, since
+	// nobody reads the hook's log (reviewer-codex).
+	keep := func(format string, a ...any) int {
+		line := p + " stays suspended: " + fmt.Sprintf(format, a...)
+		fmt.Fprintln(errw, line)
+		if d.Getenv(resumeHookEnv) == "1" {
+			if _, err := b.PersonNotice(ctx, by, line); err != nil {
+				fmt.Fprintf(errw, "%s: the notice was not written: %v\n", p, err)
+			}
+		}
+		return 1
+	}
 	// The agents that must come back: read before anything is done, since a
 	// template that cannot be read would otherwise stand for none to wait for.
 	roles, err := d.BootRoles(p)
 	if err != nil {
-		return fail("reading the template: %v: its agents cannot be checked, so it stays suspended; nothing done", err)
+		return keep("reading the template: %v: its agents cannot be checked; nothing done", err)
 	}
 	live, err := b.Agents(ctx)
 	if err != nil {
-		return fail("reading the agents: %v; nothing done", err)
+		return keep("reading the agents: %v; nothing done", err)
 	}
 	snapPath := filepath.Join(d.StateDir(p), suspendSnapshotFile)
 	snap, serr := loadSnapshot(snapPath)
@@ -282,25 +295,15 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 	missing := waitAlive(ctx, b, required, d)
 	pops := missingPops(ctx, b, required, d)
 	if len(svcFailed) > 0 {
-		fmt.Fprintf(errw, "%s: stays suspended: %s not running (agentbus --project %s service start <kind>, then agentbus resume again)\n",
-			p, strings.Join(svcFailed, ", "), p)
-		return 1
+		return keep("%s not running (agentbus --project %s service start <kind>, then agentbus resume again)", strings.Join(svcFailed, ", "), p)
 	}
 	if len(missing) > 0 && !o.partial {
-		line := fmt.Sprintf("%s stays suspended: %s not back (agentbus resume again once they are, or agentbus resume --partial to lift it anyway)",
-			p, strings.Join(missing, ", "))
-		fmt.Fprintln(errw, line)
-		if d.Getenv(resumeHookEnv) == "1" { // nobody reads the hook's log
-			if _, err := b.PersonNotice(ctx, by, line); err != nil {
-				fmt.Fprintf(errw, "%s: the notice was not written: %v\n", p, err)
-			}
-		}
-		return 1
+		return keep("%s not back (agentbus resume again once they are, or agentbus resume --partial to lift it anyway)", strings.Join(missing, ", "))
 	}
 	summary := resumeSummary(p, rec, snap, haveSnap, required, missing, pops, o.message)
 	restored, _, err := b.Unsuspend(ctx, raw, by, summary)
 	if err != nil {
-		return fail("lifting the suspend: %v", err)
+		return keep("lifting the suspend: %v", err)
 	}
 	if restored {
 		say("resumed; the previous pause (%s, until %s) is back", rec.Prev.Reason, time.UnixMilli(rec.Prev.Until).Format("15:04"))

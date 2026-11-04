@@ -96,8 +96,21 @@ func runResumeAll(ctx context.Context, args []string, d resumeDeps, out, errw io
 	return code
 }
 
-// resumeOne takes §5 for a suspended project, §7 for any other.
+// resumeOne takes §5 for a suspended project, §7 for any other. The project
+// lock is taken before the pause is read and held through either path (given
+// a copy of d without it, so neither takes it again): a suspend that lands
+// between the choice and the work can never get the crash path
+// (reviewer-codex).
 func resumeOne(ctx context.Context, p string, o resumeOptions, d resumeDeps, out, errw io.Writer) int {
+	if d.Lock != nil {
+		unlock, err := d.Lock(p)
+		if err != nil {
+			fmt.Fprintf(errw, "%s: %v (a suspend or another resume of it is running); nothing done\n", p, err)
+			return 1
+		}
+		defer unlock()
+		d.Lock = nil
+	}
 	b, err := d.Bus(p)
 	if err != nil {
 		fmt.Fprintf(errw, "%s: broker unreachable: %v\n", p, err)

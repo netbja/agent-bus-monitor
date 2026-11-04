@@ -123,19 +123,79 @@ func TestResumeAllOfASuspendedProject(t *testing.T) {
 	}
 }
 
-// A resume the hook started that leaves the project suspended tells the
-// person by a for=person notice: nobody reads the hook's log.
-func TestHookResumeTellsThePersonWhenAnAgentIsMissing(t *testing.T) {
-	w := newResumeWorld(t, "master", "coder")
-	w.suspendNow()
-	w.kill("coder")
-	w.env[resumeHookEnv] = "1"
-	if code, _, _ := w.resume(); code != 1 {
-		t.Fatalf("resume = %d", code)
+// Every way a resume the hook started leaves the project suspended tells the
+// person by a for=person notice: nobody reads the hook's log (reviewer-codex).
+func TestHookResumeTellsThePersonWhenItStaysSuspended(t *testing.T) {
+	for _, tc := range []struct {
+		name, want string
+		set        func(*resumeWorld)
+	}{
+		{"agent missing", "coder not back", func(w *resumeWorld) { w.kill("coder") }},
+		{"service not started", "missions not running", func(w *resumeWorld) {
+			w.mgr.active[w.b.Project()+"/dispatch"] = false
+			w.mgr.failStart = true
+		}},
+		{"template unreadable", "reading the template", func(w *resumeWorld) { w.bootErr = errors.New("no such file") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newResumeWorld(t, "master", "coder")
+			w.suspendNow()
+			tc.set(w)
+			w.env[resumeHookEnv] = "1"
+			if code, _, _ := w.resume(); code != 1 {
+				t.Fatalf("resume = %d", code)
+			}
+			if p := w.pause(); p == nil || !p.Suspended() {
+				t.Fatalf("pause = %+v", p)
+			}
+			evs, _, err := w.b.Recent(context.Background(), []string{"notify"}, 10)
+			if err != nil || len(evs) == 0 {
+				t.Fatalf("no notice: %v", err)
+			}
+			last := evs[len(evs)-1]
+			if !strings.Contains(last.Message, "stays suspended") || !strings.Contains(last.Message, tc.want) {
+				t.Fatalf("notice = %+v", last)
+			}
+			// The person's own resume says it on the terminal only.
+			delete(w.env, resumeHookEnv)
+			n := len(evs)
+			w.resume()
+			if evs, _, _ = w.b.Recent(context.Background(), []string{"notify"}, 10); len(evs) != n {
+				t.Fatalf("a notice without the hook: %+v", evs[len(evs)-1])
+			}
+		})
 	}
-	evs, _, err := w.b.Recent(context.Background(), []string{"notify"}, 10)
-	if err != nil || len(evs) == 0 || !strings.Contains(evs[len(evs)-1].Message, "stays suspended") {
-		t.Fatalf("notice = %+v %v", evs, err)
+}
+
+// resume --all reads the pause under the project lock: a suspend that lands
+// between the choice of projects and the lock takes §5, never the crash path
+// (reviewer-codex).
+func TestResumeAllChoosesUnderTheLock(t *testing.T) {
+	w := newResumeWorld(t, "master")
+	w.mgr.active[w.b.Project()+"/dispatch"] = false
+	locked := 0
+	w.lock = func(string) (func(), error) {
+		locked++
+		if locked == 1 { // the suspend completes just before resume gets the lock
+			off := map[string]bool{"dispatch": false, "missions": false}
+			if _, _, _, err := w.b.Suspend(context.Background(), bus.SuspendSpec{By: "dana", Notify: "master", Services: off}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return func() {}, nil
+	}
+	code, out, errw := w.all("--yes")
+	if code != 0 {
+		t.Fatalf("resume --all = %d\n%s\n%s", code, out, errw)
+	}
+	if locked != 1 {
+		t.Fatalf("the lock was taken %d times", locked)
+	}
+	if w.mgr.active[w.b.Project()+"/dispatch"] {
+		t.Fatal("the crash path started dispatch on a project suspended with dispatch off")
+	}
+	if last := w.lastCmd(); !strings.Contains(last.Message, "after a suspend") {
+		t.Fatalf("directive = %+v", last)
 	}
 }
 
