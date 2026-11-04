@@ -11,9 +11,10 @@ import (
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
-// When nothing is expected from the person, For you says so, and what is in
-// progress and the next decision to come (the person: "I must always know
-// what is expected"), from what busmon already reads: agents and the plan.
+// When nothing is expected from the person, For you says so, and the next
+// decision to come (the person: "I must always know what is expected"), from
+// the plan; what is in progress is the Agents panel's, never repeated here
+// (foryou-no-progress).
 func TestForYouEmptyState(t *testing.T) {
 	s := snapshot{agents: map[string]*agentState{
 		"coder":    {state: "working", message: "pages step 4: recap"},
@@ -25,35 +26,36 @@ func TestForYouEmptyState(t *testing.T) {
 		{Task: plan.Task{ID: "notifications-order", Title: "Decide: notifications order", Owner: plan.Person}, State: plan.Upcoming},
 	}
 	text := plainOf(forYouEmpty(s, 0))
-	// In progress names the agent and its current task from the facts (its plan
-	// task in progress), never its status message (the person saw a merged task).
-	for _, w := range []string{"Nothing expected from you.", "In progress: coder " + GlyphNone + " pages-4", "Next for you: Decide: notifications order"} {
-		if !strings.Contains(text, w) {
-			t.Errorf("empty state lacks %q:\n%s", w, text)
+	if text != "Nothing expected from you.\nNext for you: Decide: notifications order" {
+		t.Errorf("empty state:\n%s", text)
+	}
+	for _, w := range []string{"In progress", "coder", "pages-4", "foureyes"} {
+		if strings.Contains(text, w) {
+			t.Errorf("the empty state repeats the Agents panel (%q):\n%s", w, text)
 		}
 	}
-	if strings.Contains(text, "foureyes") {
-		t.Errorf("an idle agent listed as in progress:\n%s", text)
-	}
-	// Nothing in progress, no plan: it still says what it knows.
+	// No plan: it still says what it knows.
 	text = plainOf(forYouEmpty(snapshot{}, 0))
-	if !strings.Contains(text, "Nothing expected from you.") || !strings.Contains(text, "In progress: nobody declares working") || !strings.Contains(text, "Next for you: no decision planned") {
+	if text != "Nothing expected from you.\nNext for you: no decision planned" {
 		t.Errorf("bare empty state:\n%s", text)
 	}
 }
 
-// Through the shell: an empty For you shows the three lines whole (the
-// Requests fixture's shell has nothing for the person).
+// Through the shell: an empty For you shows its two lines whole (the
+// Requests fixture's shell has nothing for the person), no In progress.
 func TestForYouPanelShowsTheEmptyState(t *testing.T) {
 	m := reqShell(t, 120, 40, nil)
 	if len(m.forYou) != 0 {
 		t.Fatalf("fixture has %d for-you items", len(m.forYou))
 	}
 	screen := m.grid().plain()
-	for _, w := range []string{"Nothing expected from you.", "In progress:", "Next for you:"} {
+	for _, w := range []string{"Nothing expected from you.", "Next for you:"} {
 		if !strings.Contains(screen, w) {
 			t.Errorf("For you lacks %q:\n%s", w, screen)
 		}
+	}
+	if strings.Contains(screen, "In progress") {
+		t.Errorf("For you repeats the Agents panel:\n%s", screen)
 	}
 }
 
@@ -255,32 +257,8 @@ func TestRecapCursorKeepsItsRowOnResize(t *testing.T) {
 	}
 }
 
-// The facts win over a stale message: an accepted board task names what an
-// agent works on; with none, only its name.
-func TestForYouEmptyInProgressFromFacts(t *testing.T) {
-	s := snapshot{agents: map[string]*agentState{"coder": {state: "working", message: "codex-review-auth: boot reads"}},
-		board: map[string]bus.BoardEntry{"history": {Owner: "coder", State: "accepted"}, "a-merged": {Owner: "coder", State: "done"}}}
-	text := plainOf(forYouEmpty(s, 0))
-	if !strings.Contains(text, "In progress: coder "+GlyphNone+" history") || strings.Contains(text, "codex-review-auth") {
-		t.Fatalf("in progress:\n%s", text)
-	}
-	// A finished board task is never in progress: the plan's task in progress
-	// is named, else only the agent.
-	for _, st := range []string{"done", "complete", "blocked"} {
-		s.board = map[string]bus.BoardEntry{"a-merged": {Owner: "coder", State: st}}
-		s.planState = planState{loaded: true, rows: []plan.Row{{Task: plan.Task{ID: "auto-state", Owner: "coder"}, State: plan.InProgress}}}
-		if text := plainOf(forYouEmpty(s, 0)); !strings.Contains(text, "In progress: coder "+GlyphNone+" auto-state") || strings.Contains(text, "a-merged") {
-			t.Fatalf("board %s:\n%s", st, text)
-		}
-		s.planState = planState{}
-		if text := plainOf(forYouEmpty(s, 0)); !strings.Contains(text, "In progress: coder\n") {
-			t.Fatalf("board %s, no plan: %s", st, text)
-		}
-	}
-}
-
-// Every empty-state line that names something opens it: the agent's page, the
-// plan task's page; a waiting plan task item opens its page too.
+// The next decision's line opens the plan task's page; a waiting plan task
+// item opens its page too.
 func TestForYouEmptyRowsOpen(t *testing.T) {
 	m := reqShell(t, 120, 40, nil)
 	snap := m.snap
@@ -288,7 +266,7 @@ func TestForYouEmptyRowsOpen(t *testing.T) {
 	snap.planState.loaded = true
 	snap.planState.rows = []plan.Row{{Task: plan.Task{ID: "tag", Title: "Reinstall and tag", Owner: plan.Person}, State: plan.Upcoming}}
 	m = step(t, m, pollMsg{snap: snap, at: shellNow})
-	for key, want := range map[string]overlayKind{"empty:agent:coder": ovAgent, "empty:plan:tag": ovPlanTask} {
+	for key, want := range map[string]overlayKind{"empty:plan:tag": ovPlanTask} {
 		n := m
 		n.focusPanel(PanelForYou)
 		n.lists.forYou.Select(key)

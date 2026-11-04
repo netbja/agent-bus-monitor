@@ -221,10 +221,7 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 		m.expand(p, key)
 	case PanelForYou:
-		if name, ok := strings.CutPrefix(key, "empty:agent:"); ok { // the empty state's rows
-			return m.pushAgent(name)
-		}
-		if task, ok := strings.CutPrefix(key, "empty:plan:"); ok {
+		if task, ok := strings.CutPrefix(key, "empty:plan:"); ok { // the empty state's next decision
 			return m.push(page{kind: ovPlanTask, key: task})
 		}
 		i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Key == key })
