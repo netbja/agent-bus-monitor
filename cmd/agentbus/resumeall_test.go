@@ -297,6 +297,34 @@ func TestHookOnASuspendedProject(t *testing.T) {
 	}
 }
 
+// One auto-resume try per boot and suspend (foureyes): a second event on the
+// same boot starts nothing and says why; a new boot, or a new suspend, tries
+// again; a mark it cannot write starts nothing.
+func TestHookAutoResumesOncePerBoot(t *testing.T) {
+	h := newHookWorld(t)
+	h.rec = suspendedOn("host-a", "boot-1")
+	if code, out := h.run(); code != 0 || len(h.spawned) != 1 {
+		t.Fatalf("first event = %d %q, spawned %v", code, out, h.spawned)
+	}
+	code, out := h.run()
+	if code != 0 || len(h.spawned) != 1 || !strings.Contains(out, "did not complete") {
+		t.Fatalf("second event = %d %q, spawned %v", code, out, h.spawned)
+	}
+	h.boot = "boot-3" // rebooted again
+	if h.run(); len(h.spawned) != 2 {
+		t.Fatalf("a new boot did not try again: %v", h.spawned)
+	}
+	h.rec.At++ // suspended anew
+	if h.run(); len(h.spawned) != 3 {
+		t.Fatalf("a new suspend did not try again: %v", h.spawned)
+	}
+	h.d.Paths.StateHome = "/proc/agentbus-nowhere" // the mark cannot be written
+	h.boot = "boot-4"
+	if code, out := h.run(); code != 1 || len(h.spawned) != 3 || !strings.Contains(out, "not resumed") {
+		t.Fatalf("unwritable mark = %d %q, spawned %v", code, out, h.spawned)
+	}
+}
+
 // The resume the hook starts is exactly agentbus --project <p> resume --yes:
 // never --partial.
 func TestHookResumeArgv(t *testing.T) {

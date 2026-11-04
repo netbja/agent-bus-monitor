@@ -1370,7 +1370,9 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (`upHook`, `hookSuspended`; real deps `withSuspendHook`) reads the pause (2 s) and on a suspended project starts no
   service: with `suspend.auto_resume` (Services, Bool, off, `AGENT_BUS_SUSPEND_AUTO_RESUME`) on, and only when the
   record's host is this host and its boot is known and differs from the current one, with a recorded `identity.as`
-  and the lock free (else `resume already running`), it starts `agentbus --project <p> resume --yes` detached
+  and the lock free (else `resume already running`), once per boot and suspend (`auto-resume.json` in the project's
+  state dir, boot and the suspend's `at`, read and written under the lock before the spawn; a later focus on that boot
+  says the auto-resume did not complete and starts nothing; a mark it cannot write starts nothing), it starts `agentbus --project <p> resume --yes` detached
   (`hookResumeArgv`, never `--partial`; `spawnDetachedLog`, output in the project's `suspend.log`) with
   `AGENTBUS_RESUME_HOOK=1`, so every way such a resume leaves the project suspended (template or agents unreadable, a
   service not started, an agent missing, the lift failing: `keep` in `runSuspendedResume`) also writes a `for=person`

@@ -909,18 +909,74 @@ func hookSuspended(d upDeps, project string, rec *bus.PauseRecord, stdout, stder
 			fmt.Fprintf(stderr, "agentbus: %s: %v: not resumed\n", project, err)
 			return 1
 		}
-		unlock() // the resume takes it again for its whole run
+		defer unlock() // released before the resume takes it again for its whole run
 	}
 	if d.SpawnResume == nil {
 		return 0
 	}
-	log := filepath.Join(d.Paths.StateDir(project), "suspend.log")
+	// One try per boot and suspend (foureyes): a resume that stays suspended
+	// is not started again on every focus, each with its own notice. The
+	// mark is read and written under the lock, before the spawn; one that
+	// cannot be written starts nothing.
+	dir := d.Paths.StateDir(project)
+	mark := autoResumeMark{Boot: boot, At: rec.At}
+	if autoResumeTried(filepath.Join(dir, autoResumeFile), mark) {
+		fmt.Fprintf(stdout, "%s: suspended: the auto-resume on this boot did not complete (agentbus resume brings it back; see %s)\n",
+			project, filepath.Join(dir, "suspend.log"))
+		return 0
+	}
+	if err := writeAutoResumeMark(dir, mark); err != nil {
+		fmt.Fprintf(stderr, "agentbus: %s: recording the auto-resume: %v: not resumed (agentbus resume brings it back)\n", project, err)
+		return 1
+	}
+	log := filepath.Join(dir, "suspend.log")
 	if err := d.SpawnResume(project, log); err != nil {
 		fmt.Fprintf(stderr, "agentbus: %s: starting the resume: %v (agentbus resume brings it back)\n", project, err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "%s: suspended before this boot: resuming (log: %s)\n", project, log)
 	return 0
+}
+
+// autoResumeFile records the auto-resume the hook started: the boot and the
+// suspend it was for.
+const autoResumeFile = "auto-resume.json"
+
+type autoResumeMark struct {
+	Boot string `json:"boot"`
+	At   int64  `json:"at"` // the suspend's at
+}
+
+// autoResumeTried: the hook already started the auto-resume of this suspend on
+// this boot. An unreadable mark reads as not tried.
+func autoResumeTried(path string, m autoResumeMark) bool {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var old autoResumeMark
+	return json.Unmarshal(raw, &old) == nil && old == m
+}
+
+// writeAutoResumeMark writes the mark 0600 in a 0700 directory, by a rename.
+func writeAutoResumeMark(dir string, m autoResumeMark) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	raw, _ := json.Marshal(m)
+	tmp, err := os.CreateTemp(dir, ".auto-resume-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), filepath.Join(dir, autoResumeFile))
 }
 
 // checkClients (installer-no-client) refuses before any service starts or any

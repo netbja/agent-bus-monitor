@@ -395,6 +395,11 @@ suspended project it reads the pause (2 s) and, by the setting `suspend.auto_res
   notice). The hook must not hold herdr's event: it starts the resume as a detached child
   (`setsid`, as `report-resume`'s sender), its output in `<state>/agentbus/<p>/suspend.log`, and
   returns at once. `upLock` makes a second event while one runs a no-op (`resume already running`).
+  It tries **once per boot and suspend** (foureyes): the boot and the suspend's `at` are recorded in
+  `<state>/agentbus/<p>/auto-resume.json` under the lock before the spawn, and a later focus on that boot,
+  the resume having left the project suspended, prints `suspended: the auto-resume on this boot did not
+  complete (agentbus resume brings it back)` and starts nothing, so a missing agent never earns the
+  person a new resume and a new notice at every focus. A mark that cannot be written starts nothing.
   The resume directive and the notice are written as the person (`identity.as`), since the setting is
   the person's standing consent; with no recorded name the hook does not resume and says why.
 
