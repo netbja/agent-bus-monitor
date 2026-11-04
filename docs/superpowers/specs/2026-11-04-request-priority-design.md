@@ -55,16 +55,21 @@ Why on the board:
   script that decodes the whole entry with `cjson` and re-encodes it: `publishRequest`,
   `requestTransition`, `deliveryRecord`, the conductor's fenced writes and `boardMutation`. So a
   field it does not know survives an accept, a block, a delivery record or a done.
-- No Go code writes a board entry back from a struct. A test pins this (§9).
+- One Go helper does write a whole entry from a struct: `boardSet` (`bus/board.go`,
+  `json.Marshal` of a `BoardEntry` then `HSET`), called today only by `delivery_review_test.go`. A
+  struct round trip would drop a field the struct does not know. This change moves `boardSet` into
+  a `_test.go` file of package `bus`, so production code has no struct writer of the board, and §9
+  step 3 keeps it that way.
 - `board` is a `KeyRecord` in `bus/keykinds.go` and already in `projectKinds`. A backup and a
   restore carry the priority with the request. `TestEveryWrittenKeyKindIsClassified` and
   `projectKinds` do not change.
 
 **End of life:**
 
-- A `board drop` removes the entry, priority included.
-- A `board claim` of a done task replaces the entry, so new work starts at normal.
-- A new request for the same task name is refused while the entry exists (`publishRequest`).
+- Only `board drop` ends a tracked request: it deletes the entry, priority included.
+  `boardMutation` refuses claim and state on any entry carrying `request`, done or not ("tracked
+  request: use request accept/block/done or explicit board drop"). `publishRequest` refuses a new
+  request while the entry exists. So a task name's next request starts at normal only after a drop.
 
 ## 4. Who may write, and how
 
@@ -227,8 +232,14 @@ Test-first, one step each:
      trimmed still holds the agent (in hand needs no body); an expired deadline reads `expired` and
      is skipped.
    - **Mutants:** remove the done refusal; store `normal` instead of deleting.
-3. **The no-Go-writer test:** an AST walk over the module that fails on an `HSet` to `BoardKey(…)`
-   outside a script. It keeps §3's survival argument true.
+3. **The no-struct-writer test:** an AST walk over the module's non-test files that fails on:
+   - any `json.Marshal` of a `BoardEntry` or `RequestInfo` value or pointer (type-checked with
+     `go/types`, so a parameter or a variable is caught, not only a literal);
+   - any `HSet`, `HSetNX` or `HMSet` call whose key argument's data flow (call arguments,
+     assignments and parameters, followed to a fixpoint) reaches `BoardKey`.
+
+   It keeps §3's survival argument true. It fails today on `boardSet` (key passed as a parameter),
+   so it is written before `boardSet` moves to a test file (red, then green).
 4. **CLI:**
    - `request priority` without `--as`, with `AGENT_BUS_AGENT`, and under an agent ancestor (the
      injected `AgentCaller`): all refused;
