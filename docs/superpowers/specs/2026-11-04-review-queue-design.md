@@ -29,7 +29,10 @@ verdict on it. Two cases:
 **(a) Owed: an open gate.** A gate is open on a non-dormant reviewer, its challenge has been
 delivered (it is not among the reviewer's unread or pending entries, which `cmd-delivery` and the
 dispatcher already cover), and its challenge entry is older than `stall_after`. The detail names
-the reviewer, the gate's subject (or its ref) and the age.
+the reviewer, the gate's subject (or its ref) and the age. A gate whose challenge entry is no longer
+retained is never owed: a consumer group skips an entry trimmed before it read it, so even a cursor
+past it proves nothing. It is named "not judged", and the check reads unknown when nothing else is
+owed (reviewer-codex).
 
 **(b) Half-approved.** For a subject S whose roll-up is `APPROVED`, take the deciding approval D,
 with its `Head` when it names one. S is half-approved when some other reviewer R (not D's reviewer

@@ -23,6 +23,9 @@ type ReviewGate struct {
 	Reviewer, Ref, Subject string    // Subject "" when the challenge named none
 	At                     time.Time // its challenge entry's time; zero when no longer retained (old)
 	Delivered              bool      // read by the reviewer: neither unread nor pending
+	// DeliveryUnknown: its challenge is no longer retained and the cursor
+	// cannot prove it read (reviewer-codex): never owed, named "not judged".
+	DeliveryUnknown bool
 }
 
 // ReviewVerdict is one ledger entry, in ledger order.
@@ -70,12 +73,29 @@ func EvaluateReviewQueue(in ReviewQueueInput) Outcome {
 		return Outcome{Status: OK, Detail: truncateDetail("work is open: " + strings.Join(open.items(), ", "))}
 	}
 	owed := owedReviews(in)
+	var unjudged []string
+	for _, g := range in.Gates {
+		if g.DeliveryUnknown {
+			unjudged = append(unjudged, fmt.Sprintf("%s's gate %s (challenge no longer retained)", g.Reviewer, g.Ref))
+		}
+	}
+	sort.Strings(unjudged)
+	notJudged := ""
+	if len(unjudged) > 0 {
+		notJudged = "not judged: " + strings.Join(unjudged, ", ")
+	}
 	if len(owed) == 0 {
+		if notJudged != "" {
+			return Outcome{Status: Unknown, Detail: truncateDetail(notJudged)}
+		}
 		return Outcome{Status: OK, Detail: "no review owed"}
 	}
 	texts := make([]string, len(owed))
 	for i, o := range owed {
 		texts[i] = o.text
+	}
+	if notJudged != "" {
+		texts = append(texts, notJudged)
 	}
 	return Outcome{Status: Warn, Detail: truncateDetail(fmt.Sprintf("team idle %s; %s", minutes(idleFor), strings.Join(texts, "; ")))}
 }
@@ -112,7 +132,7 @@ func owedReviews(in ReviewQueueInput) []owedReview {
 			gatedOn[g.Reviewer+"|"+g.Subject] = true
 		}
 		age := in.Now.Sub(g.At)
-		if !g.Delivered || dormant[g.Reviewer] || (!g.At.IsZero() && age < in.After) {
+		if !g.Delivered || g.DeliveryUnknown || dormant[g.Reviewer] || (!g.At.IsZero() && age < in.After) {
 			continue
 		}
 		name := g.Subject

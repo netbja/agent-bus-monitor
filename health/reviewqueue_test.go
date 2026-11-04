@@ -153,6 +153,7 @@ func TestReviewQueueOwedGate(t *testing.T) {
 		{"younger than stall_after", func(g *ReviewGate, _ *ReviewQueueInput) { g.At = rqNow.Add(-5 * time.Minute) }, false},
 		{"reviewer dormant", func(_ *ReviewGate, in *ReviewQueueInput) { in.Agents[3].Dormant = true }, false},
 		{"no subject names the ref", func(g *ReviewGate, _ *ReviewQueueInput) { g.Subject = "" }, true},
+		{"delivery unknown is never owed", func(g *ReviewGate, _ *ReviewQueueInput) { g.Delivered, g.DeliveryUnknown = false, true }, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -198,5 +199,26 @@ func TestReviewQueueWakes(t *testing.T) {
 	in.Agents[0].State = "working"
 	if none := ReviewQueueWakes(in, "master"); len(none) != 0 {
 		t.Fatalf("no wake unless the check warns: %+v", none)
+	}
+}
+
+// A gate whose delivery cannot be read is not judged: unknown when nothing
+// is owed, named beside what is owed otherwise (reviewer-codex).
+func TestReviewQueueUnjudgedGate(t *testing.T) {
+	in := rqIdle()
+	in.Gates = []ReviewGate{{Reviewer: "reviewer-codex", Ref: "r1", Subject: "x", DeliveryUnknown: true}}
+	out := EvaluateReviewQueue(in)
+	if out.Status != Unknown || !strings.Contains(out.Detail, "not judged: reviewer-codex's gate r1 (challenge no longer retained)") {
+		t.Fatalf("unjudged alone: %s %q", out.Status, out.Detail)
+	}
+	if w := ReviewQueueWakes(in, "master"); len(w) != 0 {
+		t.Fatalf("an unjudged gate woke master: %+v", w)
+	}
+	in.Verdicts = []ReviewVerdict{
+		rqVerdict("s", "reviewer-codex", "approve", headA, "", 3*time.Hour),
+		rqVerdict("s", "foureyes", "approve", headB, "", 2*time.Hour)}
+	out = EvaluateReviewQueue(in)
+	if out.Status != Warn || !strings.Contains(out.Detail, "s approved by foureyes") || !strings.Contains(out.Detail, "not judged: reviewer-codex's gate r1") {
+		t.Fatalf("owed and unjudged: %s %q", out.Status, out.Detail)
 	}
 }

@@ -988,7 +988,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). `review-queue` (spec
   `docs/superpowers/specs/2026-11-04-review-queue-design.md`; `health/reviewqueue.go` pure, `cmd/agentbus/reviewqueue.go`
   the reader) warns (master) when the same idle team (`teamIdle`, shared with `team-stall`), nothing else open (gates
-  aside), owes a review: an open gate whose challenge the reviewer read, older than `stall_after`; or a subject approved
+  aside), owes a review: an open gate whose challenge the reviewer read, older than `stall_after` (a challenge no longer retained is
+  never proved read, a group skipping trimmed entries: not judged, unknown when nothing is owed); or a subject approved
   within 72 h (fixed) and not done in the plan, where a reviewer who engaged with it (a verdict on it, an open gate on
   it, or a challenge under a ref a verdict on it carries) has no approve of the deciding head; the `StallWake` hook
   wakes master once per owed set (mark `stall-review`, episode a hash of the owed keys); never fail. busmon shows the health pill, F5

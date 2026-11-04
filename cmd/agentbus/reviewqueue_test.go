@@ -84,3 +84,38 @@ func TestReviewQueueReadsAnOwedGate(t *testing.T) {
 		t.Fatalf("an off check woke master: %q", got)
 	}
 }
+
+// A gate whose challenge was trimmed is never owed: a group skips an entry
+// trimmed before it read it, so even a cursor past it proves nothing; it is
+// not judged (reviewer-codex).
+func TestReviewQueueTrimmedChallenge(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	if err := w.b.OpenChallenge(ctx, "coder", "r1", bus.FormatGateMeta("master", "focus-notice", "review it")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.b.Cmd(ctx, "master", "coder", bus.CmdChallenge, "r1", "review it"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.b.Purge(ctx, []string{"cmd"}); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.reviewQueue); out.Status != health.Unknown || !strings.Contains(out.Detail, "not judged: coder's gate r1") {
+		t.Fatalf("unread, then trimmed: %+v", out)
+	}
+	if _, err := w.b.CmdNoWake(ctx, "master", "coder", bus.CmdDirective, "", "note for coder"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.b.DrainCmd(ctx, "coder", "test", bus.DefaultHorizon, func(bus.Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.reviewQueue); out.Status != health.Unknown || !strings.Contains(out.Detail, "not judged: coder's gate r1") {
+		t.Fatalf("the cursor passed the trimmed challenge unread: %+v", out)
+	}
+	if err := w.s.stallWake(ctx, "stall-holder", "review-queue"); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.dispatchDirectives("master"); len(got) != 0 {
+		t.Fatalf("an unjudged gate woke master: %q", got)
+	}
+}

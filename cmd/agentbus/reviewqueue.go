@@ -64,10 +64,15 @@ func (s *stallReader) reviewQueue(ctx context.Context) (health.Outcome, error) {
 			return fail("delivery cursors unavailable")
 		}
 		for ref, meta := range gates {
-			g := health.ReviewGate{Reviewer: name, Ref: ref, Subject: bus.ParseGateMeta(meta).Subject, Delivered: true}
-			if id, ok := challengeID[name+"|"+ref]; ok { // not retained: old, and long delivered
+			g := health.ReviewGate{Reviewer: name, Ref: ref, Subject: bus.ParseGateMeta(meta).Subject}
+			if id, ok := challengeID[name+"|"+ref]; ok {
 				g.At = time.UnixMilli(streamIDMillis(id))
 				g.Delivered = !health.StreamIDLess(o.LastDelivered, id) && !slices.Contains(o.PendingIDs, id)
+			} else {
+				// Trimmed: nothing proves it was read. A group skips an
+				// entry trimmed before it read it, so a cursor past it
+				// proves nothing either: not judged (reviewer-codex).
+				g.DeliveryUnknown = true
 			}
 			in.Gates = append(in.Gates, g)
 		}
