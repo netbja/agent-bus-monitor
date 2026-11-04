@@ -255,7 +255,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case sleepLineMsg:
 		return m.gotSleepLine(msg)
 	case sleepDoneMsg:
-		m.gotSleepDone(msg)
+		return m.gotSleepDone(msg)
 	case pastedImageMsg:
 		m.gotPastedImage(msg)
 	case resumeMsg:

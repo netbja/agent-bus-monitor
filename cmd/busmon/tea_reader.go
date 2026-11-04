@@ -492,6 +492,10 @@ func (m *Model) buildPage() bool {
 		p.title, p.body, p.hrows = historyBody(v, p.sel, time.Local, width)
 		p.sel = clamp(p.sel, 0, max(0, len(p.hrows)-1))
 	case ovSettings:
+		p.set.running = ""
+		if r := m.ui.sleepRun; r != nil && r.verb == "backup" {
+			p.set.running = "running" + GlyphEllipsis + " its last line is the notice (" + r.log + ")"
+		}
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
 	case ovTokens:
 		p.title = tokensTitle(s.budgets, s.holds, now)

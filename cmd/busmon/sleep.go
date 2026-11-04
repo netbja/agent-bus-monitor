@@ -113,20 +113,34 @@ func (m *Model) startSleep(resume bool) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = r.verb+" already running (see "+r.log+")", true
 		return nil
 	}
-	run, logOf, p := m.cfg.sleepRunner, m.cfg.sleepLog, m.cfg.project
+	logOf, p := m.cfg.sleepLog, m.cfg.project
 	verb := "suspend"
 	if resume {
 		verb = "resume"
 	}
-	if run == nil || logOf == nil {
+	if logOf == nil {
+		m.ui.flash, m.ui.flashErr = "no agentbus to run "+verb+" with", true
+		return nil
+	}
+	return m.startRun(verb, []string{"--project", p, verb, "--yes"}, logOf(p))
+}
+
+// startRun runs `agentbus args...` as a child, its output appended to log,
+// one run at a time whatever it is (Z's suspend or resume, the C page's
+// backup): its last line is the notice until it exits.
+func (m *Model) startRun(verb string, args []string, log string) tea.Cmd {
+	if r := m.ui.sleepRun; r != nil {
+		m.ui.flash, m.ui.flashErr = r.verb+" already running (see "+r.log+")", true
+		return nil
+	}
+	run := m.cfg.sleepRunner
+	if run == nil {
 		m.ui.flash, m.ui.flashErr = "no agentbus to run "+verb+" with", true
 		return nil
 	}
 	m.ui.sleepSeq++
 	id := m.ui.sleepSeq
-	m.ui.sleepRun = &sleepRun{id: id, verb: verb, log: logOf(p), last: "starting" + GlyphEllipsis}
-	args := []string{"--project", p, verb, "--yes"}
-	log := m.ui.sleepRun.log
+	m.ui.sleepRun = &sleepRun{id: id, verb: verb, log: log, last: "starting" + GlyphEllipsis}
 	return func() tea.Msg {
 		done, err := run(args, log)
 		return sleepStartedMsg{id: id, verb: verb, log: log, done: done, err: err}
@@ -165,22 +179,28 @@ func (m *Model) gotSleepLine(msg sleepLineMsg) tea.Cmd {
 	return sleepTick(r.id, r.log)
 }
 
-// gotSleepDone: the outcome is the notice, with the last line on a failure.
-func (m *Model) gotSleepDone(msg sleepDoneMsg) {
+// gotSleepDone: the outcome is the notice, with the last line on a failure;
+// a backup's end reads the C page again when it is open (its archives).
+func (m *Model) gotSleepDone(msg sleepDoneMsg) tea.Cmd {
 	r := m.ui.sleepRun
 	if r == nil || r.id != msg.id { // an earlier run's exit never ends this one
-		return
+		return nil
 	}
 	m.ui.sleepRun = nil
+	var reread tea.Cmd
+	if r.verb == "backup" && m.settingsPageOpen() != nil {
+		reread = m.settingsCmd(func() error { return nil })
+	}
 	if msg.err == nil {
 		m.notice.push(notice{text: r.verb + " done", level: noticeDone})
-		return
+		return reread
 	}
 	why := r.last
 	if why == "" || strings.HasPrefix(why, "starting") {
 		why = msg.err.Error()
 	}
 	m.notice.push(notice{text: r.verb + " failed: " + Preview(why) + " (" + r.log + ")", level: noticeAttention})
+	return reread
 }
 
 // sleepNotice is the run's line in the notice's place while it goes.
