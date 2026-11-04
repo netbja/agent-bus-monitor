@@ -4,6 +4,41 @@ This practical guide complements the `README.md`. It provides a complete step-by
 
 ---
 
+## Start a new project
+
+Once agent-bus is installed ([section 3](#3-step-by-step-terminal-installation)), one command, run in
+the project's folder, starts a team:
+
+```bash
+cd ~/code/myapp
+agentbus start
+```
+
+`agentbus start` deduces what it can: the project's name (from the folder, or the template a
+previous run wrote), your name (`agentbus identity set`, else `$USER`) and the team (every boot role of
+`roles.toml` by default: master, coder, foureyes and sentinel as shipped). It shows them once and asks only for what it cannot deduce.
+Then it runs `agentbus up` for you. Outside herdr, it opens the herdr session itself
+(`herdr --session <project>`) and the team opens inside it.
+
+- `agentbus start --yes` takes the deduced values without asking.
+- `agentbus start --dry-run` shows the plan and starts nothing.
+- `agentbus start ~/code/myapp` names the folder instead of the current one.
+- `--name <project>`, `--as <your-name>` and `--roles master,coder,foureyes` set a value
+  yourself; a reduced team is kept for the project and for the next new ones.
+
+**When to use `agentbus up` instead.** `up` is the strict, scriptable form: no questions and no
+deduction, the project named on the command line. Use it:
+
+- for a project that already exists: `agentbus up myapp` reopens it, and relaunches any agent that
+  is gone ([Scenario B](#scenario-b-resuming-an-existing-project));
+- with `--resume`, to bring the Claude Code agents back on their recorded sessions;
+- in a script that names everything: `agentbus up myapp ~/code/myapp --as <your-name>`;
+- for its other flags (`--tabs`, `--no-dispatch`, `--escalate-to`, `--dry-run`).
+
+[Section 5](#5-walkthrough-launching-and-managing-projects) walks through both.
+
+---
+
 ## 1. Overview & Core Features
 
 `agent-bus-monitor` is a decoupled, asynchronous multi-agent coordination bus built on **Redis Streams** and written in **Go**. It enables multiple autonomous agents (Claude Code, OpenAI Codex, Kimi CLI, etc.) to collaborate on a software project with complete visibility and oversight for the human operator.
@@ -52,7 +87,7 @@ This practical guide complements the `README.md`. It provides a complete step-by
      - **For you**: the questions, decisions, gates and unread messages only you can settle.
      - **Agents**: declared state (`working`, `idle`, `blocked`, `waiting`, `done`), freshness, queue, context fill, flags in words.
      - **Activity · Board · Requests · Plan**: the live feed, the shared task board, who owes whom an answer, the batch's plan.
-     - **Pages**: services (F3), health (F5), recap (`R`), plan (`P`), tokens (`U`), history (`H`), help (F1).
+     - **Pages**: services (F3), health (F5), recap (`R`), plan (`P`), tokens (`U`), history (`H`), about (`A`: the versions, `y` copies them), help (F1).
      - **Input**: `@coder ...` sends a directive that wakes the agent.
 
 4. **Event-Driven Dispatcher (`agentbus dispatch`)**
@@ -215,7 +250,8 @@ For security, the broker binds strictly to loopback (`127.0.0.1:6380`). Remote a
 
 ### Scenario A: Starting a Team on a NEW Project
 
-Assume your target project is at `~/code/myapp`.
+Assume your target project is at `~/code/myapp`. The short way is `cd ~/code/myapp && agentbus start`
+([Start a new project](#start-a-new-project)); below is what it does, step by step, with `agentbus up`.
 
 1. **Start herdr** (a session per project is handy):
    ```bash
@@ -582,7 +618,11 @@ to watch a pane.
   warning only if you add `for-you` to `notify.events`. The targets live in
   `~/.config/agentbus/notify.toml`, which you write yourself (agentbus never does), mode `0600` in a
   folder no one else can write: a topic, a token or a webhook is a secret, so it never goes in
-  `config.toml`, on the bus or in a log, and no agent may read the file.
+  `config.toml`, on the bus or in a log, and no agent may read the file. busmon's C page, group
+  Notifications, ends with an assistant per kind (`Set up ntfy`, `Set up Discord`, `Set up the
+  desktop`): Enter shows the steps, the file's state (target names and kinds, never a topic or a
+  URL), a table to copy with `y` (for ntfy a topic drawn on the spot, kept nowhere) and each
+  target's last test; you still paste it into the file yourself.
 
   ```toml
   [ntfy.phone]

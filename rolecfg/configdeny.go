@@ -12,7 +12,8 @@ import (
 // only": backup.after_command runs with the person's rights). The path is in
 // Claude Code's absolute form, "//" and the path. A path that cannot be
 // resolved (no HOME, a relative XDG_CONFIG_HOME) adds nothing, and note says
-// so. Defence in depth: an agent with a shell can still write the file.
+// so. Defence in depth: an agent with a shell can still write the file. Edit
+// covers the Write tool too: Claude Code never matches a Write(path) rule.
 // notify.toml beside it (the notification targets' secrets, notifications
 // spec) is denied Read as well.
 func ConfigDenies(getenv func(string) string) (denies []string, note string) {
@@ -27,6 +28,5 @@ func ConfigDenies(getenv func(string) string) (denies []string, note string) {
 		return nil, ""
 	}
 	abs, notify := "/"+path, "/"+filepath.Join(filepath.Dir(path), "notify.toml")
-	return []string{"Edit(" + abs + ")", "Write(" + abs + ")",
-		"Read(" + notify + ")", "Edit(" + notify + ")", "Write(" + notify + ")"}, ""
+	return []string{"Edit(" + abs + ")", "Read(" + notify + ")", "Edit(" + notify + ")"}, ""
 }

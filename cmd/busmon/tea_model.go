@@ -48,6 +48,8 @@ type shellConfig struct {
 	tour          *tourMarker    // the machine's tour marker; nil = the tour never opens by itself
 	// docker runs the F3 pages' docker reads; nil = none at all (tests).
 	docker svcRunner
+	// about is where About reads the versions it cannot know itself.
+	about aboutSources
 	// brokerHost is --host, which overrides REDIS_HOST (bus.Connect): the
 	// Redis page states container facts only for the broker it reads.
 	brokerHost string
@@ -67,6 +69,11 @@ type shellConfig struct {
 	getenv  func(string) string
 	flags   settingsFlags
 	retheme func(name string) (*Theme, error)
+	// Z (sleep.go): the runner of agentbus suspend/resume, the project's
+	// suspend.log, suspend.wait; nil = Z says there is no agentbus to run.
+	sleepRunner func(args []string, log string) (<-chan error, error)
+	sleepLog    func(project string) string
+	sleepWait   func() time.Duration
 }
 
 // uiState is the person's place on the screen.
@@ -100,6 +107,9 @@ type uiState struct {
 	pauseAck       string            // the send the person chose to make despite the pause
 	pausePopup     *pauseDialog      // the pause popup, when open
 	confirm        *pendingRemoval   // a d waiting for its y
+	sleepAsk       *sleepAsk         // a Z waiting for its y
+	sleepRun       *sleepRun         // agentbus suspend or resume running
+	sleepSeq       int               // the last run's id
 	reminder       *reminderDialog   // the reminder, when open
 	summary        bool              // the recap's summary confirmation is open
 	summarySent    bool              // the summary request is in flight: its success closes the recap
@@ -218,6 +228,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.sig.fading = false
 		sliding := m.barView().moving() // its last frame draws the bar at rest
 		m.now = time.Time(msg)
+		m.aboutFrame(m.now)
 		if top := m.rd.top(); top != nil && top.kind == ovTokens && (sliding || m.tokensSkeleton()) { // the shimmer and the bars are in the page body
 			m.rd.top().dirty = true
 		}
@@ -235,11 +246,21 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
 	case redisPageMsg:
 		return m.gotRedisPage(msg)
+	case aboutVersionsMsg:
+		m.gotAboutVersions(msg)
 	case answerMsg:
 		m.gotAnswer(msg)
 	case sendResultMsg:
 		m.gotSend(msg)
 		m.refresh()
+	case sleepAskMsg:
+		m.gotSleepAsk(msg)
+	case sleepStartedMsg:
+		return m.gotSleepStarted(msg)
+	case sleepLineMsg:
+		return m.gotSleepLine(msg)
+	case sleepDoneMsg:
+		return m.gotSleepDone(msg)
 	case pastedImageMsg:
 		m.gotPastedImage(msg)
 	case resumeMsg:
@@ -253,6 +274,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.gotRecap(msg)
 	case settingsMsg:
 		m.gotSettings(msg)
+	case notifyAssistMsg:
+		if m.settingsPageOpen() != nil { // the page it was asked from is still open
+			return m.push(notifyAssistPage(msg.kind, msg.f))
+		}
 	case cacheSavedMsg:
 		if msg.err != nil && m.cfg.st != nil {
 			m.cfg.st.mu.Lock()

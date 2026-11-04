@@ -361,10 +361,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   its badge and reminder subset; a plan task waiting for the person is an item of its own (`rankPlan`, `planItems`:
   counted in the title and badge, Enter opens its page with the Action row, also from the reminder; it stays a standing
   decision in the badge and the reminder until master records it done, even one with no `after`); with nothing for the person it says so, then
-  what is in progress and the next decision as selectable rows (`forYouEmptyRows`: one row per agent declaring working,
-  with its current task from the facts, `currentTask`: an accepted board task it owns, else its plan task in progress,
-  never its status message; keys `empty:agent:<name>` open the agent's page, `empty:plan:<task>` the plan task; no
-  store), and the
+  the next decision as a selectable row (`forYouEmptyRows`, foryou-no-progress: no In progress rows, the Agents panel shows them; key
+  `empty:plan:<task>` opens the plan task; no store), and the
   recap's For you section shows only when the For you panel is not on screen (`recapForScreen`), in the list format
   (recap-foryou: `recapItemLine`, one line per item, the sender in its provider's colour, its text, the age at the
   right edge, an unread one marked `●`; a report notice reads as its report's own preview, `reportText`, never the
@@ -387,7 +385,11 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   quarter of the room after it) and the
   compose window (`tea_compose.go`, our own rune-capped text area: bubbles' textarea caps in cells; a
   selection from Shift with a move, `Key.Shift` on navigation keys only, removed by Backspace/Del, replaced by typing or a
-  paste, ended by a plain move, a click or a first Esc; PageUp/PageDown a page of the window's rows); `^V` pastes the clipboard's image (usage-cards, `clipimage.go`: wl-paste, xclip or pngpaste,
+  paste, ended by a plain move, a click or a first Esc; PageUp/PageDown a page of the window's rows; compose-undo: `^Z`
+  undoes and `^Y` (or ctrl+shift+z) redoes, per field, `textArea.edit` keeping the state before each edit that changed
+  the text (text, cursor, selection), a paste or an image path one step, a run of typed characters or of deletions one
+  step (a move, a click, a line break or a selection ends it), at most `undoMax` (100) steps, a new history at every
+  `set` (open, send, completion); no setting); `^V` pastes the clipboard's image (usage-cards, `clipimage.go`: wl-paste, xclip or pngpaste,
   chosen by the session (WAYLAND_DISPLAY, DISPLAY, macOS), 5 s timeout, read through its 20 MiB bound, PNG only, saved 0600 as a new file under `os.UserCacheDir()/agentbus/attachments` (0700), its path
   inserted at the cursor with a space on each side as its neighbours need, said when there is no tool or no image; our own
   files older than 30 days pruned at each paste; never uploaded)
@@ -954,8 +956,9 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   (`DiskCleanChoice`, kept whole: the paths are cut to leave it room within the 300-rune detail), never in the copyable line; a fail wakes sentinel, which never deletes anything. `github`
   (busmon-github-check, `health/github.go` pure, `cmd/agentbus/githubcheck.go` the runner; 15 min, 10 s) runs only
   when a remote is on github.com (origin first): `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` and
-  `git -c credential.helper= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
-  under `LC_ALL=C` (the answers are read by git's English messages); any answer from GitHub is reached (auth unknown),
+  `git -c credential.helper= -c core.askPass= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
+  under `LC_ALL=C` and without any askpass program (`probeEnviron`: `GIT_ASKPASS`/`SSH_ASKPASS` removed, `SSH_ASKPASS_REQUIRE=never`;
+  github-askpass: the terminal switch alone left KDE's ksshaskpass asking for a username every 15 minutes) (the answers are read by git's English messages); any answer from GitHub is reached (auth unknown),
   matched before the network errors since it may quote a repository named like one (TLS by its own phrases), only a network error failed, an unrecognised answer or a missing binary not
   judged. Both reached ok, one warn (for you), neither unknown then warn after `GitHubNeitherWarnAfter` (1 h, tracked
   in the check's memory: a restart starts it over); never fail, so it never wakes sentinel. The stall guard (spec
@@ -1010,6 +1013,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   streams, `history.Merge` by (stream, id), `history.Filter` (`--agent` matches from/target/agent and a verdict's
   author/reviewer; a gap line passes an agent or kind filter it may hide, never `--thread`/`--grep`), newest
   `--limit` (200); says `broker unreachable: archive only` or `no archive on this host: live streams only`.
+  busmon's About page (`A`, about-page, `about.go`, `ovAbout`; about-design: centred, the two-row wordmark `aboutLogo` on top (the half blocks, `GlyphUpperHalf` joined the closed set; the name in words below `aboutLogoW` + 2 cells), the project, then the versions as label/value rows in one column under THIS BUILD (busmon, agentbus marked `✓ same build` or `≠ busmon`, protocol, go, the update state marked) and THIS HOST (redis, herdr, plugin), `y` still copying the flat `Lines`): the versions read in a command (`aboutSources`: the project, busmon, `agentbus version` beside it, protocol, Redis INFO, `herdr --version` through `HERDR_BIN_PATH`, the plugin's `herdr-plugin.toml` version (`AGENTBUS_REPO`, `buildinfo.Repo`, the binary's folder), the update check's cached `latest.json` only, never a network call, Go; `y` copies them), master and coder on a bus line, a packet travelling there and back on the fade schedule only (`animated` reads `aboutPlaying`; the run starts at the first `fadeMsg` after the open, `aboutState.start`, one cell per `aboutCell` 60 ms of frame time), still with fade off, 16 colours or no colour (`aboutMotion`), where `r` (`ActReplay`, OnPage) says there is nothing to replay; else it replays.
   busmon's History page (`H`, `history_page.go`, `ovHistory`): loaded in a command (`historyLoadCmd`: the last 3 days
   under an 8 MiB cap through `history.ReadBack`, which pages **by position** with a `Cursor` (day file, byte offset)
   because a day file is not in id order; `ReadGaps`; the live streams through the writer's optional
@@ -1051,7 +1055,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   10 s later), the `AGENTBUS_BACKUP_*` variables, an environment scrubbed of secret-named or `health.Sensitive`
   variables but those `after_env` names; output capped at 64 KiB, each line `health.Redact`ed; run after the rename and
   before the retention, never on a refused run, its outcome in `<state>/backup-last.json` `after` per project
-  (`RecordAfter`, 0600); a failure only warns. Every role denies `Edit`/`Write` of `~/.config/agentbus/config.toml`
+  (`RecordAfter`, 0600); a failure only warns. Every role denies `Edit` of `~/.config/agentbus/config.toml` (an Edit rule covers the Write tool; Claude Code never matches a `Write(path)` rule and warns about one at each launch, `neverMatches` in `rolecfg/configdeny_test.go` keeps them out)
   (shipped `[tool_rules]`), and a Claude Code launch adds the path `XDG_CONFIG_HOME` gives it (`rolecfg.ConfigDenies`,
   `//` absolute form; a relative one adds nothing and says so). `backup.schedule = daily` (`backupschedule.go`, `scheduledBackupPass`;
   `dispatch.BackupConfig`, an hourly pass only while `HoldsDispatch`): due when a project of the host has no archive
@@ -1060,7 +1064,13 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   secrets only with `backup.age_recipient`, without `age` the archive is made without them and `SecretsError`
   recorded; `backup-last.json`'s `scheduled` part (`RecordScheduled`) is written only by the chore. `agentbus backup`
   warns about a defaulted `backup.dir` while `daily` is on. busmon's C page shows the three `backup.after_*` keys (Backup group, `settingOnPage`: only its
-  `PersonOnly` keys) read-only: Enter says "edit config.toml yourself", `d` offers nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `cmd/agentbus/backupcheck.go` the reader; 15 min,
+  `PersonOnly` keys) read-only: Enter says "edit config.toml yourself", `d` offers nothing. Below them (backup-page,
+  `settings_backup.go`, read with the rows in the page's command: `readBackupFacts`, nothing without a HOME or XDG folder):
+  the folder, `Back up now` (Enter, then `y`: `agentbus backup`, `--secrets` when `backup.age_recipient` is set and `age` is on PATH (else left out and said, as the schedule does), run as Z
+  runs suspend, `startRun` in `sleep.go`: one child at a time, its own session, output in `<state>/agentbus/backup.log`,
+  its last line the notice, its end reading the page again), one row per archive of this host (`backup.List`: date, size,
+  projects, secrets or not), and the last runs from `backup-last.json` (errors through `health.Redact`); Enter on an
+  archive opens its coverage, the restore dry runs to copy (`y`, the path shell-quoted) and what takes each project offline first (`agentbus down <p>`, its herdr workspace closed: a suspend keeps the agents and the workspace, which restore refuses even with `--force`; `backupOfflineSteps`); busmon restores nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `cmd/agentbus/backupcheck.go` the reader; 15 min,
   for you, `agentbus backup`): per project, warn on no covering archive younger than `backup.warn_after` (168h, `0` =
   this reminder off), on the latest scheduled attempt covering it failed while `daily` (cleared by a newer covering
   archive; the age case only by one with secrets, read from `coverage.json`'s `secrets`), on its latest
@@ -1073,7 +1083,7 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   writable by no one else, opened once `O_NOFOLLOW` and judged by fstat; per target https, http only `insecure` on a
   private host, ntfy.sh by default and never `self_hosted`, a topic of 12-64 safe characters, Discord's hosts only;
   warnings carry no value; a `Target` prints only kind and name). Never written by agentbus; every role denies its
-  Read/Edit/Write and `Bash(agentbus notifications test*)` (no wildcard before the words: it would deny prose), and the
+  Read/Edit and `Bash(agentbus notifications test*)` (no wildcard before the words: it would deny prose), and the
   command refuses `AGENT_BUS_AGENT` or a process under a registered agent's verified pid in any project (so on Linux
   it needs the broker); a backup secret. The settings are `notify.*` (group Notifications, config.toml only, list keys
   `Key.List`). Events (`notifyfacts.go`, never an agent's text in a summary line): open asks, `waiting`
@@ -1089,7 +1099,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   outcomes per target apart from the counted hour; a send's hour reserved under the lock, given back if it fails).
   The dispatcher's own prompt ring is skipped (`PromptConfig.Skip`) only for an episode that began after a listed
   desktop target's baseline. Health `notifications` (5 min, for you, never fail); busmon's C page shows the group and
-  one muted line per target, never its URL. One HTTP client: no redirect, no proxy, 10 s, a 429 waited once (seconds
+  one muted line per target, never its URL. Its last lines are the assistant (notify-assistant, `settings_notify_assist.go`):
+  `Set up ntfy|Discord|the desktop`, Enter reading in a command (`readNotifyAssist`: `notify.Load`, the record, `notify-send`
+  on PATH) then a page: the steps, the file's state by name and kind only, the template `y` copies (a free name,
+  `notifyAssistName`; ntfy's topic `drawTopic`, crypto/rand, kept nowhere), each target's last test; nothing written. One HTTP client: no redirect, no proxy, 10 s, a 429 waited once (seconds
   or a date, at most 60 s), a 5xx retried twice; errors name the target and status, never the URL or body.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
@@ -1319,7 +1332,75 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   wakes and escalates nobody while it runs, and once due ends it with `FencedResume` — one script
   that checks the lease, that the record is unchanged and that Redis `TIME` is past the deadline,
   then deletes it and XADDs the resume directive to `notify`. `agentbus resume` (`Bus.Resume`) ends
-  it early. busmon shows it in the header and in the state column (v0.14.4, `stateLook`: an agent
+  it early. A **suspend** (spec `docs/superpowers/specs/2026-11-03-suspend-resume-design.md`, `bus/suspend.go`)
+  is a pause of `kind = "suspend"` (additive fields `kind`, `services`, `prev`, `host`, `boot`; `Until` = `at` +
+  365 days so an older dispatcher never ends it): `Bus.Suspend` writes it in one script (an existing suspend left
+  and returned, a timed pause kept as `prev`, times from Redis `TIME`); `FencedResume` never ends it, `SetPause`
+  and `Resume` refuse it (`ErrSuspended`), `FencedQuotaPause` never takes it whatever its reason; `Unsuspend` and
+  `SuspendCancel` (compare-and-swap on the raw record) put a still-due `prev` back with no directive, else delete
+  it and send the notify target a `human=yes` resume directive. `reserveWake` refuses while any pause exists, in
+  its own script after the lease check (`ErrPaused`), so a pass that read the project before a pause reserves
+  and types nothing after it; a reservation made before stays visible as `prompting`/`prompted`. `agentbus suspend`
+  (`suspend.go`, above the project-required exit like `backup`; the host's projects = templates the broker has, or
+  `--project`; the person's act: `AGENT_BUS_AGENT` or a process under a registered agent's verified pid is refused,
+  `agentAncestor`, and the shared denies are only the plain `agentbus suspend*` / `agentbus resume --all*`, since
+  a `agentbus * suspend*` form would deny every message mentioning a suspend): per project under `upLock`, refused
+  while a swap/reload/retire intent is held, then `Services` read and `Bus.Suspend`, the dispatch service stopped at
+  once, the quiet rule (`suspendquiet.go`, pure: dormant and proved-gone agents ignored; a wake record `prompting`
+  busy at any age until it leaves that state or the dispatcher is proved gone, then busy until a non-working
+  declaration later than that boundary or two ready own inspections at or after it plus 5 s; else `EffectiveState`
+  on the suspend's own inspections, and a busy pane; quiet = two rounds in a row, 2 s apart) up to `--wait`
+  (`suspend.wait`, Services, 10 min; `--no-wait` = 0 still runs the two rounds). Timeout without `--force`, a
+  signal (SIGINT, SIGTERM, SIGHUP) or repeated read errors cancel: the services the record marks active start again
+  first, then `SuspendCancel`; a failed start keeps the suspend and says `agentbus resume` (also as a `for=person`
+  notice). Then the snapshot's facts, the other services stopped, `<state>/agentbus/<p>/suspend.json` (0600, ids,
+  states and counts only, the reason through `health.Redact`; `suspendsnap.go`). A suspended project without a
+  current snapshot is completed by a rerun, `Services` never rewritten; `suspend --status` lists them. `agentbus resume` on a
+  suspended project (`resume.go`; `Bus.Resume` answers `ErrSuspended`, `pauseDeps.Full` runs it; from a herdr pane with no
+  `AGENT_BUS_AGENT` it is routed ahead of the identity guard, `suspendedResumeFirst`, only when the pause reads as a
+  suspend): refused to an agent caller like suspend; the project's `upLock` held without waiting from the first read to
+  the last write (the nested up does not take it again); the template's agents read first, an unreadable template doing
+  nothing; the services the record's `Services` marks active start (else the snapshot's copy, else every
+  installed kind), one that cannot be read or started keeping the suspend, `--partial` or not; then `agentbus up <p> --resume --no-dispatch --no-missions` inside the herdr session recorded in the
+  services env file (`HERDR_ENV`/`HERDR_SESSION`/`HERDR_SOCKET_PATH` set as `start` does; a session not running is said
+  with `herdr --session <s>`, services only, no wait), with `upDeps.KeepEnv`: **a resume keeps the project's env file as
+  it is** (escalation target, reload policy and every hand-set `AGENT_BUS_*` key; only the herdr session and socket
+  are the caller's), names the keys the caller's environment would have changed, never a value, and installs nothing
+  on a file it cannot read (`keptEnv`; a plain `up` still takes the caller's environment); then up to 90 s for every
+  required agent (`requiredAgents`: the template's agent tabs plus each non-pop agent the snapshot knows alive at the
+  suspend, or with no snapshot each verified non-pop agent of the bus; dormant ones skipped) to have a live verified
+  process (`alive`: pid with its recorded start); a missing one keeps the suspend unless `--partial`; `--yes` is taken
+  and ignored (busmon passes it); then `Unsuspend` with
+  one summary (agents back, missing, pops named with `agent-spawn <role> <p> --resume <session>`, never spawned, what was
+  open at the suspend, the person's words), a `for=person` notice when the directive's target is missing, and the
+  snapshot set aside as `suspend.<taken_at>.json` (5 kept). `agentbus resume --all [--dry-run] [--partial] [--yes]`
+  (`resumeall.go`, above the project-required exit like `suspend`; asks on a terminal, exit 2 without one and without
+  `--yes`; an agent caller refused, `refuseAgentCaller`): every project of the host, `resumeOne` taking its `upLock`
+  before it reads the pause and holding it through either path (a suspend landing in between never gets the crash path),
+  a suspended one through the above, any other through the crash path (`runCrashResume`, §7): its installed stopped services started,
+  its dead required agents relaunched by `up --resume` only when its workspace is open in its recorded herdr session (a
+  crash never opens a closed workspace: `agentbus up <p> --resume` is named), no pause touched, a summary on stdout
+  (what could not be known, the open work the bus holds now, read with `readSnapshotFacts`) and to the escalation
+  target as the person only when something was relaunched; `nothing to resume` when all runs. The workspace hook
+  (`upHook`, `hookSuspended`; real deps `withSuspendHook`) reads the pause (2 s) and on a suspended project starts no
+  service: with `suspend.auto_resume` (Services, Bool, off, `AGENT_BUS_SUSPEND_AUTO_RESUME`) on, and only when the
+  record's host is this host and its boot is known and differs from the current one, with a recorded `identity.as`
+  and the lock free (else `resume already running`), once per boot and suspend (`auto-resume.json` in the project's
+  state dir, boot and the suspend's `at`, read and written under the lock, which is released before the spawn so the detached resume takes it without waiting; a later focus on that boot
+  says the auto-resume did not complete and starts nothing; a mark it cannot write starts nothing), it starts `agentbus --project <p> resume --yes` detached
+  (`hookResumeArgv`, never `--partial`; `spawnDetachedLog`, output in the project's `suspend.log`) with
+  `AGENTBUS_RESUME_HOOK=1`, so every way such a resume leaves the project suspended (template or agents unreadable, a
+  service not started, an agent missing, the lift failing: `keep` in `runSuspendedResume`) also writes a `for=person`
+  notice; a pause it
+  cannot read starts the services as before. busmon (step 4, `sleep.go`): the header reads a suspend as `suspended since HH:MM · by <name> · <reason>`
+  (`pauseSeg`); `Z` (`ActSleep`, shell table) asks by the pause's kind, `Suspend <p>? … (up to <suspend.wait>) … y / n`
+  or `Resume <p>? … y / n` (`sleepAsk`, suspend.wait read in a command), and `y` runs `agentbus --project <p>
+  suspend|resume --yes` as a child (`realSleepRunner`: `agentbusBeside()`, its own session, output appended to the
+  project's `suspend.log`, never a service started by busmon), its log's last line read every second as the notice
+  until it exits (`sleepNotice`), then the outcome pushed as a notice; a second `Z` while it runs says so; the pause
+  popup on a suspend says `suspended since` and its first button `Resume (services, agents)` runs the same resume (the
+  draft waits). suspend.wait and suspend.auto_resume are on the C page with the Services keys.
+  busmon shows a timed pause in the header and in the state column (v0.14.4, `stateLook`: an agent
   that declared working or idle reads `paused`, or `quota` when its provider is held; blocked,
   waiting and done are never covered; the detail keeps the declared state, the panel counts what
   is shown); `@all` targets only agents in `{p}:agents`

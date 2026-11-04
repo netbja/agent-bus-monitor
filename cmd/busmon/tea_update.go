@@ -60,6 +60,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.chooseKey(k)
 	case m.ui.confirm != nil:
 		cmd = m.confirmKey(k)
+	case m.ui.sleepAsk != nil:
+		cmd = m.sleepConfirm(k)
 	default:
 		cmd = m.modeKey(k)
 	}
@@ -144,6 +146,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.openSettings()
 	case ActHistory:
 		cmd = m.openHistory()
+	case ActAbout:
+		cmd = m.openAbout()
 	case ActAsk:
 		agent := ""
 		if sel := m.lists.agents.Selected(); m.ui.focus == PanelAgents && m.snap.agents[sel] != nil && m.snap.agents[sel].openAsk > 0 {
@@ -152,6 +156,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.pushAskOf(agent)
 	case ActAskOrWrite:
 		cmd = m.askOrWrite()
+	case ActSleep:
+		cmd = m.sleepKey()
 	case ActFollow:
 		if act := &m.lists.activity; act.Live() {
 			act.Pause()
@@ -221,10 +227,7 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 		m.expand(p, key)
 	case PanelForYou:
-		if name, ok := strings.CutPrefix(key, "empty:agent:"); ok { // the empty state's rows
-			return m.pushAgent(name)
-		}
-		if task, ok := strings.CutPrefix(key, "empty:plan:"); ok {
+		if task, ok := strings.CutPrefix(key, "empty:plan:"); ok { // the empty state's next decision
 			return m.push(page{kind: ovPlanTask, key: task})
 		}
 		i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Key == key })

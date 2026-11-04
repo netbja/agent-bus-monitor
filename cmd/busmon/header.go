@@ -362,6 +362,16 @@ func missionsSeg(state string, compact bool) Line {
 // dispatcher has ended it, "paused · resume due" (no dispatcher runs, or it is
 // about to).
 func pauseSeg(p *bus.PauseRecord, now time.Time) Line {
+	if p.Suspended() { // "suspended since 21:40 · by dana · reboot": no deadline, only resume ends it
+		text := "suspended since " + time.UnixMilli(p.At).Local().Format("15:04")
+		if p.By != "" {
+			text += " " + GlyphNone + " by " + p.By
+		}
+		if p.Reason != "" {
+			text += " " + GlyphNone + " " + Preview(p.Reason)
+		}
+		return Line{{Text: text, Role: RoleAttention}}
+	}
 	left := p.UntilTime().Sub(now)
 	text := "paused " + GlyphNone + " resume due"
 	if left > 0 {

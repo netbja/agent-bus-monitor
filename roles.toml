@@ -110,16 +110,23 @@ deny = [
   "Bash(agentbus reload *--as*)", "Bash(agentbus * reload *--as*)",
   # backup.after_command runs with the person's rights, from config.toml
   # alone: no role edits that file (the launch adds the path XDG_CONFIG_HOME
-  # gives it). Defence in depth: a shell can still write it.
-  "Edit(~/.config/agentbus/config.toml)", "Write(~/.config/agentbus/config.toml)",
+  # gives it). Defence in depth: a shell can still write it. An Edit rule
+  # covers the Write tool too; Claude Code never matches a Write(path) rule
+  # and warns about one at every launch (its permissions docs).
+  "Edit(~/.config/agentbus/config.toml)",
   # notify.toml holds the notification targets' secrets (a topic, a token, a
   # webhook): no role reads or writes it, and no role sends a test message,
   # which reaches the person's phone (notifications spec). The launch adds
   # the path XDG_CONFIG_HOME gives it. Defence in depth: a shell can still
   # read it. No "agentbus * notifications test*": it would deny the words in
   # any message; the command refuses an agent caller itself.
-  "Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)", "Write(~/.config/agentbus/notify.toml)",
+  "Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)",
   "Bash(agentbus notifications test*)",
+  # Suspending the team and waking a whole host are the person's acts
+  # (suspend spec §4). Only the plain forms: "agentbus * suspend*" would
+  # deny every message that mentions a suspend; the commands refuse an agent
+  # caller themselves, whatever the spelling.
+  "Bash(agentbus suspend*)", "Bash(agentbus resume --all*)",
 ]
 
 [roles.master]

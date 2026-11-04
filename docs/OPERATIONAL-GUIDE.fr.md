@@ -4,6 +4,42 @@ Ce guide pratique est conçu en complément du [README](../README.fr.md) (la ré
 
 ---
 
+## Démarrer un nouveau projet
+
+Une fois agent-bus installé ([section 3](#3-installation-pas-à-pas-depuis-le-terminal)), une seule
+commande, lancée dans le dossier du projet, démarre une équipe :
+
+```bash
+cd ~/code/myapp
+agentbus start
+```
+
+`agentbus start` déduit ce qu'il peut : le nom du projet (d'après le dossier, ou le modèle qu'un
+lancement précédent a écrit), votre nom (`agentbus identity set`, sinon `$USER`) et l'équipe
+(par défaut tous les rôles de démarrage de `roles.toml` : master, coder, foureyes et sentinel tels
+que livrés). Il les montre une fois et ne demande que ce qu'il
+ne peut pas déduire. Puis il lance `agentbus up` pour vous. Hors de herdr, il ouvre lui-même la
+session herdr (`herdr --session <projet>`) et l'équipe s'ouvre dedans.
+
+- `agentbus start --yes` prend les valeurs déduites sans rien demander.
+- `agentbus start --dry-run` montre le plan et ne lance rien.
+- `agentbus start ~/code/myapp` désigne le dossier au lieu du dossier courant.
+- `--name <projet>`, `--as <votre-nom>` et `--roles master,coder,foureyes` fixent une valeur
+  vous-même ; une équipe réduite est gardée pour le projet et pour les prochains nouveaux.
+
+**Quand utiliser `agentbus up` à la place.** `up` est la forme stricte, scriptable : ni question ni
+déduction, le projet nommé sur la ligne de commande. Utilisez-le :
+
+- pour un projet qui existe déjà : `agentbus up myapp` le rouvre et relance tout agent disparu
+  ([Cas B](#cas-b--reprendre-un-projet-existant)) ;
+- avec `--resume`, pour reprendre les agents Claude Code sur leurs sessions enregistrées ;
+- dans un script qui nomme tout : `agentbus up myapp ~/code/myapp --as <votre-nom>` ;
+- pour ses autres options (`--tabs`, `--no-dispatch`, `--escalate-to`, `--dry-run`).
+
+La [section 5](#5-marche-à-suivre--lancement-et-gestion-des-projets) détaille les deux.
+
+---
+
 ## 1. Vue d'ensemble & Fonctions Principales
 
 `agent-bus-monitor` est un bus de coordination multi-agents asynchrone et découplé, bâti sur **Redis Streams** et outillé en **Go**. Il permet à plusieurs agents autonomes (Claude Code, OpenAI Codex, Kimi CLI, etc.) de collaborer sur un même projet avec une visibilité totale pour l'humain.
@@ -52,7 +88,7 @@ Ce guide pratique est conçu en complément du [README](../README.fr.md) (la ré
      - **For you** : les questions, décisions, verrous et messages non lus que vous seul pouvez régler.
      - **Agents** : état déclaré (`working`, `idle`, `blocked`, `waiting`, `done`), fraîcheur, file d'attente, remplissage du contexte, signaux en toutes lettres.
      - **Activity · Board · Requests · Plan** : le flux en direct, le tableau des tâches, qui doit une réponse à qui, le plan du lot.
-     - **Pages** : services (F3), santé (F5), récapitulatif (`R`), plan (`P`), tokens (`U`), historique (`H`), aide (F1).
+     - **Pages** : services (F3), santé (F5), récapitulatif (`R`), plan (`P`), tokens (`U`), historique (`H`), à propos (`A` : les versions, `y` les copie), aide (F1).
      - **Saisie** : `@coder ...` envoie une directive qui réveille l'agent.
 
 4. **L'Event-Driven Dispatcher (`agentbus dispatch`)**
@@ -220,7 +256,9 @@ Le broker Redis reste confiné au loopback (`127.0.0.1:6380`) pour des raisons d
 
 ### Cas A : Démarrer une Équipe sur un NOUVEAU Projet
 
-Votre projet est dans `~/code/myapp`.
+Votre projet est dans `~/code/myapp`. Le plus court est `cd ~/code/myapp && agentbus start`
+([Démarrer un nouveau projet](#démarrer-un-nouveau-projet)) ; voici ce qu'il fait, pas à pas, avec
+`agentbus up`.
 
 1. **Lancer herdr** (une session par projet, c'est pratique) :
    ```bash
@@ -619,7 +657,12 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   ajoutez `for-you` à `notify.events`. Les cibles sont dans `~/.config/agentbus/notify.toml`, que
   vous écrivez vous-même (agentbus jamais), en mode `0600` dans un dossier que personne d'autre ne
   peut écrire : un topic, un jeton ou un webhook est un secret, il ne va donc jamais dans
-  `config.toml`, sur le bus ni dans un journal, et aucun agent ne peut lire ce fichier.
+  `config.toml`, sur le bus ni dans un journal, et aucun agent ne peut lire ce fichier. La page C
+  de busmon, groupe Notifications, se termine par un assistant par sorte de cible (`Set up ntfy`,
+  `Set up Discord`, `Set up the desktop`) : Entrée montre les étapes, l'état du fichier (noms et
+  sortes des cibles, jamais un topic ni une URL), une table à copier avec `y` (pour ntfy un topic
+  tiré sur le moment, gardé nulle part) et le dernier test de chaque cible ; vous la collez
+  vous-même dans le fichier.
 
   ```toml
   [ntfy.phone]

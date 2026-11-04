@@ -51,8 +51,7 @@ herdr (0.9.0 or newer) is installed for you with `--install-herdr`.
 git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor
 ./setup.sh install --install-herdr     # toolchain check, binaries, skills, herdr plugin, Redis
 agentbus statusline --print-install    # Claude Code users: the statusLine block for ~/.claude/settings.json
-herdr --session myproject              # then, inside herdr:
-agentbus up myproject ~/code/myproject --as <your-name>
+cd ~/code/myproject && agentbus start   # start a team on your project
 ```
 
 > **Found it in herdr's plugin list?** Install it with the commands above, not
@@ -60,9 +59,13 @@ agentbus up myproject ~/code/myproject --as <your-name>
 > `./setup.sh` sets up, and setup links it into herdr for you. `herdr plugin install
 > netbja/agent-bus-monitor` stops with the same advice and installs nothing.
 
-`agentbus up` provisions the team and opens its workspace, with busmon first. busmon's
-first-launch tour walks you through its screen (F1 then `t` shows it again). Later, `Ctrl+B`
-then `↑` (the plugin's Projects picker) reopens any project.
+`agentbus start`, run in the project's folder, deduces the project's name, yours and the team,
+asks only for what it cannot deduce, then runs `agentbus up`, which provisions the team and opens
+its workspace, with busmon first. Outside herdr it opens the herdr session itself. `--yes` takes
+the deduced values, `--dry-run` shows the plan ([Start a new project](#start-a-new-project--one-command)).
+busmon's first-launch tour walks you through its screen (F1 then `t` shows it again). Later, `Ctrl+B`
+then `↑` (the plugin's Projects picker) reopens any project, and `agentbus up <project>` reopens it
+from a shell inside herdr.
 
 ### First run
 
@@ -544,6 +547,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | `P` | the plan |
 | `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |
 | `H` | history: re-read the past, the archive on this host then the live streams, newest first by day (enter opens an entry and `n`/`p` step, `o` loads three days more, `/` filters, `t` keeps the selected entry's thread) |
+| `A` | about: the project's and busmon's, agentbus's, the protocol's, Redis's, herdr's, the plugin's and Go's versions and the update state (`y` copies them), and master and coder on a bus line with a packet travelling there and back (`r` replays; still with fade off, 16 colours or no colour) |
 
 **Responsive.** At 120 columns and more, For you and Agents side by side above the tabs. From
 80 to 119 they are stacked. Under 80, one view at a time (`1 For you` … `6 Plan`), with health
@@ -653,6 +657,24 @@ If you use `--cron`, make sure `agentbus` is on the cron job's `PATH`; the trigg
 `~/.local/bin`.
 
 ### Start a new project — one command
+
+```bash
+cd /path/to/your/project
+agentbus start
+```
+
+`agentbus start` deduces the project's name (from the folder, or the template a previous run
+wrote), your name (`agentbus identity set`, else `$USER`) and the team (every boot role by default),
+shows them once, asks only for what it cannot deduce, then runs `agentbus up` for you. Outside
+herdr it opens the herdr session itself (`herdr --session <project>`), and the team opens inside it.
+`--yes` takes the deduced values without asking, `--dry-run` shows the plan and starts nothing,
+and `--name`, `--as` and `--roles master,coder,foureyes` set a value yourself (a reduced team is
+kept for the project and as the default for new ones).
+
+`agentbus up` is the strict, scriptable form: no questions, no deduction, the project on the
+command line. Use it for a project that already exists (it reopens it and relaunches any agent
+that is gone), with `--resume` to bring the Claude Code agents back on their sessions, in a script,
+or for its other flags:
 
 ```bash
 herdr --session myproject                                   # start herdr (a session per project is handy)

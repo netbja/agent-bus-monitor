@@ -18,6 +18,7 @@ KEYS
   u                    Activity: the next unread message for you (●), wrapping
   ! F4                 answer
   w                    answer the open question, or with none open write to master
+  Z                    put the project to sleep (agentbus suspend), or, when it is suspended, bring it back (agentbus resume); asks first
   d del                remove
   a                    show or hide the agents silent for more than a day
   o                    Requests: show or hide the answered threads and those older than 7 days
@@ -32,6 +33,7 @@ KEYS
   U                    tokens: the account windows, every project side by side, this project by agent
   C                    settings: display, attention and your name, changed in config.toml
   H                    history: re-read the past, the archive on this host then the live streams (enter opens an entry)
+  A                    about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work
   F1 ?                 help
   q                    quit
   ^C                   quit (everywhere)
@@ -64,6 +66,7 @@ KEYS
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
   o                    History (H): load the three days before; the recap (R): show For you's items older than a day
+  r                    About (A): play the packet's run again
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
   ^C                   quit (everywhere)
@@ -90,6 +93,8 @@ KEYS
   tab                  recipient · text; a text that is only @prefix becomes the recipient (completed, or its list opens)
   ^T                   after the open-question hint: answer in its question panel
   ^V                   paste the clipboard's image: saved 0600 under the cache's agentbus/attachments, its path inserted; nothing uploaded
+  ^Z                   undo the last edit: a paste whole, a run of typing or of deleting (until the window closes)
+  ^Y                   redo what undo took back (also ctrl+shift+z where the terminal tells it apart)
   esc                  close (draft kept)
   shift+↑↓←→ home end  select text: del or backspace removes it, typing replaces it, esc or a plain move clears it
   pgup pgdn            a page up or down (with shift: extend the selection)

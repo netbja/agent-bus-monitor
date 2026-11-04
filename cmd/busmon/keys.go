@@ -68,6 +68,8 @@ const (
 	ActComposeField // the window: text <-> recipient
 	ActComposeAsk   // the window: answer the open question in its panel
 	ActPasteImage   // the window: paste the clipboard's image (saved locally, its path inserted)
+	ActUndo         // the window: take back the last edit (a paste, a run of typing)
+	ActRedo         // the window: do again what undo took back
 	ActRecap        // open the deterministic project recap
 	ActHealth       // open project health details
 	ActPickType     // the picker: a typed character or backspace edits the filter
@@ -77,6 +79,7 @@ const (
 	ActTabNext      // the lower panel's next tab, wrapping (busmon-keys)
 	ActTabPrev      // the lower panel's previous tab, wrapping
 	ActAskOrWrite   // w: the open question, or with none the compose window to master
+	ActSleep        // Z: suspend the open project, or resume it when it is suspended (agentbus suspend/resume)
 	ActNextItem     // reader: the next item of the list the page came from (A5)
 	ActPrevItem     // reader: the previous one
 	ActAskOther     // the shell's ask: a free answer ("Other") in the compose window
@@ -88,6 +91,8 @@ const (
 	ActTokens       // open the tokens page (U)
 	ActSettings     // open the settings page (C)
 	ActHistory      // open the history page (H)
+	ActAbout        // open About (A): the versions and the bus line
+	ActReplay       // About: play the packet's run again (r)
 	ActOlder        // History: load the days before
 	ActLineEdit     // the line: move its cursor or delete at it (the field does it)
 	ActGroupNext    // settings (C): → into the keys (or the next tab on a narrow page)
@@ -208,6 +213,7 @@ var (
 		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
 		{Keys: "!", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!'))},
 		{Keys: "w", Help: "answer the open question, or with none open write to master", Act: ActAskOrWrite, match: runeIs('w')},
+		{Keys: "Z", Help: "put the project to sleep (agentbus suspend), or, when it is suspended, bring it back (agentbus resume); asks first", Act: ActSleep, match: runeIs('Z')},
 		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(keyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "o", Help: "Requests: show or hide the answered threads and those older than 7 days", Act: ActFold, Panels: []PanelID{PanelRequests}, match: runeIs('o')},
@@ -223,6 +229,7 @@ var (
 		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
 		{Keys: "C", Help: "settings: display, attention and your name, changed in config.toml", Act: ActSettings, match: runeIs('C')},
 		{Keys: "H", Help: "history: re-read the past, the archive on this host then the live streams (enter opens an entry)", Act: ActHistory, match: runeIs('H')},
+		{Keys: "A", Help: "about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work", Act: ActAbout, match: runeIs('A')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
 	}
@@ -274,6 +281,8 @@ var (
 		{Keys: "tab", Hint: "recipient", Help: "recipient " + GlyphNone + " text; a text that is only @prefix becomes the recipient (completed, or its list opens)", Act: ActComposeField, match: keyIs(keyTab)},
 		{Keys: "^T", Help: "after the open-question hint: answer in its question panel", Act: ActComposeAsk, match: keyIs(keyCtrlT)},
 		{Keys: "^V", Help: "paste the clipboard's image: saved 0600 under the cache's agentbus/attachments, its path inserted; nothing uploaded", Act: ActPasteImage, match: keyIs(keyCtrlV)},
+		{Keys: "^Z", Help: "undo the last edit: a paste whole, a run of typing or of deleting (until the window closes)", Act: ActUndo, match: keyIs(keyCtrlZ)},
+		{Keys: "^Y", Help: "redo what undo took back (also ctrl+shift+z where the terminal tells it apart)", Act: ActRedo, match: keyIs(keyCtrlY)},
 		{Keys: "esc", Hint: "close (draft kept)", Act: ActClose, match: keyIs(keyEscape)},
 		// Help only: the window's own keys move and select (tea_compose.go), never through the table.
 		{Keys: "shift+" + arrows + GlyphArrowL + GlyphArrowR + " home end", Help: "select text: del or backspace removes it, typing replaces it, esc or a plain move clears it", match: never},
@@ -307,6 +316,7 @@ var (
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
+		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}

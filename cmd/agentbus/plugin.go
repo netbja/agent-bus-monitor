@@ -59,7 +59,7 @@ func realPluginDeps() pluginDeps {
 			return st
 		},
 		Hook: func(project, ws string, stdout, stderr io.Writer) int {
-			return upHook(realUpDeps(stdout, stderr), project, ws, stdout, stderr)
+			return upHook(withSuspendHook(realUpDeps(stdout, stderr)), project, ws, stdout, stderr)
 		},
 	}
 }

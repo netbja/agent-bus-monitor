@@ -55,13 +55,14 @@ type page struct {
 	health healthView   // ovHealth: its rows open in place and a (sel: the selected row)
 	hitems []healthItem // ovHealth: its selectable rows
 
-	svc        *svcFacts  // ovServices: the facts the cards show (sel: the card selected)
-	svcBusy    bool       // ovServices, ovRedis: a refresh read is in flight
-	lead       string     // ovMessage, ovRequest: a first muted line (the Requests section's sentence)
-	recap      recapModel // ovRecap: the recap as shown, re-filtered at each build for the tier
-	recapAll   recapModel // ovRecap: the recap as built, unfiltered
-	recapLine  int        // ovRecap: the body line of the cursor's row
-	recapOlder bool       // ovRecap: o shows the For you items older than a day
+	svc        *svcFacts   // ovServices: the facts the cards show (sel: the card selected)
+	about      *aboutState // ovAbout: the versions and the packet's run
+	svcBusy    bool        // ovServices, ovRedis: a refresh read is in flight
+	lead       string      // ovMessage, ovRequest: a first muted line (the Requests section's sentence)
+	recap      recapModel  // ovRecap: the recap as shown, re-filtered at each build for the tier
+	recapAll   recapModel  // ovRecap: the recap as built, unfiltered
+	recapLine  int         // ovRecap: the body line of the cursor's row
+	recapOlder bool        // ovRecap: o shows the For you items older than a day
 
 	hist       *histView  // ovHistory: what the load read
 	histFilter feedFilter // ovHistory: / and t narrow it
@@ -492,7 +493,14 @@ func (m *Model) buildPage() bool {
 		p.title, p.body, p.hrows = historyBody(v, p.sel, time.Local, width)
 		p.sel = clamp(p.sel, 0, max(0, len(p.hrows)-1))
 	case ovSettings:
+		p.set.running = ""
+		if r := m.ui.sleepRun; r != nil && r.verb == "backup" {
+			p.set.running = "running" + GlyphEllipsis + " its last line is the notice (" + r.log + ")"
+		}
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
+	case ovAbout:
+		p.title, p.body = "About", aboutBody(*p.about, p.about.step(now), !m.aboutMotion(), width)
+		p.plain, p.plainWhat = strings.Join(p.about.versions.Lines, "\n"), "versions"
 	case ovTokens:
 		p.title = tokensTitle(s.budgets, s.holds, now)
 		icons := m.cfg.settings.Icons
@@ -708,6 +716,10 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.recapKey(k)
 	case ovSettings:
 		return m.settingsKey(act, k)
+	case ovAbout:
+		if act == ActReplay {
+			return m.aboutReplay(p)
+		}
 	}
 	if p.kind == ovServices && p.svc != nil { // the cards: arrows choose, enter or l opens the log
 		// Side by side the cards are a row, so ←/→ move between them too;
@@ -1215,6 +1227,8 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovHistory || p.kind == ovRecap && recapHasOlder(p.recapAll)
 	case ActFilter:
 		return p.kind == ovHistory
+	case ActReplay:
+		return p.kind == ovAbout
 	}
 	return false
 }

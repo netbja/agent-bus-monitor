@@ -56,8 +56,7 @@ moins un client d'agent, que vous installez vous-même : Claude Code (`claude`),
 git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor
 ./setup.sh install --install-herdr     # outils, binaires, compétences, plugin herdr, Redis
 agentbus statusline --print-install    # pour Claude Code : le bloc statusLine de ~/.claude/settings.json
-herdr --session myproject              # puis, dans herdr :
-agentbus up myproject ~/code/myproject --as <votre-nom>
+cd ~/code/myproject && agentbus start   # démarre une équipe sur votre projet
 ```
 
 > **Vu dans la liste des plugins de herdr ?** Installez-le avec les commandes ci-dessus, pas
@@ -65,9 +64,15 @@ agentbus up myproject ~/code/myproject --as <votre-nom>
 > compétences que `./setup.sh` met en place, et setup le relie à herdr pour vous.
 > `herdr plugin install netbja/agent-bus-monitor` s'arrête sur le même conseil et n'installe rien.
 
-`agentbus up` prépare l'équipe et ouvre son espace de travail, busmon en premier. La visite
-guidée de busmon, au premier lancement, présente son écran (F1 puis `t` la rejoue). Ensuite,
-`Ctrl+B` puis `↑` (le sélecteur Projects du plugin) rouvre n'importe quel projet.
+`agentbus start`, lancé dans le dossier du projet, déduit le nom du projet, le vôtre et l'équipe,
+ne demande que ce qu'il ne peut pas déduire, puis lance `agentbus up`, qui prépare l'équipe et
+ouvre son espace de travail, busmon en premier. Hors de herdr, il ouvre lui-même la session herdr.
+`--yes` prend les valeurs déduites, `--dry-run` montre le plan. `agentbus up <projet>` reste la
+forme stricte, scriptable (ni question ni déduction) : pour un projet qui existe déjà (il le
+rouvre et relance tout agent disparu), avec `--resume` pour reprendre les agents Claude Code sur
+leurs sessions, ou dans un script ([guide](docs/OPERATIONAL-GUIDE.fr.md#démarrer-un-nouveau-projet)).
+La visite guidée de busmon, au premier lancement, présente son écran (F1 puis `t` la rejoue).
+Ensuite, `Ctrl+B` puis `↑` (le sélecteur Projects du plugin) rouvre n'importe quel projet.
 
 - `./setup.sh update` tient la machine à jour ; busmon affiche `↑ vX.Y.Z` dans son en-tête quand
   une version plus récente existe.

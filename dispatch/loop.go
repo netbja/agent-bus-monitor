@@ -666,6 +666,12 @@ func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
 	next.LastDelivered, next.PendingTotal = s.o.LastDelivered, s.o.PendingTotal
 	next.PID, next.PIDStart = s.snap.PID, s.snap.PIDStart
 	stored, reserved, err := l.b.ReserveWake(ctx, s.agent, l.token, next, l.cfg.Retry, l.cfg.MinPTTL)
+	if errors.Is(err, bus.ErrPaused) {
+		// A pause (a suspend included) written since this pass read the
+		// project: nothing reserved, nothing typed; the next pass stops at it.
+		l.logOnce(s.agent, map[string]any{"agent": s.agent, "action": "none", "reason": "paused"})
+		return nil
+	}
 	if err != nil {
 		return err
 	}
