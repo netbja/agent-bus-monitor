@@ -20,6 +20,7 @@ const (
 	rankWait          // a waiting agent with no open ask, or its client's prompt
 	rankGate          // a pending verdict: an open 4-eyes gate
 	rankPlan          // a plan task waiting for the person: Enter opens its page and its Action row
+	rankMerge         // a change waiting for the person's merge (merge-queue): Enter opens its page
 	rankUnread        // an Activity line for the person not opened yet
 )
 
@@ -54,6 +55,7 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 	}
 	out = append(out, stallItems(s.guardianHealth, s.guardianNow)...)
 	out = append(out, planItems(s)...)
+	out = append(out, mergeItems(s)...)
 	asks := map[string]int{} // an open ask's row, by ask id (the id of its Activity line)
 	for i, it := range out {
 		if it.Rank == rankAsk {
@@ -145,7 +147,7 @@ func personGateItems(person, gated string, gates map[string]string) []attentionI
 func decisions(items []attentionItem) []attentionItem {
 	var out []attentionItem
 	for _, it := range items {
-		if it.Rank != rankUnread {
+		if it.Rank != rankUnread && it.Key != mergeUnknownKey {
 			out = append(out, it)
 		}
 	}

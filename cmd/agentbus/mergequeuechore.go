@@ -106,8 +106,9 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 	base := settings.String("delivery.base")
 	env := mergeQueueEnv(c.environ())
 	call := func() (context.Context, context.CancelFunc) { return context.WithTimeout(ctx, mergeQueueCall) }
+	forgeKind := ""
 	fail := func(source, why string) bus.MergeQueueRecord {
-		return bus.MergeQueueRecord{Source: source, Reason: why}
+		return bus.MergeQueueRecord{Source: source, Reason: why, Forge: forgeKind, Base: base}
 	}
 
 	cctx, cancel := call()
@@ -123,6 +124,7 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 		return fail("git", "origin unreadable")
 	}
 	f := forge.Resolve(settings.String("delivery.forge"), url, has)
+	forgeKind = string(f.Kind)
 	if f.Kind != forge.Local && !has {
 		return fail("git", "no origin remote")
 	}
@@ -177,5 +179,5 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 		in.Tips, in.Merged = tips, func(h string) bool { return in2[h] }
 	}
 	res := mergequeue.Derive(in)
-	return bus.MergeQueueRecord{Source: source, Items: res.Items, Unapproved: res.Unapproved}
+	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved}
 }

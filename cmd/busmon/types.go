@@ -50,6 +50,7 @@ const (
 	ovHistory    // history (H): the archive, then the live streams, newest first
 	ovSettings   // settings (C): the registry's keys by group, changed in place (settings_ui.go)
 	ovAbout      // about (A): the versions and the bus line (about.go)
+	ovMerge      // a change waiting for the person's merge (merge-queue), its key the head
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.

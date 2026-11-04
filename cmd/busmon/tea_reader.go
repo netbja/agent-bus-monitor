@@ -435,6 +435,9 @@ func (m *Model) buildPage() bool {
 		if e, ok := s.board[p.key]; ok {
 			p.title, p.body, p.plain = taskDetail(e, p.key, now)
 		}
+	case ovMerge:
+		p.title, p.body, p.plain, p.threadPlain = mergePage(s.mergeQ, p.key, width)
+		p.plainWhat, p.threadWhat = "link", "checks"
 	case ovRequest:
 		task := strings.TrimPrefix(p.key, "req:")
 		for _, r := range s.requests {

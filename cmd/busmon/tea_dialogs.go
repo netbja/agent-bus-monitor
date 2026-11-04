@@ -432,6 +432,10 @@ func (m *Model) reminderKey(k Key) tea.Cmd {
 			return m.push(page{kind: ovHealth})
 		case rankPlan:
 			return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(it.Key, "plan:")})
+		case rankMerge:
+			if it.Key != mergeUnknownKey {
+				return m.push(page{kind: ovMerge, key: strings.TrimPrefix(it.Key, "merge:")})
+			}
 		case rankGate:
 			ref := strings.TrimPrefix(it.Key, "gate:"+it.Agent+":")
 			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)

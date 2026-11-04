@@ -54,6 +54,8 @@ type MergeQueueRecord struct {
 	AttemptedAt int64
 	ItemsAt     int64
 	Source      string // gh, or git
+	Forge       string // github, gitlab, bitbucket or local (forge.Resolve's kind)
+	Base        string // the base branch (delivery.base)
 	Reason      string
 	Items       []MergeItem
 	Unapproved  int // open PRs not on an approved head
@@ -65,7 +67,7 @@ func (b *Bus) MergeQueue(ctx context.Context) (MergeQueueRecord, error) {
 	if err != nil {
 		return MergeQueueRecord{}, err
 	}
-	rec := MergeQueueRecord{Source: h["source"], Reason: h["reason"]}
+	rec := MergeQueueRecord{Source: h["source"], Forge: h["forge"], Base: h["base"], Reason: h["reason"]}
 	rec.AttemptedAt, _ = strconv.ParseInt(h["attempted_at"], 10, 64)
 	rec.ItemsAt, _ = strconv.ParseInt(h["items_at"], 10, 64)
 	rec.Unapproved, _ = strconv.Atoi(h["unapproved"])
@@ -79,12 +81,13 @@ func (b *Bus) MergeQueue(ctx context.Context) (MergeQueueRecord, error) {
 
 // mergeQueuePut: KEYS[1] the dispatch lease, KEYS[2] the cache; ARGV[1]
 // token, ARGV[2] "1" a success, ARGV[3] source, ARGV[4] reason, ARGV[5] items
-// (JSON, kept opaque), ARGV[6] unapproved, ARGV[7] ttl ms. A failure writes
+// (JSON, kept opaque), ARGV[6] unapproved, ARGV[7] ttl ms, ARGV[8] forge,
+// ARGV[9] base. A failure writes
 // the attempt, the source and the reason only.
 var mergeQueuePut = redis.NewScript(fenceCheck + `
 local t = redis.call('TIME')
 local now = tostring(tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000))
-redis.call('HSET', KEYS[2], 'attempted_at', now, 'source', ARGV[3], 'reason', ARGV[4])
+redis.call('HSET', KEYS[2], 'attempted_at', now, 'source', ARGV[3], 'reason', ARGV[4], 'forge', ARGV[8], 'base', ARGV[9])
 if ARGV[2] == '1' then
   redis.call('HSET', KEYS[2], 'items_at', now, 'items', ARGV[5], 'unapproved', ARGV[6])
 end
@@ -108,5 +111,5 @@ func (b *Bus) FencedPutMergeQueue(ctx context.Context, token string, rec MergeQu
 		ok = "1"
 	}
 	return notHolder(mergeQueuePut.Run(ctx, b.r, []string{DispatchKey(b.project), MergeQueueKey(b.project)},
-		token, ok, rec.Source, rec.Reason, string(js), rec.Unapproved, MergeQueueTTL.Milliseconds()).Err())
+		token, ok, rec.Source, rec.Reason, string(js), rec.Unapproved, MergeQueueTTL.Milliseconds(), rec.Forge, rec.Base).Err())
 }
