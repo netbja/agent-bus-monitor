@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -44,6 +45,24 @@ func TestReviewQueueReadsAHalfApproval(t *testing.T) {
 	}
 	if got := w.dispatchDirectives("master"); len(got) != 1 || !strings.Contains(got[0], "t1 approved by foureyes, not by reviewer-codex") {
 		t.Fatalf("master woken %q", got)
+	}
+	// A new owed review is a new episode: one more wake, then none. Master
+	// reads the first wake (unread, it is open work that settles the check).
+	if _, err := w.b.DrainCmd(ctx, "master", "test", bus.DefaultHorizon, func(bus.Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	w.verdict("t2", "reviewer-codex", rqHeadA)
+	w.verdict("t2", "foureyes", rqHeadB)
+	if out := w.run(w.s.reviewQueue); !strings.Contains(out.Detail, "t2 approved by foureyes") {
+		t.Fatalf("t2 owed: %+v", out)
+	}
+	for i := 0; i < 2; i++ {
+		if err := w.s.stallWake(ctx, "stall-holder", "review-queue"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := w.dispatchDirectives("master"); len(got) != 2 || !strings.Contains(got[1], "t2 approved by foureyes") {
+		t.Fatalf("a new owed review: master woken %q", got)
 	}
 	if err := w.b.PlanDone(ctx, "t1"); err != nil {
 		t.Fatal(err)
@@ -117,5 +136,59 @@ func TestReviewQueueTrimmedChallenge(t *testing.T) {
 	}
 	if got := w.dispatchDirectives("master"); len(got) != 0 {
 		t.Fatalf("an unjudged gate woke master: %q", got)
+	}
+}
+
+// The delivery rule on its own: a wake=no challenge is no obligation, so
+// nothing else hides it. Unread, then read but not acknowledged (pending):
+// not owed; acknowledged: owed (foureyes).
+func TestReviewQueueDeliveryRule(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	if err := w.b.OpenChallenge(ctx, "coder", "r1", bus.FormatGateMeta("master", "focus-notice", "review it")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.b.CmdNoWake(ctx, "master", "coder", bus.CmdChallenge, "r1", "review it"); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.reviewQueue); out.Status != health.OK || out.Detail != "no review owed" {
+		t.Fatalf("unread: %+v", out)
+	}
+	failed := errors.New("not now")
+	if _, err := w.b.DrainCmd(ctx, "coder", "test", bus.DefaultHorizon, func(bus.Event) error { return failed }); err == nil {
+		t.Fatal("a failed delivery must leave the entry pending")
+	}
+	o, err := w.b.Obligation(ctx, "coder", bus.DefaultHorizon)
+	if err != nil || len(o.PendingIDs) != 1 {
+		t.Fatalf("pending = %v, %v", o.PendingIDs, err)
+	}
+	if out := w.run(w.s.reviewQueue); out.Status != health.OK || out.Detail != "no review owed" {
+		t.Fatalf("pending: %+v", out)
+	}
+	if _, err := w.b.DrainCmd(ctx, "coder", "test", bus.DefaultHorizon, func(bus.Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.reviewQueue); out.Status != health.Warn || !strings.Contains(out.Detail, "coder owes focus-notice") {
+		t.Fatalf("acknowledged: %+v", out)
+	}
+}
+
+// A subject pr:<n> is history once the plan task linking PR n is done.
+func TestReviewQueueSkipsADonePlanTasksPR(t *testing.T) {
+	w := newStallWorld(t)
+	ctx := context.Background()
+	w.verdict("pr:7", "reviewer-codex", rqHeadA)
+	w.verdict("pr:7", "foureyes", rqHeadB)
+	if err := w.b.PlanLink(ctx, "t1", 7); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.reviewQueue); out.Status != health.Warn || !strings.Contains(out.Detail, "pr:7 approved by foureyes") {
+		t.Fatalf("linked, not done: %+v", out)
+	}
+	if err := w.b.PlanDone(ctx, "t1"); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.reviewQueue); out.Status != health.OK {
+		t.Fatalf("its task done: %+v", out)
 	}
 }

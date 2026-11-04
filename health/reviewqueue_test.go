@@ -96,6 +96,12 @@ func TestReviewQueueHalfApproved(t *testing.T) {
 		{name: "other reviewer's reject before the approve", owed: true, verdicts: []ReviewVerdict{
 			rqVerdict("s", "reviewer-codex", "reject", headA, "", 3*time.Hour),
 			rqVerdict("s", "foureyes", "approve", headB, "", 2*time.Hour)}},
+		{name: "other reviewer rejected the same head", owed: true, verdicts: []ReviewVerdict{
+			rqVerdict("s", "reviewer-codex", "reject", headB, "", 3*time.Hour),
+			rqVerdict("s", "foureyes", "approve", headB, "", 2*time.Hour)}},
+		{name: "other reviewer rejected with no head", owed: true, verdicts: []ReviewVerdict{
+			rqVerdict("s", "reviewer-codex", "reject", "", "", 3*time.Hour),
+			rqVerdict("s", "foureyes", "approve", headB, "", 2*time.Hour)}},
 		{name: "its later approve settles its reject", verdicts: []ReviewVerdict{
 			rqVerdict("s", "reviewer-codex", "reject", headA, "", 4*time.Hour),
 			rqVerdict("s", "reviewer-codex", "approve", headB, "", 3*time.Hour),
