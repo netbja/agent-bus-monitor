@@ -32,7 +32,10 @@ func TestKeyOfTea(t *testing.T) {
 		{tea.Key{Code: 'o', Mod: tea.ModCtrl}, Key{Code: keyCtrlO}},
 		{tea.Key{Code: 's', Mod: tea.ModCtrl}, Key{Code: keyCtrlS}},
 		{tea.Key{Code: 't', Mod: tea.ModCtrl}, Key{Code: keyCtrlT}},
-		{tea.Key{Code: 'z', Mod: tea.ModCtrl}, Key{}},
+		{tea.Key{Code: 'z', Mod: tea.ModCtrl}, Key{Code: keyCtrlZ}},
+		{tea.Key{Code: 'y', Mod: tea.ModCtrl}, Key{Code: keyCtrlY}},
+		{tea.Key{Code: 'z', Mod: tea.ModCtrl | tea.ModShift}, Key{Code: keyCtrlY}}, // ctrl+shift+z redoes
+		{tea.Key{Code: 'q', Mod: tea.ModCtrl}, Key{}},                              // a ctrl key no table names stays unmapped
 		{tea.Key{Code: tea.KeyF12}, Key{}},
 	} {
 		if got := keyOfTea(tea.KeyPressMsg(c.tea)); got != c.want {
