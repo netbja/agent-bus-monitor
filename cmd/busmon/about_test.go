@@ -36,9 +36,9 @@ func TestAboutRoute(t *testing.T) {
 // (a directive out, a reply back), delivered once done, no packet then; a
 // still drawing has no packet whatever the step, and says why.
 func TestAboutBody(t *testing.T) {
-	a := aboutState{versions: aboutVersions{Lines: []string{"busmon dev", "agentbus version v0.26.1"}}, loaded: true}
+	a := aboutState{versions: aboutVersions{Project: "demo", Build: []aboutRow{{Label: "busmon", Value: "dev"}, agentbusRow("v0.26.1", "dev")}}, loaded: true}
 	text := func(step int, still bool) string { return tokLinesText(aboutBody(a, step, still, 80)) }
-	if b := text(0, false); !strings.Contains(b, "bus ready") || strings.Contains(b, GlyphWorking) || !strings.Contains(b, "agentbus version v0.26.1") {
+	if b := text(0, false); !strings.Contains(b, "bus ready") || strings.Contains(b, GlyphWorking) || !strings.Contains(b, "v0.26.1") {
 		t.Fatalf("step 0:\n%s", b)
 	}
 	if b := text(3, false); !strings.Contains(b, "a directive") || !strings.Contains(b, GlyphWorking) {
@@ -54,10 +54,79 @@ func TestAboutBody(t *testing.T) {
 	if b := text(5, true); strings.Contains(b, GlyphWorking) || !strings.Contains(b, "bus ready") || !strings.Contains(b, "still:") {
 		t.Fatalf("still:\n%s", b)
 	}
-	for _, l := range aboutBody(a, 5, false, 40) {
-		if l.Width() > 40 {
-			t.Fatalf("a line is %d cells at 40", l.Width())
+	for _, w := range []int{20, 36, 40, 80, 140} {
+		for _, l := range aboutBody(a, 5, false, w) {
+			if l.Width() > w {
+				t.Fatalf("a line is %d cells at %d", l.Width(), w)
+			}
 		}
+	}
+}
+
+// about-design: the wordmark first (the name in words when it does not
+// fit), then the versions in two sections whose values start in one column.
+func TestAboutLayout(t *testing.T) {
+	for _, row := range aboutLogo {
+		if Width(row) != aboutLogoW {
+			t.Fatalf("a wordmark row is %d cells, not %d", Width(row), aboutLogoW)
+		}
+	}
+	a := aboutState{loaded: true, versions: aboutVersions{Project: "ansible-devtools",
+		Build: []aboutRow{{Label: "busmon", Value: "v1.0.0"}, agentbusRow("v1.0.0", "v1.0.0"), {Label: "protocol", Value: "v1"}},
+		Host:  []aboutRow{{Label: "redis", Value: "8.10.2"}, {Label: "herdr", Value: "0.9.5"}}}}
+	lines := strings.Split(tokLinesText(aboutBody(a, 0, true, 100)), "\n")
+	logo := -1
+	for i, l := range lines {
+		if strings.Contains(l, aboutLogo[0]) {
+			logo = i
+			break
+		}
+	}
+	if logo < 0 || logo > 2 {
+		t.Fatalf("the wordmark is not at the top (line %d):\n%s", logo, strings.Join(lines, "\n"))
+	}
+	col := -1
+	for _, v := range []string{"ansible-devtools", "v1.0.0  ", "v1\n", "8.10.2", "0.9.5"} {
+		for _, l := range lines {
+			if i := strings.Index(l+"\n", v); i >= 0 {
+				switch c := Width(l[:i]); {
+				case col < 0:
+					col = c
+				case c != col:
+					t.Fatalf("%q starts at %d, not %d", v, c, col)
+				}
+				break
+			}
+		}
+	}
+	body := strings.Join(lines, "\n")
+	for _, s := range []string{"THIS BUILD", "THIS HOST", GlyphDone + " same build"} {
+		if !strings.Contains(body, s) {
+			t.Fatalf("no %q:\n%s", s, body)
+		}
+	}
+	if narrow := tokLinesText(aboutBody(a, 0, true, 30)); strings.Contains(narrow, aboutLogo[0]) || !strings.Contains(narrow, "agent-bus monitor") {
+		t.Fatalf("narrow:\n%s", narrow)
+	}
+}
+
+// agentbus beside busmon is marked the same build or not; the update state is
+// marked up to date or newer, and muted otherwise.
+func TestAboutRowMarks(t *testing.T) {
+	if r := agentbusRow("v2", "v1"); !strings.Contains(r.Note, GlyphNotEqual) || r.NoteRole != RoleAttention {
+		t.Fatalf("differs: %+v", r)
+	}
+	if r := agentbusRow("agentbus ?", "v1"); r.Value != "?" || r.Note != "" {
+		t.Fatalf("unknown: %+v", r)
+	}
+	if r := updateRow("up to date (v1, checked Nov 3 18:37)"); r.Role != RoleOK || !strings.HasPrefix(r.Value, GlyphDone) {
+		t.Fatalf("up to date: %+v", r)
+	}
+	if r := updateRow("update v2 available (checked Nov 3 18:37)"); r.Role != RoleAttention || !strings.HasPrefix(r.Value, GlyphUp) {
+		t.Fatalf("newer: %+v", r)
+	}
+	if r := updateRow("update unknown (no check recorded)"); r.Role != RoleMuted {
+		t.Fatalf("unknown: %+v", r)
 	}
 }
 

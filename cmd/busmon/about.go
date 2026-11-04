@@ -53,8 +53,23 @@ func aboutRoute() []aboutPoint {
 	return out
 }
 
-// aboutVersions are the lines y copies.
-type aboutVersions struct{ Lines []string }
+// aboutVersions are the lines y copies, and the same facts as the rows the
+// page aligns (about-design): the project, then this build, then this host.
+type aboutVersions struct {
+	Lines   []string
+	Project string
+	Build   []aboutRow // busmon, agentbus, protocol, go, updates
+	Host    []aboutRow // redis, herdr, plugin
+}
+
+// aboutRow is a label, its value and an optional note after it (the
+// agentbus beside busmon: same build or not; the update state's mark).
+type aboutRow struct {
+	Label, Value string
+	Role         Role // the value's colour
+	Note         string
+	NoteRole     Role
+}
 
 // aboutState is the page's run: start is the first fade frame's time (zero:
 // not started yet, or a replay waiting for its first frame).
@@ -114,17 +129,35 @@ func (m *Model) openAbout() tea.Cmd {
 			}
 			cancel()
 		}
-		return aboutVersionsMsg{serial: serial, v: aboutVersions{Lines: []string{
-			"project " + project,
-			"busmon " + buildinfo.Version,
-			or(src.agentbus, "agentbus ?"),
-			fmt.Sprintf("protocol v%d", bus.ProtocolVersion),
-			"redis " + redis,
-			or(src.herdr, "herdr ?"),
-			"plugin " + or(src.plugin, "?"),
-			or(src.update, "update unknown"),
-			runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH,
-		}}}
+		agentbus, herdr := or(src.agentbus, "agentbus ?"), or(src.herdr, "herdr ?")
+		plugin, update := or(src.plugin, "?"), or(src.update, "update unknown")
+		goLine := runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH
+		return aboutVersionsMsg{serial: serial, v: aboutVersions{
+			Lines: []string{
+				"project " + project,
+				"busmon " + buildinfo.Version,
+				agentbus,
+				fmt.Sprintf("protocol v%d", bus.ProtocolVersion),
+				"redis " + redis,
+				herdr,
+				"plugin " + plugin,
+				update,
+				goLine,
+			},
+			Project: project,
+			Build: []aboutRow{
+				{Label: "busmon", Value: buildinfo.Version},
+				agentbusRow(strings.TrimPrefix(agentbus, "agentbus version "), buildinfo.Version),
+				{Label: "protocol", Value: fmt.Sprintf("v%d", bus.ProtocolVersion)},
+				{Label: "go", Value: goLine},
+				updateRow(update),
+			},
+			Host: []aboutRow{
+				{Label: "redis", Value: redis},
+				{Label: "herdr", Value: strings.TrimPrefix(herdr, "herdr ")},
+				{Label: "plugin", Value: plugin},
+			},
+		}}
 	}
 	return tea.Batch(read, m.scheduleFade())
 }
@@ -177,26 +210,117 @@ func (m *Model) aboutReplay(p *page) tea.Cmd {
 	return m.scheduleFade()
 }
 
+// agentbusRow is the agentbus beside busmon: the same build or not (an
+// unknown version says nothing).
+func agentbusRow(v, busmon string) aboutRow {
+	if v == "agentbus ?" {
+		v = "?"
+	}
+	r := aboutRow{Label: "agentbus", Value: v}
+	switch {
+	case v == "?":
+	case v == busmon:
+		r.Note, r.NoteRole = GlyphDone+" same build", RoleOK
+	default:
+		r.Note, r.NoteRole = GlyphNotEqual+" busmon", RoleAttention
+	}
+	return r
+}
+
+// updateRow is the update check's cached state, marked: up to date, a
+// newer release, or muted when nothing is known.
+func updateRow(state string) aboutRow {
+	r := aboutRow{Label: "updates", Value: state, Role: RoleMuted}
+	switch {
+	case strings.HasPrefix(state, "up to date"):
+		r.Value, r.Role = GlyphDone+" "+state, RoleOK
+	case strings.HasPrefix(state, "update ") && strings.Contains(state, " available"):
+		r.Value, r.Role = GlyphUp+" "+state, RoleAttention
+	}
+	return r
+}
+
+// aboutLogo is the wordmark, two rows of half blocks: AGENT-BUS. Every row
+// is aboutLogoW cells.
+var aboutLogo = [2]string{
+	"▄▀█ █▀▀ █▀▀ █▄ █ ▀█▀ ▄▄ █▄▄ █ █ █▀",
+	"█▀█ █▄█ ██▄ █ ▀█  █     █▄█ █▄█ ▄█",
+}
+
+const (
+	aboutLogoW  = 34
+	aboutLabelW = 10 // "agentbus" and two cells
+	aboutBlockW = 48 // the versions' column, at most
+)
+
 // aboutBody is the page in width cells, the packet at step; still is the
-// drawing without motion.
+// drawing without motion. Everything is centred on the page: the wordmark
+// (or the name in words when it does not fit), the versions in two aligned
+// sections, then the bus line.
 func aboutBody(a aboutState, step int, still bool, width int) []Line {
 	var b body
-	b.text(" ").segs(Seg{Text: "agent-bus monitor", Role: RoleAccent, Bold: true}).text("\n")
-	b.seg(RoleMuted, " agents coordinating over Redis Streams").text("\n\n")
-	if !a.loaded {
-		b.seg(RoleMuted, " reading the versions"+GlyphEllipsis).text("\n")
+	centre := func(w int) string { return strings.Repeat(" ", max(0, (width-w)/2)) }
+	line := func(ss ...Seg) {
+		w := 0
+		for _, s := range ss {
+			w += Width(s.Text)
+		}
+		b.text(centre(w)).segs(ss...).text("\n")
 	}
-	for _, l := range a.versions.Lines {
-		b.seg(RoleText, " "+Preview(l)).text("\n")
+
+	b.text("\n")
+	if width >= aboutLogoW+2 {
+		for _, row := range aboutLogo {
+			line(Seg{Text: row, Role: RoleAccent, Bold: true})
+		}
+		line(Seg{Text: "m o n i t o r", Role: RoleAccent})
+	} else {
+		line(Seg{Text: "agent-bus monitor", Role: RoleAccent, Bold: true})
+	}
+	line(S(RoleMuted, "agents coordinating over Redis Streams"))
+	b.text("\n")
+
+	if !a.loaded {
+		line(S(RoleMuted, "reading the versions"+GlyphEllipsis))
+	} else {
+		bw := min(aboutBlockW, max(0, width-4))
+		pad := centre(bw)
+		row := func(r aboutRow) {
+			role := r.Role
+			if role == RoleText && r.Value == "?" {
+				role = RoleMuted
+			}
+			segs := []Seg{S(RoleMuted, Fit(r.Label, aboutLabelW)), S(role, Preview(r.Value))}
+			if r.Note != "" {
+				segs = append(segs, S(r.NoteRole, "  "+r.Note))
+			}
+			b.text(pad).segs(segs...).text("\n")
+		}
+		heading := func(name string) {
+			rule := strings.Repeat(glyphHorizontal, max(0, bw-Width(name)-1))
+			b.text(pad).seg(RoleAccent, name).seg(RoleLine, " "+rule).text("\n")
+		}
+		b.text(pad).seg(RoleMuted, Fit("project", aboutLabelW)).segs(Seg{Text: Preview(a.versions.Project), Role: RoleText, Bold: true}).text("\n\n")
+		heading("THIS BUILD")
+		for _, r := range a.versions.Build {
+			row(r)
+		}
+		b.text("\n")
+		heading("THIS HOST")
+		for _, r := range a.versions.Host {
+			row(r)
+		}
 	}
 	b.text("\n")
+
 	route := aboutRoute()
 	packet, moving := aboutPoint{-1, -1}, !still && step > 0 && step < len(route)
 	if moving {
 		packet = route[step]
 	}
-	pad := func(n int) string { return strings.Repeat(" ", max(0, n)) }
-	b.seg(RoleAccent, pad(aboutMasterX-2)+"master"+pad(aboutCoderX-aboutMasterX-6)+"coder").text("\n")
+	ox := centre(aboutBusW)
+	gap := func(n int) string { return strings.Repeat(" ", max(0, n)) }
+	b.text(ox).seg(RoleAccent, gap(aboutMasterX-2)+"master"+gap(aboutCoderX-aboutMasterX-6)+"coder").text("\n")
 	for y := 0; y <= 2; y++ {
 		var l Line
 		for x := 0; x < aboutBusW; x++ {
@@ -215,7 +339,7 @@ func aboutBody(a aboutState, step int, still bool, width int) []Line {
 			}
 			l = append(l, S(role, cell))
 		}
-		b.text(" ").segs(l...).text("\n")
+		b.text(ox).segs(l...).text("\n")
 	}
 	status := "bus ready"
 	switch half := len(route) / 2; {
@@ -227,9 +351,10 @@ func aboutBody(a aboutState, step int, still bool, width int) []Line {
 	case step > 0:
 		status = "master " + GlyphArrowR + " a directive to coder"
 	}
-	b.text("\n").seg(RoleOK, " "+status).text("\n")
+	b.text("\n")
+	line(S(RoleOK, status))
 	if still {
-		b.seg(RoleMuted, " still: the packet travels with fade on, in true colour").text("\n")
+		line(S(RoleMuted, "still: the packet travels with fade on, in true colour"))
 	}
 	var out []Line
 	for _, l := range b.Lines() {
