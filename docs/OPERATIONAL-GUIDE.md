@@ -92,7 +92,7 @@ deduction, the project named on the command line. Use it:
 
 4. **Event-Driven Dispatcher (`agentbus dispatch`)**
    - A user service (systemd `--user`, launchd) watching the `{p}:cmd` stream.
-   - When a directive arrives for an idle, unarmed agent, it types a single wake command into its `herdr` pane (only when the pane is idle and not focused).
+   - When a directive arrives for an idle, unarmed agent, it types a single wake command into its `herdr` pane (only when the pane is idle and not focused). A wake that waits 30 s on the pane you are in earns one desktop notice (notify-send); leave the pane and the next pass wakes it. `dispatch.focus_notice` (page C, Attention; `0` = off) sets the delay.
    - The agent wakes up, drains waiting tasks via `agentbus subscribe --drain <agent>`, executes work, and returns to sleep.
    - It also reads the provider quotas, the agents' context fill and the project's health, and acts on them by rule (section 5, scenarios C and D).
 

@@ -245,7 +245,8 @@ func serviceTokens(getenv func(string) string, home func() (string, error)) disp
 // notify-send runner as the context alert.
 func servicePrompt(getenv func(string) string, lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) dispatch.PromptConfig {
-	return dispatch.PromptConfig{Grace: dispatch.PromptGrace(getenv), Notify: desktopNotify(lookPath, run)}
+	return dispatch.PromptConfig{Grace: dispatch.PromptGrace(getenv), Notify: desktopNotify(lookPath, run),
+		FocusGrace: dispatch.FocusNotice(getenv)}
 }
 
 // serviceClear is the dispatch service's auto-clear (lifecycle part B): on by

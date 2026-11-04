@@ -2,11 +2,12 @@
 
  Attention  how busmon calls you; bell and reminder timings apply at …
                                                                       
- ▶   Reminder after     5m                                            
-     Reminder snooze    15m                                           
-   • Bell               ○ off                                         
-     Recap after away   8h                                            
-     Update check       ○ off                                         
+ ▶   Reminder after              5m                                   
+     Reminder snooze             15m                                  
+   • Bell                        ○ off                                
+     Recap after away            8h                                   
+     Update check                ○ off                                
+     Focused pane notice after   30s                                  
                                                                       
  ──────────────────────────────────────────────────────────────────── 
  Reminder after · waiting.popup_after · from the default · read by    

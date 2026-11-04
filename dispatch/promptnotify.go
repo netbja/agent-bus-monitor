@@ -32,6 +32,9 @@ type PromptConfig struct {
 	// An episode older than that target's baseline stays the ring's: the
 	// notifier baselined it and will never send it (reviewer-codex).
 	Skip func(ctx context.Context, since int64) bool
+	// FocusGrace is how long a wake waits on a focused pane before the
+	// person gets a desktop notice (focus-notice; 0 = off).
+	FocusGrace time.Duration
 }
 
 // PromptGraceDefault: two observe passes past the first reading. A prompt is
