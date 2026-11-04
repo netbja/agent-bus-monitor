@@ -40,7 +40,7 @@ func TestRequestRefusalsAreTyped(t *testing.T) {
 // the script cannot drift past requestRefusals (foureyes).
 func TestEveryScriptRefusalIsListed(t *testing.T) {
 	re := regexp.MustCompile(`error_reply\('([^']*)'\)`)
-	found := re.FindAllStringSubmatch(requestTransitionSrc, -1)
+	found := re.FindAllStringSubmatch(requestTransitionSrc+requestPrioritySrc, -1)
 	if len(found) < 8 {
 		t.Fatalf("only %d error replies found in the script", len(found))
 	}

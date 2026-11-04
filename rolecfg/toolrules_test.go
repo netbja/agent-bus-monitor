@@ -221,7 +221,9 @@ var configDeny = []string{"Edit(~/.config/agentbus/config.toml)",
 	"Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)",
 	"Bash(agentbus notifications test*)",
 	// suspend spec §4: plain forms only, the commands refuse agent callers.
-	"Bash(agentbus suspend*)", "Bash(agentbus resume --all*)"}
+	"Bash(agentbus suspend*)", "Bash(agentbus resume --all*)",
+	// request-priority §4: the plain form only, the command refuses agent callers.
+	"Bash(agentbus request priority*)"}
 
 // masterUpRules are master's own rules in the shipped manifest (Charlie,
 // 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the

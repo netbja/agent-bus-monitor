@@ -325,9 +325,15 @@ func requestGroups(in reqInput) reqView {
 	}
 	for s, gs := range v.groups {
 		newestFirst := s == secWait
+		byPriority := s == secTracked // request-priority §6: the tracked section only
 		for i := range gs {
 			ts := gs[i].Threads
 			sort.SliceStable(ts, func(a, b int) bool {
+				if byPriority {
+					if ra, rb := threadRank(ts[a]), threadRank(ts[b]); ra != rb {
+						return ra < rb
+					}
+				}
 				if newestFirst {
 					return ts[a].At.After(ts[b].At)
 				}
@@ -338,6 +344,11 @@ func requestGroups(in reqInput) reqView {
 			ua, ub := gs[a].State() == "unread", gs[b].State() == "unread"
 			if ua != ub {
 				return ua
+			}
+			if byPriority {
+				if ra, rb := groupRank(gs[a]), groupRank(gs[b]); ra != rb {
+					return ra < rb
+				}
 			}
 			if newestFirst {
 				return gs[a].Threads[0].At.After(gs[b].Threads[0].At)
@@ -426,4 +437,44 @@ func reqSectionNote(s reqSection) string {
 		return "Notices: nobody owes an answer."
 	}
 	return "Answered, or older than 7 days."
+}
+
+// threadRank is a thread's place by priority: a requested request's level
+// (bus.PriorityRank); accepted, blocked and done ones, and every other
+// thread, sort as normal: the display never claims to reorder work in hand.
+func threadRank(th reqThread) int {
+	if th.Request != nil && th.Request.State == "requested" {
+		return bus.PriorityRank(th.Request.Priority)
+	}
+	return bus.PriorityRank("")
+}
+
+// groupRank is a group's best thread rank.
+func groupRank(g reqGroup) int {
+	if len(g.Threads) == 0 {
+		return bus.PriorityRank("")
+	}
+	best := threadRank(g.Threads[0]) // not normal: an all-low group ranks low (reviewer-codex)
+	for _, th := range g.Threads[1:] {
+		best = min(best, threadRank(th))
+	}
+	return best
+}
+
+// groupPriority is the level a group's mark shows: its highest member's
+// stored level ("" normal), whatever its state.
+func groupPriority(g reqGroup) string {
+	best := bus.PriorityRank(bus.PriorityLow) + 1 // above every level: no request, no mark
+	for _, th := range g.Threads {
+		if th.Request != nil {
+			best = min(best, bus.PriorityRank(th.Request.Priority))
+		}
+	}
+	switch best {
+	case bus.PriorityRank(bus.PriorityHigh):
+		return bus.PriorityHigh
+	case bus.PriorityRank(bus.PriorityLow):
+		return bus.PriorityLow
+	}
+	return ""
 }

@@ -23,6 +23,7 @@ type busWriter interface {
 	ForgetAgent(ctx context.Context, agent string) (bool, error)
 	Thread(ctx context.Context, threadID string) ([]bus.Event, error)
 	Resume(ctx context.Context, by, message string) (bool, error)
+	SetRequestPriority(ctx context.Context, task, level, by string) (bool, error) // the person's, request-priority §6
 }
 
 // overlayKind is a reader page's kind (tea_reader.go): one per overlay that

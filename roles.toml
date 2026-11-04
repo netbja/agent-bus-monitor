@@ -127,6 +127,11 @@ deny = [
   # deny every message that mentions a suspend; the commands refuse an agent
   # caller themselves, whatever the spelling.
   "Bash(agentbus suspend*)", "Bash(agentbus resume --all*)",
+  # A request's priority is the person's (request-priority spec §4). Only the
+  # plain form, as for suspend: "agentbus * request priority*" (or with
+  # --project *) would deny every message that mentions one; the command
+  # refuses an agent caller itself, whatever the spelling.
+  "Bash(agentbus request priority*)",
 ]
 
 [roles.master]

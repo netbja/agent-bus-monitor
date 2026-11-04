@@ -126,6 +126,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		m.lists.activity.Resume()
 	case ActFold:
 		m.ui.reqOpen.folded = !m.ui.reqOpen.folded
+	case ActPriorityUp, ActPriorityDown:
+		cmd = m.setPriority(act == ActPriorityUp)
 	case ActOpen:
 		cmd = m.openTracked(m.ui.focus, false)
 	case ActCopy:

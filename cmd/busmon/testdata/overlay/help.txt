@@ -22,6 +22,7 @@ KEYS
   d del                remove
   a                    show or hide the agents silent for more than a day
   o                    Requests: show or hide the answered threads and those older than 7 days
+  + -                  Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first
   /                    filter
   i :                  write
   I                    write in the compose window (several lines, Ctrl+S sends)
@@ -68,6 +69,7 @@ KEYS
   r                    About (A): play the packet's run again
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
+  + -                  a tracked request's page: raise or lower its priority (low, normal, high)
   i I                  reply in the compose window: on an agent's page to that agent; on a message, report or note page to its sender, an agent, prefilled with re: and its first line
   ^C                   quit (everywhere)
   answering questions

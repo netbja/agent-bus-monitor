@@ -41,6 +41,10 @@ type request struct {
 	DuplicatePossible bool
 	BlockedReason     string
 	ResponseID        string
+
+	Priority   string    // high | low | "" normal (request-priority: set only by the person)
+	PriorityBy string    // who set it
+	PriorityAt time.Time // when (Redis TIME)
 }
 
 // msTime converts a Unix-millisecond stamp, keeping 0 as the zero time so
@@ -70,6 +74,7 @@ func boardRequests(m map[string]bus.BoardEntry) []request {
 			r.Delivery, r.Availability = q.Delivery, q.Availability
 			r.Attempts, r.DuplicatePossible = q.Attempts, q.DuplicatePossible
 			r.BlockedReason, r.ResponseID = q.BlockedReason, q.ResponseID
+			r.Priority, r.PriorityBy, r.PriorityAt = q.Priority, q.PriorityBy, msTime(q.PriorityAt)
 		}
 		out = append(out, r)
 	}
@@ -223,6 +228,13 @@ func requestBlock(r request, now time.Time) []Line {
 		facts = append(facts, av)
 	}
 	b.text("   ").seg(RoleMuted, strings.Join(facts, " · ")).text("\n")
+	if line := priorityLine(r); line != "" { // request-priority §6
+		role := RoleMuted
+		if r.Priority == "high" {
+			role = RoleAttention
+		}
+		b.text("   ").seg(role, line).text("\n")
+	}
 	return b.Lines()
 }
 

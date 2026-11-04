@@ -51,15 +51,16 @@ func (c reqLayout) who(name, self string) string {
 	return name
 }
 
-// row lays out one row: symbol, from → to, kind, subject, age.
-func (c reqLayout) row(sym Seg, from, target, self, kind, subject string, at, now time.Time) Line {
+// row lays out one row: symbol, from → to, the priority mark, kind,
+// subject, age.
+func (c reqLayout) row(sym, mark Seg, from, target, self, kind, subject string, at, now time.Time) Line {
 	if c.short {
 		if k, ok := reqKindShort[kind]; ok {
 			kind = k
 		}
 	}
 	r := listRow{Sym: sym.Text, Role: sym.Role, Name: c.who(from, self) + " " + GlyphArrowR + " " + c.who(target, self),
-		State: Fit(kind, c.kindW) + subject}
+		State: Fit(kind, c.kindW) + subject, Mark: mark, HasMark: true}
 	if !at.IsZero() {
 		r.Age = humanAge(now.Sub(at))
 	}
@@ -83,6 +84,21 @@ func reqSym(sec reqSection, kind, state string) Seg {
 	}
 	return S(RoleMuted, GlyphNone)
 }
+
+// priorityMark is a request's level as its row shows it: ↑ in the attention
+// colour for high, ↓ muted for low, a blank cell for normal or no request.
+func priorityMark(level string) Seg {
+	switch level {
+	case bus.PriorityHigh:
+		return S(RoleAttention, GlyphUp)
+	case bus.PriorityLow:
+		return S(RoleMuted, GlyphDownArrow)
+	}
+	return S(RoleText, " ")
+}
+
+// noMark is the blank mark of a row that is no request.
+var noMark = priorityMark("")
 
 func padLeft(s string, n int) string {
 	if w := Width(s); w < n {
@@ -130,7 +146,11 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 		if indent {
 			subject = "  " + subject
 		}
-		return ListItem{Key: threadKey(th), Selectable: true, Line: fit(c.row(sym, th.From, th.Target, v.self, th.Kind, Preview(subject), th.At, now))}
+		mark := noMark
+		if th.Request != nil {
+			mark = priorityMark(th.Request.Priority)
+		}
+		return ListItem{Key: threadKey(th), Selectable: true, Line: fit(c.row(sym, mark, th.From, th.Target, v.self, th.Kind, Preview(subject), th.At, now))}
 	}
 	groupRow := func(g reqGroup) []ListItem {
 		if len(g.Threads) == 1 {
@@ -143,7 +163,7 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 		subject = fmt.Sprintf("%s (+%d)", Preview(subject), len(g.Threads)-1)
 		key := g.Key()
 		items := []ListItem{{Key: key, Selectable: true, Expanded: open.groups[key],
-			Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))}}
+			Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), priorityMark(groupPriority(g)), g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))}}
 		if open.groups[key] {
 			for _, th := range g.Threads {
 				items = append(items, threadRow(th, true))
@@ -160,7 +180,7 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 				word = "question"
 			}
 			out = append(out, ListItem{Key: "ask:" + a.ID, Selectable: true,
-				Line: fit(c.row(S(RoleAttention, GlyphGate), a.From, v.self, v.self, "ask", fmt.Sprintf("%s (%d %s)", Preview(a.Title), a.Open, word), a.At, now))})
+				Line: fit(c.row(S(RoleAttention, GlyphGate), noMark, a.From, v.self, v.self, "ask", fmt.Sprintf("%s (%d %s)", Preview(a.Title), a.Open, word), a.At, now))})
 		}
 		for _, g := range v.groups[secOwed] {
 			out = append(out, groupRow(g)...)
@@ -182,7 +202,7 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 					label = fmt.Sprintf("%d older shown  (enter folds them)", len(rest))
 				}
 				out = append(out, ListItem{Key: key, Selectable: true, Expanded: open.groups[key],
-					Line: fit(c.row(S(RoleMuted, " "), g.From, g.Target, v.self, g.Kind, label, older.Oldest(), now))})
+					Line: fit(c.row(S(RoleMuted, " "), noMark, g.From, g.Target, v.self, g.Kind, label, older.Oldest(), now))})
 			}
 		}
 	}
@@ -208,7 +228,7 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 				}
 				subject := fmt.Sprintf("%s (+%d)", Preview(g.Threads[len(g.Threads)-1].Subject), len(g.Threads)-1)
 				out = append(out, ListItem{Key: "ntc:" + g.Key(), Selectable: true,
-					Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))})
+					Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), noMark, g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))})
 			}
 		}
 	}

@@ -566,6 +566,7 @@ chasing it means reading the feed and guessing. A **tracked request** records th
 ```bash
 agentbus request send <task> <target> [--ref T] [--ttl 5m] <body>
 agentbus request                       # EVERY tracked request, done ones included (--json)
+agentbus request next <agent>          # what that agent takes next, before you send it more
 ```
 
 - The `<task>` slug **is** the board key, so the request creates the board entry in state
@@ -575,6 +576,11 @@ agentbus request                       # EVERY tracked request, done ones includ
   which busmon states plainly. Don't set one you don't mean: once it passes, a peer that had
   not yet accepted can no longer take the work and has to come back to you. A peer that had
   already accepted can still resume after a block.
+- **Priority is the person's.** A tracked request may carry `high` or `low` (absent = normal),
+  set only by the person (busmon `+`/`-` on the Requests tab, or `agentbus request priority
+  <task> high|normal|low --as <person>` from their own shell; agents are refused and denied).
+  Agents take the next by `request next`: priority, then age, work in hand first. When the
+  person wants something first, they set it; you do not reorder by rewording directives.
 - Use plain `cmd` for what it is good at: a nudge, an answer, an FYI, anything you will not
   follow up.
 

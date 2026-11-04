@@ -33,6 +33,10 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		return enc.Encode(requests)
 	}
 	switch args[0] {
+	case "priority":
+		return requestPriority(ctx, b, args[1:], out)
+	case "next":
+		return requestNext(ctx, b, self, args[1:], asJSON, out)
 	case "send":
 		args, ref := extractFlag(args[1:], "--ref")
 		args, ttlArg := extractFlag(args, "--ttl")
@@ -82,7 +86,7 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		_, err = fmt.Fprintln(out, id)
 		return err
 	default:
-		return fmt.Errorf("request: want send|accept|block|done or [--json]")
+		return fmt.Errorf("request: want send|accept|block|done|priority|next or [--json]")
 	}
 }
 

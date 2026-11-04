@@ -51,7 +51,10 @@ func hostileShared(now time.Time, down bool) *shared {
 	for i := 0; i < 30; i++ {
 		st.board[fmt.Sprintf("task-%02d-%s", i, hostileText)] = bus.BoardEntry{Owner: "a00", State: []string{"working", "requested", "blocked", "done"}[i%4], Updated: now.Unix()}
 	}
-	st.requests = []request{{Task: "t-" + hostileText, Tracked: true, From: "a00", Target: "a01", State: "blocked", BlockedReason: hostileText, Created: now}}
+	st.requests = []request{{Task: "t-" + hostileText, Tracked: true, From: "a00", Target: "a01", State: "blocked", BlockedReason: hostileText, Created: now},
+		// request-priority §6: the marks drawn at every size and palette.
+		{Task: "hi-" + hostileText, Tracked: true, From: "a00", Target: "a02", State: "requested", Created: now, Priority: "high", PriorityBy: "charlie", PriorityAt: now},
+		{Task: "lo-" + hostileText, Tracked: true, From: "a00", Target: "a03", State: "requested", Created: now, Priority: "low", PriorityBy: "charlie", PriorityAt: now}}
 	st.threads = []openThread{{ID: "1-0", Type: "directive", From: "a00", Target: "a02", Message: hostileText, At: now}}
 	for i := 0; i < 12; i++ { // the Requests view's rows: every section, hostile senders, targets and texts
 		from, to, typ, msg := "a0"+fmt.Sprint(i%3)+hostileText, "a0"+fmt.Sprint(i%4), "directive", hostileText

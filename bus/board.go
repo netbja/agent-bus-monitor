@@ -107,14 +107,6 @@ func (b *Bus) boardEntry(ctx context.Context, key, task string) (*BoardEntry, er
 	return &e, nil
 }
 
-func (b *Bus) boardSet(ctx context.Context, key, task string, e BoardEntry) error {
-	v, err := json.Marshal(e)
-	if err != nil {
-		return err
-	}
-	return b.r.HSet(ctx, key, task, v).Err()
-}
-
 // The whole read/check/write runs atomically and preserves unknown JSON fields.
 var boardMutation = redis.NewScript(`
 local raw = redis.call('HGET', KEYS[1], ARGV[2])

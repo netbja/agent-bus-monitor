@@ -20,6 +20,11 @@ type listRow struct {
 	State string
 	Note  Line   // an optional column before the age: a command, who deals with it
 	Age   string // humanAge, or ""
+	// Mark, with HasMark, is a one-cell column before the state (and a blank
+	// after it): the Requests list's priority, blank for normal, so every row
+	// of that list keeps its kind in one column (request-priority §6).
+	Mark    Seg
+	HasMark bool
 }
 
 // listAgeW is the age column: "59s", "23h", "120d".
@@ -45,6 +50,10 @@ func (r listRow) cells(width, nameW, noteW int) Line {
 		stateW -= noteW + 2
 	}
 	l := Line{S(r.Role, r.Sym), S(RoleText, " "+Fit(Preview(r.Name), nameW)+"  ")}
+	if r.HasMark && stateW > 2 {
+		l = append(l, S(r.Mark.Role, Fit(r.Mark.Text, 1)), S(RoleText, " "))
+		stateW -= 2
+	}
 	l = append(l, S(RoleText, Fit(Preview(r.State), max(0, stateW))))
 	if noteW > 0 {
 		note := FitLine(r.Note, noteW)

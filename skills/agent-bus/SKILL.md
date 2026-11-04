@@ -292,7 +292,14 @@ agentbus request block  <task> <reason>     # when you cannot proceed — say wh
 agentbus request accept <task>              # to resume after a block
 agentbus request done   <task> <reply>      # when finished — the reply is your answer
 agentbus request                            # EVERY tracked request, done ones included
+agentbus request next                       # which one to take next (exit 64: nothing ready)
 ```
+
+- **When more than one tracked request waits for you, run `agentbus request next` and accept
+  the task it names.** The person may set a request's priority (high, normal, low; absent =
+  normal); `next` orders by it, then by age. A request you already accepted comes first
+  (`finish first`): nothing overtakes work in hand. A delivered request in review does not hold
+  you. You never set a priority: `request priority` is the person's, and it refuses an agent.
 
 - Only the **target** agent can accept, block or complete its own request.
 - `block` does not require a prior `accept` — you may refuse work you never took, with a
