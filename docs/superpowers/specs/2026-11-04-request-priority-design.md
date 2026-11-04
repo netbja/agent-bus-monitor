@@ -18,13 +18,20 @@ the same way.
 
 - **One of three levels per tracked request:** `high`, `normal` or `low`. Absent means `normal`.
 - **Set by the person only, never by an agent** (§4).
-- **It orders ready work and nothing else** (§5). A request is ready when it is `requested`: sent,
-  not yet accepted, not blocked, not done and not expired.
+- **It orders ready work and nothing else** (§5). A request is ready when its board state is
+  `requested` and `Bus.Board`'s derived `Availability` is `retained`: its body is still in the cmd
+  stream and its deadline has not passed. The other two values are `missing` (body trimmed) and
+  `expired` (`now >= expires_at`). Neither can be accepted: `requestTransition` refuses both, so
+  neither is ever next.
 - **Untouched:**
   - dependencies, both a plan task's `after` and a mission's order;
   - one task at a time: an agent with an accepted request finishes it first;
-  - the review: a `done` request is delivered, so it is in review, and a priority never puts a new
-    request ahead of it;
+  - the review: a `done` request is delivered, so it is in review. It is out of the ready set, and
+    a priority never reopens, reorders or pre-empts it. "Never overtakes a request in review" means
+    exactly that, and nothing more. It does **not** add a review barrier: an agent with a delivered
+    request under review may take its next ready request, as today (the review queue). A barrier
+    ("no new work while my delivery is in review") would be a new policy: open question 6, for the
+    person;
   - delivery: the cmd stream and the drain keep id order, at least once.
 - **Not in this spec:** plan tasks (phase 2, §10) and missions.
 
@@ -112,16 +119,20 @@ There is one pure function in `bus`, so the CLI and busmon cannot disagree:
 // RequestLess orders ready requests: priority rank, then created_at, then id.
 func RequestLess(a, b RequestInfo) bool
 // NextRequest is the request an agent should take next, or why none.
-func NextRequest(board map[string]BoardEntry, agent string, now int64) (task string, why string)
+func NextRequest(board map[string]BoardEntry, agent string) (task string, why string) // board as Bus.Board returns it
 ```
 
 `NextRequest(agent)` works in this order:
 
 1. If the agent has an `accepted` request that is not done, it answers that one with the reason
    `finish first`. Nothing overtakes work in hand.
-2. Otherwise it takes the agent's ready requests (`requested`, not expired at `now`, body
-   available: `Availability` is not `gone`) and answers the first by `RequestLess`.
-3. If there are none, it answers `nothing ready`.
+2. Otherwise it takes the agent's ready requests (state `requested` and `Availability ==
+   "retained"`, the values `Bus.Board` derives with one Redis `TIME`) and answers the first by
+   `RequestLess`. `NextRequest` is pure over those derived values and takes no `now` of its own, so
+   it can never call ready what `Bus.Board` called `expired`.
+3. A `done` request, delivered and in review, is neither in hand nor ready. With a done A under
+   review and a high requested B, the answer is B (no review barrier, §2 and open question 6).
+4. If there are none, it answers `nothing ready`.
 
 A `blocked` request does not hold the agent: it waits on someone else. Its priority applies again
 once it is accepted.
@@ -201,15 +212,20 @@ Test-first, one step each:
    - `PriorityRank`, and `RequestLess` with every pair of levels, equal levels by `created_at`, and
      equal times by id;
    - `NextRequest`: an accepted request wins whatever its level; a blocked one does not hold the
-     agent; expired and gone bodies are skipped; another agent's requests are ignored; `nothing
-     ready`.
+     agent; `missing` and `expired` requests are skipped whatever their level (a high missing one
+     never beats a normal retained one); a done A in review plus a high requested B gives B;
+     another agent's requests are ignored; `nothing ready`.
 2. **`bus`, Redis (disposable broker):**
    - set high, set low, set normal (fields removed), the same level twice (`changed = false`, entry
      byte for byte equal);
    - refused on unknown, untracked and done;
    - the priority survives `AcceptRequest`, `BlockRequest`, `deliveryRecord`, the conductor's
      fenced board state and `CompleteRequestAt`;
-   - `priority_at` comes from Redis `TIME`.
+   - `priority_at` comes from Redis `TIME`;
+   - availability for real: a request whose cmd entry is trimmed (`XTRIM`) reads `missing` through
+     `Bus.Board` and is never `request next`, while an accepted request whose body has since been
+     trimmed still holds the agent (in hand needs no body); an expired deadline reads `expired` and
+     is skipped.
    - **Mutants:** remove the done refusal; store `normal` instead of deleting.
 3. **The no-Go-writer test:** an AST walk over the module that fails on an `HSet` to `BoardKey(…)`
    outside a script. It keeps §3's survival argument true.
@@ -254,3 +270,8 @@ The person said the plan comes later. Recorded here so phase 1 does not close th
    today, or refuse anything but `requested`? The proposal is to allow it, since it applies again
    once a blocked request is accepted.
 5. **Phase 2 storage:** plan facts (the proposal) or a field in the plan file.
+6. **Review barrier:** should an agent with a delivered request still in review take no new
+   request until the review closes? Today it may, and the proposal keeps that: the review queue
+   runs in parallel. A barrier would need a source (the verdict roll-up over the request's subject)
+   and a release (approved, or rejected and re-opened). It is a person's decision, not part of
+   priority.
