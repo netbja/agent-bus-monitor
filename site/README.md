@@ -86,6 +86,21 @@ The three files of the owner's chosen concept ("A, visor bus", from the branch
   `prefers-reduced-motion`.
 - The language switch links the two pages; there is no automatic redirect.
 
+## Accessibility and print
+
+- Keyboard: a skip link to `<main>`; every horizontally scrolling block (terminal screens, figures,
+  install and step commands) takes the focus so it can be scrolled with the arrows. The focus ring
+  is drawn inward where its box clips (`overflow`), so it is never cut.
+- Names: the GitHub button keeps its label for assistive technology when only its icon shows; the
+  language switch reads "FR — Français" / "EN — English"; the theme button is a toggle
+  (`aria-pressed`) that also follows a system theme change; the copy button reports "copied"
+  through a `role="status"` region.
+- Reflow: no horizontal page scroll at 320 CSS px (an inline `code` token wider than the column
+  wraps there, and only there).
+- Print: always the light tokens, every reveal shown, header, ribbon and copy buttons left out, the
+  dark screens kept with `print-color-adjust: exact` and sized to fit 140 columns, external link
+  targets printed after the link.
+
 ## Contrast of the terminal screens
 
 `build.py` computes the contrast of every foreground/background pair drawn in the screens and, for

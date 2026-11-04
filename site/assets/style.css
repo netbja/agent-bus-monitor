@@ -38,17 +38,22 @@
 }
 
 *,*::before,*::after{box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-padding-top:96px;-webkit-text-size-adjust:100%}
+html{scroll-behavior:smooth;scroll-padding-top:96px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;background:var(--paper);color:var(--ink);font:400 17px/1.62 var(--sans);overflow-x:hidden;
   text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
 img,svg{max-width:100%}
 a{color:var(--blue);text-underline-offset:3px;text-decoration-thickness:1px}
 a:hover{text-decoration-thickness:2px}
 :focus-visible{outline:3px solid var(--blue);outline-offset:3px;border-radius:4px}
+/* inside a box that clips (overflow), the ring is drawn inward so it is never cut */
+.term .scr:focus-visible,.install pre:focus-visible{outline-offset:-3px}
+main:focus{outline:none}
 code,kbd,samp{font-family:var(--mono);font-size:.88em}
 p code,li code,td code,dd code{background:var(--line-soft);padding:.08em .38em;border-radius:5px;white-space:nowrap}
+/* narrow: a token keeps one line when it fits one; only a token wider than the column wraps (320 px reflow) */
+@media (max-width:480px){p code,li code,td code,dd code{display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere}}
 .wrap{width:100%;max-width:var(--max);margin-inline:auto;padding-inline:var(--gutter)}
-.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sr{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 .skip{position:absolute;left:var(--gutter);top:-80px;background:var(--ink);color:var(--paper);padding:.6rem 1rem;border-radius:0 0 8px 8px;z-index:100;text-decoration:none;font-weight:700}
 .skip:focus{top:0}
 
@@ -60,7 +65,7 @@ p code,li code,td code,dd code{background:var(--line-soft);padding:.08em .38em;b
 .hues{display:grid;grid-template-columns:repeat(4,1fr);height:4px}
 .hues i:nth-child(1){background:var(--amber)}.hues i:nth-child(2){background:var(--green)}
 .hues i:nth-child(3){background:var(--blue)}.hues i:nth-child(4){background:var(--violet)}
-header.site{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+header.site{position:sticky;top:0;z-index:50;background:var(--paper);background:color-mix(in srgb,var(--paper) 88%,transparent);-webkit-backdrop-filter:saturate(1.4) blur(10px);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
 .bar{display:flex;align-items:center;gap:14px;min-height:60px;flex-wrap:wrap;padding-block:6px}
 .brand{display:flex;align-items:center;color:var(--ink);text-decoration:none;margin-right:auto}
 .brand svg{height:38px;width:auto;display:block}
@@ -68,6 +73,8 @@ header.site{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--
 .brand .eyes{fill:var(--paper)}
 .brand .word{fill:var(--ink);font-family:var(--sans);font-weight:700}
 nav.primary{order:3;width:100%;overflow-x:auto;scrollbar-width:none;margin-inline:calc(var(--gutter)*-1);padding-inline:var(--gutter)}
+nav.primary::-webkit-scrollbar{display:none}
+@media (max-width:879px){nav.primary a:focus-visible{outline-offset:-3px}}
 nav.primary ul{display:flex;gap:4px;list-style:none;margin:0;padding:0}
 nav.primary a{display:block;padding:.4rem .75rem;border-radius:999px;color:var(--muted);text-decoration:none;font:500 14.5px/1.2 var(--sans);white-space:nowrap}
 nav.primary a:hover{background:var(--line-soft);color:var(--ink)}
@@ -77,8 +84,9 @@ nav.primary a:hover{background:var(--line-soft);color:var(--ink)}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .btn svg{width:18px;height:18px;fill:currentColor;flex:none}
-.btn .t{display:none}
-@media (min-width:520px){.btn .t{display:inline}}
+/* narrow: the label is hidden from sight only, so the icon link keeps its name */
+.btn .t{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+@media (min-width:520px){.btn .t{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;clip-path:none}}
 .icon-btn{width:40px;padding:0;justify-content:center}
 .theme-ico .moon{display:none}
 :root[data-theme="dark"] .theme-ico .sun{display:none}
@@ -110,7 +118,7 @@ section{padding-block:clamp(56px,9vw,104px)}
 .install{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
 .install header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font:500 12px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .install pre{margin:0;padding:16px 14px;overflow-x:auto;font:400 13.5px/1.75 var(--mono)}
-.install .p{color:var(--green);user-select:none}
+.install .p{color:var(--green);-webkit-user-select:none;user-select:none}
 .install .c{color:var(--muted)}
 .copy{font:500 12px/1 var(--mono);padding:.4rem .65rem;border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
 .copy:hover{border-color:var(--muted)}
@@ -131,7 +139,7 @@ section{padding-block:clamp(56px,9vw,104px)}
 .term figcaption{display:flex;justify-content:space-between;gap:12px;padding:9px 14px;border-bottom:1px solid #21262D;font:500 12px/1.2 var(--mono);color:#9BA7B4;letter-spacing:.03em}
 .term figcaption b{color:#E8BC63;font-weight:700}
 .term .scr{overflow-x:auto;padding:12px 14px 14px}
-.term pre{margin:0;font-family:var(--screen-font);font-size:clamp(10.5px,calc(100cqw / 87),12.8px);line-height:1.28;font-variant-ligatures:none;color:#E6EDF3;width:max-content}
+.term pre{margin:0;font-family:var(--screen-font);font-size:11.5px;font-size:clamp(10.5px,calc(100cqw / 87),12.8px);line-height:1.28;font-variant-ligatures:none;color:#E6EDF3;width:max-content}
 .term .note{padding:8px 14px;border-top:1px solid #21262D;font:400 12px/1.4 var(--sans);color:#9BA7B4}
 /* busmon dark palette (cmd/busmon/theme.go): generated classes below */
 /* generated by tools/build.py from the golden .ansi files; foregrounds under 4.5:1 are lifted to 4.5:1 */
@@ -234,7 +242,7 @@ section{padding-block:clamp(56px,9vw,104px)}
 .steps h3{font-size:1.4rem;margin-bottom:4px}
 .steps p{margin:0 0 10px;color:var(--muted);font-size:.96rem}
 .steps pre{margin:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;font:400 13px/1.7 var(--mono)}
-.steps pre .p{color:var(--green);user-select:none}
+.steps pre .p{color:var(--green);-webkit-user-select:none;user-select:none}
 .steps pre .c{color:var(--muted)}
 .two{display:grid;gap:18px}
 @media (min-width:860px){.two{grid-template-columns:1fr 1fr}}
@@ -263,7 +271,31 @@ footer .rel i{width:8px;height:8px;border-radius:50%;background:var(--green)}
   .pkt.two{transform:translateX(730px)}
   .js .reveal{opacity:1;transform:none;transition:none}
 }
-@media print{header.site,.masthead,.hues,.skip{display:none}body{background:#fff;color:#000}}
+@media print{
+  /* paper is light whatever the screen theme; backgrounds are usually not printed */
+  :root,:root[data-theme],:root:not([data-theme="light"]){
+    --paper:#FFFFFF; --card:#FFFFFF; --ink:#1F2328; --muted:#57606A; --line:#D0D7DE; --line-soft:#EEF1F4;
+    --amber:#9A6700; --green:#1A7F37; --blue:#0969DA; --violet:#6E40C9; --red:#CF222E;
+    --amber-t:#FFF4D6; --green-t:#E3F5E8; --blue-t:#E3F0FF; --violet-t:#EFE9FB; --red-t:#FFE9EA;
+    --shadow:none; color-scheme:light;
+  }
+  header.site,.masthead,.hues,.skip,.ribbon,.copy{display:none}
+  body{background:#fff;color:#000;font-size:11pt;overflow:visible}
+  .js .reveal{opacity:1!important;transform:none!important;transition:none!important}
+  .pkt{animation:none}
+  section{padding-block:24pt}
+  .install,.card,.steps>li,.panel,.dia{box-shadow:none}
+  .btn.primary{background:none;color:var(--ink);border-color:var(--ink)} /* its fill is a background, which is not printed */
+  .install pre,.steps pre{overflow:visible;white-space:pre-wrap;overflow-wrap:anywhere}
+  .dia{overflow:visible}.dia svg{min-width:0}
+  /* the screens are dark by design: keep their colours, and fit 140 columns on the page */
+  .term{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none}
+  .term .scr{overflow:visible}
+  .term pre{font-size:5.6pt}
+  .card,.fig,.tour-item,.steps>li,.panel,.term,.remember{break-inside:avoid}
+  h1,h2,h3,.sec-head{break-after:avoid}
+  main a[href^="http"]::after,footer a[href^="http"]::after{content:" (" attr(href) ")";font-size:.8em;overflow-wrap:anywhere}
+}
 
 .mt{margin-top:14px}
 .c-amber{--c:var(--amber)}.c-green{--c:var(--green)}.c-blue{--c:var(--blue)}.c-violet{--c:var(--violet)}
