@@ -142,3 +142,37 @@ func hintsHave(m Model, hint string) bool {
 	}
 	return strings.Contains(b.String(), " "+hint)
 }
+
+// A report notice (from its author) replies to the author with the report's
+// own first line, never its envelope: the retained report's full text, else
+// the notice's subject when the report is gone (foureyes).
+func TestReplyKeyOnAReportNotice(t *testing.T) {
+	notice := bus.Event{Kind: "cmd", Type: "directive", From: "coder", Target: "charlie", ID: "9-5",
+		Message: reportPrefix("8-0") + "Parser done, one question"}
+	report := bus.Event{Kind: "report", Agent: "coder", ID: "8-0", Message: "Parser done, one question",
+		Full: "\nParser done: the grammar is in\n\n## What remains for you"}
+	for _, c := range []struct {
+		name     string
+		retained bool
+		body     string
+	}{
+		{"its report retained", true, "re: Parser done: the grammar is in\n"},
+		{"its report gone", false, "re: Parser done, one question\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m := fixtureShell(t, 140, 40)
+			if c.retained {
+				m.feed.feed = append(m.feed.feed, feedLine{ev: report, at: shellNow})
+			}
+			m.pushMessage(notice, shellNow)
+			m = keys(t, m, 'i')
+			cm := m.ui.compose
+			if cm == nil || cm.recipient() != "coder" || cm.area.value() != c.body {
+				t.Fatalf("i opened %+v", cm)
+			}
+			if strings.Contains(cm.area.value(), "for you (full text") {
+				t.Fatalf("the envelope was quoted: %q", cm.area.value())
+			}
+		})
+	}
+}

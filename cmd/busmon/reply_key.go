@@ -80,8 +80,27 @@ func (m *Model) replyFromPage(p *page) {
 	}
 	m.openMessageCompose("", to)
 	if c := m.ui.compose; c != nil {
-		c.area.set(replyPrefill(p.ev))
+		c.area.set(replyPrefill(m.replySource(p.ev)))
 		c.onTo = false
 		m.layoutCompose()
 	}
+}
+
+// replySource is the event whose text the reply quotes: a report notice
+// (report --to, from its author) quotes its report, never its envelope: the
+// retained report's own text, else the notice's subject when the report is
+// gone (foureyes). Any other event quotes itself.
+func (m *Model) replySource(ev bus.Event) bus.Event {
+	subject, id, ok := reportSubject(ev.Message)
+	if !ok || ev.Kind != "cmd" {
+		return ev
+	}
+	for i := len(m.feed.feed) - 1; i >= 0; i-- {
+		if r := m.feed.feed[i].ev; r.Kind == "report" && r.ID == id {
+			return r
+		}
+	}
+	src := ev
+	src.Message, src.Full = subject, ""
+	return src
 }

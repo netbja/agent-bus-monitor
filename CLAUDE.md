@@ -343,7 +343,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   binding marked `OnPage` only where `pageOffers` says the page offers it, under the word `pageHint` gives;
   on an agent's page `y` copies the status message and `Y` the whole report the page shows, `Y` offered only where a
   page has something for it; message-reply-key, `reply_key.go`: `i` on a message, report or note page opens the compose
-  window to its sender prefilled `re: <first line>` (cut at `replyFirstMax`, 72 runes), offered (`OnPage`, after close in
+  window to its sender prefilled `re: <first line>` (cut at `replyFirstMax`, 72 runes; a report notice quotes its
+  report, the retained one's text else the notice's subject, never the envelope: `replySource`), offered (`OnPage`, after close in
   the footer) only when the sender is a registered agent (`replyTarget`: never the dispatcher, the person or a non-agent,
   each said when `i` is pressed), a draft opened as it was, never overwritten), `keys.go` (one key table per mode drives the handler, the footer
   (its F-keys grouped last, ascending; on the main screen room is kept for F1 help and F5 health) and the help; `key.go`'s engine-neutral `Key`, `keyOfTea` its adapter), `poll.go` (`pollOnce`
