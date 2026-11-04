@@ -101,6 +101,10 @@ func (m *Model) sleepConfirm(k Key) tea.Cmd {
 // startSleep runs agentbus suspend or resume for the open project, in a
 // command: the child is started off the update path.
 func (m *Model) startSleep(resume bool) tea.Cmd {
+	if r := m.ui.sleepRun; r != nil { // one run at a time, whichever way it was asked for (foureyes)
+		m.ui.flash, m.ui.flashErr = r.verb+" already running (see "+r.log+")", true
+		return nil
+	}
 	run, logOf, p := m.cfg.sleepRunner, m.cfg.sleepLog, m.cfg.project
 	verb := "suspend"
 	if resume {

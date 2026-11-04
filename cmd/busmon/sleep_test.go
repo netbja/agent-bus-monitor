@@ -168,3 +168,16 @@ func TestPausePopupOnASuspend(t *testing.T) {
 		t.Fatalf("runs = %q", w.runs)
 	}
 }
+
+// The popup's Resume while a run goes starts nothing more and says so, as a
+// second Z does (foureyes).
+func TestPausePopupResumeWhileARunGoes(t *testing.T) {
+	w := newSleepWorld(t, suspendedPause())
+	w.press(t, 'Z')
+	w.press(t, 'y')
+	w.m.ui.pausePopup = &pauseDialog{rec: *suspendedPause(), key: "k", sel: 0}
+	w.feed(t, w.m.pressPause(0))
+	if len(w.runs) != 1 || !strings.Contains(w.m.ui.flash, "already running") {
+		t.Fatalf("runs %q, flash %q", w.runs, w.m.ui.flash)
+	}
+}

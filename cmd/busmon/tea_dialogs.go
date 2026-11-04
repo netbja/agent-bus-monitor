@@ -73,7 +73,7 @@ func (m *Model) pressPause(i int) tea.Cmd {
 	case 0:
 		if d.rec.Suspended() { // the same as Z then y; the draft waits for the project to be back
 			m.ui.flash, m.ui.flashErr = "resuming the project; send again once it is back", false
-			return m.startSleep(true)
+			return m.startSleep(true) // says so instead when a run already goes
 		}
 		w, ctx, self := m.cfg.w, m.cfg.ctx, m.cfg.self
 		if w == nil {
