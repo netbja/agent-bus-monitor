@@ -85,3 +85,14 @@ The three files of the owner's chosen concept ("A, visor bus", from the branch
 - Motion: a packet on the hero's bus line and a reveal on scroll, both off under
   `prefers-reduced-motion`.
 - The language switch links the two pages; there is no automatic redirect.
+
+## Contrast of the terminal screens
+
+`build.py` computes the contrast of every foreground/background pair drawn in the screens and, for
+any pair under 4.5:1, lifts the foreground towards white (or, for the dark text of a pill, lightens
+the pill) until it reaches 4.5:1, keeping hue and order. It prints the table on each run. Lifted:
+`#4A5563` 2.50 to `#757E88`, `#496A86` 3.32 to `#627F97`, `#316461` 2.82 to `#5A8381`, `#4A7469`
+3.60 to `#5E837A`, `#6F6751` 3.37 to `#837C69`, `#7D8A99` 3.68 to `#8F9AA7`; the dim pill fill
+`#4A7469` under dark text 3.60 to `#5E857B`. Every other colour already passed (lowest `#7B6FD6`
+4.58). The site's own tokens (accents on paper and card, muted text) are 4.57:1 or more in light
+and 6:1 or more in dark.

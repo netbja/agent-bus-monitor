@@ -141,7 +141,7 @@ def fig_message(t):
     f.line("M790 420 H310", "agent")
     f.label(550, 414, t("ack after output · report · status", "acquittement après sortie · rapport · état"))
     f.add('<rect class="box r-you" x="20" y="470" width="860" height="70" rx="10"/>')
-    f.text(36, 492, t("The only text the dispatcher ever types:", "Le seul texte que le répartiteur tape jamais :"), "ttl", "start")
+    f.text(36, 492, t("The only text it types to deliver messages:", "Le seul texte qu'il tape pour livrer des messages :"), "ttl", "start")
     f.text(36, 513, "[agentbus#<nonce>] <project>: 1 message(s) waiting for coder.", "sub mono", "start")
     f.text(36, 529, "Run: agentbus --project <project> subscribe --drain coder", "sub mono", "start")
     return f.render() + legend([("line", t("write / read", "écriture / lecture")), ("dash", t("typed into the pane", "tapé dans le panneau"))])
