@@ -6,6 +6,20 @@ release exists.
 
 ## Unreleased
 
+## v0.27.0 — suspend and resume the team, busmon pages for backups, notifications and About
+
+- `agentbus suspend` rests the host's projects (pause, wait for quiet, stop the services, keep a
+  snapshot); `agentbus resume [--all]` brings services and agents back; `suspend.auto_resume` after
+  a reboot (off by default); the dispatcher types nothing under any pause; busmon `Z`.
+- busmon's settings page `C`: a Backup section (back up now, archives, restore commands to copy)
+  and a notifications assistant (ntfy, Discord, desktop: steps and a template; busmon writes no file).
+- busmon: an About page `A` (versions, `y` copies them); For you without In progress rows; `^Z`/`^Y`
+  in the compose window; a desktop ring when a wake waits on the pane you are typing in.
+- Fixes: health `github` never opens an askpass prompt; no `Write(...)` warning at Claude Code
+  launch. Docs: start a project with `agentbus start`.
+
+[Notes](docs/releases/v0.27.0.md)
+
 ## v0.26.1 — restore after a dead agent, the plugin's version, the settings page's focus
 
 - `agentbus restore` no longer refuses a project whose registered agent has died (a pid `/proc` no
