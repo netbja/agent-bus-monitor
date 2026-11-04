@@ -985,7 +985,14 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   episode the directive's id). The health loop's `StallNotify` hook (lease token, after each stored `team-stall`)
   tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an
   unknown pass and deleted once the check reads ok or warn): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
-  `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). busmon shows the health pill, F5
+  `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). `review-queue` (spec
+  `docs/superpowers/specs/2026-11-04-review-queue-design.md`; `health/reviewqueue.go` pure, `cmd/agentbus/reviewqueue.go`
+  the reader) warns (master) when the same idle team (`teamIdle`, shared with `team-stall`), nothing else open (gates
+  aside), owes a review: an open gate whose challenge the reviewer read, older than `stall_after` (a challenge no longer retained is
+  never proved read, a group skipping trimmed entries: not judged, unknown when nothing is owed); or a subject approved
+  within 72 h (fixed) and not done in the plan, where a reviewer who engaged with it (a verdict on it, an open gate on
+  it, or a challenge under a ref a verdict on it carries) has no approve of the deciding head; the `StallWake` hook
+  wakes master once per owed set (mark `stall-review`, episode a hash of the owed keys); never fail. busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
   not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check
