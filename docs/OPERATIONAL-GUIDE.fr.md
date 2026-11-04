@@ -88,7 +88,7 @@ La [section 5](#5-marche-à-suivre--lancement-et-gestion-des-projets) détaille 
      - **For you** : les questions, décisions, verrous et messages non lus que vous seul pouvez régler.
      - **Agents** : état déclaré (`working`, `idle`, `blocked`, `waiting`, `done`), fraîcheur, file d'attente, remplissage du contexte, signaux en toutes lettres.
      - **Activity · Board · Requests · Plan** : le flux en direct, le tableau des tâches, qui doit une réponse à qui, le plan du lot.
-     - **Pages** : services (F3), santé (F5), récapitulatif (`R`), plan (`P`), tokens (`U`), historique (`H`), aide (F1).
+     - **Pages** : services (F3), santé (F5), récapitulatif (`R`), plan (`P`), tokens (`U`), historique (`H`), à propos (`A` : les versions, `y` les copie), aide (F1).
      - **Saisie** : `@coder ...` envoie une directive qui réveille l'agent.
 
 4. **L'Event-Driven Dispatcher (`agentbus dispatch`)**

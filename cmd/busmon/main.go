@@ -483,7 +483,7 @@ func main() {
 	// the model; the poll runs in its commands, the tail is fed in below.
 	shell := newShell(shellConfig{ctx: ctx, liveFrom: time.Now(), reader: b, w: b, st: st, project: project, self: self, attachDir: attachmentsDir(),
 		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour,
-		docker: realSvcRunner, brokerHost: opts.host, histDir: historyDirOf(project),
+		docker: realSvcRunner, about: realAboutSources(os.Getenv), brokerHost: opts.host, histDir: historyDirOf(project),
 		getenv: os.Getenv, flags: flags, retheme: func(name string) (*Theme, error) { // as at the start, with the page's choice
 			return ResolveTheme(name, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
 		},

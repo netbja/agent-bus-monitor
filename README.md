@@ -547,6 +547,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | `P` | the plan |
 | `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |
 | `H` | history: re-read the past, the archive on this host then the live streams, newest first by day (enter opens an entry and `n`/`p` step, `o` loads three days more, `/` filters, `t` keeps the selected entry's thread) |
+| `A` | about: the project's and busmon's, agentbus's, the protocol's, Redis's, herdr's, the plugin's and Go's versions and the update state (`y` copies them), and master and coder on a bus line with a packet travelling there and back (`r` replays; still with fade off, 16 colours or no colour) |
 
 **Responsive.** At 120 columns and more, For you and Agents side by side above the tabs. From
 80 to 119 they are stacked. Under 80, one view at a time (`1 For you` … `6 Plan`), with health

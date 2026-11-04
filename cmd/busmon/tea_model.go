@@ -48,6 +48,8 @@ type shellConfig struct {
 	tour          *tourMarker    // the machine's tour marker; nil = the tour never opens by itself
 	// docker runs the F3 pages' docker reads; nil = none at all (tests).
 	docker svcRunner
+	// about is where About reads the versions it cannot know itself.
+	about aboutSources
 	// brokerHost is --host, which overrides REDIS_HOST (bus.Connect): the
 	// Redis page states container facts only for the broker it reads.
 	brokerHost string
@@ -226,6 +228,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.sig.fading = false
 		sliding := m.barView().moving() // its last frame draws the bar at rest
 		m.now = time.Time(msg)
+		m.aboutFrame(m.now)
 		if top := m.rd.top(); top != nil && top.kind == ovTokens && (sliding || m.tokensSkeleton()) { // the shimmer and the bars are in the page body
 			m.rd.top().dirty = true
 		}
@@ -243,6 +246,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
 	case redisPageMsg:
 		return m.gotRedisPage(msg)
+	case aboutVersionsMsg:
+		m.gotAboutVersions(msg)
 	case answerMsg:
 		m.gotAnswer(msg)
 	case sendResultMsg:
