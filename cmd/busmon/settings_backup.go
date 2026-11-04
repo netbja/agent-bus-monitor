@@ -166,15 +166,7 @@ func backupSizeText(n int64) string {
 func backupItemLines(s *settingsPage, f *backupFacts, first, sel, width int, running string) ([]Line, int) {
 	var out []Line
 	selAt := -1
-	mark := func(i int) Line {
-		switch {
-		case i == sel && s.keys:
-			return append(Line{S(RoleText, " ")}, planMark(true)...)
-		case i == sel:
-			return Line{S(RoleText, " "), S(RoleMuted, GlyphSelect), S(RoleText, " ")}
-		}
-		return append(Line{S(RoleText, " ")}, planMark(false)...)
-	}
+	mark := func(i int) Line { return settingsItemMark(s, i, sel) }
 	out = append(out, Line{}, Line{S(RoleText, " "), Seg{Text: "Archives", Role: RoleText, Bold: true},
 		S(RoleMuted, "  "+Preview(f.Dir)+backupDirNote(f))})
 	now := mark(first)

@@ -1098,7 +1098,10 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   outcomes per target apart from the counted hour; a send's hour reserved under the lock, given back if it fails).
   The dispatcher's own prompt ring is skipped (`PromptConfig.Skip`) only for an episode that began after a listed
   desktop target's baseline. Health `notifications` (5 min, for you, never fail); busmon's C page shows the group and
-  one muted line per target, never its URL. One HTTP client: no redirect, no proxy, 10 s, a 429 waited once (seconds
+  one muted line per target, never its URL. Its last lines are the assistant (notify-assistant, `settings_notify_assist.go`):
+  `Set up ntfy|Discord|the desktop`, Enter reading in a command (`readNotifyAssist`: `notify.Load`, the record, `notify-send`
+  on PATH) then a page: the steps, the file's state by name and kind only, the template `y` copies (a free name,
+  `notifyAssistName`; ntfy's topic `drawTopic`, crypto/rand, kept nowhere), each target's last test; nothing written. One HTTP client: no redirect, no proxy, 10 s, a 429 waited once (seconds
   or a date, at most 60 s), a 5xx retried twice; errors name the target and status, never the URL or body.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
