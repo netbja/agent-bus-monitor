@@ -64,14 +64,19 @@ it.
 ### 3a. The forge, when its CLI is there (the authoritative source)
 
 - **GitHub:**
-  `gh pr list --state open --json number,title,url,headRefName,headRefOid,baseRefName,isDraft --limit 100`,
+  `gh pr list --state open --json number,title,url,headRefName,headRefOid,baseRefName,isDraft --limit 1000`,
   in the project's working directory.
-  - One call answers number, title, URL, branch, head SHA and base.
+  - One call answers number, title, URL, branch, head SHA and base; `gh` pages through the API up to
+    the limit itself.
+  - **The list must be whole** (reviewer-codex): an approved PR outside a cut list would leave the
+    queue silently. A result of exactly the limit (1000) is read as possibly cut: the pass is
+    **incomplete**, which is unknown (§3d), and keeps the previous items. A failed page fails the
+    call, which is unknown too. Never a partial list read as the whole.
   - A merged or closed PR is simply not listed.
   - A draft is listed but never queued: not ready.
-- **GitLab:** `glab mr list` with its JSON output, the same fields under GitLab's names. The exact
-  flag is to be confirmed against glab's version at build time: glab is not installed on this host,
-  and the spec does not guess it.
+- **GitLab:** `glab mr list` with its JSON output, the same fields under GitLab's names, and the
+  same rule for a cut list. The exact flag is to be confirmed against glab's version at build time:
+  glab is not installed on this host, and the spec does not guess it.
 - **The rules `deliver` already follows:** the same forge detection (`forge` package, `delivery.forge`
   setting), the same "CLI on PATH" check (`cliReady`), the same environment hardening as the github
   health check:
@@ -87,20 +92,27 @@ it.
 1. **The remote tips:** `git ls-remote --heads origin`, one call, no fetch.
 2. **An open item:** a remote branch whose tip is exactly H, H being an approved deciding head.
 3. **The base:** `ls-remote` gives the base branch's tip B (`delivery.base`, else `main`).
-   `git fetch --no-write-fetch-head --no-tags origin <B>` brings B's objects only. It updates no ref
-   and no remote-tracking branch, so the person's checkout is untouched. The forge-delivery decision
-   lets only master and docs push; this is a read.
+   `git fetch --no-write-fetch-head --no-tags --refmap= origin <B>` brings B's objects only. The
+   empty `--refmap=` is what stops git's opportunistic update of `refs/remotes/origin/<B>`. Without
+   it the fetch moves the remote-tracking branch and `origin/HEAD` (foureyes, tested on git 2.56).
+   With it every ref stays byte-equal and the objects arrive. So the person's checkout is
+   untouched. The forge-delivery decision lets only master and docs push; this is a read.
 4. **Merged:** `git merge-base --is-ancestor H B` is true, and the item leaves.
 
 **Local forge:** `deliver` pushes nothing, so a local delivery is approved head H on a local branch.
-An item is H not an ancestor of the local base branch, and the person merges it with the command
-`deliver` printed (`git switch <base> && git merge --no-ff <H>`). The plan's `LinkRef` already records
-that ref.
+The rule has the remote fallback's shape (foureyes):
+- **An item** is a **local branch whose tip is exactly H** (`git for-each-ref refs/heads`), H not an
+  ancestor of the local base branch and the branch not the base itself.
+- **It ends** when the branch is deleted or moves (a new commit needs a new verdict).
+- **What is not an item:** an approved subject with no branch at its head, abandoned or never
+  delivered. That is master's work (§2), never the person's list.
+- **How the person merges:** with the command `deliver` printed
+  (`git switch <base> && git merge --no-ff <H>`). The plan's `LinkRef` already records that ref.
 
 **What the fallback cannot see:**
 - **A squash merge**, or a rebase merge, leaves H outside the base forever. The branch's deletion
   ends the item (no remote tip at H). A branch kept after a squash is dropped once its diff against
-  the base is empty, said as "merged (contents)" (§8, decision 3).
+  the base is empty, said as "contents in base" (§8, decision 3).
 - **Titles and URLs:** git has none. The title is the plan task's title, when a plan link names H's
   branch, else the first commit's subject in `B..H`, as `deliver` builds it (`deliverTitle`). The URL
   is the forge's compare page (`linkPage`), or none.
@@ -117,8 +129,15 @@ that ref.
   - What it is: a fenced JSON string.
   - Lifetime: `PEXPIRE` 15 minutes.
   - Class: runtime (`bus/keykinds.go`), not in `projectKinds`, ignored by `HasKeysBesidesDispatch`.
-  - Contents: `at` (Redis `TIME`), `source` (`gh`, `glab` or `git`), `ok` or the fixed phrase of
-    what could not be read, and the items.
+  - Contents (reviewer-codex: an attempt is not an observation):
+    - `attempted_at`, Redis `TIME` at the last pass, failed or not;
+    - `items_at`, Redis `TIME` at the last **successful** pass, the one that read the items;
+    - `source` (`gh`, `glab` or `git`);
+    - `ok`, or the fixed phrase of what could not be read;
+    - the items.
+
+    A failed pass moves `attempted_at` and the reason only; `items_at` and the items stay as the
+    last success left them.
 - **This is a cache of a derivation, not a memory.** Nobody else writes it, nothing merges into it,
   and every pass recomputes it whole. A deleted key changes nothing: the next pass writes it back.
   busmon reads it on its `requestPoll` tick. It never runs git or `gh` itself.
@@ -132,9 +151,10 @@ The pass is unknown, with its reason, when any of these holds:
 - `ls-remote` or the fetch fails;
 - the ledger cannot be read.
 
-An unknown pass **keeps the previous items** and sets `ok` to the reason. busmon shows them as of
-their time, never as an empty queue. A missing or expired key is unknown too. Only a successful pass
-can say "nothing waits".
+An unknown pass **keeps the previous items and their `items_at`**, and sets the reason. busmon shows
+them "as of" `items_at`, never as an empty queue. Successive failures never make that time look
+fresh: only a success moves it. A missing or expired key is unknown too. Only a successful pass can
+say "nothing waits".
 
 ## 4. busmon
 
@@ -234,8 +254,14 @@ Nothing new: the For you badge already counts decisions.
 - **An older busmon** shows no merge items; the asks and plan links it reads still work.
 - **The verdict ledger cap** (10 000 entries) bounds how far back an approve is found. An approve
   trimmed out of the ledger cannot match, and its PR shows as not approved. The record says so as a
-  count, `N open PRs with no approve in the retained ledger`, on the page and in the health detail.
-  It is never hidden.
+  count, `N open PRs not on an approved head`, on the page and in the health detail. It is never
+  hidden. The count covers (foureyes) every open, non-draft PR whose head is not the deciding
+  approved head of any subject:
+  - a newer push;
+  - no review yet;
+  - an approve trimmed out of the ledger;
+  - a late approve on an older head, which becomes the decider, so the delivered PR leaves the
+    queue. `deliver` would refuse that head too, so this is consistent, but never silent.
 
 ## 8. Decisions (master, 2026-11-05, the person being away)
 
@@ -245,7 +271,8 @@ The six questions this spec left open, as master decided them:
 2. **Approved, not delivered:** a later step, not in this change.
 3. **Squash merges under the git fallback:** an item whose branch has no difference from the base
    (`git diff --quiet B H` after the objects-only fetch) is dropped. The page and the CLI say
-   "merged (contents)" for it.
+   "contents in base" for it, not "merged": the same empty diff also clears a branch whose changes
+   were reverted (foureyes).
 4. **Several forges:** `origin` only, as `deliver` does.
 5. **Drafts:** never queued.
 6. **The plan:** `plan.Derive` reads the queue, so an approved merge task whose head is an item waits
@@ -264,22 +291,30 @@ Test-first, one step each:
    - two subjects on one head make one item;
    - an approve with no head matches nothing;
    - a merged item (ancestry true) leaves;
-   - `local`: an approved head not in the base is an item;
+   - `local`: a local branch whose tip is the approved head, not in the base, is an item; an
+     approved head with no branch at it is not; a deleted or moved branch ends it;
    - an untrimmed count when approves are missing.
 2. **The forge readers** with a fake `gh` and `glab` on PATH, as the installer tests do:
    - the JSON parsed, titles through `SafeText`;
    - the hardened environment asserted (no askpass, `GH_PROMPT_DISABLED`);
    - every failure is unknown with its fixed phrase;
+   - a list of exactly the limit is incomplete. The test: 1001 open PRs, the only approved one
+     outside the first 1000. That pass is unknown and keeps the previous items, never an empty or
+     partial queue;
+   - a failing page is unknown too;
    - the 10 s bound.
 3. **The git fallback** on a temporary repository with a bare `origin`:
    - the remote tips;
-   - the objects-only fetch writes no ref (`git for-each-ref` before and after, byte equal);
+   - the objects-only fetch with `--refmap=` writes no ref (`git for-each-ref` before and after,
+     byte equal, `refs/remotes/origin/*` and `origin/HEAD` included, after a new commit pushed to
+     the bare origin) and still brings the objects (`git cat-file -e`);
    - ancestry;
    - the squash case (§8, decision 3): a kept branch whose diff against the base is empty is
-     dropped, said "merged (contents)".
+     dropped, said "contents in base".
 4. **The chore:**
    - fenced (a lost lease writes nothing);
-   - an unknown pass keeps the previous items;
+   - an unknown pass keeps the previous items and their `items_at`;
+   - two successive failures move `attempted_at` only: the items' age stays the last success's;
    - the `PEXPIRE`;
    - not in `projectKinds`;
    - classified runtime (`TestEveryWrittenKeyKindIsClassified`).
