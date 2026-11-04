@@ -161,3 +161,34 @@ func TestComposeUndoAClickEndsTheRun(t *testing.T) {
 		t.Fatalf("after a click and undo: %q", got)
 	}
 }
+
+// Going to the recipient field and back ends the text's run: typing on
+// return is a step of its own, by Tab or by the recipient's Enter
+// (reviewer-codex).
+func TestComposeUndoAFieldSwitchEndsTheRun(t *testing.T) {
+	for _, back := range []struct {
+		name string
+		key  any
+	}{{"tab", kTab}, {"enter", kEnter}} {
+		t.Run(back.name, func(t *testing.T) {
+			m := composeWith(t, "")
+			m = typeText(t, m, "abc")
+			m = keys(t, m, kTab) // to the recipient
+			if !m.ui.compose.onTo {
+				t.Fatal("tab did not reach the recipient")
+			}
+			m = keys(t, m, kLeftPlain, back.key)
+			if m.ui.compose.onTo {
+				t.Fatalf("%s did not come back to the text", back.name)
+			}
+			m = typeText(t, m, "x")
+			m = keys(t, m, kUndo)
+			if got := text(m); got != "abc" {
+				t.Fatalf("undo after the round trip by %s: %q", back.name, got)
+			}
+			if to := m.ui.compose.to.value(); to != "@coder" && to != "coder" {
+				t.Fatalf("the recipient changed: %q", to)
+			}
+		})
+	}
+}

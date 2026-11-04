@@ -426,6 +426,13 @@ func newField(s string, limit int) textArea {
 	return t
 }
 
+// switchedField ends both fields' edit runs: typing after the keyboard went
+// to the other field and back is a new step (reviewer-codex).
+func (c *composeState) switchedField() {
+	c.area.endRun()
+	c.to.endRun()
+}
+
 // recipient is the field read: "" (a broadcast), "all", or a name.
 func (c *composeState) recipient() string {
 	return strings.TrimPrefix(strings.TrimSpace(c.to.value()), "@")
@@ -601,6 +608,7 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 		case k.Code == keyTab || k.Code == keyEnter:
 			c.to.set(strings.TrimSpace(cands[min(c.pick, len(cands)-1)]))
 			c.pick, c.onTo = 0, false
+			c.switchedField()
 			return nil
 		case k.Code == keyUp || k.Code == keyDown:
 			step := 1
@@ -631,6 +639,7 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 	case ActComposeField:
 		c.area.unmark() // a selection belongs to the field it was made in: leaving it ends it
 		c.to.unmark()
+		c.switchedField()
 		switch {
 		case c.kind != composeMessage:
 		case !c.onTo && m.prefixToRecipient(c):
@@ -674,6 +683,7 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 	switch {
 	case k.Code == keyEnter && field == &c.to: // the recipient is done: to the text
 		c.onTo = false
+		c.switchedField()
 	case k.Code == keyEnter, k.Code == keyRune && !k.Alt:
 		s, kind := "\n", "" // a line break is a step of its own
 		if k.Code == keyRune {
