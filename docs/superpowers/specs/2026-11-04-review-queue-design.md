@@ -1,6 +1,6 @@
 # Health check `review-queue` (plan task review-queue-idle)
 
-Status: draft, for master and the reviewers. Short spec: the design has one choice that is not
+Status: agreed with master on 2026-11-04 (engaged reviewers, 72 h fixed, wake master only); implemented on the same branch. Short spec: the design has one choice that is not
 trivial, the meaning of "half-approved" (§2).
 
 ## 1. The hole
@@ -34,8 +34,10 @@ the reviewer, the gate's subject (or its ref) and the age.
 **(b) Half-approved.** For a subject S whose roll-up is `APPROVED`, take the deciding approval D,
 with its `Head` when it names one. S is half-approved when some other reviewer R (not D's reviewer
 and not the author) engaged with S, and R's newest verdict on S is one of these:
-- missing: R was challenged on S (a challenge entry whose ref is an open gate's ref with subject S,
-  or the `Ref` of a verdict on S), but R gave no verdict;
+- missing: R was challenged on S, but R gave no verdict. Challenged on S means a challenge entry
+  to R under the `Ref` of a verdict on S: one ref shared by both reviewers' challenges. A challenge
+  entry carries no subject, so a ref that only R's challenge carries reaches S through R's open
+  gate, which is case (a) while it is open;
 - a reject older than D;
 - an approve of another head (both heads known and different).
 
