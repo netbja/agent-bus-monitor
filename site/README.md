@@ -61,9 +61,15 @@ All fonts are self-hosted in `assets/fonts/` as Latin subsets in woff2 (made wit
 | Instrument Serif (regular, italic) | headlines | `OFL-InstrumentSerif.txt` |
 | Geist (regular, bold) | body | `OFL-Geist.txt` |
 | Geist Mono (regular, bold) | commands, labels | `OFL-GeistMono.txt` |
+| DejaVu Sans Mono (regular, bold), subset to the 122 characters of the four screens | terminal screens | `LICENSE-DejaVu.txt` (Bitstream Vera / DejaVu licence) |
 
-Terminal screens use the system's monospace font on purpose: Geist Mono lacks the box-drawing
-corners and some symbols busmon draws, and a fallback glyph would break the character grid.
+Terminal screens use DejaVu Sans Mono, bundled, and nothing else: it carries every box-drawing,
+block, arrow and marker glyph busmon draws, so no character falls back to another face and every
+cell has the same advance. (A per-glyph `inline-block` wrapper was tried and rejected: its width is
+floored to 1/64 px, which drifts a 140-cell row by up to a pixel.) The subset is made with
+`pyftsubset --unicodes=<characters of the golden screens> --layout-features=` from DejaVuSansMono.ttf
+and DejaVuSansMono-Bold.ttf; add a character to a screen and the subset must be rebuilt. Each screen
+row is a block `<span class="r">`, so the alignment can be measured per row.
 
 ## The logo
 
