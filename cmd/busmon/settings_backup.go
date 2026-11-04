@@ -246,9 +246,27 @@ func backupArchivePage(a backupArchiveRow) page {
 	for _, c := range cmds {
 		b.seg(RoleAccent, "   "+Preview(c)).text("\n")
 	}
-	b.text("\n").seg(RoleMuted, " A restore refuses a live project: agentbus suspend it first.").text("\n")
+	backupOfflineSteps(&b, a)
 	return page{kind: ovMessage, title: "Archive " + GlyphNone + " " + a.At.Local().Format("2006-01-02 15:04"),
 		body: b.Lines(), plain: strings.Join(cmds, "\n"), plainWhat: "commands", fixed: true}
+}
+
+// backupOfflineSteps says what a restore needs (restore's projectLive, even
+// with --force): no lease, no service active, no workspace open, no agent
+// alive. A suspend stops the services but keeps the agents and the workspace,
+// so it is not enough (reviewer-codex).
+func backupOfflineSteps(b *body, a backupArchiveRow) {
+	projects := a.Projects
+	if a.Err != "" || len(projects) == 0 {
+		projects = []string{"<project>"}
+	}
+	b.text("\n").seg(RoleMuted, " A restore refuses a live project, even with --force. First, for each project:").text("\n")
+	for _, p := range projects {
+		b.seg(RoleAccent, "   agentbus down "+Preview(p)).seg(RoleMuted, "   its services stopped").text("\n")
+	}
+	b.seg(RoleMuted, "   then close its herdr workspace: its agents exit with it").text("\n")
+	b.seg(RoleMuted, " a suspend is not enough: it keeps the agents and the workspace.").text("\n")
+	b.seg(RoleMuted, " After the restore, agentbus up <project> --resume brings it back.").text("\n")
 }
 
 // backupRestoreCommands are the dry runs to copy: the whole archive, then

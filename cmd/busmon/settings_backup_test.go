@@ -222,6 +222,17 @@ func TestSettingsBackupArchivePage(t *testing.T) {
 			t.Errorf("page lacks %q:\n%s", s, body)
 		}
 	}
+	// A restore refuses a live project whatever --force: the page names
+	// every step that takes one offline, not a suspend alone (reviewer-codex).
+	for _, s := range []string{"even with --force", "agentbus down alpha", "agentbus down beta", "close its herdr workspace",
+		"its agents exit with it", "a suspend is not enough", "agentbus up <project> --resume"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("restore guidance lacks %q:\n%s", s, body)
+		}
+	}
+	if strings.Contains(body, "agentbus suspend it first") {
+		t.Errorf("the page still says a suspend is enough:\n%s", body)
+	}
 	if !strings.HasPrefix(p.plain, "agentbus restore "+q+" --dry-run\n") || strings.Count(p.plain, "\n") != 2 {
 		t.Fatalf("y copies %q", p.plain)
 	}
