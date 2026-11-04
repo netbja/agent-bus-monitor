@@ -21,7 +21,8 @@ type fakeManager struct {
 	active    map[string]bool
 	calls     []string
 	failStart bool
-	failList  bool // List fails after the first removal
+	stopErr   func(p, k string) error // nil = every stop succeeds
+	failList  bool                    // List fails after the first removal
 	removed   int
 }
 
@@ -47,6 +48,11 @@ func (f *fakeManager) Start(p, k string) error {
 }
 func (f *fakeManager) Stop(p, k string) error {
 	f.calls = append(f.calls, "stop "+p+" "+k)
+	if f.stopErr != nil {
+		if err := f.stopErr(p, k); err != nil {
+			return err
+		}
+	}
 	f.active[p+"/"+k] = false
 	return nil
 }

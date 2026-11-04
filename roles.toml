@@ -122,6 +122,11 @@ deny = [
   # any message; the command refuses an agent caller itself.
   "Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)",
   "Bash(agentbus notifications test*)",
+  # Suspending the team and waking a whole host are the person's acts
+  # (suspend spec §4). Only the plain forms: "agentbus * suspend*" would
+  # deny every message that mentions a suspend; the commands refuse an agent
+  # caller themselves, whatever the spelling.
+  "Bash(agentbus suspend*)", "Bash(agentbus resume --all*)",
 ]
 
 [roles.master]

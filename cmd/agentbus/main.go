@@ -122,6 +122,11 @@ func main() {
 	if len(args) >= 1 && args[0] == "restore" {
 		os.Exit(runRestore(context.Background(), args[1:], explicitProject, realRestoreDeps(host), os.Stdout, os.Stderr))
 	}
+	// suspend puts this host's projects to sleep (spec 2026-11-03-suspend-resume):
+	// every project unless one is named on the command line, like backup.
+	if len(args) >= 1 && args[0] == "suspend" {
+		os.Exit(runSuspend(context.Background(), args[1:], explicitProject, realSuspendDeps(host), os.Stdout, os.Stderr))
+	}
 	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
 	if len(args) >= 1 && args[0] == "plugin" {
 		os.Exit(runPlugin(args[1:], realPluginDeps(), os.Stdout, os.Stderr))

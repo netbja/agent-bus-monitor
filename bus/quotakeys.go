@@ -112,7 +112,7 @@ if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
 local v = redis.call('GET', KEYS[2])
 if v then
   local ok, p = pcall(cjson.decode, v)
-  if not ok or p['reason'] ~= ARGV[2] then return 0 end
+  if not ok or p['kind'] == 'suspend' or p['reason'] ~= ARGV[2] then return 0 end
 end
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
@@ -167,7 +167,7 @@ func (b *Bus) FencedQuotaUnpauseWhy(ctx context.Context, token, provider, from, 
 	target, text, seen := "", "", ""
 	if raw, err := b.r.Get(ctx, PauseKey(b.project)).Result(); err == nil {
 		var p PauseRecord
-		if json.Unmarshal([]byte(raw), &p) == nil && p.Reason == reason && p.By == "dispatch" {
+		if json.Unmarshal([]byte(raw), &p) == nil && p.Reason == reason && p.By == "dispatch" && !p.Suspended() {
 			seen = raw
 			if ValidName(p.Notify) {
 				target, text = p.Notify, resumeText(p, why)
@@ -215,7 +215,7 @@ func (b *Bus) FencedQuotaRepause(ctx context.Context, token, from, to string, un
 		return false, err
 	}
 	var p PauseRecord
-	if json.Unmarshal([]byte(raw), &p) != nil || p.Reason != QuotaPauseReason(from) || p.By != "dispatch" {
+	if json.Unmarshal([]byte(raw), &p) != nil || p.Reason != QuotaPauseReason(from) || p.By != "dispatch" || p.Suspended() {
 		return false, nil
 	}
 	next, err := json.Marshal(map[string]any{"until": untilMS, "reason": QuotaPauseReason(to), "notify": p.Notify})
