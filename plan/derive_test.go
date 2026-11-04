@@ -280,3 +280,31 @@ func TestDeriveRefLikeAPR(t *testing.T) {
 		t.Fatalf("a ref, approved: the person merges it (plan-view): %+v", r)
 	}
 }
+
+// merge-queue §8 decision 6: an approved merge task whose subject is in the
+// merge queue waits for the person with no PR link; nothing makes it done.
+func TestDeriveReadsTheMergeQueue(t *testing.T) {
+	roles := task("roles")
+	f := File{Plan: "p", Tasks: []Task{roles}}
+	in := ok()
+	in.Board["roles-impl"] = deliveredEntry()
+	in.Verdicts["roles-impl"] = []bus.Verdict{verdict("5-0", "roles-impl", "approve")}
+	in.Merge = MergeBySubject([]bus.MergeItem{{Number: 311, Branch: "feat/roles", Head: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Subjects: []string{"roles-impl"}}})
+	if r := derive1(t, f, in, "roles"); r.State != Waiting || r.Reason != "merge PR 311" || r.PR != 311 {
+		t.Fatalf("queued: %+v", r)
+	}
+	in.Merge = MergeBySubject([]bus.MergeItem{{Branch: "feat/roles", Head: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Subjects: []string{"roles-impl"}}})
+	if r := derive1(t, f, in, "roles"); r.State != Waiting || r.Reason != "merge feat/roles" {
+		t.Fatalf("queued without a number: %+v", r)
+	}
+	in.Merge = nil
+	if r := derive1(t, f, in, "roles"); r.State != InReview {
+		t.Fatalf("not queued, not linked: %+v", r)
+	}
+	// A queued task that is not approved under the plan's own reading stays in review.
+	in.Verdicts["roles-impl"] = []bus.Verdict{verdict("5-0", "roles-impl", "reject")}
+	in.Merge = MergeBySubject([]bus.MergeItem{{Number: 311, Head: "a", Subjects: []string{"roles-impl"}}})
+	if r := derive1(t, f, in, "roles"); r.State == Waiting || r.State == Done {
+		t.Fatalf("rejected: %+v", r)
+	}
+}

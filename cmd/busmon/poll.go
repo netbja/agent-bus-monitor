@@ -7,6 +7,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 type guardianReader interface {
@@ -316,6 +317,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	}
 	if boardErr == nil {
 		st.board = boardSnap
+	}
+	if st.mergeQ.ItemsAt > 0 { // the plan reads the merge queue (merge-queue §8, decision 6)
+		st.plan.in.Merge = plan.MergeBySubject(st.mergeQ.Items)
 	}
 	st.plan.fold(planR, boardSnap, boardErr, asks, asksErr)
 	if readTok {

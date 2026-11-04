@@ -46,6 +46,10 @@ type Inputs struct {
 	Verdicts map[string][]bus.Verdict // by subject, ledger order
 	Asks     []bus.Ask
 	Missions map[string]mission.State // by "<change>/<id>"
+	// Merge is the merge queue by subject (merge-queue §8, decision 6): an
+	// approved merge task whose subject is queued waits for the person even
+	// with no PR linked. nil = no queue read: today's rule alone.
+	Merge map[string]bus.MergeItem
 
 	BoardOK, FactsOK, VerdictsOK, AsksOK, MissionsOK bool
 }
@@ -143,6 +147,12 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 	// the team.
 	case t.MergeTask() && review == Approved && linked:
 		r.State, r.Reason = Waiting, mergeReason(fact)
+	case t.MergeTask() && review == Approved && queuedFor(t, in.Merge) != nil:
+		it := queuedFor(t, in.Merge)
+		r.State, r.Reason = Waiting, "merge "+it.Branch
+		if it.Number > 0 {
+			r.PR, r.Reason = it.Number, "merge PR "+strconv.Itoa(it.Number)
+		}
 	// The person answered and nothing is open: master records it.
 	case t.Owner == Person && answeredAsk(t.ID, in.Asks):
 		r.State = Answered
@@ -295,4 +305,25 @@ func splitID(id string) (int64, int64) {
 	ms, _ := strconv.ParseInt(m, 10, 64)
 	seq, _ := strconv.ParseInt(s, 10, 64)
 	return ms, seq
+}
+
+// MergeBySubject indexes the merge queue's items by each of their subjects.
+func MergeBySubject(items []bus.MergeItem) map[string]bus.MergeItem {
+	out := map[string]bus.MergeItem{}
+	for _, it := range items {
+		for _, s := range it.Subjects {
+			out[s] = it
+		}
+	}
+	return out
+}
+
+// queuedFor is the merge-queue item for t's review subject, or nil.
+func queuedFor(t Task, merge map[string]bus.MergeItem) *bus.MergeItem {
+	if s := t.ReviewSubject(); s != "" {
+		if it, ok := merge[s]; ok {
+			return &it
+		}
+	}
+	return nil
 }
