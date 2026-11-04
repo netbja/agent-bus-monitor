@@ -37,6 +37,32 @@ func assistEnv(t *testing.T) (getenv func(string) string, notifyPath string) {
 
 var topicRE = regexp.MustCompile(`^agentbus-[a-z0-9]{20}$`)
 
+// The template the assistant hands out is accepted by notify.Load as it is,
+// and a topic that is not the drawn shape (guessable) in the same template is
+// refused: the drawn topic is only worth anything while the loader keeps its
+// own rule.
+func TestNotifyTemplateTopicRoundTrip(t *testing.T) {
+	load := func(topic string) *notify.File {
+		dir := filepath.Join(t.TempDir(), "agentbus")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		p := filepath.Join(dir, "notify.toml")
+		if err := os.WriteFile(p, []byte(notifyTemplate("ntfy", "phone", topic)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return notify.Load(p)
+	}
+	if f := load(drawTopic()); len(f.Targets) != 1 {
+		t.Fatalf("the drawn template is refused: %v %q", f.Warnings, f.Refused)
+	}
+	for _, bad := range []string{"phone", "agentbus", "my topic", "agentbus/abc12345678901"} {
+		if f := load(bad); len(f.Targets) != 0 {
+			t.Errorf("guessable topic %q taken", bad)
+		}
+	}
+}
+
 // A drawn topic is long, of ntfy's own characters, and new each time.
 func TestDrawTopic(t *testing.T) {
 	a, b := drawTopic(), drawTopic()
