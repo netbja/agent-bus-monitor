@@ -32,6 +32,12 @@ def hexof(rgb):
     return "%02X%02X%02X" % rgb
 
 
+def glyphs(text):
+    """Every cell is one character of the bundled DejaVu Sans Mono subset (assets/fonts), so all cells have the
+    same advance. No per-glyph wrapper: an inline-block's width is floored to 1/64 px, which drifts a row."""
+    return esc(text)
+
+
 def screen(name, first=None, last=None):
     with open(os.path.join(GOLD, name), encoding="utf-8") as fh:
         lines = fh.read().split("\n")
@@ -72,9 +78,10 @@ def screen(name, first=None, last=None):
                 cls.append("g" + hexof(b_)); USED.add(("g", hexof(b_)))
             if bo:
                 cls.append("b")
-            html += f'<span class="{" ".join(cls)}">{esc(text)}</span>' if cls else esc(text)
-        out.append(html)
-    return "\n".join(out)
+            cells = glyphs(text)
+            html += f'<span class="{" ".join(cls)}">{cells}</span>' if cls else cells
+        out.append(f'<span class="r">{html}</span>')
+    return "".join(out)
 
 
 def _lum(rgb):
