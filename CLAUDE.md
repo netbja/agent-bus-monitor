@@ -276,7 +276,10 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   context alert's directive now asks for both). `report` now retains the full
   text (newlines/tabs kept, ≤8000, `AGENT_BUS_REPORT_FULL_MAX`) in a `full` field **only when it
   differs from the one-line ≤500 preview**; `reports [--json]` lists recent reports (marking those
-  with more via ` (+N)`) and `reports <id>` prints one report's full retained text.
+  with more via ` (+N)`; each row shows the headline and each notice's read state, report-one-row: a person's `read HH:MM`/`unread`
+  from `{p}:seen`, `?` when unreadable, an agent's `delivered`/`pending` from its group's cursor; `--json` adds `notices`
+  `[{target, id, person, seen_at}]`; `--unread [--to <t>]` only the reports a person has not opened, exit 64 when none, refused
+  when `{p}:seen` cannot be read) and `reports <id>` prints one report's full retained text.
   `listen`/busmon still render the preview. `verdict` is subject-first
   (`--pr N`/`--subject S`), always appends to the `{p}:verdicts` ledger, publishes a live
   `CmdVerdict`, then closes gates best-effort (`verdictGates`, foryou-gates): on the *reviewer's own*
@@ -490,7 +493,15 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (an ask, a cmd to the person's name, a notify with `for=person`, an agent's newest report while it
   waits for the person) carry a mark column before the time (`unread.go`: ● unread, ○ superseded by a
   newer one from the same sender, an answer or a closed ask; a report notice, `reportSubject`'s exact prefix, is never
-  superseded, and its Activity and For you rows read as its report's first line, never the envelope: report-notice-unread); opening the line reads it, saved in the
+  superseded, and its Activity and For you rows read as its report's headline, never the envelope: report-notice-unread; report-one-row, spec
+  `docs/superpowers/specs/2026-11-05-report-one-row-design.md`: a notice whose `reportSubject` id is its `ref` folds into its report's
+  Activity line (`activityFeed.add`: `reportLine`/`noticeLine` by seq, pruned at the `feedCap` trim; a report takes a waiting notice's
+  line over in place, so the selection follows; no report at hand, the notice stays its own line), the line's `→` its targets, its mark
+  its notices to the person (`feedLine.personNotices`), opening it reads every member (`markLineRead`); For you one row per report
+  (`unreadKey`, `attentionItem.IDs`) and `classifyWaits` adds no second row for a report noticed to the person; opening a notice to
+  the person also writes the read receipt `{p}:seen` (`bus/seen.go`: notice id → `<ms>|<person>`, Redis `TIME`, first opening wins,
+  512 fields, only while the cmd stream exists; runtime; the person's decision, the one read fact on the bus: busmon never reads it
+  back); opening the line reads it, saved in the
   local cache (`read`, only ids still retained), never on the bus; nothing older than `last_visit`
   is marked; the header counts `● N unread`, `u` jumps to the next, `R` lists them first. The line
   and the compose window share one `@` completion (`recipientCompletions`, `completionNames`: the
@@ -1478,6 +1489,11 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   waiting plan task announces, and the check's own warn is never an event), and `plan.Derive` (`Inputs.Merge`, read
   by `plan.ReadWithVerdicts` and busmon's poll): an approved merge task whose subject is queued waits for the person
   with no PR link; nothing makes it done.
+- **A report's headline is `bus.ReportHeadline`** (report-one-row §4): the first line of substance of `full` (else `message`),
+  blank lines, Markdown headings, code fences and table lines skipped, a list marker stripped, cut after its first sentence;
+  the first heading's text when nothing else, else "". The notice `report --to` writes carries it (else the first line; still
+  sanitised and cut at 300 runes, the envelope unchanged so `reportSubject` reads old and new), and busmon, the recap, `i`'s
+  quote and the `reports` table show it.
 - **`report` keeps a bounded preview AND the full text.** The write path stores `message` (the
   ≤500 one-line `SanitizeReportMessage` preview, for `listen`/busmon) and — only when it carries
   more — a `full` field (`SanitizeReportFull`: newlines/tabs kept, ≤8000). Don't raise the preview

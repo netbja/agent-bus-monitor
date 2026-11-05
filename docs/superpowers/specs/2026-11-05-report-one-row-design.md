@@ -1,6 +1,6 @@
 # One row per report (report-one-row)
 
-Status: for review (spec only, no code); the person's answers to the open questions are in §8. Author: coder. Asked by master on the person's
+Status: approved (foureyes, reviewer-codex at d133001); implemented on this branch. The person's answers are in §8. Author: coder. Asked by master on the person's
 request, 2026-11-05 (directive 1793861459157-0).
 
 ## 1. The problem, as it is today
