@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -233,3 +235,44 @@ func TestReplyQuoteIsTheHeadline(t *testing.T) {
 		t.Fatalf("replyPrefill: %q", got)
 	}
 }
+
+// §5 B: opening a report row writes the read receipt for its notices to the
+// person, once; a report with no such notice writes none.
+func TestOpeningAReportRowWritesTheReceipt(t *testing.T) {
+	fw := &fakeWriter{}
+	m := shellWith(t, 140, 40, shellConfig{w: fw}, false)
+	at := shellNow.Add(-time.Minute).UnixMilli()
+	rep := bus.Event{Kind: "report", ID: fmt.Sprintf("%d-0", at), Agent: "master", RKind: "note", Message: "## Done"}
+	n := bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-1", at), From: "master", Target: "charlie", Type: bus.CmdDirective, Ref: rep.ID,
+		Message: "Report " + rep.ID + " for you (full text: agentbus reports " + rep.ID + "): Done"}
+	other := bus.Event{Kind: "report", ID: fmt.Sprintf("%d-2", at), Agent: "coder", RKind: "note", Message: "x"}
+	m = step(t, m, tailMsg{events: []bus.Event{rep, n, other}})
+	seen := func() []string {
+		fw.mu.Lock()
+		defer fw.mu.Unlock()
+		var out []string
+		for _, s := range fw.sent {
+			if strings.HasPrefix(s, "seen ") {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	m.markLineRead(rep.ID)
+	m = run(t, m, m.afterUpdate())
+	if got := seen(); len(got) != 1 || got[0] != "seen charlie "+n.ID {
+		t.Fatalf("receipt: %v", got)
+	}
+	m.markLineRead(rep.ID)
+	m.markLineRead(other.ID)
+	m = run(t, m, m.afterUpdate())
+	if got := seen(); len(got) != 1 {
+		t.Fatalf("a second opening, or a report with no notice, wrote again: %v", got)
+	}
+	if !slices.Contains(m.cache_().Read, n.ID) {
+		t.Fatalf("the folded notice's read mark is kept in the cache: %v", m.cache_().Read)
+	}
+}
+
+// The real writer writes the receipt.
+var _ seenWriter = (*bus.Bus)(nil)

@@ -74,8 +74,14 @@ func (m *Model) markRead(id string) {
 	m.feed.unread.read[id] = true
 	retained := map[string]bool{}
 	for _, fl := range m.feed.feed {
-		if !fl.sep {
-			retained[fl.ev.ID] = true
+		if fl.sep {
+			continue
+		}
+		for _, x := range lineIDs(fl) { // a folded notice is retained with its line
+			retained[x] = true
+		}
+		if slices.Contains(fl.personNotices, id) { // a report notice to the person: its read receipt (report-one-row §5 B)
+			m.sig.seenPending = append(m.sig.seenPending, id)
 		}
 	}
 	c := m.cache_()
