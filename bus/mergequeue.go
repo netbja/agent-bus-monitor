@@ -33,8 +33,7 @@ type MergeItem struct {
 	Head       string          `json:"head"`
 	Subjects   []string        `json:"subjects"`
 	Approvals  []MergeApproval `json:"approvals"`
-	ApprovedAt int64           `json:"approved_at"`    // Unix ms of the deciding approve
-	Task       string          `json:"task,omitempty"` // the plan task whose review subject is one of Subjects
+	ApprovedAt int64           `json:"approved_at"` // Unix ms of the deciding approve
 }
 
 // MergeQueueKey is {p}:mergequeue: the dispatch service's cache of the

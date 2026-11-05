@@ -299,8 +299,9 @@ The person cannot see the plan in your conversation; busmon shows it (`P`, the h
   that ends without a merge of its own (a spec, a review), or `mission: "<change>/<id>"`.
 - States are derived, never typed: delivered (`request done`) reads **in review**; an approved
   merge task reads **waiting for you** ("merge PR N", or "merge <branch>@<sha>" for a delivery
-  recorded as a ref) only once its PR or ref is linked, and until you record the merge (approved
-  with neither, it stays in review: deliver it); a person task whose ask was answered, with
+  recorded as a ref) once its PR or ref is linked **or once the merge queue holds its approved head**
+  (below), and until you record the merge (approved with neither, it stays in review: deliver it);
+  a person task whose ask was answered, with
   nothing open, reads **answered, master to record**: yours to act on and record, no longer the
   person's. Keep the facts true:
   `agentbus deliver <branch> --task <task>` records the link itself (`--pr <n>` once a pull or
@@ -680,7 +681,20 @@ line screened for credentials), followed by the verdicts; without it, the commit
   or GitLab it pushes `H` and opens the request with `gh`/`glab` (or reuses the open one); without
   the CLI, logged out, or on Bitbucket it pushes and prints the page to open (link mode): give the
   person that URL. In **local** mode it pushes nothing and prints `git switch <base> && git merge
-  --no-ff <H>`: ask the person to merge (an ask naming the task), then `plan done`.
+  --no-ff <H>`: the person merges it (the merge queue lists it, with that command on `y`), then
+  `plan done`.
+- **What waits for the person's merge is derived, never remembered** (the merge queue, spec
+  `docs/superpowers/specs/2026-11-05-merge-queue-design.md`). The dispatch service lists, every 5
+  minutes, each open PR whose head is a subject's deciding approved head (`gh`, else git: a remote
+  branch at that head, or a local one in local mode). busmon shows each in For you, with a page of
+  its approvals; health `merge-queue` and a `decision` notification say it too. So **never open an
+  ask to list PRs or to say "please merge"**: an ask is for a *decision* (merge now or wait, a
+  conflict to choose, a release). After `deliver`, run `agentbus merge-queue`: it must name the PR.
+  If it does not, it says why, and you fix that, not the list:
+  - unknown, with the reason (gh logged out, no origin, a failed fetch);
+  - the PR counted as "not on an approved head" (a newer push, a merge-only head: get a verdict
+    on the head you delivered);
+  - a draft.
 - Exit 2 means delivered but the plan link was not recorded (say it, record it by hand). A push
   git refuses (the remote branch is ahead) stops it with git's own message.
 
