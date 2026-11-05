@@ -74,9 +74,15 @@ it.
     call, which is unknown too. Never a partial list read as the whole.
   - A merged or closed PR is simply not listed.
   - A draft is listed but never queued: not ready.
-- **GitLab:** `glab mr list` with its JSON output, the same fields under GitLab's names, and the
-  same rule for a cut list. The exact flag is to be confirmed against glab's version at build time:
-  glab is not installed on this host, and the spec does not guess it.
+- **GitLab and Bitbucket, this round: the git fallback (§3b)** (master's decision on review,
+  2026-11-05). No forge reader is built for them yet: a GitLab or Bitbucket project reads its queue
+  from the remote branches, as GitHub without `gh` does, and its source is `git`. What the fallback
+  cannot see (a draft, a title, the MR's number and URL) is simply not shown; an approved head on a
+  remote branch is still an item, so nothing waiting is lost.
+- **Later step: `glab mr list`** with its JSON output, the same fields under GitLab's names, and the
+  same rule for a cut list. The exact flag is to be confirmed against glab's version when it is
+  built: glab is not installed on this host, and the spec does not guess it. Bitbucket has no
+  official CLI to rely on; it stays on the fallback until one is chosen.
 - **The rules `deliver` already follows:** the same forge detection (`forge` package, `delivery.forge`
   setting), the same "CLI on PATH" check (`cliReady`), the same environment hardening as the github
   health check:
@@ -132,7 +138,7 @@ The rule has the remote fallback's shape (foureyes):
   - Contents (reviewer-codex: an attempt is not an observation):
     - `attempted_at`, Redis `TIME` at the last pass, failed or not;
     - `items_at`, Redis `TIME` at the last **successful** pass, the one that read the items;
-    - `source` (`gh`, `glab` or `git`);
+    - `source` (`gh` or `git`; `glab` with its later step);
     - `ok`, or the fixed phrase of what could not be read;
     - the items.
 
@@ -294,7 +300,7 @@ Test-first, one step each:
    - `local`: a local branch whose tip is the approved head, not in the base, is an item; an
      approved head with no branch at it is not; a deleted or moved branch ends it;
    - an untrimmed count when approves are missing.
-2. **The forge readers** with a fake `gh` and `glab` on PATH, as the installer tests do:
+2. **The forge reader** with a fake `gh` on PATH, as the installer tests do (`glab` with its later step):
    - the JSON parsed, titles through `SafeText`;
    - the hardened environment asserted (no askpass, `GH_PROMPT_DISABLED`);
    - every failure is unknown with its fixed phrase;
