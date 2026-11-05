@@ -247,3 +247,61 @@ func TestScansReportWhatTheyUsed(t *testing.T) {
 		})
 	}
 }
+
+// An agent with rows under two providers today shows one provider by a
+// stable rule, never by map order: the most tokens today, else (a tie) the
+// agent's snapshot provider, else the lexically first.
+func TestAgentRowsProviderRule(t *testing.T) {
+	const today = "2026-11-04"
+	cases := []struct {
+		name   string
+		rows   map[string]bus.TokenRow
+		agents map[string]bus.AgentSnapshot
+		want   string
+	}{
+		{
+			name: "the most tokens today wins over the snapshot and the lexical order",
+			rows: map[string]bus.TokenRow{
+				today + "|coder|anthropic": {In: 10, Out: 1},
+				today + "|coder|zeta":      {In: 5, Write: 5, Out: 2},
+			},
+			agents: map[string]bus.AgentSnapshot{"coder": {Provider: "anthropic"}},
+			want:   "zeta",
+		},
+		{
+			name: "a tie: the snapshot's provider, though lexically later",
+			rows: map[string]bus.TokenRow{
+				today + "|coder|anthropic": {In: 10, Out: 2},
+				today + "|coder|zeta":      {In: 6, Write: 4, Out: 2},
+			},
+			agents: map[string]bus.AgentSnapshot{"coder": {Provider: "zeta"}},
+			want:   "zeta",
+		},
+		{
+			name: "a tie the snapshot does not settle: the lexically first",
+			rows: map[string]bus.TokenRow{
+				today + "|coder|zeta":      {In: 10, Out: 2},
+				today + "|coder|mid":       {In: 1},
+				today + "|coder|anthropic": {In: 12},
+			},
+			agents: map[string]bus.AgentSnapshot{"coder": {Provider: "mid"}},
+			want:   "anthropic",
+		},
+		{
+			name: "a tie and no snapshot: the lexically first",
+			rows: map[string]bus.TokenRow{
+				today + "|coder|zeta":      {Out: 3},
+				today + "|coder|anthropic": {In: 3},
+			},
+			want: "anthropic",
+		},
+	}
+	for _, c := range cases {
+		for i := 0; i < 50; i++ { // map order varies from run to run
+			got := AgentRows(c.rows, true, "", c.agents, today)
+			if len(got) != 1 || got[0].Provider != c.want {
+				t.Fatalf("%s (run %d): %+v", c.name, i, got)
+			}
+		}
+	}
+}

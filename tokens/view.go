@@ -49,6 +49,7 @@ type AgentRow struct {
 // the dispatcher's own rule) with nothing today.
 func AgentRows(rows map[string]bus.TokenRow, known bool, reason string, agents map[string]bus.AgentSnapshot, today string) []AgentRow {
 	byAgent := map[string]*AgentRow{}
+	perProvider := map[string]map[string]int64{} // agent -> provider -> tokens today
 	for k, v := range rows {
 		parts := strings.SplitN(k, "|", 3)
 		if len(parts) != 3 || parts[0] != today {
@@ -57,11 +58,16 @@ func AgentRows(rows map[string]bus.TokenRow, known bool, reason string, agents m
 		a := byAgent[parts[1]]
 		if a == nil {
 			in, out := int64(0), int64(0)
-			a = &AgentRow{Agent: parts[1], Provider: parts[2], In: &in, Out: &out}
+			a = &AgentRow{Agent: parts[1], In: &in, Out: &out}
 			byAgent[parts[1]] = a
+			perProvider[parts[1]] = map[string]int64{}
 		}
 		*a.In += v.In + v.Write
 		*a.Out += v.Out
+		perProvider[parts[1]][parts[2]] += v.In + v.Write + v.Out
+	}
+	for name, a := range byAgent {
+		a.Provider = topProvider(perProvider[name], agents[name].Provider)
 	}
 	for name, s := range agents {
 		if byAgent[name] != nil {
@@ -100,4 +106,23 @@ func AgentRows(rows map[string]bus.TokenRow, known bool, reason string, agents m
 		return out[i].Agent < out[j].Agent
 	})
 	return out
+}
+
+// topProvider is the provider an agent with rows today shows, by a rule that
+// never depends on map order: the most tokens today; on a tie, the agent's
+// snapshot provider when it is among the tied; else the lexically first.
+func topProvider(byProvider map[string]int64, snapshot string) string {
+	best, bestN := "", int64(-1)
+	for p, n := range byProvider {
+		switch {
+		case n > bestN:
+			best, bestN = p, n
+		case n < bestN:
+		case p == snapshot:
+			best = p
+		case best != snapshot && p < best:
+			best = p
+		}
+	}
+	return best
 }
