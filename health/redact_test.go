@@ -22,10 +22,10 @@ func TestRedactReplacesTheWholeFieldOnAnyHit(t *testing.T) {
 		"use sk-ant-api03-abcdefghijklmnop",
 		"ghp_abcdefghijklmnopqrst",
 		"Basic dXNlcjpwYXNzd29yZA==",
-		"Basic QWxhZGRpbnNlc2FtZW9wZW5z", // 16+ letters, no digit or symbol
+		"Basic QWxhZGRpbnNlc2FtZW9wZW5z",                  // 16+ letters, no digit or symbol
 		"github_pat_11ABCDEFG0123456789_abcdefghijklmnop", // a fine-grained PAT (reviewer-codex)
-		"PGPASSWORD=x",  // a prefix glued to the name (foureyes)
-		"DB_PASS=x",     // env-name endings pass and pwd
+		"PGPASSWORD=x",                                    // a prefix glued to the name (foureyes)
+		"DB_PASS=x",                                       // env-name endings pass and pwd
 		"MYSQL_PWD=x",
 	}
 	for _, s := range secret {
@@ -41,7 +41,7 @@ func TestRedactReplacesTheWholeFieldOnAnyHit(t *testing.T) {
 		"the Bearer token is refused",
 		"Basic authentication is off",
 		"Basic auth over HTTPS",
-		"a basic follow-up",            // letters joined by - or /, under 16 (foureyes)
+		"a basic follow-up", // letters joined by - or /, under 16 (foureyes)
 		"run a basic end-to-end test",
 		"a basic read-only check",
 		"basic setup/teardown",

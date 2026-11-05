@@ -46,6 +46,11 @@ func Read(ctx context.Context, b *bus.Bus, f File) (Inputs, []error) {
 func ReadWithVerdicts(ctx context.Context, b *bus.Bus, f File, verdicts map[string][]bus.Verdict, ok bool) (Inputs, []error) {
 	var errs []error
 	in := Inputs{Missions: map[string]mission.State{}, Verdicts: verdicts, VerdictsOK: ok}
+	// The merge queue (merge-queue §8, decision 6): an addition, so a failed
+	// or absent read leaves today's rule alone rather than failing the plan.
+	if rec, err := b.MergeQueue(ctx); err == nil && rec.ItemsAt > 0 {
+		in.Merge = MergeBySubject(rec.Items)
+	}
 	var err error
 	if in.Facts, err = b.PlanFacts(ctx); err == nil {
 		in.FactsOK = true

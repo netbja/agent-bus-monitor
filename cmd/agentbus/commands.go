@@ -76,6 +76,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo cmd coder \"run the suite\"", "agentbus -p demo cmd -r 1792537337865-0 coder \"and the vet\""},
 	},
 	{
+		Name: "merge-queue", Usage: []string{"merge-queue [--json] [--live]"},
+		Summary: "what waits for the person's merge: open PRs on an approved head (read-only)",
+		Flags: []cli.Flag{
+			fJSON,
+			{Long: "live", Arg: "", Help: "derive it now in this checkout (gh, else git) instead of reading the service's cache; writes nothing"},
+		},
+		Examples: []string{"agentbus -p demo merge-queue", "agentbus -p demo merge-queue --live --json"},
+	},
+	{
 		Name: "history", Usage: []string{"history [--agent A] [--thread T] [--kind K] [--since D] [--until D] [--grep TEXT] [--limit N] [--json]"},
 		Summary: "re-read the past: the archive on this host, then the live streams (redaction is best effort)",
 		Flags: []cli.Flag{

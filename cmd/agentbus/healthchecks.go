@@ -464,6 +464,13 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 		healthOutcomeTask("notifications", func(ctx context.Context) (health.Outcome, error) { // b is read at run time, as the others
 			return notificationsCheck(b.Project(), os.Getenv, time.Now)(ctx)
 		}),
+		healthOutcomeTask("merge-queue", func(ctx context.Context) (health.Outcome, error) { // the dispatch service's cache
+			rec, err := b.MergeQueue(ctx)
+			if err != nil {
+				return health.EvaluateMergeQueue(health.MergeQueueInput{}, "merge queue unavailable"), nil
+			}
+			return health.EvaluateMergeQueue(mergeQueueInput(rec), ""), nil
+		}),
 		healthTask("tracked-secrets", func(ctx context.Context) (health.Status, string, error) {
 			root, err := os.Getwd()
 			if err != nil {

@@ -323,10 +323,13 @@ type shared struct {
 	pace           paceTracker                   // per provider window: rate of use, display only
 	svcRecs        map[string]bus.ServiceRecord  // each service's last state
 	board          map[string]bus.BoardEntry
-	requests       []request    // tracked requests read from the board
-	requestsReadAt time.Time    // when the read that gave requests began (a failed read keeps both)
-	threads        []openThread // cmd exchanges with no answer in retained history
-	health         health       // the MONITOR's own link to the broker
+	requests       []request            // tracked requests read from the board
+	mergeQ         bus.MergeQueueRecord // the merge queue's cache (merge-queue), as last read
+	mergeQRead     bool                 // the reader can read it: a row may say it is unknown
+	mergeQErr      string               // the last read failed: why
+	requestsReadAt time.Time            // when the read that gave requests began (a failed read keeps both)
+	threads        []openThread         // cmd exchanges with no answer in retained history
+	health         health               // the MONITOR's own link to the broker
 	guardianHealth map[string]guardian.Record
 	guardianNotes  map[string]guardian.Note
 	guardianNow    time.Time     // Redis TIME at the last good read

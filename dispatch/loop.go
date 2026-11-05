@@ -73,6 +73,8 @@ type Config struct {
 	Backup BackupConfig
 	// Notify is the notifications chore (notifychore.go); off without a pass.
 	Notify NotifyConfig
+	// MergeQueue is the merge queue's chore (mergequeuechore.go); off without a pass.
+	MergeQueue MergeQueueConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -258,6 +260,14 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 		go func() {
 			defer wg.Done()
 			l.notifyLoop(inner)
+		}()
+	}
+
+	if cfg.MergeQueue.on() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.mergeQueueLoop(inner)
 		}()
 	}
 

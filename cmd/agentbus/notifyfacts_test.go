@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +165,40 @@ func TestNotifyEventsOneLineForAStall(t *testing.T) {
 	}
 	if evs := notifyEvents(notifyFacts{Notices: notice}, nil, nfNow); len(evs) != 0 {
 		t.Fatalf("the stall is over: %v", evs)
+	}
+}
+
+// merge-queue §5: one decision event per change waiting for the person's
+// merge, its episode the PR (or branch) and head; never a second one for an
+// item a waiting plan task already announces, nor from the merge-queue
+// check's own warn.
+func TestNotifyEventsMergeQueue(t *testing.T) {
+	head := "f98091be429b220f63dc8b4b2dde3ef7d6d832a5"
+	f := notifyFacts{
+		Merge: []bus.MergeItem{
+			{Number: 309, Title: "request priority", Branch: "feat/rp", Head: head, Subjects: []string{"request-priority"}, ApprovedAt: nfMS(-time.Hour)},
+			{Branch: "feat/local", Head: "1111111111111111111111111111111111111111", Subjects: []string{"local"}, ApprovedAt: nfMS(-time.Hour)},
+			{Number: 311, Title: "in the plan", Branch: "feat/p", Head: "2222222222222222222222222222222222222222", Subjects: []string{"planned"}, ApprovedAt: nfMS(-time.Hour)},
+		},
+		PlanWaiting: []notifyPlanTask{{ID: "p", Title: "Merge it", Subject: "planned"}},
+		Health: map[string]health.Record{
+			"merge-queue": {ID: "merge-queue", Status: health.Warn, Since: nfMS(-time.Hour), ObservedAt: nfMS(0), Detail: "waiting for your merge: #309"},
+		},
+	}
+	evs := notifyEvents(f, map[string]time.Time{"p": nfNow}, nfNow)
+	var got []string
+	for k := range eventsByKey(evs) {
+		got = append(got, k)
+	}
+	sort.Strings(got)
+	want := []string{"decision|merge:309|" + head, "decision|merge:feat/local|1111111111111111111111111111111111111111", "decision|plan:p"}
+	sort.Strings(want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("events %v, want %v", got, want)
+	}
+	for _, e := range evs {
+		if e.Episode == "merge:309|"+head && (!strings.Contains(e.Line, "PR 309") || strings.Contains(e.Line, "request priority")) {
+			t.Fatalf("the line must carry no free text: %q", e.Line)
+		}
 	}
 }

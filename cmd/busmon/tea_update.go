@@ -246,6 +246,11 @@ func (m *Model) open(p PanelID) tea.Cmd {
 			return m.push(page{kind: ovHealth})
 		case rankPlan: // its page carries the Action row (compose to master, prefilled)
 			return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(key, "plan:")})
+		case rankMerge: // the PR, who approved it and what they checked; y copies the URL
+			if key != mergeUnknownKey {
+				return m.push(page{kind: ovMerge, key: strings.TrimPrefix(key, "merge:")})
+			}
+			return nil
 		case rankGate: // the challenge thread: its ref is the root
 			ref := strings.TrimPrefix(key, "gate:"+it.Agent+":")
 			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)

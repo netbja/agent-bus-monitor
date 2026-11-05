@@ -28,6 +28,9 @@ type snapshot struct {
 	personGates                       map[string]string // gates holding the person
 	board                             map[string]bus.BoardEntry
 	requests                          []request
+	mergeQ                            bus.MergeQueueRecord
+	mergeQRead                        bool
+	mergeQErr                         string
 	requestsReadAt                    time.Time // when the board read behind requests began
 	threads                           []openThread
 	cmdHistory                        []bus.Event // the retained cmd stream (the Requests view)
@@ -59,7 +62,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 		guardian: summarizeGuardian(st.guardianHealth, guardNow),
 		agents:   make(map[string]*agentState, len(st.agents)),
 		budgets:  st.budgets, holds: st.holds, pace: maps.Clone(st.pace.last), pause: st.pause, pauseFailed: st.pauseFailed,
-		asks: st.asks, personGates: st.personGates, board: st.board, requests: st.requests, requestsReadAt: st.requestsReadAt, threads: st.threads, cmdHistory: st.cmdHistory, tok: st.tok,
+		asks: st.asks, personGates: st.personGates, board: st.board, requests: st.requests, mergeQ: st.mergeQ, mergeQRead: st.mergeQRead, mergeQErr: st.mergeQErr, requestsReadAt: st.requestsReadAt, threads: st.threads, cmdHistory: st.cmdHistory, tok: st.tok,
 		guardianHealth: st.guardianHealth, guardianNotes: st.guardianNotes, guardianNow: guardNow,
 		svcInst: st.svcInst, svcRecs: st.svcRecs,
 	}
