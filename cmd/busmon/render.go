@@ -89,6 +89,13 @@ type feedLine struct {
 	at   time.Time
 	to   []string // a fan-out (@all): every target of the same directive, shown as one line
 	mark mark     // unread mark for the person, set by the fill (unread.go)
+	// notices are the report notices folded into this line (report-one-row
+	// §2): on a report's line, every notice whose ref is its id; on a notice's
+	// own line (its report not at hand yet), the later notices of that report.
+	notices []bus.Event
+	// personNotices are the ids of this line's report notices addressed to
+	// the person (its own entry included when it is one): its mark is theirs.
+	personNotices []string
 }
 
 // health is what the monitor knows about its OWN link to the broker. It is

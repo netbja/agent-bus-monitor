@@ -71,11 +71,17 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 			continue
 		}
 		text := fl.ev.Message
-		if s, _, ok := reportSubject(text); ok { // a report notice reads as its report
+		if len(fl.personNotices) > 0 || fl.ev.Kind == "report" {
+			text = lineHeadline(fl.ev) // a report notice reads as its report's headline (report-one-row §4)
+		} else if s, _, ok := reportSubject(text); ok {
 			text = s
 		}
-		out = append(out, attentionItem{Rank: rankUnread, Key: "unread:" + fl.ev.ID, Agent: sender(fl.ev),
-			Text: text, At: fl.at, EventID: fl.ev.ID})
+		ids := []string{fl.ev.ID}
+		if len(fl.personNotices) > 0 { // one row per report, holding every notice to the person (§3)
+			ids = fl.personNotices
+		}
+		out = append(out, attentionItem{Rank: rankUnread, Key: unreadKey(fl), Agent: sender(fl.ev),
+			Text: text, At: fl.at, EventID: ids[0], IDs: ids})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]

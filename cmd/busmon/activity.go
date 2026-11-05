@@ -38,7 +38,7 @@ func lookEvent1(e bus.Event) eventLook {
 		}
 		return eventLook{From: e.Agent, Type: "status", Role: RoleMuted, Text: text}
 	case "report":
-		look := eventLook{From: e.Agent, Type: "report", Role: RoleText, Text: e.Message + reportMarker(e.Full)}
+		look := eventLook{From: e.Agent, Type: "report", Role: RoleText, Text: lineHeadline(e) + reportMarker(e.Full)}
 		if e.RKind == bus.ReportAuto {
 			look.Type, look.Role = "auto", RoleMuted
 		}
@@ -47,8 +47,8 @@ func lookEvent1(e bus.Event) eventLook {
 		return eventLook{From: e.From, Type: "notify", Role: RoleAttention, Text: e.Message}
 	case "cmd":
 		look := eventLook{From: e.From, To: e.Target, Type: e.Type, Role: RoleMuted, Text: e.Message}
-		if s, _, ok := reportSubject(e.Message); ok { // a report notice reads as its report, not its envelope
-			look.Text = s
+		if _, _, ok := reportSubject(e.Message); ok { // a report notice reads as its report's headline, not its envelope
+			look.Text = lineHeadline(e)
 		}
 		switch e.Type {
 		case bus.CmdDirective:
@@ -157,6 +157,7 @@ type activityKey struct {
 	width int
 	day   string
 	ask   string // an ask's row reads the ask's current state (reviewer-codex): askRowInput
+	to2   string // a report row's notice targets (report-one-row §2)
 }
 
 // activityCache keeps the Activity rows laid out by the last fill (the
@@ -166,7 +167,7 @@ type activityCache struct{ rows, next map[activityKey]Line }
 
 // row is activityRowAt, laid out only when one of its inputs changed.
 func (c *activityCache) row(fl feedLine, tier Tier, width int, today time.Time) Line {
-	k := activityKey{ev: fl.ev, at: fl.at.UnixNano(), sep: fl.sep, to: len(fl.to), mark: fl.mark, tier: tier, width: width, ask: askRowInput(fl.ev)}
+	k := activityKey{ev: fl.ev, at: fl.at.UnixNano(), sep: fl.sep, to: len(fl.to), mark: fl.mark, tier: tier, width: width, ask: askRowInput(fl.ev), to2: strings.Join(noticeTargets(fl), ",")}
 	if fl.sep {
 		k.day = today.Format("2006-01-02")
 	}
@@ -216,6 +217,12 @@ func activityRowAt(fl feedLine, tier Tier, width int, today time.Time) Line {
 	look := lookEvent(fl.ev)
 	if len(fl.to) > 1 {
 		look.To = "@all (" + strconv.Itoa(len(fl.to)) + ")"
+	}
+	if t := noticeTargets(fl); fl.ev.Kind == "report" && len(t) > 0 { // the report's notices (report-one-row §2)
+		look.To = t[0]
+		if len(t) > 1 {
+			look.To += " +" + strconv.Itoa(len(t)-1)
+		}
 	}
 	c := colsFor(tier)
 	l := Line{markCell(fl.mark), col(fl.at.Format("15:04"), c.time, RoleMuted), col(Preview(look.From), c.from, RoleText)}

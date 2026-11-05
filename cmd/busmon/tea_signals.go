@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -188,8 +189,17 @@ func (m *Model) requestRecap(auto bool) tea.Cmd {
 func (m *Model) unreadEvents() []bus.Event {
 	var out []bus.Event
 	for _, fl := range m.feed.feed {
-		if !fl.sep && fl.mark == markUnread {
+		if fl.sep || fl.mark != markUnread {
+			continue
+		}
+		if len(fl.personNotices) == 0 {
 			out = append(out, fl.ev)
+			continue
+		}
+		for _, n := range append([]bus.Event{fl.ev}, fl.notices...) { // a report row: its notices to the person
+			if slices.Contains(fl.personNotices, n.ID) && !m.feed.unread.read[n.ID] {
+				out = append(out, n)
+			}
 		}
 	}
 	return out
