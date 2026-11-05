@@ -41,11 +41,23 @@ A report and its notices are one **report row**:
   (report-notice-unread is unchanged). Opening the row reads the notice ids it holds and the
   report id: the `read` cache gets every member.
 - **Order.** Each stream is tailed on its own, so a notice can reach the feed before its report,
-  or with other lines in between. The fold therefore looks the report up by id
-  (`activityFeed.byID`, a map kept with `feed`), not by adjacency:
+  or with other lines in between. The fold therefore looks the report up by id, not by adjacency.
+  It uses two maps kept beside `feed`:
+  - **`reportLine`** maps a report id to the `seq` of the line that shows it.
+  - **`noticeLine`** maps a report id to the `seq` of a notice line still waiting for that report.
+
+  Both maps hold `seq`, never a slice index. `add` re-slices `feed` to `feedCap` (`types.go`), and
+  an index would go stale there. `seq` only grows, so a line is found again by its `seq`, with a
+  binary search over `feed`. When `add` trims the feed, every entry whose `seq` is below the first
+  kept line's is deleted from both maps. A late notice therefore never folds into a line that has
+  left the feed: it becomes a line of its own.
+
+  The two arrival orders:
   - **The notice arrives after its report:** it joins the report's line.
-  - **The notice arrives before its report:** it stays a line of its own until the report comes;
-    the report then takes the notice's place in the feed, and the line count shrinks by one.
+  - **The notice arrives before its report:** it stays a line of its own until the report comes.
+    The report then takes over that line in place, keeping its `id` and `seq`, so Activity's
+    selection, which `listState` anchors by line id, stays on it. The line keeps its position in the
+    feed and shows the report's time. No line is added for the report.
 - **The report is not at hand** (trimmed, beyond the backfill `--limit`, a stream read failed): the
   notice stays a line of its own, as today. A notice never vanishes for lack of its report.
 - **Fan-out.** Each `--to` target still gets its own directive, so each agent keeps its own
@@ -61,9 +73,13 @@ section is already one line (`ntc:all`).
 
 - **One row per notice.** An unread notice is one For you row, keyed by the notice
   (`unread:<notice id>`), and its text is the report's headline (§4).
-- **No second row for the same report.** If `classifyWaits` marks a report that has a notice in
-  the feed, it does not add the report: the notice's row stands for it. A waiting agent's report
-  with no notice keeps today's behaviour.
+- **No second row for the same report.** If `classifyWaits` marks a report that has a notice
+  **to the person** in the feed (`personEntry` true for that notice), it does not add the report:
+  the notice's row stands for it.
+  - A notice to an agent does not count. Example: master waits for the person while its newest
+    report went `--to coder`. That report keeps its own For you row, because the coder notice is not
+    a For you item.
+  - A waiting agent's report with no notice keeps today's behaviour.
 - **Several notices for the same report** (two names that are both the person's, or a re-send) make
   one row. It holds all their ids, as recap rows do (`recapRow.IDs`), and Enter reads them all.
 - **The recap's For you section** uses the same rule. It already reads a notice as its report
@@ -77,6 +93,8 @@ section is already one line (`ntc:all`).
    `full`, the original was a single line, because `full` is kept only when the preview differs
    from the original.
 2. Skip blank lines and Markdown heading lines (`^#{1,6}\s`), remembering the first heading.
+   Also skip code fences (lines starting with three backticks or `~~~`) and every line inside a
+   fence, plus table lines (starting with `|`). None of these makes a headline.
 3. Take the first other line, strip a list marker (`- `, `* `, `+ `, `1. `), and cut it at the
    end of its first sentence (`. `, `! `, `? ` followed by a capital letter or a digit) or at the
    line's end. Examples: `## Done\n- Vérif: …` → `Vérif: …`; `## Done\n\nmerge-queue 958b636
@@ -87,7 +105,9 @@ section is already one line (`ntc:all`).
 Where it applies:
 
 - **The notice's subject.** `reportNotice` writes `ReportHeadline(msg)` instead of the first line,
-  so `agentbus subscribe` and `--brief` show it too. The envelope prefix is unchanged, so
+  so `agentbus subscribe` and `--brief` show it too. If the headline is empty, it keeps the first
+  line. The headline then goes through today's guards unchanged (`reports.go`):
+  `SanitizeReportMessage`, then the 300-rune cut with `…`. The envelope prefix is unchanged, so
   `reportSubject` still parses old and new notices.
 - **busmon's text for a report** (the Activity report row, the For you row, the recap, `i`'s
   `re:` quote): `ReportHeadline` over the report when it is at hand, else over the notice's
@@ -138,16 +158,23 @@ B reverses "read state never on the bus" for this one fact. That is the person's
 - **`activityFeed.add`.** Each case asserts the line count, the marks and the `to` list:
   - a report then its notice: one line;
   - a notice then its report, with a status line between: one line;
-  - a notice whose report is absent: two lines become one;
+  - a notice whose report is absent: one line, the notice's own;
+  - a notice before its report: the report takes over that line, and its `id` and `seq` are
+    unchanged (the selection follows);
+  - past `feedCap`: a report trimmed from the feed leaves `reportLine`, and its late notice is a
+    line of its own;
   - a report with two `--to` targets: one line;
   - a notice whose `ref` is not its report id (a forged prefix): two lines.
 - **`marks`.** The report row is unread until opened, and opening it reads every member.
-- **`forYou`.** A waiting agent's report that has a notice gives one row. Two notices for the same
+- **`forYou`.** A waiting agent's report that has a notice to the person gives one row. A waiting
+  agent's report whose only notice went to an agent keeps its own row. Two notices for the same
   report give one row holding both ids.
 - **`ReportHeadline`.** A table test: heading then list, heading then a sentence, heading alone,
-  no heading, blank lines, a numbered list, a sentence with `e.g. x`.
+  no heading, blank lines, a numbered list, a sentence with `e.g. x`, a code fence and a table before
+  the first sentence.
 - **Mutants:** no heading skip, no sentence cut, no list strip.
-- **`reportNotice`.** Golden of old and new envelopes; `reportSubject` parses both.
+- **`reportNotice`.** Golden of old and new envelopes; `reportSubject` parses both. A control
+  character in the headline is mapped to a space, and a headline over 300 runes is cut with `…`.
 - **busmon goldens.** Activity and For you with a report to the person, at the wide and medium
   tiers.
 - **B (if chosen).**
