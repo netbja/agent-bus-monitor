@@ -97,7 +97,7 @@ func EvaluateReviewQueue(in ReviewQueueInput) Outcome {
 	if notJudged != "" {
 		texts = append(texts, notJudged)
 	}
-	return Outcome{Status: Warn, Detail: truncateDetail(fmt.Sprintf("team idle %s; %s", minutes(idleFor), strings.Join(texts, "; ")))}
+	return Outcome{Status: Warn, Detail: truncateDetail(fmt.Sprintf("%s; %s", idleText(idleFor, in.Agents), strings.Join(texts, "; ")))}
 }
 
 // ReviewQueueWakes: while review-queue warns, one waking directive to master,
