@@ -36,7 +36,11 @@ func (s *stallReader) reviewQueue(ctx context.Context) (health.Outcome, error) {
 	if phrase, err := s.readOpenWork(ctx, tr.team, &in.Open); err != nil {
 		return fail(phrase)
 	}
-	cmds, _, err := s.b.Recent(ctx, []string{"cmd"}, 2000)
+	if phrase := s.answerWaitsLive(ctx, &tr); phrase != "" { // stale-waiting
+		return fail(phrase)
+	}
+	in.Agents = tr.agents
+	cmds, _, err := s.b.Recent(ctx, []string{"cmd"}, stallCmdScan)
 	if err != nil {
 		return fail("cmd history unavailable")
 	}

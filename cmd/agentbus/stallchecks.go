@@ -223,6 +223,10 @@ func (s *stallReader) teamStall(ctx context.Context) (health.Outcome, error) {
 	if phrase, err := s.readOpenWork(ctx, team, &in.Open); err != nil {
 		return fail(phrase)
 	}
+	if phrase := s.answerWaitsLive(ctx, &tr); phrase != "" { // stale-waiting
+		return fail(phrase)
+	}
+	in.Agents = tr.agents
 	recs, err := s.b.Health(ctx)
 	if err != nil {
 		return fail("health records unavailable")
@@ -504,4 +508,48 @@ func stallChecks(s *stallReader) []dispatch.HealthCheck {
 		healthOutcomeTask("team-stall", s.teamStall),
 		healthOutcomeTask("review-queue", s.reviewQueue),
 	}
+}
+
+// stallCmdScan is how much of the cmd stream the stall guards and the
+// notifications read for answers (quiet-agent's figure).
+const stallCmdScan = 2000
+
+// answerWaits rewrites, in tr.agents, each non-dormant agent whose waiting the
+// person answered (bus.WaitAnswered) as idle since the answer (stale-waiting
+// §4). It reads the asks and the cmd stream only when such an agent waits, so
+// a failed read turns a pass unknown only then; it returns that phrase.
+func answerWaits(tr *teamRead, readAsks func() ([]bus.Ask, error), readCmds func() ([]bus.Event, error)) string {
+	waiting := false
+	for _, a := range tr.agents {
+		waiting = waiting || !a.Dormant && a.State == "waiting"
+	}
+	if !waiting {
+		return ""
+	}
+	asks, err := readAsks()
+	if err != nil {
+		return "asks unavailable"
+	}
+	cmds, err := readCmds()
+	if err != nil {
+		return "cmd stream unavailable"
+	}
+	for i, a := range tr.agents {
+		if a.Dormant || a.State != "waiting" {
+			continue
+		}
+		at := bus.WaitAnswered(a.Name, tr.snaps[a.Name].DeclaredTS(), bus.OpenQuestionsOf(a.Name, asks), asks, cmds)
+		if at > 0 {
+			tr.agents[i].State, tr.agents[i].DeclaredAt, tr.agents[i].AnsweredWait = "idle", time.UnixMilli(at), true
+		}
+	}
+	return ""
+}
+
+// answerWaitsLive is answerWaits over the project's bus.
+func (s *stallReader) answerWaitsLive(ctx context.Context, tr *teamRead) string {
+	return answerWaits(tr, func() ([]bus.Ask, error) { return s.b.Asks(ctx) }, func() ([]bus.Event, error) {
+		evs, _, err := s.b.Recent(ctx, []string{"cmd"}, stallCmdScan)
+		return evs, err
+	})
 }
