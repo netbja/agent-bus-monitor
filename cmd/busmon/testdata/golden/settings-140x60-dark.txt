@@ -14,6 +14,7 @@
 │                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 20 default ──────────────────────────────────────────────────────────────── esc back ─╮
+│                   │                                                                                                                      │
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
 │    Identity       │     Fade and slide            ● on                                                                                   │
@@ -27,7 +28,6 @@
 │                   │ Icons · display.icons · from config.toml (default: off) · read by busmon                                             │
 │                   │ off: none · nerd: a lettered box per provider · agent-font: the maker's logo                                         │
 │                   │                                                                                                                      │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

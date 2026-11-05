@@ -560,8 +560,12 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 		panelW = width - settingsSideW - 1
 	}
 	right, selLine := settingsPanel(s, sel, panelW)
+	// One blank row of top margin (about-trim): the groups and keys start
+	// below the frame's title, not against it; the sidebar's rule runs through it.
 	var lines []Line
+	selLine++
 	if side {
+		lines = append(lines, FitLine(Line{S(RoleText, strings.Repeat(" ", settingsSideW)), S(RoleLine, glyphVertical)}, width))
 		for i := 0; i < max(len(right), len(s.groups)); i++ {
 			l := Line{}
 			if i < len(s.groups) {
@@ -575,7 +579,7 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 			lines = append(lines, FitLine(l, width))
 		}
 	} else {
-		lines = append(lines, FitLine(settingsTabs(s.groups, s.group, width, !s.keys), width), Line{})
+		lines = append(lines, Line{}, FitLine(settingsTabs(s.groups, s.group, width, !s.keys), width), Line{})
 		selLine += 2
 		for _, l := range right {
 			lines = append(lines, FitLine(l, width))

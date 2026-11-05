@@ -54,7 +54,8 @@ func aboutRoute() []aboutPoint {
 }
 
 // aboutVersions are the lines y copies, and the same facts as the rows the
-// page aligns (about-design): the project, then this build, then this host.
+// page aligns (about-design): this build, then this host (the project only in
+// what y copies since about-trim).
 type aboutVersions struct {
 	Lines   []string
 	Project string
@@ -280,7 +281,6 @@ func aboutBody(a aboutState, step int, still bool, width int) []Line {
 		line(Seg{Text: "agent-bus monitor", Role: RoleAccent, Bold: true})
 	}
 	line(S(RoleMuted, "agents coordinating over Redis Streams"))
-	line(S(RoleMuted, "by "+buildinfo.Author))
 	b.text("\n")
 
 	if !a.loaded {
@@ -303,7 +303,6 @@ func aboutBody(a aboutState, step int, still bool, width int) []Line {
 			rule := strings.Repeat(glyphHorizontal, max(0, bw-Width(name)-1))
 			b.text(pad).seg(RoleAccent, name).seg(RoleLine, " "+rule).text("\n")
 		}
-		b.text(pad).seg(RoleMuted, Fit("project", aboutLabelW)).segs(Seg{Text: Preview(a.versions.Project), Role: RoleText, Bold: true}).text("\n\n")
 		heading("THIS BUILD")
 		for _, r := range a.versions.Build {
 			row(r)
