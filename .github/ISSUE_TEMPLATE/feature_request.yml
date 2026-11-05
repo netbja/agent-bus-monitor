@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a change or a new capability.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the README, `docs/` and the open issues first. Decisions already taken are recorded
+        in `docs/memory/decisions/`; a request that changes one should say so.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+      description: What you would like agent-bus to do. Commands, keys or screens you have in mind are welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - bus protocol (streams, board, verdicts, asks)
+        - agentbus (CLI)
+        - busmon (TUI)
+        - dispatch / missions services
+        - roles / launcher
+        - installer / herdr plugin
+        - documentation
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you use now, or other designs you weighed.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Related issues, decisions in `docs/memory/`, specs, screenshots.
