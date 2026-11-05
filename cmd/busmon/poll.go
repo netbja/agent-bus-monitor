@@ -460,7 +460,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	if haveCmdHistory {
 		st.cmdHistory, st.cmdOldest, st.cmdHistoryOK = cmdHistory, attentionHistoryFloor(cmdHistory), true
 		for name, a := range st.agents {
-			a.answeredAt = waitingAnswerAt(name, a.stateAt, st.cmdHistory)
+			a.answeredAt = agentAnsweredAt(name, a, st.asks, st.cmdHistory)
 		}
 	}
 	st.lastPollAt = time.Now()
