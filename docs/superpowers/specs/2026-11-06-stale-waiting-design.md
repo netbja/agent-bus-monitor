@@ -1,6 +1,6 @@
 # A `waiting` the person has answered no longer counts as waiting (stale-waiting)
 
-Status: spec, for review (subject `stale-waiting`). Not built. The task comes from master after a
+Status: approved (subject `stale-waiting`, 5a9b441, both reviewers); implemented on this branch (subject `stale-waiting-impl`). The task comes from master after a
 two-hour team stall on 2026-11-05 (22:28 to 00:20).
 
 ## 1. The stall, and its root cause
@@ -138,7 +138,7 @@ clear-stall reads hand-offs.
 - no message is sent.
 
 The chore reads the asks today but not the `cmd` stream, so it adds one read of the stream's last
-1000 entries per pass. A failed read sends nothing, as every failed read does
+2000 entries per pass (the guards' figure, `stallCmdScan`). A failed read sends nothing, as every failed read does
 today.
 
 The same chore raises a `prompt` event for a pane blocked on its client's prompt. It skips an

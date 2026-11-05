@@ -978,7 +978,14 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   non-dormant agent (`bus.DormantAfter`) is idle that long, each pane seen not busy by a fresh observation (none =
   unknown), nothing is open (request, accepted task, ask, gate, pause, swap, obligation, valid hand-off, mission) and
   the plan has an agent task ready whose owner is not held; person tasks only = warn `waiting-person` (for you); it
-  reads `quiet-agent`'s record (warn suppresses it, unknown is unknown, `QuietOff` when quiet_after = 0). The plan's
+  reads `quiet-agent`'s record (warn suppresses it, unknown is unknown, `QuietOff` when quiet_after = 0).
+  A `waiting` the person answered (stale-waiting, spec `docs/superpowers/specs/2026-11-06-stale-waiting-design.md`:
+  `bus.WaitAnswered`, no open question and, strictly after the declaration, a `human=yes` cmd to the agent or a
+  reply on its thread, or one of its asks `answered`, at its latest answer not withdrawn) is read by team-stall and
+  review-queue as idle since the answer (`answerWaits`, after `readTeam` and `readOpenWork`; it reads the asks and
+  2000 cmd entries only while a non-dormant agent waits, a failed read then unknown), named in the detail
+  (`master's wait answered 22:30`): the 2026-11-05 stall, master's declaration never lifted after the person
+  answered, is `TestAnsweredWaitNeverBlocksTheGuards`. Nothing is written: only the agent lifts its `waiting`. The plan's
   verdicts are read forward (`plan.ReadWithVerdicts`). `quiet-agent` warns (master) on a waking directive or
   escalation from master, the dispatcher or a person, delivered with its payload (an expired request never counts),
   and nothing written since by the agent on status, report or cmd (same millisecond = written), not working, held or
@@ -1104,7 +1111,8 @@ hook POSTing to a notification webhook of the person's own. It never touches Red
   command refuses `AGENT_BUS_AGENT` or a process under a registered agent's verified pid in any project (so on Linux
   it needs the broker); a backup secret. The settings are `notify.*` (group Notifications, config.toml only, list keys
   `Key.List`). Events (`notifyfacts.go`, never an agent's text in a summary line): open asks, `waiting`
-  declarations, plan tasks waiting for the person (episode `plan:<id>`, first seen in memory), team-stall at fail
+  declarations not answered (`bus.WaitAnswered`, stale-waiting: an answered one is no event and no longer
+  silences a prompt; the cmd stream is read only while an agent is declared waiting), plan tasks waiting for the person (episode `plan:<id>`, first seen in memory), team-stall at fail
   (a stall only; the stall guard's own notice is never an event), other fails, for-you warns, `for=person` notices,
   prompts by the desktop ring's rule. `notify.Decide` is pure: a target's first pass records everything standing as
   `baseline` and sends nothing; then the due events without a field (delay, kinds, pause = fail only, quiet hours =

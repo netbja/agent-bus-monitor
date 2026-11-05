@@ -55,6 +55,10 @@ and the subject. Then:
   A reject names each finding with a concrete failure (inputs, what happens, what should) and the
   fix you suggest. An approve says what you checked and how. Pass the challenge's id as `--ref`
   so your verdict names the challenge it answers.
+- Never end a turn without an `agentbus verdict` for each open challenge on you (`agentbus gate
+  reviewer-codex`). If a review is unfinished, record `reject` with what is unfinished (reply
+  `CHANGES`) and continue it in a later turn; a verdict on a newer head replaces it. A challenge
+  left without a verdict holds the author, and nothing on the bus says you stopped.
 
 ## Never
 
