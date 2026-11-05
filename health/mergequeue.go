@@ -33,7 +33,9 @@ func EvaluateMergeQueue(rec MergeQueueInput, readErr string) Outcome {
 	case rec.Reason != "":
 		return Outcome{Status: Unknown, Detail: truncateDetail("the last pass failed: " + rec.Reason)}
 	case len(rec.Items) == 0:
-		return Outcome{Status: OK, Detail: "nothing waits for a merge"}
+		// Still ok (nothing for the person to merge), but an open PR never
+		// goes unsaid: a newer push or a missing review is the team's.
+		return Outcome{Status: OK, Detail: truncateDetail("nothing waits for a merge" + unapprovedNote(rec.Unapproved))}
 	}
 	var parts []string
 	for _, it := range rec.Items {
@@ -43,9 +45,17 @@ func EvaluateMergeQueue(rec MergeQueueInput, readErr string) Outcome {
 			parts = append(parts, it.Branch)
 		}
 	}
-	d := fmt.Sprintf("waiting for your merge: %s", strings.Join(parts, "; "))
-	if rec.Unapproved > 0 {
-		d += fmt.Sprintf(" (%d open PRs not on an approved head)", rec.Unapproved)
-	}
+	d := fmt.Sprintf("waiting for your merge: %s", strings.Join(parts, "; ")) + unapprovedNote(rec.Unapproved)
 	return Outcome{Status: Warn, Detail: truncateDetail(d)}
+}
+
+// unapprovedNote is " (N open PRs not on an approved head)", or nothing at 0.
+func unapprovedNote(n int) string {
+	switch n {
+	case 0:
+		return ""
+	case 1:
+		return " (1 open PR not on an approved head)"
+	}
+	return fmt.Sprintf(" (%d open PRs not on an approved head)", n)
 }

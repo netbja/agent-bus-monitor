@@ -64,6 +64,23 @@ func TestMergeItemsUnknown(t *testing.T) {
 	if got := mergeItems(snapshot{mergeQ: ok, mergeQRead: true}); len(got) != 0 {
 		t.Fatalf("an empty queue: %+v", got)
 	}
+	// After an empty success, a failed pass or a failed read is unknown again:
+	// one row that says why, never a decision.
+	failed := ok
+	failed.Reason = "gh timed out"
+	for name, s := range map[string]snapshot{
+		"a failed pass": {mergeQ: failed, mergeQRead: true},
+		"a failed read": {mergeQ: ok, mergeQErr: "the merge queue could not be read", mergeQRead: true},
+	} {
+		got := mergeItems(s)
+		if len(got) != 1 || got[0].Key != mergeUnknownKey || len(decisions(got)) != 0 ||
+			!strings.Contains(got[0].Text, "merge queue unknown") {
+			t.Fatalf("%s after an empty success: %+v", name, got)
+		}
+	}
+	if got := mergeItems(snapshot{mergeQ: failed, mergeQRead: true}); !strings.Contains(got[0].Text, "gh timed out") {
+		t.Fatalf("the reason is not said: %+v", got)
+	}
 }
 
 // Enter opens the item's page: the PR, the branch and head, who approved and
@@ -88,6 +105,21 @@ func TestMergePage(t *testing.T) {
 	}
 	if p.plain != "https://github.com/o/r/pull/309" || !strings.Contains(p.threadPlain, "full suite and Redis suite pass") {
 		t.Fatalf("y %q, Y %q", p.plain, p.threadPlain)
+	}
+	if strings.Contains(text.String(), "Others:") {
+		t.Fatalf("an Others row with every open PR approved:\n%s", text.String())
+	}
+	// The open PRs not on an approved head are said on the page too.
+	snap.mergeQ.Unapproved = 2
+	m.snap = snap
+	m.closeReader()
+	m.push(page{kind: ovMerge, key: mqH})
+	text.Reset()
+	for _, l := range m.rd.top().body {
+		text.WriteString(l.text() + "\n")
+	}
+	if !strings.Contains(text.String(), "Others:") || !strings.Contains(text.String(), "2 open PRs not on an approved head") {
+		t.Fatalf("the unapproved count is not on the page:\n%s", text.String())
 	}
 	// Under the local forge, y copies the merge command.
 	snap.mergeQ.Items[0].Number, snap.mergeQ.Items[0].URL, snap.mergeQ.Source, snap.mergeQ.Forge, snap.mergeQ.Base = 0, "", "git", "local", "main"

@@ -43,7 +43,8 @@ func readMergeQueue(ctx context.Context, b busReader, st *shared) {
 // mergeItems are the For you rows: one per item ("merge PR 309: <title>", or
 // "merge <branch>"), dated by its deciding approve and marked "(as of HH:MM:
 // <reason>)" while the last pass failed; with no items known and the queue
-// unknown, one row that says why. Nothing without a reader.
+// unknown (never computed, a failed read, or a failed pass even after an
+// empty success), one row that says why. Nothing without a reader.
 func mergeItems(s snapshot) []attentionItem {
 	if !s.mergeQRead {
 		return nil
@@ -53,14 +54,14 @@ func mergeItems(s snapshot) []attentionItem {
 	if why == "" {
 		why = rec.Reason
 	}
-	if rec.ItemsAt == 0 {
-		switch {
-		case why != "":
-			return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you", Text: "merge queue unknown: " + why}}
-		default:
-			return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you",
-				Text: "merge queue not computed yet (the dispatch service computes it)"}}
-		}
+	switch {
+	case len(rec.Items) == 0 && why != "":
+		// Nothing known waiting (never computed, or an empty success since
+		// gone stale): the queue is unknown, one row says why.
+		return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you", Text: Preview("merge queue unknown: " + why)}}
+	case rec.ItemsAt == 0:
+		return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you",
+			Text: "merge queue not computed yet (the dispatch service computes it)"}}
 	}
 	var out []attentionItem
 	for _, it := range rec.Items {
@@ -117,6 +118,13 @@ func mergePage(rec bus.MergeQueueRecord, head string, width int) (title string, 
 		src += " (the last pass failed: " + rec.Reason + ")"
 	}
 	f.add("Source", S(RoleMuted, Preview(src)))
+	if n := rec.Unapproved; n > 0 {
+		others := fmt.Sprintf("%d open PRs not on an approved head", n)
+		if n == 1 {
+			others = "1 open PR not on an approved head"
+		}
+		f.add("Others", S(RoleMuted, others+" (a newer push, no review, an approve no longer retained)"))
+	}
 	var b body
 	b.fields(&f, width)
 	b.text("\n").seg(RoleMuted, "What the reviewers checked").text("\n")

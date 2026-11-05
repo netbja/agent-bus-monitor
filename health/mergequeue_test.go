@@ -20,6 +20,7 @@ func TestEvaluateMergeQueue(t *testing.T) {
 		{"one waits", MergeQueueInput{ItemsAt: 1, Items: []MergeQueueEntry{item}}, "", Warn, "#309 request priority"},
 		{"git fallback", MergeQueueInput{ItemsAt: 1, Items: []MergeQueueEntry{{Branch: "feat/x"}}}, "", Warn, "feat/x"},
 		{"a failed pass", MergeQueueInput{ItemsAt: 1, Reason: "gh timed out", Items: []MergeQueueEntry{item}}, "", Unknown, "gh timed out"},
+		{"a sole unapproved PR", MergeQueueInput{ItemsAt: 1, Unapproved: 1}, "", OK, "nothing waits for a merge (1 open PR not on an approved head)"},
 		{"unapproved counted", MergeQueueInput{ItemsAt: 1, Items: []MergeQueueEntry{item}, Unapproved: 2}, "", Warn, "2 open PRs not on an approved head"},
 	}
 	for _, c := range cases {
