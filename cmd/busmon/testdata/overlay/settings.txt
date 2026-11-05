@@ -1,3 +1,4 @@
+                  │                                                                             
  › Display        │ Display  how busmon looks; theme, icons and fade apply at once              
    Attention      │                                                                             
    Identity       │     Fade and slide            ● on                                          

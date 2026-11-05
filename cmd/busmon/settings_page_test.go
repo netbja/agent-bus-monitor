@@ -444,6 +444,11 @@ func TestSettingsPanelsLayout(t *testing.T) {
 	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
 	set := &settingsPage{groups: settingsGroups(getenv, settingsFlags{}, settingsPageGroups), loaded: true}
 	wide := settingsBody(set, 0, 96)
+	// about-trim: one blank row of top margin, the sidebar's rule through it.
+	if strings.TrimSpace(strings.ReplaceAll(wide[0].text(), glyphVertical, "")) != "" || !strings.Contains(wide[0].text(), glyphVertical) {
+		t.Fatalf("no top margin on the wide page: %q", wide[0].text())
+	}
+	wide = wide[1:]
 	for i, g := range set.groups {
 		if !strings.Contains(wide[i].text(), string(g.Group)) || !strings.Contains(wide[i].text(), glyphVertical) {
 			t.Fatalf("sidebar line %d lacks %s:\n%s", i, g.Group, tokLinesText(wide))
@@ -455,7 +460,10 @@ func TestSettingsPanelsLayout(t *testing.T) {
 	for _, w := range []int{91, 70, 40, 24} {
 		set.group = 3 // Notifications
 		lines := settingsBody(set, 0, w)
-		tabs := lines[0]
+		if strings.TrimSpace(lines[0].text()) != "" {
+			t.Fatalf("%d: no top margin: %q", w, lines[0].text())
+		}
+		tabs := lines[1]
 		if strings.Contains(tokLinesText(lines), glyphVertical) {
 			t.Fatalf("%d: a sidebar below 92 cells", w)
 		}
@@ -572,8 +580,8 @@ func TestSettingsGroupKeys(t *testing.T) {
 		t.Fatalf("→: keys %v sel %d", set().keys, m.rd.top().sel)
 	}
 	body := m.rd.top().body
-	if c := body[0][0]; c.Role != RoleMuted || !strings.Contains(c.Text, GlyphPrompt) {
-		t.Fatalf("the selected group is not muted with the focus on the keys: %+v", body[0])
+	if c := body[1][0]; c.Role != RoleMuted || !strings.Contains(c.Text, GlyphPrompt) {
+		t.Fatalf("the selected group is not muted with the focus on the keys: %+v", body[1])
 	}
 	if markRole := func() Role {
 		for _, l := range m.rd.top().body {
@@ -595,8 +603,8 @@ func TestSettingsGroupKeys(t *testing.T) {
 	if set().keys {
 		t.Fatal("← did not go back to the groups")
 	}
-	if c := m.rd.top().body[0][0]; c.Role != RoleAccent {
-		t.Fatalf("the focused group is not lit: %+v", m.rd.top().body[0])
+	if c := m.rd.top().body[1][0]; c.Role != RoleAccent {
+		t.Fatalf("the focused group is not lit: %+v", m.rd.top().body[1])
 	}
 	markRole := func() Role { // the selected key's ▶, wherever its line is
 		for _, l := range m.rd.top().body {
@@ -663,7 +671,7 @@ func TestSettingsGroupKeysNarrow(t *testing.T) {
 		t.Fatalf("→ on the tabs: group %d", set().group)
 	}
 	pill := func() Seg {
-		for _, s := range m.rd.top().body[0] {
+		for _, s := range m.rd.top().body[1] {
 			if s.Pill {
 				return s
 			}

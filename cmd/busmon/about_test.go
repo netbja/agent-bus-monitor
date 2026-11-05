@@ -112,22 +112,25 @@ func TestAboutLayout(t *testing.T) {
 	}
 }
 
-// about-credits: the author under the subtitle, the licence and the
+// about-credits, trimmed (about-trim): nothing between the subtitle and the
+// versions, neither the author nor the project; the licence and the
 // repository at the foot, and y copies them; only the pseudonym LICENSE names.
 func TestAboutCredits(t *testing.T) {
 	a := aboutState{loaded: true, versions: aboutVersions{Project: "demo"}}
 	lines := strings.Split(tokLinesText(aboutBody(a, 0, true, 100)), "\n")
-	by, sub := -1, -1
+	sub := -1
 	for i, l := range lines {
 		switch {
 		case strings.Contains(l, "agents coordinating"):
 			sub = i
 		case strings.TrimSpace(l) == "by "+buildinfo.Author:
-			by = i
+			t.Fatalf("the author is still under the subtitle:\n%s", strings.Join(lines, "\n"))
+		case strings.Contains(l, "demo"):
+			t.Fatalf("the project is still on the page:\n%s", strings.Join(lines, "\n"))
 		}
 	}
-	if sub < 0 || by != sub+1 {
-		t.Fatalf("the author is not under the subtitle (%d, %d):\n%s", sub, by, strings.Join(lines, "\n"))
+	if sub < 0 || sub+2 >= len(lines) || strings.TrimSpace(lines[sub+1]) != "" || !strings.Contains(lines[sub+2], "THIS BUILD") {
+		t.Fatalf("THIS BUILD does not follow the subtitle after one blank line (%d):\n%s", sub, strings.Join(lines, "\n"))
 	}
 	body := strings.Join(lines, "\n")
 	foot := buildinfo.License + " License " + GlyphNone + " " + buildinfo.Copyright()
