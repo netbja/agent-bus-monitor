@@ -74,6 +74,9 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 func (m *Model) modeKey(k Key) tea.Cmd {
 	mode := m.mode()
 	act := lookup(mode, m.ui.focus, m.layout.Tier, k)
+	if mode == ModeOverlay { // a page key shared by two pages resolves by the page (reply-key-r)
+		act = lookupOn(mode, m.ui.focus, m.layout.Tier, k, m.pageOffers)
+	}
 	if act == ActQuit {
 		return tea.Quit
 	}

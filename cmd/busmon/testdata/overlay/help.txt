@@ -70,7 +70,7 @@ KEYS
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
   + -                  a tracked request's page: raise or lower its priority (low, normal, high)
-  i I                  reply in the compose window: on an agent's page to that agent; on a message, report or note page to its sender, an agent, prefilled with re: and its first line
+  r i I                reply in the compose window: on an agent's page to that agent; on a message, report or note page to its sender, an agent, prefilled with re: and its first line
   ^C                   quit (everywhere)
   answering questions
   ↑↓ j k               choose
