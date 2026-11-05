@@ -183,3 +183,24 @@ func TestMergeQueueChoreNoOriginIsLocal(t *testing.T) {
 		t.Fatalf("%+v fetched %v", rec, fetched)
 	}
 }
+
+// Reads that exhaust the pass's budget still leave time for the fenced write:
+// the failure is recorded, never the old success left looking current.
+func TestMergeQueueChoreBudgetSpentStillRecords(t *testing.T) {
+	c, b := mqChore(t, "git@github.com:o/r.git")
+	ctx := context.Background()
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	c.budget = 50 * time.Millisecond
+	c.github = func(ctx context.Context, _ string, _ []string) ([]mergequeue.PR, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatalf("the write after a spent budget: %v", err)
+	}
+	if rec, _ := b.MergeQueue(ctx); rec.Reason == "" || len(rec.Items) != 1 {
+		t.Fatalf("the spent pass is not recorded: %+v", rec)
+	}
+}

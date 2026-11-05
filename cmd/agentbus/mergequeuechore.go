@@ -26,12 +26,14 @@ const (
 	mergeQueueEvery  = 5 * time.Minute
 	mergeQueueBudget = 20 * time.Second
 	mergeQueueCall   = 10 * time.Second // one forge or git command
+	mergeQueueWrite  = 2 * time.Second  // the fenced write's share of the budget
 )
 
 // mergeQueueChore holds the pass's readers (tests replace them).
 type mergeQueueChore struct {
 	b       *bus.Bus
 	dir     string
+	budget  time.Duration // the pass's whole budget, the write's share included (0 = mergeQueueBudget)
 	getenv  func(string) string
 	environ func() []string
 
@@ -101,12 +103,21 @@ func gitOrigin(ctx context.Context, dir string, env []string) (string, bool, err
 
 // pass recomputes and stores the queue; only the lease's errors are returned
 // (a lost lease ends nothing else), every read's failure is the record's
-// reason.
+// reason. The reads get the budget less the write's share, and the write its
+// own context from the caller's: reads that spend their time still record
+// their failure, never leave the last success looking current.
 func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
-	ctx, cancel := context.WithTimeout(ctx, mergeQueueBudget)
-	defer cancel()
-	rec := c.derive(ctx)
-	return c.b.FencedPutMergeQueue(ctx, token, rec)
+	budget := c.budget
+	if budget == 0 {
+		budget = mergeQueueBudget
+	}
+	write := min(mergeQueueWrite, budget/2)
+	dctx, cancel := context.WithTimeout(ctx, budget-write)
+	rec := c.derive(dctx)
+	cancel()
+	wctx, wcancel := context.WithTimeout(ctx, write)
+	defer wcancel()
+	return c.b.FencedPutMergeQueue(wctx, token, rec)
 }
 
 // derive reads everything one pass needs; a failed read is the reason.
