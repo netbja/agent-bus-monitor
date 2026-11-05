@@ -77,15 +77,31 @@ func WaitAnswered(agent string, declaredMs int64, open int, asks []Ask, cmds []E
   acting, so its next declaration is its own to make.
 - **An `expired` ask, and a `replaced` one.** The replacement is open, so `open > 0` anyway.
 
+**Any person's message to the agent after the wait counts as an answer:** an unrelated
+directive, or the agent's share of an `@all`. That is busmon's rule today, and this spec keeps
+it. A wait is meant for the person, so the person writing to that agent is the best signal the
+bus holds. If the message did not answer the wait, the guards read the agent as idle and may
+wake it, or master, too early. That is the safe direction: a stall woken too soon costs one
+turn, while a stall that nobody wakes cost two hours here.
+
 The answer happened after the declaration. So an agent that asks again, or declares `waiting`
 again, is waiting again, because its new declaration postdates every answer.
 
 ## 4. The stall guards
 
-`stallReader` (`cmd/agentbus/stallchecks.go`) already reads the asks (`readOpenWork`) and the
-recent `cmd` stream (2000 entries, for quiet-agent). The reading below needs both before
-`readTeam` judges the agents, so those two reads move ahead of it.
+**Where it runs.** team-stall (`stallchecks.go`) and review-queue (`reviewqueue.go`) read the
+team the same way: `readTeam`, then `readOpenWork`, which takes `readTeam`'s team map. Neither
+reads the `cmd` stream today; the 2000-entry read in `stallchecks.go` belongs to quiet-agent, a
+separate check. `readOpenWork` reads the asks but does not return them.
 
+So a new step, `answerWaits`, runs after `readTeam` and `readOpenWork`, before `Evaluate*`, in
+both checks. It rewrites the waiting agents in `tr.agents`.
+
+- **It reads only when someone is waiting.** If no non-dormant agent's effective state is
+  `waiting`, it reads nothing and changes nothing. A failed read can then never turn a pass
+  unknown when nobody waits.
+- **When someone waits,** it reads the asks and the recent `cmd` stream (2000 entries, as
+  quiet-agent does) once.
 - **For each agent whose effective state is `waiting`,** the reader calls `WaitAnswered` with its
   declaration's millisecond (`snap.DeclaredTS()`; a turn flip never writes `waiting`, so it is the declaration's `TS`).
 - **If the answer is proved,** the agent enters `StallAgent` as `State: "idle"`, with `DeclaredAt`
@@ -101,8 +117,9 @@ recent `cmd` stream (2000 entries, for quiet-agent). The reading below needs bot
 - **team-stall names the answered wait** in its fail or warn detail:
   `team idle 18m (master's wait answered 22:30), nothing open; next ready: …`.
 - **review-queue** names it the same way.
-- **A failed read of the asks or the `cmd` stream** keeps today's phrase ("asks unavailable"). The
-  pass is unknown, never a guess that the wait was answered.
+- **A failed read of the asks or the `cmd` stream** while an agent waits makes the pass unknown,
+  with the phrase "asks unavailable" or "cmd stream unavailable". It never guesses that the wait
+  was answered.
 
 **The person's plan tasks need no special case.** If master's stale wait was really the person's
 plan task, team-stall now reaches its own `PersonReady` branch. That is the warn
@@ -123,6 +140,12 @@ clear-stall reads hand-offs.
 The chore reads the asks today but not the `cmd` stream, so it adds one read of the stream's last
 1000 entries per pass. A failed read sends nothing, as every failed read does
 today.
+
+The same chore raises a `prompt` event for a pane blocked on its client's prompt. It skips an
+agent declared `waiting` (`notifyfacts.go`, `s.State == "waiting"`), the same silence as
+`promptnotify`. It applies `WaitAnswered` there too, since the facts are in hand: an answered
+wait no longer suppresses the prompt event. This needs the `cmd` read, so the chore reads the
+stream only when an agent is declared `waiting`, as the stall guards do.
 
 ## 6. busmon
 
@@ -169,14 +192,34 @@ names both: the verdict `reject`, the reply `CHANGES`.
   - master `waiting` with no proof keeps `waiting`;
   - a failed asks read is unknown.
   - Mutants: drop the `open > 0` guard, compare answer ≥ declaration, ignore the ask source.
-- **notifyfacts:** an answered wait raises no `wait:` event.
+- **notifyfacts:**
+  - an answered wait raises no `wait:` event;
+  - an answered wait no longer suppresses a `prompt` event, while an unanswered one still does;
+  - with nobody waiting, there is no `cmd` read.
+- **answerWaits (both checks):**
+  - with no waiting agent, it makes no read, even when the fake bus would fail one;
+  - with one waiting agent and a failed `cmd` or asks read, the pass is unknown.
 - **busmon:** the existing `answered` tests pass unchanged on the moved function. One new case
   covers an ask answer with the reply out of history.
 
-## 9. Not in scope
+## 9. Deliverables
 
-- `dispatch/promptnotify.go` still suppresses the prompt ring for an agent declared `waiting`. A
-  pane prompt under a stale wait stays silent. It is rare, it is a separate rule, and it is noted
-  here for later.
+- `bus/waiting.go`: `WaitAnswered` and its table test;
+- `answerWaits` in team-stall and review-queue;
+- notifications;
+- busmon's source;
+- `roles/reviewer-codex.md`;
+- **CLAUDE.md**, as master promised the person: the stall guard paragraph gets a sentence saying
+  a `waiting` answered by the person reads as idle from the answer (`bus.WaitAnswered`), and the
+  notifications paragraph the same for the `wait:` and `prompt` events. The regression test is
+  the reader test of §8: master `waiting`, its ask answered, gives `idle` from the answer, and
+  team-stall reaches the plan.
+
+## 10. Not in scope
+
+- `dispatch/promptnotify.go` (the dispatcher's desktop ring) still suppresses the ring for an
+  agent declared `waiting`, so a pane prompt under a stale wait stays silent there. The
+  notifications chore's `prompt` event is fixed in §5. The ring would need the asks and the `cmd`
+  stream in the dispatch pass, so it is a separate change, noted here for later.
 - The master skill's own rule ("lift `waiting` once the person answers") stays. This spec makes
   forgetting it cost nothing. It does not make the rule unnecessary.
