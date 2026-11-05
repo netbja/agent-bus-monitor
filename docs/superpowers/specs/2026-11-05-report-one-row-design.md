@@ -1,6 +1,6 @@
 # One row per report (report-one-row)
 
-Status: draft for review (spec only, no code). Author: coder. Asked by master on the person's
+Status: for review (spec only, no code); the person's answers to the open questions are in §8. Author: coder. Asked by master on the person's
 request, 2026-11-05 (directive 1793861459157-0).
 
 ## 1. The problem, as it is today
@@ -128,12 +128,12 @@ What exists today:
 - **The Requests delivery state.** It reads consumer-group cursors; the person has no group.
 - **Nothing in `agentbus reports`, `thread` or `history`.**
 
-So master cannot know today. Two ways:
+So master cannot know today. Two ways were weighed; the person chose **B** (§8):
 
 - **A. Read the cache file** (`agentbus reports` reads `~/.cache/agentbus/busmon/<p>.json` on its
   own host). No bus write and no change to the decision, but it is right only when busmon runs on
   master's host, and it is silently wrong otherwise. Not recommended.
-- **B. A read receipt on the bus (recommended).**
+- **B. A read receipt on the bus (chosen).**
   - **Write.** When the person opens a report row or a For you row that stands for a report
     notice, busmon writes `{p}:seen` (a hash, notice id → `<at ms>|<person>`) through one script,
     as the person (`busWriter`, like `HumanCmd`). The time comes from Redis `TIME`, the first
@@ -151,7 +151,8 @@ So master cannot know today. Two ways:
     never read back as the person's read state, so a second busmon's marks do not change. Whether
     marks should sync across busmons is out of scope.
 
-B reverses "read state never on the bus" for this one fact. That is the person's decision (§8).
+B reverses "read state never on the bus" for this one fact, by the person's decision (§8). The busmon UX
+spec's item 8 still holds for everything else: the unread marks themselves stay in the local cache.
 
 ## 6. Tests (when implemented)
 
@@ -177,7 +178,7 @@ B reverses "read state never on the bus" for this one fact. That is the person's
   character in the headline is mapped to a space, and a headline over 300 runes is cut with `…`.
 - **busmon goldens.** Activity and For you with a report to the person, at the wide and medium
   tiers.
-- **B (if chosen).**
+- **B.**
   - The `{p}:seen` script, Redis suite: first open wins, the cap holds, the key class is set.
   - `reports` read/unread, and `--unread` exit codes.
 
@@ -187,9 +188,11 @@ B reverses "read state never on the bus" for this one fact. That is the person's
 - Folding other duplicate pairs: a verdict and its notice, a request and its board line.
 - Syncing unread marks between several busmons.
 
-## 8. Open questions for the person (through master)
+## 8. The person's decisions (through master, 2026-11-05, directive 1793911995965-0)
 
-1. **§5: A, B, or neither?** B puts one fact about the person's reading on the bus, against the
-   busmon UX spec's item 8. Recommended: B, limited to report notices.
-2. **§4: the headline also replaces the flattened preview in `agentbus reports`.** Should the
-   table keep the flattened preview instead?
+1. **§5: B.** busmon writes the read receipt `{p}:seen` for report notices to the person, and
+   `agentbus reports` shows read/unread per notice, with `--unread`. A is not built.
+2. **§4: yes.** The `agentbus reports` table shows the headline in place of the flattened preview;
+   `reports <id>` and `--json` keep the data unchanged.
+
+No question is left open.
