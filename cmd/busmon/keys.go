@@ -326,7 +326,8 @@ var (
 		// After close: on a narrow footer the way out stays (message-reply-key).
 		{Keys: "+ -", Hint: "priority", Help: "a tracked request's page: raise or lower its priority (low, normal, high)", Act: ActPriorityUp, OnPage: true, match: runeIs('+')},
 		{Keys: "-", Act: ActPriorityDown, OnPage: true, match: runeIs('-')},
-		{Keys: "i I", Hint: "reply", Help: "reply in the compose window: on an agent's page to that agent; on a message, report or note page to its sender, an agent, prefilled with re: and its first line", Act: ActComposeOpen, OnPage: true, match: runeIs('i', 'I')},
+		// r is shared with About's replay: lookupOn takes the one the page offers (reply-key-r).
+		{Keys: "r", Hint: "reply", Alt: "i I", Help: "reply in the compose window: on an agent's page to that agent; on a message, report or note page to its sender, an agent, prefilled with re: and its first line", Act: ActComposeOpen, OnPage: true, match: runeIs('r', 'i', 'I')},
 	}
 	// settingsBindings: the C page (settings-panels, settings-focus). The focus
 	// is on the groups or on the keys: on the groups ↑↓ choose one (the keys
@@ -425,6 +426,24 @@ func lookup(m Mode, p PanelID, t Tier, ev Key) Action {
 		}
 	}
 	return ActNone
+}
+
+// lookupOn is lookup on a page: of the bindings that match ev, the first that
+// is not OnPage or that the page offers (offers); when the page offers none of
+// them, the last one, so a key shared by two pages' actions (r: About's replay,
+// a message's reply) still reaches the handler that says why.
+func lookupOn(m Mode, p PanelID, t Tier, ev Key, offers func(Action) bool) Action {
+	last := ActNone
+	for _, b := range bindings(m) {
+		if !b.applies(p, t) || !b.match(ev) {
+			continue
+		}
+		if !b.OnPage || offers == nil || offers(b.Act) {
+			return b.Act
+		}
+		last = b.Act
+	}
+	return last
 }
 
 // footerHints renders the advertised bindings of the mode, in table order
