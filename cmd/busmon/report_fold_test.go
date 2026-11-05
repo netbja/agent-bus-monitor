@@ -276,3 +276,32 @@ func TestOpeningAReportRowWritesTheReceipt(t *testing.T) {
 
 // The real writer writes the receipt.
 var _ seenWriter = (*bus.Bus)(nil)
+
+// §6: Activity and For you with a report to the person, wide and medium.
+func TestReportOneRowGoldens(t *testing.T) {
+	pinLocal(t)
+	at := shellNow.Add(-90 * time.Second).UnixMilli()
+	rep := bus.Event{Kind: "report", ID: fmt.Sprintf("%d-0", at), Agent: "master", RKind: bus.ReportNote,
+		Message: "## Done - Vérif: merge-queue 958b636 approved. Next the docs.",
+		Full:    "## Done\n- Vérif: merge-queue 958b636 approved. Next the docs.\n- PR to open"}
+	n := bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-1", at), From: "master", Target: "charlie", Type: bus.CmdDirective, Ref: rep.ID,
+		Message: "Report " + rep.ID + " for you (full text: agentbus reports " + rep.ID + "): Vérif: merge-queue 958b636 approved."}
+	for _, size := range [][2]int{{140, 40}, {100, 30}} {
+		withPalette(t, "dark", false, 1<<24)
+		m := fixtureShell(t, size[0], size[1])
+		m = step(t, m, tailMsg{events: []bus.Event{rep, n}})
+		m.paint = newPainter(th)
+		plain := m.grid().plain()
+		want := 1 // Activity: one line for the report and its notice
+		if size[0] == 140 {
+			want = 2 // and For you, in view at the wide tier
+		}
+		if c := strings.Count(plain, "Vérif: merge-"); c != want || !strings.Contains(plain, " report    Vérif") && !strings.Contains(plain, " report     Vérif") {
+			t.Errorf("%dx%d: want the headline %d time(s) on a report row, got %d:\n%s", size[0], size[1], want, c, plain)
+		}
+		if strings.Contains(plain, "## Done") {
+			t.Errorf("%dx%d: a heading reached a row", size[0], size[1])
+		}
+		checkGolden(t, fmt.Sprintf("report-one-row-%dx%d-dark.txt", size[0], size[1]), plain+"\n")
+	}
+}

@@ -90,3 +90,7 @@ func (b *Bus) Seen(ctx context.Context) (map[string]Seen, error) {
 	}
 	return out, nil
 }
+
+// IDLess orders two stream ids numerically (`agentbus reports` compares a
+// notice with a group's last-delivered id).
+func IDLess(a, b string) bool { return idLess(a, b) }

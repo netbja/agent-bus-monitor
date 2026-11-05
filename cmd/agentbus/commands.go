@@ -36,10 +36,14 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo report coder -t master \"task 3 done\""},
 	},
 	{
-		Name: "reports", Usage: []string{"reports [--json] [<id>]"},
-		Summary:  "list recent reports, or print one report's full text",
-		Flags:    []cli.Flag{fJSON},
-		Examples: []string{"agentbus -p demo reports", "agentbus -p demo reports 1792537337865-0"},
+		Name: "reports", Usage: []string{"reports [--json] [<id>]", "reports --unread [--to <target>] [--json]"},
+		Summary: "list recent reports with each notice's read state, or print one report's full text",
+		Flags: []cli.Flag{
+			{Long: "unread", Short: 'u', Help: "only the reports a person has not opened in busmon (exit 64 when none)"},
+			{Long: "to", Short: 't', Arg: "<target>", Help: "with --unread: only notices to that person"},
+			fJSON,
+		},
+		Examples: []string{"agentbus -p demo reports", "agentbus -p demo reports --unread --to alice", "agentbus -p demo reports 1792537337865-0"},
 	},
 	{
 		Name: "reload", Usage: []string{"reload <role> [--fresh] [--dry-run] [--reason <text>] [--as <person>]"},

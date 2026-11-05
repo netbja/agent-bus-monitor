@@ -312,6 +312,11 @@ func main() {
 
 	case "reports":
 		rest, asJSON := extractBool(rest, "--json")
+		rest, unread := extractBool(rest, "--unread")
+		rest, to := extractFlag(rest, "--to")
+		if to != "" && !unread {
+			die("usage: reports --unread [--to <target>]")
+		}
 		if len(rest) >= 1 { // detail: one report's full text by id
 			e, err := b.ReportByID(ctx, rest[0])
 			if err != nil {
@@ -329,12 +334,24 @@ func main() {
 		if err != nil {
 			die(err.Error())
 		}
+		states, seenErr, err := readNoticeStates(ctx, b, evs)
+		if err != nil {
+			die(err.Error())
+		}
+		if unread {
+			if seenErr != nil { // never claim unread without the receipts
+				die("read receipts not readable: " + seenErr.Error())
+			}
+			if evs = unreadReports(evs, states, to); len(evs) == 0 {
+				fmt.Fprintln(os.Stderr, "no unread report")
+				os.Exit(64)
+			}
+		}
 		if asJSON {
-			out, _ := json.MarshalIndent(evs, "", "  ")
-			fmt.Println(string(out))
+			fmt.Println(string(reportsJSON(evs, states)))
 			return
 		}
-		fmt.Print(reportsTable(evs))
+		fmt.Print(reportsTableWith(evs, states))
 
 	case "notify":
 		if len(rest) < 1 {

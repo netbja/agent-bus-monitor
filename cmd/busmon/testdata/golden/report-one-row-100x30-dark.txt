@@ -1,0 +1,30 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙ 4  ● 2                       15:04:05 
+ paused · resumes in 1h52 (lunch)  pilot master  claude 5h 62% │ 7d 41%  grok 5h 100% held 15:44    
+╭─ For you ───────────────────────────────────────────────────────────────── 4 for you · 2 unread ─╮
+│  ? ask    master    review lot 1? (2 questions)                                                4m▲
+│  ♙ wait   foureyes  need a decision on the width rule                                          6m┃
+│  ♙ wait   sentinel  pane prompt                                                                1m┃
+│  ◆ gate   coder     by charlie  look at b1                                                       │
+│  ● unread dispatch  project paused until 16:56                                                 8m▼
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─────────────────── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-4 of 10 ─╮
+│▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule                     ▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                                            ┃
+│  ♙ sentinel  waiting  30m  —   prompt      health ok                                             │
+│  ✓ architect done     40m  —   escalating  spec merged                                           ▼
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity   2 Board   3 Requests   4 Plan    auto-scroll on ──────── 8 events · filter: none ─╮
+│    time  from     to       type      message                                                     │
+│  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────│
+│    14:24 archite…          status    done · spec merged                                          │
+│    14:50 ♙ Charl… → coder  directive review lot 1                                                │
+│    14:51 coder             report    Lot 1 delivered (+197)                                      │
+│  ○ 14:52 master   → charl… directive please look at the plan                                     │
+│  ● 14:56 dispatch          notify    project paused until 16:56                                  │
+│  ○ 15:00 master            ask       asks · review lot 1? (2 question(s), 2 open)                │
+│    15:02 coder             status    working · busmon-charm-b: b1 shell                          │
+│  ● 15:02 master   → charl… report    Vérif: merge-queue 958b636 approved. (+74)                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                   
+ tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   ! answer   F1 help   F5 health      
