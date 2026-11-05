@@ -20,6 +20,11 @@
   if (btn) {
     var sync = function () { btn.setAttribute("aria-pressed", effective() === "dark" ? "true" : "false"); };
     sync();
+    // with no stored choice the page follows the system, so a change there must reach the button's state
+    if (window.matchMedia) {
+      var mq = matchMedia("(prefers-color-scheme: dark)");
+      if (mq.addEventListener) mq.addEventListener("change", sync); else if (mq.addListener) mq.addListener(sync);
+    }
     btn.addEventListener("click", function () {
       var next = effective() === "dark" ? "light" : "dark";
       root.setAttribute("data-theme", next);
@@ -34,7 +39,12 @@
       var text = b.getAttribute("data-copy");
       var done = b.getAttribute("data-done") || "copied";
       var label = b.textContent;
-      var ok = function () { b.textContent = done; setTimeout(function () { b.textContent = label; }, 1600); };
+      var status = b.parentNode && b.parentNode.querySelector("[role=status]");
+      var ok = function () {
+        b.textContent = done;
+        if (status) status.textContent = done; // a changed button label is not announced; a status is
+        setTimeout(function () { b.textContent = label; if (status) status.textContent = ""; }, 1600);
+      };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(ok, function () { fallback(text, ok); });
       } else { fallback(text, ok); }

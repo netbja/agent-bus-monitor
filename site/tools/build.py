@@ -319,7 +319,9 @@ def page(lang):
            "Ctrl+B puis ↑ ouvre le sélecteur de projets dans herdr. Depuis un shell dans herdr, agentbus up rouvre un projet et relance tout agent disparu."),
          pre([P + "agentbus up myproject", P + "./setup.sh update", P + "./setup.sh status"])),
     ]
-    steps_html = "".join(f'<li class="reveal"><div><h3>{esc(h)}</h3><p>{esc(p)}</p>{c}</div></li>' for h, p, c in steps)
+    # a <pre> that scrolls sideways must take the keyboard focus (Firefox and Safari do not give it one), named by its step
+    steps_html = "".join('<li class="reveal"><div><h3>%s</h3><p>%s</p>%s</div></li>'
+                         % (esc(h), esc(p), c.replace("<pre>", '<pre tabindex="0" aria-label="%s">' % esc(h), 1)) for h, p, c in steps)
     # the step markup puts the number in ::before, the body in the second column
     steps_html = steps_html.replace('<li class="reveal"><div>', '<li class="reveal"><div class="step-body">')
 
@@ -381,12 +383,12 @@ def page(lang):
   <nav class="primary" aria-label="{t("Sections", "Sections")}"><ul>{nav_html}</ul></nav>
   <div class="tools">
     <button class="btn icon-btn theme-ico" id="theme" type="button" aria-pressed="false" aria-label="{t("Toggle dark theme", "Basculer le thème sombre")}">{sun}{moon}</button>
-    <a class="btn lang" href="{other}" hreflang="{"fr" if en else "en"}" lang="{"fr" if en else "en"}">{"FR" if en else "EN"}</a>
+    <a class="btn lang" href="{other}" hreflang="{"fr" if en else "en"}" lang="{"fr" if en else "en"}">{"FR" if en else "EN"}<span class="sr"> — {"Français" if en else "English"}</span></a>
     <a class="btn primary" href="{gh}">{gh_ico}<span class="t">GitHub</span></a>
   </div>
 </div></header>
 
-<main id="main">
+<main id="main" tabindex="-1">
 <section class="hero" id="top"><div class="wrap">
   <div class="hero-grid">
     <div>
@@ -397,8 +399,8 @@ def page(lang):
       <ul class="facts"><li class="c-amber">{t("two Go binaries", "deux binaires Go")}</li><li class="c-green">{t("one Redis container", "un conteneur Redis")}</li><li class="c-blue">{t("nothing polls an agent", "rien n'interroge un agent")}</li><li class="c-violet">MIT</li></ul>
     </div>
     <div class="install" role="group" aria-label="{t("Install", "Installation")}">
-      <header><span>{t("install", "installation")}</span><button class="copy" type="button" data-done="{t("copied", "copié")}" data-copy="git clone {gh} &amp;&amp; cd agent-bus-monitor &amp;&amp; ./setup.sh install --install-herdr">{t("copy", "copier")}</button></header>
-      <pre><span class="p">$ </span>git clone {gh}
+      <header><span>{t("install", "installation")}</span><button class="copy" type="button" data-done="{t("copied", "copié")}" data-copy="git clone {gh} &amp;&amp; cd agent-bus-monitor &amp;&amp; ./setup.sh install --install-herdr">{t("copy", "copier")}</button><span class="sr" role="status"></span></header>
+      <pre tabindex="0" aria-label="{t("Install commands", "Commandes d'installation")}"><span class="p">$ </span>git clone {gh}
 <span class="p">$ </span>cd agent-bus-monitor
 <span class="p">$ </span>./setup.sh install --install-herdr
 <span class="p">$ </span>cd ~/code/myproject &amp;&amp; agentbus start</pre>
