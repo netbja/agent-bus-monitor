@@ -10,6 +10,7 @@ const (
 	hA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	hB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	hC = "cccccccccccccccccccccccccccccccccccccccc"
+	hD = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 )
 
 func v(id, subject, reviewer, decision, head string) bus.Verdict {
@@ -31,11 +32,12 @@ func TestDeriveForge(t *testing.T) {
 		v("3-0", "feat-b", "foureyes", "approve", hB), // B then pushed past: the PR's head is C
 		v("4-0", "feat-r", "foureyes", "approve", hC),
 		v("5-0", "feat-r", "reviewer-codex", "reject", hC), // rejected after the approve
+		v("6-0", "feat-d", "foureyes", "approve", hD),      // the draft's own approved head
 	}
 	prs := []PR{
 		{Number: 1, Title: "A", URL: "https://x/1", Branch: "feat/a", Head: hA},
 		{Number: 2, Title: "B", URL: "https://x/2", Branch: "feat/b", Head: hC}, // newer push, and C is rejected
-		{Number: 3, Title: "draft", Branch: "feat/d", Head: hA, Draft: true},
+		{Number: 3, Title: "draft", Branch: "feat/d", Head: hD, Draft: true},    // approved, still a draft: neither queued nor counted
 		{Number: 4, Title: "unreviewed", Branch: "feat/u", Head: "dddddddddddddddddddddddddddddddddddddddd"},
 	}
 	got := Derive(Input{Verdicts: ledger, PRs: prs})
