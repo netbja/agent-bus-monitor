@@ -192,3 +192,20 @@ func recapHas(m recapModel, detail string) bool {
 	}
 	return false
 }
+
+// stale-waiting §6: an ask answered after the declaration reads answered even
+// once its reply has left the retained cmd history (the asks keep 7 days).
+func TestAnsweredByAnAskOutOfHistory(t *testing.T) {
+	declared := time.UnixMilli(1_800_000_000_000)
+	a := &agentState{state: "waiting", stateAt: declared}
+	asks := []bus.Ask{{ID: "1799999999999-0", From: "master", State: "answered", Questions: []bus.AskQuestionState{
+		{Answer: &bus.AskAnswer{By: "charlie", At: 1_800_000_000_500}}}}}
+	a.answeredAt = agentAnsweredAt("master", a, asks, nil)
+	if !answered(a) || !a.answeredAt.Equal(time.UnixMilli(1_800_000_000_500)) {
+		t.Fatalf("answeredAt %v, answered %v", a.answeredAt, answered(a))
+	}
+	a.openAsk = 1
+	if a.answeredAt = agentAnsweredAt("master", a, asks, nil); !a.answeredAt.IsZero() {
+		t.Fatalf("an open question left: %v", a.answeredAt)
+	}
+}

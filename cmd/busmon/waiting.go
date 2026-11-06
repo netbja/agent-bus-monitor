@@ -9,38 +9,17 @@ import (
 )
 
 // waitingAnswerAt finds the first retained, explicitly human message addressed
-// to agent after its declaration, or a human reply in a retained thread rooted
-// by that agent. Stream IDs are millisecond timestamps; same-ms events are not
+// to agent after declaredAt, or a human reply in a retained thread rooted by
+// that agent (bus.WaitAnswered's message proof). Same-ms events are not
 // ordered across streams and therefore do not count as later.
 func waitingAnswerAt(agent string, declaredAt time.Time, events []bus.Event) time.Time {
-	if agent == "" || declaredAt.IsZero() {
+	if declaredAt.IsZero() {
 		return time.Time{}
 	}
-	roots := make(map[string]bool)
-	for _, e := range events {
-		if e.Kind == "cmd" && e.From == agent {
-			if id := threadID(e); id != "" {
-				roots[id] = true
-			}
-		}
+	if ms := bus.WaitAnswered(agent, declaredAt.UnixMilli(), 0, nil, events); ms > 0 {
+		return time.UnixMilli(ms)
 	}
-	var first time.Time
-	for _, e := range events {
-		if e.Kind != "cmd" || !e.Human {
-			continue
-		}
-		at := eventTimestamp(e.ID)
-		if at.IsZero() || !at.After(declaredAt) {
-			continue
-		}
-		if e.Target != agent && (e.Type != bus.CmdReply || e.Ref == "" || !roots[e.Ref]) {
-			continue
-		}
-		if first.IsZero() || at.Before(first) {
-			first = at
-		}
-	}
-	return first
+	return time.Time{}
 }
 
 func eventTimestamp(id string) time.Time {
@@ -67,4 +46,17 @@ func attentionHistoryFloor(events []bus.Event) time.Time {
 // declaration never covers a newer one, even before the next history scan.
 func answered(a *agentState) bool {
 	return a.state == "waiting" && a.openAsk == 0 && !a.answeredAt.IsZero() && a.answeredAt.After(a.stateAt)
+}
+
+// agentAnsweredAt is when the person answered a's waiting, through the rule
+// the stall guards and the notifications share (bus.WaitAnswered,
+// stale-waiting §6): a human message after it, or one of its asks answered.
+func agentAnsweredAt(name string, a *agentState, asks []bus.Ask, events []bus.Event) time.Time {
+	if a.stateAt.IsZero() {
+		return time.Time{}
+	}
+	if ms := bus.WaitAnswered(name, a.stateAt.UnixMilli(), a.openAsk, asks, events); ms > 0 {
+		return time.UnixMilli(ms)
+	}
+	return time.Time{}
 }

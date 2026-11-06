@@ -36,6 +36,13 @@ type notifyFacts struct {
 	Observed    map[string]bus.Observation
 	Paused      bool
 	PromptGrace time.Duration // 0 = prompts off, as the desktop ring
+	Cmds        []bus.Event   // the recent cmd stream, read only while an agent is declared waiting (stale-waiting)
+}
+
+// waitAnswered: name's waiting was answered by the person (bus.WaitAnswered),
+// so it is no longer a wait for the person (stale-waiting §5).
+func (f notifyFacts) waitAnswered(name string, s bus.AgentSnapshot) bool {
+	return s.State == "waiting" && bus.WaitAnswered(name, s.DeclaredTS(), bus.OpenQuestionsOf(name, f.Asks), f.Asks, f.Cmds) > 0
 }
 
 // notifyEvents is the events that hold now. planSeen is when each waiting
@@ -60,7 +67,7 @@ func notifyEvents(f notifyFacts, planSeen map[string]time.Time, now time.Time) [
 	}
 	for _, name := range sortedAgentNames(f.Agents) {
 		s := f.Agents[name]
-		if s.State == "waiting" {
+		if s.State == "waiting" && !f.waitAnswered(name, s) {
 			add("decision", "wait:"+name+"|"+strconv.FormatInt(s.TS, 10), time.UnixMilli(s.TS), name+" waits for you (busmon For you)", s.Message)
 		}
 	}
@@ -132,7 +139,7 @@ merge:
 		for _, name := range sortedObsNames(f.Observed) {
 			o, s := f.Observed[name], f.Agents[name]
 			if o.State != "blocked" || o.PID == 0 || o.PID != s.PID || o.At-o.Since < f.PromptGrace.Milliseconds() ||
-				s.State == "blocked" || s.State == "waiting" || asking[name] {
+				s.State == "blocked" || s.State == "waiting" && !f.waitAnswered(name, s) || asking[name] {
 				continue
 			}
 			add("prompt", fmt.Sprintf("%s|%d:%d", name, o.PID, o.Since), time.UnixMilli(o.Since), name+" waits on a prompt in its pane", "")
@@ -174,6 +181,7 @@ const verdictCacheMax = 10000
 type notifyReader struct {
 	b     *bus.Bus
 	grace time.Duration
+	cmds  func(context.Context) ([]bus.Event, error) // nil = the bus's recent cmd stream (a test seam)
 
 	mu       sync.Mutex
 	verdicts []bus.Verdict
@@ -190,6 +198,11 @@ func (r *notifyReader) read(ctx context.Context, now time.Time) (notifyFacts, ma
 	}
 	if f.Agents, err = r.b.Agents(ctx); err != nil {
 		failed["agents"] = err.Error()
+	}
+	if anyWaiting(f.Agents) { // the answers to a wait: read only when one is declared
+		if f.Cmds, err = r.readCmds(ctx); err != nil {
+			failed["cmd"] = err.Error()
+		}
 	}
 	if f.Health, err = r.b.Health(ctx); err != nil {
 		failed["health"] = err.Error()
@@ -300,4 +313,21 @@ func (r *notifyReader) seen(tasks []notifyPlanTask, now time.Time) map[string]ti
 		out[k] = v
 	}
 	return out
+}
+
+func anyWaiting(agents map[string]bus.AgentSnapshot) bool {
+	for _, s := range agents {
+		if s.State == "waiting" {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *notifyReader) readCmds(ctx context.Context) ([]bus.Event, error) {
+	if r.cmds != nil {
+		return r.cmds(ctx)
+	}
+	evs, _, err := r.b.Recent(ctx, []string{"cmd"}, stallCmdScan)
+	return evs, err
 }

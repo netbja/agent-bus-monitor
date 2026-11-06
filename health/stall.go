@@ -28,6 +28,25 @@ type StallAgent struct {
 	DeclaredAt time.Time // the status entry's time (Redis)
 	Dormant    bool      // silent past bus.DormantAfter: not part of the team
 	Pane       PaneSeen
+	// AnsweredWait: declared waiting, answered by the person since
+	// (bus.WaitAnswered): State is idle and DeclaredAt the answer's time
+	// (stale-waiting §4); the details name it.
+	AnsweredWait bool
+}
+
+// idleText is "team idle 18m", naming each answered wait: "team idle 18m
+// (master's wait answered 22:30)".
+func idleText(idleFor time.Duration, agents []StallAgent) string {
+	var waits []string
+	for _, a := range agents {
+		if a.AnsweredWait && !a.Dormant {
+			waits = append(waits, a.Name+"'s wait answered "+a.DeclaredAt.Format("15:04"))
+		}
+	}
+	if len(waits) == 0 {
+		return "team idle " + minutes(idleFor)
+	}
+	return "team idle " + minutes(idleFor) + " (" + strings.Join(waits, ", ") + ")"
 }
 
 // TeamOpenWork is what keeps a team out of a stall: work someone already
@@ -132,11 +151,11 @@ func EvaluateTeamStall(in TeamStallInput) Outcome {
 			continue
 		}
 		return Outcome{Status: Fail, Reason: "stalled", Detail: truncateDetail(
-			fmt.Sprintf("team idle %s, nothing open; next ready: %s (%s)", minutes(idleFor), t.ID, t.Owner))}
+			fmt.Sprintf("%s, nothing open; next ready: %s (%s)", idleText(idleFor, in.Agents), t.ID, t.Owner))}
 	}
 	if len(in.PersonReady) > 0 {
 		return Outcome{Status: Warn, Reason: "waiting-person", Detail: truncateDetail(
-			fmt.Sprintf("team idle %s; waiting for you: %s", minutes(idleFor), in.PersonReady[0]))}
+			fmt.Sprintf("%s; waiting for you: %s", idleText(idleFor, in.Agents), in.PersonReady[0]))}
 	}
 	if len(held) > 0 {
 		return ok("ready work waits on a quota hold: " + strings.Join(held, ", "))
