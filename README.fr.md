@@ -47,6 +47,10 @@ d'usage et le remplissage du contexte sont lus dans des sources locales, sans d�
 
 ## Démarrage rapide
 
+Nouveau venu ? Le [guide de démarrage en cinq minutes](docs/quickstart.md) (en anglais) mène un
+opérateur de l'installation à une première tâche faite, une question répondue et un projet
+arrêté, avec la sortie réelle de chaque étape.
+
 Il vous faut Linux ou macOS, Go (la version de `go.mod`), Docker avec Compose, Git et curl.
 herdr (0.9.0 ou plus récent) est installé pour vous avec `--install-herdr`. Il faut aussi au
 moins un client d'agent, que vous installez vous-même : Claude Code (`claude`), Codex CLI
