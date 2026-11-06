@@ -71,7 +71,7 @@ the next day.
 1. **The directive follows the policy.** `proposeReloads` writes the action for the project's
    policy, read as `agentbus reload` reads it (`reloadPolicy`: the dispatcher's own environment
    is the services' env file, so the same layers apply):
-   - `on`, sentinel in the team: `client update: … Reload the ready ones now (agent-bus-sentinel skill, Client update): agentbus reload <agent>, one at a time, master last; never type into a pane.`
+   - `on`, sentinel registered: `client update: … Reload the ready ones now (agent-bus-sentinel skill, Client update): agentbus reload <agent>, one at a time, master last; never type into a pane.`
    - `propose`: today's text, `Propose a reload … propose only, never restart or type.`
    - `off`: `… Reload nothing; report the agents to master once.`
    The episode mark is unchanged. The policy is read **at each send**, never once at service
