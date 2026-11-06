@@ -26,7 +26,8 @@ are listed in [CHANGELOG.md](CHANGELOG.md).
 ## Security stance
 
 What follows is what the repository's own documentation ([README.md](README.md),
-[CLAUDE.md](CLAUDE.md)) states. It is not a claim of anything beyond it.
+[CLAUDE.md](CLAUDE.md), [docs/architecture.md](docs/architecture.md),
+[docs/operator-notes.md](docs/operator-notes.md)) states. It is not a claim of anything beyond it.
 
 ### The broker
 

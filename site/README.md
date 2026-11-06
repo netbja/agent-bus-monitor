@@ -36,14 +36,14 @@ The generated HTML is committed; run the script after editing either tool file a
 |---|---|
 | Hero pitch, quick start, requirements | `README.md` (intro, Quick start, First run), `go.mod`, `setup/preflight.go` |
 | What it does (13 cards) | `README.md` "What you get", `CHANGELOG.md`, `cmd/agentbus/commands.go` (each command shown exists in the table) |
-| Fig. 1 who does what | `CLAUDE.md` Architecture and "How the bus is actually consumed" |
-| Fig. 2 message and wake line | `CLAUDE.md` (wake line text, `subscribe --drain`), `dispatch/` |
+| Fig. 1 who does what | `docs/architecture.md` Architecture and "How the bus is actually consumed" |
+| Fig. 2 message and wake line | `docs/architecture.md` (wake line text, `subscribe --drain`), `dispatch/` |
 | Fig. 3 decision flow | `dispatch/decide.go` (`Decide`, rules 1 to 9) |
-| Fig. 4 4-eyes | `CLAUDE.md` (verdict ledger, roll-up rule, `challenge`, `verdict`, `verdicts` exit codes), `docs/memory/decisions/2026-11-02-forge-delivery.md` |
-| Fig. 5 restart-safe layers | `docker-compose.yml` (`--appendonly yes`, volume), `CLAUDE.md` (stateless services, fenced writes, `FencedCmdOnce`) |
-| Fig. 6 suspend/resume | `docs/releases/v0.27.0.md`, `CLAUDE.md` (suspend, resume, `suspend.auto_resume`) |
+| Fig. 4 4-eyes | `docs/architecture.md` (`challenge`, `verdict`, `verdicts` exit codes), `docs/operator-notes.md` (verdict ledger, roll-up rule), `docs/memory/decisions/2026-11-02-forge-delivery.md` |
+| Fig. 5 restart-safe layers | `docker-compose.yml` (`--appendonly yes`, volume), `docs/architecture.md` (stateless services), `docs/operator-notes.md` (fenced writes, `FencedCmdOnce`) |
+| Fig. 6 suspend/resume | `docs/releases/v0.27.0.md`, `docs/operator-notes.md` (suspend, resume, `suspend.auto_resume`) |
 | Screens | `cmd/busmon/testdata/golden/{dashboard,expanded,reader,health}-140x40-dark.ansi` |
-| Security stance | `docker-compose.yml`, `CLAUDE.md` (connection, password, tests, notifications, fencing) |
+| Security stance | `docker-compose.yml`, `CLAUDE.md` (tests), `docs/operator-notes.md` (connection, password, notifications, fencing) |
 | Release line, licence, author | `CHANGELOG.md`, `LICENSE`, `buildinfo` (`Author`, `License`, `Year`) |
 
 The screens are the real golden renders of busmon's dark theme at 140×40 columns, converted from

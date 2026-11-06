@@ -29,7 +29,7 @@ go build -o busmon  ./cmd/busmon      # the TUI dashboard
 
 Protocol changes belong in the `bus` package (`bus/stream.go`, `bus/bus.go` for transport-neutral
 primitives, `bus/board.go` for the board), not in the binaries. See the Architecture section of
-[CLAUDE.md](CLAUDE.md#architecture) before changing the protocol.
+[docs/architecture.md](docs/architecture.md#architecture) before changing the protocol.
 
 ## Test
 
