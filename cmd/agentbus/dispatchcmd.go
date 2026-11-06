@@ -31,7 +31,9 @@ func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Run
 	cfg.PopRetire = servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) })
 	if paths, err := service.PathsFrom(os.Getenv); err == nil {
 		cfg.Health = realHealthConfig(b, rt, paths, cfg.Clear, &cfg.EscalateTo)
-		cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(b.Project()))
+		if b != nil { // a bad flag exits before any bus is used
+			cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(b.Project()))
+		}
 	}
 	status := false
 	usage := func(msg string) int {
