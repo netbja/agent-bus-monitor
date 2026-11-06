@@ -537,6 +537,12 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   n'importe qui : `agentbus --project myapp reload coder --as <votre-nom>` (`--dry-run` dit ce qui
   se passerait, `--fresh` démarre une nouvelle conversation). `agentbus up myapp --reload
   propose` fait attendre chaque rechargement votre accord ; `--reload off` vous les réserve.
+  Pour tous les projets à la fois, la page des réglages de busmon (`C`, Services) offre
+  **Auto-restart on update** : `on` (par défaut), `propose` ou `off` ; le `--reload` d'un projet
+  l'emporte. Le dispatcher le relit à chaque mise à jour : un changement ne demande aucun
+  redémarrage. Un agent occupé quand la mise à jour arrive est rechargé une fois au repos :
+  sentinel reçoit une directive de plus pour lui. Sans sentinel enregistré, rien ne redémarre
+  tout seul : master vous le demande.
 - **Quotas épuisés.** À 95 %, les agents d'un fournisseur sont retenus (cas C). Quand la remise à
   zéro est à plus de 2 heures (`AGENT_BUS_QUOTA_LONG_HOLD`), master vous dit quels agents retenus
   avaient du travail en cours, pour que vous puissiez passer un rôle sur l'un de ses

@@ -788,10 +788,25 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `docs/superpowers/specs/2026-10-21-client-reload-design.md`): the launcher fingerprints the client
   it resolved (`clientfp`, `AGENT_BUS_CLIENT_FP`, kept in the verified identity as `client_fp`); the
   observe pass re-checks it at most once a minute (or reads the Claude Code `versions/` layout for
-  agents without one) and adds `update` and `client_judged` to `{p}:observed`; sentinel gets one
-  directive per update episode (`FencedCmdOnce`, mark `update:<client>`, episode the installed
-  hash); health `client-updates` warns; busmon flags `update`. Metadata only: the dispatcher never
-  runs a client; sentinel reloads the outdated agents with `agentbus reload` (lifecycle-3b, below).
+  agents without one) and adds `update` and `client_judged` to `{p}:observed`; one directive per
+  update episode goes to sentinel when it is registered (a snapshot), else to the escalation target
+  (`FencedCmdOnceMarks`, mark `update:<client>:<episode>` = `sent`); health `client-updates` warns;
+  busmon flags `update`. Metadata only: the dispatcher never runs a client; sentinel reloads the
+  outdated agents with `agentbus reload` (lifecycle-3b, below). Auto-reload (spec
+  `docs/superpowers/specs/2026-11-06-auto-reload-setting-design.md`): the directive's text follows
+  the reload policy, read at each send (`Config.ReloadPolicy` = `serviceReloadPolicy`, i.e.
+  `service.ReloadPolicy` over the env, the project's env file, then `config.toml`): `on` with
+  sentinel registered says reload the ready ones now, master last; `on` without one asks the person
+  through the escalation target (it may reload no one but sentinel); `propose` keeps the proposal;
+  `off` reloads nothing. Never word it "propose only" under `on`: that text, left over from v0.22,
+  is why `on` never reloaded until v0.29. Under `on` with sentinel, the episode's send also sets a
+  per-agent mark `update:<client>:<episode>:<agent>` for each agent ready then (`reloadReady`:
+  declared idle, not observed busy, no `accepted` board task, no gate on either side
+  (`ReviewsOf`), no swap or reload intent, not on a fallback, every read succeeded), in the same
+  script; on later passes an agent of the episode now ready with no mark gets one hint
+  (`client update: <agent> is ready now …`, `retryReloads`), never sentinel about itself. busmon's
+  C page shows `sentinel.reload` as "Auto-restart on update" (on / propose / off), the Services
+  group's only key there (`settingOnPage`).
   v0.15: an observation carries `since` (first reading of
   that state by the same pid, carried forward) and a failed inspection keeps the previous reading
   (`Observation.Fresh`, 120 s); a pane seen `blocked` (its client's own menu or permission prompt)

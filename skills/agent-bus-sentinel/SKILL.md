@@ -108,8 +108,9 @@ run `swap` or `retire`.
    master as written. A Codex agent has no session to resume: reload it only with `--fresh`, and
    only when master asked for it (its conversation is lost).
 4. Report once, with `agentbus report sentinel --to master`: who was reloaded (old pid -> new pid),
-   who waits and why. Then `agentbus health note client-updates "<one line>"`. The agents still
-   later are retried on your next wake.
+   who waits and why. Then `agentbus health note client-updates "<one line>"`. You need not
+   watch the agents still later: once one of them is ready, the dispatcher sends you one more
+   directive for it (`client update: <agent> is ready now …`); reload it then, the same way.
 
 **When the project's policy is not the default** (`agentbus reload` says so; the policy is
 `AGENT_BUS_RELOAD` in the caller's environment, else the project's env file from `agentbus up
