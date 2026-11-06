@@ -23,8 +23,10 @@ installed and nothing is in progress, the agents restart on it by themselves.
   sentinel. `propose` refuses both and needs a person (`--as`). `off` refuses everyone but a
   person.
 - **The trigger**: the dispatcher's observe pass sees an agent on an older client than installed
-  (`{p}:observed` `update`) and sends sentinel **one** directive per update episode
-  (`proposeReloads`, `dispatch/clientupdate.go:110`, once-mark `update:<client>:<episode>`).
+  (`{p}:observed` `update`) and sends **one** directive per update episode
+  (`proposeReloads`, `dispatch/clientupdate.go:110`, once-mark `update:<client>:<episode>`) to
+  sentinel when sentinel is registered (it has a snapshot), else to the escalation target
+  `l.cfg.EscalateTo`, master by default (`clientupdate.go:121-124`).
 - **sentinel's skill** (`skills/agent-bus-sentinel/SKILL.md`, "Client update") says "Reloading
   them is your job": sort the named agents into ready and later, reload each ready one with
   `agentbus reload`, master last, then report. Only under `propose` does it send master a
@@ -81,18 +83,19 @@ the next day.
    each time. A change after the send applies to the next episode (`agentbus reload` checks the
    policy again anyway).
 
-   **A team without sentinel** (reviewer-codex): `proposeReloads` then sends the directive to the
-   escalation target (`l.cfg.EscalateTo`, master by default; `clientupdate.go:123-126`), and
+   **No sentinel registered** (reviewer-codex): `proposeReloads` then sends the directive to the
+   escalation target (`l.cfg.EscalateTo`, master by default; `clientupdate.go:121-124`), and
    nobody there may reload the others: `runReload` lets master reload only sentinel, and an agent
-   without `--as` nothing at all. So under `on` with no sentinel snapshot the directive says the
+   without `--as` nothing at all. So under `on` with no sentinel registered (no snapshot: a team without the role, or one whose
+   sentinel has not registered yet or was forgotten) the directive says the
    limit and asks for the person, as `propose` does:
-   `client update: … No sentinel in this project, so nothing reloads by itself: ask the person to run agentbus reload <agent> --as <name> for each idle agent, one at a time; never type into a pane.`
+   `client update: … No sentinel registered, so nothing reloads by itself: ask the person to run agentbus reload <agent> --as <name> for each idle agent, one at a time; never type into a pane.`
    `propose` and `off` keep their own texts whoever receives them. No retry hint (3, below) is
-   sent without sentinel: the person, not an agent, does the reloads. The C page's detail line
-   says it: "on needs sentinel in the team; without it, you are asked".
+   sent without a registered sentinel: the person, not an agent, does the reloads. The C page's detail line
+   says it: "on needs a registered sentinel; without one, you are asked".
 2. **The health remediation** of `client-updates` stops saying "propose": one static text that
    covers every policy, "sentinel reloads the outdated agents (agentbus reload), master last;
-   under propose, or with no sentinel in the team, the person is asked through master; under off
+   under propose, or with no sentinel registered, the person is asked through master; under off
    nothing is reloaded." The
    remediation is shown to people and agents; it must not contradict the policy.
 3. **Retry the later ones.** The hint is only for agents that were **not** ready when the
