@@ -352,12 +352,21 @@ def page(lang):
     sec_html = "".join(f"<li>{x}</li>" for x in sec_items)
 
     req_items = [
-        t("Linux or macOS. Verified agent identity reads <code>/proc</code>, so it is Linux only.", "Linux ou macOS. L'identité vérifiée d'un agent lit <code>/proc</code> : Linux seulement."),
+        t("<b>v0.x, one operator:</b> one person runs a team of agents on their own machine. Commands and screens still change between releases; there are no accounts and no access control.",
+          "<b>v0.x, un seul opérateur :</b> une personne fait travailler une équipe d'agents sur sa propre machine. Commandes et écrans changent encore d'une version à l'autre ; il n'y a ni comptes ni contrôle d'accès."),
+        t("<b>Linux</b>: developed and used daily; services under systemd <code>--user</code> when available; verified agent identity read from <code>/proc</code>.",
+          "<b>Linux</b> : développé et utilisé tous les jours ; services sous systemd <code>--user</code> s'il est disponible ; identité vérifiée des agents lue dans <code>/proc</code>."),
+        t("<b>macOS</b>: builds (a cross-compile run by hand, no CI), not used daily; services under launchd. No agent's process is verified there, so the dispatcher never wakes an agent.",
+          "<b>macOS</b> : compile (compilation croisée lancée à la main, sans CI), pas utilisé tous les jours ; services sous launchd. Aucun processus d'agent n'y est vérifié, donc le répartiteur ne réveille jamais un agent."),
+        t("<b>Windows</b>: not supported; it does not compile.", "<b>Windows</b> : non pris en charge ; ne compile pas."),
         t("Go (the version in <code>go.mod</code>, 1.26.3), Git and curl.", "Go (la version de <code>go.mod</code>, 1.26.3), Git et curl."),
         t("Docker with Compose, for the <code>redis:8-alpine</code> broker.", "Docker avec Compose, pour le courtier <code>redis:8-alpine</code>."),
         t("herdr 0.9.0 or newer; <code>--install-herdr</code> installs it for you.", "herdr 0.9.0 ou plus récent ; <code>--install-herdr</code> l'installe pour vous."),
-        t("At least one agent CLI (Claude Code, Codex and others); setup warns, with install pages, when none is found.", "Au moins un client d'agent (Claude Code, Codex, etc.) ; l'installateur avertit, avec les pages d'installation, si aucun n'est trouvé."),
+        t("At least one agent CLI: Claude Code, Codex, Grok (beta) or Kimi Code; setup warns, with install pages, when none is found. Only Claude Code resumes a session and reports its context fill; Kimi has no hooks, so its working/idle state is only what it declares.",
+          "Au moins un client d'agent : Claude Code, Codex, Grok (bêta) ou Kimi Code ; l'installateur avertit, avec les pages d'installation, si aucun n'est trouvé. Seul Claude Code reprend une session et indique le remplissage de son contexte ; Kimi n'a pas de hooks, son état travail/repos n'est donc que ce qu'il déclare."),
         t("Optional: <code>age</code>, to encrypt secrets in backups.", "En option : <code>age</code>, pour chiffrer les secrets des sauvegardes."),
+        t(f'New here? The <a href="{REPO}/blob/main/docs/quickstart.md">five-minute quick start</a>, written for Linux.',
+          f'Nouveau venu ? Le <a href="{REPO}/blob/main/docs/quickstart.md">guide de démarrage en cinq minutes</a> (en anglais), écrit pour Linux.'),
     ]
     req_html = "".join(f"<li>{x}</li>" for x in req_items)
 

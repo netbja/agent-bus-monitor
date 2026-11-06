@@ -45,6 +45,38 @@ d'usage et le remplissage du contexte sont lus dans des sources locales, sans d�
 - **Santé et consommation** : la santé mesurée du projet (`agentbus health`, F5) et les jetons
   par projet, agent et jour, jamais un coût (`agentbus tokens`, `U`).
 
+## Où il tourne
+
+agent-bus est en **v0.x** et conçu pour **un seul opérateur** : une personne fait travailler une
+équipe d'agents sur sa propre machine. Commandes et écrans changent encore d'une version à
+l'autre. Il n'y a ni comptes ni contrôle d'accès, et le courtier est un Redis lié à `127.0.0.1`.
+Dans les tableaux ci-dessous, la fréquence d'usage d'une plateforme est ce qu'en disent les
+mainteneurs, et « compile » pour macOS est une compilation croisée (`GOOS=darwin go build ./...`
+et `go vet ./...`, amd64 et arm64) lancée à la main, sans CI ; toutes les autres cases ne disent
+que ce que le code et ses tests montrent.
+
+| | Linux | macOS | Windows |
+|---|---|---|---|
+| État | développé et utilisé tous les jours | compile, pas utilisé tous les jours | non pris en charge : ne compile pas (`syscall.Flock`) |
+| Services du projet | systemd `--user`, s'il est disponible | launchd, dans la session graphique de l'utilisateur | aucun |
+| Identité vérifiée des agents | oui, lue dans `/proc` | non : aucun processus d'agent n'est vérifié, donc le répartiteur ne réveille jamais un agent | — |
+| herdr (0.9.0 ou plus récent) | requis | requis | — |
+| Courtier Redis | Docker avec Compose (`redis:8-alpine`) | Docker avec Compose | — |
+
+Chaque agent tourne dans son propre panneau herdr, quel que soit son client. Le lanceur connaît
+quatre clients :
+
+| Client | Reprise de session | État travail/repos automatique | Fenêtres d'usage lues dans |
+|---|---|---|---|
+| Claude Code (`claude`) | oui | oui, par ses hooks | sa ligne d'état, la transcription en secours |
+| Codex CLI (`codex`) | non | oui, par ses hooks | `codex app-server`, ses journaux de session en repli |
+| Grok Build (`grok`, bêta) | non | oui, par ses hooks | sa ligne de journal de facturation |
+| Kimi Code CLI (`kimi`) | non | non | son journal, seulement les limites atteintes (Kimi n'indique pas de réinitialisation) |
+
+Le remplissage du contexte en pourcentage et le décompte des jetons ne viennent que de Claude
+Code. Le [guide de démarrage en cinq minutes](docs/quickstart.md) (en anglais) est écrit pour
+Linux.
+
 ## Démarrage rapide
 
 Nouveau venu ? Le [guide de démarrage en cinq minutes](docs/quickstart.md) (en anglais) mène un
