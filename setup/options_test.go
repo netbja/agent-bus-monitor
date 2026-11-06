@@ -19,7 +19,7 @@ func bashSetup(t *testing.T, home string, args ...string) (string, string, int) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Failing fakes first on PATH (CLAUDE.md: setup's tests stub docker and
+	// Failing fakes first on PATH (docs/operator-notes.md: setup's tests stub docker and
 	// herdr): a copy of the repository shares the live broker's compose
 	// project, so the real docker must never answer a test.
 	fakes := t.TempDir()

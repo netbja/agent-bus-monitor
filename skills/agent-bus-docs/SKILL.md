@@ -23,7 +23,9 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    - `docs/releases/<version>.md`: what changes, how to use it, how it was validated, limits.
    - The operational guides, in English **and** in French when both exist (`*.md` /
      `*.fr.md`); keep them saying the same thing.
-   - `CLAUDE.md` / `AGENTS.md`: only durable facts an agent needs.
+   - `CLAUDE.md` / `AGENTS.md`: only durable facts an agent needs; in a project that splits
+     them out, the architecture and operator notes they link (here `docs/architecture.md`,
+     `docs/operator-notes.md`).
 4. **Check before you deliver:**
    - every command you document runs;
    - every link resolves;

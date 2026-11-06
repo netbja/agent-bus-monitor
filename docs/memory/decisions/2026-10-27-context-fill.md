@@ -68,7 +68,7 @@ the other clients read unknown until their own client gives one.
 
 ## Evidence
 
-- Related: the [quota decision's](../../../CLAUDE.md) statusline reader, which this one sits beside.
+- Related: the [quota decision's](../../operator-notes.md#things-that-bite) statusline reader, which this one sits beside.
 
 - Master's directive `1793095487926-0` and its accepted design and split (`1793095608409-0`).
 - Claude Code 2.1.311 binary, statusLine docs: `"used_percentage": number | null, // Pre-calculated:

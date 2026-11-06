@@ -22,8 +22,8 @@ On boot, once:
 
 ## Read first
 
-- `CLAUDE.md`: the `busmon` paragraph of "The two binaries", and the busmon items of
-  "Things that bite" (attention, asks, recap, pause, observed).
+- `docs/architecture.md`: the `busmon` paragraph of "The two binaries"; `docs/operator-notes.md`:
+  the busmon items of "Things that bite" (attention, asks, recap, pause, observed).
 - `cmd/busmon/`: `layout.go`, `theme.go`, `keys.go`, `header.go`, `agents.go`,
   `activity.go`, `detail.go`, `compose.go`, `askpanel.go`.
 - The specs it cites under `docs/superpowers/specs/` and `specs/` when a question needs them.
