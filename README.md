@@ -42,6 +42,33 @@ are read from local sources, without spending tokens on them.
 - **Health and spend** — measured project health (`agentbus health`, F5) and tokens per project,
   agent and day, never a cost (`agentbus tokens`, `U`).
 
+## Where it runs
+
+agent-bus is **v0.x** and built for **one operator**: one person runs a team of agents on their
+own machine. Commands and screens still change between releases. There are no accounts and no
+access control, and the broker is a Redis bound to `127.0.0.1`. The tables below say only what
+the code and its tests show.
+
+| | Linux | macOS | Windows |
+|---|---|---|---|
+| Status | developed and used daily | builds, not used daily | not supported: it does not compile (`syscall.Flock`) |
+| Project services | systemd `--user` | launchd, in the user's GUI session | none |
+| Verified agent identity | yes, read from `/proc` | no: no agent's process is verified, so the dispatcher never wakes an agent | — |
+| herdr (0.9.0 or newer) | required | required | — |
+| Redis broker | Docker with Compose (`redis:8-alpine`) | Docker with Compose | — |
+
+Every agent runs in its own herdr pane, whatever its client. The launcher knows four clients:
+
+| Client | Resume a session | Automatic working/idle state | Usage windows read from |
+|---|---|---|---|
+| Claude Code (`claude`) | yes | yes, from its hooks | its status line, the transcript as backstop |
+| Codex CLI (`codex`) | no | yes, from its hooks | `codex app-server`, its session logs as fallback |
+| Grok Build (`grok`, beta) | no | yes, from its hooks | its billing log line |
+| Kimi Code CLI (`kimi`) | no | no | its log, limit hits only (Kimi states no reset) |
+
+Context fill as a percentage and token counts come from Claude Code only. The
+[five-minute quick start](docs/quickstart.md) is written for Linux.
+
 ## Quick start
 
 New here? The [five-minute quick start](docs/quickstart.md) walks one operator from install to a
