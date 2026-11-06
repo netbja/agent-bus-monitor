@@ -125,7 +125,7 @@ func (a *asker) screen(p startPlan) {
 	if p.TeamAsk != "" {
 		fmt.Fprintf(a.out, "                ? %s\n", p.TeamAsk)
 	}
-	if p.Existing && a.live != nil {
+	if p.Existing && (a.live != nil || a.busmonDown() != "") {
 		status, enter := a.openState(p)
 		fmt.Fprintf(a.out, "\n  %s\n  Enter: %s   1-4: change   q: quit\n", status, enter)
 		return
@@ -140,30 +140,40 @@ func (a *asker) screen(p startPlan) {
 // runs and what Enter does, nothing to fill in.
 func (a *asker) shortScreen(p startPlan) {
 	fmt.Fprintf(a.out, "\nagentbus start — %s\n\n", p.Folder)
-	status, enter := "", "open it (agentbus up's rule)"
-	if a.live != nil {
-		status, enter = a.openState(p)
-	} else {
-		status = p.Project + ": its agents' state cannot be read."
-	}
+	status, enter := a.openState(p)
 	fmt.Fprintf(a.out, "  %s\n  Enter: %s   c: change project, name or team   q: quit\n", status, enter)
 }
 
+// busmonDown says why busmon's tab would be reopened, "" when it would not
+// or is unknown.
+func (a *asker) busmonDown() string {
+	switch a.busmon {
+	case verdictRelaunch:
+		return "busmon not running (its pane is a shell)"
+	case verdictCreate:
+		return "busmon's tab is missing"
+	}
+	return ""
+}
+
 // openState is an existing project's status line and what Enter does: the
-// agents by their life, busmon by up's own judgement of its tab.
+// agents by their life, busmon by up's own judgement of its tab, which
+// needs herdr only, so it is said even when the agents cannot be read.
 func (a *asker) openState(p startPlan) (status, enter string) {
+	busmon := a.busmonDown()
+	if a.live == nil {
+		status, enter = p.Project+": its agents' state cannot be read", "open it (agentbus up's rule)"
+		if busmon != "" {
+			status += "; " + busmon
+			enter = "reopen busmon, and relaunch any agent that is gone (agentbus up's rule)"
+		}
+		return status + ".", enter
+	}
 	var dead []string
 	for _, r := range p.Team {
 		if a.live[r.Role] != lifeAlive {
 			dead = append(dead, r.Role)
 		}
-	}
-	busmon := ""
-	switch a.busmon {
-	case verdictRelaunch:
-		busmon = "busmon not running (its pane is a shell)"
-	case verdictCreate:
-		busmon = "busmon's tab is missing"
 	}
 	if len(dead) == 0 && busmon == "" {
 		return fmt.Sprintf("%s is running: %d of %d agents live.", p.Project, len(p.Team), len(p.Team)), "focus its workspace"

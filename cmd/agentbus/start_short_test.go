@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -161,5 +162,35 @@ func TestBusmonVerdict(t *testing.T) {
 	}
 	if v, _ := busmonVerdict(ws(h, true), upTemplate{Tabs: []upTab{{Name: "coder", Command: "agent-launch coder demo"}}}, "demo"); v != "" {
 		t.Fatalf("no busmon tab: %q", v)
+	}
+}
+
+// The agents unreadable (the bus down) but busmon's tab read from herdr: the
+// screen still says busmon is not running and that Enter reopens it
+// (reviewer-codex). busmon's judgement never needs the bus.
+func TestStartShortScreenKeepsBusmonWithTheAgentsUnreadable(t *testing.T) {
+	for v, want := range map[relaunchVerdict][2]string{
+		verdictRelaunch: {"shop: its agents' state cannot be read; busmon not running (its pane is a shell).", "Enter: reopen busmon, and relaunch any agent that is gone (agentbus up's rule)   c:"},
+		verdictRunning:  {"shop: its agents' state cannot be read.", "Enter: open it (agentbus up's rule)   c:"},
+	} {
+		w := newStartWorld(t)
+		write(t, w.config, "[identity]\nas = \"charlie\"\n")
+		w.writeTemplate("shop", nil)
+		tty := &fakeTTY{Reader: strings.NewReader("c\nq\n")}
+		d := w.deps()
+		d.Live = func(string) (map[string]life, error) { return nil, errors.New("broker down") }
+		d.TTY = func() io.ReadWriter { return tty }
+		d.Look = func(exe string) (string, error) { return "/bin/" + exe, nil }
+		d.Busmon = func(string) (relaunchVerdict, error) { return v, nil }
+		runStart([]string{w.folder}, d)
+		screen := tty.screen.String()
+		for _, s := range want {
+			if !strings.Contains(screen, s) {
+				t.Errorf("%s: screen lacks %q:\n%s", v, s, screen)
+			}
+		}
+		if v == verdictRelaunch && !strings.Contains(screen, "Enter: reopen busmon, and relaunch any agent that is gone (agentbus up's rule)   1-4: change") {
+			t.Errorf("the full screen drops busmon:\n%s", screen)
+		}
 	}
 }
