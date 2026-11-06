@@ -435,6 +435,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg.Clear.Decisions = dispatch.NewClearDecisions()             // why a clear waits: logged, and read by clear-stall
 			cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &cfg.EscalateTo)
 			cfg.PopRetire = servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) })
+			cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project)) // read at each client-update send (auto-reload)
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
 			}
@@ -443,4 +444,16 @@ func mainServiceRun(project, host string, args []string) int {
 		RunMissions: mission.Run,
 	}
 	return serviceRun(ctx, b, kind, rest, deps, w)
+}
+
+// serviceReloadPolicy reads the project's reload policy as agentbus reload
+// does (service.ReloadPolicy: the environment, the project's env file, then
+// config.toml), at each call, so a change on busmon's C page applies to the
+// next client update without a restart (auto-reload).
+func serviceReloadPolicy(getenv func(string) string, envFile string) func() string {
+	return func() string {
+		ef, _ := service.LoadEnvFile(envFile)
+		mode, _ := service.ReloadPolicy(getenv, ef)
+		return mode
+	}
 }
