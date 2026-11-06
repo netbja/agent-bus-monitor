@@ -58,14 +58,24 @@ var settingLabels = map[string]string{
 	"display.theme": "Theme", "display.icons": "Icons", "display.limit": "Activity lines at start", "display.idle_hint_after": "Idle? hint after",
 	"waiting.fade": "Fade and slide", "waiting.popup_after": "Reminder after", "waiting.snooze": "Reminder snooze",
 	"waiting.bell": "Bell", "dispatch.focus_notice": "Focused pane notice after", "recap.auto_after": "Recap after away", "updates.check": "Update check", "identity.as": "Your name", "start.team": "Default team",
-	"notify.on": "Send notifications", "notify.targets": "Targets", "notify.events": "Events", "notify.detail": "Detail",
+	"sentinel.reload": "Auto-restart on update",
+	"notify.on":       "Send notifications", "notify.targets": "Targets", "notify.events": "Events", "notify.detail": "Detail",
 	"notify.delay": "Delay", "notify.max_per_hour": "At most per hour", "notify.quiet": "Quiet hours", "notify.quiet_exempt": "Sent in quiet hours",
 	"backup.after_command": "Command after each backup", "backup.after_env": "Variables it keeps", "backup.after_timeout": "Its time limit",
 }
 
 // settingOnPage: the Backup group shows only its person-only keys, read-only
-// (backup spec); every key of the other groups shows.
-func settingOnPage(k *config.Key) bool { return k.Group() != config.GroupBackup || k.PersonOnly }
+// (backup spec), Services only sentinel.reload (auto-reload); every key of
+// the other groups shows.
+func settingOnPage(k *config.Key) bool {
+	switch k.Group() {
+	case config.GroupBackup:
+		return k.PersonOnly
+	case config.GroupServices:
+		return k.Name == "sentinel.reload"
+	}
+	return true
+}
 
 // settingFlags are the flags above a key's env: busmon's own, read-only here.
 var settingFlags = map[string]string{"display.theme": "busmon --theme", "display.limit": "busmon --limit", "identity.as": "busmon --as"}

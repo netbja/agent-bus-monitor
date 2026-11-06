@@ -21,8 +21,10 @@ import (
 // settingsPageGroups are the groups the page shows (the person's answer:
 // these first, the services' thresholds staying in the file for now), and
 // Backup for its person-only keys alone, read-only (backup spec: shown, never
-// written by busmon; settingOnPage).
-var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity, config.GroupNotifications, config.GroupBackup}
+// written by busmon; settingOnPage). Services shows one key, sentinel.reload
+// ("Auto-restart on update", auto-reload): the other thresholds stay in the
+// file.
+var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity, config.GroupNotifications, config.GroupServices, config.GroupBackup}
 
 // settingsPage is the page's state (settings-panels: the groups on the left,
 // the selected group's keys on the right; page.sel is the row in that group).
@@ -67,7 +69,8 @@ var themeChoices = []string{"auto", "dark", "light"}
 
 // settingChoices are the keys chosen with ←→ among their values, in the
 // page's order (busmon-icons: display.icons joins the theme).
-var settingChoices = map[string][]string{"display.theme": themeChoices, "display.icons": {iconsOff, iconsNerd, iconsFont}}
+var settingChoices = map[string][]string{"display.theme": themeChoices, "display.icons": {iconsOff, iconsNerd, iconsFont},
+	"sentinel.reload": {"on", "propose", "off"}}
 
 // settingsMsg is the rows read again, after an open or a write.
 type settingsMsg struct {
@@ -876,6 +879,8 @@ var settingHelps = map[string]string{
 	"notify.max_per_hour":     "messages an hour at most; a fail or a stall always goes",
 	"notify.quiet":            "HH:MM-HH:MM; only the exempt events are sent then",
 	"notify.quiet_exempt":     "the events still sent in quiet hours, separated by commas",
+	"sentinel.reload": "a new version of an agent's client is installed. on: sentinel restarts each idle agent on it, resuming its conversation, master last (needs a registered sentinel; without one, you are asked) " +
+		GlyphNone + " propose: you approve each restart " + GlyphNone + " off: nothing restarts. A project's agentbus up --reload overrides it",
 }
 
 // settingHelp is r's help line: its own, else what its kind takes.
