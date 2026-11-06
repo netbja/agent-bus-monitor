@@ -47,13 +47,20 @@ carries `--project <p>` for this project. No other non-agent tab is touched (see
 
 ### Which panes close
 
-The panes that made the verdict `verdictRelaunch`: every pane of the busmon tab (`ref.All`), all
-of them one plain shell at judging time. The new pane is not among them. A tab with a pane that
-is not a plain shell is never `verdictRelaunch` in the first place (it is `running`), so nothing
-changes there.
+Only when the busmon tab holds **exactly one pane** (`len(ref.All) == 1`), a plain shell at
+judging time (the verdict `verdictRelaunch` already requires it): that pane is the one busmon ran
+in, since nothing else is in the tab. It is the old pane; the new one is not it.
 
-Closing all of them, not only the first, also cleans a tab left with two shells by an earlier
-`up` (the bug as it stands). Open question 2 asks whether only one should go.
+A busmon tab with **several** panes, all plain shells, is relaunched as today and every pane is
+left as it is, and the line says so (`the old ones are left as they are: the tab has 2 panes`).
+Which of them busmon ran in cannot be told (busmon records no pane), and one may be a shell the
+person split into the tab on purpose: an idle prompt is a plain shell too, and closing it loses
+its scrollback. That is the agent rule's own limit: "the tab's other panes are never touched"
+(`relaunch.go:397-398`). A tab already split by the bug is therefore not cleaned; open question 2
+asks whether it should be.
+
+A tab with a pane that is not a plain shell is never `verdictRelaunch` in the first place (it is
+`running`), so nothing changes there.
 
 ### The proof that busmon runs
 
@@ -93,19 +100,34 @@ busmon: old pane w4:p1 closed
 ```
 
 `--dry-run` says `would relaunch (new pane; would close the old one w4:p1 once busmon is seen
-running)`. With no `Prove` set (the workspace hook, `reload`), the busmon tab keeps today's
-behaviour: `the old one is left as it is`.
+running)`.
+
+### When it runs
+
+Whenever `relaunchOpen` relaunches the busmon tab outside `--dry-run`, **whether or not the
+agents' snapshots are readable**. The busmon proof needs herdr, not the bus, so it is not gated
+on `o.Prove` (set only when the agents could be read). Gating it there would keep busmon's shell
+exactly when the broker is unreadable, which is also when busmon is most likely to have been
+quit and restarted.
+
+In practice only `up` on an open workspace (`relaunchUp`) reaches it:
+
+- `reload` passes `relaunchOpen` a template holding only its role's tab (`reload.go:439-441`), so
+  it never sees busmon;
+- the workspace hook (`upHook`, `up.go:836-843`) never calls `relaunchOpen`: it touches no pane.
 
 ### Where in the code
 
-- `relaunchOpen`: when `v == verdictRelaunch` and the tab is the busmon tab and `o.Prove != nil`,
-  record an old-pane entry per pane of `ref.All` with the new pane and a "busmon" kind instead of
-  a role.
+- `relaunchOpen`: when `v == verdictRelaunch`, the tab is the busmon tab, `len(ref.All) == 1`
+  and not `o.DryRun`, record one old-pane entry (`ref.All[0]`) with the new pane and a "busmon"
+  kind instead of a role.
 - `oldPane` gains the kind; `closeOldPanes` proves a busmon entry with `busmonIn` instead of
   `provenIn`. The proof loop for agents is unchanged; the busmon proof has its own 10 tries,
   run after the agents' (or interleaved in the same loop with a separate budget: an
   implementation choice).
-- `relaunchProof` gains nothing the busmon proof needs except the herdr call it already has.
+- The busmon proof needs a sleep and its 10 tries even when `o.Prove` is nil: a small
+  `busmonProof{Sleep, Tries}` in `relaunchOptions`, which `relaunchUp` always sets (with
+  `d.Sleep`, as for the agents), and a nil one means no busmon close (the tests' default).
 - The decision note `2026-10-27-relaunch-close.md` gets a dated amendment: "the busmon tab too,
   proven by herdr's foreground argv in the new pane" (once the person agrees).
 
@@ -122,8 +144,10 @@ In `cmd/agentbus/relaunch_test.go`, with the fake herdr already there:
   `vim`; left.
 - `TestRelaunchOpenBusmonProofNeedsTheProject`: the new pane runs `busmon --project other`; no
   proof.
-- `TestRelaunchOpenClosesEveryShellOfTheBusmonTab`: tab with two shell panes; both closed after
-  proof (or only one, per open question 2).
+- `TestRelaunchOpenLeavesEveryPaneOfASplitBusmonTab`: tab with two shell panes; busmon is
+  relaunched, neither old pane is closed, the line says why.
+- `TestRelaunchOpenClosesBusmonsShellWithTheAgentsUnreadable`: snapshots unreadable (`Prove`
+  nil); busmon's old shell is still closed once busmon is seen.
 - `TestRelaunchOpenNeverClosesAnotherNonAgentTab`: a `dispatch` tab (tab mode) relaunched; its
   old pane is left.
 - `TestRelaunchOpenDryRunSaysItWouldCloseBusmonsShell`.
@@ -157,7 +181,7 @@ agentbus start — /data/projects/shop
 
 - The status line says what Enter will do, from the same judgement `up` will use: the agents'
   life (`d.Live`, as today) and, inside herdr with the workspace open, `judgeTab` on every
-  template tab, run with `DryRun` (it reads herdr, types and closes nothing). The Enter label
+  template tab (it is read-only already: `tab list`, `pane list`, `process-info`). The Enter label
   lists what is not running: `reopen busmon`, `relaunch coder and foureyes`, `relaunch coder,
   reopen busmon`, or `focus its workspace` when everything runs.
 - Outside herdr, or when herdr cannot be read, the busmon part is left out (as an unreadable
@@ -192,8 +216,12 @@ In `cmd/agentbus/start_test.go`:
 1. **Is herdr's view of the new pane enough proof?** The alternative is a busmon presence key in
    `bus/` (pid, start time, pane), checked like `provenIn`. Proposed: herdr's argv is enough,
    since only a plain shell, re-read just before, is ever closed.
-2. **Close every shell pane of the busmon tab, or only one?** Proposed: every one, which also
-   cleans the tabs the bug already split. Only the tab's first pane would leave older shells.
+2. **A busmon tab with several plain-shell panes: close them, or leave them?** Proposed: leave
+   them, and close only when the tab has one pane. Closing every shell would also clean the tabs
+   the bug has already split, but it would close a shell the person split into the busmon tab on
+   purpose (an idle prompt is a plain shell too), losing its scrollback; the agent rule never
+   touches the tab's other panes. With "leave", a tab split by the bug is cleaned by hand once
+   (close the extra shell), and stays one pane from then on.
 3. **The `dispatch` and `missions` tabs in `--tabs` mode** pile up the same way. Same rule for
    them (proof: the foreground argv names `agentbus dispatch` / the missions command), or busmon
    only? Proposed: busmon only now.
