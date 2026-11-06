@@ -14,10 +14,12 @@ a stopped project. For everything else, read the [README](../README.md) and the
   but some of the dispatcher's checks read `/proc`, which only Linux has. On macOS no agent's
   process is verified, so the dispatcher never wakes an agent there.
 
-Every command below was run in a scratch folder, and the output shown is what it printed. Paths are
-shortened to `~/…`, and the project is a scratch one called `myshop`. Some steps were run as
-**dry runs**, or on a disposable broker so that no real agent was started; each one says so. Your
-own ids, times and paths will differ.
+Every output below was printed by a command that was run in a scratch folder, on a scratch project
+called `myshop`, and each output block shows the exact command that printed it. Two kinds of
+command were only shown, not run, because they would change the machine or start real agents:
+the real install and the real `agentbus start`. Each is labelled **Not run for this guide**, and
+its dry run is shown instead. The bus steps in §3 and §4 ran on a disposable broker. Paths are
+shortened to `~/…`, and your own ids, times and paths will differ.
 
 ## 1. Install (about 2 minutes)
 
@@ -26,14 +28,15 @@ least one agent CLI: Claude Code (`claude`), Codex (`codex`), Grok or Kimi Code.
 
 ```bash
 git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor
-./setup.sh install --install-herdr
+./setup.sh install --install-herdr     # Not run for this guide: it installs for real
 ```
 
-`--install-herdr` also installs herdr, the terminal
-workspace the agents run in, when it is missing. To see first what would change, add `--dry-run`.
-On a machine that already had everything, the dry run printed this:
+`--install-herdr` also installs herdr, the terminal workspace the agents run in, when it is
+missing. To see first what would change, add `--dry-run`. On a machine that already had
+everything, the dry run printed this:
 
 ```text
+$ ./setup.sh install --install-herdr --dry-run
 ==> 1/5 Checking system platform & toolchain
     ✓ Platform: linux / amd64
     ✓ git: git version 2.56.0
@@ -59,7 +62,8 @@ On a machine that already had everything, the dry run printed this:
  Dry run complete — nothing was changed (0 missing, 2 warning(s))
 ```
 
-If you use Claude Code, also run `agentbus statusline --print-install` and add the block it prints
+If you use Claude Code, also run `agentbus statusline --print-install` (not run for this guide)
+and add the block it prints
 to `~/.claude/settings.json`. Without it, agent-bus cannot read Claude Code's rate limits or each
 session's context fill.
 
@@ -82,12 +86,12 @@ Run this in your project's folder:
 
 ```bash
 cd ~/code/myshop
-agentbus start --roles master,coder,sentinel
+agentbus start --roles master,coder,sentinel     # Not run for this guide: it starts real agents
 ```
 
 `agentbus start` works out the project's name from the folder, takes your name from step 1, shows
 what it will do, and asks before it starts anything. With `--dry-run`, it shows the plan and
-starts nothing:
+starts nothing (`--yes` takes the deduced values without asking):
 
 ```console
 $ agentbus start --dry-run --roles master,coder,sentinel --yes
@@ -124,33 +128,34 @@ master's pane, and master reads the message from the bus. Master turns it into a
 for coder, coder implements it, and both report back. busmon's **Activity** panel shows each step,
 and **Board** shows the task's state.
 
-You can follow the same steps from any shell. The run below was made on a disposable broker, so the
-agents' commands were typed by hand to show what each one writes to the bus:
+You can follow the same steps from a shell. Outside the project's herdr workspace, name the project
+first: export `AGENT_BUS_PROJECT`, or pass `--project myshop` to each command. Inside the workspace
+it is already set. The run below was made on a disposable broker, so the agents' commands were
+typed by hand, each as its agent (`AGENT_BUS_AGENT=…`), to show what each one writes to the bus:
 
 ```console
-$ (master) agentbus request send healthz coder "Add GET /healthz returning 200 ok, with a test."
-1793943284765-0
-$ (coder) agentbus subscribe --drain coder --brief
-1793943284765-0 master [directive task=healthz]: Add GET /healthz returning 200 ok, with a test.
-$ (coder) agentbus request accept healthz
+$ export AGENT_BUS_PROJECT=myshop
+$ AGENT_BUS_AGENT=master agentbus request send healthz coder "Add GET /healthz returning 200 ok, with a test."
+1793943942464-0
+$ AGENT_BUS_AGENT=coder agentbus subscribe --drain coder --brief
+1793943942464-0 master [directive task=healthz]: Add GET /healthz returning 200 ok, with a test.
+$ AGENT_BUS_AGENT=coder agentbus request accept healthz
 $ agentbus board
 TASK             OWNER        STATE     BRANCH                   AGE
 healthz          coder        accepted                           0s ago
-$ (coder) agentbus request done healthz "GET /healthz added, test green"
-1793943284785-0
-$ (coder) agentbus report coder --to master "healthz done: GET /healthz returns 200 ok, test added"
-1793943284790-0
+$ AGENT_BUS_AGENT=coder agentbus request done healthz "GET /healthz added, test green"
+1793943942483-0
+$ AGENT_BUS_AGENT=coder agentbus report coder --to master "healthz done: GET /healthz returns 200 ok, test added"
+1793943942488-0
 $ agentbus board
 TASK             OWNER        STATE     BRANCH                   AGE
 healthz          coder        done                               0s ago
 $ agentbus reports
-1793943284790-0  coder        note  "healthz done: GET /healthz returns 200 ok, test added"  → master pending
+1793943942488-0  coder        note  "healthz done: GET /healthz returns 200 ok, test added"  → master pending
 ```
 
 `pending` means master has not read the report yet. It reads `delivered` once master has drained
-it. To see the task at a glance from a shell, use `agentbus --project myshop board` and
-`agentbus --project myshop agents`. Inside the project's herdr workspace, the project is already
-set.
+it. `agentbus board` and `agentbus agents` show the tasks and the team at a glance.
 
 Agents never push or merge on their own. When a change is ready, master asks you, and the merge is
 your decision (see the README's *Pull requests and forges*).
@@ -172,21 +177,28 @@ To answer it:
 
 Your answer goes back to the agent that asked, and it wakes.
 
-The same works from a shell. The run below was also made on the disposable broker; master asked
-which path to use:
+The same works from a shell, in the same session as §3 (`AGENT_BUS_PROJECT` still exported). The
+run below was also made on the disposable broker: master writes its question to `q.json` and asks
+which path to use, and you answer it:
 
 ```console
-$ (master) agentbus ask master --file q.json
-1793943292814-0 open
+$ cat > q.json <<'EOF'
+{"title":"healthz path","questions":[{"id":"path","header":"Path","question":"Which path for the health endpoint?","options":[{"label":"/healthz","recommended":true},{"label":"/status"}]}]}
+EOF
+$ AGENT_BUS_AGENT=master agentbus ask master --file q.json
+1793943942504-0 open
 $ agentbus asks --open
-1793943292814-0  master  open  healthz path (<1m ago)
+1793943942504-0  master  open  healthz path (<1m ago)
                    path  Path  open
-$ agentbus answer 1793943292814-0 path --choice /healthz --as alice
-answered 1793943292814-0/path; 0 question(s) still open
-$ (master) agentbus subscribe --drain master --brief
-1793943292848-0 alice (person) [reply 1793943292814-0]: Answer to "Path": /healthz
+$ agentbus answer 1793943942504-0 path --choice /healthz --as alice
+answered 1793943942504-0/path; 0 question(s) still open
+$ AGENT_BUS_AGENT=master agentbus subscribe --drain master --brief
+1793943942483-0 coder [reply 1793943942464-0]: GET /healthz added, test green
+1793943942488-0 coder [directive 1793943942488-0]: Report 1793943942488-0 for you (full text: agentbus reports 1793943942488-0): healthz done: GET /healthz returns 200 ok, test added
+1793943947587-0 alice (person) [reply 1793943942504-0]: Answer to "Path": /healthz
 ```
 
+Master's drain also picks up what coder sent it in §3: the done reply and the report's notice.
 The last line is what master receives: your answer, marked as coming from a person.
 
 ## 5. Stop
@@ -197,7 +209,8 @@ These are the ways to stop, from the lightest:
   `busmon --project myshop`, or pick the project in herdr's Projects picker (Ctrl+B then `↑`).
 - **Put the project to sleep:** `Z` in busmon, or `agentbus suspend`. This pauses the project,
   lets the running turns end, records a snapshot and stops the services. Agents and the workspace
-  are kept. `Z` again, or `agentbus resume`, brings the project back:
+  are kept. `Z` again, or `agentbus resume`, brings the project back. The real suspend and resume
+  were not run for this guide; here is the suspend's dry run:
 
   ```console
   $ agentbus suspend --project myshop --dry-run
