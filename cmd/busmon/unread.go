@@ -71,7 +71,19 @@ func (s unreadState) marks(feed []feedLine, asks map[string]bus.Ask) map[string]
 	newer := map[string]bool{}
 	for i := len(feed) - 1; i >= 0; i-- {
 		fl := feed[i]
-		if fl.sep || !s.forPerson[fl.ev.ID] {
+		if fl.sep {
+			continue
+		}
+		if len(fl.personNotices) > 0 { // a report row is its notices' (report-one-row §2): never superseded
+			newer[sender(fl.ev)] = true
+			for _, id := range fl.personNotices {
+				if !s.read[id] && entryTime(id).UnixMilli() >= s.floor {
+					out[id], out[fl.ev.ID] = markUnread, markUnread
+				}
+			}
+			continue
+		}
+		if !s.forPerson[fl.ev.ID] {
 			continue
 		}
 		from := sender(fl.ev)
@@ -115,12 +127,24 @@ func waitingNames(agents map[string]*agentState) []string {
 	return waiting
 }
 
+// classifyWaits marks a waiting agent's newest report for the person, unless
+// a notice of it to the person stands for it (report-one-row §3).
 func (f *activityFeed) classifyWaits(waiting []string) {
 	for _, name := range waiting {
-		if id := lastReportID(name, f.feed); id != "" {
+		if id := lastReportID(name, f.feed); id != "" && !f.noticedToPerson(id) {
 			f.unread.forPerson[id] = true
 		}
 	}
+}
+
+// noticedToPerson: the report's line holds a notice to the person.
+func (f *activityFeed) noticedToPerson(reportID string) bool {
+	for _, fl := range f.feed {
+		if !fl.sep && fl.ev.ID == reportID {
+			return len(fl.personNotices) > 0
+		}
+	}
+	return false
 }
 
 // lastReportID is the stream id of the agent's newest report in the feed.

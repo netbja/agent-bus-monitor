@@ -27,7 +27,7 @@ func (m *Model) expandedLine() (feedLine, bool) {
 		if fl.sep {
 			continue
 		}
-		if (m.ui.expandIn == PanelActivity && fl.id == key) || (m.ui.expandIn == PanelForYou && "unread:"+fl.ev.ID == key) {
+		if (m.ui.expandIn == PanelActivity && fl.id == key) || (m.ui.expandIn == PanelForYou && unreadKey(fl) == key) {
 			return fl, true
 		}
 	}
@@ -47,9 +47,21 @@ func (m *Model) collapse() {
 		return
 	}
 	if fl, ok := m.expandedLine(); ok {
-		m.markRead(fl.ev.ID)
+		m.markLineRead(fl.ev.ID)
 	}
 	m.ui.expanded = ""
+}
+
+// markLineRead reads every entry of the line that holds id: a report row's
+// notices with it (report-one-row §2); id alone when no line holds it.
+func (m *Model) markLineRead(id string) {
+	if fl, ok := m.feed.lineOf(id); ok {
+		for _, x := range lineIDs(fl) {
+			m.markRead(x)
+		}
+		return
+	}
+	m.markRead(id)
 }
 
 // markRead records that the person opened an entry. The local cache keeps
@@ -62,8 +74,14 @@ func (m *Model) markRead(id string) {
 	m.feed.unread.read[id] = true
 	retained := map[string]bool{}
 	for _, fl := range m.feed.feed {
-		if !fl.sep {
-			retained[fl.ev.ID] = true
+		if fl.sep {
+			continue
+		}
+		for _, x := range lineIDs(fl) { // a folded notice is retained with its line
+			retained[x] = true
+		}
+		if slices.Contains(fl.personNotices, id) { // a report notice to the person: its read receipt (report-one-row §5 B)
+			m.sig.seenPending = append(m.sig.seenPending, id)
 		}
 	}
 	c := m.cache_()

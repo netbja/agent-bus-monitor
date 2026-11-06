@@ -414,6 +414,9 @@ func askTime(a bus.Ask) time.Time {
 // preview and its report id, never the notice's envelope; else msg, on one line.
 func reportText(msg string) (text, reportID string) {
 	if s, id, ok := reportSubject(msg); ok {
+		if h := bus.ReportHeadline(s); h != "" { // report-one-row §4: an old "## Done" reads "Done"
+			s = h
+		}
 		return oneLine(s), id
 	}
 	return oneLine(msg), ""

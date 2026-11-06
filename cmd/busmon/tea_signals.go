@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,7 +34,8 @@ type signalState struct {
 	recapPending  bool // built, opens once the person is not busy
 	recapAutoDone bool // the first poll's automatic check is done
 	cache         *busmonCache
-	readDirty     bool // a read mark waits for the cache's save
+	readDirty     bool     // a read mark waits for the cache's save
+	seenPending   []string // report notices the person opened, for {p}:seen
 }
 
 func newSignals(c *busmonCache) *signalState {
@@ -136,7 +138,33 @@ func (m *Model) afterUpdate() tea.Cmd {
 		save = m.saveCache("local busmon cache not saved")
 	}
 	m.pruneReminder()
-	return tea.Batch(save, m.maybeReminder(), frames)
+	return tea.Batch(save, m.writeSeen(), m.maybeReminder(), frames)
+}
+
+// seenWriter is the writer's read receipt (report-one-row §5 B), optional so
+// a writer without it keeps working.
+type seenWriter interface {
+	MarkSeen(ctx context.Context, person string, ids ...string) error
+}
+
+// writeSeen sends the pending read receipts in a command; a failure is a
+// header note, never retried: the local mark stays the person's state.
+func (m *Model) writeSeen() tea.Cmd {
+	ids := m.sig.seenPending
+	m.sig.seenPending = nil
+	w, ok := m.cfg.w.(seenWriter)
+	if len(ids) == 0 || !ok || m.cfg.self == "" {
+		return nil
+	}
+	ctx, self := m.cfg.ctx, m.cfg.self
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return func() tea.Msg {
+		cc, cancel := context.WithTimeout(ctx, pollBudget)
+		defer cancel()
+		return cacheSavedMsg{err: w.MarkSeen(cc, self, ids...), note: "read receipt not written"}
+	}
 }
 
 // autoRecap, once, at the first poll: it records this visit and builds the
@@ -188,8 +216,17 @@ func (m *Model) requestRecap(auto bool) tea.Cmd {
 func (m *Model) unreadEvents() []bus.Event {
 	var out []bus.Event
 	for _, fl := range m.feed.feed {
-		if !fl.sep && fl.mark == markUnread {
+		if fl.sep || fl.mark != markUnread {
+			continue
+		}
+		if len(fl.personNotices) == 0 {
 			out = append(out, fl.ev)
+			continue
+		}
+		for _, n := range append([]bus.Event{fl.ev}, fl.notices...) { // a report row: its notices to the person
+			if slices.Contains(fl.personNotices, n.ID) && !m.feed.unread.read[n.ID] {
+				out = append(out, n)
+			}
 		}
 	}
 	return out

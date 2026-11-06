@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -104,12 +107,69 @@ type activityFeed struct {
 	lastDay string
 	unread  unreadState   // the person's unread marks (unread.go)
 	rows    activityCache // its rows as last laid out (the lag fix)
+	// The report fold (report-one-row §2), by report id: the seq of the line
+	// showing that report, and of a notice line still waiting for it. A seq,
+	// never an index: add re-slices the feed.
+	reportLine map[string]int
+	noticeLine map[string]int
+}
+
+// noticeOf is the report id a cmd entry is a notice of: a directive whose
+// subject parses as reportNotice's and whose report id is its ref.
+func noticeOf(e bus.Event) (string, bool) {
+	if e.Kind != "cmd" || e.Type != bus.CmdDirective {
+		return "", false
+	}
+	_, id, ok := reportSubject(e.Message)
+	if !ok || id != e.Ref {
+		return "", false
+	}
+	return id, true
+}
+
+// lineAt is the index of the line with that seq (the feed is in seq order).
+func (f *activityFeed) lineAt(seq int) (int, bool) {
+	i := sort.Search(len(f.feed), func(i int) bool { return f.feed[i].seq >= seq })
+	return i, i < len(f.feed) && f.feed[i].seq == seq
 }
 
 // add appends one event to the feed (with a day separator on a date
-// change), keeping the last feedCap lines.
+// change), keeping the last feedCap lines. A report notice joins its report's
+// line, and a report takes over a waiting notice's line in place.
 func (f *activityFeed) add(e bus.Event, self string) {
+	if f.reportLine == nil {
+		f.reportLine, f.noticeLine = map[string]int{}, map[string]int{}
+	}
 	et := entryTime(e.ID)
+	if personEntry(e, self) {
+		f.unread.forPerson[e.ID] = true
+	}
+	if id, ok := noticeOf(e); ok {
+		for _, seq := range []int{f.reportLine[id], f.noticeLine[id]} {
+			if i, found := f.lineAt(seq); seq > 0 && found {
+				fl := &f.feed[i]
+				fl.notices = append(fl.notices, e)
+				if f.unread.forPerson[e.ID] {
+					fl.personNotices = append(fl.personNotices, e.ID)
+				}
+				fl.text = foldedPlain(*fl)
+				return
+			}
+		}
+	}
+	if e.Kind == "report" {
+		if seq := f.noticeLine[e.ID]; seq > 0 {
+			if i, found := f.lineAt(seq); found {
+				fl := &f.feed[i]
+				fl.notices = append([]bus.Event{fl.ev}, fl.notices...)
+				fl.ev, fl.at = e, et
+				fl.text = foldedPlain(*fl)
+				delete(f.noticeLine, e.ID)
+				f.reportLine[e.ID] = seq
+				return
+			}
+		}
+	}
 	if day := et.Format("2006-01-02"); day != f.lastDay {
 		f.lastDay = day
 		f.seq++
@@ -125,15 +185,102 @@ func (f *activityFeed) add(e bus.Event, self string) {
 		fl.text = plainLine(fl.ev, fl.at) + " (+" + strconv.Itoa(len(fl.to)-1) + " more)"
 		return
 	}
-	if personEntry(e, self) {
-		f.unread.forPerson[e.ID] = true
-	}
 	f.seq++
 	fl := feedLine{id: strconv.Itoa(f.seq), seq: f.seq, text: plainLine(e, et), ev: e, at: et}
+	if e.Kind == "report" {
+		f.reportLine[e.ID] = f.seq
+	} else if id, ok := noticeOf(e); ok {
+		f.noticeLine[id] = f.seq
+		if f.unread.forPerson[e.ID] {
+			fl.personNotices = []string{e.ID}
+		}
+	}
 	f.feed = append(f.feed, fl)
 	if len(f.feed) > feedCap {
 		f.feed = f.feed[len(f.feed)-feedCap:]
+		floor := f.feed[0].seq
+		for _, m := range []map[string]int{f.reportLine, f.noticeLine} {
+			for id, seq := range m {
+				if seq < floor {
+					delete(m, id)
+				}
+			}
+		}
 	}
+}
+
+// foldedPlain is a folded line's plain text: its own, then the notices'
+// targets (report-one-row §2, what y copies).
+func foldedPlain(fl feedLine) string {
+	s := plainLine(fl.ev, fl.at)
+	if fl.ev.Kind != "report" {
+		return s
+	}
+	return s + " -> " + strings.Join(noticeTargets(fl), ", ")
+}
+
+// lineOf is the event line that holds entry id, as its own or as a notice.
+func (f *activityFeed) lineOf(id string) (feedLine, bool) {
+	for _, fl := range f.feed {
+		if !fl.sep && slices.Contains(lineIDs(fl), id) {
+			return fl, true
+		}
+	}
+	return feedLine{}, false
+}
+
+// lineIDs are every entry a line stands for: its own, then its notices'.
+func lineIDs(fl feedLine) []string {
+	ids := []string{fl.ev.ID}
+	for _, n := range fl.notices {
+		ids = append(ids, n.ID)
+	}
+	return ids
+}
+
+// unreadKey is a line's For you key: its first notice to the person when it
+// has one (report-one-row §3), else its own entry.
+func unreadKey(fl feedLine) string {
+	if len(fl.personNotices) > 0 {
+		return "unread:" + fl.personNotices[0]
+	}
+	return "unread:" + fl.ev.ID
+}
+
+// lineHeadline is what a report line or a notice line reads as: the
+// report's headline (bus.ReportHeadline over its full text, else its
+// preview), a notice's subject's headline; the text itself when it has none.
+func lineHeadline(e bus.Event) string {
+	switch {
+	case e.Kind == "report":
+		text := e.Message
+		if e.Full != "" {
+			text = e.Full
+		}
+		if h := bus.ReportHeadline(text); h != "" {
+			return h
+		}
+		return e.Message
+	case e.Kind == "cmd":
+		if s, _, ok := reportSubject(e.Message); ok {
+			if h := bus.ReportHeadline(s); h != "" {
+				return h
+			}
+			return s
+		}
+	}
+	return e.Message
+}
+
+// noticeTargets are the targets of a line's folded notices, each once.
+func noticeTargets(fl feedLine) []string {
+	var out []string
+	for _, n := range fl.notices {
+		if !slices.Contains(out, n.Target) {
+			out = append(out, n.Target)
+		}
+	}
+	return out
 }
 
 // plainLine is what y copies from an Activity line: the v0.8 plain format,

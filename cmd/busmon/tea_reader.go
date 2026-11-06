@@ -231,7 +231,7 @@ func (m *Model) readerRows() int { return max(0, m.readerRect().H-2) }
 // push opens a page over the current one; a message page also reads its thread.
 func (m *Model) push(p page) tea.Cmd {
 	if p.kind == ovMessage {
-		m.markRead(p.ev.ID) // opening a line reads it
+		m.markLineRead(p.ev.ID) // opening a line reads it, a report row's notices too
 	}
 	m.rd.serial++
 	p.serial = m.rd.serial
@@ -1175,10 +1175,8 @@ func (m *Model) openTracked(p PanelID, direct bool) tea.Cmd {
 
 // openFeedLine opens the feed line of event id in the reader.
 func (m *Model) openFeedLine(id string) tea.Cmd {
-	for _, fl := range m.feed.feed {
-		if fl.ev.ID == id {
-			return m.pushMessage(fl.ev, fl.at)
-		}
+	if fl, ok := m.feed.lineOf(id); ok {
+		return m.pushMessage(fl.ev, fl.at)
 	}
 	return nil
 }

@@ -50,6 +50,9 @@ func replyPrefill(ev bus.Event) string {
 	if ev.Full != "" {
 		text = ev.Full
 	}
+	if h := bus.ReportHeadline(text); h != "" { // report-one-row §4: never a heading
+		text = h
+	}
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(Preview(line))
 		if line == "" {

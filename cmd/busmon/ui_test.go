@@ -63,6 +63,13 @@ func (f *fakeWriter) SetRequestPriority(_ context.Context, task, level, by strin
 	return true, f.fail
 }
 
+func (f *fakeWriter) MarkSeen(_ context.Context, person string, ids ...string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "seen "+person+" "+strings.Join(ids, ","))
+	return f.fail
+}
+
 func (f *fakeWriter) ForgetAgent(_ context.Context, agent string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

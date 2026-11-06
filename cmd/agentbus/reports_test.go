@@ -51,3 +51,39 @@ func TestReportNoticeNamesTheReportAndItsFirstLine(t *testing.T) {
 		t.Fatalf("notice not bounded: %d runes", n)
 	}
 }
+
+// report-one-row §4: the notice's subject is the report's headline, through
+// the same guards (sanitised, 300 runes); the first line when it has none.
+func TestReportNoticeCarriesTheHeadline(t *testing.T) {
+	const pre = "Report 1-0 for you (full text: agentbus reports 1-0): "
+	for _, c := range []struct{ msg, want string }{
+		{"## Done\n- Vérif: all green\n- next", pre + "Vérif: all green"},
+		{"## Done", pre + "Done"},
+		{"| a | b |\n|---|", pre + "| a | b |"},              // no headline: today's first line
+		{"## Done\nbell\x07here. Then", pre + "bell here."}, // a control character is a space
+	} {
+		if got := reportNotice("1-0", c.msg); got != c.want {
+			t.Errorf("reportNotice(%q) = %q, want %q", c.msg, got, c.want)
+		}
+	}
+	long := reportNotice("1-0", "## T\n"+strings.Repeat("y", 900))
+	if sub := strings.TrimPrefix(long, pre); len([]rune(sub)) != 301 || !strings.HasSuffix(sub, "…") {
+		t.Fatalf("headline not cut at 300 runes: %d", len([]rune(sub)))
+	}
+}
+
+// §4 and the person's answer: the table shows the headline, read from the
+// full text when the report keeps one.
+func TestReportsTableShowsTheHeadline(t *testing.T) {
+	out := reportsTable([]bus.Event{
+		{ID: "1-0", Agent: "master", RKind: "note", Message: "## Done - Vérif: ok - next", Full: "## Done\n- Vérif: ok\n- next", TextComplete: "yes"},
+		{ID: "2-0", Agent: "coder", RKind: "note", Message: "| only a table |", TextComplete: "yes"},
+	})
+	rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if !strings.Contains(rows[0], `"Vérif: ok"`) || strings.Contains(rows[0], "##") {
+		t.Fatalf("row 1: %q", rows[0])
+	}
+	if !strings.Contains(rows[1], `"| only a table |"`) {
+		t.Fatalf("row 2 keeps its preview with no headline: %q", rows[1])
+	}
+}
