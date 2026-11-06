@@ -60,8 +60,11 @@ letters and data model are theirs. The real views keep:
 
 `Owed by you (3)`, `Tracked (8)`.
 
-- The figure is the one `requestsTitle` already sums: `reqView.count(s)`, with the asks counted
-  in `Owed by you`, as `owedText` counts them.
+- The figure is the one `requestsTitle` already sums: `reqView.count(s)`. For `Owed by you` it
+  adds the open **questions** (`v.questions`), as `owedText` does, not the asks. So the figure can
+  exceed the rows shown: one ask with two questions plus one thread reads `Owed by you (3)` over
+  two rows. A group's `(+N)` likewise counts threads under one row. The heading counts what is
+  owed, not the rows.
 - The title's summary stays. It is the panel's total at a glance, while the heading is the
   section's own count.
 - **Cost:** one line in `requestRows`' `head`, golden updates, and a test that each heading's
@@ -69,10 +72,22 @@ letters and data model are theirs. The real views keep:
 
 ### R2. A heading is a row: Enter folds and unfolds its section
 
-- The heading becomes a selectable `ListItem` keyed `sec:<section>`. It uses the gutter's own
-  marker: `▼` open, `▶` folded (`Expanded`, `listview.go`). No new glyph.
-- **Folded,** the heading reads `Tracked (8)`. Its groups are hidden, and with them its `+ N older`
-  line.
+- The heading becomes a selectable `ListItem` keyed `sec:<section>`. It is never `Expanded`,
+  whether its section is open or folded. `listview.go` draws `▼` in the gutter for any `Expanded`
+  item, so marking open headings `Expanded` would put a `▼` on every heading at start.
+- **The gutter is the list's, as for any row:** `▶` when the heading is selected (`GlyphSelect`,
+  with the highlight), blank otherwise. No new glyph.
+- **The fold is said in the heading's text,** in the words of busmon's other folds. Open, the
+  heading reads `Tracked (8)`, today's bold heading plus its count. Folded, it reads
+  `Tracked (8)` followed by a muted `  (enter shows it)`, as `+ N older  (enter shows them)` and
+  the notices line already say. Its groups are hidden, and with them its `+ N older` line.
+
+  | Section | Selected | Gutter | Text |
+  |---|---|---|---|
+  | open | no | blank | `Tracked (8)` |
+  | open | yes | `▶`, highlighted | `Tracked (8)` |
+  | folded | no | blank | `Tracked (8)  (enter shows it)` |
+  | folded | yes | `▶`, highlighted | `Tracked (8)  (enter shows it)` |
 - **The fold state is per busmon session,** kept in `reqOpen` beside its groups. It is not saved:
   every section is open at start, as today, so the screen does not change for someone who folds
   nothing.
@@ -85,8 +100,14 @@ letters and data model are theirs. The real views keep:
   recorded keys leave out `sec:`, the same way they would skip a fold line that is not an item.
 - **Space** is not added. busmon's lists open with Enter, and Space is a binding only on the
   settings page.
-- **Cost:** `requestRows` and `openRequestRow` (key `sec:`), tests for fold, unfold, the selection
-  moving to the heading, and the header count unchanged, plus goldens.
+- **Cost:** `requestRows` and `openRequestRow` (key `sec:`), plus tests for:
+  - fold and unfold;
+  - each row of the table above (the heading never `Expanded`, the gutter blank unless selected,
+    the folded suffix);
+  - the selection moving to the heading;
+  - the header count unchanged.
+  
+  Goldens are regenerated: with nothing folded, only the counts change.
 
 ### R3. `/` on the Requests tab filters Requests
 
