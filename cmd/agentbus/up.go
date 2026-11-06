@@ -716,6 +716,8 @@ func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunchOptions,
 		}
 	}
 	o.Dir = os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
+	// busmon's old shell needs herdr only, not the agents (start-busmon-pane).
+	o.CloseBusmon = true
 	if ok {
 		// A relaunched agent is proven by its own bind before its old pane closes.
 		sleep := d.Sleep

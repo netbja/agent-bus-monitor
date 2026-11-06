@@ -725,7 +725,8 @@ func TestUpClosesTheOldPaneOfAProvenRelaunch(t *testing.T) {
 	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if got := h.closes(); len(got) != 1 || got[0] != "w4:p3" || !strings.Contains(out.String(), "master: old pane w4:p3 closed") {
+	// busmon's tab, a plain shell in deadMaster, is closed too (start-busmon-pane).
+	if got := h.closes(); strings.Join(got, " ") != "w4:p1 w4:p3" || !strings.Contains(out.String(), "master: old pane w4:p3 closed") {
 		t.Fatalf("closed %q\n%s", got, out.String())
 	}
 	if bad := h.typedIntoExisting(); len(bad) != 0 {

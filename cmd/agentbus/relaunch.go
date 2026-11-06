@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
 // life is what is known of an agent's process.
@@ -271,6 +272,9 @@ type relaunchOptions struct {
 	Resume, DryRun, Create bool
 	Dir                    string         // the project directory a new pane starts in
 	Prove                  *relaunchProof // nil: every old pane is left as it is
+	// CloseBusmon: a relaunched busmon's old shell is closed (start-busmon-pane):
+	// only up on an open workspace sets it.
+	CloseBusmon bool
 	// Verdicts, when set, receives each tab's verdict by tab name: a caller
 	// that relaunches one role (reload) fails on anything but a relaunch.
 	Verdicts map[string]relaunchVerdict
@@ -400,6 +404,17 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 		if v == verdictRelaunch && isAgent && has && o.Prove != nil && slices.Contains(ref.All, snap.Pane) {
 			old = snap.Pane
 		}
+		// busmon's tab (start-busmon-pane, the person's answers of 2026-11-06):
+		// its old pane is closed with no proof, only when it is the tab's one
+		// pane, re-read as a plain shell right before the close.
+		busmonOld, busmonMany := "", 0
+		if v == verdictRelaunch && o.CloseBusmon && isBusmonTab(t, project) {
+			if len(ref.All) == 1 {
+				busmonOld = ref.All[0]
+			} else {
+				busmonMany = len(ref.All)
+			}
+		}
 		word := string(v)
 		switch v {
 		case verdictRelaunch, verdictCreate:
@@ -412,6 +427,12 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 				word += " (new pane; would close the old one " + old + " once the new one is proven)"
 			case v == verdictRelaunch && old != "":
 				word += " (new pane; the old one " + old + " closes once the new one is proven)"
+			case busmonOld != "" && o.DryRun:
+				word += " (new pane; would close the old one " + busmonOld + " if it is still a plain shell)"
+			case busmonOld != "":
+				word += " (new pane; the old one " + busmonOld + " closes if it is still a plain shell)"
+			case busmonMany > 0:
+				word += fmt.Sprintf(" (new pane; the old ones are left as they are: the tab has %d panes)", busmonMany)
 			case v == verdictRelaunch:
 				word += " (new pane; the old one is left as it is)"
 			}
@@ -454,6 +475,11 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 			}
 		}
 		fmt.Fprintf(stdout, "%s: %s\n", t.Name, word)
+		if busmonOld != "" && !o.DryRun {
+			if err := closeIfShell(herdr, t.Name, busmonOld, stdout); err != nil {
+				errs = append(errs, err)
+			}
+		}
 	}
 	if len(olds) > 0 {
 		errs = append(errs, closeOldPanes(herdr, procStart, o.Prove, olds, stdout))
@@ -505,6 +531,45 @@ func closeOldPanes(herdr func(args ...string) ([]byte, error), procStart func(in
 		fmt.Fprintf(stdout, "%s: old pane %s closed\n", o.Name, o.Old)
 	}
 	return errors.Join(errs...)
+}
+
+// closeIfShell closes pane once it is re-read, right before, as one plain
+// interactive shell; anything else leaves it as it is and says why. Closing
+// is not typing: nothing is ever typed into it.
+func closeIfShell(herdr func(args ...string) ([]byte, error), name, pane string, stdout io.Writer) error {
+	shell, err := paneShell(herdr, pane)
+	if err != nil {
+		fmt.Fprintf(stdout, "%s: old pane %s left as it is (unreadable: %v)\n", name, pane, err)
+		return nil
+	}
+	if !shell {
+		fmt.Fprintf(stdout, "%s: old pane %s left as it is (no longer a plain shell)\n", name, pane)
+		return nil
+	}
+	if _, err := herdr("pane", "close", pane); err != nil {
+		fmt.Fprintf(stdout, "%s: old pane %s not closed: %v\n", name, pane, err)
+		return fmt.Errorf("herdr pane close %s (%s): %w", pane, name, err)
+	}
+	fmt.Fprintf(stdout, "%s: old pane %s closed\n", name, pane)
+	return nil
+}
+
+// isBusmonTab: the template tab named busmon that runs this project's busmon
+// (its first word's base name busmon, --project <project>). No other tab.
+func isBusmonTab(t upTab, project string) bool {
+	if t.Name != "busmon" {
+		return false
+	}
+	w, err := rolecfg.ShellSplit(t.Command)
+	if err != nil || len(w) == 0 || filepath.Base(w[0]) != "busmon" {
+		return false
+	}
+	for i, a := range w[1:] {
+		if a == "--project="+project || a == "--project" && i+2 < len(w) && w[i+2] == project {
+			return true
+		}
+	}
+	return false
 }
 
 // provenIn: the agent's verified identity is a new process, alive, bound in
