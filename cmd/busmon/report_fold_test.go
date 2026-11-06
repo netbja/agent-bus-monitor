@@ -1,6 +1,7 @@
 package main
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"fmt"
 	"slices"
 	"strings"
@@ -304,4 +305,65 @@ func TestReportOneRowGoldens(t *testing.T) {
 		}
 		checkGolden(t, fmt.Sprintf("report-one-row-%dx%d-dark.txt", size[0], size[1]), plain+"\n")
 	}
+}
+
+// foureyes: opening a report row through the keys, Enter then Enter (the
+// reader's push), reads its notice and writes the receipt before any Esc;
+// so does opening its For you row.
+func TestOpeningAReportRowByKeysWritesTheReceipt(t *testing.T) {
+	at := shellNow.Add(-time.Minute).UnixMilli()
+	rep := bus.Event{Kind: "report", ID: fmt.Sprintf("%d-0", at), Agent: "master", RKind: "note", Message: "Done"}
+	n := bus.Event{Kind: "cmd", ID: fmt.Sprintf("%d-1", at), From: "master", Target: "charlie", Type: bus.CmdDirective, Ref: rep.ID,
+		Message: "Report " + rep.ID + " for you (full text: agentbus reports " + rep.ID + "): Done"}
+	setup := func(t *testing.T) (Model, *fakeWriter) {
+		fw := &fakeWriter{}
+		m := shellWith(t, 140, 40, shellConfig{w: fw}, false)
+		return step(t, m, tailMsg{events: []bus.Event{rep, n}}), fw
+	}
+	check := func(t *testing.T, m Model, fw *fakeWriter, path string) {
+		t.Helper()
+		if p := m.rd.top(); p == nil || p.ev.ID != rep.ID {
+			t.Fatalf("%s: the report is not open: %+v", path, m.rd.pages)
+		}
+		if !slices.Contains(m.cache_().Read, n.ID) {
+			t.Fatalf("%s: the notice is unread: %v", path, m.cache_().Read)
+		}
+		fw.mu.Lock()
+		defer fw.mu.Unlock()
+		if !slices.Contains(fw.sent, "seen charlie "+n.ID) {
+			t.Fatalf("%s: no receipt: %v", path, fw.sent)
+		}
+	}
+	t.Run("Activity", func(t *testing.T) {
+		m, fw := setup(t)
+		m.focusPanel(PanelActivity)
+		m.lists.activity.Select(feedKey(t, m, rep.ID))
+		m = pressRun(t, m, kEnter, kEnter)
+		check(t, m, fw, "Activity")
+	})
+	t.Run("For you", func(t *testing.T) {
+		m, fw := setup(t)
+		m.focusPanel(PanelForYou)
+		fl, ok := m.feed.lineOf(rep.ID)
+		if !ok {
+			t.Fatal("no line")
+		}
+		m.lists.forYou.Select(unreadKey(fl))
+		m = pressRun(t, m, kEnter)
+		if !m.rd.open() {
+			m = pressRun(t, m, kEnter)
+		}
+		check(t, m, fw, "For you")
+	})
+}
+
+// pressRun is keys with each update's commands run, as the program runs them
+// (the receipt is written by a command).
+func pressRun(t *testing.T, m Model, ks ...tea.Key) Model {
+	t.Helper()
+	for _, k := range ks {
+		next, cmd := m.Update(tea.KeyPressMsg(k))
+		m = run(t, next.(Model), cmd)
+	}
+	return m
 }
