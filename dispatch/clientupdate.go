@@ -155,7 +155,8 @@ func (l *loop) proposeReloads(ctx context.Context, snaps map[string]bus.AgentSna
 		mark := "update:" + k[0] + ":" + k[1]
 		head := fmt.Sprintf("client update: %s %s installed; still on an older one: %s.", client, orUnknown(u.Installed), strings.Join(agents, ", "))
 		var extra []string
-		if auto { // the agents this directive covers get no later hint
+		if auto { // the episode is automatic; the agents this directive covers get no later hint
+			extra = append(extra, autoMark(mark))
 			for _, a := range members[k] {
 				if a != "sentinel" && rf.ready(ctx, a) {
 					extra = append(extra, mark+":"+a)
@@ -176,6 +177,12 @@ func (l *loop) proposeReloads(ctx context.Context, snaps map[string]bus.AgentSna
 	return nil
 }
 
+// autoMark records, with the episode's send, that it went out under on with
+// sentinel registered: only such an episode gets retry hints, so a policy
+// changed after the send applies to the next episode (reviewer-codex). The
+// suffix is no agent name (ValidName has no '='), so no agent's mark is it.
+func autoMark(mark string) string { return mark + ":auto=on" }
+
 // reloadAction is what the episode's directive asks for, by policy and
 // recipient. Without a registered sentinel the escalation target may reload
 // nobody but sentinel (agentbus reload's caller table), so on asks the
@@ -195,8 +202,9 @@ func reloadAction(policy string, sentinel bool) string {
 }
 
 // retryReloads sends sentinel one hint per agent of an episode already sent
-// that is now ready and was not covered when the directive went out (no
-// per-agent mark): its once-mark goes with it. sentinel never gets one
+// automatically (autoMark) that is now ready and was not covered when the
+// directive went out (no per-agent mark): its once-mark goes with it. The
+// policy must still be on: a change to propose or off stops the hints. sentinel never gets one
 // about itself: master reloads it.
 func (l *loop) retryReloads(ctx context.Context, rf *reloadReader, mark, client string, agents []string, obs map[string]Observation) error {
 	var marks map[string]string
@@ -209,6 +217,9 @@ func (l *loop) retryReloads(ctx context.Context, rf *reloadReader, mark, client 
 			if marks, err = l.b.QuotaMarks(ctx); err != nil {
 				return err
 			}
+		}
+		if marks[autoMark(mark)] != "sent" {
+			return nil // the episode was sent under another policy or without sentinel
 		}
 		if marks[mark+":"+a] == "sent" || !rf.ready(ctx, a) {
 			continue

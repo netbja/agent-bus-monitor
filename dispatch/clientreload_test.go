@@ -220,3 +220,19 @@ func TestReloadReady(t *testing.T) {
 		}
 	}
 }
+
+// A policy changed after the episode's send applies to the next episode
+// (reviewer-codex): an episode first sent under propose never gets an
+// automatic hint, even once the policy is on.
+func TestNoRetryHintForAnEpisodeSentBeforeOn(t *testing.T) {
+	var policy atomic.Value
+	policy.Store("propose")
+	b, updates, _ := updateWorld(t, true, &policy, "doc")
+	waitFor(t, 3*time.Second, "the propose directive", func() bool { return len(updates()) >= 1 })
+	policy.Store("on")
+	setState(t, b, "doc", "idle")
+	time.Sleep(400 * time.Millisecond)
+	if us := updates(); len(us) != 1 || !strings.Contains(us[0].Command, "Propose a reload") {
+		t.Fatalf("after the change to on: %q", us)
+	}
+}

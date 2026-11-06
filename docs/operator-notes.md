@@ -803,7 +803,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   per-agent mark `update:<client>:<episode>:<agent>` for each agent ready then (`reloadReady`:
   declared idle, not observed busy, no `accepted` board task, no gate on either side
   (`ReviewsOf`), no swap or reload intent, not on a fallback, every read succeeded), in the same
-  script; on later passes an agent of the episode now ready with no mark gets one hint
+  script, with `update:<client>:<episode>:auto=on` saying the episode went out automatically;
+  on later passes, only for such an episode and while the policy is still `on`, an agent of the
+  episode now ready with no mark gets one hint
   (`client update: <agent> is ready now …`, `retryReloads`), never sentinel about itself. busmon's
   C page shows `sentinel.reload` as "Auto-restart on update" (on / propose / off), the Services
   group's only key there (`settingOnPage`).
