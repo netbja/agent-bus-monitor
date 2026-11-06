@@ -116,6 +116,8 @@ that page again.
   first For you row in the reader, as Enter would, and marks the reader as walking.
   With nothing for the person, it says so in a flash (`nothing for you`) and opens nothing.
 - **Esc** leaves the walk and the reader, as today.
+- The main screen's footer advertises it as `T triage`, kept like F1 and F5 when room is short,
+  since it is the way into the walk.
 - The reader's title gains the walk's place, `triage 2/7`, where 7 counts the rows visited plus
   the rows still in the list. It is drawn in the frame's title with `frameTitle`, so the title's
   width rule holds.
@@ -157,9 +159,16 @@ them. This is the cinematic the person asked for: deal, see it acknowledged, lan
 
 ### 4.4 The end
 
-When no row is left, the walk opens one page: `Nothing waits for you` with the counts it went
-through (`answered 2 · sent 1 · skipped 3`) and the next decision the empty For you already shows
-(`forYouEmptyRows`, foryou-no-progress). Enter on that row opens it; Esc closes.
+When every row has been visited, the walk opens one page. It never says that nothing waits
+while a skipped row still stands:
+
+- the title `Triage done: everything was seen once`;
+- the counts the walk went through (`answered 1 · sent 1 · read 1 · skipped 3`);
+- what still waits, by chip (`♙ 2 decide (skipped: …) · ◆ 1 merge`);
+- the next decision the empty For you already shows (`forYouEmptyRows`, foryou-no-progress).
+
+Enter on that row opens it; Esc closes. Only when the list is empty does the title read `Nothing
+waits for you`.
 
 ### 4.5 Interplay
 
