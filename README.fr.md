@@ -50,7 +50,8 @@ d'usage et le remplissage du contexte sont lus dans des sources locales, sans d�
 agent-bus est en **v0.x** et conçu pour **un seul opérateur** : une personne fait travailler une
 équipe d'agents sur sa propre machine. Commandes et écrans changent encore d'une version à
 l'autre. Il n'y a ni comptes ni contrôle d'accès, et le courtier est un Redis lié à `127.0.0.1`.
-Les tableaux ci-dessous ne disent que ce que le code et ses tests montrent.
+Dans les tableaux ci-dessous, la fréquence d'usage d'une plateforme est ce qu'en disent les
+mainteneurs ; toutes les autres cases ne disent que ce que le code et ses tests montrent.
 
 | | Linux | macOS | Windows |
 |---|---|---|---|

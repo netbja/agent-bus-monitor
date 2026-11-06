@@ -46,8 +46,9 @@ are read from local sources, without spending tokens on them.
 
 agent-bus is **v0.x** and built for **one operator**: one person runs a team of agents on their
 own machine. Commands and screens still change between releases. There are no accounts and no
-access control, and the broker is a Redis bound to `127.0.0.1`. The tables below say only what
-the code and its tests show.
+access control, and the broker is a Redis bound to `127.0.0.1`. In the tables below, how often a
+platform is used is the maintainers' own report; every other cell says only what the code and
+its tests show.
 
 | | Linux | macOS | Windows |
 |---|---|---|---|
