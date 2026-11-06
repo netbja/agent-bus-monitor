@@ -167,8 +167,8 @@ in a report. busmon then does three things:
 To answer it:
 
 1. Select the question in **For you** and press Enter. You can also press `!` or F4 from anywhere.
-2. Choose an option with `↑`/`↓` or its number (`1`–`9`). `o` gives a free answer instead.
-3. Press Enter to send it.
+2. Press an option's number (`1`–`9`) to send it at once, or move with `↑`/`↓` and press Enter.
+3. For an answer in your own words, press `o`: it opens the compose window, and Ctrl+S sends it.
 
 Your answer goes back to the agent that asked, and it wakes.
 
@@ -194,7 +194,7 @@ The last line is what master receives: your answer, marked as coming from a pers
 These are the ways to stop, from the lightest:
 
 - **Leave busmon** with `q` or Ctrl+C. The team keeps running; open busmon again with
-  `busmon --project myshop`, or with Ctrl+B then `↑` in herdr.
+  `busmon --project myshop`, or pick the project in herdr's Projects picker (Ctrl+B then `↑`).
 - **Put the project to sleep:** `Z` in busmon, or `agentbus suspend`. This pauses the project,
   lets the running turns end, records a snapshot and stops the services. Agents and the workspace
   are kept. `Z` again, or `agentbus resume`, brings the project back:
