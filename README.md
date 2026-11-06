@@ -44,6 +44,9 @@ are read from local sources, without spending tokens on them.
 
 ## Quick start
 
+New here? The [five-minute quick start](docs/quickstart.md) walks one operator from install to a
+first task done, an answered question and a stopped project, with the real output of each step.
+
 You need Linux or macOS, Go (the version in `go.mod`), Docker with Compose, Git and curl.
 herdr (0.9.0 or newer) is installed for you with `--install-herdr`.
 
