@@ -27,11 +27,14 @@ func setState(t *testing.T, b *bus.Bus, agent, state string) {
 
 // updateWorld: dev and doc run claude-code 2.1.305 while installed (an
 // atomic, so a test opens a new episode) is newer; sentinel is up to date.
-func updateWorld(t *testing.T, withSentinel bool, policy *atomic.Value) (*bus.Bus, func() []updateEntry, *atomic.Value) {
+func updateWorld(t *testing.T, withSentinel bool, policy *atomic.Value, busy ...string) (*bus.Bus, func() []updateEntry, *atomic.Value) {
 	t.Helper()
 	b, r := dialRun(t)
 	register(t, b, "dev", "p1")
 	register(t, b, "doc", "p2")
+	for _, a := range busy { // not ready when the episode's directive goes out
+		setState(t, b, a, "working")
+	}
 	if withSentinel {
 		register(t, b, "sentinel", "p3")
 	}
@@ -112,10 +115,9 @@ func TestProposeReloadsFollowsThePolicy(t *testing.T) {
 func TestProposeReloadsWithoutSentinelAsksThePerson(t *testing.T) {
 	var policy atomic.Value
 	policy.Store("on")
-	b, updates, _ := updateWorld(t, false, &policy)
+	b, updates, _ := updateWorld(t, false, &policy, "doc")
 	waitFor(t, 3*time.Second, "the directive", func() bool { return len(updates()) >= 1 })
-	setState(t, b, "doc", "working")
-	setState(t, b, "doc", "idle") // ready again: no hint without sentinel
+	setState(t, b, "doc", "idle") // ready now: still no hint without sentinel
 	time.Sleep(300 * time.Millisecond)
 	us := updates()
 	if len(us) != 1 {
@@ -187,8 +189,7 @@ func TestNoRetryHintUnlessOn(t *testing.T) {
 	for _, p := range []string{"propose", "off"} {
 		var policy atomic.Value
 		policy.Store(p)
-		b, updates, _ := updateWorld(t, true, &policy)
-		setState(t, b, "doc", "working")
+		b, updates, _ := updateWorld(t, true, &policy, "doc")
 		waitFor(t, 3*time.Second, "the directive", func() bool { return len(updates()) >= 1 })
 		setState(t, b, "doc", "idle")
 		time.Sleep(300 * time.Millisecond)
