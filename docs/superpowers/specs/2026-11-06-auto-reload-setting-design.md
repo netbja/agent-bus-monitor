@@ -72,21 +72,31 @@ the next day.
    - `on`: `client update: … Reload the ready ones now (agent-bus-sentinel skill, Client update): agentbus reload <agent>, one at a time, master last; never type into a pane.`
    - `propose`: today's text, `Propose a reload … propose only, never restart or type.`
    - `off`: `… Reload nothing; report the agents to master once.`
-   The episode mark is unchanged. The policy is the dispatcher's at the moment it sends; a
-   change after that applies to the next episode (`agentbus reload` checks it again anyway).
-2. **The health remediation** of `client-updates` stops saying "propose": "sentinel reloads the
-   outdated agents (agentbus reload), master last; under propose it asks the person through
-   master." The remediation is shown to people and agents; it must not contradict the policy.
-3. **Retry the later ones.** While an episode has outdated agents that are now ready (the same
-   rule as the reload's preflight, below), the dispatcher sends sentinel one more directive per
-   episode **per newly ready agent**: once-mark `update:<client>:<episode>:<agent>`. The ready
+   The episode mark is unchanged. The policy is read **at each send**, never once at service
+   start, or a change on the C page would wait for a restart of the services. `reloadPolicy`
+   lives in `cmd/agentbus` today; it moves to a shared package (`service`, beside `ReloadEnv`) so
+   the dispatcher and `agentbus reload` read it the same way. The dispatcher's environment is the
+   services' env file as of its start, so a value set there by `up --reload` still needs
+   `up --reload` again (and the restart it does); `config.toml`, which the C page writes, is read
+   each time. A change after the send applies to the next episode (`agentbus reload` checks the
+   policy again anyway).
+2. **The health remediation** of `client-updates` stops saying "propose": one static text that
+   covers every policy, "sentinel reloads the outdated agents (agentbus reload), master last;
+   under propose it asks the person through master; under off nothing is reloaded." The
+   remediation is shown to people and agents; it must not contradict the policy.
+3. **Retry the later ones.** The hint is only for agents that were **not** ready when the
+   episode's directive went out. When it sends that directive, the dispatcher also sets the
+   per-agent once-mark `update:<client>:<episode>:<agent>` for every named agent ready at that
+   moment, in the same fenced script, so an agent sentinel is reloading from the first directive
+   never gets a second one. Later, on each pass, an agent of the episode that is still outdated,
+   now ready, and has no mark gets one directive to sentinel (`client update: <agent> is ready
+   now …`), and its mark is set with it. The ready
    test the dispatcher can make without running code: declared `idle`, not observed busy, no
    `accepted` board task, no open gate on either side, no swap or reload intent, not on a
    fallback. It is a hint only: sentinel runs `agentbus reload`, which decides. Open question 3
    asks whether this belongs in this task.
-4. A test pins the directive's text for each policy (`dispatch/clientupdate_test.go`), and a
-   registry test that no message the dispatcher sends to sentinel for an update says "propose"
-   under `on`.
+4. A test pins the directive's text for each policy (`dispatch/clientupdate_test.go`), and that
+   no message the dispatcher sends to sentinel for an update says "propose" under `on`.
 
 ### (a) What the person sees on the C page
 
@@ -96,10 +106,12 @@ becomes a **choice** (←→, like Theme and Icons: `settingChoices`), with a la
 
 ```
 Services
-  Auto-restart on a new client version   on   propose   off
+  Auto-restart on update   on   propose   off
 ```
 
-and the detail line explains each value: `on: sentinel restarts idle agents on the installed
+The label is 22 cells: the label column is capped at `settingsLabelW` (26), so "Auto-restart on
+a new client version" (36) would be cut. The detail line says the rest: `a new version of an
+agent's client (Claude Code, Codex, Grok) is installed. on: sentinel restarts idle agents on the installed
 version, master last · propose: you approve each restart · off: nothing restarts`.
 
 A plain true/false would hide `propose`, and a project set to `propose` by `up --reload` would
@@ -123,8 +135,8 @@ Exactly what `agentbus reload` already refuses on, so one rule holds in one plac
 - not on a fallback profile (`swap --back` first);
 - master: no other driver holds the pilot lease.
 
-The command checks all of it twice, before and after the reload intent is written, and again
-right before SIGTERM. Nothing new is needed; the spec only names it on the C page's detail line
+The command checks all of it before the reload intent is written, and again after it, right
+before SIGTERM. Nothing new is needed; the spec only names it on the C page's detail line
 ("idle, no review, task or mission in flight").
 
 ### (c) master's own reload, and sentinel's
@@ -143,8 +155,13 @@ right before SIGTERM. Nothing new is needed; the spec only names it on the C pag
 ## Tests (first, red)
 
 - `dispatch`: `TestProposeReloadsFollowsThePolicy` (on / propose / off text, one per episode as
-  today); `TestRetryReadyLaterAgentsOncePerAgent` if (d)3 is kept.
-- `health`: the remediation text under each policy does not say "propose" for `on`.
+  today; the policy read at each send, a `config.toml` change seen without a restart);
+  `TestRetryOnlyAgentsLaterAtTheEpisode` if (d)3 is kept (an agent ready at the first directive
+  gets no hint; one later gets exactly one).
+- `service`: `ReloadPolicy` moved, its layers unchanged (the existing `reloadPolicy` tests move
+  with it).
+- `health`: the one remediation text names all three policies and no longer says "never restart
+  a client".
 - `busmon`: the C page shows the label, ←→ cycles on/propose/off, the file gets the value;
   golden for the settings page.
 - `skills`: sentinel's skill text is unchanged in substance; the "retried on your next wake"
@@ -159,8 +176,9 @@ right before SIGTERM. Nothing new is needed; the spec only names it on the C pag
 
 ## Open questions (for the person)
 
-1. **The C page form**: a three-way choice `on / propose / off` (proposed), or a bool
-   "Auto-restart" (on = `on`, off = `propose`), with `off` left to the CLI and `up --reload`?
+1. **The C page form**: a three-way choice `on / propose / off` under "Auto-restart on update"
+   (proposed), or a bool (on = `on`, off = `propose`), with `off` left to the CLI and
+   `up --reload`?
 2. **master's reload under `on`**: sentinel reloads master by itself, last (proposed, as the code
    and skills say), or master always tells sentinel when?
 3. **The retry of later agents** (d)3: in this task, or a follow-up? Without it, an agent busy at
