@@ -5,7 +5,7 @@ scope: project
 kind: decision
 status: active
 created: 2026-10-27
-last_verified: 2026-10-27
+last_verified: 2026-11-06
 author: coder
 confidence: verified
 ---
@@ -34,6 +34,19 @@ often, those dead shells piled up in every tab.
   `roles.toml`, `[roles.master.tool_rules]` allows exactly `agentbus up agent-bus-monitor
   --resume` and its `--dry-run` form: no other project, flag or wildcard. Every other role's
   launch is unchanged.
+
+## Amendment 2026-11-06: busmon's tab
+
+The person decided an exception for busmon (task start-busmon-pane, spec
+`docs/superpowers/specs/2026-11-06-start-busmon-pane-design.md`, "The person's answers"). When
+`agentbus up` on an open workspace relaunches busmon because its tab's one pane is a plain shell,
+it closes that old pane **without a proof**, once the new pane is created and the command runs
+in it, if a re-read right before still shows one plain interactive shell. The person dropped the
+proof because busmon can run in any window, not only herdr. Only the tab named `busmon` that runs
+this project's busmon, and only when it held exactly one pane: a split busmon tab is left whole,
+since one of its shells may be the person's own. The `dispatch` and `missions` tabs keep the rule
+above. Nothing is typed into the old pane. Code: `isBusmonTab`, `closeIfShell`,
+`relaunchOptions.CloseBusmon` (`relaunch.go`); tests in `relaunch_busmon_test.go`.
 
 ## When it applies
 
