@@ -6,6 +6,24 @@ release exists.
 
 ## Unreleased
 
+## v0.28.0 — stabilisation: the merge queue, one row per report, request priority, and the docs
+
+- The merge queue: PRs on a head both reviewers approved are derived from the ledger and the forge
+  (`gh`, else git), shown in busmon's For you, by `agentbus merge-queue` and by health `merge-queue`.
+- busmon: one row per report, its headline its first sentence of substance; a read receipt, shown
+  by `agentbus reports` (`--unread`); `r` replies on message, report, note and agent pages.
+- Request priority (high, normal, low), set by the person only (`request priority`, `+`/`-` in
+  busmon); `agentbus request next` names the request to take.
+- Stall guards: health `review-queue` wakes master when an idle team owes a review; an answered
+  `waiting` counts as idle. Fix: `tokens.AgentRows` picks a deterministic provider.
+- Docs: a five-minute quick start, a platform matrix (v0.x, one operator), CLAUDE.md split into a
+  short contract plus `docs/architecture.md` and `docs/operator-notes.md`, community files, the
+  guides proofread, a presentation site in `site/`. Tests: coverage and fuzz targets.
+- Not in it: the Plan/Requests views redesign (spec only), plan-task priority, GitLab/Bitbucket API
+  readers, the host dispatcher, Windows.
+
+[Notes](docs/releases/v0.28.0.md)
+
 ## v0.27.0 — suspend and resume the team, busmon pages for backups, notifications and About
 
 - `agentbus suspend` rests the host's projects (pause, wait for quiet, stop the services, keep a
