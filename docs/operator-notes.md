@@ -92,6 +92,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   pid bound in the new pane, read for up to 60 s), it closes the exact old pane the dead agent's
   snapshot recorded, if a re-read right before shows it still a plain shell; anything else leaves it
   and says why (`closeOldPanes`, decision `docs/memory/decisions/2026-10-27-relaunch-close.md`;
+  busmon's tab, when it held one plain-shell pane, has that pane closed with no proof once the new
+  pane runs busmon, if it is re-read a plain shell: `isBusmonTab`, `closeIfShell`, `CloseBusmon`,
+  start-busmon-pane;
   master may run `agentbus up agent-bus-monitor --resume` without a prompt, `roles.toml`). A tab's command counts as gone only when
   no live snapshot says otherwise (`snapLife`: pid + `pid_start`, Linux only), herdr sees no agent in
   any of its panes, and **every** pane of the tab is a plain interactive shell (`idleShell`, argv
@@ -144,7 +147,10 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   templates' `working_dir` too, since bootstrap records the logical path), the project (a template on that folder, else
   `startProjectName` of its base name, `-2`… when another folder's template holds it), the name (`identity.as`, else
   `$USER`) and the team (the template's tabs, else `start.team`, else every boot role). The assistant is plain lines on
-  `/dev/tty` (`setup.OpenTTY`); with no terminal and no `--yes` it prints and exits 2. Its own writes are only
+  `/dev/tty` (`setup.OpenTTY`); with no terminal and no `--yes` it prints and exits 2. An existing project with
+  nothing to settle and no `--name`/`--as`/`--roles` gets a short screen (`shortScreen`, `openState`): one status
+  line (agents by `d.Live`, busmon's tab by `busmonVerdict`, inside herdr only) naming what Enter does; `c` or a
+  digit switches to the full screen. Its own writes are only
   `identity.as` when none is recorded and `start.team` when the person chose a team; everything else is `up`'s code path
   (`runUp`), with `--roles` for a reduced new team or `new --roles` for a team change, which is refused on a template
   edited by hand (rebuilt with `TemplateTeam` from its own tabs and compared byte for byte) or when it drops or moves an

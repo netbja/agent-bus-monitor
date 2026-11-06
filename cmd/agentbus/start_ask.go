@@ -18,12 +18,14 @@ import (
 // digit changes that line, q or the end of input quits having written
 // nothing.
 type asker struct {
-	in   *bufio.Reader
-	out  io.Writer
-	m    *rolecfg.Manifest
-	env  func(string) string
-	look func(exe string) (string, error) // the agent CLI lookup up uses
-	live map[string]life                  // an existing project's agents; nil unknown
+	in     *bufio.Reader
+	out    io.Writer
+	m      *rolecfg.Manifest
+	env    func(string) string
+	look   func(exe string) (string, error) // the agent CLI lookup up uses
+	live   map[string]life                  // an existing project's agents; nil unknown
+	busmon relaunchVerdict                  // what up would do to its busmon tab; "" unknown
+	short  bool                             // an existing project: the short screen until c or a digit
 
 	chosenTeam bool // the person changed the team: start.team follows
 }
@@ -43,12 +45,21 @@ func (a *asker) line(prompt string) (string, error) {
 // run shows the screen until the person starts or quits.
 func (a *asker) run(p *startPlan) error {
 	for {
-		a.screen(*p)
+		if a.short && p.unsettled() == "" {
+			a.shortScreen(*p)
+		} else {
+			a.screen(*p)
+		}
 		in, err := a.line("> ")
 		if err != nil {
 			return err
 		}
+		if in != "" && in != "q" && in != "Q" {
+			a.short = false // c or a change: the full screen from now on
+		}
 		switch in {
+		case "c", "C":
+			continue
 		case "":
 			if why := p.unsettled(); why != "" {
 				fmt.Fprintf(a.out, "  %s first\n", why)
@@ -115,24 +126,59 @@ func (a *asker) screen(p startPlan) {
 		fmt.Fprintf(a.out, "                ? %s\n", p.TeamAsk)
 	}
 	if p.Existing && a.live != nil {
-		var dead []string
-		for _, r := range p.Team {
-			if a.live[r.Role] != lifeAlive {
-				dead = append(dead, r.Role)
-			}
-		}
-		if len(dead) == 0 {
-			fmt.Fprintf(a.out, "\n  %s is running: %d of %d agents live.\n  Enter: focus its workspace   1-4: change   q: quit\n", p.Project, len(p.Team), len(p.Team))
-			return
-		}
-		fmt.Fprintf(a.out, "\n  %s is open: %d of %d agents live (%s not).\n  Enter: relaunch %s in new panes (agentbus up's rule)   1-4: change   q: quit\n",
-			p.Project, len(p.Team)-len(dead), len(p.Team), strings.Join(dead, ", "), strings.Join(dead, " and "))
+		status, enter := a.openState(p)
+		fmt.Fprintf(a.out, "\n  %s\n  Enter: %s   1-4: change   q: quit\n", status, enter)
 		return
 	}
 	if !p.Existing && teamKey(p.Team) != teamKey(completeTeam(a.m)) {
 		fmt.Fprintln(a.out, "\n  This team becomes the default for new projects (start.team in config.toml).")
 	}
 	fmt.Fprintln(a.out, "\n  Enter: start the team   1-4: change   q: quit, nothing written")
+}
+
+// shortScreen is an existing project's screen (start-busmon-pane): what
+// runs and what Enter does, nothing to fill in.
+func (a *asker) shortScreen(p startPlan) {
+	fmt.Fprintf(a.out, "\nagentbus start — %s\n\n", p.Folder)
+	status, enter := "", "open it (agentbus up's rule)"
+	if a.live != nil {
+		status, enter = a.openState(p)
+	} else {
+		status = p.Project + ": its agents' state cannot be read."
+	}
+	fmt.Fprintf(a.out, "  %s\n  Enter: %s   c: change project, name or team   q: quit\n", status, enter)
+}
+
+// openState is an existing project's status line and what Enter does: the
+// agents by their life, busmon by up's own judgement of its tab.
+func (a *asker) openState(p startPlan) (status, enter string) {
+	var dead []string
+	for _, r := range p.Team {
+		if a.live[r.Role] != lifeAlive {
+			dead = append(dead, r.Role)
+		}
+	}
+	busmon := ""
+	switch a.busmon {
+	case verdictRelaunch:
+		busmon = "busmon not running (its pane is a shell)"
+	case verdictCreate:
+		busmon = "busmon's tab is missing"
+	}
+	if len(dead) == 0 && busmon == "" {
+		return fmt.Sprintf("%s is running: %d of %d agents live.", p.Project, len(p.Team), len(p.Team)), "focus its workspace"
+	}
+	status = fmt.Sprintf("%s is open: %d of %d agents live", p.Project, len(p.Team)-len(dead), len(p.Team))
+	var does []string
+	if len(dead) > 0 {
+		status += " (" + strings.Join(dead, ", ") + " not)"
+		does = append(does, "relaunch "+strings.Join(dead, " and ")+" in new panes")
+	}
+	if busmon != "" {
+		status += ", " + busmon
+		does = append(does, "reopen busmon")
+	}
+	return status + ".", strings.Join(does, ", ")
 }
 
 // clientLines says, per client of the team, whether it is installed.

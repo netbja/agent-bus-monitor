@@ -1,7 +1,41 @@
 # One busmon pane after `agentbus start` on an open project — design
 
-Status: spec only, no code until the person's go. Task `start-busmon-pane` (v0.29).
-Base: `origin/main` at 5b8eaac (v0.28.0).
+Status: approved, then amended by the person's answers (below); implemented as task
+`start-busmon-pane-impl` (v0.29). Spec base: `origin/main` at 5b8eaac (v0.28.0).
+
+## The person's answers (2026-11-06), which amend this spec
+
+Where the sections below disagree with this one, this one holds.
+
+1. **No proof is waited for.** The person dropped the 10 s herdr argv proof: "busmon can run in
+   any window, not only herdr". A busmon seen in herdr proves nothing about where the person
+   watches it, so waiting for one guards nothing. `up` closes the old busmon pane once its own
+   split has created the new pane and the command has been run in it (`herdr pane run`
+   succeeded), and only if a re-read right before the close still shows one plain interactive
+   shell (`paneShell`, `idleShell`). Nothing is ever typed into the old pane. The sections "The
+   proof that busmon runs" and the proof steps of "The close" and "Where in the code" are
+   superseded: there is no `busmonIn`, no `busmonProof`, no wait.
+2. **Leave a split tab.** The old pane is closed only when the busmon tab held exactly one pane
+   before the relaunch; a tab of several panes is left whole, and the line says so. No other
+   pane is ever touched.
+3. **busmon only**, not the `dispatch` and `missions` tabs of `--tabs` mode.
+4. **The short screen as specced**: `c` opens the full screen, `1`-`4` still go to their question.
+5. The decision note `2026-10-27-relaunch-close.md` is amended for the busmon exception.
+
+As built (`cmd/agentbus/relaunch.go`, `start.go`, `start_ask.go`):
+
+- `relaunchOptions.CloseBusmon`, set by `relaunchUp` whatever the agents' state (so `up` on an
+  open workspace, and its `--dry-run`); `reload` and the workspace hook never reach busmon's tab.
+- `isBusmonTab`: the tab named `busmon` whose first word's base name is `busmon` and which carries
+  `--project <p>` (or `--project=<p>`) for this project.
+- `closeIfShell`: the re-read and the close, right after the `pane run` of the new pane.
+- Output: `busmon: relaunched (new pane; the old one w4:p1 closes if it is still a plain shell)`,
+  then `busmon: old pane w4:p1 closed`, or `left as it is (no longer a plain shell)`,
+  `left as it is (unreadable: …)`, `not closed: …`; for a split tab `(new pane; the old ones are
+  left as they are: the tab has 2 panes)`; `--dry-run` says `would close the old one w4:p1 if it
+  is still a plain shell`.
+- The start screen reads busmon's tab through `busmonVerdict` (inside herdr only: the template,
+  `herdr workspace list`, then `judgeTab`, read-only); unknown leaves busmon out.
 
 ## The bug
 
@@ -107,8 +141,7 @@ running)`.
 Whenever `relaunchOpen` relaunches the busmon tab outside `--dry-run`, **whether or not the
 agents' snapshots are readable**. The busmon proof needs herdr, not the bus, so it is not gated
 on `o.Prove` (set only when the agents could be read). Gating it there would keep busmon's shell
-exactly when the broker is unreadable, which is also when busmon is most likely to have been
-quit and restarted.
+whenever the broker is unreadable, for no reason tied to busmon.
 
 In practice only `up` on an open workspace (`relaunchUp`) reaches it:
 

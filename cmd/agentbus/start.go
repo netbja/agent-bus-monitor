@@ -31,6 +31,9 @@ type startDeps struct {
 	Manifest func() (*rolecfg.Manifest, error)
 	Up       func(args []string) int // up's own code path
 	Live     func(project string) (map[string]life, error)
+	// Busmon judges an open project's busmon tab with up's own rule, reading
+	// herdr only; nil, an error or "" leave busmon out of the screen.
+	Busmon   func(project string) (relaunchVerdict, error)
 	Repo     func() (string, error) // the checkout bootstrap writes templates from
 	TTY      func() io.ReadWriter   // the person's terminal; nil when there is none
 	Look     func(exe string) (string, error)
@@ -142,8 +145,39 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			}
 			return out, nil
 		},
+		Busmon: func(project string) (relaunchVerdict, error) {
+			if os.Getenv("HERDR_ENV") != "1" {
+				return "", nil // outside herdr the workspace cannot be read
+			}
+			path := templatePath(realUpDeps(stdout, stderr), project)
+			var tpl upTemplate
+			if _, err := toml.DecodeFile(path, &tpl); err != nil {
+				return "", err
+			}
+			herdr := func(args ...string) ([]byte, error) { return exec.Command(herdrBin(os.Getenv), args...).Output() }
+			return busmonVerdict(herdr, tpl, project)
+		},
 		Out: stdout, Err: stderr,
 	}
+}
+
+// busmonVerdict is what up would do to the project's busmon tab, judged by
+// up's own rule (judgeTab) from herdr's read-only answers: "" when the
+// project's workspace is not open or its template has no busmon tab.
+func busmonVerdict(herdr func(args ...string) ([]byte, error), tpl upTemplate, project string) (relaunchVerdict, error) {
+	i := slices.IndexFunc(tpl.Tabs, func(t upTab) bool { return isBusmonTab(t, project) })
+	if i < 0 {
+		return "", nil
+	}
+	ws, err := findWorkspace(upDeps{Herdr: herdr}, project)
+	if err != nil || ws == "" {
+		return "", err
+	}
+	panes, err := workspacePanes(herdr, ws)
+	if err != nil {
+		return "", err
+	}
+	return judgeTab(herdr, panes, tpl.Tabs[i], project, nil, false, nil, true).V, nil
 }
 
 // herdrSessionSocket asks herdr where a session lives (herdr session list
@@ -376,6 +410,12 @@ func runStart(args []string, d startDeps) int {
 		}
 		if p.Existing {
 			a.live, _ = d.Live(p.Project) // unknown leaves the running line out
+			if d.Busmon != nil {
+				a.busmon, _ = d.Busmon(p.Project) // unknown leaves busmon out
+			}
+			// An open project, unchanged by a flag: the short screen
+			// (start-busmon-pane).
+			a.short = name == "" && as == "" && roles == ""
 		}
 		if err := a.run(&p); err != nil {
 			fmt.Fprintln(d.Out, "nothing written")

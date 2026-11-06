@@ -699,7 +699,9 @@ agentbus start
 wrote), your name (`agentbus identity set`, else `$USER`) and the team (every boot role by default),
 shows them once, asks only for what it cannot deduce, then runs `agentbus up` for you. Outside
 herdr it opens the herdr session itself (`herdr --session <project>`), and the team opens inside it.
-`--yes` takes the deduced values without asking, `--dry-run` shows the plan and starts nothing,
+On a project that already exists, it shows one line instead: what runs, and what Enter will do
+(focus the workspace, relaunch an agent, reopen busmon); `c` shows the full screen. `--yes` takes
+the deduced values without asking, `--dry-run` shows the plan and starts nothing,
 and `--name`, `--as` and `--roles master,coder,foureyes` set a value yourself (a reduced team is
 kept for the project and as the default for new ones).
 
@@ -831,7 +833,9 @@ services yet. Switching to the workspace (or `agentbus up <p>` in it) brings eve
   when its recorded pid still runs with the recorded start time; without a record, herdr's detected
   agent decides. Nothing is typed into an existing pane: a dead agent comes back in a new pane
   split beside its old one. Once the new agent has bound in its new pane, the old pane is closed if
-  it is still a plain shell; otherwise it is left as it is, and the output says why.
+  it is still a plain shell; otherwise it is left as it is, and the output says why. busmon's tab
+  is the one exception to the proof: when you quit busmon and its tab's only pane is a shell, `up`
+  reopens busmon in a new pane and closes the old shell at once, if it is still a plain shell.
   `--dry-run` prints the plan and changes nothing; `--resume` resumes a Claude Code agent's
   recorded session through the launcher (other clients start fresh).
 - **`agentbus projects`** lists every known project with its broker state, services and agents,
