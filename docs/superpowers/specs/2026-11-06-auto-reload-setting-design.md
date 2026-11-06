@@ -69,7 +69,7 @@ the next day.
 1. **The directive follows the policy.** `proposeReloads` writes the action for the project's
    policy, read as `agentbus reload` reads it (`reloadPolicy`: the dispatcher's own environment
    is the services' env file, so the same layers apply):
-   - `on`: `client update: … Reload the ready ones now (agent-bus-sentinel skill, Client update): agentbus reload <agent>, one at a time, master last; never type into a pane.`
+   - `on`, sentinel in the team: `client update: … Reload the ready ones now (agent-bus-sentinel skill, Client update): agentbus reload <agent>, one at a time, master last; never type into a pane.`
    - `propose`: today's text, `Propose a reload … propose only, never restart or type.`
    - `off`: `… Reload nothing; report the agents to master once.`
    The episode mark is unchanged. The policy is read **at each send**, never once at service
@@ -80,9 +80,20 @@ the next day.
    `up --reload` again (and the restart it does); `config.toml`, which the C page writes, is read
    each time. A change after the send applies to the next episode (`agentbus reload` checks the
    policy again anyway).
+
+   **A team without sentinel** (reviewer-codex): `proposeReloads` then sends the directive to the
+   escalation target (`l.cfg.EscalateTo`, master by default; `clientupdate.go:123-126`), and
+   nobody there may reload the others: `runReload` lets master reload only sentinel, and an agent
+   without `--as` nothing at all. So under `on` with no sentinel snapshot the directive says the
+   limit and asks for the person, as `propose` does:
+   `client update: … No sentinel in this project, so nothing reloads by itself: ask the person to run agentbus reload <agent> --as <name> for each idle agent, one at a time; never type into a pane.`
+   `propose` and `off` keep their own texts whoever receives them. No retry hint (3, below) is
+   sent without sentinel: the person, not an agent, does the reloads. The C page's detail line
+   says it: "on needs sentinel in the team; without it, you are asked".
 2. **The health remediation** of `client-updates` stops saying "propose": one static text that
    covers every policy, "sentinel reloads the outdated agents (agentbus reload), master last;
-   under propose it asks the person through master; under off nothing is reloaded." The
+   under propose, or with no sentinel in the team, the person is asked through master; under off
+   nothing is reloaded." The
    remediation is shown to people and agents; it must not contradict the policy.
 3. **Retry the later ones.** The hint is only for agents that were **not** ready when the
    episode's directive went out. When it sends that directive, the dispatcher also sets the
@@ -156,6 +167,8 @@ before SIGTERM. Nothing new is needed; the spec only names it on the C page's de
 
 - `dispatch`: `TestProposeReloadsFollowsThePolicy` (on / propose / off text, one per episode as
   today; the policy read at each send, a `config.toml` change seen without a restart);
+  `TestProposeReloadsWithoutSentinelAsksThePerson` (no sentinel snapshot, policy `on`: the
+  escalation target gets the person's text, never "reload the ready ones now"; no retry hint);
   `TestRetryOnlyAgentsLaterAtTheEpisode` if (d)3 is kept (an agent ready at the first directive
   gets no hint; one later gets exactly one).
 - `service`: `ReloadPolicy` moved, its layers unchanged (the existing `reloadPolicy` tests move
