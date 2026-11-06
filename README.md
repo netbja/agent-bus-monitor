@@ -47,13 +47,14 @@ are read from local sources, without spending tokens on them.
 agent-bus is **v0.x** and built for **one operator**: one person runs a team of agents on their
 own machine. Commands and screens still change between releases. There are no accounts and no
 access control, and the broker is a Redis bound to `127.0.0.1`. In the tables below, how often a
-platform is used is the maintainers' own report; every other cell says only what the code and
-its tests show.
+platform is used is the maintainers' own report, and "builds" on macOS is a cross-compile
+(`GOOS=darwin go build ./...` and `go vet ./...`, amd64 and arm64) run by hand, with no CI; every
+other cell says only what the code and its tests show.
 
 | | Linux | macOS | Windows |
 |---|---|---|---|
 | Status | developed and used daily | builds, not used daily | not supported: it does not compile (`syscall.Flock`) |
-| Project services | systemd `--user` | launchd, in the user's GUI session | none |
+| Project services | systemd `--user`, when available | launchd, in the user's GUI session | none |
 | Verified agent identity | yes, read from `/proc` | no: no agent's process is verified, so the dispatcher never wakes an agent | — |
 | herdr (0.9.0 or newer) | required | required | — |
 | Redis broker | Docker with Compose (`redis:8-alpine`) | Docker with Compose | — |

@@ -51,12 +51,14 @@ agent-bus est en **v0.x** et conçu pour **un seul opérateur** : une personne f
 équipe d'agents sur sa propre machine. Commandes et écrans changent encore d'une version à
 l'autre. Il n'y a ni comptes ni contrôle d'accès, et le courtier est un Redis lié à `127.0.0.1`.
 Dans les tableaux ci-dessous, la fréquence d'usage d'une plateforme est ce qu'en disent les
-mainteneurs ; toutes les autres cases ne disent que ce que le code et ses tests montrent.
+mainteneurs, et « compile » pour macOS est une compilation croisée (`GOOS=darwin go build ./...`
+et `go vet ./...`, amd64 et arm64) lancée à la main, sans CI ; toutes les autres cases ne disent
+que ce que le code et ses tests montrent.
 
 | | Linux | macOS | Windows |
 |---|---|---|---|
 | État | développé et utilisé tous les jours | compile, pas utilisé tous les jours | non pris en charge : ne compile pas (`syscall.Flock`) |
-| Services du projet | systemd `--user` | launchd, dans la session graphique de l'utilisateur | aucun |
+| Services du projet | systemd `--user`, s'il est disponible | launchd, dans la session graphique de l'utilisateur | aucun |
 | Identité vérifiée des agents | oui, lue dans `/proc` | non : aucun processus d'agent n'est vérifié, donc le répartiteur ne réveille jamais un agent | — |
 | herdr (0.9.0 ou plus récent) | requis | requis | — |
 | Courtier Redis | Docker avec Compose (`redis:8-alpine`) | Docker avec Compose | — |
