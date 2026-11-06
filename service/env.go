@@ -140,3 +140,24 @@ func LoadEnvFile(path string) (map[string]string, error) {
 	}
 	return env, sc.Err()
 }
+
+// ReloadPolicy is the project's reload policy and where it comes from: the
+// caller's environment, then the project's env file (up --reload: per
+// project, so above the machine's file), then config.toml's sentinel.reload,
+// then on. The env file's value follows the env rule, as it always has.
+// agentbus reload and the dispatcher's client-update directive read it the
+// same way, at each use (auto-reload-setting spec).
+func ReloadPolicy(getenv func(string) string, envFile map[string]string) (mode, source string) {
+	layered := func(k string) string {
+		if v := getenv(k); v != "" || k != ReloadEnv {
+			return v
+		}
+		return envFile[k]
+	}
+	r := config.Machine(layered).Get("sentinel.reload")
+	mode, source = r.Value.(string), r.Source
+	if getenv(ReloadEnv) == "" && envFile[ReloadEnv] != "" {
+		source = "env file"
+	}
+	return mode, source
+}
