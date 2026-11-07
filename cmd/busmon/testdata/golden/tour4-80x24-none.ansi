@@ -1,9 +1,9 @@
  [1magent-bus-monitor[m  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
 [1m╭─[m[1;7m For you [m[1m─────────────────────────────────────────────[m 4 for you · 2 unread [1m─╮[m
-[1m│[m  ● ask    master    review lot 1? (2 questions)                            4m[1m│[m
-[1m│[m  ♙[1m╭─[m[1;7m Useful keys [m[1m──────────────────────────────────────────────────[m 4/5 [1m─╮[m 6m[1m│[m
-[1m│[m  ♙[1m│[m                                                                      [1m│[m 1m[1m│[m
+[1m│[m  ●[1m╭─[m[1;7m Useful keys [m[1m──────────────────────────────────────────────────[m 4/5 [1m─╮[m 4m[1m│[m
+[1m│[m  ♙[1m│[m                                                                      [1m│[m 6m[1m│[m
+[1m│[m  ♙[1m│[m   [1mT[m      walk what waits for you, one by one                         [1m│[m 1m[1m│[m
 [1m│[m  ◆[1m│[m   [1menter[m  open a line (once: in place; twice: the full text)          [1m│[m   [1m│[m
 [1m│[m  ●[1m│[m   [1mu[m      the next unread line for you                                [1m│[m 8m[1m│[m
 [1m╰───[m[1m│[m   [1mR[m      where was I? the recap since your last visit                [1m│[m[1m───╯[m

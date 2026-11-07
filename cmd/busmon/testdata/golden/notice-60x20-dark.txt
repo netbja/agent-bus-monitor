@@ -17,4 +17,4 @@
 │                                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯
- tab focus   F1 help   F5 health           ✓ coder reloaded 
+ T triage   F1 help   F5 health            ✓ coder reloaded 

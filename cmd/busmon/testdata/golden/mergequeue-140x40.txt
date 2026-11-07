@@ -37,4 +37,4 @@
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                           
- tab focus   1-4 tabs   ↑↓ j k select   y copy   f auto-scroll   ! answer   / filter   i write   esc back   q quit   F1 help   F5 health    
+ T triage   tab focus   1-4 tabs   ↑↓ j k select   y copy   f auto-scroll   ! answer   / filter   i write   q quit   F1 help   F5 health    
