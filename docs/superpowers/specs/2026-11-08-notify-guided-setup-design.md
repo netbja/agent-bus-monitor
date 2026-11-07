@@ -119,8 +119,8 @@ topic or a URL. Enter on a target line opens its own page (`ovNotifySetup`, in i
   target's record in `notify-last.json`, so its last test stays.
 - **`s` (show the topic)**, ntfy only: the person may need the topic again, on a new phone. The
   page shows the topic and its QR code until a key is pressed. busmon never writes it to a log or
-  the bus, and its alternate screen leaves no scrollback. The CLI's `show-topic` and `add ntfy`
-  print it once, on the person's own terminal, which keeps it in that terminal's scrollback. §11 Q2.
+  the bus, and its alternate screen leaves no scrollback. On the CLI, the topic goes only to the
+  controlling terminal (§4, §6). §11 Q2.
 
 ## 4. Writing the file safely: `notify.Edit`
 
@@ -151,9 +151,21 @@ One writer, in package `notify`, which both callers use.
   file's size and modification time at the rename with those it read. If the person saved the file
   by hand meanwhile, nothing is written: `notify.toml changed while you were editing: open the
   setup again`.
-- **No secret leaves the file.** The writer's errors, the pages and the CLI never print a topic, a
-  token or a webhook, except the topic on its own page (§3, §5.3). `Target`'s `String` and `Format`
-  already print only kind and name. A test asserts no output holds the secret.
+- **No secret leaves the file.** The writer's errors, the pages and the CLI's stdout and stderr
+  never hold a topic, a token or a webhook (reviewer-codex). Two places show the topic, by design:
+  - busmon's subscribe step and target page (§3, §5.3);
+  - on the CLI, `setup`, `add ntfy` and `show-topic` write it, with its link and QR code, **only
+    to the controlling terminal** (`/dev/tty`), never to stdout or stderr. So `agentbus
+    notifications add ntfy > setup.log`, a pipe or a captured output never holds it.
+  - With no controlling terminal (a script, cron, a service), the topic is not shown at all. The
+    command still writes and tests the target, and says on stdout `the topic was not shown (no
+    terminal): run agentbus notifications show-topic phone on a terminal`.
+  - What the terminal itself keeps (its scrollback, a session recorder such as `script` or a
+    multiplexer's log) is the person's: the page says so in one muted line, `the topic is a
+    password: clear the screen when you are done`.
+
+  `Target`'s `String` and `Format` already print only kind and name. A test asserts that no stdout
+  or stderr holds the secret.
 - **Backups and history.** The file stays where it is (`~/.config/agentbus/`), outside every
   repository, and backups already treat it as a secret. Nothing is written to the repository, the
   bus, the busmon cache or the shell's history: the CLI reads secrets from a prompt, a file or
@@ -199,7 +211,7 @@ from a target line, shows that target (its kind, its last test) with its own key
     | `c` | show the code alone, full screen, until any key | the same |
     | `t` | test again | after the write, and a target's page |
     | `e` | edit (back to the first step, values kept) | the same |
-    | `x` | remove, after `y` | a target's page |
+    | `x` | remove: asks `remove phone? y/n`, a modal question: while it is open, `y` and `n` answer it and no other key applies (so `y` does not copy) | a target's page |
     | `n` | rename | a target's page |
     | `s` | show the topic and its code | an ntfy target's page |
     | F1 | help | everywhere |
@@ -209,9 +221,11 @@ from a target line, shows that target (its kind, its last test) with its own key
     nothing new, so its `d` stays `ActReset`.
 - **A field takes every key while it is being edited** (foureyes), as the settings editor does
   (`settingsKey`: "a typed q is text").
-  - A field is entered by Tab or Enter on it. Then every printable key, paste included, is text,
+  - A field is entered by Enter on it, or by Tab from the field before it. Then every printable
+    key, paste included, is text,
     and the table's letters do nothing.
-  - **Tab, Enter and Esc leave it**: Tab and Enter keep the value, Esc restores the value it had.
+  - **Tab, Enter and Esc leave it**: Tab keeps the value and enters the next field (shift-Tab the
+    one before), Enter keeps it and stays on the step, Esc restores the value it had (foureyes).
   - `TestNotifySetupFieldTakesBoundRunes` types `ntfy.my-host.de/qtyYcxens` into the server field
     and the name field: the value holds every rune, and no action ran.
 - **Masked fields.** They show `••••` and the count of characters. Bracketed paste is taken whole;
@@ -271,8 +285,8 @@ agentbus notifications status                               # unchanged
 - `add` is for scripts. **No secret on the command line**: a token or a webhook comes from a
   file (`--token-file`, `--webhook-file`, `-` for stdin) or `--webhook-stdin`, so it is never in
   `ps` or the shell's history. Each command:
-  - prints the topic it drew (ntfy) and the subscribe link once, on stdout, with nothing else on
-    that line;
+  - shows the topic it drew (ntfy), its subscribe link and QR code once, on the controlling
+    terminal only (§4), never on stdout;
   - turns `notify.on` on and lists the target;
   - tests it, unless `--no-test`;
   - exits 0 when written and delivered, 2 when written but the test failed, 1 when nothing was
@@ -341,6 +355,12 @@ A delivery on the forge's side is not a delivery to the phone. On success the pa
   round-trip through the encoder's matrix). The size per version fits §5.3's tiers.
 - **busmon**: the flow through every step, per kind, with a fake sender; Esc back at each step
   writes nothing; the masked field never reaches the grid's text; goldens (§5.4); key-table tests.
+- **The topic's output** (reviewer-codex): `add ntfy` and `show-topic` with stdout and stderr
+  captured to files and a fake terminal: the topic and its link are on the terminal, and neither
+  file holds them. With no controlling terminal, the topic is shown nowhere and stdout says to run
+  `show-topic` on a terminal.
+- **The modal remove** (foureyes): `x` then `y` removes the target and copies nothing; `x` then
+  `n` keeps it.
 - **The CLI**: `add` with a secret only from a file or stdin; `setup` refused without a terminal;
   the exit codes 0, 1 and 2.
 
