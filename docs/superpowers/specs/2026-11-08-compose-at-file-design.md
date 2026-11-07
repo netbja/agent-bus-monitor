@@ -28,39 +28,73 @@ What the code has today:
   same families as the `Read(…)` denies of `roles.toml`'s shared `[tool_rules]`.
 - **The project's root:** the template's `working_dir` (`projlist`, for example
   `/data/projects/agent-bus-monitor`).
+- **`peer.DenyMatcher`** compiles `roles.toml`'s `Read(…)` denies with Claude Code's glob
+  meaning (`**`, a pattern without a slash at any depth, case-insensitive).
 
-Measured on this repository (2026-11-07): `git ls-files --cached --others --exclude-standard`
-lists 2 720 entries in 0.04 s. 1 365 of them are `.worktrees/<name>/`: git lists each nested
-worktree as **one** directory entry and does not descend into it.
+Measured on this repository (2026-11-07), for scale only (busmon will not run git, §2.1): git
+lists 2 720 entries in 0.04 s, and 1 365 of them are `.worktrees/<name>/` nested worktrees, one
+entry each.
 
 ## 2. Where it searches
 
-- **The project's root, from git:** `git -C <root> ls-files --cached --others
-  --exclude-standard -z`. This is tracked files plus untracked files that are not ignored, so
-  `.gitignore`, `.git/info/exclude` and the global excludes are all respected. Each nested
-  worktree stays a single `.worktrees/<name>/` entry.
-- **A worktree, on demand.** When the query starts with a worktree directory the root listed
-  (`.worktrees/agy-probe/…`), the source becomes that worktree's own `git ls-files`, with its
-  paths prefixed. That avoids listing 1 365 copies of the tree up front, and a coder's branch
-  is still reachable.
-- **Not a git checkout:** a bounded walk is used instead. It stops at depth 8 and 20 000 entries,
-  and skips `.git`, `node_modules`, `.venv` and `vendor`. The popup's footer says `not a git
-  checkout: .gitignore not applied`.
+### 2.1 No git process: a walk in Go (foureyes)
+
+The first version ran `git ls-files`. It is **rejected**. git reads the repository's config, and
+that config can make git run a command: `core.fsmonitor` is consulted by the untracked scan. Every
+agent worktree shares the main `.git/config`, so an agent could write `git config core.fsmonitor
+<cmd>` from its worktree, and the person's busmon would run `<cmd>` on the next `@`. That is
+repository-controlled code run outside every agent's rules, the class CLAUDE.md forbids for the
+dispatcher. Hardening the call (`-c core.fsmonitor=false`, `GIT_CONFIG_NOSYSTEM=1`, …) would
+leave busmon chasing every config key that can execute something.
+
+So **busmon runs no program to list files.** It walks the project's root itself, in Go:
+
+- **Ignore rules** come from the `.gitignore` files met on the way and from `.git/info/exclude`.
+  They are read as **text** by a small matcher. It covers patterns, `!` negation, a trailing `/`
+  for directories only, a leading `/` to anchor, and `**`; a pattern without a slash matches at
+  any depth. Reading a file never runs anything. The global excludes file (`core.excludesFile`)
+  would need git's config, so it is **not** read. That is a known, harmless difference: a few
+  more files may show.
+- **Always skipped:** `.git` and every directory that holds a `.git` entry (file or directory),
+  which means a nested repository or a worktree (§2.2). Also skipped: `node_modules`, `.venv` and
+  `vendor`, because they are too big to be useful.
+- **Symlinks are never followed** (foureyes). A symlinked directory is listed as one entry,
+  marked `→`, and is not descended into: no loops, and no escape from the root. A symlinked file
+  is offered as itself, by its own path inside the root, and its target is never resolved or
+  shown.
+- **Bounds:** depth 12, 50 000 entries, and a 2 s deadline, in a `tea.Cmd`, never on the update
+  path. Until it answers, the popup shows `reading the file list…`. On a cap or the deadline it
+  says `list incomplete (<why>)` and works on what it got. The list is read once per window
+  opening and dropped when the window closes.
+- The root is the template's `working_dir`, made absolute and cleaned.
+
+### 2.2 Worktrees, on demand
+
+A directory with a `.git` entry under the root (`.worktrees/<name>/`) is listed as **one** entry
+(the way git itself shows them: 1 365 such entries on this repository on 2026-11-07). When the
+query starts with that directory (`.worktrees/agy-probe/…`), the same walk runs inside it with
+the same rules, and the paths are prefixed. That avoids listing a full copy of the tree for each
+worktree, and a coder's branch is still reachable.
+
+### 2.3 When there is nothing to list
+
 - **No checkout on this machine** (busmon against a remote broker, or a template whose
   `working_dir` is missing): the popup shows only `no checkout of <project> on this machine`, and
   `@` stays a plain character.
-- **Read once per window opening,** in a `tea.Cmd` (never on the update path), with a 2 s deadline
-  and a cap of 50 000 entries. Until it answers, the popup shows `reading the file list…`. On a
-  timeout or a cap hit it says `list incomplete (<why>)` and works on what it got. The list is
-  dropped when the window closes, so a reopened window sees new files.
 - **Only paths inside the root are offered.** A query that starts with `/`, `~` or `..` gets no
   list and shows `outside the project: type the path yourself`. The person can always type any
   text; the popup only refuses to *offer* it.
 
 ## 3. What is never offered
 
-A shared function, `secretpath.Is(path) (kind string, ok bool)`, moved from
-`health.IsSecretLikePath` so that health and busmon use one rule. It adds two kinds of path:
+Two filters, both applied before ranking:
+
+1. **The manifest's own denies.** The shared `[tool_rules]` `Read(…)` patterns of `roles.toml`,
+   compiled with `peer.DenyMatcher` against the root. What no agent may read is never offered
+   to be pointed at.
+2. A shared function, `secretpath.Is(path) (kind string, ok bool)`, moved from
+   `health.IsSecretLikePath` so that health and busmon use one rule. It covers a machine with no
+   `roles.toml`, and it adds two kinds of path:
 
 - any path with a component `.ssh`, `.gnupg`, `.aws` or `.git`;
 - the agent-bus files the manifest already denies: `notify.toml` and `config.toml` under an
@@ -138,7 +172,9 @@ not switch fields. Once it is closed, both mean what they mean today. `keys_test
 - **The form of the path is §8 Q1.** The recommendation is the **absolute** path
   (`/data/projects/agent-bus-monitor/cmd/busmon/compose.go`). Agents work in different
   worktrees, so a relative path names a different file for each reader. The team already writes
-  full paths for that reason. A setting, `compose.at_path` (`absolute` | `relative`, registered
+  full paths for that reason. An absolute path names **the main checkout's copy** (foureyes),
+  which can differ from an agent's branch in its worktree. A path picked under
+  `.worktrees/<x>/` names that worktree's copy. A setting, `compose.at_path` (`absolute` | `relative`, registered
   in `config/keys.go`), lets the person choose relative paths. A relative path is relative to the
   project's root.
 - **Quoting.** A path with a space, a tab or one of ``(`)[]{}<>"'`` is wrapped in backticks:
@@ -183,7 +219,9 @@ today.
 ## 8. Questions for the person
 
 1. **Absolute or relative path by default?** The recommendation is absolute (§5), with
-   `compose.at_path` to switch.
+   `compose.at_path` to switch. Know this when choosing: an absolute path names the main
+   checkout's copy, not the recipient agent's branch. A relative path is read in each agent's own
+   worktree.
 2. **Keep the `@` in the text** (`@cmd/busmon/compose.go`, as Claude Code does) or drop it (the
    recommendation, since an `@word` reads as an agent)?
 3. **The one-line input (`i`)** too? It reads a leading `@` as the recipient. The popup could
@@ -201,10 +239,15 @@ compose tests use. No test runs git on the real repository.
 
 - **The trigger:** `atToken(text, cursor) (query string, start int, ok bool)`: at the start, after a
   space or a `(`, not in `a@b`, closed by a space, cursor outside the token, a paste.
-- **The listing:** a fake `git ls-files -z` output with spaces in names, a nested
-  `.worktrees/x/`, and the descent into a worktree on the prefix query. The fallback walk is
-  tested with depth and count caps and the skipped directories. Deadline and cap give
-  `list incomplete`. No checkout gives the message.
+- **No program is run** (foureyes): a fake repository whose `.git/config` sets `core.fsmonitor`
+  (and `core.hooksPath`) to a script that touches a file. After `@`, the file does not exist. A
+  test hook on the process runner fails the test if busmon starts any process while listing.
+- **The walk:** names with spaces; `.gitignore` at the root and in a subdirectory, negation,
+  dir-only, anchored and `**` patterns; `.git/info/exclude`; a nested `.worktrees/x/` (one entry,
+  then the descent on the prefix query); depth, count and deadline caps (`list incomplete`); a
+  symlinked directory not followed (a loop to the root, and a link to `/etc`, are each one entry);
+  a symlinked file offered as itself; no checkout gives the message.
+- **The denies:** a `roles.toml` with a shared `Read(**/secrets/**)` hides `secrets/a.txt`.
 - **Secrets:** every `secretpath` kind is absent from the popup, including an exact query for one.
   `health`'s existing secret-path tests pass against the moved function.
 - **Ranking:** a table of queries → expected order (file-name prefix, segment prefix, substring,
@@ -226,8 +269,10 @@ compose tests use. No test runs git on the real repository.
 
 ## 10. Steps (each its own subject for 4-eyes)
 
-1. `secretpath` (moved from `health`, plus the extra kinds), the lister (git, the walk, the
-   worktree descent) and the ranking: pure, with tests.
+1. `secretpath` (moved from `health`, plus the extra kinds), the manifest-deny filter, the
+   gitignore matcher, the walk (no process, no symlink followed, the worktree descent) and the
+   ranking: pure, with tests. **Security review on master's call** (foureyes): the walk is the
+   only new thing reading an agent-writable tree on the person's behalf.
 2. The trigger, the insert, the `compose.at_path` setting and the key table: pure and table tests.
 3. The popup in the window (View, mouse, tiers, goldens), after or alongside coder's rewrite.
 4. Docs: README's compose keys, OPERATIONAL-GUIDE (and `.fr`), and the help text from the table.
