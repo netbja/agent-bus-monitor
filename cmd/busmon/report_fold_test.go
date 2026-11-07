@@ -278,7 +278,8 @@ func TestOpeningAReportRowWritesTheReceipt(t *testing.T) {
 // The real writer writes the receipt.
 var _ seenWriter = (*bus.Bus)(nil)
 
-// §6: Activity and For you with a report to the person, wide and medium.
+// §6: Activity with a report to the person, wide and medium (For you draws
+// no unread line any more, home-inbox-drawer §3.2).
 func TestReportOneRowGoldens(t *testing.T) {
 	pinLocal(t)
 	at := shellNow.Add(-90 * time.Second).UnixMilli()
@@ -293,10 +294,7 @@ func TestReportOneRowGoldens(t *testing.T) {
 		m = step(t, m, tailMsg{events: []bus.Event{rep, n}})
 		m.paint = newPainter(th)
 		plain := m.grid().plain()
-		want := 1 // Activity: one line for the report and its notice
-		if size[0] == 140 {
-			want = 2 // and For you, in view at the wide tier
-		}
+		want := 1 // Activity: one line for the report and its notice; For you draws no unread line (home-inbox-drawer §3.2)
 		if c := strings.Count(plain, "Vérif: merge-"); c != want || !strings.Contains(plain, " report    Vérif") && !strings.Contains(plain, " report     Vérif") {
 			t.Errorf("%dx%d: want the headline %d time(s) on a report row, got %d:\n%s", size[0], size[1], want, c, plain)
 		}
@@ -341,20 +339,7 @@ func TestOpeningAReportRowByKeysWritesTheReceipt(t *testing.T) {
 		m = pressRun(t, m, kEnter, kEnter)
 		check(t, m, fw, "Activity")
 	})
-	t.Run("For you", func(t *testing.T) {
-		m, fw := setup(t)
-		m.focusPanel(PanelForYou)
-		fl, ok := m.feed.lineOf(rep.ID)
-		if !ok {
-			t.Fatal("no line")
-		}
-		m.lists.forYou.Select(unreadKey(fl))
-		m = pressRun(t, m, kEnter)
-		if !m.rd.open() {
-			m = pressRun(t, m, kEnter)
-		}
-		check(t, m, fw, "For you")
-	})
+	// For you draws no unread line any more (home-inbox-drawer §3.2): its route is gone.
 }
 
 // pressRun is keys with each update's commands run, as the program runs them

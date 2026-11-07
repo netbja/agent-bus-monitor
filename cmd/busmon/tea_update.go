@@ -230,24 +230,14 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 		m.expand(p, key)
 	case PanelForYou:
-		if task, ok := strings.CutPrefix(key, "empty:plan:"); ok { // the empty state's next decision
+		if task, ok := strings.CutPrefix(key, planNextPrefix); ok { // the plan pointer (home-inbox-drawer §3.3)
 			return m.push(page{kind: ovPlanTask, key: task})
 		}
 		i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Key == key })
 		if i < 0 {
 			return nil
 		}
-		it := m.forYou[i]
-		if it.Rank != rankUnread {
-			return m.openForYouItem(it)
-		}
-		if m.ui.expanded == key && m.ui.expandIn == p {
-			if fl, ok := m.expandedLine(); ok {
-				return m.pushMessage(fl.ev, fl.at)
-			}
-			return nil
-		}
-		m.expand(p, key)
+		return m.openForYouItem(m.forYou[i]) // no unread row: the panel draws none (home-inbox-drawer §3.2)
 	case PanelAgents:
 		return m.pushAgent(key)
 	case PanelBoard:
@@ -281,8 +271,6 @@ func (m *Model) openForYouItem(it attentionItem) tea.Cmd {
 		return m.pushAgent(it.Agent)
 	case rankHealth: // the stall guard: F5 says what and why
 		return m.push(page{kind: ovHealth})
-	case rankPlan: // its page carries the Action row (compose to master, prefilled)
-		return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(key, "plan:")})
 	case rankMerge: // the PR, who approved it and what they checked; y copies the URL
 		if key != mergeUnknownKey {
 			return m.push(page{kind: ovMerge, key: strings.TrimPrefix(key, "merge:")})

@@ -13,6 +13,7 @@ var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard
 // shellCounts is what the shell's layout needs to know about the content.
 type shellCounts struct {
 	ForYou, Agents int
+	ForYouExtra    int  // rows under the items, never cut by the medium cap: the plan pointer (home-inbox-drawer §3.3)
 	ForYouWidth    int  // the For you frame's natural width: its widest row, gutter and borders
 	Composing      bool // narrow shows the input row only while composing
 }
@@ -34,7 +35,7 @@ const (
 	forYouMediumRows  = 4 // items shown at the medium tier, then "+N more" (the person's decision 1)
 	minShellLowerMed  = 6
 	shellHeaderHeight = 2
-	forYouMinWidth    = 36 // its title and label, "N for you · M unread"
+	forYouMinWidth    = 36 // its title and label, "N decide · M merge"
 	forYouMaxWidth    = 56 // wide: For you takes its content, capped, Agents the rest (b1 review)
 )
 
@@ -101,7 +102,7 @@ func shellWide(w, h int, c shellCounts, tab PanelID) (shellLayout, bool) {
 func shellMedium(w, h int, c shellCounts, tab PanelID) (shellLayout, bool) {
 	const fixed, borders = shellHeaderHeight + 2, 2 // header + input + footer; frame only
 	avail := h - fixed
-	fr := forYouRowsFor(c.ForYou, forYouMediumRows)
+	fr := forYouRowsFor(c.ForYou, forYouMediumRows) + c.ForYouExtra
 	fh := fr + 2
 	rows := agentRowsFor(c.Agents, avail-fh, borders)
 	agentsH := rows + borders

@@ -1,11 +1,11 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ◆1  ●2                     15:04:05 
  paused · resumes in 1h52 (lunch)  pilot master  claude 5h 62% │ 7d 41%  grok 5h 100% held 15:44    
-╭─ For you ───────────────────────────────────────────────────────────────── 5 for you · 2 unread ─╮
-│  ● ask    master    review lot 1? (2 questions)                                                4m▲
-│  ♙ wait   foureyes  need a decision on the width rule                                          6m┃
-│  ♙ wait   sentinel  pane prompt                                                                1m┃
+╭─ For you ─────────────────────────────────────────────────────────────────── 4 decide · 1 merge ─╮
+│  ● ask    master    review lot 1? (2 questions)                                                4m│
+│  ♙ wait   foureyes  need a decision on the width rule                                          6m│
+│  ♙ wait   sentinel  pane prompt                                                                1m│
 │  ◆ gate   coder     by charlie  look at b1                                                       │
-│           you       merge PR 309: request priority                                             1h▼
+│           you       merge PR 309: request priority                                             1h│
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Agents ─────────────────── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-4 of 10 ─╮
 │▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule                     ▲

@@ -1,7 +1,7 @@
 # busmon's home as an inbox, the plan in a drawer (home-inbox-drawer)
 
-Status: spec, for review (subject `home-inbox-drawer`). Not built. Nothing is implemented before
-the person's go. busmon only: no bus key, no stream field, no new Redis read, no write.
+Status: spec, approved and merged (PR 340); the person's decisions are in §11. Built in three
+steps (§10). busmon only: no bus key, no stream field, no new Redis read, no write.
 
 The person's complaint (2026-11-07 brief): busmon is hard to use, and For you in particular is
 disturbing, because **plan tasks stay there permanently**. Four directions were drawn as mock-ups
@@ -182,7 +182,7 @@ For you says `Owed by you: N (Requests)`). Today's heading, "Owed by you", is ke
 - **Age** is on every row already (`reqLayout.row`, the oldest thread of a group). Unchanged.
 - **One action per row**: Enter's word, from `rowHint` (busmon-row-actions), in the footer. No
   second hint line under the selected row: it would move every row below when the selection
-  moves (the strip's fixed-place rule, queue-triage §3.1). See §11 Q3.
+  moves (the strip's fixed-place rule, queue-triage §3.1). The person's decision 3 (§11).
 
 The mock-up's `a` (accept as the person), `n` (nudge) and `f` (filter by agent) would write to the
 bus or need a new filter. They are out of scope (§10).
@@ -266,19 +266,16 @@ Each step leaves busmon whole, after the three queue-triage steps are merged.
 Requests view grouped by agent (direction 3); accepting a request as the person, nudging, a filter
 by agent (they write to the bus or need a filter of their own); moving plan tasks by hand.
 
-## 11. Open questions for the person
+## 11. The person's decisions (2026-11-07)
 
-Each has a recommendation; the person's go on this spec decides them.
+The five questions went to the person after PR 339 and PR 340; each recommendation was taken.
 
-1. **Unread lines in For you.** Recommended: they leave the panel (§3.2) and are reached by the
-   chip, `u` and `T`. The direction-1 mock-up still drew one (`● msg codex: APPROVE…`); master's
-   directive lists what For you keeps without them. Keep them as rows instead?
-2. **The pointer in the `decide` count.** Recommended: not counted (it is not something to do
-   now). Count it?
-3. **A hint line under the selected row** (the mock-up's `enter answer · 1 yes 2 not now`).
-   Recommended: no, the footer names Enter's outcome (busmon-row-actions) and a second line would
-   move the rows below. Draw it?
-4. **The drawer at the wide tier.** Recommended: right of For you, over Agents and the lower tab
-   (§4.4). Or the reader's lower frame, as every page?
-5. **`s` on the plan view** ("tell master", in the mock-up). `s` is F3's alternate on the main
-   screen, so the plan keeps it on the task page only (as today). Agreed?
+1. **Unread lines in For you: out.** They leave the panel (§3.2) and are reached by the strip's
+   `unread` chip, `u` and the walk (`T`).
+2. **The pointer in the `decide` count: no.** It is not something to do now; the plan's `♙ N`
+   stays in the header's plan item.
+3. **A hint line under the selected row: no.** The footer names Enter's outcome
+   (busmon-row-actions); a second line would move the rows below.
+4. **The drawer at the wide tier: right of For you**, over Agents and the lower tab (§4.4).
+5. **`s` on the plan view: on the task page only**, as today: `s` stays F3's alternate on the main
+   screen.

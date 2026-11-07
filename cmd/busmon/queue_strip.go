@@ -10,7 +10,7 @@ import (
 // partition of For you, so the strip and the panel never disagree.
 
 // queueStrip is what waits, by chip: decide (asks, stall rows, waits,
-// gates, plan tasks), merge (merge rows that are a PR, never merge:unknown)
+// gates; plan tasks are no rows, home-inbox-drawer §3.3), merge (merge rows that are a PR, never merge:unknown)
 // and unread (unreadItems, as the old badge).
 type queueStrip struct{ decide, merge, unread int }
 
@@ -30,7 +30,7 @@ func stripOf(items []attentionItem) queueStrip {
 
 // isDecide and isMergePR are a decide or merge chip's rows: what it counts
 // and what its click selects.
-func isDecide(it attentionItem) bool  { return it.Rank <= rankPlan }
+func isDecide(it attentionItem) bool  { return it.Rank < rankMerge }
 func isMergePR(it attentionItem) bool { return it.Rank == rankMerge && it.Key != mergeUnknownKey }
 
 // headerHit is what a click on a header item does (§3.2).

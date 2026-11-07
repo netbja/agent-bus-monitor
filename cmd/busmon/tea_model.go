@@ -347,18 +347,22 @@ func (m Model) barView() barView { return barView{slides: m.bars, now: m.now} }
 func (m *Model) counts() shellCounts {
 	names, _ := visibleAgents(m.snap.agents, m.snap.pilot, m.ui.showAll, m.now)
 	w := 0
-	for _, it := range m.forYou {
+	items := forYouPanelItems(m.forYou)
+	for _, it := range items {
 		w = max(w, forYouNatural(it))
 	}
-	fy := len(m.forYou)
-	if fy == 0 { // the empty state's lines, shown whole, as wide as they need (capped by the layout)
+	fy, extra := len(items), 0
+	if fy == 0 { // the empty state's lines (the pointer among them), shown whole, as wide as they need (capped by the layout)
 		empty := forYouEmpty(m.snap, m.lists.reqView.count(secOwed))
 		fy = len(empty)
 		for _, l := range empty {
 			w = max(w, l.Width())
 		}
+	} else if p, ok := planPointer(m.snap); ok { // the pointer under the decisions, past any "+N more"
+		extra = 1
+		w = max(w, p.line.Width())
 	}
-	return shellCounts{ForYou: fy, Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.line != lineNone}
+	return shellCounts{ForYou: fy, ForYouExtra: extra, Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.line != lineNone}
 }
 
 // refresh recomputes the marks, the For you list, the layout and every list's

@@ -15,15 +15,14 @@ func TestStripCountsPartitionForYou(t *testing.T) {
 		{Rank: rankHealth, Key: "health:team-stall:1"},
 		{Rank: rankWait, Key: "wait:coder:1"},
 		{Rank: rankGate, Key: "gate:coder:1-0"},
-		{Rank: rankPlan, Key: "plan:p1"},
 		{Rank: rankMerge, Key: "merge:abc"},
 		{Rank: rankMerge, Key: mergeUnknownKey},
 		{Rank: rankUnread, Key: "unread:9"},
 		{Rank: rankUnread, Key: "unread:10"},
 	}
 	q := stripOf(items)
-	if q != (queueStrip{decide: 5, merge: 1, unread: 3}) {
-		t.Fatalf("strip = %+v, want decide 5, merge 1 (never merge:unknown), unread 3", q)
+	if q != (queueStrip{decide: 4, merge: 1, unread: 3}) {
+		t.Fatalf("strip = %+v, want decide 4, merge 1 (never merge:unknown), unread 3", q)
 	}
 	if q.decide+q.merge != len(decisions(items)) {
 		t.Fatalf("decide+merge = %d, decisions = %d", q.decide+q.merge, len(decisions(items)))
@@ -124,8 +123,8 @@ func TestHeaderChipClicks(t *testing.T) {
 		m.refresh()
 		x, y := chipX(t, m, hitDecide)
 		m = clickAt(t, m, x, y)
-		want := firstOf(m, func(it attentionItem) bool { return it.Rank <= rankPlan })
-		if m.ui.focus != PanelForYou || m.lists.forYou.Selected() != want || rank(m, want) > rankPlan {
+		want := firstOf(m, func(it attentionItem) bool { return it.Rank <= rankGate })
+		if m.ui.focus != PanelForYou || m.lists.forYou.Selected() != want || rank(m, want) > rankGate {
 			t.Fatalf("decide: focus %v sel %q, want For you and %q", m.ui.focus, m.lists.forYou.Selected(), want)
 		}
 	})
@@ -256,8 +255,8 @@ func TestTourHeaderPageShowsTheStrip(t *testing.T) {
 		if p.title != "The header" {
 			continue
 		}
-		if p.since != tourVersion {
-			t.Fatalf("the header page's since = %d, want %d so it is seen again", p.since, tourVersion)
+		if p.since < 3 {
+			t.Fatalf("the header page's since = %d, want at least 3 so it is seen again", p.since)
 		}
 		var text string
 		for _, b := range p.blocks {

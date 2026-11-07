@@ -431,8 +431,6 @@ func (m *Model) reminderKey(k Key) tea.Cmd {
 			return m.pushAsk(it.AskID)
 		case rankHealth:
 			return m.push(page{kind: ovHealth})
-		case rankPlan:
-			return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(it.Key, "plan:")})
 		case rankMerge:
 			if it.Key != mergeUnknownKey {
 				return m.push(page{kind: ovMerge, key: strings.TrimPrefix(it.Key, "merge:")})
@@ -443,7 +441,7 @@ func (m *Model) reminderKey(k Key) tea.Cmd {
 		}
 		m.openMessageCompose("", it.Agent) // a declared wait: Enter answers it like i
 	case k.Code == keyRune && k.Rune == 'i':
-		if it := d.items[d.sel]; it.Rank != rankAsk && it.Rank != rankHealth && it.Rank != rankPlan { // a health row names a check, no agent to write to
+		if it := d.items[d.sel]; it.Rank != rankAsk && it.Rank != rankHealth { // a health row names a check, no agent to write to
 			m.ui.reminder = nil
 			m.openMessageCompose("", it.Agent)
 		}

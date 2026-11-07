@@ -35,13 +35,13 @@ func TestForYouEmptyState(t *testing.T) {
 		}
 	}
 	// No plan: it still says what it knows.
-	text = plainOf(forYouEmpty(snapshot{}, 0))
-	if text != "Nothing expected from you.\nNext for you: no decision planned" {
+	text = plainOf(forYouEmpty(snapshot{}, 0)) // no pointer (home-inbox-drawer §3.3)
+	if text != "Nothing expected from you." {
 		t.Errorf("bare empty state:\n%s", text)
 	}
 }
 
-// Through the shell: an empty For you shows its two lines whole (the
+// Through the shell: an empty For you shows its line whole (the
 // Requests fixture's shell has nothing for the person), no In progress.
 func TestForYouPanelShowsTheEmptyState(t *testing.T) {
 	m := reqShell(t, 120, 40, nil)
@@ -49,10 +49,11 @@ func TestForYouPanelShowsTheEmptyState(t *testing.T) {
 		t.Fatalf("fixture has %d for-you items", len(m.forYou))
 	}
 	screen := m.grid().plain()
-	for _, w := range []string{"Nothing expected from you.", "Next for you:"} {
-		if !strings.Contains(screen, w) {
-			t.Errorf("For you lacks %q:\n%s", w, screen)
-		}
+	if !strings.Contains(screen, "Nothing expected from you.") {
+		t.Errorf("For you lacks its line:\n%s", screen)
+	}
+	if strings.Contains(screen, "Next for you:") { // no plan, no pointer (home-inbox-drawer §3.3)
+		t.Errorf("a pointer without a plan:\n%s", screen)
 	}
 	if strings.Contains(screen, "In progress") {
 		t.Errorf("For you repeats the Agents panel:\n%s", screen)
@@ -89,9 +90,9 @@ func TestRecapForYouOnlyWithoutThePanel(t *testing.T) {
 	}
 }
 
-// "Nothing expected" only when nothing is: a request owed to the person, or
-// a plan task of theirs waiting, is named instead, and "Next for you" is never
-// a task that is already due (foureyes).
+// "Nothing expected" only when nothing is: a request owed to the person is
+// named instead (foureyes). A plan task waiting for the person is no row and
+// nothing owed: it is the pointer, "Next for you" (home-inbox-drawer §3.3).
 func TestForYouEmptyNamesWhatIsOwed(t *testing.T) {
 	s := snapshot{}
 	s.planState.loaded = true
@@ -100,12 +101,10 @@ func TestForYouEmptyNamesWhatIsOwed(t *testing.T) {
 		{Task: plan.Task{ID: "tag", Title: "Reinstall and tag", Owner: plan.Person}, State: plan.Upcoming},
 	}
 	text := plainOf(forYouEmpty(s, 2))
-	// The waiting plan task is a For you item of its own (rankPlan), counted in
-	// the title, not an empty-state line.
-	if items := forYou(s, nil); len(items) != 1 || items[0].Rank != rankPlan || items[0].Key != "plan:pick" || len(decisions(items)) != 1 {
+	if items := forYou(s, nil); len(items) != 0 {
 		t.Errorf("the waiting plan task as an item: %+v", items)
 	}
-	for _, w := range []string{"Owed by you: 2 requests (Requests)", "Next for you: Reinstall and tag"} {
+	for _, w := range []string{"Owed by you: 2 requests (Requests)", "Next for you: Pick the notifications order"} {
 		if !strings.Contains(text, w) {
 			t.Errorf("lacks %q:\n%s", w, text)
 		}
@@ -257,56 +256,29 @@ func TestRecapCursorKeepsItsRowOnResize(t *testing.T) {
 	}
 }
 
-// The next decision's line opens the plan task's page; a waiting plan task
-// item opens its page too.
+// The pointer opens the plan task's page, Upcoming or Waiting alike; a
+// Waiting task is never a decision, so never in the reminder
+// (home-inbox-drawer §3.3).
 func TestForYouEmptyRowsOpen(t *testing.T) {
 	m := reqShell(t, 120, 40, nil)
 	snap := m.snap
 	snap.agents["coder"].state = "working"
 	snap.planState.loaded = true
 	snap.planState.rows = []plan.Row{{Task: plan.Task{ID: "tag", Title: "Reinstall and tag", Owner: plan.Person}, State: plan.Upcoming}}
-	m = step(t, m, pollMsg{snap: snap, at: shellNow})
-	for key, want := range map[string]overlayKind{"empty:plan:tag": ovPlanTask} {
-		n := m
+	for _, st := range []plan.State{plan.Upcoming, plan.Waiting} {
+		snap.planState.rows[0].State = st
+		n := step(t, m, pollMsg{snap: snap, at: shellNow})
+		if d := decisions(n.forYou); len(d) != 0 {
+			t.Errorf("%v: decisions %+v", st, d)
+		}
 		n.focusPanel(PanelForYou)
-		n.lists.forYou.Select(key)
-		if n.lists.forYou.Selected() != key {
-			t.Fatalf("%s is not a selectable row", key)
+		n.lists.forYou.Select(planNextPrefix + "tag")
+		if n.lists.forYou.Selected() != planNextPrefix+"tag" {
+			t.Fatalf("%v: the pointer is not a selectable row", st)
 		}
 		n.open(PanelForYou)
-		if top := n.rd.top(); top == nil || top.kind != want {
-			t.Errorf("%s opened %+v", key, top)
+		if top := n.rd.top(); top == nil || top.kind != ovPlanTask || top.key != "tag" {
+			t.Errorf("%v: the pointer opened %+v", st, top)
 		}
 	}
-	snap.planState.rows[0].State = plan.Waiting
-	m = step(t, m, pollMsg{snap: snap, at: shellNow})
-	m.focusPanel(PanelForYou)
-	m.lists.forYou.Select("plan:tag")
-	m.open(PanelForYou)
-	if top := m.rd.top(); top == nil || top.kind != ovPlanTask || top.key != "tag" {
-		t.Errorf("the plan item opened %+v", top)
-	}
-	// From the reminder too: Enter opens the task's page, never a compose
-	// window to a recipient named after the item; i writes to nobody.
-	for _, it := range decisions(m.forYou) {
-		if it.Rank != rankPlan {
-			continue
-		}
-		n := m
-		n.rd = newReader()
-		n.ui.reminder = &reminderDialog{items: []attentionItem{it}}
-		n.reminderKey(Key{Code: keyEnter})
-		if top := n.rd.top(); top == nil || top.kind != ovPlanTask || top.key != "tag" || n.ui.compose != nil {
-			t.Errorf("reminder Enter opened %+v (compose %v)", top, n.ui.compose != nil)
-		}
-		n = m
-		n.rd = newReader()
-		n.ui.reminder = &reminderDialog{items: []attentionItem{it}}
-		n.reminderKey(Key{Code: keyRune, Rune: 'i'})
-		if n.ui.compose != nil {
-			t.Error("reminder i composed to a plan item")
-		}
-		return
-	}
-	t.Fatal("no plan item among the decisions")
 }

@@ -348,11 +348,11 @@ func recapForScreen(r recapModel, forYouShown bool, empty []Line) recapModel {
 	return out
 }
 
-// recapInPanel: a For-you row the For you panel also lists (its unread lines,
-// asks and waits); directives owed, blocked agents, plan tasks and read
+// recapInPanel: a For-you row the For you panel also lists (its
+// asks and waits); unread lines, directives owed, blocked agents, plan tasks and read
 // errors are only in the recap and always stay.
 func recapInPanel(row recapRow) bool {
-	for _, p := range []string{"unread:", "ask:", "wait:"} {
+	for _, p := range []string{"ask:", "wait:"} { // no unread line: the panel draws none (home-inbox-drawer §3.2)
 		if strings.HasPrefix(row.Key, p) {
 			return true
 		}

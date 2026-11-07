@@ -496,18 +496,27 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   Requests ones from `reqShell`, all closed and all open), again on an in-place row after its
   change, and holds the word to what Enter did and to every row-key kind being met.
 - **busmon's header strip is a partition of For you** (busmon-queue-strip, same spec §3): `stripOf`
-  (`queue_strip.go`) counts `decide` (ranks `rankAsk`…`rankPlan`), `merge` (`rankMerge` but never
+  (`queue_strip.go`) counts `decide` (ranks `rankAsk`…`rankGate`), `merge` (`rankMerge` but never
   `merge:unknown`) and `unread` (`unreadItems`), so `decide + merge = decisions(forYou)` and the strip
   can never disagree with the panel. A new For you rank must be placed in one chip or none, there.
+  The panel's frame label is the same words (`forYouLabel`: `2 decide · 1 merge`).
+- **busmon's For you holds no plan task and draws no unread line** (home-inbox, spec
+  `2026-11-07-home-inbox-drawer-design.md` §3): `rankPlan` and `planItems` are gone, so a plan task
+  never counts in `decide`, the reminder or the walk; the plan's `♙ N` is the header's plan item.
+  One muted pointer row, `plan-next:<task>` from `nextPlanTask` (the first person task Waiting,
+  else Blocked, else Upcoming), ends the panel and the empty state alike; it is no `forYou` item.
+  The panel draws `forYouPanelItems` (`forYou` minus `rankUnread`); the model keeps the unread lines
+  for the strip, `u` and the walk, so For you expands nothing in place and `recapInPanel` no longer
+  drops `unread:` recap rows.
   The header's clickable items carry a `headerHit`; `headerLayout` returns their spans, and `click`
-  hit-tests the header after closing an open reader. `tourVersion` is 3 (the header page, and Useful keys for `T`).
+  hit-tests the header after closing an open reader. `tourVersion` is 4 (3: the header page and Useful keys for `T`; 4: the welcome page's For you line, home-inbox).
 - **busmon's triage walk is For you's live order minus `visited`** (busmon-triage, same spec §4,
   `triage.go`): `walkNext` opens the first `forYou` row not visited (never `merge:unknown`) through
   `openForYouItem`, the function Enter uses too (an unread line straight to its message page). The
   walk's page is the reader's bottom page (`walk.serial`); `walkCheck`, run by `pop` and
   `closeReader`, ends the walk once that page has left the stack, except while `walk.moving`
   replaces it. The terminal acts call `walkDone`: `gotAnswer` with no question left, and `gotSend`
-  (now returning a command) for a send to the waiting agent or, on a plan task, to master. `n`/`p`
+  (now returning a command) for a send to the waiting agent (a plan task's act went with its row). `n`/`p`
   on the walk's page go to `walkStep`, never `readerStep`; on an ask page they are bound only for
   that (`shellAskTable`). `busyForModal` counts `m.ui.walk`, so the reminder and the recap wait.
   When `refresh` drops the walk's ask page (answered or closed elsewhere) it sets `walk.lost`, and

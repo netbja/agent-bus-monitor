@@ -468,12 +468,12 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 ```
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05
  paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44
-╭─ For you ───────────────────── 4 for you · 2 unread ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
+╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
 │  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
 │  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
 │  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask ┃
 │  ◆ gate   coder     by charlie  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  ┃
-│  ● unread dispatch  project paused until 16:56     8m││  ✓ architect done      40m     —        —         escalating · busy   spec merged┃
+│                                                      ││  ✓ architect done      40m     —        —         escalating · busy   spec merged┃
 │                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…┃
 │                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…┃
 │                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…┃
@@ -514,20 +514,22 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   truncated; the rest gives way from the right.
   A click on a chip goes there: `decide` and `merge` select For you's first such row, `unread` is
   `u`, and the health pill opens F5.
-- **For you** — what only you can settle: an agent's open questions (`ask`), an
-  agent `waiting` for your decision (`wait`), a 4-eyes gate you opened or that holds you
-  (`gate`), and messages addressed to you that you have not opened (`unread`, `●`; `○` once a
-  newer one, an answer or a closed ask supersedes it). Enter opens one; `!`, `w` or F4 answers the
+- **For you** — what only you can settle, an inbox that can empty: an agent's open questions
+  (`ask`), an agent `waiting` for your decision (`wait`), a 4-eyes gate you opened or that holds
+  you (`gate`), a stall that waits on you, and the PRs waiting for your merge. The frame reads the
+  strip's words (`2 decide · 1 merge`). Messages addressed to you that you have not opened are no
+  rows: the strip's `unread` chip counts them, and `u` or `T` reaches them. Plan tasks are no rows
+  either: one muted line at the bottom, `Next for you: …`, names the plan's next task for you
+  (waiting first, then blocked, then upcoming), not counted; Enter opens its page. Enter opens one; `!`, `w` or F4 answers the
   questions (one tab per question, a digit or Enter picks an option, `Other…` writes your own).
   With no question open, `w` opens the compose window to master instead.
   **`T` (triage)** walks what waits for you one item at a time, in For you's live order: each
-  item's page (an ask's questions, the agent, the gate's thread, the plan task, the PR, F5 for a
+  item's page (an ask's questions, the agent, the gate's thread, the PR, F5 for a
   stall, an unread line's message, which reads it). The frame reads `triage 2/7`. Answering an
-  ask's last question, writing to the waiting agent from its page or sending a plan task's Action
-  row moves on by itself (`sent — next: …`); `n` skips, `p` goes back (a line read on the way stays
+  ask's last question or writing to the waiting agent from its page moves on by itself (`sent — next: …`); `n` skips, `p` goes back (a line read on the way stays
   reachable), Esc ends it. A new ask that arrives meanwhile is reached before older lines. The end
   page counts what you did and names what still waits (`merge queue unreadable` when it is), and
-  Enter on its last row opens the next decision planned for you. It reads `Nothing waits for you` only when For you is empty.
+  Enter on its last row opens the plan's next task for you. It reads `Nothing waits for you` only when For you is empty.
 - **Agents** — one row per agent, **attention first** (waiting for you, escalated, gated,
   blocked; then queued; then working, idle, done). Columns: the **declared** state (never
   overwritten by silence — an agent that said `working` three hours ago still reads `working`;

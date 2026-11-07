@@ -17,7 +17,7 @@ var kT = 'T'
 
 // walkKinds is the page the walk opens by rank (§4.1's table).
 var walkKinds = map[int]overlayKind{rankAsk: ovAsk, rankHealth: ovHealth, rankWait: ovAgent, rankGate: ovMessage,
-	rankPlan: ovPlanTask, rankMerge: ovMerge, rankUnread: ovMessage}
+	rankMerge: ovMerge, rankUnread: ovMessage}
 
 func topKind(t *testing.T, m Model) overlayKind {
 	t.Helper()
@@ -147,18 +147,19 @@ func TestTriageSendAdvancesAndFailureKeeps(t *testing.T) {
 	if m.ui.flash == flash {
 		t.Fatal("the next key kept the flash")
 	}
-	// a plan task: its Action row's message to master
+	// a message to master on any other item is no terminal act: plan tasks
+	// are no rows, so is their Action row's act (home-inbox-drawer §8)
 	m = rowsFixture(t, false, false)
-	m, it = walkTo(t, m, func(it attentionItem) bool { return it.Rank == rankPlan })
+	m, it = walkTo(t, m, func(it attentionItem) bool { return it.Rank == rankGate })
 	m = step(t, m, sent("master"))
-	if cur, ok := m.walkItem(); !ok || cur.Key == it.Key || m.ui.walk.outcome[it.Key] != "sent" {
-		t.Fatal("the plan task's message to master did not move the walk")
+	if cur, _ := m.walkItem(); cur.Key != it.Key {
+		t.Fatal("a message to master moved the walk off a gate")
 	}
 }
 
 func TestTriageNewAskBeforeOlderUnread(t *testing.T) {
 	m := rowsFixture(t, false, false)
-	m, _ = walkTo(t, m, func(it attentionItem) bool { return it.Rank == rankPlan })
+	m, _ = walkTo(t, m, func(it attentionItem) bool { return it.Rank == rankMerge })
 	s := m.snap
 	a := s.asks[0]
 	a.ID, a.CreatedAt = "1793027000000-0", shellNow.UnixMilli()
@@ -205,7 +206,7 @@ func TestTriageBackSkipsGoneReachesRead(t *testing.T) {
 	s.mergeQ = bus.MergeQueueRecord{AttemptedAt: shellNow.UnixMilli()}
 	m = step(t, m, pollMsg{snap: s, at: shellNow})
 	m = keys(t, m, 'p')
-	if it, ok := m.walkItem(); !ok || it.Rank != rankPlan {
+	if it, ok := m.walkItem(); !ok || it.Rank != rankGate {
 		t.Fatalf("p did not skip the gone merge row: %v", m.rd.top().kind)
 	}
 }
@@ -301,8 +302,8 @@ func TestTourListsTriage(t *testing.T) {
 			for _, r := range b.rows {
 				for _, c := range r.cell {
 					if c.key != nil && c.key.act == ActTriage {
-						if p.since != tourVersion {
-							t.Fatalf("page %q since %d: seen again only from %d", p.title, p.since, tourVersion)
+						if p.since < 3 { // the triage row arrived in version 3
+							t.Fatalf("page %q since %d: want at least 3 so the T row is seen", p.title, p.since)
 						}
 						return
 					}
@@ -342,8 +343,9 @@ func TestTriageGoneIsNotSkipped(t *testing.T) {
 		m = keys(t, m, 'n')
 	}
 	end := m.grid().plain()
-	// visited: ask, health, 3 waits, gate, plan, merge (gone), unread (read): 7 skipped
-	if !strings.Contains(end, "read 1") || !strings.Contains(end, "skipped 7") {
+	// visited: ask, health, 3 waits, gate, merge (gone), unread (read): 6 skipped
+	// (no plan row: home-inbox-drawer §3.3)
+	if !strings.Contains(end, "read 1") || !strings.Contains(end, "skipped 6") {
 		t.Fatalf("a row gone from the list counted as skipped:\n%s", end)
 	}
 }
@@ -365,7 +367,7 @@ func TestTriageForwardThroughVisited(t *testing.T) {
 	if it, _ := m.walkItem(); it.Key != third.Key {
 		t.Fatalf("n: %s, want %s", it.Key, third.Key)
 	}
-	if got := m.walkTitle(); got != "triage 3/9" {
+	if got := m.walkTitle(); got != "triage 3/8" { // no plan row (home-inbox-drawer §3.3)
 		t.Fatalf("title %q", got)
 	}
 }
