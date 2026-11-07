@@ -24,7 +24,7 @@ type headerData struct {
 	waiting  string            // owedText: what the Requests view says is owed to the person, "" when nothing
 	between  int               // the Requests view's threads between agents: muted, no age
 	asks     int               // agents in state waiting: decisions a person owes
-	forYou   int               // the shell's for-you badge: decisions(forYou), shown instead of asks
+	strip    queueStrip        // the shell's queue strip (busmon-queue-triage §3), shown instead of asks
 	shell    bool              // the shell's header: badges first (compact under 120 columns), the pause on row 2
 	unread   int               // Activity entries for the person not opened yet (unread.go)
 	pause    *bus.PauseRecord  // the project pause, nil when not paused
@@ -42,10 +42,11 @@ type headerData struct {
 type hItem struct {
 	line  Line
 	prio  int
-	row   int  // 0 or 1
-	trunc bool // may be cut with "…" down to minProject cells
-	right bool // right-aligned on its row (the clock)
-	order int  // display order
+	row   int       // 0 or 1
+	trunc bool      // may be cut with "…" down to minProject cells
+	right bool      // right-aligned on its row (the clock)
+	order int       // display order
+	hit   headerHit // what a click on it does (§3.2)
 }
 
 const minProject = 6
@@ -65,6 +66,13 @@ func headerLines(d headerData, width int, tier Tier) []Line {
 // headerRows lays the header out on rows lines (1 or 2): the shell's header
 // is two lines at every tier (busmon Charm spec, "The screen").
 func headerRows(d headerData, width int, tier Tier, rows int) []Line {
+	lines, _ := headerLayout(d, width, tier, rows)
+	return lines
+}
+
+// headerLayout is headerRows with the admitted items' places, for the
+// header's click hit-test (busmon-queue-triage §3.2).
+func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []headerSpan) {
 	compact := width < 80
 	second := 0 // row of the secondary elements
 	if rows == 2 {
@@ -83,7 +91,7 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	add(Line{{Text: Preview(d.project), Role: RoleText, Bold: true}}, 3, 0).trunc = true
 	add(healthSeg(d.health, d.now, compact), 1, 0)
 	if d.guardian.Total > 0 {
-		add(guardianSeg(d.guardian, width), 1, 0)
+		add(guardianSeg(d.guardian, width), 1, 0).hit = hitHealth
 	}
 	add(dispatchSeg(d.dispatch, compact), 2, 0)
 	if d.missions != "" {
@@ -99,18 +107,9 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 		}
 		add(pauseSeg(d.pause, d.now), 1, row)
 	}
-	if d.shell { // the badges are what the person acts on: admitted before anything they could lose to
-		word := func(full string) string {
-			if width < wideMinWidth {
-				return ""
-			}
-			return " " + full
-		}
-		if d.forYou > 0 {
-			add(Line{{Text: fmt.Sprintf("%s %d%s", GlyphHuman, d.forYou, word("for you")), Role: RoleAttention}}, 0, 0)
-		}
-		if d.unread > 0 {
-			add(Line{{Text: fmt.Sprintf("%s %d%s", GlyphDotFull, d.unread, word("unread")), Role: RoleAttention}}, 0, 0)
+	if d.shell { // the strip is what the person acts on: admitted before anything it could lose to
+		for _, c := range stripChips(d.strip, width >= wideMinWidth) {
+			add(c.line, 0, 0).hit = c.hit
 		}
 	} else if d.unread > 0 {
 		add(Line{{Text: fmt.Sprintf("%s %d unread", GlyphDotFull, d.unread), Role: RoleAttention}}, 3, 0)
@@ -214,6 +213,7 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 	}
 
 	out := make([]Line, rows)
+	var spans []headerSpan
 	for r := 0; r < rows; r++ {
 		left := Line{{Text: " "}}
 		var right Line
@@ -233,6 +233,9 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 			if !first {
 				left = append(left, Seg{Text: strings.Repeat(" ", gap)})
 			}
+			if it.hit != hitNone {
+				spans = append(spans, headerSpan{row: r, x: left.Width(), w: l.Width(), hit: it.hit})
+			}
 			left = append(left, l...)
 			first = false
 		}
@@ -243,7 +246,7 @@ func headerRows(d headerData, width int, tier Tier, rows int) []Line {
 		}
 		out[r] = FitLine(left, width)
 	}
-	return out
+	return out, spans
 }
 
 // iconAt is a header item's icon pair (busmon-icons).

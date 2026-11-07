@@ -23,7 +23,7 @@ import (
 
 // tourVersion is bumped by a release that changes a page's meaning (each
 // page carries the version it last changed in); a wording fix does not.
-const tourVersion = 2
+const tourVersion = 3
 
 // tourMarkerFile sits beside the per-project caches; its name is no valid
 // project name, so no project's cache can be read or written as it.
@@ -220,8 +220,10 @@ var tourBook = []tourPage{
 			krow(cells(ky(ModeShell, ActHealth)), tx("project health")),
 			krow(cells(ky(ModeShell, ActQuit)), tx("quit"))),
 	}},
-	{title: "The header", since: 1, blocks: []tourBlock{
-		rows(pillRow(func(string) Line { return healthSeg(health{ok: true}, time.Time{}, false) }, tx("busmon reads the bus")),
+	{title: "The header", since: 3, blocks: []tourBlock{ // 3: the queue strip (busmon-queue-triage)
+		rows(pillRow(func(string) Line { return stripLine(queueStrip{decide: 2, merge: 1, unread: 3}, false) },
+			tx("what waits for you: "+GlyphHuman+" to decide, "+GlyphGate+" to merge, "+GlyphDotFull+" unread; a click goes to the first")),
+			pillRow(func(string) Line { return healthSeg(health{ok: true}, time.Time{}, false) }, tx("busmon reads the bus")),
 			pillRow(func(string) Line { return dispatchSeg("up", false) }, tx("the service that wakes idle agents runs")),
 			pillRow(func(string) Line { return missionsSeg("up", false) }, tx("the conductor runs")),
 			pillRow(func(string) Line { return guardianSeg(tourGuardian(), 100) }, tx("two checks only you can fix;"), ky(ModeShell, ActHealth), tx("says which")),

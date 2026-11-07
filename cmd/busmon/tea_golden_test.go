@@ -160,7 +160,7 @@ func TestShellGoldensCarryEverySurvivingFlag(t *testing.T) {
 		"1 dormant (a shows)",
 		// header items
 		"Charlie [human]", "agent-bus-monitor", "bus ok", "dispatch up", "missions up", "resumes in 1h52",
-		"grok 5h", "100% held", "claude 5h", "2 unread", GlyphHuman + " 4 for you", "15:04:05",
+		"grok 5h", "100% held", "claude 5h", "2 unread", GlyphHuman + " 4 decide", "15:04:05",
 		// Activity marks
 		GlyphDotFull + " 14:56", GlyphIdle + " 14:52", "(+197)",
 	} {
