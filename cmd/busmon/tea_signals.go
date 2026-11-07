@@ -120,12 +120,14 @@ func (m *Model) afterPoll() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// afterUpdate opens what waited for the person to be free: the recap, then
-// the reminder.
+// afterUpdate moves a triage walk whose page a refresh dropped on to its
+// next item, then opens what waited for the person to be free: the recap,
+// then the reminder.
 func (m *Model) afterUpdate() tea.Cmd {
 	if m.width == 0 {
 		return nil
 	}
+	lost := m.walkLost()
 	m.maybeTour()
 	m.maybeOpenRecap()
 	var frames tea.Cmd
@@ -138,7 +140,7 @@ func (m *Model) afterUpdate() tea.Cmd {
 		save = m.saveCache("local busmon cache not saved")
 	}
 	m.pruneReminder()
-	return tea.Batch(save, m.writeSeen(), m.maybeReminder(), frames)
+	return tea.Batch(lost, save, m.writeSeen(), m.maybeReminder(), frames)
 }
 
 // seenWriter is the writer's read receipt (report-one-row §5 B), optional so

@@ -208,8 +208,9 @@ var tourBook = []tourPage{
 			krow(cells(ky(ModeShellAsk, ActAskOther)), tx("Other: write your own answer in the compose window"))),
 		para(tx("Your answer wakes the agent; nothing else is needed.")),
 	}},
-	{title: "Useful keys", since: 2, blocks: []tourBlock{ // 2: request priority
-		rows(krow(cells(ky(ModeShell, ActOpen)), tx("open a line (once: in place; twice: the full text)")),
+	{title: "Useful keys", since: 3, blocks: []tourBlock{ // 2: request priority; 3: triage (busmon-queue-triage)
+		rows(krow(cells(ky(ModeShell, ActTriage)), tx("walk what waits for you, one by one")),
+			krow(cells(ky(ModeShell, ActOpen)), tx("open a line (once: in place; twice: the full text)")),
 			krow(cells(ky(ModeShell, ActNextUnread)), tx("the next unread line for you")),
 			krow(cells(ky(ModeShell, ActRecap)), tx("where was I? the recap since your last visit")),
 			krow(cells(ky(ModeShell, ActPlan)), tx("the batch's plan")),

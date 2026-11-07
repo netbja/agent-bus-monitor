@@ -251,12 +251,14 @@ func (m *Model) pop() {
 			p.dirty = true // built for another width or generation maybe: rebuild
 		}
 	}
+	m.walkCheck()
 	m.refresh()
 }
 
 // closeReader leaves every page.
 func (m *Model) closeReader() {
 	m.rd.pages = nil
+	m.walkCheck()
 	m.refresh()
 }
 
@@ -665,12 +667,12 @@ func (m *Model) answerCmd(a bus.Ask, q bus.AskQuestionState, choice, text string
 
 // gotAnswer records a sent answer and moves the page to the next open
 // question; the last one closes it. A refusal says why and keeps the page.
-func (m *Model) gotAnswer(msg answerMsg) {
+func (m *Model) gotAnswer(msg answerMsg) tea.Cmd {
 	delete(m.rd.sending, msg.key)
 	if msg.err != nil {
 		m.ui.flash, m.ui.flashErr = "answer not sent: "+Preview(msg.err.Error()), true
 		m.refresh()
-		return
+		return nil
 	}
 	ans := bus.AskAnswer{Choice: msg.choice, Text: msg.text, By: m.cfg.self, At: m.now.UnixMilli()}
 	m.rd.answered[msg.key] = ans
@@ -689,11 +691,14 @@ func (m *Model) gotAnswer(msg answerMsg) {
 	p := m.rd.top()
 	if p == nil || p.kind != ovAsk || (p.ask.id != msg.ask.ID && p.ask.id != msg.id) {
 		m.refresh()
-		return
+		return nil
 	}
 	if msg.left == 0 {
+		if m.walkPage() { // the walk's terminal act on an ask (busmon-queue-triage §4.3)
+			return m.walkDone("answered")
+		}
 		m.pop()
-		return
+		return nil
 	}
 	// The answer landed on a replacement: follow it once the snapshot holds it
 	// (until then pageAsk follows replaced_by, and the page stays open).
@@ -707,6 +712,7 @@ func (m *Model) gotAnswer(msg answerMsg) {
 	}
 	p.dirty = true
 	m.refresh()
+	return nil
 }
 
 // readerKey is a key while the reader is open.
@@ -784,6 +790,12 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 	}
+	if p.kind == ovTriageEnd && k.Code == keyEnter { // the next decision's row (busmon-queue-triage §4.4)
+		if p.key != "" {
+			return m.push(page{kind: ovPlanTask, key: p.key})
+		}
+		return nil
+	}
 	rows := m.readerRows()
 	switch act {
 	case ActClose:
@@ -794,6 +806,9 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 	case ActCopyThread:
 		return m.copy(p.threadPlain, or(p.threadWhat, "thread"))
 	case ActNextItem, ActPrevItem:
+		if m.walkPage() {
+			return m.walkStep(act == ActNextItem)
+		}
 		return m.readerStep(p, act == ActNextItem)
 	case ActHealth:
 		return m.push(page{kind: ovHealth})
@@ -886,6 +901,11 @@ func (m *Model) askKey(act Action, k Key) tea.Cmd {
 		return m.push(page{kind: ovHelp})
 	case ActCopy:
 		return m.copy(p.plain, "question")
+	case ActNextItem, ActPrevItem: // during triage only
+		if m.walkPage() {
+			return m.walkStep(act == ActNextItem)
+		}
+		return nil
 	case ActUp:
 		p.ask.opt = max(p.ask.opt-1, 0)
 	case ActDown:
@@ -1076,7 +1096,11 @@ func (m Model) drawReader(g *grid) {
 	if p.threadPlain != "" {
 		hints = "Y copy " + or(p.threadWhat, "thread") + " " + GlyphNone + " " + hints
 	}
-	drawFrame(g, r.X, r.Y, r.W, r.H, Frame{Title: Line{{Text: Preview(p.title), Role: RoleText}},
+	title := Line{{Text: Preview(p.title), Role: RoleText}}
+	if m.walkPage() && !m.ui.walk.end { // the walk's place (busmon-queue-triage §4.1)
+		title = append(Line{{Text: m.walkTitle() + " " + GlyphNone + " ", Role: RoleAccent}}, title...)
+	}
+	drawFrame(g, r.X, r.Y, r.W, r.H, Frame{Title: title,
 		Label: Line{{Text: hints, Role: RoleMuted}}, Focused: true,
 		Scroll: ScrollState{Total: len(p.body), Top: p.top, Visible: rows}, Hue: RoleAccent})
 	for i := 0; i < rows; i++ {
