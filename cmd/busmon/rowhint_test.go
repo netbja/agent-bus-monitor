@@ -25,13 +25,10 @@ func TestRowHintTable(t *testing.T) {
 		{PanelForYou, "wait:coder:1", false, "agent"},
 		{PanelForYou, "prompt:coder:1", false, "agent"},
 		{PanelForYou, "gate:coder:1-0", false, "thread"},
-		{PanelForYou, "plan:t1", false, "task"},
-		{PanelForYou, "empty:plan:t1", false, "task"},
+		{PanelForYou, planNextPrefix + "t1", false, "task"},
 		{PanelForYou, "merge:" + mqH, false, "PR"},
 		{PanelForYou, mergeUnknownKey, false, rowNoPair},
 		{PanelForYou, "health:team-stall:1", false, "health"},
-		{PanelForYou, "unread:1-0", false, "expand"},
-		{PanelForYou, "unread:1-0", true, "full text"},
 		{PanelActivity, "1-0", false, "expand"},
 		{PanelActivity, "1-0", true, "full text"},
 		{PanelRequests, "asks", false, "answer"},
@@ -240,7 +237,7 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 	sort.Strings(got)
 	want := []string{"no selection"}
 	for p, words := range map[PanelID][]string{
-		PanelForYou:   {"answer", "agent", "thread", "task", "PR", rowNoPair, "health", "expand", "full text"},
+		PanelForYou:   {"answer", "agent", "thread", "task", "PR", rowNoPair, "health"},
 		PanelAgents:   {"agent"},
 		PanelActivity: {"expand", "full text"},
 		PanelBoard:    {"task"},
@@ -257,10 +254,11 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 		}
 	}
 	// Each row-key kind of each producer, so a word shared by two kinds
-	// (task: plan: and empty:plan:) cannot hide a kind never met. The
+	// (task: and plan-next:) cannot hide a kind never met. For you has no
+	// plan: or unread: rows any more (home-inbox-drawer §3). The
 	// Requests "asks" key has no producer: openRequestRow alone knows it.
 	for p, ks := range map[PanelID][]string{
-		PanelForYou:   {"ask", "wait", "prompt", "gate", "plan", "empty:plan", "merge", mergeUnknownKey, "health", "unread"},
+		PanelForYou:   {"ask", "wait", "prompt", "gate", "plan-next", "merge", mergeUnknownKey, "health"},
 		PanelRequests: {"ask", "req", "thr", "ntc", reqNoticesKey, "fold", "grp", "older"},
 		PanelPlan:     {"task", "toggle"},
 	} {
@@ -272,14 +270,12 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 	}
 }
 
-// keyKind is a row key's kind: its prefix ("ask", "empty:plan"), or the key
+// keyKind is a row key's kind: its prefix ("ask", "plan-next"), or the key
 // itself for a fixed one (merge:unknown, ntc:all, fold, toggle).
 func keyKind(key string) string {
 	switch {
 	case key == mergeUnknownKey, key == reqNoticesKey, !strings.Contains(key, ":"):
 		return key
-	case strings.HasPrefix(key, "empty:plan:"):
-		return "empty:plan"
 	}
 	return key[:strings.Index(key, ":")]
 }

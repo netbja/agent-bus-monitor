@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/netbja/agent-bus-monitor/plan"
 	"sort"
+	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/plan"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
@@ -19,7 +21,6 @@ const (
 	rankHealth        // the stall guard: the team waits on the person, or the person's focus holds a hand-off
 	rankWait          // a waiting agent with no open ask, or its client's prompt
 	rankGate          // a pending verdict: an open 4-eyes gate
-	rankPlan          // a plan task waiting for the person: Enter opens its page and its Action row
 	rankMerge         // a change waiting for the person's merge (merge-queue): Enter opens its page
 	rankUnread        // an Activity line for the person not opened yet
 )
@@ -54,7 +55,6 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 		out = append(out, personGateItems(s.person, s.person, s.personGates)...)
 	}
 	out = append(out, stallItems(s.guardianHealth, s.guardianNow)...)
-	out = append(out, planItems(s)...)
 	out = append(out, mergeItems(s)...)
 	asks := map[string]int{} // an open ask's row, by ask id (the id of its Activity line)
 	for i, it := range out {
@@ -172,32 +172,70 @@ func unreadItems(items []attentionItem) int {
 	return n
 }
 
-// forYouEmpty is For you when its list is empty (the person: "I must always
-// know what is expected"). It says "Nothing expected from you." only when
-// nothing else is owed either: no request owed to the person (owed, the
-// Requests view's count, as the header's orange item) and no plan task of the
-// person's waiting; otherwise it names those (foureyes). Then what is in
-// progress (the agents that declare working, with their status) and the next
-// decision to come (the plan's first person task Blocked or Upcoming), from
-// what busmon already reads. No store of its own.
-// planItems are the plan's tasks waiting for the person: a decision like any
-// other, counted in the title and the badge (the person: "0 for you" under a
-// "Waiting for you" line read as a contradiction).
-func planItems(s snapshot) []attentionItem {
-	if !s.planState.loaded {
-		return nil
+// planNextPrefix is the plan pointer's key: plan-next:<task> (home-inbox-drawer
+// §3.3). Enter opens the task page.
+const planNextPrefix = "plan-next:"
+
+// nextPlanTask is the plan pointer's task (§3.3): the first person task, in
+// the plan file's order, that is Waiting; with none, the first Blocked, then
+// Upcoming. False with none at all, or no plan loaded.
+//
+// Plan tasks are no For you rows any more (the person's choice, 2026-11-07,
+// home-inbox-drawer): a task waiting for the person is counted in the
+// header's plan item (planSeg's ♙), not in decide, and this one pointer
+// says which comes next. It supersedes "a decision like any other, counted
+// in the title and the badge": no "Waiting for you" line remains in For you.
+func nextPlanTask(p planState) (plan.Row, bool) {
+	if !p.loaded {
+		return plan.Row{}, false
 	}
+	for _, st := range []plan.State{plan.Waiting, plan.Blocked, plan.Upcoming} {
+		for _, r := range p.rows {
+			if r.Task.Owner == plan.Person && r.State == st {
+				return r, true
+			}
+		}
+	}
+	return plan.Row{}, false
+}
+
+// planPointer is the pointer's row: muted, never counted (§3.3).
+func planPointer(s snapshot) (emptyRow, bool) {
+	r, ok := nextPlanTask(s.planState)
+	if !ok {
+		return emptyRow{}, false
+	}
+	return emptyRow{key: planNextPrefix + r.Task.ID, line: Line{{Text: "Next for you: ", Role: RoleMuted}, {Text: Preview(r.Task.Title), Role: RoleMuted}}}, true
+}
+
+// forYouPanelItems is what the For you panel draws: the list minus its
+// unread lines (§3.2). They stay in the model: the strip's unread chip, u and
+// the walk reach them; an ask's own unread mark stays on its row.
+func forYouPanelItems(items []attentionItem) []attentionItem {
 	var out []attentionItem
-	for _, r := range s.planState.rows {
-		if r.Task.Owner == plan.Person && r.State == plan.Waiting {
-			out = append(out, attentionItem{Rank: rankPlan, Key: "plan:" + r.Task.ID, Agent: "plan", Text: r.Task.Title})
+	for _, it := range items {
+		if it.Rank != rankUnread {
+			out = append(out, it)
 		}
 	}
 	return out
 }
 
+// forYouLabel is the panel's frame label: the strip's words, decide and
+// merge, each at 0 left out (§3.2), so the panel and the strip never disagree.
+func forYouLabel(q queueStrip) string {
+	var parts []string
+	if q.decide > 0 {
+		parts = append(parts, fmt.Sprintf("%d decide", q.decide))
+	}
+	if q.merge > 0 {
+		parts = append(parts, fmt.Sprintf("%d merge", q.merge))
+	}
+	return strings.Join(parts, " "+GlyphNone+" ")
+}
+
 // emptyRow is one line of the empty state, selectable when it has a key:
-// empty:plan:<task> opens the plan task.
+// plan-next:<task> opens the plan task.
 type emptyRow struct {
 	key  string
 	line Line
@@ -212,9 +250,11 @@ func forYouEmpty(s snapshot, owed int) []Line {
 	return out
 }
 
-// forYouEmptyRows: what is owed, else "Nothing expected", then the next
-// decision. What is in progress is the Agents panel's: never repeated here
-// (foryou-no-progress, the person's answer).
+// forYouEmptyRows: what is owed, else "Nothing expected", then the plan
+// pointer (planPointer, the one producer), if any. What is in progress is the
+// Agents panel's: never repeated here (foryou-no-progress, the person's
+// answer). A plan task waiting for the person is the pointer, not something
+// owed (home-inbox-drawer §3.3).
 func forYouEmptyRows(s snapshot, owed int) []emptyRow {
 	var rows []emptyRow
 	if owed > 0 {
@@ -226,17 +266,8 @@ func forYouEmptyRows(s snapshot, owed int) []emptyRow {
 	} else {
 		rows = append(rows, emptyRow{line: Line{{Text: "Nothing expected from you.", Role: RoleOK}}})
 	}
-	next := emptyRow{line: Line{{Text: "Next for you: ", Role: RoleMuted}, {Text: "no decision planned", Role: RoleText}}}
-	if s.planState.loaded {
-	find:
-		for _, st := range []plan.State{plan.Blocked, plan.Upcoming} {
-			for _, r := range s.planState.rows {
-				if r.Task.Owner == plan.Person && r.State == st {
-					next = emptyRow{key: "empty:plan:" + r.Task.ID, line: Line{{Text: "Next for you: ", Role: RoleMuted}, {Text: Preview(r.Task.Title), Role: RoleText}}}
-					break find
-				}
-			}
-		}
+	if p, ok := planPointer(s); ok {
+		rows = append(rows, p)
 	}
-	return append(rows, next)
+	return rows
 }

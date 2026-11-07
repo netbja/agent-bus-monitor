@@ -186,7 +186,7 @@ var tourBook = []tourPage{
 	{title: "Welcome to busmon", since: 1, blocks: []tourBlock{
 		para(tx("busmon shows what your agents are doing and what waits for you. A few short pages;"),
 			ky(ModeTour, ActClose), tx("skips, and"), ky(ModeShell, ActHelp), tx("then"), ky(ModeOverlay, ActTour), tx("brings them back.")),
-		rows(panelRow(PanelForYou, "what needs you: questions, waits, unread lines"),
+		rows(panelRow(PanelForYou, "what needs you: questions, waits, merges"),
 			panelRow(PanelAgents, "each agent, its state and how fresh it is"),
 			panelRow(PanelActivity, "everything said on the bus, live"),
 			panelRow(PanelBoard, "who owns which task"),

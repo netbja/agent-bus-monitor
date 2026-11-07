@@ -36,7 +36,7 @@ func rowHint(p PanelID, it ListItem) (word string, known bool) {
 			return "agent", true
 		case has("gate:"):
 			return "thread", true
-		case has("plan:"), has("empty:plan:"):
+		case has(planNextPrefix):
 			return "task", true
 		case key == mergeUnknownKey:
 			return rowNoPair, true
@@ -44,8 +44,6 @@ func rowHint(p PanelID, it ListItem) (word string, known bool) {
 			return "PR", true
 		case has("health:"):
 			return "health", true
-		case has("unread:"):
-			return inPlace("full text", "expand")
 		}
 	case PanelActivity:
 		if key != "" {

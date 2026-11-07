@@ -106,8 +106,11 @@ func TestShellTailFoldsEvents(t *testing.T) {
 func TestShellForYouMediumShowsFourThenMore(t *testing.T) {
 	pinLocal(t)
 	m := fixtureShell(t, 80, 24)
-	if n := len(m.forYou); n != 5 {
-		t.Fatalf("fixture has %d items, want 5", n)
+	s := m.snap // a fifth panel row: the fixture's unread lines are no rows (home-inbox-drawer §3.2)
+	s.agents["qa2"] = &agentState{state: "waiting", message: "a fifth", stateAt: shellNow.Add(-time.Minute), lastSeen: shellNow, registered: true}
+	m = step(t, m, pollMsg{snap: s, at: shellNow})
+	if n := len(forYouPanelItems(m.forYou)); n != 5 {
+		t.Fatalf("fixture has %d panel items, want 5", n)
 	}
 	m.ui.focus = PanelAgents
 	m.refresh()

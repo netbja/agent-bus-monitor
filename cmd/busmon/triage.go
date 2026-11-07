@@ -258,7 +258,7 @@ func (m *Model) walkEnd() tea.Cmd {
 	}
 	next := ""
 	for _, r := range forYouEmptyRows(m.snap, m.lists.reqView.count(secOwed)) {
-		if task, ok := strings.CutPrefix(r.key, "empty:plan:"); ok {
+		if task, ok := strings.CutPrefix(r.key, planNextPrefix); ok {
 			lines = append(lines, nil)
 			lines = append(lines, append(Line{{Text: GlyphSelect + " ", Role: RoleAccent}}, r.line...))
 			next = task

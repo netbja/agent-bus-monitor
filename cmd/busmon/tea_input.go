@@ -222,9 +222,9 @@ func (m *Model) gotSend(msg sendResultMsg) tea.Cmd {
 		}
 	}
 	// The walk's terminal act (busmon-queue-triage §4.3): a message to the
-	// waiting agent from its page, or a plan task's Action row to master.
-	if it, ok := m.walkItem(); ok && msg.plan.directed &&
-		((it.Rank == rankWait && msg.plan.tgt == it.Agent) || (it.Rank == rankPlan && msg.plan.tgt == "master")) {
+	// waiting agent from its page. Plan tasks are no rows any more, so is
+	// their Action row's act (home-inbox-drawer §8).
+	if it, ok := m.walkItem(); ok && msg.plan.directed && it.Rank == rankWait && msg.plan.tgt == it.Agent {
 		return m.walkDone("sent")
 	}
 	return nil

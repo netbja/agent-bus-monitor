@@ -165,9 +165,10 @@ func (m *Model) fillLists() {
 		lst.rect, lst.focused = l.rect(p), m.ui.focus == p
 	}
 
-	// For you: every item; at the medium tier, unfocused, four and "+N more".
+	// For you: every item but the unread lines (home-inbox-drawer §3.2); at
+	// the medium tier, unfocused, four and "+N more"; then the plan pointer.
 	fy := &m.lists.forYou
-	items := m.forYou
+	items := forYouPanelItems(m.forYou)
 	more := 0
 	if l.Tier == TierMedium && m.ui.focus != PanelForYou && len(items) > forYouMediumRows {
 		more, items = len(items)-forYouMediumRows, items[:forYouMediumRows]
@@ -179,15 +180,15 @@ func (m *Model) fillLists() {
 	if more > 0 {
 		rows = append(rows, ListItem{Key: "more", Line: Line{{Text: fmt.Sprintf("+%d more", more), Role: RoleMuted}}, Selectable: true})
 	}
-	if len(rows) == 0 { // say what is expected, if anything, then what is in progress and the next decision
+	if len(rows) == 0 { // say what is expected, if anything, then the plan pointer
 		for _, r := range forYouEmptyRows(s, m.lists.reqView.count(secOwed)) {
 			rows = append(rows, ListItem{Key: r.key, Line: r.line, Selectable: r.key != ""})
 		}
+	} else if p, ok := planPointer(s); ok { // below the decisions, muted, never counted (§3.3)
+		rows = append(rows, ListItem{Key: p.key, Line: p.line, Selectable: true})
 	}
-	fy.SetItems(m.withExpansion(PanelForYou, rows, rowW(l.ForYou)))
-	n := len(decisions(m.forYou))
-	fy.SetFrame(Line{{Text: "For you", Role: RoleText}},
-		Line{{Text: fmt.Sprintf("%d for you %s %d unread", n, GlyphNone, unreadItems(m.forYou)), Role: RoleMuted}})
+	fy.SetItems(rows)
+	fy.SetFrame(Line{{Text: "For you", Role: RoleText}}, Line{{Text: forYouLabel(stripOf(m.forYou)), Role: RoleMuted}})
 
 	// Agents: today's rows and sort.
 	ag := &m.lists.agents
@@ -284,7 +285,6 @@ var forYouKinds = map[int]struct {
 	rankHealth: {GlyphBlocked, "health", RoleAttention},
 	rankWait:   {GlyphHuman, "wait", RoleAttention},
 	rankGate:   {GlyphGate, "gate", RoleDispatch},
-	rankPlan:   {GlyphHuman, "plan", RoleAttention},
 	rankUnread: {GlyphDotFull, "unread", RoleAccent},
 }
 

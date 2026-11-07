@@ -153,14 +153,7 @@ func TestShellExpansionGuide(t *testing.T) {
 		}
 	}
 	m := inState(t, fixtureShell(t, 140, 40), "expanded")
-	check(m, PanelActivity, feedKey(t, m, reportID), expandIndent(PanelActivity, m.layout.Tier))
-
-	m = fixtureShell(t, 140, 40)
-	i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Rank == rankUnread })
-	key := m.forYou[i].Key
-	m.lists.forYou.Select(key)
-	m = keys(t, m, kEnter)
-	check(m, PanelForYou, key, expandIndent(PanelForYou, m.layout.Tier))
+	check(m, PanelActivity, feedKey(t, m, reportID), expandIndent(m.layout.Tier))
 }
 
 // The indent is the message column of the tier's rows, and a panel too
@@ -169,7 +162,7 @@ func TestExpandIndent(t *testing.T) {
 	for _, tier := range []Tier{TierWide, TierMedium, TierNarrow} {
 		c := colsFor(tier)
 		want := 2 + c.time + c.from + c.to + c.typ
-		if got := expandIndent(PanelActivity, tier); got != want {
+		if got := expandIndent(tier); got != want {
 			t.Errorf("tier %v: Activity indent %d, want %d", tier, got, want)
 		}
 		probe := activityRowAt(feedLine{id: "x", ev: bus.Event{ID: "1-0", Kind: "notify", From: "f", Message: "MSG"}, at: time.Unix(0, 0)}, tier, 200, time.Unix(0, 0))
@@ -177,42 +170,8 @@ func TestExpandIndent(t *testing.T) {
 			t.Errorf("tier %v: the message starts at %d, the indent says %d", tier, at, want)
 		}
 	}
-	// For you: the indent is where a real row's text starts, whatever its kind.
-	for _, it := range []attentionItem{
-		{Rank: rankUnread, Key: "unread:1-0", Agent: "master", Text: "TEXT", At: time.Unix(0, 0)},
-		{Rank: rankAsk, Key: "ask:1-0", Agent: "a-very-long-agent-name", Text: "TEXT"},
-	} {
-		head, _, _ := forYouParts(it, time.Unix(60, 0))
-		txt := forYouRow(it, 200, time.Unix(60, 0)).text()
-		at := Width(txt[:strings.Index(txt, "TEXT")]) // in cells: the kind glyph is several bytes
-		if got := expandIndent(PanelForYou, TierWide); got != head.Width() || at != got {
-			t.Errorf("For you indent %d; the row's text starts at cell %d (head %d)", got, at, head.Width())
-		}
-	}
-	if got := expansionIndent(forYouTextCol, forYouTextCol+minExpandText+1); got != 0 {
+	if got := expansionIndent(19, 19+minExpandText+1); got != 0 {
 		t.Errorf("a narrow panel keeps indent %d", got)
-	}
-}
-
-// A For you unread line expands in place too, and stays listed (unread)
-// while it is open; collapsing it reads it, and it leaves For you.
-func TestShellForYouUnreadExpands(t *testing.T) {
-	pinLocal(t)
-	m := fixtureShell(t, 140, 40)
-	i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Rank == rankUnread })
-	key := m.forYou[i].Key
-	m.lists.forYou.Select(key)
-	m = keys(t, m, kEnter)
-	if m.ui.expanded != key || len(expansionRows(m, PanelForYou)) == 0 {
-		t.Fatalf("For you: expanded %q", m.ui.expanded)
-	}
-	before := unreadItems(m.forYou)
-	if m.lists.forYou.index(key) < 0 {
-		t.Fatal("the expanded line left For you")
-	}
-	m = keys(t, m, kEsc)
-	if m.lists.forYou.index(key) >= 0 || unreadItems(m.forYou) != before-1 {
-		t.Fatalf("after the collapse: listed %v, unread %d (was %d)", m.lists.forYou.index(key) >= 0, unreadItems(m.forYou), before)
 	}
 }
 

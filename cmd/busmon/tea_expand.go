@@ -8,11 +8,12 @@ import (
 )
 
 // Inline expansion (busmon Charm spec, "Reading"): Enter on a selected
-// Activity line, or a For you unread line, shows its text in place, under the
-// row, indented, at the panel's width, up to half the panel's height. One row
-// at a time; moving the selection or Esc collapses it, and a second Enter
-// opens it in the reader. The line is read when its expansion closes (or the
-// reader opens on it): For you keeps the row while it is open.
+// Activity line shows its text in place, under the row, indented, at the
+// panel's width, up to half the panel's height. One row at a time; moving the
+// selection or Esc collapses it, and a second Enter opens it in the reader.
+// The line is read when its expansion closes (or the reader opens on it).
+// For you draws no unread line any more, so it expands nothing
+// (home-inbox-drawer §3.2).
 
 // expandKey is the key of an expansion's line i: not selectable, never a
 // feed id ("\x00" starts no stream id).
@@ -27,7 +28,7 @@ func (m *Model) expandedLine() (feedLine, bool) {
 		if fl.sep {
 			continue
 		}
-		if (m.ui.expandIn == PanelActivity && fl.id == key) || (m.ui.expandIn == PanelForYou && unreadKey(fl) == key) {
+		if m.ui.expandIn == PanelActivity && fl.id == key {
 			return fl, true
 		}
 	}
@@ -103,20 +104,13 @@ func (m *Model) keepExpansion() {
 	}
 }
 
-// forYouTextCol is where a For you row's text starts: the glyph, the kind
-// word and the agent's column (forYouParts).
-const forYouTextCol = 2 + 7 + 10
-
 // minExpandText is the narrowest text an indented expansion keeps; a panel
 // narrower than its indent plus this shows the text from the left edge.
 const minExpandText = 24
 
 // expandIndent is the column an expansion's text starts under: the message
 // column of the panel's rows at tier (A12).
-func expandIndent(p PanelID, tier Tier) int {
-	if p == PanelForYou {
-		return forYouTextCol
-	}
+func expandIndent(tier Tier) int {
 	c := colsFor(tier)
 	return 2 + c.time + c.from + c.to + c.typ
 }
@@ -142,7 +136,7 @@ func (m *Model) withExpansion(p PanelID, items []ListItem, width int) []ListItem
 	if i < 0 || !ok {
 		return items
 	}
-	indent := expansionIndent(expandIndent(p, m.layout.Tier), width)
+	indent := expansionIndent(expandIndent(m.layout.Tier), width)
 	pad := strings.Repeat(" ", indent)
 	limit := max(2, m.lists.of(p).rect.H/2)
 	md := m.cache.markdown(fl.ev.ID, messageBody(fl.ev), max(1, width-indent-2))
