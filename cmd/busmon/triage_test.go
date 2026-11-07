@@ -302,8 +302,8 @@ func TestTourListsTriage(t *testing.T) {
 			for _, r := range b.rows {
 				for _, c := range r.cell {
 					if c.key != nil && c.key.act == ActTriage {
-						if p.since != tourVersion {
-							t.Fatalf("page %q since %d: seen again only from %d", p.title, p.since, tourVersion)
+						if p.since < 3 { // the triage row arrived in version 3
+							t.Fatalf("page %q since %d: want at least 3 so the T row is seen", p.title, p.since)
 						}
 						return
 					}

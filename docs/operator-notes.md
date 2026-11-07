@@ -509,7 +509,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   for the strip, `u` and the walk, so For you expands nothing in place and `recapInPanel` no longer
   drops `unread:` recap rows.
   The header's clickable items carry a `headerHit`; `headerLayout` returns their spans, and `click`
-  hit-tests the header after closing an open reader. `tourVersion` is 3 (the header page, and Useful keys for `T`).
+  hit-tests the header after closing an open reader. `tourVersion` is 4 (3: the header page and Useful keys for `T`; 4: the welcome page's For you line, home-inbox).
 - **busmon's triage walk is For you's live order minus `visited`** (busmon-triage, same spec §4,
   `triage.go`): `walkNext` opens the first `forYou` row not visited (never `merge:unknown`) through
   `openForYouItem`, the function Enter uses too (an unread line straight to its message page). The

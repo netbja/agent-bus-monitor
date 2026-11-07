@@ -255,8 +255,8 @@ func TestTourHeaderPageShowsTheStrip(t *testing.T) {
 		if p.title != "The header" {
 			continue
 		}
-		if p.since != tourVersion {
-			t.Fatalf("the header page's since = %d, want %d so it is seen again", p.since, tourVersion)
+		if p.since < 3 {
+			t.Fatalf("the header page's since = %d, want at least 3 so it is seen again", p.since)
 		}
 		var text string
 		for _, b := range p.blocks {

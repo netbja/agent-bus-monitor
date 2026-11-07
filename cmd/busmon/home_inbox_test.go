@@ -205,3 +205,17 @@ func TestForYouWidthHoldsThePointer(t *testing.T) {
 		t.Errorf("For you's natural width %d, the pointer needs %d", got, want)
 	}
 }
+
+// The welcome page's For you line changed (unread lines and plan tasks left
+// it): a person who saw version 3 sees it again (reviewer-codex).
+func TestTourWelcomeIsSeenAgain(t *testing.T) {
+	if tourVersion < 4 {
+		t.Fatalf("tourVersion %d, want at least 4", tourVersion)
+	}
+	for _, i := range pagesSince(tourBook, 3) {
+		if tourBook[i].title == "Welcome to busmon" {
+			return
+		}
+	}
+	t.Fatal("a person who saw version 3 does not see the welcome page again")
+}

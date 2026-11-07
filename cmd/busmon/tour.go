@@ -23,7 +23,7 @@ import (
 
 // tourVersion is bumped by a release that changes a page's meaning (each
 // page carries the version it last changed in); a wording fix does not.
-const tourVersion = 3
+const tourVersion = 4
 
 // tourMarkerFile sits beside the per-project caches; its name is no valid
 // project name, so no project's cache can be read or written as it.
@@ -183,7 +183,7 @@ func tourGuardian() guardianSummary {
 }
 
 var tourBook = []tourPage{
-	{title: "Welcome to busmon", since: 1, blocks: []tourBlock{
+	{title: "Welcome to busmon", since: 4, blocks: []tourBlock{ // 4: For you is an inbox (home-inbox-drawer)
 		para(tx("busmon shows what your agents are doing and what waits for you. A few short pages;"),
 			ky(ModeTour, ActClose), tx("skips, and"), ky(ModeShell, ActHelp), tx("then"), ky(ModeOverlay, ActTour), tx("brings them back.")),
 		rows(panelRow(PanelForYou, "what needs you: questions, waits, merges"),
