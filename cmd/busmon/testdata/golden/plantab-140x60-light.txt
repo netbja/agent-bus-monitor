@@ -19,13 +19,13 @@
 │                                                                                                       │ state    in review             │ │
 │  NOW  3                                                                                               │ owner    coder                 │ │
 │  ♙ title notes  ♙ person  waiting for you                                                             │ review   approved              │ │
-│▶ ○ title strip  coder  #338 · approved · merge PR 338                                                 │ reason   merge PR 338          │ │
-│  ● title drawer  coder  in progress                                                                   │ waits on —                     │ │
-│                                                                                                       │ for you  nothing               │ │
-│  NEXT  1                                                                                              │                                │ │
-│  ○ title requests  coder  upcoming                                                                    │ enter task page                │ │
-│                                                                                                       ╰────────────────────────────────╯ │
-│  LATER  1                                                                                                                                │
+│▶ ○ title strip  coder  #338 · approved · merge PR 338                                                 │ PR       338                   │ │
+│  ● title drawer  coder  in progress                                                                   │ reason   merge PR 338          │ │
+│                                                                                                       │ waits on —                     │ │
+│  NEXT  1                                                                                              │ for you  nothing               │ │
+│  ○ title requests  coder  upcoming                                                                    │                                │ │
+│                                                                                                       │ enter task page                │ │
+│  LATER  1                                                                                             ╰────────────────────────────────╯ │
 │  ○ title tag  ♙ person  waiting on requests                                                                                              │
 │                                                                                                                                          │
 │  DONE  1   d shows                                                                                                                       │

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -203,9 +202,9 @@ func planSide(r plan.Row, now time.Time) []Line {
 	} else if r.Task.Owner == plan.Person && r.State != plan.Done {
 		forYou = plan.Label(r.State)
 	}
-	pr := ""
+	pr := GlyphDash
 	if r.PR > 0 {
-		pr = fmt.Sprintf("PR %d", r.PR)
+		pr = fmt.Sprintf("%d", r.PR)
 	}
 	field := func(k, v string) Line {
 		return Line{{Text: fmt.Sprintf("%-9s", k), Role: RoleMuted}, {Text: v, Role: RoleText}}
@@ -215,19 +214,13 @@ func planSide(r plan.Row, now time.Time) []Line {
 		field("state", plan.Label(r.State)),
 		field("owner", or(r.Task.Owner)),
 		field("review", review),
-		field("reason", or(firstOf(r.Reason, pr))),
+		field("PR", pr), // a PR and a reason both hold (a blocked task with its PR linked): two fields (reviewer-codex)
+		field("reason", or(r.Reason)),
 		field("waits on", waits),
 		field("for you", forYou),
 		nil,
 		{{Text: "enter", Role: RoleAccent, Bold: true}, {Text: " task page", Role: RoleMuted}},
 	}
-}
-
-func firstOf(ss ...string) string {
-	if i := slices.IndexFunc(ss, func(s string) bool { return s != "" }); i >= 0 {
-		return ss[i]
-	}
-	return ""
 }
 
 // planBoardItems is the Plan tab's rows from the board (keys task:<id>).

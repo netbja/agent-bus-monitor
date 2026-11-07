@@ -216,6 +216,20 @@ func TestPlanSidePanel(t *testing.T) {
 	}
 }
 
+// The side panel shows the PR and the reason as two fields: a blocked task
+// keeps its linked PR (reviewer-codex).
+func TestPlanSideShowsPRAndReason(t *testing.T) {
+	r := boardRow("b", plan.Blocked, "coder")
+	r.PR, r.Reason = 351, "waits for the CI fix"
+	var text string
+	for _, l := range planSide(r, shellNow) {
+		text += l.text() + "\n"
+	}
+	if !strings.Contains(text, "PR       351") || !strings.Contains(text, "reason   waits for the CI fix") {
+		t.Fatalf("side:\n%s", text)
+	}
+}
+
 // §9 Keys: the main screen's footer holds enter, T, p, F1 and F5 at the
 // narrow width before any other key; p follows T.
 func TestFooterKeepsPlanAfterTriage(t *testing.T) {
