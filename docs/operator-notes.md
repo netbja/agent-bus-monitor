@@ -607,7 +607,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   warnings carry no value; a `Target` prints only kind and name). Its one writer is `notify.Edit` (notify-guided-setup
   §4, `notify/edit.go`): by table, every other byte kept (every `[..]` or `[[..]]` line is a boundary, only a
   `[kind.name]` part is editable, any other is kept verbatim; the comments right above a header are its table's);
-  the targets after an edit must be those before it changed by the edit's own ops, or nothing is written; values
+  the targets after an edit must be those before it changed by the edit's own ops, every other target with the same
+  values (a rename keeps its own), or nothing is written; values
   judged by `parse` (Load's rules) and TOML-encoded
   before any write; a refused, unparsable or swapped-folder file never touched; `flock` on `notify.toml.lock`, size
   and mtime compared at the rename (`ErrChanged`); a 0600 temp file renamed over it, the folder synced; loaded again,

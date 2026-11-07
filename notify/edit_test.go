@@ -382,3 +382,35 @@ func TestEditChecksARemovalAfterTheWrite(t *testing.T) {
 		t.Fatalf("a removal the reload refuses stayed: %v", err)
 	}
 }
+
+// foureyes: the safety net compares every untouched target's values too, so
+// a mis-split (a line starting with '[' inside a multi-line string or array,
+// read as a header) can never change another target unseen.
+func TestEditRefusesAChangeToAnUntouchedTarget(t *testing.T) {
+	p := writeFile(t, handFile, 0o600)
+	err := Edit(p, func(d *Doc) error {
+		for i, tb := range d.tables { // edits phone's topic behind the editor's back
+			if tb.name == "phone" {
+				d.tables[i].lines[tb.hdr+1] = "topic = \"agentbus-someoneelse0000\"\n"
+			}
+		}
+		return d.Add(Target{Name: "x", Kind: "desktop"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "cannot edit safely") || read(t, p) != handFile {
+		t.Fatalf("err %v", err)
+	}
+	// A rename keeps the target's values: one changed with it is refused.
+	err = Edit(p, func(d *Doc) error {
+		if err := d.Rename("phone", "pixel"); err != nil {
+			return err
+		}
+		i := d.find("pixel")
+		d.tables[i].lines[d.tables[i].hdr+1] = "topic = \"agentbus-someoneelse0000\"\n"
+		return nil
+	})
+	if err == nil || read(t, p) != handFile {
+		t.Fatalf("a rename that changed the values: %v", err)
+	}
+	// (A valid target holds no multi-line value: Load refuses one, so a
+	// mis-split can only reach a part Load ignores; the net covers the rest.)
+}

@@ -301,16 +301,33 @@ func Edit(path string, fn func(*Doc) error) error {
 		return errors.New("notify.toml not changed: the result " + after.Refused)
 	}
 	// The safety net (foureyes): the targets after the edit are exactly those
-	// before it, changed by the edit's own ops, or nothing is written.
+	// before it, changed by the edit's own ops, and every target the edit does
+	// not name keeps every value (in memory only), so a mis-split can never
+	// change another target unseen; or nothing is written.
 	want := targetNames(parse(old))
+	kept := targetValues(parse(old))
 	for _, op := range d.ops {
 		delete(want, op.old)
 		if op.name != "" {
 			want[op.name] = true
 		}
+		if v, ok := kept[op.old]; ok && op.name != "" { // a rename keeps its values
+			v.Name = op.name
+			kept[op.name] = v
+		} else if op.name != "" {
+			delete(kept, op.name) // added: judged by Load's rules before
+		}
+		delete(kept, op.old)
 	}
+	unsafe := errors.New("notify.toml not changed: it is written in a form this editor cannot edit safely: edit it by hand")
 	if got := targetNames(after); !maps.Equal(got, want) {
-		return errors.New("notify.toml not changed: it is written in a form this editor cannot edit safely: edit it by hand")
+		return unsafe
+	}
+	gotValues := targetValues(after)
+	for name, v := range kept {
+		if gotValues[name] != v {
+			return unsafe
+		}
 	}
 	if err := sameAsRead(real, existed, stamp); err != nil {
 		return err
@@ -331,6 +348,16 @@ func Edit(path string, fn func(*Doc) error) error {
 		return errors.New("notify.toml was not changed: the targets did not load as expected after the write")
 	}
 	return nil
+}
+
+// targetValues are the targets by name, their line left out (it moves).
+func targetValues(f *File) map[string]Target {
+	out := map[string]Target{}
+	for _, t := range f.Targets {
+		t.Line = 0
+		out[t.Name] = t
+	}
+	return out
 }
 
 func targetNames(f *File) map[string]bool {
