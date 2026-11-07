@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"io"
 	"os"
 	"os/exec"
@@ -13,9 +14,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
-	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/notify"
 )
 
@@ -44,54 +43,11 @@ func realNotificationsDeps() notificationsDeps {
 		Desktop: desktopRun(exec.LookPath, runQuiet), AgentCaller: agentAncestor}
 }
 
-// errNoAncestry: this host has no /proc to read the caller's ancestors.
-var errNoAncestry = errors.New("no process ancestry on this host")
+// errNoAncestry and agentAncestor are the shared rule (internal/agentcaller),
+// which busmon's notification setup applies too.
+var errNoAncestry = agentcaller.ErrNoAncestry
 
-// agentAncestor is "<project>/<agent>" for the registered agent, in any
-// project of the broker, whose verified pid and start are an ancestor of
-// this process (reviewer-codex, master: clearing AGENT_BUS_AGENT is no way
-// out of the agent refusal). The bus is no boundary against the local user:
-// an agent's process can still read notify.toml and post to its target
-// itself; this keeps the command from being an agent's easy path.
-func agentAncestor(ctx context.Context) (string, error) {
-	chain := dispatch.Ancestors(os.Getpid())
-	if len(chain) == 0 {
-		return "", errNoAncestry
-	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	r, err := bus.ConnectContext(ctx, "")
-	if err != nil {
-		return "", err
-	}
-	defer r.Close()
-	projects, err := bus.Projects(ctx, r)
-	if err != nil {
-		return "", err
-	}
-	for _, p := range projects {
-		b, err := bus.Open(r, p.Project)
-		if err != nil {
-			return "", err
-		}
-		snaps, err := b.Agents(ctx)
-		if err != nil {
-			return "", err
-		}
-		for _, name := range sortedAgentNames(snaps) {
-			s := snaps[name]
-			if s.PID == 0 || s.PIDStart == 0 {
-				continue // no verified identity to match
-			}
-			for _, a := range chain {
-				if a.PID == s.PID && a.Start == s.PIDStart {
-					return p.Project + "/" + name, nil
-				}
-			}
-		}
-	}
-	return "", nil
-}
+func agentAncestor(ctx context.Context) (string, error) { return agentcaller.Ancestor(ctx) }
 
 // desktopRun is notify-send with an urgency, bounded to 5 s; nil when it is
 // not on PATH.
