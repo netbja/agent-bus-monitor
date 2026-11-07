@@ -15,7 +15,7 @@ func TestRolesSkillUsers(t *testing.T) {
 	if code := runRoles([]string{"skill-users", "agent-bus-sentinel", "tdd"}, env, &out, &errw); code != 0 {
 		t.Fatalf("exit %d: %s", code, errw.String())
 	}
-	if got := strings.TrimSpace(out.String()); got != "coder\nsentinel" {
+	if got := strings.TrimSpace(out.String()); got != "coder\nsentinel\ncoder2" {
 		t.Fatalf("out %q", got)
 	}
 	out.Reset()

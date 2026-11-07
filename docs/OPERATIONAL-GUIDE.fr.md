@@ -814,6 +814,7 @@ l'exécute étape par étape.
 | Consulter l'historique d'un fil | `agentbus --project myapp thread <id-ou-ref>` |
 | Lister les comptes-rendus | `agentbus --project myapp reports` |
 | Ajouter un agent en renfort | `agent-spawn architect myapp` (depuis master) |
+| Ajouter un second codeur | `agent-spawn coder2 myapp` (depuis master) : deux tâches à la fois, chacune dans son propre worktree, jamais un même paquet dans les deux |
 | Tous les projets connus | `agentbus projects` |
 | Les questions qui vous attendent | `agentbus --project myapp asks --open` / `answer <id> <q> --choice <libellé>` |
 | Pause, reprise | `agentbus --project myapp pause --for 2h` / `resume` |

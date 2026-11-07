@@ -306,3 +306,15 @@ deny = [
   # Only master and docs deliver (forge-delivery).
   "Bash(agentbus deliver *)",
 ]
+
+# A second implementer (role-coder2, the person 2026-11-08), popped for parallel work:
+# agent-spawn coder2 <project>. coder's profile, skills and denies; one git worktree per
+# task from origin/main, never the shared tree, and never a package another task has in
+# flight (roles/coder2.md). Two coders never hold one task: a board claim of a task
+# another owner holds is refused, and only a request's target may accept it (bus/).
+[roles.coder2]
+profile = "claude-opus"
+tier = "pop"
+skills = ["agent-bus", "tdd", "implement"]
+[roles.coder2.tool_rules]
+deny = ["Bash(agentbus deliver *)"]

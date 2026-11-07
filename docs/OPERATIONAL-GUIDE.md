@@ -768,6 +768,7 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
 | Inspect thread history | `agentbus --project myapp thread <id-or-ref>` |
 | View report summaries | `agentbus --project myapp reports` |
 | Spawn extra agent | `agent-spawn architect myapp` (from master) |
+| Spawn a second coder | `agent-spawn coder2 myapp` (from master): two tasks at once, each in its own worktree, never one package in both |
 | Every known project | `agentbus projects` |
 | Questions waiting for you | `agentbus --project myapp asks --open` / `answer <id> <q> --choice <label>` |
 | Pause, resume | `agentbus --project myapp pause --for 2h` / `resume` |
