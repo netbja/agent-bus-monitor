@@ -18,9 +18,10 @@ three steps are approved and await their merge. §8 says how the two compose.
 ## 1. The cause, in the code
 
 `planItems` (`tea_foryou.go`) adds one For you row (`rankPlan`) for **every** task the plan
-derives as `plan.Waiting` with `Owner == plan.Person`. `plan.Derive` (`plan/derive.go`) gives
-`Waiting` to every person task whose dependencies are done (`len(waitingOn) == 0`), whether or not
-the person can act on it today. Several such tasks sit in For you for the life of a batch. That is
+derives as `plan.Waiting` with `Owner == plan.Person`. In `plan.Derive` (`plan/derive.go`), a
+person task that is not a mission task, not done (no `done` board entry, no recorded completion)
+and not answered (`answeredAsk`) falls through to `Waiting` as soon as its dependencies are done
+(`len(waitingOn) == 0`), whether or not the person can act on it today. Several such tasks sit in For you for the life of a batch. That is
 the permanent panel. They also count in the `for you` badge (the strip's `decide` chip after
 queue-triage), in the frame label and in the reminder (`decisions`, `dueAttention`).
 
