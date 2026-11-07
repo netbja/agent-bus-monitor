@@ -162,3 +162,38 @@ func TestActivityLiveSelectionHeldOnAppendAndResize(t *testing.T) {
 	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 24})
 	selVisible(t, m, "after a resize")
 }
+
+// An expansion kept in view while live holds the view above the tail; after
+// new lines and the collapse, the lines below the last one seen count as new
+// (reviewer-codex: lastSeen is the last line in view after every adjustment).
+func TestActivityCountsLinesBelowAKeptExpansion(t *testing.T) {
+	m := longActivity(t, 140, 40)
+	m = keys(t, m, 'k', 'k', kEnter) // inside the live window: opening keeps live
+	if !m.lists.activity.Live() || m.ui.expanded == "" {
+		t.Fatalf("fixture: live %v, expanded %q", m.lists.activity.Live(), m.ui.expanded)
+	}
+	m.grid()
+	var evs []bus.Event
+	for i := 0; i < 40; i++ {
+		evs = append(evs, bus.Event{ID: fmt.Sprintf("%d-%d", shellNow.UnixMilli(), i+1), Kind: "status", Agent: "qa", State: "working", Message: fmt.Sprintf("new %d", i)})
+	}
+	m = step(t, m, tailMsg{events: evs})
+	m.grid()
+	l := m.lists.activity
+	below := 0
+	for i := l.top + l.rows(); i < len(l.items); i++ {
+		if it := l.items[i]; it.Selectable && !isExpandKey(it.Key) {
+			below++
+		}
+	}
+	if below == 0 {
+		t.Fatal("fixture: the kept expansion did not hold the view above new lines")
+	}
+	m = keys(t, m, kEsc)
+	if m.lists.activity.Live() {
+		t.Fatal("collapsed above the live window, still live")
+	}
+	if n := m.ui.pause.New(); n != below {
+		t.Errorf("new lines counted %d, want the %d below the last line in view", n, below)
+	}
+}

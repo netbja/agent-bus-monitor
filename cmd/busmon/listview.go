@@ -315,9 +315,6 @@ func (l *listState) viewport() {
 	switch {
 	case l.Live() && !wheeled:
 		l.top = maxTop
-		if n > 0 {
-			l.lastSeen = l.items[n-1].Key // where a later hold starts counting
-		}
 	case l.anchor != "":
 		if i := l.index(l.anchor); i >= 0 {
 			l.top = i + l.anchorOff
@@ -346,6 +343,15 @@ func (l *listState) viewport() {
 		l.top = min(l.top, i)
 	}
 	l.top = clamp(l.top, 0, maxTop)
+	if l.Live() { // where a later hold starts counting: the last line in view once every adjustment is made (reviewer-codex)
+		l.lastSeen = ""
+		for i := min(n, l.top+rows) - 1; i >= l.top; i-- {
+			if k := l.items[i].Key; k != "" && !isExpandKey(k) {
+				l.lastSeen = k
+				break
+			}
+		}
+	}
 }
 
 // draw draws the frame, the header and the visible rows inside rect.
