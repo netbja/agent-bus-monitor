@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -27,21 +28,33 @@ import (
 // another setup): nothing was written.
 var ErrChanged = errors.New("notify.toml changed while you were editing: open the setup again")
 
-// Doc is notify.toml as its lines: what precedes the first table, then one
-// part per table, from its header to the next header.
+// Doc is notify.toml as its lines: what precedes the first header, then one
+// part per header ([..] or [[..]]), from the comment block right above it to
+// the next one. Only a [kind.name] part is a target the editor may touch;
+// any other ([ntfy] with dotted keys, a nested table, an array of tables) is
+// kept verbatim (foureyes).
 type Doc struct {
 	head    []string
 	tables  []docTable
 	touched []string // the names an edit added or renamed: they must load
+	ops     []docOp  // what the edit means to do: the safety net compares it
 }
 
 type docTable struct {
-	kind, name string
+	kind, name string // "" for a part the editor does not edit
 	lines      []string
+	hdr        int // the header's line within lines (comments above it come first)
 }
 
-// tableHeader is a [kind.name] line, a trailing comment allowed.
-var tableHeader = regexp.MustCompile(`^\s*\[\s*([A-Za-z0-9_-]+)\.([^\]\s]+)\s*\]\s*(#.*)?$`)
+// docOp is one edit: add (name), remove (old), rename (old to name).
+type docOp struct{ old, name string }
+
+// anyHeader is any table header line; tableHeader is a [kind.name] one, a
+// trailing comment allowed.
+var (
+	anyHeader   = regexp.MustCompile(`^\s*\[`)
+	tableHeader = regexp.MustCompile(`^\s*\[\s*([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\s*\]\s*(#.*)?$`)
+)
 
 func parseDoc(data string) *Doc {
 	d := &Doc{}
@@ -53,16 +66,32 @@ func parseDoc(data string) *Doc {
 		lines = lines[:len(lines)-1]
 	}
 	for _, l := range lines {
-		if m := tableHeader.FindStringSubmatch(strings.TrimRight(l, "\r\n")); m != nil {
-			d.tables = append(d.tables, docTable{kind: m[1], name: m[2], lines: []string{l}})
+		line := strings.TrimRight(l, "\r\n")
+		if !anyHeader.MatchString(line) {
+			if n := len(d.tables); n > 0 {
+				d.tables[n-1].lines = append(d.tables[n-1].lines, l)
+			} else {
+				d.head = append(d.head, l)
+			}
 			continue
 		}
-		if len(d.tables) == 0 {
-			d.head = append(d.head, l)
-			continue
+		// The comments right above a header are its own: take them from the
+		// part before, leaving the blank lines that separate the two there.
+		prev := &d.head
+		if n := len(d.tables); n > 0 {
+			prev = &d.tables[n-1].lines
 		}
-		t := &d.tables[len(d.tables)-1]
-		t.lines = append(t.lines, l)
+		cut := len(*prev)
+		for cut > 0 && strings.HasPrefix(strings.TrimSpace((*prev)[cut-1]), "#") {
+			cut--
+		}
+		above := append([]string(nil), (*prev)[cut:]...)
+		*prev = (*prev)[:cut]
+		t := docTable{lines: append(above, l), hdr: len(above)}
+		if m := tableHeader.FindStringSubmatch(line); m != nil {
+			t.kind, t.name = m[1], m[2]
+		}
+		d.tables = append(d.tables, t)
 	}
 	return d
 }
@@ -84,14 +113,16 @@ func (d *Doc) bytes() []byte {
 func (d *Doc) Names() []string {
 	out := make([]string, 0, len(d.tables))
 	for _, t := range d.tables {
-		out = append(out, t.name)
+		if t.name != "" {
+			out = append(out, t.name)
+		}
 	}
 	return out
 }
 
 func (d *Doc) find(name string) int {
 	for i, t := range d.tables {
-		if t.name == name {
+		if t.name != "" && t.name == name {
 			return i
 		}
 	}
@@ -125,6 +156,7 @@ func (d *Doc) Add(t Target) error {
 	nt := parseDoc(text).tables[0]
 	d.tables = append(d.tables, nt)
 	d.touched = append(d.touched, t.Name)
+	d.ops = append(d.ops, docOp{name: t.Name})
 	return nil
 }
 
@@ -148,6 +180,7 @@ func (d *Doc) Remove(name string) error {
 		return fmt.Errorf("no target called %s", name)
 	}
 	d.tables = append(d.tables[:i], d.tables[i+1:]...)
+	d.ops = append(d.ops, docOp{old: name})
 	return nil
 }
 
@@ -164,11 +197,12 @@ func (d *Doc) Rename(old, name string) error {
 		return fmt.Errorf("a target is already called %s", name)
 	}
 	t := &d.tables[i]
-	h := t.lines[0]
+	h := t.lines[t.hdr]
 	at := strings.Index(h, "."+old)
-	t.lines[0] = h[:at] + "." + name + h[at+1+len(old):]
+	t.lines[t.hdr] = h[:at] + "." + name + h[at+1+len(old):]
 	t.name = name
 	d.touched = append(d.touched, name)
+	d.ops = append(d.ops, docOp{old: old, name: name})
 	return nil
 }
 
@@ -263,8 +297,21 @@ func Edit(path string, fn func(*Doc) error) error {
 		return err
 	}
 	data := d.bytes()
-	if f := parse(data); f.Refused != "" {
-		return errors.New("notify.toml not changed: the result " + f.Refused)
+	after := parse(data)
+	if after.Refused != "" {
+		return errors.New("notify.toml not changed: the result " + after.Refused)
+	}
+	// The safety net (foureyes): the targets after the edit are exactly those
+	// before it, changed by the edit's own ops, or nothing is written.
+	want := targetNames(parse(old))
+	for _, op := range d.ops {
+		delete(want, op.old)
+		if op.name != "" {
+			want[op.name] = true
+		}
+	}
+	if got := targetNames(after); !maps.Equal(got, want) {
+		return errors.New("notify.toml not changed: it is written in a form this editor cannot edit safely: edit it by hand")
 	}
 	if err := sameAsRead(real, existed, stamp); err != nil {
 		return err
@@ -285,6 +332,14 @@ func Edit(path string, fn func(*Doc) error) error {
 		}
 	}
 	return nil
+}
+
+func targetNames(f *File) map[string]bool {
+	out := map[string]bool{}
+	for _, t := range f.Targets {
+		out[t.Name] = true
+	}
+	return out
 }
 
 // fileStamp is what tells a later write that the file was changed.

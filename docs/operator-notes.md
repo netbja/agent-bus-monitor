@@ -605,7 +605,10 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   writable by no one else, opened once `O_NOFOLLOW` and judged by fstat; per target https, http only `insecure` on a
   private host, ntfy.sh by default and never `self_hosted`, a topic of 12-64 safe characters, Discord's hosts only;
   warnings carry no value; a `Target` prints only kind and name). Its one writer is `notify.Edit` (notify-guided-setup
-  §4, `notify/edit.go`): by table, every other byte kept; values judged by `parse` (Load's rules) and TOML-encoded
+  §4, `notify/edit.go`): by table, every other byte kept (every `[..]` or `[[..]]` line is a boundary, only a
+  `[kind.name]` part is editable, any other is kept verbatim; the comments right above a header are its table's);
+  the targets after an edit must be those before it changed by the edit's own ops, or nothing is written; values
+  judged by `parse` (Load's rules) and TOML-encoded
   before any write; a refused, unparsable or swapped-folder file never touched; `flock` on `notify.toml.lock`, size
   and mtime compared at the rename (`ErrChanged`); a 0600 temp file renamed over it, the folder synced; loaded again,
   and the old bytes put back (or a new file removed) when an added or renamed target does not load. `notify.Explain`

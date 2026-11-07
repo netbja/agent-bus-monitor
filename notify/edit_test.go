@@ -252,3 +252,87 @@ func TestEditRollsBack(t *testing.T) {
 		t.Fatalf("a file that did not exist is left: %v", err)
 	}
 }
+
+// foureyes: a header other than [kind.name] ([ntfy] with dotted keys, a
+// nested table, an array of tables) is a part of its own, kept verbatim;
+// an edit whose result would lose or gain any other target writes nothing.
+func TestEditKeepsPartsItCannotEdit(t *testing.T) {
+	const file = "[discord.team]\nwebhook = \"https://discord.com/api/webhooks/1/abc\"\n\n[ntfy]\nphone.topic = \"agentbus-abcdefghijklmnopqrst\"\n"
+	p := writeFile(t, file, 0o600)
+	if f := Load(p); len(f.Targets) != 2 {
+		t.Fatalf("fixture: %v", f.Targets)
+	}
+	if err := Edit(p, func(d *Doc) error { return d.Remove("team") }); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, p); got != "[ntfy]\nphone.topic = \"agentbus-abcdefghijklmnopqrst\"\n" {
+		t.Fatalf("after remove:\n%q", got)
+	}
+	if _, ok := Load(p).Target("phone"); !ok {
+		t.Fatal("phone was lost")
+	}
+	// phone is defined by dotted keys, not a [kind.name] table: the editor
+	// cannot remove or rename it, and says so; nothing is written.
+	for _, fn := range []func(*Doc) error{
+		func(d *Doc) error { return d.Remove("phone") },
+		func(d *Doc) error { return d.Rename("phone", "pixel") },
+	} {
+		before := read(t, p)
+		if err := Edit(p, fn); err == nil || read(t, p) != before {
+			t.Errorf("an edit of a target it cannot see: %v", err)
+		}
+	}
+	// A part the editor does not edit has no name to reach it by.
+	arr := writeFile(t, "[[x]]\na = 1\n", 0o600)
+	if err := Edit(arr, func(d *Doc) error { return d.Remove("") }); err == nil || read(t, arr) != "[[x]]\na = 1\n" {
+		t.Errorf("an unnamed part was removed: %v", err)
+	}
+	// A result that would lose a target it did not name writes nothing.
+	nested := writeFile(t, "[ntfy.phone]\ntopic = \"agentbus-abcdefghijklmnopqrst\"\n[[x]]\na = 1\n", 0o600)
+	if err := Edit(nested, func(d *Doc) error { return d.Add(Target{Name: "here", Kind: "desktop"}) }); err != nil {
+		t.Fatalf("add beside an array of tables: %v", err)
+	}
+	if got := read(t, nested); !strings.HasPrefix(got, "[ntfy.phone]\ntopic = \"agentbus-abcdefghijklmnopqrst\"\n[[x]]\na = 1\n") {
+		t.Fatalf("after add:\n%q", got)
+	}
+}
+
+// The safety net itself: an edit that changes another target than the one it
+// names is refused whatever the parser thought (foureyes).
+func TestEditRefusesAnUnexpectedTargetChange(t *testing.T) {
+	p := writeFile(t, handFile, 0o600)
+	err := Edit(p, func(d *Doc) error {
+		d.tables = d.tables[:1] // drops team and here behind the editor's back
+		return d.Add(Target{Name: "x", Kind: "desktop"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "cannot edit safely") || read(t, p) != handFile {
+		t.Fatalf("err %v", err)
+	}
+}
+
+// A comment and the lines directly above a header belong to that header's
+// table: removing the table before keeps them (foureyes).
+func TestEditKeepsTheCommentAboveTheNextTable(t *testing.T) {
+	const file = "[ntfy.phone]\ntopic = \"agentbus-abcdefghijklmnopqrst\"\n\n# my work server\n[ntfy.work]\ntopic = \"agentbus-workworkworkwork\"\n"
+	p := writeFile(t, file, 0o600)
+	if err := Edit(p, func(d *Doc) error { return d.Remove("phone") }); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, p); got != "# my work server\n[ntfy.work]\ntopic = \"agentbus-workworkworkwork\"\n" {
+		t.Fatalf("after remove:\n%q", got)
+	}
+	p = writeFile(t, file, 0o600)
+	if err := Edit(p, func(d *Doc) error { return d.Remove("work") }); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, p); got != "[ntfy.phone]\ntopic = \"agentbus-abcdefghijklmnopqrst\"\n\n" {
+		t.Fatalf("after removing the second:\n%q", got)
+	}
+	p = writeFile(t, file, 0o600)
+	if err := Edit(p, func(d *Doc) error { return d.Rename("work", "office") }); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, p); !strings.Contains(got, "# my work server\n[ntfy.office]\n") {
+		t.Fatalf("after rename:\n%q", got)
+	}
+}
