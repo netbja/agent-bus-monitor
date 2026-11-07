@@ -34,12 +34,19 @@ func (m Model) grid() *grid {
 		drawLine(g, 0, l.Tabs.Y, m.width, tabBar(narrowPanels, l.Active, m.width, true), false)
 	}
 	reading := m.rd.open()
+	drawer := reading && l.Tier == TierWide && m.rd.pages[0].drawer
 	for _, p := range l.Visible {
 		if reading && (p == l.Active || l.Tier == TierNarrow) {
 			continue // the reader has the lower zone (narrow: the view)
 		}
+		if drawer && p == PanelAgents {
+			continue // the plan drawer is right of For you, over Agents (home-inbox-drawer §4.4)
+		}
 		lst := *m.lists.of(p) // drawn from a copy: View leaves the model as it found it
 		lst.draw(g)
+		if p == PanelPlan && m.lists.planSide != nil {
+			drawPlanSide(g, l.Lower, m.lists.planSide)
+		}
 	}
 	if reading {
 		m.drawReader(g)
@@ -240,7 +247,27 @@ func (m *Model) fillLists() {
 	bd.SetFrame(m.lowerTitle(PanelBoard, bt), bl)
 
 	pl := &m.lists.plan
-	pl.SetItems(planTabItems(s.planState, m.ui.planExpanded, now, lower))
+	m.lists.planSide = nil
+	if !s.planState.loaded {
+		pl.SetItems([]ListItem{{Line: FitLine(Line{{Text: "no plan loaded (master: agentbus plan load <path>@<commit>)", Role: RoleMuted}}, lower)}})
+	} else {
+		// The board (home-inbox-drawer §4): at the wide tier the side panel
+		// takes the frame's right part when the list keeps planListMin cells.
+		wide := l.Tier == TierWide && lower >= planListMin+planSideWidth+1
+		lw := lower
+		if wide {
+			lw = lower - planSideWidth - 1
+		}
+		v := planBoard(s.planState, -1, m.ui.planExpanded, now, lw, l.Tier, false)
+		pl.SetItems(planBoardItems(v, lw))
+		if task, ok := strings.CutPrefix(pl.Selected(), "task:"); ok && wide {
+			for _, r := range s.planState.rows {
+				if r.Task.ID == task {
+					m.lists.planSide = planSide(r, now)
+				}
+			}
+		}
+	}
 	pt := Line{{Text: "Plan", Role: RoleText}}
 	var plabel Line
 	if s.plan != nil {

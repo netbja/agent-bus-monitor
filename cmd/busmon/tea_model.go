@@ -124,6 +124,7 @@ type uiState struct {
 type shellLists struct {
 	forYou, agents, activity, board, requests, plan listState
 	reqView                                         reqView // the Requests view refresh computed: the layout, fillLists and the header read it
+	planSide                                        []Line  // the Plan tab's side panel (wide tier), drawn inside its frame at the right (home-inbox-drawer §4.3)
 }
 
 func (ls *shellLists) of(p PanelID) *listState {

@@ -45,7 +45,6 @@ func TestRowHintTable(t *testing.T) {
 		{PanelAgents, "coder", false, "agent"},
 		{PanelBoard, "busmon-charm-b", false, "task"},
 		{PanelPlan, "task:t1", false, "task"},
-		{PanelPlan, "toggle", false, "expand"},
 		{PanelForYou, "", false, rowNoPair},
 		{PanelAgents, "", false, rowNoPair},
 	} {
@@ -242,7 +241,7 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 		PanelActivity: {"expand", "full text"},
 		PanelBoard:    {"task"},
 		PanelRequests: {"answer", "request", "thread", "notices", "fold", "unfold"},
-		PanelPlan:     {"task", "expand"},
+		PanelPlan:     {"task"},
 	} {
 		for _, w := range words {
 			want = append(want, fmt.Sprintf("%d %s", p, w))
@@ -260,7 +259,7 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 	for p, ks := range map[PanelID][]string{
 		PanelForYou:   {"ask", "wait", "prompt", "gate", "plan-next", "merge", mergeUnknownKey, "health"},
 		PanelRequests: {"ask", "req", "thr", "ntc", reqNoticesKey, "fold", "grp", "older"},
-		PanelPlan:     {"task", "toggle"},
+		PanelPlan:     {"task"},
 	} {
 		for _, k := range ks {
 			if !kinds[fmt.Sprintf("%d %s", p, k)] {

@@ -61,13 +61,7 @@ func TestShellPlanPageKeys(t *testing.T) {
 	if p := m.rd.top(); p.kind != ovPlan || p.items[p.sel].task != second {
 		t.Fatal("esc from a task returns to the plan, selection kept")
 	}
-	p = m.rd.top()
-	for i, it := range p.items {
-		if it.toggle {
-			p.sel = i
-		}
-	}
-	m = keys(t, m, kEnter)
+	m = keys(t, m, 'd') // DONE folded until d (home-inbox-drawer §4.4)
 	if p := m.rd.top(); !p.expanded || !strings.Contains(p.plain, "merged (recorded") {
 		t.Fatalf("enter on done did not expand: %q", p.plain)
 	}

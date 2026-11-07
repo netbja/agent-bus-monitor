@@ -74,7 +74,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 	if sum, ok := st.plan.summary(now); ok {
 		s.plan = &sum
 	}
-	// What the plan's pages read (planOverlay, planTaskDetail). The poller
+	// What the plan's pages read (planBoard, planTaskDetail). The poller
 	// appends to its ledger in place and may replace the rest: the maps are
 	// copied (a ledger slice is only appended to, so its first len entries
 	// never change); rows is a new slice per Derive.

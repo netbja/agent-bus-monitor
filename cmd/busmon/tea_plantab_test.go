@@ -43,7 +43,7 @@ func TestShellPlanTab(t *testing.T) {
 			sel = append(sel, it.Key)
 		}
 	}
-	if strings.Join(sel, " ") != "task:a-board toggle" {
+	if strings.Join(sel, " ") != "task:a-board" { // DONE folded: d shows it (home-inbox-drawer §4.4)
 		t.Fatalf("selectable plan rows %v", sel)
 	}
 	l.Select("task:a-board")
@@ -52,8 +52,7 @@ func TestShellPlanTab(t *testing.T) {
 		t.Fatalf("Enter on a task: %+v", p)
 	}
 	m = keys(t, m, kEsc)
-	m.lists.of(PanelPlan).Select("toggle")
-	m = keys(t, m, kEnter)
+	m = keys(t, m, 'd')
 	sel = nil
 	for _, it := range m.lists.of(PanelPlan).items {
 		if it.Selectable {
@@ -61,7 +60,13 @@ func TestShellPlanTab(t *testing.T) {
 		}
 	}
 	if strings.Join(sel, " ") != "task:a-board task:a-look" {
-		t.Fatalf("after expanding done: %v", sel)
+		t.Fatalf("after d: %v", sel)
+	}
+	m = keys(t, m, 'd')
+	for _, it := range m.lists.of(PanelPlan).items {
+		if it.Key == "task:a-look" {
+			t.Fatal("d again did not fold DONE")
+		}
 	}
 
 	// The narrow tier's sixth view.
@@ -74,7 +79,9 @@ func TestShellPlanTab(t *testing.T) {
 
 // No plan loaded: the tab says how to load one, and nothing is selectable.
 func TestPlanTabWithoutPlan(t *testing.T) {
-	its := planTabItems(planState{}, false, shellNow, 100)
+	m := newShell(shellConfig{project: "demo", self: "charlie", st: &shared{agents: map[string]*agentState{}, person: "charlie"}})
+	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
+	its := m.lists.of(PanelPlan).items
 	if len(its) != 1 || its[0].Selectable || !strings.Contains(its[0].Line.text(), "agentbus plan load") {
 		t.Fatalf("no plan: %+v", its)
 	}
@@ -129,7 +136,7 @@ func TestPlanTabCopyAndEnd(t *testing.T) {
 	if !strings.Contains(m.ui.flash, "task copied") {
 		t.Fatalf("y on a task: flash %q", m.ui.flash)
 	}
-	for _, it := range planTabItems(st.plan, false, shellNow, 120) {
+	for _, it := range planBoardItems(planBoard(st.plan, -1, false, shellNow, 120, TierWide, false), 120) {
 		if it.Selectable && strings.HasPrefix(it.Line.text(), "  ") {
 			t.Fatalf("plan row keeps the overlay's mark column: %q", it.Line.text())
 		}

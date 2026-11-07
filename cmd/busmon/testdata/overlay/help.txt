@@ -31,7 +31,8 @@ KEYS
   F2 r                 requests
   F3 s                 services
   R                    where was I? open the project recap
-  P                    the batch's plan: its tasks by state (enter opens one, or expands done)
+  p P                  the batch's plan in a drawer: NOW, NEXT, LATER, DONE, the progress; enter opens a task, d shows done, esc closes
+  d                    the Plan tab: show or fold the done tasks
   U                    tokens: the account windows, every project side by side, this project by agent
   C                    settings: display, attention and your name, changed in config.toml
   H                    history: re-read the past, the archive on this host then the live streams (enter opens an entry)
@@ -68,6 +69,7 @@ KEYS
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
   o                    History (H): load the three days before; the recap (R): show For you's items older than a day
   r                    About (A): play the packet's run again
+  d                    the plan (p): show or fold the done tasks
   l                    Services (F3): the selected service's log (enter too; ↑↓ choose the card, ←→ too when side by side)
   esc q                close
   + -                  a tracked request's page: raise or lower its priority (low, normal, high)

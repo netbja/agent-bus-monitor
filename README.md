@@ -554,9 +554,14 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     requests, reviews still gated, directives between agents, notices; answered threads and
     those older than 24 h are folded (`o`). Enter expands a group or opens a thread; `d` then `y`
     closes a thread with a reply from you.
-  - **Plan** — the batch's plan (`agentbus plan load`), its tasks by state: waiting for you (a merge
-    only once its PR is linked), answered (master to record), blocked, in review, in progress,
-    upcoming, done. Enter opens a task: its review, PR, asks and notes.
+  - **Plan** — the batch's plan (`agentbus plan load`) as a board: the progress (`v0.29  6/11 done`,
+    a bar, the share), then **NOW** (waiting for you, a merge only once its PR is linked; answered,
+    master to record; blocked; in review; in progress), **NEXT** (ready to start), **LATER** (waiting
+    on another task) and **DONE**, folded to a count until `d` shows it. At 120 columns and more a
+    side panel beside the list holds the selected task's state, owner, review, reason, what it waits
+    on and what it needs from you. `p` (or `P`) opens the same board as a drawer: at 120 columns and
+    more right of For you, which stays in view; below, in the lower zone. Esc closes it. Enter opens
+    a task: its review, PR, asks and notes.
     A task waiting for you has an `Action:` row: Enter or `s` opens the compose window to master,
     prefilled, to start it.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent
@@ -594,7 +599,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | F3 `s` | services: dispatch, missions and the Redis broker as cards (state, pid, last error, log size; Redis version, uptime, memory, keys), read again every 5 s while open; `↑↓` (or `←→` when side by side) choose a card, Enter or `l` opens a service's log, Enter on Redis its page (memory, persistence, clients, each project's keys and streams, the port bind, its last log lines) |
 | F5 | project health: each check, its detail and remediation |
 | `R` | the recap: "where was I?", built from what the bus retains, unread first |
-| `P` | the plan |
+| `p` `P` | the plan in a drawer (`d` shows what is done) |
 | `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |
 | `H` | history: re-read the past, the archive on this host then the live streams, newest first by day (enter opens an entry and `n`/`p` step, `o` loads three days more, `/` filters, `t` keeps the selected entry's thread) |
 | `A` | about: the project's and busmon's, agentbus's, the protocol's, Redis's, herdr's, the plugin's and Go's versions and the update state (`y` copies them), and master and coder on a bus line with a packet travelling there and back (`r` replays; still with fade off, 16 colours or no colour) |

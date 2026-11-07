@@ -21,4 +21,4 @@
 │    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- T triage   tab focus   1-4 tabs   ↑↓ j k select   F1 help   F5 health          
+ T triage   p P plan   tab focus   1-4 tabs   y copy   F1 help   F5 health      

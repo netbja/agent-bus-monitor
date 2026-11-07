@@ -75,7 +75,8 @@ const (
 	ActRecap        // open the deterministic project recap
 	ActHealth       // open project health details
 	ActPickType     // the picker: a typed character or backspace edits the filter
-	ActPlan         // open the batch's plan
+	ActPlan         // open the batch's plan: the drawer (p, P; home-inbox-drawer §4.4)
+	ActShowDone     // the plan board: show or fold DONE (d)
 	ActTab5         // the shell's narrow tier: the fifth view
 	ActTab6         // the shell's narrow tier: the sixth view (Plan)
 	ActTabNext      // the lower panel's next tab, wrapping (busmon-keys)
@@ -233,7 +234,8 @@ var (
 		{Keys: "F2", Hint: "requests", Alt: "r", Act: ActRequests, match: either(keyIs(keyF2), runeIs('r'))},
 		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(keyF3), runeIs('s'))},
 		{Keys: "R", Help: "where was I? open the project recap", Act: ActRecap, match: runeIs('R')},
-		{Keys: "P", Help: "the batch's plan: its tasks by state (enter opens one, or expands done)", Act: ActPlan, match: runeIs('P')},
+		{Keys: "p P", Hint: "plan", Help: "the batch's plan in a drawer: NOW, NEXT, LATER, DONE, the progress; enter opens a task, d shows done, esc closes", Act: ActPlan, match: runeIs('p', 'P')},
+		{Keys: "d", Hint: "done", Help: "the Plan tab: show or fold the done tasks", Act: ActShowDone, Panels: []PanelID{PanelPlan}, match: runeIs('d')},
 		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
 		{Keys: "C", Help: "settings: display, attention and your name, changed in config.toml", Act: ActSettings, match: runeIs('C')},
 		{Keys: "H", Help: "history: re-read the past, the archive on this host then the live streams (enter opens an entry)", Act: ActHistory, match: runeIs('H')},
@@ -324,6 +326,7 @@ var (
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
 		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
+		{Keys: "d", Hint: "done", Help: "the plan (p): show or fold the done tasks", Act: ActShowDone, OnPage: true, match: runeIs('d')},
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 		// After close: on a narrow footer the way out stays (message-reply-key).
@@ -484,6 +487,9 @@ func footerHintsOn(m Mode, p PanelID, t Tier, width int, offers func(Action) boo
 			if len(shown) > 0 && shown[0].Act == ActOpen {
 				at = 1
 			}
+			shown = slices.Insert(shown, at, b)
+		case b.Act == ActPlan && m == ModeShell: // after T (home-inbox-drawer §7)
+			at := slices.IndexFunc(shown, func(x binding) bool { return x.Act == ActTriage }) + 1
 			shown = slices.Insert(shown, at, b)
 		default:
 			shown = append(shown, b)

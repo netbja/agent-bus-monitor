@@ -33,6 +33,8 @@ type page struct {
 	built       pageStamp
 	dirty       bool // its own state changed since the build (cursor, thread)
 	fixed       bool // its body was given at open (services, a verdict): never rebuilt
+	drawer      bool   // ovPlan opened as the plan drawer (p, P): at the wide tier, right of For you (home-inbox-drawer §4.4)
+	side        []Line // ovPlan: the side panel of the selected task (wide tier), drawn beside the body
 
 	plainWhat, threadWhat string // what y and Y copy, as the frame and the footer name it ("" = text, thread)
 
@@ -209,8 +211,16 @@ type answerMsg struct {
 
 // readerRect is the reader's zone: the tabbed panel and the input, or at the
 // narrow tier the view, down to the footer.
+//
+// The plan drawer, at the wide tier, is right of For you, from the top panels'
+// row to the footer; a page opened from it is drawn there too: the bottom
+// page's flag decides for the whole stack (home-inbox-drawer §4.4).
 func (m *Model) readerRect() Rect {
 	l := m.layout
+	if l.Tier == TierWide && len(m.rd.pages) > 0 && m.rd.pages[0].drawer {
+		fw := l.ForYou.W
+		return Rect{fw, l.ForYou.Y, m.width - fw, l.Footer.Y - l.ForYou.Y}
+	}
 	switch l.Tier {
 	case TierWide, TierMedium:
 		return Rect{0, l.Lower.Y, m.width, l.Footer.Y - l.Lower.Y}
@@ -380,7 +390,17 @@ func (m *Model) pushPlan() tea.Cmd {
 		m.ui.flash, m.ui.flashErr = "no plan loaded (master: agentbus plan load <path>@<commit>)", false
 		return nil
 	}
-	return m.push(page{kind: ovPlan})
+	return m.push(page{kind: ovPlan, drawer: true})
+}
+
+// planDrawerWidths is the plan page's list width and whether the side panel
+// goes beside it (the wide tier, with room for both, §4.3).
+func (m *Model) planDrawerWidths() (list int, side bool) {
+	w := m.readerWidth()
+	if m.layout.Tier == TierWide && w >= planListMin+planSideWidth+1 {
+		return w - planSideWidth - 1, true
+	}
+	return w, false
 }
 
 // buildPage (re)builds the top page's body when it is stale; it reports
@@ -479,12 +499,13 @@ func (m *Model) buildPage() bool {
 	case ovHelp:
 		p.title, p.body = helpTitle(), helpText()
 	case ovPlan:
-		body, plain, items := planOverlay(s.planState, p.sel, p.expanded, now, width)
-		if p.sel >= len(items) {
-			p.sel = max(0, len(items)-1)
-			body, plain, items = planOverlay(s.planState, p.sel, p.expanded, now, width)
+		lw, wide := m.planDrawerWidths()
+		v := planBoard(s.planState, p.sel, p.expanded, now, lw, m.layout.Tier, wide)
+		if p.sel >= len(v.items) {
+			p.sel = max(0, len(v.items)-1)
+			v = planBoard(s.planState, p.sel, p.expanded, now, lw, m.layout.Tier, wide)
 		}
-		p.body, p.plain, p.items = body, plain, items
+		p.body, p.plain, p.items, p.side = v.lines, v.plain, v.items, v.side
 		p.title = "Plan"
 		if s.plan != nil {
 			p.title += " " + GlyphNone + " " + strings.TrimPrefix(planSeg(*s.plan, now).text(), "plan ")
@@ -728,6 +749,12 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 	case ovAbout:
 		if act == ActReplay {
 			return m.aboutReplay(p)
+		}
+	case ovPlan:
+		if act == ActShowDone { // d: show or fold DONE (home-inbox-drawer §4.4)
+			p.expanded, p.dirty = !p.expanded, true
+			m.refresh()
+			return nil
 		}
 	}
 	if p.kind == ovServices && p.svc != nil { // the cards: arrows choose, enter or l opens the log
@@ -1005,13 +1032,7 @@ func (m *Model) openPlanItem(p *page) tea.Cmd {
 	if p.sel >= len(p.items) {
 		return nil
 	}
-	it := p.items[p.sel]
-	if it.toggle {
-		p.expanded, p.dirty = true, true
-		m.refresh()
-		return nil
-	}
-	return m.push(page{kind: ovPlanTask, key: it.task})
+	return m.push(page{kind: ovPlanTask, key: p.items[p.sel].task})
 }
 
 // copy puts s on the clipboard (OSC52: it reaches the local clipboard even
@@ -1103,12 +1124,17 @@ func (m Model) drawReader(g *grid) {
 	drawFrame(g, r.X, r.Y, r.W, r.H, Frame{Title: title,
 		Label: Line{{Text: hints, Role: RoleMuted}}, Focused: true,
 		Scroll: ScrollState{Total: len(p.body), Top: p.top, Visible: rows}, Hue: RoleAccent})
+	bodyW := r.W - 4
+	if p.side != nil { // the plan's side panel, its own frame at the right (§4.3)
+		bodyW = r.W - 4 - planSideWidth - 1
+		drawPlanSide(g, r, p.side)
+	}
 	for i := 0; i < rows; i++ {
 		var l Line
 		if j := p.top + i; j < len(p.body) {
 			l = p.body[j]
 		}
-		drawLine(g, r.X+2, r.Y+1+i, r.W-4, l, false)
+		drawLine(g, r.X+2, r.Y+1+i, bodyW, l, false)
 	}
 }
 
@@ -1270,6 +1296,8 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovHistory
 	case ActReplay:
 		return p.kind == ovAbout
+	case ActShowDone:
+		return p.kind == ovPlan
 	}
 	return false
 }
