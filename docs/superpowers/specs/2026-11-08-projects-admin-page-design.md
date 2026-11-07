@@ -167,9 +167,34 @@ client, project, removeServices) (keys int64, services []string, err error)`. Bo
 `busmon --delete` after `confirmDelete`, and the page after §5.2. The order stays as it is
 (services first, so nothing restarts the project). So do the guards: `bus.ProjectKeys` refuses an
 invalid name, and the `{p}:*` glob with its trailing colon cannot match a sibling (`demo` never
-takes `demo-2`). The page runs it in a `tea.Cmd`, with a deadline of 30 s. The notice reports
-`deleted 1 204 keys of demo; removed dispatch and missions services here`, and the list is read
-again (the row disappears, or shows `template` when a template remains).
+takes `demo-2`). The page runs it in a `tea.Cmd`, with a deadline of 30 s.
+
+**The final check and the DEL are one atomic step** (reviewer-codex). Today `bus.DeleteProject`
+scans and then deletes, and a check run just before it leaves a window. It gains a Lua script,
+`deleteIfQuiet`. Its KEYS are the scanned keys plus `{p}:dispatch`, `{p}:conductor` and
+`{p}:services`. Inside the script, Redis runs nothing else, and it:
+
+1. refuses (returns the reason, deletes nothing) if `{p}:dispatch` or `{p}:conductor` exists, or
+   if a `{p}:services` record's `at` (decoded with `cjson`) is younger than 30 s by Redis `TIME`;
+2. otherwise `DEL`s every key it was given, and returns the count.
+
+Every Redis script is atomic, so no lease can be taken between the check and the DEL. The
+local checks (this machine's services, herdr, live agents) stay in Go just before it, as §5.1
+says.
+
+**Then a second scan, and the truth on the notice.** A key written between the scan and the script
+(an agent's `status`, say) is not in the list and survives. A writer that starts after the script
+re-creates its key. No check can stop that without a fence that every writer honours, and adding
+one is out of scope. So `deleteProjectNow` scans `{p}:*` again after the script:
+
+- nothing left: `deleted 1 204 keys of demo; removed dispatch and missions services here`;
+- keys left or back: `deleted 1 204 keys of demo, but 2 keys came back (demo:status,
+  demo:dispatch): something of demo still runs (on <host> if a record names it); stop it, then d
+  again`. The row stays, and the delete is never reported clean.
+
+The list is then read again (the row disappears, or shows `template` when a template remains).
+`busmon --delete` prints the same two outcomes, and exits with code 1 in the second case. The
+residual race is stated in operator-notes.
 
 The template, the roles, the worktrees and the backups are **not** touched. Deleting those is a
 different act (§10 Q3).
@@ -179,7 +204,10 @@ different act (§10 Q3).
 busmon is the person's interface, and an agent never drives it. But `busmon --delete <p> --yes`
 is one Bash line for any agent. Two layers stop it:
 
-1. **busmon refuses an agent caller itself**, whatever the spelling. This is the boundary.
+1. **busmon refuses an agent caller itself**, whatever the spelling. This is defence in depth,
+   not a boundary (foureyes). `env -u AGENT_BUS_AGENT setsid busmon -d demo --yes` (a double
+   fork, reparented) escapes both the environment check and the ancestor walk. That escape was
+   already noted on notify-guided-setup.
    `--delete` and `--reset` run the check `agentbus suspend` and `resume` already run
    (`refuseAgentCaller`): `AGENT_BUS_AGENT` set, or a registered agent among the process's
    ancestors. On a hit they exit with `deleting a project is the person's act, not <agent>'s
@@ -198,7 +226,8 @@ is one Bash line for any agent. Two layers stop it:
    busmon takes no message text, so a wildcard cannot deny a word inside a message, which was the
    worry with `agentbus * deliver *`. Residuals, named in operator-notes: a full path
    (`~/go/bin/busmon`), `go run ./cmd/busmon`, an env prefix (`X=1 busmon`), a shell alias.
-   Layer 1 covers all of them.
+   Layer 1 catches the ordinary ones. On the page, the real guard is the person's typed
+   confirmation (§5.2) and the live checks (§5.1, §5.3).
 
 The page itself adds no command an agent could call.
 
@@ -261,6 +290,10 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
   lease on after the typed name) deletes nothing and shows `became live:` (foureyes); a typed name that differs by one byte (`demo `,
   `Demo`, `demo-2`) never deletes; `esc` at each step writes nothing; the open project needs the
   second `y`; after it, the model quits with the message (`tea.Quit`), and nothing else runs.
+- **The atomic step** (Redis tests on `AGENTBUS_TEST_REDIS_URL`): the script deletes nothing
+  and returns the reason when the dispatch lease, the conductor lease or a fresh service record
+  exists; a lease set between the Go scan and the script is refused by the script; a key written
+  after the script makes the second scan report `came back` and `busmon --delete` exit 1.
 - **Delete path:** `deleteProjectNow` is called with the row's name only, and `busmon --delete`'s
   tests pass unchanged through the extracted function. One Redis test against
   `AGENTBUS_TEST_REDIS_URL` checks that a page delete of `demo` leaves `demo-2:*` intact.
