@@ -228,6 +228,13 @@ func (m *Model) fillLists() {
 	m.feed.rows.sweep()
 	act.SetHeader(activityHeader(l.Tier, lower))
 	act.SetItems(m.withExpansion(PanelActivity, feedItems, lower))
+	if seen, left := act.holdSelection(m.ui.expandIn == PanelActivity && m.ui.expanded != "" && m.ui.expanded == act.Selected()); left { // new lines or a smaller frame: the selection stays in view
+		at := m.feed.seq
+		if fl, ok := m.feedLine(seen); ok {
+			at = fl.seq // what came after the last line in view counts as new
+		}
+		m.ui.pause.Pause(at)
+	}
 	m.ui.pause.Recount(admitted)
 	at, al := activityFrame(&m.ui.pause, len(admitted), events, m.ui.filter)
 	act.SetFrame(m.lowerTitle(PanelActivity, at), al)

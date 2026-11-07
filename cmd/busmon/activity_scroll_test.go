@@ -108,3 +108,57 @@ func TestViewportUpKeepsTheSelectionOverTallSeparators(t *testing.T) {
 		t.Errorf("top %d, want 4: the separators fill the rows above it", l.top)
 	}
 }
+
+// Every way to select above the live window keeps the selection in view:
+// Home and g, u onto an old unread line (foureyes), not only Up.
+func TestActivityJumpsAboveTheLiveWindowStayVisible(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		key  any
+	}{{"home", kHome}, {"g", 'g'}, {"u", 'u'}} {
+		m := longActivity(t, 140, 40)
+		m = keys(t, m, c.key)
+		selVisible(t, m, c.name)
+		if m.lists.activity.Live() {
+			t.Errorf("%s: selected above the live window, still live", c.name)
+		}
+	}
+	m := longActivity(t, 140, 40)
+	m = keys(t, m, kHome)
+	if m.grid(); m.lists.activity.top != 0 {
+		t.Errorf("home: the view starts at %d, not the top", m.lists.activity.top)
+	}
+}
+
+// A live selection that new lines or a smaller frame would push out of the
+// window: the list leaves live and the selection stays in view; the lines
+// that arrived after the last one in view count as new (reviewer-codex).
+func TestActivityLiveSelectionHeldOnAppendAndResize(t *testing.T) {
+	m := longActivity(t, 140, 40)
+	m = keys(t, m, 'k')
+	if !m.lists.activity.Live() {
+		t.Fatal("one Up inside the window left live")
+	}
+	m.grid()
+	rows := m.lists.activity.rows()
+	var evs []bus.Event
+	for i := 0; i < rows; i++ {
+		evs = append(evs, bus.Event{ID: fmt.Sprintf("%d-%d", shellNow.UnixMilli(), i+1), Kind: "status", Agent: "qa", State: "working", Message: fmt.Sprintf("new %d", i)})
+	}
+	m = step(t, m, tailMsg{events: evs})
+	selVisible(t, m, "after new lines")
+	if m.lists.activity.Live() {
+		t.Error("new lines pushed the selection out, still live")
+	}
+	if n := m.ui.pause.New(); n != rows {
+		t.Errorf("new lines counted %d, want %d", n, rows)
+	}
+	// a smaller frame
+	m = longActivity(t, 140, 40)
+	m = keys(t, m, 'k', 'k', 'k', 'k', 'k', 'k')
+	if !m.lists.activity.Live() {
+		t.Fatal("six Ups inside a 40-row window left live")
+	}
+	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 24})
+	selVisible(t, m, "after a resize")
+}

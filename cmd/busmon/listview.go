@@ -34,6 +34,7 @@ type listState struct {
 	tail, live   bool
 	keep         int // rows after the selection kept in view with it (the shell's expansion), in every mode
 	onChange     func(key string, live bool)
+	lastSeen     string // the last item drawn while live (holdSelection)
 	onOpen       func(key string)
 }
 
@@ -164,14 +165,6 @@ func (l *listState) Move(delta int) {
 		l.live = true
 		l.changed()
 	}
-	// Moving up past the live window leaves live, as a wheel-up does: live
-	// pins the bottom rows, so the selection would leave the view and the
-	// first rows never show (activity-scroll-bug, the person, 2026-11-07).
-	// A selection inside the window keeps it live (charm spec, b-scenarios).
-	if step < 0 && l.tail && l.live && i < max(0, len(l.items)-l.rows()) {
-		l.live = false
-		l.changed()
-	}
 }
 
 // First selects the first selectable item.
@@ -218,6 +211,34 @@ func (l *listState) setSel(i int) {
 	if l.sel != prevSel || l.live != prevLive {
 		l.changed()
 	}
+}
+
+// outsideLive: a live tail list whose item i is above its live window, the
+// last rows. Live pins that window, so a selection there would be hidden and
+// the list's first rows would never show (activity-scroll-bug, the person,
+// 2026-11-07): it leaves live, as a wheel-up does. A selection inside the
+// window keeps it live (charm spec: selecting keeps it live).
+func (l *listState) outsideLive(i int) bool {
+	return l.Live() && i >= 0 && i < max(0, len(l.items)-l.rows())
+}
+
+// holdSelection leaves live when the selection is above the live window,
+// whatever put it there: a key (Up, Home, g, u), a click, new items or a
+// smaller frame (foureyes, reviewer-codex). The fill calls it after the
+// list's items and frame are set, so it is the one place that decides. It
+// returns the key of the last item drawn while live: what came after it is
+// counted as new.
+//
+// An open expansion (open) keeps live: viewport holds it in view while live
+// (keep), and Esc returns to the tail (charm spec: in auto-scroll the open
+// expansion stays in view).
+func (l *listState) holdSelection(open bool) (lastSeen string, left bool) {
+	if open || !l.outsideLive(l.index(l.sel)) {
+		return "", false
+	}
+	l.live = false
+	l.changed()
+	return l.lastSeen, true
 }
 
 func (l *listState) setAnchor() {
@@ -294,6 +315,9 @@ func (l *listState) viewport() {
 	switch {
 	case l.Live() && !wheeled:
 		l.top = maxTop
+		if n > 0 {
+			l.lastSeen = l.items[n-1].Key // where a later hold starts counting
+		}
 	case l.anchor != "":
 		if i := l.index(l.anchor); i >= 0 {
 			l.top = i + l.anchorOff

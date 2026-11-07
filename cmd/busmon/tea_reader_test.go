@@ -535,7 +535,8 @@ func TestShellFadeCost(t *testing.T) {
 
 // The expanded row and its first text line are on screen at every size, in
 // auto-scroll too (opening a line keeps Activity live): the tail never
-// pushes an open expansion off the top, even when new lines arrive.
+// pushes an open expansion off the top, even when new lines arrive. Once
+// collapsed, the selected row stays in view too.
 func TestShellExpansionStaysInView(t *testing.T) {
 	pinLocal(t)
 	for _, size := range goldenSizes {
@@ -560,8 +561,16 @@ func TestShellExpansionStaysInView(t *testing.T) {
 		if m = keys(t, m, kEsc); m.ui.expanded != "" {
 			t.Fatal("Esc did not collapse")
 		}
-		if lst := m.lists.activity; lst.top != max(0, len(lst.items)-lst.rows()) {
-			t.Fatalf("%v: after the collapse the tail is not at the bottom (top %d)", size, lst.top)
+		// After the collapse the selected row stays in view (activity-scroll-bug):
+		// a row above the live window pauses the list; one inside it stays
+		// live, the tail at the bottom.
+		m.grid()
+		lst := m.lists.activity
+		if i := lst.index(lst.Selected()); i < lst.top || i >= lst.top+lst.rows() {
+			t.Fatalf("%v: after the collapse the selection %d is out of view [%d, %d)", size, i, lst.top, lst.top+lst.rows())
+		}
+		if lst.Live() && lst.top != max(0, len(lst.items)-lst.rows()) {
+			t.Fatalf("%v: live after the collapse, but the tail is not at the bottom (top %d)", size, lst.top)
 		}
 	}
 }
