@@ -347,3 +347,78 @@ func TestTriageGoneIsNotSkipped(t *testing.T) {
 		t.Fatalf("a row gone from the list counted as skipped:\n%s", end)
 	}
 }
+
+// n after p goes forward through the visited items before the live list.
+func TestTriageForwardThroughVisited(t *testing.T) {
+	m := rowsFixture(t, false, false)
+	m = keys(t, m, kT, 'n', 'n') // ask, health, the first wait
+	third, _ := m.walkItem()
+	m = keys(t, m, 'p', 'p') // back to the ask
+	if it, _ := m.walkItem(); it.Rank != rankAsk {
+		t.Fatalf("p p: %s, want the ask", it.Key)
+	}
+	m = keys(t, m, 'n')
+	if it, _ := m.walkItem(); it.Rank != rankHealth {
+		t.Fatalf("n after p: %s, want the second visited item (health)", it.Key)
+	}
+	m = keys(t, m, 'n')
+	if it, _ := m.walkItem(); it.Key != third.Key {
+		t.Fatalf("n: %s, want %s", it.Key, third.Key)
+	}
+	if got := m.walkTitle(); got != "triage 3/9" {
+		t.Fatalf("title %q", got)
+	}
+}
+
+// The end page's frame carries no walk place.
+func TestTriageEndPageHasNoPlace(t *testing.T) {
+	m := rowsFixture(t, false, true)
+	m = keys(t, m, kT)
+	if topKind(t, m) != ovTriageEnd {
+		t.Fatal("no end page")
+	}
+	if got := m.grid().plain(); strings.Contains(got, "triage ") {
+		t.Fatalf("the end page shows a walk place:\n%s", got)
+	}
+	m = rowsFixture(t, false, false)
+	m = keys(t, m, kT)
+	for i := 0; i < 12 && m.rd.top().kind != ovTriageEnd; i++ {
+		m = keys(t, m, 'n')
+	}
+	if got := m.grid().plain(); strings.Contains(got, "triage ") || !strings.Contains(got, "Triage done") {
+		t.Fatalf("the end page after a walk shows a walk place:\n%s", got)
+	}
+}
+
+// An ask answered on a page above the walk's closes that page as today; the
+// walk stays on its item.
+func TestTriageAnswerAboveTheWalkKeepsIt(t *testing.T) {
+	m := rowsFixture(t, false, false)
+	m, it := walkTo(t, m, func(it attentionItem) bool { return it.Rank == rankWait })
+	ask := m.snap.asks[0]
+	m.pushAsk(ask.ID)
+	if m.walkPage() || topKind(t, m) != ovAsk {
+		t.Fatal("fixture: the ask page is not above the walk's")
+	}
+	q := ask.Questions[0]
+	m = step(t, m, answerMsg{ask: ask, qid: q.ID, header: q.Header, choice: "yes", left: 0, key: ask.ID + "|" + q.ID})
+	if cur, ok := m.walkItem(); !ok || cur.Key != it.Key || topKind(t, m) != ovAgent {
+		t.Fatalf("the answer above moved the walk: %v", m.rd.top().kind)
+	}
+}
+
+// The walk's ask closed elsewhere: the refresh that drops its page moves the
+// walk on, never ends it (foureyes).
+func TestTriageAskClosedElsewhereMovesOn(t *testing.T) {
+	m := rowsFixture(t, false, false)
+	m = keys(t, m, kT)
+	s := m.snap
+	s.asks = nil
+	m = step(t, m, pollMsg{snap: s, at: shellNow}) // the refresh drops the ask's page
+	if m.ui.walk == nil || !m.walkPage() {
+		t.Fatal("the walk ended")
+	}
+	if it, ok := m.walkItem(); !ok || it.Rank == rankAsk {
+		t.Fatalf("the walk did not move on: %+v", it)
+	}
+}

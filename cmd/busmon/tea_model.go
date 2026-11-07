@@ -379,6 +379,9 @@ func (m *Model) refresh() {
 	m.layout = shellLayoutFor(m.width, m.height, m.counts(), m.ui.view, m.ui.tab)
 	m.fillLists()
 	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes
+		if w := m.ui.walk; w != nil && !w.moving && m.rd.top().serial == w.serial {
+			w.lost = true // the walk's own: afterUpdate moves the walk on (foureyes)
+		}
 		m.rd.pages = m.rd.pages[:len(m.rd.pages)-1]
 		if p := m.rd.top(); p != nil {
 			p.dirty = true

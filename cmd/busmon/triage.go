@@ -20,6 +20,7 @@ type walk struct {
 	serial  int               // the walk's page on the reader stack (its bottom)
 	end     bool              // that page is the end page
 	moving  bool              // between two pages: the walk replaces its page
+	lost    bool              // its page dropped by a refresh (an ask closed elsewhere): move on
 }
 
 // walkable is a For you row the walk opens: every row but merge:unknown.
@@ -170,9 +171,27 @@ func (m *Model) walkCheck() {
 	if w == nil || w.moving {
 		return
 	}
+	if w.lost {
+		return // afterUpdate moves it on
+	}
 	if !slices.ContainsFunc(m.rd.pages, func(p page) bool { return p.serial == w.serial }) {
 		m.ui.walk = nil
 	}
+}
+
+// walkLost moves the walk on when a refresh dropped its page (the walk's ask
+// answered or closed elsewhere), rather than ending it (foureyes).
+func (m *Model) walkLost() tea.Cmd {
+	w := m.ui.walk
+	if w == nil || !w.lost {
+		return nil
+	}
+	w.lost = false
+	if w.end {
+		m.ui.walk = nil
+		return nil
+	}
+	return m.walkStep(true)
 }
 
 // walkTitle is the walk's place, "triage 2/7": the rows visited plus the

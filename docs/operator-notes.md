@@ -510,6 +510,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   (now returning a command) for a send to the waiting agent or, on a plan task, to master. `n`/`p`
   on the walk's page go to `walkStep`, never `readerStep`; on an ask page they are bound only for
   that (`shellAskTable`). `busyForModal` counts `m.ui.walk`, so the reminder and the recap wait.
+  When `refresh` drops the walk's ask page (answered or closed elsewhere) it sets `walk.lost`, and
+  `afterUpdate` (`walkLost`) moves the walk on, since `refresh` cannot return a command.
 - **History archive** (spec `docs/superpowers/specs/2026-11-01-history-design.md`, package `history/`): the
   dispatch service's chore (`dispatch/history.go`, its own goroutine beside the reconciliation, 1 min, a 5 s
   pass, 2000 entries shared a page per stream in turn, the round starting one stream further each pass) appends `history.Streams` to `<state>/history/YYYY-MM-DD.jsonl` (UTC day of the id;
