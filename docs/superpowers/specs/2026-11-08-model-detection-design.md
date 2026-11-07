@@ -86,19 +86,34 @@ update it`. What refreshes Kimi's file is §6 Q5.
 signal is added and **never acted on by anything**:
 
 - **`listed-newer`**: the same provider lists an id with the **same stem and the same suffix** and
-  a **higher version number**. The id is split into prefix, version and suffix
-  (`^(.*?)(\d+(?:[.-]\d+)*)(.*)$`), and the versions are compared as number tuples. Examples:
+  a **higher version number**. The rule runs in three steps (foureyes, reviewer-codex: a version
+  must never absorb a date):
+  1. Both ids go through `BaseID` first, which drops Claude's context suffix (`[1m]`) and a
+     trailing release date. `BaseID` gains the `-YYYY-MM-DD` form next to `-YYYYMMDD`. Two ids
+     with the same base are the same model (`sameModel`) and are never "newer".
+  2. Each base is split as `^(.*?)(\d{1,4}(?:[.-]\d{1,4})*)(.*)$`. A version component has at most
+     4 digits, so an 8-digit date can never become one.
+  3. The prefixes and suffixes must be equal, and the version is compared as a tuple of numbers.
+  Examples, all checked against the rule:
   - `grok-4.6` → `grok-4.7` (counts);
   - `gpt-6-sol` → `gpt-6.1-sol` (counts);
   - `claude-opus-5` → `claude-opus-5-5` (counts);
+  - `model-4-20251001` → `model-5-20251001` (counts: version 5 > 4, the dates are dropped);
+  - `gemini-3.8-flash-high` → `gemini-4-flash-high` (counts);
   - `grok-4.7-build-fast` is not a candidate for `grok-4.6` (the suffix differs);
-  - `kimi-code/k3` → `kimi-code/k3.1-pro` does not count either (the suffix differs).
+  - `kimi-code/k3` → `kimi-code/k3.1-pro` does not count (the suffix differs);
+  - `claude-haiku-4-5` ↔ `claude-haiku-4-5-20251001`, in both directions, does not count (the
+    same model);
+  - `claude-haiku-4-5-20250101` → `…-20251001` does not count (only the date differs);
+  - `m-2025-01-01` → `m-2025-06-01` does not count;
+  - `claude-fable-5-1[1m]` → `claude-fable-5-1` does not count;
+  - `gpt-4o` ↔ `gpt-4.1` does not count (the suffixes differ);
+  - `gemini-3.8-flash-low` → `-high` does not count (the suffixes differ).
 - It is shown as `newer?` in `roles doctor`, the profile check (§3.4) and the health detail, with
   the words `listed, not stated as a successor`. It never makes the `model-drift` check fail. It
   warns only in the catalogue check (§3.5).
-- Table-driven tests cover each example above, and the cases that must **not** match: a date
-  suffix (`-20251001`), `[1m]`, `4o` vs `4.1`, a family's order in `models.toml` that wins over
-  the hint.
+- Table-driven tests take every example above as a fixture, in both directions where the text
+  says so. One more case: a family order in `models.toml` wins over the hint.
 
 ### 3.4 Every profile is judged, not only the running agents (G4)
 
@@ -129,7 +144,14 @@ There is a new check, **`model-catalogue`**, beside `model-drift`. Its statuses 
   `new: xai grok-4.7 (2d) · anthropic opus now claude-opus-5-5`.
 - The check runs the refresh first, under the lock, if the table is over 24 h old. **G7 is
   closed:** the refresh no longer waits for services, and `agentbus models` (any form) also
-  refreshes a table older than 24 h before it answers. Every read is local and cheap.
+  refreshes a table older than 24 h before it answers. That automatic refresh is bounded
+  (foureyes): **10 s in all**, with each reader under the same deadline (an explicit `--refresh`
+  keeps the current 20 s per reader). It is skipped when another process holds the lock. A
+  reader that fails or times out keeps its provider's previous rows; `Refresh` already never
+  empties them. The answer then comes from the table as it is, with each provider's age and the
+  line `refresh incomplete: <provider> <reason>`. It never blocks past the deadline and never
+  answers empty because of a failed refresh. The health check runs the same bounded refresh
+  inside its own task deadline.
 - A client update (the `client-updates` check, which compares client fingerprints) forces a
   refresh of that client's provider, because a new client brings a new catalogue.
 
@@ -142,7 +164,11 @@ There is a new check, **`model-catalogue`**, beside `model-drift`. Its statuses 
   evidence:
   `profile grok: model grok-4.6 → grok-4.7? (grok models lists grok-4.7 since 2026-11-05, not
   stated as a successor; grok's own default is still grok-4.6)`. It sends nothing for `ok`, and
-  never repeats a finding it already reported (its annotation carries the event ids).
+  never repeats a finding it already reported. The de-duplication key is the finding, not an
+  event (foureyes): `(profile, field, model, verdict, candidate)`, for example `(grok, model,
+  grok-4.6, newer?, grok-4.7)`. `gone`, `newer?` and an old source are derived on every pass, so
+  an event id could not de-duplicate them. The keys live in sentinel's annotation. A finding that
+  disappears (the profile was changed) is dropped from it, so a later return is reported again.
 - **The person decides.** master turns the proposal into an ask in For you, with the diff,
   as PRs to merge already are. On yes, the change goes to coder as a normal step
   with 4-eyes. A `gone` model on a running role is urgent: its next launch will fail, so the ask
@@ -194,7 +220,11 @@ client file or calls a client.
   profile on an untiered provider, a gone model, a `newer` and a `newer?`
   (`testdata/models-check.golden`).
 - `agentbus models --changes` golden; `models` auto-refresh when the table is over 24 h old, and
-  no refresh when it is younger.
+  no refresh when it is younger; a reader that hangs past the 10 s deadline (a fake `Run` that
+  blocks) gives the old rows, the age and `refresh incomplete`, in under 11 s; a held lock skips
+  the refresh.
+- sentinel's de-duplication key: the same `newer?` twice is proposed once; the finding is
+  proposed again after it disappears and returns.
 - The health check: each warn cause, the info line, no warn for `ok` alone, and a forced refresh
   after a client fingerprint change.
 - **No profile writer:** a source-scanning test, like `TestNoStructWriterOfTheBoard`: no
