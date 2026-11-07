@@ -37,10 +37,19 @@ the person can stop it.
 
 **Master merges, through the forge's CLI, by one command:** `agentbus automerge <pr>`.
 
-- Never a reviewer, never the coder, never the dispatcher.
-- Only a role with `delivers = true` may run it, the same check `deliver` makes before any git or
-  forge call. That is master and docs today. Docs never needs it, so §6 denies it to docs in its
-  rules. A person outside the agents' panes is no role and may run it.
+- Never a reviewer, never the coder, never docs, never the dispatcher.
+- **Who may run it**, checked by the command before any read, in this order:
+  - **master holding the pilot lease**: `AGENT_BUS_AGENT` is `master` and `{p}:pilot` names it.
+    `delivers = true` is not enough: docs has it too, and docs never merges (reviewer-codex);
+  - **the person, outside the agents' panes**: no `AGENT_BUS_AGENT`, and on Linux no registered
+    agent among the command's ancestors (`agentAncestor`, the check `agentbus notifications test`
+    makes). The person needs no lease: they are not master;
+  - anyone else is refused, with the reason.
+- **These checks are defence in depth, not a boundary**, as the forge-delivery decision says of
+  `deliver`: an identity on the bus is what the caller's environment states. The real guard is that
+  the command merges **only an eligible PR** (§3), each condition re-read at that moment. So a
+  process that passed the identity check wrongly could merge nothing that master could not, and
+  nothing before the person's window ran out.
 - **The command decides nothing new.** It recomputes every condition of §3 at that moment, from the
   ledger and the forge, then calls:
 
@@ -74,14 +83,25 @@ keep the window; `agentbus automerge` checks it again just before `gh pr merge`.
    (`approvalsOn`, as `deliver` reads them), there are two verdicts that satisfy all of these:
    - from **two different reviewers**, neither of them the author;
    - **one of them `foureyes`**, the role the team reviews with;
-   - from **two different providers**: each verdict's `ReviewerProvider` is known and the two
-     differ. The same model through two providers counts once: two verdicts whose providers share
-     a maker (`models.Row.Family`, as `reviewCandidates` reads it) are one;
+   - from **two different makers** (the company whose model reviewed), each known (below);
    - with **no `reject` on any of the item's subjects after them**.
 
-   A verdict whose provider is empty (an older verdict, or a client that published none) never
-   counts toward the two. Same-provider verdicts are one review: "independent" means another
-   provider, not another pane.
+   **The maker of a verdict.** A verdict records `ReviewerProvider` today, from the reviewer's
+   snapshot (`verdictProviders`, `cmd/agentbus/verdicts.go`). A provider is not a maker: `agy`
+   (provider `google`) serves `claude-*` (maker anthropic) and `gpt-*` (maker openai) too
+   (`models/readers.go`, `Row.Family`; foureyes). So:
+   - The verdict gains an additive field, **`reviewer_model`**: the snapshot's `Model` (the
+     launcher's `AGENT_BUS_MODEL`), written beside the provider, empty when unknown. The same goes
+     for `author_model`.
+   - **`models.MakerOf(provider, model)`** is the maker:
+     - a provider that serves only its own models (anthropic, openai, moonshot, xai) is its own
+       maker, whatever the model;
+     - a provider that serves several makers (google through `agy`) takes the maker from the
+       model's `Family`, by its prefix rule, so `claude-*` is anthropic;
+     - with no model recorded, or a model the table does not know, the maker is **unknown**.
+   - A verdict whose maker is unknown **never counts** toward the two. That includes every verdict
+     written before this field. Two verdicts of one maker are one review: "independent" means
+     another maker's model, not another pane or another provider.
 4. **The head is unchanged.** The forge's head for `n` is `H`, read in the same pass. The merge
    call then carries `--match-head-commit H`.
 5. **Not stacked.** The PR's base is `delivery.base`. A PR into any other branch never
@@ -94,9 +114,14 @@ keep the window; `agentbus automerge` checks it again just before `gh pr merge`.
    repository today (no workflow), §12 Q2 decides. The recommendation: allowed only when the base
    branch requires no check and none exists, because the reviewers' runs of the full suite are then
    the only proof.
-8. **The window ran out, unaborted, on this head** (§4). No abort names `n` at `H`.
-9. **The bus reads.** The ledger, the abort entries, the setting and the forge were all read in the
-   pass. Any read that fails makes the PR **not eligible**. Unknown is never "go", as merge-queue
+8. **No review still open on the item's subjects.** No gate is open whose subject
+   (`ParseGateMeta(...).Subject`) is one of the item's subjects, on any agent: a security review, a
+   third reviewer, or a challenge still waiting for its verdict all hold the merge, even with two
+   approves (foureyes). A gate whose meta carries no subject does not match. A stale gate is closed
+   by `agentbus gate close`, as always, never by auto-merge.
+9. **The window ran out, unaborted, on this head** (§4). No abort names `n` at `H`.
+10. **The bus reads.** The ledger, the gates, the abort entries, the setting and the forge were all
+   read in the pass. Any read that fails makes the PR **not eligible**. Unknown is never "go", as merge-queue
    §3d: unknown is never "nothing waits".
 
 `agentbus automerge <pr>` prints the first point that fails, in plain words (`not eligible: only
@@ -104,7 +129,7 @@ one provider approved 3f2a1c9 (anthropic)`), and exits 3. It never merges on a p
 
 ## 4. The window and the abort
 
-- **Opening.** When the merge-queue chore first finds a PR eligible on every point but 8, it opens
+- **Opening.** When the merge-queue chore first finds a PR eligible on every point but 9, it opens
   the PR's window. It writes `{p}:automerge` (a hash, fenced like the queue record, runtime class,
   no TTL beyond 7 days) with the field `<n>` = `{"head": H, "opened_at": <Redis TIME ms>, "due_at":
   opened_at + window}`. The window is the setting's value at opening; a later change to the setting
@@ -119,17 +144,22 @@ one provider approved 3f2a1c9 (anthropic)`), and exits 3. It never merges on a p
   automerge abort <pr>`.
   - It is the audit: `agentbus history` shows it, the ledger's way.
   - It binds to the head, so a later head is not aborted by it.
-  - An abort entry is honoured only when its sender is the configured person (`identity.as`), or a
-    caller with no agent identity outside the agents' panes. An abort from an agent's identity is
-    refused by the command, and if written raw it is ignored by the chore. An agent cannot hold a
-    merge back for the person, nor release one.
+  - **Who may abort.** `agentbus automerge abort` runs only for the person outside the agents'
+    panes, detected as for the merge (§2): no `AGENT_BUS_AGENT`, and no registered agent among its
+    ancestors on Linux. busmon is the person's tool and refuses when it runs as an agent, by the
+    same two checks. The entry's sender is the configured person (`identity.as`).
+  - **Defence in depth, not a boundary.** `identity.as` can be set from the environment
+    (`AGENT_BUS_HUMAN`), so an agent could write an abort entry that names the person (foureyes).
+    The chore cannot tell. An abort whose sender is an agent's name is ignored, and health
+    `automerge` warns. **A forged abort can only stop a merge**: the PR stays in the merge queue for
+    the person, the fail-safe direction. Nothing an abort entry says can make a PR merge.
 - **Notice.** On opening, the person is told on every surface they already read:
   - busmon's For you merge row turns into an auto-merge row (§7);
   - a notification goes through the existing curated path (`notify`, kind `automerge`, summary
     privacy), saying `PR 351 auto-merges in 10 min (abort in busmon, or agentbus automerge abort
     351)`. It follows notify's rules (on, targets, quiet), and ringing is not a condition: an
     auto-merge does not wait for a notification to be delivered.
-- **Due.** At `due_at` the chore re-checks points 1–9 and, if all hold, sends master the directive
+- **Due.** At `due_at` the chore re-checks points 1–10 and, if all hold, sends master the directive
   (§2). If master has not merged after 30 minutes, the chore sends it again once, and busmon's
   row reads `auto-merge overdue: master has not merged`. No merge happens without master.
 
@@ -152,15 +182,32 @@ A PR touching any of these paths waits for the person, even under `all`:
 
 | What | Paths (repository-relative) |
 |---|---|
-| the merge rules themselves and this setting | `config/keys.go`, `mergequeue/**`, `cmd/agentbus/automerge*.go`, `cmd/agentbus/deliver*.go`, `cmd/agentbus/mergequeue*.go`, `bus/verdicts.go`, `bus/stream.go`, `bus/mergequeue.go`, `docs/superpowers/specs/*auto-merge*`, `docs/memory/decisions/**` |
+| the merge rules themselves and this setting | `automerge/**` and every module package it depends on, the command files feeding it (below), `cmd/agentbus/automerge*.go`, `cmd/agentbus/mergequeue*.go`, `dispatch/**`, `docs/superpowers/specs/*auto-merge*`, `docs/memory/decisions/**` |
 | who may do what | `roles.toml`, `roles/**`, `rolecfg/**`, `skills/**`, `AGENTS.md`, `CLAUDE.md`, `.claude/**` |
 | release, tag, reinstall | `setup.sh`, `herdr-plugin.toml`, `CHANGELOG.md`, `docs/releases/**`, `install*`, `Makefile` |
 | supply chain and CI | `go.mod`, `go.sum`, `.github/**`, `docker-compose.yml`, `Dockerfile*` |
 | security-sensitive | `SECURITY.md`, `health/**` secret readers (`health/secrets*.go`), `notify/**`, `backup/**`, any path whose name holds `secret`, `token`, `credential`, `password` or `.env` |
 
+- **The first row is defined by dependency, not by hand** (foureyes). The eligibility and the merge
+  live in one package, `automerge/` (`Eligible`, `HardExcluded`, the scope, the merge call), and
+  `cmd/agentbus/automerge*.go` is a thin command over it. Every package of this module that
+  `automerge/` depends on (`go list -deps ./automerge`, module packages only) is excluded whole.
+  The expected set is `bus/**`, `config/**`, `forge/**`, `models/**` and `mergequeue/**`; the test
+  below, not this list, is the authority.
+  - So are the files outside it that feed its facts:
+    - `cmd/agentbus/verdicts.go` and `cmd/agentbus/main.go`, which record verdicts and their
+      provider and model;
+    - `cmd/agentbus/reviewers.go`;
+    - `cmd/agentbus/identityguard.go` and `cmd/agentbus/notificationscmd.go`, which detect an
+      agent caller;
+    - `cmd/agentbus/deliver*.go`;
+    - `dispatch/**`, the chore's runner, its fence and Redis `TIME` behind the window.
+  - **A test enforces it.** `TestAutomergeDependenciesAreExcluded` runs `go list -deps ./automerge`,
+    and fails when a module package it lists, or a file named above, is not excluded by
+    `HardExcluded`. A new dependency then cannot slip out of the list.
 - Matching is on the path, before and after a rename.
-- The list lives in one place, `mergequeue.HardExcluded(path) (bool, why string)`. Its own file
-  is excluded by the first row.
+- The list lives in one place, `automerge.HardExcluded(path) (bool, why string)`, inside an excluded
+  package.
 - A label `no-automerge` on the PR also excludes it. Master sets it when an ask is pending on the
   PR, and the person can set it on the forge.
 - **Never an act beyond the merge.** `agentbus automerge` merges and reports; it never tags,
@@ -192,7 +239,8 @@ person keeps the merge: deliver never merges, never touches the base." This spec
   - The forge-delivery note gets one line pointing to it.
 - **The same proof, stronger.** `deliver` needs one independent approve of `H`. `automerge` needs
   two, on two providers, one of them foureyes.
-- **The same role check.** `delivers = true` is required, and roles' rules follow it:
+- **A narrower caller check than `deliver`'s.** `deliver` accepts any role with `delivers = true`.
+  `automerge` accepts master with the pilot lease, or the person (§2). Roles' rules echo it:
   - `Bash(agentbus automerge *)` is allowed in master's own rules;
   - it is denied in every other role's own rules, docs included, with the same spellings after
     `--project` that `deliver`'s deny uses.
@@ -221,8 +269,8 @@ person keeps the merge: deliver never merges, never touches the base." This spec
   - or the first point of §3 that fails (`not eligible: checks pending`);
   - or `off (delivery.automerge)`.
 
-  Each approval line names its provider, which the page reads from the queue record (an additive
-  field `provider` on `MergeApproval`).
+  Each approval line names its provider and maker, which the page reads from the queue record (the
+  additive fields `provider` and `maker` on `MergeApproval`).
 - **Overdue.** Past `due_at` + 30 min, the row reads `auto-merge overdue` and is a decision, as any
   merge row is.
 - **Settings page.** Two rows beside `delivery.forge` and `delivery.base`:
@@ -261,7 +309,7 @@ person keeps the merge: deliver never merges, never touches the base." This spec
 | an abort arrives while master runs the command | the command reads aborts as its last step before `gh pr merge`; an abort written after that call starts is too late, and the report says `merged before the abort` |
 | `--match-head-commit` refused by the forge | nothing merged; the command says so; the next pass re-derives |
 | the setting turned `off` during a window | not eligible at the next check; the window closes |
-| two masters (a stale pane) | only the pilot-lease holder may run `automerge`: a check of its own, which `deliver` does not make |
+| two masters (a stale pane) | only master holding the pilot lease may run `automerge` (or the person, §2): a check of its own, which `deliver` does not make |
 | the dispatcher down | no window opens, no directive; nothing merges by itself; the merge queue reads unknown, as today |
 | master's merge refused by the forge (permission) | exit 1 with the forge's message; the window stays overdue; health warns; the person merges by hand |
 
@@ -270,8 +318,14 @@ person keeps the merge: deliver never merges, never touches the base." This spec
 - **Eligibility (pure, `mergequeue.Eligible`).** One fixture per point of §3, each failing alone:
   - the setting off, out of scope, excluded;
   - not in the queue;
-  - one approve; two approves from the same reviewer; two from one provider; two from two
-    providers of one maker; a provider unknown; no foureyes among the two; a reject after;
+  - one approve; two approves from the same reviewer; two from one provider;
+  - two from two providers of one maker: foureyes (anthropic) and a reviewer on `agy` running
+    `claude-*`, which counts once;
+  - an `agy` verdict with no model recorded (unknown, never counts); a verdict from before the
+    field;
+  - no foureyes among the two; a reject after;
+  - an open gate on one of the item's subjects (a security review), and a gate on another subject
+    (does not hold);
   - the head moved; the base not `delivery.base`; conflicting;
   - a check pending, failed, none reported (both answers of Q2);
   - the window not run out; an abort on `H`; an abort on an older head (does not count);
@@ -283,8 +337,11 @@ person keeps the merge: deliver never merges, never touches the base." This spec
 - **The command.** With fake `gh` on `PATH` (as the merge-queue tests do):
   - `--match-head-commit H` is in the argv;
   - nothing is called on any non-eligible fixture;
-  - a role without `delivers` is refused before any call;
-  - an agent's `automerge abort` is refused;
+  - `--match-head-commit H` is the one merge call;
+  - every caller is refused before any call except master with the lease and the person: docs
+    (`delivers = true`), master without the lease, an agent ancestor;
+  - an agent's `automerge abort` is refused; an abort entry from an agent's name is ignored by
+    the chore and warned about;
   - the report names both reviewers and providers.
 - **The window (Redis, a disposable broker only).**
   - Opening is fenced and uses Redis `TIME`.
@@ -303,8 +360,10 @@ person keeps the merge: deliver never merges, never touches the base." This spec
 
 ## 11. Steps, and out of scope
 
-1. **The derivation and the setting:** the keys; `mergequeue.Eligible`, `HardExcluded` and the
-   scope; the provider on `MergeApproval`; `agentbus automerge status`. Nothing merges yet.
+1. **The derivation and the setting:** the keys; the `automerge/` package with `Eligible`,
+   `HardExcluded` and the scope, and its dependency test; `reviewer_model` and `author_model` on the
+   verdict and `models.MakerOf`; the provider and maker on `MergeApproval`; `agentbus automerge
+   status`. Nothing merges yet.
 2. **The window and the abort:** `{p}:automerge`, the abort entry and command, the notice, and
    busmon's row, `x` and page.
 3. **The merge:** `agentbus automerge <pr>`, the directive to master, the rules and the decision
