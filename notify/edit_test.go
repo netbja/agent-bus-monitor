@@ -336,3 +336,49 @@ func TestEditKeepsTheCommentAboveTheNextTable(t *testing.T) {
 		t.Fatalf("after rename:\n%q", got)
 	}
 }
+
+// reviewer-codex: a notify.toml link in a folder others can write is refused
+// before it is followed, as Load refuses it; nothing is written through it.
+func TestEditRefusesALinkInASharedFolder(t *testing.T) {
+	real := writeFile(t, handFile, 0o600)
+	shared := filepath.Join(t.TempDir(), "shared")
+	if err := os.MkdirAll(shared, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(shared, "notify.toml")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(shared, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(shared, 0o700) })
+	if Load(link).Refused == "" {
+		t.Fatal("fixture: Load reads the link")
+	}
+	before, err := os.Stat(real)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Edit(link, func(d *Doc) error { return d.Remove("team") }); err == nil || read(t, real) != handFile {
+		t.Fatalf("written through a link in a shared folder: %v", err)
+	}
+	if after, err := os.Stat(real); err != nil || !os.SameFile(before, after) {
+		t.Fatal("the file was replaced, even if put back: refused only after a write")
+	}
+}
+
+// A removal is checked after the write too: the reload must hold exactly
+// the targets expected, or the old bytes come back.
+func TestEditChecksARemovalAfterTheWrite(t *testing.T) {
+	defer func(f func(string) *File) { reload = f }(reload)
+	reload = func(path string) *File { // the expected targets, but refused
+		f := Load(path)
+		f.Refused = "not owned by you"
+		return f
+	}
+	p := writeFile(t, handFile, 0o600)
+	if err := Edit(p, func(d *Doc) error { return d.Remove("team") }); err == nil || read(t, p) != handFile {
+		t.Fatalf("a removal the reload refuses stayed: %v", err)
+	}
+}

@@ -34,10 +34,9 @@ var ErrChanged = errors.New("notify.toml changed while you were editing: open th
 // any other ([ntfy] with dotted keys, a nested table, an array of tables) is
 // kept verbatim (foureyes).
 type Doc struct {
-	head    []string
-	tables  []docTable
-	touched []string // the names an edit added or renamed: they must load
-	ops     []docOp  // what the edit means to do: the safety net compares it
+	head   []string
+	tables []docTable
+	ops    []docOp // what the edit means to do: the safety net compares it
 }
 
 type docTable struct {
@@ -155,7 +154,6 @@ func (d *Doc) Add(t Target) error {
 	}
 	nt := parseDoc(text).tables[0]
 	d.tables = append(d.tables, nt)
-	d.touched = append(d.touched, t.Name)
 	d.ops = append(d.ops, docOp{name: t.Name})
 	return nil
 }
@@ -201,7 +199,6 @@ func (d *Doc) Rename(old, name string) error {
 	at := strings.Index(h, "."+old)
 	t.lines[t.hdr] = h[:at] + "." + name + h[at+1+len(old):]
 	t.name = name
-	d.touched = append(d.touched, name)
 	d.ops = append(d.ops, docOp{old: old, name: name})
 	return nil
 }
@@ -259,6 +256,8 @@ func Edit(path string, fn func(*Doc) error) error {
 	}
 	real := path
 	if link, err := os.Lstat(path); err == nil && link.Mode()&fs.ModeSymlink != 0 {
+		// Followed to write the file it names; whether it may be is Load(path)'s
+		// judgement below, the link's own folder included (reviewer-codex).
 		if real, err = filepath.EvalSymlinks(path); err != nil {
 			return errors.New("notify.toml is a link that cannot be followed")
 		}
@@ -281,7 +280,7 @@ func Edit(path string, fn func(*Doc) error) error {
 		return err
 	}
 	if existed {
-		if f := Load(real); f.Refused != "" {
+		if f := Load(path); f.Refused != "" { // the path itself, as every reader loads it
 			if rest, ok := strings.CutPrefix(f.Refused, "does not parse"); ok {
 				at := strings.Trim(strings.TrimSpace(rest), "()") // "line 12", or nothing
 				if at != "" {
@@ -319,17 +318,17 @@ func Edit(path string, fn func(*Doc) error) error {
 	if err := replace(real, data); err != nil {
 		return err
 	}
+	// Loaded again through the path: exactly the targets expected, a removal
+	// included, or the old bytes come back (a new file goes).
 	f := reload(path)
-	for _, name := range d.touched {
-		if _, ok := f.Target(name); !ok || f.Refused != "" {
-			if existed {
-				_ = replace(real, old)
-			} else {
-				_ = os.Remove(real)
-				_ = syncDir(dir)
-			}
-			return fmt.Errorf("notify.toml was not changed: the target %s did not load after the write", name)
+	if f.Refused != "" || !maps.Equal(targetNames(f), want) {
+		if existed {
+			_ = replace(real, old)
+		} else {
+			_ = os.Remove(real)
+			_ = syncDir(dir)
 		}
+		return errors.New("notify.toml was not changed: the targets did not load as expected after the write")
 	}
 	return nil
 }
