@@ -304,14 +304,20 @@ where the step means them to change.
   `COLORFGBG` alone, and a 256-colour tier instead of falling to the 16-colour palette
   (`theme.go:124`). They are a separate change.
 
-## 8. Answered (foureyes' review, from the code; the person may still override)
+## 8. Recommended answers (foureyes' review, from the code)
+
+These are the reviewers' recommendations, not the person's decisions. The person's go on this
+spec still decides them.
 
 1. **`owedText` on row 1 is kept.** It counts the Requests view's owed section (`titleCounts`),
    not the For you rows, so it is not the decide chip's number. A chip that grew an age would
    move its neighbours, against §3.1's fixed-place rule. It is priority 5 on row 1, already the
    first to go when room is short.
-2. **The "ready" chip comes after the walk.** `health.ReadyTask` and `health.AgentReady` are
-   exported in this module (`health/stall.go:94-115`). Before any rule moves, the chip's own spec
-   checks whether busmon can call them on its snapshot.
+2. **The "ready" chip comes after the walk.** busmon cannot reuse the rule as it stands. It is
+   the `switch` over `plan.Derive` rows in `cmd/agentbus/stallchecks.go:253-266`: answered
+   tasks go to master; upcoming tasks not the person's, with nothing in `WaitingOn`, go to their
+   owner. That switch fills `health.TeamStallInput.AgentReady`, an input field of `[]ReadyTask`,
+   not a function. Showing the chip means moving that rule where both binaries can read it (for
+   instance into `plan`), in the chip's own spec.
 3. **`T`, not Enter.** B2 and §5.3 depend on Enter keeping "open this row". `T` sits beside `t`
    (the tour), so F1 lists both (§4.5).
