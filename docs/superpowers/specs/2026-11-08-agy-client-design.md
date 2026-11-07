@@ -66,9 +66,14 @@ start one. §9 is the probe that settles them.
 1. **Which form `--model` takes.** The settings file stores the display name (`"Gemini 3.8 Flash
    (High)"`). `agy models` prints an id and a display name. Which one `--model` accepts is not
    known.
-2. **Whether `--settings` accepts `permissions` (and `deny`), `defaultMode`, and a hooks path.**
-   The binary contains the strings `defaultMode`, `permissions`, `hooks_paths` and
-   `hooksInheritUser`. None of them is documented as a settings key.
+2. **Whether `--settings` accepts `permissions` (and `deny`), `toolPermission`, `defaultMode`, and
+   a hooks path.** The binary contains the strings `defaultMode`, `permissions`, `hooks_paths`
+   and `hooksInheritUser`. None of them is documented in the bundled docs. `toolPermission`
+   exists: the startup log prints it. The binary also holds three values that look like its
+   choices: `request-review`, `agent-decides`, `always-proceed` (strings only). reviewer-codex
+   reports that agy's online settings reference makes it user-configurable, with `always-proceed`
+   among the values. I did not open that page. So the person's own file may set a permissive
+   `toolPermission`, and a role would inherit it unless the session overrides it.
 3. **The deny syntax for anything but a command.** Is there a file-read rule (an equivalent of
    Claude's `Read(**/.env)`)? Unknown.
 4. **Whether a session started with `-i` takes a multi-kilobyte prompt** and keeps it as its first
@@ -145,15 +150,27 @@ agy --model <model> [--mode <mode> | --dangerously-skip-permissions] [--effort <
 The launcher writes one JSON object to its cache, like Kimi's agent file, and passes its path:
 
 ```json
-{ "permissions": { "deny": ["command(agentbus suspend)", "…"] },
-  "defaultMode": "<only if §9 shows the key exists and is needed to pin default>" }
+{ "toolPermission": "request-review",
+  "permissions": { "allow": [], "deny": ["command(agentbus suspend)", "…"] } }
 ```
 
-- **It pins the mode.** grok taught that a client with no mode on its command line falls back to
-  the person's own config (`permission_mode = "always-approve"` in `~/.grok/config.toml`). The
-  same can happen with agy's settings `defaultMode`. If §9 shows the key exists, the session file
-  sets it to the profile's mode; if it does not, `default` relies on agy's `request-review`, and
-  the risk summary says so.
+- **It pins the least permissive tool permission** (reviewer-codex). grok taught that a client
+  with no mode on its command line falls back to the person's own config (`permission_mode =
+  "always-approve"` in `~/.grok/config.toml`). agy's equivalent is `toolPermission` (and perhaps
+  `defaultMode`). The session file for a `default` profile always sets `"toolPermission":
+  "request-review"`, the least permissive value seen (§3.2.2). It never omits the key and never
+  leaves it to the person's file. `accept-edits`, `auto` and `plan` pass `--mode` as well. `skip`
+  passes `--dangerously-skip-permissions` and still writes the key, so the risk summary shows
+  both.
+- **Proven before coding, gated if it fails.** §9 step 3 checks that the session value wins over
+  a permissive value in the person's file. It also checks what an omitted key inherits. If the
+  session cannot pin `toolPermission` (the key is ignored, or the person's value wins), a
+  `default` agy profile is **refused at launch** whenever the person's file sets anything other
+  than `request-review`: `agy: ~/.gemini/antigravity-cli/settings.json sets
+  toolPermission=<v>, which this launch cannot override; set it to request-review, or give the
+  profile an explicit permission`. With an explicit non-default permission, the launch goes ahead
+  and names the inherited value in the risk parts and `roles doctor`. The launcher reads only
+  that one value and the allow count (next points), and never edits the file.
 - **Deny rules.** A manifest `Bash(<prefix>*)` or `Bash(<prefix>)` deny becomes
   `command(<prefix>)`. A rule that does not translate (`Read(…)`, `Edit(…)`, a `*` in the middle
   of a pattern) is not dropped silently: the launcher prints one line,
@@ -164,10 +181,9 @@ The launcher writes one JSON object to its cache, like Kimi's agent file, and pa
   profile grants, **plus whatever it inherits from the person's own settings** (next point).
 - **The person's settings are inherited until proven otherwise** (§3.2.7, foureyes). §9 step 2
   settles which wins. The rule, by outcome:
-  - **The session replaces them.** The session object carries an explicit `"allow": []` and
-    pins the tool permission (`toolPermission`, or `defaultMode`, whichever key §9 shows works).
-    `default` then means "ask", and the docs may say so.
-  - **The session merges with them** (or nothing pins the tool permission). The launch prints
+  - **The session replaces them.** The session object's explicit `"allow": []` empties them, and
+    `toolPermission` is pinned (above). `default` then means "ask", and the docs may say so.
+  - **The session merges with them.** The launch prints
     `agy: inherits N allow rules and toolPermission=<v> from ~/.gemini/antigravity-cli/settings.json`.
     The profile's risk parts and `roles doctor` carry the same count and value. Neither the docs,
     the manifest comment nor the risk summary call `default` "ask". The launcher reads only the
@@ -285,8 +301,10 @@ sandbox = true
 ## 8. Security
 
 - **agy's own default, which is "ask" only once proven.** The shipped profile is `default` +
-  `sandbox = true`. `default` means "ask" only if §9 step 2 shows the session replaces the
-  person's allows and pins the tool permission. Until then, the inherited allow count and the
+  `sandbox = true`. The session always writes `toolPermission: request-review` (§4.4). If §9
+  step 3 shows that cannot override the person's value, a `default` profile is refused while the
+  person's file is more permissive. `default` means "ask" only if §9 steps 2 and 3 show the
+  session replaces the person's allows and pins the tool permission. Until then, the inherited allow count and the
   tool permission are named (§4.4). `skip` exists, but no shipped role uses it, and it shows in
   the risk summary.
 - **Nothing written outside the cache.** No `GEMINI.md`, no `.agents/`, no change to
@@ -315,7 +333,17 @@ Run it in a throwaway worktree, with a fake broker project:
    prompt means it merged. Then run a session `deny` of that same command: whether a session deny
    beats an inherited allow. Then the same with a hooks-path key pointing at a temp `hooks.json`
    whose `Stop` hook touches a file (§3.2.2, §4.5).
-3. `agy --settings '{"defaultMode":"…"}'`: whether the key exists.
+3. **`toolPermission`** (§3.2.2, reviewer-codex). In a throwaway `HOME` with a copy of the
+   person's sign-in and a settings file that sets `"toolPermission": "always-proceed"`, run:
+   - `agy -p --settings '{"toolPermission":"request-review"}' "run: touch x"`. A request for
+     review, or a refusal in `-p`, means the session wins. `x` created with no request means the
+     person's value wins.
+   - The same with no `toolPermission` in `--settings`: whether an omitted key inherits the
+     file's `always-proceed`. That is expected, and it is the reason the key is always written.
+   - Then `agy --settings '{"defaultMode":"…"}'`: whether that key exists at all.
+
+   If the copied sign-in cannot work in a throwaway `HOME`, use the person's real file. Set the
+   value only for the probe, put it back, and write in the result that this was done.
 4. `agy -i "$(cat <a 10 KB prompt>)"` in a new worktree: whether the turn is kept, and whether a
    trust dialog appears (§3.2.4). Capture the idle, typed and approval screens with `herdr`
    (§7, the dispatcher fixtures).
@@ -346,7 +374,10 @@ spec gets an amendment with the results before coding starts.
 - Tests. The seam is the one the other clients use: the dry-run `Launch` output and `build()`'s
   argv, with a fake `agy` on `PATH` that prints the real 1.5.3 `--help` (kept as testdata).
   Cases: each permission value, `sandbox`, `reasoning`, an unknown option refused, an untranslated
-  rule named, preflight refusing a missing flag, and the dry run writing nothing.
+  rule named, preflight refusing a missing flag, and the dry run writing nothing. The session
+  JSON always carries `toolPermission: request-review` for `default`. A `default` launch is refused
+  when a fake person's file sets `always-proceed` and §9 showed the override fails (that branch is
+  behind a constant the probe result sets).
   `TestClientsMatchTheLauncher` and `migration_test` cover the new profile. The quota reader gets
   the capacity-line case (§6). The dispatcher fixtures are refreshed if §9 finds new screens.
 - Installer and `agentbus up`: the "no agent CLI on PATH" guidance prints `ClientGuidance`
