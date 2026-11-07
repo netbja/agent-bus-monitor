@@ -107,8 +107,8 @@ rows, their keys and the side panel's lines. Tab 4 and the drawer both draw it. 
 | **DONE** | `Done` | folded to one line, `DONE  6   d shows` |
 
 **A failed read.** When the facts, board, verdicts or asks read fails, `plan.Derive` makes every
-task `Unknown` (`derive.go:115-118`), except a mission task and one already recorded done
-(`planState.partial` is set too). LATER would then hold nearly the whole plan, so when every row
+task `Unknown` (`derive.go:111-118`), except a mission task (derived on its own) and, only when
+the facts read itself succeeded, a task recorded done (`planState.partial` is set too). LATER would then hold nearly the whole plan, so when every row
 not `Done` is `Unknown` the board draws no NOW, NEXT or LATER: one muted line `a read failed:
 states unknown`, then those tasks in file order with the `Unknown` glyph, then DONE as usual.
 `Unknown` goes to LATER only beside known rows.
