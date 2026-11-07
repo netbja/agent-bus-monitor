@@ -54,6 +54,7 @@ const (
 	ovSettings   // settings (C): the registry's keys by group, changed in place (settings_ui.go)
 	ovAbout      // about (A): the versions and the bus line (about.go)
 	ovMerge      // a change waiting for the person's merge (merge-queue), its key the head
+	ovTriageEnd  // the triage walk's end page (busmon-queue-triage §4.4), its key the next plan task
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.

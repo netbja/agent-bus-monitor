@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,6 +61,7 @@ const (
 	ActConfirm
 	ActFollow
 	ActNextUnread
+	ActTriage // T: walk what waits for the person (busmon-queue-triage §4)
 	ActAsk
 	ActAskNext
 	ActAskPrev
@@ -213,6 +215,7 @@ var (
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "f", Hint: "auto-scroll", Act: ActFollow, match: runeIs('f')},
 		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
+		{Keys: "T", Hint: "triage", Help: "triage: open what waits for you one item at a time, the next after each answer or send (n next, p back, esc ends); not t, the tour", Act: ActTriage, match: runeIs('T')},
 		{Keys: "!", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!'))},
 		{Keys: "w", Help: "answer the open question, or with none open write to master", Act: ActAskOrWrite, match: runeIs('w')},
 		{Keys: "Z", Help: "put the project to sleep (agentbus suspend), or, when it is suspended, bring it back (agentbus resume); asks first", Act: ActSleep, match: runeIs('Z')},
@@ -379,7 +382,9 @@ func shellAskTable() []binding {
 	for _, b := range askBindings {
 		if b.Act == ActAskPick {
 			b.Help = "answer with the option of that number"
-			out = append(out, b, binding{Keys: "o", Help: "Other: a free answer in the compose window", Act: ActAskOther, match: runeIs('o')})
+			out = append(out, b, binding{Keys: "o", Help: "Other: a free answer in the compose window", Act: ActAskOther, match: runeIs('o')},
+				binding{Keys: "n p", Help: "during triage (T): the next or previous item", Act: ActNextItem, match: runeIs('n')},
+				binding{Keys: "p", Act: ActPrevItem, match: runeIs('p')})
 			continue
 		}
 		out = append(out, b)
@@ -472,8 +477,14 @@ func footerHintsOn(m Mode, p PanelID, t Tier, width int, offers func(Action) boo
 			fkeys = append(fkeys, b)
 		case b.Act == ActOpen && m == ModeShell:
 			// The main screen: the selected row's own act comes first
-			// (busmon-queue-triage §5.2).
+			// (busmon-queue-triage §5.2), then T, the way into the walk (§4.1).
 			shown = append([]binding{b}, shown...)
+		case b.Act == ActTriage && m == ModeShell:
+			at := 0
+			if len(shown) > 0 && shown[0].Act == ActOpen {
+				at = 1
+			}
+			shown = slices.Insert(shown, at, b)
 		default:
 			shown = append(shown, b)
 		}
