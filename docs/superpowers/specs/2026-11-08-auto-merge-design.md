@@ -66,7 +66,8 @@ the person can stop it.
   `auto-merge due: PR <n> head <H7> (<branch>)`. Master runs the command. The dispatcher never
   merges and never runs `gh pr merge`: it stays the one pane writer, typing only its wake line.
 - **After the merge** the command reports to the person, with `report master --to <person>` and
-  one line: `auto-merged PR <n> (<title>) at <H7>: approved by <r1> (<p1>) and <r2> (<p2>)`. The
+  one line: `auto-merged PR <n> (<title>) at <H7>: approved by <r1> (<maker1>, via <provider1>) and
+  <r2> (<maker2>, via <provider2>)`. The
   merge queue drops the item on its next pass, as for a merge by hand.
 
 ## 3. The condition: all of it, at merge time
@@ -94,11 +95,14 @@ keep the window; `agentbus automerge` checks it again just before `gh pr merge`.
      launcher's `AGENT_BUS_MODEL`), written beside the provider, empty when unknown. The same goes
      for `author_model`.
    - **`models.MakerOf(provider, model)`** is the maker:
-     - a provider that serves only its own models (anthropic, openai, moonshot, xai) is its own
-       maker, whatever the model;
+     - a provider on the fixed list of single-maker providers in `models` (anthropic, openai,
+       moonshot, xai) is its own maker, whatever the model;
      - a provider that serves several makers (google through `agy`) takes the maker from the
        model's `Family`, by its prefix rule, so `claude-*` is anthropic;
-     - with no model recorded, or a model the table does not know, the maker is **unknown**.
+     - with no model recorded, or a model the table does not know, the maker is **unknown**;
+     - **any other provider is unknown** until it is added to one of the two lists: a local-llm
+       peer's endpoint, or a new provider that may serve several makers, never defaults to being
+       its own maker (foureyes).
    - A verdict whose maker is unknown **never counts** toward the two. That includes every verdict
      written before this field. Two verdicts of one maker are one review: "independent" means
      another maker's model, not another pane or another provider.
@@ -315,7 +319,7 @@ person keeps the merge: deliver never merges, never touches the base." This spec
 
 ## 10. Tests
 
-- **Eligibility (pure, `mergequeue.Eligible`).** One fixture per point of §3, each failing alone:
+- **Eligibility (pure, `automerge.Eligible`).** One fixture per point of §3, each failing alone:
   - the setting off, out of scope, excluded;
   - not in the queue;
   - one approve; two approves from the same reviewer; two from one provider;
@@ -342,7 +346,8 @@ person keeps the merge: deliver never merges, never touches the base." This spec
     (`delivers = true`), master without the lease, an agent ancestor;
   - an agent's `automerge abort` is refused; an abort entry from an agent's name is ignored by
     the chore and warned about;
-  - the report names both reviewers and providers.
+  - the report names both reviewers, their makers and their providers;
+  - an unlisted provider (a local-llm endpoint) gives an unknown maker, which never counts.
 - **The window (Redis, a disposable broker only).**
   - Opening is fenced and uses Redis `TIME`.
   - A new head opens a new window.
