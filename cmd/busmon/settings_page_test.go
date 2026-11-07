@@ -444,8 +444,9 @@ func TestSettingsPanelsLayout(t *testing.T) {
 	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
 	set := &settingsPage{groups: settingsGroups(getenv, settingsFlags{}, settingsPageGroups), loaded: true}
 	wide := settingsBody(set, 0, 96)
-	// about-trim: one blank row of top margin, the sidebar's rule through it.
-	if strings.TrimSpace(strings.ReplaceAll(wide[0].text(), glyphVertical, "")) != "" || !strings.Contains(wide[0].text(), glyphVertical) {
+	// about-trim: one row of top margin, the sidebar's rule through it; it
+	// carries the focus line only (settings-focus-line).
+	if margin := strings.ReplaceAll(wide[0].text(), glyphVertical, ""); strings.TrimSpace(margin) != settingsFocusLine(false, true, 96).text()[1:] || !strings.Contains(wide[0].text(), glyphVertical) {
 		t.Fatalf("no top margin on the wide page: %q", wide[0].text())
 	}
 	wide = wide[1:]
@@ -460,8 +461,8 @@ func TestSettingsPanelsLayout(t *testing.T) {
 	for _, w := range []int{91, 70, 40, 24} {
 		set.group = 3 // Notifications
 		lines := settingsBody(set, 0, w)
-		if strings.TrimSpace(lines[0].text()) != "" {
-			t.Fatalf("%d: no top margin: %q", w, lines[0].text())
+		if lines[0].text() != settingsFocusLine(false, false, w).text() {
+			t.Fatalf("%d: the top margin is not the focus line alone: %q", w, lines[0].text())
 		}
 		tabs := lines[1]
 		if strings.Contains(tokLinesText(lines), glyphVertical) {
