@@ -1,0 +1,21 @@
+  0148 Lorem ipsum filler line for a size test, nothing to do here.
+  0149 Lorem ipsum filler line for a size test, nothing to do here.
+  0150 Lorem ipsum filler line for a size test, nothing to do here.
+  0151 Lorem ipsum filler line for a size test, nothing to do here.
+  0152 Lorem ipsum filler line for a size test, nothing to do here.
+  0153 Lorem ipsum filler line for a size test, nothing to do here.
+  0154 Lorem ipsum filler line for a size test, nothing to do here.
+  0155 Lorem ipsum filler line for a size test, nothing to do here.
+  0156 Lorem ipsum filler line for a size test, nothing to do here.
+  0157 Lorem ipsum filler line for a size test, nothing to do here.
+  0158 Lorem ipsum filler line for a size test, nothing to do here.
+  0159 Lorem ipsum filler line for a size test, nothing to do here.
+  --- filler end ---
+  Reply with the single word READY.
+
+  READY
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> zz-probe
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                                                                  Gemini 3.8 Flash · low

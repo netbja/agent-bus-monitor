@@ -23,6 +23,9 @@ Spec §10 records what each state means.
 | `agy-empty.txt` | REAL — w5:p1, idle, unfocused |
 | `agy-typed.txt` | REAL — w5:p1 with `zz-probe` typed, then cleared |
 | `agy-approval.txt` | SYNTHETIC — top of `agy-empty.txt`, input box replaced by an approval menu with a `> 1. Yes` line and an `esc to dismiss` banner (spec §10 "Modal hazard"); reproducing it needs a prompt to the peer |
+| `agy153-empty.txt` | REAL — agy 1.5.3, 2026-11-07 live probe (agy-client spec §3.3): `-i` with a 10.9 KB prompt answered, idle input box, throwaway pane, plain `herdr pane read --source visible`. The current signature reads it ready (checked; the case is the implementation's) |
+| `agy153-typed.txt` | REAL — the same pane with `zz-probe` typed, then cleared with `ctrl+u`; reads not ready |
+| `agy153-approval.txt` | REAL — the same pane on a `request-review` approval menu (`> 1. Yes, run command` … `4. No, cancel`, `esc to cancel`); reads not ready. Replaces the need for the SYNTHETIC `agy-approval.txt` |
 | `<client>-old-empty-typed.txt` (claude, codex, kimi, grok, agy) | DERIVED — last 12 lines of `<client>-empty.txt` (an OLD empty input box in scrollback) above the last 28 lines of `<client>-typed.txt` (the CURRENT box with `zz-probe` typed); must read not ready. Escapes and `\r` kept as in the sources |
 | `<client>-old-typed-empty.txt` (same clients) | DERIVED — last 12 lines of `<client>-typed.txt` above the last 28 lines of `<client>-empty.txt`; must read ready (only the current box counts) |
 | `claude-trust.txt` | REAL — 2026-10-27, Claude Code in a fresh untrusted folder, throwaway probe tab (herdr 0.9.5, `--ansi`); herdr reported `blocked` (`../herdr/agent-get-claude-trust.json`, the real reply) |
