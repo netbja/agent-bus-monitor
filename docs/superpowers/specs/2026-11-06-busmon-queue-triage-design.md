@@ -229,34 +229,61 @@ waits for you`.
 ### 5.1 The word
 
 `footerHintsOn` already asks a `hint(Action) string` for a word. `pageHint` answers it on pages.
-A new `rowHint` answers it on the shell's panels for `ActOpen`, from the selected row's key alone
-(as `priorityTarget` reads the row key, request-priority §6):
+A new `rowHint` answers it on the shell's panels for `ActOpen`, from the selected row's key (as
+`priorityTarget` reads the row key, request-priority §6) and, for an in-place row, whether it is
+expanded or folded. Those are the facts Enter itself reads:
 
-| Panel, row | Word for `enter` |
-|---|---|
-| For you, `ask:` | `answer` |
-| For you, `wait:` / `prompt:` | `agent` (both open the agent page, `pushAgent`) |
-| For you, gate | `thread` (the challenge thread; the person does not record the verdict) |
-| For you, plan | `task` (the task page, `ovPlanTask`, with its Action row) |
-| For you, merge (a PR) | `PR` (the PR page, `ovMerge`) |
-| For you, `merge:unknown` | none: Enter does nothing there, so the `enter` pair is left out |
-| For you, health | `health` (F5) |
-| For you, `empty:plan:` | `task` |
-| For you, unread / Activity line | `read` (collapsed), `full text` (expanded) |
-| Requests, an owed or waited-on thread | `thread` |
-| Requests, the notices line | `notices` |
-| Requests, a tracked request | `request` |
-| Agents | `agent` |
-| Board, Plan | `task` |
+Enter has three kinds of outcome today (`open`, `tea_update.go:215-285`; `openRequestRow`,
+`requests_rows.go:377`):
+- it pushes a page;
+- it changes the row in place (an expansion, a fold), with no page;
+- it does nothing.
 
-**Each word names the page Enter opens, never an act the person then does there.** An ask's
-`answer` is the one act word left: its page is the answer form. Anything else keeps `detail`.
-`rowHint` returns either a word or "no pair". On `merge:unknown` the footer draws no `enter`
-pair, so it never offers what Enter does not do. A test holds each word to the page Enter
-pushes, by pressing Enter on a fixture row of each prefix and reading the page kind. `rowHint` is pure, and one table test walks every row-key prefix
-that `forYou`, `requestRows`, `planTabItems` and the Agents and Board rows produce. A new prefix
-with no word fails that test, much as `TestEveryQuotaProviderHasItsColour` fails on a provider
-without a colour.
+The word says that outcome: the page's name, the change, or no pair at all.
+
+| Panel, row key (its producer) | Enter's outcome | Word |
+|---|---|---|
+| For you, `ask:` (`forYou`) | page: the ask (`pushAsk`) | `answer` |
+| For you, `wait:` / `prompt:` (`forYou`) | page: the agent (`pushAgent`) | `agent` |
+| For you, `gate:` (`forYou`) | page: the challenge thread (`pushMessage`); the person does not record the verdict | `thread` |
+| For you, `plan:` (`forYou`) | page: the task (`ovPlanTask`, with its Action row) | `task` |
+| For you, `merge:<head>` (`forYou`, merge queue) | page: the PR (`ovMerge`) | `PR` |
+| For you, `merge:unknown` (`forYou`, merge queue) | nothing (returns nil) | no `enter` pair |
+| For you, `health:` (`forYou`) | page: F5 (`ovHealth`) | `health` |
+| For you, `empty:plan:` (`forYouEmptyRows`) | page: the task (`ovPlanTask`) | `task` |
+| For you, `unread:`, collapsed (`forYou`) | in place: expands the line | `expand` |
+| For you, `unread:`, expanded | page: the line (`pushMessage`, which reads it) | `full text` |
+| Activity, a line, collapsed (the feed) | in place: expands the line | `expand` |
+| Activity, a line, expanded | page: the line (`pushMessage`) | `full text` |
+| Requests, `asks` (`requestRows`) | page: the asks (`pushAskOf`) | `answer` |
+| Requests, `ask:` | page: the ask (`pushAsk`) | `answer` |
+| Requests, `req:` | page: the request (`ovRequest`) | `request` |
+| Requests, `thr:` | page: the thread (`pushMessage` of its report or root) | `thread` |
+| Requests, `ntc:` | page: the notices (`ovNotices`) | `notices` |
+| Requests, `fold`, the notices line (`reqNoticesKey`), `grp:`, `older:` | in place: folds or unfolds | `unfold` when folded, `fold` when open |
+| Agents, an agent (the Agents rows) | page: the agent (`pushAgent`) | `agent` |
+| Board, a task (the Board rows) | page: the task (`ovTask`) | `task` |
+| Plan, `task:` (`planTabItems`) | page: the task (`ovPlanTask`) | `task` |
+| Plan, `toggle` (`planTabItems`) | in place: shows the rest of the plan | `expand` |
+
+**A page row's word names the page Enter opens, never an act the person then does there.** An
+ask's `answer` is the one act word left: its page is the answer form. An in-place row's word
+names the change. A row whose Enter does nothing gets no pair. `rowHint` returns either a word
+or "no pair", so the footer never offers what Enter does not do. A row key outside the table
+keeps `detail`.
+
+**Two tests hold the table, both over fixtures from every producer named above** (`forYou`,
+`forYouEmptyRows`, `requestRows`, `planTabItems`, the feed, the Agents and Board rows):
+- **Prefix coverage.** `rowHint` is pure. A table test walks every row-key prefix those
+  producers emit. A prefix with no entry fails, much as `TestEveryQuotaProviderHasItsColour`
+  fails on a provider without a colour.
+- **Outcome.** The test presses Enter on a fixture row of each entry and checks the outcome
+  kind against the table:
+  - a page entry: the page kind on top of the reader stack;
+  - an in-place entry: no page pushed, and the row's state changed (`m.ui.expanded`, the fold
+    map, `planExpanded`), with the word after the change matching the second row of its pair;
+  - the nothing entry (`merge:unknown`): no page pushed, no state changed, and no `enter` pair in
+    the footer.
 
 ### 5.2 First in the footer
 
@@ -276,7 +303,7 @@ merge, `+`/`-` on a tracked request) keep their `OnPage` rule.
 
 ## 6. Steps, each its own subject for 4-eyes
 
-1. **C, row actions** (`busmon-row-actions`): `rowHint`, the footer order, the prefix test. It is
+1. **C, row actions** (`busmon-row-actions`): `rowHint`, the footer order, the prefix and outcome tests (§5.1). It is
    the smallest step, and the one the other two reuse: the walk's flash names the next item with
    the same words.
 2. **A, the strip** (`busmon-queue-strip`): the chips, the header hit-test (`hItem` x spans,
