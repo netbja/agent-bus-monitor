@@ -94,15 +94,18 @@ keep the window; `agentbus automerge` checks it again just before `gh pr merge`.
    - The verdict gains an additive field, **`reviewer_model`**: the snapshot's `Model` (the
      launcher's `AGENT_BUS_MODEL`), written beside the provider, empty when unknown. The same goes
      for `author_model`.
-   - **`models.MakerOf(provider, model)`** is the maker:
-     - a provider on the fixed list of single-maker providers in `models` (anthropic, openai,
-       moonshot, xai) is its own maker, whatever the model;
-     - a provider that serves several makers (google through `agy`) takes the maker from the
-       model's `Family`, by its prefix rule, so `claude-*` is anthropic;
-     - with no model recorded, or a model the table does not know, the maker is **unknown**;
-     - **any other provider is unknown** until it is added to one of the two lists: a local-llm
-       peer's endpoint, or a new provider that may serve several makers, never defaults to being
-       its own maker (foureyes).
+   - **`models.MakerOf(provider, model)`** is the maker. The provider decides which rule applies,
+     in this order (reviewer-codex), and the first that matches gives the answer:
+     1. **a single-maker provider** (a fixed list in `models`: anthropic, openai, moonshot, xai)
+        is its own maker **whatever the model**, recorded or not, known or not. It serves only its
+        own models, so the model cannot change the answer;
+     2. **a multi-maker provider** (a second fixed list: google, through `agy`) takes the maker
+        from the recorded model's `Family`, by its prefix rule (`claude-*` anthropic, `gpt-*`
+        openai, `gemini-*` google). With no model recorded, or a model the prefix rule does not
+        know, the maker is **unknown**;
+     3. **any other provider is unknown**, whatever the model, until it is added to one of the two
+        lists: a local-llm peer's endpoint, or a new provider that may serve several makers, never
+        defaults to being its own maker (foureyes).
    - A verdict whose maker is unknown **never counts** toward the two. That includes every verdict
      written before this field. Two verdicts of one maker are one review: "independent" means
      another maker's model, not another pane or another provider.
@@ -129,7 +132,8 @@ keep the window; `agentbus automerge` checks it again just before `gh pr merge`.
    §3d: unknown is never "nothing waits".
 
 `agentbus automerge <pr>` prints the first point that fails, in plain words (`not eligible: only
-one provider approved 3f2a1c9 (anthropic)`), and exits 3. It never merges on a partial read.
+one maker approved 3f2a1c9 (anthropic)`, or `not eligible: the maker of reviewer-agy's approve is
+unknown (agy, no model recorded)`), and exits 3. It never merges on a partial read.
 
 ## 4. The window and the abort
 
@@ -242,7 +246,7 @@ person keeps the merge: deliver never merges, never touches the base." This spec
     hands merges to master by a setting only they write".
   - The forge-delivery note gets one line pointing to it.
 - **The same proof, stronger.** `deliver` needs one independent approve of `H`. `automerge` needs
-  two, on two providers, one of them foureyes.
+  two, from two different makers (§3.3), one of them foureyes.
 - **A narrower caller check than `deliver`'s.** `deliver` accepts any role with `delivers = true`.
   `automerge` accepts master with the pilot lease, or the person (§2). Roles' rules echo it:
   - `Bash(agentbus automerge *)` is allowed in master's own rules;
@@ -322,9 +326,14 @@ person keeps the merge: deliver never merges, never touches the base." This spec
 - **Eligibility (pure, `automerge.Eligible`).** One fixture per point of §3, each failing alone:
   - the setting off, out of scope, excluded;
   - not in the queue;
-  - one approve; two approves from the same reviewer; two from one provider;
+  - one approve; two approves from the same reviewer; two from one maker on one provider;
   - two from two providers of one maker: foureyes (anthropic) and a reviewer on `agy` running
     `claude-*`, which counts once;
+  - **one provider, two makers, counts as two** (positive): foureyes on `agy` running `claude-*`
+    and a second reviewer on `agy` running `gemini-*` are anthropic and google;
+  - `MakerOf`'s order: anthropic with no model, and anthropic with an unknown model, are anthropic
+    (rule 1); `agy` with no model, and `agy` with an unknown model, are unknown (rule 2); a
+    local-llm endpoint with a known model's name is unknown (rule 3);
   - an `agy` verdict with no model recorded (unknown, never counts); a verdict from before the
     field;
   - no foureyes among the two; a reject after;
