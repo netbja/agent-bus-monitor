@@ -555,7 +555,11 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   nothing uploaded; it needs `wl-paste`, `xclip` or `pngpaste`). You write as a
   **person**: `busmon --as charlie` (or `AGENT_BUS_HUMAN`, or `agentbus identity set charlie`)
   shows `♙ Charlie [human]`; your entries carry `human=yes`, and agents see `"human": true`.
-- **Footer** — the keys of where you are (F1 lists them all). At its right end, for a few
+- **Footer** — the keys of where you are (F1 lists them all). On the main screen `enter` comes
+  first, with what it does on the selected row: the page it opens (`answer`, `agent`, `thread`,
+  `task`, `PR`, `health`, `request`, `notices`, `full text`), the change it makes in place
+  (`expand`, `fold`, `unfold`), or no `enter` at all where it does nothing (`merge queue unknown`, or no row selected).
+  At its right end, for a few
   seconds, a quiet line tells what happened by itself while you watched: a pause the dispatcher
   or an agent set (`▲` for a quota pause), the project resumed, an agent's context cleared after
   its hand-off, a reload begun, done (`✓`) or failed (`▲`), a role moved to a fallback profile or

@@ -21,4 +21,4 @@
 │    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- tab focus   1-4 tabs   enter detail   F1 help   F5 health     ✓ coder reloaded 
+ tab focus   1-4 tabs   y copy   F1 help   F5 health           ✓ coder reloaded 

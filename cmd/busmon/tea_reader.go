@@ -1251,11 +1251,12 @@ func (m Model) pageOffers(act Action) bool {
 }
 
 // pageHint is the footer's word for act on the top page: what its y and Y
-// copy ("" keeps the binding's own).
+// copy ("" keeps the binding's own); with no page open, Enter's word on the
+// selected row (shellHint, busmon-row-actions).
 func (m Model) pageHint(act Action) string {
 	p := m.rd.top()
 	if p == nil {
-		return ""
+		return m.shellHint(act)
 	}
 	switch {
 	case act == ActCopyThread && p.threadWhat != "":

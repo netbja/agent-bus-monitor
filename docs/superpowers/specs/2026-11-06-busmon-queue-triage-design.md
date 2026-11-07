@@ -265,12 +265,17 @@ The word says that outcome: the page's name, the change, or no pair at all.
 | Board, a task (the Board rows) | page: the task (`ovTask`) | `task` |
 | Plan, `task:` (`planTabItems`) | page: the task (`ovPlanTask`) | `task` |
 | Plan, `toggle` (`planTabItems`) | in place: shows the rest of the plan | `expand` |
+| any panel, no row selected (an empty list) | nothing | no `enter` pair (the person's decision, 2026-11-07) |
 
 **A page row's word names the page Enter opens, never an act the person then does there.** An
 ask's `answer` is the one act word left: its page is the answer form. An in-place row's word
 names the change. A row whose Enter does nothing gets no pair. `rowHint` returns either a word
 or "no pair", so the footer never offers what Enter does not do. A row key outside the table
 keeps `detail`.
+
+**No row selected: the person's decision (2026-11-07).** When the focused panel has no selected
+row (an empty list), Enter does nothing, so the footer hides the `enter` pair rather than
+offer `enter detail`. The person chose this over keeping `detail` there.
 
 **Two tests hold the table, both over fixtures from every producer named above** (`forYou`,
 `forYouEmptyRows`, `requestRows`, `planTabItems`, the feed, the Agents and Board rows):
@@ -282,8 +287,8 @@ keeps `detail`.
   - a page entry: the page kind on top of the reader stack;
   - an in-place entry: no page pushed, and the row's state changed (`m.ui.expanded`, the fold
     map, `planExpanded`), with the word after the change matching the second row of its pair;
-  - the nothing entry (`merge:unknown`): no page pushed, no state changed, and no `enter` pair in
-    the footer.
+  - the nothing entries (`merge:unknown`, and no row selected): no page pushed, no state
+    changed, and no `enter` pair in the footer.
 
 ### 5.2 First in the footer
 

@@ -455,16 +455,26 @@ func footerHints(m Mode, p PanelID, t Tier, width int) Line {
 
 // footerHintsOn is footerHints on a page: a binding marked OnPage is
 // advertised only when offers says the page offers its action (nil: none is),
-// under the word hint gives for it on that page ("" or nil: its own).
+// under the word hint gives for it on that page ("" or nil: its own). On the
+// main screen (ModeShell) the enter pair comes first, and a rowNoPair word
+// leaves it out.
 func footerHintsOn(m Mode, p PanelID, t Tier, width int, offers func(Action) bool, hint func(Action) string) Line {
 	var shown, fkeys []binding
 	for _, b := range bindings(m) {
 		if b.Hint == "" || !b.applies(p, t) || b.OnPage && (offers == nil || !offers(b.Act)) {
 			continue
 		}
-		if fkey(b.Keys) {
+		if b.Act == ActOpen && hint != nil && hint(b.Act) == rowNoPair {
+			continue // Enter does nothing on this row: no pair (busmon-row-actions)
+		}
+		switch {
+		case fkey(b.Keys):
 			fkeys = append(fkeys, b)
-		} else {
+		case b.Act == ActOpen && m == ModeShell:
+			// The main screen: the selected row's own act comes first
+			// (busmon-queue-triage §5.2).
+			shown = append([]binding{b}, shown...)
+		default:
 			shown = append(shown, b)
 		}
 	}
