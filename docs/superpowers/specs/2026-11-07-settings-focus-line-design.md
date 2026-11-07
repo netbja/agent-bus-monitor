@@ -30,7 +30,7 @@ same height, and no group or key moves.
 | keys | `focus: keys · ← or tab: the groups` | `focus: keys · ← or tab: the tabs` |
 
 - **Why `←` on the narrow keys line, not `↑`.** From the keys, `←` returns to the tabs from any
-  key, on both layouts (`settingsUpdate`: `case s.keys && act == ActGroupPrev` comes before the
+  key, on both layouts (`settingsKey`: `case s.keys && act == ActGroupPrev` comes before the
   `side` cases). `↑` returns only from the first key; from any other key it moves up. The hint
   names the key that works wherever the selection is.
 - **Roles.** The whole line is `RoleMuted`, except the focused panel's word (`groups`, `tabs` or
