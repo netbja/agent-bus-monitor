@@ -172,11 +172,7 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 			m.ui.flash = "auto-scroll on"
 		}
 	case ActNextUnread:
-		m.focusPanel(PanelActivity)
-		m.refresh()
-		if !m.nextUnread() {
-			m.ui.flash = "nothing unread"
-		}
+		m.goNextUnread()
 	case ActShowAll:
 		m.ui.showAll = !m.ui.showAll
 	case ActFilter:
@@ -479,6 +475,15 @@ func (m *Model) syncPause() {
 
 // nextUnread selects the next unread Activity line after the selection,
 // wrapping; false when none.
+// goNextUnread is u: Activity, its next unread line for the person.
+func (m *Model) goNextUnread() {
+	m.focusPanel(PanelActivity)
+	m.refresh()
+	if !m.nextUnread() {
+		m.ui.flash = "nothing unread"
+	}
+}
+
 func (m *Model) nextUnread() bool {
 	l := &m.lists.activity
 	cur := -1
@@ -541,7 +546,8 @@ func (m *Model) wheel(ms tea.Mouse) {
 	return
 }
 
-// click: a tab label switches the tab, a frame's title row focuses its
+// click: a header chip or the health pill runs its action (busmon-queue-triage
+// §3.2), a tab label switches the tab, a frame's title row focuses its
 // panel, a row is selected (opened when already selected) and the scrollbar
 // column pages towards the click (listState.click).
 func (m *Model) click(ms tea.Mouse) tea.Cmd {
@@ -569,6 +575,11 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 		m.closeReader() // a click on For you, Agents or a tab leaves the reader
 	}
 	l := m.layout
+	if l.Header.H > 0 && ms.Y >= l.Header.Y && ms.Y < l.Header.Y+l.Header.H { // a strip chip, the health pill
+		cmd := m.headerClick(ms.X, ms.Y-l.Header.Y)
+		m.refresh()
+		return cmd
+	}
 	if l.Tabs.H > 0 && ms.Y == l.Tabs.Y {
 		if p, ok := tabAt(narrowPanels, l.Active, m.width, 0, ms.X); ok {
 			m.focusPanel(p)

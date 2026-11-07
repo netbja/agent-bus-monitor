@@ -495,6 +495,12 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `TestRowHintEveryRowAndItsOutcome` presses Enter on every selectable row of five fixtures (the
   Requests ones from `reqShell`, all closed and all open), again on an in-place row after its
   change, and holds the word to what Enter did and to every row-key kind being met.
+- **busmon's header strip is a partition of For you** (busmon-queue-strip, same spec §3): `stripOf`
+  (`queue_strip.go`) counts `decide` (ranks `rankAsk`…`rankPlan`), `merge` (`rankMerge` but never
+  `merge:unknown`) and `unread` (`unreadItems`), so `decide + merge = decisions(forYou)` and the strip
+  can never disagree with the panel. A new For you rank must be placed in one chip or none, there.
+  The header's clickable items carry a `headerHit`; `headerLayout` returns their spans, and `click`
+  hit-tests the header after closing an open reader. `tourVersion` is 3 (the header page).
 - **History archive** (spec `docs/superpowers/specs/2026-11-01-history-design.md`, package `history/`): the
   dispatch service's chore (`dispatch/history.go`, its own goroutine beside the reconciliation, 1 min, a 5 s
   pass, 2000 entries shared a page per stream in turn, the round starting one stream further each pass) appends `history.Streams` to `<state>/history/YYYY-MM-DD.jsonl` (UTC day of the id;
@@ -633,7 +639,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   of your own (it counts as an approve): `agentbus gate close` leaves a trace that is not a verdict.
   busmon's For you lists a gate only when it concerns the person (`personGateItems`: the person
   opened it, or it holds the person, read as `personGates` when the person is no agent); a review
-  between agents never counts in the `for you` badge.
+  between agents never counts in the strip's `decide` chip.
 - **A plain `subscribe` acknowledges older entries unseen; `--drain` does not.** With no
   `--since`, `subscribe` floors at the server's "now", so everything that waited for an unarmed
   agent is ACKed without output. That is why a woken agent must run `subscribe --drain` — keep the
