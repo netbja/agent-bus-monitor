@@ -37,13 +37,26 @@ busmon's guided setup (§5) and the CLI twin (§6). Both refuse an agent first, 
 `agentbus notifications test` already applies (`notificationscmd.go`):
 
 - **busmon** refuses when its own environment carries `AGENT_BUS_AGENT`, or, on Linux, when a
-  registered agent is among its ancestors (`agentAncestor`). Its page then reads `setting up a
+  registered agent is among its ancestors. `agentAncestor` lives in `cmd/agentbus` (package
+  main) today. It moves to a shared package, `internal/agentcaller`, which both binaries call: one
+  rule, not two copies (foureyes). Its page then reads `setting up a
   target is the person's act: open busmon from your own shell`. busmon is the person's tool, so this
   is a guard against an agent running it in a pane, not a hurdle for the person.
 - **the CLI** refuses the same two cases, before reading anything.
-- **The tool rules stay as they are.** Every role already denies `Read`, `Edit` and `Write` of
-  `notify.toml` (`rolecfg/configdeny.go`). The new subcommands need no rule: they refuse an agent
-  themselves, so a deny never has to match prose that mentions them.
+- **The tool rules gain denies for the writing and revealing subcommands** (foureyes). Both checks
+  above can be escaped: `env -u` drops the variable, and a double fork leaves the agent's process
+  tree. An agent could then add its own Discord webhook and receive the summaries, or run
+  `show-topic` and read the ntfy topic.
+  - Every role already denies `Read`, `Edit` and `Write` of `notify.toml`
+    (`rolecfg/configdeny.go`).
+  - It also denies `Bash(agentbus notifications add *)`, `remove *`, `rename *`, `setup` and
+    `show-topic *`, with the spellings after `--project`/`-p` (and `--host`/`-H`) that `deliver`'s
+    deny uses, added by the launch and written by `roles draft`.
+  - `status` and `test` stay as they are: `status` reveals no secret, and `test` refuses an agent
+    itself.
+  - **Defence in depth, not a boundary**, as everywhere on the bus: the person's own shell and an
+    agent's wrapper script both run the same binary. The point goes to the security role's
+    review on master's call.
 
 ## 3. What the person is asked, per kind
 
@@ -61,7 +74,9 @@ The guided setup asks **the minimum**, and everything else has its safe default.
    `crypto/rand`, as the assistant draws it today. It is never asked.
 3. **Subscribe on the phone.** The page shows, together:
    - the topic, with `y` to copy it;
-   - the subscribe link `https://<server>/<topic>`, with `Y` to copy it;
+   - the subscribe link `<server>/<topic>`, built from the validated server URL **with its own
+     scheme**: `https://ntfy.sh/…`, or `http://192.168.1.20/…` for a private server Load accepted
+     with `insecure = true` (reviewer-codex). `Y` copies it;
    - a QR code of that link (§5.3), with one line: `in the ntfy app: + → subscribe to topic → paste
      the topic, or scan the code with the phone's camera`.
 
@@ -72,7 +87,7 @@ The guided setup asks **the minimum**, and everything else has its safe default.
    (both through `config.Set`, as the C page writes today).
 5. **Test.** One message is sent at once, the same as `agentbus notifications test phone`. The page
    shows `delivered: check your phone`, or the failure in plain words (§7). It offers `t` test
-   again, `e` edit, `d` remove.
+   again, `e` edit, `x` remove.
 
 ### Discord
 
@@ -92,17 +107,20 @@ tests, as above.
 ### Remove and rename
 
 On the C page, every target of the file is a line: its name, its kind and its last test, never a
-topic or a URL.
+topic or a URL. Enter on a target line opens its own page (`ovNotifySetup`, in its target view,
+§5.2). The keys below are that page's, never page C's: on page C `d` already resets a setting
+(`ActReset`).
 
-- **`d` (remove)** asks `remove phone? its topic is lost, y/n`. It removes the target's table and
+- **`x` (remove)** asks `remove phone? its topic is lost, y/n`. It removes the target's table and
   its name from `notify.targets`. When no target is left listed, it asks `turn notifications off
   too? y/n`.
-- **`r` (rename)** edits the name. A new name must be free, and `^[a-z][a-z0-9_-]{0,31}$`, the
+- **`n` (rename)** edits the name. A new name must be free, and `^[a-z][a-z0-9_-]{0,31}$`, the
   rule Load applies. It renames the table and its entry in `notify.targets`, and moves the
   target's record in `notify-last.json`, so its last test stays.
 - **`s` (show the topic)**, ntfy only: the person may need the topic again, on a new phone. The
-  page shows the topic and its QR code until a key is pressed. It is never written to a log, the
-  bus or the screen's scrollback. §11 Q2.
+  page shows the topic and its QR code until a key is pressed. busmon never writes it to a log or
+  the bus, and its alternate screen leaves no scrollback. The CLI's `show-topic` and `add ntfy`
+  print it once, on the person's own terminal, which keeps it in that terminal's scrollback. §11 Q2.
 
 ## 4. Writing the file safely: `notify.Edit`
 
@@ -126,8 +144,8 @@ One writer, in package `notify`, which both callers use.
      The folder is created `0700` if missing, and refused, as Load refuses it, if it is not the
      person's or others can write it.
   5. It re-loads the result with `notify.Load`. If the new or renamed target is not there and
-     valid, it puts the old bytes back the same way, and the caller says `notify.toml was not
-     changed: <why>`.
+     valid, it puts the old bytes back the same way, or removes the file when there was none
+     before (foureyes). The caller then says `notify.toml was not changed: <why>`.
 - **No lost edit.** Between its read and its rename, the writer holds a lock beside the file
   (`notify.toml.lock`, `flock`, the way `notify-last.json` is updated). It also compares the
   file's size and modification time at the rename with those it read. If the person saved the file
@@ -153,7 +171,8 @@ target (§3, remove and rename). The read-only template stays reachable on the s
 ### 5.2 The screens
 
 One reader page, `ovNotifySetup`, with one screen per step; the frame says `step 2/4`. Esc steps
-back, and Esc on step 1 closes it. Nothing is written before the write step.
+back, and Esc on step 1 closes it. Nothing is written before the write step. The same page, opened
+from a target line, shows that target (its kind, its last test) with its own keys.
 
 | Step | ntfy | Discord | desktop |
 |---|---|---|---|
@@ -162,20 +181,47 @@ back, and Esc on step 1 closes it. Nothing is written before the write step.
 | 3 | subscribe: topic, link, QR, Enter when done | write | write |
 | 4 | name, write, test, the result | test, the result | test, the result |
 
-- **Keys.** They are bound in the page's own mode, which already has its table in `keys.go`:
-  - Enter next, Esc back, Tab between fields, ↑↓ between choices;
-  - `y` copy the topic, `Y` copy the link;
-  - `t` test again, `e` edit, `d` remove, `r` rename.
+- **A mode of its own: `ModeNotifySetup`** (foureyes). A reader page is `ModeOverlay` today, where
+  `q` closes, `t` opens the tour, and `s` and `r` are `OnPage` actions of other pages, so the setup's
+  keys would collide there.
+  - `mode()` returns `ModeNotifySetup` when the top page is `ovNotifySetup`, as it returns
+    `ModeSettings` for `ovSettings`.
+  - Its table in `keys.go`, one row per key:
 
-  `TestNoKeyCollisionPerMode`, `TestTourKeysExist`, and F1 lists them from the table.
+    | Key | Action | Where |
+    |---|---|---|
+    | Enter | next step, or confirm the choice | every step |
+    | Esc | back one step; on step 1 or a target's page, close | everywhere |
+    | ↑ ↓ | between choices | a step with choices |
+    | Tab, shift-Tab | between fields | a step with fields |
+    | `y` | copy the topic | ntfy, the subscribe step and a target's page |
+    | `Y` | copy the subscribe link | the same |
+    | `c` | show the code alone, full screen, until any key | the same |
+    | `t` | test again | after the write, and a target's page |
+    | `e` | edit (back to the first step, values kept) | the same |
+    | `x` | remove, after `y` | a target's page |
+    | `n` | rename | a target's page |
+    | `s` | show the topic and its code | an ntfy target's page |
+    | F1 | help | everywhere |
+
+    `TestNoKeyCollisionPerMode` holds the table, F1 lists it, and `TestTourKeysExist` holds the
+    tour's mention. On page C, Enter on a set-up line or a target line opens the page; page C binds
+    nothing new, so its `d` stays `ActReset`.
+- **A field takes every key while it is being edited** (foureyes), as the settings editor does
+  (`settingsKey`: "a typed q is text").
+  - A field is entered by Tab or Enter on it. Then every printable key, paste included, is text,
+    and the table's letters do nothing.
+  - **Tab, Enter and Esc leave it**: Tab and Enter keep the value, Esc restores the value it had.
+  - `TestNotifySetupFieldTakesBoundRunes` types `ntfy.my-host.de/qtyYcxens` into the server field
+    and the name field: the value holds every rune, and no action ran.
 - **Masked fields.** They show `••••` and the count of characters. Bracketed paste is taken whole;
   a pasted newline ends the field. The field's value is held in the page only and dropped when the
   page closes. It is never drawn, never copied, never in a golden.
 
 ### 5.3 The QR code
 
-- The code encodes the subscribe link, `https://<server>/<topic>`. Opened on a phone, it shows the
-  topic's page, from which the ntfy app subscribes. Whether the app's own `ntfy://` link should be
+- The code encodes the subscribe link, `<server>/<topic>` with the server's own scheme (§3).
+  Opened on a phone, it shows the topic's page, from which the ntfy app subscribes. Whether the app's own `ntfy://` link should be
   used instead is §11 Q1.
 - It is drawn with half-block characters (`▀`, `▄`, `█`, space): two modules per cell in height, a
   4-module quiet zone, black on white whatever the theme, so a camera reads it in dark mode too.
@@ -189,8 +235,8 @@ back, and Esc on step 1 closes it. Nothing is written before the write step.
   | Tier | What the page shows |
   |---|---|
   | wide and medium, with at least 26 rows inside the page | the code beside or under the steps |
-  | otherwise | the topic and the link only, with `q` to show the code alone on the whole screen until any key |
-  | narrow | the topic and the link; `q` shows the code when the screen is at least 41×25, else `widen the window to show the code` |
+  | otherwise | the topic and the link only, with `c` to show the code alone on the whole screen until any key |
+  | narrow | the topic and the link; `c` shows the code when the screen is at least 41×25, else `widen the window to show the code` |
 
 ### 5.4 Goldens and tests
 
@@ -279,12 +325,18 @@ A delivery on the forge's side is not a delivery to the phone. On success the pa
   - a failed re-load puts the old bytes back;
   - no error string holds a topic, token or webhook.
 - **The agent refusal**: busmon's page and every writing subcommand, with `AGENT_BUS_AGENT` set and
-  with an agent ancestor (the cases `TestNotificationsTestRefusesAnAgent*` cover today).
+  with an agent ancestor (the cases `TestNotificationsTestRefusesAnAgent*` cover today), through
+  the one shared `internal/agentcaller`.
+- **The denies**: every role's rules (`roles draft`, the launch's added spellings) deny `add`,
+  `remove`, `rename`, `setup` and `show-topic`, and allow `status` and `test` as today.
+- **The roll-back**: a re-load failure with no file before leaves no file.
 - **The settings**: after `add`, `notify.on` is true and the name is in `notify.targets` once.
   After `remove`, it is gone, and `notify.on` changes only on the person's yes.
 - **The record**: `rename` moves the target's `notify-last.json` entry.
 - **`Explain`**: one case per row of §7, from a fake server (`httptest`) and a fake `notify-send`
   on `PATH`.
+- **The link**: built with the server's scheme; an `http://` private server (with `insecure`) gives an
+  `http://` link and code, ntfy.sh an `https://` one (reviewer-codex).
 - **The QR**: decoding the drawn half-blocks gives back the link (a test-only decoder, or a
   round-trip through the encoder's matrix). The size per version fits §5.3's tiers.
 - **busmon**: the flow through every step, per kind, with a fake sender; Esc back at each step
@@ -307,7 +359,7 @@ A delivery on the forge's side is not a delivery to the phone. On success the pa
 
 ## 11. Questions for the person
 
-1. **The QR's link.** Recommended: `https://<server>/<topic>`. It opens in any phone camera and
+1. **The QR's link.** Recommended: `<server>/<topic>` (its own scheme, §3). It opens in any phone camera and
    shows the topic's page, with a subscribe button in the ntfy app. Or the app's own `ntfy://`
    link, which subscribes in one tap but opens nothing without the app.
 2. **Showing a saved topic again (`s`, `show-topic`).** Recommended: yes, on the person's key
