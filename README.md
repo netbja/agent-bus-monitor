@@ -527,7 +527,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   row moves on by itself (`sent — next: …`); `n` skips, `p` goes back (a line read on the way stays
   reachable), Esc ends it. A new ask that arrives meanwhile is reached before older lines. The end
   page counts what you did and names what still waits (`merge queue unreadable` when it is), and
-  Enter on its last row opens the next decision planned for you.
+  Enter on its last row opens the next decision planned for you. It reads `Nothing waits for you` only when For you is empty.
 - **Agents** — one row per agent, **attention first** (waiting for you, escalated, gated,
   blocked; then queued; then working, idle, done). Columns: the **declared** state (never
   overwritten by silence — an agent that said `working` three hours ago still reads `working`;

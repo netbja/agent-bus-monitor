@@ -313,8 +313,8 @@ func TestTourListsTriage(t *testing.T) {
 	t.Fatal("no tour row for T")
 }
 
-// Only merge:unknown left: nothing waits, and the end page says the queue
-// cannot be read.
+// Only merge:unknown left: the list is not empty, so the walk's done title,
+// and the end page says the queue cannot be read (§4.4, reviewer-codex).
 func TestTriageOnlyUnknownMerge(t *testing.T) {
 	m := rowsFixture(t, false, true)
 	s := m.snap
@@ -325,7 +325,8 @@ func TestTriageOnlyUnknownMerge(t *testing.T) {
 	}
 	m = keys(t, m, kT)
 	got := m.grid().plain()
-	if topKind(t, m) != ovTriageEnd || !strings.Contains(got, "Nothing waits for you") || !strings.Contains(got, "merge queue unreadable") {
+	if topKind(t, m) != ovTriageEnd || strings.Contains(got, "Nothing waits for you") ||
+		!strings.Contains(got, "Triage done: everything was seen once") || !strings.Contains(got, "merge queue unreadable") {
 		t.Fatalf("only merge:unknown:\n%s", got)
 	}
 }

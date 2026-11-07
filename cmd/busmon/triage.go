@@ -213,7 +213,7 @@ func (m *Model) walkEnd() tea.Cmd {
 	}
 	q := stripOf(m.forYou)
 	title := "Triage done: everything was seen once"
-	if !slices.ContainsFunc(m.forYou, walkable) {
+	if len(m.forYou) == 0 { // only an empty list (§4.4): merge:unknown alone still stands (reviewer-codex)
 		title = "Nothing waits for you"
 	}
 	var lines []Line
