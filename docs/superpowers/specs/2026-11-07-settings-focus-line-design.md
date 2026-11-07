@@ -52,12 +52,22 @@ same height, and no group or key moves.
 - **While a key is being edited, or a choice is open,** the focus is on the keys, and the line
   says `keys`. The editor keeps its own hints. This change adds none, and the line's hint stays
   the panel hint.
-- **Scrolling.** The line is body row 0, as the margin is today. It scrolls with the body, like the
-  margin and the narrow tab bar. When the groups have the focus, the selection is a group, the
-  body is at its top, and the line is on screen. When the keys have it on a short page, the line
-  can scroll away. The lit `▶` on the key is then on screen, and `p.top` brings the line back with
-  the first key. Keeping the line pinned would need a fixed head that no other page has. That is
-  more than this line needs, and it is left out.
+- **Scrolling: the line is on screen whenever the groups have the focus or the first key is
+  selected.** The line is body row 0, as the margin is today, and scrolls with the body. Today
+  nothing brings row 0 back (foureyes' probe). `tab` and `←` set `s.keys` and leave `p.top`.
+  `keepSettingInView` scrolls only when `selLine` is out of view, and then to `selLine-3`. A
+  scrolled key, then `tab` or `←`, leaves the line and, on a narrow page, the tab bar off screen:
+  - wide 120x20: `p.top=6`;
+  - narrow 80x16: `p.top=7`;
+  - narrow, `↑` back to the first key: `p.top=3`, and the next `↑` to the tabs keeps it.
+
+  So `keepSettingInView` gains one rule: `p.top = 0` when the groups (or tabs) have the focus, or
+  when the first key is selected (`p.sel == 0`). Its own scroll follows only for a later key. Each
+  of `tab`, `←`, `↑` on the first key, `↓` from the tabs and a group step therefore shows row 0.
+  At the first key, the line, the tab bar and the key are all within the first rows the frame
+  shows. When a later key is selected on a short page, the line can scroll away. The lit `▶` on
+  that key is on screen then. Keeping the line pinned would need a fixed head that no other page
+  has. That is more than this line needs, and it is left out.
 - **What does not change:**
   - the key table (`settingsBindings`), the footer's `panel` and `focus` hints, the lit marks and
     `frameFade` on the tab;
@@ -68,6 +78,7 @@ same height, and no group or key moves.
 
 - `cmd/busmon/settings_ui.go`:
   - `settingsFocusLine(keys, side bool, width int) Line` builds the line.
+  - `keepSettingInView` sets `p.top = 0` while `!s.keys` or `p.sel == 0`, before its own rule.
   - `settingsBody` puts it in place of the blank margin: in the panel column on the wide branch;
     on the narrow branch, as the first of its three leading rows.
 - **Tests (first):**
@@ -79,6 +90,12 @@ same height, and no group or key moves.
   - The plain text is the same with the colour off.
   - At width 40 the focused word is still there.
   - The first group and key rows keep their line numbers, and `selLine` is unchanged.
+  - Row 0 is in the shown window (`p.body[p.top:p.top+readerRows]`) in these cases:
+    - after `tab` from a scrolled key, wide (120x20) and narrow (80x16);
+    - after `←` from a scrolled key, both layouts;
+    - after `↑` back to the first key, then again to the tabs, narrow.
+
+    With the Notifications group walked down to its last key first, each of these fails today.
 - **Goldens:** the settings goldens (`settings-*-dark/light`) and the `settings`/`settings-narrow`
   overlays are regenerated. Only row 0 of the page changes.
 - **Docs:** the settings paragraph in `docs/operator-notes.md`, at "two panels below one blank row
