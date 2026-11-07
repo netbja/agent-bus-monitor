@@ -134,8 +134,11 @@ func TestShellHeaderKeepsBothBadges(t *testing.T) {
 				m.refresh()
 			}
 			row := m.grid().rowText(0)
-			forYou, unread := GlyphHuman+" 4", GlyphDotFull+" 2"
-			if !strings.Contains(row, forYou) || !strings.Contains(row, unread) {
+			decide, unread := GlyphHuman+"4", GlyphDotFull+"2" // the queue strip below wide (busmon-queue-triage §3.3)
+			if size[0] >= wideMinWidth {
+				decide, unread = GlyphHuman+" 4 decide", GlyphDotFull+" 2 unread"
+			}
+			if !strings.Contains(row, decide) || !strings.Contains(row, unread) {
 				t.Errorf("%v paused=%v: header row 0 lacks a badge: %q", size, paused, row)
 			}
 			if paused && !strings.Contains(m.grid().plain(), "resumes in") {

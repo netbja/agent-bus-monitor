@@ -1,4 +1,4 @@
- agent-bus-monitor  ● bus  ● disp  ● miss  ♙ 4  ● 2         
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
 ╭─ Compose ────────────────────────────────────────────────╮
 │ to: @coder                                   · directive │

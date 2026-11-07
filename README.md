@@ -466,7 +466,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 <details><summary>The same layout as text, 140 columns</summary>
 
 ```
- agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 for you   ● 2 unread                                           15:04:05
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05
  paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ▇▇▇░░ 62% │ 7d ▇▇▇▇░░░░░░ 41%   grok 5h ▇▇▇▇▇ 100% held 15:44
 ╭─ For you ───────────────────── 4 for you · 2 unread ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
 │  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
@@ -500,8 +500,10 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 - **Header** — the project, then the **monitor's own** link to Redis (`● bus ok`, or
   `▲ bus down 42s` — a broker busmon cannot reach looks exactly like a quiet team, and the
   two call for opposite reactions), the dispatcher and the conductor (`dispatch up`,
-  `missions up`, or their service state: `dispatch waiting herdr`, `missions waiting git`…), what
-  is for you (`♙ 4 for you`, `● 2 unread`), the project's health pill, a pause
+  `missions up`, or their service state: `dispatch waiting herdr`, `missions waiting git`…), the
+  queue strip (`♙ 4 decide`, `◆ 1 merge`, `● 2 unread`: For you split into what you decide, what
+  waits for your merge and what you have not read; a chip at 0 is not drawn, and below 120 columns
+  a chip keeps only its count, `♙4`), the project's health pill, a pause
   (`paused · resumes in 1h52 (lunch)`), your name as a person, and one usage gauge per provider
   (`claude 5h 62% │ 7d 41%`, `held` past the hold threshold), each provider in its own colour,
   then the clock. In a true-colour terminal a gauge fills in eighths of a cell and slides to a new
@@ -510,6 +512,8 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   What is owed to you in Requests reads in orange (`2 requests waiting · oldest 3h`), what agents
   owe each other muted (`4 between agents`); each is absent at 0. Health and dispatch are never
   truncated; the rest gives way from the right.
+  A click on a chip goes there: `decide` and `merge` select For you's first such row, `unread` is
+  `u`, and the health pill opens F5.
 - **For you** — what only you can settle: an agent's open questions (`ask`), an
   agent `waiting` for your decision (`wait`), a 4-eyes gate you opened or that holds you
   (`gate`), and messages addressed to you that you have not opened (`unread`, `●`; `○` once a
