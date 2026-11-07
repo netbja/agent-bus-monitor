@@ -32,7 +32,7 @@ queue-triage), in the frame label and in the reminder (`decisions`, `dueAttentio
 | For you | asks, stall rows, waits, prompts, gates, plan tasks, merges, unread lines | asks, stall rows, waits, prompts, gates, merges; at most **one** plan pointer row |
 | unread lines | rows of For you | the strip's `unread` chip, `u` and the walk (`T`) reach them; no For you row (§3.2) |
 | the plan | tab 4, `P` (a page) | tab 4 redrawn (NOW · NEXT · LATER · DONE, progress, a side panel); `p` opens the same view as a drawer |
-| Requests (tab 3) | seven sections | three: **Owed to you**, **You wait on**, **Between agents**; age on each row; one action per row |
+| Requests (tab 3) | seven sections | three: **Owed by you**, **You wait on**, **Between agents**; age on each row; one action per row |
 
 ## 3. For you: an inbox that can empty
 
@@ -75,8 +75,8 @@ One **pointer row** may stay, drawn at the bottom of the panel, below the decisi
   line chooses today. With none at all, or no plan loaded, no pointer.
 - **Not a decision.** The pointer is muted. It is not counted in the `decide` chip, the frame
   label, the reminder or the walk's `N/M`, and it never rings. The header's `planSeg` keeps
-  `plan v0.29 6/11 ♙ 2`: the count of the person's waiting tasks lives there, beside the plan it
-  belongs to.
+  `plan v0.29 6/11 ♙ 2`: what waits for the person in the plan (every `Waiting` row, its merges
+  and open asks included, `plan.go:199-201`) is counted there, beside the plan it belongs to.
 - **Its key** is `plan-next:<task>`. Enter opens the task page (`ovPlanTask`, with its Action
   row, `s` starts it with master), as `empty:plan:` does today. `rowHint` says `task`.
 - **One producer.** The empty state's "Next for you" line and the pointer are the same row, from
@@ -103,8 +103,15 @@ rows, their keys and the side panel's lines. Tab 4 and the drawer both draw it. 
 |---|---|---|
 | **NOW** | `Waiting`, `Answered`, `Blocked`, `InReview`, `InProgress` | `plan.Order` |
 | **NEXT** (ready to start) | `Upcoming` with `WaitingOn` empty | file order |
-| **LATER** | `Upcoming` with `WaitingOn` not empty, and `Unknown` | file order |
+| **LATER** | `Upcoming` with `WaitingOn` not empty, and `Unknown` beside known rows | file order |
 | **DONE** | `Done` | folded to one line, `DONE  6   d shows` |
+
+**A failed read.** When the facts, board, verdicts or asks read fails, `plan.Derive` makes every
+task `Unknown` (`derive.go:115-118`), except a mission task and one already recorded done
+(`planState.partial` is set too). LATER would then hold nearly the whole plan, so when every row
+not `Done` is `Unknown` the board draws no NOW, NEXT or LATER: one muted line `a read failed:
+states unknown`, then those tasks in file order with the `Unknown` glyph, then DONE as usual.
+`Unknown` goes to LATER only beside known rows.
 
 Each row: the state's glyph (`planLook`, unchanged), the title, the owner, and the state's word
 or reason (`in review`, `merge PR 338 (you)`, `waits on c1`). A section with no row is not drawn.
@@ -119,7 +126,7 @@ At the wide tier, the selected task's facts sit in a frame beside the list:
 ```
  state    in review
  owner    coder
- review   foureyes approve · reviewer-codex approve
+ review   approved
  reason   merge PR 338
  waits on —
  for you  nothing            (or: "start it: enter, then s")
@@ -128,7 +135,9 @@ At the wide tier, the selected task's facts sit in a frame beside the list:
 ```
 
 It reads only the `plan.Row` already derived (`State`, `Task.Owner`, `Verdict`, `Reason`, `PR`,
-`WaitingOn`). Below the wide tier there is no side panel: Enter opens the task page as today.
+`WaitingOn`). `Verdict` is one roll-up label (`pending`, `approved`…), not one line per reviewer:
+the reviewers' names would need the verdicts read (`Inputs.Verdicts`), which this panel does not
+do. The task page keeps them, as today. Below the wide tier there is no side panel: Enter opens the task page as today.
 
 ### 4.4 Tab 4 and the drawer
 
@@ -143,6 +152,10 @@ It reads only the `plan.Row` already derived (`State`, `Task.Owner`, `Verdict`, 
   | medium (80–119) | the reader's frame (the lower zone), as every page |
   | narrow (< 80) | the reader's frame (the view), as every page |
 
+  At the wide tier For you stays drawn, but the keyboard is the drawer's (ModeOverlay, as every
+  page), and a click on For you closes the drawer first, as a click outside any page does today
+  (`click` → `closeReader`), then lands on For you.
+
   A page opened from the drawer (Enter: the task page) is drawn in the drawer's frame and Esc
   returns to the drawer. `readerRect` reads the bottom page's `drawer` flag for the whole stack.
 - **`P`** stays, as an alias of `p`: one way to the plan, two keys.
@@ -153,15 +166,16 @@ It reads only the `plan.Row` already derived (`State`, `Task.Owner`, `Verdict`, 
 
 | Section | From today's | Row kind word |
 |---|---|---|
-| **Owed to you** | the asks row, `secOwed` | as today |
+| **Owed by you** | the `secOwed` groups (the `asks` key has no producer: only `openRequestRow` names it) | as today |
 | **You wait on** | `secWait` | as today |
 | **Between agents** | `secTracked`, `secReviews`, `secDirectives`, then the notices line (`secNotices`) | `request`, `challenge`, `directive`, `notices` |
 
 The folded threads (`secFolded`, `o`) stay as they are. `reqSection` keeps its values: only
 `reqSectionNames` and the headings change. Three headings are drawn in place of five, each with
-its count: `Owed to you  2`. Within "Between agents", the order stays tracked, reviews,
-directives, notices. Today's "Owed by you" heading reads "Owed to you" in the mock-ups. The
-mock-up's wording is kept, since the person chose it: the row is what someone owes *to you*.
+its count: `Owed by you  2`. Within "Between agents", the order stays tracked, reviews,
+directives, notices. The mock-ups wrote "Owed to you", which inverts the section: `secOwed` holds
+the threads whose sender waits for the person's answer (`requests_view.go:22`, `:427`; the empty
+For you says `Owed by you: N (Requests)`). Today's heading, "Owed by you", is kept (foureyes).
 
 ### 5.2 Age and the action
 
@@ -192,7 +206,7 @@ bus or need a new filter. They are out of scope (§10).
 | `P` | ModeShell | the same action (alias) | not shown |
 | `d` | ModeShell, `PanelPlan` | `ActShowDone`: show or fold DONE | `d done` |
 | `d` | ModeOverlay, the plan page or drawer | the same | `d done` |
-| Esc | the drawer | close | as every page |
+| Esc | the drawer | close (Esc only: `p` inside the drawer is ModeOverlay's `ActPrevItem`) | as every page |
 
 `p` is free in ModeShell today (`n`/`p` are bound in ModeOverlay only). `d` on `PanelPlan` does not
 collide with `ActDelete`, which is bound to Agents and Requests only. `TestNoKeyCollisionPerMode`
