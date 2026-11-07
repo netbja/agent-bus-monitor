@@ -99,21 +99,36 @@ compare it with the selected row's name (§5.2).
 
 ## 5. Delete
 
-### 5.1 Refused while the project is live
+### 5.1 Refused while the project is live, on any host
 
 A live project recreates its keys: the next `agentbus status` from any of its agents writes
-`{p}:status` again, and a running dispatcher writes `{p}:dispatch`. A delete then leaves a
-half-project that the list shows again a second later. So `d` is **refused**, with the reason
-and the way out on the notice line, while:
+`{p}:status` again, and a dispatcher or conductor takes its lease again (`{p}:dispatch`,
+`{p}:conductor`). A delete then leaves a half-project that the list shows again a second later.
+So `d` is **refused**, with the reason and the way out on the notice line, while any of these
+holds. The broker-side checks see every host, because they read the broker and not this
+machine's service manager (reviewer-codex, foureyes):
 
-- a local service of the project is active → `stop its services first: x`;
-- an agent is live by the bus's liveness rule → `N agents are live: Z puts the project to sleep`;
-- its herdr workspace is open on this machine → `close its herdr workspace first (N panes)`;
-- a run (`startRun`) is going → the existing "already running" notice.
+| Evidence | Read from | Notice |
+|---|---|---|
+| a dispatcher holds the lease, on whatever host | `Bus.DispatchAlive` (`EXISTS {p}:dispatch`, a TTL lease) | `a dispatcher runs for demo (host <h>, from {p}:services): agentbus down demo there, or Z` |
+| a conductor holds its lease | `Bus.ConductorAlive` | the same, naming the conductor |
+| a service publishes its heartbeat | `Bus.ServiceStates`: a record whose `at` (Redis TIME) is younger than 30 s. A service writes it every 5 s (`servicecmd.go`, `Heartbeat`) in any live state (`starting`, `ready`, `busy`, …); `host` is named | `<kind> runs on <host>` |
+| a local service is active | `service.Manager.State` | `stop its services first: x` |
+| an agent is live | the bus's liveness rule, which counts agents on any host | `N agents are live: Z puts the project to sleep` |
+| its herdr workspace is open on this machine | `herdr workspace list` | `close its herdr workspace first (N panes)` |
+| a run (`startRun`) is going | the model | the existing "already running" notice |
 
-A suspended project passes this check: its services are stopped and its agents are gone. That is
-the expected path: `Z`, then `d`. Whether the person wants a forced delete that skips the check
-is §10 Q1. This spec has none.
+**It is checked twice** (foureyes): once when `d` is pressed, and **again inside the delete's
+`tea.Cmd`, immediately before `deleteProjectNow`**. Minutes can pass between the two (a backup,
+the typed name). If anything became live in between, nothing is deleted, the panel closes, and the
+notice is the one in the table, prefixed `became live:`. Any check that cannot be read (broker
+error, herdr not answering) refuses too: `cannot check that demo is quiet (<err>)`. An unknown
+never counts as quiet.
+
+A suspended project passes these checks: its services are stopped, its leases released, and its
+agents gone. That is the expected path: `Z`, then `d`, and it works the same from a remote broker
+(§10 Q5). Whether the person wants a forced delete that skips the checks is §10 Q1. This spec
+has none.
 
 ### 5.2 The confirmation: a backup offered, the name typed
 
@@ -140,8 +155,8 @@ is §10 Q1. This spec has none.
    the typed name: `busmon has demo open: after the delete busmon exits. y deletes · esc
    cancels`. After the delete, busmon quits and prints `demo deleted (N keys); busmon --pick to
    open another project`. The picker is its own program (`pickMain`), and the shell cannot turn
-   into it in place. That is the "project you run in" case. The agent's own project (`AGENT_BUS_PROJECT` in
-   busmon's environment) is checked too, when it differs from the open one.
+   into it in place. That is the "project you run in" case. Nothing else is checked here
+   (foureyes): the open project is the one busmon runs in.
 4. `esc` cancels at every step, and cancelling writes nothing.
 
 ### 5.3 The delete itself: the one path busmon --delete uses
@@ -162,11 +177,30 @@ different act (§10 Q3).
 ### 5.4 Agents cannot reach this
 
 busmon is the person's interface, and an agent never drives it. But `busmon --delete <p> --yes`
-is one Bash line for any agent, and today no `[tool_rules]` deny names it. This spec adds two
-shared denies to `roles.toml`, of the plain form only, as `agentbus suspend*` has: `"Bash(busmon
---delete*)"` and `"Bash(busmon -d *)"`. The same goes for `--reset` (`"Bash(busmon --reset*)"`).
-This is defence in depth, as the manifest says of every deny. The page itself adds no command an
-agent could call.
+is one Bash line for any agent. Two layers stop it:
+
+1. **busmon refuses an agent caller itself**, whatever the spelling. This is the boundary.
+   `--delete` and `--reset` run the check `agentbus suspend` and `resume` already run
+   (`refuseAgentCaller`): `AGENT_BUS_AGENT` set, or a registered agent among the process's
+   ancestors. On a hit they exit with `deleting a project is the person's act, not <agent>'s
+   (run busmon from your own shell)`. The check is moved to a shared package, so busmon and
+   agentbus use the same one. A text deny can never be complete (foureyes): Go's `flag` package
+   takes one or two dashes, `name=value`, and flags in any order.
+2. **Shared denies in `roles.toml`, as an echo.** They name the spellings busmon's parser accepts
+   (`cmd/busmon/flags.go`: every long and short flag registered with `flag`), like deliver's
+   denies. A wildcard before the flag catches it after any other flag (`-p x`, `--host h`, `-y`,
+   `--yes`):
+   - `Bash(busmon *-delete*)` covers `--delete`, `-delete` and `--delete=`;
+   - `Bash(busmon *-d *)`, `Bash(busmon *-d=*)`, `Bash(busmon *--d *)` and `Bash(busmon *--d=*)`;
+   - the same for the bare start: `Bash(busmon -d *)`, `Bash(busmon --d *)`;
+   - the same set for `reset` and `-r`.
+
+   busmon takes no message text, so a wildcard cannot deny a word inside a message, which was the
+   worry with `agentbus * deliver *`. Residuals, named in operator-notes: a full path
+   (`~/go/bin/busmon`), `go run ./cmd/busmon`, an env prefix (`X=1 busmon`), a shell alias.
+   Layer 1 covers all of them.
+
+The page itself adds no command an agent could call.
 
 ## 6. Tiers (wide ≥ 120, medium 80–119, narrow < 80)
 
@@ -221,7 +255,10 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
 - **Goldens:** the list at each tier with a live, a suspended, a template-only and the open
   project; the detail; the confirmation at both the backup step and the typed-name step; the
   refusal notice; the `?` columns with herdr and the service manager missing.
-- **Delete guards:** each of the §5.1 refusals; a typed name that differs by one byte (`demo `,
+- **Delete guards:** each of the §5.1 refusals, including a dispatcher lease and a fresh
+  fresh service heartbeat from **another host** (reviewer-codex); a check that cannot be read
+  refuses; a project that **becomes live between `d` and the delete** (the fake reader turns a
+  lease on after the typed name) deletes nothing and shows `became live:` (foureyes); a typed name that differs by one byte (`demo `,
   `Demo`, `demo-2`) never deletes; `esc` at each step writes nothing; the open project needs the
   second `y`; after it, the model quits with the message (`tea.Quit`), and nothing else runs.
 - **Delete path:** `deleteProjectNow` is called with the row's name only, and `busmon --delete`'s
@@ -232,7 +269,11 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
 - **Runs:** `Z`, `x` and `b` call the runner with exactly `--project <p> suspend --yes` /
   `resume --yes`, `down <p>`, and `backup --project <p>`; a second action while a run goes is
   refused.
-- **The manifest:** a roles test checks that the shared denies of §5.4 are present.
+- **Agents:** `busmon --delete demo --yes` and `--reset` exit with the refusal when
+  `AGENT_BUS_AGENT` is set, or when a fake ancestry names an agent. A table-driven roles test
+  checks that each spelling (`--delete demo`, `-delete demo`, `-d demo`, `-d=demo`, `--d demo`,
+  `--yes --delete demo`, `-p x -d demo`, `-H h --delete=demo`, the same for reset) is denied by
+  the shared rules, as deliver's test does, and that `busmon --list` and `busmon -p x` are not.
 
 ## 10. Questions for the person
 
@@ -245,14 +286,17 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
    person may want, and `backup` is the only place they can be restored from.
 4. **The key.** Is `M` (manage) right, or would you rather use another letter? A menu entry
    alone is not an option, because busmon has no menu.
-5. **Remote broker.** When busmon runs against another host's broker, should the page offer
-   delete at all? It can remove only this machine's services (§3.3). The recommendation is to
-   allow it and say so in the panel.
+5. **Remote broker.** The broker-side checks of §5.1 refuse a delete while a dispatcher,
+   conductor or service runs on **any** host. A suspended or stopped project can then be deleted
+   from a remote broker; only this machine's units are removed, and the panel says
+   `services on other hosts: none running; their units stay there`. Is that right, or should
+   delete be refused on a remote broker altogether?
 
 ## 11. Steps (each its own subject for 4-eyes)
 
 1. `deleteProjectNow` extracted from `main.go` (no behaviour change; `busmon --delete` tests
-   unchanged) + the §5.4 denies.
+   unchanged), the agent-caller refusal for `--delete` and `--reset` with the shared check, and
+   the §5.4 denies with their spelling test.
 2. The page, read-only: rows, tiers, detail, `R`, keys table, goldens.
 3. Actions: `Z`, `x`, `b` through `startRun`.
 4. Delete: the guards, the panel, the typed name, the open-project second confirmation and the
