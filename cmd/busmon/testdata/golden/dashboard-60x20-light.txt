@@ -17,4 +17,4 @@
 │                                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯
- tab focus   1-6 view   y copy   F1 help   F5 health        
+ enter detail   tab focus   y copy   F1 help   F5 health    

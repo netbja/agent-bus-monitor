@@ -147,13 +147,15 @@ func TestFooterGroupsFKeys(t *testing.T) {
 }
 
 // A narrow footer drops ordinary keys before F1 help and F5 health.
+// On the main screen the enter pair comes first (busmon-row-actions), then
+// the table's order.
 func TestNarrowFooterKeepsHelp(t *testing.T) {
 	l := footerHints(ModeShell, PanelActivity, TierWide, 40)
 	text := ""
 	for _, s := range l {
 		text += s.Text
 	}
-	if !strings.Contains(text, "F1 help") || !strings.Contains(text, "F5 health") || !strings.HasPrefix(text, " tab focus") || l.Width() != 40 {
+	if !strings.Contains(text, "F1 help") || !strings.Contains(text, "F5 health") || !strings.HasPrefix(text, " enter detail") || l.Width() != 40 {
 		t.Fatalf("footer at 40 = %q", text)
 	}
 	// At 140 F1 and F5 are both kept, in order, after the ordinary keys.

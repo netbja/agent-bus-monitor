@@ -37,4 +37,4 @@
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- tab focus   1-4 tabs   ←→ tab   ↑↓ j k select   y copy   F1 help   F5 health   
+ enter detail   tab focus   1-4 tabs   ←→ tab   y copy   F1 help   F5 health    
