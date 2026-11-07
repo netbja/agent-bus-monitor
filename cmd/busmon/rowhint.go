@@ -17,7 +17,7 @@ const rowNoPair = "\x00"
 // binding's own word.
 func rowHint(p PanelID, it ListItem) (word string, known bool) {
 	key := it.Key
-	if key == "" { // no row selected: Enter does nothing (foureyes)
+	if key == "" { // no row selected: Enter does nothing, no pair (the person's decision, 2026-11-07)
 		return rowNoPair, true
 	}
 	inPlace := func(open, closed string) (string, bool) {
