@@ -58,10 +58,14 @@ So **busmon runs no program to list files.** It walks the project's root itself,
 - **Always skipped:** `.git` and every directory that holds a `.git` entry (file or directory),
   which means a nested repository or a worktree (§2.2). Also skipped: `node_modules`, `.venv` and
   `vendor`, because they are too big to be useful.
-- **Symlinks are never followed** (foureyes). A symlinked directory is listed as one entry,
-  marked `→`, and is not descended into: no loops, and no escape from the root. A symlinked file
-  is offered as itself, by its own path inside the root, and its target is never resolved or
-  shown.
+- **Symlinks** (foureyes, reviewer-codex). A link's name proves nothing: `docs/credentials` can
+  point to `~/.aws/credentials` or to the project's `.env`. So:
+  - a **symlinked directory** is neither descended into nor listed (no loops, no escape);
+  - a **symlinked file** is offered only if its target, resolved with `filepath.EvalSymlinks`,
+    is a regular file **inside the root** and passes **both** filters of §3 (the manifest's
+    denies and `secretpath`), checked against the target's path as well as the link's. Any other
+    link, a dangling one included, is not offered;
+  - the inserted path is the link's own path, and the check is the target's.
 - **Bounds:** depth 12, 50 000 entries, and a 2 s deadline, in a `tea.Cmd`, never on the update
   path. Until it answers, the popup shows `reading the file list…`. On a cap or the deadline it
   says `list incomplete (<why>)` and works on what it got. The list is read once per window
@@ -244,9 +248,14 @@ compose tests use. No test runs git on the real repository.
   test hook on the process runner fails the test if busmon starts any process while listing.
 - **The walk:** names with spaces; `.gitignore` at the root and in a subdirectory, negation,
   dir-only, anchored and `**` patterns; `.git/info/exclude`; a nested `.worktrees/x/` (one entry,
-  then the descent on the prefix query); depth, count and deadline caps (`list incomplete`); a
-  symlinked directory not followed (a loop to the root, and a link to `/etc`, are each one entry);
-  a symlinked file offered as itself; no checkout gives the message.
+  then the descent on the prefix query); depth, count and deadline caps (`list incomplete`); no
+  checkout gives the message.
+- **Symlinks** (reviewer-codex's fixtures):
+  - `docs/credentials` → a file outside the root: not offered;
+  - `docs/notes` → the project's `.env`: not offered (an in-root secret target);
+  - `docs/alias.md` → `README.md` inside the root: offered as `docs/alias.md`;
+  - a dangling link: not offered;
+  - a symlinked directory (a loop to the root, a link to `/etc`): neither listed nor walked.
 - **The denies:** a `roles.toml` with a shared `Read(**/secrets/**)` hides `secrets/a.txt`.
 - **Secrets:** every `secretpath` kind is absent from the popup, including an exact query for one.
   `health`'s existing secret-path tests pass against the moved function.
