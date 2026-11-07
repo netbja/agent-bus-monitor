@@ -13,7 +13,7 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 21 default ──────────────────────────────────────────────────────────────── esc back ─╮
-│                   │                                                                                                                      │
+│                   │ focus: keys · ← or tab: the groups                                                                                   │
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
 │    Identity       │     Fade and slide            ● on                                                                                   │

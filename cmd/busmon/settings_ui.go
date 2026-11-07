@@ -387,6 +387,12 @@ func (m *Model) keepSettingInView(p *page) {
 	if p.set == nil {
 		return
 	}
+	// The focus line is row 0: on screen whenever the groups (or tabs) have
+	// the focus or the first key is selected (settings-focus-line).
+	if !p.set.keys || p.sel == 0 {
+		p.top = 0
+		return
+	}
 	if rows := m.readerRows(); rows > 0 && (p.set.selLine < p.top || p.set.selLine >= p.top+rows) {
 		p.top = max(0, p.set.selLine-3)
 		m.clampPage(p)
@@ -563,12 +569,14 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 		panelW = width - settingsSideW - 1
 	}
 	right, selLine := settingsPanel(s, sel, panelW)
-	// One blank row of top margin (about-trim): the groups and keys start
-	// below the frame's title, not against it; the sidebar's rule runs through it.
+	// One row of top margin (about-trim): the groups and keys start below the
+	// frame's title, not against it; the sidebar's rule runs through it. It
+	// carries the focus line (settings-focus-line).
 	var lines []Line
 	selLine++
 	if side {
-		lines = append(lines, FitLine(Line{S(RoleText, strings.Repeat(" ", settingsSideW)), S(RoleLine, glyphVertical)}, width))
+		margin := Line{S(RoleText, strings.Repeat(" ", settingsSideW)), S(RoleLine, glyphVertical)}
+		lines = append(lines, FitLine(append(margin, settingsFocusLine(s.keys, true, panelW)...), width))
 		for i := 0; i < max(len(right), len(s.groups)); i++ {
 			l := Line{}
 			if i < len(s.groups) {
@@ -582,7 +590,7 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 			lines = append(lines, FitLine(l, width))
 		}
 	} else {
-		lines = append(lines, Line{}, FitLine(settingsTabs(s.groups, s.group, width, !s.keys), width), Line{})
+		lines = append(lines, settingsFocusLine(s.keys, false, width), FitLine(settingsTabs(s.groups, s.group, width, !s.keys), width), Line{})
 		selLine += 2
 		for _, l := range right {
 			lines = append(lines, FitLine(l, width))
@@ -590,6 +598,33 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 	}
 	s.selLine = selLine
 	return lines
+}
+
+// settingsFocusLine says in words where the focus is and which key moves it
+// (settings-focus-line), in width cells, one cell in: muted, the focused
+// panel's word plain and bold, so it reads the same without colour. On a
+// narrow column the hint goes first, then "focus:"; the word stays.
+func settingsFocusLine(keys, side bool, width int) Line {
+	word, hint := "groups", GlyphArrowR+" or tab: the keys"
+	switch {
+	case keys && side:
+		word, hint = "keys", GlyphArrowL+" or tab: the groups"
+	case keys:
+		word, hint = "keys", GlyphArrowL+" or tab: the tabs"
+	case !side:
+		word, hint = "tabs", GlyphDownArrow+" or tab: the keys"
+	}
+	focused := Seg{Text: word, Role: RoleText, Bold: true}
+	for _, l := range []Line{
+		{S(RoleMuted, " focus: "), focused, S(RoleMuted, " "+GlyphNone+" "+hint)},
+		{S(RoleMuted, " focus: "), focused},
+		{S(RoleMuted, " "), focused},
+	} {
+		if l.Width() <= width {
+			return l
+		}
+	}
+	return FitLine(Line{focused}, width)
 }
 
 // settingsSideRow is a group in the sidebar: the selected one marked, in the

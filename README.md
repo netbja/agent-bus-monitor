@@ -1084,7 +1084,7 @@ on the right (below 96 cells the groups are tabs above them). A value reads as a
 `○ off`, a choice `‹ dark ›`, the rest plain), in one column after the labels; `•` marks a key
 `config.toml` sets to other than its default, and a value from the environment, a flag or
 `busmon.toml` reads muted. Under the keys, the selected one: its file key, where its value comes from,
-its default, who reads it and what it takes. One side has the focus and is lit, the other muted: on the
+its default, who reads it and what it takes. One side has the focus and is lit, the other muted; the page's top line says which in words (`focus: groups`, `tabs` or `keys`) and the key that moves it: on the
 groups `↑` `↓` choose one (its keys follow), `→` or Enter go to its keys; on the keys `↑` `↓` move, `←`
 goes back, Enter edits (an on/off flips; a choice opens, `←` `→` change it, Enter saves it, Esc leaves the file as it is).
 Below 96 cells `←` `→` step the tabs, `↓` goes to the keys and `↑` on the first key comes back. Tab

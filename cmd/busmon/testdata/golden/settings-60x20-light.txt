@@ -2,7 +2,7 @@
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
  1 For you   2 Agents   3 Act   4 Board   5 Req   6 Plan    
 ╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 21 d…─╮
-│                                                          ▲
+│  focus: keys · ← or tab: the tabs                        ▲
 │  Display   Attention   Identity   Notifications  …       ┃
 │                                                          ┃
 │  Display  how busmon looks; theme, icons and fade apply… ┃
