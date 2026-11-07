@@ -29,6 +29,10 @@ same height, and no group or key moves.
 | groups | `focus: groups · → or tab: the keys` | `focus: tabs · ↓ or tab: the keys` |
 | keys | `focus: keys · ← or tab: the groups` | `focus: keys · ← or tab: the tabs` |
 
+- **Why `←` on the narrow keys line, not `↑`.** From the keys, `←` returns to the tabs from any
+  key, on both layouts (`settingsUpdate`: `case s.keys && act == ActGroupPrev` comes before the
+  `side` cases). `↑` returns only from the first key; from any other key it moves up. The hint
+  names the key that works wherever the selection is.
 - **Roles.** The whole line is `RoleMuted`, except the focused panel's word (`groups`, `tabs` or
   `keys`), which is `RoleText` and bold. The line stays discreet: the accent remains the cue on
   the selected row itself.
@@ -68,7 +72,10 @@ same height, and no group or key moves.
     on the narrow branch, as the first of its three leading rows.
 - **Tests (first):**
   - The four texts (groups or keys, wide or narrow) come from `settingsBody`'s first row.
-  - Toggling with `tab`, `→`/`←` (wide) and `↓`/`↑` on the first key (narrow) changes the word.
+  - Toggling changes the word:
+    - wide: `tab`, `→` and `←`;
+    - narrow: `tab`, `↓` from the tabs, `←` from a key other than the first, and `↑` on the
+      first key. `←` from a later key returns, which holds the hint.
   - The plain text is the same with the colour off.
   - At width 40 the focused word is still there.
   - The first group and key rows keep their line numbers, and `selLine` is unchanged.
