@@ -78,7 +78,13 @@ start one. §9 is the probe that settles them.
    string, which is probably a server capacity error and not an account quota.
 6. **Whether agy has separate quotas** (per model family, per window) and how a hit names its pool.
    The person says agy has "many quotas". Nothing local shows them.
-7. **Where the official install page is.** The bundled guide points to
+7. **Whether `--settings` replaces or merges with the person's own settings file** (foureyes).
+   `~/.gemini/antigravity-cli/settings.json` holds the person's `permissions.allow`: 52 entries
+   today, counted and not read. If a session `permissions` object merges with it, an agy role
+   inherits every command the person allowed for their own use, with no prompt. A later
+   `toolPermission` change in that file would also reach every `default` role. This is the grok
+   lesson §4.4 cites, in another key.
+8. **Where the official install page is.** The bundled guide points to
    `https://antigravity.google/docs/cli/reference`. I did not open it.
 
 ## 4. Design
@@ -86,7 +92,7 @@ start one. §9 is the probe that settles them.
 ### 4.1 Client registration
 
 - `rolecfg`: add `agy` to `Clients` (`Exe: "agy"`, `Name: "Antigravity CLI (Google)"`,
-  `Install:` the URL that §3.2.7 confirms) and to `builtinBinary`, and make `isBuiltin` return
+  `Install:` the URL that §3.2.8 confirms) and to `builtinBinary`, and make `isBuiltin` return
   true for it. `TestClientsMatchTheLauncher` already ties the two together.
 - The client is named `agy`, the name that `clientProviders`, `reviewers.go`, the dispatcher
   screen table and the icon map already use. The provider is `google`.
@@ -155,7 +161,21 @@ The launcher writes one JSON object to its cache, like Kimi's agent file, and pa
   same count. If §9 finds a file rule syntax, `Read`/`Edit` translate as well. The translation is
   one pure function, and it is tested on its own.
 - **Allow rules** are not translated in v1. An agy role asks the person, or runs with the mode its
-  profile grants.
+  profile grants, **plus whatever it inherits from the person's own settings** (next point).
+- **The person's settings are inherited until proven otherwise** (§3.2.7, foureyes). §9 step 2
+  settles which wins. The rule, by outcome:
+  - **The session replaces them.** The session object carries an explicit `"allow": []` and
+    pins the tool permission (`toolPermission`, or `defaultMode`, whichever key §9 shows works).
+    `default` then means "ask", and the docs may say so.
+  - **The session merges with them** (or nothing pins the tool permission). The launch prints
+    `agy: inherits N allow rules and toolPermission=<v> from ~/.gemini/antigravity-cli/settings.json`.
+    The profile's risk parts and `roles doctor` carry the same count and value. Neither the docs,
+    the manifest comment nor the risk summary call `default` "ask". The launcher reads only the
+    count and that one value, never the rules' text into the bus or a log. It never edits the
+    file.
+  - **Either way**, a deny in the session still applies, if §9 step 2 shows that a session deny
+    beats an inherited allow. If it does not, the denies are named as not enforced, like an
+    untranslated rule.
 - **Defence in depth, not a boundary.** The same caveat as `[tool_rules]`: agy matches command
   text, and a process the agent starts can still read files.
 
@@ -203,12 +223,23 @@ fingerprint (`clientfp`, the client-reload notice) are what catch a flag that ch
 | `master`, `docs` | no | `pops` writes Claude Code allow rules, and `delivers` pushes. Both stay on Claude in the shipped manifest. No new refusal is added: these are manifest choices, not launcher rules |
 | `sentinel` | no | Its narrow restart and model-refresh actions rely on the Claude tool rules |
 
+**A reviewer's verdict must count.** The approved auto-merge spec (`56d1e54`) counts an agy
+verdict only through `models.MakerOf(provider, model)`, with the model taken from the launcher's
+`AGENT_BUS_MODEL`. A model the table does not know gives an unknown maker, and that verdict never
+counts. So the agy reviewer profile carries a model id exactly as `agy models` prints it
+(`gemini-3.8-flash-high`). That id is the model table's key, and `AGENT_BUS_MODEL` is
+`profile.model` unchanged. If §9 step 1 shows `--model` takes only the display name, the
+launcher maps id → display name for the command line alone, using the `agy models` rows, and
+leaves `AGENT_BUS_MODEL` as the id. A test pins that `AGENT_BUS_MODEL` is an id `MakerOf`
+resolves to `google`.
+
 **Shipped profile.** The profile goes in `roles.toml`, and no role uses it until the person picks
 one (§10 Q1). The same block goes in `examples/roles.mixed.toml`:
 
 ```toml
 # agy (Antigravity CLI, Google): a reviewer or panelist from another maker. permission stays
-# default: agy asks the person before each tool use (request-review). The model is Gemini, never
+# default: agy's own tool permission, plus any allows it inherits from the person's agy settings
+# (the launch names them; agy-client spec §4.4). The model is Gemini, never
 # a claude-* row agy also serves: that would review Anthropic's work with Anthropic's model.
 [profiles.agy-review]
 client = "agy"
@@ -248,12 +279,16 @@ sandbox = true
 | Self-update changes a flag | the launch would break | Preflight refuses with `agy lacks required launch flags`, and the fingerprint flags the new client |
 | The dispatcher's screens are from 1.3.3 | 1.5.3 may draw its input box differently | §9 captures 1.5.3 screens and replaces the `agy-*.txt` fixtures if they differ |
 | A deny rule with no agy form | the rule is not enforced | Named at launch and in `roles doctor` (§4.4), never silent |
-| The role prompt passes 24 KB, or the rules budget | none: `-i` is a user turn, not a rules file | The 24 KB/20k-token limits apply to `AGENTS.md`. That file is already near its cap, which `mem check` watches |
+| The role prompt passes 24 KB, or the rules budget | none: `-i` is a user turn, not a rules file | The 24 000-byte/20k-token limits apply to `AGENTS.md`. It is 5 522 bytes today, so there is room. A test may pin it under agy's cap |
+| The person's own allows reach the role | a `default` role runs commands without asking | §4.4: proven by §9 step 2, and named at launch and in `roles doctor` until it is replaced |
 
 ## 8. Security
 
-- **Ask by default.** The shipped profile is `default` + `sandbox = true`. `skip` exists, but no
-  shipped role uses it, and it shows in the risk summary.
+- **agy's own default, which is "ask" only once proven.** The shipped profile is `default` +
+  `sandbox = true`. `default` means "ask" only if §9 step 2 shows the session replaces the
+  person's allows and pins the tool permission. Until then, the inherited allow count and the
+  tool permission are named (§4.4). `skip` exists, but no shipped role uses it, and it shows in
+  the risk summary.
 - **Nothing written outside the cache.** No `GEMINI.md`, no `.agents/`, no change to
   `~/.gemini/antigravity-cli/settings.json`. `--settings` is session-only, as `--help` states.
 - **Off this machine.** `--remote-agent` and `--remote-control` are never passed, and a profile
@@ -274,8 +309,12 @@ Run it in a throwaway worktree, with a fake broker project:
 1. `agy --model gemini-3.8-flash-high -p "say ok"`, then the same with `"Gemini 3.8 Flash (High)"`:
    which form `--model` takes (§3.2.1).
 2. `agy -p --settings '{"permissions":{"deny":["command(echo)"]}}' "run: echo hi"`: whether the
-   session deny applies. Then the same with a hooks-path key pointing at a temp `hooks.json` whose
-   `Stop` hook touches a file (§3.2.2, §4.5).
+   session deny applies. Then **replace or merge** (§3.2.7): pick a command the person's own file
+   allows (`command(ls)` is one), and run `agy -p --settings '{"permissions":{"allow":[]}}' "run:
+   ls"`. A prompt or a refusal means the session replaced the file's allows; `ls` running with no
+   prompt means it merged. Then run a session `deny` of that same command: whether a session deny
+   beats an inherited allow. Then the same with a hooks-path key pointing at a temp `hooks.json`
+   whose `Stop` hook touches a file (§3.2.2, §4.5).
 3. `agy --settings '{"defaultMode":"…"}'`: whether the key exists.
 4. `agy -i "$(cat <a 10 KB prompt>)"` in a new worktree: whether the turn is kept, and whether a
    trust dialog appears (§3.2.4). Capture the idle, typed and approval screens with `herdr`
