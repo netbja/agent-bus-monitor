@@ -164,6 +164,14 @@ func (l *listState) Move(delta int) {
 		l.live = true
 		l.changed()
 	}
+	// Moving up past the live window leaves live, as a wheel-up does: live
+	// pins the bottom rows, so the selection would leave the view and the
+	// first rows never show (activity-scroll-bug, the person, 2026-11-07).
+	// A selection inside the window keeps it live (charm spec, b-scenarios).
+	if step < 0 && l.tail && l.live && i < max(0, len(l.items)-l.rows()) {
+		l.live = false
+		l.changed()
+	}
 }
 
 // First selects the first selectable item.
@@ -293,7 +301,12 @@ func (l *listState) viewport() {
 	default:
 		if i := l.index(l.sel); i >= 0 && rows > 0 {
 			if i < l.top {
+				// The rows no one selects right above it (a day separator,
+				// the first rows of the list) come into view with it.
 				l.top = i
+				for l.top > 0 && !l.items[l.top-1].Selectable && i-(l.top-1) < rows {
+					l.top--
+				}
 			} else if i >= l.top+rows {
 				l.top = i - rows + 1
 			}
