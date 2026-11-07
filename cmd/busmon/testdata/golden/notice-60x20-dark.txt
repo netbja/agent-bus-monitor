@@ -17,4 +17,4 @@
 │                                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯
- enter detail   F1 help   F5 health        ✓ coder reloaded 
+ tab focus   F1 help   F5 health           ✓ coder reloaded 

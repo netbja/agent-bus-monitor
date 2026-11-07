@@ -558,7 +558,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 - **Footer** — the keys of where you are (F1 lists them all). On the main screen `enter` comes
   first, with what it does on the selected row: the page it opens (`answer`, `agent`, `thread`,
   `task`, `PR`, `health`, `request`, `notices`, `full text`), the change it makes in place
-  (`expand`, `fold`, `unfold`), or no `enter` at all where it does nothing (`merge queue unknown`).
+  (`expand`, `fold`, `unfold`), or no `enter` at all where it does nothing (`merge queue unknown`, or no row selected).
   At its right end, for a few
   seconds, a quiet line tells what happened by itself while you watched: a pause the dispatcher
   or an agent set (`▲` for a quota pause), the project resumed, an agent's context cleared after

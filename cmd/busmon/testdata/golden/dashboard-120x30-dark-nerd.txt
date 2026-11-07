@@ -27,4 +27,4 @@
 │                                                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                       
- enter detail   tab focus   1-4 tabs   ↑↓ j k select   y copy   f auto-scroll   ! answer   F1 help   F5 health          
+ tab focus   1-4 tabs   ↑↓ j k select   y copy   f auto-scroll   ! answer   / filter   i write   F1 help   F5 health    

@@ -13,10 +13,13 @@ const rowNoPair = "\x00"
 // facts Enter itself reads. It names the page Enter opens, never an act the
 // person then does there (an ask's "answer" is its page, the answer form);
 // an in-place row's word names the change; rowNoPair where Enter does
-// nothing. known is false for a key outside the table, which keeps the
+// nothing (merge:unknown, or no row selected). known is false for a key outside the table, which keeps the
 // binding's own word.
 func rowHint(p PanelID, it ListItem) (word string, known bool) {
 	key := it.Key
+	if key == "" { // no row selected: Enter does nothing (foureyes)
+		return rowNoPair, true
+	}
 	inPlace := func(open, closed string) (string, bool) {
 		if it.Expanded {
 			return open, true

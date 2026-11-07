@@ -49,6 +49,8 @@ func TestRowHintTable(t *testing.T) {
 		{PanelBoard, "busmon-charm-b", false, "task"},
 		{PanelPlan, "task:t1", false, "task"},
 		{PanelPlan, "toggle", false, "expand"},
+		{PanelForYou, "", false, rowNoPair},
+		{PanelAgents, "", false, rowNoPair},
 	} {
 		got, known := rowHint(c.p, ListItem{Key: c.key, Expanded: c.expanded})
 		if got != c.want || !known {
@@ -74,11 +76,17 @@ func rowsFixture(t *testing.T, unknownMerge, empty bool) Model {
 	}
 	person := plan.Task{ID: "p1", Title: "say yes to lot 2", Owner: plan.Person}
 	coder := plan.Task{ID: "c1", Title: "build lot 2", Owner: "coder"}
-	s.planState = planState{loaded: true, file: plan.File{Plan: "v0.29", Goal: "triage", Tasks: []plan.Task{person, coder}},
-		rows: []plan.Row{{Task: person, State: plan.Waiting}, {Task: coder, State: plan.Upcoming}}}
+	done := plan.Task{ID: "d1", Title: "lot 1", Owner: "coder"}
+	s.planState = planState{loaded: true, file: plan.File{Plan: "v0.29", Goal: "triage", Tasks: []plan.Task{person, coder, done}},
+		rows: []plan.Row{{Task: person, State: plan.Waiting}, {Task: coder, State: plan.Upcoming}, {Task: done, State: plan.Done}}}
 	if empty {
 		s.asks, s.agents, s.personGates = nil, map[string]*agentState{}, nil
 		s.planState.rows[0].State = plan.Upcoming
+		for _, fl := range m.feed.feed { // every line read: For you is empty
+			if !fl.sep {
+				m.markLineRead(fl.ev.ID)
+			}
+		}
 		return step(t, m, pollMsg{snap: s, at: shellNow})
 	}
 	s.agents["scout"] = &agentState{state: "idle", stateAt: shellNow.Add(-time.Minute), lastSeen: shellNow, registered: true,
@@ -102,17 +110,98 @@ var enterOutcome = map[string][]overlayKind{
 
 var inPlaceWords = map[string]bool{"expand": true, "fold": true, "unfold": true}
 
-// Every selectable row of every panel, over the fixtures: its key has a word
-// (no prefix left to the binding's "detail"), and Enter does what the word
-// says. The For you kinds and the Requests and Plan rows the fixtures make
-// must all be met.
+// reqOpenShell is the Requests fixture with every group, every older row and
+// the notices line open, and the answered threads shown: the open state of
+// each in-place row, and the ntc: rows the notices line holds.
+func reqOpenShell(t *testing.T) Model {
+	t.Helper()
+	m := reqShell(t, 140, 40, nil)
+	m.ui.reqOpen.folded = true
+	if m.ui.reqOpen.groups == nil {
+		m.ui.reqOpen.groups = map[string]bool{}
+	}
+	for i := 0; i < 3; i++ { // opening a group can show an older row inside it
+		for _, it := range m.lists.requests.items {
+			if strings.HasPrefix(it.Key, "grp:") || strings.HasPrefix(it.Key, "older:") || it.Key == reqNoticesKey {
+				m.ui.reqOpen.groups[it.Key] = true
+			}
+		}
+		m.refresh()
+	}
+	return m
+}
+
+// checkEnter holds the footer and Enter to word on the selected row of p in
+// m: the footer opens with "enter <word>" (no enter at all for rowNoPair),
+// and Enter opens the page the word names, changes the row in place, or does
+// nothing. For an in-place row it returns the row's word after the change
+// ("" when the row is gone, as the Plan toggle is once used).
+func checkEnter(t *testing.T, m Model, p PanelID, key, what string) (Model, string, string) {
+	t.Helper()
+	word, known := rowHint(p, m.selectedItem(p))
+	if !known {
+		t.Errorf("%s: no word for this key", what)
+		return m, word, ""
+	}
+	foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.pageHint).text()
+	if word == rowNoPair {
+		if strings.Contains(foot, "enter") {
+			t.Errorf("%s: the footer offers enter: %q", what, foot)
+		}
+	} else if !strings.HasPrefix(strings.TrimSpace(foot), "enter "+word+" ") {
+		t.Errorf("%s: the footer does not open with enter %s: %q", what, word, foot)
+	}
+	m = keys(t, m, kEnter)
+	top := m.rd.top()
+	after := ""
+	switch {
+	case word == rowNoPair:
+		if top != nil {
+			t.Errorf("%s: Enter opened %v", what, top.kind)
+		}
+	case inPlaceWords[word]:
+		if top != nil {
+			t.Errorf("%s: Enter opened %v, want a change in place", what, top.kind)
+			break
+		}
+		if m.lists.of(p).Selected() == key {
+			after, _ = rowHint(p, m.selectedItem(p))
+			if after == word {
+				t.Errorf("%s: nothing changed in place", what)
+			}
+			// The word says which way: expand and unfold open the row, fold
+			// closes it (a Requests fold's open is ListItem.Expanded, whatever
+			// reqOpen.folded is called).
+			if open := m.selectedItem(p).Expanded; open != (word != "fold") {
+				t.Errorf("%s: after %s the row is open=%v", what, word, open)
+			}
+		}
+	default:
+		if top == nil || !containsKind(enterOutcome[word], top.kind) {
+			t.Errorf("%s: Enter opened %+v, want %v", what, top, enterOutcome[word])
+		}
+	}
+	return m, word, after
+}
+
+// Every selectable row of every panel, over five fixtures: its key has a word
+// (no prefix left to the binding's "detail"), the footer opens with it, and
+// Enter does what the word says. An in-place row is then checked again in
+// its new state (an expanded line's "full text", an open group's "fold").
+// Every row kind the producers make must be met (foureyes).
 func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
-	seen := map[string]bool{}
+	seen, kinds := map[string]bool{}, map[string]bool{}
 	for _, fx := range []struct {
-		name                string
-		unknownMerge, empty bool
-	}{{"rich", false, false}, {"merge unknown", true, false}, {"empty", false, true}} {
-		base := rowsFixture(t, fx.unknownMerge, fx.empty)
+		name  string
+		build func(t *testing.T) Model
+	}{
+		{"rich", func(t *testing.T) Model { return rowsFixture(t, false, false) }},
+		{"merge unknown", func(t *testing.T) Model { return rowsFixture(t, true, false) }},
+		{"empty", func(t *testing.T) Model { return rowsFixture(t, false, true) }},
+		{"requests", func(t *testing.T) Model { return reqShell(t, 140, 40, nil) }},
+		{"requests open", reqOpenShell},
+	} {
+		base := fx.build(t)
 		for _, p := range []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard, PanelRequests, PanelPlan} {
 			base.focusPanel(p)
 			base.refresh()
@@ -120,64 +209,79 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 				if !it.Selectable || it.Key == "" {
 					continue
 				}
-				m := rowsFixture(t, fx.unknownMerge, fx.empty)
+				m := fx.build(t)
 				m.focusPanel(p)
 				m.lists.of(p).Select(it.Key)
 				m.refresh()
-				word, known := rowHint(p, m.selectedItem(p))
-				what := fmt.Sprintf("%s, panel %d, %q (%q)", fx.name, p, it.Key, word)
-				if !known {
-					t.Errorf("%s: no word for this key", what)
-					continue
-				}
+				what := fmt.Sprintf("%s, panel %d, %q", fx.name, p, it.Key)
+				m, word, after := checkEnter(t, m, p, it.Key, what)
 				seen[fmt.Sprintf("%d %s", p, word)] = true
-				foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.shellHint).text()
-				if word == rowNoPair {
-					if strings.Contains(foot, "enter") {
-						t.Errorf("%s: the footer offers enter: %q", what, foot)
-					}
-				} else if !strings.HasPrefix(strings.TrimSpace(foot), "enter "+word) {
-					t.Errorf("%s: the footer does not open with enter %s: %q", what, word, foot)
-				}
-				m = keys(t, m, kEnter)
-				top := m.rd.top()
-				switch {
-				case word == rowNoPair:
-					if top != nil {
-						t.Errorf("%s: Enter opened %v", what, top.kind)
-					}
-				case inPlaceWords[word]:
-					if top != nil {
-						t.Errorf("%s: Enter opened %v, want a change in place", what, top.kind)
-					}
-					after, _ := rowHint(p, m.selectedItem(p))
-					if m.lists.of(p).Selected() == it.Key && after == word {
-						t.Errorf("%s: nothing changed in place", what)
-					}
-				default:
-					if top == nil || !containsKind(enterOutcome[word], top.kind) {
-						t.Errorf("%s: Enter opened %+v, want %v", what, top, enterOutcome[word])
-					}
+				kinds[fmt.Sprintf("%d %s", p, keyKind(it.Key))] = true
+				if after != "" {
+					_, again, _ := checkEnter(t, m, p, it.Key, what+" (after the change)")
+					seen[fmt.Sprintf("%d %s", p, again)] = true
 				}
 			}
 		}
+	}
+	// No row selected: Enter does nothing, so the footer offers no enter.
+	m := rowsFixture(t, false, false)
+	m.focusPanel(PanelForYou)
+	m.lists.of(PanelForYou).Select("")
+	m.refresh()
+	if m.lists.of(PanelForYou).Selected() == "" {
+		checkEnter(t, m, PanelForYou, "", "no row selected")
+		seen["no selection"] = true
 	}
 	var got []string
 	for k := range seen {
 		got = append(got, k)
 	}
 	sort.Strings(got)
-	for _, want := range []string{
-		fmt.Sprintf("%d answer", PanelForYou), fmt.Sprintf("%d agent", PanelForYou), fmt.Sprintf("%d thread", PanelForYou),
-		fmt.Sprintf("%d task", PanelForYou), fmt.Sprintf("%d PR", PanelForYou), fmt.Sprintf("%d %s", PanelForYou, rowNoPair),
-		fmt.Sprintf("%d health", PanelForYou), fmt.Sprintf("%d expand", PanelForYou),
-		fmt.Sprintf("%d agent", PanelAgents), fmt.Sprintf("%d expand", PanelActivity), fmt.Sprintf("%d task", PanelBoard),
-		fmt.Sprintf("%d task", PanelPlan),
+	want := []string{"no selection"}
+	for p, words := range map[PanelID][]string{
+		PanelForYou:   {"answer", "agent", "thread", "task", "PR", rowNoPair, "health", "expand", "full text"},
+		PanelAgents:   {"agent"},
+		PanelActivity: {"expand", "full text"},
+		PanelBoard:    {"task"},
+		PanelRequests: {"answer", "request", "thread", "notices", "fold", "unfold"},
+		PanelPlan:     {"task", "expand"},
 	} {
-		if !seen[want] {
-			t.Errorf("the fixtures never met %q; met: %q", want, got)
+		for _, w := range words {
+			want = append(want, fmt.Sprintf("%d %s", p, w))
 		}
 	}
+	for _, w := range want {
+		if !seen[w] {
+			t.Errorf("the fixtures never met %q; met: %q", w, got)
+		}
+	}
+	// Each row-key kind of each producer, so a word shared by two kinds
+	// (task: plan: and empty:plan:) cannot hide a kind never met. The
+	// Requests "asks" key has no producer: openRequestRow alone knows it.
+	for p, ks := range map[PanelID][]string{
+		PanelForYou:   {"ask", "wait", "prompt", "gate", "plan", "empty:plan", "merge", mergeUnknownKey, "health", "unread"},
+		PanelRequests: {"ask", "req", "thr", "ntc", reqNoticesKey, "fold", "grp", "older"},
+		PanelPlan:     {"task", "toggle"},
+	} {
+		for _, k := range ks {
+			if !kinds[fmt.Sprintf("%d %s", p, k)] {
+				t.Errorf("the fixtures never met panel %d's %q rows", p, k)
+			}
+		}
+	}
+}
+
+// keyKind is a row key's kind: its prefix ("ask", "empty:plan"), or the key
+// itself for a fixed one (merge:unknown, ntc:all, fold, toggle).
+func keyKind(key string) string {
+	switch {
+	case key == mergeUnknownKey, key == reqNoticesKey, !strings.Contains(key, ":"):
+		return key
+	case strings.HasPrefix(key, "empty:plan:"):
+		return "empty:plan"
+	}
+	return key[:strings.Index(key, ":")]
 }
 
 func containsKind(ks []overlayKind, k overlayKind) bool {
