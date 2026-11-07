@@ -95,6 +95,7 @@ type uiState struct {
 	expanded       string                  // the row expanded in place (its list key), "" none
 	expandIn       PanelID                 // the list it is in: Activity or For you
 	planExpanded   bool                    // the Plan tab shows its done tasks (A11)
+	walk           *walk                   // the triage walk in progress (T, triage.go), nil when none
 	reqOpen        reqOpen                 // the Requests view's expanded groups and folded section
 	prioBusy       bool                    // a priority write is in flight: + and - wait for its answer
 	prioSeen       map[string]prioOverride // task -> the level this busmon wrote, until a board read begun after it
@@ -252,10 +253,11 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case aboutVersionsMsg:
 		m.gotAboutVersions(msg)
 	case answerMsg:
-		m.gotAnswer(msg)
+		return m.gotAnswer(msg)
 	case sendResultMsg:
-		m.gotSend(msg)
+		cmd := m.gotSend(msg)
 		m.refresh()
+		return cmd
 	case sleepAskMsg:
 		m.gotSleepAsk(msg)
 	case sleepStartedMsg:

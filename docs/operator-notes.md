@@ -500,7 +500,16 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `merge:unknown`) and `unread` (`unreadItems`), so `decide + merge = decisions(forYou)` and the strip
   can never disagree with the panel. A new For you rank must be placed in one chip or none, there.
   The header's clickable items carry a `headerHit`; `headerLayout` returns their spans, and `click`
-  hit-tests the header after closing an open reader. `tourVersion` is 3 (the header page).
+  hit-tests the header after closing an open reader. `tourVersion` is 3 (the header page, and Useful keys for `T`).
+- **busmon's triage walk is For you's live order minus `visited`** (busmon-triage, same spec §4,
+  `triage.go`): `walkNext` opens the first `forYou` row not visited (never `merge:unknown`) through
+  `openForYouItem`, the function Enter uses too (an unread line straight to its message page). The
+  walk's page is the reader's bottom page (`walk.serial`); `walkCheck`, run by `pop` and
+  `closeReader`, ends the walk once that page has left the stack, except while `walk.moving`
+  replaces it. The terminal acts call `walkDone`: `gotAnswer` with no question left, and `gotSend`
+  (now returning a command) for a send to the waiting agent or, on a plan task, to master. `n`/`p`
+  on the walk's page go to `walkStep`, never `readerStep`; on an ask page they are bound only for
+  that (`shellAskTable`). `busyForModal` counts `m.ui.walk`, so the reminder and the recap wait.
 - **History archive** (spec `docs/superpowers/specs/2026-11-01-history-design.md`, package `history/`): the
   dispatch service's chore (`dispatch/history.go`, its own goroutine beside the reconciliation, 1 min, a 5 s
   pass, 2000 entries shared a page per stream in turn, the round starting one stream further each pass) appends `history.Streams` to `<state>/history/YYYY-MM-DD.jsonl` (UTC day of the id;

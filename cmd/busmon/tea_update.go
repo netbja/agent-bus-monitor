@@ -200,6 +200,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		m.openMessageCompose(line, to)
 	case ActDelete:
 		m.askRemove()
+	case ActTriage:
+		cmd = m.startWalk()
 	case ActRecap:
 		cmd = m.requestRecap(false)
 	case ActEscape:
@@ -236,32 +238,16 @@ func (m *Model) open(p PanelID) tea.Cmd {
 			return nil
 		}
 		it := m.forYou[i]
-		switch it.Rank {
-		case rankAsk:
-			return m.pushAsk(it.AskID)
-		case rankWait:
-			return m.pushAgent(it.Agent)
-		case rankHealth: // the stall guard: F5 says what and why
-			return m.push(page{kind: ovHealth})
-		case rankPlan: // its page carries the Action row (compose to master, prefilled)
-			return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(key, "plan:")})
-		case rankMerge: // the PR, who approved it and what they checked; y copies the URL
-			if key != mergeUnknownKey {
-				return m.push(page{kind: ovMerge, key: strings.TrimPrefix(key, "merge:")})
+		if it.Rank != rankUnread {
+			return m.openForYouItem(it)
+		}
+		if m.ui.expanded == key && m.ui.expandIn == p {
+			if fl, ok := m.expandedLine(); ok {
+				return m.pushMessage(fl.ev, fl.at)
 			}
 			return nil
-		case rankGate: // the challenge thread: its ref is the root
-			ref := strings.TrimPrefix(key, "gate:"+it.Agent+":")
-			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
-		case rankUnread:
-			if m.ui.expanded == key && m.ui.expandIn == p {
-				if fl, ok := m.expandedLine(); ok {
-					return m.pushMessage(fl.ev, fl.at)
-				}
-				return nil
-			}
-			m.expand(p, key)
 		}
+		m.expand(p, key)
 	case PanelAgents:
 		return m.pushAgent(key)
 	case PanelBoard:
@@ -279,6 +265,35 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 	case PanelRequests:
 		return m.openRequestRow(key)
+	}
+	return nil
+}
+
+// openForYouItem pushes a For you item's page (Enter on its row, and the
+// triage walk): an unread line's message page straight away (Enter expands
+// it first), nothing for merge:unknown.
+func (m *Model) openForYouItem(it attentionItem) tea.Cmd {
+	key := it.Key
+	switch it.Rank {
+	case rankAsk:
+		return m.pushAsk(it.AskID)
+	case rankWait:
+		return m.pushAgent(it.Agent)
+	case rankHealth: // the stall guard: F5 says what and why
+		return m.push(page{kind: ovHealth})
+	case rankPlan: // its page carries the Action row (compose to master, prefilled)
+		return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(key, "plan:")})
+	case rankMerge: // the PR, who approved it and what they checked; y copies the URL
+		if key != mergeUnknownKey {
+			return m.push(page{kind: ovMerge, key: strings.TrimPrefix(key, "merge:")})
+		}
+	case rankGate: // the challenge thread: its ref is the root
+		ref := strings.TrimPrefix(key, "gate:"+it.Agent+":")
+		return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
+	case rankUnread:
+		if id, ok := strings.CutPrefix(key, "unread:"); ok {
+			return m.openFeedLine(id)
+		}
 	}
 	return nil
 }

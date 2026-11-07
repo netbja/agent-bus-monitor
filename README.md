@@ -520,6 +520,14 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   newer one, an answer or a closed ask supersedes it). Enter opens one; `!`, `w` or F4 answers the
   questions (one tab per question, a digit or Enter picks an option, `Other…` writes your own).
   With no question open, `w` opens the compose window to master instead.
+  **`T` (triage)** walks what waits for you one item at a time, in For you's live order: each
+  item's page (an ask's questions, the agent, the gate's thread, the plan task, the PR, F5 for a
+  stall, an unread line's message, which reads it). The frame reads `triage 2/7`. Answering an
+  ask's last question, writing to the waiting agent from its page or sending a plan task's Action
+  row moves on by itself (`sent — next: …`); `n` skips, `p` goes back (a line read on the way stays
+  reachable), Esc ends it. A new ask that arrives meanwhile is reached before older lines. The end
+  page counts what you did and names what still waits (`merge queue unreadable` when it is), and
+  Enter on its last row opens the next decision planned for you.
 - **Agents** — one row per agent, **attention first** (waiting for you, escalated, gated,
   blocked; then queued; then working, idle, done). Columns: the **declared** state (never
   overwritten by silence — an agent that said `working` three hours ago still reads `working`;

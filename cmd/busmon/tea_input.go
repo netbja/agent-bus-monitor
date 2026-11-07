@@ -193,7 +193,7 @@ func (m *Model) send(tgt, body string, directed, window bool) tea.Cmd {
 
 // gotSend reads a send's outcome: sent (or partly sent) clears the draft it
 // came from, failed keeps it for a retry.
-func (m *Model) gotSend(msg sendResultMsg) {
+func (m *Model) gotSend(msg sendResultMsg) tea.Cmd {
 	m.ui.sending = false
 	note := ""
 	if msg.plan.directed && m.snap.pauseFailed {
@@ -204,23 +204,30 @@ func (m *Model) gotSend(msg sendResultMsg) {
 	summary := m.ui.summarySent
 	m.ui.summarySent = false
 	if res == sendFailed {
-		return
+		return nil
 	}
 	m.ui.pauseAck = "" // the acknowledgement was for this one send
 	if summary {       // the summary request went: the recap it came from closes
 		if p := m.rd.top(); p != nil && p.kind == ovRecap {
 			m.pop()
 		}
-		return
+		return nil
 	}
 	if msg.window {
 		m.sentCompose()
-		return
+	} else {
+		m.ui.msgDraft = ""
+		if m.ui.line == lineMessage {
+			m.ui.edit, m.ui.tail = "", 0
+		}
 	}
-	m.ui.msgDraft = ""
-	if m.ui.line == lineMessage {
-		m.ui.edit, m.ui.tail = "", 0
+	// The walk's terminal act (busmon-queue-triage §4.3): a message to the
+	// waiting agent from its page, or a plan task's Action row to master.
+	if it, ok := m.walkItem(); ok && msg.plan.directed &&
+		((it.Rank == rankWait && msg.plan.tgt == it.Agent) || (it.Rank == rankPlan && msg.plan.tgt == "master")) {
+		return m.walkDone("sent")
 	}
+	return nil
 }
 
 // askHolders are the recipients of a directed text that have an open ask:

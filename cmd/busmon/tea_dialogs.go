@@ -306,7 +306,8 @@ type reminderDialog struct {
 // automatic recap waits for it to end.
 func (m *Model) busyForModal() bool {
 	return m.ui.compose != nil || m.rd.open() || m.ui.line != lineNone || strings.TrimSpace(m.ui.msgDraft) != "" ||
-		m.ui.askChoose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary || m.ui.tour != nil
+		m.ui.askChoose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary || m.ui.tour != nil ||
+		m.ui.walk != nil // the walk's gap between two pages (busmon-queue-triage §4.5)
 }
 
 // maybeReminder opens the reminder when decisions are due (PopupAfter) and
