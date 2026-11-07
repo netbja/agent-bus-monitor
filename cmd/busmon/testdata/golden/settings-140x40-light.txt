@@ -12,14 +12,14 @@
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 20 default ──────────────────────────────────────────────────────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 21 default ──────────────────────────────────────────────────────────────── esc back ─╮
 │                   │                                                                                                                      │
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
 │    Identity       │     Fade and slide            ● on                                                                                   │
 │    Notifications  │   • Theme                     ‹ dark ›                                                                               │
-│    Backup         │ ▶ • Icons                     ‹ nerd ›                                                                               │
-│                   │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font         (what your terminal draws is what you get)                         │
+│    Services       │ ▶ • Icons                     ‹ nerd ›                                                                               │
+│    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font         (what your terminal draws is what you get)                         │
 │                   │     Activity lines at start   25                                                                                     │
 │                   │     Idle? hint after          10m                                                                                    │
 │                   │                                                                                                                      │

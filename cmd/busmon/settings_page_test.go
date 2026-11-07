@@ -824,3 +824,36 @@ func TestSettingsSelectionInViewNarrow(t *testing.T) {
 		}
 	}
 }
+
+// auto-reload (the person, 2026-11-06): sentinel.reload is "Auto-restart on
+// update" on the C page, a choice among on, propose and off (←→), with a help
+// line saying what each does and that on needs a registered sentinel.
+func TestSettingsPageAutoRestart(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	r := settingRowOf(t, settingsGroups(getenv, settingsFlags{}, settingsPageGroups), "sentinel.reload")
+	if r.Label != "Auto-restart on update" || len([]rune(r.Label)) > settingsLabelW {
+		t.Fatalf("label %q", r.Label)
+	}
+	help := settingHelp(r)
+	for _, w := range []string{"on:", "propose:", "off:", "registered sentinel", "master last"} {
+		if !strings.Contains(help, w) {
+			t.Errorf("help %q lacks %q", help, w)
+		}
+	}
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	m = selectSetting(t, m, "sentinel.reload")
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "reload = \"propose\"") {
+		t.Fatalf("right of on: %q", configText(t, getenv))
+	}
+	m = selectSetting(t, m, "sentinel.reload")
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "reload = \"off\"") {
+		t.Fatalf("right of propose: %q", configText(t, getenv))
+	}
+}

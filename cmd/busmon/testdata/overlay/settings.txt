@@ -3,8 +3,8 @@
    Attention      │                                                                             
    Identity       │     Fade and slide            ● on                                          
    Notifications  │   • Theme                     ‹ dark ›                                      
-   Backup         │ ▶ • Icons                     ‹ nerd ›                                      
-                  │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font                                   
+   Services       │ ▶ • Icons                     ‹ nerd ›                                      
+   Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font                                   
                   │     Activity lines at start   25                                            
                   │     Idle? hint after          10m                                           
                   │                                                                             

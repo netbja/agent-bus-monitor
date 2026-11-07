@@ -150,3 +150,48 @@ func TestEpisodeEntryScansTheWholeStream(t *testing.T) {
 		t.Fatalf("EpisodeEntry = %q, %v; want %q", id, err, first)
 	}
 }
+
+// FencedCmdOnceMarks (auto-reload): the entry, its mark and the extra marks
+// go together in one script. A second call in the same episode writes and
+// marks nothing; a holder that lost the lease writes and marks nothing.
+func TestFencedCmdOnceMarks(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	extra := []string{"update:claude-code:v2:coder", "update:claude-code:v2:master"}
+	if _, err := b.FencedCmdOnceMarks(ctx, "bad", "update:claude-code:v2", "sent", extra, "dispatch", "sentinel", CmdDirective, "client update", false); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("err = %v, want ErrNotHolder", err)
+	}
+	if m, _ := b.QuotaMarks(ctx); len(m) != 0 {
+		t.Fatalf("marked without the lease: %v", m)
+	}
+	sent, err := b.FencedCmdOnceMarks(ctx, "tok", "update:claude-code:v2", "sent", extra, "dispatch", "sentinel", CmdDirective, "client update", false)
+	if err != nil || !sent {
+		t.Fatalf("first = %v, %v", sent, err)
+	}
+	m, _ := b.QuotaMarks(ctx)
+	for _, k := range append([]string{"update:claude-code:v2"}, extra...) {
+		if m[k] != "sent" {
+			t.Errorf("mark %s = %q", k, m[k])
+		}
+	}
+	// Again in the episode: nothing written, and a new extra mark is not set
+	// (the entry that would carry it was not sent).
+	sent, err = b.FencedCmdOnceMarks(ctx, "tok", "update:claude-code:v2", "sent", []string{"update:claude-code:v2:doc"}, "dispatch", "sentinel", CmdDirective, "client update", false)
+	if err != nil || sent {
+		t.Fatalf("second = %v, %v", sent, err)
+	}
+	if m, _ := b.QuotaMarks(ctx); m["update:claude-code:v2:doc"] != "" {
+		t.Fatal("an extra mark set without its entry")
+	}
+	n, _ := b.r.XLen(ctx, StreamKey(b.project, "cmd")).Result()
+	if n != 1 {
+		t.Fatalf("%d entries, want 1", n)
+	}
+	// No extra marks: FencedCmdOnce's behaviour.
+	if sent, err := b.FencedCmdOnceMarks(ctx, "tok", "other", "1", nil, "dispatch", "sentinel", CmdDirective, "x", false); err != nil || !sent {
+		t.Fatalf("no extras = %v, %v", sent, err)
+	}
+}

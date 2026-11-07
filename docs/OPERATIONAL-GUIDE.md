@@ -506,7 +506,11 @@ to watch a pane.
   reload only sentinel. You may reload anyone: `agentbus --project myapp reload coder --as
   <your-name>` (`--dry-run` says what would happen, `--fresh` starts a new conversation).
   `agentbus up myapp --reload propose` makes every reload wait for you; `--reload off` leaves
-  them to you alone.
+  them to you alone. For every project at once, busmon's settings page (`C`, Services) has
+  **Auto-restart on update**: `on` (the default), `propose` or `off`; a project's `--reload`
+  overrides it. The dispatcher reads it at each update, so a change needs no restart. An agent
+  that was busy when the update came is reloaded once it is idle: sentinel gets one more
+  directive for it. Without a registered sentinel nothing restarts by itself: master asks you.
 - **Quotas run out.** At 95% a provider's agents are held (scenario C). When the reset is more
   than 2 hours away (`AGENT_BUS_QUOTA_LONG_HOLD`), master tells you which held agents had work in
   flight, so you can move a role to one of its `fallback_profiles` in `roles.toml`:

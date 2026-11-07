@@ -718,7 +718,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   Lifecycle-3b, `agentbus reload <role> [--fresh] [--dry-run] [--reason] [--as <person>]`
   (`cmd/agentbus/reload.go`): who may (sentinel any role but itself on an observed update, master
   last and only with no other pilot driver; master only sentinel; a person anyone by an explicit
-  `--as`, which also passes the identity guard), `AGENT_BUS_RELOAD`, the registry's `sentinel.reload` (auto-reload, `reloadPolicy`: caller's env, else the
+  `--as`, which also passes the identity guard), `AGENT_BUS_RELOAD`, the registry's `sentinel.reload` (auto-reload, `service.ReloadPolicy`: caller's env, else the
   project's env file, per project so above the machine's file, else `config.toml`, else `on`; an unknown env value reads on, as always; `up --reload on|propose|off`; `propose` and `off` leave only a person's `--as`), a preflight that changes nothing (verified live
   identity, not its own pane, not on a fallback, `reloadOpenWork` = swap's `openWork` plus an
   `accepted` board task and, only with `--fresh`, its own open ask (a resume keeps the conversation and
@@ -788,10 +788,27 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `docs/superpowers/specs/2026-10-21-client-reload-design.md`): the launcher fingerprints the client
   it resolved (`clientfp`, `AGENT_BUS_CLIENT_FP`, kept in the verified identity as `client_fp`); the
   observe pass re-checks it at most once a minute (or reads the Claude Code `versions/` layout for
-  agents without one) and adds `update` and `client_judged` to `{p}:observed`; sentinel gets one
-  directive per update episode (`FencedCmdOnce`, mark `update:<client>`, episode the installed
-  hash); health `client-updates` warns; busmon flags `update`. Metadata only: the dispatcher never
-  runs a client; sentinel reloads the outdated agents with `agentbus reload` (lifecycle-3b, below).
+  agents without one) and adds `update` and `client_judged` to `{p}:observed`; one directive per
+  update episode goes to sentinel when it is registered (a snapshot), else to the escalation target
+  (`FencedCmdOnceMarks`, mark `update:<client>:<episode>` = `sent`); health `client-updates` warns;
+  busmon flags `update`. Metadata only: the dispatcher never runs a client; sentinel reloads the
+  outdated agents with `agentbus reload` (lifecycle-3b, below). Auto-reload (spec
+  `docs/superpowers/specs/2026-11-06-auto-reload-setting-design.md`): the directive's text follows
+  the reload policy, read at each send (`Config.ReloadPolicy` = `serviceReloadPolicy`, i.e.
+  `service.ReloadPolicy` over the env, the project's env file, then `config.toml`): `on` with
+  sentinel registered says reload the ready ones now, master last; `on` without one asks the person
+  through the escalation target (it may reload no one but sentinel); `propose` keeps the proposal;
+  `off` reloads nothing. Never word it "propose only" under `on`: that text, left over from v0.22,
+  is why `on` never reloaded until v0.29. Under `on` with sentinel, the episode's send also sets a
+  per-agent mark `update:<client>:<episode>:<agent>` for each agent ready then (`reloadReady`:
+  declared idle, not observed busy, no `accepted` board task, no gate on either side
+  (`ReviewsOf`), no swap or reload intent, not on a fallback, every read succeeded), in the same
+  script, with `update:<client>:<episode>:auto=on` saying the episode went out automatically;
+  on later passes, only for such an episode and while the policy is still `on`, an agent of the
+  episode now ready with no mark gets one hint
+  (`client update: <agent> is ready now …`, `retryReloads`), never sentinel about itself. busmon's
+  C page shows `sentinel.reload` as "Auto-restart on update" (on / propose / off), the Services
+  group's only key there (`settingOnPage`).
   v0.15: an observation carries `since` (first reading of
   that state by the same pid, carried forward) and a failed inspection keeps the previous reading
   (`Observation.Fresh`, 120 s); a pane seen `blocked` (its client's own menu or permission prompt)

@@ -58,6 +58,10 @@ type Config struct {
 	// disk (clientupdate.go; nil = the real probe: metadata only, never the
 	// client run). known=false: it cannot tell.
 	ClientProbe func(bus.AgentSnapshot) (*bus.ClientUpdate, bool)
+	// ReloadPolicy is the project's reload policy (sentinel.reload: on,
+	// propose or off), read at each client-update send so a change applies
+	// without a restart (auto-reload). nil reads on.
+	ReloadPolicy func() string
 	// ClientProbeEvery is the probe's throttle per agent (0 = one minute).
 	ClientProbeEvery time.Duration
 	// Health runs deterministic checks in a separate bounded goroutine. Nil

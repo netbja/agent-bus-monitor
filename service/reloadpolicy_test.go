@@ -1,4 +1,4 @@
-package main
+package service
 
 import (
 	"os"
@@ -46,7 +46,7 @@ func TestReloadPolicyOrder(t *testing.T) {
 		if c.file != "" {
 			envFile["AGENT_BUS_RELOAD"] = c.file
 		}
-		mode, source := reloadPolicy(getenv, envFile)
+		mode, source := ReloadPolicy(getenv, envFile)
 		if mode != c.mode || source != c.source {
 			t.Errorf("%s: %s from %s, want %s from %s", name, mode, source, c.mode, c.source)
 		}

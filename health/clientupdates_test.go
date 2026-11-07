@@ -32,3 +32,22 @@ func TestEvaluateClientUpdates(t *testing.T) {
 		t.Fatal("client-updates is not in the catalogue")
 	}
 }
+
+// The remediation is one static text for every reload policy (auto-reload):
+// sentinel reloads, master last; propose or no sentinel asks the person; off
+// reloads nothing. It no longer forbids the reload sentinel is there to do.
+func TestClientUpdatesRemediation(t *testing.T) {
+	d, ok := ByID("client-updates")
+	if !ok {
+		t.Fatal("client-updates is not in the catalogue")
+	}
+	r := d.Remediation
+	for _, want := range []string{"sentinel reloads the outdated agents (agentbus reload)", "master last", "under propose, or with no sentinel registered, the person is asked through master", "under off nothing is reloaded", "Never type into a pane"} {
+		if !strings.Contains(r, want) {
+			t.Errorf("remediation %q lacks %q", r, want)
+		}
+	}
+	if strings.Contains(r, "never restart a client") || strings.Contains(r, "Propose a reload") {
+		t.Errorf("remediation still forbids the reload: %q", r)
+	}
+}
