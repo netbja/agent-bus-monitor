@@ -634,7 +634,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `--webhook-stdin`, never an argument, and an unknown flag is a usage error that echoes nothing; `http` only with
   `--insecure`), `remove` (asks on the terminal, or `--yes`; `notify.on` goes off only on the person's yes), `rename`
   (the header, `notify.targets` and the `notify-last.json` record, `Last.Rename`) and `show-topic`; `add` turns
-  `notify.on` on and lists the target, then tests it (exit 0 delivered, 2 written but failed, 1 nothing written). A
+  `notify.on` on and lists the target, then tests it (exit 0 delivered, 2 written but failed, 1 nothing written, a
+  malformed command line included). A
   topic, its link and its QR (`notify.QR`, half blocks drawn black on white, rsc.io/qr, L, up to version 6) go only
   to `/dev/tty`: without one, stdout says to run `show-topic` on a terminal. All five refuse an agent first
   (`refuseAgent`: `AGENT_BUS_AGENT`, an agent ancestor, an unreadable broker) and every role denies them

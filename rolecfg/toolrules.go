@@ -61,7 +61,6 @@ func checkDelivers(role string, info map[string]interface{}, own ToolRules) erro
 	return nil
 }
 
-// HoldsDeliverDeny: r denies agentbus deliver.
 // NotifyWriteDenies are the shared denies of the notifications subcommands
 // that write notify.toml or show a topic (notify-guided-setup §2): every
 // role's, in the shared [tool_rules], and a drafted role's own. Plain forms
@@ -95,6 +94,7 @@ func holdsAll(r ToolRules, rules []string) bool {
 	return true
 }
 
+// HoldsDeliverDeny: r denies agentbus deliver.
 func HoldsDeliverDeny(r ToolRules) bool {
 	for _, d := range DeliverDeny {
 		if !slices.Contains(r.Deny, d) {

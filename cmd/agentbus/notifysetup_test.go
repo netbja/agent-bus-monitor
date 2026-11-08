@@ -220,7 +220,7 @@ func TestAddSecretsFromFilesOnly(t *testing.T) {
 	noSecret(t, "output", r.out+r.err, "hook-from-stdin", "tk_from_file")
 	for _, args := range [][]string{{"add", "discord", "--webhook", hook}, {"add", "ntfy", "--token", "tk_x"}, {"add", "ntfy", "--topic", "agentbus-mine"}} {
 		r := w.setup(t, nil, "", args...)
-		if r.code != 2 {
+		if r.code != 1 { // nothing written: never 2, a written target whose test failed (§6)
 			t.Errorf("%q: exit %d", args, r.code)
 		}
 		noSecret(t, "usage", r.out+r.err, "hook-from-stdin", "tk_x", "agentbus-mine")
@@ -420,7 +420,7 @@ func TestSetupRefusesAnAgent(t *testing.T) {
 func TestSetupUsage(t *testing.T) {
 	w := newNotifyWorld(t)
 	for _, args := range [][]string{{"add"}, {"add", "slack"}, {"add", "ntfy", "--bogus"}, {"remove"}, {"rename", "a"}, {"show-topic"}, {"setup", "x"}, {"add", "ntfy", "--server"}} {
-		if r := w.setup(t, nil, "", args...); r.code != 2 {
+		if r := w.setup(t, nil, "", args...); r.code != 1 || !strings.Contains(r.err, "usage: agentbus notifications setup") {
 			t.Errorf("%q: exit %d %q", args, r.code, r.err)
 		}
 	}

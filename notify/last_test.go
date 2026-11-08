@@ -201,8 +201,11 @@ func TestLastRename(t *testing.T) {
 	if _, ok := l.Latest("x"); ok {
 		t.Error("an absent record made one")
 	}
-	l.Rename("mobile", "team")
-	if o, _ := l.Latest("team"); o.OK {
-		t.Error("a rename onto a taken name replaced its record")
+	l.Rename("mobile", "team") // team's record is a removed target's: stale, replaced
+	if o, _ := l.Latest("team"); !o.OK || !o.Test {
+		t.Error("a stale record under the new name was kept")
+	}
+	if _, ok := l.Latest("mobile"); ok {
+		t.Error("the old name keeps its record")
 	}
 }

@@ -66,7 +66,8 @@ func openTTY() (notifyTerm, func(), error) {
 
 func stdinIsTerminal() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
-// errUsage is a malformed command line (exit 2); every other error exits 1.
+// errUsage is a malformed command line: the usage, exit 1 like every
+// refusal (nothing written; foureyes, §6).
 var errUsage = errors.New("usage")
 
 const notifySetupUsage = `usage: agentbus notifications setup [--no-test]
@@ -128,9 +129,9 @@ func runNotifySetup(ctx context.Context, args []string, d notificationsDeps, out
 		err = notifyShowTopic(args[1:], d)
 	}
 	switch {
-	case errors.Is(err, errUsage):
+	case errors.Is(err, errUsage): // nothing written: 1 (§6 keeps 2 for a written target whose test failed)
 		fmt.Fprintln(errw, notifySetupUsage)
-		return 2, true
+		return 1, true
 	case err != nil:
 		fmt.Fprintln(errw, "agentbus notifications:", err)
 		return 1, true
