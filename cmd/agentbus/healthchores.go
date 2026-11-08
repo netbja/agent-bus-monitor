@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -55,8 +54,8 @@ func refreshModelsDaily(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	readers := modelReaders(models.RealEnv(), manifestFromEnv, io.Discard) // §3.9: adapters too
-	return refreshModelsUnderLock(ctx, models.CachePath(), cfg.Tiers, readers, time.Now())
+	// The dispatcher's: built-in readers only, never an adapter (repository code).
+	return refreshModelsUnderLock(ctx, models.CachePath(), cfg.Tiers, dispatcherModelReaders(), time.Now())
 }
 
 func refreshModelsUnderLock(ctx context.Context, path string, tiers models.TierMap, readers []models.Reader, now time.Time) error {

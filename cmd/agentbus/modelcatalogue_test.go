@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -165,4 +167,60 @@ func TestRecordAliases(t *testing.T) {
 	if len(tbl.Events) != 1 || tbl.Events[0].Kind != "alias" || tbl.Events[0].From != "claude-opus-5-5" || tbl.Events[0].To != "claude-opus-5-6" {
 		t.Fatalf("events %+v", tbl.Events)
 	}
+}
+
+// foureyes: the dispatcher never runs repository code, so its model readers
+// (the model-catalogue check, the daily refresh) are the built-in clients
+// only, never an adapter's argv from roles.toml.
+func TestDispatcherReadsNoAdapter(t *testing.T) {
+	providers := func(rs []models.Reader) string {
+		var p []string
+		for _, r := range rs {
+			p = append(p, r.Provider)
+		}
+		return strings.Join(p, ",")
+	}
+	// roles.toml names an adapter with a models argv: still not read.
+	path := t.TempDir() + "/roles.toml"
+	m := checkManifest + "[adapters.deep]\nexecutable = \"./d\"\nmodels = [\"./d\"]\n[profiles.ds]\nclient = \"deep\"\nprovider = \"deepseek\"\nmodel = \"v4\"\n"
+	if err := os.WriteFile(path, []byte(m), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ROLES_TOML", path)
+	if got := modelReaders(models.Env{}, manifestFromEnv, io.Discard); len(got) != len(models.Readers(models.Env{}))+1 {
+		t.Fatalf("the fixture's adapter is not seen by modelReaders: %d readers", len(got))
+	}
+	builtin := providers(models.Readers(models.Env{}))
+	if got := providers(dispatcherModelReaders()); got != builtin {
+		t.Fatalf("dispatcher readers %s, want the built-in %s", got, builtin)
+	}
+	if got := providers(realCatalogueReader().readers); got != builtin {
+		t.Fatalf("model-catalogue readers %s, want the built-in %s", got, builtin)
+	}
+}
+
+// An adapter's provider, old: the hint is the command a person runs.
+func TestCatalogueAdapterHint(t *testing.T) {
+	now := time.Now()
+	cache, _ := checkFixture(t, now)
+	path := t.TempDir() + "/roles.toml"
+	m := checkManifest + "[adapters.deep]\nexecutable = \"./d\"\nmodels = [\"./d\"]\n[profiles.ds]\nclient = \"deep\"\nprovider = \"deepseek\"\nmodel = \"v4\"\n"
+	if err := os.WriteFile(path, []byte(m), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tbl, _ := models.Load(cache)
+	tbl.Providers["deepseek"] = &models.Provider{OK: true, At: now.UnixMilli(), ReadAt: now.UnixMilli(), SourceAt: now.Add(-9 * 24 * time.Hour).UnixMilli(), Rows: []models.Row{{ID: "v4"}}}
+	if err := tbl.Save(cache); err != nil {
+		t.Fatal(err)
+	}
+	r := catalogueReader{cache: cache, manifest: func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }, now: func() time.Time { return now }}
+	for _, o := range r.input(context.Background()).OldSources {
+		if o.Provider == "deepseek" {
+			if o.Hint != "agentbus models --refresh" {
+				t.Fatalf("hint %q", o.Hint)
+			}
+			return
+		}
+	}
+	t.Fatal("the adapter's old source is not named")
 }

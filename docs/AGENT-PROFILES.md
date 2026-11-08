@@ -187,6 +187,10 @@ other lines are ignored. Its executable is relative to the manifest, like
 `executable`. The rows go under the provider its profiles name: one provider per
 adapter, and never a provider a built-in client already reads (anthropic,
 openai, xai, moonshot, google). Its answer is live, so its source age is the read's.
+Only `agentbus models` (run by a person or an agent) runs this command; the
+dispatcher never does, since it never runs repository code. Its rows age until
+the next `agentbus models`, and the `model-catalogue` health check says
+`agentbus models --refresh` when they are too old.
 
 The executable path is relative to the manifest. The launcher calls it directly,
 without a shell, with `--spec-file <path>`. The JSON contains `client`, `provider`,

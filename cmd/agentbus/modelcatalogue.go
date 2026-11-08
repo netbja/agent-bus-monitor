@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"os"
 	"sort"
 	"time"
@@ -33,14 +32,20 @@ type catalogueReader struct {
 	config   string // models.toml
 	manifest func() (*rolecfg.Manifest, error)
 	readers  []models.Reader
-	env      *models.Env // set: the readers are modelReaders' (built-in and adapters), read at each pass
 	now      func() time.Time
 }
 
 func realCatalogueReader() catalogueReader {
-	env := models.RealEnv()
-	return catalogueReader{cache: models.CachePath(), config: models.ConfigPath(), env: &env, now: time.Now, manifest: manifestFromEnv}
+	return catalogueReader{cache: models.CachePath(), config: models.ConfigPath(), readers: dispatcherModelReaders(), now: time.Now, manifest: manifestFromEnv}
 }
+
+// dispatcherModelReaders are the readers the dispatcher may run (the
+// model-catalogue check, the daily refresh): the built-in clients only, from
+// PATH. An adapter's models argv is relative to roles.toml, in the
+// repository agents commit to, and the dispatcher never runs repository
+// code (foureyes): adapters are read by agentbus models, run by a person or
+// an agent.
+func dispatcherModelReaders() []models.Reader { return models.Readers(models.RealEnv()) }
 
 // manifestFromEnv is roles.toml as the launcher finds it.
 func manifestFromEnv() (*rolecfg.Manifest, error) {
@@ -64,11 +69,7 @@ func (r catalogueReader) input(ctx context.Context) health.ModelCatalogueInput {
 		return in
 	}
 	// G7: no service needed; a held lock or a failed reader keeps the table as it is.
-	readers := r.readers
-	if r.env != nil {
-		readers = modelReaders(*r.env, r.manifest, io.Discard)
-	}
-	_, _, _ = refreshTable(ctx, r.cache, cfg.Tiers, readers, now, catalogueRefreshBudget)
+	_, _, _ = refreshTable(ctx, r.cache, cfg.Tiers, r.readers, now, catalogueRefreshBudget)
 	tbl, err := models.Load(r.cache)
 	if err != nil {
 		in.ReadErr = "model table unreadable"
@@ -104,7 +105,11 @@ func (r catalogueReader) input(ctx context.Context) health.ModelCatalogueInput {
 			continue
 		}
 		if p.SourceAt > 0 && cfg.SourceMaxAge > 0 && now.Sub(time.UnixMilli(p.SourceAt)) > cfg.SourceMaxAge {
-			in.OldSources = append(in.OldSources, health.OldSource{Provider: name, Age: now.Sub(time.UnixMilli(p.SourceAt)), Hint: sourceHints[name]})
+			hint, ok := sourceHints[name]
+			if !ok { // an adapter's provider: the dispatcher never reads it
+				hint = "agentbus models --refresh"
+			}
+			in.OldSources = append(in.OldSources, health.OldSource{Provider: name, Age: now.Sub(time.UnixMilli(p.SourceAt)), Hint: hint})
 		}
 		if !p.OK && p.At > 0 {
 			since := p.ReadAt // the last good read; never one: the first attempt counts

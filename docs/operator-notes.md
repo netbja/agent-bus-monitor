@@ -880,7 +880,12 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   profile uses; ok, its detail is the last 24 h's news (`new: xai grok-4.7 (2h) · anthropic opus
   now claude-opus-5-5`). The doctor task records Claude alias moves from fresh transcripts; a
   client update forces its provider's refresh once per installed version. An adapter may list its
-  models (`models = [argv]` in `[adapters.<client>]`, `id<TAB>label` lines, docs/AGENT-PROFILES.md).
+  models (`models = [argv]` in `[adapters.<client>]`, `id<TAB>label` lines, docs/AGENT-PROFILES.md):
+  only `agentbus models` (refresh, auto-refresh, check), run by a person or an agent, reads it.
+  The dispatcher's model readers (the model-catalogue check, the daily refresh) are the built-in
+  clients only (`dispatcherModelReaders`, `TestDispatcherReadsNoAdapter`): the argv is relative to
+  roles.toml in the repository, and the dispatcher never runs repository code. An adapter's old
+  source is named with `agentbus models --refresh` as its hint.
   Nothing writes roles.toml on its own (`TestNoProfileWriter`; `roles adopt` is the person's act).
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write
