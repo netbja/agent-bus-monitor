@@ -89,6 +89,9 @@ func TestSettingsFocusBarFit(t *testing.T) {
 		{true, true, 12, "keys"},
 		{true, true, 14, "keys"}, // " focus: keys" would fit 13 and leave a 1-cell bar
 		{false, false, 10, "tabs"},
+		{false, false, 6, "tabs"}, // reviewer-codex: "tabs━━", never "ta… ━━"
+		{false, false, 7, "tabs"},
+		{true, true, 6, "keys"},
 		{false, false, 40, "tabs"},
 	} {
 		l := settingsFocusLine(c.keys, c.side, true, c.width)
@@ -98,6 +101,10 @@ func TestSettingsFocusBarFit(t *testing.T) {
 		if n := barCells(t, l); n < 2 || !strings.Contains(l.text(), c.word) {
 			t.Fatalf("%+v: %q (%d bar cells)", c, l.text(), n)
 		}
+	}
+	// Narrower than the word and a 2-cell bar: the word stays, whole when it fits.
+	if l := settingsFocusLine(false, false, true, 5); !strings.Contains(l.text(), "tabs") || l.Width() > 5 {
+		t.Fatalf("width 5: %q", l.text())
 	}
 	if l := settingsFocusLine(true, true, false, 60); barCells(t, l) != 0 {
 		t.Fatalf("no bar asked: %q", l.text())

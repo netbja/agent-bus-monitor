@@ -25,8 +25,9 @@ focused panel. No row is added, so no group or key moves and `selLine` is unchan
   the wide page becomes top/bottom when the panels stack.
 - **The text line is kept, and it fits first.** Behind a bar, the text is cut with the same order
   as before (the hint first, then `focus:`; the focused word stays). The bar takes what is left,
-  and never fewer than 2 cells. So on the narrowest frame, the word and a short bar are both
-  shown.
+  and never fewer than 2 cells. When even ` word ━━` does not fit, the word goes against the bar,
+  with no margin and no separator (`tabs━━` in 6 cells). Narrower still, the word stays alone
+  and the bar gives way (reviewer-codex).
 - **NO_COLOR and 16 colours.** The bar is a glyph, not a colour: under `NO_COLOR` it is drawn in
   the terminal's own colour, bold, and with 16 colours in the palette's accent. It still shows by
   its place and by its heavy stroke, which differs from the light rules (`─`, `│`) busmon draws

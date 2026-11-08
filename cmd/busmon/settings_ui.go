@@ -624,7 +624,8 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 // panel's word plain and bold, so it reads the same without colour. On a
 // narrow column the hint goes first, then "focus:"; the word stays. With
 // bar, the text fits in what leaves the bar 2 cells, and the bar fills the
-// rest of the width (settings-focus-bar).
+// rest of the width (settings-focus-bar); at a tight width the word and a
+// 2-cell bar go without margin or separator, and the word alone wins last.
 func settingsFocusLine(keys, side, bar bool, width int) Line {
 	word, hint := "groups", GlyphArrowR+" or tab: the keys"
 	switch {
@@ -635,29 +636,43 @@ func settingsFocusLine(keys, side, bar bool, width int) Line {
 	case !side:
 		word, hint = "tabs", GlyphDownArrow+" or tab: the keys"
 	}
-	room := width
-	if bar {
-		room = width - 3 // " " and a bar of at least 2
-	}
 	focused := Seg{Text: word, Role: RoleText, Bold: true}
-	text := FitLine(Line{focused}, max(room, 0))
+	if !bar {
+		return fitFocusText(focused, hint, width)
+	}
+	if text, ok := tryFocusText(focused, hint, width-3); ok { // " " and a bar of at least 2
+		return FitLine(append(text, S(RoleText, " "), focusBar(width-text.Width()-1)), width)
+	}
+	// Tight: the word against the bar, no margin nor separator (reviewer-codex);
+	// narrower still, the word alone: it stays, the bar gives way.
+	if Width(word)+2 <= width {
+		return Line{focused, focusBar(width - Width(word))}
+	}
+	return FitLine(Line{focused}, width)
+}
+
+// tryFocusText is the longest form of the focus text that fits room cells:
+// the hint goes first, then "focus:".
+func tryFocusText(focused Seg, hint string, room int) (Line, bool) {
 	for _, l := range []Line{
 		{S(RoleMuted, " focus: "), focused, S(RoleMuted, " "+GlyphNone+" "+hint)},
 		{S(RoleMuted, " focus: "), focused},
 		{S(RoleMuted, " "), focused},
 	} {
 		if l.Width() <= room {
-			text = l
-			break
+			return l, true
 		}
 	}
-	if !bar {
-		return text
+	return nil, false
+}
+
+// fitFocusText is the focus text alone in width cells; the word is the last
+// thing kept.
+func fitFocusText(focused Seg, hint string, width int) Line {
+	if l, ok := tryFocusText(focused, hint, width); ok {
+		return l
 	}
-	if fill := width - text.Width() - 1; fill > 0 {
-		text = append(text, S(RoleText, " "), focusBar(fill))
-	}
-	return FitLine(text, width)
+	return FitLine(Line{focused}, width)
 }
 
 // focusBar is the settings page's focus bar, n cells: heavy, accent, bold,
