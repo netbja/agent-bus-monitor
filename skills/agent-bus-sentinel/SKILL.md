@@ -137,10 +137,11 @@ master asks the person, and the change is an ordinary reviewed step.
    `profile|field|model|verdict|candidate`: `field` is `tier` and `model` the tier when the row has a
    `tier`, else `model` and the row's `model`; `candidate` may be empty. Example:
    `grok|model|grok-4.6|newer?|grok-4.7`. An old source is `<provider>|source||old|`, a failing
-   read `<provider>|source||failing|`. The key is the finding, never an event: these are derived
+   read `<provider>|source||failing|`: those two come from the health detail's warn line
+   (`<provider>'s catalogue is … old`, `<provider>'s read has failed for …`), not from `check --json`. The key is the finding, never an event: these are derived
    again on every pass.
 3. For each finding whose key is **not** in your previous note, send master one report, with
-   the exact line to change and the evidence (`agentbus models --changes --provider <p>`):
+   the exact line to change and the evidence (`agentbus models --changes --provider <p>`, the provider name: `xai` for grok):
 
    ```bash
    agentbus report sentinel --to master "profile grok: model grok-4.6 → grok-4.7? (grok models lists grok-4.7 since 2026-11-05, not stated as a successor; grok's own default is still grok-4.6)"
@@ -159,8 +160,8 @@ The info line (`new: …`) is busmon's to show; it needs no report.
 
 ## Daily review
 
-On the daily directive, review `agentbus health list` and `agentbus health log` (a `model-catalogue` warn: see "Model
-catalogue" above), then read
+On the daily directive, review `agentbus health list` and `agentbus health log` (a `model-catalogue`
+warn: see "Model catalogue" above), then read
 [`docs/memory/INDEX.md`](../../docs/memory/INDEX.md) and the project's `STATUS` file if present. Mention only requests that remain
 requested, blocked, or past deadline; do not chase them. List the popped roles (tier `pop` in
 `roles.toml`) idle for more than 2 h with no accepted task, in one `agentbus cmd master` line, so

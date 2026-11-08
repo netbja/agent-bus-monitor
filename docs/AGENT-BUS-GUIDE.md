@@ -274,8 +274,11 @@ subscription a dollar figure is fiction). Raw context tokens are what we actuall
 ### Which models exist: the machine's table, never memory
 
 A model id written from memory is a guess: providers add, rename and retire models every few
-weeks. The machine keeps one table, read from each client's own free catalogue (no project, no
-broker, no credential), at `~/.cache/agentbus/models.json`:
+weeks. The machine keeps one table at `~/.cache/agentbus/models.json`. The built-in readers
+(Claude Code, Codex, Grok, Kimi, agy) read each client's own free catalogue: no project, no
+broker, no credential file. An adapter's `models` command (docs/AGENT-PROFILES.md) is different:
+`agentbus models` and `models check` run that argv from `roles.toml` as configured, and nothing
+bounds what it reads; the dispatcher never runs it.
 
 ```bash
 agentbus models                        # the table; refreshes it first when its last attempt is 24 h old

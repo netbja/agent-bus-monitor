@@ -173,8 +173,10 @@ model = "my-model"
 ```
 
 An adapter may also say how to list its models (model-detection §3.9), so
-`agentbus models`, `models check` and the `model-catalogue` health check read
-its catalogue next to the built-in clients':
+`agentbus models` and `models check` (which refreshes the table first when it is
+24 h old) read its catalogue next to the built-in clients'. The `model-catalogue`
+health check and the daily refresh run in the dispatcher and read the built-in
+clients only (`dispatcherModelReaders`):
 
 ```toml
 [adapters.my-client]
