@@ -125,9 +125,14 @@ func reqSubject(th reqThread) string {
 }
 
 // reqSectionNames are the sections' headings; the sentences that explained
-// them are the first line of a thread's page (reqSectionNote).
-var reqSectionNames = map[reqSection]string{secOwed: "Owed by you", secWait: "You wait on", secTracked: "Tracked",
-	secReviews: "Reviews gated", secDirectives: "Between agents"}
+// them are the first line of a thread's page (reqSectionNote). Three headings
+// for five sections (home-inbox-drawer §5): tracked requests, gated reviews
+// and directives are all between agents.
+var reqSectionNames = map[reqSection]string{secOwed: "Owed by you", secWait: "You wait on", secTracked: "Between agents",
+	secReviews: "Between agents", secDirectives: "Between agents"}
+
+// reqBetween are the sections under "Between agents", in their order.
+var reqBetween = []reqSection{secTracked, secReviews, secDirectives}
 
 // requestRows are the view's list items in the one list pattern (busmon
 // pages, Requests): a heading per section with something in it, one line
@@ -137,8 +142,8 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 	fit := func(l Line) Line { return FitLine(l, width) }
 	sep := " " + GlyphNone + " "
 	var out []ListItem
-	head := func(s reqSection) {
-		out = append(out, ListItem{Line: fit(Line{{Text: reqSectionNames[s], Role: RoleText, Bold: true}})})
+	head := func(s reqSection, n int) { // the heading and its count: "Owed by you  2"
+		out = append(out, ListItem{Line: fit(Line{{Text: reqSectionNames[s], Role: RoleText, Bold: true}, S(RoleMuted, fmt.Sprintf("  %d", n))})})
 	}
 	threadRow := func(th reqThread, indent bool) ListItem {
 		sym := reqSym(th.Section, th.Kind, th.State) // an expanded thread keeps its own marker (reviewer-codex)
@@ -173,7 +178,7 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 	}
 
 	if len(v.asks) > 0 || len(v.groups[secOwed]) > 0 {
-		head(secOwed)
+		head(secOwed, v.count(secOwed))
 		for _, a := range v.asks {
 			word := "questions"
 			if a.Open == 1 {
@@ -187,7 +192,7 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 		}
 	}
 	if gs := v.groups[secWait]; len(gs) > 0 {
-		head(secWait)
+		head(secWait, v.count(secWait))
 		for _, g := range gs {
 			for i, th := range g.Threads {
 				if i < reqWaitShown || open.groups[olderKey(g)] {
@@ -206,10 +211,14 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 			}
 		}
 	}
-	for _, s := range []reqSection{secTracked, secReviews, secDirectives} {
-		if gs := v.groups[s]; len(gs) > 0 {
-			head(s)
-			for _, g := range gs {
+	between := 0
+	for _, s := range reqBetween {
+		between += v.count(s)
+	}
+	if between > 0 {
+		head(secTracked, between)
+		for _, s := range reqBetween {
+			for _, g := range v.groups[s] {
 				out = append(out, groupRow(g)...)
 			}
 		}
@@ -262,9 +271,11 @@ func reqFold(label string) Line {
 // under 100 cells.
 func requestsTitle(v reqView, width int) Line {
 	owed, wait := "owed by you", "waiting"
-	agents := "between agents"
+	// "directives", not "between agents": the heading Between agents now sums
+	// tracked, gated and directives (home-inbox-drawer §5), as the header does.
+	agents := "directives"
 	if width < 100 {
-		owed, agents = "owed", "agents"
+		owed, agents = "owed", "dir"
 	}
 	sum := listSummary(listCount{v.count(secOwed), owed}, listCount{v.count(secWait), wait}, listCount{v.count(secTracked), "tracked"},
 		listCount{v.count(secReviews), "gated"}, listCount{v.count(secDirectives), agents})

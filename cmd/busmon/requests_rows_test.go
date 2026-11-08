@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+// trimRows drops each row's padding to the width.
+func trimRows(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " ")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func reqRowsText(items []ListItem) string {
 	var b strings.Builder
 	for _, it := range items {
@@ -22,23 +31,31 @@ func TestRequestRowsInTheListPattern(t *testing.T) {
 	now := time.Unix(10_000_000, 0)
 	v := requestGroups(reqFixture(now))
 	sep := " " + GlyphNone + " "
-	if got := requestsTitle(v, 140).text(); got != "22 waiting"+sep+"1 tracked"+sep+"9 gated"+sep+"11 between agents" {
+	if got := requestsTitle(v, 140).text(); got != "22 waiting"+sep+"1 tracked"+sep+"9 gated"+sep+"11 directives" {
 		t.Errorf("title %q", got)
+	}
+	if got := requestsTitle(v, 80).text(); !strings.HasSuffix(got, sep+"11 dir") {
+		t.Errorf("narrow title %q", got)
 	}
 	items := requestRows(v, reqOpen{}, now, 136)
 	text := reqRowsText(items)
-	order := []string{"You wait on", "you " + GlyphArrowR + " master", "Tracked", "busmon-group-a " + GlyphNone + " accepted",
-		"Reviews gated", "Between agents", "notices" + sep + "22, nobody owes an answer  (enter shows them)",
+	// Three sections (home-inbox-drawer §5): each heading with its count; tracked,
+	// reviews and directives under Between agents, in that order, the notices last.
+	order := []string{"You wait on  22\n", "you " + GlyphArrowR + " master", "Between agents  21\n", "busmon-group-a " + GlyphNone + " accepted",
+		"reviewer-codex", "sentinel " + GlyphArrowR + " master", "notices" + sep + "22, nobody owes an answer  (enter shows them)",
 		"done or answered" + sep + "77, older than 7 d folded  (o shows them)"}
 	at := -1
 	for _, w := range order {
-		i := strings.Index(text, w)
+		i := strings.Index(trimRows(text), w)
 		if i <= at {
 			t.Fatalf("%q missing or out of order in:\n%s", w, text)
 		}
 		at = i
 	}
-	for _, gone := range []string{"FROM", "no reply on their thread", "charlie", "Owed by you"} { // no column header, no sentence, the person is `you`, an empty section is not drawn
+	if n := strings.Count(text, "Between agents"); n != 1 {
+		t.Errorf("Between agents drawn %d times:\n%s", n, text)
+	}
+	for _, gone := range []string{"FROM", "no reply on their thread", "charlie", "Owed by you", "Tracked", "Reviews gated"} { // no column header, no sentence, the person is `you`, an empty section is not drawn, two headings fewer
 		if strings.Contains(text, gone) {
 			t.Errorf("%q still drawn:\n%s", gone, text)
 		}
@@ -83,7 +100,7 @@ func TestRequestRowsListTheOpenAsks(t *testing.T) {
 	v := requestGroups(in)
 	items := requestRows(v, reqOpen{}, now, 136)
 	text := reqRowsText(items)
-	if !strings.Contains(text, "Owed by you") || !strings.Contains(text, "master "+GlyphArrowR+" you") || !strings.Contains(text, "review lot 1? (2 questions)") {
+	if !strings.HasPrefix(trimRows(text), "Owed by you  2\n") || !strings.Contains(text, "master "+GlyphArrowR+" you") || !strings.Contains(text, "review lot 1? (2 questions)") {
 		t.Fatalf("ask row missing:\n%s", text)
 	}
 	found := false
