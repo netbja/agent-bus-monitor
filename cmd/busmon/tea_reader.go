@@ -72,6 +72,7 @@ type page struct {
 	hrows      []histItem // ovHistory: its selectable rows (sel: the selected one)
 
 	set *settingsPage // ovSettings: its rows and the change in progress (sel: the selected row)
+	ns  *notifySetup  // ovNotifySetup: its step, fields and outcome
 }
 
 // pageStamp is what a body was built for.
@@ -524,6 +525,8 @@ func (m *Model) buildPage() bool {
 			p.set.running = "running" + GlyphEllipsis + " its last line is the notice (" + r.log + ")"
 		}
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
+	case ovNotifySetup:
+		p.title, p.body = notifySetupTitle(p.ns), notifySetupBody(p.ns, width, m.readerRows(), m.layout.Tier, m.width, m.height)
 	case ovAbout:
 		p.title, p.body = "About", aboutBody(*p.about, p.about.step(now), !m.aboutMotion(), width)
 		p.plain, p.plainWhat = strings.Join(p.about.versions.Lines, "\n"), "versions"
@@ -746,6 +749,11 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.recapKey(k)
 	case ovSettings:
 		return m.settingsKey(act, k)
+	case ovNotifySetup:
+		if act == ActHelp && !p.ns.editing {
+			break
+		}
+		return m.notifySetupKey(act, k)
 	case ovAbout:
 		if act == ActReplay {
 			return m.aboutReplay(p)

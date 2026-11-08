@@ -93,6 +93,22 @@ KEYS
   D                    remove every key of the group set in config.toml (y confirms); your own backup.after_* stay
   esc q                back
   ^C                   quit (everywhere)
+  the notifications setup
+  enter                the next step, or confirm the choice; on a field: edit it
+  esc                  back one step; on step 1 or a target's page, close (nothing is written before the write step)
+  ↑↓                   between choices, or between fields
+  tab                  the next field (shift-tab the one before), edited at once
+  y                    ntfy: copy the topic (the subscribe step, a target's page)
+  Y                    ntfy: copy the subscribe link
+  c                    ntfy: the code alone, full screen, until any key
+  t                    send the test again (after the write, a target's page)
+  e                    back to the first step, values kept
+  x                    a target's page: remove it (y/n; no other key while it asks)
+  n                    a target's page: rename it (enter writes)
+  s                    an ntfy target's page: its topic and code, until any key
+  ?                    the first step: notify.toml's format and a table to copy, to write the file by hand
+  F1                   help
+  ^C                   quit (everywhere)
   the compose window
   ^S                   send
   tab                  recipient · text; a text that is only @prefix becomes the recipient (completed, or its list opens)

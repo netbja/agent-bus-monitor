@@ -274,6 +274,12 @@ func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
 	if c.Off { // an inactive tab replaces the style whole
 		style = t.TabOff()
 	}
+	if c.QR { // a camera reads dark on light only: black on white whatever the theme; NO_COLOR reverses the terminal's own
+		if t.palette == PaletteNone {
+			return tcell.StyleDefault.Reverse(true)
+		}
+		return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorWhite)
+	}
 	if c.Pill { // replaces the style whole; NO_COLOR keeps its reverse in Pill
 		style = t.Pill(c.Role)
 		if c.Fade > 0 && t.Animated() { // the active tab of an unfocused panel: dimmed like its frame

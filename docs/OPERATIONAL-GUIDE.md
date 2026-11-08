@@ -630,11 +630,15 @@ to watch a pane.
   terminal (or `add ntfy`, `add discord --webhook-file F`, `add desktop`; then `remove`, `rename`,
   `show-topic` for a second phone), never an agent; mode `0600` in a
   folder no one else can write: a topic, a token or a webhook is a secret, so it never goes in
-  `config.toml`, on the bus or in a log, and no agent may read the file. busmon's C page, group
-  Notifications, ends with an assistant per kind (`Set up ntfy`, `Set up Discord`, `Set up the
-  desktop`): Enter shows the steps, the file's state (target names and kinds, never a topic or a
-  URL), a table to copy with `y` (for ntfy a topic drawn on the spot, kept nowhere) and each
-  target's last test; you may still paste it into the file yourself. `setup` and `add ntfy` draw the
+  `config.toml`, on the bus or in a log, and no agent may read the file. busmon does the same from its C page,
+  group Notifications: `Set up ntfy`, `Set up Discord` or `Set up the desktop` asks only what it
+  needs, in four steps (`esc` goes back, nothing is written before the last), draws the topic and
+  shows it with its link and a QR code to scan, writes the file, turns notifications on, lists the
+  target and sends a test, whose outcome it says in plain words. A field takes every key while you
+  type in it; a token or a webhook shows only `••••` and its length. Under them, one line per
+  target opens its page: `t` test again, `n` rename, `x` remove (it asks), `s` show the topic and
+  its code for a second phone. `?` on the first step shows the file's format, if you prefer to
+  write it by hand. Opened under an agent, busmon refuses all of it. `setup` and `add ntfy` draw the
   topic and show it, its link and a QR code to scan on your terminal only, never in a log; they turn
   `notify.on` on, list the target and send a test (`--no-test` skips it).
 

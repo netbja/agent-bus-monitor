@@ -14,12 +14,22 @@ import (
 // topic, token or webhook. notify.toml is the person's: read here, never
 // written (edit it yourself).
 func notifyTargetLines(getenv func(string) string) []string {
+	lines, _ := notifyTargets(getenv)
+	return lines
+}
+
+// notifyTargetRef is a target line's target: Enter opens its page.
+type notifyTargetRef struct{ name, kind string }
+
+// notifyTargets are the lines and, one per line, the targets they show
+// (none when the file is absent or refused: its one line says so).
+func notifyTargets(getenv func(string) string) ([]string, []notifyTargetRef) {
 	f := notify.Load(notify.Path(getenv))
 	switch {
 	case !f.Exists:
-		return []string{"no notify.toml: copy a table from the guide (edit it yourself)"}
+		return []string{"no notify.toml yet: set up a target above"}, nil
 	case f.Refused != "":
-		return []string{"notify.toml refused: " + f.Refused}
+		return []string{"notify.toml refused: " + f.Refused}, nil
 	}
 	listed := map[string]bool{}
 	r := config.Resolver{Getenv: getenv, Files: []*config.File{config.Load(config.Path(getenv), "config.toml")}}
@@ -36,7 +46,9 @@ func notifyTargetLines(getenv func(string) string) []string {
 		last = l
 	}
 	var out []string
-	for i, t := range f.Targets {
+	var refs []notifyTargetRef
+	for _, t := range f.Targets {
+		refs = append(refs, notifyTargetRef{t.Name, t.Kind})
 		state := "not listed in Targets"
 		if listed[t.Name] && unread {
 			state = "last send unknown (notify-last.json cannot be read)"
@@ -49,13 +61,9 @@ func notifyTargetLines(getenv func(string) string) []string {
 				}
 			}
 		}
-		line := fmt.Sprintf("%-8s %-8s %s", t.Name, t.Kind, state)
-		if i == 0 {
-			line += "   (notify.toml, edit it yourself)"
-		}
-		out = append(out, line)
+		out = append(out, fmt.Sprintf("%-8s %-8s %s", t.Name, t.Kind, state))
 	}
-	return out
+	return out, refs
 }
 
 // notifyStateDir is <state> (notify-last.json's folder), as agentbus reads it.

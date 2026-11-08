@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ 1 For you   2 Agents   3 Act   4 Board   5 Req   6 Plan    
+╭─ Set up ntfy · step 4/4 ────────────────────── esc back ─╮
+│                                                          │
+│                                                          │
+│    its name                    phone                     │
+│  delivered: check your phone                             │
+│  t test again · e edit · enter closes                    │
+│                                                          │
+│  messages say what waits, never an agent's words         │
+│  (notify.detail = summary)                               │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰──────────────────────────────────────────────────────────╯
+ enter next   esc back   ↑↓ choose   tab field   F1 help    

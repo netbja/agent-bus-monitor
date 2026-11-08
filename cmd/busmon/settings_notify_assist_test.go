@@ -153,18 +153,19 @@ func TestSettingsNotifyAssistLines(t *testing.T) {
 	if p := m.rd.top(); p.sel != len(p.set.rows())+1 {
 		t.Fatalf("sel %d", p.sel)
 	}
+	stubAgentCaller(t, "", nil)
 	next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("Enter reads nothing")
 	}
-	msg, ok := cmd().(notifyAssistMsg)
+	msg, ok := cmd().(notifySetupMsg)
 	if !ok {
-		t.Fatal("Enter's command is not the assistant's read")
+		t.Fatal("Enter's command is not the guided setup's read")
 	}
 	next, _ = m.Update(msg)
 	m = next.(Model)
-	if p := m.rd.top(); p.kind != ovMessage || !strings.Contains(p.title, "Discord") {
+	if p := m.rd.top(); p.kind != ovNotifySetup || !strings.Contains(p.title, "Set up Discord") {
 		t.Fatalf("opened %v %q", p.kind, p.title)
 	}
 }

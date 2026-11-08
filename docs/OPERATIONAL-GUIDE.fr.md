@@ -672,12 +672,16 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   --webhook-file F`, `add desktop` ; puis `remove`, `rename`, `show-topic` pour un second téléphone),
   jamais un agent ; en mode `0600` dans un dossier que personne d'autre ne
   peut écrire : un topic, un jeton ou un webhook est un secret, il ne va donc jamais dans
-  `config.toml`, sur le bus ni dans un journal, et aucun agent ne peut lire ce fichier. La page C
-  de busmon, groupe Notifications, se termine par un assistant par type de cible (`Set up ntfy`,
-  `Set up Discord`, `Set up the desktop`) : Entrée montre les étapes, l'état du fichier (noms et
-  types des cibles, jamais un topic ni une URL), une table à copier avec `y` (pour ntfy un topic
-  tiré sur le moment, gardé nulle part) et le dernier test de chaque cible ; vous la collez
-  vous-même dans le fichier si vous préférez. `setup` et `add ntfy` tirent le topic et l'affichent,
+  `config.toml`, sur le bus ni dans un journal, et aucun agent ne peut lire ce fichier. busmon fait de même depuis
+  sa page C, groupe Notifications : `Set up ntfy`, `Set up Discord` ou `Set up the desktop` ne
+  demande que le nécessaire, en quatre étapes (`esc` revient en arrière, rien n'est écrit avant la
+  dernière), tire le topic et l'affiche avec son lien et un code QR à scanner, écrit le fichier,
+  active les notifications, liste la cible et envoie un test dont il donne le résultat en clair.
+  Un champ prend toutes les touches pendant la saisie ; un jeton ou un webhook n'affiche que
+  `••••` et sa longueur. En dessous, une ligne par cible ouvre sa page : `t` reteste, `n` renomme,
+  `x` supprime (il demande), `s` montre le topic et son code pour un second téléphone. `?` à la
+  première étape montre le format du fichier, pour l'écrire à la main. Ouvert sous un agent, busmon
+  refuse tout cela. `setup` et `add ntfy` tirent le topic et l'affichent,
   avec son lien et un code QR à scanner, sur votre terminal seulement, jamais dans un journal ; ils
   activent `notify.on`, listent la cible et envoient un test (`--no-test` l'évite).
 

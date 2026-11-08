@@ -294,8 +294,18 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		}
 	case tea.KeyPressMsg:
 		return m.key(msg)
+	case notifySetupMsg:
+		if m.settingsPageOpen() != nil { // the page it was asked from is still open
+			return m.openNotifySetup(msg)
+		}
+	case notifySetupDone:
+		m.notifySetupResult(msg)
+		m.refresh()
+		return m.settingsCmd(func() error { return nil })
 	case tea.PasteMsg:
 		switch {
+		case m.rd.open() && m.rd.top().kind == ovNotifySetup:
+			m.notifyPaste(msg.Content)
 		case m.ui.compose != nil:
 			m.pasteCompose(msg.Content)
 		case m.ui.line != lineNone:

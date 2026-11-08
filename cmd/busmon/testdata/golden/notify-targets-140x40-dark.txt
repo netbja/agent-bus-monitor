@@ -1,0 +1,40 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
+╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
+│  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
+│  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
+│  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask ┃
+│  ◆ gate   coder     by charlie  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  ┃
+│                                                      ││  ✓ architect done      40m     —        —         escalating · busy   spec merged┃
+│                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…┃
+│                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…┃
+│                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…┃
+│                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
+│                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─ Settings · 2 set here · 1 elsewhere · 22 default ──────────────────────────────────────────────────────────────────────────── esc back ─╮
+│                   │ focus: keys · ← or tab: the groups                                                                                   │
+│    Display        │ Notifications  what reaches your phone or desktop; targets in notify.toml                                            │
+│    Attention      │                                                                                                                      │
+│    Identity       │   • Send notifications    ● on                                                                                       │
+│  › Notifications  │   • Targets               phone                                                                                      │
+│    Services       │     Events                decision, stall, fail, bloc…                                                               │
+│    Backup         │     Detail                summary                                                                                    │
+│                   │     Delay                 2m                                                                                         │
+│                   │     At most per hour      6                                                                                          │
+│                   │     Quiet hours           none                                                                                       │
+│                   │     Sent in quiet hours   fail, stall                                                                                │
+│                   │                                                                                                                      │
+│                   │   Set up ntfy (your phone)                                                                                           │
+│                   │   Set up Discord                                                                                                     │
+│                   │   Set up the desktop (notify-send)                                                                                   │
+│                   │ ▶ phone    ntfy     never sent                                                                                       │
+│                   │   team     discord  not listed in Targets                                                                            │
+│                   │                                                                                                                      │
+│                   │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────  │
+│                   │ enter: a set-up line asks what is needed and writes notify.toml for you; a target opens its page (test, rename,      │
+│                   │ remove)                                                                                                              │
+│                   │                                                                                                                      │
+│                                                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k move   ←→ panel   tab focus   enter edit   d reset   D reset group   esc q back                                                     

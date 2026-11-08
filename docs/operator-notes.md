@@ -682,11 +682,19 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   nothing and records the source in `<state>/notify-last.json` (host-wide, under the flock `notify.lock`: latest 20
   outcomes per target apart from the counted hour; a send's hour reserved under the lock, given back if it fails).
   The dispatcher's own prompt ring is skipped (`PromptConfig.Skip`) only for an episode that began after a listed
-  desktop target's baseline. Health `notifications` (5 min, for you, never fail); busmon's C page shows the group and
-  one muted line per target, never its URL. Its last lines are the assistant (notify-assistant, `settings_notify_assist.go`):
-  `Set up ntfy|Discord|the desktop`, Enter reading in a command (`readNotifyAssist`: `notify.Load`, the record, `notify-send`
-  on PATH) then a page: the steps, the file's state by name and kind only, the template `y` copies (a free name,
-  `notifyAssistName`; ntfy's topic `drawTopic`, crypto/rand, kept nowhere), each target's last test; nothing written. One HTTP client: no redirect, no proxy, 10 s, a 429 waited once (seconds
+  desktop target's baseline. Health `notifications` (5 min, for you, never fail); busmon's C page shows the group, then
+  `Set up ntfy|Discord|the desktop`, then one selectable line per target (`notifyTargets`, never its URL). Enter on a
+  set-up line opens the guided setup (notify-guided-setup step 3, `notify_setup.go`, `ovNotifySetup` in its own
+  `ModeNotifySetup` table): four steps, nothing written before the last, which writes through `notify.Edit` (an edit
+  after `e` removes the old table in the same edit), lists the target and turns `notify.on` on (`nsList`), then tests
+  (`nsSend`) and says the outcome by `notify.Explain`. A field being edited takes every key but tab, enter and esc
+  (esc puts its value back); a paste goes whole into it, a newline ends it; masked fields draw `••••` and a count. The
+  code is `notify.QR` in cells drawn black on white (`Seg.QR`; reverse under NO_COLOR), beside the steps when the
+  page has 26 rows and is not narrow, else on `c`. A target line opens its page: `t`, `n` (rename, the record moves),
+  `x` (modal y/n; when that leaves no target listed, a second modal asks to turn `notify.on` off, which only y does),
+  `s` (the topic and code until any key, that key consumed). A step with one field takes a paste without a tab first. `?` on step 1 opens the old read-only template page
+  (`settings_notify_assist.go`). The page refuses an agent: `AGENT_BUS_AGENT`, an agent ancestor, or agents that
+  cannot be read (`nsAgentCaller`, `internal/agentcaller`; busmon's tests stub it in `TestMain`, never the broker). One HTTP client: no redirect, no proxy, 10 s, a 429 waited once (seconds
   or a date, at most 60 s), a 5xx retried twice; errors name the target and status, never the URL or body.
 - **Liveness is passive** — there is no heartbeat stream. busmon shows the age of each agent's
   last declared status as a freshness bar (empty after `staleAfter` 10m, atop
