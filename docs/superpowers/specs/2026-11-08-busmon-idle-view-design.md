@@ -18,13 +18,20 @@ it never runs as a command.
 ## 2. The setting
 
 - **`display.idle_view_after`**, in `config/keys.go`: kind `Duration`, default `0` (off), env
-  `AGENT_BUS_IDLE_VIEW_AFTER`, read by busmon, file rule `fileDuration(true)` (0 allowed, as for
-  `display.idle_hint_after`). An invalid env value is skipped, never a broken screen.
+  `AGENT_BUS_IDLE_VIEW_AFTER`, read by busmon. An invalid env value is skipped, never a broken
+  screen.
 - **Settings page** (`C`, Display group): the label is "Idle view after", and the note says "a
   calm screen after this long without input; 0 = off". It applies at once, like the other
   Display keys.
-- **Below 1 minute** the value is refused in the file and on the page ("at least 1m, or 0"). A
-  few seconds would turn on while the person is still reading.
+- **Below 1 minute** the value is not taken: a few seconds would turn the view on while the
+  person is still reading. This needs two new validators, since `fileDuration(true)` and
+  `envStallDuration` both accept `30s` (foureyes):
+  - **file rule `fileIdleView`**: `"0"`, or a Go duration from `1m` to `24h`. Anything else is
+    refused with "want 0 (off) or a duration from 1m to 24h, such as \"10m\"". The settings page
+    uses the same rule, so it refuses the same values.
+  - **env rule `envIdleView`**: whole seconds or a Go duration, either `0` or from `1m` to `24h`.
+    Anything else, `30s` included, is **skipped**: the file's value or the default (off)
+    applies, as for the other `env` rules.
 
 ## 3. Idle detection in Bubble Tea
 
@@ -32,13 +39,21 @@ it never runs as a command.
   input message: `tea.KeyPressMsg`, `tea.PasteMsg`, `tea.MouseClickMsg`, `tea.MouseWheelMsg`,
   `tea.MouseMotionMsg` and `tea.FocusMsg`. Nothing else counts: `tickMsg`, `tailMsg`, a resize,
   a fade frame or a notice is not the person.
+- **Its start (reviewer-codex).** `m.now` is zero until the first poll (`applySnapshot` sets it),
+  and so is a new `lastInput`. A zero `lastInput` would read as "idle since 1970" and enter the
+  view at the first tick. So the first poll, in `applySnapshot`, sets `lastInput = at` while it is
+  zero, and the entering rule below also requires `!lastInput.IsZero()`. A busmon started and left
+  alone counts its delay from its first poll.
 - **Entering.** On the existing 1 s `tickMsg`, busmon enters the idle view when all of these
   hold:
   - `idle_view_after > 0`;
   - `m.now - lastInput >= idle_view_after`;
-  - the screen is the plain dashboard, with no overlay on the reader stack, no compose window,
-    no line input (`m.ui.line == lineNone`) and no dialog. An open draft or a question being
-    answered is never hidden. The idle view waits until it is closed.
+  - `!m.lastInput.IsZero()` (above);
+  - `!m.busyForModal()` (`tea_dialogs.go`), the predicate the reminder and the automatic recap
+    already wait on. It covers the compose window, the reader stack, line input, a typed message
+    draft (`msgDraft`), the ask chooser, the pause popup, the reminder, the summary, the tour and
+    the walk between two pages (foureyes). A draft, a question being answered or the tour is
+    never hidden. The idle view waits until they are closed.
   - The tier is not `TierTooSmall`.
 - **The mouse.** busmon runs `MouseModeCellMotion` today, which reports motion only with a
   button held. In the idle view, `View()` sets `MouseModeAllMotion` and `ReportFocus = true`,
@@ -51,19 +66,28 @@ it never runs as a command.
      none of them acts. The person sees the dashboard as they left it, and the next input acts.
   - A paste is dropped too: there is no field open to receive it, since the view never opens
     over one.
+  - The release that follows a waking click (`tea.MouseReleaseMsg`) then reaches the dashboard.
+    `Update` has no case for it, so it does nothing. It is not counted as input either.
 - **Instantly.** The dashboard is drawn from the model, which kept polling under the idle view,
   so the first frame after waking is current. No fade or slide plays on the way back.
+- **A modal that is due while the view is shown (foureyes).** `busyForModal()` also returns true
+  while the idle view is shown. So the waiting reminder (`maybeReminder`), the automatic recap
+  (`recapPending`) and the automatic tour wait, as they already wait for a draft. They open on the
+  first tick after the view is left, on the dashboard, where the next key reaches them. No modal
+  ever opens hidden under the view. The pause popup and the ask chooser open only on a key, and
+  that key would wake the view first. The bell is not a modal, and it still rings (§4).
 
 ## 4. What the frames show (existing data only)
 
-Every frame is drawn from the snapshot busmon already polls each second (`m.snap`, `m.feed`).
+Every frame is drawn from the snapshot busmon already polls each second (`m.snap`, `m.forYou`,
+`m.feed.feed`).
 No new read, and no new key in Redis.
 
 | Frame | Shows | Source |
 |---|---|---|
-| **A: needs you** | the count of For you items, large (3-row block digits on Wide and Medium), "need you" under it, then the first item's one-line title (`Preview`) muted. At 0: "nothing needs you" and the time since the last one. | `forYou(m.snap, m.feed)`, the items For you lists |
+| **A: needs you** | the count of For you items, large (3-row block digits on Wide and Medium), "need you" under it, then the first item's one-line title (`Preview`) muted. At 0: "nothing needs you", and nothing else: no source records when For you last had an item (foureyes). | `m.forYou`, the items For you lists, as `forYou(m.snap, m.feed.feed)` computes them at each poll |
 | **B: agents** | one row per agent: its glyph or icon (`display.icons`), name, state word (`working`, `idle`, `waiting`, `held`, `dormant`) and the time in that state; then the line `3 working · 2 idle · 1 waiting` | `m.snap.agents`, the same state the agents panel draws |
-| **C: last word** (optional, §8 Q2) | the last report's first line, who sent it and when | `m.feed`, the newest report |
+| **C: last word** (optional, §8 Q2) | the last report's first line, who sent it and when | `m.feed.feed`, the newest report |
 
 - **Turns.** The frames take turns every 20 s, on a `tea.Tick` that runs only while the view is
   shown. While a For you item exists, **frame A stays up** and the others do not show. What
@@ -122,11 +146,19 @@ the palette's accent and grey apply as elsewhere.
 
 ## 9. Tests (for the implementation)
 
-- The setting: registry entry, env skip on a bad value, file refusal below 1m, page label.
+- The setting: registry entry; `fileIdleView` takes 0, 1m and 24h and refuses 30s, 25h and
+  "soon"; `envIdleView` uses the same values and skips the others (30s gives the default, off);
+  the page label.
 - With a fake clock:
+  - a busmon started and left alone does not enter before the delay counted from its first
+    poll, and enters at it (reviewer-codex);
   - entering happens after the delay, and not before;
   - an input message resets the delay, and `tickMsg`, `tailMsg` or a resize does not;
-  - the view is not entered over an overlay, compose, line input or dialog, nor at TooSmall.
+  - the view is not entered while `busyForModal()` holds: one case per member (compose, reader
+    stack, line input, a typed draft, the ask chooser, the pause popup, the reminder, the summary,
+    the tour, the walk), nor at TooSmall;
+  - a reminder due while the view is shown does not open; it opens on the first tick after the
+    view is left. The same holds for a pending recap.
 - Leaving: `q`, `enter`, a click, a wheel turn, a motion and a focus message each wake the view
   and do nothing else. The model is unchanged except `idle` and `lastInput`, and busmon does not
   quit on `q`.
