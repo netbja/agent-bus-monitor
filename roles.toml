@@ -55,6 +55,16 @@ model = "sonnet"
 [profiles.claude-sonnet-edits.options]
 permission = "acceptEdits"
 
+# master's (the person, 2026-11-08: they switched master to auto at every start). Claude Code's
+# auto mode still prompts on an explicit ask rule (master's deploy and infra pops) and blocks on
+# every deny rule; broad allow rules are dropped on entering it, master's are narrow.
+[profiles.claude-sonnet-auto]
+client = "claude-code"
+provider = "anthropic"
+model = "sonnet"
+[profiles.claude-sonnet-auto.options]
+permission = "auto"
+
 [profiles.claude-haiku]
 client = "claude-code"
 provider = "anthropic"
@@ -160,7 +170,7 @@ deny = [
 ]
 
 [roles.master]
-profile = "claude-sonnet-edits"
+profile = "claude-sonnet-auto"
 tier = "boot"
 pops = true
 # forge-delivery: master delivers; agentbus deliver refuses every role without delivers = true.
