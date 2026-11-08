@@ -98,7 +98,9 @@ const MaxEvents = 200
 type Table struct {
 	Providers map[string]*Provider `json:"providers"`
 	Events    []Event              `json:"events,omitempty"`
-	Aliases   map[string]AliasAt   `json:"aliases,omitempty"` // a client alias -> the id it resolves to (Claude: opus)
+	// Aliases: provider -> its client alias -> the id it resolves to (Claude's
+	// opus). Per provider: an alias name is the provider's own (reviewer-codex).
+	Aliases map[string]map[string]AliasAt `json:"aliases,omitempty"`
 }
 
 // addEvent appends e, keeping the newest MaxEvents.
@@ -114,10 +116,13 @@ func (t *Table) addEvent(e Event) {
 // whether that was news.
 func (t *Table) RecordAlias(provider, alias, id string, now time.Time) bool {
 	if t.Aliases == nil {
-		t.Aliases = map[string]AliasAt{}
+		t.Aliases = map[string]map[string]AliasAt{}
 	}
-	old, had := t.Aliases[alias]
-	t.Aliases[alias] = AliasAt{ID: id, At: now.UnixMilli()}
+	if t.Aliases[provider] == nil {
+		t.Aliases[provider] = map[string]AliasAt{}
+	}
+	old, had := t.Aliases[provider][alias]
+	t.Aliases[provider][alias] = AliasAt{ID: id, At: now.UnixMilli()}
 	if !had || old.ID == id {
 		return false
 	}

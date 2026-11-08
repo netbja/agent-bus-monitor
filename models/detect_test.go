@@ -122,7 +122,7 @@ func TestAliasMoves(t *testing.T) {
 	if tbl.RecordAlias("anthropic", "opus", "claude-opus-5-5", detNow.Add(2*time.Hour)) {
 		t.Fatal("the same id twice is news")
 	}
-	if got := kinds(tbl.Events); got != "alias anthropic opus from claude-opus-5" || tbl.Aliases["opus"].ID != "claude-opus-5-5" {
+	if got := kinds(tbl.Events); got != "alias anthropic opus from claude-opus-5" || tbl.Aliases["anthropic"]["opus"].ID != "claude-opus-5-5" {
 		t.Fatalf("%q %+v", got, tbl.Aliases)
 	}
 	if e := tbl.Events[0]; e.To != "claude-opus-5-5" {
@@ -247,5 +247,21 @@ func TestSourceAtUnknownReplacesAnOldAge(t *testing.T) {
 	tbl.Refresh(context.Background(), []Reader{r}, nil, detNow.Add(time.Hour))
 	if at := tbl.Providers["p"].SourceAt; at != 0 {
 		t.Fatalf("source_at %d", at)
+	}
+}
+
+// reviewer-codex: an alias is its provider's own: the same name at another
+// provider is another alias, never a move of the first.
+func TestAliasPerProvider(t *testing.T) {
+	tbl := &Table{Providers: map[string]*Provider{}}
+	tbl.RecordAlias("anthropic", "opus", "claude-opus-5", detNow)
+	if tbl.RecordAlias("moonshot", "opus", "kimi-opus", detNow.Add(time.Hour)) {
+		t.Fatal("another provider's alias was a move")
+	}
+	if tbl.RecordAlias("anthropic", "opus", "claude-opus-5", detNow.Add(2*time.Hour)) || len(tbl.Events) != 0 {
+		t.Fatalf("anthropic's opus compared with moonshot's: %q", kinds(tbl.Events))
+	}
+	if tbl.Aliases["anthropic"]["opus"].ID != "claude-opus-5" || tbl.Aliases["moonshot"]["opus"].ID != "kimi-opus" {
+		t.Fatalf("%+v", tbl.Aliases)
 	}
 }
