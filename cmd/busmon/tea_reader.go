@@ -530,7 +530,7 @@ func (m *Model) buildPage() bool {
 	case ovProjects:
 		if p.proj != nil {
 			p.title = projectsTitle(*p.proj, now)
-			p.body, p.plines = projectsBody(*p.proj, p.sel, m.layout.Tier, width, now)
+			p.body, p.plines = projectsBody(*p.proj, p.sel, m.layout.Tier, width, now, m.runningProject())
 		}
 	case ovNotifySetup:
 		p.title, p.body = notifySetupTitle(p.ns), notifySetupBody(p.ns, width, m.readerRows(), m.layout.Tier, m.width, m.height)

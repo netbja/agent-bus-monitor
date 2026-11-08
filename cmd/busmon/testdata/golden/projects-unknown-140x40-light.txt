@@ -18,10 +18,10 @@
 │ herdr: not read                                                                                                                          │
 │ services and herdr: this machine (vdr); — means not here                                                                                 │
 │                                                                                                                                          │
-│   PROJECT                            STATE      AGENTS  KEYS    SERVICES               HERDR            LAST     TEMPLATE                │
-│ ▶ agent-bus-monitor ◂ open           ?          ?       ?       ?                      ?                ?                                │
-│   demo                               ?          ?       ?       ?                      ?                ?        ✓                       │
-│   newone                             ?          ?       ?       ?                      ?                ?        ✓                       │
+│   PROJECT                            STATE       AGENTS  KEYS    SERVICES               HERDR            LAST     TEMPLATE               │
+│ ▶ agent-bus-monitor ◂ open           ?           ?       ?       ?                      ?                ?                               │
+│   demo                               ?           ?       ?       ?                      ?                ?        ✓                      │
+│   newone                             ?           ?       ?       ?                      ?                ?        ✓                      │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
@@ -37,4 +37,4 @@
 │                                                                                                                                          │
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k move   enter detail   R read again   esc back   q quit   F1 help                                                                    
+ ↑↓ j k move   enter detail   Z sleep   x stop   b back up   R read again   esc back   q quit   F1 help                                     

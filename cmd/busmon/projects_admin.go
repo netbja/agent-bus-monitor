@@ -446,12 +446,12 @@ type adminCol struct {
 	cell func(adminRow) Line
 }
 
-func adminCols(tier Tier, now time.Time) []adminCol {
+func adminCols(tier Tier, now time.Time, running string) []adminCol {
 	text := func(f func(adminRow) string) func(adminRow) Line {
 		return func(r adminRow) Line { return Line{{Text: f(r), Role: RoleMuted}} }
 	}
 	project := adminCol{"PROJECT", 0, adminName} // the width left (projectsBody)
-	state := adminCol{"STATE", 10, func(r adminRow) Line { return Line{{Text: r.state, Role: adminStateRole(r.state)}} }}
+	state := adminCol{"STATE", 11, func(r adminRow) Line { return adminStateCell(r, running) }}
 	agents := adminCol{"AGENTS", 7, text(adminAgents)}
 	keys := adminCol{"KEYS", 7, text(adminKeys)}
 	services := adminCol{"SERVICES", 22, adminServicesCell}
@@ -480,7 +480,7 @@ func projectsTitle(v adminView, now time.Time) string {
 
 // projectsBody is the page: its notes, then a row per project (two on a
 // narrow page), the selected one marked; lines is each row's first line.
-func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time) ([]Line, []int) {
+func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, running string) ([]Line, []int) {
 	var body []Line
 	note := func(s string) { body = append(body, FitLine(Line{{Text: s, Role: RoleAttention}}, width)) }
 	if v.brokerErr != "" {
@@ -511,7 +511,8 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time) ([]
 	if tier == TierNarrow {
 		for i, r := range v.rows {
 			lines = append(lines, len(body))
-			first := append(append(Line{mark(i)}, adminName(r)...), Seg{Text: "  ", Role: RoleText}, Seg{Text: r.state, Role: adminStateRole(r.state)})
+			first := append(append(Line{mark(i)}, adminName(r)...), Seg{Text: "  ", Role: RoleText})
+			first = append(first, adminStateCell(r, running)...)
 			second := Line{{Text: "  " + adminAgents(r) + " agents " + GlyphNone + " " + adminLast(r, now) + " " + GlyphNone + " ", Role: RoleMuted}}
 			second = append(second, adminServicesCell(r)...)
 			if r.brokerKnown && !r.onBroker {
@@ -521,7 +522,7 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time) ([]
 		}
 		return body, lines
 	}
-	cols := adminCols(tier, now)
+	cols := adminCols(tier, now, running)
 	rest := 2 // the selection mark
 	for _, c := range cols[1:] {
 		rest += c.w + 1
@@ -689,6 +690,10 @@ func (m *Model) projectsKey(act Action, _ Key) tea.Cmd {
 		}
 	case ActRecap: // R: read again
 		return m.projectsCmd(p.serial)
+	case ActSleep, ActStopServices, ActBackupNow:
+		if p.sel < len(p.proj.rows) {
+			return m.projectAction(act, p.proj.rows[p.sel])
+		}
 	case ActHelp:
 		return m.push(page{kind: ovHelp})
 	}
@@ -702,4 +707,82 @@ func adminSourceFor(client *redis.Client, getenv func(string) string, flagHost s
 	remote := host != "unix" && host != "localhost" && host != "127.0.0.1" && host != "::1"
 	src := realAdminSource(client, getenv, remote)
 	return &src
+}
+
+// projectsPageOpen is the Projects page when it is on the stack.
+func (m *Model) projectsPageOpen() *page {
+	for i := range m.rd.pages {
+		if m.rd.pages[i].kind == ovProjects {
+			return &m.rd.pages[i]
+		}
+	}
+	return nil
+}
+
+// projectAction is Z, x or b on a row (§4): through the shell's one run at a
+// time (startRun), Z and x after a y, b at once.
+func (m *Model) projectAction(act Action, r adminRow) tea.Cmd {
+	if run := m.ui.sleepRun; run != nil {
+		m.ui.flash, m.ui.flashErr = run.verb+" already running (see "+run.log+")", true
+		return nil
+	}
+	switch act {
+	case ActSleep:
+		if r.open { // the open project's row is the shell's Z
+			return m.sleepKey()
+		}
+		if !r.onBroker {
+			m.ui.flash, m.ui.flashErr = r.name+" is a template only: nothing runs to put to sleep", true
+			return nil
+		}
+		return m.sleepKeyFor(r.name, r.pause != nil && r.pause.Suspended())
+	case ActStopServices:
+		active := false
+		for _, on := range r.svc {
+			active = active || on
+		}
+		if !active {
+			m.ui.flash, m.ui.flashErr = "no active service of "+r.name+" on this machine: nothing to stop", true
+			return nil
+		}
+		m.ui.sleepAsk = &sleepAsk{project: r.name, verb: "down", args: []string{"down", r.name}}
+		m.ui.flash, m.ui.flashErr = "Stop the services of "+r.name+" here? agentbus down: nothing is deleted. y / n", true
+		return nil
+	case ActBackupNow:
+		return m.startRunFor(r.name, "backup", []string{"backup", "--project", r.name})
+	}
+	return nil
+}
+
+// adminStateCell is the row's state, with ⋯ while a run goes on it (§4).
+func adminStateCell(r adminRow, running string) Line {
+	l := Line{{Text: r.state, Role: adminStateRole(r.state)}}
+	if running != "" && running == r.name {
+		l = append(l, Seg{Text: " " + GlyphEllipsis, Role: RoleAccent})
+	}
+	return l
+}
+
+// runningProject is the project the current run acts on: a Projects page
+// run's, or the open project's for the shell's Z; "" for none, or for the
+// C page's backup of every project.
+func (m *Model) runningProject() string {
+	r := m.ui.sleepRun
+	switch {
+	case r == nil:
+		return ""
+	case r.project != "":
+		return r.project
+	case r.verb == "suspend" || r.verb == "resume":
+		return m.cfg.project
+	}
+	return ""
+}
+
+// markProjectsDirty rebuilds the Projects page: a run started or ended on a
+// row (its ⋯ mark), or its project became known.
+func (m *Model) markProjectsDirty() {
+	if p := m.projectsPageOpen(); p != nil {
+		p.dirty = true
+	}
 }

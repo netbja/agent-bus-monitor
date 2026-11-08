@@ -17,4 +17,4 @@
 │                                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯
- ↑↓ j k move   enter detail   R read again   F1 help        
+ ↑↓ j k move   enter detail   Z sleep   x stop   F1 help    

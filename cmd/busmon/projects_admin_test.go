@@ -106,7 +106,7 @@ func TestAdminRowsUnknowns(t *testing.T) {
 		t.Fatalf("rows %+v", v.rows)
 	}
 	pinLocal(t)
-	body, _ := projectsBody(v, 0, TierWide, 130, now)
+	body, _ := projectsBody(v, 0, TierWide, 130, now, "")
 	text := tokLinesText(body)
 	if strings.Contains(text, GlyphDash) {
 		t.Errorf("an unknown read as none:\n%s", text)
@@ -182,9 +182,9 @@ func TestProjectsPageFlow(t *testing.T) {
 func TestProjectsTiers(t *testing.T) {
 	pinLocal(t)
 	v := gatherAdmin(context.Background(), adminFixture(shellNow), "agent-bus-monitor", shellNow)
-	wide, _ := projectsBody(v, 0, TierWide, 130, shellNow)
-	medium, _ := projectsBody(v, 0, TierMedium, 100, shellNow)
-	narrow, lines := projectsBody(v, 0, TierNarrow, 60, shellNow)
+	wide, _ := projectsBody(v, 0, TierWide, 130, shellNow, "")
+	medium, _ := projectsBody(v, 0, TierMedium, 100, shellNow, "")
+	narrow, lines := projectsBody(v, 0, TierNarrow, 60, shellNow, "")
 	for _, c := range []struct {
 		name      string
 		body      []Line

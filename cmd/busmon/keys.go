@@ -120,6 +120,8 @@ const (
 	ActPriorityUp   // Requests or a request's page: raise a tracked request's priority (the person's)
 	ActPriorityDown // and lower it
 	ActProjects     // open the Projects page (M)
+	ActStopServices // projects (M): stop the selected project's services here (agentbus down)
+	ActBackupNow    // projects (M): back the selected project up (agentbus backup --project)
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -253,7 +255,7 @@ var (
 		{Keys: "d", Hint: "done", Help: "the Plan tab: show or fold the done tasks", Act: ActShowDone, Panels: []PanelID{PanelPlan}, match: runeIs('d')},
 		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
 		{Keys: "C", Help: "settings: display, attention and your name, changed in config.toml", Act: ActSettings, match: runeIs('C')},
-		{Keys: "M", Help: "projects: every project of this host, its state, agents, keys, services and herdr workspace (enter: one in detail)", Act: ActProjects, match: runeIs('M')},
+		{Keys: "M", Help: "projects: every project of this host, its state, agents, keys, services and herdr workspace; sleep, stop or back one up", Act: ActProjects, match: runeIs('M')},
 		{Keys: "H", Help: "history: re-read the past, the archive on this host then the live streams (enter opens an entry)", Act: ActHistory, match: runeIs('H')},
 		{Keys: "A", Help: "about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work", Act: ActAbout, match: runeIs('A')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
@@ -397,6 +399,9 @@ var (
 		{Keys: "home end", Help: "the first or the last project", Act: ActFirst, match: keyIs(keyHome)},
 		{Keys: "end", Act: ActLast, match: keyIs(keyEnd)},
 		{Keys: "enter", Hint: "detail", Help: "the selected project: every column, its streams, its pause or suspend record, its template and workspace", Act: ActOpen, match: keyIs(keyEnter)},
+		{Keys: "Z", Hint: "sleep", Help: "put the selected project to sleep (agentbus suspend), or wake it when it is suspended (resume); asks first", Act: ActSleep, match: runeIs('Z')},
+		{Keys: "x", Hint: "stop", Help: "stop the selected project's services on this machine (agentbus down; deletes nothing); asks first", Act: ActStopServices, match: runeIs('x')},
+		{Keys: "b", Hint: "back up", Help: "back the selected project up now (agentbus backup --project); the archive is the notice", Act: ActBackupNow, match: runeIs('b')},
 		{Keys: "R", Hint: "read again", Help: "read every project again (the page is never polled)", Act: ActRecap, match: runeIs('R')},
 		{Keys: "esc", Hint: "back", Act: ActClose, match: keyIs(keyEscape)},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
