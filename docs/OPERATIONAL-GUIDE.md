@@ -120,7 +120,8 @@ so re-running it is safe.
 - **Git** and **curl**.
 - **herdr** 0.9.0 or newer; `--install-herdr` installs it when it is missing.
 - **At least one agent CLI**, installed by you: Claude Code (`claude`), Codex CLI (`codex`), Kimi
-  Code CLI (`kimi`) or Grok Build (`grok`). The install never fails without one: it lists where to
+  Code CLI (`kimi`), Grok Build (`grok`) or Antigravity CLI (`agy`; sign in once with `agy` by hand,
+  which also runs its first-run setup). The install never fails without one: it lists where to
   get each, and the bus and busmon work meanwhile. `agentbus up` with none of the team's CLIs starts
   nothing and says what to install; with only some missing it starts every tab and warns with them.
 
@@ -394,7 +395,8 @@ agent names, no project template):
     (a `billing cycle` limit states no length and is never held). An agy `Individual quota
     reached … Resets in …` holds until the reset it states; nothing ends it earlier, and the quota
     may be one model's, so if it holds agents that could still work, turn it off with
-    `[providers.google] kind = "off"` in `quota.toml`.
+    `[providers.google] kind = "off"` in `quota.toml`. A capacity error (`MODEL_CAPACITY…`, a
+    server shortage agy retries itself) is never read as a quota.
   - **Any other AI**: describe its source in `~/.config/agentbus/quota.toml` — a file and its fields
     (`kind = "json"` or `"jsonl-last"`), or a script that prints the reading as JSON
     (`kind = "command"`), or `kind = "unlimited"` for a local model. Thresholds:

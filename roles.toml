@@ -90,6 +90,18 @@ model = "gpt-6-astra"
 sandbox = "read-only"
 approval = "on-request"
 
+# agy (Antigravity CLI, Google): a reviewer or panelist from another maker. permission stays
+# default: the session pins toolPermission=request-review and empties the person's agy allows
+# (agy-client spec §4.4, proven by the probe). The model is Gemini, never a claude-* row agy
+# also serves: that would review Anthropic's work with Anthropic's model. No role uses it yet:
+# the person picks one (agy-client §10).
+[profiles.agy-review]
+client = "agy"
+provider = "google"
+model = "gemini-3.8-flash-high"   # the person's default (2026-11-07); agy takes the id
+[profiles.agy-review.options]
+sandbox = true
+
 [tool_rules]
 deny = [
   "Read(**/.env)", "Read(**/.env.local)", "Read(**/.env.production)", "Read(**/.env.development)",

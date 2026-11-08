@@ -16,7 +16,8 @@ func TestClients(t *testing.T) {
 		"    ✓ claude: available (/b/claude)\n" +
 		"    • codex: not installed (optional)\n" +
 		"    • kimi: not installed (optional)\n" +
-		"    • grok: not installed (optional)\n"
+		"    • grok: not installed (optional)\n" +
+		"    • agy: not installed (optional)\n"
 	if out.String() != want {
 		t.Fatalf("%q", out.String())
 	}
@@ -31,6 +32,7 @@ func TestClients(t *testing.T) {
 		"      Codex CLI (codex): https://github.com/openai/codex\n",
 		"      Kimi Code CLI (kimi): https://github.com/MoonshotAI/kimi-code\n",
 		"      Grok Build (xAI, beta) (grok): https://x.ai/cli\n",
+		"      Antigravity CLI (Google) (agy): https://antigravity.google/docs/cli/reference\n",
 		"    • Meanwhile the bus and busmon work. Once one is installed: agentbus up <project> <path>\n",
 	} {
 		if !strings.Contains(got, w) {

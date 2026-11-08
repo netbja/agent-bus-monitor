@@ -59,7 +59,7 @@ other cell says only what the code and its tests show.
 | herdr (0.9.0 or newer) | required | required | — |
 | Redis broker | Docker with Compose (`redis:8-alpine`) | Docker with Compose | — |
 
-Every agent runs in its own herdr pane, whatever its client. The launcher knows four clients:
+Every agent runs in its own herdr pane, whatever its client. The launcher knows five clients:
 
 | Client | Resume a session | Automatic working/idle state | Usage windows read from |
 |---|---|---|---|
@@ -67,6 +67,7 @@ Every agent runs in its own herdr pane, whatever its client. The launcher knows 
 | Codex CLI (`codex`) | no | yes, from its hooks | `codex app-server`, its session logs as fallback |
 | Grok Build (`grok`, beta) | no | yes, from its hooks | its billing log line |
 | Kimi Code CLI (`kimi`) | no | no | its log, limit hits only (Kimi states no reset) |
+| Antigravity CLI (`agy`, Google) | no | no: the agent declares it | its log, limit hits only (one window for every model) |
 
 Context fill as a percentage and token counts come from Claude Code only. The
 [five-minute quick start](docs/quickstart.md) is written for Linux.
@@ -232,7 +233,7 @@ What `install` does:
   only warns, in `agentbus up` and when an agent starts; the agent runs without it. A folder
   there that setup did not clone is left alone.
 - **Agent CLIs.** agent-bus runs its agents in a CLI you install: Claude Code (`claude`), Codex CLI
-  (`codex`), Kimi Code CLI (`kimi`) or Grok Build (`grok`). Setup lists those it finds and never
+  (`codex`), Kimi Code CLI (`kimi`), Grok Build (`grok`) or Antigravity CLI (`agy`). Setup lists those it finds and never
   fails without one: it then says where to get each, and the bus and busmon work meanwhile. `agentbus
   up` looks for each agent's CLI (on its PATH, in `~/.local/bin` and the like, or as your login shell
   finds it: nvm, volta, a CLI's own installer). With none of the team's found it starts nothing and

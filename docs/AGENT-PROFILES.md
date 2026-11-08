@@ -70,6 +70,7 @@ to use defaults. There is no cross-provider fallback.
 | `codex` | `--model` and `model_provider` configuration | Additive initial role prompt, preserving existing developer instructions | `model_reasoning_effort`, only supported declared levels |
 | `kimi-cli` | `--model` selects an already configured native model alias and its provider | Generated `--agent-file` Markdown wrapping the base prompt | No verified override in the tested CLI; leave absent |
 | `grok` | `--model` (ids from `grok models`, provider `xai`) | `--rules`, appended to Grok Build's system prompt | `--reasoning-effort` exists but its `--help` lists no levels; leave absent |
+| `agy` | `--model` (an id as `agy models` prints it, provider `google`) | `-i`, the initial user turn (agy reads `AGENTS.md` itself) | `--effort`: `low`, `medium`, `high`, `xhigh`, `max` |
 
 For Codex, `provider` is the native provider ID already configured in Codex. For
 Claude and Kimi, it labels the selected native configuration; changing this label
@@ -92,6 +93,18 @@ Optional native permissions live in `profiles.<name>.options`:
   silently replace the profile's `default`. `--sandbox` and `--always-approve` are
   not exposed, and `tool_rules` are not applied (Claude Code only). Resume is refused, as for the
   other non-Claude clients.
+- agy: `permission` (`default`, `accept-edits`, `auto`, `plan`, `skip`) and `sandbox` (`true` or
+  `false`, a boolean). `default` passes no mode, so agy asks before each tool use;
+  `accept-edits`, `auto` and `plan` pass `--mode`; `skip` passes `--dangerously-skip-permissions`;
+  `sandbox = true` passes `--sandbox`. Whatever the profile, the launcher passes `--settings` with
+  a session file in its cache (agy never saves it): `toolPermission = request-review` (it beats an
+  `always-proceed` in your own agy settings), `allowNonWorkspaceAccess = false`, and
+  `permissions.allow = []`, which replaces your own agy allows for the role. A `Bash(<prefix>)`,
+  `Bash(<prefix>*)` or `Bash(<prefix> *)` deny becomes `command(<prefix>)`; any other rule (a
+  `Read`/`Edit` rule, a `*` inside the pattern) has no agy form and is named at launch
+  (`agy: N tool rules have no agy form and are not enforced: …`). `skip` and `auto` are named as
+  elevated, `skip` without the sandbox too. No turn hooks (agy takes none per session) and no
+  resume. In a role's pane prefer approval 1 or 2: 3 persists the allow to your own agy settings.
 
 These names are not portable equivalents. No generic permission bypass is added.
 Review-only instructions are not an operating-system sandbox: native permissions

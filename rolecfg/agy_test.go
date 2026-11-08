@@ -332,3 +332,26 @@ func TestAgyResumeAndNoHooks(t *testing.T) {
 		t.Fatal("ClientExecutable")
 	}
 }
+
+// Both shipped manifests carry the agy reviewer profile: a Gemini id as agy
+// models prints it (the model table's key, and AGENT_BUS_MODEL unchanged),
+// default permission, the sandbox on (agy-client §5).
+func TestShippedAgyProfile(t *testing.T) {
+	for _, name := range []string{"roles.toml", filepath.Join("examples", "roles.mixed.toml")} {
+		m, err := Load(repoPath(t, name))
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		p, err := m.ResolveWith("coder", "agy-review")
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		if p.Client != "agy" || p.Provider != "google" || p.Model != "gemini-3.8-flash-high" ||
+			p.Options["sandbox"] != "true" || p.Options["permission"] != "" || p.Reasoning != "" {
+			t.Errorf("%s: %+v", name, p)
+		}
+		if el := elevated(p, ToolRules{}); el != "" {
+			t.Errorf("%s: the shipped agy profile is elevated: %s", name, el)
+		}
+	}
+}
