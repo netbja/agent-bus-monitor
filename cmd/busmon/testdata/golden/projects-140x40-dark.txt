@@ -13,14 +13,14 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Projects · 5 · read just now ──────────────────────────────────────────────────────────────────────────────────────────────── esc back ─╮
+│ services and herdr: this machine (vdr); — means not here                                                                                 │
+│                                                                                                                                          │
 │   PROJECT                            STATE       AGENTS  KEYS    SERVICES               HERDR            LAST     TEMPLATE               │
 │ ▶ agent-bus-monitor ◂ open           live        3/7     1204    dispatch ● missions ○  open (6 panes)   1m ago                          │
 │   trading                            paused      1/5     800     —                      —                2h ago                          │
 │   demo                               suspended   0/4     310     —                      —                3d ago   ✓                      │
 │   old                                stopped     0/2     12      dispatch ○             —                40d ago                         │
 │   newone                             template    —       —       —                      —                —        ✓                      │
-│                                                                                                                                          │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,8 +27,8 @@ import (
 // read once when the page opens and on R, in a command, never polled.
 // Step 2 is read-only: the actions come in steps 3 and 4.
 
-// adminReadTimeout bounds the page's read (§3.3).
-const adminReadTimeout = 5 * time.Second
+// adminReadTimeout bounds the page's read (§3.3); a test lowers it.
+var adminReadTimeout = 5 * time.Second
 
 // adminFacts is one broker project as the page reads it.
 type adminFacts struct {
@@ -53,7 +54,6 @@ type adminSource struct {
 	services  func(ctx context.Context) (map[string]map[string]bool, error) // project -> kind -> active, this machine
 	herdr     func(ctx context.Context) (map[string]adminWorkspace, error)  // project -> its workspace, this machine
 	host      string                                                        // this machine's name
-	remote    bool                                                          // busmon reads a broker given by --host or REDIS_*
 }
 
 // adminRow is one row of the page.
@@ -84,7 +84,6 @@ type adminView struct {
 	readAt                               time.Time
 	brokerErr, svcErr, herdrErr, tmplErr string
 	host                                 string
-	remote                               bool
 }
 
 // gatherAdmin reads every part within the page's deadline; each part fails
@@ -92,7 +91,7 @@ type adminView struct {
 func gatherAdmin(ctx context.Context, src adminSource, open string, now time.Time) adminView {
 	c, cancel := context.WithTimeout(ctx, adminReadTimeout)
 	defer cancel()
-	v := adminView{readAt: now, host: src.host, remote: src.remote}
+	v := adminView{readAt: now, host: src.host}
 	var facts []adminFacts
 	brokerOK := false
 	if src.broker == nil {
@@ -202,8 +201,11 @@ func adminState(r adminRow, brokerOK bool) string {
 	for _, on := range r.svc {
 		active = active || on
 	}
-	if active {
+	switch {
+	case active:
 		return "live"
+	case !r.svcKnown: // stopped means no active service either, unknown here (reviewer-codex)
+		return "?"
 	}
 	return "stopped"
 }
@@ -212,19 +214,52 @@ func adminState(r adminRow, brokerOK bool) string {
 
 // realAdminSource reads through client and this machine's service manager
 // and herdr.
-func realAdminSource(client *redis.Client, getenv func(string) string, remote bool) adminSource {
+func realAdminSource(client *redis.Client, getenv func(string) string) adminSource {
 	host, _ := os.Hostname()
-	src := adminSource{host: host, remote: remote,
+	src := adminSource{host: host,
 		broker:    func(ctx context.Context) ([]adminFacts, error) { return readAdminBroker(ctx, client) },
 		templates: func() ([]projlist.Row, error) { return projlist.Templates(rolecfg.ProjectsDir(getenv)) },
 		herdr: func(ctx context.Context) (map[string]adminWorkspace, error) {
 			return readAdminHerdr(ctx, herdrRunner(getenv))
 		},
 	}
-	if m, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, getenv)), getenv); m != nil {
-		src.services = func(context.Context) (map[string]map[string]bool, error) { return readAdminServices(m) }
+	// The manager is found and asked inside the page's read, never at
+	// busmon's start, and within its deadline (reviewer-codex).
+	src.services = func(ctx context.Context) (map[string]map[string]bool, error) {
+		return withDeadline(ctx, func() (map[string]map[string]bool, error) {
+			m, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, getenv)), getenv)
+			if m == nil {
+				return nil, errNoManager
+			}
+			return readAdminServices(m)
+		})
 	}
 	return src
+}
+
+// errNoManager: this machine has no service manager agentbus uses.
+var errNoManager = errors.New("no service manager")
+
+// withDeadline runs read, whose commands take no context, and gives up at
+// ctx's end: the page never waits past its deadline (its goroutine ends
+// when the command does).
+func withDeadline[T any](ctx context.Context, read func() (T, error)) (T, error) {
+	type result struct {
+		v   T
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		v, err := read()
+		ch <- result{v, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.v, r.err
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
+	}
 }
 
 func readAdminBroker(ctx context.Context, client *redis.Client) ([]adminFacts, error) {
@@ -495,12 +530,10 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 	if v.tmplErr != "" {
 		note("templates: " + v.tmplErr)
 	}
-	if v.remote {
-		body = append(body, FitLine(Line{{Text: "services and herdr: this machine (" + v.host + "); " + GlyphDash + " means not here", Role: RoleMuted}}, width))
-	}
-	if len(body) > 0 {
-		body = append(body, nil)
-	}
+	// Always: busmon cannot tell a tunnel (localhost:6380 to another host's
+	// broker) from a local broker, and services and herdr are this machine's
+	// (foureyes).
+	body = append(body, FitLine(Line{{Text: "services and herdr: this machine (" + or(v.host, "?") + "); " + GlyphDash + " means not here", Role: RoleMuted}}, width), nil)
 	lines := make([]int, 0, len(v.rows))
 	mark := func(i int) Seg {
 		if i == sel {
@@ -641,13 +674,18 @@ func (m *Model) projectsCmd(serial int) tea.Cmd {
 	}
 }
 
-// gotProjects opens the page, or refreshes it in place: the selection stays
-// on the same project when it is still listed.
+// openProjects pushes the page at once, then reads it (foureyes): a second
+// M meets the open page, and a slow read never lands over another page.
+func (m *Model) openProjects() tea.Cmd {
+	cmd := m.push(page{kind: ovProjects, title: "Projects"})
+	return tea.Batch(cmd, m.projectsCmd(m.rd.top().serial))
+}
+
+// gotProjects fills the page it was read for, in place: the selection stays
+// on the same project when it is still listed. A page closed meanwhile takes
+// nothing.
 func (m *Model) gotProjects(msg projectsMsg) tea.Cmd {
 	v := msg.view
-	if msg.serial == 0 {
-		return m.push(page{kind: ovProjects, title: "Projects", proj: &v})
-	}
 	for i := range m.rd.pages {
 		p := &m.rd.pages[i]
 		if p.serial != msg.serial || p.kind != ovProjects {
@@ -700,12 +738,9 @@ func (m *Model) projectsKey(act Action, _ Key) tea.Cmd {
 	return nil
 }
 
-// adminSourceFor is the page's sources for busmon's broker: remote when the
-// broker is not a loopback address or a socket (§3.3).
-func adminSourceFor(client *redis.Client, getenv func(string) string, flagHost string) *adminSource {
-	host, _ := brokerEndpoint(getenv, flagHost)
-	remote := host != "unix" && host != "localhost" && host != "127.0.0.1" && host != "::1"
-	src := realAdminSource(client, getenv, remote)
+// adminSourceFor is the page's sources for busmon's broker.
+func adminSourceFor(client *redis.Client, getenv func(string) string) *adminSource {
+	src := realAdminSource(client, getenv)
 	return &src
 }
 

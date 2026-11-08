@@ -156,7 +156,7 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 	case ActSettings:
 		cmd = m.openSettings()
 	case ActProjects:
-		cmd = m.projectsCmd(0)
+		cmd = m.openProjects()
 	case ActHistory:
 		cmd = m.openHistory()
 	case ActAbout:

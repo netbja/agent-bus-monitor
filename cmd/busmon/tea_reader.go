@@ -528,10 +528,12 @@ func (m *Model) buildPage() bool {
 		}
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
 	case ovProjects:
-		if p.proj != nil {
-			p.title = projectsTitle(*p.proj, now)
-			p.body, p.plines = projectsBody(*p.proj, p.sel, m.layout.Tier, width, now, m.runningProject())
+		if p.proj == nil {
+			p.title, p.body = "Projects", []Line{{{Text: "reading every project of this host" + GlyphEllipsis, Role: RoleMuted}}}
+			break
 		}
+		p.title = projectsTitle(*p.proj, now)
+		p.body, p.plines = projectsBody(*p.proj, p.sel, m.layout.Tier, width, now, m.runningProject())
 	case ovNotifySetup:
 		p.title, p.body = notifySetupTitle(p.ns), notifySetupBody(p.ns, width, m.readerRows(), m.layout.Tier, m.width, m.height)
 	case ovAbout:

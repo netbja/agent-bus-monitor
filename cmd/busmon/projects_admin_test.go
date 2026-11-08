@@ -108,8 +108,10 @@ func TestAdminRowsUnknowns(t *testing.T) {
 	pinLocal(t)
 	body, _ := projectsBody(v, 0, TierWide, 130, now, "")
 	text := tokLinesText(body)
-	if strings.Contains(text, GlyphDash) {
-		t.Errorf("an unknown read as none:\n%s", text)
+	for _, l := range body { // the cells: the "this machine" note names the dash itself
+		if lt := l.text(); strings.Contains(lt, GlyphDash) && !strings.Contains(lt, "means not here") {
+			t.Errorf("an unknown read as none: %q", lt)
+		}
 	}
 	for _, want := range []string{"broker: connection refused", "herdr: no server", "services: no service manager"} {
 		if !strings.Contains(text, want) {
@@ -331,5 +333,62 @@ func TestAdminRowsEdges(t *testing.T) {
 	}
 	if n := liveAgents(snaps, now); n != 2 {
 		t.Fatalf("live %d, want 2", n)
+	}
+}
+
+// Review fixes on step 2: an unknown service manager makes a row with no
+// other evidence ?, never stopped (reviewer-codex); a conductor lease alone
+// is live; the "this machine" note always shows, a tunnel looks local
+// (foureyes); the read never waits past its deadline (reviewer-codex).
+func TestAdminReviewFixes(t *testing.T) {
+	now := shellNow
+	facts := []adminFacts{
+		{sum: bus.ProjectSummary{Project: "quiet", LastTS: now.UnixMilli()}},
+		{sum: bus.ProjectSummary{Project: "cond"}, conductor: true},
+	}
+	rows := adminRows(facts, true, nil, nil, false, nil, true, "")
+	for _, r := range rows {
+		if want := map[string]string{"quiet": "?", "cond": "live"}[r.name]; r.state != want {
+			t.Errorf("%s: %q, want %q", r.name, r.state, want)
+		}
+	}
+	src := adminFixture(now)
+	src.host = "laptop"
+	pinLocal(t)
+	body, _ := projectsBody(gatherAdmin(context.Background(), src, "agent-bus-monitor", now), 0, TierWide, 130, now, "")
+	if !strings.Contains(tokLinesText(body), "services and herdr: this machine (laptop)") {
+		t.Errorf("no note:\n%s", tokLinesText(body))
+	}
+
+	old := adminReadTimeout
+	adminReadTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { adminReadTimeout = old })
+	release := make(chan struct{})
+	defer close(release)
+	src.services = func(ctx context.Context) (map[string]map[string]bool, error) {
+		return withDeadline(ctx, func() (map[string]map[string]bool, error) { <-release; return nil, nil })
+	}
+	start := time.Now()
+	v := gatherAdmin(context.Background(), src, "agent-bus-monitor", now)
+	if d := time.Since(start); d > time.Second || !strings.Contains(v.svcErr, "deadline") {
+		t.Fatalf("read took %v, svcErr %q", d, v.svcErr)
+	}
+	if got, err := withDeadline(context.Background(), func() (int, error) { return 7, nil }); got != 7 || err != nil {
+		t.Fatalf("withDeadline: %d %v", got, err)
+	}
+}
+
+// foureyes P3: the page is on screen at once, filled when its read returns;
+// a read for a page closed meanwhile lands nowhere.
+func TestProjectsPageOpensFirst(t *testing.T) {
+	m := adminShell(t, 140, 40)
+	m, cmd := pressCmd(t, m, 'M')
+	if p := m.rd.top(); p == nil || p.kind != ovProjects || p.proj != nil || !strings.Contains(m.grid().plain(), "reading every project") {
+		t.Fatalf("M: %+v", p)
+	}
+	m = keys(t, m, tea.Key{Code: tea.KeyEscape})
+	m = run(t, m, cmd)
+	if m.rd.open() {
+		t.Fatalf("a late read reopened the page: %+v", m.rd.top())
 	}
 }

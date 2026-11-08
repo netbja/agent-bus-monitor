@@ -81,7 +81,7 @@ func inState(t testing.TB, m Model, state string) Model {
 	case "projects", "projects-detail", "projects-unknown": // the Projects page (M, projects-admin §9)
 		src := adminFixture(shellNow)
 		if state == "projects-unknown" {
-			src = adminSource{templates: src.templates, host: "vdr", remote: true,
+			src = adminSource{templates: src.templates, host: "vdr",
 				broker: func(context.Context) ([]adminFacts, error) { return nil, errors.New("connection refused") }}
 		}
 		m.cfg.admin = &src
