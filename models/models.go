@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -60,11 +61,68 @@ type Provider struct {
 	// Partial: the source lists aliases and a few options, not every id it
 	// accepts (Claude Code); an id missing from it is not "gone".
 	Partial bool `json:"partial,omitempty"`
+	// Seen is when each id was first and last listed (model-detection §3.1).
+	Seen map[string]Seen `json:"seen,omitempty"`
+	// SourceAt is the source's own age, from evidence only (Unix ms; 0 =
+	// unknown): Codex's fetched_at, Kimi's file mtime, the read itself for a
+	// live listing (grok, agy); never Claude's (§3.2).
+	SourceAt int64 `json:"source_at,omitempty"`
 }
+
+// Seen is an id's first and last listing (Unix ms).
+type Seen struct {
+	First int64 `json:"first"`
+	Last  int64 `json:"last"`
+}
+
+// Event is one change the table saw (§3.1): added, removed, default, alias.
+type Event struct {
+	At       int64  `json:"at"`
+	Provider string `json:"provider"`
+	Kind     string `json:"kind"`
+	ID       string `json:"id"`             // the id added, removed or now default; for alias, the alias
+	From     string `json:"from,omitempty"` // the previous default, or the id the alias resolved to
+	To       string `json:"to,omitempty"`   // alias: the id it resolves to now
+}
+
+// AliasAt is the id an alias was last seen resolving to.
+type AliasAt struct {
+	ID string `json:"id"`
+	At int64  `json:"at"`
+}
+
+// MaxEvents is how many events the table keeps, the newest.
+const MaxEvents = 200
 
 // Table is the machine's model table.
 type Table struct {
 	Providers map[string]*Provider `json:"providers"`
+	Events    []Event              `json:"events,omitempty"`
+	Aliases   map[string]AliasAt   `json:"aliases,omitempty"` // a client alias -> the id it resolves to (Claude: opus)
+}
+
+// addEvent appends e, keeping the newest MaxEvents.
+func (t *Table) addEvent(e Event) {
+	t.Events = append(t.Events, e)
+	if n := len(t.Events); n > MaxEvents {
+		t.Events = append([]Event(nil), t.Events[n-MaxEvents:]...)
+	}
+}
+
+// RecordAlias records that alias (of provider) resolves to id: the first
+// resolution silently, a move as an alias event (§3.1, G5). It reports
+// whether that was news.
+func (t *Table) RecordAlias(provider, alias, id string, now time.Time) bool {
+	if t.Aliases == nil {
+		t.Aliases = map[string]AliasAt{}
+	}
+	old, had := t.Aliases[alias]
+	t.Aliases[alias] = AliasAt{ID: id, At: now.UnixMilli()}
+	if !had || old.ID == id {
+		return false
+	}
+	t.addEvent(Event{At: now.UnixMilli(), Provider: provider, Kind: "alias", ID: alias, From: old.ID, To: id})
+	return true
 }
 
 // MaxAge: a read older than this is not trusted to judge gone or newer.
@@ -128,6 +186,9 @@ type Reader struct {
 	Provider string
 	Partial  bool
 	Read     func(ctx context.Context) (rows []Row, home string, err error)
+	// SourceAt is the source's own age after a successful Read (Unix ms, 0 =
+	// unknown); nil = unknown (§3.2).
+	SourceAt func(now time.Time) int64
 }
 
 // Refresh runs every reader and merges the outcome into t: a provider whose
@@ -155,7 +216,54 @@ func (t *Table) Refresh(ctx context.Context, readers []Reader, tiers TierMap, no
 				rows[i].Tier = tiers.Tier(rows[i])
 			}
 		}
+		t.remember(r.Provider, p, rows, r.Partial, now)
+		p.SourceAt = 0
+		if r.SourceAt != nil {
+			p.SourceAt = r.SourceAt(now)
+		}
 		p.OK, p.Error, p.ReadAt, p.Home, p.Rows, p.Partial = true, "", now.UnixMilli(), home, rows, r.Partial
+	}
+}
+
+// remember updates p.Seen with a successful read's rows and writes the
+// events (§3.1): added only after a first successful read (installing a
+// client is no news); removed only when the source is not partial and the
+// previous read is fresh too; default when the source's default moved.
+func (t *Table) remember(provider string, p *Provider, rows []Row, partial bool, now time.Time) {
+	at := now.UnixMilli()
+	hadRead := p.ReadAt != 0
+	prevFresh := hadRead && now.Sub(time.UnixMilli(p.ReadAt)) <= MaxAge
+	if p.Seen == nil {
+		p.Seen = map[string]Seen{}
+	}
+	listed := map[string]bool{}
+	newDefault := ""
+	for _, r := range rows {
+		listed[r.ID] = true
+		if r.Default && newDefault == "" {
+			newDefault = r.ID
+		}
+		s, seen := p.Seen[r.ID]
+		if !seen {
+			s.First = at
+			if hadRead {
+				t.addEvent(Event{At: at, Provider: provider, Kind: "added", ID: r.ID})
+			}
+		}
+		s.Last = at
+		p.Seen[r.ID] = s
+	}
+	oldDefault := ""
+	for _, r := range p.Rows {
+		if r.Default && oldDefault == "" {
+			oldDefault = r.ID
+		}
+		if !listed[r.ID] && !partial && prevFresh {
+			t.addEvent(Event{At: at, Provider: provider, Kind: "removed", ID: r.ID})
+		}
+	}
+	if hadRead && newDefault != "" && newDefault != oldDefault {
+		t.addEvent(Event{At: at, Provider: provider, Kind: "default", ID: newDefault, From: oldDefault})
 	}
 }
 
@@ -255,12 +363,65 @@ func (p *Provider) Find(id string) (Row, bool) {
 	return Row{}, false
 }
 
-var datedSuffix = regexp.MustCompile(`-\d{8}$`)
+var datedSuffix = regexp.MustCompile(`-(\d{8}|\d{4}-\d{2}-\d{2})$`)
 
-// BaseID drops Claude Code's context suffix ("[1m]") and a release date.
+// BaseID drops Claude Code's context suffix ("[1m]") and a release date
+// (-YYYYMMDD or -YYYY-MM-DD).
 func BaseID(id string) string {
 	if i := strings.Index(id, "["); i > 0 {
 		id = id[:i]
 	}
 	return datedSuffix.ReplaceAllString(id, "")
+}
+
+// versionSplit is §3.3's split of a base id: a prefix that ends on a
+// non-digit (else a lazy prefix takes a date's first digits and its last four
+// become a version), a version of 1-4 digit components, a suffix that starts
+// on a non-digit: an 8-digit date can never be one.
+var versionSplit = regexp.MustCompile(`^(.*?\D|)(\d{1,4}(?:[.-]\d{1,4})*)(\D.*|)$`)
+
+// VersionNewer reports whether to is a listed-newer candidate for from
+// (§3.3): the same prefix and suffix once both are BaseID'd, and a higher
+// version compared as a tuple of numbers. The same base is the same model.
+func VersionNewer(from, to string) bool {
+	a, b := BaseID(from), BaseID(to) // the same base gives equal versions: never newer
+	ma, mb := versionSplit.FindStringSubmatch(a), versionSplit.FindStringSubmatch(b)
+	if ma == nil || mb == nil || ma[1] != mb[1] || ma[3] != mb[3] {
+		return false
+	}
+	va, vb := versionParts(ma[2]), versionParts(mb[2])
+	for i := 0; i < max(len(va), len(vb)); i++ {
+		x, y := 0, 0
+		if i < len(va) {
+			x = va[i]
+		}
+		if i < len(vb) {
+			y = vb[i]
+		}
+		if x != y {
+			return y > x
+		}
+	}
+	return false
+}
+
+func versionParts(v string) []int {
+	var out []int
+	for _, f := range strings.FieldsFunc(v, func(r rune) bool { return r == '.' || r == '-' }) {
+		n, _ := strconv.Atoi(f)
+		out = append(out, n)
+	}
+	return out
+}
+
+// ListedNewer is the highest id p lists that is VersionNewer than id
+// (a hint, "newer?", never evidence: §3.3).
+func (p *Provider) ListedNewer(id string) (string, bool) {
+	best := ""
+	for _, r := range p.Rows {
+		if VersionNewer(id, r.ID) && (best == "" || VersionNewer(best, r.ID)) {
+			best = r.ID
+		}
+	}
+	return best, best != ""
 }
