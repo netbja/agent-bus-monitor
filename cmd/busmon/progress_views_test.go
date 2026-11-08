@@ -200,3 +200,41 @@ func TestRequestPlanLinkOnScreen(t *testing.T) {
 		t.Fatalf("the page:\n%s", page)
 	}
 }
+
+// reviewer-codex: an answered task (master to record) is not in hand: §2.3
+// names in progress or in review, else waiting for the person, else blocked.
+func TestPlanInHandSkipsAnswered(t *testing.T) {
+	p := boardPlan(boardRow("a", plan.Answered, plan.Person), boardRow("up", plan.Upcoming, "coder"))
+	if now, next, _ := planInHand(p); now != nil || next == nil || next.Task.ID != "up" {
+		t.Fatalf("answered read as in hand: %v, next %v", now, next)
+	}
+	if got := planProgress(p, 140, TierWide).text(); strings.Contains(got, "now:") {
+		t.Fatalf("header %q", got)
+	}
+	p = boardPlan(boardRow("a", plan.Answered, plan.Person), boardRow("b", plan.Blocked, "coder"))
+	if now, _, _ := planInHand(p); now == nil || now.Task.ID != "b" {
+		t.Fatalf("blocked after answered: %v", now)
+	}
+}
+
+// foureyes P3: a header derived from a kept value after a failed read says
+// so with '?', at every width.
+func TestPlanProgressPartial(t *testing.T) {
+	p := boardPlan(boardRow("d", plan.Done, "coder"), boardRow("i", plan.InProgress, "coder"))
+	p.partial = true
+	if got := planProgress(p, 140, TierWide).text(); !strings.Contains(got, "1 of 2? done") {
+		t.Errorf("wide %q", got)
+	}
+	if got := planProgress(p, 40, TierNarrow).text(); got != "1/2? 50%" {
+		t.Errorf("narrow %q", got)
+	}
+}
+
+// §2.3's order: waiting for the person comes before blocked, whatever the
+// file order.
+func TestPlanInHandWaitingBeforeBlocked(t *testing.T) {
+	p := boardPlan(boardRow("b", plan.Blocked, "coder"), boardRow("w", plan.Waiting, plan.Person))
+	if now, _, _ := planInHand(p); now == nil || now.Task.ID != "w" {
+		t.Fatalf("in hand %v, want the waiting one", now)
+	}
+}

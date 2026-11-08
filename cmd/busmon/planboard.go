@@ -123,7 +123,8 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 }
 
 // planInHand is the plan's task in hand (the first in progress or in
-// review, else the first waiting for the person, answered or blocked) and
+// review, else the first waiting for the person, else the first blocked;
+// an answered one is master's to record, not in hand: reviewer-codex) and
 // the first upcoming one; nil when there is none. ok says a plan is loaded.
 // The idle view's next frame, the Plan header and its highlight read it
 // (progress-line §2.3).
@@ -131,7 +132,7 @@ func planInHand(p planState) (now, next *plan.Row, ok bool) {
 	if !p.loaded {
 		return nil, nil, false
 	}
-	for _, states := range [][]plan.State{{plan.InProgress, plan.InReview}, {plan.Waiting, plan.Answered, plan.Blocked}} {
+	for _, states := range [][]plan.State{{plan.InProgress, plan.InReview}, {plan.Waiting}, {plan.Blocked}} {
 		for i := range p.rows {
 			if now == nil && indexOfState(states, p.rows[i].State) >= 0 {
 				now = &p.rows[i]
