@@ -1,0 +1,17 @@
+PROFILE    PROVIDER   MODEL                              VERDICT                USED BY
+main       anthropic  opus                               ok                     coder, master
+pinned     anthropic  claude-opus-4-8                    not listed (partial)   unused
+           anthropic's source does not list every id it accepts
+spare      openai     tier workhorse = gpt-6.1-sol       ok                     fallback of coder
+sol        openai     gpt-6-sol                          newer                  ui
+           openai lists gpt-6.1-sol as newer than gpt-6-sol
+old        openai     gpt-5-old                          gone                   unused
+           gpt-5-old is no longer in openai's model list (agentbus models)
+grok       xai        grok-4.6                           newer?                 fallback of coder
+           xai lists grok-4.7: listed, not stated as a successor
+kimi       moonshot   tier frontier                      untiered               unused
+           moonshot has no frontier row: the profile cannot resolve (models.toml [[tier]] rules)
+gem        google     gemini-3.8-flash-high              unknown                unused
+           google: no read in the last 7 days (last read failed: timeout)
+moonshot: 2 models have no tier; a tier profile cannot resolve there (models.toml [[tier]] rules)
+xai: 1 model has no tier; a tier profile cannot resolve there (models.toml [[tier]] rules)

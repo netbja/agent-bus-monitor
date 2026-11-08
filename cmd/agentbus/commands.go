@@ -550,19 +550,26 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus quota"},
 	},
 	{
-		Name: "models", NoProject: true, Usage: []string{"models [--refresh] [--provider <p>] [--json]"},
-		Summary: "this machine's model table",
+		Name: "models", NoProject: true,
+		Usage: []string{
+			"models [--refresh] [--provider <p>] [--json]",
+			"models --changes [--since <7d|24h>] [--provider <p>] [--json]   (what moved: added, removed, default, alias)",
+			"models check [--json]   (every roles.toml profile and fallback, used or not; exit 3 on gone, newer, untiered)",
+		},
+		Summary: "this machine's model table; a table over 24 h old is refreshed first (10 s at most)",
 		Flags: []cli.Flag{
-			{Long: "refresh", Short: 'r', Help: "read every client's catalogue again"},
+			{Long: "refresh", Short: 'r', Help: "read every client's catalogue again (20 s per reader)"},
 			{Long: "provider", Short: 'P', Arg: "<p>", Help: "only this provider"},
+			{Long: "changes", Help: "the table's events, oldest first"},
+			{Long: "since", Arg: "<7d|24h>", Help: "changes: only this far back"},
 			fJSON,
 		},
-		Examples: []string{"agentbus models -r"},
+		Examples: []string{"agentbus models -r", "agentbus models --changes --since 7d", "agentbus models check"},
 	},
 	{
 		Name: "roles", NoProject: true,
 		Usage: []string{
-			"roles doctor [--json] [--publish]   (needs --project)",
+			"roles doctor [--agent <name>] [--json] [--publish]   (needs --project)",
 			"roles fallbacks <role> [--json]",
 			"roles reviewers [--json]   (models of other providers than coder's that can review)",
 			"roles skill-users <skill>...   (the roles to tell when those skills change)",
@@ -574,6 +581,7 @@ var commands = []cli.Command{
 		Flags: []cli.Flag{
 			fJSON,
 			{Long: "publish", Short: 'u', Help: "doctor: leave verdicts for busmon"},
+			{Long: "agent", Arg: "<name>", Help: "doctor: only this agent's row (what it runs)"},
 			{Long: "missing-ok", Help: "install: a missing skill is not an error"},
 			{Long: "task", Arg: "<words...>", Help: "draft: what the role is for (the rest of the line)"},
 			{Long: "out", Arg: "<dir>", Help: "draft: where the draft goes (default .agent-bus/drafts)"},

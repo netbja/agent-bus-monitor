@@ -69,6 +69,19 @@ func LoadConfig(path string) (Config, error) {
 	return cfg, nil
 }
 
+// InFamily reports whether id is in a person's family order: the order is
+// then the evidence, and the listed-newer hint is not asked (§3.3).
+func (c Config) InFamily(id string) bool {
+	for _, order := range c.Families {
+		for _, o := range order {
+			if BaseID(o) == BaseID(id) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // NewerByOrder is the newest id of a person's family order that is newer
 // than id, or "" (no evidence).
 func (c Config) NewerByOrder(id string) string {

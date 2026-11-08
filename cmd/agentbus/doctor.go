@@ -253,8 +253,9 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 func runDoctor(ctx context.Context, b *bus.Bus, d doctorDeps, args []string, out, errw io.Writer) int {
 	args, asJSON := extractBool(args, "--json")
 	args, publish := extractBool(args, "--publish")
+	args, agent := extractFlag(args, "--agent")
 	if len(args) != 0 {
-		fmt.Fprintln(errw, "usage: agentbus --project <p> roles doctor [--json] [--publish]")
+		fmt.Fprintln(errw, "usage: agentbus --project <p> roles doctor [--agent <name>] [--json] [--publish]")
 		return 2
 	}
 	rows, err := doctorRows(ctx, b, d)
@@ -273,9 +274,23 @@ func runDoctor(ctx context.Context, b *bus.Bus, d doctorDeps, args []string, out
 			return 1
 		}
 	}
+	if agent != "" { // model-detection §3.8: what one agent runs (master's USED);
+		// after --publish, which always publishes every agent's verdict
+		var mine []doctorRow
+		for _, r := range rows {
+			if r.Agent == agent {
+				mine = append(mine, r)
+			}
+		}
+		if len(mine) == 0 {
+			fmt.Fprintf(errw, "roles doctor: %s is not a registered agent with a role in roles.toml\n", agent)
+			return 1
+		}
+		rows = mine
+	}
 	code := 0
 	for _, r := range rows {
-		if r.Verdict == "drift" || r.Verdict == "unknown model" || r.Verdict == "gone" || r.Verdict == "newer" {
+		if doctorFails(r.Verdict) {
 			code = 3
 		}
 	}
@@ -302,40 +317,84 @@ func runDoctor(ctx context.Context, b *bus.Bus, d doctorDeps, args []string, out
 }
 
 // catalogueVerdict (v0.15.2 §10.4, §12): what the model table says about a
-// launched model that matches its configuration — "gone" when its provider's
-// fresh, complete catalogue no longer lists it (aliases resolved first: an
-// alias is a row of its own), "newer" only on stated evidence (the source's
-// upgrade or generation words, or a family order in models.toml). An old or
-// failed catalogue judges nothing.
+// launched model that matches its configuration: gone, newer or newer?
+// (judgeModel), else nothing. An old or failed catalogue judges nothing.
 func catalogueVerdict(d doctorDeps, provider, launched string) (string, string) {
-	if d.Table == nil || launched == "" || provider == "" {
+	if launched == "" || provider == "" {
 		return "", ""
 	}
-	p, fresh := d.Table.Fresh(provider, d.Now())
+	j := judgeModel(d.Table, d.Config, d.Now(), provider, launched)
+	switch j.Verdict {
+	case "gone": // what runs: its next launch fails
+		return j.Verdict, j.Why + ": relaunch on a listed model"
+	case "newer", "newer?":
+		return j.Verdict, j.Why
+	}
+	return "", ""
+}
+
+// doctorFails: the verdicts that make roles doctor exit 3 (and model-drift
+// warn). newer? is a hint and never fails (model-detection §3.3).
+func doctorFails(verdict string) bool {
+	switch verdict {
+	case "drift", "unknown model", "gone", "newer":
+		return true
+	}
+	return false
+}
+
+// judgement is the model table's verdict on one model id, shared by roles
+// doctor (what runs) and models check (what is configured), so the two never
+// disagree on a model (model-detection §3.4).
+type judgement struct {
+	Verdict   string // ok, gone, newer, newer?, not listed (partial), unknown
+	Why       string
+	Candidate string // newer, newer?: the listed successor
+}
+
+// judgeModel: "gone" when the provider's fresh, complete catalogue no longer
+// lists id (aliases resolved first: an alias is a row of its own); "newer"
+// only on stated evidence (the source's upgrade or generation words, or a
+// family order in models.toml), naming a model the same catalogue lists;
+// "newer?" when the catalogue lists a higher version of the same stem and
+// suffix and no family order speaks for id (§3.3); "unknown" when there is
+// no fresh read.
+func judgeModel(tbl *models.Table, cfg models.Config, now time.Time, provider, id string) judgement {
+	if tbl == nil {
+		return judgement{Verdict: "unknown", Why: "no model table: agentbus models --refresh"}
+	}
+	p, fresh := tbl.Fresh(provider, now)
 	if !fresh {
-		return "", ""
+		why := provider + ": no read in the last 7 days"
+		if p != nil && p.Error != "" {
+			why += " (last read failed: " + p.Error + ")"
+		}
+		return judgement{Verdict: "unknown", Why: why}
 	}
-	row, found := p.Find(launched)
+	row, found := p.Find(id)
 	if !found && p.Partial {
-		return "", "" // the source does not list every id it accepts
+		return judgement{Verdict: "not listed (partial)", Why: provider + "'s source does not list every id it accepts"}
 	}
 	if !found {
-		return "gone", fmt.Sprintf("%s is no longer in %s's model list (agentbus models): relaunch on a listed model", launched, provider)
+		return judgement{Verdict: "gone", Why: fmt.Sprintf("%s is no longer in %s's model list (agentbus models)", id, provider)}
+	}
+	if row.Alias {
+		return judgement{Verdict: "ok"}
 	}
 	// Evidence names a model, and that model must be in the same fresh
 	// catalogue: never point a relaunch at something the provider lacks.
-	newer := ""
-	for _, cand := range []string{d.Config.NewerByOrder(launched), row.Newer} {
+	for _, cand := range []string{cfg.NewerByOrder(id), row.Newer} {
 		if cand == "" {
 			continue
 		}
 		if _, ok := p.Find(cand); ok {
-			newer = cand
-			break
+			return judgement{Verdict: "newer", Candidate: cand, Why: fmt.Sprintf("%s lists %s as newer than %s", provider, cand, id)}
 		}
 	}
-	if newer != "" && !row.Alias {
-		return "newer", fmt.Sprintf("%s runs %s; its source lists %s as newer", provider, launched, newer)
+	if !cfg.InFamily(id) {
+		if cand, ok := p.ListedNewer(id); ok {
+			return judgement{Verdict: "newer?", Candidate: cand, Why: fmt.Sprintf("%s lists %s: listed, not stated as a successor", provider, cand)}
+		}
 	}
-	return "", ""
+	return judgement{Verdict: "ok"}
 }

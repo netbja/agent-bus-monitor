@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -52,14 +53,14 @@ func RealEnv() Env {
 // file: they read only the catalogue files named here, or the client's own
 // listing command.
 func Readers(e Env) []Reader {
-	var codexAt int64                                            // the last read's fetched_at
+	var codexAt atomic.Int64                                     // the last read's fetched_at; atomic: an abandoned read may still write it (§3.5)
 	live := func(now time.Time) int64 { return now.UnixMilli() } // asked of the server at the read
 	return []Reader{
 		{Provider: "openai", Read: func(ctx context.Context) ([]Row, string, error) {
 			rows, home, at, err := readCodexAt(e)
-			codexAt = at
+			codexAt.Store(at)
 			return rows, home, err
-		}, SourceAt: func(time.Time) int64 { return codexAt }},
+		}, SourceAt: func(time.Time) int64 { return codexAt.Load() }},
 		{Provider: "anthropic", Partial: true, Read: func(ctx context.Context) ([]Row, string, error) { return readClaude(e) }}, // its file changes for other reasons: age unknown
 		{Provider: "xai", Read: func(ctx context.Context) ([]Row, string, error) { return readGrok(ctx, e) }, SourceAt: live},
 		{Provider: "moonshot", Read: func(ctx context.Context) ([]Row, string, error) { return readKimi(e) }, SourceAt: func(time.Time) int64 {

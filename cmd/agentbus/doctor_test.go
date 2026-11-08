@@ -282,3 +282,74 @@ func TestDoctorNamesAgyRisks(t *testing.T) {
 		}
 	}
 }
+
+// model-detection §3.3: a listed higher version is "newer?", with its words,
+// and never fails the doctor (it is a hint, not evidence); a family order
+// in models.toml is the evidence and wins over it.
+func TestDoctorListedNewerIsAHint(t *testing.T) {
+	now := time.Now()
+	tbl := &models.Table{Providers: map[string]*models.Provider{
+		"xai": {OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{{ID: "grok-4.7", Default: true}, {ID: "grok-4.6"}, {ID: "grok-4.7-build-fast"}}},
+	}}
+	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
+	v, why := catalogueVerdict(d, "xai", "grok-4.6")
+	if v != "newer?" || !strings.Contains(why, "listed, not stated as a successor") || !strings.Contains(why, "grok-4.7") {
+		t.Fatalf("hint: %q %q", v, why)
+	}
+	if v, _ := catalogueVerdict(d, "xai", "grok-4.7"); v != "" {
+		t.Fatalf("the newest listed: %q", v)
+	}
+	d.Config = models.Config{Families: map[string][]string{"grok": {"grok-4.6", "grok-4.7"}}} // the person says 4.6 is newest
+	if v, _ := catalogueVerdict(d, "xai", "grok-4.6"); v != "" {
+		t.Fatalf("a family order lost to the hint: %q", v)
+	}
+	tbl.Providers["anthropic"] = &models.Provider{OK: true, ReadAt: now.UnixMilli(), Partial: true, Rows: []models.Row{
+		{ID: "opus", Alias: true, Newer: "claude-opus-5-5"}, {ID: "claude-opus-5-5"}}}
+	if v, _ := catalogueVerdict(d, "anthropic", "opus"); v != "" {
+		t.Fatalf("an alias follows its family by itself, never newer: %q", v)
+	}
+	if doctorFails("newer?") || !doctorFails("newer") || !doctorFails("gone") {
+		t.Fatal("newer? must never fail the doctor")
+	}
+}
+
+// model-detection §3.8: --agent keeps one agent's row.
+func TestDoctorAgentFilter(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = bus.DeleteProject(context.Background(), r, b.Project()) })
+	path := filepath.Join(t.TempDir(), "roles.toml")
+	if err := os.WriteFile(path, []byte(doctorManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []string{"coder", "master"} {
+		if _, err := b.Status(ctx, a, "idle", "", bus.AgentIdent{Pane: "p-" + a, PID: 1, PIDStart: 1, Model: "claude-opus-5-5", Client: "claude-code", Provider: "anthropic"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := doctorDeps{
+		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
+		ProcStart:  func(int) (uint64, error) { return 1, nil },
+		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
+		Transcript: func(string) (usage.UsedModel, error) { return usage.UsedModel{}, errors.New("none") },
+		Now:        time.Now,
+	}
+	var out, errw bytes.Buffer
+	if code := runDoctor(ctx, b, d, []string{"--agent", "master"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "master") || strings.Contains(out.String(), "coder") {
+		t.Fatalf("filtered:\n%s", out.String())
+	}
+	out.Reset()
+	if code := runDoctor(ctx, b, d, []string{"--agent", "master", "--publish"}, &out, &errw); code != 0 {
+		t.Fatalf("publish exit %d: %s", code, errw.String())
+	}
+	if v, _ := b.ModelVerdicts(ctx); len(v) != 2 { // the filter is the display's only: busmon reads every verdict
+		t.Fatalf("--agent narrowed what was published: %+v", v)
+	}
+	out.Reset()
+	if code := runDoctor(ctx, b, d, []string{"--agent", "ghost"}, &out, &errw); code != 1 || !strings.Contains(errw.String(), "ghost") {
+		t.Fatalf("unknown agent: exit %d %q", code, errw.String())
+	}
+}

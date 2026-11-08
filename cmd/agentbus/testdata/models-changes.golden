@@ -1,0 +1,4 @@
+2026-10-29 12:00  openai     removed  gpt-5-old
+2026-11-05 12:00  xai        added    grok-4.7
+2026-11-05 12:00  xai        default  grok-4.7 (was grok-4.6)
+2026-11-08 10:00  anthropic  alias    opus now claude-opus-5-5 (was claude-opus-5)
