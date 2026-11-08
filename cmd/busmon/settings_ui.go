@@ -1137,10 +1137,18 @@ func stepSetting(k *config.Key, text string, up bool) string {
 			if d, err = time.ParseDuration(t); err != nil {
 				return text
 			}
-			switch t[len(t)-1] {
-			case 'h':
+			// The longest suffix first: "ms" (typed), "us" and "ns" (a stored value)
+			// also end in s.
+			switch {
+			case strings.HasSuffix(t, "ms"):
+				unit = time.Millisecond
+			case strings.HasSuffix(t, "us"):
+				unit = time.Microsecond
+			case strings.HasSuffix(t, "ns"):
+				unit = time.Nanosecond
+			case strings.HasSuffix(t, "h"):
 				unit = time.Hour
-			case 's':
+			case strings.HasSuffix(t, "s"):
 				unit = time.Second
 			}
 		}
@@ -1153,7 +1161,7 @@ func stepSetting(k *config.Key, text string, up bool) string {
 	return text
 }
 
-// formatStep writes d in the unit it was stepped by: "8d", "11m", "91s".
+// formatStep writes d in the unit it was stepped by: "8d", "11m", "91s", "2ms".
 func formatStep(d, unit time.Duration) string {
 	switch {
 	case d == 0:
@@ -1166,6 +1174,10 @@ func formatStep(d, unit time.Duration) string {
 		return strconv.FormatInt(int64(d/time.Minute), 10) + "m"
 	case d%time.Second == 0:
 		return strconv.FormatInt(int64(d/time.Second), 10) + "s"
+	case d%time.Millisecond == 0:
+		return strconv.FormatInt(int64(d/time.Millisecond), 10) + "ms"
+	case d%time.Microsecond == 0:
+		return strconv.FormatInt(int64(d/time.Microsecond), 10) + "us"
 	}
 	return d.String()
 }

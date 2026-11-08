@@ -84,6 +84,13 @@ func TestSettingFieldSteps(t *testing.T) {
 		{"display.idle_hint_after", "0", '-', "0"},
 		{"display.idle_hint_after", "90s", '+', "91s"},
 		{"display.idle_hint_after", "2h", '-', "1h"},
+		{"display.idle_hint_after", "1ms", '+', "2ms"}, // ms is its own unit, not a trailing s
+		{"display.idle_hint_after", "2ms", '-', "1ms"},
+		{"display.idle_hint_after", "1ms", '-', "0"},
+		{"display.idle_hint_after", "5us", '+', "6us"},
+		{"display.idle_hint_after", "5ns", '+', "6ns"},
+		{"dispatch.quota_warn", "0", '-', "0"}, // a float that takes no negative stays at 0
+		{"dispatch.quota_warn", "0.5", '-', "0"},
 		{"models.source_max_age", "7d", '+', "8d"},
 		{"backup.keep", "3", '+', "4"},
 		{"backup.keep", "0", '-', "0"},
