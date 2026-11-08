@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -41,7 +42,9 @@ type clipTools struct {
 	env  func(string) string // the session: WAYLAND_DISPLAY, DISPLAY
 	goos string
 	look func(name string) (string, error)
-	out  func(name string, args ...string) ([]byte, error)
+	// out is a command's stdout, refused (errClipTooLarge) past max bytes,
+	// never read beyond max+1.
+	out func(max int, name string, args ...string) ([]byte, error)
 }
 
 // clipTimeout bounds one clipboard tool: one that hangs (a clipboard owner
@@ -53,12 +56,24 @@ func realClipTools() clipTools {
 		env:  os.Getenv,
 		goos: runtime.GOOS,
 		look: exec.LookPath,
-		out: func(name string, args ...string) ([]byte, error) {
+		out: func(max int, name string, args ...string) ([]byte, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), clipTimeout)
 			defer cancel()
-			return boundedOutput(exec.CommandContext(ctx, name, args...), clipImageMax)
+			return boundedOutput(exec.CommandContext(ctx, name, args...), max)
 		},
 	}
+}
+
+// errClipTooLarge is a clipboard's content past what a paste may read.
+var errClipTooLarge = errors.New("the clipboard's content is too large")
+
+// boundedRead is r read through max+1 bytes at most: past max, refused.
+func boundedRead(r io.Reader, max int) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, int64(max)+1))
+	if len(data) > max {
+		return nil, errClipTooLarge
+	}
+	return data, err
 }
 
 // boundedOutput is cmd's stdout read through max+1 bytes: past max, the
@@ -72,11 +87,11 @@ func boundedOutput(cmd *exec.Cmd, max int) ([]byte, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	data, rerr := io.ReadAll(io.LimitReader(out, int64(max)+1))
-	if len(data) > max {
+	data, rerr := boundedRead(out, max)
+	if errors.Is(rerr, errClipTooLarge) {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		return nil, errors.New("the clipboard's image is larger than 20 MiB")
+		return nil, rerr
 	}
 	if werr := cmd.Wait(); werr != nil {
 		return nil, werr
@@ -97,27 +112,27 @@ func clipboardImage(t clipTools) ([]byte, error) {
 	var err error
 	switch {
 	case t.env("WAYLAND_DISPLAY") != "" && has("wl-paste"):
-		types, terr := t.out("wl-paste", "--list-types")
+		types, terr := t.out(clipTextMax, "wl-paste", "--list-types")
 		if terr != nil || !strings.Contains(string(types), "image/png") {
 			return nil, errNoClipImage
 		}
-		data, err = t.out("wl-paste", "--no-newline", "--type", "image/png")
+		data, err = t.out(clipImageMax, "wl-paste", "--no-newline", "--type", "image/png")
 	case t.env("DISPLAY") != "" && has("xclip"):
-		types, terr := t.out("xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
+		types, terr := t.out(clipTextMax, "xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
 		if terr != nil || !strings.Contains(string(types), "image/png") {
 			return nil, errNoClipImage
 		}
-		data, err = t.out("xclip", "-selection", "clipboard", "-t", "image/png", "-o")
+		data, err = t.out(clipImageMax, "xclip", "-selection", "clipboard", "-t", "image/png", "-o")
 	case t.goos == "darwin" && has("pngpaste"):
-		data, err = t.out("pngpaste", "-")
+		data, err = t.out(clipImageMax, "pngpaste", "-")
 	default:
 		return nil, errNoClipTool
 	}
+	if errors.Is(err, errClipTooLarge) {
+		return nil, fmt.Errorf("the clipboard's image is larger than 20 MiB: %w", err)
+	}
 	if err != nil || !bytes.HasPrefix(data, pngMagic) {
 		return nil, errNoClipImage
-	}
-	if len(data) > clipImageMax {
-		return nil, errors.New("the clipboard's image is larger than 20 MiB")
 	}
 	return data, nil
 }
@@ -188,27 +203,27 @@ func clipboardText(t clipTools) (string, error) {
 	var err error
 	switch {
 	case t.env("WAYLAND_DISPLAY") != "" && has("wl-paste"):
-		types, terr := t.out("wl-paste", "--list-types")
+		types, terr := t.out(clipTextMax, "wl-paste", "--list-types")
 		if terr != nil || !strings.Contains(string(types), "text/plain") && !strings.Contains(string(types), "UTF8_STRING") {
 			return "", errNoClipImage
 		}
-		data, err = t.out("wl-paste", "--no-newline", "--type", "text")
+		data, err = t.out(clipTextMax, "wl-paste", "--no-newline", "--type", "text")
 	case t.env("DISPLAY") != "" && has("xclip"):
-		types, terr := t.out("xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
+		types, terr := t.out(clipTextMax, "xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
 		if terr != nil || !strings.Contains(string(types), "UTF8_STRING") && !strings.Contains(string(types), "text/plain") && !strings.Contains(string(types), "STRING") {
 			return "", errNoClipImage
 		}
-		data, err = t.out("xclip", "-selection", "clipboard", "-o")
+		data, err = t.out(clipTextMax, "xclip", "-selection", "clipboard", "-o")
 	case t.goos == "darwin" && has("pbpaste"):
-		data, err = t.out("pbpaste")
+		data, err = t.out(clipTextMax, "pbpaste")
 	default:
 		return "", errNoClipTool
 	}
+	if errors.Is(err, errClipTooLarge) { // read through clipTextMax+1 only (reviewer-codex)
+		return "", fmt.Errorf("the clipboard's text is larger than 1 MiB: %w", err)
+	}
 	if err != nil || len(bytes.TrimSpace(data)) == 0 || !utf8.Valid(data) {
 		return "", errNoClipImage
-	}
-	if len(data) > clipTextMax {
-		return "", errors.New("the clipboard's text is larger than 1 MiB")
 	}
 	return string(data), nil
 }
@@ -220,8 +235,12 @@ func pasteImageCmd(tools clipTools, dir string, known map[string]string) tea.Cmd
 	return func() tea.Msg {
 		data, err := clipboardImage(tools)
 		if err != nil {
-			if text, terr := clipboardText(tools); terr == nil {
+			text, terr := clipboardText(tools)
+			if terr == nil {
 				return pastedImageMsg{text: text}
+			}
+			if errors.Is(terr, errClipTooLarge) && !errors.Is(err, errClipTooLarge) {
+				err = terr // no image, a text too long: say so
 			}
 			return pastedImageMsg{err: err}
 		}
