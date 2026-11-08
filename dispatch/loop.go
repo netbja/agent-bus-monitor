@@ -549,8 +549,8 @@ func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot,
 			s.x.SinceWake = time.Duration(now.UnixMilli()-w.At) * time.Millisecond
 		}
 	}
-	if ms, _, ok := parseID(o.OldestID); ok && o.OldestID != "" {
-		s.x.OldestAge = time.Duration(now.UnixMilli()-int64(ms)) * time.Millisecond
+	if ms, ok := idMillis(o.OldestID); ok && o.OldestID != "" {
+		s.x.OldestAge = time.Duration(now.UnixMilli()-ms) * time.Millisecond
 	}
 
 	// Rules 1–6 never look at the pane; inspect only when Decide gets past them,

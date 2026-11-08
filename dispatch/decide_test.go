@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -336,5 +337,20 @@ func TestNewMessageReopensAnEscalatedWake(t *testing.T) {
 	x.Wake = mark(3, "true", 1)
 	if d := Decide(testPolicy, x); d.Action != ActNone || d.Rule != 3 {
 		t.Fatalf("no high id recorded: %+v", d)
+	}
+}
+
+// CodeQL go/incorrect-integer-conversion (alert 1): a stream id's time past
+// math.MaxInt64 is no time at all, never a negative one.
+func TestIDMillis(t *testing.T) {
+	for id, want := range map[string]int64{"1794125199070-0": 1794125199070, "5": 5, "9223372036854775807-3": math.MaxInt64} {
+		if got, ok := idMillis(id); !ok || got != want {
+			t.Errorf("%s: %d %v", id, got, ok)
+		}
+	}
+	for _, id := range []string{"18446744073709551615-0", "9223372036854775808-0", "", "x-1", "-5"} {
+		if got, ok := idMillis(id); ok {
+			t.Errorf("%s: %d accepted", id, got)
+		}
 	}
 }

@@ -3,6 +3,7 @@
 package dispatch
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -308,6 +309,17 @@ func idAfter(a, b string) bool {
 		return am > bm
 	}
 	return as > bs
+}
+
+// idMillis is a stream id's time in milliseconds, as a time takes it: an id
+// whose time passes math.MaxInt64 is refused, never wrapped negative
+// (CodeQL go/incorrect-integer-conversion).
+func idMillis(id string) (int64, bool) {
+	ms, _, ok := parseID(id)
+	if !ok || ms > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(ms), true
 }
 
 func parseID(id string) (ms, seq uint64, ok bool) {
