@@ -375,6 +375,14 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   approval) and deny rules block in every mode; broad allow rules are dropped on entering it, and
   master's are narrow. rolecfg refuses ask rules only with `bypassPermissions`, where nothing prompts.
   `TestMasterStartsInAutoMode` holds master alone in auto, its ask rules kept.
+- **A restored pane recovers by itself** (spec `docs/superpowers/specs/2026-11-08-codex-identity-recovery.md`).
+  A new process fails `identityOK` until it proves its pid through the bus; Claude Code's
+  `SessionStart` hook (`roles turn end`) does it at once, and Codex's launch now carries the same
+  `SessionStart` hook. For any client that does not, the wake decision accepts a pane whose
+  registered process is gone when one of its foreground processes carries this agent's own
+  `AGENT_BUS_PROJECT`/`AGENT_BUS_AGENT` (`restartedInPlace`, `/proc/<pid>/environ`): the fixed wake line
+  only, its turn proves the pid; `/clear`, the observation and pop-done stay strict; another agent,
+  or no `/proc`, is still a mismatch.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
