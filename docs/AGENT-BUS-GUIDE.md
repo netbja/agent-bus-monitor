@@ -271,6 +271,45 @@ subscription a dollar figure is fiction). Raw context tokens are what we actuall
 
 ---
 
+### Which models exist: the machine's table, never memory
+
+A model id written from memory is a guess: providers add, rename and retire models every few
+weeks. The machine keeps one table, read from each client's own free catalogue (no project, no
+broker, no credential), at `~/.cache/agentbus/models.json`:
+
+```bash
+agentbus models                        # the table; refreshes it first when its last attempt is 24 h old
+agentbus models --json                 # the same, as JSON (fields below)
+agentbus models --refresh              # read every client now
+agentbus models --changes --since 7d   # what moved: added, removed, default, alias; newest first (--provider, --json)
+agentbus models check [--json]         # judge every roles.toml profile and fallback; exit 3 on gone, newer, untiered
+agentbus roles doctor --agent <name>   # one agent: configured, launched and USED model
+```
+
+`models check` verdicts: `ok`; `gone` (no longer listed: the next launch fails); `newer` (the
+source states a successor); `newer?` (a higher version is listed but not stated as a successor:
+a hint, never a failure); `not listed (partial)` (Claude Code's catalogue is partial, so absence
+proves nothing); `untiered` (a `tier` profile whose provider has no row of that tier); `unknown`
+(no fresh read, or a source older than `models.source_max_age`, 7 d by default).
+
+`models --json` fields. They are versioned like the rest: fields are only ever added.
+
+| Field | Meaning |
+|---|---|
+| `providers.<p>.rows[]` | `provider`, `client`, `id`, `label`, `family`, `tier`, `default`, `alias`, `newer`, `note` |
+| `providers.<p>.ok`, `.at`, `.read_at`, `.error`, `.home` | the last attempt's outcome and time, the last good read's time (Unix ms), where the rows came from |
+| `providers.<p>.partial` | the catalogue lists only part of what the provider serves |
+| `providers.<p>.seen` | `<id>: {first, last}`: when the table first and last saw each id |
+| `providers.<p>.source_at` | when the client itself last fetched its catalogue (Unix ms; absent = unknown) |
+| `events[]` | `{at, provider, kind, id, from, to}`, `kind` one of `added`, `removed`, `default`, `alias`; the newest 200 |
+| `aliases.<p>.<alias>` | `{id, at}`: the id a client alias (Claude Code's `opus`…) last resolved to |
+| `clients.<p>` | the installed client version the last forced refresh followed |
+
+Nothing writes `roles.toml` from this table. The sentinel proposes a change to master, master
+asks the person, and the change is an ordinary reviewed step.
+
+---
+
 ## 3. How the loop actually works (the part agents get wrong)
 
 ### Your status/report IS your heartbeat

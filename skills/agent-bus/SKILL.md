@@ -19,7 +19,10 @@ useful but never a blocker.
 ## Client portability
 
 Your role is independent of client, provider and model; the launch profile selects
-those. Load skills through the native client mechanism or the supplied source paths.
+those. Asked about a model, never answer from memory: `agentbus models --json` is this
+machine's table, `agentbus models check` judges the profiles, and `agentbus roles doctor --agent
+<you>` shows the model you run on.
+Load skills through the native client mechanism or the supplied source paths.
 Background-task exit wakes a session only when that client supports completion
 notifications. Verify that mechanism before relying on it; otherwise tell master
 that pane wake-up and board recovery are needed. Do not claim an unarmed or

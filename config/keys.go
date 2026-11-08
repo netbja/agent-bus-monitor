@@ -602,8 +602,6 @@ func fileInt(ok func(int) bool, want string) func(any) (any, string) {
 
 var filePositiveInt = fileInt(func(n int) bool { return n > 0 }, "want a whole number above 0")
 
-// fileDuration is a Go duration string ("90s", "5m"); zeroOK lets "0" mean off
-// (or immediately), as busmon.toml always has.
 // parseAge is whole days ("7d") or a Go duration, above 0, at most 365 days.
 func parseAge(raw string) (time.Duration, bool) {
 	raw = strings.TrimSpace(raw)
@@ -623,6 +621,8 @@ func parseAge(raw string) (time.Duration, bool) {
 	return d, d > 0 && d <= 365*24*time.Hour
 }
 
+// fileDuration is a Go duration string ("90s", "5m"); zeroOK lets "0" mean off
+// (or immediately), as busmon.toml always has.
 func fileDuration(zeroOK bool) func(any) (any, string) {
 	return func(v any) (any, string) {
 		want := "want a duration above 0, such as \"30m\""

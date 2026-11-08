@@ -71,6 +71,18 @@ Ask the person whether to relaunch each one; on a yes, when the agent is idle,
 `agentbus swap <role> --back` relaunches it on its own profile and model, with the usual checks and
 the resume of its work. Never relaunch without that yes: a model change changes cost and behaviour.
 
+**Never write a model id from memory**: it is a guess, and providers rename and retire models
+every few weeks. `agentbus models --json` is this machine's table; `agentbus models check` judges
+every profile and fallback (`gone`, `newer`, `newer?`…); `agentbus models --changes` says what
+moved. What you run on yourself: the `USED` column of `agentbus roles doctor --agent master`.
+
+**A sentinel model proposal** (`profile <p>: model <m> → <candidate>…`, from the
+`model-catalogue` check) is a decision for the person, never yours: turn it into an ask in For
+you, with the diff of the `roles.toml` line and the sentinel's evidence, as you do for PRs to
+merge. A `gone` model on a role in use is urgent (its next launch fails): the ask says so first.
+On a yes, dispatch the change to coder as a normal step with 4-eyes; nothing writes `roles.toml`
+on its own.
+
 ## Spawn a peer
 The team's boot roles (coder, foureyes, sentinel) come up with the workspace. When you need a
 role that isn't up — design work, or surge capacity — **pop** it. Popping runs the *exact* boot
