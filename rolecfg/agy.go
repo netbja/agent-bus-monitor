@@ -2,6 +2,7 @@ package rolecfg
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -124,4 +125,43 @@ func agyHelpHas(help, flag string) bool {
 		}
 	}
 	return false
+}
+
+// agyUnenforced is the sentence that names the denies with no agy form, the
+// same at launch and in roles doctor ("" when there is none).
+func agyUnenforced(rules ToolRules) string {
+	_, untranslated := agySettings(rules)
+	switch len(untranslated) {
+	case 0:
+		return ""
+	case 1:
+		return "1 tool rule has no agy form and is not enforced: " + untranslated[0]
+	}
+	return fmt.Sprintf("%d tool rules have no agy form and are not enforced: %s", len(untranslated), strings.Join(untranslated, ", "))
+}
+
+// LaunchRisk is what roles doctor names for an agy role on profile ("" its
+// own): the elevated options and the denies agy cannot enforce, from the
+// rules its launch would carry. Other clients: "" (their launch notice stays
+// the launch's).
+func (m *Manifest) LaunchRisk(role, project, profile string) (string, error) {
+	p, err := m.ResolveWith(role, profile)
+	if err != nil {
+		return "", err
+	}
+	if p.Client != "agy" {
+		return "", nil
+	}
+	rules, err := m.ProjectLaunchRules(role, project)
+	if err != nil {
+		return "", err
+	}
+	var parts []string
+	if el := elevated(p, rules); el != "" {
+		parts = append(parts, "elevated "+el)
+	}
+	if u := agyUnenforced(rules); u != "" {
+		parts = append(parts, u)
+	}
+	return strings.Join(parts, "; "), nil
 }

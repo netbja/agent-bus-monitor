@@ -255,7 +255,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `always-proceed`), `allowNonWorkspaceAccess = false`, `permissions.allow = []` (a session list replaces the person's),
   and `permissions.deny` only when a deny translates (an empty one would drop the person's own denies). Only `Bash`
   prefix denies have an agy form (`command(<prefix>)`); `Read`/`Edit` rules and a `*` inside a pattern (the project's
-  `--host *` deliver spellings among them) are not enforced, and the launch names them on one line. agy prints its
+  `--host *` deliver spellings among them) are not enforced, and the launch names them on one line; `roles doctor` names
+  them and the elevated options on a `risk:` line (`Manifest.LaunchRisk`, the launch's own logic, agy roles only). agy prints its
   `--help` on stderr, and preflight matches whole flags: `--mode` is inside `--model`. `Bus.TurnState` (`bus/turnstate.go`) flips idle/working in the `{p}:agents`
   snapshot only, never a status entry (`auto: "turn"`, the message kept, only from idle or working, only for the stored
   verified pid and start); a declaration clears `auto` and wins over a flip whatever their times (`mergeSnapshot`).

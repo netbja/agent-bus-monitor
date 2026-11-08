@@ -36,6 +36,9 @@ type doctorRow struct {
 	UsedAge    string `json:"used_age,omitempty"`
 	Verdict    string `json:"verdict"` // ok, drift, unknown model, not reported
 	Why        string `json:"why,omitempty"`
+	// Risk is an agy role's elevated options and the denies agy cannot
+	// enforce, in its launch's words (agy-client §4.2, §4.4); never a verdict.
+	Risk string `json:"risk,omitempty"`
 }
 
 type doctorDeps struct {
@@ -175,6 +178,9 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 			}
 		}
 		r.Profile, r.Configured = cur.Profile, cur.Model
+		if risk, err := m.LaunchRisk(n, b.Project(), cur.Profile); err == nil {
+			r.Risk = risk
+		}
 		if cur.Tier != "" { // the model the tier stands for now (§10.3)
 			r.Configured = "tier " + cur.Tier
 			if d.Table != nil {
@@ -277,6 +283,9 @@ func runDoctor(ctx context.Context, b *bus.Bus, d doctorDeps, args []string, out
 		fmt.Fprintf(out, "%-12s %-10s %-22s %-22s %-22s %s\n", r.Agent, dash(r.Profile), dash(r.Configured), dash(r.Launched), dash(r.Used), r.Verdict)
 		if r.Why != "" && r.Verdict != "ok" {
 			fmt.Fprintf(out, "%12s %s\n", "", r.Why)
+		}
+		if r.Risk != "" {
+			fmt.Fprintf(out, "%12s risk: %s\n", "", r.Risk)
 		}
 	}
 	if len(rows) == 0 {

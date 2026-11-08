@@ -551,8 +551,8 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 		}
 	}
 	if p.Client == "agy" { // its session settings carry the denies that have a command form (agy-client §4.4)
-		if _, untranslated := agySettings(rules); len(untranslated) > 0 {
-			fmt.Fprintf(cfg.Stderr, "agy: %d tool rules have no agy form and are not enforced: %s\n", len(untranslated), strings.Join(untranslated, ", "))
+		if u := agyUnenforced(rules); u != "" { // roles doctor names it in the same words (LaunchRisk)
+			fmt.Fprintln(cfg.Stderr, "agy: "+u)
 		}
 	} else if p.Client != "claude-code" && !rules.Empty() { // v0.17 §6: Codex and Kimi have no such rules; their own approval mode applies
 		fmt.Fprintf(cfg.Stderr, "note: tool_rules not applied for %s\n", p.Client)

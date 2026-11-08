@@ -103,7 +103,8 @@ Optional native permissions live in `profiles.<name>.options`:
   `Bash(<prefix>*)` or `Bash(<prefix> *)` deny becomes `command(<prefix>)`; any other rule (a
   `Read`/`Edit` rule, a `*` inside the pattern) has no agy form and is named at launch
   (`agy: N tool rules have no agy form and are not enforced: …`). `skip` and `auto` are named as
-  elevated, `skip` without the sandbox too. No turn hooks (agy takes none per session) and no
+  elevated, `skip` without the sandbox too. `agentbus roles doctor` shows both on a `risk:` line
+  under the agent (`"risk"` in `--json`), in the same words; it never changes the verdict. No turn hooks (agy takes none per session) and no
   resume. In a role's pane prefer approval 1 or 2: 3 persists the allow to your own agy settings.
 
 These names are not portable equivalents. No generic permission bypass is added.

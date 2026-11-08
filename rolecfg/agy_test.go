@@ -355,3 +355,32 @@ func TestShippedAgyProfile(t *testing.T) {
 		}
 	}
 }
+
+// roles doctor's view of an agy role (reviewer-codex): the same elevated
+// parts and untranslated denies the launch names, from the same logic.
+func TestAgyLaunchRisk(t *testing.T) {
+	f := agyFixture(t)
+	m := f.config("agy", "", "[roles.coder.tool_rules]\ndeny = [\"Read(**/.env)\", \"Bash(agentbus suspend *)\"]\n",
+		"[profiles.main.options]\npermission = \"skip\"\n[profiles.calm]\nclient = \"agy\"\nprovider = \"google\"\nmodel = \"g\"\n[profiles.claude]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\noptions = { permission = \"bypassPermissions\" }\n")
+	got, err := m.LaunchRisk("coder", "demo", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "elevated permission=skip sandbox=false; 1 tool rule has no agy form and is not enforced: Read(**/.env)"; got != want {
+		t.Errorf("risk %q, want %q", got, want)
+	}
+	if got, _ := m.LaunchRisk("coder", "demo", "calm"); got != "1 tool rule has no agy form and is not enforced: Read(**/.env)" {
+		t.Errorf("calm risk %q", got)
+	}
+	if got, _ := m.LaunchRisk("coder", "demo", "claude"); got != "" {
+		t.Errorf("a Claude profile's risk %q: doctor names agy's only", got)
+	}
+	if _, err := m.LaunchRisk("nobody", "demo", ""); err == nil {
+		t.Error("an unknown role has a risk")
+	}
+	// The launch names them in the same words.
+	_, errOut, err := f.launch(m, "coder")
+	if err != nil || !strings.Contains(errOut, "agy: 1 tool rule has no agy form and is not enforced: Read(**/.env)\n") {
+		t.Fatalf("launch: %v %q", err, errOut)
+	}
+}
