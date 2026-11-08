@@ -12,7 +12,7 @@
 │  ✓ architect done     40m  —   escalating  spec merged                       ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Plan ─────────────────────────────────────────────────── y copy · esc back ─╮
-│ v0.29  1/6 done  ━━━━━━━━━━━━  16%                                           ▲
+│ v0.29  1 of 6 done  ━━━━━━━━━━━━  16%  ·  now: title strip (coder)           ▲
 │ the inbox · loaded 0s ago (abcdef0)                                          ┃
 │                                                                              ┃
 │ NOW  3                                                                       ┃

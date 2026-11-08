@@ -468,6 +468,9 @@ func (m *Model) buildPage() bool {
 		for _, r := range s.requests {
 			if r.Task == task {
 				p.title, p.body, p.plain = requestDetail(r, now)
+				if l, ok := planLinkLine(planLinks(s.planState), r.Task); ok { // progress-line §2.2
+					p.body = append(p.body, l)
+				}
 				p.body = withLead(p.lead, p.body)
 			}
 		}

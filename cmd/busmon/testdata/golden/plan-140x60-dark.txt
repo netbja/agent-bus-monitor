@@ -1,7 +1,7 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 3 decide   ● 2 unread                                            15:04:05 
  paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
 ╭─ For you ───────────────────────────────── 3 decide ─╮╭─ Plan ─────────────────────────────────────────────────────── y copy · esc back ─╮
-│  ● ask    master    review lot 1? (2 questions)    4m││ v0.29  1/6 done  ━━━━━━━  16%                 ╭─ Task ─────────────────────────╮ │
+│  ● ask    master    review lot 1? (2 questions)    4m││ v0.29  1 of 6 done  ━━━━━━━  16%              ╭─ Task ─────────────────────────╮ │
 │  ♙ wait   foureyes  need a decision on the width … 6m││ the inbox · loaded 0s ago (abcdef0)           │ strip                          │ │
 │  ◆ gate   coder     by charlie  look at b1           ││                                               │ state    in review             │ │
 │  Next for you: title notes                           ││ NOW  3                                        │ owner    coder                 │ │

@@ -80,7 +80,7 @@ func TestPlanBoardSections(t *testing.T) {
 		t.Errorf("DONE not folded:\n%s", folded.plain)
 	}
 	// The progress: the plan, done/total, the bar, the share; narrow: the count only.
-	if l := v.lines[0].text(); !strings.HasPrefix(l, "v0.29  1/9 done  ") || !strings.HasSuffix(strings.TrimRight(l, " "), "11%") || !strings.Contains(l, GlyphThinBar) {
+	if l := v.lines[0].text(); !strings.HasPrefix(l, "v0.29  1 of 9 done  ") || !strings.Contains(l, "  11%  ") || !strings.Contains(l, GlyphThinBar) { // progress-line §2.3: N of M, then now and next
 		t.Errorf("progress %q", l)
 	}
 	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false).lines[0].text(); strings.TrimRight(l, " ") != "1/9 11%" {

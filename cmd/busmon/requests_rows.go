@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // The Requests view's rows: a column header, then each section's header and
@@ -51,20 +52,55 @@ func (c reqLayout) who(name, self string) string {
 	return name
 }
 
+// priorityWordW is the priority column at the wide width: "high", "low".
+const priorityWordW = 4
+
+// reqNoteRoom is the subject's room a row keeps before it shows a note.
+const reqNoteRoom = 24
+
+// priority is a level as the row's mark: the word at the wide width
+// (progress-line §2.1), the one-cell arrow under reqKindWidth.
+func (c reqLayout) priority(level string) Seg {
+	m := priorityMark(level)
+	if c.short {
+		return m
+	}
+	switch level {
+	case bus.PriorityHigh, bus.PriorityLow:
+		m.Text = level
+	}
+	return m
+}
+
 // row lays out one row: symbol, from → to, the priority mark, kind,
 // subject, age.
 func (c reqLayout) row(sym, mark Seg, from, target, self, kind, subject string, at, now time.Time) Line {
+	return c.rowNote(sym, mark, from, target, self, kind, subject, nil, at, now)
+}
+
+// rowNote is row with a note before the age (a request's plan task,
+// progress-line §2.2); the note is dropped first when the row is short.
+func (c reqLayout) rowNote(sym, mark Seg, from, target, self, kind, subject string, note Line, at, now time.Time) Line {
 	if c.short {
 		if k, ok := reqKindShort[kind]; ok {
 			kind = k
 		}
 	}
 	r := listRow{Sym: sym.Text, Role: sym.Role, Name: c.who(from, self) + " " + GlyphArrowR + " " + c.who(target, self),
-		State: Fit(kind, c.kindW) + subject, Mark: mark, HasMark: true}
+		State: Fit(kind, c.kindW) + subject, Mark: mark, HasMark: true, Note: note}
+	if !c.short {
+		r.MarkW = priorityWordW
+	}
 	if !at.IsZero() {
 		r.Age = humanAge(now.Sub(at))
 	}
-	return r.cells(c.width, c.nameW, 0)
+	noteW := note.Width()
+	markW := max(r.MarkW, 1)
+	subjectW := c.width - (Width(r.Sym) + 1 + c.nameW + 2 + 2 + listAgeW) - (markW + 1) - c.kindW - (noteW + 2)
+	if noteW > 0 && subjectW < reqNoteRoom {
+		noteW = 0 // the subject keeps its room: the link goes first (progress-line §2.2)
+	}
+	return r.cells(c.width, c.nameW, noteW)
 }
 
 // reqSym is a row's symbol: a target held by its quota first, ● in the
@@ -152,10 +188,14 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 			subject = "  " + subject
 		}
 		mark := noMark
+		var note Line
 		if th.Request != nil {
-			mark = priorityMark(th.Request.Priority)
+			mark = c.priority(th.Request.Priority)
+			if pl, ok := v.plans[th.Request.Task]; ok {
+				note = Line{S(RoleMuted, "plan #"+Preview(pl.id)+" "+plan.Label(pl.state))}
+			}
 		}
-		return ListItem{Key: threadKey(th), Selectable: true, Line: fit(c.row(sym, mark, th.From, th.Target, v.self, th.Kind, Preview(subject), th.At, now))}
+		return ListItem{Key: threadKey(th), Selectable: true, Line: fit(c.rowNote(sym, mark, th.From, th.Target, v.self, th.Kind, Preview(subject), note, th.At, now))}
 	}
 	groupRow := func(g reqGroup) []ListItem {
 		if len(g.Threads) == 1 {
@@ -168,7 +208,7 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 		subject = fmt.Sprintf("%s (+%d)", Preview(subject), len(g.Threads)-1)
 		key := g.Key()
 		items := []ListItem{{Key: key, Selectable: true, Expanded: open.groups[key],
-			Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), priorityMark(groupPriority(g)), g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))}}
+			Line: fit(c.row(reqSym(g.Section, g.Kind, g.State()), c.priority(groupPriority(g)), g.From, g.Target, v.self, g.Kind, subject, g.Oldest(), now))}}
 		if open.groups[key] {
 			for _, th := range g.Threads {
 				items = append(items, threadRow(th, true))
@@ -293,7 +333,7 @@ func requestsTitle(v reqView, width int) Line {
 // stream, the board, every open gate, each agent's delivery cursor and hold.
 func (m *Model) requestInput() reqInput {
 	s := m.snap
-	in := reqInput{cmds: s.cmdHistory, reqs: s.requests, questions: openQuestionCount(s.asks), asks: reqAsks(s.asks), self: m.cfg.self, now: m.now,
+	in := reqInput{cmds: s.cmdHistory, reqs: s.requests, questions: openQuestionCount(s.asks), asks: reqAsks(s.asks), plans: planLinks(s.planState), self: m.cfg.self, now: m.now,
 		gates: map[string]map[string]string{}, delivery: map[string]reqDelivery{}, held: map[string]bool{}}
 	for n, a := range s.agents {
 		if len(a.gates) > 0 {

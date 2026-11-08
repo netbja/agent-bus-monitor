@@ -127,6 +127,7 @@ type reqInput struct {
 	held      map[string]bool              // target -> its provider is held
 	questions int                          // open questions for the person (they stay in For you)
 	asks      []reqAsk                     // the open asks, one row each in owed by you
+	plans     map[string]planLink          // board task -> the plan task naming it (progress-line §2.2)
 	self      string
 	now       time.Time
 }
@@ -144,6 +145,7 @@ type reqView struct {
 	folded    []reqThread
 	questions int
 	asks      []reqAsk
+	plans     map[string]planLink
 	self      string
 }
 
@@ -215,7 +217,7 @@ func reportSubject(msg string) (subject, id string, ok bool) {
 
 // requestGroups computes the view.
 func requestGroups(in reqInput) reqView {
-	v := reqView{groups: map[reqSection][]reqGroup{}, questions: in.questions, asks: in.asks, self: in.self}
+	v := reqView{groups: map[reqSection][]reqGroup{}, questions: in.questions, asks: in.asks, plans: in.plans, self: in.self}
 	horizon := in.now.Add(-reqFoldAfter)
 	known := map[string]bool{}
 	var threads []reqThread
